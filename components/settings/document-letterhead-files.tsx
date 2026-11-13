@@ -21,6 +21,7 @@ import { uploadCompanyFile } from '@/lib/company-profile/upload-client';
 
 const FILE_FAILURES = {
   not_authorized: 'Nur Admins und das Büro können Logo und Briefpapier ändern.',
+  organization_changed: 'Inzwischen ist eine andere Organisation aktiv. Lade die Seite neu.',
   file_type_not_allowed: 'Diese Datei passt nicht. Erlaubt sind die genannten Dateitypen.',
   file_too_large: 'Die Datei ist zu groß.',
   file_empty: 'Die Datei ist leer.',

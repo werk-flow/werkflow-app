@@ -80,18 +80,15 @@ async function seedStationery(world: TestWorld): Promise<void> {
   await seedFilledProfile(world);
   await surfaceFixture(world, 'acceptance.company-profile-stationery', async () => {
     const path = `${world.orgId}/briefpapier/${randomUUID()}/stationery_first`;
-    await putStorageObject({
-      organizationId: world.orgId,
-      path,
-      body: await stationeryPdf(),
-      contentType: 'application/pdf',
-    });
+    const body = await stationeryPdf();
+    await putStorageObject({ organizationId: world.orgId, path, body, contentType: 'application/pdf' });
     const { error } = await createAdminClient().rpc('replace_company_document_file', {
       p_actor_id: world.users.buero.id,
       p_organization_id: world.orgId,
       p_kind: 'stationery_first',
       p_storage_path: path,
       p_mime_type: 'application/pdf',
+      p_size_bytes: body.byteLength,
     });
     if (error) throw new Error(`stationery seed failed: ${error.message}`);
     return path;

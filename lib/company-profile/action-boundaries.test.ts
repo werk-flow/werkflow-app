@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 // The actions need module mocks for identity, cookies, storage and the
 // database, which would leak into other test files; the fixture runs them in
 // its own process.
-test('only Admin and Büro write their own organization’s company profile and sign its uploads', async () => {
+test('only Admin and Büro write their active organization’s company profile and sign its uploads', async () => {
   const child = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, '../testing/fixtures/company-profile-boundaries.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },

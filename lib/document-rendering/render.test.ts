@@ -432,12 +432,15 @@ describe('the business document renderer', () => {
       // Nothing is cut: a word too long for its column breaks, but every character is printed.
       const printed = footerItems.map((item) => item.text).join('');
       for (const word of footerColumns.flat().join(' ').split(' ')) expect(printed).toContain(word);
+      // A row joins the footer columns that share its baseline, so the first row holding „Tel.“ is
+      // the footer's first line: 6.5 pt type, 4 pt below the rule.
       const lines = (await readPages(bytes))[0] ?? [];
-      const footerTop = Math.min(
-        ...lines.filter((line) => line.text.startsWith('Tel.')).map((line) => line.top),
-      );
+      const footerRows = lines.filter((line) => line.text.includes('Tel.'));
+      expect(footerRows.length, 'the footer row with „Tel.“').toBeGreaterThan(0);
+      const footerRuleTop = Math.min(...footerRows.map((line) => line.top)) - 4 - 6.5;
       const pageNumber = lines.find((line) => line.text.startsWith('Seite 1 von'));
-      expect(pageNumber?.top ?? PAGE_HEIGHT).toBeLessThan(footerTop - 9);
+      // `top` is the baseline; the rule needs at least 2 mm below it.
+      expect(pageNumber?.top ?? PAGE_HEIGHT).toBeLessThanOrEqual(footerRuleTop - 2 * MM);
     }
     // The roomy footer keeps every line whole: the IBAN is one line.
     const roomyText =

@@ -235,6 +235,9 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/org-export\/actions$/ }, () => ({
               path: join(import.meta.dir, 'organization-export-service-boundaries.ts'),
             }));
+            builder.onResolve({ filter: /^@\/lib\/company-profile\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'company-profile-service-boundaries.ts'),
+            }));
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (args.importer.endsWith('use-export-builder.ts'))
                 return { path: join(import.meta.dir, 'organization-export-service-boundaries.ts') };

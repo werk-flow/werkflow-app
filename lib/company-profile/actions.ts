@@ -4,9 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
-import { canEmbedFile, stationeryMarginsFit } from '@/lib/document-rendering/render';
+import { stationeryMarginsFit } from '@/lib/document-rendering/page-geometry';
+import { canEmbedFile } from '@/lib/document-rendering/render';
 import { logError } from '@/lib/logging';
-import { resolveActionContextFor, type ActionContext } from '@/lib/org/action-context';
+import { resolveActionContext, resolveActionContextFor, type ActionContext } from '@/lib/org/action-context';
 import { createSignedUploadUrl, discardStorageObjects, promoteUploadedObject } from '@/lib/storage/r2';
 import { uploadRuleFailure } from '@/lib/storage/upload-rules';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -29,7 +30,9 @@ import {
 import { companyFilePath, readCompanyFile } from './reads';
 
 // The writes of the company document profile (werk-flow/werkflow-planning#378).
-// Admin and Büro of the named organization only. The details save in one
+// Admin and Büro of the named organization only, while it is their active
+// one: the settings page shows the active organization's profile, so a form
+// loaded for another one is stale and never writes there. The details save in one
 // database call with their history. Logo and stationery follow the upload
 // flow of docs/technical/document-storage-and-access.md: the ticket signs a
 // PUT for a staging key, the browser moves the bytes, and the finalize copies
@@ -46,10 +49,15 @@ async function resolveManager(
   organizationId: string,
 ): Promise<
   | { success: true; context: ActionContext }
-  | ActionFailure<'not_authenticated' | 'not_a_member' | 'not_authorized'>
+  | ActionFailure<
+      'not_authenticated' | 'not_a_member' | 'no_active_org' | 'organization_changed' | 'not_authorized'
+    >
 > {
   const auth = await resolveActionContextFor(organizationId);
   if (!auth.success) return auth;
+  const active = await resolveActionContext();
+  if (!active.success) return active;
+  if (active.context.orgId !== auth.context.orgId) return { success: false, error: 'organization_changed' };
   if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
   return auth;
 }
@@ -167,11 +175,12 @@ export async function finalizeCompanyDocumentFileUpload(
   if (!copy.exists) return { success: false, error: 'file_missing' };
   const discardCopy = () => discardStorageObjects({ organizationId, paths: [copy.path] });
   const ruleFailure = uploadRuleFailure(COMPANY_FILE_RULES[input.kind], copy.contentType, copy.sizeBytes);
-  if (ruleFailure || copy.contentType === null) {
+  if (ruleFailure || copy.contentType === null || copy.sizeBytes === null) {
     await discardCopy();
     return { success: false, error: ruleFailure ?? 'file_type_not_allowed' };
   }
   const mimeType = copy.contentType;
+  const sizeBytes = copy.sizeBytes;
   try {
     const file = await readCompanyFile(organizationId, { path: copy.path, mimeType });
     if (!(await canEmbedFile(file, input.kind === 'logo' ? 'image' : 'page'))) {
@@ -192,6 +201,7 @@ export async function finalizeCompanyDocumentFileUpload(
       p_kind: input.kind,
       p_storage_path: copy.path,
       p_mime_type: mimeType,
+      p_size_bytes: sizeBytes,
     }),
   );
   if (error) {
@@ -219,6 +229,7 @@ export async function removeCompanyDocumentFile(rawInput: CompanyFileRemoveInput
       p_kind: input.kind,
       p_storage_path: null,
       p_mime_type: null,
+      p_size_bytes: null,
     }),
   );
   if (error) return refusal(error, 'remove_failed', 'removeCompanyDocumentFile: removal failed');

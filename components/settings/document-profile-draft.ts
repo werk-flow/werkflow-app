@@ -1,4 +1,5 @@
 import { COMPANY_TEXT_LIMITS, type CompanyProfileDetails } from '@/lib/company-profile/profile';
+import { stationeryPageShortages, type MarginShortage } from '@/lib/document-rendering/page-geometry';
 
 // The company details form's draft: every field as typed, and its parse into
 // the details the save sends. Numbers stay text while typed, so a half-typed
@@ -98,6 +99,23 @@ export const MARGIN_SIDES = [
 ] as const;
 
 export type MarginPage = 'firstPageMargins' | 'followingPageMargins';
+type MarginSide = (typeof MARGIN_SIDES)[number]['side'];
+
+/** The sides a margin shortage marks, and what it says there. */
+const SHORTAGE_MARKS: Record<MarginShortage, { sides: readonly MarginSide[]; message: string }> = {
+  width: {
+    sides: ['rightMm', 'leftMm'],
+    message: 'Links und rechts lassen zusammen zu wenig Platz für das Angebot.',
+  },
+  height: {
+    sides: ['topMm', 'bottomMm'],
+    message: 'Oben und unten lassen zusammen zu wenig Platz für das Angebot.',
+  },
+  info_block: {
+    sides: ['rightMm'],
+    message: 'Rechts bleibt so zu wenig Platz für die Angaben neben der Anschrift.',
+  },
+};
 
 /** The control id of a field, stable so an invalid submit can focus it. */
 export const fieldId = (key: string, side?: string) => `company-profile-${key}${side ? `-${side}` : ''}`;
@@ -144,10 +162,29 @@ export function parseDraft(draft: ProfileDraft): ParsedDraft {
   if (validity === null) errors[fieldId('offerValidityDays')] = 'Gib eine Zahl von 1 bis 365 ein.';
   const margins = (page: MarginPage) => {
     const parsed = { topMm: 0, rightMm: 0, bottomMm: 0, leftMm: 0 };
+    let complete = true;
     for (const { side, maximum } of MARGIN_SIDES) {
       const value = wholeNumber(draft[page][side], 0, maximum);
-      if (value === null) errors[fieldId(page, side)] = `Gib einen Rand von 0 bis ${maximum} mm ein.`;
-      else parsed[side] = value;
+      if (value === null) {
+        errors[fieldId(page, side)] = `Gib einen Rand von 0 bis ${maximum} mm ein.`;
+        complete = false;
+      } else parsed[side] = value;
+    }
+    if (!complete) return parsed;
+    // Margins that each fit can still leave the page too little room together,
+    // which the save refuses too: mark the sides at fault, in the form's order.
+    const marks = new Map<MarginSide, string>();
+    const shortages = stationeryPageShortages(
+      page === 'firstPageMargins' ? 'firstPage' : 'followingPages',
+      parsed,
+    );
+    for (const shortage of shortages) {
+      const { sides, message } = SHORTAGE_MARKS[shortage];
+      for (const side of sides) if (!marks.has(side)) marks.set(side, message);
+    }
+    for (const { side } of MARGIN_SIDES) {
+      const message = marks.get(side);
+      if (message) errors[fieldId(page, side)] = message;
     }
     return parsed;
   };

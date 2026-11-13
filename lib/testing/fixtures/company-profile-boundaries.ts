@@ -1,7 +1,8 @@
 // The actual company-profile actions over the in-memory database
-// (werk-flow/werkflow-planning#378). A signed-out caller, an employee and a
-// caller who names another organization are refused before any database or
-// storage call, the upload ticket included. Admin and Büro write only their
+// (werk-flow/werkflow-planning#378). A signed-out caller, an employee, a
+// caller who names another organization, and a manager of two organizations
+// whose form names the one no longer active are refused before any database
+// or storage call, the upload ticket included. Admin and Büro write only their
 // own organization's profile: the database call carries the resolved
 // organization and actor, never the client's, and a signed upload goes to
 // the caller's own Briefpapier folder. The database function's own refusals
@@ -21,6 +22,12 @@ import { assertRefused } from './operations-boundary-refusals';
 
 const fileId = '37800000-0000-4000-8000-000000000030';
 const storageCalls: string[] = [];
+// A 1×1 PNG the renderer embeds, and the bytes of a file it cannot read.
+const PNG_BYTES = Uint8Array.from(
+  atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='),
+  (char) => char.charCodeAt(0),
+);
+let storedBytes = new Uint8Array([1, 2, 3]);
 mock.module('@/lib/storage/r2', () => ({
   createSignedUploadUrl: async ({ organizationId, path }: { organizationId: string; path: string }) => {
     storageCalls.push(`sign ${organizationId} ${path}`);
@@ -32,7 +39,7 @@ mock.module('@/lib/storage/r2', () => ({
   },
   readStorageObject: async ({ path }: { path: string }) => {
     storageCalls.push(`read ${path}`);
-    return new Uint8Array([1, 2, 3]);
+    return storedBytes;
   },
   discardStorageObjects: async ({ paths }: { paths: readonly string[] }) => {
     storageCalls.push(...paths.map((path) => `discard ${path}`));
@@ -86,6 +93,23 @@ for (const role of ['admin', 'buero'] as const) {
   world.activeOrganizationCookie = ORGANIZATION_B;
   await assertRefused(world, everyAction(ORGANIZATION_B), { success: false, error: 'not_a_member' }, 'none');
 }
+
+// A manager of A and B whose form was loaded for A writes nothing once B is
+// active: the stale draft never lands in either organization.
+for (const role of ['admin', 'buero'] as const) {
+  signInAs(world, role);
+  world.memberships = [
+    { orgId: ORGANIZATION_A, role },
+    { orgId: ORGANIZATION_B, role },
+  ];
+  world.activeOrganizationCookie = ORGANIZATION_B;
+  await assertRefused(
+    world,
+    everyAction(ORGANIZATION_A),
+    { success: false, error: 'organization_changed' },
+    'none',
+  );
+}
 assert.deepEqual(storageCalls, [], 'a refused caller reached storage');
 
 // Büro of A writes A's profile as itself.
@@ -132,6 +156,21 @@ assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: false, error: 'fil
 assert.equal(world.rpcCalls.length, 0);
 assert.equal(storageCalls.at(-1), `discard ${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`);
 
+// An embeddable copy is registered with its stored size, for the organization export.
+storedBytes = PNG_BYTES;
+assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: true });
+assert.deepEqual(world.rpcCalls.at(-1), {
+  name: 'replace_company_document_file',
+  args: {
+    p_actor_id: CALLER_ID,
+    p_organization_id: ORGANIZATION_A,
+    p_kind: 'logo',
+    p_storage_path: `${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`,
+    p_mime_type: 'image/png',
+    p_size_bytes: 2048,
+  },
+});
+
 // A removal names the caller's organization and actor.
 assert.deepEqual(await remove(ORGANIZATION_A)(), { success: true });
 assert.deepEqual(world.rpcCalls.at(-1), {
@@ -142,5 +181,6 @@ assert.deepEqual(world.rpcCalls.at(-1), {
     p_kind: 'stationery_first',
     p_storage_path: null,
     p_mime_type: null,
+    p_size_bytes: null,
   },
 });

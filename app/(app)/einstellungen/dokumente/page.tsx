@@ -26,9 +26,7 @@ export default async function DokumenteSettingsPage() {
   const { profile } = stored;
   return (
     <div className="space-y-6">
-      {/* A saved version renders anew, so the form starts from the saved details. */}
       <DocumentCompanyProfileForm
-        key={profile.version}
         organizationId={membership.orgId}
         version={profile.version}
         details={profile.details}

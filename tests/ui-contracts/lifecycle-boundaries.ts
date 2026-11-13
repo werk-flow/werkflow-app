@@ -39,6 +39,7 @@ declare global {
       | 'calendar-month'
       | 'organization'
       | 'organization-export'
+      | 'company-profile'
       | 'today-refresh'
       | 'draft-landing'
       | 'today-refresh-switch'

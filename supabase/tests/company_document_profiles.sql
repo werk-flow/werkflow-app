@@ -5,7 +5,9 @@
 -- per changed field with actor, old and new value, in the same call, and only
 -- for an Admin or Büro member of that organization. Another organization's
 -- profile is neither read nor written. A replaced file queues its old object
--- for the purge. The history refuses UPDATE and DELETE, also for the service
+-- for the purge. A stored file records its size, and the organization
+-- export plans it with the documents' originals, so an export that leaves it
+-- out is refused. The history refuses UPDATE and DELETE, also for the service
 -- role, and leaves only with its organization.
 begin;
 
@@ -55,7 +57,7 @@ begin
   end loop;
   foreach v_function in array array[
     'public.save_company_document_profile(uuid, uuid, integer, jsonb)',
-    'public.replace_company_document_file(uuid, uuid, text, text, text)',
+    'public.replace_company_document_file(uuid, uuid, text, text, text, bigint)',
     'app_private.lock_company_document_profile(uuid, uuid)'
   ] loop
     foreach v_role in array array['anon', 'authenticated'] loop
@@ -110,13 +112,13 @@ begin
   end;
   begin
     perform public.replace_company_document_file(v_office, v_foreign, 'logo',
-      v_foreign || '/briefpapier/a/logo', 'image/png');
+      v_foreign || '/briefpapier/a/logo', 'image/png', 2048);
     raise exception 'a foreign member set another organization''s logo';
   exception when raise_exception then
     if sqlerrm <> 'not_authorized' then raise; end if;
   end;
-  if exists (select 1 from public.company_document_profiles)
-    or exists (select 1 from public.company_document_profile_events)
+  if exists (select 1 from public.company_document_profiles where organization_id in (v_org, v_foreign))
+    or exists (select 1 from public.company_document_profile_events where organization_id in (v_org, v_foreign))
   then raise exception 'a refused save wrote a row'; end if;
 
   -- A key set other than the profile's fields is refused.
@@ -181,20 +183,28 @@ begin
   -- Files: a path outside the organization's folder is refused; following pages need a first page.
   begin
     perform public.replace_company_document_file(v_office, v_org, 'logo',
-      v_foreign || '/briefpapier/a/logo', 'image/png');
+      v_foreign || '/briefpapier/a/logo', 'image/png', 2048);
     raise exception 'a logo outside the organization passed';
   exception when check_violation then null;
   end;
   begin
     perform public.replace_company_document_file(v_office, v_org, 'stationery_following',
-      v_org || '/briefpapier/b/stationery_following', 'application/pdf');
+      v_org || '/briefpapier/b/stationery_following', 'application/pdf', 2048);
     raise exception 'following pages without a first page passed';
   exception when raise_exception then
     if sqlerrm <> 'stationery_first_missing' then raise; end if;
   end;
 
-  perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/a/logo', 'image/png');
-  perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/c/logo', 'image/jpeg');
+  -- A stored file names its size.
+  begin
+    perform public.replace_company_document_file(v_office, v_org, 'logo',
+      v_org || '/briefpapier/a/logo', 'image/png', null);
+    raise exception 'a logo without its size passed';
+  exception when check_violation then null;
+  end;
+
+  perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/a/logo', 'image/png', 2048);
+  perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/c/logo', 'image/jpeg', 3072);
   if not exists (
     select 1 from public.storage_purge_queue
     where storage_path = v_org || '/briefpapier/a/logo' and purge_after > now() + interval '7 days'
@@ -206,10 +216,10 @@ begin
 
   -- Removing the first page's stationery removes the following pages' too.
   perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
-    v_org || '/briefpapier/d/stationery_first', 'application/pdf');
+    v_org || '/briefpapier/d/stationery_first', 'application/pdf', 2048);
   perform public.replace_company_document_file(v_office, v_org, 'stationery_following',
-    v_org || '/briefpapier/e/stationery_following', 'image/png');
-  perform public.replace_company_document_file(v_office, v_org, 'stationery_first', null, null);
+    v_org || '/briefpapier/e/stationery_following', 'image/png', 2048);
+  perform public.replace_company_document_file(v_office, v_org, 'stationery_first', null, null, null);
   if exists (select 1 from public.company_document_profiles where organization_id = v_org
     and (stationery_first_storage_path is not null or stationery_following_storage_path is not null))
   then raise exception 'the stationery was not removed'; end if;
@@ -220,6 +230,38 @@ begin
   if (select version from public.company_document_profiles where organization_id = v_org) <> 2 then
     raise exception 'a file change moved the profile version';
   end if;
+
+  -- The organization export plans the stored files with their sizes and no
+  -- document; a plan without one of them is refused, a plan with both starts.
+  perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
+    v_org || '/briefpapier/f/stationery_first', 'application/pdf', 4096);
+  if (
+    select array_agg(format('%s %s %s', source_path, coalesce(document_id::text, '-'), file_bytes) order by source_path)
+    from app_private.organization_export_sources(v_org)
+  ) is distinct from array[
+    format('%s/briefpapier/c/logo - 3072', v_org),
+    format('%s/briefpapier/f/stationery_first - 4096', v_org)
+  ] then
+    raise exception 'the export sources are %',
+      (select array_agg(source_path) from app_private.organization_export_sources(v_org));
+  end if;
+  begin
+    perform public.start_organization_export(v_admin, v_org, jsonb_build_array(jsonb_build_array(
+      jsonb_build_object('sourcePath', v_org || '/briefpapier/c/logo', 'archiveName', 'Dateien/Briefpapier/Logo.jpg')
+    )));
+    raise exception 'an export without the stationery started';
+  exception when raise_exception then
+    if sqlerrm <> 'export_plan_stale' then raise; end if;
+  end;
+  perform public.start_organization_export(v_admin, v_org, jsonb_build_array(jsonb_build_array(
+    jsonb_build_object('sourcePath', v_org || '/briefpapier/c/logo', 'archiveName', 'Dateien/Briefpapier/Logo.jpg'),
+    jsonb_build_object('sourcePath', v_org || '/briefpapier/f/stationery_first',
+      'archiveName', 'Dateien/Briefpapier/Briefpapier erste Seite.pdf')
+  )));
+  if (select count(*) from public.organization_export_files
+    where organization_id = v_org and document_id is null) <> 2
+    or (select file_bytes from public.organization_exports where organization_id = v_org) <> 3072 + 4096
+  then raise exception 'the export did not plan the profile files with their sizes'; end if;
 
   -- Another organization's profile stays untouched by all of the above.
   if exists (select 1 from public.company_document_profiles where organization_id = v_foreign) then

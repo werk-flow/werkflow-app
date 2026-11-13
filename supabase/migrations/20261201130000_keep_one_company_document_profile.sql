@@ -14,6 +14,9 @@
 --    two writes. A replaced or removed file queues its object for the purge in
 --    the same call: a stored document carries its own bytes, so no row needs
 --    the old object once the backup window has passed.
+-- 4. The organization export plans the profile's files with the documents'
+--    originals: each file records its size as stored, and the plan row of a
+--    file without a document names none.
 --
 -- Prevention: Tier 1 (no client grant, the history guard, the checks below),
 -- Tier 2 supabase/tests/company_document_profiles.sql.
@@ -49,12 +52,16 @@ create table public.company_document_profiles (
   stationery_following_right_mm integer not null default 20,
   stationery_following_bottom_mm integer not null default 25,
   stationery_following_left_mm integer not null default 25,
+  -- Each file's size in bytes as stored, for the organization export's plan.
   logo_storage_path text,
   logo_mime_type text,
+  logo_size_bytes bigint,
   stationery_first_storage_path text,
   stationery_first_mime_type text,
+  stationery_first_size_bytes bigint,
   stationery_following_storage_path text,
   stationery_following_mime_type text,
+  stationery_following_size_bytes bigint,
   version integer not null default 0,
   updated_at timestamptz not null default now(),
   -- Null once the person's account is deleted: the profile stays.
@@ -85,21 +92,27 @@ create table public.company_document_profiles (
   -- is one the renderer embeds: a logo is an image, stationery an image or a PDF.
   constraint company_document_profiles_logo_check check (
     (logo_storage_path is null) = (logo_mime_type is null)
+    and (logo_storage_path is null) = (logo_size_bytes is null)
     and (logo_storage_path is null
       or (starts_with(logo_storage_path, organization_id::text || '/briefpapier/')
-        and logo_mime_type in ('image/png', 'image/jpeg')))
+        and logo_mime_type in ('image/png', 'image/jpeg')
+        and logo_size_bytes >= 0))
   ),
   constraint company_document_profiles_stationery_first_check check (
     (stationery_first_storage_path is null) = (stationery_first_mime_type is null)
+    and (stationery_first_storage_path is null) = (stationery_first_size_bytes is null)
     and (stationery_first_storage_path is null
       or (starts_with(stationery_first_storage_path, organization_id::text || '/briefpapier/')
-        and stationery_first_mime_type in ('application/pdf', 'image/png', 'image/jpeg')))
+        and stationery_first_mime_type in ('application/pdf', 'image/png', 'image/jpeg')
+        and stationery_first_size_bytes >= 0))
   ),
   constraint company_document_profiles_stationery_following_check check (
     (stationery_following_storage_path is null) = (stationery_following_mime_type is null)
+    and (stationery_following_storage_path is null) = (stationery_following_size_bytes is null)
     and (stationery_following_storage_path is null
       or (starts_with(stationery_following_storage_path, organization_id::text || '/briefpapier/')
-        and stationery_following_mime_type in ('application/pdf', 'image/png', 'image/jpeg')))
+        and stationery_following_mime_type in ('application/pdf', 'image/png', 'image/jpeg')
+        and stationery_following_size_bytes >= 0))
   ),
   -- Following pages take stationery only after the first page has one.
   constraint company_document_profiles_stationery_order_check check (
@@ -258,7 +271,7 @@ grant execute on function public.save_company_document_profile(uuid, uuid, integ
 
 -- Sets or removes (p_storage_path null) the logo or a stationery page. The
 -- object was promoted by the server under the organization's Briefpapier
--- folder. Removing the first page's stationery removes the following pages'
+-- folder; p_size_bytes is its stored size. Removing the first page's stationery removes the following pages'
 -- too. Every changed file writes its history row and queues its old object
 -- for the purge. Refusals: not_authorized, invalid_input for another kind,
 -- stationery_first_missing for following pages without a first page; a table
@@ -268,7 +281,8 @@ create function public.replace_company_document_file(
   p_organization_id uuid,
   p_kind text,
   p_storage_path text,
-  p_mime_type text
+  p_mime_type text,
+  p_size_bytes bigint
 )
 returns void
 language plpgsql
@@ -292,13 +306,14 @@ begin
   end if;
 
   v_old_json := to_jsonb(v_old);
-  v_changes := jsonb_build_object(p_kind, jsonb_build_array(p_storage_path, p_mime_type));
+  v_changes := jsonb_build_object(p_kind, jsonb_build_array(p_storage_path, p_mime_type, p_size_bytes));
   if p_kind = 'stationery_first' and p_storage_path is null then
-    v_changes := v_changes || jsonb_build_object('stationery_following', jsonb_build_array(null, null));
+    v_changes := v_changes || jsonb_build_object('stationery_following', jsonb_build_array(null, null, null));
   end if;
 
   for v_change in
     select kind, changes.value ->> 0 as storage_path, changes.value ->> 1 as mime_type,
+      (changes.value ->> 2)::bigint as size_bytes,
       v_old_json ->> (kind || '_storage_path') as old_path
     from jsonb_each(v_changes) as changes(kind, value)
     -- The following pages first, so a removal never leaves them without a first page.
@@ -313,19 +328,61 @@ begin
     update public.company_document_profiles profile set
       logo_storage_path = case when v_change.kind = 'logo' then v_change.storage_path else profile.logo_storage_path end,
       logo_mime_type = case when v_change.kind = 'logo' then v_change.mime_type else profile.logo_mime_type end,
+      logo_size_bytes = case when v_change.kind = 'logo' then v_change.size_bytes else profile.logo_size_bytes end,
       stationery_first_storage_path = case when v_change.kind = 'stationery_first'
         then v_change.storage_path else profile.stationery_first_storage_path end,
       stationery_first_mime_type = case when v_change.kind = 'stationery_first'
         then v_change.mime_type else profile.stationery_first_mime_type end,
+      stationery_first_size_bytes = case when v_change.kind = 'stationery_first'
+        then v_change.size_bytes else profile.stationery_first_size_bytes end,
       stationery_following_storage_path = case when v_change.kind = 'stationery_following'
         then v_change.storage_path else profile.stationery_following_storage_path end,
       stationery_following_mime_type = case when v_change.kind = 'stationery_following'
         then v_change.mime_type else profile.stationery_following_mime_type end,
+      stationery_following_size_bytes = case when v_change.kind = 'stationery_following'
+        then v_change.size_bytes else profile.stationery_following_size_bytes end,
       updated_at = now(), updated_by = p_actor_id
     where profile.organization_id = p_organization_id;
   end loop;
 end;
 $$;
 
-revoke all on function public.replace_company_document_file(uuid, uuid, text, text, text) from public, anon, authenticated;
-grant execute on function public.replace_company_document_file(uuid, uuid, text, text, text) to service_role;
+revoke all on function public.replace_company_document_file(uuid, uuid, text, text, text, bigint) from public, anon, authenticated;
+grant execute on function public.replace_company_document_file(uuid, uuid, text, text, text, bigint) to service_role;
+
+-- The organization export holds the profile's files too: they are stored
+-- originals of the organization, and its data part names their keys. A
+-- profile file belongs to no document, so its plan row names none.
+alter table public.organization_export_files alter column document_id drop not null;
+
+-- As in 20261118090001_export_the_whole_organization.sql, plus the
+-- organization's logo and stationery, with their sizes as stored.
+create or replace function app_private.organization_export_sources(p_organization_id uuid)
+returns table (source_path text, document_id uuid, version_number integer, file_bytes bigint)
+language sql
+stable
+set search_path to ''
+as $$
+  select distinct on (source.source_path) source.source_path, source.document_id,
+    source.version_number, source.file_bytes
+  from (
+    select document.storage_path as source_path, document.id as document_id,
+      null::integer as version_number, document.size_bytes::bigint as file_bytes
+    from public.documents document
+    where document.organization_id = p_organization_id
+    union all
+    select version.storage_path, version.document_id, version.version_number, version.size_bytes::bigint
+    from public.document_versions version
+    where version.organization_id = p_organization_id
+    union all
+    select profile_file.storage_path, null::uuid, null::integer, profile_file.size_bytes
+    from public.company_document_profiles profile
+    cross join lateral (values
+      (profile.logo_storage_path, profile.logo_size_bytes),
+      (profile.stationery_first_storage_path, profile.stationery_first_size_bytes),
+      (profile.stationery_following_storage_path, profile.stationery_following_size_bytes)
+    ) as profile_file(storage_path, size_bytes)
+    where profile.organization_id = p_organization_id and profile_file.storage_path is not null
+  ) source
+  order by source.source_path, source.version_number nulls first;
+$$;

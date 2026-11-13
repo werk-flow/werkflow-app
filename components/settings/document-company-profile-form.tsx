@@ -37,12 +37,15 @@ const SAVE_FAILURES = {
   not_authorized: 'Nur Admins und das Büro können die Firmenangaben ändern.',
   profile_changed:
     'Jemand hat die Angaben inzwischen geändert. Lade die Seite neu und trag deine Änderung noch einmal ein.',
+  organization_changed:
+    'Inzwischen ist eine andere Organisation aktiv. Lade die Seite neu und trag deine Änderung noch einmal ein.',
   margins_leave_no_room:
     'Mit diesen Rändern bleibt zu wenig Platz für das Angebot. Verkleinere die Ränder des Briefpapiers.',
 } satisfies Record<string, string>;
 const SAVE_FAILED = 'Die Firmenangaben konnten nicht gespeichert werden. Versuch es noch einmal.';
 
 type FormProps = {
+  /** The organization whose saved profile the form shows. */
   organizationId: string;
   version: number;
   details: CompanyProfileDetails;
@@ -197,10 +200,15 @@ function MarginFields({
   );
 }
 
-/** The form's draft and its save: parse, mark and focus invalid fields, then one save call. */
+/**
+ * The form's draft and its save: parse, mark and focus invalid fields, then
+ * one save call. The save names the organization and version the draft was
+ * loaded from, so the server refuses it once another organization is active.
+ */
 function useProfileSave({ organizationId, version, details }: Omit<FormProps, 'stationery'>) {
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(saveCompanyDocumentProfile);
+  const [loaded] = useState(() => ({ organizationId, version }));
   const [draft, setDraft] = useState(() => profileDraftOf(details));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
@@ -217,9 +225,11 @@ function useProfileSave({ organizationId, version, details }: Omit<FormProps, 's
     }
     setErrors({});
     // A lost connection rejects the call: the draft stays and the failure shows like a refusal.
-    const result = await run({ organizationId, expectedVersion: version, details: parsed.details }).catch(
-      () => ({ success: false, error: 'save_failed' }) as const,
-    );
+    const result = await run({
+      organizationId: loaded.organizationId,
+      expectedVersion: loaded.version,
+      details: parsed.details,
+    }).catch(() => ({ success: false, error: 'save_failed' }) as const);
     if (result.success) {
       // The answer renders the route with the saved profile, which remounts this form.
       showBanner({ variant: 'success', message: 'Die Firmenangaben wurden gespeichert.' });
@@ -247,8 +257,16 @@ function StationeryMargins({ controls, following }: { controls: DraftControls; f
   );
 }
 
-/** The company's details and offer defaults, saved together with their history. */
-export function DocumentCompanyProfileForm({ stationery, ...profile }: FormProps) {
+/**
+ * The company's details and offer defaults, saved together with their
+ * history. Another organization or a saved version mounts a new form, so the
+ * draft always starts from the profile shown.
+ */
+export function DocumentCompanyProfileForm(props: FormProps) {
+  return <CompanyProfileForm key={`${props.organizationId}:${props.version}`} {...props} />;
+}
+
+function CompanyProfileForm({ stationery, ...profile }: FormProps) {
   const { controls, submit, isPending, failure } = useProfileSave(profile);
   return (
     <Card>

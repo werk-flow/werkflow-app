@@ -10,9 +10,18 @@ import type {
   DocumentImage,
   DocumentPosition,
   DocumentSection,
-  PageMargins,
   StationeryFile,
 } from './model';
+import {
+  INFO_BLOCK_LEFT_MM,
+  INFO_LABEL_WIDTH_MM,
+  MM,
+  PAGE_HEIGHT,
+  PAGE_WIDTH,
+  PLAIN_MARGINS,
+  pageGeometry,
+  type Box,
+} from './page-geometry';
 
 // The one renderer of generated business documents
 // (docs/technical/document-storage-and-access.md). It lays out the plain
@@ -20,23 +29,8 @@ import type {
 // external service. The same model gives the same bytes: fonts, images and
 // the PDF's dates all come from the input and the bundled files.
 
-const MM = 72 / 25.4;
-const PAGE_WIDTH = 210 * MM;
-const PAGE_HEIGHT = 297 * MM;
-
-/** The plain letter's margins; the first page's address field and info block sit where DIN 5008 (form B) puts them. */
-const PLAIN_MARGINS: PageMargins = { topMm: 20, rightMm: 20, bottomMm: 15, leftMm: 25 };
 const PLAIN_FOOTER_HEIGHT_MM = 17;
-const FIRST_PAGE_CONTENT_TOP_MM = 100;
 const RETURN_ADDRESS_TOP_MM = 47;
-/** Where form B's address field starts; a stationery top margin below it moves the field down. */
-const ADDRESS_FIELD_TOP_MM = 45;
-/** The narrowest content a page may leave: the table and the info block's values need this much. */
-const MINIMUM_CONTENT_WIDTH_MM = 120;
-const MINIMUM_INFO_VALUE_WIDTH_MM = 25;
-const MINIMUM_CONTENT_HEIGHT_MM = 120;
-const INFO_BLOCK_LEFT_MM = 125;
-const PAGE_NUMBER_SPACE = 8 * MM;
 const LOGO_MAX_WIDTH_MM = 55;
 
 const INK = rgb(0.11, 0.11, 0.13);
@@ -52,7 +46,6 @@ const SMALL_LEADING = 9;
 
 type Fonts = { regular: PDFFont; bold: PDFFont };
 /** A page's content area in points, measured from the top left corner. */
-type Box = { left: number; right: number; top: number; bottom: number };
 
 /** One unbreakable slice of the flow. `keepWithNext` keeps it on the page of the item after it. */
 type FlowItem = {
@@ -429,15 +422,6 @@ function placeItems(items: FlowItem[], top: number): PlacedPage {
   return page;
 }
 
-function boxFromMargins(margins: PageMargins, minimumTopMm: number): Box {
-  return {
-    left: margins.leftMm * MM,
-    right: PAGE_WIDTH - margins.rightMm * MM,
-    top: Math.max(margins.topMm, minimumTopMm) * MM,
-    bottom: PAGE_HEIGHT - margins.bottomMm * MM - PAGE_NUMBER_SPACE,
-  };
-}
-
 type Underlay = { kind: 'page'; page: PDFEmbeddedPage } | { kind: 'image'; image: PDFImage };
 
 async function embedImage(pdf: PDFDocument, image: DocumentImage): Promise<PDFImage> {
@@ -500,7 +484,7 @@ function drawAddressAndInfo(
     drawLeft(page, line, box.left, 55 * MM + shift + index * BODY_LEADING, fonts.regular, BODY_SIZE),
   );
   const labelLeft = INFO_BLOCK_LEFT_MM * MM;
-  const valueLeft = labelLeft + 30 * MM;
+  const valueLeft = labelLeft + INFO_LABEL_WIDTH_MM * MM;
   let top = 50 * MM + shift;
   for (const row of document.metaRows) {
     drawLeft(page, row.label, labelLeft, top, fonts.regular, 8, MUTED);
@@ -588,40 +572,6 @@ const PLAIN_GLYPHS = {
   mark: false,
   mkmk: false,
 };
-
-type StationeryMargins = { firstPage: PageMargins; followingPages: PageMargins | null };
-
-/** The content boxes of the first and the following pages, and how far the address field moves down. */
-function pageGeometry(stationery: StationeryMargins | null, footerHeightMm: number) {
-  const plainBottomMm = PLAIN_MARGINS.bottomMm + footerHeightMm;
-  const plainMargins = { ...PLAIN_MARGINS, bottomMm: plainBottomMm };
-  const addressShift = Math.max(0, (stationery?.firstPage.topMm ?? 0) - ADDRESS_FIELD_TOP_MM) * MM;
-  const firstBox = boxFromMargins(
-    stationery?.firstPage ?? plainMargins,
-    FIRST_PAGE_CONTENT_TOP_MM + addressShift / MM,
-  );
-  const followingBox = boxFromMargins(stationery?.followingPages ?? plainMargins, 0);
-  const tooNarrow = [firstBox, followingBox].some(
-    (box) =>
-      box.right - box.left < MINIMUM_CONTENT_WIDTH_MM * MM ||
-      box.bottom - box.top < MINIMUM_CONTENT_HEIGHT_MM * MM,
-  );
-  if (tooNarrow || firstBox.right - (INFO_BLOCK_LEFT_MM + 30) * MM < MINIMUM_INFO_VALUE_WIDTH_MM * MM) {
-    throw new Error('document_margins_leave_no_room');
-  }
-  return { firstBox, followingBox, addressShift };
-}
-
-/** Whether stationery with these margins leaves the content the room a document needs. */
-export function stationeryMarginsFit(margins: StationeryMargins): boolean {
-  try {
-    pageGeometry(margins, 0);
-    return true;
-  } catch {
-    // The geometry's only refusal is margins that leave no room.
-    return false;
-  }
-}
 
 /**
  * Whether the renderer can draw the file as a logo (`image`) or as stationery

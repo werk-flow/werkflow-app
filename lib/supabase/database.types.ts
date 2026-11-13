@@ -1100,6 +1100,7 @@ export type Database = {
           email: string;
           iban: string;
           logo_mime_type: string | null;
+          logo_size_bytes: number | null;
           logo_storage_path: string | null;
           managing_directors: string;
           offer_closing_text: string;
@@ -1115,12 +1116,14 @@ export type Database = {
           stationery_first_left_mm: number;
           stationery_first_mime_type: string | null;
           stationery_first_right_mm: number;
+          stationery_first_size_bytes: number | null;
           stationery_first_storage_path: string | null;
           stationery_first_top_mm: number;
           stationery_following_bottom_mm: number;
           stationery_following_left_mm: number;
           stationery_following_mime_type: string | null;
           stationery_following_right_mm: number;
+          stationery_following_size_bytes: number | null;
           stationery_following_storage_path: string | null;
           stationery_following_top_mm: number;
           street: string;
@@ -1139,6 +1142,7 @@ export type Database = {
           email?: string;
           iban?: string;
           logo_mime_type?: string | null;
+          logo_size_bytes?: number | null;
           logo_storage_path?: string | null;
           managing_directors?: string;
           offer_closing_text?: string;
@@ -1154,12 +1158,14 @@ export type Database = {
           stationery_first_left_mm?: number;
           stationery_first_mime_type?: string | null;
           stationery_first_right_mm?: number;
+          stationery_first_size_bytes?: number | null;
           stationery_first_storage_path?: string | null;
           stationery_first_top_mm?: number;
           stationery_following_bottom_mm?: number;
           stationery_following_left_mm?: number;
           stationery_following_mime_type?: string | null;
           stationery_following_right_mm?: number;
+          stationery_following_size_bytes?: number | null;
           stationery_following_storage_path?: string | null;
           stationery_following_top_mm?: number;
           street?: string;
@@ -1178,6 +1184,7 @@ export type Database = {
           email?: string;
           iban?: string;
           logo_mime_type?: string | null;
+          logo_size_bytes?: number | null;
           logo_storage_path?: string | null;
           managing_directors?: string;
           offer_closing_text?: string;
@@ -1193,12 +1200,14 @@ export type Database = {
           stationery_first_left_mm?: number;
           stationery_first_mime_type?: string | null;
           stationery_first_right_mm?: number;
+          stationery_first_size_bytes?: number | null;
           stationery_first_storage_path?: string | null;
           stationery_first_top_mm?: number;
           stationery_following_bottom_mm?: number;
           stationery_following_left_mm?: number;
           stationery_following_mime_type?: string | null;
           stationery_following_right_mm?: number;
+          stationery_following_size_bytes?: number | null;
           stationery_following_storage_path?: string | null;
           stationery_following_top_mm?: number;
           street?: string;
@@ -5095,7 +5104,7 @@ export type Database = {
       organization_export_files: {
         Row: {
           archive_name: string;
-          document_id: string;
+          document_id: string | null;
           export_id: string;
           file_bytes: number;
           id: string;
@@ -5106,7 +5115,7 @@ export type Database = {
         };
         Insert: {
           archive_name: string;
-          document_id: string;
+          document_id?: string | null;
           export_id: string;
           file_bytes: number;
           id?: string;
@@ -5117,7 +5126,7 @@ export type Database = {
         };
         Update: {
           archive_name?: string;
-          document_id?: string;
+          document_id?: string | null;
           export_id?: string;
           file_bytes?: number;
           id?: string;
@@ -17840,6 +17849,7 @@ export type Database = {
           p_kind: string;
           p_mime_type: string;
           p_organization_id: string;
+          p_size_bytes: number;
           p_storage_path: string;
         };
         Returns: undefined;
