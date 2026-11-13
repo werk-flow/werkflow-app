@@ -185,7 +185,7 @@ begin
   end if;
   if (select count(*) from public.inventory_movements where import_batch_id = v_batch) <> 4
     or (select quantity_on_hand from public.inventory_stock_levels
-      where item_id = '99200000-0000-4000-8000-000000000030' and location_id = '99200000-0000-4000-8000-000000000020') <> 5
+      where item_id = '99200000-0000-4000-8000-000000000030' and location_id = '99200000-0000-4000-8000-000000000020') is distinct from 5
   then
     raise exception 'the booking must book exactly the four accepted rows';
   end if;
