@@ -31,6 +31,7 @@ import {
 } from '../support/offline-today';
 import {
   UNSENT_COPY,
+  expectStartRecordedAtCapturedTime,
   expectTimeEventsOnDevice,
   offlineClock,
   offlineClockAction,
@@ -143,15 +144,17 @@ test('E7-F01 a visit without signal survives a restart, and with signal everythi
     await blockJobStart(world, `Pumpe kommt erst morgen ${world.runId}`);
   });
 
-  // The start alone is recorded: once, at the time the phone captured it, as work without a job.
+  // The start alone is recorded, once, as work without a job (its captured time is checked as it arrives).
   const startRecorded = {
     operations: [{ kind: 'start', captured: true }],
-    sessions: [{ open: true, startsAtCapture: true, segments: [{ kind: 'work', onJob: false }] }],
+    sessions: [{ open: true, segments: [{ kind: 'work', onJob: false }] }],
   };
 
   await test.step('with signal again, the start arrives once and the switch stays shown as a conflict', async () => {
-    await setNetwork(restarted, 'online');
-    await restarted.goto('/dashboard');
+    await expectStartRecordedAtCapturedTime(restarted, world, async () => {
+      await setNetwork(restarted, 'online');
+      await restarted.goto('/dashboard');
+    });
     await expect(unsentBadge(clockDock(restarted), OFFLINE_VISIT_COPY.conflict)).toBeVisible();
     await expectTimeEventsOnDevice(restarted, ['switch', 'end']);
     await expectRecordedClock(world, technician, startRecorded);

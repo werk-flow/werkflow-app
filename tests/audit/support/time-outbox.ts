@@ -220,6 +220,67 @@ export async function expectSessionsSince(
 }
 
 /**
+ * Reads the first event the device holds unsent, which must be a start, lets `reconnect` bring the
+ * signal back, and waits until the server recorded that start once, under the device's operation
+ * id, at the time the phone captured it: its operation, its session and that session's first
+ * segment, work without a job.
+ */
+export async function expectStartRecordedAtCapturedTime(
+  page: Page,
+  world: TestWorld,
+  reconnect: () => Promise<void>,
+): Promise<void> {
+  const [start] = await readTimeEventsOnDevice(page);
+  expect(start?.action).toBe('start');
+  const capturedAt = Date.parse(start?.capturedAt ?? '');
+  await reconnect();
+  await expect
+    .poll(
+      async () => {
+        const admin = createAdminClient();
+        const { data: operation } = await admin
+          .from('time_operations')
+          .select('captured_at, resulting_session_id')
+          .eq('organization_id', world.orgId)
+          .eq('id', start?.operationId ?? '')
+          .maybeSingle()
+          .throwOnError();
+        if (!operation?.resulting_session_id) return null;
+        const { data: session } = await admin
+          .from('time_sessions')
+          .select('started_at')
+          .eq('organization_id', world.orgId)
+          .eq('id', operation.resulting_session_id)
+          .single()
+          .throwOnError();
+        const { data: segments } = await admin
+          .from('time_segments')
+          .select('kind, job_id, started_at')
+          .eq('organization_id', world.orgId)
+          .eq('session_id', operation.resulting_session_id)
+          .order('started_at')
+          .limit(1)
+          .throwOnError();
+        return {
+          captured: operation.captured_at === null ? null : Date.parse(operation.captured_at),
+          sessionStart: Date.parse(session.started_at),
+          firstSegment: segments.map((segment) => ({
+            kind: segment.kind,
+            jobId: segment.job_id,
+            startedAt: Date.parse(segment.started_at),
+          })),
+        };
+      },
+      { message: "The server recorded the phone's start once, at the time the phone captured it" },
+    )
+    .toEqual({
+      captured: capturedAt,
+      sessionStart: capturedAt,
+      firstSegment: [{ kind: 'work', jobId: null, startedAt: capturedAt }],
+    });
+}
+
+/**
  * Reads the start and the end the device holds unsent, lets `reconnect` bring the signal back,
  * and waits until the server holds exactly one session of the employee, started and ended at
  * those captured times and not at the later time it received them.

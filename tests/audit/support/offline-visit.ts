@@ -155,8 +155,6 @@ type RecordedClock = {
   /** The person's sessions, oldest first, with their segments. */
   sessions: {
     open: boolean;
-    /** The session starts at the captured time of the operation that started it. */
-    startsAtCapture: boolean;
     segments: { kind: string; onJob: boolean }[];
   }[];
 };
@@ -165,14 +163,14 @@ async function recordedClock(world: TestWorld, user: TestUser): Promise<Recorded
   const admin = createAdminClient();
   const { data: operations } = await admin
     .from('time_operations')
-    .select('operation_kind, captured_at, resulting_session_id, employee_records!inner(user_id)')
+    .select('operation_kind, captured_at, employee_records!inner(user_id)')
     .eq('organization_id', world.orgId)
     .eq('employee_records.user_id', user.id)
     .order('created_at')
     .throwOnError();
   const { data: sessions } = await admin
     .from('time_sessions')
-    .select('id, started_at, ended_at')
+    .select('id, ended_at')
     .eq('organization_id', world.orgId)
     .eq('user_id', user.id)
     .order('started_at')
@@ -192,17 +190,12 @@ async function recordedClock(world: TestWorld, user: TestUser): Promise<Recorded
       kind: operation.operation_kind,
       captured: operation.captured_at !== null,
     })),
-    sessions: sessions.map((session) => {
-      const start = operations.find((operation) => operation.resulting_session_id === session.id);
-      return {
-        open: session.ended_at === null,
-        startsAtCapture:
-          start?.captured_at != null && Date.parse(start.captured_at) === Date.parse(session.started_at),
-        segments: segments
-          .filter((segment) => segment.session_id === session.id)
-          .map((segment) => ({ kind: segment.kind, onJob: segment.job_id !== null })),
-      };
-    }),
+    sessions: sessions.map((session) => ({
+      open: session.ended_at === null,
+      segments: segments
+        .filter((segment) => segment.session_id === session.id)
+        .map((segment) => ({ kind: segment.kind, onJob: segment.job_id !== null })),
+    })),
   };
 }
 
