@@ -103,9 +103,9 @@ function MovementFilterBar({
   people: Array<{ id: string; name: string }>;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
+    <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-wrap lg:items-center">
       <SearchInput
-        wrapperClassName="min-w-0 sm:col-span-2 lg:w-64"
+        wrapperClassName="col-span-2 min-w-0 lg:w-64"
         value={filters.search}
         onValueChange={filters.changeSearch}
         placeholder="Artikel suchen"
@@ -137,7 +137,7 @@ function MovementFilterBar({
           ))}
         </SelectContent>
       </Select>
-      <div className="min-w-0 lg:w-48">
+      <div className="col-span-2 min-w-0 lg:w-48">
         <SearchableSelect
           ariaLabel="Nach Person filtern"
           options={[
