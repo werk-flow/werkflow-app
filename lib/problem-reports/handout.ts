@@ -154,25 +154,26 @@ async function loadReport(
 
 /**
  * The copy the hand-out may hand out, checked before the claim: a refusal
- * code, `failed`, or null when the copy is current and clean. Only a copy
- * of the current rules passes, so the hand-out, which requires that same
- * version under its lock, answers exactly the copy checked here: a copy only
- * ever changes to a newer version. The second line behind the version: a
- * current copy that still names its organization, its join code or a record
- * id never leaves (`copy_unavailable`), is logged without its text, and is
- * withdrawn from the current version so the daily run scrubs it again.
+ * code, `failed`, or the revision of the current, clean copy checked here.
+ * The hand-out takes that revision and, under its lock, answers only that
+ * very copy: one written or withdrawn since is refused. The second line
+ * behind the rule version: a current copy that still names its organization,
+ * its join code or a record id never leaves (`copy_unavailable`), is logged
+ * without its text, and is withdrawn so the daily run scrubs it again.
  */
 async function checkCopy(
   admin: AdminClient,
   report: { id: string; organization_id: string },
-): Promise<HandoutRefusal | 'failed' | null> {
+): Promise<HandoutRefusal | 'failed' | { revision: number }> {
   const [copy, organization] = await Promise.all([
     loggedRead(
       'problem report hand-out: copy read failed',
       admin
         // tenant-scope: cross-organization-by-design — the copy of the one report a thread names, by its id
         .from('problem_reports')
-        .select('scrub_state, scrub_version, scrubbed_description, scrubbed_context, originals_deleted_at')
+        .select(
+          'scrub_state, scrub_version, scrub_revision, scrubbed_description, scrubbed_context, originals_deleted_at',
+        )
         .eq('id', report.id)
         .maybeSingle(),
     ),
@@ -194,7 +195,7 @@ async function checkCopy(
       { description, context: parseScrubbedProblemReportContext(copy.data.scrubbed_context) },
       organization.data,
     );
-    if (!names) return null;
+    if (!names) return { revision: copy.data.scrub_revision };
     // A copy of the current rules never names its organization; when one
     // does, the rules missed a case, such as a rename since the scrub. It is
     // held back, reported, and withdrawn: the daily run scrubs it again.
@@ -231,8 +232,8 @@ function handOutArguments(report: { id: string; organization_id: string }) {
 }
 
 /** The arguments of a copy hand-out: only a copy of the current scrub rules leaves. */
-function copyHandOutArguments(report: { id: string; organization_id: string }) {
-  return { ...handOutArguments(report), p_scrub_version: SCRUB_RULES_VERSION };
+function copyHandOutArguments(report: { id: string; organization_id: string }, revision: number) {
+  return { ...handOutArguments(report), p_scrub_version: SCRUB_RULES_VERSION, p_scrub_revision: revision };
 }
 
 /** The arguments of the Agent's triage of one loaded report: no actor. */
@@ -274,13 +275,13 @@ export async function handOutProblemReport(
 ): Promise<HandoutResult<{ copy: HandedOutCopy }>> {
   const loaded = await loadReport(admin, reportId);
   if (!loaded.ok) return loaded;
-  const refusal = await checkCopy(admin, loaded.report);
-  if (refusal === 'failed') return FAILED;
-  if (refusal) return { ok: false, error: refusal };
+  const checked = await checkCopy(admin, loaded.report);
+  if (checked === 'failed') return FAILED;
+  if (typeof checked === 'string') return { ok: false, error: checked };
   const { data, error } = await admin.rpc(
     'hand_out_problem_report',
     // tenant-scope: cross-organization-by-design — a report thread takes a report of any organization; the loaded report's own organization scopes the call
-    rpcArgs('hand_out_problem_report', copyHandOutArguments(loaded.report)),
+    rpcArgs('hand_out_problem_report', copyHandOutArguments(loaded.report, checked.revision)),
   );
   if (error) return refusalOf(error, 'handOutProblemReport: hand-out failed');
   try {

@@ -37,6 +37,35 @@ alter table public.problem_reports add column scrub_version integer;
 alter table public.problem_reports add constraint problem_reports_scrub_version_consistency
   check (scrub_version is null or (scrub_state = 'bereinigt' and scrub_version > 0));
 
+-- The identity of the copy: it rises with every change of the copy's text,
+-- context, state or rule version, by whichever path, and nothing else sets
+-- it. The hand-out answers only the revision the server checked.
+alter table public.problem_reports add column scrub_revision bigint not null default 0;
+
+create function app_private.raise_problem_report_copy_revision()
+returns trigger
+language plpgsql
+set search_path to ''
+as $$
+begin
+  new.scrub_revision := case
+    when new.scrubbed_description is distinct from old.scrubbed_description
+      or new.scrubbed_context is distinct from old.scrubbed_context
+      or new.scrub_state is distinct from old.scrub_state
+      or new.scrub_version is distinct from old.scrub_version
+    then old.scrub_revision + 1
+    else old.scrub_revision
+  end;
+  return new;
+end;
+$$;
+
+revoke all on function app_private.raise_problem_report_copy_revision() from public, anon, authenticated;
+
+create trigger problem_reports_copy_revision
+  before update on public.problem_reports
+  for each row execute function app_private.raise_problem_report_copy_revision();
+
 -- The reports waiting for a thread, oldest first.
 create index problem_reports_waiting_idx on public.problem_reports (created_at, id)
   where scrub_state = 'bereinigt' and handed_out_at is null and closed_at is null;
@@ -219,11 +248,13 @@ $$;
 -- p_scrub_version while it keeps its originals, is `copy_pending`; one that
 -- cannot be scrubbed, or keeps such a copy without originals, `copy_unavailable`, a closed one `report_closed`, one
 -- already handed out `already_handed_out`, and a report of another
--- organization `report_not_found`.
+-- organization `report_not_found`. A copy whose revision differs from
+-- p_scrub_revision, the one the server checked, is `copy_pending`.
 create function public.hand_out_problem_report(
   p_organization_id uuid,
   p_report_id uuid,
   p_scrub_version integer,
+  p_scrub_revision bigint,
   p_support_ids uuid[]
 )
 returns jsonb
@@ -250,6 +281,9 @@ begin
   if v_report.scrub_version is distinct from p_scrub_version then
     raise exception '%', case when v_report.originals_deleted_at is null then 'copy_pending' else 'copy_unavailable' end;
   end if;
+  -- Only the very copy the server checked: one written or withdrawn since is
+  -- refused, and the thread's next call checks the new one.
+  if v_report.scrub_revision <> p_scrub_revision then raise exception 'copy_pending'; end if;
   if v_report.closed_at is not null then raise exception 'report_closed'; end if;
   if v_report.handed_out_at is not null then raise exception 'already_handed_out'; end if;
 
@@ -274,8 +308,8 @@ begin
 end;
 $$;
 
-revoke all on function public.hand_out_problem_report(uuid, uuid, integer, uuid[]) from public, anon, authenticated;
-grant execute on function public.hand_out_problem_report(uuid, uuid, integer, uuid[]) to service_role;
+revoke all on function public.hand_out_problem_report(uuid, uuid, integer, bigint, uuid[]) from public, anon, authenticated;
+grant execute on function public.hand_out_problem_report(uuid, uuid, integer, bigint, uuid[]) to service_role;
 
 -- Hands the redrawn screenshot of a report whose copy a thread received:
 -- writes the hand-out into the history, signals the support persons in

@@ -96,7 +96,7 @@ declare
   v_role text;
 begin
   foreach v_role in array array['anon', 'authenticated'] loop
-    if has_function_privilege(v_role, 'public.hand_out_problem_report(uuid, uuid, integer, uuid[])', 'EXECUTE')
+    if has_function_privilege(v_role, 'public.hand_out_problem_report(uuid, uuid, integer, bigint, uuid[])', 'EXECUTE')
       or has_function_privilege(v_role, 'public.hand_out_problem_report_screenshot(uuid, uuid, uuid[])', 'EXECUTE')
       or has_function_privilege(v_role,
         'public.record_problem_report_scrub(uuid, uuid, text, jsonb, integer)', 'EXECUTE')
@@ -117,7 +117,7 @@ declare
   v_support constant uuid := '33600000-0000-0000-0000-000000000003';
   v_copy jsonb;
 begin
-  v_copy := public.hand_out_problem_report(v_org, v_report, 1, array[v_support]);
+  v_copy := public.hand_out_problem_report(v_org, v_report, 1, (select scrub_revision from public.problem_reports where id = v_report), array[v_support]);
   if v_copy is distinct from jsonb_build_object('description', 'Bei [Person 1] speichert nichts',
     'context', '{}'::jsonb, 'status', 'eingegangen', 'bucket', null, 'has_answer', false,
     'has_screenshot', true)
@@ -134,7 +134,7 @@ begin
   end if;
 
   begin
-    perform public.hand_out_problem_report(v_org, v_report, 1, array[v_support]);
+    perform public.hand_out_problem_report(v_org, v_report, 1, (select scrub_revision from public.problem_reports where id = v_report), array[v_support]);
     raise exception 'a second hand-out was accepted';
   exception when raise_exception then
     if sqlerrm <> 'already_handed_out' then raise; end if;
@@ -166,7 +166,8 @@ begin
     (v_org, '33600000-0000-0000-0000-0000000000ff'::uuid, 'report_not_found')
   ) as refused (organization_id, report_id, code) loop
     begin
-      perform public.hand_out_problem_report(v_case.organization_id, v_case.report_id, 1, array[]::uuid[]);
+      perform public.hand_out_problem_report(v_case.organization_id, v_case.report_id, 1,
+        (select scrub_revision from public.problem_reports where id = v_case.report_id), array[]::uuid[]);
       raise exception 'the hand-out of % was accepted', v_case.report_id;
     exception when raise_exception then
       if sqlerrm <> v_case.code then
@@ -204,7 +205,8 @@ begin
         and event_type = 'screenshot_handed_out' and actor_id is null) <> 1
   then raise exception 'the screenshot hand-out wrote no entry without an actor'; end if;
 
-  perform public.hand_out_problem_report(v_org, '33600000-0000-0000-0000-000000000024', 1, array[]::uuid[]);
+  perform public.hand_out_problem_report(v_org, '33600000-0000-0000-0000-000000000024', 1,
+    (select scrub_revision from public.problem_reports where id = '33600000-0000-0000-0000-000000000024'), array[]::uuid[]);
   begin
     perform public.hand_out_problem_report_screenshot(v_org, '33600000-0000-0000-0000-000000000024', array[]::uuid[]);
     raise exception 'a report without a screenshot handed one out';
@@ -364,7 +366,7 @@ begin
   then raise exception 'an older version replaced a newer copy'; end if;
   -- The hand-out answers only a copy of exactly the rules the server checked.
   begin
-    perform public.hand_out_problem_report(v_org, v_old, 1, array[]::uuid[]);
+    perform public.hand_out_problem_report(v_org, v_old, 1, (select scrub_revision from public.problem_reports where id = v_old), array[]::uuid[]);
     raise exception 'a copy of other rules than the checked ones was handed out';
   exception when raise_exception then
     if sqlerrm <> 'copy_pending' then raise; end if;
@@ -393,6 +395,45 @@ begin
   if not v_withdrawn or (select scrub_version is not null or scrub_state <> 'bereinigt'
       or scrubbed_description <> 'Ohne Bild' from public.problem_reports where id = v_report)
   then raise exception 'the withdrawal did not clear only the version'; end if;
+end;
+$$;
+
+-- A copy's revision rises with every change of its text, context, state or
+-- rule version, whichever path writes it, and a direct write of the revision
+-- alone changes nothing. The hand-out answers only the revision the server
+-- checked: after a withdrawal and a new scrub at the same rule version, a
+-- call with the old revision is refused and claims nothing.
+do $$
+declare
+  v_org constant uuid := '33600000-0000-0000-0000-000000000010';
+  v_report constant uuid := '33600000-0000-0000-0000-000000000026';
+  v_checked bigint;
+  v_copy jsonb;
+begin
+  update public.problem_reports set scrub_version = 1 where id = v_report;
+  v_checked := (select scrub_revision from public.problem_reports where id = v_report);
+  update public.problem_reports set scrub_revision = 0 where id = v_report;
+  if (select scrub_revision from public.problem_reports where id = v_report) <> v_checked then
+    raise exception 'a direct write changed the revision';
+  end if;
+  perform public.withdraw_problem_report_copy(v_org, v_report, 1);
+  perform public.record_problem_report_scrub(v_org, v_report, 'Die neue Kopie', '{}', 1);
+  if (select scrub_revision from public.problem_reports where id = v_report) <> v_checked + 2 then
+    raise exception 'the withdrawal and the new scrub did not each raise the revision';
+  end if;
+  begin
+    perform public.hand_out_problem_report(v_org, v_report, 1, v_checked, array[]::uuid[]);
+    raise exception 'a copy other than the checked one was handed out';
+  exception when raise_exception then
+    if sqlerrm <> 'copy_pending' then raise; end if;
+  end;
+  if (select handed_out_at from public.problem_reports where id = v_report) is not null
+    or exists (select 1 from public.problem_report_events where report_id = v_report)
+  then raise exception 'a refused hand-out of a rewritten copy claimed or wrote history'; end if;
+  v_copy := public.hand_out_problem_report(v_org, v_report, 1, v_checked + 2, array[]::uuid[]);
+  if v_copy ->> 'description' <> 'Die neue Kopie' then
+    raise exception 'the hand-out did not answer the newly checked copy: %', v_copy;
+  end if;
 end;
 $$;
 

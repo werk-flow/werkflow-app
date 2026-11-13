@@ -87,6 +87,8 @@ const report = (id: string, organizationId: string, number: number, extra: objec
   scrubbed_context: SCRUBBED_CONTEXT,
   // A copy of the current scrub rules.
   scrub_version: 1,
+  // The copy's identity, which the database raises with every change of the copy.
+  scrub_revision: 0,
   handed_out_at: null,
   ...extra,
 });
@@ -174,6 +176,8 @@ const recordAgent = (args: Record<string, unknown>, eventType: string) => {
 };
 
 let betweenCheckAndHandOut: (() => void) | null = null;
+const revisionOf = (row: Record<string, unknown>) =>
+  typeof row.scrub_revision === 'number' ? row.scrub_revision : 0;
 /** The hand-out functions and the Agent's triage over the world's tables, with their refusals. */
 world.rpc = ({ name, args }) => {
   const row = reportRow(args);
@@ -189,12 +193,13 @@ world.rpc = ({ name, args }) => {
       row.scrubbed_context = args.p_scrubbed_context;
       row.scrub_state = copy ? 'bereinigt' : 'nicht_bereinigbar';
       row.scrub_version = copy ? args.p_scrub_version : null;
+      row.scrub_revision = revisionOf(row) + 1;
     }
     return { data: row.scrub_state, error: null };
   }
   if (name === 'withdraw_problem_report_copy') {
     const current = row.scrub_version === args.p_scrub_version;
-    if (current) row.scrub_version = null;
+    if (current) Object.assign(row, { scrub_version: null, scrub_revision: revisionOf(row) + 1 });
     return { data: current, error: null };
   }
   if (name === 'hand_out_problem_report') {
@@ -206,6 +211,7 @@ world.rpc = ({ name, args }) => {
     if (row.scrub_state !== 'bereinigt') return refused('copy_unavailable');
     if (row.scrub_version !== args.p_scrub_version)
       return refused(row.originals_deleted_at === null ? 'copy_pending' : 'copy_unavailable');
+    if (revisionOf(row) !== args.p_scrub_revision) return refused('copy_pending');
     if (row.closed_at !== null) return refused('report_closed');
     if (row.handed_out_at !== null) return refused('already_handed_out');
     row.handed_out_at = '2026-11-12T09:00:00.000Z';
@@ -558,6 +564,28 @@ assert.ok(!(await raced.text()).includes('Beispiel'), 'an unchecked copy left');
 assert.equal(world.rpcCalls.length, racedCallsBefore, 'a copy of older rules reached the hand-out');
 assert.equal(reports().find((row) => row.id === racedId)?.handed_out_at, null);
 betweenCheckAndHandOut = null;
+
+// The hand-out answers only the very copy the server checked. When the copy
+// is withdrawn and scrubbed again at the same rule version between the check
+// and the call, the call is refused and writes nothing; the next call checks
+// the new copy and hands it out.
+const rewrittenId = '33600000-0000-4000-8000-00000000002c';
+reports().push(report(rewrittenId, ORGANIZATION_B, 12, { scrubbed_description: 'Die alte Kopie.' }));
+betweenCheckAndHandOut = () => {
+  const row = reports().find((entry) => entry.id === rewrittenId);
+  if (row)
+    Object.assign(row, { scrubbed_description: 'Die neue Kopie.', scrub_revision: revisionOf(row) + 2 });
+};
+const historyBeforeRewrite = events().length;
+assert.deepEqual(await refusal(call.handOut(rewrittenId)), [409, { error: 'copy_pending' }]);
+assert.equal(reports().find((row) => row.id === rewrittenId)?.handed_out_at, null);
+assert.equal(events().length, historyBeforeRewrite, 'a refused hand-out of a rewritten copy wrote history');
+const rewritten = await call.handOut(rewrittenId);
+assert.equal(rewritten.status, 200);
+assert.equal(
+  z.object({ description: z.string() }).parse(await rewritten.json()).description,
+  'Die neue Kopie.',
+);
 
 // The second line: a copy of the current rules that still names its
 // organization (the rules missed a case) is refused unclaimed, logged without

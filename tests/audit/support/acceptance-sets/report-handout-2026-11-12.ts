@@ -56,11 +56,20 @@ async function seedAnsweredReports(world: TestWorld): Promise<string> {
       'Die Liste der Aufträge bleibt nach dem Filtern leer.',
       '2026-11-11T07:30:00.000Z',
     );
+    // The hand-out answers only the copy revision the server checked, as the route reads it.
+    const { data: checked } = await admin
+      .from('problem_reports')
+      .select('scrub_revision')
+      .eq('organization_id', world.orgId)
+      .eq('id', byAgent)
+      .single()
+      .throwOnError();
     await admin
       .rpc('hand_out_problem_report', {
         p_organization_id: world.orgId,
         p_report_id: byAgent,
         p_scrub_version: SCRUB_RULES_VERSION,
+        p_scrub_revision: checked.scrub_revision,
         p_support_ids: [],
       })
       .throwOnError();

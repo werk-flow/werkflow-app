@@ -8073,6 +8073,7 @@ export type Database = {
           reporter_id: string;
           response: string | null;
           response_by_agent: boolean;
+          scrub_revision: number;
           scrub_state: string;
           scrub_version: number | null;
           scrubbed_context: Json | null;
@@ -8095,6 +8096,7 @@ export type Database = {
           reporter_id: string;
           response?: string | null;
           response_by_agent?: boolean;
+          scrub_revision?: number;
           scrub_state?: string;
           scrub_version?: number | null;
           scrubbed_context?: Json | null;
@@ -8117,6 +8119,7 @@ export type Database = {
           reporter_id?: string;
           response?: string | null;
           response_by_agent?: boolean;
+          scrub_revision?: number;
           scrub_state?: string;
           scrub_version?: number | null;
           scrubbed_context?: Json | null;
@@ -16404,6 +16407,7 @@ export type Database = {
         Args: {
           p_organization_id: string;
           p_report_id: string;
+          p_scrub_revision: number;
           p_scrub_version: number;
           p_support_ids: string[];
         };
