@@ -121,7 +121,7 @@ describe('report drafts on the device', () => {
     expect(answer).toBeNull();
     await deleteShownDraftsOnDevice(
       { userId: otherPerson.userId, organizationId: null },
-      { drafts: new Map([[draft().id, draft().updatedAt]]), unreadable: new Set([draft().id]) },
+      { drafts: new Map([[draft().id, draft().updatedAt]]), unreadable: (entry) => entry.id === draft().id },
     );
     expect((await listDraftsOnDevice(holder, NOW)).map((entry) => entry.title)).toEqual(['Heizung gewartet']);
   });
@@ -201,7 +201,9 @@ describe('the drafts a session end asks about', () => {
       draft().id,
       otherOrganizationDraft.id,
     ]);
-    expect(listed.unreadable).toEqual([{ id: unreadableId, jobId: draft().jobId }]);
+    expect(listed.unreadable.map(({ id, jobId }) => ({ id, jobId }))).toEqual([
+      { id: unreadableId, jobId: draft().jobId },
+    ]);
   });
 
   test("a switch's listing holds only the organization it leaves", async () => {
@@ -229,7 +231,7 @@ describe('the drafts a session end asks about', () => {
           // A colleague's draft id among the shown ones is never the person's to delete.
           [colleaguesDraft.id, colleaguesDraft.updatedAt],
         ]),
-        unreadable: new Set([unreadableId, colleaguesUnreadableId]),
+        unreadable: (entry) => [unreadableId, colleaguesUnreadableId].includes(entry.id),
       },
     );
     const left = await listDraftsInScopeOnDevice({ userId: holder.userId, organizationId: null }, NOW);
@@ -249,7 +251,7 @@ describe('the drafts a session end asks about', () => {
     await storeEveryone();
     await deleteShownDraftsOnDevice(holder, {
       drafts: new Map([[otherOrganizationDraft.id, otherOrganizationDraft.updatedAt]]),
-      unreadable: new Set(),
+      unreadable: () => false,
     });
     expect((await listDraftsInScopeOnDevice(otherOrganization, NOW)).drafts).toEqual([
       otherOrganizationDraft,

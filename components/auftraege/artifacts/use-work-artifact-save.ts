@@ -6,7 +6,7 @@ import { useBanner } from '@/components/ui/banner';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 import { recordWorkArtifactAction, saveWorkArtifact } from '@/lib/work-artifacts/actions';
 import { workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
-import { whileNoDraftSend } from '@/lib/field-sync/device/draft-sync';
+import { DRAFT_SEND_BUSY, whileNoDraftSend } from '@/lib/field-sync/device/draft-sync';
 import type { DeviceDraftHandle } from './use-device-drafts';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
@@ -25,6 +25,8 @@ const SAVED_MESSAGE = 'Arbeitsnachweis wurde gespeichert.';
 const SUBMITTED_MESSAGE = 'Arbeitsnachweis wurde zur Prüfung eingereicht.';
 const SEALED_ELSEWHERE_MESSAGE =
   'Dieser Entwurf wird gerade aus einem anderen Fenster gesendet. Deine Änderungen hier sind noch nicht gespeichert und bleiben im Formular.';
+const TRANSFER_RUNNING_MESSAGE =
+  'Der Entwurf konnte gerade nicht gespeichert werden, weil noch eine Übertragung läuft. Deine Eingaben bleiben im Formular. Versuch es gleich noch einmal.';
 
 /** Shows the draft the device just sent; a submit asks for its review now that the server holds it. */
 function useSentDraft(editor: WorkArtifactEditor, newArtifactId: string) {
@@ -65,12 +67,15 @@ type ServerSave = Awaited<ReturnType<typeof saveWorkArtifact>>;
  * device send runs after the turn, which it takes itself. A refusal unseals the draft, which the
  * server holds nothing of; `keptForm` when another tab changed it meanwhile. A success removes the
  * device's copy: a refused delete never rejects (the keeper shows it), and the kept copy's later
- * send carries this revision id, which the server replays.
+ * send carries this revision id, which the server replays. DRAFT_SEND_BUSY when another send held
+ * the turn past its bound: then nothing was sealed or saved, and nothing of this save runs later.
  */
 function saveThroughDevice(
   onDevice: DeviceDraftHandle,
   save: (fromDraft: { revisionId: string; changedAt: string }) => Promise<ServerSave | 'no_answer'>,
-): Promise<{ plan: DraftSavePlan; result: ServerSave | 'no_answer'; keptForm: boolean }> {
+): Promise<
+  { plan: DraftSavePlan; result: ServerSave | 'no_answer'; keptForm: boolean } | typeof DRAFT_SEND_BUSY
+> {
   return whileNoDraftSend(async () => {
     const plan = await onDevice.prepareSave();
     if (plan?.kind !== 'online') return { plan, result: 'no_answer', keptForm: false };
@@ -133,9 +138,12 @@ export function useWorkArtifactSave({
     // Photos reach the server only with the draft the device holds. A draft without photos is sealed
     // for its online save: if it lands and the answer is lost, nothing changes the draft until the
     // device's send of the same revision is answered.
-    const { plan, result, keptForm } = onDevice
+    const saved = onDevice
       ? await saveThroughDevice(onDevice, (fromDraft) => saveOnServer(submit, fromDraft))
       : { plan: null, result: await saveOnServer(submit, null), keptForm: false };
+    // A send in a dead spot holds the drafts' turn: nothing was saved, and the form keeps its text.
+    if (saved === DRAFT_SEND_BUSY) return editor.setError(TRANSFER_RUNNING_MESSAGE);
+    const { plan, result, keptForm } = saved;
     // The device could not say whether the draft has photos: a text-only save could lose them.
     if (onDevice && plan === null) return;
     // Another tab's save is on its way with the draft as it was: this form keeps what changed since.

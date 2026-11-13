@@ -137,6 +137,7 @@ function UnsentItems({ items }: { items: readonly UnsentWorkItem[] }) {
               ))}
             </ul>
           )}
+          {item.note && <p className="text-xs text-muted-foreground">{item.note}</p>}
         </li>
       ))}
     </ul>

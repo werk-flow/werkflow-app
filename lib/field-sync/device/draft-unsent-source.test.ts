@@ -19,10 +19,16 @@ import { TODAY_WIPE_KEY } from './today-wipe';
 
 /** What the photo upload answers; null when a test expects none. */
 let uploadAnswer: { status: 'failed'; reason: string; transferred: null } | null = null;
+/** How many photo uploads started: each asks the server for an upload ticket first. */
+let uploadsStarted = 0;
 let accessReads = 0;
 mock.module('@/lib/documents/upload-client', () => ({
-  uploadDocumentDirect: () =>
-    uploadAnswer ? Promise.resolve(uploadAnswer) : Promise.reject(new Error('Unexpected photo upload')),
+  uploadDocumentDirect: () => {
+    uploadsStarted += 1;
+    return uploadAnswer
+      ? Promise.resolve(uploadAnswer)
+      : Promise.reject(new Error('Unexpected photo upload'));
+  },
 }));
 mock.module('@/lib/data/background-read-client', () => ({
   readInBackground: () => {
@@ -62,7 +68,7 @@ Object.assign(globalThis, {
   },
 });
 
-const { sendDraft, startDraftSync, whileNoDraftSend } = await import('./draft-sync');
+const { DRAFT_SEND_BUSY, sendDraft, startDraftSync, whileNoDraftSend } = await import('./draft-sync');
 const { UnsentWorkBusyError } = await import('./unsent-work');
 const { draftUnsentSource } = await import('./draft-unsent-source');
 
@@ -135,8 +141,31 @@ async function writeStore(record?: unknown): Promise<void> {
 }
 
 /** Stores a record this version cannot read, as a later release would. */
-function saveUnreadable(owner: DraftHolder, id: string): Promise<void> {
-  return writeStore({ ...draft({ ...owner, id }), version: 99 });
+function saveUnreadable(owner: DraftHolder, id: string, overrides: Partial<StoredDraft> = {}): Promise<void> {
+  return writeStore({ ...draft({ ...owner, id, ...overrides }), version: 99 });
+}
+
+/**
+ * Fires the drafts' turn bound by hand while `run` waits for it: the code under test sets the one
+ * timer, so a send that never answers holds the turn past it without a real wait.
+ */
+async function passTurnBound<T>(start: () => Promise<T>): Promise<T> {
+  const realSetTimeout = globalThis.setTimeout;
+  const wait: { end: (() => void) | null } = { end: null };
+  Object.assign(globalThis, {
+    setTimeout: (run: () => void) => {
+      wait.end = run;
+      return realSetTimeout(() => undefined, 0);
+    },
+  });
+  try {
+    const running = start();
+    await until(() => wait.end !== null);
+    wait.end?.();
+    return await running;
+  } finally {
+    Object.assign(globalThis, { setTimeout: realSetTimeout });
+  }
 }
 
 async function until(condition: () => boolean): Promise<void> {
@@ -168,6 +197,7 @@ beforeEach(async () => {
   handlerAnswers = [];
   sessionUserId = null;
   uploadAnswer = null;
+  uploadsStarted = 0;
   accessReads = 0;
   Object.assign(globalThis, {
     window: { addEventListener: () => undefined, removeEventListener: () => undefined },
@@ -235,7 +265,8 @@ describe('drafts as unsent work at a session end', () => {
       {
         label: 'Berichtsentwürfe, die diese App-Version nicht lesen kann',
         count: 1,
-        ids: [`draft-unreadable:${UNREADABLE_ID}`],
+        // The record's id and its version: a rewrite under the id is asked about anew.
+        ids: [expect.stringMatching(new RegExp(`^draft-unreadable:${UNREADABLE_ID}:[0-9a-z]+$`))],
       },
     ]);
     expect(items.map((item) => item.entries?.map(({ name, detail }) => ({ name, detail })))).toEqual([
@@ -476,5 +507,83 @@ describe('drafts as unsent work at a session end', () => {
     // The abandoned deletion never runs after the save answered: the person was told nothing went.
     for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve));
     expect((await stored()).length).toBe(1);
+  });
+
+  test("an online save that does not get the drafts' turn within its bound answers busy, and its work never runs later", async () => {
+    await save(draft({ photos: [] }));
+    let answer = (): void => undefined;
+    handlerAnswers = [
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = () => resolve(results('accepted', 'accepted')());
+        }),
+    ];
+    // A send in a dead spot holds the turn: its request never answers within the bound.
+    const sending = sendDraft(holder, DRAFT_ID);
+    await until(() => sent.length === 1);
+    let ran = false;
+
+    const saved = await passTurnBound(() =>
+      whileNoDraftSend(() => {
+        ran = true;
+        return Promise.resolve('saved');
+      }),
+    );
+
+    expect(saved === DRAFT_SEND_BUSY).toBe(true);
+    answer();
+    expect(await sending).toBe('sent');
+    // The queue moved past the abandoned save: a later turn runs, and the save's work never did.
+    expect(await whileNoDraftSend(() => Promise.resolve('later'))).toBe('later');
+    expect(ran).toBe(false);
+  });
+
+  test("a session replaced during one organization's send stops the later organizations before any photo upload", async () => {
+    const photoDraft = draft({
+      ...otherOrganization,
+      id: OTHER_ORGANIZATION_ID,
+      updatedAt: new Date(NOW.getTime() + 60_000).toISOString(),
+      photos: [
+        {
+          id: '9e000000-0000-4000-8000-000000000031',
+          name: 'foto-1.jpg',
+          blob: new Blob(['synthetic photo'], { type: 'image/jpeg' }),
+          transferred: null,
+          documentId: null,
+        },
+      ],
+    });
+    await save(draft({ photos: [] }));
+    await save(photoDraft);
+    pageHoldsNobody();
+    sessionUserId = holder.userId;
+    // Another tab signs out and in while the first organization's draft is on its way.
+    handlerAnswers = [
+      () => {
+        storage.set(TODAY_WIPE_KEY, 'replaced-session');
+        return results('accepted', 'accepted')();
+      },
+    ];
+
+    await draftUnsentSource.flush();
+    sessionUserId = null;
+
+    expect(sent.map((operation) => operation.payload.artifactId)).toEqual([DRAFT_ID]);
+    expect(uploadsStarted).toBe(0);
+    expect((await stored(otherOrganization)).map((entry) => entry.id)).toEqual([OTHER_ORGANIZATION_ID]);
+  });
+
+  test('„Verwerfen“ leaves an unreadable draft another tab rewrote under the same id after the question showed it, and deletes an unchanged one', async () => {
+    const unchangedId = '9e000000-0000-4000-8000-000000000071';
+    await saveUnreadable(holder, UNREADABLE_ID);
+    await saveUnreadable(holder, unchangedId);
+    const shown = (await draftUnsentSource.summarize('session')).flatMap((item) => item.ids);
+    // A later release in another tab rewrites the record: only its job changes, which this version reads.
+    await saveUnreadable(holder, UNREADABLE_ID, { jobId: '9e000000-0000-4000-8000-000000000021' });
+
+    await draftUnsentSource.discard('session', shown);
+
+    const left = await draftUnsentSource.summarize('session');
+    expect(left.flatMap((item) => item.ids).map((id) => id.includes(UNREADABLE_ID))).toEqual([true]);
   });
 });

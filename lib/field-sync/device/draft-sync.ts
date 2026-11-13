@@ -454,6 +454,8 @@ export function sendDraft(
  */
 export async function sendDraftsBeforeSessionEnd(person: DraftScope): Promise<void> {
   const page = pageHolder();
+  // Read once: a session replaced during one organization's send stops every later one before its upload.
+  const generation = todayWipeGeneration();
   const { drafts } = await listDraftsInScopeOnDevice(person);
   const organizations = [...new Set(drafts.map((draft) => draft.organizationId))].sort(
     (left, right) => Number(right === page?.organizationId) - Number(left === page?.organizationId),
@@ -461,53 +463,54 @@ export async function sendDraftsBeforeSessionEnd(person: DraftScope): Promise<vo
   for (const organizationId of organizations) {
     const owner = { userId: person.userId, organizationId };
     const named = page?.userId === owner.userId && page.organizationId === organizationId;
-    await sendEach(
-      named ? claimFor(owner) : { owner, generation: todayWipeGeneration(), byPage: false },
-      'session_end',
-    );
+    await sendEach(named ? claimFor(owner) : { owner, generation, byPage: false }, 'session_end');
   }
 }
 
-/** How long a session end's discard waits for a draft send in flight, an online save included. */
-const DISCARD_WAIT_MS = 10_000;
+/** How long a turn waits for a draft send in flight: a session end's discard, an editor's online save. */
+const TURN_WAIT_MS = 10_000;
+
+/** What `whileNoDraftSend` answers when a send in flight held the turn past TURN_WAIT_MS. */
+export const DRAFT_SEND_BUSY = Symbol('draft send busy');
 
 /**
  * Runs `run` while no draft is sent in this tab or, with Web Locks, in any other: the online save of
  * a sealed draft takes this turn, so a session end's discard waits for its answer and its cleanup.
- * Never around a device send of the draft, which takes the turn itself.
+ * Never around a device send of the draft, which takes the turn itself. Answers DRAFT_SEND_BUSY when
+ * that send does not end within TURN_WAIT_MS, as a save in a dead spot: `run` then never runs, also
+ * not later. A turn that began before the bound always finishes: its answer is the truth.
  */
-export function whileNoDraftSend<T>(run: () => Promise<T>): Promise<T> {
-  return enqueue(run);
-}
-
-/**
- * Deletes the drafts a session end's question showed, after a send in flight, in this tab and every
- * other: the server never gets a draft the person was told is gone. Answers false, having deleted
- * nothing, when that send does not end within DISCARD_WAIT_MS, as a save in a dead spot: the question
- * then says so and its „Abbrechen“ keeps the session.
- */
-export async function deleteShownDrafts(person: DraftScope, shown: ShownDrafts): Promise<boolean> {
+export async function whileNoDraftSend<T>(run: () => Promise<T>): Promise<T | typeof DRAFT_SEND_BUSY> {
   let started = false;
   let abandoned = false;
-  const deleting = enqueue(async () => {
-    if (abandoned) return;
+  const turn = enqueue(async (): Promise<T | typeof DRAFT_SEND_BUSY> => {
+    if (abandoned) return DRAFT_SEND_BUSY;
     started = true;
-    await deleteShownDraftsOnDevice(person, shown);
+    return run();
   });
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<'late'>((resolve) => {
-    timer = setTimeout(() => resolve('late'), DISCARD_WAIT_MS);
+  const late = new Promise<typeof DRAFT_SEND_BUSY>((resolve) => {
+    timer = setTimeout(() => resolve(DRAFT_SEND_BUSY), TURN_WAIT_MS);
   });
   try {
-    // A deletion that began before the wait ended always finishes: its answer is the truth.
-    if ((await Promise.race([deleting, late])) === 'late' && !started) {
+    if ((await Promise.race([turn, late])) === DRAFT_SEND_BUSY && !started) {
       abandoned = true;
-      return false;
+      return DRAFT_SEND_BUSY;
     }
-    await deleting;
+    return await turn;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Deletes the drafts a session end's question showed, in the drafts' turn: the server never gets a
+ * draft the person was told is gone. Answers false, having deleted nothing, when a send in flight
+ * held the turn past its bound: the question then says so and its „Abbrechen“ keeps the session.
+ */
+export async function deleteShownDrafts(person: DraftScope, shown: ShownDrafts): Promise<boolean> {
+  if ((await whileNoDraftSend(() => deleteShownDraftsOnDevice(person, shown))) === DRAFT_SEND_BUSY)
+    return false;
   notify();
   return true;
 }

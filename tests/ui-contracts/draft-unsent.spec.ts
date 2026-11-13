@@ -222,6 +222,29 @@ test('„Verwerfen“ deletes only the drafts the question showed: one written s
   expect(await draftsOnDevice(page)).toEqual([laterId]);
 });
 
+test('a sign-out whose phone cannot read its jobs of today still lists the drafts and says the job names could not be loaded', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await setNetwork(page, server, false);
+  await storeDrafts(page, [{ id: DRAFT_ID }]);
+  // The phone's store of today's jobs fails to open.
+  await page.evaluate(() => {
+    const open = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (this: IDBFactory, name: string, version?: number) {
+      if (name === 'werkflow-today') throw new DOMException('The store did not open.', 'UnknownError');
+      return open.call(this, name, version);
+    };
+  });
+
+  await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
+
+  await expect(question(page).getByRole('list', { name: 'Berichtsentwürfe', exact: true })).toHaveText(
+    'Wartung HeizungArbeitsbericht · geändert 12.11.2026, 09:30',
+  );
+  await expect(question(page)).toContainText('Die Auftragsnamen konnten gerade nicht geladen werden.');
+});
+
 test('a sign-out is not asked about a colleague’s draft, which stays on the phone', async ({ page }) => {
   await mountClock(page, CLOCKED_OUT_STATE);
   await storeDrafts(page, [{ id: DRAFT_ID, userId: COLLEAGUE_ID }]);

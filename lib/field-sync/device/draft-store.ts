@@ -157,6 +157,9 @@ const heldRecordSchema = z.object({
 /** A draft on the device that this version of the code cannot read: it is never sent, changed or deleted by itself. */
 export type UnreadableDraft = { id: string; jobId: string | null };
 
+/** An unreadable draft with its record as stored, which a session end compares to the state it showed. */
+export type HeldUnreadableDraft = UnreadableDraft & { record: unknown };
+
 /** The record as an unreadable draft in the scope, or null when it is readable or someone else's. */
 function unreadableInScope(record: unknown, scope: DraftScope): UnreadableDraft | null {
   const held = heldRecordSchema.safeParse(record);
@@ -279,7 +282,7 @@ export async function listDraftsOnDevice(
 export async function listDraftsInScopeOnDevice(
   scope: DraftScope,
   now: Date = new Date(),
-): Promise<{ drafts: StoredDraft[]; unreadable: UnreadableDraft[] }> {
+): Promise<{ drafts: StoredDraft[]; unreadable: HeldUnreadableDraft[] }> {
   const records: unknown[] = await inDraftStore('readwrite', (store) => {
     const request = store.getAll();
     request.addEventListener('success', () => deleteExpired(store, request.result, now));
@@ -291,7 +294,10 @@ export async function listDraftsInScopeOnDevice(
       return draft && inScope(draft, scope) && !noAccessTimeOver(draft, now) ? [draft] : [];
     })
     .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
-  const unreadable = records.flatMap((record) => unreadableInScope(record, scope) ?? []);
+  const unreadable = records.flatMap((record) => {
+    const draft = unreadableInScope(record, scope);
+    return draft ? [{ ...draft, record }] : [];
+  });
   return { drafts, unreadable };
 }
 
@@ -379,11 +385,11 @@ export async function deleteUnreadableDraftOnDevice(holder: DraftHolder, id: str
 
 /**
  * What a session end's question showed: each readable draft by its id with the last-change time it
- * was shown at, and the ids of the records this version could not read.
+ * was shown at, and whether it showed a record this version cannot read as that record is now.
  */
 export type ShownDrafts = {
   drafts: ReadonlyMap<string, string>;
-  unreadable: ReadonlySet<string>;
+  unreadable: (draft: HeldUnreadableDraft) => boolean;
 };
 
 /** The record's id when the question showed it as it is now, in the scope; otherwise null. */
@@ -391,7 +397,7 @@ function shownIdOf(record: unknown, scope: DraftScope, shown: ShownDrafts): stri
   const draft = storedDraft(record);
   if (draft) return inScope(draft, scope) && shown.drafts.get(draft.id) === draft.updatedAt ? draft.id : null;
   const unreadable = unreadableInScope(record, scope);
-  return unreadable && shown.unreadable.has(unreadable.id) ? unreadable.id : null;
+  return unreadable && shown.unreadable({ ...unreadable, record }) ? unreadable.id : null;
 }
 
 /**

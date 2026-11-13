@@ -8,7 +8,7 @@ import {
   type DraftScope,
   type ShownDrafts,
   type StoredDraft,
-  type UnreadableDraft,
+  type HeldUnreadableDraft,
 } from './draft-store';
 import { deleteShownDrafts, isPastUnsentLimit, pageHolder, sendDraftsBeforeSessionEnd } from './draft-sync';
 import { readTodayOnDevice } from './today-store';
@@ -41,8 +41,11 @@ async function sessionScope(scope: UnsentScope): Promise<DraftScope | null> {
   return data.session ? { userId: data.session.user.id, organizationId: null } : null;
 }
 
-/** The labels of the person's jobs of today that the phone holds, by job id; empty when it holds none. */
-async function todaysJobLabels(userId: string): Promise<ReadonlyMap<string, string>> {
+/**
+ * The labels of the person's jobs of today that the phone holds, by job id; empty when it holds none,
+ * and null when the phone could not read them.
+ */
+async function todaysJobLabels(userId: string): Promise<ReadonlyMap<string, string> | null> {
   try {
     const today = await readTodayOnDevice();
     if (!today || today.snapshot.userId !== userId) return new Map();
@@ -53,10 +56,13 @@ async function todaysJobLabels(userId: string): Promise<ReadonlyMap<string, stri
       ]),
     );
   } catch {
-    // best-effort: a draft without its job's name is still named by its title.
-    return new Map();
+    // A draft without its job's name is still named by its title; the question says the names are missing.
+    return null;
   }
 }
+
+/** The line the question shows when the phone could not read which jobs the drafts belong to. */
+const JOBS_UNREAD_NOTE = 'Die Auftragsnamen konnten gerade nicht geladen werden.';
 
 function detailLine(parts: readonly (string | null)[]): string {
   return parts.filter((part): part is string => part !== null).join(' · ');
@@ -65,7 +71,7 @@ function detailLine(parts: readonly (string | null)[]): string {
 /** What the question says of a readable draft: its title, state, kind, photos, last change and job. */
 function draftEntry(
   draft: StoredDraft,
-  jobs: ReadonlyMap<string, string>,
+  jobs: ReadonlyMap<string, string> | null,
 ): { name: string; detail: string; reason: UnsentReason } {
   const photos = draft.photos.length;
   const reason = draftReason(draft);
@@ -85,7 +91,7 @@ function draftEntry(
       WORK_ARTIFACT_KIND_LABELS[draft.kind],
       photos === 0 ? null : `${photos} ${photos === 1 ? 'Foto' : 'Fotos'}`,
       `geändert ${formatBerlin(draft.updatedAt, 'dateTime')}`,
-      jobs.get(draft.jobId) ?? null,
+      jobs?.get(draft.jobId) ?? null,
     ]),
   };
 }
@@ -105,18 +111,61 @@ function shownDraftId(draft: StoredDraft): string {
   return `${SHOWN_DRAFT}${draft.id}:${draft.updatedAt}`;
 }
 
+/**
+ * A stable text of a stored record: object keys in order, a photo by its size and type. Records come
+ * from IndexedDB, so they hold only what structured cloning keeps.
+ */
+function stableText(value: unknown): string {
+  if (value instanceof Blob) return `blob:${value.size}:${value.type}`;
+  if (value instanceof Date) return `date:${value.getTime()}`;
+  if (value instanceof Map) return `map:${stableText([...value])}`;
+  if (value instanceof Set) return `set:${stableText([...value])}`;
+  if (Array.isArray(value)) return `[${value.map(stableText).join(',')}]`;
+  if (typeof value === 'object' && value !== null)
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableText(entry)}`)
+      .join(',')}}`;
+  return typeof value === 'string' ? JSON.stringify(value) : `${typeof value}:${String(value)}`;
+}
+
+/**
+ * The version of an unreadable record: a digest of all it holds (cyrb53), so any change of any field
+ * is a new version. This version reads no change time from such a record, so its content is the token.
+ */
+function unreadableVersion(record: unknown): string {
+  const text = stableText(record);
+  let first = 0xdeadbeef;
+  let second = 0x41c6ce57;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    first = Math.imul(first ^ code, 2654435761);
+    second = Math.imul(second ^ code, 1597334677);
+  }
+  first = Math.imul(first ^ (first >>> 16), 2246822507) ^ Math.imul(second ^ (second >>> 13), 3266489909);
+  second = Math.imul(second ^ (second >>> 16), 2246822507) ^ Math.imul(first ^ (first >>> 13), 3266489909);
+  return (4294967296 * (2097151 & second) + (first >>> 0)).toString(36);
+}
+
+/** The ids and the shown states among the ids with `prefix` (`<prefix><id>:<state>`). */
+function shownStates(ids: readonly string[], prefix: string): ReadonlyMap<string, string> {
+  const states = new Map<string, string>();
+  for (const id of ids) {
+    if (!id.startsWith(prefix)) continue;
+    const shown = id.slice(prefix.length);
+    const separator = shown.indexOf(':');
+    if (separator > 0) states.set(shown.slice(0, separator), shown.slice(separator + 1));
+  }
+  return states;
+}
+
 /** The drafts among the ids a question showed; ids of other sources are ignored. */
 function shownDrafts(ids: readonly string[]): ShownDrafts {
-  const drafts = new Map<string, string>();
-  const unreadable = new Set<string>();
-  for (const id of ids) {
-    if (id.startsWith(SHOWN_UNREADABLE)) unreadable.add(id.slice(SHOWN_UNREADABLE.length));
-    if (!id.startsWith(SHOWN_DRAFT)) continue;
-    const shown = id.slice(SHOWN_DRAFT.length);
-    const separator = shown.indexOf(':');
-    if (separator > 0) drafts.set(shown.slice(0, separator), shown.slice(separator + 1));
-  }
-  return { drafts, unreadable };
+  const unreadable = shownStates(ids, SHOWN_UNREADABLE);
+  return {
+    drafts: shownStates(ids, SHOWN_DRAFT),
+    unreadable: (draft) => unreadable.get(draft.id) === unreadableVersion(draft.record),
+  };
 }
 
 function item(
@@ -131,12 +180,13 @@ function item(
   };
 }
 
-function unreadableEntry(draft: UnreadableDraft, jobs: ReadonlyMap<string, string>) {
+/** An unreadable record in the state it was shown: a later rewrite under its id is asked about anew. */
+function unreadableEntry(draft: HeldUnreadableDraft, jobs: ReadonlyMap<string, string> | null) {
   return {
-    id: `${SHOWN_UNREADABLE}${draft.id}`,
+    id: `${SHOWN_UNREADABLE}${draft.id}:${unreadableVersion(draft.record)}`,
     name: 'Entwurf lässt sich nicht öffnen',
     reason: 'unreadable' as const,
-    detail: detailLine(['Nicht lesbar', draft.jobId === null ? null : (jobs.get(draft.jobId) ?? null)]),
+    detail: detailLine(['Nicht lesbar', draft.jobId === null ? null : (jobs?.get(draft.jobId) ?? null)]),
   };
 }
 
@@ -155,7 +205,7 @@ export const draftUnsentSource: UnsentSource = {
     if (drafts.length === 0 && unreadable.length === 0) return [];
     const jobs = await todaysJobLabels(person.userId);
     const named = drafts.map((draft) => ({ ...draftEntry(draft, jobs), id: shownDraftId(draft), draft }));
-    return [
+    const items = [
       item(
         'Berichtsentwürfe',
         named.filter(({ draft }) => draft.refusal?.kind !== 'no_access'),
@@ -169,14 +219,16 @@ export const draftUnsentSource: UnsentSource = {
         unreadable.map((draft) => unreadableEntry(draft, jobs)),
       ),
     ].filter((entry) => entry.count > 0);
+    const [first, ...rest] = items;
+    return jobs === null && first ? [{ ...first, note: JOBS_UNREAD_NOTE }, ...rest] : items;
   },
   async flush() {
     const person = await sessionScope('session');
     if (person) await sendDraftsBeforeSessionEnd(person);
   },
   async discard(scope, ids) {
+    if (!ids.some((id) => id.startsWith(SHOWN_DRAFT) || id.startsWith(SHOWN_UNREADABLE))) return;
     const shown = shownDrafts(ids);
-    if (shown.drafts.size === 0 && shown.unreadable.size === 0) return;
     const person = await sessionScope(scope);
     if (person && !(await deleteShownDrafts(person, shown))) throw new UnsentWorkBusyError();
   },

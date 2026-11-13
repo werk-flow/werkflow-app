@@ -25,13 +25,15 @@ export type UnsentReason = 'waiting' | 'incomplete' | 'no_access' | 'unreadable'
 /**
  * One line of what is still unsent, such as „Stempelzeiten“ with their number, and the ids of what
  * it names: a discard deletes exactly those, never what was kept after the question. `entries`
- * names each piece when the person must recognize it to decide.
+ * names each piece when the person must recognize it to decide. `note` says what the line could not
+ * name, such as the jobs of drafts when the phone could not read them.
  */
 export type UnsentWorkItem = {
   label: string;
   count: number;
   ids: readonly string[];
   entries?: readonly UnsentWorkEntry[];
+  note?: string;
 };
 
 /**
