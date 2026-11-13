@@ -1,4 +1,6 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { settled } from '../../golden/support/steps/interaction';
 import { clockInLauncher } from '../../golden/support/steps/time-tracking';
 
@@ -216,10 +218,23 @@ async function expectGeistTypography(page: Page): Promise<void> {
 }
 
 /**
+ * In an update run, removes the reference image `name` when its text reference is missing or differs
+ * from `text`, so the screenshot writes the image anew. An update rewrites an image only past its
+ * pixel tolerance, and a changed word alone can stay under it: its image would still show the old one.
+ */
+function dropImageOfChangedText(name: string, text: string): void {
+  const info = test.info();
+  if (info.config.updateSnapshots === 'none') return;
+  const textReference = info.snapshotPath(`${name}.txt`, { kind: 'snapshot' });
+  if (existsSync(textReference) && readFileSync(textReference, 'utf8') === text) return;
+  rmSync(info.snapshotPath(`${name}.png`, { kind: 'screenshot' }), { force: true });
+}
+
+/**
  * Compares the viewport with its reference image and its visible text with the
  * text reference beside it. The pixel tolerance only absorbs anti-aliasing; a
  * moved, recoloured or missing element exceeds it, and a changed word fails
- * the exact text comparison.
+ * the exact text comparison. An update writes the image anew whenever its text changed.
  */
 export async function expectReference(
   page: Page,
@@ -229,6 +244,7 @@ export async function expectReference(
 ): Promise<void> {
   await expectGeistTypography(page);
   await normalizeText(page, replacements, options.calendarWeek ?? false);
+  dropImageOfChangedText(name, await viewportText(page));
   await expect(page).toHaveScreenshot(`${name}.png`, {
     animations: 'disabled',
     caret: 'hide',
