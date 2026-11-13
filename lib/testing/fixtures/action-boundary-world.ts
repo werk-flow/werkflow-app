@@ -6,6 +6,7 @@ import { mock } from 'bun:test';
 import { AuthApiError } from '@supabase/supabase-js';
 import { addLocalDays, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { getAuftraegePreferencesFromJson } from '@/lib/jobs/auftraege-table-columns';
+import { getMembershipAccessMode, type PersonnelAccessState } from '@/lib/personnel/lifecycle';
 import { createInMemoryAdmin, type BeforeWrite, type InMemoryTables } from './in-memory-admin';
 
 type FixtureRole = 'admin' | 'buero' | 'employee';
@@ -23,8 +24,11 @@ export const CALLER_ID = '30000000-0000-4000-8000-000000000001';
 export type ActionWorld = {
   /** `null` is a signed-out caller. */
   callerId: string | null;
-  /** The caller's current memberships as the membership read returns them. */
-  memberships: Array<{ orgId: string; role: FixtureRole }>;
+  /**
+   * The caller's membership rows. The membership read keeps only those whose
+   * access is operational by the real rule; a row without `accessState` is active.
+   */
+  memberships: Array<{ orgId: string; role: FixtureRole; accessState?: PersonnelAccessState }>;
   /** Organizations where the caller is an employee whose access has not started yet. */
   prestartOrganizationIds: string[];
   /** Value of the active-organization cookie; `null` is a missing cookie. */
@@ -189,7 +193,21 @@ function mockCachedReads(world: ActionWorld): void {
     // Any tag name resolves to a string; `installActionWorld` replaces invalidation itself.
     CACHE_TAGS: new Proxy({}, { get: (_target, tag) => () => String(tag) }),
     getAuthenticatedUser: async () => caller(),
-    getCachedMemberships: async () => world.memberships.map(asMembership),
+    getCachedMemberships: async () =>
+      world.memberships
+        .filter(
+          ({ accessState }) =>
+            getMembershipAccessMode(
+              {
+                hasAccessBlocker: false,
+                accessLifecycle: accessState
+                  ? { state: accessState, scheduledState: null, scheduledFor: null }
+                  : null,
+              },
+              Date.now(),
+            ) === 'operational',
+        )
+        .map(({ orgId, role }) => asMembership({ orgId, role })),
     getCachedUser: async () => ({ data: { user: caller() } }),
     getCachedPrestartMemberships: async () =>
       world.prestartOrganizationIds.map((orgId) => asMembership({ orgId, role: 'employee' })),
