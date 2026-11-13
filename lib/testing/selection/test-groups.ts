@@ -311,6 +311,12 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
   ['security:offline-clock', 'security/offline-clock.spec.ts', ['standalone', 'time']],
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
+  // The no-signal visit end to end, and the office's refusals of a replay (decision record 0010).
+  [
+    'security:offline-visit',
+    'security/offline-visit.spec.ts',
+    ['standalone', 'work', 'time', 'documents', 'planning'],
+  ],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
@@ -426,7 +432,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
-  ['problem-reports', ['problem_reports.sql', 'problem_report_support.sql'], ['*']],
+  [
+    'problem-reports',
+    ['problem_reports.sql', 'problem_report_support.sql', 'problem_report_handout.sql'],
+    ['*'],
+  ],
   ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],

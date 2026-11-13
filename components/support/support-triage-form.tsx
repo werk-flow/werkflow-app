@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 
+import { AutomaticAnswerBadge } from '@/components/problem-reports/automatic-answer-badge';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -153,7 +154,12 @@ function TriageFields({ report, draft, notes, onChange, disabled, responseError 
         />
       </Field>
       <Field
-        label="Antwort an die Person"
+        label={
+          <>
+            Antwort an die Person
+            {report.responseByAgent ? <AutomaticAnswerBadge className="ml-2 align-middle" /> : null}
+          </>
+        }
         htmlFor={RESPONSE_ID}
         description={
           notes.response ??

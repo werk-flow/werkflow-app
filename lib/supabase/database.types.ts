@@ -7946,7 +7946,7 @@ export type Database = {
       };
       problem_report_events: {
         Row: {
-          actor_id: string;
+          actor_id: string | null;
           created_at: string;
           event_type: string;
           id: string;
@@ -7955,7 +7955,7 @@ export type Database = {
           report_id: string;
         };
         Insert: {
-          actor_id: string;
+          actor_id?: string | null;
           created_at?: string;
           event_type: string;
           id?: string;
@@ -7964,7 +7964,7 @@ export type Database = {
           report_id: string;
         };
         Update: {
-          actor_id?: string;
+          actor_id?: string | null;
           created_at?: string;
           event_type?: string;
           id?: string;
@@ -8071,13 +8071,17 @@ export type Database = {
           created_at: string;
           description: string | null;
           filed_by_id: string | null;
+          handed_out_at: string | null;
           id: string;
           number: number;
           organization_id: string;
           originals_deleted_at: string | null;
           reporter_id: string;
           response: string | null;
+          response_by_agent: boolean;
+          scrub_revision: number;
           scrub_state: string;
+          scrub_version: number | null;
           scrubbed_context: Json | null;
           scrubbed_description: string | null;
           status: string;
@@ -8090,13 +8094,17 @@ export type Database = {
           created_at?: string;
           description?: string | null;
           filed_by_id?: string | null;
+          handed_out_at?: string | null;
           id?: string;
           number?: number;
           organization_id: string;
           originals_deleted_at?: string | null;
           reporter_id: string;
           response?: string | null;
+          response_by_agent?: boolean;
+          scrub_revision?: number;
           scrub_state?: string;
+          scrub_version?: number | null;
           scrubbed_context?: Json | null;
           scrubbed_description?: string | null;
           status?: string;
@@ -8109,13 +8117,17 @@ export type Database = {
           created_at?: string;
           description?: string | null;
           filed_by_id?: string | null;
+          handed_out_at?: string | null;
           id?: string;
           number?: number;
           organization_id?: string;
           originals_deleted_at?: string | null;
           reporter_id?: string;
           response?: string | null;
+          response_by_agent?: boolean;
+          scrub_revision?: number;
           scrub_state?: string;
+          scrub_version?: number | null;
           scrubbed_context?: Json | null;
           scrubbed_description?: string | null;
           status?: string;
@@ -16397,6 +16409,24 @@ export type Database = {
         };
         Returns: Json;
       };
+      hand_out_problem_report: {
+        Args: {
+          p_organization_id: string;
+          p_report_id: string;
+          p_scrub_revision: number;
+          p_scrub_version: number;
+          p_support_ids: string[];
+        };
+        Returns: Json;
+      };
+      hand_out_problem_report_screenshot: {
+        Args: {
+          p_organization_id: string;
+          p_report_id: string;
+          p_support_ids: string[];
+        };
+        Returns: Json;
+      };
       hand_over_personnel_work: {
         Args: {
           p_actor_id: string;
@@ -17282,15 +17312,26 @@ export type Database = {
         };
         Returns: undefined;
       };
-      record_problem_report_scrub: {
-        Args: {
-          p_organization_id: string;
-          p_report_id: string;
-          p_scrubbed_context: Json;
-          p_scrubbed_description: string;
-        };
-        Returns: string;
-      };
+      record_problem_report_scrub:
+        | {
+            Args: {
+              p_organization_id: string;
+              p_report_id: string;
+              p_scrubbed_context: Json;
+              p_scrubbed_description: string;
+            };
+            Returns: string;
+          }
+        | {
+            Args: {
+              p_organization_id: string;
+              p_report_id: string;
+              p_scrub_version: number;
+              p_scrubbed_context: Json;
+              p_scrubbed_description: string;
+            };
+            Returns: string;
+          };
       record_work_artifact_action: {
         Args: {
           p_action_id: string;
@@ -19929,6 +19970,14 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: number;
+      };
+      withdraw_problem_report_copy: {
+        Args: {
+          p_organization_id: string;
+          p_report_id: string;
+          p_scrub_version: number;
+        };
+        Returns: boolean;
       };
       withdraw_time_account_adjustment: {
         Args: {

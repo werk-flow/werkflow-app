@@ -45,6 +45,8 @@ export type OwnProblemReport = {
   status: ProblemReportStatus;
   closedAt: string | null;
   response: string | null;
+  /** A report thread wrote the answer, not a support person. */
+  responseByAgent: boolean;
   /** Null once the deletion period removed the original. */
   description: string | null;
 };
@@ -86,19 +88,23 @@ export type SupportQueuePage = {
 export type SupportReportHistoryEntry = {
   id: string;
   createdAt: string;
+  /** „Agent“ for a report thread, which acts without an account. */
   actorName: string;
   change:
     | { kind: 'status'; to: ProblemReportStatus | null }
     | { kind: 'bucket'; to: ProblemReportBucket | null }
     | { kind: 'assignee'; toName: string | null }
     | { kind: 'response' }
-    | { kind: 'original_opened'; attachment: boolean };
+    | { kind: 'original_opened'; attachment: boolean }
+    | { kind: 'handed_out'; part: 'copy' | 'screenshot' };
 };
 
 /** One report as support works on it. It holds no original text and no attachment. */
 export type SupportReport = SupportQueueEntry & {
   assigneeId: string | null;
   response: string | null;
+  /** A report thread wrote the answer, not a support person. */
+  responseByAgent: boolean;
   /** The scrubbed context beside the scrubbed copy; null for a report taken by phone and while there is no copy. */
   scrubbedContext: ScrubbedProblemReportContext | null;
   /** A short-lived address of the redrawn screenshot, when the report has one. */
