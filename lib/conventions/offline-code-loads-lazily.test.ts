@@ -30,7 +30,7 @@ const CACHE_CLEAR_IMPORTS = ['@/lib/logging'];
 
 /**
  * The time outbox, the sync runner, the unsent-work check and their views
- * (werk-flow/werkflow-planning#319). The clock dock and the menu sign-out sit in chunks every page
+ * (werk-flow/werkflow-planning#319), and the drafts' unsent-work source (werk-flow/werkflow-planning#403). The clock dock and the menu sign-out sit in chunks every page
  * loads at start, so they reach these only through `import()`. The offline page is a bundle of its
  * own and imports its clock statically.
  */
@@ -42,6 +42,7 @@ const UNSENT_WORK_MODULES: readonly string[] = [
   'components/shared/unsent-work-prompt.tsx',
   'lib/field-sync/device/clock-device.ts',
   'lib/field-sync/device/clock-outbox.ts',
+  'lib/field-sync/device/draft-unsent-source.ts',
   'lib/field-sync/device/kept-clock-actions.ts',
   'lib/field-sync/device/registrations.ts',
   'lib/field-sync/device/sync-runner.ts',
