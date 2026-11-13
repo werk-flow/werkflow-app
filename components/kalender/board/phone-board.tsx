@@ -3,7 +3,12 @@
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { WEEKDAY_SHORT, type BoardColumn } from '@/lib/calendar/board-layout';
-import { absenceItems, type BoardAbsenceItem, type BoardRowModel } from '@/lib/calendar/board-model';
+import {
+  absenceItems,
+  type BoardAbsenceItem,
+  type BoardRowModel,
+  type SchoolCalendarEntry,
+} from '@/lib/calendar/board-model';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
@@ -26,6 +31,7 @@ export function PhoneBoard({
   jobsByRow,
   vacation,
   sickness,
+  school,
   dispatch,
   materialDemandJobIds,
   actions,
@@ -36,6 +42,7 @@ export function PhoneBoard({
   jobsByRow: ReadonlyMap<string, CalendarJob[]>;
   vacation: readonly VacationCalendarEntry[];
   sickness: readonly SicknessCalendarEntry[];
+  school: readonly SchoolCalendarEntry[];
   dispatch: DispatchByRecipient;
   materialDemandJobIds: ReadonlySet<string>;
   actions: CalendarSurfaceActions;
@@ -44,7 +51,7 @@ export function PhoneBoard({
   // The visible people's absences; each label already names the person.
   const absences = rowModels.flatMap((model) =>
     model.kind === 'person'
-      ? absenceItems({ vacation, sickness, employeeRecordId: model.row.employeeRecordId })
+      ? absenceItems({ vacation, sickness, school, employeeRecordId: model.row.employeeRecordId })
       : [],
   );
   return (

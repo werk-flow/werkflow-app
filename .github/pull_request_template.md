@@ -28,7 +28,7 @@ Upload them as pr<number>-*.png assets of the pr-screenshots prerelease and embe
 
 <!-- "Review level: <0|1|2>, because <reason>" (docs/technical/coderabbit.md, "Choose the review level").
 Level 1 and 2 add the sol-loop line: "Reviewed with sol-loop: <N> rounds with <model>. Sol verdict:
-<approved|not approved>. Usage: <...>". -->
+<approved|not approved>." -->
 
 ## Deletion pass
 
