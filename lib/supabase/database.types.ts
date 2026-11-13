@@ -2606,45 +2606,67 @@ export type Database = {
       };
       inventory_import_batches: {
         Row: {
+          booked_by: string | null;
           column_mapping: Json;
           completed_at: string | null;
+          content_hash: string | null;
           created_at: string;
           created_by: string | null;
           failed_count: number;
           file_name: string;
           id: string;
           imported_count: number;
+          mode: string;
           organization_id: string;
+          result_payload: Json | null;
           row_count: number;
+          staged_rows: Json | null;
           status: string;
         };
         Insert: {
+          booked_by?: string | null;
           column_mapping?: Json;
           completed_at?: string | null;
+          content_hash?: string | null;
           created_at?: string;
           created_by?: string | null;
           failed_count?: number;
           file_name: string;
           id?: string;
           imported_count?: number;
+          mode?: string;
           organization_id: string;
+          result_payload?: Json | null;
           row_count?: number;
+          staged_rows?: Json | null;
           status?: string;
         };
         Update: {
+          booked_by?: string | null;
           column_mapping?: Json;
           completed_at?: string | null;
+          content_hash?: string | null;
           created_at?: string;
           created_by?: string | null;
           failed_count?: number;
           file_name?: string;
           id?: string;
           imported_count?: number;
+          mode?: string;
           organization_id?: string;
+          result_payload?: Json | null;
           row_count?: number;
+          staged_rows?: Json | null;
           status?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "inventory_import_batches_booked_by_fkey";
+            columns: ["booked_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "inventory_import_batches_created_by_fkey";
             columns: ["created_by"];
@@ -8503,6 +8525,69 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "realtime_deletions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      school_days: {
+        Row: {
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          created_by: string;
+          employee_record_id: string;
+          end_date: string | null;
+          ended_at: string | null;
+          ended_by: string | null;
+          id: string;
+          kind: string;
+          organization_id: string;
+          start_date: string;
+          weekday: number | null;
+        };
+        Insert: {
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          created_by: string;
+          employee_record_id: string;
+          end_date?: string | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          kind: string;
+          organization_id: string;
+          start_date: string;
+          weekday?: number | null;
+        };
+        Update: {
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          created_by?: string;
+          employee_record_id?: string;
+          end_date?: string | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          kind?: string;
+          organization_id?: string;
+          start_date?: string;
+          weekday?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "school_days_employee_record_id_fkey";
+            columns: ["employee_record_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "school_days_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -14490,6 +14575,14 @@ export type Database = {
         };
         Returns: string[];
       };
+      book_inventory_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_batch_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
+      };
       cancel_approved_vacation_request: {
         Args: {
           p_actor_id: string;
@@ -17298,6 +17391,18 @@ export type Database = {
           p_sources: Json;
         };
         Returns: string;
+      };
+      preview_inventory_import: {
+        Args: {
+          p_actor_id: string;
+          p_column_mapping: Json;
+          p_content_hash: string;
+          p_file_name: string;
+          p_mode: string;
+          p_organization_id: string;
+          p_rows: Json;
+        };
+        Returns: Json;
       };
       promote_client_request_caller: {
         Args: {

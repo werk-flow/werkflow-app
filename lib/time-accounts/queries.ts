@@ -18,6 +18,7 @@ import { type OpeningDateCorrection, type OpeningDateFacts, readOpeningDateFacts
 import { payrollCodesByKey } from './payroll-mapping';
 import { type CurrentPayrollMapping, readCurrentPayrollMapping } from './payroll-mapping-server';
 import { type PeriodResultRow, toPeriodResultRows } from './period-results';
+import { readPeriodSchoolMinutes } from './period-school-minutes';
 import { describePolicyVersions, type PolicyVersionLine } from './policy-versions';
 import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import type {
@@ -341,7 +342,7 @@ type PeriodDetailRows = {
 };
 
 async function readTimePeriodDetail(
-  context: ReaderContext,
+  context: ReaderContext & { isManagerOrAbove: boolean },
   periodId: string,
 ): Promise<TimePeriodDetail | null> {
   const admin = createSupabaseAdminClient();
@@ -370,7 +371,7 @@ async function readTimePeriodDetail(
       rows.findings.flatMap((finding) => (finding.employee_record_id ? [finding.employee_record_id] : [])),
     ),
   ];
-  const [nameByEmployee, decisionByFinding, decidableRecordIds] = await Promise.all([
+  const [nameByEmployee, decisionByFinding, decidableRecordIds, schoolMinutesByEmployee] = await Promise.all([
     readEmployeeNames(admin, context.orgId, [
       ...rows.results.map((result) => result.employee_record_id),
       ...findingRecordIds,
@@ -381,12 +382,25 @@ async function readTimePeriodDetail(
       rows.findings.map((finding) => finding.id),
     ),
     readDecidableRecordIds(context, findingRecordIds),
+    // School days are personal data that only Admin, Büro and the apprentice
+    // read (werk-flow/werkflow-planning#165). A time-approval holder outside
+    // the office sees the period without them, so no event their RLS
+    // withholds can leave a note stale.
+    context.isManagerOrAbove
+      ? readPeriodSchoolMinutes(
+          admin,
+          context.orgId,
+          { start: period.period_start_date, end: period.period_end_date },
+          rows.results.map((result) => result.employee_record_id),
+        )
+      : new Map<string, number>(),
   ]);
   return toTimePeriodDetail({
     period,
     calculation,
     rows,
     nameByEmployee,
+    schoolMinutesByEmployee,
     decisionByFinding,
     decidableRecordIds,
   });
@@ -445,6 +459,7 @@ function toTimePeriodDetail(input: {
   calculation: PeriodDetailCalculation | null;
   rows: PeriodDetailRows;
   nameByEmployee: Map<string, string>;
+  schoolMinutesByEmployee: ReadonlyMap<string, number>;
   decisionByFinding: Map<string, TimeFindingDecision>;
   decidableRecordIds: Set<string>;
 }): TimePeriodDetail {
@@ -463,7 +478,7 @@ function toTimePeriodDetail(input: {
           sourceFingerprint: calculation.source_fingerprint,
         }
       : null,
-    results: toPeriodResultRows(rows.results, rows.findings, nameByEmployee),
+    results: toPeriodResultRows(rows.results, rows.findings, nameByEmployee, input.schoolMinutesByEmployee),
     findings: rows.findings.map((finding) => ({
       id: finding.id,
       employeeRecordId: finding.employee_record_id,

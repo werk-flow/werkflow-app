@@ -51,6 +51,10 @@ import { mountHydrationFixture } from './hydration-boundaries';
 import { initializeProblemReportBoundary, ProblemReportContractFixture } from './problem-report-boundaries';
 import { SupportFilingContractFixture } from './support-filing-boundaries';
 import { SupportTriageContractFixture } from './support-triage-boundaries';
+import {
+  initializeInventoryImportBoundary,
+  InventoryImportContractFixture,
+} from './inventory-import-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
 import {
   initializeInventoryMovementsBoundary,
@@ -111,6 +115,7 @@ initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
 initializeProblemReportBoundary();
 initializeInventoryUnitBoundary();
+initializeInventoryImportBoundary();
 initializeInventoryMovementsBoundary();
 initializeLeistungenBoundary();
 const personnelInitialData = initializePersonnelBoundary();
@@ -597,6 +602,10 @@ createRoot(root).render(
     <SupportFilingContractFixture />
   ) : window.uiContractFixture === 'inventory-unit' ? (
     <InventoryUnitContractFixture />
+  ) : window.uiContractFixture === 'inventory-import' ? (
+    <BannerProvider>
+      <InventoryImportContractFixture />
+    </BannerProvider>
   ) : window.uiContractFixture === 'inventory-movements' ? (
     <InventoryMovementsContractFixture />
   ) : window.uiContractFixture === 'leistungen' ? (

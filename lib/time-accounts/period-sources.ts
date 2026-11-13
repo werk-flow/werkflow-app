@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 
 import { getCachedOrganizationCalendar } from '@/lib/data/cached';
 import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
+import { loadSchoolDaySpansByRecord } from '@/lib/personnel/school-day-server';
 import { loadActiveSicknessSpansByRecord } from '@/lib/sickness/server';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows } from '@/lib/supabase/query-batches';
@@ -282,6 +283,7 @@ async function loadPeriodSources(
     calendar,
     vacations,
     sickness,
+    school,
   ] = await Promise.all([
     ...startPeriodActivityReads(admin, context, bounds, startInstant, endInstant),
     ...startPeriodPlanReads(admin, context, bounds),
@@ -289,9 +291,10 @@ async function loadPeriodSources(
     getCachedOrganizationCalendar(context.orgId),
     loadApprovedVacationSpansByRecord(context.orgId, bounds.start, bounds.end),
     loadActiveSicknessSpansByRecord(context.orgId, bounds.start, bounds.end),
+    loadSchoolDaySpansByRecord(context.orgId, bounds.start, bounds.end),
   ]);
   // A failed absence read is not "no absence": it would raise every target.
-  if (!vacations || !sickness) throw new Error('period_source_incomplete: absences');
+  if (!vacations || !sickness || !school) throw new Error('period_source_incomplete: absences');
   return {
     employees,
     accounts,
@@ -310,6 +313,7 @@ async function loadPeriodSources(
     calendar,
     vacations,
     sickness,
+    school,
   };
 }
 

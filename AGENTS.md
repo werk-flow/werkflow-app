@@ -131,10 +131,10 @@ A task is a worktree, a branch and one small PR per problem ([decision 0009](doc
 - Level 1, behavior, the default: `sol-loop`.
 - Level 2, security, auth, RLS, a migration, personal data, deletion, time or payroll: `sol-loop`, then one CodeRabbit review.
 
-1. Run `bun run check:changed`, then the level's `sol-loop`.
-2. Push, and open the PR with the `file-pr` skill.
-3. Call `watch_pull_request`, end your turn, and babysit until [the merge gate](docs/technical/coderabbit.md#the-merge-gate) holds.
-4. Its own thread then squash-merges it, unless the merge is the owner's.
+1. Run `bun run check:changed`, then open a draft with the `file-pr` skill.
+2. Run the level's `sol-loop`, then `gh pr ready`.
+3. Call `watch_pull_request` and babysit until [the merge gate](docs/technical/coderabbit.md#the-merge-gate) holds.
+4. Its thread then squash-merges it, unless the merge is the owner's.
 
 ## Language
 

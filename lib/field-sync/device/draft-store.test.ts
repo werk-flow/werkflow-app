@@ -5,7 +5,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import {
   DRAFT_NO_ACCESS_KEPT_MS,
   changeDraftOnDevice,
-  deleteDraftsOnDevice,
+  deleteShownDraftsOnDevice,
+  listDraftsInScopeOnDevice,
   listDraftsOnDevice,
   sweepExpiredDraftsOnDevice,
   type DraftHolder,
@@ -57,9 +58,40 @@ function save(entry: StoredDraft): Promise<StoredDraft | null> {
   return changeDraftOnDevice(entry, entry.id, () => entry);
 }
 
-afterEach(async () => {
-  for (const each of [holder, otherPerson, otherOrganization]) await deleteDraftsOnDevice(each);
-});
+/** Empties the draft store between tests, whoever's drafts it holds. */
+async function clearDraftStore(): Promise<void> {
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    const opening = indexedDB.open('werkflow-drafts', 1);
+    opening.onupgradeneeded = () => opening.result.createObjectStore('drafts', { keyPath: 'id' });
+    opening.onsuccess = () => resolve(opening.result);
+    opening.onerror = () => reject(opening.error);
+  });
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction('drafts', 'readwrite');
+    transaction.objectStore('drafts').clear();
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+/** Stores a record this version cannot read, as a later release would, for `owner`. */
+async function saveUnreadable(owner: DraftHolder, id: string): Promise<void> {
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    const opening = indexedDB.open('werkflow-drafts', 1);
+    opening.onsuccess = () => resolve(opening.result);
+    opening.onerror = () => reject(opening.error);
+  });
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction('drafts', 'readwrite');
+    transaction.objectStore('drafts').put({ ...draft({ ...owner, id }), version: 99 });
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+afterEach(clearDraftStore);
 
 describe('report drafts on the device', () => {
   test('a draft and its photo survive a restart: a new connection reads the text and the bytes', async () => {
@@ -87,7 +119,10 @@ describe('report drafts on the device', () => {
     });
     expect(seen).toBeUndefined();
     expect(answer).toBeNull();
-    await deleteDraftsOnDevice(otherPerson);
+    await deleteShownDraftsOnDevice(
+      { userId: otherPerson.userId, organizationId: null },
+      { drafts: new Map([[draft().id, draft().updatedAt]]), unreadable: (entry) => entry.id === draft().id },
+    );
     expect((await listDraftsOnDevice(holder, NOW)).map((entry) => entry.title)).toEqual(['Heizung gewartet']);
   });
 
@@ -139,6 +174,88 @@ describe('report drafts on the device', () => {
     await save(draft({ refusal: { kind: 'failed', at: '2026-11-09T07:45:00.000Z' } }));
     const muchLater = new Date('2027-03-01T00:00:00.000Z');
     expect((await listDraftsOnDevice(holder, muchLater)).length).toBe(1);
+  });
+});
+
+describe('the drafts a session end asks about', () => {
+  const otherJobDraft = draft({
+    id: '9c000000-0000-4000-8000-000000000013',
+    updatedAt: '2026-11-09T07:10:00.000Z',
+  });
+  const otherOrganizationDraft = draft({ ...otherOrganization, id: '9c000000-0000-4000-8000-000000000014' });
+  const colleaguesDraft = draft({ ...otherPerson, id: '9c000000-0000-4000-8000-000000000015' });
+  const unreadableId = '9c000000-0000-4000-8000-000000000016';
+  const colleaguesUnreadableId = '9c000000-0000-4000-8000-000000000017';
+
+  async function storeEveryone(): Promise<void> {
+    for (const entry of [draft(), otherJobDraft, otherOrganizationDraft, colleaguesDraft]) await save(entry);
+    await saveUnreadable(holder, unreadableId);
+    await saveUnreadable(otherPerson, colleaguesUnreadableId);
+  }
+
+  test("a sign-out's listing holds the person's drafts of every organization, readable or not, and never a colleague's", async () => {
+    await storeEveryone();
+    const listed = await listDraftsInScopeOnDevice({ userId: holder.userId, organizationId: null }, NOW);
+    expect(listed.drafts.map((entry) => entry.id)).toEqual([
+      otherJobDraft.id,
+      draft().id,
+      otherOrganizationDraft.id,
+    ]);
+    expect(listed.unreadable.map(({ id, jobId }) => ({ id, jobId }))).toEqual([
+      { id: unreadableId, jobId: draft().jobId },
+    ]);
+  });
+
+  test("a switch's listing holds only the organization it leaves", async () => {
+    await storeEveryone();
+    const listed = await listDraftsInScopeOnDevice(holder, NOW);
+    expect(listed.drafts.map((entry) => entry.id)).toEqual([otherJobDraft.id, draft().id]);
+    expect(listed.unreadable.map((entry) => entry.id)).toEqual([unreadableId]);
+    const elsewhere = await listDraftsInScopeOnDevice(otherOrganization, NOW);
+    expect(elsewhere.drafts.map((entry) => entry.id)).toEqual([otherOrganizationDraft.id]);
+    expect(elsewhere.unreadable).toEqual([]);
+  });
+
+  test('a discard deletes exactly the shown drafts in the state they were shown, and nothing else', async () => {
+    await storeEveryone();
+    // Changed after the question opened: the person never saw this text.
+    await changeDraftOnDevice(holder, otherJobDraft.id, (current) =>
+      current ? { ...current, title: 'Später ergänzt', updatedAt: '2026-11-09T07:50:00.000Z' } : null,
+    );
+    await deleteShownDraftsOnDevice(
+      { userId: holder.userId, organizationId: null },
+      {
+        drafts: new Map([
+          [draft().id, draft().updatedAt],
+          [otherJobDraft.id, otherJobDraft.updatedAt],
+          // A colleague's draft id among the shown ones is never the person's to delete.
+          [colleaguesDraft.id, colleaguesDraft.updatedAt],
+        ]),
+        unreadable: (entry) => [unreadableId, colleaguesUnreadableId].includes(entry.id),
+      },
+    );
+    const left = await listDraftsInScopeOnDevice({ userId: holder.userId, organizationId: null }, NOW);
+    expect(left.drafts.map((entry) => [entry.id, entry.title])).toEqual([
+      [otherOrganizationDraft.id, 'Heizung gewartet'],
+      [otherJobDraft.id, 'Später ergänzt'],
+    ]);
+    expect(left.unreadable).toEqual([]);
+    expect(
+      (await listDraftsInScopeOnDevice({ userId: otherPerson.userId, organizationId: null }, NOW)).drafts,
+    ).toEqual([colleaguesDraft]);
+    const colleagues = await listDraftsInScopeOnDevice(otherPerson, NOW);
+    expect(colleagues.unreadable.map((entry) => entry.id)).toEqual([colleaguesUnreadableId]);
+  });
+
+  test("a switch's discard never deletes a shown draft of another organization", async () => {
+    await storeEveryone();
+    await deleteShownDraftsOnDevice(holder, {
+      drafts: new Map([[otherOrganizationDraft.id, otherOrganizationDraft.updatedAt]]),
+      unreadable: () => false,
+    });
+    expect((await listDraftsInScopeOnDevice(otherOrganization, NOW)).drafts).toEqual([
+      otherOrganizationDraft,
+    ]);
   });
 });
 

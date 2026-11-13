@@ -109,10 +109,10 @@ begin
   from public.find_client_request_caller_matches(
     '42000000-0000-0000-0000-000000000010', '42000000-0000-0000-0000-000000000040', 10) match;
 
-  if v_matches[1] <> '42000000-0000-0000-0000-000000000021:phone,name' then
+  if v_matches[1] is distinct from '42000000-0000-0000-0000-000000000021:phone,name' then
     raise exception 'the customer matching on phone and name is not listed first: %', v_matches;
   end if;
-  if (select array_agg(entry order by entry) from unnest(v_matches) entry) <> array[
+  if (select array_agg(entry order by entry) from unnest(v_matches) entry) is distinct from array[
     '42000000-0000-0000-0000-000000000021:phone,name',
     '42000000-0000-0000-0000-000000000022:email',
     '42000000-0000-0000-0000-000000000023:phone',
@@ -129,7 +129,7 @@ begin
     select array_agg(match.client_id)
     from public.find_client_request_caller_matches(
       '42000000-0000-0000-0000-000000000010', '42000000-0000-0000-0000-000000000040', 1) match
-  ) <> array['42000000-0000-0000-0000-000000000021'::uuid] then
+  ) is distinct from array['42000000-0000-0000-0000-000000000021'::uuid] then
     raise exception 'the limit did not keep the strongest match only';
   end if;
 

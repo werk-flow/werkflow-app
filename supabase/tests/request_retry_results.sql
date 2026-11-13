@@ -61,7 +61,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -149,13 +149,13 @@ begin
   v_other := public.create_client_request('41932400-0000-0000-0000-000000000004',
     '41932400-0000-0000-0000-000000000011', 'Fremde Anfrage', null, null, null, null, null, null, null,
     null, null, null, null, null, null, null, p_attempt_key => v_key);
-  if v_other.id = v_first.id or v_other.organization_id <> '41932400-0000-0000-0000-000000000011' then
+  if v_other.id = v_first.id or v_other.organization_id is distinct from '41932400-0000-0000-0000-000000000011' then
     raise exception 'a key of another organization answered with this organization''s request';
   end if;
   if (select count(*) from public.client_requests
-      where organization_id in ('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000011')) <> v_requests_before + 2
+      where organization_id in ('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000011')) is distinct from v_requests_before + 2
     or (select count(*) from public.client_request_events
-      where organization_id in ('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000011')) <> v_events_before + 2
+      where organization_id in ('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000011')) is distinct from v_events_before + 2
   then
     raise exception 'three captures under one key in two organizations did not write two requests';
   end if;

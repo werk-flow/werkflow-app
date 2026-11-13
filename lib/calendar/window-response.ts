@@ -4,6 +4,7 @@ import { holidayRegionHistoryEntrySchema } from '@/lib/personnel/targets';
 import { WORK_EXECUTION_STATES } from '@/lib/work-lifecycle/types';
 import type { CalendarWindowResult } from './actions';
 import type { CalendarBoardResult } from './board-actions';
+import { CALENDAR_ABSENCE_TYPES } from './board';
 
 const text = z.string();
 const nullableText = text.nullable();
@@ -119,7 +120,7 @@ const boardDay = z.object({
   reason: z.enum(['working', 'no_work_day', 'holiday', 'closure']),
   label: nullableText,
   absence: z
-    .object({ type: z.enum(['vacation', 'sickness']), portion: z.enum(['full', 'half_day']) })
+    .object({ type: z.enum(CALENDAR_ABSENCE_TYPES), portion: z.enum(['full', 'half_day']) })
     .nullable(),
   pendingVacation: z.boolean(),
 });

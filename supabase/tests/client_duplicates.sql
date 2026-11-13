@@ -121,10 +121,10 @@ begin
     '43000000-0000-0000-0000-000000000010', ' k-1001 ', 'Erika  MUSTERFRAU', '030 444 0123',
     'erika.musterfrau@example.test', 'Ahornstraße 9, 12345 Musterstadt', 20) match;
 
-  if v_matches[1] <> '43000000-0000-0000-0000-000000000031:phone,email' then
+  if v_matches[1] is distinct from '43000000-0000-0000-0000-000000000031:phone,email' then
     raise exception 'the customer with two reasons is not listed first: %', v_matches;
   end if;
-  if (select array_agg(entry order by entry) from unnest(v_matches) entry) <> array[
+  if (select array_agg(entry order by entry) from unnest(v_matches) entry) is distinct from array[
     '43000000-0000-0000-0000-000000000021:customer_number',
     '43000000-0000-0000-0000-000000000022:phone',
     '43000000-0000-0000-0000-000000000023:phone',
@@ -149,7 +149,7 @@ begin
     from public.find_client_duplicates(
       '43000000-0000-0000-0000-000000000010', 'K-1001', 'Erika Musterfrau', '030 444 0123',
       'erika.musterfrau@example.test', 'Ahornstraße 9, 12345 Musterstadt', 1) match
-  ) <> array['43000000-0000-0000-0000-000000000031'::uuid] then
+  ) is distinct from array['43000000-0000-0000-0000-000000000031'::uuid] then
     raise exception 'the limit did not keep the strongest match only';
   end if;
 

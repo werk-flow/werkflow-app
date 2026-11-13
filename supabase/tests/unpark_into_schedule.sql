@@ -102,7 +102,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -144,7 +144,7 @@ begin
      union all
      select 'assignment', to_jsonb(assignment) - 'assigned_at' from public.job_assignments assignment
      where assignment.organization_id in ('26104170-0000-0000-0000-000000000010', '26104170-0000-0000-0000-000000000011'))
-  ) or (select count(*) from parking_before) <> (
+  ) or (select count(*) from parking_before) is distinct from (
     (select count(*) from public.jobs
      where organization_id in ('26104170-0000-0000-0000-000000000010', '26104170-0000-0000-0000-000000000011'))
     + (select count(*) from public.work_blockers
@@ -211,8 +211,8 @@ begin
     '{"planned_date": "2037-11-02", "planned_time": "08:00:00", "status": "nicht_bearbeitet"}', true,
     array['26104170-0000-0000-0000-000000000002'::uuid], '2037-11-02', '{}', '[]', '{}', 'fingerprint',
     null, null, true);
-  if v_job.status <> 'nicht_bearbeitet' or v_job.planned_date <> '2037-11-02'
-    or v_job.planned_time <> '08:00:00'
+  if v_job.status is distinct from 'nicht_bearbeitet' or v_job.planned_date is distinct from '2037-11-02'
+    or v_job.planned_time is distinct from '08:00:00'
   then raise exception 'the unpark into the schedule did not apply'; end if;
   if exists (
     select 1 from public.work_blockers blocker
@@ -242,7 +242,7 @@ begin
     '26104170-0000-0000-0000-000000000001', '26104170-0000-0000-0000-000000000051', 1,
     'Im Kalender neu eingeplant', '{"planned_date": "2037-11-03", "status": "nicht_bearbeitet"}', false,
     null, null, null, null, null, null, null, null, null);
-  if v_job.status <> 'in_bearbeitung' or v_job.planned_date <> '2037-11-03' then
+  if v_job.status is distinct from 'in_bearbeitung' or v_job.planned_date is distinct from '2037-11-03' then
     raise exception 'the edit overrode the status of the unpark';
   end if;
 
@@ -259,7 +259,7 @@ begin
         and occurrence.status = 'scheduled') <> 2
   then raise exception 'the unparked visit is not planned for the whole selection'; end if;
 
-  if (select status from public.jobs where id = '26104170-0000-0000-0000-000000000059') <> 'geparkt' then
+  if (select status from public.jobs where id = '26104170-0000-0000-0000-000000000059') is distinct from 'geparkt' then
     raise exception 'an unpark reached another organization';
   end if;
 end;
