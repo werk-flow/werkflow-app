@@ -17846,6 +17846,7 @@ export type Database = {
       replace_company_document_file: {
         Args: {
           p_actor_id: string;
+          p_expected_storage_path: string;
           p_kind: string;
           p_mime_type: string;
           p_organization_id: string;

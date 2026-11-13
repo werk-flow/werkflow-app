@@ -123,8 +123,12 @@ export const COMPANY_FILE_RULES: Record<
   },
 };
 
-/** What the settings show of a stored file: that it exists, and its type. */
-export type StoredCompanyFile = { mimeType: string };
+/**
+ * What the settings show of a stored file: its type, and its storage key,
+ * which a removal or replacement names so the server refuses it once someone
+ * else changed the file.
+ */
+export type StoredCompanyFile = { storagePath: string; mimeType: string };
 
 export type CompanyDocumentProfile = {
   version: number;
@@ -143,16 +147,22 @@ export const companyFileTicketInputSchema = z.strictObject({
 export type CompanyFileTicketInput = z.input<typeof companyFileTicketInputSchema>;
 export type CompanyFileTicketResult = ActionResult<{ ticket: { fileId: string; uploadUrl: string } }>;
 
+const storagePathSchema = z.string().min(1).max(500);
+
 export const companyFileFinalizeInputSchema = z.strictObject({
   organizationId: uuidSchema,
   kind: z.enum(COMPANY_FILE_KINDS),
   fileId: uuidSchema,
+  /** The file the upload replaces as the caller saw it; null when none was stored. */
+  expectedStoragePath: storagePathSchema.nullable(),
 });
 export type CompanyFileFinalizeInput = z.input<typeof companyFileFinalizeInputSchema>;
 
 export const companyFileRemoveInputSchema = z.strictObject({
   organizationId: uuidSchema,
   kind: z.enum(COMPANY_FILE_KINDS),
+  /** The file the caller saw and removes. */
+  expectedStoragePath: storagePathSchema,
 });
 export type CompanyFileRemoveInput = z.input<typeof companyFileRemoveInputSchema>;
 

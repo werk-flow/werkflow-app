@@ -51,12 +51,11 @@ function profileOf(row: ProfileRow | null): StoredProfile {
       row?.stationery_following_mime_type ?? null,
     ),
   };
+  const shown = (file: StoredFilePath | null) => file && { storagePath: file.path, mimeType: file.mimeType };
   const files = {
-    logo: filePaths.logo && { mimeType: filePaths.logo.mimeType },
-    stationery_first: filePaths.stationery_first && { mimeType: filePaths.stationery_first.mimeType },
-    stationery_following: filePaths.stationery_following && {
-      mimeType: filePaths.stationery_following.mimeType,
-    },
+    logo: shown(filePaths.logo),
+    stationery_first: shown(filePaths.stationery_first),
+    stationery_following: shown(filePaths.stationery_following),
   };
   if (!row) {
     return {

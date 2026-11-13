@@ -271,15 +271,19 @@ grant execute on function public.save_company_document_profile(uuid, uuid, integ
 
 -- Sets or removes (p_storage_path null) the logo or a stationery page. The
 -- object was promoted by the server under the organization's Briefpapier
--- folder; p_size_bytes is its stored size. Removing the first page's stationery removes the following pages'
--- too. Every changed file writes its history row and queues its old object
--- for the purge. Refusals: not_authorized, invalid_input for another kind,
+-- folder; p_size_bytes is its stored size. p_expected_storage_path names the
+-- file the caller saw in that place, null for none: another file there means
+-- someone changed it since, and the call writes and queues nothing. Removing
+-- the first page's stationery removes the following pages' too. Every changed
+-- file writes its history row and queues its old object for the purge.
+-- Refusals: not_authorized, invalid_input for another kind, file_changed,
 -- stationery_first_missing for following pages without a first page; a table
 -- check refuses a path outside the folder or another type.
 create function public.replace_company_document_file(
   p_actor_id uuid,
   p_organization_id uuid,
   p_kind text,
+  p_expected_storage_path text,
   p_storage_path text,
   p_mime_type text,
   p_size_bytes bigint
@@ -299,13 +303,16 @@ begin
   if p_kind is null or p_kind not in ('logo', 'stationery_first', 'stationery_following') then
     raise exception 'invalid_input';
   end if;
+  v_old_json := to_jsonb(v_old);
+  if (v_old_json ->> (p_kind || '_storage_path')) is distinct from p_expected_storage_path then
+    raise exception 'file_changed';
+  end if;
   if p_kind = 'stationery_following' and p_storage_path is not null
     and v_old.stationery_first_storage_path is null
   then
     raise exception 'stationery_first_missing';
   end if;
 
-  v_old_json := to_jsonb(v_old);
   v_changes := jsonb_build_object(p_kind, jsonb_build_array(p_storage_path, p_mime_type, p_size_bytes));
   if p_kind = 'stationery_first' and p_storage_path is null then
     v_changes := v_changes || jsonb_build_object('stationery_following', jsonb_build_array(null, null, null));
@@ -347,8 +354,8 @@ begin
 end;
 $$;
 
-revoke all on function public.replace_company_document_file(uuid, uuid, text, text, text, bigint) from public, anon, authenticated;
-grant execute on function public.replace_company_document_file(uuid, uuid, text, text, text, bigint) to service_role;
+revoke all on function public.replace_company_document_file(uuid, uuid, text, text, text, text, bigint) from public, anon, authenticated;
+grant execute on function public.replace_company_document_file(uuid, uuid, text, text, text, text, bigint) to service_role;
 
 -- The organization export holds the profile's files too: they are stored
 -- originals of the organization, and its data part names their keys. A

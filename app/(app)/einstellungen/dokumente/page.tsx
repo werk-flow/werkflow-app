@@ -36,7 +36,7 @@ export default async function DokumenteSettingsPage() {
         }}
       />
       <DocumentLetterheadFiles organizationId={membership.orgId} files={profile.files} />
-      <DocumentSamplePreview profileUpdatedAt={profile.updatedAt} />
+      <DocumentSamplePreview organizationId={membership.orgId} profileUpdatedAt={profile.updatedAt} />
     </div>
   );
 }

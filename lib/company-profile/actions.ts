@@ -42,7 +42,7 @@ import { companyFilePath, readCompanyFile } from './reads';
 const SETTINGS_PATH = '/einstellungen/dokumente';
 const INVALID_INPUT = { success: false, error: 'invalid_input' } as const;
 const refusal = writeRefusalFor(
-  new Set(['not_authorized', 'profile_changed', 'no_changes', 'stationery_first_missing']),
+  new Set(['not_authorized', 'profile_changed', 'no_changes', 'stationery_first_missing', 'file_changed']),
 );
 
 async function resolveManager(
@@ -151,7 +151,7 @@ export async function createCompanyDocumentFileUploadTicket(
   }
 }
 
-/** Checks the uploaded file and makes it the profile's logo or stationery page. */
+/** Checks the uploaded file and makes it the profile's logo or stationery page in place of the one the caller saw. */
 export async function finalizeCompanyDocumentFileUpload(
   rawInput: CompanyFileFinalizeInput,
 ): Promise<ActionResult> {
@@ -199,6 +199,7 @@ export async function finalizeCompanyDocumentFileUpload(
       p_actor_id: auth.context.userId,
       p_organization_id: organizationId,
       p_kind: input.kind,
+      p_expected_storage_path: input.expectedStoragePath,
       p_storage_path: copy.path,
       p_mime_type: mimeType,
       p_size_bytes: sizeBytes,
@@ -213,7 +214,11 @@ export async function finalizeCompanyDocumentFileUpload(
   return { success: true };
 }
 
-/** Removes the logo or a stationery page; removing the first page's removes the following pages' too. */
+/**
+ * Removes the logo or a stationery page the caller saw; removing the first
+ * page's removes the following pages' too. Another file in its place by now
+ * is refused as `file_changed`.
+ */
 export async function removeCompanyDocumentFile(rawInput: CompanyFileRemoveInput): Promise<ActionResult> {
   const parsed = companyFileRemoveInputSchema.safeParse(rawInput);
   if (!parsed.success) return INVALID_INPUT;
@@ -227,6 +232,7 @@ export async function removeCompanyDocumentFile(rawInput: CompanyFileRemoveInput
       p_actor_id: auth.context.userId,
       p_organization_id: auth.context.orgId,
       p_kind: input.kind,
+      p_expected_storage_path: input.expectedStoragePath,
       p_storage_path: null,
       p_mime_type: null,
       p_size_bytes: null,

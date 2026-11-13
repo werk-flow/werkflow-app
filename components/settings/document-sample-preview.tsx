@@ -27,11 +27,22 @@ async function readSampleOffer(signal: AbortSignal): Promise<SampleOfferRead> {
   }
 }
 
+type PreviewProps = {
+  /** The organization whose profile the sample shows. */
+  organizationId: string;
+  profileUpdatedAt: string | null;
+};
+
 /**
  * The Musterangebot as the PDF a customer receives, to open or download. A
- * saved change of the company profile renders it anew.
+ * saved change of the company profile renders it anew; another organization
+ * mounts a new preview, so no sample of the one before stays on screen.
  */
-export function DocumentSamplePreview({ profileUpdatedAt }: { profileUpdatedAt: string | null }) {
+export function DocumentSamplePreview(props: PreviewProps) {
+  return <SamplePreview key={props.organizationId} profileUpdatedAt={props.profileUpdatedAt} />;
+}
+
+function SamplePreview({ profileUpdatedAt }: Pick<PreviewProps, 'profileUpdatedAt'>) {
   const sample = useClientRead({
     read: readSampleOffer,
     deps: [profileUpdatedAt],

@@ -40,6 +40,7 @@ declare global {
       | 'organization'
       | 'organization-export'
       | 'company-profile'
+      | 'company-letterhead'
       | 'today-refresh'
       | 'draft-landing'
       | 'today-refresh-switch'

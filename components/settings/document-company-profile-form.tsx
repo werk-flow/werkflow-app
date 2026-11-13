@@ -27,6 +27,8 @@ import {
   TEXT_FIELD_SECTIONS,
   profileDraftOf,
   fieldId,
+  hiddenMarginPages,
+  withSavedMargins,
   parseDraft,
   type MarginPage,
   type ProfileDraft,
@@ -205,12 +207,21 @@ function MarginFields({
  * one save call. The save names the organization and version the draft was
  * loaded from, so the server refuses it once another organization is active.
  */
-function useProfileSave({ organizationId, version, details }: Omit<FormProps, 'stationery'>) {
+function useProfileSave({ organizationId, version, details, stationery }: FormProps) {
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(saveCompanyDocumentProfile);
   const [loaded] = useState(() => ({ organizationId, version }));
   const [draft, setDraft] = useState(() => profileDraftOf(details));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Removed stationery hides its margins without a new version. A hidden group
+  // returns to the saved margins, so no field nobody sees blocks the save.
+  const [shownStationery, setShownStationery] = useState(stationery);
+  if (shownStationery.first !== stationery.first || shownStationery.following !== stationery.following) {
+    setShownStationery(stationery);
+    const restored = withSavedMargins(draft, errors, details, hiddenMarginPages(stationery));
+    setDraft(restored.draft);
+    setErrors(restored.errors);
+  }
   const [failure, setFailure] = useState<string | null>(null);
   const update = (change: Partial<ProfileDraft>) => setDraft((current) => ({ ...current, ...change }));
 
@@ -266,7 +277,8 @@ export function DocumentCompanyProfileForm(props: FormProps) {
   return <CompanyProfileForm key={`${props.organizationId}:${props.version}`} {...props} />;
 }
 
-function CompanyProfileForm({ stationery, ...profile }: FormProps) {
+function CompanyProfileForm(profile: FormProps) {
+  const { stationery } = profile;
   const { controls, submit, isPending, failure } = useProfileSave(profile);
   return (
     <Card>

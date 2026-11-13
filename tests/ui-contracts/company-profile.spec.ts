@@ -47,3 +47,20 @@ test('margins too wide together mark both sides of their page, focus the first a
   await expect(right).toBeFocused();
   expect(await page.evaluate(() => window.uiContractWrites.calls)).toEqual([]);
 });
+
+test('removed stationery returns its hidden margins to the saved ones, so the save still goes through', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'company-profile');
+  await page.getByLabel('Rechts (mm)').fill('abc');
+  await page.getByRole('button', { name: 'Briefpapier entfernen' }).click();
+  await expect(page.getByLabel('Rechts (mm)')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Angaben speichern' }).click();
+  await expectHeldWrite(page, 'save-company-profile');
+  const sent = await page.evaluate(() => window.uiContractWrites.calls[0]?.input);
+  expect(sent).toMatchObject({
+    details: { firstPageMargins: { topMm: 45, rightMm: 20, bottomMm: 25, leftMm: 25 } },
+  });
+  await answerHeldWrite(page, null);
+});

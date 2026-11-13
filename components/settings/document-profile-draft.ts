@@ -138,6 +138,28 @@ export function profileDraftOf(details: CompanyProfileDetails): ProfileDraft {
   };
 }
 
+/** The margin pages the form hides for this stationery: a page without stationery shows no margins. */
+export function hiddenMarginPages(stationery: { first: boolean; following: boolean }): MarginPage[] {
+  if (!stationery.first) return ['firstPageMargins', 'followingPageMargins'];
+  return stationery.following ? [] : ['followingPageMargins'];
+}
+
+/** The draft with the saved margins of these pages, and the errors without their fields. */
+export function withSavedMargins(
+  draft: ProfileDraft,
+  errors: Record<string, string>,
+  details: CompanyProfileDetails,
+  pages: readonly MarginPage[],
+): { draft: ProfileDraft; errors: Record<string, string> } {
+  const restored = { ...draft };
+  for (const page of pages) restored[page] = marginDraft(details[page]);
+  const fields = new Set(pages.flatMap((page) => MARGIN_SIDES.map(({ side }) => fieldId(page, side))));
+  return {
+    draft: restored,
+    errors: Object.fromEntries(Object.entries(errors).filter(([id]) => !fields.has(id))),
+  };
+}
+
 /** A whole number from typed text within the range, or null. */
 function wholeNumber(text: string, minimum: number, maximum: number): number | null {
   const trimmed = text.trim();

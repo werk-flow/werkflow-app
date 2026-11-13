@@ -63,10 +63,21 @@ const ticket = (organizationId: string) => () =>
     mimeType: 'image/png',
     fileSizeBytes: 2048,
   });
+const seenLogo = `${ORGANIZATION_A}/briefpapier/37800000-0000-4000-8000-000000000031/logo`;
+const seenStationery = `${ORGANIZATION_A}/briefpapier/37800000-0000-4000-8000-000000000032/stationery_first`;
 const finalize = (organizationId: string) => () =>
-  actions.finalizeCompanyDocumentFileUpload({ organizationId, kind: 'logo', fileId });
+  actions.finalizeCompanyDocumentFileUpload({
+    organizationId,
+    kind: 'logo',
+    fileId,
+    expectedStoragePath: seenLogo,
+  });
 const remove = (organizationId: string) => () =>
-  actions.removeCompanyDocumentFile({ organizationId, kind: 'stationery_first' });
+  actions.removeCompanyDocumentFile({
+    organizationId,
+    kind: 'stationery_first',
+    expectedStoragePath: seenStationery,
+  });
 const everyAction = (organizationId: string) =>
   [
     ['saveCompanyDocumentProfile', save(organizationId)],
@@ -165,6 +176,7 @@ assert.deepEqual(world.rpcCalls.at(-1), {
     p_actor_id: CALLER_ID,
     p_organization_id: ORGANIZATION_A,
     p_kind: 'logo',
+    p_expected_storage_path: seenLogo,
     p_storage_path: `${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`,
     p_mime_type: 'image/png',
     p_size_bytes: 2048,
@@ -179,8 +191,17 @@ assert.deepEqual(world.rpcCalls.at(-1), {
     p_actor_id: CALLER_ID,
     p_organization_id: ORGANIZATION_A,
     p_kind: 'stationery_first',
+    p_expected_storage_path: seenStationery,
     p_storage_path: null,
     p_mime_type: null,
     p_size_bytes: null,
   },
 });
+
+// A file someone else changed since the caller saw it: the database refuses
+// the removal and the replacement, the caller hears why, and the refused
+// upload's copy is discarded.
+world.rpc = () => ({ data: null, error: { message: 'file_changed', code: 'P0001' } });
+assert.deepEqual(await remove(ORGANIZATION_A)(), { success: false, error: 'file_changed' });
+assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: false, error: 'file_changed' });
+assert.equal(storageCalls.at(-1), `discard ${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`);

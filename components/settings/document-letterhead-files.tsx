@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ const FILE_FAILURES = {
     'Die Datei lässt sich nicht lesen. Speichere sie neu als PNG, JPG oder PDF und lade sie noch einmal hoch.',
   file_missing: 'Die Datei ist nicht vollständig angekommen. Lade sie noch einmal hoch.',
   stationery_first_missing: 'Lade zuerst das Briefpapier für die erste Seite hoch.',
+  file_changed: 'Jemand hat die Datei inzwischen geändert. Lade die Seite neu und prüf sie noch einmal.',
 } satisfies Record<string, string>;
 
 type FileRow = { kind: CompanyFileKind; label: string; description: string; types: string };
@@ -60,6 +61,35 @@ const TYPE_LABELS: Record<string, string> = {
   'image/jpeg': 'JPG',
 };
 
+/**
+ * A row's upload or removal and what it shows: a banner when it succeeds, the
+ * reason on the row when it fails. The row of another organization unmounts
+ * on a switch, so a late result of that row shows nowhere.
+ */
+function useFileTask() {
+  const { showBanner } = useBanner();
+  const { run, isPending } = usePendingTask();
+  const [failure, setFailure] = useState<string | null>(null);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const perform = (task: () => Promise<ActionResult>, success: string, fallback: string) =>
+    run(async () => {
+      setFailure(null);
+      // A lost connection rejects the call; it shows like a refused one.
+      const result = await task().catch((): ActionResult => ({ success: false, error: 'request_failed' }));
+      if (!mounted.current) return;
+      if (result.success) showBanner({ variant: 'success', message: success });
+      else setFailure(describeFailure(result.error, FILE_FAILURES, fallback));
+    });
+  return { perform, isPending, failure };
+}
+
 function LetterheadFileRow({
   row,
   organizationId,
@@ -72,18 +102,7 @@ function LetterheadFileRow({
   /** Why the row cannot take a file yet, or null. */
   blockedBy: string | null;
 }) {
-  const { showBanner } = useBanner();
-  const { run, isPending } = usePendingTask();
-  const [failure, setFailure] = useState<string | null>(null);
-
-  const perform = (task: () => Promise<ActionResult>, success: string, fallback: string) =>
-    run(async () => {
-      setFailure(null);
-      // A lost connection rejects the call; it shows like a refused one.
-      const result = await task().catch((): ActionResult => ({ success: false, error: 'request_failed' }));
-      if (result.success) showBanner({ variant: 'success', message: success });
-      else setFailure(describeFailure(result.error, FILE_FAILURES, fallback));
-    });
+  const { perform, isPending, failure } = useFileTask();
 
   const status = stored ? `Hinterlegt (${TYPE_LABELS[stored.mimeType] ?? 'Datei'})` : 'Noch nicht hinterlegt';
   const label = (
@@ -111,7 +130,7 @@ function LetterheadFileRow({
               onSelect={(file) => {
                 if (!file) return;
                 void perform(
-                  () => uploadCompanyFile(organizationId, row.kind, file),
+                  () => uploadCompanyFile(organizationId, row.kind, file, stored?.storagePath ?? null),
                   `${row.label} wurde gespeichert.`,
                   `${row.label} konnte nicht gespeichert werden. Versuch es noch einmal.`,
                 );
@@ -124,7 +143,12 @@ function LetterheadFileRow({
                 disabled={isPending}
                 onClick={() =>
                   void perform(
-                    () => removeCompanyDocumentFile({ organizationId, kind: row.kind }),
+                    () =>
+                      removeCompanyDocumentFile({
+                        organizationId,
+                        kind: row.kind,
+                        expectedStoragePath: stored.storagePath,
+                      }),
                     `${row.label} wurde entfernt.`,
                     `${row.label} konnte nicht entfernt werden. Versuch es noch einmal.`,
                   )
@@ -140,7 +164,11 @@ function LetterheadFileRow({
   );
 }
 
-/** Logo and stationery: each uploads straight to storage and replaces the stored file. */
+/**
+ * Logo and stationery: each uploads straight to storage and replaces the
+ * stored file the row shows. The rows belong to one organization and start
+ * anew for another.
+ */
 export function DocumentLetterheadFiles({
   organizationId,
   files,
@@ -160,7 +188,7 @@ export function DocumentLetterheadFiles({
       <CardContent className="divide-y">
         {FILE_ROWS.map((row) => (
           <LetterheadFileRow
-            key={row.kind}
+            key={`${organizationId}:${row.kind}`}
             row={row}
             organizationId={organizationId}
             stored={files[row.kind]}

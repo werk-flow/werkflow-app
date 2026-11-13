@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 import { putStorageObject } from '../../../../lib/storage/r2';
+import { rpcArgs } from '../../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../../golden/support/db/shared';
 import type { TestWorld } from '../../../golden/support/world';
 import { stateCaptureId } from '../acceptance-state-plan';
@@ -82,14 +83,19 @@ async function seedStationery(world: TestWorld): Promise<void> {
     const path = `${world.orgId}/briefpapier/${randomUUID()}/stationery_first`;
     const body = await stationeryPdf();
     await putStorageObject({ organizationId: world.orgId, path, body, contentType: 'application/pdf' });
-    const { error } = await createAdminClient().rpc('replace_company_document_file', {
-      p_actor_id: world.users.buero.id,
-      p_organization_id: world.orgId,
-      p_kind: 'stationery_first',
-      p_storage_path: path,
-      p_mime_type: 'application/pdf',
-      p_size_bytes: body.byteLength,
-    });
+    const { error } = await createAdminClient().rpc(
+      'replace_company_document_file',
+      rpcArgs('replace_company_document_file', {
+        p_actor_id: world.users.buero.id,
+        p_organization_id: world.orgId,
+        p_kind: 'stationery_first',
+        // The seed stores the first stationery: no file was there before.
+        p_expected_storage_path: null,
+        p_storage_path: path,
+        p_mime_type: 'application/pdf',
+        p_size_bytes: body.byteLength,
+      }),
+    );
     if (error) throw new Error(`stationery seed failed: ${error.message}`);
     return path;
   });
