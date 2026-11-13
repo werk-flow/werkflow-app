@@ -70,7 +70,7 @@ const DOCKER_EXEC_VALUE_FLAGS = new Set([
 
 type Started = { name: string; args: string[]; words: ShellWord[] };
 /** A nested shell's script, with the outer call's other words, whose redirections feed that script's commands. */
-type NestedScript = { script: string; words: ShellWord[] };
+type NestedScript = { script: string; words: ShellWord[]; inContainer: boolean };
 
 /** The command a `docker exec` runs in its container, after the options and the container's name. */
 function dockerExecCommand(args: readonly string[]): string[] | undefined {
@@ -90,11 +90,14 @@ function started(words: ShellWord[]): (Started | NestedScript)[] {
   if (!call) return [];
   let name = call.name;
   let args = call.args.map((arg) => arg.text);
+  let viaDocker = false;
   for (let depth = 0; depth < 4; depth++) {
     if (SHELLS.has(name)) {
       const flag = args.findIndex((arg) => SCRIPT_FLAG.test(arg));
       const script = flag === -1 ? undefined : args[flag + 1];
-      return script ? [{ script, words: words.filter((word) => word.text !== script) }] : [];
+      return script
+        ? [{ script, words: words.filter((word) => word.text !== script), inContainer: viaDocker }]
+        : [];
     }
     // `docker exec <container> sh -c '<script>'`: the script's psql runs in the container. Any other
     // `docker exec` stays a docker call, which the psql check below reads as a whole.
@@ -102,6 +105,7 @@ function started(words: ShellWord[]): (Started | NestedScript)[] {
     if (inContainer?.[0] && SHELLS.has(inContainer[0])) {
       name = inContainer[0];
       args = inContainer.slice(1);
+      viaDocker = true;
       continue;
     }
     const runsBinary =
@@ -186,14 +190,20 @@ function reachesLocalDatabase(call: Started): boolean {
  * machine. A mention inside a search, a message or a string is no call.
  */
 export function sharedStackMigrationRefusal(command: string): string | undefined {
-  return readCommand(command, 0).refusal;
+  return readCommand(command, 0, false).refusal;
 }
 
 /**
  * The refusal of a command line, and whether it starts a psql on this machine, itself or in a
- * nested `sh -c` script: a heredoc on the outer line is that psql's input too.
+ * nested `sh -c` script: a heredoc on the outer line is that psql's input too. A script that
+ * `docker exec` starts runs in a container on this machine, so each psql in it is local, as a
+ * direct `docker exec <container> psql` is.
  */
-function readCommand(command: string, depth: number): { refusal?: string; localPsql: boolean } {
+function readCommand(
+  command: string,
+  depth: number,
+  inContainer: boolean,
+): { refusal?: string; localPsql: boolean } {
   const reading = readShell(command);
   if (!reading) return { localPsql: false };
   const calls: Started[] = [];
@@ -203,7 +213,10 @@ function readCommand(command: string, depth: number): { refusal?: string; localP
   for (const words of reading.commands)
     for (const entry of started(words)) {
       if ('script' in entry) {
-        const nested = depth < 4 ? readCommand(entry.script, depth + 1) : { localPsql: false };
+        const nested =
+          depth < 4
+            ? readCommand(entry.script, depth + 1, inContainer || entry.inContainer)
+            : { localPsql: false };
         if (nested.refusal) return nested;
         if (nested.localPsql) nestedPsqlWords.push(...entry.words);
         nestedPsql ||= nested.localPsql;
@@ -218,7 +231,7 @@ function readCommand(command: string, depth: number): { refusal?: string; localP
       call.name === 'psql' ||
       (call.name === 'docker' && call.args.includes('exec') && call.args.includes('psql')),
   );
-  const local = psql.filter(reachesLocalDatabase);
+  const local = psql.filter((call) => inContainer || reachesLocalDatabase(call));
   const localPsql = local.length > 0 || nestedPsql;
   // The file reaches psql as `-f` or as its input (a redirection of the psql call or of the shell
   // that starts it), through a `cat` piped into it, or as an include

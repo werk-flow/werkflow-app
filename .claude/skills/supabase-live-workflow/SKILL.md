@@ -22,7 +22,7 @@ Every worktree of a workstation tests against one local stack. It holds `main`'s
 
 - With a migration in your tree, `bun run test:verify` runs the SQL and browser groups on a fresh Boat stack, and `bun run types:generate -- --local` writes the types without changing the shared database.
 - `bun run stack:sync` applies `origin/main`'s pending migrations under the exclusive stack lock, from any worktree on any branch. Every SQL and browser run holds that lock shared, so a sync never migrates under one; it takes no workspace lock, which guards only one checkout. The worktree setup and `check:changed` run it and never wait for a run that holds the stack.
-- A trigger on the stack's migration ledger refuses every other writer, so `supabase migration up`, `db push --local` and `migration repair --local` fail and roll back, in any shell and on any branch. A hook refuses them, a raw `supabase db reset` and `psql` with a migration file before they start.
+- A trigger on the stack's migration ledger refuses every other writer, so `supabase migration up`, `db push --local` and `migration repair --local` fail and roll back their uncommitted work, in any shell and on any branch. A migration that commits before its ledger row (its own `commit;`, `create index concurrently`, `-- pg-delta: transaction=false`) keeps that schema, and `stack:sync` still reads the stack as `main`. A hook refuses them, a raw `supabase db reset` and `psql` with a migration file before they start.
 - `check:changed` fails while the stack holds a migration `main` lacks. Only a reset repairs that: tell your lead.
 
 ### Reset the shared stack

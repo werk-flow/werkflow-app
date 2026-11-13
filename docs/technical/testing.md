@@ -209,9 +209,9 @@ Check these before classifying.
 - Weaken an assertion, or retry until green, a failed CI job included.
 - Derive a reference from a failed run.
 - Raise a timeout or budget, or rewrite a visual reference, to pass a run.
-- Treat a review score or an old report as acceptance.
+- Treat a review score or old report as acceptance.
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock.
-- Add a package script that builds or tests outside the workspace lock, or writes the shared stack outside its exclusive lock.
+- Add a package script that builds or tests outside the workspace lock, or changes the shared stack's schema outside its exclusive lock.
 - Set a duration assertion in a unit test. Make a slow test cheaper.
 
 ## Verify your work

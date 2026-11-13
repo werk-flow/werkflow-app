@@ -64,6 +64,8 @@ test('a migration file never reaches psql on this machine', () => {
     `cat ${file} | docker exec -i supabase_db_werkflow-app sh -c 'psql -U postgres -d postgres'`,
     `docker exec -i supabase_db_werkflow-app sh -c 'psql -U postgres -d postgres' < ${file}`,
     `docker container exec -i -u postgres supabase_db_werkflow-app bash -lc "psql -d postgres -f /work/${file}"`,
+    // Its host names the container itself, which a direct psql would read as remote (CodeRabbit on #363).
+    `docker exec supabase_db_werkflow-app sh -c 'psql -h supabase_db_werkflow-app -U postgres -f /work/${file}'`,
   ]) {
     const refusal = sharedStackMigrationRefusal(command);
     expect(refusal, command).toContain(`\`psql\` with ${file}`);
