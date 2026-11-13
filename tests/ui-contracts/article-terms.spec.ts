@@ -54,6 +54,7 @@ test('a pack of 0 is refused at its field, and a valid pack saves as the sentenc
       write: 'saveSupplier',
       input: {
         itemId: 'filled',
+        unit: 'meter',
         referenceId: 'ref-nord',
         supplierId: 'nordrohr',
         supplierName: null,
@@ -91,6 +92,7 @@ test('the prices tab shows today’s prices with day and source, and a new price
       write: 'addPrice',
       input: {
         itemId: 'filled',
+        unit: 'meter',
         kind: 'purchase',
         amountCents: 41850,
         priceQuantity: 100,

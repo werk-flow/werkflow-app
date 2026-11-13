@@ -14502,6 +14502,7 @@ export type Database = {
           p_kind: string;
           p_organization_id: string;
           p_price_quantity: number;
+          p_unit: string;
           p_valid_from: string;
         };
         Returns: string;
@@ -18606,6 +18607,7 @@ export type Database = {
           p_supplier_article_number: string;
           p_supplier_id: string;
           p_supplier_name: string;
+          p_unit: string;
         };
         Returns: string;
       };

@@ -24,6 +24,7 @@ const { addArticlePrice, removeArticleSupplier, saveArticleSupplier, upsertInven
 
 const supplierInput = (fields: Partial<Parameters<typeof saveArticleSupplier>[0]> = {}) => ({
   itemId: ownItemId,
+  unit: 'meter',
   referenceId: null,
   supplierId: ownSupplierId,
   supplierName: null,
@@ -36,6 +37,7 @@ const supplierInput = (fields: Partial<Parameters<typeof saveArticleSupplier>[0]
 });
 const priceInput = (fields: Partial<Parameters<typeof addArticlePrice>[0]> = {}) => ({
   itemId: ownItemId,
+  unit: 'meter',
   kind: 'purchase' as const,
   amountCents: 61000,
   priceQuantity: 100 as const,
@@ -130,6 +132,7 @@ assert.deepEqual(world.rpcCalls[0], {
     p_organization_id: ORGANIZATION_A,
     p_actor_id: CALLER_ID,
     p_item_id: ownItemId,
+    p_unit: 'meter',
     p_reference_id: null,
     p_supplier_id: ownSupplierId,
     p_supplier_name: null,
@@ -151,6 +154,7 @@ assert.deepEqual(world.rpcCalls[0]?.args, {
   p_organization_id: ORGANIZATION_A,
   p_actor_id: CALLER_ID,
   p_item_id: ownItemId,
+  p_unit: 'meter',
   p_kind: 'purchase',
   p_amount_cents: 61000,
   p_price_quantity: 100,

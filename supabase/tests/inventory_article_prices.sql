@@ -85,8 +85,8 @@ begin
       end loop;
     end loop;
     if has_function_privilege(v_role, 'public.inventory_item_prices_on_day(uuid,uuid[],date)', 'EXECUTE')
-      or has_function_privilege(v_role, 'public.add_inventory_item_price(uuid,uuid,uuid,text,integer,integer,date)', 'EXECUTE')
-      or has_function_privilege(v_role, 'public.save_inventory_item_supplier(uuid,uuid,uuid,uuid,uuid,text,text,text,numeric,numeric,boolean)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.add_inventory_item_price(uuid,uuid,uuid,text,text,integer,integer,date)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.save_inventory_item_supplier(uuid,uuid,uuid,text,uuid,uuid,text,text,text,numeric,numeric,boolean)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.remove_inventory_item_supplier(uuid,uuid,uuid)', 'EXECUTE') then
       raise exception '% can execute an article price or supplier function', v_role;
     end if;
@@ -117,15 +117,15 @@ set local role service_role;
 create temp table prices_of_pipe on commit drop as
 select
   public.add_inventory_item_price('48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002',
-    '48000000-0000-4000-8000-000000000020', 'purchase', 400, 1, '2020-01-01') as first_purchase,
+    '48000000-0000-4000-8000-000000000020', 'meter', 'purchase', 400, 1, '2020-01-01') as first_purchase,
   public.add_inventory_item_price('48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002',
-    '48000000-0000-4000-8000-000000000020', 'purchase', 500, 1, '2020-07-01') as typo_purchase;
+    '48000000-0000-4000-8000-000000000020', 'meter', 'purchase', 500, 1, '2020-07-01') as typo_purchase;
 select public.add_inventory_item_price('48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002',
-  '48000000-0000-4000-8000-000000000020', 'purchase', 520, 1, '2020-07-01');
+  '48000000-0000-4000-8000-000000000020', 'meter', 'purchase', 520, 1, '2020-07-01');
 select public.add_inventory_item_price('48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000001',
-  '48000000-0000-4000-8000-000000000020', 'purchase', 61000, 100, '2021-01-01');
+  '48000000-0000-4000-8000-000000000020', 'meter', 'purchase', 61000, 100, '2021-01-01');
 select public.add_inventory_item_price('48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002',
-  '48000000-0000-4000-8000-000000000020', 'sale', 1234, 100, '2021-01-01');
+  '48000000-0000-4000-8000-000000000020', 'meter', 'sale', 1234, 100, '2021-01-01');
 
 -- A sale price that is no whole cent per meter leaves the previous release's column empty.
 do $$
@@ -137,9 +137,9 @@ end;
 $$;
 
 select public.add_inventory_item_price('48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002',
-  '48000000-0000-4000-8000-000000000020', 'sale', 1500, 10, '2021-02-01');
+  '48000000-0000-4000-8000-000000000020', 'meter', 'sale', 1500, 10, '2021-02-01');
 select public.add_inventory_item_price('48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002',
-  '48000000-0000-4000-8000-000000000020', 'purchase', 700, 1, (now() at time zone 'Europe/Berlin')::date + 30);
+  '48000000-0000-4000-8000-000000000020', 'meter', 'purchase', 700, 1, (now() at time zone 'Europe/Berlin')::date + 30);
 
 -- The current price is the latest row that has begun, per kind; among rows of
 -- one first day the latest recorded.
@@ -244,16 +244,23 @@ set local role service_role;
 
 -- The refusals of a price: role, foreign article, values.
 select pg_temp.expect_refusal('an employee''s price',
-  'select public.add_inventory_item_price(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000003'', ''48000000-0000-4000-8000-000000000020'', ''sale'', 100, 1, current_date)',
+  'select public.add_inventory_item_price(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000003'', ''48000000-0000-4000-8000-000000000020'', ''meter'', ''sale'', 100, 1, current_date)',
   'not_authorized');
 select pg_temp.expect_refusal('a price for another organization''s article',
-  'select public.add_inventory_item_price(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000029'', ''sale'', 100, 1, current_date)',
+  'select public.add_inventory_item_price(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000029'', ''meter'', ''sale'', 100, 1, current_date)',
   'item_not_found');
 select pg_temp.expect_refusal('a price per 25 units',
-  'select public.add_inventory_item_price(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000020'', ''sale'', 100, 25, current_date)',
+  'select public.add_inventory_item_price(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000020'', ''meter'', ''sale'', 100, 25, current_date)',
   'invalid_input');
+-- A price or pack entered for the unit a stale screen showed is refused.
+select pg_temp.expect_refusal('a price per piece for an article counted in meters',
+  'select public.add_inventory_item_price(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000020'', ''piece'', ''sale'', 100, 1, current_date)',
+  'unit_changed');
+select pg_temp.expect_refusal('a pack in pieces for an article counted in meters',
+  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000020'', ''piece'', null, ''48000000-0000-4000-8000-000000000030'', null, null, ''box'', 1, 10, false)',
+  'unit_changed');
 select pg_temp.expect_refusal('a negative price',
-  'select public.add_inventory_item_price(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000020'', ''purchase'', -1, 1, current_date)',
+  'select public.add_inventory_item_price(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000020'', ''meter'', ''purchase'', -1, 1, current_date)',
   'invalid_input');
 
 -- A use of job material snapshots today's purchase price per its price quantity.
@@ -280,10 +287,10 @@ $$;
 create temp table refs (name text primary key, id uuid) on commit drop;
 grant all on refs to service_role;
 insert into refs values ('nordrohr', public.save_inventory_item_supplier(
-  '48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002', '48000000-0000-4000-8000-000000000020',
+  '48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002', '48000000-0000-4000-8000-000000000020', 'meter',
   null, '48000000-0000-4000-8000-000000000030', null, ' NR-4711 ', 'bundle', 1, 25, false));
 insert into refs values ('suedrohr', public.save_inventory_item_supplier(
-  '48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002', '48000000-0000-4000-8000-000000000020',
+  '48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000002', '48000000-0000-4000-8000-000000000020', 'meter',
   null, '48000000-0000-4000-8000-000000000031', null, 'SR-0815', null, null, null, false));
 
 do $$
@@ -293,12 +300,13 @@ declare
 begin
   -- The first reference becomes preferred although the call did not ask for it; the second does not.
   select * into v_ref from public.inventory_item_suppliers where id = (select id from refs where name = 'nordrohr');
-  if not v_ref.is_preferred or v_ref.supplier_article_number is distinct from 'NR-4711'
+  if v_ref.is_preferred is distinct from true or v_ref.supplier_article_number is distinct from 'NR-4711'
     or v_ref.purchase_unit is distinct from 'bundle' or v_ref.pack_quantity is distinct from 1
     or v_ref.base_quantity is distinct from 25 then
     raise exception 'the first reference must be preferred and keep its trimmed number and its pack';
   end if;
-  if (select is_preferred from public.inventory_item_suppliers where id = (select id from refs where name = 'suedrohr')) then
+  if (select is_preferred from public.inventory_item_suppliers where id = (select id from refs where name = 'suedrohr'))
+    is distinct from false then
     raise exception 'a second reference must not take the preferred mark unasked';
   end if;
   select * into v_item from public.inventory_items where id = '48000000-0000-4000-8000-000000000020';
@@ -311,13 +319,14 @@ $$;
 
 -- Preferring the second reference moves the mark; one preferred per article.
 select public.save_inventory_item_supplier(
-  '48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000001', '48000000-0000-4000-8000-000000000020',
+  '48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000001', '48000000-0000-4000-8000-000000000020', 'meter',
   (select id from refs where name = 'suedrohr'), '48000000-0000-4000-8000-000000000031', null, 'SR-0815', 'roll', 2, 100, true);
 do $$
 begin
   if (select count(*) from public.inventory_item_suppliers
       where item_id = '48000000-0000-4000-8000-000000000020' and is_preferred) <> 1
-    or not (select is_preferred from public.inventory_item_suppliers where id = (select id from refs where name = 'suedrohr')) then
+    or (select is_preferred from public.inventory_item_suppliers where id = (select id from refs where name = 'suedrohr'))
+      is distinct from true then
     raise exception 'preferring a reference must take the mark from the other one';
   end if;
   if (select supplier_id from public.inventory_items where id = '48000000-0000-4000-8000-000000000020')
@@ -334,25 +343,25 @@ set local role service_role;
 
 -- A conversion of zero or less is refused, and the other refusals of a reference.
 select pg_temp.expect_refusal('a pack of 0 base units',
-  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', null, ''48000000-0000-4000-8000-000000000030'', null, null, ''box'', 1, 0, false)',
+  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', ''piece'', null, ''48000000-0000-4000-8000-000000000030'', null, null, ''box'', 1, 0, false)',
   'invalid_input');
 select pg_temp.expect_refusal('a pack of -1 purchase units',
-  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', null, ''48000000-0000-4000-8000-000000000030'', null, null, ''box'', -1, 50, false)',
+  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', ''piece'', null, ''48000000-0000-4000-8000-000000000030'', null, null, ''box'', -1, 50, false)',
   'invalid_input');
 select pg_temp.expect_refusal('the same supplier article number on a second article',
-  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', null, ''48000000-0000-4000-8000-000000000030'', null, ''NR-4711'', null, null, null, false)',
+  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', ''piece'', null, ''48000000-0000-4000-8000-000000000030'', null, ''NR-4711'', null, null, null, false)',
   'supplier_reference_taken');
 select pg_temp.expect_refusal('an employee''s supplier reference',
-  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000003'', ''48000000-0000-4000-8000-000000000021'', null, ''48000000-0000-4000-8000-000000000030'', null, null, null, null, null, false)',
+  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000003'', ''48000000-0000-4000-8000-000000000021'', ''piece'', null, ''48000000-0000-4000-8000-000000000030'', null, null, null, null, null, false)',
   'not_authorized');
 select pg_temp.expect_refusal('a reference on another organization''s article',
-  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000029'', null, ''48000000-0000-4000-8000-000000000030'', null, null, null, null, null, false)',
+  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000029'', ''meter'', null, ''48000000-0000-4000-8000-000000000030'', null, null, null, null, null, false)',
   'item_not_found');
 select pg_temp.expect_refusal('another organization''s supplier',
-  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', null, ''48000000-0000-4000-8000-000000000039'', null, null, null, null, null, false)',
+  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', ''piece'', null, ''48000000-0000-4000-8000-000000000039'', null, null, null, null, null, false)',
   'supplier_not_found');
 select pg_temp.expect_refusal('another article''s reference changed through this article',
-  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', (select id from refs where name = ''nordrohr''), ''48000000-0000-4000-8000-000000000030'', null, null, null, null, null, false)',
+  'select public.save_inventory_item_supplier(''48000000-0000-4000-8000-000000000010'', ''48000000-0000-4000-8000-000000000002'', ''48000000-0000-4000-8000-000000000021'', ''piece'', (select id from refs where name = ''nordrohr''), ''48000000-0000-4000-8000-000000000030'', null, null, null, null, null, false)',
   'supplier_reference_not_found');
 select pg_temp.expect_refusal('a reference removed by another organization',
   'select public.remove_inventory_item_supplier(''48000000-0000-4000-8000-000000000011'', ''48000000-0000-4000-8000-000000000004'', (select id from refs where name = ''nordrohr''))',
@@ -364,7 +373,8 @@ select public.remove_inventory_item_supplier('48000000-0000-4000-8000-0000000000
   (select id from refs where name = 'suedrohr'));
 do $$
 begin
-  if not (select is_preferred from public.inventory_item_suppliers where id = (select id from refs where name = 'nordrohr'))
+  if (select is_preferred from public.inventory_item_suppliers where id = (select id from refs where name = 'nordrohr'))
+    is distinct from true
     or (select supplier_id from public.inventory_items where id = '48000000-0000-4000-8000-000000000020')
       is distinct from '48000000-0000-4000-8000-000000000030' then
     raise exception 'removing the preferred reference must prefer the remaining one';
@@ -461,7 +471,7 @@ begin
     raise exception 'a recorded price must keep the unit it was stated in';
   end if;
 
-  perform public.save_inventory_item_supplier(v_org, v_buero, v_fitting, null, '48000000-0000-4000-8000-000000000030',
+  perform public.save_inventory_item_supplier(v_org, v_buero, v_fitting, 'package', null, '48000000-0000-4000-8000-000000000030',
     null, 'NR-PF15', 'box', 1, 20, false);
   begin
     perform public.save_inventory_item(v_org, v_buero, v_fitting, v_base || jsonb_build_object('unit', 'piece'),

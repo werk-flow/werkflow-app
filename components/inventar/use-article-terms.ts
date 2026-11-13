@@ -30,8 +30,8 @@ export function useArticleTerms(terms: ArticleTermsPage): ArticleTermWrites {
     const since = waitForTerms.markChange();
     const result = await write.catch(() => null);
     if (!result?.success) return result;
-    await waitForTerms(since);
-    showBanner({ variant: 'success', message });
+    // A refresh that never lands keeps its warning banner instead of a success.
+    if (await waitForTerms.confirmChange(since)) showBanner({ variant: 'success', message });
     return result;
   }
 

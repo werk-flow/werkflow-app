@@ -101,6 +101,7 @@ export function ArticlePricesPanel({
       setError(null);
       const result = await onAdd({
         itemId,
+        unit: baseUnit,
         kind: form.kind,
         amountCents,
         priceQuantity: form.priceQuantity,

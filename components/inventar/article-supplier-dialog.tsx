@@ -39,6 +39,8 @@ export const ARTICLE_TERMS_FAILURE_MESSAGES: Record<string, string> = {
   supplier_not_found: 'Der ausgewählte Lieferant wurde nicht gefunden.',
   supplier_required: 'Bitte wähle einen Lieferanten aus.',
   supplier_reference_not_found: 'Dieser Lieferant ist nicht mehr am Artikel hinterlegt.',
+  unit_changed:
+    'Die Einheit des Artikels hat sich inzwischen geändert. Schließe den Artikel, öffne ihn neu und prüfe die Angaben.',
   supplier_reference_taken:
     'Diese Artikelnummer ist bei diesem Lieferanten schon einem Artikel zugeordnet. Prüfe die Nummer.',
   invalid_conversion: 'Bitte gib beide Mengen der Umrechnung größer als 0 an.',
@@ -103,14 +105,12 @@ function supplierFormErrors(form: SupplierForm) {
 /** The save input of the form; a pack only with a purchase unit other than the base unit. */
 function toSaveInput(
   form: SupplierForm,
-  itemId: string,
-  referenceId: string | null,
+  target: { itemId: string; unit: string; referenceId: string | null },
 ): SaveArticleSupplierInput {
   const isNew = form.supplierId === NEW_SUPPLIER_VALUE;
   const hasPack = form.purchaseUnit !== BASE_UNIT_VALUE;
   return {
-    itemId,
-    referenceId,
+    ...target,
     supplierId: isNew ? null : form.supplierId,
     supplierName: isNew ? form.supplierName : null,
     supplierArticleNumber: form.supplierArticleNumber,
@@ -335,7 +335,9 @@ export function ArticleSupplierDialog({
     if (focusFirstInvalidField(errors)) return;
     void run(async () => {
       setError(null);
-      const result = await onSave(toSaveInput(form, itemId, reference?.id ?? null)).catch(() => null);
+      const result = await onSave(
+        toSaveInput(form, { itemId, unit: baseUnit, referenceId: reference?.id ?? null }),
+      ).catch(() => null);
       if (!result?.success) {
         const fallback = 'Der Lieferant konnte nicht gespeichert werden.';
         setError(describeFailure(result?.error ?? 'save_failed', ARTICLE_TERMS_FAILURE_MESSAGES, fallback));

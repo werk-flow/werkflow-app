@@ -370,14 +370,16 @@ end;
 $$;
 
 -- Saves one supplier reference of an article: a named existing supplier, or
--- one created by name. Returns the reference id.
--- Refusals: not_authorized, item_not_found, supplier_not_found,
+-- one created by name. p_unit is the base unit the caller showed the pack
+-- in. Returns the reference id.
+-- Refusals: not_authorized, item_not_found, unit_changed, supplier_not_found,
 -- supplier_required, supplier_reference_not_found, supplier_reference_taken,
 -- invalid_input.
 create function public.save_inventory_item_supplier(
   p_organization_id uuid,
   p_actor_id uuid,
   p_item_id uuid,
+  p_unit text,
   p_reference_id uuid,
   p_supplier_id uuid,
   p_supplier_name text,
@@ -395,13 +397,18 @@ as $$
 declare
   v_supplier_id uuid := p_supplier_id;
   v_reference_id uuid;
+  v_unit text;
 begin
   perform app_private.lock_inventory_manager(p_organization_id, p_actor_id);
-  -- The article row lock serializes every change of its references.
+  -- The article row lock serializes every change of its references and of its unit.
   update public.inventory_items item set updated_at = now()
-  where item.id = p_item_id and item.organization_id = p_organization_id;
+  where item.id = p_item_id and item.organization_id = p_organization_id
+  returning item.unit into v_unit;
   if not found then
     raise exception 'item_not_found';
+  end if;
+  if v_unit is distinct from p_unit then
+    raise exception 'unit_changed';
   end if;
   if v_supplier_id is not null then
     perform 1 from public.inventory_suppliers supplier
@@ -457,12 +464,14 @@ begin
 end;
 $$;
 
--- Records a price the office enters, from its first day on. Returns the price
--- id. Refusals: not_authorized, item_not_found, invalid_input.
+-- Records a price the office enters, from its first day on, per p_price_quantity
+-- of p_unit, the base unit the caller showed the amount in. Returns the price
+-- id. Refusals: not_authorized, invalid_input, item_not_found, unit_changed.
 create function public.add_inventory_item_price(
   p_organization_id uuid,
   p_actor_id uuid,
   p_item_id uuid,
+  p_unit text,
   p_kind text,
   p_amount_cents integer,
   p_price_quantity integer,
@@ -473,6 +482,8 @@ language plpgsql
 security definer
 set search_path to ''
 as $$
+declare
+  v_unit text;
 begin
   perform app_private.lock_inventory_manager(p_organization_id, p_actor_id);
   if p_kind is null or p_kind not in ('purchase', 'sale') or p_amount_cents is null or p_amount_cents < 0
@@ -481,9 +492,13 @@ begin
     raise exception 'invalid_input';
   end if;
   update public.inventory_items item set updated_at = now()
-  where item.id = p_item_id and item.organization_id = p_organization_id;
+  where item.id = p_item_id and item.organization_id = p_organization_id
+  returning item.unit into v_unit;
   if not found then
     raise exception 'item_not_found';
+  end if;
+  if v_unit is distinct from p_unit then
+    raise exception 'unit_changed';
   end if;
   return app_private.record_inventory_item_price(
     p_organization_id, p_actor_id, p_item_id, p_kind, p_amount_cents, p_price_quantity, p_valid_from, 'manual'
@@ -632,7 +647,12 @@ begin
     )
     returning * into v_item;
   else
-    -- A pack conversion counts in the base unit, so the unit stays while a supplier sells in packs.
+    -- A pack conversion counts in the base unit, so the unit stays while a
+    -- supplier sells in packs. The lock comes first: a reference another
+    -- session commits while this save waits for the row counts.
+    perform 1 from public.inventory_items item
+    where item.id = p_item_id and item.organization_id = p_organization_id
+    for update;
     if exists (
       select 1 from public.inventory_items item
       where item.id = p_item_id and item.organization_id = p_organization_id
@@ -1004,17 +1024,17 @@ revoke all on function app_private.apply_inventory_item_save_terms(uuid, uuid, u
 revoke all on function app_private.sync_begun_inventory_item_prices()
   from public, anon, authenticated, service_role;
 revoke all on function public.save_inventory_item_supplier(
-  uuid, uuid, uuid, uuid, uuid, text, text, text, numeric, numeric, boolean
+  uuid, uuid, uuid, text, uuid, uuid, text, text, text, numeric, numeric, boolean
 ) from public, anon, authenticated;
 revoke all on function public.remove_inventory_item_supplier(uuid, uuid, uuid)
   from public, anon, authenticated;
-revoke all on function public.add_inventory_item_price(uuid, uuid, uuid, text, integer, integer, date)
+revoke all on function public.add_inventory_item_price(uuid, uuid, uuid, text, text, integer, integer, date)
   from public, anon, authenticated;
 grant execute on function public.save_inventory_item_supplier(
-  uuid, uuid, uuid, uuid, uuid, text, text, text, numeric, numeric, boolean
+  uuid, uuid, uuid, text, uuid, uuid, text, text, text, numeric, numeric, boolean
 ) to service_role;
 grant execute on function public.remove_inventory_item_supplier(uuid, uuid, uuid) to service_role;
-grant execute on function public.add_inventory_item_price(uuid, uuid, uuid, text, integer, integer, date)
+grant execute on function public.add_inventory_item_price(uuid, uuid, uuid, text, text, integer, integer, date)
   to service_role;
 
 select cron.schedule('werkflow-inventory-begun-prices', '7 * * * *',

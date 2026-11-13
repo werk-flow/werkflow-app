@@ -56,6 +56,8 @@ const conversionQuantity = z.number().finite().max(999_999_999);
 /** One supplier reference of an article: a supplier of the organization, or a new one by name. */
 export const saveArticleSupplierSchema = z.object({
   itemId: uuidSchema,
+  // The base unit the dialog showed; a changed article unit refuses the save.
+  unit: boundedText(40),
   referenceId: uuidSchema.nullable(),
   supplierId: uuidSchema.nullable(),
   supplierName: nullableBoundedText(300),
@@ -75,6 +77,8 @@ export const removeArticleSupplierSchema = z.object({ referenceId: uuidSchema })
 /** A price the office enters: cents per price quantity of base units, from a Berlin day on. */
 export const addArticlePriceSchema = z.object({
   itemId: uuidSchema,
+  // The base unit the dialog showed the amount in; a changed article unit refuses the price.
+  unit: boundedText(40),
   kind: z.enum(ARTICLE_PRICE_KINDS),
   amountCents: z.number().int().min(0).max(MAX_PRICE_CENTS),
   priceQuantity: z.literal(PRICE_QUANTITIES),

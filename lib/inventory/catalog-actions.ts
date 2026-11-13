@@ -50,6 +50,7 @@ const articleTermsRefusal = writeRefusalFor(
     'supplier_required',
     'supplier_reference_not_found',
     'supplier_reference_taken',
+    'unit_changed',
   ]),
 );
 
@@ -256,6 +257,7 @@ export async function saveArticleSupplier(
       p_organization_id: auth.context.orgId,
       p_actor_id: auth.context.userId,
       p_item_id: input.itemId,
+      p_unit: input.unit,
       p_reference_id: input.referenceId,
       p_supplier_id: input.supplierId,
       p_supplier_name: input.supplierId ? null : supplierName,
@@ -318,6 +320,7 @@ export async function addArticlePrice(
     p_organization_id: auth.context.orgId,
     p_actor_id: auth.context.userId,
     p_item_id: input.itemId,
+    p_unit: input.unit,
     p_kind: input.kind,
     p_amount_cents: input.amountCents,
     p_price_quantity: input.priceQuantity,

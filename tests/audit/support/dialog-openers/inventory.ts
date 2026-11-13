@@ -105,7 +105,11 @@ async function prepareSeededArticle(context: SurfaceContext): Promise<void> {
 async function openSeededArticle(context: SurfaceContext): Promise<Locator> {
   const { page } = context;
   await prepareSeededArticle(context);
-  await openMenuItem(seededArticleActionsButton(context), inventoryRowActionItem(page, 'edit'));
+  const editItem = await openMenuItem(
+    seededArticleActionsButton(context),
+    inventoryRowActionItem(page, 'edit'),
+  );
+  await editItem.click();
   const dialog = editItemLayer(page);
   await expect(dialog).toBeVisible();
   return dialog;
