@@ -554,8 +554,8 @@ begin
   end if;
 end;
 $$;
-drop trigger test_raise_deadlock_for_probe on public.inventory_items;
-drop function public.test_raise_deadlock_for_probe();
+-- Disabled, not dropped: a DROP TRIGGER takes stack-wide locks (sql-test-stack-locks.test.ts).
+alter table public.inventory_items disable trigger test_raise_deadlock_for_probe;
 
 -- 6. Only the service role executes the functions; nobody executes the steps.
 do $$
