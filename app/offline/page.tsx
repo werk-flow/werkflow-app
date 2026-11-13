@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: 'Kein Netz',
 };
 
-// The service worker (public/sw.js) answers a navigation with this page when
+// The service worker (/sw.js) answers a navigation with this page when
 // the network fails, under the address the person opened, so „Erneut
 // versuchen“ reloads exactly that page. It is prerendered and the worker
 // fetches it without cookies: it holds nothing about the person. A field

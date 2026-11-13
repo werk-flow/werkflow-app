@@ -18,6 +18,7 @@ import {
 } from '../../../lib/testing/runner/run-policy';
 import { withFileLock, writeJsonAtomically } from '../../../lib/testing/runner/file-lock';
 import { assertWorldSeedComplete } from '../../../lib/testing/seed-world-plan';
+import { type BuildInputs, recordedBuildInputs } from '../../../lib/testing/evidence/build-identity';
 import { backendIdentity } from '../../../lib/testing/evidence/proof-environment';
 import { workspaceAppOrigin } from '../../../lib/testing/runner/app-port';
 import {
@@ -91,6 +92,10 @@ export type RunManifest = {
   sourceFingerprint: string;
   candidateFingerprint?: string | undefined;
   buildId: string | null;
+  /** The served build's input digests (lib/testing/runner/group-recovery.ts); absent on older manifests. */
+  buildInputs?: BuildInputs | null | undefined;
+  /** Whether the run ran on a Boat machine (WERKFLOW_BOAT_MACHINE); absent on older manifests. */
+  ranOnBoat?: boolean | undefined;
   baseUrl: string;
   projectRef: string;
   r2Bucket: string;
@@ -156,6 +161,9 @@ const runManifestSchema: z.ZodType<RunManifest> = z.looseObject({
   sourceFingerprint: z.string(),
   candidateFingerprint: z.string().optional(),
   buildId: z.string().nullable(),
+  /** The served build's input digests (lib/testing/runner/group-recovery.ts); absent on older manifests. */
+  buildInputs: z.object({ sourceDigest: z.string(), environmentDigest: z.string() }).nullable().optional(),
+  ranOnBoat: z.boolean().optional(),
   baseUrl: z.string(),
   projectRef: z.string(),
   r2Bucket: z.string(),
@@ -380,6 +388,8 @@ export function createRunManifest(input?: {
     sourceFingerprint: calculateSourceFingerprint(),
     candidateFingerprint: input?.candidateFingerprint,
     buildId: readOptionalFile(resolve(REPOSITORY_ROOT, '.next/BUILD_ID')),
+    buildInputs: recordedBuildInputs(REPOSITORY_ROOT),
+    ranOnBoat: process.env.WERKFLOW_BOAT_MACHINE === '1',
     baseUrl: workspaceAppOrigin(REPOSITORY_ROOT),
     projectRef: backendIdentity(supabaseUrl, REPOSITORY_ROOT),
     r2Bucket: process.env.R2_BUCKET_NAME ?? 'missing',
