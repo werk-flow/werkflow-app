@@ -153,7 +153,7 @@ export function WorkArtifactDialogActions({
   const { detail, editing, currentRevision, error } = editor;
   return (
     <>
-      {!readOnly && !editing && detail && currentRevision && detail.status !== 'voided' && (
+      {(!readOnly || detail?.leadReadOnly) && !editing && detail && currentRevision && detail.status !== 'voided' && (
         <WorkArtifactActionPanel
           detail={detail}
           currentRevision={currentRevision}

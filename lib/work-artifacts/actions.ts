@@ -6,7 +6,7 @@ import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
 import { logReadFailure, loggedRead } from '@/lib/data/read-request-cache';
-import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { authenticateAndAuthorize, type AuthContext } from '@/lib/jobs/auth';
 import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
@@ -27,7 +27,8 @@ import {
 } from './validation';
 import { buildWorkArtifactExport } from './export';
 import { mapArtifactError } from './errors';
-import { authorizeWorkArtifactTarget } from './target-access';
+import { authorizeWorkArtifactRead, authorizeWorkArtifactTarget } from './target-access';
+import { isWorkLeadOf } from '@/lib/responsibilities/work-lead';
 import {
   readRenderedExport,
   refuseWorkArtifactExport,
@@ -36,6 +37,7 @@ import {
 } from './export-storage';
 import {
   pageRevision,
+  artifactTargetOf,
   readArtifactForDetail,
   refuseHiddenCoworkerDraft,
   toVisibleArtifactDetail,
@@ -47,6 +49,7 @@ import {
   type WorkArtifactActionInput,
   type WorkArtifactDetail,
   type WorkArtifactMutationResult,
+  type WorkArtifactRow,
   type WorkArtifactSaveResult,
   type WorkArtifactStatus,
   type WorkArtifactSummary,
@@ -70,7 +73,7 @@ export async function getWorkArtifacts(
   const target = parsedTarget.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
-  const access = await authorizeWorkArtifactTarget(auth.context, target);
+  const access = await authorizeWorkArtifactRead(auth.context, target);
   if (!access.success) return access;
   const admin = createSupabaseAdminClient();
   const targetColumn = target.targetType === 'job' ? 'job_id' : 'project_id';
@@ -114,6 +117,18 @@ export async function getWorkArtifacts(
   };
 }
 
+/** What the viewer may do as the work's „Projektleitung“; null when the lead rule could not be read. */
+async function leadFlags(
+  context: AuthContext,
+  opened: { artifact: WorkArtifactRow; target: WorkArtifactTarget },
+  via: 'work' | 'lead',
+): Promise<Pick<WorkArtifactDetail, 'canLeadReview' | 'leadReadOnly'> | null> {
+  if (opened.artifact.kind !== 'change_work') return { canLeadReview: false, leadReadOnly: via === 'lead' };
+  const lead = await isWorkLeadOf(context, opened.target);
+  if (lead === 'load_failed') return null;
+  return { canLeadReview: lead, leadReadOnly: via === 'lead' };
+}
+
 export async function getWorkArtifactDetail(
   rawArtifactId: string,
 ): Promise<{ success: true; artifact: WorkArtifactDetail } | ActionFailure> {
@@ -125,7 +140,7 @@ export async function getWorkArtifactDetail(
   const admin = createSupabaseAdminClient();
   const opened = await readArtifactForDetail(admin, auth.context.orgId, artifactId);
   if (!opened.success) return opened;
-  const access = await authorizeWorkArtifactTarget(auth.context, opened.target);
+  const access = await authorizeWorkArtifactRead(auth.context, opened.target);
   if (!access.success) return access;
   const hiddenDraft = await refuseHiddenCoworkerDraft(admin, auth.context, opened.artifact);
   if (hiddenDraft) return hiddenDraft;
@@ -175,9 +190,13 @@ export async function getWorkArtifactDetail(
   if ([revisions, actions, lines, defects, changes, documents, sources].some((result) => result.error)) {
     return { success: false, error: 'work_artifact_load_failed' };
   }
+  const lead = await leadFlags(auth.context, opened, access.via);
+  if (!lead) return { success: false, error: 'work_artifact_load_failed' };
   return {
     success: true,
-    artifact: toVisibleArtifactDetail(auth.context, opened.artifact, {
+    artifact: {
+      ...lead,
+      ...toVisibleArtifactDetail(auth.context, opened.artifact, {
       revisions: revisions.data ?? [],
       actions: actions.data ?? [],
       lines: lines.data ?? [],
@@ -185,7 +204,8 @@ export async function getWorkArtifactDetail(
       changes: changes.data ?? [],
       documents: documents.data ?? [],
       sources: sources.data ?? [],
-    }),
+      }),
+    },
   };
 }
 
@@ -241,6 +261,75 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
   };
 }
 
+/** The caller leads the work of this Regie- oder Änderungsnachweis; otherwise `not_responsible`. */
+async function authorizeLeadReview(
+  context: AuthContext,
+  artifactId: string,
+): Promise<{ success: true; target: WorkArtifactTarget } | ActionFailure> {
+  const opened = await readArtifactForDetail(createSupabaseAdminClient(), context.orgId, artifactId);
+  if (!opened.success) return opened;
+  if (opened.artifact.kind !== 'change_work') return { success: false, error: 'not_responsible' };
+  const lead = await isWorkLeadOf(context, opened.target);
+  if (lead === 'load_failed') return { success: false, error: 'load_failed' };
+  return lead ? { success: true, target: opened.target } : { success: false, error: 'not_responsible' };
+}
+
+/**
+ * The reviewer's authority over the revision, as the snapshot the action
+ * records: a holder of the approval responsibility, or the work's
+ * „Projektleitung“ on a Regie- oder Änderungsnachweis. Nobody reviews their
+ * own revision.
+ */
+async function authorizeReviewer(
+  context: AuthContext,
+  input: { artifactId: string; revisionId: string },
+): Promise<{ success: true; snapshot: Json } | ActionFailure> {
+  const admin = createSupabaseAdminClient();
+  const { data: revision, error: revisionError } = await loggedRead(
+    'recordWorkArtifactAction: work_artifact_revisions read failed',
+    admin
+      .from('work_artifact_revisions')
+      .select('created_by')
+      .eq('id', input.revisionId)
+      .eq('organization_id', context.orgId)
+      .maybeSingle(),
+  );
+  if (revisionError) return { success: false, error: 'load_failed' };
+  if (!revision) return { success: false, error: 'work_artifact_not_found' };
+  const { data: membership, error: membershipError } = await loggedRead(
+    'recordWorkArtifactAction: organization_members read failed',
+    admin
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', context.orgId)
+      .eq('user_id', revision.created_by)
+      .maybeSingle(),
+  );
+  if (membershipError) return { success: false, error: 'load_failed' };
+  if (!membership) return { success: false, error: 'work_artifact_author_not_active' };
+  const approval = await authorizeResponsibilityForTarget({
+    organizationId: context.orgId,
+    responsibility: 'work_artifact_approval',
+    actorUserId: context.userId,
+    targetUserId: revision.created_by,
+    targetRole: membership.role,
+  });
+  if (approval.success) {
+    return {
+      success: true,
+      snapshot: {
+        responsibility: 'work_artifact_approval',
+        holder: toJson(approval.holder),
+        configurationId: approval.effective.configurationId,
+      },
+    };
+  }
+  if (approval.error !== 'not_responsible') return approval;
+  const lead = await authorizeLeadReview(context, input.artifactId);
+  if (!lead.success) return lead;
+  return { success: true, snapshot: { responsibility: 'work_lead', target: toJson(lead.target) } };
+}
+
 export async function recordWorkArtifactAction(
   input: WorkArtifactActionInput,
 ): Promise<WorkArtifactMutationResult> {
@@ -252,41 +341,9 @@ export async function recordWorkArtifactAction(
   const admin = createSupabaseAdminClient();
   let responsibilitySnapshot: Json | null = null;
   if (['internal_approved', 'internal_rejected', 'correction_requested'].includes(parsed.data.actionType)) {
-    const { data: revision, error: revisionError } = await loggedRead(
-      'recordWorkArtifactAction: work_artifact_revisions read failed',
-      admin
-        .from('work_artifact_revisions')
-        .select('created_by')
-        .eq('id', parsed.data.revisionId)
-        .eq('organization_id', auth.context.orgId)
-        .maybeSingle(),
-    );
-    if (revisionError) return { success: false, error: 'load_failed' };
-    if (!revision) return { success: false, error: 'work_artifact_not_found' };
-    const { data: membership, error: membershipError } = await loggedRead(
-      'recordWorkArtifactAction: organization_members read failed',
-      admin
-        .from('organization_members')
-        .select('role')
-        .eq('organization_id', auth.context.orgId)
-        .eq('user_id', revision.created_by)
-        .maybeSingle(),
-    );
-    if (membershipError) return { success: false, error: 'load_failed' };
-    if (!membership) return { success: false, error: 'work_artifact_author_not_active' };
-    const approval = await authorizeResponsibilityForTarget({
-      organizationId: auth.context.orgId,
-      responsibility: 'work_artifact_approval',
-      actorUserId: auth.context.userId,
-      targetUserId: revision.created_by,
-      targetRole: membership.role,
-    });
-    if (!approval.success) return { success: false, error: approval.error };
-    responsibilitySnapshot = {
-      responsibility: 'work_artifact_approval',
-      holder: toJson(approval.holder),
-      configurationId: approval.effective.configurationId,
-    };
+    const reviewer = await authorizeReviewer(auth.context, parsed.data);
+    if (!reviewer.success) return { success: false, error: reviewer.error };
+    responsibilitySnapshot = reviewer.snapshot;
   }
   const { data, error } = await admin.rpc(
     'record_work_artifact_action',
@@ -524,6 +581,23 @@ export async function discardUnlinkedWorkArtifactSignature(
   return { success: true };
 }
 
+/**
+ * Who may export: the detail admits the work's lead to read, but an export
+ * stays with who may write the work's evidence, and a project-level export,
+ * which writes a project document and its link, with a manager.
+ */
+async function authorizeExport(
+  context: AuthContext,
+  artifact: WorkArtifactDetail,
+): Promise<ActionResult<object, string>> {
+  const target = artifactTargetOf(artifact);
+  if (!target) return { success: false, error: 'work_artifact_not_found' };
+  const access = await authorizeWorkArtifactTarget(context, target);
+  if (!access.success) return access;
+  if (artifact.project_id && !context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+  return { success: true };
+}
+
 const exportWorkArtifactSchema = z.object({
   artifactId: uuidSchema,
   expectedVersion: z.number().int().nonnegative(),
@@ -543,9 +617,8 @@ export async function exportWorkArtifact(
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   const artifact = detailResult.artifact;
-  // The export writes a project document and its project link: a project-level document write needs a manager.
-  if (artifact.project_id && !auth.context.isManagerOrAbove)
-    return { success: false, error: 'not_authorized' };
+  const exportAccess = await authorizeExport(auth.context, artifact);
+  if (!exportAccess.success) return exportAccess;
   const revisionId = artifact.current_revision_id;
   const currentRevision = artifact.revisions.find((revision) => revision.id === revisionId);
   if (!revisionId || !currentRevision || artifact.version !== input.expectedVersion) {
