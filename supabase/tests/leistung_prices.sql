@@ -294,49 +294,49 @@ declare
   v_row jsonb;
 begin
   v_page := public.list_leistung_page('47000000-0000-0000-0000-000000000010', '2038-11-12', 'aktiv', '', 1, 50);
-  if (v_page ->> 'total')::integer <> 2 or not (v_page ->> 'hasAny')::boolean then
+  if (v_page ->> 'total')::integer is distinct from 2 or (v_page ->> 'hasAny')::boolean is distinct from true then
     raise exception 'active list page counted %', v_page ->> 'total';
   end if;
-  if (v_page -> 'rows' -> 0 ->> 'leistungNumber') <> 'L-200' or (v_page -> 'rows' -> 1 ->> 'leistungNumber') <> 'L-100' then
+  if (v_page -> 'rows' -> 0 ->> 'leistungNumber') is distinct from 'L-200' or (v_page -> 'rows' -> 1 ->> 'leistungNumber') is distinct from 'L-100' then
     raise exception 'active list page is not ordered by name: %', v_page -> 'rows';
   end if;
   v_row := v_page -> 'rows' -> 1;
-  if (v_row ->> 'salePriceCents')::integer <> 7100 or (v_row ->> 'costRateCents')::integer <> 4500
-    or v_row ->> 'validFrom' <> '2038-07-01' or v_row ->> 'nextValidFrom' <> '2039-01-01' then
+  if (v_row ->> 'salePriceCents')::integer is distinct from 7100 or (v_row ->> 'costRateCents')::integer is distinct from 4500
+    or v_row ->> 'validFrom' is distinct from '2038-07-01' or v_row ->> 'nextValidFrom' is distinct from '2039-01-01' then
     raise exception 'list row priced Montage wrongly: %', v_row;
   end if;
   -- The history lists every version, newest first day first, the correction before the corrected one.
-  if jsonb_array_length(v_row -> 'versions') <> 4
-    or (v_row -> 'versions' -> 0 ->> 'salePriceCents')::integer <> 7500
-    or (v_row -> 'versions' -> 1 ->> 'salePriceCents')::integer <> 7100
-    or (v_row -> 'versions' -> 2 ->> 'salePriceCents')::integer <> 6900
-    or (v_row -> 'versions' -> 3 ->> 'salePriceCents')::integer <> 6500
-    or v_row ->> 'priceVersionId' <> v_row -> 'versions' -> 1 ->> 'id' then
+  if jsonb_array_length(v_row -> 'versions') is distinct from 4
+    or (v_row -> 'versions' -> 0 ->> 'salePriceCents')::integer is distinct from 7500
+    or (v_row -> 'versions' -> 1 ->> 'salePriceCents')::integer is distinct from 7100
+    or (v_row -> 'versions' -> 2 ->> 'salePriceCents')::integer is distinct from 6900
+    or (v_row -> 'versions' -> 3 ->> 'salePriceCents')::integer is distinct from 6500
+    or v_row ->> 'priceVersionId' is distinct from v_row -> 'versions' -> 1 ->> 'id' then
     raise exception 'list row history of Montage is wrong: %', v_row -> 'versions';
   end if;
   v_row := v_page -> 'rows' -> 0;
-  if v_row -> 'salePriceCents' <> 'null'::jsonb or v_row ->> 'nextValidFrom' <> '2039-03-01' then
+  if v_row -> 'salePriceCents' is distinct from 'null'::jsonb or v_row ->> 'nextValidFrom' is distinct from '2039-03-01' then
     raise exception 'list row priced Anfahrt before its first version: %', v_row;
   end if;
 
   v_page := public.list_leistung_page('47000000-0000-0000-0000-000000000010', '2038-11-12', 'archiviert', '', 1, 50);
-  if (v_page ->> 'total')::integer <> 1 or (v_page -> 'rows' -> 0 ->> 'leistungNumber') <> 'L-300' then
+  if (v_page ->> 'total')::integer is distinct from 1 or (v_page -> 'rows' -> 0 ->> 'leistungNumber') is distinct from 'L-300' then
     raise exception 'archived list page showed %', v_page -> 'rows';
   end if;
 
   v_page := public.list_leistung_page('47000000-0000-0000-0000-000000000010', '2038-11-12', 'aktiv', 'monteur', 1, 50);
-  if (v_page ->> 'total')::integer <> 1 or (v_page -> 'rows' -> 0 ->> 'leistungNumber') <> 'L-100' then
+  if (v_page ->> 'total')::integer is distinct from 1 or (v_page -> 'rows' -> 0 ->> 'leistungNumber') is distinct from 'L-100' then
     raise exception 'search did not find the description: %', v_page;
   end if;
 
   v_page := public.list_leistung_page('47000000-0000-0000-0000-000000000010', '2038-11-12', 'aktiv', '', 2, 1);
-  if (v_page ->> 'total')::integer <> 2 or jsonb_array_length(v_page -> 'rows') <> 1
-    or (v_page -> 'rows' -> 0 ->> 'leistungNumber') <> 'L-100' then
+  if (v_page ->> 'total')::integer is distinct from 2 or jsonb_array_length(v_page -> 'rows') is distinct from 1
+    or (v_page -> 'rows' -> 0 ->> 'leistungNumber') is distinct from 'L-100' then
     raise exception 'second page of one row showed %', v_page;
   end if;
 
   v_page := public.list_leistung_page('47000000-0000-0000-0000-000000000011', '2038-11-12', 'aktiv', '', 1, 50);
-  if (v_page ->> 'total')::integer <> 1 or (v_page -> 'rows' -> 0 ->> 'name') <> 'Fremde Montage' then
+  if (v_page ->> 'total')::integer is distinct from 1 or (v_page -> 'rows' -> 0 ->> 'name') is distinct from 'Fremde Montage' then
     raise exception 'another organization''s list page showed %', v_page;
   end if;
 end;
