@@ -87,30 +87,45 @@ begin
 end;
 $$;
 
--- Collects the second session's result, then checks that every line of the
--- job carries the given project and that the job does too.
-create function pg_temp.await_job_material_on(p_project_id uuid, p_failure text)
+-- The id the second session's sent call returned; its error fails the test.
+create function pg_temp.second_result()
+returns uuid
+language plpgsql
+as $$
+declare
+  v_id uuid;
+begin
+  select id into v_id from dblink_get_result('material_plan_second') as result(id uuid);
+  perform * from dblink_get_result('material_plan_second') as result(id uuid);
+  return v_id;
+end;
+$$;
+
+-- Checks that the job, the line planned during the move and every other line
+-- of the job carry the given project.
+create function pg_temp.assert_job_material_on(p_project_id uuid, p_line_id uuid, p_failure text)
 returns void
 language plpgsql
 as $$
 declare
   v_lines integer;
   v_misplaced integer;
+  v_planned integer;
   v_job_project uuid;
 begin
-  perform * from dblink_get_result('material_plan_second', false) as result(id uuid);
-  perform * from dblink_get_result('material_plan_second', false) as result(id uuid);
-  select lines, misplaced, job_project into v_lines, v_misplaced, v_job_project
+  select lines, misplaced, planned, job_project into v_lines, v_misplaced, v_planned, v_job_project
   from dblink('material_plan_setup', format($read$
     select count(*)::integer,
       count(*) filter (where line.project_id is distinct from %L::uuid)::integer,
+      count(*) filter (where line.id = %L::uuid)::integer,
       (select job.project_id from public.jobs job where job.id = '3a000000-0000-4000-8000-000000000050')
     from public.job_material_lines line
     where line.organization_id = '3a000000-0000-4000-8000-000000000010'
       and line.job_id = '3a000000-0000-4000-8000-000000000050'
-  $read$, p_project_id)) as line(lines integer, misplaced integer, job_project uuid);
-  if v_job_project is distinct from p_project_id or v_misplaced <> 0 then
-    raise exception '%: % of % lines elsewhere, job on %', p_failure, v_misplaced, v_lines, v_job_project;
+  $read$, p_project_id, p_line_id)) as line(lines integer, misplaced integer, planned integer, job_project uuid);
+  if v_job_project is distinct from p_project_id or v_misplaced <> 0 or v_planned <> 1 then
+    raise exception '%: % of % lines elsewhere, planned line found % times, job on %',
+      p_failure, v_misplaced, v_lines, v_planned, v_job_project;
   end if;
 end;
 $$;
@@ -151,6 +166,7 @@ end $$;
 -- committed line along.
 select dblink_exec('material_plan_first', 'begin');
 select dblink_exec('material_plan_first', 'set local role service_role');
+create temporary table material_move_planned_line on commit drop as
 select line_id from dblink('material_plan_first', $plan$
   select public.plan_job_material('3a000000-0000-4000-8000-000000000010',
     '3a000000-0000-4000-8000-000000000001', '3a000000-0000-4000-8000-000000000050', null,
@@ -164,7 +180,9 @@ select dblink_send_query('material_plan_second', $move$
 $move$);
 select pg_temp.await_blocked_second('the move never waited for the planning that locked its job');
 select dblink_exec('material_plan_first', 'commit');
-select pg_temp.await_job_material_on('3a000000-0000-4000-8000-000000000041',
+select pg_temp.second_result();
+select pg_temp.assert_job_material_on('3a000000-0000-4000-8000-000000000041',
+  (select line_id from material_move_planned_line),
   'a line planned while its job moved must end on the job''s new project');
 
 -- The move locks the job first: the planning waits for it, then reads the
@@ -184,7 +202,8 @@ select dblink_send_query('material_plan_second', $plan$
 $plan$);
 select pg_temp.await_blocked_second('the planning never waited for the move that locked its job');
 select dblink_exec('material_plan_first', 'commit');
-select pg_temp.await_job_material_on('3a000000-0000-4000-8000-000000000040',
+select pg_temp.assert_job_material_on('3a000000-0000-4000-8000-000000000040',
+  pg_temp.second_result(),
   'a line planned while its job moved must take the job''s final project');
 
 select dblink_exec('material_plan_setup', statement) from material_plan_cleanup;

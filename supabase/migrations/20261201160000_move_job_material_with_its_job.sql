@@ -18,7 +18,8 @@
 --    definer and grants stay as before; the rest of the body is unchanged.
 -- 2. Lines that an earlier move left on the previous project take their job's
 --    project now, unless that project lies outside the line's organization,
---    which the line's organization check would refuse.
+--    which the line's organization check would refuse. The repair locks those
+--    jobs before it reads their projects, so a move committed meanwhile wins.
 --
 -- inventory_movements and job_material_use_events keep the project they were
 -- booked with: they are history. A project's own lines (no job) do not move.
@@ -134,13 +135,26 @@ begin
 end;
 $$;
 
-update public.job_material_lines line
-set project_id = job.project_id
-from public.jobs job
-where job.id = line.job_id
-  and job.organization_id = line.organization_id
-  and line.project_id is distinct from job.project_id
-  and (job.project_id is null or exists (
-    select 1 from public.projects project
-    where project.id = job.project_id and project.organization_id = line.organization_id
-  ));
+do $$
+begin
+  -- The jobs first, in the order the job edit locks: a move of one of them
+  -- waits, and the update reads each job's project after the locks.
+  perform 1 from public.jobs job
+  where exists (
+    select 1 from public.job_material_lines line
+    where line.job_id = job.id and line.project_id is distinct from job.project_id
+  )
+  order by job.id
+  for share;
+
+  update public.job_material_lines line
+  set project_id = job.project_id
+  from public.jobs job
+  where job.id = line.job_id
+    and job.organization_id = line.organization_id
+    and line.project_id is distinct from job.project_id
+    and (job.project_id is null or exists (
+      select 1 from public.projects project
+      where project.id = job.project_id and project.organization_id = line.organization_id
+    ));
+end $$;
