@@ -2,6 +2,7 @@ import { expect, test } from '../support/fixtures';
 import {
   formatInventoryQuantity,
   getInventoryUnitLabel,
+  INVENTORY_HISTORY_KIND_LABELS,
   INVENTORY_ITEM_TYPE_LABELS,
   INVENTORY_LOCATION_TYPE_LABELS,
   INVENTORY_MOVEMENT_TYPE_LABELS,
@@ -147,6 +148,18 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await expect(projectTotal).toContainText(materialTakenText(3));
     await expect(projectTotal).toContainText(materialReturnedText(1));
     await expect(projectTotal).toContainText(billableQuantityPattern(2));
+
+    // The office finds the worker's use in the movement history: its own kind,
+    // no stock effect, and a link to the job.
+    await adminPage.goto(`/inventar?tab=movements&kind=job_use&person=${world.users.employee.id}`);
+    const useRow = inventoryRow(adminPage, jobNumber);
+    await expect(useRow).toHaveCount(1);
+    await expect(useRow).toContainText(INVENTORY_HISTORY_KIND_LABELS.job_use);
+    await expect(useRow).toContainText('Bestand bleibt gleich');
+    await expect(useRow.getByRole('link', { name: new RegExp(jobNumber) })).toHaveAttribute(
+      'href',
+      `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(jobNumber)}`,
+    );
   });
 
   test('A1-40/A1-44: Artikel und Lager per UI sowie alle Inventaransichten', async ({

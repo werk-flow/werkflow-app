@@ -231,6 +231,9 @@ function MovementQuantity({ entry }: { entry: InventoryMovementHistoryEntry }) {
   );
 }
 
+/** A use and its correction move no stock; their rows say so at every width. */
+const STOCK_UNCHANGED = 'Bestand bleibt gleich';
+
 const formatStockQuantity = (quantity: number | null): string =>
   quantity === null ? '—' : quantity.toLocaleString('de-DE');
 
@@ -242,7 +245,7 @@ function MovementCards({ entries }: { entries: InventoryMovementHistoryEntry[] }
         return (
           <ListRow asChild key={entry.id} className="items-start">
             <li>
-              <div className="min-w-0 flex-1 space-y-1">
+              <div className="min-w-0 flex-1 space-y-1 wrap-anywhere">
                 <div className="flex items-start justify-between gap-2">
                   <p className="min-w-0 text-sm font-medium wrap-anywhere">{entry.itemName}</p>
                   <span className="shrink-0 text-sm font-medium">
@@ -258,7 +261,7 @@ function MovementCards({ entries }: { entries: InventoryMovementHistoryEntry[] }
                 <p className="text-xs tabular-nums text-muted-foreground">
                   {movesStock(entry)
                     ? `Vorher ${formatStockQuantity(entry.quantityBefore)} · Danach ${formatStockQuantity(entry.quantityAfter)}`
-                    : 'Bestand bleibt gleich'}
+                    : STOCK_UNCHANGED}
                 </p>
                 {entry.actorName && <p className="text-xs text-muted-foreground">Von {entry.actorName}</p>}
                 {entry.reason && <p className="text-xs text-muted-foreground">Grund: {entry.reason}</p>}
@@ -306,6 +309,9 @@ function MovementsDesktopTable({ entries }: { entries: InventoryMovementHistoryE
                 </TableCell>
                 <TableCell className="text-right whitespace-nowrap">
                   <MovementQuantity entry={entry} />
+                  {!movesStock(entry) && (
+                    <span className="block text-xs text-muted-foreground">{STOCK_UNCHANGED}</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatStockQuantity(entry.quantityAfter)}
