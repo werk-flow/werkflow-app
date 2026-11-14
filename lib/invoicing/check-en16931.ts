@@ -4,7 +4,8 @@
 // the CEN message and the field of the invoice model at fault.
 //
 // It checks the CEN business rules only. The XML schema of CII is not checked
-// here; CI checks the writer's output on the reference invoices with Mustang.
+// here; Mustang is to check the writer's output on the reference invoices in
+// CI (werk-flow/werkflow-planning#455).
 // A check that cannot run throws: no invoice counts as valid that no check read.
 
 import { createHash } from 'node:crypto';
@@ -12,7 +13,8 @@ import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 
 import SaxonJS from 'saxon-js';
-import { z } from 'zod';
+
+import { z } from '@/lib/zod';
 
 import { EN16931_CII_RULES } from './rules/manifest';
 

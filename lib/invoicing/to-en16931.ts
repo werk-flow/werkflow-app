@@ -26,7 +26,7 @@ function amount(cents: number): string {
 }
 
 /** Basis points as a percentage: 1900 → `19.00`. */
-function percent(basisPoints: number): string {
+function basisPointsText(basisPoints: number): string {
   return `${Math.trunc(basisPoints / 100)}.${String(basisPoints % 100).padStart(2, '0')}`;
 }
 
@@ -45,7 +45,7 @@ function tradeTax(tax: InvoiceTax, amounts?: { basisCents: number; taxCents: num
       : {}),
     ...(amounts ? { 'ram:BasisAmount': amount(amounts.basisCents) } : {}),
     'ram:CategoryCode': tax.category,
-    'ram:RateApplicablePercent': percent(taxRateBasisPoints(tax)),
+    'ram:RateApplicablePercent': basisPointsText(taxRateBasisPoints(tax)),
   };
 }
 
@@ -88,8 +88,8 @@ function paymentTermsText(invoice: CalculatedInvoice): string {
   const { discount } = invoice.paymentTerms;
   if (discount) {
     lines.push(
-      `Bei Zahlung innerhalb von ${discount.days} Tagen ${percent(discount.percentBasisPoints).replace('.', ',')} % Skonto.`,
-      `#SKONTO#TAGE=${discount.days}#PROZENT=${percent(discount.percentBasisPoints)}#`,
+      `Bei Zahlung innerhalb von ${discount.days} Tagen ${basisPointsText(discount.percentBasisPoints).replace('.', ',')} % Skonto.`,
+      `#SKONTO#TAGE=${discount.days}#PROZENT=${basisPointsText(discount.percentBasisPoints)}#`,
     );
   }
   return `${lines.join('\n')}\n`;

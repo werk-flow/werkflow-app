@@ -21,7 +21,7 @@ const xsltName = 'EN16931-CII-validation.xslt';
 const neutralFolder = join(tmpdir(), 'werkflow-en16931');
 const workFolder = mkdtempSync(join(tmpdir(), 'werkflow-en16931-sef-'));
 
-const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+const hexDigest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 try {
   mkdirSync(neutralFolder, { recursive: true });
@@ -46,8 +46,8 @@ try {
       '// Written by compile.ts; check-en16931.test.ts compares both hashes with the files.',
       'export const EN16931_CII_RULES = {',
       `  release: '${release}',`,
-      `  xsltSha256: '${sha256(xslt)}',`,
-      `  sefGzipSha256: '${sha256(compiled)}',`,
+      `  xsltSha256: '${hexDigest(xslt)}',`,
+      `  sefGzipSha256: '${hexDigest(compiled)}',`,
       '};',
       '',
     ].join('\n'),
