@@ -540,6 +540,88 @@ export async function getFieldEquipmentHistory(
   }
 }
 
+/** The ordinary documents linked to the Anlage, as `can_access_document` admits them; throws on a failed read. */
+async function readFieldDocumentRows({ admin, organizationId, equipment }: FieldScope) {
+  const equipmentLinks = await fieldRowsOrThrow(
+    'getFieldEquipmentDocuments: document_links read failed',
+    readInBatches([equipment.id], (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('document_links')
+            .select('id, document_id')
+            .eq('organization_id', organizationId)
+            .in('equipment_id', [...batch])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
+  );
+  const documentIds = [...new Set(equipmentLinks.map((link) => link.document_id))];
+  const [documents, protectedDocuments, allLinks] = await Promise.all([
+    fieldRowsOrThrow(
+      'getFieldEquipmentDocuments: documents read failed',
+      readInBatches(documentIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('documents')
+              .select('*')
+              .eq('organization_id', organizationId)
+              .is('deleted_at', null)
+              .in('id', [...batch])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
+    ),
+    fieldRowsOrThrow(
+      'getFieldEquipmentDocuments: personnel_documents read failed',
+      readInBatches(documentIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('personnel_documents')
+              .select('id, document_id')
+              .eq('organization_id', organizationId)
+              .in('document_id', [...batch])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
+    ),
+    fieldRowsOrThrow(
+      'getFieldEquipmentDocuments: document_links read failed',
+      readInBatches(documentIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('document_links')
+              .select('id, document_id, request_id, maintenance_coverage_id, employee_id')
+              .eq('organization_id', organizationId)
+              .in('document_id', [...batch])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
+    ),
+  ]);
+  const protectedIds = new Set(protectedDocuments.map((row) => row.document_id));
+  const open = documents.filter(
+    (document) =>
+      !protectedIds.has(document.id) &&
+      isFieldEquipmentDocument(
+        document,
+        allLinks.filter((link) => link.document_id === document.id),
+      ),
+  );
+  return open;
+}
+
 /**
  * The documents linked to the Anlage that its technician opens: ordinary
  * documents only, as `app_private.can_access_document` admits them.
@@ -553,85 +635,8 @@ export async function getFieldEquipmentDocuments(
   if (!authorized.success) return authorized;
   const documentContext = await getAuthorizedDocumentContext();
   if (!documentContext.success) return documentContext;
-  const { admin, organizationId, equipment } = authorized.scope;
   try {
-    const equipmentLinks = await fieldRowsOrThrow(
-      'getFieldEquipmentDocuments: document_links read failed',
-      readInBatches([equipment.id], (batch) =>
-        readCompleteRows(
-          (from, to) =>
-            admin
-              .from('document_links')
-              .select('id, document_id')
-              .eq('organization_id', organizationId)
-              .in('equipment_id', [...batch])
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
-      ),
-    );
-    const documentIds = [...new Set(equipmentLinks.map((link) => link.document_id))];
-    const [documents, protectedDocuments, allLinks] = await Promise.all([
-      fieldRowsOrThrow(
-        'getFieldEquipmentDocuments: documents read failed',
-        readInBatches(documentIds, (batch) =>
-          readCompleteRows(
-            (from, to) =>
-              admin
-                .from('documents')
-                .select('*')
-                .eq('organization_id', organizationId)
-                .is('deleted_at', null)
-                .in('id', [...batch])
-                .order('id')
-                .range(from, to),
-            LIST_ROW_CAP,
-          ),
-        ),
-      ),
-      fieldRowsOrThrow(
-        'getFieldEquipmentDocuments: personnel_documents read failed',
-        readInBatches(documentIds, (batch) =>
-          readCompleteRows(
-            (from, to) =>
-              admin
-                .from('personnel_documents')
-                .select('id, document_id')
-                .eq('organization_id', organizationId)
-                .in('document_id', [...batch])
-                .order('id')
-                .range(from, to),
-            LIST_ROW_CAP,
-          ),
-        ),
-      ),
-      fieldRowsOrThrow(
-        'getFieldEquipmentDocuments: document_links read failed',
-        readInBatches(documentIds, (batch) =>
-          readCompleteRows(
-            (from, to) =>
-              admin
-                .from('document_links')
-                .select('id, document_id, request_id, maintenance_coverage_id, employee_id')
-                .eq('organization_id', organizationId)
-                .in('document_id', [...batch])
-                .order('id')
-                .range(from, to),
-            LIST_ROW_CAP,
-          ),
-        ),
-      ),
-    ]);
-    const protectedIds = new Set(protectedDocuments.map((row) => row.document_id));
-    const open = documents.filter(
-      (document) =>
-        !protectedIds.has(document.id) &&
-        isFieldEquipmentDocument(
-          document,
-          allLinks.filter((link) => link.document_id === document.id),
-        ),
-    );
+    const open = await readFieldDocumentRows(authorized.scope);
     const hydrated = await hydrateDocuments(documentContext.context, open);
     return {
       success: true,
