@@ -80,7 +80,9 @@ const stagedImportLineSchema = z
     reason: boundedText(1000).nullable(),
   })
   // The catalog keeps a price kind only with its amount; a lone half would fail the confirm.
-  .refine((line) => (line.price_kind === null) === (line.price_cents === null));
+  .refine((line) => (line.price_kind === null) === (line.price_cents === null))
+  // The staging's check reads a missing quantity as passed; the catalog needs one for every article.
+  .refine((line) => line.kind !== 'article' || line.price_quantity !== null);
 export type StagedImportLine = z.infer<typeof stagedImportLineSchema>;
 
 export const stageWholesalerImportLinesInputSchema = z.object({

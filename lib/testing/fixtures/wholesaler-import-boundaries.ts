@@ -158,6 +158,14 @@ assert.deepEqual(
   }),
   { success: false, error: 'invalid_input' },
 );
+// An article without its price quantity would pass the staging's check, which reads NULL as passed, and fail the confirm.
+assert.deepEqual(
+  await imports.stageWholesalerImportLines({
+    importId: ownImportId,
+    lines: [{ ...LINE, price_quantity: null }],
+  }),
+  { success: false, error: 'invalid_input' },
+);
 // The batch's key is (batch, ordinal), so a bounded ordinal bounds the lines one batch holds, however many parts arrive.
 assert.deepEqual(
   await imports.stageWholesalerImportLines({
