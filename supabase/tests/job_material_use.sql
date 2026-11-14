@@ -189,8 +189,14 @@ begin
     raise exception 'a negative use that names no event must be refused, got %', v_refusal;
   end if;
 
-  -- The office changes the article's unit after the use; the correction still counts in meters.
+  -- The article's unit changed after the use, as it could before the database
+  -- kept the unit of an article with history (migration 20261204100000); the
+  -- seed bypasses that guard. The correction still counts in meters.
+  reset role;
+  set local session_replication_role = replica;
   update public.inventory_items set unit = 'piece' where id = '37000000-0000-4000-8000-000000000020';
+  set local session_replication_role = origin;
+  set local role service_role;
   v_used := public.record_job_material_use(v_org, v_actor, v_line, -2, 'Falsch gezählt', v_original);
   select id into v_event_id from public.job_material_use_events
   where job_material_line_id = v_line and corrects_event_id is not null;
@@ -386,8 +392,8 @@ begin
   then
     raise exception 'a client role can read or write material use events';
   end if;
-  if has_function_privilege('authenticated', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid)', 'execute')
-    or has_function_privilege('anon', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid)', 'execute')
+  if has_function_privilege('authenticated', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid, uuid)', 'execute')
+    or has_function_privilege('anon', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid, uuid)', 'execute')
   then
     raise exception 'a client role can record material use';
   end if;

@@ -70,6 +70,7 @@ async function bookMaterialRow(
         })
       : mode === 'take' && jobId
         ? await takeJobMaterial({
+            operationId: row.operationId,
             jobId,
             lineId: row.lineId,
             itemId: row.itemId,
@@ -79,6 +80,7 @@ async function bookMaterialRow(
           })
         : mode === 'take' && projectId
           ? await takeProjectMaterial({
+              operationId: row.operationId,
               projectId,
               lineId: row.lineId,
               itemId: row.itemId,
@@ -87,9 +89,15 @@ async function bookMaterialRow(
               reason: row.notes,
             })
           : mode === 'use'
-            ? await recordJobMaterialUse({ lineId: row.lineId ?? '', quantity, note: row.notes })
+            ? await recordJobMaterialUse({
+                operationId: row.operationId,
+                lineId: row.lineId ?? '',
+                quantity,
+                note: row.notes,
+              })
             : mode === 'return'
               ? await returnJobMaterial({
+                  operationId: row.operationId,
                   lineId: row.lineId ?? '',
                   locationId: row.locationId,
                   quantity,

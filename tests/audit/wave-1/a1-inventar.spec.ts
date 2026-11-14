@@ -180,6 +180,7 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await createInventoryLocation(adminPage, { orgId: world.orgId, name: inventoryLocationName });
     await createInventoryItem(adminPage, {
       name: inventoryItemName,
+      unit: 'meter',
       locationName: inventoryLocationName,
       initialQuantity: 5,
       supplierName: `A1 Lieferant ${world.runId}`,
