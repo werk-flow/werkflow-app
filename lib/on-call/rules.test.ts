@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { resolveBerlinWallTime } from '@/lib/date-time/berlin';
+import { parseBerlinDateTimeInput, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import { onCallWeek, isOnCallAt, shiftPhase, startToSave } from './rules';
 
 /** The instant of a Berlin wall time; the first one of an ambiguous autumn hour. */
@@ -138,6 +138,15 @@ describe('the start a change saves', () => {
     expect(
       startToSave(stored, new Date('2026-11-15T15:00:00.000Z'), new Date('2026-11-14T15:01:00.000Z')),
     ).toBeNull();
+  });
+
+  test('a running shift started in the first autumn 02:30 keeps it when its start was not edited', () => {
+    const stored = '2026-10-25T00:30:00.000Z';
+    // The form parses a shown 02:30 to the second occurrence, 01:30Z.
+    const typed = parseBerlinDateTimeInput('2026-10-25T02:30');
+    if (!typed) throw new Error('no Berlin time');
+    expect(typed.toISOString()).toBe('2026-10-25T01:30:00.000Z');
+    expect(startToSave(stored, typed, new Date('2026-10-25T03:00:00.000Z'))).toBe(stored);
   });
 
   test('a planned shift saves the typed start', () => {

@@ -33,6 +33,9 @@ import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { OnCallLabelField, OnCallNoteField, OnCallPeopleField, OverlapNotice } from './on-call-form-fields';
 import { ON_CALL_FAILURE_MESSAGES } from './on-call-labels';
 
+const START_LOCKED_MESSAGE =
+  'Die Bereitschaft hat inzwischen begonnen, ihr Beginn lässt sich nicht mehr ändern. Schließe den Dialog und öffne ihn neu.';
+
 type ShiftDialogProps = {
   organizationId: string;
   /** The shift to change; none plans a new one. */
@@ -97,12 +100,7 @@ function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDial
     setError(null);
     if (focusFirstInvalidField(errors) || !startsAt || !endsAt) return;
     const startToSend = startToSave(shift?.startsAt ?? null, startsAt, new Date());
-    if (startToSend === null) {
-      setError(
-        'Die Bereitschaft hat inzwischen begonnen, ihr Beginn lässt sich nicht mehr ändern. Schließe den Dialog und öffne ihn neu.',
-      );
-      return;
-    }
+    if (startToSend === null) return setError(START_LOCKED_MESSAGE);
     const values = {
       organizationId,
       shiftId,

@@ -1,4 +1,9 @@
-import { addLocalDays, getLocalWeekday, resolveBerlinWallTime } from '@/lib/date-time/berlin';
+import {
+  addLocalDays,
+  formatBerlinDateTimeInput,
+  getLocalWeekday,
+  resolveBerlinWallTime,
+} from '@/lib/date-time/berlin';
 
 // The one home of the Bereitschaft time rules (werk-flow/werkflow-planning#469).
 // A shift is an interval of instants, so midnight, a weekend and a DST change
@@ -28,8 +33,11 @@ export function isOnCallAt(shift: ShiftTime, at: Date): boolean {
  */
 export function startToSave(storedStart: string | null, typedStart: Date, at: Date): string | null {
   if (storedStart === null || Date.parse(storedStart) > at.getTime()) return typedStart.toISOString();
-  const storedMinute = Math.floor(Date.parse(storedStart) / 60_000);
-  return Math.floor(typedStart.getTime() / 60_000) === storedMinute ? storedStart : null;
+  // Compare the wall time the form shows, not instants: in the autumn hour a
+  // shown 02:30 parses to the second occurrence even when nobody edited it.
+  return formatBerlinDateTimeInput(typedStart) === formatBerlinDateTimeInput(storedStart)
+    ? storedStart
+    : null;
 }
 
 /** The Berlin week (Monday to Monday) a calendar day falls in, as the instants a list reads. */
