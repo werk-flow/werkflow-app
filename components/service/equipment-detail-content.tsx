@@ -35,6 +35,7 @@ import {
 } from './equipment-detail-sections';
 import { EquipmentDetailSidebar } from './equipment-detail-sidebar';
 import { EquipmentFormDialog } from './equipment-form-dialog';
+import { EquipmentPredecessorHistorySection } from './equipment-predecessor-history';
 import { EquipmentArchiveDialog, EquipmentCorrectionDialog } from './equipment-reason-confirm-dialogs';
 import { EquipmentSourceDialog } from './equipment-source-dialog';
 import { EquipmentWorkLinkDialog } from './equipment-work-link-dialog';
@@ -234,6 +235,7 @@ function EquipmentDetailRegion({
           )}
 
           <EquipmentHistorySection events={item.events} sourceBusy={busy.isBusy('source')} />
+          <EquipmentPredecessorHistorySection equipmentId={item.id} initial={item.predecessorHistory} />
         </div>
 
         <EquipmentDetailSidebar

@@ -17539,6 +17539,53 @@ export type Database = {
           project_id: string;
         }[];
       };
+      list_installed_equipment_predecessor_events: {
+        Args: {
+          p_equipment_id: string;
+          p_limit: number;
+          p_offset: number;
+          p_organization_id: string;
+        };
+        Returns: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot: Json | null;
+          corrects_event_id: string | null;
+          effective_at: string;
+          equipment_id: string;
+          event_type: Database["public"]["Enums"]["installed_equipment_event_type"];
+          from_state:
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
+          id: string;
+          idempotency_key: string;
+          organization_id: string;
+          reason: string | null;
+          recorded_at: string;
+          request_operation: string;
+          site_snapshot: Json;
+          to_state:
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "installed_equipment_events";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      list_installed_equipment_replacement_plans: {
+        Args: { p_equipment_id: string; p_organization_id: string };
+        Returns: {
+          next_due_date: string;
+          plan_id: string;
+          plan_number: string;
+          plan_status: Database["public"]["Enums"]["maintenance_plan_status"];
+          plan_version: number;
+          template_name: string;
+        }[];
+      };
       list_inventory_movement_page: {
         Args: { p_organization_id: string; p_query?: Json };
         Returns: Json;
@@ -18516,61 +18563,118 @@ export type Database = {
         };
         Returns: undefined;
       };
-      replace_installed_equipment: {
-        Args: {
-          p_actor_id: string;
-          p_effective_at: string;
-          p_expected_version: number;
-          p_idempotency_key: string;
-          p_organization_id: string;
-          p_predecessor_id: string;
-          p_reason: string;
-          p_successor_id: string;
-          p_successor_payload: Json;
-        };
-        Returns: {
-          archive_reason: string | null;
-          archived_at: string | null;
-          archived_by: string | null;
-          category: Database["public"]["Enums"]["installed_equipment_category"];
-          client_id: string;
-          commissioning_date: string | null;
-          created_at: string;
-          created_by: string;
-          equipment_number: string;
-          id: string;
-          installation_date: string | null;
-          location_detail: string | null;
-          manufacturer: string | null;
-          model: string | null;
-          name: string;
-          organization_id: string;
-          parent_equipment_id: string | null;
-          predecessor_equipment_id: string | null;
-          site_id: string;
-          state: Database["public"]["Enums"]["installed_equipment_state"];
-          subtype:
-            | Database["public"]["Enums"]["installed_equipment_subtype"]
-            | null;
-          technical_notes: string | null;
-          updated_at: string;
-          updated_by: string;
-          version: number;
-          void_reason: string | null;
-          voided_at: string | null;
-          voided_by: string | null;
-          warranty_basis: string | null;
-          warranty_end_date: string | null;
-          warranty_provider: string | null;
-          warranty_start_date: string | null;
-        };
-        SetofOptions: {
-          from: "*";
-          to: "installed_equipment";
-          isOneToOne: true;
-          isSetofReturn: false;
-        };
-      };
+      replace_installed_equipment:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_effective_at: string;
+              p_expected_version: number;
+              p_idempotency_key: string;
+              p_organization_id: string;
+              p_predecessor_id: string;
+              p_reason: string;
+              p_successor_id: string;
+              p_successor_payload: Json;
+            };
+            Returns: {
+              archive_reason: string | null;
+              archived_at: string | null;
+              archived_by: string | null;
+              category: Database["public"]["Enums"]["installed_equipment_category"];
+              client_id: string;
+              commissioning_date: string | null;
+              created_at: string;
+              created_by: string;
+              equipment_number: string;
+              id: string;
+              installation_date: string | null;
+              location_detail: string | null;
+              manufacturer: string | null;
+              model: string | null;
+              name: string;
+              organization_id: string;
+              parent_equipment_id: string | null;
+              predecessor_equipment_id: string | null;
+              site_id: string;
+              state: Database["public"]["Enums"]["installed_equipment_state"];
+              subtype:
+                | Database["public"]["Enums"]["installed_equipment_subtype"]
+                | null;
+              technical_notes: string | null;
+              updated_at: string;
+              updated_by: string;
+              version: number;
+              void_reason: string | null;
+              voided_at: string | null;
+              voided_by: string | null;
+              warranty_basis: string | null;
+              warranty_end_date: string | null;
+              warranty_provider: string | null;
+              warranty_start_date: string | null;
+            };
+            SetofOptions: {
+              from: "*";
+              to: "installed_equipment";
+              isOneToOne: true;
+              isSetofReturn: false;
+            };
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_carry_over: Json;
+              p_effective_at: string;
+              p_expected_version: number;
+              p_idempotency_key: string;
+              p_organization_id: string;
+              p_predecessor_id: string;
+              p_reason: string;
+              p_successor_id: string;
+              p_successor_payload: Json;
+            };
+            Returns: {
+              archive_reason: string | null;
+              archived_at: string | null;
+              archived_by: string | null;
+              category: Database["public"]["Enums"]["installed_equipment_category"];
+              client_id: string;
+              commissioning_date: string | null;
+              created_at: string;
+              created_by: string;
+              equipment_number: string;
+              id: string;
+              installation_date: string | null;
+              location_detail: string | null;
+              manufacturer: string | null;
+              model: string | null;
+              name: string;
+              organization_id: string;
+              parent_equipment_id: string | null;
+              predecessor_equipment_id: string | null;
+              site_id: string;
+              state: Database["public"]["Enums"]["installed_equipment_state"];
+              subtype:
+                | Database["public"]["Enums"]["installed_equipment_subtype"]
+                | null;
+              technical_notes: string | null;
+              updated_at: string;
+              updated_by: string;
+              version: number;
+              void_reason: string | null;
+              voided_at: string | null;
+              voided_by: string | null;
+              warranty_basis: string | null;
+              warranty_end_date: string | null;
+              warranty_provider: string | null;
+              warranty_start_date: string | null;
+            };
+            SetofOptions: {
+              from: "*";
+              to: "installed_equipment";
+              isOneToOne: true;
+              isSetofReturn: false;
+            };
+          };
       replace_job_assignments_with_assessment: {
         Args: {
           p_actor_id: string;
@@ -21010,7 +21114,11 @@ export type Database = {
         | "work_unlinked"
         | "source_linked"
         | "document_linked"
-        | "document_unlinked";
+        | "document_unlinked"
+        | "maintenance_plan_carried_over"
+        | "maintenance_plan_left"
+        | "component_carried_over"
+        | "parent_replaced";
       installed_equipment_identifier_type:
         | "serial_number"
         | "manufacturer_product_number"
@@ -21073,7 +21181,8 @@ export type Database = {
         | "skipped"
         | "cancelled"
         | "superseded"
-        | "service_case_linked";
+        | "service_case_linked"
+        | "equipment_replaced";
       maintenance_due_status:
         | "open"
         | "visit_created"
@@ -21656,6 +21765,10 @@ export const Constants = {
         "source_linked",
         "document_linked",
         "document_unlinked",
+        "maintenance_plan_carried_over",
+        "maintenance_plan_left",
+        "component_carried_over",
+        "parent_replaced",
       ],
       installed_equipment_identifier_type: [
         "serial_number",
@@ -21724,6 +21837,7 @@ export const Constants = {
         "cancelled",
         "superseded",
         "service_case_linked",
+        "equipment_replaced",
       ],
       maintenance_due_status: [
         "open",

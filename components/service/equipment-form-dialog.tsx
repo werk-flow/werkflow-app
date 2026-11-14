@@ -28,6 +28,7 @@ import {
   type EquipmentDetail,
   type EquipmentState,
 } from '@/lib/installed-equipment/types';
+import { EquipmentCarryOverSection, useEquipmentCarryOver } from './equipment-carry-over';
 import {
   EquipmentAssignmentFields,
   EquipmentTechnicalFields,
@@ -202,12 +203,14 @@ export function EquipmentFormDialog({
   onSubmitted,
   onSaved,
 }: EquipmentFormDialogProps): ReactElement {
+  const carryOver = useEquipmentCarryOver(initial);
   const controller = useEquipmentForm({
     onOpenChange,
     mode,
     initial,
     onSubmitted,
     onSaved,
+    carryOver,
   });
   const { form, updateField, fieldErrors, isPending, handleSubmit } = controller;
   const title =
@@ -256,6 +259,9 @@ export function EquipmentFormDialog({
                   placeholder="Warum wird diese Änderung vorgenommen?"
                 />
               </Field>
+            )}
+            {mode === 'replace' && (
+              <EquipmentCarryOverSection controller={carryOver} showErrors={controller.attempted} />
             )}
             <ErrorText>{controller.error}</ErrorText>
           </DialogBody>

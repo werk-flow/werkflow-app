@@ -110,6 +110,29 @@ export const equipmentArchiveSchema = z.object({
   idempotencyKey: uuidSchema,
 });
 
+/**
+ * The manager's choice per running plan and per component: carried to the
+ * successor, or left on the predecessor. A plan left behind names its reason.
+ */
+const replacementCarryOverSchema = z.object({
+  plans: z
+    .array(
+      z
+        .object({
+          planId: uuidSchema,
+          expectedVersion: z.number().int().positive(),
+          carry: z.boolean(),
+          reason: trimmedNullableText(1000),
+        })
+        .refine((choice) => choice.carry || (choice.reason?.length ?? 0) >= 3, {
+          message: 'Bitte begründe, warum der Wartungsplan beim Vorgänger bleibt.',
+          path: ['reason'],
+        }),
+    )
+    .max(50),
+  components: z.array(z.object({ equipmentId: uuidSchema, carry: z.boolean() })).max(100),
+});
+
 export const equipmentReplacementSchema = equipmentFormSchema.safeExtend({
   predecessorId: uuidSchema,
   successorId: uuidSchema,
@@ -117,6 +140,12 @@ export const equipmentReplacementSchema = equipmentFormSchema.safeExtend({
   effectiveAt: z.string().datetime({ offset: true }),
   reason: z.string().trim().min(3).max(1000),
   idempotencyKey: uuidSchema,
+  carryOver: replacementCarryOverSchema,
+});
+
+export const predecessorHistoryPageSchema = z.object({
+  equipmentId: uuidSchema,
+  offset: z.number().int().min(0).max(100_000),
 });
 
 export const equipmentCorrectionSchema = z.object({

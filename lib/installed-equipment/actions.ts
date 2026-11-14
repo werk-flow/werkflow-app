@@ -12,6 +12,12 @@ import { toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { Database } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import {
+  loadEquipmentEvents,
+  loadPredecessorHistory,
+  loadReplacementPlans,
+  readEquipmentEventLinkRows,
+} from './history-reads';
 import { loadListItems } from './list-page-server';
 import {
   equipmentArchiveSchema,
@@ -22,6 +28,7 @@ import {
   equipmentReplacementSchema,
   equipmentSourceSchema,
   equipmentWorkLinkSchema,
+  predecessorHistoryPageSchema,
 } from './validation';
 import type {
   EquipmentArchiveInput,
@@ -29,11 +36,10 @@ import type {
   EquipmentCorrectionInput,
   EquipmentDetail,
   EquipmentDetailResult,
-  EquipmentEvent,
-  EquipmentEventLink,
   EquipmentFieldProjection,
   EquipmentListItem,
   EquipmentMutationResult,
+  EquipmentPredecessorHistory,
   EquipmentReplacementInput,
   EquipmentSourceInput,
   EquipmentRow,
@@ -87,6 +93,8 @@ const EQUIPMENT_ERROR_CODES = [
   'installed_equipment_replacement_cycle',
   'installed_equipment_document_version_invalid',
   'installed_equipment_document_link_not_found',
+  'installed_equipment_replacement_plan_reason_required',
+  'maintenance_template_version_unavailable',
 ] as const;
 
 function mapEquipmentError(error: { message?: string; code?: string } | null): string {
@@ -113,83 +121,6 @@ function revalidateEquipment(): void {
   revalidatePath('/kunden', 'layout');
   revalidatePath('/auftraege', 'layout');
   revalidatePath('/dokumente', 'layout');
-}
-
-async function hydrateEventLinks(
-  admin: AdminClient,
-  organizationId: string,
-  rows: Database['public']['Tables']['installed_equipment_event_links']['Row'][],
-): Promise<Map<string, EquipmentEventLink[]>> {
-  const jobIds = rows.flatMap((row) => (row.job_id ? [row.job_id] : []));
-  const projectIds = rows.flatMap((row) => (row.project_id ? [row.project_id] : []));
-  const documentIds = rows.flatMap((row) => (row.document_id ? [row.document_id] : []));
-  const [jobsResult, projectsResult, documentsResult] = await Promise.all([
-    readInBatches(jobIds, (batch) =>
-      admin
-        .from('jobs')
-        .select('id, job_number, title')
-        .eq('organization_id', organizationId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(projectIds, (batch) =>
-      admin
-        .from('projects')
-        .select('id, project_number, name')
-        .eq('organization_id', organizationId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(documentIds, (batch) =>
-      admin
-        .from('documents')
-        .select('id, display_name')
-        .eq('organization_id', organizationId)
-        .in('id', [...batch]),
-    ),
-  ]);
-  const labelError = jobsResult.error ?? projectsResult.error ?? documentsResult.error;
-  if (labelError) {
-    logReadErrors('hydrateEventLinks: link label read failed', labelError);
-    // Without the labels every link would read as an exact handover state.
-    throw new Error('installed_equipment_event_links_failed');
-  }
-  const jobs = new Map(jobsResult.data.map((job) => [job.id, job]));
-  const projects = new Map(projectsResult.data.map((project) => [project.id, project]));
-  const documents = new Map(documentsResult.data.map((document) => [document.id, document]));
-  const result = new Map<string, EquipmentEventLink[]>();
-  for (const row of rows) {
-    const job = row.job_id ? jobs.get(row.job_id) : null;
-    const project = row.project_id ? projects.get(row.project_id) : null;
-    const document = row.document_id ? documents.get(row.document_id) : null;
-    const link: EquipmentEventLink = {
-      id: row.id,
-      jobId: row.job_id,
-      projectId: row.project_id,
-      workArtifactRevisionId: row.work_artifact_revision_id,
-      workHandoverReleaseId: row.work_handover_release_id,
-      documentId: row.document_id,
-      documentVersionNumber: row.document_version_number,
-      label: job
-        ? `Auftrag ${job.job_number ?? job.title}`
-        : project
-          ? `Projekt ${project.project_number ?? project.name}`
-          : document
-            ? `${document.display_name}, Version ${row.document_version_number}`
-            : row.work_artifact_revision_id
-              ? 'Exakte Arbeitsnachweis-Revision'
-              : 'Exakter Übergabestand',
-      href: job
-        ? `/auftraege/${encodeURIComponent(job.job_number ?? job.id)}`
-        : project
-          ? `/auftraege/projekt/${encodeURIComponent(project.project_number ?? project.id)}`
-          : document
-            ? `/dokumente?document=${encodeURIComponent(document.id)}`
-            : null,
-    };
-    const links = result.get(row.event_id) ?? [];
-    links.push(link);
-    result.set(row.event_id, links);
-  }
-  return result;
 }
 
 export async function getInstalledEquipmentDetailByNumber(
@@ -328,73 +259,6 @@ async function readEquipmentDetailRows(context: ManagerContext, row: EquipmentRo
   };
 }
 
-type EquipmentEventRow = Database['public']['Tables']['installed_equipment_events']['Row'];
-
-/** The links of the given events; a failed read throws after logging. */
-async function readEquipmentEventLinkRows(context: ManagerContext, eventRows: EquipmentEventRow[]) {
-  const eventLinksResult = await readInBatches(
-    eventRows.map((event) => event.id),
-    (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          context.admin
-            .from('installed_equipment_event_links')
-            .select('*')
-            .eq('organization_id', context.organizationId)
-            .in('event_id', [...batch])
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-  );
-  if (eventLinksResult.error) {
-    logReadErrors('getInstalledEquipmentDetailByNumber: event link read failed', eventLinksResult.error);
-    throw new Error('installed_equipment_detail_failed');
-  }
-  return eventLinksResult.data;
-}
-
-/** The events with their actors named and their links hydrated; a failed read throws after logging. */
-async function loadEquipmentEvents(
-  context: ManagerContext,
-  eventRows: EquipmentEventRow[],
-  eventLinkRows: Database['public']['Tables']['installed_equipment_event_links']['Row'][],
-): Promise<EquipmentEvent[]> {
-  const actorIds = [...new Set(eventRows.map((event) => event.actor_id))];
-  const { data: actors, error: actorsError } = await readInBatches(actorIds, (batch) =>
-    context.admin
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .in('id', [...batch]),
-  );
-  if (actorsError) {
-    logReadErrors('getInstalledEquipmentDetailByNumber: actor read failed', actorsError);
-    throw new Error('installed_equipment_detail_failed');
-  }
-  const actorNames = new Map(
-    actors.map((actor) => [
-      actor.id,
-      [actor.first_name, actor.last_name].filter(Boolean).join(' ') || actor.email || 'Unbekannt',
-    ]),
-  );
-  const eventLinks = await hydrateEventLinks(context.admin, context.organizationId, eventLinkRows);
-  return eventRows.map((event) => ({
-    id: event.id,
-    eventType: event.event_type,
-    fromState: event.from_state,
-    toState: event.to_state,
-    effectiveAt: event.effective_at,
-    recordedAt: event.recorded_at,
-    actorName: actorNames.get(event.actor_id) ?? 'Unbekannt',
-    reason: event.reason,
-    correctsEventId: event.corrects_event_id,
-    siteSnapshot: event.site_snapshot,
-    beforeSnapshot: event.before_snapshot,
-    afterSnapshot: event.after_snapshot,
-    links: eventLinks.get(event.id) ?? [],
-  }));
-}
-
 /** Every related read of one equipment detail; a failed read throws after logging, never an empty section. */
 async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): Promise<EquipmentDetail> {
   const { relatedRows, eventRows, workLinkRows } = await readEquipmentDetailRows(context, row);
@@ -404,8 +268,12 @@ async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): 
   const current = items.find((item) => item.id === row.id);
   if (!current) throw new Error('installed_equipment_detail_failed');
 
-  const events = await loadEquipmentEvents(context, eventRows, eventLinkRows);
-  const workLinks = await loadEquipmentWorkLinks(context, workLinkRows);
+  const [events, workLinks, predecessorHistory, replacementPlans] = await Promise.all([
+    loadEquipmentEvents(context, eventRows, eventLinkRows),
+    loadEquipmentWorkLinks(context, workLinkRows),
+    loadPredecessorHistory(context, row, 0),
+    loadReplacementPlans(context, row),
+  ]);
 
   const detail: EquipmentDetail = {
     ...current,
@@ -427,9 +295,38 @@ async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): 
       ) ?? null,
     components: items.filter((item) => item.parentEquipmentId === row.id),
     events,
+    predecessorHistory,
+    replacementPlans,
     workLinks,
   };
   return detail;
+}
+
+/** A further page of the predecessors' history, for „Ältere Einträge laden“ on the detail page. */
+export async function getEquipmentPredecessorHistory(input: {
+  equipmentId: string;
+  offset: number;
+}): Promise<ActionResult<{ history: EquipmentPredecessorHistory }>> {
+  const parsed = predecessorHistoryPageSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'installed_equipment_input_invalid' };
+  const context = await requireEquipmentManager();
+  if ('success' in context) return context;
+  const { data: row, error } = await context.admin
+    .from('installed_equipment')
+    .select('id, predecessor_equipment_id')
+    .eq('organization_id', context.organizationId)
+    .eq('id', parsed.data.equipmentId)
+    .maybeSingle();
+  if (error) {
+    logReadErrors('getEquipmentPredecessorHistory: read failed', error);
+    return { success: false, error: 'installed_equipment_load_failed' };
+  }
+  if (!row) return { success: false, error: 'installed_equipment_not_found' };
+  try {
+    return { success: true, history: await loadPredecessorHistory(context, row, parsed.data.offset) };
+  } catch {
+    return { success: false, error: 'installed_equipment_load_failed' };
+  }
 }
 
 export async function getInstalledEquipmentForClient(
@@ -632,16 +529,18 @@ export async function replaceInstalledEquipment(
   if (!parsed.success) return { success: false, error: 'installed_equipment_input_invalid' };
   const context = await requireEquipmentManager();
   if ('success' in context) return context;
+  const { carryOver, ...successor } = parsed.data;
   const { data, error } = await context.admin.rpc('replace_installed_equipment', {
     p_organization_id: context.organizationId,
-    p_predecessor_id: parsed.data.predecessorId,
-    p_successor_id: parsed.data.successorId,
-    p_expected_version: parsed.data.expectedVersion,
-    p_successor_payload: toJson(parsed.data),
-    p_effective_at: parsed.data.effectiveAt,
-    p_reason: parsed.data.reason,
+    p_predecessor_id: successor.predecessorId,
+    p_successor_id: successor.successorId,
+    p_expected_version: successor.expectedVersion,
+    p_successor_payload: toJson(successor),
+    p_effective_at: successor.effectiveAt,
+    p_reason: successor.reason,
     p_actor_id: context.userId,
-    p_idempotency_key: parsed.data.idempotencyKey,
+    p_idempotency_key: successor.idempotencyKey,
+    p_carry_over: toJson(carryOver),
   });
   if (error || !data) return { success: false, error: mapEquipmentError(error) };
   revalidateEquipment();

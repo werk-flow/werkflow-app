@@ -11,7 +11,12 @@ import {
   replaceInstalledEquipment,
   updateInstalledEquipment,
 } from '@/lib/installed-equipment/actions';
-import type { EquipmentDetail, EquipmentFormInput, EquipmentListItem } from '@/lib/installed-equipment/types';
+import type {
+  EquipmentCarryOverInput,
+  EquipmentDetail,
+  EquipmentFormInput,
+  EquipmentListItem,
+} from '@/lib/installed-equipment/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
   EQUIPMENT_REQUIRED_FIELD_IDS,
@@ -28,6 +33,7 @@ import {
   type EquipmentRequiredField,
   type EquipmentSiteOption,
 } from './equipment-form-state';
+import type { EquipmentCarryOverController } from './equipment-carry-over';
 import { useClientOption } from './use-client-option';
 
 /** The values a list can show for a record before the server confirms it. */
@@ -48,6 +54,8 @@ type UseEquipmentFormOptions = {
   initial: EquipmentDetail | null | undefined;
   onSubmitted: ((submission: EquipmentCreateSubmission) => void) | undefined;
   onSaved: (() => void) | undefined;
+  /** A replacement's choice per running plan and component. */
+  carryOver: EquipmentCarryOverController;
 };
 
 export type EquipmentFormController = {
@@ -56,6 +64,8 @@ export type EquipmentFormController = {
   updateField: <Key extends keyof EquipmentFormState>(key: Key, value: EquipmentFormState[Key]) => void;
   error: string | null;
   fieldErrors: Partial<Record<EquipmentRequiredField, string>>;
+  /** A submit was tried, so missing input shows its message. */
+  attempted: boolean;
   isPending: boolean;
   clientSearch: JobEntityOptionsState;
   clientOption: ReturnType<typeof useClientOption>;
@@ -118,6 +128,7 @@ async function saveEquipment({
   payload,
   idempotencyKey,
   effectiveAt,
+  carryOver,
   runners: { runCreate, runUpdate, runReplace },
 }: {
   mode: EquipmentFormMode;
@@ -126,6 +137,7 @@ async function saveEquipment({
   payload: EquipmentFormInput;
   idempotencyKey: string;
   effectiveAt: string;
+  carryOver: EquipmentCarryOverInput;
   runners: EquipmentActionRunners;
 }) {
   if (mode === 'create') {
@@ -154,6 +166,7 @@ async function saveEquipment({
       effectiveAt,
       reason: form.reason ?? '',
       idempotencyKey,
+      carryOver,
     });
   }
   return {
@@ -189,6 +202,7 @@ export function useEquipmentForm({
   initial,
   onSubmitted,
   onSaved,
+  carryOver,
 }: UseEquipmentFormOptions): EquipmentFormController {
   const router = useRouter();
   const { run: runCreate, isPending: isCreating } = useServerAction(createInstalledEquipment);
@@ -212,9 +226,10 @@ export function useEquipmentForm({
   async function handleSubmit(): Promise<void> {
     setError(null);
     setAttempted(true);
-    const errorsById = Object.fromEntries(
-      EQUIPMENT_REQUIRED_FIELD_IDS.map(([key, id]) => [id, missingFields[key]]),
-    );
+    const errorsById = {
+      ...Object.fromEntries(EQUIPMENT_REQUIRED_FIELD_IDS.map(([key, id]) => [id, missingFields[key]])),
+      ...(mode === 'replace' ? carryOver.errors : {}),
+    };
     if (focusFirstInvalidField(errorsById)) return;
     const idempotencyKey = crypto.randomUUID();
     const effectiveAt = new Date().toISOString();
@@ -236,6 +251,7 @@ export function useEquipmentForm({
       payload,
       idempotencyKey,
       effectiveAt,
+      carryOver: carryOver.input,
       runners: { runCreate, runUpdate, runReplace },
     });
     if (!result.success) {
@@ -257,6 +273,7 @@ export function useEquipmentForm({
     updateField,
     error,
     fieldErrors,
+    attempted,
     isPending,
     clientSearch,
     clientOption,
