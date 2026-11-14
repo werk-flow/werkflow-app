@@ -1,6 +1,6 @@
 -- Replacing an Anlage carries its maintenance obligations and components to
 -- the Nachfolger (migration
--- 20261210120002_carry_replaced_equipment_obligations_to_successor.sql):
+-- 20261210130002_carry_replaced_equipment_obligations_to_successor.sql):
 -- an overdue open due item that an earlier plan revision left open stays open
 -- with its due date on the successor's new plan revision, completed due work
 -- stays on the old revision, and the carried revision (also the one a

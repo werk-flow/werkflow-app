@@ -261,10 +261,10 @@ function EquipmentDetailRegion({
           <EquipmentDocuments item={item} documents={documents} loadFailed={documentsLoadFailed} />
 
           <EquipmentHistorySection events={item.events} sourceBusy={busy.isBusy('source')} />
-          {/* Another Anlage or any change in the refreshed first page starts the
-              paging over, so a backdated event never shifts a cached older page. */}
+          {/* Another Anlage starts the paging over; the section itself drops older
+              pages when its refreshed first page changes. */}
           <EquipmentPredecessorHistorySection
-            key={`${item.id}:${item.predecessorHistory.events.map((event) => event.id).join(',')}`}
+            key={item.id}
             equipmentId={item.id}
             initial={item.predecessorHistory}
           />

@@ -21,9 +21,17 @@ export function EquipmentPredecessorHistorySection({
   equipmentId: string;
   initial: EquipmentPredecessorHistory;
 }): ReactElement | null {
-  const [older, setOlder] = useState<{ events: EquipmentPredecessorEvent[]; nextOffset: number | null }>();
+  const [loaded, setLoaded] = useState<{
+    firstPage: string;
+    events: EquipmentPredecessorEvent[];
+    nextOffset: number | null;
+  }>();
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = useServerAction(getEquipmentPredecessorHistory);
+  // Older pages count on the first page they were loaded under; a refreshed
+  // first page that differs (a backdated event) starts the paging over.
+  const firstPage = initial.events.map((event) => event.id).join(',');
+  const older = loaded?.firstPage === firstPage ? loaded : undefined;
   if (initial.events.length === 0) return null;
   // An event recorded while paging shifts later offsets by one; each event shows once.
   const events = [
@@ -38,10 +46,11 @@ export function EquipmentPredecessorHistorySection({
       setError('Ältere Einträge konnten nicht geladen werden. Versuche es erneut.');
       return;
     }
-    setOlder((current) => ({
-      events: [...(current?.events ?? []), ...result.history.events],
+    setLoaded({
+      firstPage,
+      events: [...(older?.events ?? []), ...result.history.events],
       nextOffset: result.history.nextOffset,
-    }));
+    });
   }
 
   return (
