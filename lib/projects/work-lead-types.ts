@@ -19,6 +19,23 @@ export const nameWorkLeadSchema = workLeadTargetSchema.extend({
   expectedLeadId: uuidSchema.nullable(),
 });
 
+/** A lead holding as the server reads it, before the names are resolved. */
+export type WorkLeadHoldingRow = {
+  id: string;
+  employee_record_id: string;
+  started_at: string;
+  started_by: string | null;
+  ended_at: string | null;
+  ended_by: string | null;
+};
+
+/**
+ * A standalone job's own lead holdings as the job read embeds them, so the
+ * office's job page needs no read of its own. The read orders them newest first.
+ */
+export const JOB_WORK_LEADS_EMBED =
+  'work_leads!work_leads_job_fk(id, employee_record_id, started_at, started_by, ended_at, ended_by)';
+
 /** One lead holding as the office sees it in the history. */
 export type WorkLeadHolding = {
   id: string;

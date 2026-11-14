@@ -13,6 +13,7 @@ import {
   type LedInstruction,
   type LedProjectOverview,
   type WorkLeadHolding,
+  type WorkLeadHoldingRow,
   type WorkLeadPanel,
   type WorkLeadTarget,
 } from './work-lead-types';
@@ -98,14 +99,27 @@ export async function getWorkLead(
     logReadFailure('getWorkLead: work_leads read failed', rows.error);
     return { success: false, error: 'load_failed' };
   }
+  return workLeadPanelFrom(orgId, rows.data);
+}
+
+/**
+ * The office's panel from holdings already read, newest first, with the
+ * names resolved; reads nothing when there is none. Only a caller that
+ * checked the manager role passes holdings in: the job page takes them from
+ * the office's job read.
+ */
+export async function workLeadPanelFrom(
+  orgId: string,
+  rows: readonly WorkLeadHoldingRow[],
+): Promise<ActionResult<{ panel: WorkLeadPanel }>> {
   const names = await readHoldingNames(
     orgId,
-    [...new Set(rows.data.map((row) => row.employee_record_id))],
-    [...new Set(rows.data.flatMap((row) => [row.started_by, row.ended_by].filter((id) => id !== null)))],
+    [...new Set(rows.map((row) => row.employee_record_id))],
+    [...new Set(rows.flatMap((row) => [row.started_by, row.ended_by].filter((id) => id !== null)))],
   );
   if (!names) return { success: false, error: 'load_failed' };
 
-  const history = rows.data.map((row): WorkLeadHolding => {
+  const history = rows.map((row): WorkLeadHolding => {
     const record = names.records.get(row.employee_record_id);
     return {
       id: row.id,

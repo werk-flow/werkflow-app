@@ -47,6 +47,7 @@ import {
 import type { AssignmentApproval } from '@/lib/qualifications/types';
 import { JOB_BILLING_PARTIES_EMBED, jobBillingPartiesFrom } from '@/lib/billing-parties/server';
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
+import { JOB_WORK_LEADS_EMBED, type WorkLeadHoldingRow } from '@/lib/projects/work-lead-types';
 import {
   loadJobDetailRelations,
   readJobAssigneeProfiles,
@@ -593,9 +594,14 @@ export async function getJobDetails(
   }
 }
 
-export async function getJobByNumber(
-  rawJobNumber: string,
-): Promise<ActionResult<{ job: JobWithDetails; billingParties?: WorkBillingParties | undefined }>> {
+export async function getJobByNumber(rawJobNumber: string): Promise<
+  ActionResult<{
+    job: JobWithDetails;
+    billingParties?: WorkBillingParties | undefined;
+    /** The office's alone: the job's own lead holdings, newest first. */
+    workLeads?: WorkLeadHoldingRow[];
+  }>
+> {
   const parsedJobNumber = jobNumberLookupSchema.safeParse(rawJobNumber);
   if (!parsedJobNumber.success) return { success: false, error: 'job_not_found' };
   const jobNumber = parsedJobNumber.data;
@@ -608,26 +614,30 @@ export async function getJobByNumber(
 
     const { data: jobRow, error: jobError } = await admin
       .from('jobs')
-      .select(`*, ${JOB_BILLING_PARTIES_EMBED}`)
+      .select(`*, ${JOB_BILLING_PARTIES_EMBED}, ${JOB_WORK_LEADS_EMBED}`)
       .eq('organization_id', orgId)
       .eq('job_number', decodeURIComponent(jobNumber))
       // Newest first, so the current version leads whatever cuts the list.
       .order('version', { referencedTable: 'work_billing_parties', ascending: false })
+      .order('started_at', { referencedTable: 'work_leads', ascending: false })
+      .order('id', { referencedTable: 'work_leads' })
       .single();
 
     if (jobError || !jobRow) {
       logReadErrors('getJobByNumber: read failed', jobError);
       return { success: false, error: 'job_not_found' };
     }
-    const { work_billing_parties: billingParties, ...jobData } = jobRow;
+    const { work_billing_parties: billingParties, work_leads: workLeads, ...jobData } = jobRow;
 
-    return await readJobDetails({
+    const details = await readJobDetails({
       admin,
       context: auth.context,
       jobData,
       billingParties,
       operation: 'getJobByNumber',
     });
+    // The lead holdings ride on the job read for the office's page; a field worker never receives them.
+    return details.success && auth.context.isManagerOrAbove ? { ...details, workLeads } : details;
   } catch (error) {
     logError('Unexpected error in getJobByNumber:', error);
     return { success: false, error: 'unexpected_error' };

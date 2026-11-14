@@ -20,12 +20,14 @@ import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
 import { jobDetailHref } from '@/lib/jobs/routes';
-import { getWorkLead } from '@/lib/projects/work-lead-reads';
+import { workLeadPanelFrom } from '@/lib/projects/work-lead-reads';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
   params: Promise<{ jobNumber: string }>;
 }
+
+const WORK_LEAD_NOT_READ = { success: false, error: 'load_failed' } as const;
 
 type ServerSupabase = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -64,9 +66,13 @@ function loadJobDetailReads(
     result.success ? getWorkRequestEntries({ kind: 'job', id: result.job.id }) : null,
   );
   // The „Projektleitung“ of a standalone job; a job of a project shows its project's.
+  // Its holdings ride on the office's job read, so a job without a lead reads nothing more;
+  // a job read without them shows the section's failure.
   const workLeadPromise = jobResultPromise.then((result) =>
     result.success && !result.job.project
-      ? getWorkLead({ targetType: 'job', targetId: result.job.id })
+      ? result.workLeads
+        ? workLeadPanelFrom(activeOrgId, result.workLeads)
+        : WORK_LEAD_NOT_READ
       : null,
   );
 

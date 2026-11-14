@@ -25,6 +25,8 @@ const memberId = '8d000000-0000-4000-8000-000000000006';
 const memberRecord = '8d000000-0000-4000-8000-000000000007';
 const holding = '8d000000-0000-4000-8000-000000000008';
 const foreignHolding = '8d000000-0000-4000-8000-000000000009';
+const standaloneJob = '8d000000-0000-4000-8000-00000000000a';
+const standaloneHolding = '8d000000-0000-4000-8000-00000000000b';
 
 /** What read_work_lead_scope answers for the caller. */
 let leadScope: { projectIds: string[]; jobIds: string[] } | null = { projectIds: [], jobIds: [] };
@@ -60,6 +62,27 @@ const world = installActionWorld({
       execution_state: 'not_started',
       planned_date: null,
     },
+    {
+      id: standaloneJob,
+      organization_id: ORGANIZATION_A,
+      project_id: null,
+      job_number: 'AUF-3',
+      title: 'Wartung',
+      description: null,
+      execution_state: 'not_started',
+      planned_date: null,
+      // The job's own lead holdings, as the job read embeds them.
+      work_leads: [
+        {
+          id: standaloneHolding,
+          employee_record_id: memberRecord,
+          started_at: '2026-11-03T08:00:00Z',
+          started_by: CALLER_ID,
+          ended_at: null,
+          ended_by: null,
+        },
+      ],
+    },
   ],
   job_instruction_items: [
     {
@@ -72,7 +95,15 @@ const world = installActionWorld({
       sort_order: 1,
     },
   ],
-  job_assignments: [],
+  // The caller works on the standalone job, so its field read succeeds.
+  job_assignments: [
+    {
+      id: '8d000000-0000-4000-8000-0000000000b1',
+      organization_id: ORGANIZATION_A,
+      job_id: standaloneJob,
+      user_id: CALLER_ID,
+    },
+  ],
   work_artifacts: [],
   work_artifact_revisions: [],
   work_leads: [
@@ -137,7 +168,10 @@ world.rpc = ({ name, args }) => {
 };
 
 const { endWorkLead, nameWorkLead } = await import('@/lib/projects/work-lead-actions');
-const { getLedProjectOverview, getWorkLead } = await import('@/lib/projects/work-lead-reads');
+const { getLedProjectOverview, getWorkLead, workLeadPanelFrom } = await import(
+  '@/lib/projects/work-lead-reads'
+);
+const { getJobByNumber } = await import('@/lib/jobs/actions');
 
 const initialDatabase = databaseSnapshot(world);
 const notAuthorized = { success: false, error: 'not_authorized' };
@@ -204,6 +238,23 @@ assert.deepEqual(
   [[holding, 'Erika Musterfrau', 'Max Mustermann']],
 );
 assert.equal(panel.panel.current?.id, holding);
+
+// A standalone job's lead holdings ride on the job read for the office
+// alone: the field worker on the job gets the job without them.
+signInAs(world, 'employee');
+const fieldJob = await getJobByNumber('AUF-3');
+assert.ok(fieldJob.success, JSON.stringify(fieldJob));
+assert.equal('workLeads' in fieldJob, false, 'a field worker reads the job lead holdings');
+signInAs(world, 'buero');
+const officeJob = await getJobByNumber('AUF-3');
+assert.ok(officeJob.success, JSON.stringify(officeJob));
+assert.ok(officeJob.workLeads, 'the office job read carries no lead holdings');
+const jobPanel = await workLeadPanelFrom(ORGANIZATION_A, officeJob.workLeads);
+assert.ok(jobPanel.success, JSON.stringify(jobPanel));
+assert.deepEqual(
+  jobPanel.panel.history.map((entry) => [entry.id, entry.name, entry.startedByName]),
+  [[standaloneHolding, 'Erika Musterfrau', 'Max Mustermann']],
+);
 
 // Büro names and ends with the caller's own organization and identity; a
 // foreign organization's project is refused by the database as not found.
