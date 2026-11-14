@@ -184,7 +184,7 @@ export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = 
     'app/(app)/inventar/',
     'components/loading-states/inventar-page-skeleton.tsx',
   ],
-  commercial: ['lib/price-catalog/', 'components/angebote/', 'app/(app)/angebote/'],
+  commercial: ['lib/price-catalog/', 'lib/offers/', 'components/angebote/', 'app/(app)/angebote/'],
   service: [
     'lib/installed-equipment/',
     'lib/service-cases/',
@@ -411,6 +411,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
+  ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
   ['maintenance-missed-visits', ['maintenance_missed_visits.sql'], ['service', 'work']],
   [
     'inventory-ledger',
@@ -432,6 +433,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['inventory'],
   ],
   ['leistung-prices', ['leistung_prices.sql'], ['commercial']],
+  ['offers', ['offers.sql', 'offers_concurrency.sql'], ['commercial', 'customers']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],

@@ -25,6 +25,19 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no bytes; renders a fixed sample with the organization name and no stored record; private no-store responses',
     mustCall: ['resolveActionContext', 'getCachedMemberships', 'renderBusinessDocument'],
   },
+  'app/api/musterrechnung/route.ts': {
+    authorization:
+      'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no PDF; builds a fixed sample with the organization profile and letterhead and no stored record, sends the ZUGFeRD PDF only when the EN 16931 rules pass its XML; private no-store responses',
+    mustCall: [
+      'withReadRequest',
+      'resolveActionContext',
+      'getCachedMemberships',
+      'readCompanyProfile',
+      'readOfferLetterhead',
+      'checkEn16931',
+      'renderEInvoicePdf',
+    ],
+  },
   'app/api/time-tracking-state/route.ts': {
     authorization:
       'verified cookie identity and matching active organization before delegating to existing self-clock and membership-checked active-job readers; validated kind/UUID, private no-store responses',

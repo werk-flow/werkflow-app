@@ -53,6 +53,9 @@ export const DIALOG_INVENTORY = {
   'components/shared/unsent-work-prompt.tsx#DiscardConfirmation|Nicht Übertragenes verwerfen?': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-discard' }],
   },
+  'components/angebote/create-offer-dialog.tsx#CreateOfferDialog|Angebot anlegen': {
+    audits: [{ route: '/angebote', role: 'admin', opener: 'commercial.offer' }],
+  },
   "components/angebote/leistungen/leistung-dialog.tsx#LeistungDialog|{entry ? 'Leistung bearbeiten' : 'Leistung anlegen'}":
     {
       audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung' }],
@@ -618,6 +621,10 @@ export const DIALOG_INVENTORY = {
   'components/auftraege/project-detail/project-jobs-assignment-dialog.tsx#ProjectJobsAssignmentDialog|{title}':
     {
       audits: [{ route: '/auftraege/projekt/[projectNumber]', role: 'admin', opener: 'work.project-jobs' }],
+    },
+  "components/auftraege/project-detail/work-lead-section.tsx#WorkLeadDialog|{current ? 'Projektleitung ändern' : 'Projektleitung benennen'}":
+    {
+      audits: [{ route: '/auftraege/projekt/[projectNumber]', role: 'admin', opener: 'work.name-work-lead' }],
     },
   'components/auftraege/shared/client-assignment-dialog.tsx#ClientAssignmentDialog|{title}': {
     audits: [{ route: '/auftraege/[jobNumber]', role: 'admin', opener: 'work.assign-client' }],

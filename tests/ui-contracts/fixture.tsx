@@ -67,6 +67,7 @@ import {
   InventoryMovementsContractFixture,
 } from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
+import { OffersContractFixture } from './offers-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -631,6 +632,8 @@ createRoot(root).render(
     <RequestAttachContractFixture />
   ) : window.uiContractFixture === 'billing-parties' ? (
     <BillingPartiesContractFixture />
+  ) : window.uiContractFixture === 'offers' ? (
+    <OffersContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

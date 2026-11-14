@@ -74,6 +74,8 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
   '/mitarbeiter/[userId]': 'personnel',
   '/dokumente': 'documents',
   '/inventar': 'inventory',
+  '/angebote': 'commercial',
+  '/angebote/[offerId]': 'commercial',
   '/angebote/leistungen': 'commercial',
   '/service/faelle': 'service',
   '/service/anlagen': 'service',
