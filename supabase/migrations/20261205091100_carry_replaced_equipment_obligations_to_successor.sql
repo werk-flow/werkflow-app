@@ -115,11 +115,14 @@ $$;
 -- item whose revision covers the old equipment moves onto it with its dates
 -- unchanged; that includes items an earlier plan revision left open. When two
 -- such items share a cadence date, the one with a visit (else the newer) moves
--- and the other is superseded with a reason, so the date stays due exactly
--- once. Completed and closed due work stays on its revision. A planned-date
+-- and an open duplicate is superseded with a reason, so the date stays due
+-- exactly once; a second visit for the date refuses the replacement
+-- ('installed_equipment_replacement_duplicate_visit'). Completed and closed due work stays on its revision. A planned-date
 -- revision continues the current revision's cadence one interval after its
--- latest due date of any status, so a later generation neither recreates
--- settled work nor skips a date of that cadence; an actual-completion
+-- latest due date of any status, and never before that revision's own first
+-- due date, so a later generation neither recreates settled work nor skips a
+-- date of that cadence, also when a correction carries the plan back; an
+-- actual-completion
 -- revision starts at the earliest moved date, else at the latest completion's
 -- next date. The caller holds the plan's row lock and checked the manager role.
 create function app_private.carry_maintenance_plan_to_equipment(
@@ -153,7 +156,12 @@ begin
   where revision.id = p_plan.current_revision_id
     and revision.organization_id = p_plan.organization_id;
   if v_revision.next_due_basis = 'planned_due_date' then
-    select app_private.add_months_clamped(max(due_work.original_due_date), v_revision.interval_months)
+    -- Never before the current revision's own start: a carried revision may
+    -- hold only moved older items below its saved boundary.
+    select greatest(
+      app_private.add_months_clamped(max(due_work.original_due_date), v_revision.interval_months),
+      v_revision.first_due_date
+    )
     into v_first_due
     from public.maintenance_due_work due_work
     where due_work.organization_id = p_plan.organization_id
@@ -206,7 +214,7 @@ begin
   where plan.id = p_plan.id and plan.organization_id = p_plan.organization_id;
 
   for v_due in
-    select due_work.id, due_work.original_due_date
+    select due_work.id, due_work.original_due_date, due_work.status
     from public.maintenance_due_work due_work
     join public.maintenance_plan_revision_equipment link
       on link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
@@ -226,6 +234,10 @@ begin
         and moved.maintenance_plan_revision_id = v_revision_id
         and moved.original_due_date = v_due.original_due_date
     );
+    -- Two visits for one date: superseding one would strand its visit job.
+    if v_duplicate and v_due.status = 'visit_created' then
+      raise exception 'installed_equipment_replacement_duplicate_visit';
+    end if;
     perform set_config('app.maintenance_write', 'true', true);
     if v_duplicate then
       update public.maintenance_due_work due_work set

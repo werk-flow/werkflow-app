@@ -3,10 +3,11 @@
 -- 20261205091100_carry_replaced_equipment_obligations_to_successor.sql):
 -- an overdue open due item that an earlier plan revision left open stays open
 -- with its due date on the successor's new plan revision, completed due work
--- stays on the old revision and a later generation does not recreate it even
--- when it is newer than the open item, a plan left
+-- stays on the old revision, and the carried revision (also the one a
+-- correction saves) starts after it even when it is newer than the open item,
+-- so a later generation cannot recreate it, a plan left
 -- behind needs a reason, a stale or incomplete choice refuses the whole
--- replacement, a later generation recreates no past due work, the successor
+-- replacement, the successor
 -- reads the predecessor's history, a correction carries everything back, and
 -- only the service role executes the functions.
 -- Runs inside one transaction against the local stack and rolls back.
@@ -169,7 +170,7 @@ begin
       'overlapReason', 'Abgasmessung getrennt',
       'equipmentIds', jsonb_build_array('46600000-0000-4000-8000-000000000040')),
     'Termin verschoben', '46600000-0000-4000-8000-000000000001', '46600000-0000-4000-8000-000000000057',
-    (pg_temp.berlin_today() + interval '8 months')::date
+    (pg_temp.berlin_today() + interval '6 months')::date
   );
   insert into pg_temp.world
   select v_version_id, '46600000-0000-4000-8000-000000000040', '46600000-0000-4000-8000-000000000042',
@@ -298,12 +299,8 @@ begin
      or v_overdue.maintenance_plan_revision_id is distinct from v_revision.id then
     raise exception 'the overdue due item did not stay open with its due date on the new revision';
   end if;
-  if v_revision.first_due_date is distinct from (
-       select app_private.add_months_clamped(max(due_work.original_due_date), 12)
-       from public.maintenance_due_work due_work
-       where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
-         and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000050'
-         and due_work.original_due_date > pg_temp.berlin_today())
+  -- The revised cadence starts in 200 days and has generated nothing yet.
+  if v_revision.first_due_date is distinct from pg_temp.berlin_today() + 200
      or v_revision.effective_from_date is distinct from pg_temp.berlin_today() then
     raise exception 'the carried revision does not continue after the current revision''s latest due date';
   end if;
@@ -392,29 +389,6 @@ begin
   end if;
 end $$;
 
--- A later generation recreates no past due work on the carried revision.
-do $$
-declare v_plan public.maintenance_plans%rowtype;
-begin
-  select * into strict v_plan from public.maintenance_plans plan
-  where plan.organization_id = '46600000-0000-4000-8000-000000000010'
-    and plan.id = '46600000-0000-4000-8000-000000000050';
-  perform public.generate_maintenance_due_work(
-    '46600000-0000-4000-8000-000000000010', v_plan.id, v_plan.version,
-    (pg_temp.berlin_today() + interval '18 months')::date,
-    '46600000-0000-4000-8000-000000000001', '46600000-0000-4000-8000-000000000076'
-  );
-  if exists (
-    select 1 from public.maintenance_due_work due_work
-    where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
-      and due_work.maintenance_plan_id = v_plan.id
-      and due_work.maintenance_plan_revision_id = v_plan.current_revision_id
-      and due_work.original_due_date = (select completed_date from pg_temp.world)
-  ) then
-    raise exception 'generation recreated visited due work on the carried revision';
-  end if;
-end $$;
-
 -- The successor reads the predecessor's history, and only that.
 do $$ begin
   if (
@@ -435,6 +409,13 @@ do $$ begin
     raise exception 'the predecessor history read is wrong or crosses organizations';
   end if;
 end $$;
+
+create temporary table carried_start as
+select revision.first_due_date
+from public.maintenance_plans plan
+join public.maintenance_plan_revisions revision on revision.id = plan.current_revision_id
+where plan.organization_id = '46600000-0000-4000-8000-000000000010'
+  and plan.id = '46600000-0000-4000-8000-000000000050';
 
 -- Correcting the replacement carries the plan, even after it was terminated,
 -- and the component back before the successor is voided; the overdue item
@@ -478,6 +459,17 @@ begin
       and component.id = '46600000-0000-4000-8000-000000000042'
   ) is distinct from '46600000-0000-4000-8000-000000000040'::uuid then
     raise exception 'a corrected replacement left an obligation or a component on the voided successor';
+  end if;
+  -- The carried-back revision keeps the carried revision's start, so a later
+  -- generation recreates none of the visited work.
+  if (
+    select revision.first_due_date
+    from public.maintenance_plans plan
+    join public.maintenance_plan_revisions revision on revision.id = plan.current_revision_id
+    where plan.organization_id = '46600000-0000-4000-8000-000000000010'
+      and plan.id = '46600000-0000-4000-8000-000000000050'
+  ) is distinct from (select first_due_date from pg_temp.carried_start) then
+    raise exception 'a corrected replacement moved the plan''s start before the carried revision''s boundary';
   end if;
 end $$;
 

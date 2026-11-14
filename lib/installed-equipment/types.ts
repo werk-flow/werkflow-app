@@ -93,6 +93,8 @@ const EQUIPMENT_MUTATION_ERROR_MESSAGES: Record<string, string> = {
   installed_equipment_document_link_not_found:
     'Die Dokumentverknüpfung wurde nicht gefunden oder bereits entfernt.',
   installed_equipment_stale_version: 'Die Anlage wurde inzwischen geändert. Bitte lade die Seite neu.',
+  installed_equipment_replacement_duplicate_visit:
+    'Ein Wartungsplan hat zwei Besuche für dieselbe Fälligkeit. Schließe zuerst einen davon ab, dann kannst du die Anlage ersetzen.',
   installed_equipment_replacement_plan_reason_required:
     'Bitte begründe, warum der Wartungsplan beim Vorgänger bleibt.',
   maintenance_template_version_unavailable:

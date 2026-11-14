@@ -94,6 +94,7 @@ const EQUIPMENT_ERROR_CODES = [
   'installed_equipment_document_version_invalid',
   'installed_equipment_document_link_not_found',
   'installed_equipment_replacement_plan_reason_required',
+  'installed_equipment_replacement_duplicate_visit',
   'maintenance_template_version_unavailable',
 ] as const;
 
