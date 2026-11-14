@@ -58,16 +58,22 @@ const INSTEAD = [
   'For Vercel metadata and counts use the Vercel MCP connector.',
 ].join(' ');
 
+/** What may stand between a program and its words: spaces, quotes, commas or an opening bracket. */
+const GAP = `['",\\s[(]+`;
+
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 
 /**
  * Raw text that names a refused call: the program, with an optional `@version`, and its sign-in
  * words, apart by spaces, quotes, commas or an opening bracket, so `['gh', 'auth', 'login']` and
- * `execFileSync('gh', ['auth', 'login'])` in a script count too.
+ * `execFileSync('gh', ['auth', 'login'])` in a script count too, also with options between them
+ * (`supabase --debug login`).
  * Not `vercel.json`, `.vercel/`, `@vercel/functions` or `node_modules/vercel/`.
  */
 function mentionPattern(cli: AccountCli): RegExp {
-  const verbs = cli.verbs.map((level) => `['",\\s[(]+(?:${level.map(escaped).join('|')})`).join('');
+  const verbs = cli.verbs
+    .map((level) => `${GAP}(?:-[^\\s'",\\])]*${GAP})*(?:${level.map(escaped).join('|')})`)
+    .join('');
   return new RegExp(
     `(?<![\\w@.$-])(?:${cli.names.map(escaped).join('|')})(?:@[\\w.^~-]*)?${verbs}(?![\\w.\\-/])`,
     'g',
@@ -88,8 +94,8 @@ function cliOf(text: string): AccountCli | undefined {
 
 /**
  * Whether the arguments start with the sign-in subcommand: each level's word is the first
- * positional argument, past flags and the words that may be a flag's value. A word the shell
- * expands there may be the subcommand, so it counts as one.
+ * positional argument, past flags and the words that may be a flag's value. Any other word the
+ * shell expands there may be the subcommand, so it counts as one.
  */
 function startsWith(args: readonly ShellWord[], verbs: AccountCli['verbs']): boolean {
   const [level, ...rest] = verbs;
@@ -97,12 +103,12 @@ function startsWith(args: readonly ShellWord[], verbs: AccountCli['verbs']): boo
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (!arg) break;
-    if (arg.expands) return true;
     if (level.some((verb) => arg.text === verb || arg.text.startsWith(`${verb}:`)))
       return startsWith(args.slice(index + 1), rest);
     if (arg.text.startsWith('-')) continue;
     const previous = args[index - 1]?.text ?? '';
     if (previous.startsWith('-') && !previous.includes('=')) continue;
+    if (arg.expands) return true;
     return false;
   }
   return false;
@@ -130,14 +136,18 @@ const DATA_PROGRAMS = new Set([...INERT_PROGRAMS, 'which', 'type']);
 
 /**
  * Whether a command may run its input as commands, so a data program's words piped into it are no
- * data: a shell without a `-c` script, `xargs` or `source`, also behind a wrapper (`env bash`).
+ * data: a shell without a `-c` script or a script file, `xargs` or `source`, also behind a wrapper
+ * (`env bash`).
  */
 function runsInput(words: ShellWord[]): boolean {
   if (program(words)?.name === '.') return true;
   const names = words.map((word) => word.text.slice(word.text.lastIndexOf('/') + 1));
   if (names.some((name) => name === 'xargs' || name === 'source')) return true;
   const shell = names.findIndex((name) => SHELLS.has(name));
-  return shell !== -1 && !words.slice(shell + 1).some((word) => SCRIPT_FLAG.test(word.text));
+  return (
+    shell !== -1 &&
+    !words.slice(shell + 1).some((word) => SCRIPT_FLAG.test(word.text) || !word.text.startsWith('-'))
+  );
 }
 
 /** Mentions in raw words, without their substitutions, whose commands are read on their own. */
@@ -159,7 +169,8 @@ function scan(command: string, depth = 0): Scan | undefined {
   if (!reading) return undefined;
   const refused: string[] = [];
   let accounted = reading.dataBodies.reduce((sum, body) => sum + mentions(body), 0);
-  const piped = reading.commands.some(runsInput);
+  // Only a pipe hands a data program's output to a command that may run it.
+  const piped = /(?<![|])\|(?![|])/.test(command) && reading.commands.some(runsInput);
   for (const words of reading.commands) {
     const call = program(words);
     const script =

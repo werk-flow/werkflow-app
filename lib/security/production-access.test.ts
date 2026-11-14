@@ -188,6 +188,15 @@ test('a Vercel tool that returns a decrypted environment value is refused', () =
     ['filter_project_envs', { idOrName: 'prj_a', decrypt: true }],
   ] as const)
     expect(refusal(`${VERCEL}${tool}`, input), tool).toContain('returns an environment value');
+  // A connected app prefixes its tool names with the app's.
+  for (const tool of ['vercel_get_project_env', 'vercel_get_shared_env_var'])
+    expect(refusal(`mcp__codex_apps__${tool}`, { id: 'env_a' }), tool).toContain(
+      'returns an environment value',
+    );
+  expect(
+    refusal('mcp__codex_apps__vercel_filter_project_envs', { idOrName: 'prj_a', decrypt: 'true' }),
+  ).toContain('returns an environment value');
+  expect(refusal('mcp__codex_apps__vercel_get_runtime_logs', scope)).toContain('returns log text');
   for (const decrypt of [undefined, 'false', false])
     expect(
       refusal(`${VERCEL}filter_project_envs`, { idOrName: 'prj_a', decrypt }),

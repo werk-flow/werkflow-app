@@ -291,7 +291,10 @@ function observabilityQueryRefusal(input: unknown): string | undefined {
 const VALUE_TOOLS = new Set(['get_project_env', 'get_shared_env_var']);
 
 /** Why a Vercel MCP tool call would return PROD log text, request data or a secret value, or undefined. */
-function vercelLogToolRefusal(server: string, tool: string, input: unknown): string | undefined {
+function vercelLogToolRefusal(server: string, connectorTool: string, input: unknown): string | undefined {
+  // A connected-app server names its tools after the app: `mcp__codex_apps__vercel_get_project_env`.
+  const vercel = /vercel/i.test(server) || /^vercel_/i.test(connectorTool);
+  const tool = connectorTool.replace(/^vercel_/i, '');
   const refuse = (why: string) => `Refused: ${why} ${LOGS_INSTEAD}`;
   const field = (name: string): unknown =>
     typeof input === 'object' && input !== null ? Reflect.get(input, name) : undefined;
@@ -304,7 +307,7 @@ function vercelLogToolRefusal(server: string, tool: string, input: unknown): str
       `"${tool}" returns an environment value, which may be a production secret; list names only.`,
     );
   const preview = field('environment') === 'preview';
-  const logTool = VERCEL_LOG_TOOLS.has(tool) || (/vercel/i.test(server) && VERCEL_LOG_TOOL_NAME.test(tool));
+  const logTool = VERCEL_LOG_TOOLS.has(tool) || (vercel && VERCEL_LOG_TOOL_NAME.test(tool));
   if (logTool && !(tool === 'get_runtime_logs' && preview))
     return refuse(`"${tool}" returns log text from production, not metadata.`);
   const query = tool === 'create_observability_query' ? observabilityQueryRefusal(input) : undefined;
