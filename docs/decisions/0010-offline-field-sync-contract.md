@@ -333,6 +333,6 @@ Owner decision for werk-flow/werkflow-planning#447. The person's last recorded t
 
 Decided for werk-flow/werkflow-planning#407. It sharpens the time outbox's invariant 6.
 
-- **Sends.** Each chain, one person's events in one organization, has a lock of its own. A discard or deletion waits only for a send of a chain that holds an event it deletes, never for another person's or organization's.
+- **Sends.** Each chain, one person's events in one organization, has a lock of its own. A discard or deletion waits only for a send of a chain that holds an event it deletes, never for another person's or organization's. Each also holds the one lock every chain shared before, in shared mode, so a tab open across a deployment, which still takes that lock alone, never sends or deletes beside this version.
 - **Open online calls.** A shown action still in the kept store, behind an open online call or a stop, is deleted there. It waits only for its own online call, never for another action's.
 - **A stop that appears after the question opened.** It no longer fails „Verwerfen“. What the question showed goes, the stop stays, and the question names it as work that came after the question.

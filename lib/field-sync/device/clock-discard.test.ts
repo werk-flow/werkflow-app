@@ -170,6 +170,34 @@ async function isolatedTests(): Promise<void> {
       }
     });
 
+    test('waits for a send of a tab still on the earlier version, which holds the one lock every chain shared (S1)', async () => {
+      await holdClock(WORKER, () => undefined);
+      keepClockAction(start(WORKER, '50000000-0000-4000-8000-0000000000e6', '2026-11-11T07:00:00.000Z'), '');
+      await takeInKept();
+      const shown = await timeUnsentSource.summarize('session');
+      // A tab open across the deployment sends this chain under the earlier lock; the server has not answered.
+      let answer = (): void => undefined;
+      const earlierSend = navigator.locks.request(
+        'werkflow-time-outbox',
+        () =>
+          new Promise<void>((resolve) => {
+            answer = resolve;
+          }),
+      );
+
+      let discarded = false;
+      const discarding = timeUnsentSource.discard('session', shownIds(shown)).then(() => {
+        discarded = true;
+      });
+      try {
+        expect(await settles(() => discarded)).toBe(false);
+      } finally {
+        answer();
+        await Promise.all([earlierSend, discarding]);
+      }
+      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+    });
+
     test('deletes an action kept behind another chain’s open online call without waiting for that call (F30)', async () => {
       await holdClock(WORKER, () => undefined);
       // Another tab of the person, working in the other organization, waits for its online call.

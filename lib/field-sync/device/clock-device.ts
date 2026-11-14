@@ -42,11 +42,22 @@ const TAKE_IN_LOCK = 'werkflow-kept-clock-actions';
 const UNSENT_KIND = 'time';
 
 /**
- * The lock of one chain: its sends and the deletions of its events take turns across the origin's
- * tabs. Another person's or organization's chain never waits for it.
+ * The one lock every chain shared before each had its own. A tab open across a deployment still
+ * sends and deletes under it alone, so this version holds it too, shared: an older tab's send or
+ * deletion then never overlaps one of this version, and this version's chains never wait on each other.
  */
-function chainLock({ userId, organizationId }: OutboxHolder): string {
-  return `werkflow-time-outbox:${userId}:${organizationId}`;
+const EARLIER_SEND_LOCK = 'werkflow-time-outbox';
+
+/**
+ * Runs `work` on the holder's chain: its sends and the deletions of its events take turns across the
+ * origin's tabs. Another person's or organization's chain never waits for it.
+ */
+function onChain<T>({ userId, organizationId }: OutboxHolder, work: () => Promise<T>): Promise<T> {
+  return exclusively(`werkflow-time-outbox:${userId}:${organizationId}`, () =>
+    typeof navigator.locks?.request === 'function'
+      ? navigator.locks.request(EARLIER_SEND_LOCK, { mode: 'shared' }, work)
+      : work(),
+  );
 }
 
 /** Hears what the outbox holds for this tab's holder; `holdEnded` when another tab's wipe ended the hold. */
@@ -176,7 +187,7 @@ export async function removeShownTimeEvents(
   operationIds: readonly string[],
   resume: LiveClockState | null,
 ): ReturnType<typeof removeTimeEvents> {
-  return exclusively(chainLock(holder), async () => {
+  return onChain(holder, async () => {
     // A kept action this version cannot read is shown under its key; the person deletes it here too.
     removeUnreadableKeptActions(operationIds);
     return removeTimeEvents(holder, operationIds, resume);
@@ -296,7 +307,7 @@ export async function sendOwnTimeEvents(): Promise<void> {
   const taken = await takeInKept();
   const hold = clockHolder();
   for (const holder of await holdersToSend())
-    await exclusively(chainLock(holder), () =>
+    await onChain(holder, () =>
       sendTimeOutbox(holder, {
         fetch: (url, init) => fetch(url, init),
         now: () => new Date(),
