@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { repositoryRoot } from '../conventions/product-sources';
 import {
   INVENTORY_UNITS,
   type InventoryUnitCode,
@@ -55,6 +58,9 @@ const ADDED_ALIASES: Record<string, InventoryUnitCode> = {
   Satz: 'set',
   'Stk.': 'piece',
   'Std.': 'hour',
+  Stange: 'rod',
+  Stg: 'rod',
+  Ring: 'coil',
 };
 
 describe('normalizeInventoryUnitInput', () => {
@@ -71,7 +77,7 @@ describe('normalizeInventoryUnitInput', () => {
   test('returns unknown for text it cannot map and for no text, never Stück', () => {
     for (const input of [
       'Bogen',
-      'Stange',
+      'Fass',
       '.',
       'm..',
       'constructor',
@@ -93,5 +99,31 @@ describe('the unit list', () => {
     expect(OFFERED_INVENTORY_UNITS.map((unit) => unit.code)).toEqual(
       INVENTORY_UNITS.filter((unit) => !unit.retired).map((unit) => unit.code),
     );
+  });
+});
+
+// The database's unit guard holds its own copy of the list, because a trigger
+// cannot read this file. The newest migration that defines the guard is the one
+// in force.
+function databaseUnitCodes(): string[] {
+  const directory = join(repositoryRoot, 'supabase/migrations');
+  const newest = readdirSync(directory)
+    .filter((file) => file.endsWith('.sql'))
+    .sort()
+    .map((file) => readFileSync(join(directory, file), 'utf8'))
+    .filter((sql) => /function\s+app_private\.guard_inventory_item_unit\s*\(/.test(sql))
+    .at(-1);
+  const list = newest
+    ? /v_units\s+constant\s+text\[\]\s*:=\s*array\[([^\]]*)\]/.exec(newest)?.[1]
+    : undefined;
+  return list === undefined ? [] : [...list.matchAll(/'([^']*)'/g)].map((match) => match[1] ?? '');
+}
+
+describe('the database unit list', () => {
+  test('the unit guard of the newest migration allows exactly the units of this list', () => {
+    expect(
+      databaseUnitCodes().toSorted(),
+      'Add or keep each unit in a migration that replaces app_private.guard_inventory_item_unit',
+    ).toEqual(INVENTORY_UNITS.map((unit) => unit.code).toSorted());
   });
 });

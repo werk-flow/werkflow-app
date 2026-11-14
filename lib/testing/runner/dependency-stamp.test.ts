@@ -7,11 +7,14 @@ import { z } from 'zod';
 import { dependencyStampProblem, writeDependencyStamp } from './dependency-stamp';
 
 const INSTALL = '`bun install --frozen-lockfile`';
+const PIN = join('lib', 'inventory', 'wholesaler-reader-pin.json');
 
 function checkout(): string {
   const root = mkdtempSync(join(tmpdir(), 'werkflow-dependency-stamp-'));
   mkdirSync(join(root, 'node_modules'));
   writeFileSync(join(root, 'bun.lock'), '{ "lockfileVersion": 1, "packages": {} }\n');
+  mkdirSync(join(root, 'lib', 'inventory'), { recursive: true });
+  writeFileSync(join(root, PIN), `{ "commit": "${'a'.repeat(40)}" }\n`);
   return root;
 }
 
@@ -30,6 +33,20 @@ test('a lockfile that changed after the install stops the check with the command
   }
 });
 
+test('a moved wholesaler-reader pin stops the check with the command, and the install clears it', () => {
+  const root = checkout();
+  try {
+    writeDependencyStamp(root);
+    // A merge of main moves the reader to another commit that vendor/ does not hold yet.
+    writeFileSync(join(root, PIN), `{ "commit": "${'b'.repeat(40)}" }\n`);
+    expect(dependencyStampProblem(root)).toContain(INSTALL);
+    writeDependencyStamp(root);
+    expect(dependencyStampProblem(root)).toBeUndefined();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('node_modules without a stamp stops the check with the command', () => {
   const root = checkout();
   try {
@@ -40,11 +57,14 @@ test('node_modules without a stamp stops the check with the command', () => {
   }
 });
 
-test('every install stamps, and the checks load the stamp test before any package', () => {
+test('every install fetches the reader, then stamps, and the checks load the stamp test before any package', () => {
   const scripts = z
     .object({ scripts: z.record(z.string(), z.string()) })
     .parse(JSON.parse(readFileSync(resolve(import.meta.dir, '../../../package.json'), 'utf8'))).scripts;
-  expect(scripts.postinstall).toBe('bun scripts/stamp-dependencies.ts');
+  // The stamp comes last, so a failed reader install leaves no stamp and the checks refuse.
+  expect(scripts.postinstall).toBe(
+    'bun scripts/fetch-wholesaler-reader.ts && bun scripts/stamp-dependencies.ts',
+  );
   for (const name of ['check:changed', 'test:verify', 'test:plan'])
     expect(scripts[name], name).toStartWith('bun --preload ./scripts/require-installed-dependencies.ts ');
   const preload = readFileSync(
