@@ -20,9 +20,9 @@ const COLLEAGUE_ID = '10000000-0000-4000-8000-0000000000bb';
 const DRAFT_ID = '60000000-0000-4000-8000-000000000001';
 const updatedAt = '2026-11-12T08:30:00.000Z';
 
-/** Fixes the page's date on the drafts' day, timers still running: a week on, they count as old. */
+/** Fixes the page's date half an hour after the drafts' last change, timers still running: a week on, they count as old. */
 async function onDraftsDay(page: Page): Promise<void> {
-  await page.clock.setFixedTime(new Date('2026-11-12T09:00:00.000Z'));
+  await page.clock.setFixedTime(new Date(Date.parse(updatedAt) + 30 * 60_000));
 }
 
 type DraftRecord = {
