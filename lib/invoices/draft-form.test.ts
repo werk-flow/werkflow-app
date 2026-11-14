@@ -72,8 +72,7 @@ describe('a draft totals its lines through the invoice core', () => {
       },
     ]);
     expect(amounts.lineNetCents).toEqual([10800, 5, 9, -4500]);
-    // `+ 0` reads the core's -0 (a negative basis at 0 %) as the 0 it stores.
-    expect(amounts.taxSubtotals.map((row) => ({ ...row, taxCents: row.taxCents + 0 }))).toEqual([
+    expect(amounts.taxSubtotals).toEqual([
       { tax: { category: 'S', rateBasisPoints: 1900 }, basisCents: 10809, taxCents: 2054 },
       { tax: { category: 'S', rateBasisPoints: 700 }, basisCents: 5, taxCents: 0 },
       { tax: { category: 'Z' }, basisCents: -4500, taxCents: 0 },

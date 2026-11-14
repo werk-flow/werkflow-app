@@ -2,31 +2,16 @@
 
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
+import { SearchableListSkeleton } from '@/components/shared/searchable-list-skeleton';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
 import { INVOICE_COLUMNS } from './invoices-columns';
 
 /** The list page's subtitle, which its route skeleton shows too. */
 export const INVOICES_SUBTITLE = 'Jede Rechnung mit Kunde, Rechnungsempfänger und Betrag.';
 
-/** Toolbar, count and rows. Loaded rows open their invoice, so skeleton rows hover too. */
+/** Toolbar, count and rows of the list. */
 export function InvoicesListSkeleton() {
-  return (
-    <>
-      <div className="mb-4 flex flex-col gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Skeleton className="h-8 w-full sm:w-48" />
-          <div className="flex min-w-0 items-center gap-2 sm:flex-1 sm:justify-end">
-            <Skeleton className="h-8 min-w-0 flex-1 sm:max-w-xs" />
-            <Skeleton className="size-8" />
-          </div>
-        </div>
-        <Skeleton className="h-4 w-24" />
-      </div>
-      <SkeletonList interactive className="md:hidden" />
-      <SkeletonTable columns={INVOICE_COLUMNS} interactive className="hidden md:block" />
-    </>
-  );
+  return <SearchableListSkeleton columns={INVOICE_COLUMNS} />;
 }
 
 export function InvoicesPageSkeleton() {

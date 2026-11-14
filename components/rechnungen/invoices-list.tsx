@@ -9,6 +9,7 @@ import { ColumnsTableHeader } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { formatEuroCents } from '@/lib/document-rendering/format';
 import { INVOICE_STATUS_LABELS, type InvoiceListEntry, type InvoiceStatus } from '@/lib/invoices/types';
+import { ClientRecipientLine } from '@/components/shared/client-recipient-line';
 import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import { formatGermanDate } from '@/lib/utils';
 import { INVOICE_COLUMNS } from './invoices-columns';
@@ -26,18 +27,6 @@ export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
 /** A draft has no number until it is issued. */
 function numberLabel(entry: InvoiceListEntry): string {
   return entry.invoiceNumber ?? 'Ohne Nummer';
-}
-
-/** The customer, and the Rechnungsempfänger when another customer gets the invoice. */
-function ClientLine({ entry }: { entry: InvoiceListEntry }) {
-  return (
-    <>
-      <p className="truncate">{entry.clientName}</p>
-      {entry.recipientName && (
-        <p className="truncate text-xs text-muted-foreground">Rechnung an {entry.recipientName}</p>
-      )}
-    </>
-  );
 }
 
 /** Desktop table; a row opens the invoice and prefetches it on intent. */
@@ -67,7 +56,7 @@ export function InvoicesTable({ entries }: { entries: readonly InvoiceListEntry[
                 </Link>
               </TableCell>
               <TableCell className="max-w-0">
-                <ClientLine entry={entry} />
+                <ClientRecipientLine clientName={entry.clientName} recipientName={entry.recipientName} />
               </TableCell>
               <TableCell>
                 <InvoiceStatusBadge status={entry.status} />

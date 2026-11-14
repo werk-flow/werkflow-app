@@ -18,7 +18,8 @@ function taxCentsOf(basisCents: number, rateBasisPoints: number): number {
   const doubled = Math.abs(basisCents) * rateBasisPoints * 2 + 10000;
   if (!Number.isSafeInteger(doubled)) throw new RangeError('The tax basis is too large.');
   const rounded = Math.floor(doubled / 20000);
-  return basisCents < 0 ? -rounded : rounded;
+  // A negative basis whose tax rounds to nothing owes 0, never -0.
+  return basisCents < 0 && rounded > 0 ? -rounded : rounded;
 }
 
 /** One breakdown row per category and rate; an exemption keeps one reason. */
