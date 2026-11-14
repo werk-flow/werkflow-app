@@ -14,6 +14,11 @@ export const WHOLESALER_IMPORT_MAX_FILES = 10;
 export const WHOLESALER_IMPORT_MAX_FILE_BYTES = 250 * 1024 * 1024;
 /** The staged lines one call carries at most. */
 export const WHOLESALER_STAGE_MAX_LINES = 2000;
+/**
+ * The lines one delivery stages at most. A line's ordinal stays below it and
+ * is unique in its batch, so no number of parts grows a batch past it.
+ */
+export const WHOLESALER_IMPORT_MAX_LINES = 2_000_000;
 /** A catalog search needs this many characters, so its index can narrow it. */
 export const SUPPLIER_CATALOG_SEARCH_MIN_LENGTH = 3;
 /** The catalog rows one search shows; more matches are reported, never cut silently. */
@@ -53,26 +58,29 @@ export const openWholesalerImportInputSchema = z.object({
 export type OpenWholesalerImportInput = z.infer<typeof openWholesalerImportInputSchema>;
 
 /** One staged line, in the database's column names, as `stage_supplier_catalog_import_lines` takes it. */
-const stagedImportLineSchema = z.object({
-  ordinal: count,
-  kind: z.enum(['article', 'price', 'deletion', 'rejection']),
-  file_name: fileNameSchema,
-  line_number: count,
-  article_number: deliveryField,
-  name: boundedText(500).nullable(),
-  name_addition: boundedText(500).nullable(),
-  unit_text: deliveryField,
-  price_quantity: z.literal(PRICE_QUANTITIES).nullable(),
-  price_kind: z.enum(['list', 'net']).nullable(),
-  price_cents: z.number().int().min(0).max(2_147_483_647).nullable(),
-  rebate_group: deliveryField,
-  main_product_group: deliveryField,
-  product_group: deliveryField,
-  ean: deliveryField,
-  matchcode: deliveryField,
-  reason_code: boundedText(100).nullable(),
-  reason: boundedText(1000).nullable(),
-});
+const stagedImportLineSchema = z
+  .object({
+    ordinal: count.max(WHOLESALER_IMPORT_MAX_LINES - 1),
+    kind: z.enum(['article', 'price', 'deletion', 'rejection']),
+    file_name: fileNameSchema,
+    line_number: count,
+    article_number: deliveryField,
+    name: boundedText(500).nullable(),
+    name_addition: boundedText(500).nullable(),
+    unit_text: deliveryField,
+    price_quantity: z.literal(PRICE_QUANTITIES).nullable(),
+    price_kind: z.enum(['list', 'net']).nullable(),
+    price_cents: z.number().int().min(0).max(2_147_483_647).nullable(),
+    rebate_group: deliveryField,
+    main_product_group: deliveryField,
+    product_group: deliveryField,
+    ean: deliveryField,
+    matchcode: deliveryField,
+    reason_code: boundedText(100).nullable(),
+    reason: boundedText(1000).nullable(),
+  })
+  // The catalog keeps a price kind only with its amount; a lone half would fail the confirm.
+  .refine((line) => (line.price_kind === null) === (line.price_cents === null));
 export type StagedImportLine = z.infer<typeof stagedImportLineSchema>;
 
 export const stageWholesalerImportLinesInputSchema = z.object({

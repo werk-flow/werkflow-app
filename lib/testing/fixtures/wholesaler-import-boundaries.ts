@@ -48,6 +48,7 @@ const world = installActionWorld({
   inventory_supplier_catalog_articles: [{ id: foreignCatalogId, organization_id: ORGANIZATION_B }],
 });
 const imports = await import('@/lib/inventory/wholesaler-import-actions');
+const { WHOLESALER_IMPORT_MAX_LINES } = await import('@/lib/inventory/wholesaler-import-schemas');
 const { adoptSupplierCatalogArticle } = await import('@/lib/inventory/supplier-catalog-actions');
 const { searchSupplierCatalog } = await import('@/lib/inventory/supplier-catalog-search');
 
@@ -149,7 +150,38 @@ assert.deepEqual(
   }),
   { success: false, error: 'invalid_input' },
 );
+// A price kind without its amount would pass the staging and fail the confirm.
+assert.deepEqual(
+  await imports.stageWholesalerImportLines({
+    importId: ownImportId,
+    lines: [{ ...LINE, price_cents: null }],
+  }),
+  { success: false, error: 'invalid_input' },
+);
+// The batch's key is (batch, ordinal), so a bounded ordinal bounds the lines one batch holds, however many parts arrive.
+assert.deepEqual(
+  await imports.stageWholesalerImportLines({
+    importId: ownImportId,
+    lines: [{ ...LINE, ordinal: WHOLESALER_IMPORT_MAX_LINES }],
+  }),
+  { success: false, error: 'invalid_input' },
+);
 assert.equal(world.rpcCalls.length, 0, 'a refused part reached the database');
+
+// The staging and the preview name the batch only together with the caller's
+// organization and actor, so another person's batch of the same organization
+// is not found (supabase/tests/inventory_supplier_catalog.sql proves the refusal).
+refuseForeignIds(world, new Map());
+for (const call of [
+  () => imports.stageWholesalerImportLines({ importId: ownImportId, lines: [LINE] }),
+  () => imports.previewWholesalerImport({ importId: ownImportId }),
+]) {
+  world.rpcCalls.length = 0;
+  await call();
+  assert.equal(world.rpcCalls.length, 1);
+  assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);
+  assert.equal(world.rpcCalls[0]?.args.p_actor_id, CALLER_ID);
+}
 
 // Another organization's batch and catalog row are not found by the one call
 // that carries the caller's organization and actor.

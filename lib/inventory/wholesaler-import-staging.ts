@@ -1,7 +1,7 @@
 import type { ActionResult } from '@/lib/action-result';
 import { normalizeInventoryUnitInput, type InventoryUnitCode } from './units';
 import type { WholesalerReportLine } from './wholesaler-import-lines';
-import type { StagedImportLine } from './wholesaler-import-schemas';
+import { WHOLESALER_IMPORT_MAX_LINES, type StagedImportLine } from './wholesaler-import-schemas';
 import { readWholesalerDelivery, type WholesalerDelivery } from './wholesaler-reader';
 
 // The wholesaler import's browser half: it reads a delivery's files with the
@@ -189,7 +189,7 @@ export function guessUnitMapping(unitTexts: readonly string[]): Record<string, I
 /** What the browser read from a delivery, or why it read nothing. */
 type DeliveryReading = ActionResult<
   { delivery: WholesalerDelivery; lines: StagedImportLine[]; contentHash: string },
-  'reader_unavailable' | 'delivery_unreadable' | 'delivery_empty'
+  'reader_unavailable' | 'delivery_unreadable' | 'delivery_empty' | 'delivery_too_large'
 >;
 
 /**
@@ -213,6 +213,7 @@ export async function readDeliveryFiles(
   if (!reading.installed) return { success: false, error: 'reader_unavailable' };
   const lines = stagedDeliveryLines(reading.delivery);
   if (lines.length === 0) return { success: false, error: 'delivery_empty' };
+  if (lines.length > WHOLESALER_IMPORT_MAX_LINES) return { success: false, error: 'delivery_too_large' };
   return { success: true, delivery: reading.delivery, lines, contentHash: await deliveryContentHash(read) };
 }
 

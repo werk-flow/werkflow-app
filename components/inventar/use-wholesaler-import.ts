@@ -48,6 +48,7 @@ const FAILURE_MESSAGES: Readonly<Partial<Record<string, string>>> = {
   delivery_unreadable:
     'Die Lieferung konnte nicht gelesen werden. Prüfe, ob alle Dateien zu einer Lieferung gehören.',
   delivery_empty: 'Die Dateien enthalten keine Artikel, Preise oder Löschungen.',
+  delivery_too_large: 'Die Lieferung hat mehr als 2 Millionen Zeilen. So viele übernimmt ein Import nicht.',
   invalid_input:
     'Die Lieferung enthält Angaben, die der Import nicht übernehmen kann. Es wurde nichts übernommen.',
   supplier_not_found: 'Diesen Lieferanten gibt es nicht mehr. Wähle einen anderen.',
