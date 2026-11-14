@@ -70,7 +70,9 @@ const offerSchema = z.object({
   openingText: z.string(),
   closingText: z.string(),
   client: party,
-  site: party.extend({ street: z.string(), postalCode: z.string(), city: z.string() }).nullable(),
+  site: party
+    .extend({ street: z.string().nullable(), postalCode: z.string().nullable(), city: z.string().nullable() })
+    .nullable(),
   contact: party.nullable(),
   recipient: party.extend({ address: z.string().nullable() }),
   owner: z

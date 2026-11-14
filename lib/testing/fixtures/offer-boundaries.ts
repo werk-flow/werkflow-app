@@ -91,3 +91,30 @@ assert.deepEqual(
     ['get_offer', ORGANIZATION_A],
   ],
 );
+
+// A site may lack address parts (client_sites.street, postal_code and city allow null):
+// its offer still reads, and the header names what the site has.
+const { readOffer } = await import('@/lib/offers/reads');
+world.rpc = ({ name }) =>
+  name === 'get_offer'
+    ? {
+        data: {
+          id: ownOfferId,
+          offerNumber: 'ANG-2026-1',
+          title: 'Heizungstausch',
+          status: 'entwurf',
+          validUntil: '2026-12-14',
+          openingText: '',
+          closingText: '',
+          client: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH' },
+          site: { id: ownClientId, name: 'Lindenhof 3', street: null, postalCode: '12345', city: null },
+          contact: null,
+          recipient: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH', address: null },
+          owner: null,
+          work: null,
+        },
+        error: null,
+      }
+    : { data: null, error: null };
+const sparse = await readOffer(ORGANIZATION_A, ownOfferId);
+assert.equal(sparse?.site?.address, '12345');
