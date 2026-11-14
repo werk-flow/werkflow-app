@@ -8,8 +8,9 @@
 #        alert-issue.sh close <title> [<note>]
 #        alert-issue.sh run <title> <job results> [<skip> <skip reason>]
 #
-# `run` decides from this run's `needs.*.result` and the skip of release-candidate.sh. Needs
-# GH_TOKEN and GH_REPO; `run` needs `actions: read` to name the failed jobs.
+# `run` decides from this run's `needs.*.result` and the skip of release-candidate.sh. A red run's
+# report ends with ALERT_DETAIL when the caller sets it. Needs GH_TOKEN and GH_REPO; `run` needs
+# `actions: read` to name the failed jobs.
 #
 # Assignment is the owner's one notification, so it is kept for a failure that affects
 # production: the caller sets AFFECTS_PRODUCTION=true. Every other alert reaches a T3 thread
@@ -92,7 +93,7 @@ failed_jobs() {
 report_run() {
   local title="$1" results="$2" skip="${3:-}" reason="${4:-}"
   if grep -qE 'failure|cancelled' <<< "$results"; then
-    open_alert "$title" "$(printf 'The run failed. Failed jobs:\n\n%s' "$(failed_jobs)")"
+    open_alert "$title" "$(printf 'The run failed. Failed jobs:\n\n%s' "$(failed_jobs)"; test -z "${ALERT_DETAIL:-}" || printf '\n\n%s' "$ALERT_DETAIL")"
   elif test "$skip" = red-run; then
     open_alert "$title" "The scheduled release did not ship. ${reason}"
   elif test "$skip" != no-change; then
