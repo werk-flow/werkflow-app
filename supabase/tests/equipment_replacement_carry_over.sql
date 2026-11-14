@@ -1,8 +1,10 @@
 -- Replacing an Anlage carries its maintenance obligations and components to
 -- the Nachfolger (migration
 -- 20261205091100_carry_replaced_equipment_obligations_to_successor.sql):
--- an overdue open due item stays open with its due date on the successor's
--- new plan revision, completed due work stays on the old revision, a plan left
+-- an overdue open due item that an earlier plan revision left open stays open
+-- with its due date on the successor's new plan revision, completed due work
+-- stays on the old revision and a later generation does not recreate it even
+-- when it is newer than the open item, a plan left
 -- behind needs a reason, a stale or incomplete choice refuses the whole
 -- replacement, a later generation recreates no past due work, the successor
 -- reads the predecessor's history, a correction carries everything back, and
@@ -143,14 +145,32 @@ begin
     '46600000-0000-4000-8000-000000000001', '46600000-0000-4000-8000-000000000055',
     (pg_temp.berlin_today() + interval '6 months')::date
   );
-  -- The first item was visited; the second is overdue and open.
+  -- The second item was visited; the first is still open and overdue.
   perform set_config('app.maintenance_write', 'true', true);
   update public.maintenance_due_work due_work set status = 'completed', scope_outcome = 'complete',
     completed_on = due_work.original_due_date
   where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
     and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000050'
-    and due_work.original_due_date = v_first_due;
+    and due_work.original_due_date > v_first_due;
   perform set_config('app.maintenance_write', 'false', true);
+  -- A normal revision moves the plan's dates; the overdue item stays open on
+  -- the first revision.
+  perform public.revise_maintenance_plan_with_due_work(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000050',
+    '46600000-0000-4000-8000-000000000056',
+    (select plan.version from public.maintenance_plans plan
+     where plan.organization_id = '46600000-0000-4000-8000-000000000010'
+       and plan.id = '46600000-0000-4000-8000-000000000050'),
+    jsonb_build_object(
+      'templateVersionId', v_version_id, 'effectiveFromDate', pg_temp.berlin_today(),
+      'firstDueDate', pg_temp.berlin_today() + 200, 'intervalMonths', 12,
+      'dueWindowBeforeDays', 0, 'dueWindowAfterDays', 0, 'plannedDurationMinutes', 90,
+      'nextDueBasis', 'planned_due_date', 'operationalInstructions', null,
+      'overlapReason', 'Abgasmessung getrennt',
+      'equipmentIds', jsonb_build_array('46600000-0000-4000-8000-000000000040')),
+    'Termin verschoben', '46600000-0000-4000-8000-000000000001', '46600000-0000-4000-8000-000000000057',
+    (pg_temp.berlin_today() + interval '8 months')::date
+  );
   insert into pg_temp.world
   select v_version_id, '46600000-0000-4000-8000-000000000040', '46600000-0000-4000-8000-000000000042',
     open_due.id, open_due.due_date, done_due.id, done_due.due_date
@@ -247,7 +267,7 @@ begin
   where plan.organization_id = '46600000-0000-4000-8000-000000000010'
     and plan.id = '46600000-0000-4000-8000-000000000050';
   if v_revision.id is not distinct from '46600000-0000-4000-8000-000000000051'::uuid
-     or v_revision.revision_number is distinct from 2 then
+     or v_revision.revision_number is distinct from 3 then
     raise exception 'a carried plan did not get a new revision';
   end if;
   if (
@@ -265,9 +285,12 @@ begin
      or v_overdue.maintenance_plan_revision_id is distinct from v_revision.id then
     raise exception 'the overdue due item did not stay open with its due date on the new revision';
   end if;
-  if v_revision.first_due_date is distinct from v_overdue.original_due_date
-     or v_revision.effective_from_date is distinct from v_overdue.original_due_date then
-    raise exception 'the carried revision does not start at the earliest moved due date';
+  if v_revision.first_due_date <= coalesce((
+       select max(due_work.original_due_date) from public.maintenance_due_work due_work
+       where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
+         and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000050'), 'infinity'::date)
+     or v_revision.effective_from_date is distinct from pg_temp.berlin_today() then
+    raise exception 'the carried revision does not start after the plan''s latest due date';
   end if;
   if (
     select due_work.maintenance_plan_revision_id from public.maintenance_due_work due_work
@@ -371,7 +394,7 @@ begin
     where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
       and due_work.maintenance_plan_id = v_plan.id
       and due_work.maintenance_plan_revision_id = v_plan.current_revision_id
-      and due_work.original_due_date <= (select completed_date from pg_temp.world)
+      and due_work.original_due_date = (select completed_date from pg_temp.world)
   ) then
     raise exception 'generation recreated visited due work on the carried revision';
   end if;

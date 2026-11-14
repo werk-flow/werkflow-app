@@ -5,9 +5,10 @@
 -- successor, but the predecessor's plans, their open due work and its child
 -- components stayed on the predecessor. The new ten-argument overload takes the
 -- manager's reviewed choice per running plan and per component in the same
--- call. A carried plan gets a new revision bound to the successor, and its open
--- and visit-created due items move to that revision with their dates
--- unchanged; completed and closed due work stays on its old revision. A plan
+-- call. A carried plan gets a new revision bound to the successor, and every
+-- open and visit-created due item bound to the predecessor moves to that
+-- revision with its dates unchanged; completed and closed due work stays on
+-- its old revision. A plan
 -- left on the predecessor needs a reason. A carried component gets the
 -- successor as parent. Each change writes its history in the same call. A
 -- choice set that does not match the predecessor's running plans and
@@ -105,13 +106,17 @@ as $$
   limit least(greatest(coalesce(p_limit, 20), 1), 100);
 $$;
 
--- Moves one plan from one equipment to another: a new revision copies the
--- current one with the equipment swapped, and the current revision's open and
--- visit-created due items move onto it with their dates unchanged. The new
--- revision starts at the earliest moved due date, or without one at the next
--- date the old revision would have generated, so a later generation never
--- recreates past due work. The caller holds the plan's row lock and checked
--- the manager role. Runs as the calling function's owner; no role executes it.
+-- Moves one plan from one equipment to another. A new revision copies the
+-- current one with the equipment swapped. Every open and visit-created due
+-- item whose revision covers the old equipment moves onto it with its dates
+-- unchanged; that includes items an earlier plan revision left open. When two
+-- such items share a cadence date, the one with a visit (else the newer) moves
+-- and the other is superseded with a reason, so the date stays due exactly
+-- once. Completed and closed due work stays on its revision. A planned-date
+-- revision starts one interval after the plan's latest due date, so a later
+-- generation recreates no due work of any status; an actual-completion
+-- revision starts at the earliest moved date, else at the latest completion's
+-- next date. The caller holds the plan's row lock and checked the manager role.
 create function app_private.carry_maintenance_plan_to_equipment(
   p_plan public.maintenance_plans,
   p_from_equipment_id uuid,
@@ -128,10 +133,10 @@ declare
   v_revision public.maintenance_plan_revisions%rowtype;
   v_revision_id uuid := gen_random_uuid();
   v_first_due date;
-  v_last_due date;
   v_before jsonb;
-  v_due_id uuid;
+  v_due record;
   v_due_before jsonb;
+  v_duplicate boolean;
   v_reason text := left(btrim(p_reason), 1000);
   v_payload jsonb := jsonb_build_object(
     'fromEquipmentId', p_from_equipment_id,
@@ -142,31 +147,22 @@ begin
   select * into strict v_revision from public.maintenance_plan_revisions revision
   where revision.id = p_plan.current_revision_id
     and revision.organization_id = p_plan.organization_id;
-  select min(due_work.original_due_date) into v_first_due
-  from public.maintenance_due_work due_work
-  where due_work.organization_id = p_plan.organization_id
-    and due_work.maintenance_plan_id = p_plan.id
-    and due_work.maintenance_plan_revision_id = v_revision.id
-    and due_work.status in ('open', 'visit_created');
-  if v_first_due is null and v_revision.next_due_basis = 'planned_due_date' then
-    select max(due_work.original_due_date) into v_last_due
+  if v_revision.next_due_basis = 'planned_due_date' then
+    select app_private.add_months_clamped(max(due_work.original_due_date), v_revision.interval_months)
+    into v_first_due
     from public.maintenance_due_work due_work
     where due_work.organization_id = p_plan.organization_id
-      and due_work.maintenance_plan_id = p_plan.id
-      and due_work.maintenance_plan_revision_id = v_revision.id;
-    v_first_due := coalesce(
-      app_private.add_months_clamped(v_last_due, v_revision.interval_months),
-      v_revision.first_due_date
-    );
-  elsif v_first_due is null then
-    select max(due_work.next_due_date) into v_last_due
+      and due_work.maintenance_plan_id = p_plan.id;
+  else
+    select coalesce(
+      min(due_work.original_due_date) filter (where due_work.status in ('open', 'visit_created')),
+      max(due_work.next_due_date) filter (where due_work.status = 'completed')
+    ) into v_first_due
     from public.maintenance_due_work due_work
     where due_work.organization_id = p_plan.organization_id
-      and due_work.maintenance_plan_id = p_plan.id
-      and due_work.maintenance_plan_revision_id = v_revision.id
-      and due_work.status = 'completed';
-    v_first_due := coalesce(v_last_due, v_revision.first_due_date);
+      and due_work.maintenance_plan_id = p_plan.id;
   end if;
+  v_first_due := coalesce(v_first_due, v_revision.first_due_date);
 
   v_before := app_private.maintenance_plan_snapshot(p_plan.id, p_plan.organization_id);
   perform set_config('app.maintenance_write', 'true', true);
@@ -199,27 +195,48 @@ begin
     version = plan.version + 1, updated_by = p_actor_id, updated_at = now()
   where plan.id = p_plan.id and plan.organization_id = p_plan.organization_id;
 
-  for v_due_id in
-    select due_work.id from public.maintenance_due_work due_work
+  for v_due in
+    select due_work.id, due_work.original_due_date
+    from public.maintenance_due_work due_work
+    join public.maintenance_plan_revision_equipment link
+      on link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+     and link.organization_id = due_work.organization_id
+     and link.equipment_id = p_from_equipment_id
     where due_work.organization_id = p_plan.organization_id
       and due_work.maintenance_plan_id = p_plan.id
-      and due_work.maintenance_plan_revision_id = v_revision.id
       and due_work.status in ('open', 'visit_created')
-    order by due_work.due_date, due_work.id
-    for update
+    order by due_work.status = 'visit_created' desc, due_work.created_at desc, due_work.id
+    for update of due_work
   loop
-    v_due_before := app_private.maintenance_due_snapshot(v_due_id, p_plan.organization_id);
+    v_due_before := app_private.maintenance_due_snapshot(v_due.id, p_plan.organization_id);
+    v_duplicate := exists (
+      select 1 from public.maintenance_due_work moved
+      where moved.organization_id = p_plan.organization_id
+        and moved.maintenance_plan_id = p_plan.id
+        and moved.maintenance_plan_revision_id = v_revision_id
+        and moved.original_due_date = v_due.original_due_date
+    );
     perform set_config('app.maintenance_write', 'true', true);
-    update public.maintenance_due_work due_work set
-      maintenance_plan_revision_id = v_revision_id,
-      version = due_work.version + 1, updated_by = p_actor_id, updated_at = now()
-    where due_work.id = v_due_id and due_work.organization_id = p_plan.organization_id;
+    if v_duplicate then
+      update public.maintenance_due_work due_work set
+        status = 'superseded',
+        exception_reason = 'Beim Anlagentausch mit der gleichen Fälligkeit zusammengeführt',
+        version = due_work.version + 1, updated_by = p_actor_id, updated_at = now()
+      where due_work.id = v_due.id and due_work.organization_id = p_plan.organization_id;
+    else
+      update public.maintenance_due_work due_work set
+        maintenance_plan_revision_id = v_revision_id,
+        version = due_work.version + 1, updated_by = p_actor_id, updated_at = now()
+      where due_work.id = v_due.id and due_work.organization_id = p_plan.organization_id;
+    end if;
     perform set_config('app.maintenance_write', 'false', true);
     perform app_private.record_maintenance_due_event(
-      p_plan.organization_id, v_due_id, 'equipment_replaced', p_actor_id, v_reason,
-      p_request_operation, md5(p_idempotency_key::text || ':' || v_due_id::text)::uuid,
+      p_plan.organization_id, v_due.id,
+      case when v_duplicate then 'superseded' else 'equipment_replaced' end::public.maintenance_due_event_type,
+      p_actor_id, v_reason, p_request_operation,
+      md5(p_idempotency_key::text || ':' || v_due.id::text)::uuid,
       v_payload, v_due_before,
-      app_private.maintenance_due_snapshot(v_due_id, p_plan.organization_id)
+      app_private.maintenance_due_snapshot(v_due.id, p_plan.organization_id)
     );
   end loop;
   perform set_config('app.maintenance_write', 'false', true);
@@ -234,6 +251,7 @@ $$;
 
 -- Records one equipment event that names a plan or a component it concerns.
 -- The state does not change; the subject lands beside the equipment snapshot.
+-- The caller checked the manager role.
 create function app_private.record_installed_equipment_subject_event(
   p_organization_id uuid,
   p_equipment_id uuid,
@@ -281,7 +299,7 @@ create function public.replace_installed_equipment(
   p_carry_over jsonb
 )
 returns public.installed_equipment
-language plpgsql security definer set search_path = ''
+language plpgsql security invoker set search_path = ''
 as $$
 declare
   v_successor public.installed_equipment%rowtype;
@@ -602,10 +620,17 @@ $$;
 
 revoke all on function app_private.carry_maintenance_plan_to_equipment(
   public.maintenance_plans, uuid, uuid, date, text, uuid, text, uuid
-) from public, anon, authenticated, service_role;
+) from public, anon, authenticated;
 revoke all on function app_private.record_installed_equipment_subject_event(
   uuid, uuid, public.installed_equipment_event_type, jsonb, timestamptz, uuid, text, text, uuid
-) from public, anon, authenticated, service_role;
+) from public, anon, authenticated;
+-- The invoker replacement runs these as service_role.
+grant execute on function app_private.carry_maintenance_plan_to_equipment(
+  public.maintenance_plans, uuid, uuid, date, text, uuid, text, uuid
+) to service_role;
+grant execute on function app_private.record_installed_equipment_subject_event(
+  uuid, uuid, public.installed_equipment_event_type, jsonb, timestamptz, uuid, text, text, uuid
+) to service_role;
 revoke all on function public.list_installed_equipment_replacement_plans(uuid, uuid)
   from public, anon, authenticated;
 revoke all on function public.list_installed_equipment_predecessor_events(uuid, uuid, integer, integer)
