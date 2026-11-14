@@ -146,6 +146,24 @@ test('the signal coming back runs the same attempt as a tap, busy until the app 
   expect(await stayedBusyUntilReplaced(page, reloads[0])).toBe(true);
 });
 
+test('a signal whose first check fails while the connection settles opens the app on a later check', async ({
+  page,
+}) => {
+  const held = await holdProbes(page);
+  await mountRecovery(page, { online: false });
+  await signalReturns(page);
+  await expect.poll(() => held.length).toBe(1);
+  // Wi-Fi joined but routes nothing yet.
+  await held[0]?.abort('internetdisconnected');
+  await expect.poll(() => held.length).toBe(2);
+  await expect(retryButton(page)).toHaveAttribute('aria-busy', 'true');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  const reloads = await holdReload(page);
+  await held[1]?.fulfill({ status: 200 });
+  await expect.poll(() => reloads.length).toBe(1);
+  await reloads[0]?.fulfill({ contentType: 'text/html', body: '<html lang="de"><body></body></html>' });
+});
+
 test('a signal that came back before the page could listen starts the way back at once', async ({ page }) => {
   const held = await holdProbes(page);
   await mountRecovery(page, { online: true });

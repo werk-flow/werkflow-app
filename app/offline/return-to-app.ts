@@ -23,7 +23,15 @@ const RELOADED_AT_KEY = 'werkflow:offline-reloaded-at';
  */
 const START_PAUSE_MS = 30_000;
 
+/**
+ * A network the phone just reported can carry no request yet (Wi-Fi joined, no route), so a way
+ * back the page starts on its own checks again after each of these pauses while the phone still
+ * reports it.
+ */
+const SETTLE_PAUSES_MS = [1_000, 2_000, 4_000, 8_000];
+
 let attempt: Promise<boolean> | null = null;
+let settling: Promise<boolean> | null = null;
 
 async function reachesServer(): Promise<boolean> {
   try {
@@ -60,6 +68,28 @@ export function returnToApp(): Promise<boolean> {
     return new Promise<boolean>(() => undefined);
   });
   return attempt;
+}
+
+/**
+ * The way back the page starts on its own (`online`, its start): `returnToApp`, again after each
+ * settle pause while the phone reports a network. Resolves false once the checks are spent or the
+ * network report is gone; the next `online` starts it anew.
+ */
+export function returnWhenReachable(): Promise<boolean> {
+  settling ??= (async () => {
+    try {
+      if (await returnToApp()) return true;
+      for (const pause of SETTLE_PAUSES_MS) {
+        await new Promise((resume) => setTimeout(resume, pause));
+        if (!navigator.onLine) return false;
+        if (await returnToApp()) return true;
+      }
+      return false;
+    } finally {
+      settling = null;
+    }
+  })();
+  return settling;
 }
 
 /**
