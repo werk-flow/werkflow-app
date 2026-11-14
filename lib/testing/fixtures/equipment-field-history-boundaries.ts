@@ -24,6 +24,7 @@ const equipmentId = id(10);
 const predecessorId = id(11);
 const unlinkedEquipmentId = id(12);
 const foreignEquipmentId = id(13);
+const correctedSuccessorId = id(14);
 const revisionId = id(20);
 const predecessorRevisionId = id(21);
 const customerRevisionId = id(30);
@@ -94,6 +95,8 @@ const world = installActionWorld({
     equipment(predecessorId, ORGANIZATION_A, 'ANL-1', null),
     equipment(unlinkedEquipmentId, ORGANIZATION_A, 'ANL-3', null),
     equipment(foreignEquipmentId, ORGANIZATION_B, 'ANL-9', null),
+    // The job's Anlage was itself replaced later; its Nachfolger is no Vorgänger.
+    equipment(correctedSuccessorId, ORGANIZATION_A, 'ANL-4', equipmentId),
   ],
   installed_equipment_work_links: [
     { id: id(6), organization_id: ORGANIZATION_A, job_id: ownJobId, equipment_id: equipmentId },
@@ -109,6 +112,15 @@ const world = installActionWorld({
       effective_at: '2026-03-15T23:30:00.000Z',
       corrects_event_id: null,
       reason: 'Interner Austauschgrund',
+    },
+    {
+      id: id(51),
+      organization_id: ORGANIZATION_A,
+      equipment_id: equipmentId,
+      event_type: 'replaced',
+      effective_at: '2023-06-01T08:00:00.000Z',
+      corrects_event_id: null,
+      reason: null,
     },
   ],
   maintenance_plan_revision_equipment: [
@@ -274,7 +286,13 @@ const second = await history(ownJobId, equipmentId, first.page.nextCursor);
 assert.ok(second.success);
 assert.equal(second.page.nextCursor, null, 'the last page offers no next page');
 const keys = [...first.page.entries, ...second.page.entries].map((entry) => entry.key);
-assert.equal(new Set(keys).size, 14, 'the pages hold every completed visit and the replacement once');
+assert.equal(new Set(keys).size, 15, 'the pages hold every completed visit and both replacements once');
+const ownReplacement = second.page.entries.find((entry) => entry.key === `replacement:${id(51)}`);
+assert.deepEqual(
+  ownReplacement?.kind === 'replacement' && ownReplacement.successor,
+  { equipmentNumber: 'ANL-4', name: 'Gasbrennwertkessel ANL-4', isPredecessor: false },
+  "the Nachfolger of the job's Anlage is no Vorgänger",
+);
 assert.ok(!keys.includes(`visit:${id(72)}`), 'an open due item is no visit');
 const serialized = JSON.stringify([first, second]);
 for (const internal of [

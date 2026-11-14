@@ -502,7 +502,8 @@ export async function getFieldEquipmentHistory(
         ? {
             equipmentNumber: row.equipment_number,
             name: row.name,
-            isPredecessor: row.id !== scope.equipment.id,
+            // A successor of the Anlage is no Vorgänger.
+            isPredecessor: row.id !== scope.equipment.id && chain.some((member) => member.id === row.id),
           }
         : null;
     };
