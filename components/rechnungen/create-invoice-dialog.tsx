@@ -151,10 +151,13 @@ function WorkFields({
   error: string | undefined;
   disabled: boolean;
 }) {
+  const clientId = form.client?.id;
   const workSearch = useJobEntityOptions(
-    { kind: OPTION_KIND[form.workKind ?? 'job'], ...(form.client ? { clientId: form.client.id } : {}) },
+    { kind: OPTION_KIND[form.workKind ?? 'job'], purpose: 'invoice-work', ...(clientId ? { clientId } : {}) },
     form.workId ? [form.workId] : [],
   );
+  // The project reader also offers projects without a customer, which no invoice of this customer bills.
+  const workOptions = workSearch.options.filter((option) => option.clientId === clientId);
   return (
     <>
       <Field label="Abrechnen für" htmlFor={WORK_KIND_FIELD}>
@@ -184,7 +187,7 @@ function WorkFields({
             id={WORK_FIELD}
             value={form.workId}
             onChange={(workId) => onChange({ ...form, workId })}
-            options={workSearch.options}
+            options={workOptions}
             onSearchChange={workSearch.onSearchChange}
             loading={workSearch.loading}
             loadFailure={workSearch.loadFailure}

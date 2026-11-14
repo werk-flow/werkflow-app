@@ -121,6 +121,7 @@ export async function readInvoice(organizationId: string, invoiceId: string): Pr
     status: constrainedValue(INVOICE_STATUSES, invoice.status, 'invoices.status'),
     work: work
       ? {
+          kind: work.kind,
           label: `${INVOICE_WORK_LABELS[work.kind]} ${[work.number, work.title].filter(Boolean).join(' · ')}`,
           href: workHref(work),
         }

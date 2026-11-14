@@ -19,12 +19,18 @@ import {
   parseDraftLines,
   type DraftForm,
 } from '@/lib/invoices/draft-form';
-import type { InvoiceDetail } from '@/lib/invoices/types';
+import type { InvoiceDetail, InvoiceWorkKind } from '@/lib/invoices/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { INVOICE_FAILURE_MESSAGES } from './invoice-failure-messages';
 import { InvoiceLinesFields } from './invoice-lines-fields';
 import { InvoiceTermsFields, InvoiceTextFields } from './invoice-terms-fields';
 import { InvoiceTotals } from './invoice-totals';
+
+const WORK_TABLES = {
+  job: 'jobs',
+  project: 'projects',
+  service_case: 'service_cases',
+} as const satisfies Record<InvoiceWorkKind, string>;
 
 const SAVE_FAILED = INVOICE_FAILURE_MESSAGES.save_failed ?? '';
 
@@ -48,7 +54,10 @@ function liveAmounts(form: DraftForm): DraftAmounts | null {
  * reload, and a save from the older version is refused.
  */
 export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
-  useRealtimeRouterRefresh({ tables: ['invoices', 'clients'] });
+  // The facts show the customer's and recipient's names and the work's label, which other sessions change.
+  useRealtimeRouterRefresh({
+    tables: ['invoices', 'clients', ...(invoice.work ? [WORK_TABLES[invoice.work.kind]] : [])],
+  });
   const router = useRouter();
   const { showBanner } = useBanner();
   const draft = useDraftState(invoice);

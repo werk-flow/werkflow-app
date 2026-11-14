@@ -81,6 +81,6 @@ export type InvoiceDetail = InvoiceTerms &
     client: { id: string; name: string };
     recipient: { id: string; name: string; address: string | null };
     /** The work it bills, with its label and detail route. */
-    work: { label: string; href: string } | null;
+    work: { kind: InvoiceWorkKind; label: string; href: string } | null;
     lines: Array<InvoiceLineValues & { netCents: number }>;
   };
