@@ -2563,7 +2563,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 8, "tolerance": 0 },
+        "requests": { "reference": 7, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -2833,6 +2833,14 @@
           },
           "runKeys": ["2026-11-13T120348256Z-ff99fd"],
           "reason": "Berufsschule days (werk-flow/werkflow-planning#165, #431): the prefetched Zeiterfassung chunks carry the apprentice's school-day note. Production builds of 8f304a90 and this branch differ in two chunks only: the weekly hours chart gains WeeklySchoolDays (347 raw bytes) with its call (29) and the week view's school_days live table (14), +154 gzip; the dashboard hero gains its school sentence, +82 raw, +38 gzip. next/dynamic for both measured larger (loader stubs of 134 and about 290 raw bytes, gzip 15 bytes more), so they stay inline. Accepted by the E0 lead under decision 21."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 8, "tolerance": 0 },
+          "to": { "reference": 7, "tolerance": 0 },
+          "runKeys": ["2026-11-14T121927819Z-14ed1c"],
+          "reason": null
         }
       ]
     },
