@@ -125,7 +125,7 @@ function prepareMaintenance({ world, businessDate }: SurfaceContext): Promise<st
 
 /**
  * A plan whose first due item has a visit job with a work report, so its row
- * offers „Abschließen“. Returns the visit job's number.
+ * can be completed. Returns the visit job's number.
  */
 function prepareMaintenanceVisit({ world, businessDate }: SurfaceContext): Promise<string> {
   return surfaceFixture(world, 'service.maintenance-visit', async () => {
@@ -319,7 +319,8 @@ export const SERVICE_OPENERS = {
       await prepareMaintenanceVisit(context);
       const client = serviceAuditNames(context.world).visitClient;
       await context.page.goto(maintenanceSearchUrl(client));
-      return maintenanceDueRowAction(maintenanceDueRowNaming(context.page, client), 'complete');
+      // Without an appointment the row offers „Termin planen“; the dialog then switches to completion.
+      return maintenanceDueRowAction(maintenanceDueRowNaming(context.page, client), 'schedule');
     },
     layer: maintenanceDueActionDialog,
     prepareLayer: async (layer, page) => chooseUnresolvedWithReturn(page, layer),

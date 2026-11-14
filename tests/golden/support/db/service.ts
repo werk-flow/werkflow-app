@@ -645,7 +645,7 @@ export async function getServiceCaseByNumber(
 
 /**
  * Links a seeded plan's first open due item to a seeded job, as „Auftrag
- * anlegen“ does, so its row offers „Abschließen“.
+ * anlegen“ does, so the visit can be completed.
  */
 export async function seedMaintenanceVisitLink(input: SeedActor & { planId: string; jobId: string }): Promise<void> {
   const admin = createAdminClient();

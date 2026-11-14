@@ -5318,7 +5318,7 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "maintenance_visit_findings_maintenance_due_work_id_organizat_fkey";
+            foreignKeyName: "maintenance_visit_findings_maintenance_due_work_id_organiz_fkey";
             columns: ["maintenance_due_work_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "maintenance_due_work";
@@ -5332,7 +5332,7 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "maintenance_visit_findings_return_due_work_id_organization_i_fkey";
+            foreignKeyName: "maintenance_visit_findings_return_due_work_id_organization_fkey";
             columns: ["return_due_work_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "maintenance_due_work";

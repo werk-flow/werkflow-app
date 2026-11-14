@@ -43,6 +43,7 @@ async function aufgabenWithReturnStep(world: TestWorld): Promise<SurfaceDestinat
         updated_by: actorId,
       })
       .throwOnError();
+    return jobNumber;
   });
   return { route: '/aufgaben' };
 }
