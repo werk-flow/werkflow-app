@@ -5231,6 +5231,192 @@ export type Database = {
           },
         ];
       };
+      offer_events: {
+        Row: {
+          actor_id: string | null;
+          attempt_key: string;
+          created_at: string;
+          event_type: string;
+          id: string;
+          offer_id: string;
+          organization_id: string;
+          payload: Json;
+          status: string;
+          version: number;
+        };
+        Insert: {
+          actor_id?: string | null;
+          attempt_key: string;
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          offer_id: string;
+          organization_id: string;
+          payload?: Json;
+          status: string;
+          version: number;
+        };
+        Update: {
+          actor_id?: string | null;
+          attempt_key?: string;
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          offer_id?: string;
+          organization_id?: string;
+          payload?: Json;
+          status?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offer_events_offer_fk";
+            columns: ["offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offers";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      offers: {
+        Row: {
+          client_id: string;
+          closing_text: string;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          job_id: string | null;
+          offer_number: string;
+          opening_text: string;
+          organization_id: string;
+          owner_user_id: string | null;
+          project_id: string | null;
+          recipient_client_id: string;
+          recipient_is_default: boolean;
+          request_id: string | null;
+          site_id: string | null;
+          status: string;
+          title: string;
+          updated_at: string;
+          updated_by: string | null;
+          valid_until: string;
+          version: number;
+        };
+        Insert: {
+          client_id: string;
+          closing_text?: string;
+          contact_id?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          offer_number: string;
+          opening_text?: string;
+          organization_id: string;
+          owner_user_id?: string | null;
+          project_id?: string | null;
+          recipient_client_id: string;
+          recipient_is_default?: boolean;
+          request_id?: string | null;
+          site_id?: string | null;
+          status?: string;
+          title: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          valid_until: string;
+          version?: number;
+        };
+        Update: {
+          client_id?: string;
+          closing_text?: string;
+          contact_id?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          offer_number?: string;
+          opening_text?: string;
+          organization_id?: string;
+          owner_user_id?: string | null;
+          project_id?: string | null;
+          recipient_client_id?: string;
+          recipient_is_default?: boolean;
+          request_id?: string | null;
+          site_id?: string | null;
+          status?: string;
+          title?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          valid_until?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offers_client_fk";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_contact_fk";
+            columns: ["contact_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_contacts";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offers_project_fk";
+            columns: ["project_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_recipient_fk";
+            columns: ["recipient_client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_request_fk";
+            columns: ["request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_site_fk";
+            columns: ["site_id", "client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id", "client_id", "organization_id"];
+          },
+        ];
+      };
       organization_capabilities: {
         Row: {
           created_at: string;
@@ -16061,6 +16247,20 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_offer: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_client_id: string;
+          p_contact_id: string;
+          p_organization_id: string;
+          p_site_id: string;
+          p_title: string;
+          p_work_id: string;
+          p_work_kind: string;
+        };
+        Returns: string;
+      };
       create_organization_invite: {
         Args: {
           p_email: string;
@@ -17086,6 +17286,10 @@ export type Database = {
           status: Database["public"]["Enums"]["invite_status"];
         }[];
       };
+      get_offer: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_org_members_for_user: {
         Args: { p_org_id: string; p_user_id: string };
         Returns: {
@@ -17570,6 +17774,17 @@ export type Database = {
           p_page_size?: number;
           p_plan_page?: number;
           p_search?: string;
+        };
+        Returns: Json;
+      };
+      list_offer_page: {
+        Args: {
+          p_client_id?: string;
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+          p_status?: string;
         };
         Returns: Json;
       };

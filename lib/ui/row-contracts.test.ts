@@ -18,6 +18,7 @@ const PAIRS = [
     'components/angebote/leistungen/leistungen-table.tsx',
     'components/angebote/leistungen/leistungen-skeleton.tsx',
   ],
+  ['components/angebote/offers-list.tsx', 'components/angebote/offers-skeleton.tsx'],
   ['components/anfragen/anfragen-content.tsx'],
   [
     'components/auftraege/list/unified-auftraege-table.tsx',

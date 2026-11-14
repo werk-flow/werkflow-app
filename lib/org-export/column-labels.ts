@@ -127,6 +127,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   closed_reason: 'Abschlussgrund',
   closing_balance_minutes: 'Schlusssaldo (Minuten)',
   closing_balance_total_minutes: 'Schlusssaldo gesamt (Minuten)',
+  closing_text: 'Schluss',
   closure_date: 'Schließtag',
   column_mapping: 'Spaltenzuordnung',
   comment: 'Kommentar',

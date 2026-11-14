@@ -19,6 +19,7 @@ const valuesSchema = z
         nestedJobNumber: z.string().min(1),
         equipmentNumber: z.string().min(1),
         caseNumber: z.string().min(1),
+        offerId: uuidSchema,
       })
       .strict()
       .optional(),

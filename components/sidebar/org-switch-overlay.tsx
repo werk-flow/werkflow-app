@@ -28,6 +28,7 @@ import { WorkTemplatesPageSkeleton } from '@/components/loading-states/work-temp
 import { EquipmentPageSkeleton } from '@/components/loading-states/equipment-page-skeleton';
 import { ServiceCasesPageSkeleton } from '@/components/loading-states/service-cases-page-skeleton';
 import { LeistungenPageSkeleton } from '@/components/angebote/leistungen/leistungen-skeleton';
+import { OffersPageSkeleton } from '@/components/angebote/offers-skeleton';
 
 // The skeleton of the page the user lands on after an organization switch.
 // A record's detail page belongs to the organization being left, so it maps to
@@ -105,10 +106,18 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<readonly [prefix: string, skeleton: ()
   ['/einstellungen', () => <EinstellungenPageSkeleton />],
   ['/inventar', () => <InventarPageSkeleton />],
   [
+    '/angebote/leistungen',
+    () => (
+      <AreaPageSkeleton title="Angebote" tabCount={2}>
+        <LeistungenPageSkeleton />
+      </AreaPageSkeleton>
+    ),
+  ],
+  [
     '/angebote',
     () => (
-      <AreaPageSkeleton title="Angebote" tabCount={1}>
-        <LeistungenPageSkeleton />
+      <AreaPageSkeleton title="Angebote" tabCount={2}>
+        <OffersPageSkeleton />
       </AreaPageSkeleton>
     ),
   ],
