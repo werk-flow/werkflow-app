@@ -341,6 +341,9 @@ declare
   v_member_ids uuid[];
 begin
   perform app_private.require_on_call_planner(p_organization_id, p_actor_id);
+  -- A retry of this operation waits here until the first call commits, then
+  -- finds its shift below; it never reaches the checks after the lookup.
+  perform pg_advisory_xact_lock(hashtextextended(p_shift_id::text || ':on-call-operation', 0));
   select * into v_existing from public.on_call_shifts shift where shift.id = p_shift_id;
   if found then
     if v_existing.organization_id <> p_organization_id or v_existing.created_by is distinct from p_actor_id then
@@ -515,6 +518,9 @@ declare
   v_now timestamptz := now();
 begin
   perform app_private.require_on_call_planner(p_organization_id, p_actor_id);
+  -- A retry of this operation waits here until the first call commits, then
+  -- finds its shift below; it never reaches the checks after the lookup.
+  perform pg_advisory_xact_lock(hashtextextended(p_next_shift_id::text || ':on-call-operation', 0));
   select * into v_existing from public.on_call_shifts shift where shift.id = p_next_shift_id;
   if found then
     if v_existing.organization_id <> p_organization_id or v_existing.created_by is distinct from p_actor_id then

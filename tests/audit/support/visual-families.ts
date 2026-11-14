@@ -257,7 +257,8 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     id: 'service-bereitschaft',
     role: 'admin',
     covers: ['/service/bereitschaft'],
-    route: fixed('/service/bereitschaft'),
+    // A fixed Monday, so the week's range in the reference never moves with the clock.
+    route: fixed('/service/bereitschaft?woche=2026-03-02'),
     heading: SERVICE_AREA_HEADER.title,
     title: 'Bereitschaft',
   },

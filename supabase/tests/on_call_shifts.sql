@@ -81,9 +81,13 @@ begin
   end if;
   perform pg_temp.plan('46900000-0000-4000-8000-000000000102', now() + interval '3 days',
     now() + interval '5 days', null, array[v_lena]);
-  -- A repeated call under the same id writes nothing.
-  perform pg_temp.plan('46900000-0000-4000-8000-000000000102', now() + interval '3 days',
+  -- A repeated call under the same id answers the first result and writes nothing.
+  v_result := pg_temp.plan('46900000-0000-4000-8000-000000000102', now() + interval '3 days',
     now() + interval '5 days', null, array[v_lena]);
+  if v_result is distinct from
+      '{"shiftId": "46900000-0000-4000-8000-000000000102", "version": 1}'::jsonb then
+    raise exception 'a repeated plan did not answer the first result';
+  end if;
   if (select count(*) from public.on_call_shift_events
       where organization_id = '46900000-0000-4000-8000-0000000000a0'
         and shift_id = '46900000-0000-4000-8000-000000000102') <> 1 then
@@ -190,6 +194,16 @@ begin
     'Therme Lindenstraße 4 beobachten', array[v_lena], true);
   if v_result ->> 'shiftId' is distinct from '46900000-0000-4000-8000-000000000105' then
     raise exception 'the handover does not answer the next shift';
+  end if;
+  -- The same handover repeated after its answer was lost answers the first
+  -- result, although the source shift has moved past the version it names.
+  v_result := public.hand_over_on_call_shift('46900000-0000-4000-8000-000000000001',
+    '46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-000000000101', 2,
+    '46900000-0000-4000-8000-000000000105', now() + interval '1 day', 'Heizung',
+    'Therme Lindenstraße 4 beobachten', array[v_lena], true);
+  if v_result is distinct from
+      '{"shiftId": "46900000-0000-4000-8000-000000000105", "version": 1}'::jsonb then
+    raise exception 'a repeated handover did not answer the first result';
   end if;
   if not exists (select 1 from public.on_call_shifts
       where id = '46900000-0000-4000-8000-000000000101' and ends_at = now() and version = 3)
@@ -319,8 +333,10 @@ set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"46900000-0000-4000-8000-000000000003","role":"authenticated"}', true);
 do $$
 begin
-  if (select count(*) from public.on_call_shifts) <> 5
-    or (select count(*) from public.on_call_shift_members) <> 6 then
+  -- Every probe names both organizations of this test, so a policy that
+  -- leaks across them still shows, and no other fixture is read or written.
+  if (select count(*) from public.on_call_shifts where organization_id in ('46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-0000000000b0')) <> 5
+    or (select count(*) from public.on_call_shift_members where organization_id in ('46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-0000000000b0')) <> 6 then
     raise exception 'an employee does not read the shifts of their organization';
   end if;
 end;
@@ -328,11 +344,12 @@ $$;
 do $$
 begin
   begin
-    update public.on_call_shifts set handover_note = 'x';
+    update public.on_call_shifts set handover_note = 'x' where organization_id in ('46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-0000000000b0');
   exception when insufficient_privilege then
     begin
       insert into public.on_call_shift_members (shift_id, organization_id, employee_record_id)
-      select shift_id, organization_id, employee_record_id from public.on_call_shift_members limit 1;
+      select shift_id, organization_id, employee_record_id from public.on_call_shift_members
+      where organization_id in ('46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-0000000000b0') limit 1;
     exception when insufficient_privilege then
       return;
     end;
@@ -345,7 +362,8 @@ $$;
 select set_config('request.jwt.claims', '{"sub":"46900000-0000-4000-8000-000000000006","role":"authenticated"}', true);
 do $$
 begin
-  if exists (select 1 from public.on_call_shifts) or exists (select 1 from public.on_call_shift_members) then
+  if exists (select 1 from public.on_call_shifts where organization_id in ('46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-0000000000b0'))
+    or exists (select 1 from public.on_call_shift_members where organization_id in ('46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-0000000000b0')) then
     raise exception 'a foreign organization reads shifts';
   end if;
 end;
