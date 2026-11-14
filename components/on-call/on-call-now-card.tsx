@@ -5,6 +5,7 @@ import { Phone, Siren } from 'lucide-react';
 
 import { OnCallNowSkeleton } from '@/components/loading-states/on-call-now-skeleton';
 import { useOrganization } from '@/components/organization/organization-context';
+import { StaleRegion } from '@/components/shared/stale-region';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SectionError } from '@/components/ui/section-error';
 import { TextLink } from '@/components/ui/text-link';
@@ -49,7 +50,14 @@ function OnCallNow({
       return result.success ? { ok: true, data: result.overview } : { ok: false, error: result.error };
     },
   });
-  if (live.data) return <OnCallNowContent overview={live.data} canPlan={canPlan} />;
+  if (live.data) {
+    // A failed refresh keeps the last names and numbers visible, marked stale with a retry.
+    return (
+      <StaleRegion stale={live.isStale} onRetry={live.refresh}>
+        <OnCallNowContent overview={live.data} canPlan={canPlan} />
+      </StaleRegion>
+    );
+  }
   if (!live.isStale) return <OnCallNowSkeleton />;
   return (
     <SectionError

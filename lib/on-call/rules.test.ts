@@ -169,6 +169,11 @@ describe('when the dashboard card changes next', () => {
       '2026-11-16T23:00',
     ],
     ['an end across a month end', [shift('2026-11-30T18:00', '2026-12-01T06:00')], '2026-11-30T18:00'],
+    [
+      'a running end before a later start',
+      [shift('2026-11-16T18:00', '2026-11-16T22:00'), shift('2026-11-16T23:00', '2026-11-17T07:00')],
+      '2026-11-16T22:00',
+    ],
     ['only a past shift', [shift('2026-11-16T06:00', '2026-11-16T20:00')], null],
     ['an end exactly now has passed', [shift('2026-11-16T18:00', '2026-11-16T21:00')], null],
     [
