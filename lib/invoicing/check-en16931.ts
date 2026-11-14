@@ -119,10 +119,54 @@ const HEADER_FIELDS: Record<string, string> = {
   InvoiceReferencedDocument: 'precedingInvoice',
 };
 
+/** EN 16931 business terms of the model, for rules whose context is the whole invoice. */
+const TERM_FIELDS: Record<string, string> = {
+  'BT-1': 'number',
+  'BT-2': 'issueDate',
+  'BT-3': 'typeCode',
+  'BT-5': 'currency',
+  'BT-9': 'paymentTerms',
+  'BT-10': 'buyerReference',
+  'BT-13': 'orderReference',
+  'BT-20': 'paymentTerms',
+  'BT-22': 'notes',
+  'BG-3': 'precedingInvoice',
+  'BT-25': 'precedingInvoice',
+  'BG-4': 'seller',
+  'BT-27': 'seller.name',
+  'BT-30': 'seller.vatId',
+  'BT-31': 'seller.vatId',
+  'BT-32': 'seller.vatId',
+  'BT-34': 'seller.email',
+  'BG-5': 'seller.address',
+  'BT-40': 'seller.address',
+  'BG-7': 'buyer',
+  'BT-44': 'buyer.name',
+  'BT-48': 'buyer.vatId',
+  'BG-8': 'buyer.address',
+  'BT-55': 'buyer.address',
+  'BG-13': 'deliverTo',
+  'BT-72': 'delivery',
+  'BG-14': 'delivery',
+  'BG-16': 'payee',
+  'BT-81': 'payee',
+  'BT-84': 'payee.iban',
+  'BG-22': 'totals',
+  'BT-106': 'totals',
+  'BT-109': 'totals',
+  'BT-110': 'totals',
+  'BT-112': 'totals',
+  'BT-115': 'totals',
+  'BG-23': 'taxSubtotals',
+  'BG-25': 'lines',
+};
+
+const BUSINESS_TERM = /\bB[GT]-\d+\b/g;
+
 const SEGMENT = /\*:([A-Za-z]+)\[namespace-uri\(\)='[^']*'\]\[(\d+)\]/g;
 
 /** The model field an SVRL location points to, as to-en16931.ts lays the XML out. */
-function fieldOf(ruleId: string, location: string): string {
+function fieldOf(ruleId: string, location: string, message: string): string {
   const known = RULE_FIELDS[ruleId];
   if (known) return known;
   const segments = [...location.matchAll(SEGMENT)].map(([, name = '', index = '1']) => ({
@@ -149,6 +193,11 @@ function fieldOf(ruleId: string, location: string): string {
     const header = HEADER_FIELDS[segment.name];
     if (header) return header;
   }
+  // A rule on the whole invoice names its business terms; the first one the model holds is the field.
+  for (const [term] of message.matchAll(BUSINESS_TERM)) {
+    const field = TERM_FIELDS[term];
+    if (field) return field;
+  }
   return 'invoice';
 }
 
@@ -159,11 +208,14 @@ export async function checkEn16931(xml: string): Promise<En16931Check> {
     { stylesheetInternal, sourceText: xml, destination: 'document' },
     'async',
   );
-  const firedRules = SaxonJS.XPath.evaluate('count(//svrl:fired-rule)', report.principalResult, {
-    namespaceContext: { svrl: SVRL },
-  });
-  if (typeof firedRules !== 'number' || firedRules === 0) {
-    throw new Error('The EN 16931 rules matched nothing in this XML.');
+  // The invoice-level rules fire only on a CII invoice root; a fragment or another document fires none.
+  const rootRules = SaxonJS.XPath.evaluate(
+    "count(//svrl:fired-rule[@context = '/rsm:CrossIndustryInvoice'])",
+    report.principalResult,
+    { namespaceContext: { svrl: SVRL } },
+  );
+  if (typeof rootRules !== 'number' || rootRules === 0) {
+    throw new Error('The EN 16931 rules found no CII invoice in this XML.');
   }
   const failed = failedAssertsSchema.parse(
     SaxonJS.XPath.evaluate(
@@ -175,7 +227,11 @@ export async function checkEn16931(xml: string): Promise<En16931Check> {
   const errors: En16931Finding[] = [];
   const warnings: En16931Finding[] = [];
   for (const assert of failed) {
-    const finding = { ruleId: assert.id, field: fieldOf(assert.id, assert.location), message: assert.text };
+    const finding = {
+      ruleId: assert.id,
+      field: fieldOf(assert.id, assert.location, assert.text),
+      message: assert.text,
+    };
     // Only an explicit warning passes; an unknown flag counts as fatal.
     (assert.flag === 'warning' ? warnings : errors).push(finding);
   }

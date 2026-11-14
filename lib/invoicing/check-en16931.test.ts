@@ -57,5 +57,11 @@ describe('checkEn16931', () => {
   test('XML the rules cannot read is never valid', async () => {
     await expect(checkEn16931('<Invoice xmlns="urn:example:not-cii"/>')).rejects.toThrow();
     await expect(checkEn16931('<rsm:CrossIndustryInvoice')).rejects.toThrow();
+    // A fragment fires element rules but is no invoice.
+    await expect(
+      checkEn16931(
+        '<ram:ChargeAmount xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100">1.00</ram:ChargeAmount>',
+      ),
+    ).rejects.toThrow();
   });
 });

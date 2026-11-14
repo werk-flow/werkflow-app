@@ -64,8 +64,17 @@ const config: KnipConfig = {
     // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
     // the offer calculation imports it. Remove this entry with that import.
     'lib/price-catalog/leistung-prices.ts!',
+    // Recompiles the vendored EN 16931 rules (`bun run rules:en16931`); the
+    // package script makes it an entry of the first pass only.
+    'lib/invoicing/rules/compile.ts!',
   ],
-  project: ['**/*.{ts,tsx,mjs}!', '!lib/**/*.test.{ts,tsx,mjs}!', '!lib/testing/fixtures/**!'],
+  project: [
+    '**/*.{ts,tsx,mjs}!',
+    '!lib/**/*.test.{ts,tsx,mjs}!',
+    '!lib/testing/fixtures/**!',
+    // The invoice core's reference and broken invoices, read by its tests and CI's checkers.
+    '!lib/invoicing/fixtures/**!',
+  ],
   // Deno functions have their own import graph; the transcript folder is
   // research bookkeeping outside the product.
   ignore: ['supabase/functions/**', 'temporary-transcripts/**'],

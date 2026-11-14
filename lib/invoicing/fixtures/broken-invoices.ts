@@ -2,7 +2,9 @@
 // with the named rule and model field. A copy breaks either the model, which
 // the core then calculates and writes faithfully, or the written XML.
 
-import type { InvoiceDraft, InvoiceLine } from '../model';
+import type { InvoiceDraft } from '../model';
+
+type InvoiceLine = InvoiceDraft['lines'][number];
 import { EXEMPT_INVOICE, MIXED_RATE_INVOICE, STANDARD_RATE_INVOICE } from './reference-invoices';
 
 type BrokenInvoice = {
@@ -64,7 +66,19 @@ export const BROKEN_INVOICES: BrokenInvoice[] = [
     case: 'a grand total that is not net plus VAT',
     draft: STANDARD_RATE_INVOICE,
     tamper: (xml) => xml.replace(/<ram:GrandTotalAmount>[^<]*</, '<ram:GrandTotalAmount>281.45<'),
-    expected: { ruleId: 'BR-CO-15', field: 'invoice' },
+    expected: { ruleId: 'BR-CO-15', field: 'totals' },
+  },
+  {
+    case: 'an invoice without its issue date',
+    draft: MIXED_RATE_INVOICE,
+    tamper: (xml) => xml.replace(/<ram:IssueDateTime>[\s\S]*?<\/ram:IssueDateTime>/, ''),
+    expected: { ruleId: 'BR-03', field: 'issueDate' },
+  },
+  {
+    case: 'a seller without a postal address',
+    draft: MIXED_RATE_INVOICE,
+    tamper: (xml) => xml.replace(/<ram:PostalTradeAddress>[\s\S]*?<\/ram:PostalTradeAddress>/, ''),
+    expected: { ruleId: 'BR-08', field: 'seller.address' },
   },
   {
     case: 'a VAT amount that is not the rate of its basis',

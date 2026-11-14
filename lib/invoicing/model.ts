@@ -46,7 +46,7 @@ export type InvoiceTax =
   | { category: 'Z' }
   | { category: 'E'; exemptionReason: string };
 
-export type InvoiceLine = {
+type InvoiceLine = {
   /** The line's own id, for example its position number `1.2` (BT-126). */
   id: string;
   name: string;

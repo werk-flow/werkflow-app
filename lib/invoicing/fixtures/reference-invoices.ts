@@ -2,7 +2,9 @@
 // and identifiers only. Every one must pass the EN 16931 rules; every broken
 // copy must be refused with the rule and the model field at fault.
 
-import type { InvoiceDraft, InvoiceLine, InvoiceSeller, InvoiceTax } from '../model';
+import type { InvoiceDraft, InvoiceSeller, InvoiceTax } from '../model';
+
+type InvoiceLine = InvoiceDraft['lines'][number];
 
 const seller: InvoiceSeller = {
   name: 'Haustechnik Sonnenberg GmbH',
