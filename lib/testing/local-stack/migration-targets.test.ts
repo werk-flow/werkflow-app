@@ -275,3 +275,83 @@ test('a view, CREATE TABLE AS and a data copy conflict with a newer change to wh
   // A pure SELECT changes nothing.
   expect(shared('select count(*) from jobs;', addNote)).toEqual([]);
 });
+
+test('a table definition conflicts with a change to the table or type it takes its shape from', () => {
+  const addNote = 'alter table jobs add column note text;';
+  for (const copy of [
+    'create table archive (like jobs including all);',
+    'create table archive (id int, like public.jobs);',
+    'create table archive (id int) inherits (audit, jobs);',
+    'create table archive partition of jobs for values in (1);',
+    'create foreign table archive (id int) inherits (jobs) server s;',
+    'alter table archive inherit jobs;',
+    'alter table archive no inherit jobs;',
+    'alter table archive attach partition jobs for values in (1);',
+    'alter table archive detach partition jobs;',
+  ]) {
+    const name = copy.includes('public.jobs') ? 'public.jobs' : 'jobs';
+    // The copy older than the change, and the change older than the copy.
+    expect(shared(copy, addNote), copy).toEqual([name]);
+    expect(shared(addNote, copy), copy).toEqual([name]);
+  }
+  expect(shared('create table archive of job_row;', 'alter type job_row add attribute note text;')).toEqual([
+    'job_row',
+  ]);
+  expect(named('alter table archive not of;')).toEqual(['object archive']);
+  // A check's LIKE compares text and names no table.
+  expect(named("create table archive (mail text check (mail like '%@%'));")).toEqual(['object archive']);
+});
+
+test('a statement with CASCADE is opaque, but a foreign key rule is not', () => {
+  for (const cascade of [
+    'drop schema scratchpad cascade;',
+    'drop table if exists jobs cascade;',
+    'drop function touch() cascade;',
+    'truncate jobs cascade;',
+    'revoke grant option for select on jobs from office cascade;',
+  ])
+    expect(migrationChanges(cascade).opaque, cascade).toHaveLength(1);
+  expect(
+    shared(
+      'create table scratchpad.items (id int);',
+      'drop schema scratchpad cascade; create schema scratchpad;',
+    ),
+  ).toEqual(['a statement it cannot read on the other side ("drop schema scratchpad cascade")']);
+  expect(
+    named(`
+      create table visits (job_id int references jobs on delete cascade on update cascade);
+      comment on table visits is 'cascade';
+      create table "cascade" (id int);
+    `),
+  ).toEqual(['object visits', 'object visits', 'object cascade']);
+});
+
+test('a policy, trigger or publication member conflicts with any change to its table, and not with another one beside it', () => {
+  const trigger =
+    'create trigger touch_widgets before update on widgets for each row execute function touch();';
+  for (const table of [
+    'drop table widgets; create table widgets (id int);',
+    'alter table public.widgets rename to gadgets;',
+    'alter table widgets set schema app_private;',
+    'alter table widgets add column note text;',
+  ]) {
+    expect(shared(trigger, table), table).toEqual(['trigger touch_widgets on widgets']);
+    expect(shared(table, trigger), table).toEqual(['trigger touch_widgets on widgets']);
+  }
+  expect(shared('create policy a on public.widgets using (true);', 'drop table widgets;')).toEqual([
+    'policy a on public.widgets',
+  ]);
+  expect(shared('alter publication supabase_realtime add table widgets;', 'drop table widgets;')).toEqual([
+    'publication supabase_realtime, table widgets',
+  ]);
+  // Different names beside one table commute, and a table of another name is apart.
+  expect(shared(trigger, 'create policy a on widgets using (true);')).toEqual([]);
+  expect(
+    shared(
+      trigger,
+      'create trigger audit_widgets after insert on widgets for each row execute function audit();',
+    ),
+  ).toEqual([]);
+  expect(shared(trigger, 'drop table gadgets;')).toEqual([]);
+  expect(shared(trigger, 'alter publication supabase_realtime set (publish = insert);')).toEqual([]);
+});

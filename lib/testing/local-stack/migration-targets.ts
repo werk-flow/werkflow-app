@@ -6,7 +6,11 @@
 // writes it. It follows neither the search path nor an object's kind: an
 // unqualified name matches that name in every schema, and a table, view,
 // index, function or type of one name are one target. A statement it cannot
-// read is opaque, and an opaque statement conflicts with every other migration.
+// read, or one with CASCADE, which removes dependents the SQL does not name, is
+// opaque, and an opaque statement conflicts with every other migration. A table
+// definition counts the tables and types it copies or hangs from (LIKE,
+// INHERITS, PARTITION OF, OF), and a policy, trigger or publication member
+// conflicts with every change to its table.
 // Each choice can add a conflict PostgreSQL would not have, which costs a
 // rename, and never drops one. It misses a change made only through a call: a
 // function body or trigger that writes when a later statement runs it, and the
@@ -289,7 +293,41 @@ function relationTargets(reader: Reader, kind: string, verb: Verb): Read {
   }
   const found = objects(names(reader));
   if (found === null || !found.length) return null;
-  return verb === 'alter' ? [...found, ...renamedTo(reader, found)] : found;
+  const renamed = verb === 'alter' ? renamedTo(reader, found) : [];
+  const sources = kind === 'table' || kind === 'foreign' ? shapeSources(reader) : [];
+  return sources === null ? null : [...found, ...renamed, ...sources];
+}
+
+/**
+ * What a CREATE or ALTER TABLE takes its shape from: `(LIKE t`, `INHERITS (t, u)`, `[NO] INHERIT t`,
+ * `PARTITION OF t`, `ATTACH|DETACH PARTITION t` and `OF type`. A later change to the source would
+ * reach the table in one order and not the other. Null when a source cannot be read.
+ */
+function shapeSources(reader: Reader): Read {
+  const result: MigrationTarget[] = [];
+  const word = (at: number): string => {
+    const token = reader.tokens[at];
+    return token === undefined || token.quoted || token.string ? '' : token.text;
+  };
+  for (let at = 0; at < reader.tokens.length; at += 1) {
+    const text = word(at);
+    const previous = word(at - 1);
+    reader.position = at + 1;
+    let found: Name[] | null;
+    if (text === 'inherits') found = reader.accept('(') ? names(reader) : null;
+    else if (
+      (text === 'like' && (previous === '(' || previous === ',')) ||
+      text === 'inherit' ||
+      (text === 'partition' && (previous === 'attach' || previous === 'detach')) ||
+      // `NOT OF` names nothing.
+      (text === 'of' && previous !== 'not')
+    )
+      found = names(reader);
+    else continue;
+    if (found === null) return null;
+    result.push(...found.map((name) => target('object', ...name)));
+  }
+  return result;
 }
 
 /** COMMENT ON COLUMN and COMMENT ON CONSTRAINT: the table they belong to. */
@@ -558,11 +596,27 @@ function statementTargets(reader: Reader): Read {
   return null;
 }
 
+/**
+ * CASCADE also removes or changes what depends on its object, which the SQL does not name. A
+ * foreign key's `ON DELETE|UPDATE CASCADE` only declares a rule and removes nothing now.
+ */
+const cascades = (words: Token[]): boolean =>
+  words.some((token, at) => {
+    const previous = words[at - 1];
+    return (
+      !token.quoted &&
+      !token.string &&
+      token.text === 'cascade' &&
+      !(previous !== undefined && !previous.quoted && ['delete', 'update'].includes(previous.text))
+    );
+  });
+
 /** What one migration changes. */
 export function migrationChanges(sql: string): MigrationChanges {
   const changes: MigrationChanges = { targets: [], opaque: [] };
   for (const statement of statements(sql)) {
-    const found = statementTargets(new Reader(tokens(statement)));
+    const words = tokens(statement);
+    const found = cascades(words) ? null : statementTargets(new Reader(words));
     if (found === null) changes.opaque.push(statement.replace(/\s+/g, ' ').slice(0, 60));
     else changes.targets.push(...found);
   }
@@ -581,14 +635,24 @@ function label(found: MigrationTarget): string {
   return `${found.kind} ${found.name}`;
 }
 
-/** One kind, one part, a schema that matches (an unqualified name matches every one), one name or `*`. */
+/** Kinds that hang from a table: dropping, recreating or renaming the table removes or moves them. */
+const ATTACHED: ReadonlySet<TargetKind> = new Set(['policy', 'trigger', 'publication']);
+
+/**
+ * A schema that matches (an unqualified name matches every one) and one name or `*`, with one kind and
+ * one part. A policy, trigger or publication member also overlaps any change to its table, since the
+ * reader cannot tell an added column from a drop; two of them with different parts stay apart.
+ */
 function overlaps(left: MigrationTarget, right: MigrationTarget): boolean {
-  return (
-    left.kind === right.kind &&
-    left.part === right.part &&
-    (left.schema === null || right.schema === null || left.schema === right.schema) &&
-    (left.name === right.name || left.name === '*' || right.name === '*')
-  );
+  if (left.schema !== null && right.schema !== null && left.schema !== right.schema) return false;
+  if (left.kind === right.kind)
+    return left.part === right.part && (left.name === right.name || left.name === '*' || right.name === '*');
+  const table = (attached: MigrationTarget, object: MigrationTarget): boolean =>
+    ATTACHED.has(attached.kind) &&
+    object.kind === 'object' &&
+    attached.name !== '*' &&
+    attached.name === object.name;
+  return table(left, right) || table(right, left);
 }
 
 /** What two migrations both change, each named once; an opaque statement in either conflicts with the other. */
@@ -600,6 +664,17 @@ export function sharedChanges(left: MigrationChanges, right: MigrationChanges): 
   for (const mine of left.targets)
     for (const theirs of right.targets)
       if (overlaps(mine, theirs))
-        shared.add(label(mine.name === '*' || (mine.schema === null && theirs.name !== '*') ? theirs : mine));
+        shared.add(
+          label(
+            // The attached object, else the more specific name.
+            mine.kind !== theirs.kind
+              ? mine.kind === 'object'
+                ? theirs
+                : mine
+              : mine.name === '*' || (mine.schema === null && theirs.name !== '*')
+                ? theirs
+                : mine,
+          ),
+        );
   return [...shared].sort();
 }
