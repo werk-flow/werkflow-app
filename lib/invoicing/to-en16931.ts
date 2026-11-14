@@ -21,7 +21,8 @@ type XmlNode = { [element: string]: string | XmlNode | XmlNode[] };
 const NOT_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/;
 
 function escapeText(text: string): string {
-  if (NOT_XML.test(text)) throw new RangeError('Invoice text holds a control character XML cannot carry.');
+  if (NOT_XML.test(text) || !text.isWellFormed())
+    throw new RangeError('Invoice text holds a character XML cannot carry.');
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 

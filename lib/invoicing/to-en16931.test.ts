@@ -56,6 +56,19 @@ describe('toEn16931', () => {
     expect(() => toEn16931(calculateInvoice(draft))).toThrow(RangeError);
   });
 
+  test('an unpaired surrogate is refused, a surrogate pair is written', () => {
+    const lone = {
+      ...STANDARD_RATE_INVOICE,
+      seller: { ...STANDARD_RATE_INVOICE.seller, name: 'Sonnenberg\uD800' },
+    };
+    expect(() => toEn16931(calculateInvoice(lone))).toThrow(RangeError);
+    const pair = {
+      ...STANDARD_RATE_INVOICE,
+      seller: { ...STANDARD_RATE_INVOICE.seller, name: 'Sonnenberg \u{1F527}' },
+    };
+    expect(toEn16931(calculateInvoice(pair))).toContain('Sonnenberg \u{1F527}');
+  });
+
   test('the § 19 exemption carries its reason and a zero rate', () => {
     const xml = toEn16931(calculateInvoice(EXEMPT_INVOICE));
     expect(xml).toContain(
