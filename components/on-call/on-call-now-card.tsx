@@ -1,9 +1,9 @@
 'use client';
 
-import type { ReactElement } from 'react';
+import { memo, type ReactElement } from 'react';
 import { Phone, Siren } from 'lucide-react';
 
-import { OnCallNowSkeleton } from '@/components/loading-states/on-call-skeletons';
+import { OnCallNowSkeleton } from '@/components/loading-states/on-call-now-skeleton';
 import { useOrganization } from '@/components/organization/organization-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SectionError } from '@/components/ui/section-error';
@@ -63,8 +63,12 @@ function OnCallNow({
   );
 }
 
-/** Who is on call now with phone and handover note, and the caller's own coming shifts. */
-function OnCallNowContent({
+/**
+ * Who is on call now with phone and handover note, and the caller's own coming
+ * shifts. Memoized: the live view re-renders its shell whenever a sheet opens
+ * or closes, as around every clock action, while the shown shifts stay the same.
+ */
+const OnCallNowContent = memo(function OnCallNowContent({
   overview,
   canPlan,
 }: {
@@ -114,7 +118,7 @@ function OnCallNowContent({
       </CardContent>
     </Card>
   );
-}
+});
 
 function CurrentShift({ shift }: { shift: OnCallShift }): ReactElement {
   return (
