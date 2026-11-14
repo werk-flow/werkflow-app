@@ -227,20 +227,33 @@ test('a clock read that fails after the send keeps the clock-in apart from the s
   expect(await screens(page)).toEqual([...KEPT_START, 'Arbeit · Wird übertragen', 'Fehler', 'Arbeit']);
 });
 
-test('a start whose outbox code cannot load shows no clock instead of the server’s clock from before the waiting work', async ({
+test('a start whose outbox code cannot load shows its failure with a retry, no clock and no usable control', async ({
   page,
 }) => {
-  await mountClock(page, CLOCKED_OUT_STATE, () => {
-    // An earlier visit left a start on the phone, and the outbox's code does not arrive.
-    localStorage.setItem('werkflow:unsent:time', '1');
-    window.contractOutboxGone = true;
-  });
+  await mountClock(
+    page,
+    CLOCKED_OUT_STATE,
+    () => {
+      // An earlier visit left a start on the phone, and the outbox's code does not arrive.
+      localStorage.setItem('werkflow:unsent:time', '1');
+      window.contractOutboxGone = true;
+    },
+    ACCEPTED,
+    /^Nicht bereit/,
+  );
   await recordScreens(page);
+  const failure = clockDock(page).getByText('Der Zeitstatus konnte nicht sicher geladen werden.');
+  await expect(failure).toBeVisible();
+  // A successful clock read never ends it: the server's clock may stand before the waiting work.
   await page.getByRole('button', { name: 'Zeitstatus aktualisieren', exact: true }).click();
-  await expect(clockStatus(page)).toHaveText('');
+  // The retry loads the outbox's code again; the harness keeps it gone.
+  await clockDock(page).getByRole('button', { name: 'Erneut laden', exact: true }).click();
+  await expect(failure).toBeVisible();
   await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'loading');
+  // A tap would start from the server's clock, behind the start that waits on the phone.
+  await expect(page.getByRole('button', { name: 'Zeiterfassung starten', exact: true })).toBeDisabled();
 
-  expect(await screens(page)).toEqual(['leer']);
+  expect((await screens(page)).filter((screen) => screen !== 'leer')).toEqual(['Fehler']);
 });
 
 test('taps after a send accepted just before the signal went are kept and go on from the session the send left', async ({

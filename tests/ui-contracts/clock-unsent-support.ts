@@ -73,6 +73,8 @@ export async function mountClock(
   initial: LiveClockState,
   prepare: () => void = () => undefined,
   verdict: Verdict = ACCEPTED,
+  /** The clock's readiness once mounted: not ready while what the device holds is unknown. */
+  readiness: RegExp = /^Bereit/,
 ): Promise<Server> {
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
@@ -127,7 +129,7 @@ export async function mountClock(
   // What the device holds before the app starts.
   await page.evaluate(prepare);
   await page.addScriptTag({ path: bundle });
-  await expect(page.getByLabel('Zeitstatus')).toHaveText(/^Bereit/);
+  await expect(page.getByLabel('Zeitstatus')).toHaveText(readiness);
   return server;
 }
 

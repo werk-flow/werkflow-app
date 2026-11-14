@@ -13,6 +13,7 @@ import { bypassHttpCache, setNetwork, waitForOfflineShell } from '../support/off
 import {
   UNSENT_COPY,
   expectOneSessionAtCapturedTimes,
+  expectStartRecordedAtCapturedTime,
   meineZeitActivity,
   expectSessionsSince,
   expectTimeEventsOnDevice,
@@ -95,6 +96,7 @@ test('a clock start and end without signal are recorded once, at their captured 
 
 test('a kept clock-in on an open page reaches the server when the signal returns, and the clock never shows another state on the way @AUDIT-SECURITY-OFFLINE-CLOCK', async ({
   employeePage: page,
+  world,
 }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/dashboard');
@@ -126,7 +128,7 @@ test('a kept clock-in on an open page reaches the server when the signal returns
   await clockInLauncher(page).click();
   await startWorkAction(clockStartSheet(page)).click();
   await expect(unsentBadge(clockDock(page), UNSENT_COPY.waiting)).toBeVisible();
-  await setNetwork(page, 'online');
+  await expectStartRecordedAtCapturedTime(page, world, () => setNetwork(page, 'online'));
   await expectTimeEventsOnDevice(page, []);
   await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'in');
 

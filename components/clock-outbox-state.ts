@@ -39,8 +39,12 @@ export type ClockOutboxState = {
   view: ClockDeviceView | null;
   /** When the outbox last answered (`performance.now()`), so a clock read can be told apart as older or newer. */
   answeredAt: number;
-  /** The device may hold unsent work, and the outbox has not answered yet nor failed to load. */
+  /** The device may hold unsent work, and the outbox has not answered yet. */
   checking: boolean;
+  /** The outbox's code failed to load while `checking`: the clock is unknown until `retry` loads it. */
+  loadFailed: boolean;
+  /** Loads the outbox's code again and hands it what this page kept. */
+  retry: () => void;
   /** This page kept an action the outbox does not show yet: its code could not load without signal. */
   kept: boolean;
   /** Unsent work the page started with that the outbox has not shown yet; read when an action starts. */
@@ -61,13 +65,14 @@ export type ClockOutboxState = {
 /**
  * The page's two ways to keep an action: `keep` after a failed or skipped online call, `callKept` around
  * the online call. Neither keeps behind events that wait for the person: such an action would never be sent.
+ * `retry` hands kept actions to the outbox again, loading its code anew.
  */
 function useKeepers(
   stopped: boolean,
   signalRef: RefObject<string | null>,
   attachRef: RefObject<(() => void) | null>,
   setKept: (kept: boolean) => void,
-): Pick<ClockOutboxState, 'keep' | 'callKept'> {
+): Pick<ClockOutboxState, 'keep' | 'callKept' | 'retry'> {
   const keep = useCallback<ClockOutboxState['keep']>(
     (action) => {
       const signal = signalRef.current;
@@ -91,20 +96,44 @@ function useKeepers(
     },
     [attachRef, setKept, signalRef],
   );
-  return { keep, callKept };
+  const retry = useCallback(() => attachRef.current?.(), [attachRef]);
+  return { keep, callKept, retry };
 }
 
-/** Marks the page's first look at the device as open; only the outbox's answer or a failed device storage ends it. */
-function watchCheck(check: () => Promise<void>, setChecking: (checking: boolean) => void): void {
-  setChecking(true);
+/**
+ * The page's first look at the device: open while the device may hold unsent work the outbox has not
+ * shown, failed when the outbox's code could not load meanwhile. Only the outbox's answer or a failed
+ * device storage closes it.
+ */
+type FirstLook = 'closed' | 'open' | 'failed';
+
+/** Marks the page's first look at the device as open. */
+function watchCheck(check: () => Promise<void>, setFirstLook: (look: FirstLook) => void): void {
+  setFirstLook('open');
   void check();
+}
+
+/** Asks the outbox again on every return of the network and every action another tab kept; returns the stop. */
+function askOutboxOnChanges(attachNow: () => void, uncheckedRef: RefObject<boolean>): () => void {
+  // Every return of the network asks the outbox: another tab may have sent what this page kept.
+  window.addEventListener('online', attachNow);
+  // Another tab kept an action: until the outbox shows it, a tap here waits behind it.
+  const onKept = (event: StorageEvent): void => {
+    if (!event.key?.startsWith(UNSENT_MARK_PREFIX)) return;
+    uncheckedRef.current = true;
+    attachNow();
+  };
+  window.addEventListener('storage', onKept);
+  return () => {
+    window.removeEventListener('online', attachNow);
+    window.removeEventListener('storage', onKept);
+  };
 }
 
 export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void>): ClockOutboxState {
   const [answer, setAnswer] = useState<{ view: ClockDeviceView | null; at: number }>({ view: null, at: -1 });
-  const view = answer.view;
   const [kept, setKept] = useState(false);
-  const [checking, setChecking] = useState(false);
+  const [firstLook, setFirstLook] = useState<FirstLook>('closed');
   const [deviceFailed, setDeviceFailed] = useState(false);
   const attachRef = useRef<(() => void) | null>(null);
   // The wipe signal the page started under: after another tab's wipe it keeps nothing more.
@@ -123,7 +152,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
       uncheckedRef.current = holdEnded;
       setAnswer({ view: next, at: performance.now() });
       setKept(false);
-      setChecking(false);
+      setFirstLook('closed');
     };
     /** Hands kept actions to the outbox; without signal they stay kept until the next `online`. */
     const attach = async (): Promise<void> => {
@@ -131,7 +160,8 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
       try {
         outbox = await loadClockOutbox();
       } catch {
-        // best-effort: no signal is expected here; `online` or the next start tries again.
+        // No signal is the expected cause; `online`, a retry or the next start tries again.
+        if (!ended) setFirstLook((look) => (look === 'open' ? 'failed' : look));
         return;
       }
       try {
@@ -142,7 +172,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
         // The device storage failed (the outbox logged it): never mistaken for no signal, so actions go online.
         uncheckedRef.current = false;
         setDeviceFailed(true);
-        setChecking(false);
+        setFirstLook('closed');
       }
     };
     const attachNow = (): void => void attach();
@@ -151,37 +181,35 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
     // Until the outbox shows what waits, a new action goes behind it, never past it to the server.
     uncheckedRef.current = deviceMayHoldUnsentWork();
     // The clock shows nothing it is not sure of until this first look answered (shown-clock.ts).
-    if (uncheckedRef.current) watchCheck(attach, setChecking);
-    // Every return of the network asks the outbox: another tab may have sent what this page kept.
-    window.addEventListener('online', attachNow);
-    // Another tab kept an action: until the outbox shows it, a tap here waits behind it.
-    const onKept = (event: StorageEvent): void => {
-      if (!event.key?.startsWith(UNSENT_MARK_PREFIX)) return;
-      uncheckedRef.current = true;
-      attachNow();
-    };
-    window.addEventListener('storage', onKept);
+    if (uncheckedRef.current) watchCheck(attach, setFirstLook);
+    const stopListening = askOutboxOnChanges(attachNow, uncheckedRef);
     return () => {
       ended = true;
       holderRef.current = null;
       attachRef.current = null;
-      window.removeEventListener('online', attachNow);
-      window.removeEventListener('storage', onKept);
+      stopListening();
       detach?.();
       // The next person or organization never sees these events.
       setAnswer({ view: null, at: performance.now() });
       setKept(false);
-      setChecking(false);
+      setFirstLook('closed');
       setDeviceFailed(false);
     };
   }, [holder, refresh]);
 
   const holderNow = useCallback(() => holderRef.current, []);
-  const { keep, callKept } = useKeepers(view?.status === 'stopped', signalRef, attachRef, setKept);
+  const { keep, callKept, retry } = useKeepers(
+    answer.view?.status === 'stopped',
+    signalRef,
+    attachRef,
+    setKept,
+  );
   return {
-    view,
+    view: answer.view,
     answeredAt: answer.at,
-    checking,
+    checking: firstLook !== 'closed',
+    loadFailed: firstLook === 'failed',
+    retry,
     kept,
     unchecked: uncheckedRef,
     deviceFailed,

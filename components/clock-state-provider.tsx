@@ -379,18 +379,26 @@ function clockReadiness(input: {
   error: string | null;
   isLoading: boolean;
   standsOnDevice: boolean;
+  /** The outbox's code failed to load during the start's first look at the device. */
+  outboxFailed: boolean;
 }): { isReady: boolean; statusError: string | null } {
-  const { phoneState, shown, error, isLoading, standsOnDevice } = input;
+  const { phoneState, shown, error, isLoading, standsOnDevice, outboxFailed } = input;
   return {
-    // While unsent actions settle with network, no action starts before the server's answer.
-    isReady: phoneState !== null && !isLoading && !shown.actionsWait && (!error || standsOnDevice),
+    // No action starts while the outbox's code failed to load (its retry shows), nor, while unsent
+    // actions settle with network, before the server's answer. While the first look is only open,
+    // a tap goes into the outbox behind the waiting work: a device store that never answers keeps
+    // the clock usable, and a wrong guess stops the chain with its badge.
+    isReady:
+      phoneState !== null && !outboxFailed && !isLoading && !shown.actionsWait && (!error || standsOnDevice),
     // While they settle, only the read that should settle them shows its failure, also without
     // network: the server's older clock is never shown in its place.
     statusError: shown.readFailed
       ? (error ?? 'time_state_unavailable')
-      : standsOnDevice || shown.settling
-        ? null
-        : error,
+      : outboxFailed
+        ? 'time_state_unavailable'
+        : standsOnDevice || shown.settling
+          ? null
+          : error,
   };
 }
 
@@ -426,7 +434,14 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
     error: view.error,
     isLoading: view.isLoading,
     standsOnDevice: Boolean(unsent?.state) || outbox.kept || (Boolean(view.error) && !online),
+    outboxFailed: outbox.loadFailed,
   });
+  // The dock's retry also loads the outbox's code again when that is what failed.
+  const { loadFailed: outboxFailed, retry: retryOutbox } = outbox;
+  const retry = useCallback(async () => {
+    if (outboxFailed) retryOutbox();
+    await refresh();
+  }, [outboxFailed, refresh, retryOutbox]);
   const execute = useClockTransitionExecute({
     holder: { activeOrgId, userId },
     isReady,
@@ -455,7 +470,7 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
       isReady,
       isPending,
       statusError,
-      refresh,
+      refresh: retry,
       ...commands,
     }),
     [
@@ -467,7 +482,7 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
       statusError,
       view.isLoading,
       isReady,
-      refresh,
+      retry,
     ],
   );
 
