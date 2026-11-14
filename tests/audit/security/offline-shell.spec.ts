@@ -103,7 +103,6 @@ test('the installed app opens its shell on a cold start without signal, also beh
       await expectOnlyShellFilesCached(page, [world.users.employee.email]);
       await coldStartWithoutSignal(page, origin, async (started) => {
         await expect(offlineFallback(started)).toBeVisible();
-        await setNetwork(started, 'online');
       });
     });
   });

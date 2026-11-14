@@ -281,8 +281,10 @@ export async function withProtectedOrigin(
 
 /**
  * Starts the installed app again without signal: takes the context off the
- * network, closes every page, as swiping the app away does, opens the
- * manifest's start URL in a new page and hands that page to `inStartedApp`.
+ * network, closes every page, as swiping the app away does, and stops the
+ * service worker, as the phone does once no page of the app runs. Then it
+ * opens the manifest's start URL in a new page, so the navigation starts the
+ * worker, and hands that page to `inStartedApp`. Chromium only.
  */
 export async function coldStartWithoutSignal(
   page: Page,
@@ -300,7 +302,25 @@ export async function coldStartWithoutSignal(
   if (typeof startUrl !== 'string') throw new Error('The manifest names no start URL.');
   await context.setOffline(true);
   for (const open of context.pages()) await open.close();
+  // A blank page is no client of the app; it only reaches the browser's worker controls.
   const started = await openPage(context);
+  const workers = await context.newCDPSession(started);
+  const runningStatus = new Map<string, string>();
+  workers.on('ServiceWorker.workerVersionUpdated', ({ versions }) => {
+    for (const version of versions) runningStatus.set(version.versionId, version.runningStatus);
+  });
+  await workers.send('ServiceWorker.enable');
+  await workers.send('ServiceWorker.stopAllWorkers');
+  await expect
+    .poll(
+      () => runningStatus.size > 0 && [...runningStatus.values()].every((status) => status === 'stopped'),
+      {
+        message: 'Every service worker of the context is stopped before the cold start',
+      },
+    )
+    .toBe(true);
+  // A session left on the worker domain made a later network switch of the context hang.
+  await workers.detach();
   // Only the worker's cache may serve the shell, as on a phone whose HTTP cache was cleared.
   await bypassHttpCache(started);
   await started.goto(new URL(startUrl, origin).href);

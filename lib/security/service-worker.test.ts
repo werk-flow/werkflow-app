@@ -57,14 +57,17 @@ test('the shell asset pattern finds only root-relative paths of this origin', ()
 // The cached bytes stay free of the person only while proxy.ts, which reads
 // and refreshes the session, never runs on a shell path.
 test('the proxy never runs on a path the shell caches', () => {
-  const proxy = readFileSync(join(root, 'proxy.ts'), 'utf8');
-  const block = /matcher: \[([^\]]*)\]/.exec(proxy)?.[1];
+  // Only a literal path or a literal prefix with `/:path*` can be judged here; any
+  // other Next.js matcher form, such as `/(.*)`, fails until this test learns it.
+  const judgeable = /^\/(?:[\w-]+(?:\/[\w-]+)*)?(?:\/:path\*)?$/;
+  const block = /matcher: \[([^\]]*)\]/.exec(readFileSync(join(root, 'proxy.ts'), 'utf8'))?.[1];
   if (!block) throw new Error('matcher not found in proxy.ts');
   const entries = [...block.matchAll(/'([^']+)'/g)].flatMap(([, entry]) =>
     entry === undefined ? [] : [entry],
   );
   expect(entries.length).toBeGreaterThan(0);
-  const routes = (entry: string, path: string): boolean => {
+  expect(entries.filter((entry) => !judgeable.test(entry))).toEqual([]);
+  const runsOn = (entry: string, path: string): boolean => {
     if (!entry.endsWith('/:path*')) return entry === path;
     const base = entry.slice(0, -'/:path*'.length);
     return path === base || path.startsWith(`${base}/`);
@@ -77,10 +80,11 @@ test('the proxy never runs on a path the shell caches', () => {
     '/logo.svg',
   ]) {
     expect(
-      entries.filter((entry) => routes(entry, path)),
-      `proxy.ts routes ${path}`,
+      entries.filter((entry) => runsOn(entry, path)),
+      `proxy.ts runs on ${path}`,
     ).toEqual([]);
   }
+  expect(judgeable.test('/(.*)')).toBe(false);
 });
 
 // Rule test: a dynamic page could hold the person whose cookies the shell
