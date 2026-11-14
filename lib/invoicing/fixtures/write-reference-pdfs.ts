@@ -49,4 +49,4 @@ for (const [name, draft] of Object.entries(REFERENCE_INVOICES)) {
 if (!first) throw new Error('No reference invoice.');
 await writeFile(join(out, 'broken', 'xml-changed-after-embedding.pdf'), await withChangedEmbeddedXml(first));
 await writeFile(join(out, 'broken', 'without-output-intent.pdf'), await withoutOutputIntent(first));
-console.log(`Wrote ${Object.keys(REFERENCE_INVOICES).length} reference invoices and 2 broken copies to ${out}.`);
+process.stdout.write(`Wrote ${Object.keys(REFERENCE_INVOICES).length} reference invoices and 2 broken copies to ${out}.\n`);
