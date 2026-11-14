@@ -253,8 +253,10 @@ export async function loadReplacementPlans(
   const { data, error } = await context.admin.rpc('list_installed_equipment_replacement_plans', {
     p_organization_id: context.organizationId,
     p_equipment_id: row.id,
+    // The carry-over input takes at most 50 plans (validation.ts).
+    p_limit: 50,
   });
-  const parsed = replacementPlanRowsSchema.safeParse(data);
+  const parsed = replacementPlanRowsSchema.safeParse(data ?? []);
   if (error || !parsed.success) {
     logReadErrors('loadReplacementPlans: read failed', error ?? { code: 'unexpected_row_shape' });
     throw new Error('installed_equipment_detail_failed');

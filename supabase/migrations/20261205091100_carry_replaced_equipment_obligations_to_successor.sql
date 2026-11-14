@@ -31,11 +31,12 @@ alter type public.maintenance_due_event_type add value if not exists 'equipment_
 
 -- The running plans whose current revision covers the equipment, with their
 -- template and the earliest open due date bound to the equipment on any of
--- the plan's revisions (the items a carry moves). The replace dialog lists them, and
+-- the plan's revisions (the items a carry moves). A null limit lists all. The replace dialog lists them, and
 -- replace_installed_equipment requires one choice for each.
 create function public.list_installed_equipment_replacement_plans(
   p_organization_id uuid,
-  p_equipment_id uuid
+  p_equipment_id uuid,
+  p_limit integer
 )
 returns table (
   plan_id uuid,
@@ -73,7 +74,8 @@ as $$
   where plan.organization_id = p_organization_id
     and plan.status in ('draft', 'active', 'suspended')
     and plan.archived_at is null
-  order by plan.plan_number, plan.id;
+  order by plan.plan_number, plan.id
+  limit p_limit;
 $$;
 
 -- One page of the history of the equipment's predecessors (the Vorgänger, its
@@ -385,10 +387,10 @@ begin
       select choice."planId" from jsonb_to_recordset(p_carry_over->'plans') as choice("planId" uuid)
       except
       select running.plan_id
-      from public.list_installed_equipment_replacement_plans(p_organization_id, p_predecessor_id) running
+      from public.list_installed_equipment_replacement_plans(p_organization_id, p_predecessor_id, null) running
     ) union all (
       select running.plan_id
-      from public.list_installed_equipment_replacement_plans(p_organization_id, p_predecessor_id) running
+      from public.list_installed_equipment_replacement_plans(p_organization_id, p_predecessor_id, null) running
       except
       select choice."planId" from jsonb_to_recordset(p_carry_over->'plans') as choice("planId" uuid)
     )
@@ -582,7 +584,7 @@ begin
         and (
           plan.id in (
             select running.plan_id
-            from public.list_installed_equipment_replacement_plans(p_organization_id, v_successor.id) running
+            from public.list_installed_equipment_replacement_plans(p_organization_id, v_successor.id, null) running
           ) or exists (
             select 1 from public.maintenance_due_work due_work
             join public.maintenance_plan_revision_equipment link
@@ -685,14 +687,15 @@ grant execute on function app_private.carry_maintenance_plan_to_equipment(
 grant execute on function app_private.record_installed_equipment_subject_event(
   uuid, uuid, public.installed_equipment_event_type, jsonb, timestamptz, uuid, text, text, uuid
 ) to service_role;
-revoke all on function public.list_installed_equipment_replacement_plans(uuid, uuid)
+revoke all on function public.list_installed_equipment_replacement_plans(uuid, uuid, integer)
   from public, anon, authenticated;
 revoke all on function public.list_installed_equipment_predecessor_events(uuid, uuid, integer, integer)
   from public, anon, authenticated;
 revoke all on function public.replace_installed_equipment(
   uuid, uuid, uuid, bigint, jsonb, timestamptz, text, uuid, uuid, jsonb
 ) from public, anon, authenticated;
-grant execute on function public.list_installed_equipment_replacement_plans(uuid, uuid) to service_role;
+grant execute on function public.list_installed_equipment_replacement_plans(uuid, uuid, integer)
+  to service_role;
 grant execute on function public.list_installed_equipment_predecessor_events(uuid, uuid, integer, integer)
   to service_role;
 grant execute on function public.replace_installed_equipment(

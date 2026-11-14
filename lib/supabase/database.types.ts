@@ -17576,7 +17576,11 @@ export type Database = {
         };
       };
       list_installed_equipment_replacement_plans: {
-        Args: { p_equipment_id: string; p_organization_id: string };
+        Args: {
+          p_equipment_id: string;
+          p_limit: number;
+          p_organization_id: string;
+        };
         Returns: {
           next_due_date: string;
           plan_id: string;

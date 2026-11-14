@@ -194,7 +194,7 @@ do $$ begin
   if (
     select running.next_due_date
     from public.list_installed_equipment_replacement_plans(
-      '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000040') running
+      '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000040', 50) running
     where running.plan_id = '46600000-0000-4000-8000-000000000050'
   ) is distinct from (select overdue_date from pg_temp.world) then
     raise exception 'the replacement plans do not show the overdue item of an earlier revision';
@@ -481,7 +481,7 @@ select pg_temp.expect_refusal('authenticated replaces', $sql$
 $sql$, 'permission denied');
 select pg_temp.expect_refusal('authenticated reads replacement plans', $sql$
   select public.list_installed_equipment_replacement_plans(
-    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000040')
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000040', 50)
 $sql$, 'permission denied');
 select pg_temp.expect_refusal('authenticated reads predecessor history', $sql$
   select public.list_installed_equipment_predecessor_events(
