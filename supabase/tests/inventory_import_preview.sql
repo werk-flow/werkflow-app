@@ -382,11 +382,18 @@ begin
     raise exception 'the preview must match the Rotguss-Bogen and refuse the Pressfitting in Meter: %', v_preview->'rows';
   end if;
 
-  -- After the preview, someone moves the Bogen's Artikelnummer and counts the fitting in Meter.
+  -- After the preview, someone moves the Bogen's Artikelnummer and counts the
+  -- fitting in Meter. The fitting has stock, so only a change made before the
+  -- database kept the unit of such an article (migration 20261204100000) gets
+  -- there; the seed bypasses that guard.
   update public.inventory_items set internal_sku = 'NR-BOGEN-15-ALT'
   where organization_id = v_org and internal_sku = 'NR-BOGEN-15';
+  reset role;
+  set local session_replication_role = replica;
   update public.inventory_items set unit = 'meter'
   where organization_id = v_org and internal_sku = 'NR-FIT-15';
+  set local session_replication_role = origin;
+  set local role service_role;
   select count(*) into v_movements from public.inventory_movements where organization_id = v_org;
 
   v_booking := public.book_inventory_import(v_org, v_admin, (v_preview->>'batch_id')::uuid);
