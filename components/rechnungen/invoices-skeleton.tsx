@@ -20,7 +20,7 @@ export function InvoicesPageSkeleton() {
       <PageHeader
         title="Rechnungen"
         subtitle={INVOICES_SUBTITLE}
-        actions={<Skeleton className="h-9 w-44" />}
+        actions={<Skeleton className="h-11 w-44 sm:h-9" />}
       />
       <PageBody>
         <div role="status" aria-label="Rechnungen werden geladen">
