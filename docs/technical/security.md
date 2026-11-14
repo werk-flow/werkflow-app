@@ -50,7 +50,7 @@ Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it ke
 
 ### Profile a customer export
 
-A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures derive from it. Wrong turn: opening an export row to "check one field".
+A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds personal data. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures derive from it. Wrong turn: opening an export row to "check one field".
 
 ## Trust boundaries
 
@@ -63,7 +63,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; a new authenticated area is routed there. `app/(app)/layout.tsx` checks the session again and is the authority.
 - **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy passes the request to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
 - **Redirects.** A return destination from a query string goes through `resolveSafeReturnPath` and is a same-origin path. An invite code is a UUID before the app echoes it.
-- **Organization cookie.** The cookie is a hint. The server accepts it only for a current member and refuses to set it for a non-member.
+- **Organization cookie.** The cookie is a hint, accepted and set only for a current member.
 - **Joining.** Join codes are cryptographically random. A code creates a join request, never a membership; only an Admin or Büro approval in that organization creates it, in one database function. A signed-in user gets limited join attempts per hour.
 - **Cross-organization writes.** A write that names another record checks that it belongs to the caller's organization and, where it applies, to the same person.
 - **Abuse limits.** Invite mail, invite redemption, join codes, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
@@ -90,7 +90,7 @@ RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE
 
 ### Files
 
-Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; each finalization copies it to its own key and checks it. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes; only reviewed writers, such as the organization export, store a server-generated file.
+Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; each finalization copies it to its own key and checks it. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes; only reviewed writers store a server-generated file.
 
 ### Mail and providers
 
@@ -106,11 +106,15 @@ The service worker (`/sw.js`, [versioned per build](../decisions/0010-offline-fi
 
 A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure.
 
+### Usage statistics
+
+Only `lib/usage-statistics/capture.ts` sends to PostHog: personless server events under the organization id, only for organizations in `POSTHOG_ORGANIZATION_IDS` (werk-flow/werkflow-planning#280, register LQ-20). Its test fails on another property or sender.
+
 ### Supply chain
 
 Every plan carries an advisory check under 24 hours old. An unknown finding fails, as does an exception that is expired, outgrown or on a changed dependency tree, matching or not. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
 
-An exception matching no finding on an unchanged tree means the registry narrowed the advisory: the check passes with a note; remove the exception.
+An exception matching no finding on an unchanged tree passes with a note: the registry narrowed the advisory; remove it.
 
 ## Never
 
@@ -173,19 +177,19 @@ List each owner-accepted residual exposure until it closes.
 | Logs, traces, test artifacts | Diagnosis and test evidence. Fixtures are synthetic. | Limit access and remove secrets from exported evidence. Ignored files are neither encrypted nor purged automatically. |
 | Backups and retained file versions | Recovery. Database backups hold no file bytes. | [The runbook](recovery-and-incidents.md) records coverage and accepted loss. Deleting a live record does not erase a backup. |
 
-Before sensitive client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Product analytics or session replay needs the owner's privacy and cost decision first.
+Before sensitive client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa), [PostHog](https://posthog.com/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Session replay or per-person analytics needs a new owner decision.
 
 ## Read-request authorization reuse
 
 A GET handler may share the identity and membership reads of one request through `lib/data/read-request-cache.ts`.
 
-- Each GET gets a fresh scope. No identity or membership result crosses requests.
+- Each GET gets a fresh scope; no result crosses requests.
 - Never wrap a Server Action or a mutation. Never pass caller-supplied authorization context into a `'use server'` export.
 - A handler that takes an organization from the request requires it to equal the resolved active organization.
 - The privileged profile lookup reads through the caller's own RLS on every call.
 - A new consumer extends `lib/data/read-request-cache.test.ts`. Job-access facts share one read per render or GET scope (`lib/jobs/job-access-reads.ts`) and read fresh in a Server Action.
 
-Membership alone authorizes no retained data of a removed employee. The clock-state reads check current membership in the action itself.
+Membership alone authorizes no retained data of a removed employee; the clock-state reads check current membership themselves.
 
 ## Calendar correction input boundary
 

@@ -313,6 +313,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
   ['security:offline-clock', 'security/offline-clock.spec.ts', ['standalone', 'time']],
+  // No browser request reaches PostHog while a counted workflow step runs (usage statistics).
+  ['security:usage-statistics', 'security/usage-statistics.spec.ts', ['time']],
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
   // The no-signal visit end to end, and the office's refusals of a replay (decision record 0010).
   [

@@ -33,6 +33,7 @@ import { blankableUuidSchema, createJobInputSchema } from '@/lib/jobs/action-sch
 import { createProjectInputSchema } from '@/lib/projects/action-schemas';
 import { Constants, type Json } from '@/lib/supabase/database.types';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { captureUsage } from '@/lib/usage-statistics/capture';
 import { isUuid, uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
@@ -302,7 +303,9 @@ export async function createClientRequest(
         p_attempt_key: attemptKey ?? null,
       }),
     );
-    return requestWriteResult(outcome, 'create_failed', 'Error creating client request:');
+    const created = requestWriteResult(outcome, 'create_failed', 'Error creating client request:');
+    if (created.success) captureUsage(orgId, 'request', 'started');
+    return created;
   } catch (error) {
     logError('Unexpected error in createClientRequest:', error);
     return { success: false, error: 'unexpected_error' };
@@ -562,7 +565,9 @@ export async function closeClientRequest(
         p_note: input.note?.trim() || null,
       }),
     );
-    return requestWriteResult(outcome, 'close_failed', 'Error closing client request:');
+    const closed = requestWriteResult(outcome, 'close_failed', 'Error closing client request:');
+    if (closed.success) captureUsage(orgId, 'request', 'abandoned');
+    return closed;
   } catch (error) {
     logError('Unexpected error in closeClientRequest:', error);
     return { success: false, error: 'unexpected_error' };
@@ -684,6 +689,7 @@ export async function convertRequestToJob(
     }
 
     updateTag(CACHE_TAGS.workTemplates(orgId));
+    captureUsage(orgId, 'request', 'completed');
 
     return { success: true, target: 'job', jobId: data.id, jobNumber: data.job_number };
   } catch (error) {
@@ -739,6 +745,7 @@ export async function convertRequestToProject(
     }
 
     updateTag(CACHE_TAGS.workTemplates(orgId));
+    captureUsage(orgId, 'request', 'completed');
 
     return {
       success: true,

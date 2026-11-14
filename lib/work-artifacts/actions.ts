@@ -11,6 +11,7 @@ import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { captureUsage } from '@/lib/usage-statistics/capture';
 import type { Database, Json } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { discardStorageObjects, putStorageObject } from '@/lib/storage/r2';
@@ -249,6 +250,11 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
     return { success: false, error: mapArtifactError(error) };
   }
   revalidateWorkEvidenceViews();
+  // A first save opens the report; a submit, first or later, completes it.
+  if (!parsed.data.expectedVersion && !parsed.data.correctsRevisionId) {
+    captureUsage(auth.context.orgId, 'work_report', 'started');
+  }
+  if (parsed.data.submit) captureUsage(auth.context.orgId, 'work_report', 'completed');
   // The authoritative detail after the write, read with the same permission checks as an open.
   const saved = await getWorkArtifactDetail(parsed.data.artifactId);
   return {
@@ -399,6 +405,7 @@ export async function voidWorkArtifact(input: {
     return { success: false, error: mapArtifactError(error) };
   }
   revalidateWorkEvidenceViews();
+  captureUsage(auth.context.orgId, 'work_report', 'abandoned');
   return {
     success: true,
     artifactId: parsed.data.artifactId,
