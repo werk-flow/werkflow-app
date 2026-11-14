@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, type ReactElement } from 'react';
+import { memo, useEffect, useState, type ReactElement } from 'react';
 import { Phone, Siren } from 'lucide-react';
 
 import { OnCallNowSkeleton } from '@/components/loading-states/on-call-now-skeleton';
@@ -9,9 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { SectionError } from '@/components/ui/section-error';
 import { TextLink } from '@/components/ui/text-link';
 import { useLiveView } from '@/hooks/use-live-view';
-import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { isOnCallAt, shiftPhase } from '@/lib/on-call/rules';
+import { isOnCallAt, nextShiftChange, shiftPhase } from '@/lib/on-call/rules';
 import type { OnCallOverview, OnCallShift } from '@/lib/on-call/types';
 import { isManagerRole } from '@/lib/roles';
 
@@ -63,6 +62,28 @@ function OnCallNow({
   );
 }
 
+/** setTimeout holds at most 2^31 - 1 ms; a later change waits in steps. */
+const LONGEST_WAIT_MS = 2_147_483_647;
+
+/**
+ * The instant the card shows, renewed when a shown shift starts or ends. Who
+ * is on call changes only there, so the card renders no minute tick: a field
+ * worker's dashboard stays still while the clock runs.
+ */
+function useNowUntilShiftsChange(overview: OnCallOverview): number {
+  const [now, setNow] = useState(() => Date.now());
+  const next = nextShiftChange([...overview.shifts, ...overview.ownNext], new Date(now));
+  useEffect(() => {
+    if (next === null) return;
+    const timer = window.setTimeout(
+      () => setNow(Date.now()),
+      Math.min(Math.max(next - Date.now(), 0), LONGEST_WAIT_MS),
+    );
+    return () => window.clearTimeout(timer);
+  }, [next, now]);
+  return now;
+}
+
 /**
  * Who is on call now with phone and handover note, and the caller's own coming
  * shifts. Memoized: the live view re-renders its shell whenever a sheet opens
@@ -75,7 +96,7 @@ const OnCallNowContent = memo(function OnCallNowContent({
   overview: OnCallOverview;
   canPlan: boolean;
 }): ReactElement {
-  const now = new Date(useWallClockTick(60_000));
+  const now = new Date(useNowUntilShiftsChange(overview));
   const current = overview.shifts.filter((shift) => isOnCallAt(shift, now));
   const own = overview.ownNext.filter((shift) => shiftPhase(shift, now) === 'planned');
   return (

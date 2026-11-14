@@ -26,6 +26,23 @@ export function isOnCallAt(shift: ShiftTime, at: Date): boolean {
 }
 
 /**
+ * The next instant after `at` where a shift starts or ends (epoch
+ * milliseconds), or null: who is on call changes only there, so a view of it
+ * re-renders then and not on every minute.
+ */
+export function nextShiftChange(shifts: readonly ShiftTime[], at: Date): number | null {
+  const now = at.getTime();
+  let next: number | null = null;
+  for (const shift of shifts) {
+    if (shift.cancelledAt !== null) continue;
+    for (const instant of [Date.parse(shift.startsAt), Date.parse(shift.endsAt)]) {
+      if (instant > now && (next === null || instant < next)) next = instant;
+    }
+  }
+  return next;
+}
+
+/**
  * The start a save sends. A running shift keeps its stored instant: the form
  * shows minutes, while a handover starts the next shift at the exact second.
  * Null when the shift started while its start was being edited: that edit can

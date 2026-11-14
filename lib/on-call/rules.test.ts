@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { parseBerlinDateTimeInput, resolveBerlinWallTime } from '@/lib/date-time/berlin';
-import { onCallWeek, isOnCallAt, shiftPhase, startToSave } from './rules';
+import { nextShiftChange, onCallWeek, isOnCallAt, shiftPhase, startToSave } from './rules';
 
 /** The instant of a Berlin wall time; the first one of an ambiguous autumn hour. */
 function berlin(localDateTime: string): Date {
@@ -155,5 +155,30 @@ describe('the start a change saves', () => {
       typed.toISOString(),
     );
     expect(startToSave(null, typed, new Date('2026-11-14T09:00:00.000Z'))).toBe(typed.toISOString());
+  });
+});
+
+describe('when the dashboard card changes next', () => {
+  const now = berlin('2026-11-16T21:00');
+  test.each([
+    ['nothing ahead', [], null],
+    ['a coming start', [shift('2026-11-16T22:00', '2026-11-17T06:00')], '2026-11-16T22:00'],
+    [
+      'the earlier of a running end and a coming start',
+      [shift('2026-11-16T18:00', '2026-11-17T06:00'), shift('2026-11-16T23:00', '2026-11-17T07:00')],
+      '2026-11-16T23:00',
+    ],
+    ['an end across a month end', [shift('2026-11-30T18:00', '2026-12-01T06:00')], '2026-11-30T18:00'],
+    ['only a past shift', [shift('2026-11-16T06:00', '2026-11-16T20:00')], null],
+    ['an end exactly now has passed', [shift('2026-11-16T18:00', '2026-11-16T21:00')], null],
+    [
+      'a cancelled shift never changes the card',
+      [shift('2026-11-16T22:00', '2026-11-17T06:00', now.toISOString())],
+      null,
+    ],
+    // The spring change: 02:00 to 03:00 does not exist; the shift ends at its instant.
+    ['an end in the spring change', [shift('2027-03-27T18:00', '2027-03-28T04:00')], '2027-03-27T18:00'],
+  ])('%s', (_, shifts, expected) => {
+    expect(nextShiftChange(shifts, now)).toEqual(expected === null ? null : berlin(expected).getTime());
   });
 });
