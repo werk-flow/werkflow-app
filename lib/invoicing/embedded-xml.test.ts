@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { AFRelationship, PDFDocument } from 'pdf-lib';
 
 import { calculateInvoice } from './calculate';
-import { E_INVOICE_FILE_NAME, readEmbeddedInvoiceXml, verifyEmbeddedInvoiceXml } from './embedded-xml';
+import { E_INVOICE_FILE_NAME, readEmbeddedInvoiceXml } from './embedded-xml';
 import { withChangedEmbeddedXml } from './fixtures/broken-e-invoice-pdfs';
 import { STANDARD_RATE_INVOICE } from './fixtures/reference-invoices';
 import { toEn16931 } from './to-en16931';
@@ -27,18 +27,17 @@ describe('reading the invoice XML back out of a finished PDF', () => {
     const bytes = await pdfWith(xml);
     expect(await readEmbeddedInvoiceXml(bytes)).toBe(xml);
     expect(xml).toContain('Heizkörperventil');
-    await verifyEmbeddedInvoiceXml(bytes, xml);
   });
 
-  test('XML changed after embedding is a failure', async () => {
+  test('XML changed after embedding reads back as the changed XML, never as what the core wrote', async () => {
     const changed = await withChangedEmbeddedXml(await pdfWith(xml));
-    expect(await readEmbeddedInvoiceXml(changed)).not.toBe(xml);
-    await expect(verifyEmbeddedInvoiceXml(changed, xml)).rejects.toThrow('e_invoice_xml_mismatch');
+    const readBack = await readEmbeddedInvoiceXml(changed);
+    expect(readBack).not.toBe(xml);
+    expect(readBack).toContain('<ram:GrandTotalAmount>281.45</ram:GrandTotalAmount>');
   });
 
   test('a PDF without the embedded invoice is a failure, never an empty match', async () => {
     const bytes = await pdfWith(null);
     await expect(readEmbeddedInvoiceXml(bytes)).rejects.toThrow('e_invoice_xml_missing');
-    await expect(verifyEmbeddedInvoiceXml(bytes, '')).rejects.toThrow('e_invoice_xml_missing');
   });
 });

@@ -1,6 +1,6 @@
-// Reads the invoice XML back out of a finished ZUGFeRD PDF. The PDF is only
-// issued or sent when the file a machine reads is the file the core wrote and
-// the rules checked: a changed or missing attachment is a failure.
+// Reads the invoice XML back out of a finished ZUGFeRD PDF, so the renderer
+// returns a PDF only when the file a machine reads is the file the core wrote
+// and the rules checked: a changed or missing attachment is a failure.
 
 import {
   PDFArray,
@@ -36,9 +36,4 @@ export async function readEmbeddedInvoiceXml(pdfBytes: Uint8Array): Promise<stri
     return new TextDecoder('utf-8', { fatal: true }).decode(decodePDFRawStream(stream).decode());
   }
   throw new Error('e_invoice_xml_missing');
-}
-
-/** Throws unless the PDF carries exactly `xml` as its embedded invoice. */
-export async function verifyEmbeddedInvoiceXml(pdfBytes: Uint8Array, xml: string): Promise<void> {
-  if ((await readEmbeddedInvoiceXml(pdfBytes)) !== xml) throw new Error('e_invoice_xml_mismatch');
 }

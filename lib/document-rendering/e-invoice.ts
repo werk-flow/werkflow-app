@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { AFRelationship, JpegEmbedder, PDFHexString, PDFName, PDFString } from 'pdf-lib';
 
-import { E_INVOICE_FILE_NAME, verifyEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
+import { E_INVOICE_FILE_NAME, readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 
 import type { BusinessDocument, StationeryFile } from './model';
 import { drawBusinessDocument } from './render';
@@ -180,6 +180,6 @@ export async function renderEInvoicePdf(input: BusinessDocument, xml: string): P
   context.trailerInfo.ID = context.obj([PDFHexString.of(id), PDFHexString.of(id)]);
 
   const bytes = await pdf.save();
-  await verifyEmbeddedInvoiceXml(bytes, xml);
+  if ((await readEmbeddedInvoiceXml(bytes)) !== xml) throw new Error('e_invoice_xml_mismatch');
   return bytes;
 }
