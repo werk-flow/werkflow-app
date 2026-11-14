@@ -217,27 +217,33 @@ export async function readDeliveryFiles(
   return { success: true, delivery: reading.delivery, lines, contentHash: await deliveryContentHash(read) };
 }
 
-/** The JSON characters one staging call carries at most, well below the 1 MB a Server Action takes. */
-const STAGE_PART_MAX_CHARACTERS = 400_000;
+/**
+ * The UTF-8 bytes of lines one staging call carries at most: half the 1 MB a
+ * Server Action takes, so the rest holds the call's envelope (the batch id,
+ * the brackets) and React's escape of each string that starts with `$`.
+ */
+const STAGE_PART_MAX_BYTES = 512 * 1024;
+const utf8 = new TextEncoder();
 
 /**
  * The lines in delivery order, split into the parts the staging calls carry:
- * each at most `maxLines` lines and about 400 000 JSON characters, so a part
- * of long names still fits one request.
+ * each at most `maxLines` lines and 512 KB of UTF-8 JSON, so a part of long
+ * names in three-byte characters still fits one request.
  */
 export function stagingParts(lines: readonly StagedImportLine[], maxLines: number): StagedImportLine[][] {
   const parts: StagedImportLine[][] = [];
   let part: StagedImportLine[] = [];
-  let characters = 0;
+  let bytes = 0;
   for (const line of lines) {
-    const size = JSON.stringify(line).length;
-    if (part.length > 0 && (part.length === maxLines || characters + size > STAGE_PART_MAX_CHARACTERS)) {
+    // The line's JSON and the comma before it.
+    const size = utf8.encode(JSON.stringify(line)).length + 1;
+    if (part.length > 0 && (part.length === maxLines || bytes + size > STAGE_PART_MAX_BYTES)) {
       parts.push(part);
       part = [];
-      characters = 0;
+      bytes = 0;
     }
     part.push(line);
-    characters += size;
+    bytes += size;
   }
   if (part.length > 0) parts.push(part);
   return parts;

@@ -135,7 +135,10 @@ test('the browser reads the files and sends only their parsed lines, each part s
   expect(ordinals).toEqual(Array.from({ length: 2647 }, (_, ordinal) => ordinal));
   for (const part of staged) {
     expect(part.length).toBeLessThanOrEqual(2000);
-    expect(JSON.stringify(part).length).toBeLessThan(450_000);
+    // One staging call's body in UTF-8 bytes stays below the 1 MB a Server Action takes.
+    expect(Buffer.byteLength(JSON.stringify([{ importId: 'import-1', lines: part }]))).toBeLessThan(
+      1024 * 1024,
+    );
   }
 });
 

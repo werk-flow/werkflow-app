@@ -3,7 +3,8 @@
 // a unit only when the unit list knows it. Synthetic data, no wholesaler file.
 import { expect, test } from 'bun:test';
 import { wholesalerImportReportCsv, wholesalerPreviewTotals } from './wholesaler-import-lines';
-import { guessUnitMapping, readDeliveryFiles } from './wholesaler-import-staging';
+import { WHOLESALER_STAGE_MAX_LINES } from './wholesaler-import-schemas';
+import { guessUnitMapping, readDeliveryFiles, stagingParts } from './wholesaler-import-staging';
 import type { WholesalerDelivery } from './wholesaler-reader';
 
 const ARTICLE = {
@@ -188,6 +189,38 @@ test('a delivery the reader refuses or that holds nothing is no delivery to stag
     throw new Error('unreadable');
   };
   expect(await readDeliveryFiles([file], throwing)).toEqual({ success: false, error: 'delivery_unreadable' });
+});
+
+test('each staging part fits the 1 MB a Server Action takes, counted in UTF-8 bytes, whatever characters its texts hold', async () => {
+  // „“–€… take three UTF-8 bytes each, so a part's characters undercount its bytes threefold.
+  // Umlauts and ß take two, which 400 000 characters never push past 1 MB.
+  const text = (length: number) => '„“–€…'.repeat(length).slice(0, length);
+  const lines = await stagedDeliveryLines(
+    delivery({
+      articles: Array.from({ length: 3000 }, (_, index) => ({
+        ...ARTICLE,
+        file: text(200),
+        line: index + 2,
+        articleNumber: `${index}-${text(190)}`,
+        name: text(500),
+        nameAddition: text(500),
+        unit: text(200),
+        rebateGroup: text(200),
+        mainProductGroup: text(200),
+        productGroup: text(200),
+        ean: text(200),
+        matchcode: text(200),
+      })),
+    }),
+  );
+  const parts = stagingParts(lines, WHOLESALER_STAGE_MAX_LINES);
+  expect(parts.flat().map((line) => line.ordinal)).toEqual(lines.map((line) => line.ordinal));
+  const importId = '00000000-0000-4000-8000-000000000001';
+  for (const part of parts) {
+    // The body of one staging call: React sends the action's arguments as one JSON array.
+    const body = new TextEncoder().encode(JSON.stringify([{ importId, lines: part }]));
+    expect(body.length).toBeLessThan(1024 * 1024);
+  }
 });
 
 test('a unit text names a unit of the list or nothing, never Stück by default', () => {
