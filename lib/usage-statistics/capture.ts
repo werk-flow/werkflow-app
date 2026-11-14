@@ -9,7 +9,7 @@ import { isUuid } from '@/lib/validation/uuid';
 // after a workflow step succeeded. An event names a workflow and a step and is
 // keyed by the organization alone: no person, role, record id, content or IP.
 // Without a project key, or for an organization missing from the allowlist,
-// nothing leaves the server.
+// nothing leaves the server. capture.test.ts fails on any other property.
 
 export type UsageWorkflow =
   | 'work_evidence'
@@ -25,14 +25,6 @@ export type UsageStep = 'started' | 'completed' | 'abandoned';
 // PostHog's EU ingestion host; the project lives in the EU cloud.
 const CAPTURE_URL = 'https://eu.i.posthog.com/i/v0/e/';
 const SEND_TIMEOUT_MS = 5_000;
-
-/** Every property an event may carry. The guard below refuses any other key before sending. */
-const ALLOWED_PROPERTY_KEYS: ReadonlySet<string> = new Set([
-  'workflow',
-  'step',
-  '$process_person_profile',
-  '$geoip_disable',
-]);
 
 type UsageEventProperties = {
   workflow: UsageWorkflow;
@@ -52,14 +44,6 @@ type UsageEventPayload = {
 function allowedOrganizationIds(): ReadonlySet<string> {
   const entries = (process.env.POSTHOG_ORGANIZATION_IDS ?? '').split(',').map((entry) => entry.trim());
   return new Set(entries.filter(isUuid).map((entry) => entry.toLowerCase()));
-}
-
-/**
- * True when every property key is allowed; a new property must join the list and its review.
- * @internal exported for the guard's test.
- */
-export function carriesOnlyAllowedProperties(properties: object): boolean {
-  return Object.keys(properties).every((key) => ALLOWED_PROPERTY_KEYS.has(key));
 }
 
 /** The event this step sends, or null when nothing may leave: no key, or the organization is not allowed. */
@@ -103,9 +87,5 @@ async function send(payload: UsageEventPayload): Promise<void> {
 export function captureUsage(organizationId: string, workflow: UsageWorkflow, step: UsageStep): void {
   const payload = usageEventFor(organizationId, workflow, step);
   if (!payload) return;
-  if (!carriesOnlyAllowedProperties(payload.properties)) {
-    logError('captureUsage: event carries a property outside the allowlist');
-    return;
-  }
   after(() => send(payload));
 }

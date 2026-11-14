@@ -13,12 +13,13 @@ mock.module('server-only', () => ({}));
 // Runs the deferred send at once, so the test sees what would leave the server.
 const deferred: Array<() => Promise<void>> = [];
 mock.module('next/server', () => ({ after: (task: () => Promise<void>) => deferred.push(task) }));
-const { captureUsage, carriesOnlyAllowedProperties } = await import('./capture');
+const { captureUsage } = await import('./capture');
 
 type SentRequest = { url: string; body: unknown };
 let sent: SentRequest[] = [];
 const originalFetch = globalThis.fetch;
-const environment = { ...process.env };
+const CAPTURE_VARIABLES = ['POSTHOG_PROJECT_API_KEY', 'POSTHOG_ORGANIZATION_IDS'] as const;
+const environment = CAPTURE_VARIABLES.map((name) => [name, process.env[name]] as const);
 
 async function flush(): Promise<void> {
   for (const task of deferred.splice(0)) await task();
@@ -39,7 +40,11 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  process.env = { ...environment };
+  // Only the keys this file sets: replacing process.env would cut later tests' TZ off the runtime.
+  for (const [name, value] of environment) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
 });
 
 test('an event names workflow and step, keyed by the organization, with no person and no location', async () => {
@@ -78,25 +83,29 @@ test('an organization outside the allowlist, such as one whose AVV is unsigned, 
   expect(sent).toEqual([]);
 });
 
-test('the guard refuses every property that could point to a person, a record or content', () => {
-  const base = { workflow: 'request', step: 'started', $process_person_profile: false, $geoip_disable: true };
-  expect(carriesOnlyAllowedProperties(base)).toBe(true);
-  for (const forbidden of [
-    'user_id',
-    'userId',
-    'email',
-    'name',
-    'role',
-    'job_id',
-    'record_id',
-    'customer',
-    'content',
-    '$ip',
-    '$set',
-    '$current_url',
-  ]) {
-    expect(carriesOnlyAllowedProperties({ ...base, [forbidden]: 'x' })).toBe(false);
+// Rule test: an event carries only these keys; any new property, such as a person, a role,
+// a record id or content, fails here first.
+test('every event of every workflow carries no property beyond workflow and step', async () => {
+  const workflows = [
+    'work_evidence',
+    'time_recording',
+    'follow_up',
+    'request',
+    'handover',
+    'maintenance_visit',
+    'blocker',
+  ] as const;
+  const expected: SentRequest[] = [];
+  for (const workflow of workflows) {
+    for (const step of ['started', 'completed', 'abandoned'] as const) {
+      captureUsage(ALLOWED_ORG, workflow, step);
+      const properties = { workflow, step, $process_person_profile: false, $geoip_disable: true };
+      const body = { api_key: TEST_KEY, event: `${workflow}_${step}`, distinct_id: ALLOWED_ORG, properties };
+      expected.push({ url: 'https://eu.i.posthog.com/i/v0/e/', body });
+    }
   }
+  await flush();
+  expect(sent).toEqual(expected);
 });
 
 test('a failed send is logged and never throws into the workflow step', async () => {
