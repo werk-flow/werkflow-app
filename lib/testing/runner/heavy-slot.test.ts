@@ -68,7 +68,15 @@ test('a machine holds as many heavy slots as its memory fits: two on the 16 GB P
 });
 
 const pcRoom = (available: number, blocked: string | null = null): RoomReading => ({
-  room: { available: available * GIB, floor: 1.56 * GIB, blocked, alerted: false },
+  room: {
+    available: available * GIB,
+    floor: 1.56 * GIB,
+    blocked,
+    alerted: false,
+    load: 2,
+    cores: 14,
+    normalLoad: 21,
+  },
 });
 
 // The count from total memory never saw what the agents held (2026-11-11); it stays only as the upper limit.

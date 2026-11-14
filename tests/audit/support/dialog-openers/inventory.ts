@@ -308,6 +308,11 @@ function seededRowActionsButton(context: SurfaceContext) {
 
 /** The Angebote openers; their acceptance captures run with the inventory group. */
 export const COMMERCIAL_OPENERS = {
+  'commercial.offer': {
+    trigger: async ({ page }) =>
+      page.getByRole('main').getByRole('button', { name: 'Angebot anlegen', exact: true }),
+    layer: (page) => page.getByRole('dialog', { name: 'Angebot anlegen', exact: true }),
+  },
   'commercial.leistung': {
     trigger: async ({ page }) => createLeistungButton(page),
     layer: (page) => leistungDialogLayer(page, 'create'),
