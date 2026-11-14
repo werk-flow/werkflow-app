@@ -158,6 +158,8 @@ const REVIEWED_UNPAGED_RPC_READS: Readonly<Record<string, string>> = {
   'lib/documents/actions.ts::permanentlyDeleteDocument::rpc:permanently_delete_document':
     'the storage paths of the versions of one document',
   'lib/documents/links.ts::writeDocumentLinks::rpc:update_document_links': 'the links of one document',
+  'lib/installed-equipment/history-reads.ts::loadReplacementPlans::rpc:list_installed_equipment_replacement_plans':
+    'the running maintenance plans of one Anlage',
   'lib/inventory/actions.ts::recordMovement::rpc:record_inventory_movement': 'the stock rows of one movement',
   'lib/invites/send-invite.ts::createAndMailOrganizationInvite::rpc:check_user_exists_by_email':
     'the account of one address',

@@ -127,6 +127,7 @@ $$;
 -- next date. The caller holds the plan's row lock and checked the manager role.
 create function app_private.carry_maintenance_plan_to_equipment(
   p_plan public.maintenance_plans,
+  p_expected_plan_version bigint,
   p_from_equipment_id uuid,
   p_to_equipment_id uuid,
   p_effective_on date,
@@ -211,7 +212,9 @@ begin
   update public.maintenance_plans plan set
     current_revision_id = v_revision_id,
     version = plan.version + 1, updated_by = p_actor_id, updated_at = now()
-  where plan.id = p_plan.id and plan.organization_id = p_plan.organization_id;
+  where plan.id = p_plan.id and plan.organization_id = p_plan.organization_id
+    and plan.version = p_expected_plan_version;
+  if not found then raise exception 'installed_equipment_stale_version'; end if;
 
   for v_due in
     select due_work.id, due_work.original_due_date, due_work.status
@@ -431,7 +434,7 @@ begin
     );
     if v_choice.carry then
       perform app_private.carry_maintenance_plan_to_equipment(
-        v_plan, p_predecessor_id, p_successor_id, v_effective_on,
+        v_plan, v_choice.expected_version, p_predecessor_id, p_successor_id, v_effective_on,
         'Anlagentausch: ' || btrim(p_reason), p_actor_id, 'equipment_replace', p_idempotency_key
       );
       perform app_private.record_installed_equipment_subject_event(
@@ -595,7 +598,7 @@ begin
       for update
     loop
       perform app_private.carry_maintenance_plan_to_equipment(
-        v_plan, v_successor.id, p_equipment_id,
+        v_plan, v_plan.version, v_successor.id, p_equipment_id,
         (p_effective_at at time zone 'Europe/Berlin')::date,
         'Korrektur des Anlagentauschs: ' || btrim(p_reason), p_actor_id,
         'equipment_replace_correct', p_idempotency_key
@@ -670,14 +673,14 @@ end;
 $$;
 
 revoke all on function app_private.carry_maintenance_plan_to_equipment(
-  public.maintenance_plans, uuid, uuid, date, text, uuid, text, uuid
+  public.maintenance_plans, bigint, uuid, uuid, date, text, uuid, text, uuid
 ) from public, anon, authenticated;
 revoke all on function app_private.record_installed_equipment_subject_event(
   uuid, uuid, public.installed_equipment_event_type, jsonb, timestamptz, uuid, text, text, uuid
 ) from public, anon, authenticated;
 -- The invoker replacement runs these as service_role.
 grant execute on function app_private.carry_maintenance_plan_to_equipment(
-  public.maintenance_plans, uuid, uuid, date, text, uuid, text, uuid
+  public.maintenance_plans, bigint, uuid, uuid, date, text, uuid, text, uuid
 ) to service_role;
 grant execute on function app_private.record_installed_equipment_subject_event(
   uuid, uuid, public.installed_equipment_event_type, jsonb, timestamptz, uuid, text, text, uuid
