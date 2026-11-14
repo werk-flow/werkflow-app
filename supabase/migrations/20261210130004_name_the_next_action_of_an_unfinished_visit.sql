@@ -123,6 +123,7 @@ declare
   v_next_due_date date;
   v_next_due_id uuid;
   v_return_id uuid;
+  v_return_for_id uuid;
   v_follow_up_id uuid;
   v_due_at timestamptz;
   v_payload jsonb;
@@ -164,10 +165,7 @@ begin
       if v_note is null or length(v_note) not between 3 and 1000 then raise exception 'maintenance_reason_required'; end if;
     else
       if v_note is not null then raise exception 'maintenance_next_action_not_allowed'; end if;
-      if p_next_action_owner_id is null
-         or not app_private.maintenance_actor_is_manager(p_organization_id, p_next_action_owner_id) then
-        raise exception 'maintenance_next_action_owner_invalid';
-      end if;
+      if p_next_action_owner_id is null then raise exception 'maintenance_next_action_owner_invalid'; end if;
       if p_next_action_target_date is null then raise exception 'maintenance_next_action_date_invalid'; end if;
     end if;
   end if;
@@ -184,6 +182,11 @@ begin
     select * into strict v_after from public.maintenance_due_work due_work
     where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id;
     return v_after;
+  end if;
+  -- After the replay: an owner who lost the manager role since keeps the recorded completion.
+  if p_next_action_owner_id is not null
+     and not app_private.maintenance_actor_is_manager(p_organization_id, p_next_action_owner_id) then
+    raise exception 'maintenance_next_action_owner_invalid';
   end if;
 
   select * into v_before from public.maintenance_due_work due_work
@@ -251,7 +254,8 @@ begin
     -- A Rückkehr on that date would hide the regular obligation.
     if v_next_due_id is null and exists (
       select 1 from public.maintenance_due_work due_work
-      where due_work.maintenance_plan_id = v_before.maintenance_plan_id
+      where due_work.organization_id = p_organization_id
+        and due_work.maintenance_plan_id = v_before.maintenance_plan_id
         and due_work.maintenance_plan_revision_id = v_revision.id
         and due_work.original_due_date = v_next_due_date
         and due_work.return_for_due_work_id is not null
@@ -268,6 +272,8 @@ begin
   end if;
 
   if p_next_action = 'return_visit' then
+    -- A return from a return item still returns to the regular item, in row and history alike.
+    v_return_for_id := coalesce(v_before.return_for_due_work_id, v_before.id);
     v_return_id := gen_random_uuid();
     insert into public.maintenance_due_work (
       id, organization_id, maintenance_plan_id, maintenance_plan_revision_id,
@@ -277,14 +283,14 @@ begin
       v_return_id, p_organization_id, v_before.maintenance_plan_id, v_revision.id,
       p_next_action_target_date, p_next_action_target_date,
       p_completed_on, p_next_action_target_date + v_revision.due_window_after_days,
-      coalesce(v_before.return_for_due_work_id, v_before.id), p_actor_id, p_actor_id
+      v_return_for_id, p_actor_id, p_actor_id
     ) on conflict (maintenance_plan_id, maintenance_plan_revision_id, original_due_date)
       do nothing returning id into v_return_id;
     if v_return_id is null then raise exception 'maintenance_return_date_taken'; end if;
     perform app_private.record_maintenance_due_event(
       p_organization_id, v_return_id, 'generated', p_actor_id, null,
       'due_return_opened', v_return_id,
-      jsonb_build_object('dueDate', p_next_action_target_date, 'returnForDueWorkId', v_before.id),
+      jsonb_build_object('dueDate', p_next_action_target_date, 'returnForDueWorkId', v_return_for_id),
       null, app_private.maintenance_due_snapshot(v_return_id, p_organization_id)
     );
   end if;

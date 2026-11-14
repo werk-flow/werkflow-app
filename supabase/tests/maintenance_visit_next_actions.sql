@@ -256,6 +256,32 @@ begin
 
 end $$;
 
+-- A replay recognizes the recorded completion although its owner has since
+-- lost the Büro role: the owner is checked for a new completion only.
+reset role;
+update public.organization_members set role = 'employee'
+where organization_id = '47050000-0000-4000-8000-000000000010' and user_id = '47050000-0000-4000-8000-000000000004';
+set local role service_role;
+do $$ declare
+  v_org constant uuid := '47050000-0000-4000-8000-000000000010';
+  v_items bigint;
+  v_after public.maintenance_due_work%rowtype;
+begin
+  select count(*) into v_items from public.maintenance_due_work due_work where due_work.organization_id = v_org;
+  v_after := public.complete_maintenance_visit(v_org, '47050000-0000-4000-8000-000000000071', 1, 'partial', '2026-01-12',
+    array['47050000-0000-4000-8000-000000000046']::uuid[], 'Teilweise erledigt',
+    array['Brenner zündet verzögert', ' Abgasklappe klemmt '], 'return_visit', '47050000-0000-4000-8000-000000000004',
+    '2026-02-15', null, '47050000-0000-4000-8000-000000000001', '47050000-0000-4000-8000-000000000090');
+  if v_after.version is distinct from 2::bigint or v_after.status is distinct from 'completed'
+     or (select count(*) from public.maintenance_due_work due_work where due_work.organization_id = v_org) is distinct from v_items then
+    raise exception 'a replay after the owner lost the Büro role did not return the first result: %', to_jsonb(v_after);
+  end if;
+end $$;
+reset role;
+update public.organization_members set role = 'buero'
+where organization_id = '47050000-0000-4000-8000-000000000010' and user_id = '47050000-0000-4000-8000-000000000004';
+set local role service_role;
+
 -- The return item gets its visit job by hand: the seed role bypasses the guards.
 reset role;
 set local session_replication_role = replica;
@@ -266,22 +292,38 @@ where due_work.organization_id = '47050000-0000-4000-8000-000000000010'
 set local session_replication_role = origin;
 set local role service_role;
 
--- Completing the return item neither sets a next due date nor adds an item.
+-- Completing the return item neither sets a next due date nor adds a regular
+-- item; a second Rückkehr from it returns to the regular item, in its row and
+-- its history alike.
 do $$ declare
   v_org constant uuid := '47050000-0000-4000-8000-000000000010';
+  v_regular constant uuid := '47050000-0000-4000-8000-000000000071';
   v_return public.maintenance_due_work%rowtype;
+  v_second public.maintenance_due_work%rowtype;
   v_after public.maintenance_due_work%rowtype;
   v_items bigint;
 begin
   select * into v_return from public.maintenance_due_work due_work
-  where due_work.organization_id = v_org and due_work.return_for_due_work_id = '47050000-0000-4000-8000-000000000071';
+  where due_work.organization_id = v_org and due_work.return_for_due_work_id = v_regular;
   select count(*) into v_items from public.maintenance_due_work due_work where due_work.organization_id = v_org;
-  v_after := public.complete_maintenance_visit(v_org, v_return.id, v_return.version, 'complete', '2026-02-14',
-    array['47050000-0000-4000-8000-000000000046']::uuid[], 'Rückkehr erledigt', null,
-    null, null, null, null, '47050000-0000-4000-8000-000000000001', gen_random_uuid());
+  v_after := public.complete_maintenance_visit(v_org, v_return.id, v_return.version, 'partial', '2026-02-14',
+    array['47050000-0000-4000-8000-000000000046']::uuid[], 'Rückkehr teilweise erledigt', array['Abgasklappe klemmt'],
+    'return_visit', '47050000-0000-4000-8000-000000000001', '2026-06-15', null,
+    '47050000-0000-4000-8000-000000000001', gen_random_uuid());
   if v_after.status is distinct from 'completed' or v_after.next_due_date is not null
-     or (select count(*) from public.maintenance_due_work due_work where due_work.organization_id = v_org) is distinct from v_items then
+     or (select count(*) from public.maintenance_due_work due_work where due_work.organization_id = v_org) is distinct from v_items + 1 then
     raise exception 'completing a return item advanced the plan: %', to_jsonb(v_after);
+  end if;
+  select * into v_second from public.maintenance_due_work due_work
+  where due_work.organization_id = v_org and due_work.due_date = date '2026-06-15';
+  if v_second.return_for_due_work_id is distinct from v_regular then
+    raise exception 'a second Rückkehr does not return to the regular item: %', to_jsonb(v_second);
+  end if;
+  if not exists (select 1 from public.maintenance_due_work_events event
+    where event.organization_id = v_org and event.maintenance_due_work_id = v_second.id
+      and event.request_operation = 'due_return_opened'
+      and event.request_payload->>'returnForDueWorkId' = v_regular::text) then
+    raise exception 'the second Rückkehr''s history names another item than its row';
   end if;
 end $$;
 
