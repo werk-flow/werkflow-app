@@ -4,6 +4,7 @@ import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
 import { useServerAction } from '@/hooks/use-server-action';
+import { useBanner } from '@/components/ui/banner';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type {
   MaintenanceDueItem,
@@ -103,6 +104,7 @@ export function useMaintenanceDueAction({
     serviceCaseId,
     missedReason,
   };
+  const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(async () => {
     setError(null);
     const result = await runMaintenanceDueAction(due, values, idempotencyKey.current);
@@ -111,6 +113,7 @@ export function useMaintenanceDueAction({
       return;
     }
     onOpenChange(false);
+    showBanner({ variant: 'success', message: 'Änderung gespeichert.' });
     // Without a caller's live read, the action's response renders the route.
     onSaved?.();
   });
