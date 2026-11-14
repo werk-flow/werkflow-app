@@ -1,5 +1,7 @@
--- A project lead per project or job (20261201150000_name_a_project_lead_per_work.sql,
--- werk-flow/werkflow-planning#381). A holding names a member of the work's own
+-- A project lead per project or job (20261201150000_name_a_project_lead_per_work.sql
+-- and 20261210120000_name_and_end_a_project_lead.sql, werk-flow/werkflow-planning#381).
+-- Admin and Büro name and end a lead in one call each, against the holding
+-- they saw. A holding names a member of the work's own
 -- organization, one open holding per work, and stays as history. The lead of
 -- a project reviews the Regie- und Änderungsnachweise of the project and of
 -- its jobs, unless a job names its own lead; a lead of another project, an
@@ -113,15 +115,18 @@ begin
 end;
 $$;
 
--- Names the member the lead of the work, ending the open holding, as the
--- office's naming does.
-create function pg_temp.name_lead(p_project_id uuid, p_job_id uuid, p_user_id uuid) returns void
-language sql as $$
-  update public.work_leads set ended_at = now(), ended_by = '4f200000-0000-4000-8000-000000000001'
+-- The open holding of the work, as the office's screen shows it.
+create function pg_temp.open_lead(p_project_id uuid, p_job_id uuid) returns uuid language sql as $$
+  select id from public.work_leads
   where ended_at is null and (project_id = p_project_id or job_id = p_job_id);
-  insert into public.work_leads (organization_id, project_id, job_id, employee_record_id, started_by)
-  values ('4f200000-0000-4000-8000-0000000000a0', p_project_id, p_job_id, pg_temp.record_of(p_user_id),
-    '4f200000-0000-4000-8000-000000000001');
+$$;
+
+-- Names the member the lead of the work through the office's naming, which
+-- ends the open holding in the same call.
+create function pg_temp.name_lead(p_project_id uuid, p_job_id uuid, p_user_id uuid) returns jsonb
+language sql as $$
+  select public.name_work_lead('4f200000-0000-4000-8000-0000000000a0', '4f200000-0000-4000-8000-000000000001',
+    p_project_id, p_job_id, p_user_id, pg_temp.open_lead(p_project_id, p_job_id));
 $$;
 
 -- A submitted Arbeitsnachweis of the given kind on a job or the project.
@@ -245,8 +250,8 @@ begin
   if v_result->>'status' is distinct from 'rejected' then raise exception 'the job lead''s rejection did not apply'; end if;
 
   -- Ending: the ended lead is refused at once.
-  update public.work_leads set ended_at = now(), ended_by = v_admin
-  where project_id = v_project_a and ended_at is null;
+  v_result := public.end_work_lead(v_org, v_admin, v_project_a, null, pg_temp.open_lead(v_project_a, null));
+  if v_result->>'changed' is distinct from 'true' then raise exception 'the lead was not ended'; end if;
   perform pg_temp.expect_refusal('an ended lead approves', format(
     'select pg_temp.review(%L, %L, %L)', v_lead, '4f200000-0000-4000-8000-000000000035', 'internal_approved'),
     'work_artifact_not_authorized');
@@ -294,6 +299,127 @@ begin
 end;
 $$;
 
+-- The office's naming and ending (20261210120000_name_and_end_a_project_lead.sql),
+-- called as the server calls them, as service_role: only a manager of the
+-- organization, only its own work and members, and a call whose holding
+-- changed meanwhile is refused; a repeat changes nothing.
+grant execute on function pg_temp.expect_refusal(text, text, text) to service_role;
+grant execute on function pg_temp.open_lead(uuid, uuid) to service_role;
+grant execute on function pg_temp.record_of(uuid) to service_role;
+set local role service_role;
+do $$
+declare
+  v_org constant uuid := '4f200000-0000-4000-8000-0000000000a0';
+  v_admin constant uuid := '4f200000-0000-4000-8000-000000000001';
+  v_lead constant uuid := '4f200000-0000-4000-8000-000000000002';
+  v_author constant uuid := '4f200000-0000-4000-8000-000000000003';
+  v_other constant uuid := '4f200000-0000-4000-8000-000000000004';
+  v_second constant uuid := '4f200000-0000-4000-8000-000000000005';
+  v_project_b constant uuid := '4f200000-0000-4000-8000-000000000011';
+  v_stale uuid := pg_temp.open_lead('4f200000-0000-4000-8000-000000000011', null);
+  v_result jsonb;
+begin
+  perform pg_temp.expect_refusal('an employee names a lead', format(
+    'select public.name_work_lead(%L, %L, %L, null, %L, %L)', v_org, v_lead, v_project_b, v_other, v_stale),
+    'work_lead_not_authorized');
+  perform pg_temp.expect_refusal('a foreign organization''s Admin names a lead', format(
+    'select public.name_work_lead(%L, %L, %L, null, %L, %L)',
+    v_org, '4f200000-0000-4000-8000-000000000006', v_project_b, v_other, v_stale),
+    'work_lead_not_authorized');
+  perform pg_temp.expect_refusal('a foreign organization''s member is named', format(
+    'select public.name_work_lead(%L, %L, %L, null, %L, %L)',
+    v_org, v_admin, v_project_b, '4f200000-0000-4000-8000-000000000007', v_stale),
+    'work_lead_member_not_eligible');
+  perform pg_temp.expect_refusal('a removed member is named', format(
+    'select public.name_work_lead(%L, %L, %L, null, %L, %L)', v_org, v_admin, v_project_b, v_second, v_stale),
+    'work_lead_member_not_eligible');
+  perform pg_temp.expect_refusal('a lead is named on a foreign organization''s project', format(
+    'select public.name_work_lead(%L, %L, %L, null, %L, null)',
+    v_org, v_admin, '4f200000-0000-4000-8000-000000000012', v_other), 'work_lead_target_not_found');
+  perform pg_temp.expect_refusal('a lead is named on a project and a job at once', format(
+    'select public.name_work_lead(%L, %L, %L, %L, %L, null)',
+    v_org, v_admin, v_project_b, '4f200000-0000-4000-8000-000000000022', v_other), 'work_lead_target_invalid');
+  perform pg_temp.expect_refusal('a naming that saw no lead replaces the open one', format(
+    'select public.name_work_lead(%L, %L, %L, null, %L, null)', v_org, v_admin, v_project_b, v_other),
+    'work_lead_changed');
+  if pg_temp.open_lead(v_project_b, null) is distinct from v_stale then
+    raise exception 'a refused naming changed the holding';
+  end if;
+
+  v_result := public.name_work_lead(v_org, v_admin, v_project_b, null, v_other, v_stale);
+  if v_result->>'changed' is distinct from 'true'
+    or (v_result->>'leadId')::uuid is distinct from pg_temp.open_lead(v_project_b, null)
+    or (select ended_by from public.work_leads where id = v_stale) is distinct from v_admin
+  then raise exception 'the naming did not end the old holding and open the new one'; end if;
+  -- The retry of the applied call changes nothing.
+  v_result := public.name_work_lead(v_org, v_admin, v_project_b, null, v_other, v_stale);
+  if v_result->>'changed' is distinct from 'false'
+    or (select count(*) from public.work_leads where project_id = v_project_b) <> 2
+  then raise exception 'a repeated naming changed the history'; end if;
+
+  perform pg_temp.expect_refusal('an end that saw an older lead', format(
+    'select public.end_work_lead(%L, %L, %L, null, %L)', v_org, v_admin, v_project_b, v_stale),
+    'work_lead_changed');
+  perform pg_temp.expect_refusal('an employee ends a lead', format(
+    'select public.end_work_lead(%L, %L, %L, null, %L)',
+    v_org, v_author, v_project_b, pg_temp.open_lead(v_project_b, null)), 'work_lead_not_authorized');
+  v_stale := pg_temp.open_lead(v_project_b, null);
+  v_result := public.end_work_lead(v_org, v_admin, v_project_b, null, v_stale);
+  if v_result->>'changed' is distinct from 'true' or pg_temp.open_lead(v_project_b, null) is not null then
+    raise exception 'the end did not apply';
+  end if;
+  v_result := public.end_work_lead(v_org, v_admin, v_project_b, null, v_stale);
+  if v_result->>'changed' is distinct from 'false' then raise exception 'a repeated end changed something'; end if;
+
+  -- A member who left cannot be named.
+  update public.employee_records set entry_date = (now() at time zone 'Europe/Berlin')::date - 30,
+    exit_date = (now() at time zone 'Europe/Berlin')::date - 1
+  where id = pg_temp.record_of(v_author);
+  perform pg_temp.expect_refusal('a member who left is named', format(
+    'select public.name_work_lead(%L, %L, %L, null, %L, null)', v_org, v_admin, v_project_b, v_author),
+    'work_lead_member_not_eligible');
+  update public.employee_records set exit_date = null where id = pg_temp.record_of(v_author);
+end;
+$$;
+
+reset role;
+
+-- A change of a job, an instruction or an Arbeitsnachweis in a led project touches the open
+-- holding, so the lead, who reads no row of a job they are not on, hears of it
+-- through the holding's Realtime event. Work of another project does not.
+do $$
+declare
+  v_holding uuid;
+  v_before tid;
+begin
+  perform pg_temp.name_lead('4f200000-0000-4000-8000-000000000011', null, '4f200000-0000-4000-8000-000000000004');
+  v_holding := pg_temp.open_lead('4f200000-0000-4000-8000-000000000011', null);
+  v_before := (select ctid from public.work_leads where id = v_holding);
+  update public.jobs set title = 'Lüftung Dachgeschoss' where id = '4f200000-0000-4000-8000-000000000022';
+  if (select ctid from public.work_leads where id = v_holding) is not distinct from v_before then
+    raise exception 'a changed job of a led project did not touch its holding';
+  end if;
+  v_before := (select ctid from public.work_leads where id = v_holding);
+  insert into public.job_instruction_items (organization_id, job_id, content, created_by)
+  values ('4f200000-0000-4000-8000-0000000000a0', '4f200000-0000-4000-8000-000000000022',
+    'Filter tauschen', '4f200000-0000-4000-8000-000000000001');
+  if (select ctid from public.work_leads where id = v_holding) is not distinct from v_before then
+    raise exception 'a new instruction in a led project did not touch its holding';
+  end if;
+  v_before := (select ctid from public.work_leads where id = v_holding);
+  perform pg_temp.submit('4f200000-0000-4000-8000-000000000036', '4f200000-0000-4000-8000-000000000001',
+    'site_diary', '4f200000-0000-4000-8000-000000000022', null);
+  if (select ctid from public.work_leads where id = v_holding) is not distinct from v_before then
+    raise exception 'a new Arbeitsnachweis in a led project did not touch its holding';
+  end if;
+  v_before := (select ctid from public.work_leads where id = v_holding);
+  update public.jobs set title = 'Heizung Erdgeschoss' where id = '4f200000-0000-4000-8000-000000000020';
+  if (select ctid from public.work_leads where id = v_holding) is distinct from v_before then
+    raise exception 'a job of another project touched the holding';
+  end if;
+end;
+$$;
+
 -- The organization's deletion removes its holdings with the rest.
 insert into public.projects (id, organization_id, name, project_number, created_by) values
   ('4f200000-0000-4000-8000-000000000013', '4f200000-0000-4000-8000-0000000000c0', 'Altbau',
@@ -323,6 +449,10 @@ begin
     or has_table_privilege('authenticated', 'public.work_leads', 'delete')
     or has_function_privilege('authenticated', 'public.read_work_lead_scope(uuid, uuid)', 'execute')
     or has_function_privilege('anon', 'public.read_work_lead_scope(uuid, uuid)', 'execute')
+    or has_function_privilege('authenticated', 'public.name_work_lead(uuid, uuid, uuid, uuid, uuid, uuid)', 'execute')
+    or has_function_privilege('anon', 'public.name_work_lead(uuid, uuid, uuid, uuid, uuid, uuid)', 'execute')
+    or has_function_privilege('authenticated', 'public.end_work_lead(uuid, uuid, uuid, uuid, uuid)', 'execute')
+    or has_function_privilege('anon', 'public.end_work_lead(uuid, uuid, uuid, uuid, uuid)', 'execute')
   then raise exception 'a browser role holds a privilege on the work leads'; end if;
 end;
 $$;
@@ -346,7 +476,7 @@ $$;
 select set_config('request.jwt.claims', '{"sub":"4f200000-0000-4000-8000-000000000001","role":"authenticated"}', true);
 do $$
 begin
-  if (select count(*) from public.work_leads) <> 6 then raise exception 'the Admin does not see every holding'; end if;
+  if (select count(*) from public.work_leads) <> 8 then raise exception 'the Admin does not see every holding'; end if;
 end;
 $$;
 reset role;

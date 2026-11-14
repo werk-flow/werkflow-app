@@ -11,6 +11,7 @@ import { ClipboardList, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useLiveView } from '@/hooks/use-live-view';
+import { isLeadSignal, withLeadSignal } from '@/lib/projects/work-lead-signal';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import {
@@ -44,6 +45,12 @@ type WorkArtifactsSectionProps = WorkArtifactTarget & {
   instructionOptions?: Array<{ id: string; label: string }>;
   defaultSiteId?: string | undefined;
   readOnly?: boolean;
+  /**
+   * The viewer leads the work as its „Projektleitung“ without working on it:
+   * no Arbeitsnachweis event reaches them, so the list also reads fresh when
+   * their lead holding is touched.
+   */
+  refreshOnLeadSignal?: boolean;
 };
 
 export function WorkArtifactsSection({
@@ -60,6 +67,7 @@ export function WorkArtifactsSection({
   instructionOptions = [],
   defaultSiteId,
   readOnly = false,
+  refreshOnLeadSignal = false,
 }: WorkArtifactsSectionProps): ReactElement {
   const { selectedId, editing, restoredDraft, draftDevice, ...open } = useOpenArtifact(initialArtifacts);
   // Newest version seen per artifact while the dialog is open. The dialog
@@ -71,13 +79,10 @@ export function WorkArtifactsSection({
   // prefetches that code, so a dialog in it would count toward the field cold start. A field
   // worker's page loads it once idle, so a first open without signal finds it.
   const { code, failure } = useArtifactCode(currentUserId, editing, !isManager && !readOnly);
-  const view = useWorkArtifactsLiveView({
-    targetType,
-    targetId,
-    initialArtifacts,
-    editing,
-    setRemoteVersions,
-  });
+  const view = useWorkArtifactsLiveView(
+    { targetType, targetId, initialArtifacts, editing, setRemoteVersions },
+    refreshOnLeadSignal,
+  );
   const artifacts = view.data ?? initialArtifacts;
 
   return (
@@ -192,15 +197,12 @@ type WorkArtifactsLiveViewOptions = WorkArtifactTarget & {
 };
 
 /** The section's live artifact list; while the dialog is open it records the newest remote versions instead. */
-function useWorkArtifactsLiveView({
-  targetType,
-  targetId,
-  initialArtifacts,
-  editing,
-  setRemoteVersions,
-}: WorkArtifactsLiveViewOptions) {
+function useWorkArtifactsLiveView(
+  { targetType, targetId, initialArtifacts, editing, setRemoteVersions }: WorkArtifactsLiveViewOptions,
+  refreshOnLeadSignal: boolean,
+) {
   return useLiveView<WorkArtifactSummary[]>({
-    tables: ['work_artifacts'],
+    tables: withLeadSignal(['work_artifacts'], refreshOnLeadSignal),
     read: async ({ signal }) => {
       const result = await readInBackground('work-artifacts', { targetType, targetId }, signal);
       return result.success ? { ok: true, data: result.artifacts } : { ok: false };
@@ -211,6 +213,7 @@ function useWorkArtifactsLiveView({
     // close); the in-dialog hint tells the editor a newer version exists.
     suspend: editing,
     eventFilter: (event) => {
+      if (isLeadSignal(event)) return true;
       const row = event.new ?? event.old;
       const targetColumn = targetType === 'job' ? 'job_id' : 'project_id';
       const rowTarget = row?.[targetColumn];
