@@ -48,6 +48,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
 | `werkflow app prod-watch` | The owner's PC: `~/.config/werkflow/prod-watch.env`, mode 600 | The [production watcher](recovery-and-incidents.md#monitoring), which checks it | 2027-11-07 | Vercel Tokens: same name, team-scoped (`werkflows-projects`, also werkflow-website), 1 year; set the file's `VERCEL_TOKEN=`. |
 | Boat API key | `~/.config/werkflow/boat-api-key`, [mode 600](boat-verification.md#the-key-contract) | [Boat](boat-verification.md) | `boat-api-key.expires` | [Renew](boat-verification.md#renew-the-key) |
+| `WERKFLOW_DATANORM_TOKEN` | Vercel, Production and Preview, Sensitive | `bun install` on Vercel fetches the private wholesaler-file reader at the commit in `lib/inventory/wholesaler-reader-pin.json` (`scripts/fetch-wholesaler-reader.ts`); a production or preview build without it fails. Every other machine installs a stand-in; an agent machine that must run the real reader passes `--github-login` to the script to use its own GitHub login | One year after creation | Fine-grained GitHub token of the owner, resource owner `werk-flow`, only `werkflow-datanorm`, Contents read-only, the longest expiry; set it as Sensitive for Production and Preview, redeploy, delete the old token. Delete the variable when this repository becomes private and the reader moves into it. |
 | `SIBLING_REPOSITORIES_TOKEN` | GitHub repository secret | CI clones werkflow-business for `docs:check` | 2027-11-13 | Fine-grained GitHub token of an organization owner, resource owner the `werk-flow` organization, read access to werkflow-business contents; `gh secret set`. |
 | `DEV_DATABASE_URL` | GitHub repository secret | Staging: `supabase db push` | With its password | DEV Database settings: reset the password; `gh secret set` the new connection string. |
 | `PROD_DATABASE_URL` | GitHub environment `production` | Release: `supabase db push` | With its password | As for DEV, with `gh secret set --env production`. |
@@ -64,7 +65,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `RESEND_API_KEY` | Supabase secrets, one key per project | The mail functions | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
 | `FROM_EMAIL` | Supabase secrets | The mail functions' sender | Never | `supabase secrets set`. |
 
-The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the owner's local Supabase and R2 admin tokens in the env backups.
+The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the owner's local Supabase and R2 admin tokens in the env backups, and `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name.
 
 ## The local test stack
 
