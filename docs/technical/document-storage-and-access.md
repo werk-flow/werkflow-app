@@ -41,6 +41,14 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 - A generated offer belongs to its offer and customer, never to a job or project, because an assigned employee reads a job's documents.
 - The company document profile's logo and stationery lie under `{organizationId}/briefpapier/{fileId}/{uploaderId}/`, outside the library. They follow the [upload flow](#upload-flow); ticket and finalize bind the key to the session's person (`bindUploadPathToCreator`), so another manager finds nothing to finalize. The finalize also refuses a file the renderer cannot embed, and registers the copy with its stored size and its history entry in one call. It keeps the staging object (`copyStagedUpload`) until the registration commits or is refused, so after an unknown outcome the retry under the same file id copies it again. The [organization export](../features/employee-management.md#current-product-baseline) plans them by that size beside the documents' originals, with no document. A replacement or removal names the file the caller saw, and removing the first page's stationery also names the following pages' file it removes too; either is refused when another file took its place since. A replaced or removed file queues its old object for the [purge](#storage-cleanup): a stored document carries its own bytes and never needs the live file.
 
+## Wholesaler deliveries
+
+A wholesaler delivery for the [supplier catalog](../features/inventory.md#current-product-baseline) is read once and never kept.
+
+- Admin and Büro get one signed PUT per file for the staging key of `{organizationId}/wholesaler-imports/{uploadId}/{fileIndex}`, with a folder of the uploader before the file's place (`bindUploadPathToCreator`). The key holds no file name; the batch row keeps the names.
+- The preview recomputes each key from its own session, reads the staging objects on the server, stages the parsed lines on a batch in the database, and deletes the objects after the read, whatever its outcome. Nothing registers a key, so no copy is made, and the confirm reads only the staged lines. A retry uploads the files again.
+- Residual: a staging object whose preview never ran, such as from a closed tab, stays as an orphan like any other unfinalized upload. A signed URL stays valid for 30 minutes, so the uploader can write the key again after the preview deleted it.
+
 ## Links and ownership
 
 A document exists once. A `document_links` row points to exactly one target. A link never moves an object or changes the folder.

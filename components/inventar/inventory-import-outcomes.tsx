@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -70,23 +70,72 @@ function OutcomeRow({
   );
 }
 
+/** The counts of an import's preview or result, one figure per label. */
+export function ImportCountGrid({ counts }: { counts: readonly { label: string; value: number }[] }) {
+  return (
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {counts.map((count) => (
+        <div key={count.label} className="min-w-0">
+          <dt className="text-xs text-muted-foreground">{count.label}</dt>
+          <dd className="text-lg font-semibold tabular-nums">{count.value.toLocaleString('de-DE')}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Rows of an import revealed in steps, so a long list keeps the dialog responsive. */
+export function RevealedImportRows<Row>({
+  rows,
+  rowKey,
+  renderRow,
+}: {
+  rows: readonly Row[];
+  rowKey: (row: Row) => string | number;
+  renderRow: (row: Row) => ReactNode;
+}) {
+  const [visibleCount, setVisibleCount] = useState(ROWS_PER_STEP);
+  return (
+    <>
+      <div className="divide-y rounded-lg border">
+        {rows.slice(0, visibleCount).map((row) => (
+          <Fragment key={rowKey(row)}>{renderRow(row)}</Fragment>
+        ))}
+      </div>
+      {rows.length > visibleCount && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setVisibleCount((count) => count + ROWS_PER_STEP)}
+        >
+          Weitere {Math.min(ROWS_PER_STEP, rows.length - visibleCount)} Zeilen anzeigen
+        </Button>
+      )}
+    </>
+  );
+}
+
+/** Saves an import's report of rows with a note as `<name>-hinweise.csv`. */
+export function downloadImportReport(baseName: string, csv: Uint8Array) {
+  const url = URL.createObjectURL(new Blob([csv.slice()], { type: 'text/csv;charset=utf-8' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${baseName}-hinweise.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 /** The counts above the rows: new, matched, rejected, and the stock each Lager receives. */
 export function ImportTotalsSummary({ totals, mode }: { totals: ImportTotals; mode: InventoryImportMode }) {
-  const counts = [
-    { label: 'Neue Artikel', value: totals.created },
-    { label: 'Vorhandene Artikel', value: totals.matched },
-    { label: 'Abgelehnt', value: totals.rejected },
-  ];
   return (
     <section aria-label="Summen" className="space-y-3 rounded-lg border p-3">
-      <dl className="grid grid-cols-3 gap-3">
-        {counts.map((count) => (
-          <div key={count.label} className="min-w-0">
-            <dt className="text-xs text-muted-foreground">{count.label}</dt>
-            <dd className="text-lg font-semibold tabular-nums">{count.value}</dd>
-          </div>
-        ))}
-      </dl>
+      <ImportCountGrid
+        counts={[
+          { label: 'Neue Artikel', value: totals.created },
+          { label: 'Vorhandene Artikel', value: totals.matched },
+          { label: 'Abgelehnt', value: totals.rejected },
+        ]}
+      />
       <div className="space-y-1 text-sm">
         {mode === 'master_data' ? (
           <p>Nur Stammdaten und Preise: Es wird kein Bestand gebucht.</p>
@@ -131,7 +180,6 @@ export function ImportOutcomeList({
   onlyProblems?: boolean;
 }) {
   const [filter, setFilter] = useState<'all' | 'problems'>(onlyProblems ? 'problems' : 'all');
-  const [visibleCount, setVisibleCount] = useState(ROWS_PER_STEP);
   const problemRows = outcomes.filter((row) => importRowProblem(row, null) !== null);
   // The result shows only rows with a note; its list may keep the preview's filter state.
   const shown = onlyProblems || filter === 'problems' ? problemRows : outcomes;
@@ -144,7 +192,6 @@ export function ImportOutcomeList({
             checked={filter === 'problems'}
             onCheckedChange={(checked) => {
               setFilter(checked === true ? 'problems' : 'all');
-              setVisibleCount(ROWS_PER_STEP);
             }}
           />
           <Label htmlFor="inventory-import-only-problems" className="font-normal">
@@ -155,26 +202,20 @@ export function ImportOutcomeList({
       {shown.length === 0 ? (
         <EmptyState size="compact" title="Keine Zeile mit Hinweis gefunden" />
       ) : (
-        <div className="divide-y rounded-lg border">
-          {shown.slice(0, visibleCount).map((row) => (
+        <RevealedImportRows
+          // A changed filter starts the list from its first step again.
+          key={filter}
+          rows={shown}
+          rowKey={(row) => row.index}
+          renderRow={(row) => (
             <OutcomeRow
-              key={row.index}
               row={row}
               fileRow={importRows[row.index]}
               lineNumber={lineNumbers[row.index] ?? row.index + 2}
               mode={mode}
             />
-          ))}
-        </div>
-      )}
-      {shown.length > visibleCount && (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setVisibleCount((count) => count + ROWS_PER_STEP)}
-        >
-          Weitere {Math.min(ROWS_PER_STEP, shown.length - visibleCount)} Zeilen anzeigen
-        </Button>
+          )}
+        />
       )}
     </section>
   );

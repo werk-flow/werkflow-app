@@ -171,6 +171,7 @@ export function JobMaterialsSection({
         isSearching={materialDialog.isPickerLoading}
         searchFailed={materialDialog.searchFailed}
         onRetrySearch={materialDialog.retrySearch}
+        supplierCatalog={materialDialog.supplierCatalog}
         onSave={handleDialogSave}
       />
     </div>

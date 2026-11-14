@@ -12,6 +12,7 @@ import {
   type MaterialDialogMode,
   type MaterialDialogState,
 } from './job-material-dialog-model';
+import { useSupplierCatalogSearch, type SupplierCatalogPicker } from './use-supplier-catalog-search';
 
 type JobMaterialDialog = {
   dialog: MaterialDialogState | null;
@@ -24,6 +25,8 @@ type JobMaterialDialog = {
   searchFailed: boolean;
   retrySearch: () => void;
   openDialog: (mode: MaterialDialogMode, line?: JobMaterialLine) => Promise<void>;
+  /** The office's wholesaler catalogs below the own articles; null for a field worker. */
+  supplierCatalog: SupplierCatalogPicker | null;
 };
 
 type JobMaterialDialogOptions = {
@@ -221,6 +224,24 @@ function usePickerCatalog({
   };
 }
 
+/** Opens the use dialog on its line; the line itself names article and unit. */
+function openUseDialog(
+  line: JobMaterialLine,
+  setPickerItems: Dispatch<SetStateAction<InventoryPickerOption[]>>,
+  setDialog: Dispatch<SetStateAction<MaterialDialogState | null>>,
+): void {
+  const item = itemFromLine(line);
+  // The row names its article and unit from the picker; keep a richer entry when one is loaded.
+  setPickerItems((current) => (current.some((entry) => entry.id === item.id) ? current : [...current, item]));
+  setDialog({
+    mode: 'use',
+    rows: [buildDialogRow(item, [], 'use', line)],
+    search: '',
+    error: null,
+    catalogOpen: false,
+  });
+}
+
 /**
  * The material dialog's open state and the catalog it picks from: the first
  * page arrives with the section, a field worker loads it on open, and a
@@ -246,21 +267,7 @@ export function useJobMaterialDialog({
   async function openDialog(mode: MaterialDialogMode, line?: JobMaterialLine) {
     setSectionError(null);
     // A use books on the line itself: no Lager, so no catalog to read.
-    if (mode === 'use' && line) {
-      const item = itemFromLine(line);
-      // The row names its article and unit from the picker; keep a richer entry when one is loaded.
-      catalog.setPickerItems((current) =>
-        current.some((entry) => entry.id === item.id) ? current : [...current, item],
-      );
-      setDialog({
-        mode,
-        rows: [buildDialogRow(item, [], mode, line)],
-        search: '',
-        error: null,
-        catalogOpen: false,
-      });
-      return;
-    }
+    if (mode === 'use' && line) return openUseDialog(line, catalog.setPickerItems, setDialog);
     const picker = await catalog.loadPickerOptions();
     if (!picker) return;
 
@@ -311,5 +318,11 @@ export function useJobMaterialDialog({
     searchFailed: catalog.searchFailed,
     retrySearch: catalog.retrySearch,
     openDialog,
+    supplierCatalog: useSupplierCatalogSearch({
+      enabled: isAdminOrManager,
+      dialog,
+      setDialog,
+      picker: catalog,
+    }),
   };
 }

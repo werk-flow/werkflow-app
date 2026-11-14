@@ -3371,6 +3371,321 @@ export type Database = {
           },
         ];
       };
+      inventory_supplier_catalog_articles: {
+        Row: {
+          article_number: string;
+          delivery_date: string | null;
+          ean: string | null;
+          id: string;
+          import_id: string;
+          main_product_group: string | null;
+          matchcode: string | null;
+          name: string;
+          name_addition: string;
+          organization_id: string;
+          price_cents: number | null;
+          price_kind: string | null;
+          price_quantity: number;
+          product_group: string | null;
+          rebate_group: string | null;
+          search_text: string | null;
+          supplier_id: string;
+          unit: string;
+          unit_text: string;
+          updated_at: string;
+        };
+        Insert: {
+          article_number: string;
+          delivery_date?: string | null;
+          ean?: string | null;
+          id?: string;
+          import_id: string;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name: string;
+          name_addition?: string;
+          organization_id: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity: number;
+          product_group?: string | null;
+          rebate_group?: string | null;
+          search_text?: string | null;
+          supplier_id: string;
+          unit: string;
+          unit_text: string;
+          updated_at?: string;
+        };
+        Update: {
+          article_number?: string;
+          delivery_date?: string | null;
+          ean?: string | null;
+          id?: string;
+          import_id?: string;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name?: string;
+          name_addition?: string;
+          organization_id?: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity?: number;
+          product_group?: string | null;
+          rebate_group?: string | null;
+          search_text?: string | null;
+          supplier_id?: string;
+          unit?: string;
+          unit_text?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_catalog_articles_import_fk";
+            columns: ["import_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_supplier_catalog_imports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_articles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_articles_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_catalog_import_lines: {
+        Row: {
+          article_number: string | null;
+          ean: string | null;
+          file_name: string;
+          import_id: string;
+          kind: string;
+          line_number: number;
+          main_product_group: string | null;
+          matchcode: string | null;
+          name: string | null;
+          name_addition: string | null;
+          ordinal: number;
+          organization_id: string;
+          price_cents: number | null;
+          price_kind: string | null;
+          price_quantity: number | null;
+          product_group: string | null;
+          reason: string | null;
+          reason_code: string | null;
+          rebate_group: string | null;
+          unit_text: string | null;
+        };
+        Insert: {
+          article_number?: string | null;
+          ean?: string | null;
+          file_name: string;
+          import_id: string;
+          kind: string;
+          line_number: number;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name?: string | null;
+          name_addition?: string | null;
+          ordinal: number;
+          organization_id: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity?: number | null;
+          product_group?: string | null;
+          reason?: string | null;
+          reason_code?: string | null;
+          rebate_group?: string | null;
+          unit_text?: string | null;
+        };
+        Update: {
+          article_number?: string | null;
+          ean?: string | null;
+          file_name?: string;
+          import_id?: string;
+          kind?: string;
+          line_number?: number;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name?: string | null;
+          name_addition?: string | null;
+          ordinal?: number;
+          organization_id?: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity?: number | null;
+          product_group?: string | null;
+          reason?: string | null;
+          reason_code?: string | null;
+          rebate_group?: string | null;
+          unit_text?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_catalog_import_lines_import_fk";
+            columns: ["import_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_supplier_catalog_imports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_catalog_imports: {
+        Row: {
+          confirmed_at: string | null;
+          confirmed_by: string | null;
+          content_hash: string;
+          created_at: string;
+          created_by: string | null;
+          currency: string | null;
+          delivery_date: string | null;
+          file_names: string[];
+          format_version: string | null;
+          id: string;
+          organization_id: string;
+          rebate_groups: Json;
+          result: Json | null;
+          skipped: Json;
+          status: string;
+          supplier_id: string;
+          supplier_text: string | null;
+          unit_mapping: Json | null;
+        };
+        Insert: {
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          content_hash: string;
+          created_at?: string;
+          created_by?: string | null;
+          currency?: string | null;
+          delivery_date?: string | null;
+          file_names: string[];
+          format_version?: string | null;
+          id?: string;
+          organization_id: string;
+          rebate_groups?: Json;
+          result?: Json | null;
+          skipped?: Json;
+          status?: string;
+          supplier_id: string;
+          supplier_text?: string | null;
+          unit_mapping?: Json | null;
+        };
+        Update: {
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          content_hash?: string;
+          created_at?: string;
+          created_by?: string | null;
+          currency?: string | null;
+          delivery_date?: string | null;
+          file_names?: string[];
+          format_version?: string | null;
+          id?: string;
+          organization_id?: string;
+          rebate_groups?: Json;
+          result?: Json | null;
+          skipped?: Json;
+          status?: string;
+          supplier_id?: string;
+          supplier_text?: string | null;
+          unit_mapping?: Json | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_confirmed_by_fkey";
+            columns: ["confirmed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_rebate_groups: {
+        Row: {
+          discount: Json;
+          id: string;
+          import_id: string;
+          organization_id: string;
+          rebate_group: string;
+          supplier_id: string;
+          text: string;
+          updated_at: string;
+        };
+        Insert: {
+          discount: Json;
+          id?: string;
+          import_id: string;
+          organization_id: string;
+          rebate_group: string;
+          supplier_id: string;
+          text?: string;
+          updated_at?: string;
+        };
+        Update: {
+          discount?: Json;
+          id?: string;
+          import_id?: string;
+          organization_id?: string;
+          rebate_group?: string;
+          supplier_id?: string;
+          text?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_rebate_groups_import_fk";
+            columns: ["import_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_supplier_catalog_imports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_rebate_groups_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_rebate_groups_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       inventory_suppliers: {
         Row: {
           created_at: string;
@@ -14669,6 +14984,14 @@ export type Database = {
       };
     };
     Functions: {
+      abandon_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_organization_id: string;
+        };
+        Returns: undefined;
+      };
       accept_site_access_proposal: {
         Args: {
           p_actor_id: string;
@@ -14824,6 +15147,14 @@ export type Database = {
           p_valid_from: string;
         };
         Returns: string;
+      };
+      adopt_supplier_catalog_article: {
+        Args: {
+          p_actor_id: string;
+          p_catalog_article_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
       };
       apply_problem_report_retention: {
         Args: { p_organization_id: string; p_report_id: string };
@@ -15268,6 +15599,15 @@ export type Database = {
           p_request_hash: string;
         };
         Returns: string;
+      };
+      confirm_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_organization_id: string;
+          p_unit_mapping: Json;
+        };
+        Returns: Json;
       };
       consume_rate_limit: {
         Args: {
@@ -17726,6 +18066,19 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      open_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_content_hash: string;
+          p_file_names: string[];
+          p_header: Json;
+          p_organization_id: string;
+          p_rebate_groups: Json;
+          p_skipped: Json;
+          p_supplier_id: string;
+        };
+        Returns: string;
+      };
       open_time_account: {
         Args: {
           p_actor_id: string;
@@ -17828,6 +18181,14 @@ export type Database = {
           p_mode: string;
           p_organization_id: string;
           p_rows: Json;
+        };
+        Returns: Json;
+      };
+      preview_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_organization_id: string;
         };
         Returns: Json;
       };
@@ -19609,6 +19970,15 @@ export type Database = {
           p_template_id: string;
         };
         Returns: undefined;
+      };
+      stage_supplier_catalog_import_lines: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_lines: Json;
+          p_organization_id: string;
+        };
+        Returns: number;
       };
       start_organization_export: {
         Args: {

@@ -9,6 +9,8 @@ import { PlainButton } from '@/components/ui/plain-button';
 import type { InventoryPickerOption } from '@/lib/inventory/types';
 import { formatInventoryQuantity, INVENTORY_PICKER_PAGE_SIZE } from '@/lib/inventory/types';
 import type { MaterialDialogMode } from './job-material-dialog-model';
+import { SupplierCatalogOptions } from './supplier-catalog-options';
+import type { SupplierCatalogPicker } from './use-supplier-catalog-search';
 
 function NoMatchingItems() {
   return (
@@ -70,6 +72,7 @@ export function MaterialItemPicker({
   searchFailed,
   onRetrySearch,
   onAdd,
+  supplierCatalog,
 }: {
   mode: MaterialDialogMode;
   /** The office searches by supplier too; a field worker never sees one. */
@@ -84,6 +87,8 @@ export function MaterialItemPicker({
   searchFailed: boolean;
   onRetrySearch: () => void;
   onAdd: (item: InventoryPickerOption) => void;
+  /** The office's wholesaler catalogs while planning; null otherwise. */
+  supplierCatalog?: SupplierCatalogPicker | null | undefined;
 }) {
   return (
     <div className="space-y-3">
@@ -127,6 +132,7 @@ export function MaterialItemPicker({
           oder Barcode, um weitere zu finden.
         </p>
       )}
+      {supplierCatalog && mode === 'plan' && <SupplierCatalogOptions catalog={supplierCatalog} />}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useMemo, useState } from 'react';
-import { FileUp, Plus, Warehouse } from 'lucide-react';
+import { FileUp, PackageSearch, Plus, Warehouse } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -61,6 +61,7 @@ export function InventoryContent({ overview, history }: InventoryContentProps) {
   const filters = useInventoryFilters(query, navigation);
   const editing = useInventoryEditing(overview);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [wholesalerImportOpen, setWholesalerImportOpen] = useState(false);
 
   useRealtimeRouterRefresh({
     tables: [
@@ -95,6 +96,7 @@ export function InventoryContent({ overview, history }: InventoryContentProps) {
         actions={
           <InventoryHeaderActions
             onImport={() => setImportDialogOpen(true)}
+            onWholesalerImport={() => setWholesalerImportOpen(true)}
             onCreateLocation={editing.location.openCreate}
             onCreateItem={editing.item.openCreate}
           />
@@ -130,6 +132,8 @@ export function InventoryContent({ overview, history }: InventoryContentProps) {
         editing={editing}
         importDialogOpen={importDialogOpen}
         setImportDialogOpen={setImportDialogOpen}
+        wholesalerImportOpen={wholesalerImportOpen}
+        setWholesalerImportOpen={setWholesalerImportOpen}
       />
     </PageShell>
   );
@@ -137,10 +141,12 @@ export function InventoryContent({ overview, history }: InventoryContentProps) {
 
 function InventoryHeaderActions({
   onImport,
+  onWholesalerImport,
   onCreateLocation,
   onCreateItem,
 }: {
   onImport: () => void;
+  onWholesalerImport: () => void;
   onCreateLocation: () => void;
   onCreateItem: () => void;
 }) {
@@ -149,6 +155,10 @@ function InventoryHeaderActions({
       <Button variant="outline" className="gap-2" onClick={onImport}>
         <FileUp className="size-4" />
         CSV importieren
+      </Button>
+      <Button variant="outline" className="gap-2" onClick={onWholesalerImport}>
+        <PackageSearch className="size-4" />
+        Großhandel importieren
       </Button>
       <Button variant="outline" className="gap-2" onClick={onCreateLocation}>
         <Warehouse className="size-4" />
