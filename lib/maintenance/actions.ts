@@ -436,11 +436,14 @@ export async function recordMaintenanceVisitMissed(input: unknown): Promise<Main
     p_actor_id: context.actorId,
     p_idempotency_key: parsed.data.idempotencyKey,
   });
-  if (error)
-    return {
-      success: false,
-      error: maintenanceFailureCode(error, 'maintenance_visit_missed_failed'),
-    };
+  if (error) {
+    const code = maintenanceFailureCode(error, 'maintenance_visit_missed_failed');
+    // A known refusal is the user's case; anything else is a failure to diagnose.
+    if (code === 'maintenance_visit_missed_failed') {
+      logError('recordMaintenanceVisitMissed: record_maintenance_visit_missed failed', error);
+    }
+    return { success: false, error: code };
+  }
   refreshMaintenancePaths();
   return { success: true };
 }
