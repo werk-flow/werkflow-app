@@ -297,9 +297,7 @@ test('the normal load line is read from the watch, and a watch without one is no
     'CLEAR_LOAD_PER_CORE = CORES\n',
     '# CLEAR_LOAD_PER_CORE = 1.5\n',
   ])
-    expect(withLine(source)).toMatchObject({
-      unwatched: expect.stringContaining('names no normal load line'),
-    });
+    expect(fixOf(withLine(source)).unwatched).toContain('names no normal load line');
 });
 
 test('a missing, stopped, failing or unreadable watch is no reading, never an empty room', () => {

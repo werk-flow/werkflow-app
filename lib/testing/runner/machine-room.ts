@@ -40,14 +40,18 @@ export type StartKind = keyof typeof START_COST;
 export const isStartKind = (value: unknown): value is StartKind =>
   typeof value === 'string' && Object.hasOwn(START_COST, value);
 
-/** The watch's answer for this machine at this moment, in bytes. */
-type MachineRoom = {
+/** The watch's `--room` answer for this machine at this moment, in bytes. */
+type WatchAnswer = {
   readonly available: number;
   /** What must stay available after a start. The watch raises it while its alert is open or swap fills. */
   readonly floor: number;
   /** Why the machine takes no start of any kind, or null. */
   readonly blocked: string | null;
   readonly alerted: boolean;
+  /** Whether the watch's timer wrote a sample in the last 5 minutes. */
+  readonly watching: boolean;
+};
+type MachineRoom = Omit<WatchAnswer, 'watching'> & {
   /** The 15-minute load and the logical cores, measured as the watch measures them. */
   readonly load: number;
   readonly cores: number;
@@ -98,7 +102,7 @@ function runCommand(command: string, args: readonly string[]): CommandResult {
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
-function parsedRoom(text: string): (MachineRoom & { readonly watching: boolean }) | undefined {
+function parsedRoom(text: string): WatchAnswer | undefined {
   let answer: unknown;
   try {
     answer = JSON.parse(text);
@@ -163,17 +167,8 @@ export function readMachineRoom(
   if (perCore === undefined)
     return { unwatched: `the load watch at ${script} names no normal load line (CLEAR_LOAD_PER_CORE)`, fix };
   const { load, cores } = measureLoad();
-  return {
-    room: {
-      available: room.available,
-      floor: room.floor,
-      blocked: room.blocked,
-      alerted: room.alerted,
-      load,
-      cores,
-      normalLoad: perCore * cores,
-    },
-  };
+  const { available, floor, blocked, alerted } = room;
+  return { room: { available, floor, blocked, alerted, load, cores, normalLoad: perCore * cores } };
 }
 
 /** Every process as pid, parent and resident bytes, from one `ps` call (the columns are the same on Linux and macOS). */
