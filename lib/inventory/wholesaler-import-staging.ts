@@ -6,7 +6,7 @@ import type { WholesalerDelivery } from './wholesaler-reader';
 // a file: how a read delivery becomes the lines the preview stages, how a
 // delivery is recognized again, and which unit a unit text guesses.
 // The database decides each line's effect on the catalog (migration
-// 20261205090000).
+// 20261205100000).
 
 /** One staged line, in the database's column names, as `stage_supplier_catalog_import_lines` takes it. */
 export type StagedImportLine = {
