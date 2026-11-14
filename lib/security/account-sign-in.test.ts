@@ -107,8 +107,9 @@ test('every listed sign-in and token command is refused, through every runner an
     'TOKEN="$(gh auth token)"',
     'bash -c "gh auth login"',
     "sh <<'EOF'\nsupabase login\nEOF",
-    // A variable in the subcommand's place may be the sign-in.
+    // A variable in the subcommand's place may be the sign-in, also after an option without a value.
     'gh auth "$VERB"',
+    'COMMAND=login; supabase --debug "$COMMAND"',
     'supabase $COMMAND',
   ])
     expect(accountSignInRefusal(command), command).toContain(REFUSED);
@@ -151,6 +152,7 @@ test('a mention the guard cannot verify as data is refused', () => {
     'echo vercel list | xargs -I{} sh -c {}',
     'echo "vercel list" | env bash',
     "printf 'vercel list\\n' | bash -s -- arg",
+    "echo 'vercel whoami' | bash -s -- staging",
     "printf 'gh auth login\\n' | bash -ls arg",
     "printf 'supabase --debug login\\n' | bash",
     `python3 -c 'import os; os.system("supabase --debug login")'`,

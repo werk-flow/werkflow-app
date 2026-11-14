@@ -93,22 +93,48 @@ function cliOf(text: string): AccountCli | undefined {
 }
 
 /**
- * Whether the arguments start with the sign-in subcommand: each level's word is the first
- * positional argument, past flags and the words that may be a flag's value. Any other word the
- * shell expands there may be the subcommand, so it counts as one.
+ * Options of the listed CLIs known to take a value, so a variable after one is that value
+ * (`gh -R "$REPO" pr view`). After any other option a variable may be the subcommand
+ * (`supabase --debug "$COMMAND"`).
  */
-function startsWith(args: readonly ShellWord[], verbs: AccountCli['verbs']): boolean {
+const VALUE_OPTIONS = new Set([
+  '-R',
+  '--repo',
+  '--hostname',
+  '--workdir',
+  '--profile',
+  '--project-ref',
+  '--db-url',
+  '-o',
+  '--output',
+  '--scope',
+  '--project',
+  '-p',
+  '--cwd',
+  '--config',
+]);
+
+/**
+ * Whether the arguments open with the sign-in subcommand: each level's word is the first
+ * positional argument, past options and the words that may be an option's value. A word the
+ * shell expands there may be the subcommand, so it counts as one, unless it follows an option
+ * known to take a value.
+ */
+function opensWithSignIn(args: readonly ShellWord[], verbs: AccountCli['verbs']): boolean {
   const [level, ...rest] = verbs;
   if (!level) return true;
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (!arg) break;
     if (level.some((verb) => arg.text === verb || arg.text.startsWith(`${verb}:`)))
-      return startsWith(args.slice(index + 1), rest);
+      return opensWithSignIn(args.slice(index + 1), rest);
     if (arg.text.startsWith('-')) continue;
     const previous = args[index - 1]?.text ?? '';
+    if (arg.expands) {
+      if (VALUE_OPTIONS.has(previous)) continue;
+      return true;
+    }
     if (previous.startsWith('-') && !previous.includes('=')) continue;
-    if (arg.expands) return true;
     return false;
   }
   return false;
@@ -198,7 +224,7 @@ function scan(command: string, depth = 0): Scan | undefined {
     const runnable = withoutRedirections(words).filter((word) => !messages.includes(word));
     for (const [index, word] of runnable.entries()) {
       const cli = cliOf(word.text);
-      if (cli && startsWith(runnable.slice(index + 1), cli.verbs)) {
+      if (cli && opensWithSignIn(runnable.slice(index + 1), cli.verbs)) {
         refused.push(
           runnable
             .slice(index)
