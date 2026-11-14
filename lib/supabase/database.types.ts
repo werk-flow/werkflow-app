@@ -5266,6 +5266,80 @@ export type Database = {
           },
         ];
       };
+      maintenance_visit_findings: {
+        Row: {
+          client_follow_up_id: string | null;
+          created_at: string;
+          created_by: string;
+          defects: string[];
+          id: string;
+          maintenance_due_work_id: string;
+          next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          note: string | null;
+          organization_id: string;
+          owner_user_id: string | null;
+          return_due_work_id: string | null;
+          target_date: string | null;
+        };
+        Insert: {
+          client_follow_up_id?: string | null;
+          created_at?: string;
+          created_by: string;
+          defects: string[];
+          id?: string;
+          maintenance_due_work_id: string;
+          next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          note?: string | null;
+          organization_id: string;
+          owner_user_id?: string | null;
+          return_due_work_id?: string | null;
+          target_date?: string | null;
+        };
+        Update: {
+          client_follow_up_id?: string | null;
+          created_at?: string;
+          created_by?: string;
+          defects?: string[];
+          id?: string;
+          maintenance_due_work_id?: string;
+          next_action?: Database["public"]["Enums"]["maintenance_next_action"];
+          note?: string | null;
+          organization_id?: string;
+          owner_user_id?: string | null;
+          return_due_work_id?: string | null;
+          target_date?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_visit_findings_client_follow_up_id_fkey";
+            columns: ["client_follow_up_id"];
+            isOneToOne: false;
+            referencedRelation: "client_follow_ups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_maintenance_due_work_id_organiz_fkey";
+            columns: ["maintenance_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_return_due_work_id_organization_fkey";
+            columns: ["return_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       offer_events: {
         Row: {
           actor_id: string | null;
@@ -5449,80 +5523,6 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "client_sites";
             referencedColumns: ["id", "client_id", "organization_id"];
-          },
-        ];
-      };
-      maintenance_visit_findings: {
-        Row: {
-          client_follow_up_id: string | null;
-          created_at: string;
-          created_by: string;
-          defects: string[];
-          id: string;
-          maintenance_due_work_id: string;
-          next_action: Database["public"]["Enums"]["maintenance_next_action"];
-          note: string | null;
-          organization_id: string;
-          owner_user_id: string | null;
-          return_due_work_id: string | null;
-          target_date: string | null;
-        };
-        Insert: {
-          client_follow_up_id?: string | null;
-          created_at?: string;
-          created_by: string;
-          defects: string[];
-          id?: string;
-          maintenance_due_work_id: string;
-          next_action: Database["public"]["Enums"]["maintenance_next_action"];
-          note?: string | null;
-          organization_id: string;
-          owner_user_id?: string | null;
-          return_due_work_id?: string | null;
-          target_date?: string | null;
-        };
-        Update: {
-          client_follow_up_id?: string | null;
-          created_at?: string;
-          created_by?: string;
-          defects?: string[];
-          id?: string;
-          maintenance_due_work_id?: string;
-          next_action?: Database["public"]["Enums"]["maintenance_next_action"];
-          note?: string | null;
-          organization_id?: string;
-          owner_user_id?: string | null;
-          return_due_work_id?: string | null;
-          target_date?: string | null;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "maintenance_visit_findings_client_follow_up_id_fkey";
-            columns: ["client_follow_up_id"];
-            isOneToOne: false;
-            referencedRelation: "client_follow_ups";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "maintenance_visit_findings_maintenance_due_work_id_organiz_fkey";
-            columns: ["maintenance_due_work_id", "organization_id"];
-            isOneToOne: false;
-            referencedRelation: "maintenance_due_work";
-            referencedColumns: ["id", "organization_id"];
-          },
-          {
-            foreignKeyName: "maintenance_visit_findings_organization_id_fkey";
-            columns: ["organization_id"];
-            isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "maintenance_visit_findings_return_due_work_id_organization_fkey";
-            columns: ["return_due_work_id", "organization_id"];
-            isOneToOne: false;
-            referencedRelation: "maintenance_due_work";
-            referencedColumns: ["id", "organization_id"];
           },
         ];
       };
