@@ -81,6 +81,30 @@ describe('a draft totals its lines through the invoice core', () => {
     expect(amounts.totals).toEqual({ lineNetCents: 6314, taxCents: 2054, grossCents: 8368 });
   });
 
+  test('lines whose amounts cancel out lose no cent: a line beyond ten billion euros is refused', () => {
+    const line = (quantity: string) => ({
+      name: 'Posten',
+      description: '',
+      quantity,
+      unit: 'piece',
+      unitPriceCents: 100_000_000,
+      priceQuantity: 1 as const,
+      taxRateBasisPoints: 0 as const,
+    });
+    // 90 000 000 × 1 000 000 € each: their running sum would leave the safe integer range.
+    const huge = [
+      line('90000000'),
+      line('90000000'),
+      { ...line('1'), unitPriceCents: 1 },
+      line('-90000000'),
+      line('-90000000'),
+    ];
+    expect(() => draftAmounts(huge)).toThrow(RangeError);
+    expect(
+      draftAmounts([line('10000'), line('-10000'), { ...line('1'), unitPriceCents: 1 }]).totals.lineNetCents,
+    ).toBe(1);
+  });
+
   test('a draft without lines totals zero', () => {
     expect(draftAmounts([]).totals).toEqual({ lineNetCents: 0, taxCents: 0, grossCents: 0 });
   });

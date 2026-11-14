@@ -24,8 +24,15 @@ export type DraftAmounts = Pick<CalculatedInvoice, 'taxSubtotals'> & {
 const NO_DATE = '2000-01-01';
 
 /**
+ * The largest line amount a draft takes: ten billion euros. With at most 500
+ * lines every sum the core forms stays an exact integer, so no cent is lost
+ * between lines that cancel out.
+ */
+const MAX_LINE_NET_CENTS = 1_000_000_000_000;
+
+/**
  * Every amount of a draft's lines. A draft without lines totals zero. Throws
- * a RangeError on a line the line rule refuses.
+ * a RangeError on a line the line rule refuses or above the largest line amount.
  */
 export function draftAmounts(lines: readonly InvoiceLineValues[]): DraftAmounts {
   if (lines.length === 0) {
@@ -61,6 +68,9 @@ export function draftAmounts(lines: readonly InvoiceLineValues[]): DraftAmounts 
           : { category: 'S', rateBasisPoints: line.taxRateBasisPoints },
     })),
   });
+  if (calculated.lines.some((line) => Math.abs(line.netCents) > MAX_LINE_NET_CENTS)) {
+    throw new RangeError('A line amount exceeds ten billion euros.');
+  }
   return {
     lineNetCents: calculated.lines.map((line) => line.netCents),
     taxSubtotals: calculated.taxSubtotals,
