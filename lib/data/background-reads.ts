@@ -49,6 +49,7 @@ import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
 import { getOwnSicknessReports, getSicknessReportsForRecord } from '@/lib/sickness/actions';
 import { getSchoolDaysForRecord } from '@/lib/personnel/school-day-actions';
 import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
+import { getOnCallOverview } from '@/lib/on-call/actions';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
 import { getAssignmentTeamOptions } from '@/lib/qualifications/actions';
 import {
@@ -285,6 +286,8 @@ export const BACKGROUND_READS = {
     maintenanceWorkspaceQuerySchema.extend({ organizationId: uuidSchema }),
     (input) => getMaintenanceWorkspace(input),
   ),
+  // „Bereitschaft jetzt“ on the dashboard, for every member.
+  'on-call-overview': defineRead(organizationInput, (input) => getOnCallOverview(input.organizationId)),
   'work-templates': defineRead(noInput, () => getWorkTemplates()),
   'work-template-detail': defineRead(z.object({ templateId: uuidSchema }), (input) =>
     getWorkTemplate(input.templateId),

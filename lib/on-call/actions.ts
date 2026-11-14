@@ -8,6 +8,9 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
+import { uuidSchema } from '@/lib/validation/uuid';
+
+import { readOnCallOverview } from './reads';
 
 import {
   changeShiftInputSchema,
@@ -17,6 +20,7 @@ import {
   type ChangeShiftInput,
   type EndShiftInput,
   type HandOverInput,
+  type OnCallOverview,
   type PlanShiftInput,
 } from './types';
 
@@ -58,11 +62,30 @@ async function requirePlanner(
   return auth;
 }
 
+/**
+ * „Bereitschaft jetzt“ for every member of the named organization, read by
+ * the dashboard card over `GET /api/background-read`: outside the dashboard's
+ * server render, so the clock actions that render it again read no shift.
+ */
+export async function getOnCallOverview(
+  rawOrganizationId: string,
+): Promise<
+  ActionResult<
+    { overview: OnCallOverview },
+    'invalid_input' | 'not_authenticated' | 'not_a_member' | 'load_failed'
+  >
+> {
+  const parsed = uuidSchema.safeParse(rawOrganizationId);
+  if (!parsed.success) return INVALID_INPUT;
+  const auth = await resolveActionContextFor(parsed.data);
+  if (!auth.success) return auth;
+  return readOnCallOverview(auth.context.orgId, auth.context.userId);
+}
+
 /** The written shift's id and version, as every on-call function answers. */
 function shiftWritten(data: unknown, logLabel: string): ShiftWriteResult {
   if (isJsonRecord(data) && typeof data.shiftId === 'string' && typeof data.version === 'number') {
     revalidatePath(PLANNING_PATH);
-    revalidatePath('/dashboard');
     return { success: true, shiftId: data.shiftId, version: data.version };
   }
   return refusal(null, 'save_failed', logLabel);

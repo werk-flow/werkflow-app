@@ -3,26 +3,72 @@
 import type { ReactElement } from 'react';
 import { Phone, Siren } from 'lucide-react';
 
-import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
+import { OnCallNowSkeleton } from '@/components/loading-states/on-call-skeletons';
+import { useOrganization } from '@/components/organization/organization-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionError } from '@/components/ui/section-error';
 import { TextLink } from '@/components/ui/text-link';
+import { useLiveView } from '@/hooks/use-live-view';
 import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
+import { readInBackground } from '@/lib/data/background-read-client';
 import { isOnCallAt, shiftPhase } from '@/lib/on-call/rules';
 import type { OnCallOverview, OnCallShift } from '@/lib/on-call/types';
+import { isManagerRole } from '@/lib/roles';
 
 import { phoneHref, shiftSpanLabel } from './on-call-labels';
 
 /**
- * „Bereitschaft jetzt“ for every role: who is on call now with phone and
- * handover note, and the caller's own coming shifts. The minute tick moves a
- * shift from planned to running without a new read.
+ * „Bereitschaft jetzt“ for every member of the active organization. The card
+ * reads on mount and on every change of a shift or a person, over GET and
+ * outside the dashboard's server render: the clock actions render the
+ * dashboard again, and none of them changes who is on call.
  */
-export function OnCallNowCard({
+export function OnCallNowCard(): ReactElement | null {
+  const { activeOrg } = useOrganization();
+  if (!activeOrg) return null;
+  return (
+    <OnCallNow
+      key={activeOrg.orgId}
+      organizationId={activeOrg.orgId}
+      canPlan={isManagerRole(activeOrg.role)}
+    />
+  );
+}
+
+function OnCallNow({
+  organizationId,
+  canPlan,
+}: {
+  organizationId: string;
+  /** Admin and Büro get the way to the planning. */
+  canPlan: boolean;
+}): ReactElement {
+  const live = useLiveView<OnCallOverview>({
+    tables: ['on_call_shifts', 'profiles', 'employee_records'],
+    read: async ({ signal }) => {
+      const result = await readInBackground('on-call-overview', { organizationId }, signal);
+      return result.success ? { ok: true, data: result.overview } : { ok: false, error: result.error };
+    },
+  });
+  if (live.data) return <OnCallNowContent overview={live.data} canPlan={canPlan} />;
+  if (!live.isStale) return <OnCallNowSkeleton />;
+  return (
+    <SectionError
+      title="Die Bereitschaft konnte nicht geladen werden"
+      onRetry={() => void live.refresh()}
+      retryPending={live.isRefreshing}
+    >
+      Wer gerade Bereitschaft hat, ist gerade nicht abrufbar. Versuche es in einem Moment erneut.
+    </SectionError>
+  );
+}
+
+/** Who is on call now with phone and handover note, and the caller's own coming shifts. */
+function OnCallNowContent({
   overview,
   canPlan,
 }: {
   overview: OnCallOverview;
-  /** Admin and Büro get the way to the planning. */
   canPlan: boolean;
 }): ReactElement {
   const now = new Date(useWallClockTick(60_000));
@@ -30,7 +76,6 @@ export function OnCallNowCard({
   const own = overview.ownNext.filter((shift) => shiftPhase(shift, now) === 'planned');
   return (
     <Card>
-      <LiveRouteRefresh tables={['on_call_shifts', 'profiles', 'employee_records']} />
       <CardHeader className="pb-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">

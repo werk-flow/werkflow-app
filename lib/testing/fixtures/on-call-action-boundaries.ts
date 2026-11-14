@@ -1,7 +1,8 @@
 // The Bereitschaft actions over the in-memory database
 // (werk-flow/werkflow-planning#469). A signed-out caller, an employee, a
 // suspended or ended manager and a manager who names another organization are
-// refused before any database call. Admin and Büro write only through the one
+// refused before any database call. Every member reads the dashboard's
+// overview of their own organization only. Admin and Büro write only through the one
 // database function of each action, which carries the organization and actor
 // the server resolved, never the client's; a shift or person of another
 // organization is refused by that function and nothing is written.
@@ -140,6 +141,38 @@ for (const role of ['admin', 'buero'] as const) {
     assert.equal(world.rpcCalls[0]?.args.p_actor_id, CALLER_ID, `${name}: actor`);
   }
 }
+
+// Every member reads who is on call, in an organization they belong to and as
+// the plain read: the office read with history and people stays with the week.
+const readOverview = (organizationId: string) =>
+  [['getOnCallOverview', () => actions.getOnCallOverview(organizationId)]] as const;
+world.callerId = null;
+await assertRefused(
+  world,
+  readOverview(ORGANIZATION_A),
+  { success: false, error: 'not_authenticated' },
+  'none',
+);
+for (const role of ['employee', 'admin'] as const) {
+  signInAs(world, role);
+  world.activeOrganizationCookie = ORGANIZATION_B;
+  await assertRefused(world, readOverview(ORGANIZATION_B), { success: false, error: 'not_a_member' }, 'none');
+  signInAs(world, role);
+  world.memberships = [{ orgId: ORGANIZATION_A, role, accessState: 'ended' }];
+  await assertRefused(world, readOverview(ORGANIZATION_A), { success: false, error: 'not_a_member' }, 'none');
+}
+signInAs(world, 'employee');
+await assertRefused(world, readOverview('x'), { success: false, error: 'invalid_input' }, 'none');
+world.rpc = () => ({ data: { shifts: [], people: [] }, error: null });
+world.rpcCalls.length = 0;
+assert.deepEqual(await actions.getOnCallOverview(ORGANIZATION_A), {
+  success: true,
+  overview: { shifts: [], ownNext: [] },
+});
+assert.deepEqual(
+  world.rpcCalls.map(({ name, args }) => [name, args.p_organization_id, args.p_for_office]),
+  [['read_on_call_shifts', ORGANIZATION_A, false]],
+);
 
 // A malformed id never reaches the database.
 signInAs(world, 'admin');
