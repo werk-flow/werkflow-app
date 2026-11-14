@@ -46,11 +46,25 @@ const RUNNER_ENTRY_POINTS = [
   'scripts/ci-plan.ts',
 ];
 const RUNNER_FOLDER = /^lib\/testing\/(runner|selection|local-stack)\//;
+/**
+ * The registries a feature adds a row to: its test groups and scope prefixes, its dialogs, its phone
+ * routes. The runner reads them, but a row changes which groups exist or what they open, not how
+ * every group runs, so the change plans by diff: a new group's spec selects it, the runner
+ * integration pilots run (group-selection.ts), and the SQL and static jobs take every registered
+ * group. What a diff misses runs in main's full run within hours. As runner modules they ran every
+ * browser group for 13 of 45 merged PRs (werk-flow/werkflow-planning#294). The modules they import
+ * stay runner modules.
+ */
+const REGISTRIES = [
+  'lib/testing/selection/test-groups.ts',
+  'lib/testing/selection/dialog-inventory.ts',
+  'lib/testing/selection/mobile-route-inventory.ts',
+];
 
 /**
  * The runner entry points and the runner, selection and local-stack modules
- * they import, directly or through other modules. A module only a spec, a static check or a unit test imports
- * selects its own groups instead. An import the graph cannot resolve takes
+ * they import, directly or through other modules, except the `REGISTRIES`. A module only a spec, a
+ * static check or a unit test imports selects its own groups instead. An import the graph cannot resolve takes
  * every module of those folders.
  */
 export function runnerModules(graph: ReadonlyMap<string, readonly string[]>): string[] {
@@ -64,7 +78,9 @@ export function runnerModules(graph: ReadonlyMap<string, readonly string[]>): st
       pending.push(...[...graph.keys()].filter((candidate) => RUNNER_FOLDER.test(candidate)));
     else pending.push(...(graph.get(file) ?? []));
   }
-  return [...reached].filter((file) => RUNNER_ENTRY_POINTS.includes(file) || RUNNER_FOLDER.test(file));
+  return [...reached].filter(
+    (file) => (RUNNER_ENTRY_POINTS.includes(file) || RUNNER_FOLDER.test(file)) && !REGISTRIES.includes(file),
+  );
 }
 
 /** The visual groups render in the pinned Playwright image, which a runner pulls first, so they share shards of their own. */
@@ -72,13 +88,18 @@ const VISUAL_GROUP = /^audit:visual(:|$)/;
 /** A visual shard holds about this many visual groups: a full selection's fourteen fill two. */
 const VISUAL_GROUPS_PER_SHARD = 7;
 
-/** A browser shard holds about this many groups; a typical change then finishes in one shard round. */
-const GROUPS_PER_SHARD = 4;
 /**
- * The account runs 40 jobs at once across every run (GitHub Pro), and a shard's setup takes about
- * as long as a typical shard's tests. A full selection fills this many shards, so it leaves the other pull
- * requests' runs most of the runners: six general shards and two visual ones, each with about 14 min
- * of tests (werk-flow/werkflow-planning#291, #294). A diff selection of up to 24 groups is not capped.
+ * A browser shard holds about this many groups. Its setup (disk, install, stack, Playwright) takes
+ * about 5 min, and a diff selection's group about 1 min, so the eleven critical journeys and lab
+ * groups of a product change share one shard: about 15 min, beside the 11 min of `Component
+ * contracts`, where three shards of four paid three setups for 2 to 4 min of tests each
+ * (werk-flow/werkflow-planning#294).
+ */
+const GROUPS_PER_SHARD = 12;
+/**
+ * A full selection fills this many shards: six general shards and two visual ones, each with about
+ * 11 to 31 min of tests (werk-flow/werkflow-planning#291, #294). Fewer would take the slowest shard
+ * past the Browser job's 45 min timeout. A diff selection of up to 72 general groups is not capped.
  */
 export const MAX_SHARDS = 8;
 

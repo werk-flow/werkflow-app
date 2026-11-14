@@ -61,7 +61,7 @@ test('an unreadable diff and a tooling change run every browser group except the
     '.github/workflows/ci.yml',
     '.github/actions/setup/action.yml',
     'lib/testing/runner/app-port.ts',
-    'lib/testing/selection/test-groups.ts',
+    'lib/testing/selection/group-selection.ts',
   ])
     expect(ids(ciPlan({ groups, changedFiles: [tooling], fullRun: undefined, runnerModules }))).toEqual(
       EVERY_BROWSER_GROUP,
@@ -102,7 +102,6 @@ test('the runner modules are what the runner entry points import, directly or th
   expect(runnerModules.sort()).toEqual([
     'lib/testing/runner/app-port.ts',
     'lib/testing/selection/group-selection.ts',
-    'lib/testing/selection/test-groups.ts',
     // Every entry point counts, whether the graph lists it or not.
     'scripts/build.ts',
     'scripts/ci-plan.ts',
@@ -115,6 +114,25 @@ test('the runner modules are what the runner entry points import, directly or th
   const unresolved = new Map([...graph, ['scripts/verify.ts', [UNKNOWN_IMPORT_DEPENDENCY]]]);
   expect(runnerModulesOf(unresolved)).toContain('lib/testing/selection/surface-groups.ts');
   expect(runnerModulesOf(unresolved)).toContain('lib/testing/selection/coverage-map.ts');
+  expect(runnerModulesOf(unresolved)).not.toContain('lib/testing/selection/test-groups.ts');
+});
+
+test("a feature's registry row plans by diff, though the runner reads the registry", () => {
+  // The graph above has group-selection.ts import test-groups.ts, so the runner reaches it.
+  for (const registry of [
+    'lib/testing/selection/test-groups.ts',
+    'lib/testing/selection/dialog-inventory.ts',
+    'lib/testing/selection/mobile-route-inventory.ts',
+  ]) {
+    const plan = ciPlan({
+      groups,
+      changedFiles: [registry, 'lib/inventory/stock.ts'],
+      fullRun: undefined,
+      runnerModules,
+    });
+    expect(plan.fullReason).toBeUndefined();
+    expect(ids(plan)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13']);
+  }
 });
 
 test('files that cannot change how every group installs, builds or runs plan by diff', () => {
@@ -241,7 +259,7 @@ test('support only a wall-clock group imports still runs the critical journeys, 
   expect(ids(plan)).toEqual(['golden:gg-00']);
 });
 
-test('the critical journeys and both lab groups of a product change split into three shards', () => {
+test('the critical journeys and both lab groups of a product change share one shard, which pays one setup', () => {
   const critical = Object.keys(CRITICAL_JOURNEYS).map((id) =>
     group(id, `tests/golden/${id.replace('golden:', '')}.spec.ts`, ['*'], 'critical'),
   );
@@ -259,7 +277,7 @@ test('the critical journeys and both lab groups of a product change split into t
     'audit:lab:field',
     'audit:lab:office',
   ]);
-  expect(plan.shards.map((shard) => shard.groups.split(',').length)).toEqual([4, 4, 3]);
+  expect(plan.shards.map((shard) => shard.groups.split(',').length)).toEqual([11]);
 });
 
 // A hosted runner has no reviewed wall-clock baseline, so a timed shard fails its wall-clock group on
