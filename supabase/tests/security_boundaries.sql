@@ -558,7 +558,8 @@ drop table public.werkflow_privilege_probe;
 -- calls, so no caller skips the entry's recheck of role and organization. A
 -- stable helper writes nothing; the RLS helpers among them have their own
 -- inventory below. A call is found by its schema-qualified name in a body,
--- with optional quotes and spaces; a call through dynamic SQL is not.
+-- in any case, with optional quotes and spaces, or by the dependency a
+-- BEGIN ATOMIC body records; a call through dynamic SQL is not.
 -- legacy_definer_breaches names each breach that predates the rule, as the
 -- line the check reports; lib/testing/publication/shrink-only-lists.ts keeps
 -- it from growing, and a listed breach that is gone fails until it leaves the
@@ -656,7 +657,12 @@ create function pg_temp.definer_entry_breaches() returns text language sql as $$
     select entry.oid from entry where not entry.is_trigger
     union
     select callee.oid from reached join routine caller on caller.oid = reached.oid
-    join routine callee on case when strpos(caller.prosrc, callee.proname) > 0
+    join routine callee on exists (
+      -- a parsed body (BEGIN ATOMIC) records its calls; its prosrc is empty
+      select 1 from pg_depend d
+      where d.classid = 'pg_proc'::regclass and d.objid = caller.oid
+        and d.refclassid = 'pg_proc'::regclass and d.refobjid = callee.oid
+    ) or case when strpos(lower(caller.prosrc), lower(callee.proname)) > 0
       then caller.prosrc ~* ('\m"?' || callee.nspname || '"?\s*\.\s*"?' || callee.proname || '"?\s*\(')
       else false end
   ), executor (oid, role_name) as (
@@ -700,7 +706,8 @@ $$;
 
 -- Probe: an inventory entry granted to authenticated, one that lost its
 -- search_path, a step granted to service_role, and a step reached through a
--- public invoker function with a quoted, spaced call must each be reported.
+-- public invoker function with a quoted, spaced call, one called in upper
+-- case, and one reached through a BEGIN ATOMIC body must each be reported.
 savepoint definer_entry_probe;
 grant execute on function public.save_inventory_item(uuid, uuid, uuid, jsonb, text, text, uuid, numeric)
   to authenticated;
@@ -709,17 +716,31 @@ alter function public.import_inventory_row(uuid, uuid, uuid, jsonb, text, text, 
 grant execute on function app_private.lock_inventory_manager(uuid, uuid) to service_role;
 create function app_private.werkflow_step_probe() returns void language sql volatile as 'select';
 grant execute on function app_private.werkflow_step_probe() to service_role;
+create function app_private.werkflow_upper_step_probe() returns void language sql volatile as 'select';
+grant execute on function app_private.werkflow_upper_step_probe() to service_role;
+create function app_private.werkflow_atomic_step_probe() returns void language sql volatile as 'select';
+grant execute on function app_private.werkflow_atomic_step_probe() to service_role;
+create function public.werkflow_atomic_hop_probe() returns void language sql
+  begin atomic select app_private.werkflow_atomic_step_probe(); end;
 create function public.werkflow_hop_probe() returns void language plpgsql set search_path = '' as
   $body$ begin perform "app_private" . "werkflow_step_probe" (); end; $body$;
 create function public.werkflow_entry_probe() returns void language plpgsql security definer
-  set search_path = '' as $body$ begin perform public.werkflow_hop_probe(); end; $body$;
+  set search_path = '' as $body$
+  begin
+    perform public.werkflow_hop_probe();
+    perform APP_PRIVATE.WERKFLOW_UPPER_STEP_PROBE();
+    perform public.werkflow_atomic_hop_probe();
+  end;
+  $body$;
 do $$
 begin
   if pg_temp.definer_entry_breaches() is distinct from concat_ws('; ',
     'unlisted: public.import_inventory_row(uuid, uuid, uuid, jsonb, text, text, text, text, numeric, text) does not pin search_path to empty',
     'unlisted: public.save_inventory_item(uuid, uuid, uuid, jsonb, text, text, uuid, numeric) executable by authenticated',
     'unlisted: step app_private.lock_inventory_manager(uuid, uuid) executable by service_role',
-    'unlisted: step app_private.werkflow_step_probe() executable by service_role'
+    'unlisted: step app_private.werkflow_atomic_step_probe() executable by service_role',
+    'unlisted: step app_private.werkflow_step_probe() executable by service_role',
+    'unlisted: step app_private.werkflow_upper_step_probe() executable by service_role'
   ) then
     raise exception 'SECURITY DEFINER entry rule missed the probe: %', pg_temp.definer_entry_breaches();
   end if;
