@@ -134,9 +134,10 @@ const {
 } = await import('@/lib/inventory/actions');
 const { recordJobMaterialUse } = await import('@/lib/inventory/material-use-actions');
 const { readJobMaterialConsumption } = await import('@/lib/inventory/material-line-reads');
-const use = { quantity: 1, note: null };
+const operationId = '90000000-0000-4000-8000-0000000000aa';
+const use = { operationId, quantity: 1, note: null };
 
-const take = { locationId: foreignLocationId, quantity: 1 };
+const take = { operationId, locationId: foreignLocationId, quantity: 1 };
 const upsert = [
   'upsertInventoryItem',
   () =>

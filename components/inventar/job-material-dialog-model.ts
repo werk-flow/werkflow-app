@@ -8,6 +8,8 @@ export type MaterialDialogMode = 'plan' | 'take' | 'use' | 'return' | 'edit';
 
 export type MaterialDialogRow = {
   key: string;
+  /** Names this position's take, use or return; every press of one dialog opening sends it, so a retry books once. */
+  operationId: string;
   lineId: string | null;
   itemId: string;
   locationId: string;
@@ -88,6 +90,8 @@ export function getActionErrorMessage(error: string, mode: MaterialDialogMode): 
     location_not_found: 'Das ausgewählte Lager wurde nicht gefunden.',
     line_not_found: 'Die Materialposition wurde nicht gefunden.',
     line_changed: 'Die Materialposition wurde inzwischen geändert. Versuche es noch einmal.',
+    material_idempotency_conflict:
+      'Diese Buchung wurde schon mit anderen Angaben gespeichert. Schließe den Dialog und prüfe die Materialposition.',
     create_failed: 'Die Materialposition konnte nicht gespeichert werden.',
     update_failed: 'Die Materialposition konnte nicht aktualisiert werden.',
     delete_failed: 'Die Materialposition konnte nicht entfernt werden.',
@@ -185,6 +189,7 @@ export function buildDialogRow(
 
   return {
     key: line?.id ?? `${item.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    operationId: crypto.randomUUID(),
     lineId: line?.id ?? null,
     itemId: item.id,
     locationId: getDefaultLocationId(item, locations, mode, line?.preferredLocationId),
