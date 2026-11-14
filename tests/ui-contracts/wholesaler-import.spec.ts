@@ -71,6 +71,22 @@ test('an unmapped unit text rejects its articles until the office picks a unit, 
   ]);
 });
 
+test('the unit choice is locked while the confirm runs, so the preview never shows a choice it did not send', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.uiContractWholesalerImport.confirmHeld = true;
+  });
+  const dialog = await openPreview(page);
+  const unit = dialog.getByRole('combobox', { name: /„Rolle 50m“ · 5 Artikel/ });
+  await expect(unit).toBeEnabled();
+  await dialog.getByRole('button', { name: 'Übernehmen', exact: true }).click();
+  await expect
+    .poll(async () => (await contract(page)).confirmations)
+    .toEqual([{ importId: 'import-1', unitMapping: { Meter: 'meter', 'Rolle 50m': null, Stück: 'piece' } }]);
+  await expect(unit).toBeDisabled();
+});
+
 test('a submit without supplier or file marks both and focuses the supplier', async ({ page }) => {
   const dialog = await openDialog(page);
   await dialog.getByRole('button', { name: 'Vorschau anzeigen', exact: true }).click();

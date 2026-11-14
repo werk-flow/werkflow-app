@@ -33,6 +33,8 @@ type WholesalerImportContract = {
   effects: WholesalerPreviewEffects;
   repeat: WholesalerImportPreview['repeat'];
   previewError: string | null;
+  /** Keeps the confirm waiting after it records its input, so the dialog stays pending. */
+  confirmHeld: boolean;
   confirmations: ConfirmWholesalerImportInput[];
   abandoned: string[];
 };
@@ -107,6 +109,7 @@ export function initializeWholesalerImportBoundary(): void {
     effects: EFFECTS,
     repeat: null,
     previewError: null,
+    confirmHeld: false,
     confirmations: [],
     abandoned: [],
   };
@@ -141,7 +144,9 @@ export async function previewWholesalerImport(): Promise<
 export async function confirmWholesalerImport(
   input: ConfirmWholesalerImportInput,
 ): Promise<{ success: true; result: WholesalerImportResult; alreadyConfirmed: boolean }> {
-  window.uiContractWholesalerImport.confirmations.push(input);
+  const contract = window.uiContractWholesalerImport;
+  contract.confirmations.push(input);
+  if (contract.confirmHeld) return new Promise(() => undefined);
   return {
     success: true,
     alreadyConfirmed: false,

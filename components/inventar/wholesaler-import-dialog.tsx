@@ -192,6 +192,8 @@ function UnitMappingFields({
                 emptyMessage="Keine Einheit gefunden"
                 allowNone
                 noneLabel="Nicht zuordnen"
+                // The confirm sends the choice it started with; a later one would only change the counts.
+                disabled={wholesalerImport.isPending}
               />
             </Field>
           );
