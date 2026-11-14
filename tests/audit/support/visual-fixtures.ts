@@ -47,6 +47,7 @@ export const VISUAL_NAMES = {
   equipment: 'Gas-Brennwerttherme',
   serviceCase: 'Therme zeigt Störung F.28',
   template: 'Jährliche Thermenwartung',
+  offer: 'Austausch Gas-Brennwerttherme',
   // The last row the seed writes; its presence means the world is complete.
   lastDocument: 'Wartungsvertrag Wohnanlage Uferweg.pdf',
 } as const;
@@ -56,6 +57,7 @@ export type VisualDetails = {
   requestId: string;
   equipmentNumber: string;
   caseNumber: string;
+  offerId: string;
 };
 
 const DOCUMENTS = [
@@ -342,6 +344,23 @@ async function seedVisualWorld(world: TestWorld): Promise<void> {
     capability: { capabilityId: gas, requireConfirmation: true },
   });
 
+  // A fixed number and validity, so the reference stays the same in every year.
+  await admin
+    .from('offers')
+    .insert({
+      organization_id: orgId,
+      offer_number: 'ANG-2026-001',
+      title: VISUAL_NAMES.offer,
+      client_id: family.clientId,
+      site_id: site(family, 'Einfamilienhaus'),
+      recipient_client_id: family.clientId,
+      valid_until: '2037-01-31',
+      opening_text: 'Vielen Dank für deine Anfrage. Gern bieten wir dir an:',
+      owner_user_id: world.users.buero.id,
+      created_by: world.users.buero.id,
+    })
+    .throwOnError();
+
   for (const [index, name] of DOCUMENTS.entries()) {
     await admin
       .from('documents')
@@ -389,11 +408,19 @@ async function readVisualDetails(world: TestWorld): Promise<VisualDetails> {
     .eq('summary', VISUAL_NAMES.serviceCase)
     .single()
     .throwOnError();
+  const { data: offer } = await admin
+    .from('offers')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('title', VISUAL_NAMES.offer)
+    .single()
+    .throwOnError();
   return {
     familyClientId: client.id,
     requestId: request.id,
     equipmentNumber: equipment.equipment_number,
     caseNumber: serviceCase.case_number,
+    offerId: offer.id,
   };
 }
 

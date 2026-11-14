@@ -17,6 +17,7 @@ export type SurfaceDestination = { route: string; heading?: string };
 const DYNAMIC_ROUTES: ReadonlySet<string> = new Set<DynamicPhoneRoute>([
   '/kunden/[clientId]',
   '/anfragen/[requestId]',
+  '/angebote/[offerId]',
   '/auftraege/[jobNumber]',
   '/mitarbeiter/[userId]',
   '/auftraege/[jobNumber]/uebergabe',
@@ -112,6 +113,8 @@ export async function detailDestination(
         route: `/auftraege/projekt/${details.projectNumber}/${details.nestedJobNumber}/uebergabe`,
         heading: names.nestedJob,
       };
+    case '/angebote/[offerId]':
+      return { route: `/angebote/${details.offerId}`, heading: names.offer };
     case '/auftraege/uebergaben/[targetType]/[targetId]':
       return { route: `/auftraege/uebergaben/auftrag/${details.jobId}`, heading: names.job };
   }

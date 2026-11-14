@@ -54,6 +54,7 @@ const LINK_LABELS: readonly (readonly [kind: ClientLinkKind, one: string, many: 
     'Arbeit als Auftraggeber oder Rechnungsempfänger',
     'Arbeiten als Auftraggeber oder Rechnungsempfänger',
   ],
+  ['offers', 'Angebot', 'Angebote'],
 ];
 
 /** „2 Aufträge, 1 Anfrage“: what links to the customer. */

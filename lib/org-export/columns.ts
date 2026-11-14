@@ -123,6 +123,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   maintenance_plan_revisions: 'Wartungspläne_Fassungen',
   maintenance_plans: 'Wartungspläne',
   maintenance_service_case_links: 'Wartungen_Servicefälle',
+  offer_events: 'Angebote_Verlauf',
+  offers: 'Angebote',
   organization_capabilities: 'Organisation_Qualifikationen',
   organization_closure_days: 'Organisation_Schließtage',
   organization_export_events: 'Datenexporte_Protokoll',

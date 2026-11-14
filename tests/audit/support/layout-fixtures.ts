@@ -4,6 +4,7 @@ import type { Database } from '../../../lib/supabase/database.types';
 import type { CheckpointValues } from '../../../lib/testing/spec-support/checkpoints';
 import { equipmentCreateSchema } from '../../../lib/installed-equipment/validation';
 import { serviceCaseCreateSchema } from '../../../lib/service-cases/validation';
+import { rpcArgs } from '../../../lib/supabase/rpc-args';
 import type { Locator, Page } from '@playwright/test';
 import { worldName } from '../../../lib/testing/seed-world-plan';
 import { requireEnv } from '../../golden/support/env';
@@ -44,7 +45,10 @@ export function dateTimeFieldGrid(scope: Locator, datePickerId: string): Locator
 
 export function layoutNames(
   world: TestWorld,
-): Record<'client' | 'project' | 'job' | 'nestedJob' | 'request' | 'equipment' | 'serviceCase', string> {
+): Record<
+  'client' | 'project' | 'job' | 'nestedJob' | 'request' | 'equipment' | 'serviceCase' | 'offer',
+  string
+> {
   return {
     client: worldName('Layout Heizungsbau Kunde', world.runId),
     project: worldName('Layout Modernisierung Heizungsanlage', world.runId),
@@ -53,6 +57,7 @@ export function layoutNames(
     request: worldName('Layout Anfrage zur Heizungsmodernisierung', world.runId),
     equipment: worldName('Layout Wärmeerzeuger im Technikraum', world.runId),
     serviceCase: worldName('Layout Heizungsstörung mit Kundenrückfrage', world.runId),
+    offer: worldName('Layout Angebot Austausch Gastherme', world.runId),
   };
 }
 
@@ -211,6 +216,23 @@ export async function prepareLayoutDetails(world: TestWorld): Promise<LayoutDeta
     })
     .throwOnError();
   if (!serviceRow) throw new Error('Layout service fixture returned no saved record.');
+  const { data: offerId } = await server
+    .rpc(
+      'create_offer',
+      rpcArgs('create_offer', {
+        p_actor_id: world.users.admin.id,
+        p_organization_id: world.orgId,
+        p_attempt_key: randomUUID(),
+        p_title: names.offer,
+        p_client_id: clientId,
+        p_site_id: siteId,
+        p_contact_id: null,
+        p_work_kind: null,
+        p_work_id: null,
+      }),
+    )
+    .throwOnError();
+  if (!offerId) throw new Error('Layout offer fixture returned no saved record.');
   const result = {
     clientId,
     requestId,
@@ -221,6 +243,7 @@ export async function prepareLayoutDetails(world: TestWorld): Promise<LayoutDeta
     nestedJobNumber,
     equipmentNumber: equipmentRow.equipment_number,
     caseNumber: serviceRow.case_number,
+    offerId,
   };
   saveAuditCheckpoint('layout.details', result);
   return result;
