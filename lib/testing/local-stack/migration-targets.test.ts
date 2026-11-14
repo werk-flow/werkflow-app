@@ -227,3 +227,28 @@ test('two migrations conflict on one object, a schema-wide grant or an opaque st
     ),
   ).toEqual([]);
 });
+
+test('a view, CREATE TABLE AS and a data copy conflict with a newer change to what they read', () => {
+  const addNote = migrationChanges('alter table jobs add column note text;');
+  for (const reader of [
+    'create view job_summary as select * from public.jobs j join visits v on v.job_id = j.id;',
+    'create table job_copy as select * from jobs;',
+    'with fresh as (select id from jobs) insert into archive select * from fresh;',
+    'update visits set due = j.due from archive a, jobs j where j.id = visits.job_id;',
+  ])
+    expect(sharedChanges(migrationChanges(reader), addNote), reader).toEqual(['relation public.jobs']);
+  // A pure SELECT changes nothing.
+  expect(sharedChanges(migrationChanges('select count(*) from jobs;'), addNote)).toEqual([]);
+});
+
+test('SET SCHEMA moves the search path, and creating or dropping a publication changes all of it', () => {
+  expect(named("set schema 'app_private'; alter table jobs add column flag int;")).toEqual([
+    'relation app_private.jobs',
+  ]);
+  expect(
+    sharedChanges(
+      migrationChanges('alter publication supabase_realtime add table jobs;'),
+      migrationChanges('drop publication supabase_realtime; create publication supabase_realtime;'),
+    ),
+  ).toEqual(['publication supabase_realtime.public.jobs']);
+});

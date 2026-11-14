@@ -264,6 +264,14 @@ function relationTargets(reader: Reader, kind: string, verb: Verb): Read {
     const name = reader.qualified();
     return name === null ? null : [target('relation', ...name)];
   }
+  if (
+    verb === 'create' &&
+    (kind === 'view' || kind === 'materialized' || (kind === 'table' && reader.find('as') !== -1))
+  ) {
+    // A view or CREATE TABLE AS fixes what it reads when it runs, `select *` included.
+    const name = reader.qualified();
+    return name === null ? null : [target('relation', ...name), ...readRelations(reader)];
+  }
   const found = names(reader, 'relation');
   const first = found?.[0];
   if (found === null || first === undefined) return null;
@@ -342,7 +350,8 @@ function objectTargets(reader: Reader, verb: Verb): Read {
     reader.skip(['if', 'not', 'exists'], ['if', 'exists']);
     const name = reader.identifier();
     if (name === null) return null;
-    if (kind === 'publication' && verb === 'alter') return publication(reader, name);
+    if (kind === 'publication')
+      return verb === 'alter' ? publication(reader, name) : [target('publication', '', `${name}.*`)];
     return [target(kind === 'user' || kind === 'group' ? 'role' : kind, '', name)];
   }
   return null;
@@ -416,6 +425,69 @@ function selectTargets(reader: Reader): Read {
   return result;
 }
 
+const NOT_AN_ALIAS = new Set([
+  'where',
+  'join',
+  'inner',
+  'left',
+  'right',
+  'full',
+  'cross',
+  'natural',
+  'on',
+  'using',
+  'group',
+  'order',
+  'limit',
+  'offset',
+  'having',
+  'union',
+  'except',
+  'intersect',
+  'returning',
+  'set',
+  'window',
+  'for',
+  'when',
+  'then',
+  'into',
+  'values',
+  'select',
+  'lateral',
+  'with',
+  'do',
+]);
+
+/**
+ * The relations after FROM, JOIN and USING. A view, CREATE TABLE AS and a data statement copy what
+ * they read when they run, so a newer change to what they read conflicts with them.
+ */
+function readRelations(reader: Reader): MigrationTarget[] {
+  const result: MigrationTarget[] = [];
+  // A WITH query's own name (`name as (`) is no relation.
+  const queries = new Set(
+    reader.tokens.flatMap((token, at) =>
+      reader.tokens[at + 1]?.text === 'as' && reader.tokens[at + 2]?.text === '(' ? [token.text] : [],
+    ),
+  );
+  reader.tokens.forEach((token, at) => {
+    if (token.quoted || token.string || !['from', 'join', 'using'].includes(token.text)) return;
+    reader.position = at + 1;
+    for (;;) {
+      reader.skip(['only'], ['lateral']);
+      const name = reader.peek() === '(' ? null : reader.qualified();
+      if (name === null) return;
+      if (name[0] !== UNQUALIFIED || !queries.has(name[1])) result.push(target('relation', ...name));
+      reader.group();
+      reader.accept('as');
+      if (!NOT_AN_ALIAS.has(reader.peek()) && reader.peek() !== ',' && reader.identifier() !== null)
+        reader.group();
+      if (!reader.accept(',')) return;
+    }
+  });
+  return result;
+}
+
 /** INSERT, UPDATE, DELETE, MERGE and TRUNCATE anywhere in a statement, CTEs included. */
 function dataTargets(reader: Reader): Read {
   const result: MigrationTarget[] = [];
@@ -447,7 +519,11 @@ function dataTargets(reader: Reader): Read {
     if (found === null) return null;
     result.push(...found);
   }
-  return result.length ? result : selectTargets(reader);
+  if (!result.length) return selectTargets(reader);
+  const unique = new Map(
+    [...result, ...readRelations(reader)].map((found) => [`${found.schema}\u0001${found.name}`, found]),
+  );
+  return [...unique.values()];
 }
 
 const NO_TARGET = new Set([
@@ -515,8 +591,9 @@ function nextPath(list: Token[], path: string[] | null): string[] | null {
   const words = list.map((token) => (token.quoted || token.string ? '' : token.text));
   if (words[0] === 'reset' && (words[1] === 'search_path' || words[1] === 'all')) return ['public'];
   if (words[0] === 'set') {
-    const at = words.indexOf('search_path');
-    if (at === -1 || at > 2) return path;
+    // SET SCHEMA 'x' is PostgreSQL's alias for SET search_path TO 'x'.
+    const at = words.findIndex((word, index) => index <= 2 && (word === 'search_path' || word === 'schema'));
+    if (at === -1) return path;
     return pathSchemas(list.slice(at + 1).filter((token) => token.text !== 'to' && token.text !== '='));
   }
   for (let at = 0; at < list.length; at += 1) {
