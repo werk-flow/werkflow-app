@@ -500,6 +500,13 @@ describe('the business document renderer', () => {
     expect(title?.top ?? 0).toBeGreaterThan((lastInfo?.top ?? PAGE_HEIGHT) + 5 * MM);
   });
 
+  test('a head that leaves no room for content is refused, never clipped', async () => {
+    const metaRows = [
+      { label: 'Bestellnummer', value: Array.from({ length: 80 }, () => 'Zeile').join('\n') },
+    ];
+    await expect(renderBusinessDocument({ ...serviceOffer, metaRows })).rejects.toThrow(RangeError);
+  });
+
   // The invoice layout and PDF/A-3 output extend this module; an offer must
   // not change by a byte. A new digest here is a deliberate offer change.
   test('an offer renders to the bytes it rendered to before invoices joined the renderer', async () => {

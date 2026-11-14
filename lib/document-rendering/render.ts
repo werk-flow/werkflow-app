@@ -504,6 +504,9 @@ const HEAD_GAP_MM = 6;
  * rows, as an invoice may have, reach further down than the usual content top;
  * the content then starts below them instead of under them.
  */
+/** The least room the first page keeps below the head for the title and first lines. */
+const MIN_FIRST_PAGE_CONTENT_MM = 40;
+
 function headBottom(document: BusinessDocument, fonts: Fonts, box: Box, shift: number): number {
   const valueWidth = box.right - (INFO_BLOCK_LEFT_MM + INFO_LABEL_WIDTH_MM) * MM;
   const infoBottom = document.metaRows.reduce(
@@ -679,6 +682,9 @@ export async function drawBusinessDocument(document: BusinessDocument): Promise<
     ...plannedFirstBox,
     top: Math.max(plannedFirstBox.top, headBottom(document, fonts, plannedFirstBox, addressShift)),
   };
+  // The head is drawn on the first page only; one that leaves too little room is refused, never clipped.
+  if (firstBox.bottom - firstBox.top < MIN_FIRST_PAGE_CONTENT_MM * MM)
+    throw new RangeError('The document head leaves no room for its content.');
   const boxOf = (pageIndex: number) => (pageIndex === 0 ? firstBox : followingBox);
   const firstUnderlay = stationery ? await embedStationery(pdf, stationery.firstPage.file) : null;
   const followingUnderlay = stationery?.followingPages
