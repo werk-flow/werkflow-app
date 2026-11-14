@@ -9,6 +9,7 @@ import { logError } from '@/lib/logging';
 import { hasActiveSicknessOn } from '@/lib/sickness/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { captureUsage } from '@/lib/usage-statistics/capture';
 import { hasApprovedFullDayVacationOn } from '@/lib/vacation/server';
 import { isPeriodClosedError } from './closed-periods';
 import { hashTimeTransitionRequest } from './transition-hash';
@@ -145,6 +146,23 @@ function transitionArgs(
   });
 }
 
+/**
+ * Counts a person's own clocking as time recording: a start opens it, an end
+ * completes it, and ending a session left open from an earlier day counts as
+ * abandoned.
+ */
+function captureTimeRecordingStep(
+  organizationId: string,
+  action: TimeTransitionAction,
+  outcome: 'active' | 'ended' | 'no_change' | 'recovery_required',
+): void {
+  if (action === 'start' && outcome === 'active') captureUsage(organizationId, 'time_recording', 'started');
+  if (action === 'end' && outcome === 'ended') captureUsage(organizationId, 'time_recording', 'completed');
+  if (action === 'recover_end' && outcome === 'ended') {
+    captureUsage(organizationId, 'time_recording', 'abandoned');
+  }
+}
+
 export async function recordTimeTransition(
   caller: TimeTransitionCaller,
   command: TimeTransitionCommand,
@@ -209,6 +227,7 @@ export async function recordTimeTransition(
     return { success: false, error: 'time_transition_failed' };
   }
   const payload = parsedPayload.data;
+  if (!payload.replayed) captureTimeRecordingStep(organizationId, command.action, payload.outcome);
   revalidatePath('/zeiterfassung');
   revalidatePath('/auftraege');
 
