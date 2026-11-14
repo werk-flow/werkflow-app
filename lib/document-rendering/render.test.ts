@@ -486,6 +486,20 @@ describe('the business document renderer', () => {
     }
   });
 
+  test('a tall info block moves the content down instead of running into the title', async () => {
+    const metaRows = Array.from({ length: 9 }, (_, index) => ({
+      label: `Angabe ${index + 1}`,
+      value:
+        index % 3 === 0
+          ? 'Ein langer Wert, der in diesem schmalen Feld über mehrere Zeilen umbricht'
+          : 'kurz',
+    }));
+    const [first = []] = await readPages(await renderBusinessDocument({ ...serviceOffer, metaRows }));
+    const title = first.find((line) => line.text.startsWith('Angebot ANG-2026-17'));
+    const lastInfo = first.filter((line) => line.text.startsWith('Angabe 9')).at(-1);
+    expect(title?.top ?? 0).toBeGreaterThan((lastInfo?.top ?? PAGE_HEIGHT) + 5 * MM);
+  });
+
   // The invoice layout and PDF/A-3 output extend this module; an offer must
   // not change by a byte. A new digest here is a deliberate offer change.
   test('an offer renders to the bytes it rendered to before invoices joined the renderer', async () => {

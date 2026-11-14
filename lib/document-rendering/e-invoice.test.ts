@@ -6,6 +6,7 @@ import {
   PDFName,
   PDFRawStream,
   PDFStream,
+  StandardFonts,
   decodePDFRawStream,
 } from 'pdf-lib';
 import { extractText, getDocumentProxy } from 'unpdf';
@@ -22,6 +23,7 @@ import type { InvoiceDraft } from '@/lib/invoicing/model';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
 
 import { invoiceDocument } from './invoice-layout';
+import type { BusinessDocument } from './model';
 
 mock.module('server-only', () => ({}));
 const { renderEInvoicePdf } = await import('./e-invoice');
@@ -32,11 +34,37 @@ const LETTERHEAD = {
   stationery: null,
 };
 
-async function rendered(draft: InvoiceDraft) {
+async function rendered(draft: InvoiceDraft, letterhead: typeof LETTERHEAD | Letterhead = LETTERHEAD) {
   const invoice = calculateInvoice(draft);
   const xml = toEn16931(invoice);
-  return { xml, bytes: await renderEInvoicePdf(invoiceDocument(invoice, LETTERHEAD), xml) };
+  return { xml, bytes: await renderEInvoicePdf(invoiceDocument(invoice, letterhead), xml) };
 }
+
+type Letterhead = Pick<BusinessDocument, 'sender' | 'footerColumns' | 'stationery'>;
+
+/** The first page's drawn images and forms (logo, stationery) and its font names. */
+async function firstPageResources(bytes: Uint8Array) {
+  const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+  const page = pdf.getPage(0);
+  const resources = page.node.Resources();
+  const xObjects = resources?.lookupMaybe(PDFName.of('XObject'), PDFDict);
+  const fonts = resources?.lookupMaybe(PDFName.of('Font'), PDFDict);
+  const baseFonts = (fonts?.values() ?? []).map((ref) =>
+    String(pdf.context.lookup(ref, PDFDict).get(PDFName.of('BaseFont'))),
+  );
+  return { xObjects: xObjects?.keys().length ?? 0, baseFonts };
+}
+
+/** The header of a CMYK JPEG: start of image and a frame with four components, enough for the embed check. */
+const CMYK_JPEG = Uint8Array.from([
+  0xff, 0xd8, 0xff, 0xc0, 0x00, 0x14, 0x08, 0x00, 0x01, 0x00, 0x01, 0x04, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00,
+  0x03, 0x11, 0x00, 0x04, 0x11, 0x00, 0xff, 0xd9,
+]);
+const PNG = Uint8Array.from(
+  atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP49OlHAwAJEwNdDFqrdgAAAABJRU5ErkJggg=='),
+  (character) => character.charCodeAt(0),
+);
+const MARGINS = { topMm: 45, rightMm: 20, bottomMm: 30, leftMm: 25 };
 
 async function textOf(bytes: Uint8Array): Promise<string> {
   const { text } = await extractText(await getDocumentProxy(bytes.slice()), { mergePages: true });
@@ -121,5 +149,34 @@ describe('the ZUGFeRD invoice PDF', () => {
     expect(storno).toContain('Storno zu Rechnung RE-2026-0002\nvom 14.11.2026');
     expect(storno).not.toContain('Zahlbar');
     expect(storno).not.toContain('Bankverbindung');
+  });
+
+  test('a stationery PDF or a CMYK JPEG, which PDF/A-3b cannot vouch for, gives way to the plain letterhead; a PNG stays', async () => {
+    const stationery = await PDFDocument.create({ updateMetadata: false });
+    stationery
+      .addPage()
+      .drawText('Briefpapier', { font: await stationery.embedFont(StandardFonts.Helvetica) });
+    const unsafe = await rendered(STANDARD_RATE_INVOICE, {
+      ...LETTERHEAD,
+      sender: { ...LETTERHEAD.sender, logo: { format: 'jpeg', bytes: CMYK_JPEG } },
+      stationery: {
+        firstPage: { file: { format: 'pdf', bytes: await stationery.save() }, margins: MARGINS },
+        followingPages: null,
+      },
+    });
+    const drawn = await firstPageResources(unsafe.bytes);
+    expect(drawn.xObjects).toBe(0);
+    expect(drawn.baseFonts.some((name) => name.includes('Helvetica'))).toBe(false);
+    // The plain letterhead takes its place.
+    expect(await textOf(unsafe.bytes)).toContain('Haustechnik Sonnenberg GmbH & Co. KG');
+
+    const safe = await rendered(STANDARD_RATE_INVOICE, {
+      ...LETTERHEAD,
+      stationery: {
+        firstPage: { file: { format: 'png', bytes: PNG }, margins: MARGINS },
+        followingPages: { file: { format: 'jpeg', bytes: CMYK_JPEG }, margins: MARGINS },
+      },
+    });
+    expect((await firstPageResources(safe.bytes)).xObjects).toBe(1);
   });
 });

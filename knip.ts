@@ -76,8 +76,10 @@ const config: KnipConfig = {
     '**/*.{ts,tsx,mjs}!',
     '!lib/**/*.test.{ts,tsx,mjs}!',
     '!lib/testing/fixtures/**!',
-    // The invoice core's reference and broken invoices, read by its tests and CI's checkers.
+    // The invoice core's reference and broken invoices, read by its tests and CI's checkers,
+    // and the writer that renders them as PDFs for CI's checkers.
     '!lib/invoicing/fixtures/**!',
+    '!lib/document-rendering/fixtures/**!',
   ],
   // Deno functions have their own import graph; the transcript folder is
   // research bookkeeping outside the product.

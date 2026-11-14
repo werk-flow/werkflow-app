@@ -486,13 +486,32 @@ function drawAddressAndInfo(
   );
   const labelLeft = INFO_BLOCK_LEFT_MM * MM;
   const valueLeft = labelLeft + INFO_LABEL_WIDTH_MM * MM;
-  let top = 50 * MM + shift;
+  let top = INFO_BLOCK_TOP_MM * MM + shift;
   for (const row of document.metaRows) {
     drawLeft(page, row.label, labelLeft, top, fonts.regular, 8, MUTED);
     const lines = wrap(row.value, fonts.regular, 8, box.right - valueLeft);
     lines.forEach((line, index) => drawLeft(page, line, valueLeft, top + index * 11, fonts.regular, 8));
     top += lines.length * 11 + 2;
   }
+}
+
+const INFO_BLOCK_TOP_MM = 50;
+/** The least space between the address field or info block and the first page's content. */
+const HEAD_GAP_MM = 6;
+
+/**
+ * Where the first page's address field and info block end. Many or long info
+ * rows, as an invoice may have, reach further down than the usual content top;
+ * the content then starts below them instead of under them.
+ */
+function headBottom(document: BusinessDocument, fonts: Fonts, box: Box, shift: number): number {
+  const valueWidth = box.right - (INFO_BLOCK_LEFT_MM + INFO_LABEL_WIDTH_MM) * MM;
+  const infoBottom = document.metaRows.reduce(
+    (top, row) => top + wrap(row.value, fonts.regular, 8, valueWidth).length * 11 + 2,
+    INFO_BLOCK_TOP_MM * MM + shift,
+  );
+  const recipientBottom = 55 * MM + shift + document.recipientLines.length * BODY_LEADING;
+  return Math.max(infoBottom, recipientBottom) + HEAD_GAP_MM * MM;
 }
 
 /** The plain footer: each column's left edge and wrapped lines, and the height they take in millimetres. */
@@ -645,13 +664,21 @@ export async function drawBusinessDocument(document: BusinessDocument): Promise<
   const fonts = await embedFonts(pdf);
   // Stationery carries its own footer, so the plain one exists only without it.
   const footer = footerLayout(stationery ? [] : document.footerColumns, fonts);
-  const { firstBox, followingBox, addressShift } = pageGeometry(
+  const {
+    firstBox: plannedFirstBox,
+    followingBox,
+    addressShift,
+  } = pageGeometry(
     stationery && {
       firstPage: stationery.firstPage.margins,
       followingPages: stationery.followingPages?.margins ?? null,
     },
     footer.heightMm,
   );
+  const firstBox = {
+    ...plannedFirstBox,
+    top: Math.max(plannedFirstBox.top, headBottom(document, fonts, plannedFirstBox, addressShift)),
+  };
   const boxOf = (pageIndex: number) => (pageIndex === 0 ? firstBox : followingBox);
   const firstUnderlay = stationery ? await embedStationery(pdf, stationery.firstPage.file) : null;
   const followingUnderlay = stationery?.followingPages

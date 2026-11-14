@@ -2,11 +2,11 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { AFRelationship, PDFHexString, PDFName, PDFString } from 'pdf-lib';
+import { AFRelationship, JpegEmbedder, PDFHexString, PDFName, PDFString } from 'pdf-lib';
 
 import { E_INVOICE_FILE_NAME, verifyEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 
-import type { BusinessDocument } from './model';
+import type { BusinessDocument, StationeryFile } from './model';
 import { drawBusinessDocument } from './render';
 
 // A ZUGFeRD / Factur-X invoice: the business document drawn by the one
@@ -14,8 +14,8 @@ import { drawBusinessDocument } from './render';
 // `factur-x.xml` (relationship `Alternative`). A person reads the pages, a
 // machine reads the XML; both come from the same invoice. The same input
 // gives the same bytes. Mustang and veraPDF check the reference invoices in
-// CI (.github/workflows/e-invoice-checks.yml); nothing checks PDF/A at run
-// time, so a stationery PDF that is not PDF/A itself can break conformance.
+// CI (.github/workflows/e-invoice-checks.yml). Nothing checks PDF/A at run
+// time, so an invoice draws only what the renderer can vouch for (`pdfaSafe`).
 
 /** The Factur-X profile the XML follows; the XMP names it, Mustang compares it with the XML. */
 const FACTUR_X_CONFORMANCE_LEVEL = 'EN 16931';
@@ -103,12 +103,44 @@ function xmpMetadata(document: BusinessDocument, isoDate: string): string {
 <?xpacket end="w"?>`;
 }
 
+/** The file if it is a PNG, or a JPEG in grey or RGB; a CMYK JPEG would need a CMYK output intent. */
+async function pdfaSafeImage<File extends StationeryFile>(file: File | null): Promise<File | null> {
+  if (!file || file.format === 'pdf') return null;
+  if (file.format === 'png') return file;
+  return (await JpegEmbedder.for(file.bytes)).colorSpace === 'DeviceCMYK' ? null : file;
+}
+
+/**
+ * The document without what PDF/A-3b cannot vouch for: a stationery PDF may
+ * carry unembedded fonts, CMYK or other content no run-time check reads, and
+ * a CMYK JPEG needs another output intent. Such stationery gives way to the
+ * plain letterhead and footer, such a logo to none.
+ */
+async function pdfaSafe(document: BusinessDocument): Promise<BusinessDocument> {
+  const { stationery, sender } = document;
+  const first = stationery && (await pdfaSafeImage(stationery.firstPage.file));
+  const following = stationery?.followingPages ?? null;
+  const followingFile = following && (await pdfaSafeImage(following.file));
+  return {
+    ...document,
+    sender: { ...sender, logo: await pdfaSafeImage(sender.logo) },
+    stationery:
+      stationery && first
+        ? {
+            firstPage: { ...stationery.firstPage, file: first },
+            followingPages: following && followingFile ? { ...following, file: followingFile } : null,
+          }
+        : null,
+  };
+}
+
 /**
  * Renders an invoice document as a ZUGFeRD PDF/A-3b with `xml` embedded, then
  * reads the XML back out of the saved bytes: a PDF that does not carry exactly
  * that XML throws instead of being returned.
  */
-export async function renderEInvoicePdf(document: BusinessDocument, xml: string): Promise<Uint8Array> {
+export async function renderEInvoicePdf(input: BusinessDocument, xml: string): Promise<Uint8Array> {
+  const document = await pdfaSafe(input);
   const pdf = await drawBusinessDocument(document);
   const date = new Date(`${document.issuedOn}T00:00:00Z`);
   const xmlBytes = new TextEncoder().encode(xml);
