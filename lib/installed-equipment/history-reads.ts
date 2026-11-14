@@ -5,12 +5,13 @@ import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { z } from '@/lib/zod';
-import type {
-  EquipmentEvent,
-  EquipmentEventLink,
-  EquipmentPredecessorHistory,
-  EquipmentReplacementPlan,
-  EquipmentRow,
+import {
+  REPLACEMENT_PLAN_LIMIT,
+  type EquipmentEvent,
+  type EquipmentEventLink,
+  type EquipmentPredecessorHistory,
+  type EquipmentReplacementPlan,
+  type EquipmentRow,
 } from './types';
 
 /** The equipment register's reads: the caller's organization and the service-role client. */
@@ -244,29 +245,37 @@ const replacementPlanRowsSchema = z.array(
   }),
 );
 
-/** The running plans a replacement of this equipment asks about; none when it cannot be replaced. */
+/**
+ * The running plans a replacement of this equipment asks about, at most
+ * REPLACEMENT_PLAN_LIMIT, and whether it has more; none when it cannot be replaced.
+ */
 export async function loadReplacementPlans(
   context: EquipmentReadContext,
   row: EquipmentRow,
-): Promise<EquipmentReplacementPlan[]> {
-  if (!['active', 'inactive'].includes(row.state) || row.archived_at || row.voided_at) return [];
+): Promise<{ plans: EquipmentReplacementPlan[]; overflow: boolean }> {
+  if (!['active', 'inactive'].includes(row.state) || row.archived_at || row.voided_at) {
+    return { plans: [], overflow: false };
+  }
   const { data, error } = await context.admin.rpc('list_installed_equipment_replacement_plans', {
     p_organization_id: context.organizationId,
     p_equipment_id: row.id,
-    // The carry-over input takes at most 50 plans (validation.ts).
-    p_limit: 50,
+    // One row more than a replacement carries tells the dialog to refuse it.
+    p_limit: REPLACEMENT_PLAN_LIMIT + 1,
   });
   const parsed = replacementPlanRowsSchema.safeParse(data ?? []);
   if (error || !parsed.success) {
     logReadErrors('loadReplacementPlans: read failed', error ?? { code: 'unexpected_row_shape' });
     throw new Error('installed_equipment_detail_failed');
   }
-  return parsed.data.map((plan) => ({
-    id: plan.plan_id,
-    planNumber: plan.plan_number,
-    version: plan.plan_version,
-    status: plan.plan_status,
-    templateName: plan.template_name,
-    nextDueDate: plan.next_due_date,
-  }));
+  return {
+    plans: parsed.data.slice(0, REPLACEMENT_PLAN_LIMIT).map((plan) => ({
+      id: plan.plan_id,
+      planNumber: plan.plan_number,
+      version: plan.plan_version,
+      status: plan.plan_status,
+      templateName: plan.template_name,
+      nextDueDate: plan.next_due_date,
+    })),
+    overflow: parsed.data.length > REPLACEMENT_PLAN_LIMIT,
+  };
 }

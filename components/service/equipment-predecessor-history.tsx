@@ -25,8 +25,10 @@ export function EquipmentPredecessorHistorySection({
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = useServerAction(getEquipmentPredecessorHistory);
   if (initial.events.length === 0) return null;
-  const shownIds = new Set(initial.events.map((event) => event.id));
-  const events = [...initial.events, ...(older?.events ?? []).filter((event) => !shownIds.has(event.id))];
+  // An event recorded while paging shifts later offsets by one; each event shows once.
+  const events = [
+    ...new Map([...initial.events, ...(older?.events ?? [])].map((event) => [event.id, event])).values(),
+  ];
   const nextOffset = older ? older.nextOffset : initial.nextOffset;
 
   async function loadOlder(offset: number): Promise<void> {

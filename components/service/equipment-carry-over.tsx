@@ -8,11 +8,12 @@ import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
-import type {
-  EquipmentCarryOverInput,
-  EquipmentDetail,
-  EquipmentListItem,
-  EquipmentReplacementPlan,
+import {
+  REPLACEMENT_TOO_MANY_PLANS_MESSAGE,
+  type EquipmentCarryOverInput,
+  type EquipmentDetail,
+  type EquipmentListItem,
+  type EquipmentReplacementPlan,
 } from '@/lib/installed-equipment/types';
 import { formatLocalCalendarDay, parseIsoLocalDate } from '@/lib/utils';
 
@@ -38,6 +39,8 @@ function isCarriedComponent(component: EquipmentListItem): boolean {
 
 export type EquipmentCarryOverController = {
   plans: EquipmentReplacementPlan[];
+  /** More running plans than one replacement carries; the server refuses the replacement. */
+  plansOverflow: boolean;
   components: EquipmentListItem[];
   carried: ReadonlyMap<string, boolean>;
   reasons: ReadonlyMap<string, string>;
@@ -57,12 +60,14 @@ export function useEquipmentCarryOver(
   // stays open never puts a version the manager did not review into the
   // choices; the server refuses the outdated set instead.
   const [plans] = useState(() => initial?.replacementPlans ?? []);
+  const [plansOverflow] = useState(() => initial?.replacementPlansOverflow ?? false);
   const [components] = useState(() => (initial?.components ?? []).filter(isCarriedComponent));
   const [carried, setCarriedMap] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [reasons, setReasons] = useState<ReadonlyMap<string, string>>(new Map());
   const isCarried = (id: string) => carried.get(id) ?? true;
   return {
     plans,
+    plansOverflow,
     components,
     carried,
     reasons,
@@ -128,7 +133,7 @@ export function EquipmentCarryOverSection({
   controller: EquipmentCarryOverController;
   showErrors: boolean;
 }): ReactElement | null {
-  const { plans, components, carried, reasons, setCarried, setReason, errors } = controller;
+  const { plans, plansOverflow, components, carried, reasons, setCarried, setReason, errors } = controller;
   if (plans.length === 0 && components.length === 0) return null;
   return (
     <section className="space-y-3 rounded-lg border p-4" aria-labelledby="equipment-carry-over-title">
@@ -140,6 +145,14 @@ export function EquipmentCarryOverSection({
           Offene Fälligkeiten wandern mit ihrem Datum mit. Erledigte Wartungen bleiben beim Vorgänger.
         </p>
       </div>
+      {plansOverflow && (
+        <p
+          role="note"
+          className="rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground"
+        >
+          {REPLACEMENT_TOO_MANY_PLANS_MESSAGE}
+        </p>
+      )}
       {plans.map((plan) => {
         const carry = carried.get(plan.id) ?? true;
         return (

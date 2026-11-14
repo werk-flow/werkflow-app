@@ -7,6 +7,7 @@ import {
   EQUIPMENT_STATES,
   EQUIPMENT_SUBTYPES,
   EQUIPMENT_SUBTYPES_BY_CATEGORY,
+  REPLACEMENT_PLAN_LIMIT,
 } from './types';
 
 const trimmedNullableText = (maximum: number) => z.string().trim().max(maximum).optional().nullable();
@@ -129,7 +130,7 @@ const replacementCarryOverSchema = z.object({
           path: ['reason'],
         }),
     )
-    .max(50),
+    .max(REPLACEMENT_PLAN_LIMIT),
   components: z.array(z.object({ equipmentId: uuidSchema, carry: z.boolean() })).max(100),
 });
 

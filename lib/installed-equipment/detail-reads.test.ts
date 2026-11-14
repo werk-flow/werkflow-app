@@ -132,6 +132,27 @@ test('the detail carries the Vorgänger history and the running plans a replacem
       nextDueDate: null,
     },
   ]);
+  expect(result.equipment.replacementPlansOverflow).toBe(false);
+});
+
+test('an Anlage with more running plans than one replacement carries reports the overflow, never a silent cut', async () => {
+  const running = rpcRows.list_installed_equipment_replacement_plans ?? [];
+  rpcRows.list_installed_equipment_replacement_plans = Array.from({ length: 51 }, (_, index) => ({
+    plan_id: `plan-${index}`,
+    plan_number: `WPL-2026-${String(index).padStart(3, '0')}`,
+    plan_version: 1,
+    plan_status: 'active',
+    template_name: 'Heizungswartung',
+    next_due_date: null,
+  }));
+  try {
+    const result = await getInstalledEquipmentDetailByNumber('ANL-2026-001');
+    if (!result.success) throw new Error(result.error);
+    expect(result.equipment.replacementPlans).toHaveLength(50);
+    expect(result.equipment.replacementPlansOverflow).toBe(true);
+  } finally {
+    rpcRows.list_installed_equipment_replacement_plans = running;
+  }
 });
 
 test('a failed lookup is a load failure, while a missing row is not found', async () => {

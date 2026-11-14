@@ -171,13 +171,26 @@ begin
       and due_work.maintenance_plan_id = p_plan.id
       and due_work.maintenance_plan_revision_id = v_revision.id;
   else
+    -- The latest completion decides, not the latest next date: revisions
+    -- with different intervals put an older item's next date later.
     select coalesce(
-      min(due_work.original_due_date) filter (where due_work.status in ('open', 'visit_created')),
-      max(due_work.next_due_date) filter (where due_work.status = 'completed')
-    ) into v_first_due
-    from public.maintenance_due_work due_work
-    where due_work.organization_id = p_plan.organization_id
-      and due_work.maintenance_plan_id = p_plan.id;
+      (
+        select min(due_work.original_due_date)
+        from public.maintenance_due_work due_work
+        where due_work.organization_id = p_plan.organization_id
+          and due_work.maintenance_plan_id = p_plan.id
+          and due_work.status in ('open', 'visit_created')
+      ),
+      (
+        select due_work.next_due_date
+        from public.maintenance_due_work due_work
+        where due_work.organization_id = p_plan.organization_id
+          and due_work.maintenance_plan_id = p_plan.id
+          and due_work.status = 'completed'
+        order by due_work.completed_on desc nulls last, due_work.original_due_date desc, due_work.id
+        limit 1
+      )
+    ) into v_first_due;
   end if;
   v_first_due := coalesce(v_first_due, v_revision.first_due_date);
 
@@ -311,7 +324,8 @@ $$;
 -- Refusals: those of the nine-argument replacement;
 -- 'installed_equipment_stale_version' for a choice set that does not match or
 -- a stale plan version; 'installed_equipment_replacement_plan_reason_required'
--- for a plan left without a reason; 'maintenance_template_version_unavailable'
+-- for a plan left without a reason; 'installed_equipment_replacement_too_many_plans'
+-- for more than 50 running plans; 'maintenance_template_version_unavailable'
 -- when a carried plan's template version is no longer published.
 create function public.replace_installed_equipment(
   p_organization_id uuid,
@@ -353,6 +367,14 @@ begin
   if jsonb_typeof(p_carry_over->'plans') is distinct from 'array'
      or jsonb_typeof(p_carry_over->'components') is distinct from 'array' then
     raise exception 'installed_equipment_stale_version';
+  end if;
+  -- One replacement carries at most 50 plans (REPLACEMENT_PLAN_LIMIT); more
+  -- would never match the dialog's choice set, so refuse them by name.
+  if (
+    select count(*)
+    from public.list_installed_equipment_replacement_plans(p_organization_id, p_predecessor_id, null)
+  ) > 50 then
+    raise exception 'installed_equipment_replacement_too_many_plans';
   end if;
 
   v_successor := public.replace_installed_equipment(

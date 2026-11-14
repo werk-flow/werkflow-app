@@ -1,13 +1,14 @@
 -- Replacing an Anlage carries its maintenance obligations and components to
 -- the Nachfolger (migration
--- 20261205091100_carry_replaced_equipment_obligations_to_successor.sql):
+-- 20261205091201_carry_replaced_equipment_obligations_to_successor.sql):
 -- an overdue open due item that an earlier plan revision left open stays open
 -- with its due date on the successor's new plan revision, completed due work
 -- stays on the old revision, and the carried revision (also the one a
 -- correction saves) starts after it even when it is newer than the open item,
--- so a later generation cannot recreate it, a plan left
+-- so a later generation cannot recreate it, a carried actual-completion plan
+-- starts at its latest completion's next date, a plan left
 -- behind needs a reason, a stale or incomplete choice refuses the whole
--- replacement, the successor
+-- replacement, more than 50 running plans refuse it by name, the successor
 -- reads the predecessor's history, a correction carries everything back, and
 -- only the service role executes the functions.
 -- Runs inside one transaction against the local stack and rolls back.
@@ -472,6 +473,154 @@ begin
     raise exception 'a corrected replacement moved the plan''s start before the carried revision''s boundary';
   end if;
 end $$;
+
+-- An actual-completion plan with no outstanding work, revised from 24 to 6
+-- months: the carried revision starts at the latest completion's next date,
+-- not at the later next date an older, longer-interval completion named.
+do $$
+declare
+  v_today date := pg_temp.berlin_today();
+  v_version_id uuid := (select version_id from pg_temp.world);
+  v_expected date := app_private.add_months_clamped(pg_temp.berlin_today() - 10, 6);
+  v_carried date;
+begin
+  perform public.create_installed_equipment(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000100',
+    jsonb_build_object('clientId', '46600000-0000-4000-8000-000000000020',
+      'siteId', '46600000-0000-4000-8000-000000000021', 'name', 'Enthärtungsanlage',
+      'category', 'heat_generation', 'state', 'active', 'identifiers', '[]'::jsonb),
+    '46600000-0000-4000-8000-000000000001', '46600000-0000-4000-8000-000000000101'
+  );
+  perform public.create_maintenance_plan_with_due_work(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000110',
+    '46600000-0000-4000-8000-000000000111',
+    jsonb_build_object(
+      'clientId', '46600000-0000-4000-8000-000000000020', 'siteId', '46600000-0000-4000-8000-000000000021',
+      'maintenanceCoverageId', null, 'status', 'active', 'templateVersionId', v_version_id,
+      'effectiveFromDate', v_today - 400, 'firstDueDate', v_today - 400, 'intervalMonths', 24,
+      'dueWindowBeforeDays', 0, 'dueWindowAfterDays', 0, 'plannedDurationMinutes', 60,
+      'nextDueBasis', 'actual_completion_date', 'operationalInstructions', null,
+      'overlapReason', 'Enthärter getrennt', 'reason', 'Wartungsplan angelegt',
+      'equipmentIds', jsonb_build_array('46600000-0000-4000-8000-000000000100')),
+    '46600000-0000-4000-8000-000000000001', '46600000-0000-4000-8000-000000000112',
+    (v_today + interval '6 months')::date
+  );
+  perform set_config('app.maintenance_write', 'true', true);
+  update public.maintenance_due_work due_work set status = 'completed', scope_outcome = 'complete',
+    completed_on = v_today - 400, next_due_date = app_private.add_months_clamped(v_today - 400, 24)
+  where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
+    and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000110'
+    and due_work.status = 'open';
+  perform set_config('app.maintenance_write', 'false', true);
+  perform public.revise_maintenance_plan_with_due_work(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000110',
+    '46600000-0000-4000-8000-000000000113',
+    (select plan.version from public.maintenance_plans plan
+     where plan.organization_id = '46600000-0000-4000-8000-000000000010'
+       and plan.id = '46600000-0000-4000-8000-000000000110'),
+    jsonb_build_object(
+      'templateVersionId', v_version_id, 'effectiveFromDate', v_today - 30,
+      'firstDueDate', v_today - 30, 'intervalMonths', 6,
+      'dueWindowBeforeDays', 0, 'dueWindowAfterDays', 0, 'plannedDurationMinutes', 60,
+      'nextDueBasis', 'actual_completion_date', 'operationalInstructions', null,
+      'overlapReason', 'Enthärter getrennt',
+      'equipmentIds', jsonb_build_array('46600000-0000-4000-8000-000000000100')),
+    'Halbjährlich nach Herstellerangabe', '46600000-0000-4000-8000-000000000001',
+    '46600000-0000-4000-8000-000000000114', (v_today + interval '6 months')::date
+  );
+  perform set_config('app.maintenance_write', 'true', true);
+  update public.maintenance_due_work due_work set status = 'completed', scope_outcome = 'complete',
+    completed_on = v_today - 10, next_due_date = v_expected
+  where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
+    and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000110'
+    and due_work.status in ('open', 'visit_created');
+  perform set_config('app.maintenance_write', 'false', true);
+  if (
+    select count(*) filter (where due_work.status = 'completed') = 2
+      and count(*) filter (where due_work.status in ('open', 'visit_created')) = 0
+    from public.maintenance_due_work due_work
+    where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
+      and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000110'
+  ) is distinct from true then
+    raise exception 'fixture: expected two completed and no outstanding due items';
+  end if;
+
+  perform public.replace_installed_equipment(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000100',
+    '46600000-0000-4000-8000-000000000120', 1,
+    jsonb_build_object('name', 'Enthärtungsanlage neu', 'category', 'heat_generation', 'state', 'active',
+      'identifiers', '[]'::jsonb),
+    now(), 'Enthärter getauscht', '46600000-0000-4000-8000-000000000001',
+    '46600000-0000-4000-8000-000000000115',
+    jsonb_build_object(
+      'plans', jsonb_build_array(pg_temp.plan_choice('46600000-0000-4000-8000-000000000110', true, null)),
+      'components', '[]'::jsonb)
+  );
+  select revision.first_due_date into v_carried
+  from public.maintenance_plans plan
+  join public.maintenance_plan_revisions revision
+    on revision.id = plan.current_revision_id and revision.organization_id = plan.organization_id
+  join public.maintenance_plan_revision_equipment link
+    on link.maintenance_plan_revision_id = revision.id and link.organization_id = revision.organization_id
+   and link.equipment_id = '46600000-0000-4000-8000-000000000120'
+  where plan.organization_id = '46600000-0000-4000-8000-000000000010'
+    and plan.id = '46600000-0000-4000-8000-000000000110';
+  if v_carried is distinct from v_expected then
+    raise exception 'a carried actual-completion plan starts at %, not at the latest completion''s next date %',
+      v_carried, v_expected;
+  end if;
+end $$;
+
+-- An Anlage with more running plans than one replacement carries is refused
+-- by name, never as a stale version the manager retries forever.
+do $$
+declare
+  v_today date := pg_temp.berlin_today();
+  v_version_id uuid := (select version_id from pg_temp.world);
+  v_index integer;
+begin
+  perform public.create_installed_equipment(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000130',
+    jsonb_build_object('clientId', '46600000-0000-4000-8000-000000000020',
+      'siteId', '46600000-0000-4000-8000-000000000021', 'name', 'Lüftungszentrale',
+      'category', 'heat_generation', 'state', 'active', 'identifiers', '[]'::jsonb),
+    '46600000-0000-4000-8000-000000000001', '46600000-0000-4000-8000-000000000131'
+  );
+  for v_index in 1..51 loop
+    perform public.create_maintenance_plan_with_due_work(
+      '46600000-0000-4000-8000-000000000010', md5('carry-plan-' || v_index)::uuid,
+      md5('carry-revision-' || v_index)::uuid,
+      jsonb_build_object(
+        'clientId', '46600000-0000-4000-8000-000000000020', 'siteId', '46600000-0000-4000-8000-000000000021',
+        'maintenanceCoverageId', null, 'status', 'active', 'templateVersionId', v_version_id,
+        'effectiveFromDate', v_today, 'firstDueDate', v_today + 60, 'intervalMonths', 12,
+        'dueWindowBeforeDays', 0, 'dueWindowAfterDays', 0, 'plannedDurationMinutes', 30,
+        'nextDueBasis', 'planned_due_date', 'operationalInstructions', null,
+        'overlapReason', 'Prüfpunkt ' || v_index, 'reason', 'Wartungsplan angelegt',
+        'equipmentIds', jsonb_build_array('46600000-0000-4000-8000-000000000130')),
+      '46600000-0000-4000-8000-000000000001', md5('carry-key-' || v_index)::uuid,
+      (v_today + interval '6 months')::date
+    );
+  end loop;
+end $$;
+
+select pg_temp.expect_refusal('a replacement of more than 50 running plans', $sql$
+  select public.replace_installed_equipment(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000130',
+    '46600000-0000-4000-8000-000000000140', 1,
+    jsonb_build_object('name', 'Lüftungszentrale neu', 'category', 'heat_generation', 'state', 'active',
+      'identifiers', '[]'::jsonb),
+    now(), 'Zentrale getauscht', '46600000-0000-4000-8000-000000000001',
+    '46600000-0000-4000-8000-000000000141',
+    jsonb_build_object(
+      'plans', (
+        select jsonb_agg(pg_temp.plan_choice(running.plan_id, true, null))
+        from public.list_installed_equipment_replacement_plans(
+          '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000130', 50) running
+      ),
+      'components', '[]'::jsonb)
+  )
+$sql$, 'installed_equipment_replacement_too_many_plans');
 
 -- Browser roles cannot execute the new functions.
 reset role;
