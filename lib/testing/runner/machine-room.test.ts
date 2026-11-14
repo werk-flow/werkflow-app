@@ -31,7 +31,7 @@ const watched = (
   available: number,
   floor: number,
   blocked: string | null = null,
-  load = { load: 2, cores: 14, normalLoad: 21 },
+  load: { load: number; cores: number; normalLoad: number | null } = { load: 2, cores: 14, normalLoad: 21 },
 ): RoomReading => ({
   room: { available: available * GIB, floor: floor * GIB, blocked, alerted: false, ...load },
 });
@@ -309,8 +309,10 @@ test('the room is the answer of the load watch', () => {
 });
 
 // The normal line is the watch's own constant, never a copy here (werk-flow/werkflow-planning
-// ops/workstation-load.py): a watch that names none is an unreadable answer.
-test('the normal load line is read from the watch, and a watch without one is no reading', () => {
+// ops/workstation-load.py). A watch that names none still answers for memory, so its hard
+// refusals hold for every start, and only a thread is refused for the missing line
+// (CodeRabbit on #390).
+test('the normal load line is read from the watch, and without one only a thread is refused', () => {
   const room = '{"available": 1, "floor": 2, "blocked": null, "alerted": false, "watching": true}';
   const withLine = (source: string): RoomReading => watchAnswering(0, room, '', source);
   expect(withLine('CLEAR_LOAD_PER_CORE = 2  # a comment\n')).toMatchObject({ room: { normalLoad: 28 } });
@@ -320,7 +322,16 @@ test('the normal load line is read from the watch, and a watch without one is no
     'CLEAR_LOAD_PER_CORE = CORES\n',
     '# CLEAR_LOAD_PER_CORE = 1.5\n',
   ])
-    expect(fixOf(withLine(source)).unwatched).toContain('names no normal load line');
+    expect(withLine(source)).toMatchObject({ room: { normalLoad: null } });
+  const noLine = (available: number, blocked: string | null = null): RoomReading =>
+    watched(available, 1.8, blocked, { load: 2, cores: 14, normalLoad: null });
+  const thread = admission('thread', noLine(20), []);
+  expect(thread).toMatchObject({ admitted: false, unwatched: true });
+  expect(thread.reason).toContain('names no normal load line');
+  for (const start of ['heavy', 'setup', 'device'] as const) {
+    expect(admitted(start, noLine(20)), start).toBe(true);
+    expect(admitted(start, noLine(20, 'macOS reports memory pressure: critical')), start).toBe(false);
+  }
 });
 
 test('a missing, stopped, failing or unreadable watch is no reading, never an empty room', () => {

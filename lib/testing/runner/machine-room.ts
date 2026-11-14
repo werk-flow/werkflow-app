@@ -55,8 +55,12 @@ type MachineRoom = Omit<WatchAnswer, 'watching'> & {
   /** The 15-minute load and the logical cores, measured as the watch measures them. */
   readonly load: number;
   readonly cores: number;
-  /** The load watch's normal line for this machine: its alert counts a 15-minute load under it as normal. */
-  readonly normalLoad: number;
+  /**
+   * The load watch's normal line for this machine: its alert counts a 15-minute load under it as
+   * normal. Null when the watch's script names none: its memory answer still holds, and only a
+   * thread, which needs the line, is refused.
+   */
+  readonly normalLoad: number | null;
 };
 /** The 15-minute load and the logical cores: the kernel numbers the load watch reads. */
 export type MachineLoad = { readonly load: number; readonly cores: number };
@@ -164,11 +168,10 @@ export function readMachineRoom(
   if (!room.watching)
     return { unwatched: 'the load watch has the script but its timer wrote no sample in 5 minutes', fix };
   const perCore = normalLoadPerCore(script);
-  if (perCore === undefined)
-    return { unwatched: `the load watch at ${script} names no normal load line (CLEAR_LOAD_PER_CORE)`, fix };
   const { load, cores } = measureLoad();
   const { available, floor, blocked, alerted } = room;
-  return { room: { available, floor, blocked, alerted, load, cores, normalLoad: perCore * cores } };
+  const normalLoad = perCore === undefined ? null : perCore * cores;
+  return { room: { available, floor, blocked, alerted, load, cores, normalLoad } };
 }
 
 /** Every process as pid, parent and resident bytes, from one `ps` call (the columns are the same on Linux and macOS). */
@@ -271,6 +274,16 @@ export function admission(
   const running =
     heavy.length === 0 ? 'no heavy command runs' : `${plural(heavy.length, 'heavy command')} running`;
   if (start === 'thread') {
+    // A watch without its normal line still answers for memory, so every other start keeps its
+    // measurement; a thread needs the line, and waiting does not add it.
+    if (normalLoad === null)
+      return {
+        admitted: false,
+        measured: false,
+        unwatched: true,
+        reason:
+          "This machine's load is not measured: its load watch names no normal load line (CLEAR_LOAD_PER_CORE). Update werkflow-planning (git -C ~/code/werkflow-planning pull) so the watch has it.",
+      };
     const held = heavy.reduce((sum, use) => sum + use, 0);
     const needed = floor + START_COST.heavy + cost * threads;
     const fits = available + held >= needed && load < normalLoad;
