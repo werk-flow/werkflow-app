@@ -1,5 +1,9 @@
 Menü öffnen
 Dashboard
+Bereitschaft jetzt
+Wer außerhalb der Arbeitszeit erreichbar ist.
+Gerade hat niemand Bereitschaft.
+Bereitschaft planen
 Haustechnik Krämer GmbH
 Deine Rolle:
 Admin
