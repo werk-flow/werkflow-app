@@ -24,7 +24,7 @@ State a deviation in the domain that deviates.
 - A domain references another domain's fact by exact identity or version and never copies it.
 - A derivable value is derived: attention items, capacity, daily targets, project state, readiness, the relationship timeline.
 - A mutable root carries a version. A business write is one atomic database operation that checks version, organization and authorization. A client request key makes a retry return the first result.
-- A record number is unique in the organization and immutable. Job, project, request, equipment, service case and maintenance numbers count per year; personnel numbers once. The count has at least three digits and grows past 999. A generator reads every existing number of its pattern, whatever its length.
+- A record number is unique in the organization and immutable. Job, project, request, offer, equipment, service case and maintenance numbers count per year; personnel numbers once. The count has at least three digits and grows past 999. A generator reads every existing number of its pattern, whatever its length.
 - Missing configuration shows as missing, never as complete, allowed or compliant.
 - Field workers get a purpose-limited projection through their assigned work.
 

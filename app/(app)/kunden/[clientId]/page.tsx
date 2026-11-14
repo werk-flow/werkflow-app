@@ -18,7 +18,12 @@ import { SiteAccessReviewOpener } from '@/components/kunden/site-access-review';
 import { readSiteAccessReview } from '@/lib/site-access-proposals/review-read';
 import { SITE_ACCESS_REVIEW_PARAM } from '@/lib/site-access-proposals/types';
 import { uuidSchema } from '@/lib/validation/uuid';
+import { logError } from '@/lib/logging';
+import { readOfferPage } from '@/lib/offers/reads';
 import KundenDetailLoading from './loading';
+
+/** The newest offers the customer's page lists; a link opens the rest. */
+const CUSTOMER_OFFER_COUNT = 5;
 
 interface KundenDetailPageProps {
   params: Promise<{ clientId: string }>;
@@ -37,7 +42,27 @@ function readKundenDetail(clientId: string, activeOrgId: string, userId: string)
     getInstalledEquipmentForClient(clientId),
     getOrganizationUserPreferencesForView(activeOrgId, userId),
     getClientSiteRoles(clientId),
+    readOfferPage(activeOrgId, { status: null, search: '', clientId, page: 1 }, CUSTOMER_OFFER_COUNT).catch(
+      (error: unknown) => {
+        logError('kunde.offers_read_failed', error);
+        return null;
+      },
+    ),
   ]);
+}
+
+function customerPageMember(member: {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+}): OrgMemberOption {
+  return {
+    userId: member.user_id,
+    firstName: member.first_name,
+    lastName: member.last_name,
+    role: member.role,
+  };
 }
 
 async function KundenDetailData({ clientId }: { clientId: string }) {
@@ -61,6 +86,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     equipmentResult,
     { visibleColumns },
     siteRolesResult,
+    offers,
   ] = await readKundenDetail(clientId, activeOrgId, user.id);
 
   // A missing or forbidden client leaves the page; a failed read must not look like one.
@@ -93,13 +119,6 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
 
   const { client, archivedAt, sourceNumber } = clientResult;
 
-  const members: OrgMemberOption[] = membersResult.members.map((m) => ({
-    userId: m.user_id,
-    firstName: m.first_name,
-    lastName: m.last_name,
-    role: m.role,
-  }));
-
   return (
     <KundenDetailContent
       client={client}
@@ -120,13 +139,14 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
             }
           : null
       }
-      members={members}
+      members={membersResult.members.map(customerPageMember)}
       isAdminOrManager={isAdminOrManager}
       visibleColumns={visibleColumns}
       currentUserId={user.id}
       relationshipBundle={relationshipResult.success ? relationshipResult.data : null}
       equipment={equipmentResult.success ? equipmentResult.equipment : []}
       equipmentLoadFailed={!equipmentResult.success}
+      offers={offers}
     />
   );
 }

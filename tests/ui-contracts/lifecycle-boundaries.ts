@@ -74,6 +74,7 @@ declare global {
       | 'wholesaler-import'
       | 'inventory-movements'
       | 'leistungen'
+      | 'offers'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName

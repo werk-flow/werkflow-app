@@ -1,6 +1,7 @@
 // Rule test: both agent tools run the edit guard before every tool call that can write a file,
 // Claude runs the delete guard before every shell call, and both run the sign-in, Boat key, heavy
-// command, second-stack and shared stack migration guards, and the device guard before T3's device_open.
+// command, second-stack and shared stack migration guards, the device guard before T3's device_open,
+// and the child-start guard before T3's thread starts.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -14,6 +15,7 @@ const SIGN_IN_GUARD = '.claude/hooks/refuse-account-sign-in.ts';
 const BOAT_KEY_GUARD = '.claude/hooks/refuse-boat-key-reads.ts';
 const HEAVY_COMMAND_GUARD = '.claude/hooks/refuse-heavy-commands.ts';
 const SECOND_STACK_GUARD = '.claude/hooks/refuse-second-stack.ts';
+const CHILD_START_GUARD = '.claude/hooks/refuse-child-start-without-room.ts';
 const DEVICE_GUARD = '.claude/hooks/refuse-device-without-room.ts';
 const STACK_MIGRATION_GUARD = '.claude/hooks/refuse-shared-stack-migration.ts';
 
@@ -102,6 +104,26 @@ test('both agent tools run the heavy command guard before every shell call', () 
 test('both agent tools run the second-stack guard before every shell call', () => {
   expect(guardedTools('.claude/settings.json', ['Bash'], SECOND_STACK_GUARD)).toEqual(['Bash']);
   expect(guardedTools('.codex/hooks.json', ['Bash'], SECOND_STACK_GUARD)).toEqual(['Bash']);
+});
+
+// A thread starts on a machine only while it has room (lib/testing/runner/child-start.ts). Claude
+// names T3 Code's server `t3-code`, Codex `t3_code`, so the matcher leaves the server open. It names
+// only the three tools that start a thread: every other T3 call runs without the measurement.
+test('both agent tools run the child-start guard before each tool that starts a thread, and before no other', () => {
+  const starts = ['delegate_task', 't3_thread_launch', 'create_threads'].flatMap((tool) => [
+    `mcp__t3-code__${tool}`,
+    `mcp__t3_code__${tool}`,
+  ]);
+  const others = [
+    'mcp__t3-code__t3_thread_send',
+    'mcp__t3-code__task_status',
+    'mcp__supabase__execute_sql',
+    'Bash',
+  ];
+  for (const file of ['.claude/settings.json', '.codex/hooks.json']) {
+    expect(guardedTools(file, starts, CHILD_START_GUARD)).toEqual(starts);
+    expect(guardedTools(file, others, CHILD_START_GUARD)).toEqual([]);
+  }
 });
 
 // No branch applies its own migration to the shared local stack
