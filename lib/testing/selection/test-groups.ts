@@ -392,6 +392,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
   ['client-site-roles', ['client_site_roles.sql'], ['customers', 'service']],
+  ['work-billing-parties', ['work_billing_parties.sql'], ['customers', 'work', 'service']],
   ['site-access-proposals', ['site_access_proposals.sql'], ['customers', 'work', 'attention']],
   [
     'request-callback-and-equipment',

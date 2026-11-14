@@ -17,6 +17,7 @@ import {
 } from '@/lib/requests/types';
 import { getRequestDocuments } from '@/lib/documents/actions';
 import { getCallerMatches } from '@/lib/requests/actions';
+import { getWorkBillingParties } from '@/lib/billing-parties/server';
 import {
   RequestDetailContent,
   type RequestDetailData,
@@ -183,6 +184,7 @@ function requestDetailData({
   convertedServiceCase,
   attachedEntry,
   callerMatches,
+  billingParties,
   labelWave: [
     clientResult,
     siteResult,
@@ -202,6 +204,7 @@ function requestDetailData({
   convertedServiceCase: { case_number: string } | null;
   attachedEntry: AttachedEntryRow | null;
   callerMatches: RequestDetailData['callerMatches'];
+  billingParties: RequestDetailData['billingParties'];
   labelWave: LabelWave;
 }): RequestDetailData {
   const actorById = new Map((actorsResult.data ?? []).map((profile) => [profile.id, profile]));
@@ -248,6 +251,7 @@ function requestDetailData({
     attachedLink: attachedLinkOf(attachedEntry),
     documents,
     callerMatches,
+    billingParties,
     events: eventsFailed || actorsResult.error ? null : eventEntries,
     assignees,
   };
@@ -281,6 +285,7 @@ function readRequestWave(admin: AdminClient, activeOrgId: string, requestId: str
       .maybeSingle(),
     // Empty for a matched or finished request.
     getCallerMatches(requestId),
+    getWorkBillingParties({ kind: 'request', id: requestId }),
   ]);
 }
 
@@ -312,6 +317,7 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
       convertedServiceCaseResult,
       attachedEntryResult,
       callerMatchesResult,
+      billingPartiesResult,
     ],
   ] = await Promise.all([
     admin
@@ -365,6 +371,7 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
         callerMatches: callerMatchesResult.success
           ? { matches: callerMatchesResult.matches, moreMatches: callerMatchesResult.moreMatches }
           : null,
+        billingParties: billingPartiesResult.success ? billingPartiesResult.parties : undefined,
         labelWave,
       })}
     />

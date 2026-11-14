@@ -17,10 +17,13 @@ import { cn } from '@/lib/utils';
 export function SectionError({
   title,
   className,
+  retryRef,
   ...content
 }: {
   title?: string;
   className?: string;
+  /** Lets a form point to the retry, for a step that needs the read first. */
+  retryRef?: React.Ref<HTMLButtonElement>;
 } & (
   | { failure: ReadFailure; children?: never; onRetry?: never; retryPending?: never }
   | { failure?: never; children: React.ReactNode; onRetry?: () => void; retryPending?: boolean }
@@ -46,6 +49,7 @@ export function SectionError({
       </div>
       {onRetry && (
         <Button
+          ref={retryRef}
           type="button"
           size="sm"
           variant="outline"

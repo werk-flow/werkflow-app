@@ -972,4 +972,111 @@ begin
 end;
 $$;
 
+-- Work billing parties are a ledger (werk-flow/werkflow-planning#327): no API
+-- role may rewrite or delete a version, the history guard refuses even the
+-- owner role, and only a deleted actor's reference-nulling and a deleted
+-- work's cascade clean up.
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('53270000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'billing-ledger-admin@example.test', '', now(), '{}',
+ '{"first_name":"Admin","last_name":"Ledger"}', now(), now()),
+('53270000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'billing-ledger-buero@example.test', '', now(), '{}',
+ '{"first_name":"Büro","last_name":"Ledger"}', now(), now());
+insert into public.organizations (id, name, admin_id, unique_code) values
+('53270000-0000-4000-8000-000000000010', 'Billing ledger SQL',
+ '53270000-0000-4000-8000-000000000001', 'BILLLEDG');
+insert into public.organization_members (organization_id, user_id, role) values
+('53270000-0000-4000-8000-000000000010', '53270000-0000-4000-8000-000000000002', 'buero');
+insert into public.clients (id, organization_id, name, client_type, address) values
+('53270000-0000-4000-8000-000000000020', '53270000-0000-4000-8000-000000000010',
+ 'WEG Ahornweg 1', 'gewerblich', 'Ahornweg 1, 10115 Berlin'),
+('53270000-0000-4000-8000-000000000021', '53270000-0000-4000-8000-000000000010',
+ 'Hausverwaltung Ahorn GmbH', 'gewerblich', 'Hofweg 9, 10117 Berlin');
+-- The job's default version comes with it; the office's choice adds one with its actor.
+insert into public.jobs (id, organization_id, title, job_number, client_id, status, created_by) values
+('53270000-0000-4000-8000-000000000030', '53270000-0000-4000-8000-000000000010', 'Heizung prüfen',
+ 'L-30', '53270000-0000-4000-8000-000000000020', 'nicht_bearbeitet',
+ '53270000-0000-4000-8000-000000000001');
+set local role service_role;
+select public.set_work_billing_parties('53270000-0000-4000-8000-000000000002',
+  '53270000-0000-4000-8000-000000000010', 'job', '53270000-0000-4000-8000-000000000030',
+  '53270000-0000-4000-8000-000000000020', '53270000-0000-4000-8000-000000000021',
+  (select max(version) from public.work_billing_parties
+    where work_id = '53270000-0000-4000-8000-000000000030'));
+
+-- The server role holds no UPDATE or DELETE grant; a browser session holds none at all.
+do $$
+declare
+  v_role text;
+begin
+  foreach v_role in array array['service_role', 'authenticated'] loop
+    execute format('set local role %I', v_role);
+    begin
+      update public.work_billing_parties set recipient_name = 'Andere'
+      where work_id = '53270000-0000-4000-8000-000000000030';
+      raise exception 'billing party update was accepted for %', v_role;
+    exception when insufficient_privilege then
+      null;
+    end;
+    begin
+      delete from public.work_billing_parties where work_id = '53270000-0000-4000-8000-000000000030';
+      raise exception 'billing party delete was accepted for %', v_role;
+    exception when insufficient_privilege then
+      null;
+    end;
+  end loop;
+end;
+$$;
+
+-- The owner role passes the grant and meets the history guard.
+reset role;
+do $$
+begin
+  begin
+    update public.work_billing_parties set recipient_name = 'Andere'
+    where work_id = '53270000-0000-4000-8000-000000000030';
+    raise exception 'privileged billing party update was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  begin
+    delete from public.work_billing_parties where work_id = '53270000-0000-4000-8000-000000000030';
+    raise exception 'privileged billing party delete was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  if (select count(*) from public.work_billing_parties
+      where work_id = '53270000-0000-4000-8000-000000000030') is distinct from 2::bigint
+    or exists (select 1 from public.work_billing_parties
+      where work_id = '53270000-0000-4000-8000-000000000030' and recipient_name = 'Andere')
+  then raise exception 'a refused billing party edit changed the history'; end if;
+end;
+$$;
+
+-- Permitted cleanup: a deleted account leaves its versions without an actor,
+-- and a deleted work takes its versions with it.
+delete from public.organization_members
+where organization_id = '53270000-0000-4000-8000-000000000010'
+  and user_id = '53270000-0000-4000-8000-000000000002';
+delete from auth.users where id = '53270000-0000-4000-8000-000000000002';
+do $$
+begin
+  if (select count(*) from public.work_billing_parties
+      where work_id = '53270000-0000-4000-8000-000000000030' and set_by is null) is distinct from 2::bigint
+  then raise exception 'a deleted account did not leave its billing party versions without an actor'; end if;
+end;
+$$;
+delete from public.jobs where id = '53270000-0000-4000-8000-000000000030';
+do $$
+begin
+  if exists (select 1 from public.work_billing_parties
+    where work_id = '53270000-0000-4000-8000-000000000030')
+  then raise exception 'a deleted job left its billing party versions'; end if;
+end;
+$$;
+
 rollback;

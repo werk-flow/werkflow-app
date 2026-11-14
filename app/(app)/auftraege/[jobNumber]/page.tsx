@@ -206,6 +206,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       currentUserId={user.id}
       originRequest={originRequestLink(originRequest)}
       requestEntries={requestEntriesResult?.success ? requestEntriesResult.entries : undefined}
+      billingParties={result.billingParties}
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
       handoverWorkspace={handoverWorkspace}
     />

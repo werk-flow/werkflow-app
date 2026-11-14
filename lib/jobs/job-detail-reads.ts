@@ -7,6 +7,7 @@ import { logReadFailure } from '@/lib/data/read-request-cache';
 import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { formatEmployeeRecordName } from '@/lib/personnel/types';
 import type { AdminClient } from '@/lib/supabase/admin';
+import { SITE_CONTACTS_EMBED } from '@/lib/billing-parties/server';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import { toJobAssignment, type JobAssignmentRow, type JobAssignmentWithProfile } from './types';
 import {
@@ -25,12 +26,23 @@ export async function loadJobDetailRelations(
   admin: AdminClient,
   orgId: string,
   job: { id: string; site_id: string | null; contact_id: string | null },
-): Promise<{ site: ClientSite | null; contact: ClientContact | null; scheduledVisitCount: number } | null> {
+): Promise<{
+  site: ClientSite | null;
+  contact: ClientContact | null;
+  scheduledVisitCount: number;
+  /** The site's contacts for the office's billing section; never part of the job. */
+  siteContacts: unknown;
+} | null> {
   const siteId = job.site_id;
   const contactId = job.contact_id;
   const [siteResult, contactResult, visitCountResult] = await Promise.all([
     siteId
-      ? admin.from('client_sites').select('*').eq('organization_id', orgId).eq('id', siteId).maybeSingle()
+      ? admin
+          .from('client_sites')
+          .select(`*, ${SITE_CONTACTS_EMBED}`)
+          .eq('organization_id', orgId)
+          .eq('id', siteId)
+          .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     contactId
       ? admin
@@ -52,6 +64,7 @@ export async function loadJobDetailRelations(
     site: siteResult.data ? toClientSite(siteResult.data) : null,
     contact: contactResult.data ? toClientContact(contactResult.data) : null,
     scheduledVisitCount: visitCountResult.count ?? 0,
+    siteContacts: siteResult.data?.site_contacts ?? [],
   };
 }
 

@@ -58,13 +58,23 @@ Kunde & Einsatzort
 Familie Hoffmann
 Einfamilienhaus
 Lindenstraße 4, 71032 Böblingen
+Auftraggeber und Rechnung
+Ändern
+Auftraggeber
+Familie Hoffmann
+Rechnungsempfänger
+Familie Hoffmann
+Lindenstraße 4, 71032 Böblingen
+Wie Auftraggeber
+·
+01.01.2026, 08:00
+Einsatzort
+Einfamilienhaus
+Lindenstraße 4, 71032 Böblingen
+Zugangskontakt
+—
 Betroffene Anlagen
 Gas-Brennwerttherme
 ANL-2026-001
 Operativer Auftrag
-Lege den Auftrag im bestehenden Auftragsbereich an und ordne ihn anschließend hier zu.
-Auftrag anlegen
-Nächster Schritt
-Plane eine Büro-, Gewährleistungs- oder Kundenrückfrage als bestehende Nachfassaktion.
-Nachfassaktion anlegen
 Nicht eingestempelt

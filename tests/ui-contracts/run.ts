@@ -58,6 +58,9 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               )
                 return { path: join(repository, 'lib/supabase/client.ts') };
             });
+            builder.onResolve({ filter: /^@\/lib\/billing-parties\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'billing-parties-service-boundaries.ts'),
+            }));
             // The report dialog's contract runs the real launcher, dialog and upload
             // client against stub actions, router, organization and redraw.
             builder.onResolve(
@@ -96,7 +99,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
               if (
                 args.importer.endsWith('use-suggested-record-number.ts') ||
-                args.importer.endsWith('use-request-work-targets.ts')
+                args.importer.endsWith('use-request-work-targets.ts') ||
+                args.importer.endsWith('use-work-billing-parties.ts')
               )
                 return { path: join(import.meta.dir, 'calendar-service-boundaries.tsx') };
             });

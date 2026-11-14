@@ -1,7 +1,7 @@
 'use client';
 
 import { StaleRegion } from '@/components/shared/stale-region';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Award } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
@@ -86,7 +86,19 @@ async function saveJobQualificationRequirements({
   }
 }
 
-export function JobQualificationSection({ jobId, canEdit }: { jobId: string; canEdit: boolean }) {
+/**
+ * It reads and refreshes its own detail and takes two plain values, so a
+ * render of the job page leaves it alone. Without the memo, the page's
+ * time-entries render drew the whole card again whenever its own read landed
+ * first: lab.office.job-open took 28 renders more in that order.
+ */
+export const JobQualificationSection = memo(function JobQualificationSection({
+  jobId,
+  canEdit,
+}: {
+  jobId: string;
+  canEdit: boolean;
+}) {
   const [selectedCapabilityId, setSelectedCapabilityId] = useState('');
   const [requireConfirmation, setRequireConfirmation] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -159,4 +171,4 @@ export function JobQualificationSection({ jobId, canEdit }: { jobId: string; can
       </StaleRegion>
     </Card>
   );
-}
+});
