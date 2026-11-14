@@ -1,3 +1,4 @@
+import { getLocalDayStart } from '@/lib/date-time/berlin';
 import { isSameActivitySelection } from '@/lib/time-tracking/clock-actions';
 import type { TimeActivitySelection } from '@/lib/time-tracking/types';
 import type { TimeCorrectionFact, TimeCorrectionSnapshot } from './types';
@@ -89,7 +90,9 @@ function continuesAcrossMidnight(facts: readonly TimeCorrectionFact[]): boolean 
     return (
       fact.entryType === 'clock_out' &&
       next?.entryType === 'clock_in' &&
-      Date.parse(next.timestamp) === Date.parse(fact.timestamp)
+      Date.parse(next.timestamp) === Date.parse(fact.timestamp) &&
+      // Only a Berlin midnight: a daytime switch at the same instant is two pieces of work, not one span.
+      getLocalDayStart(new Date(fact.timestamp)).getTime() === Date.parse(fact.timestamp)
     );
   });
 }
@@ -132,6 +135,7 @@ function editSource(
     closing?.entryType === 'clock_out' &&
     opening &&
     Date.parse(patch.timestamp) > Date.parse(opening.timestamp) &&
+    sharesOneContext(before.facts) &&
     continuesAcrossMidnight(before.facts)
   ) {
     return {

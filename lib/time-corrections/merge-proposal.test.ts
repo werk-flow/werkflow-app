@@ -161,4 +161,29 @@ describe('an edit of a recovery-ended segment that spans several days', () => {
     expect(proposal?.facts).toHaveLength(4);
     expect(proposal?.facts.map((fact) => fact.activity)).toEqual(mixed.facts.map((fact) => fact.activity));
   });
+
+  test('a new end on a daytime switch keeps the later piece (07:00-12:00 and 12:00-16:00 Berlin)', () => {
+    const [firstIn, firstOut, secondIn, secondOut] = before.facts;
+    if (!firstIn || !firstOut || !secondIn || !secondOut) throw new Error('Missing source fact fixture.');
+    const daytime: TimeCorrectionSnapshot = {
+      schemaVersion: 1,
+      facts: [
+        { ...firstIn, timestamp: '2026-09-07T05:00:00.000Z' },
+        { ...firstOut, timestamp: '2026-09-07T10:00:00.000Z' },
+        { ...secondIn, timestamp: '2026-09-07T10:00:00.000Z' },
+        { ...secondOut, timestamp: '2026-09-07T14:00:00.000Z' },
+      ],
+    };
+    const proposal = mergeCorrectionProposal(
+      'edit',
+      daytime,
+      proposed(['clock_out', '2026-09-07T09:00:00.000Z']),
+    );
+    expect(proposal?.facts.map((fact) => [fact.entryType, fact.timestamp])).toEqual([
+      ['clock_in', '2026-09-07T05:00:00.000Z'],
+      ['clock_out', '2026-09-07T09:00:00.000Z'],
+      ['clock_in', '2026-09-07T10:00:00.000Z'],
+      ['clock_out', '2026-09-07T14:00:00.000Z'],
+    ]);
+  });
 });
