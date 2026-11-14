@@ -408,6 +408,10 @@ begin
     raise exception 'invalid_input';
   end if;
   perform app_private.lock_office_actor(p_organization_id, p_actor_id);
+  -- The organization's number lock, taken before the lookup: a call that
+  -- overlaps an earlier call under the same key waits for it and then reads
+  -- its committed event instead of writing a second offer.
+  perform pg_advisory_xact_lock(hashtextextended(p_organization_id::text || ':offer-number', 0));
   select event.offer_id into v_offer_id from public.offer_events event
   where event.organization_id = p_organization_id and event.attempt_key = p_attempt_key
     and event.event_type = 'created' and event.actor_id = p_actor_id;

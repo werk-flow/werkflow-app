@@ -25,7 +25,8 @@ const ALL_STATUSES = 'alle';
  * session's change reads the page again.
  */
 export function OffersContent({ entries, total, hasAnyOffer, query }: OfferPage & { query: OfferListQuery }) {
-  useRealtimeRouterRefresh({ tables: ['offers'] });
+  // The rows show customer and recipient names, which a customer edit changes.
+  useRealtimeRouterRefresh({ tables: ['offers', 'clients'] });
   const navigation = useListNavigation();
   const createDialog = usePageAction();
   // The typed text and the chosen status stay ahead of the URL while the read is under way.

@@ -172,6 +172,7 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     route: (details) => `/angebote/${details.offerId}`,
     // The area layout keeps „Angebote“ as the page's h1 above the offer.
     heading: 'Angebote',
+    title: VISUAL_NAMES.offer,
   },
   {
     id: 'angebote-leistungen',

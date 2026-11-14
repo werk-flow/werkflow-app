@@ -1,5 +1,5 @@
--- Two creates that run at the same time get different numbers
--- (werk-flow/werkflow-planning#380). The first session creates an offer and
+-- Two creates that run at the same time get different numbers, and the same
+-- create twice at the same time writes one offer (werk-flow/werkflow-planning#380). The first session creates an offer and
 -- keeps its transaction open; the second session's create waits for the
 -- organization's number lock and, once the first commits, takes the next number.
 --
@@ -95,6 +95,61 @@ begin
   $read$) as offer(numbers text[]);
   if v_numbers is distinct from array['ANG-' || v_year || '-001', 'ANG-' || v_year || '-002'] then
     raise exception 'two creates at the same time numbered %', v_numbers;
+  end if;
+end $$;
+
+-- The same press twice at the same time, as a retry after a lost answer while
+-- the first is still running: the second waits for the first, then answers
+-- with its offer and writes nothing.
+select dblink_exec('offer_race_first', 'begin');
+select dblink_exec('offer_race_first', 'set local role service_role');
+create temporary table offer_race_first_offer on commit drop as
+select offer_id from dblink('offer_race_first', $first$
+  select public.create_offer('38050000-0000-4000-8000-000000000001', '38050000-0000-4000-8000-000000000010',
+    '38050000-0000-4000-8000-000000000201', 'Drittes Angebot', '38050000-0000-4000-8000-000000000020',
+    null, null, null, null)
+$first$) as first(offer_id uuid);
+select dblink_send_query('offer_race_second', $second$
+  select public.create_offer('38050000-0000-4000-8000-000000000001', '38050000-0000-4000-8000-000000000010',
+    '38050000-0000-4000-8000-000000000201', 'Drittes Angebot', '38050000-0000-4000-8000-000000000020',
+    null, null, null, null)
+$second$);
+
+do $$
+declare
+  v_pid integer := (select pid from offer_race_second_pid);
+  v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
+begin
+  while cardinality(pg_blocking_pids(v_pid)) = 0 loop
+    if clock_timestamp() > v_deadline then
+      raise exception 'the repeated create never waited for the first one';
+    end if;
+  end loop;
+end $$;
+
+select dblink_exec('offer_race_first', 'commit');
+
+do $$
+declare
+  v_answer uuid;
+  v_rows integer;
+begin
+  select offer_id into v_answer from dblink_get_result('offer_race_second', false) as result(offer_id uuid);
+  if dblink_error_message('offer_race_second') is distinct from 'OK' then
+    raise exception 'the repeated create failed: %', dblink_error_message('offer_race_second');
+  end if;
+  perform * from dblink_get_result('offer_race_second', false) as result(offer_id uuid);
+  if v_answer is distinct from (select offer_id from offer_race_first_offer) then
+    raise exception 'the repeated create answered % instead of the first offer', v_answer;
+  end if;
+  select rows into v_rows from dblink('offer_race_setup', $read$
+    select (select count(*) from public.offers
+        where organization_id = '38050000-0000-4000-8000-000000000010')
+      + (select count(*) from public.offer_events
+        where organization_id = '38050000-0000-4000-8000-000000000010')
+  $read$) as offer(rows integer);
+  if v_rows is distinct from 6 then
+    raise exception 'the repeated create left % offers and events instead of 3 each', v_rows;
   end if;
 end $$;
 

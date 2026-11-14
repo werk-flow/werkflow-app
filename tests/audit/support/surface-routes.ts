@@ -17,6 +17,7 @@ export type SurfaceDestination = { route: string; heading?: string };
 const DYNAMIC_ROUTES: ReadonlySet<string> = new Set<DynamicPhoneRoute>([
   '/kunden/[clientId]',
   '/anfragen/[requestId]',
+  '/angebote/[offerId]',
   '/auftraege/[jobNumber]',
   '/mitarbeiter/[userId]',
   '/auftraege/[jobNumber]/uebergabe',

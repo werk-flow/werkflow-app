@@ -22,7 +22,7 @@ WerkFlow has offers without positions, and no order or invoice yet. Admin and B�
 ### Current limits
 
 - An article's purchase price is organization-wide, not per supplier.
-- An offer's header cannot be changed yet, and an offer has no Titel, Positionen or amounts, no PDF, sending, acceptance or conversion. Its status stays „Entwurf“. Nothing sets the job, project or request it was written for yet.
+- An offer's header cannot be changed yet, and an offer has no Titel (its sections), Positionen or amounts, no PDF, sending, acceptance or conversion. Its status stays „Entwurf“. Nothing sets the job, project or request it was written for yet.
 - No offer uses the profile's tax rate yet; the Musterangebot keeps its fixed 19 %.
 - A Leistung's price applies per one unit; a VAT rate other than 19, 7 or 0 % cannot be chosen. No offer uses a Leistung yet.
 - Not built: calculation, offer positions and amounts, order confirmation, contract, change order, billable measurement, invoice, credit, incoming bill, payment, open item, dunning, bank matching, accounting export, ledger.

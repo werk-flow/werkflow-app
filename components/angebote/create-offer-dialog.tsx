@@ -30,13 +30,23 @@ const SAVE_FAILED = OFFER_FAILURE_MESSAGES.save_failed ?? '';
 /**
  * „Angebot anlegen“: title and customer, optionally Einsatzort and
  * Ansprechpartner. The new offer opens on its own page, where the rest of its
- * header can be edited. A press repeated after a lost answer sends the same
- * key and opens the first offer.
+ * header shows. A press repeated after a lost answer sends the same key and
+ * opens the first offer.
  */
 export function CreateOfferDialog({ onClose }: { onClose: () => void }) {
   const router = useRouter();
-  const [attemptKey] = useState(() => crypto.randomUUID());
-  const [form, setForm] = useState<OfferCustomerForm>({ title: '', client: null, siteId: '', contactId: '' });
+  // A changed form gets a new key: only a repeat of the same press answers with the first offer.
+  const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
+  const [form, setFormState] = useState<OfferCustomerForm>({
+    title: '',
+    client: null,
+    siteId: '',
+    contactId: '',
+  });
+  const setForm = (next: OfferCustomerForm) => {
+    setFormState(next);
+    setAttemptKey(crypto.randomUUID());
+  };
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending: pending } = usePendingTask();
@@ -73,7 +83,6 @@ export function CreateOfferDialog({ onClose }: { onClose: () => void }) {
             <DialogTitle>Angebot anlegen</DialogTitle>
             <DialogDescription>
               Rechnungsempfänger, Gültigkeit und Texte übernimmt das Angebot aus Einsatzort und Firmenprofil.
-              Du kannst sie danach ändern.
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4">

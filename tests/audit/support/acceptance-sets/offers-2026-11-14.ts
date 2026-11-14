@@ -149,6 +149,7 @@ function roleCaptures(role: 'admin' | 'buero'): SetCapture[] {
       route: '/kunden/[clientId]',
       view: page,
       destination: customerPage,
+      reveal: 'Angebote',
       ...both,
     },
   ];

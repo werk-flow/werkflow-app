@@ -14,9 +14,10 @@ function withAddress(name: string, address: string | null) {
   );
 }
 
-/** The header of one offer; another session's change reads the page again. */
+/** The header of one offer; another session's change to it or a record it names reads the page again. */
 export function OfferHeaderFacts({ offer }: { offer: OfferDetail }) {
-  useRealtimeRouterRefresh({ tables: ['offers'] });
+  // The header shows the current names and addresses of customer, Objekt, contact and responsible person.
+  useRealtimeRouterRefresh({ tables: ['offers', 'clients', 'client_sites', 'client_contacts', 'profiles'] });
   return (
     <MetadataSection
       title="Angebotskopf"

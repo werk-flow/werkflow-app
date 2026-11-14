@@ -52,8 +52,11 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
           Alle Angebote
         </Link>
         <SubpageHeader
-          title={offer.title}
-          description={`${offer.offerNumber} · für ${offer.client.name}`}
+          // A title or customer name can hold a word wider than a phone.
+          title={<span className="wrap-anywhere">{offer.title}</span>}
+          description={
+            <span className="wrap-anywhere">{`${offer.offerNumber} · für ${offer.client.name}`}</span>
+          }
           actions={<OfferStatusBadge status={offer.status} />}
         />
       </div>

@@ -6,6 +6,18 @@ import { OFFER_COLUMNS } from './offers-columns';
 
 // Content-only skeletons: the Angebote layout keeps the h1 and the area nav on screen.
 
+/** The facts the offer header lists, one placeholder row each. */
+const OFFER_FACTS = [
+  'Kunde',
+  'Einsatzort',
+  'Ansprechpartner',
+  'Rechnungsempfänger',
+  'Gültig bis',
+  'Verantwortlich',
+  'Einleitung',
+  'Schluss',
+] as const;
+
 /** Toolbar, count and rows. Loaded rows open their offer, so skeleton rows hover too. */
 export function OffersListSkeleton() {
   return (
@@ -42,7 +54,7 @@ export function OffersPageSkeleton() {
   );
 }
 
-/** The offer's page: its title line and the header form. */
+/** The offer's page: its title line and the header's stacked facts. */
 export function OfferDetailSkeleton() {
   return (
     <div className="space-y-6" role="status" aria-label="Angebot wird geladen">
@@ -50,12 +62,14 @@ export function OfferDetailSkeleton() {
       <div className="space-y-2">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-6 w-72 max-w-full" />
+        <Skeleton className="h-4 w-56 max-w-full" />
       </div>
-      <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2 sm:p-6">
-        {Array.from({ length: 8 }, (_, index) => (
-          <div key={index} className="space-y-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-9 w-full" />
+      <div className="space-y-4 rounded-lg border bg-card p-4 sm:p-5">
+        <Skeleton className="h-4 w-32" />
+        {OFFER_FACTS.map((fact) => (
+          <div key={fact} className="space-y-1.5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-4 w-48 max-w-full" />
           </div>
         ))}
       </div>
