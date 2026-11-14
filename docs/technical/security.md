@@ -32,11 +32,11 @@ Wrong turn: trusting an id because the UI offers only own records. Every export 
 
 ### Add a privileged function
 
-1. Write `SECURITY DEFINER` only when one transaction must cross RLS, such as an approval that creates a membership. A function that writes related rows for a server action runs as `security invoker`.
+1. Write `SECURITY DEFINER` only when one transaction must cross RLS, such as an approval that creates a membership. A Server Action's write function runs as `security invoker`, or as definer when (a) no role, not even `service_role`, executes a volatile `app_private` function it reaches; (b) only `service_role` executes it; (c) it rechecks the actor's role and organization; (d) its `search_path` is `''`. `security_boundaries.sql` checks (a), (b) and (d) on public definer functions; review owns (c).
 2. A public function is executable by `service_role` only. An RLS helper that policies call goes into `app_private`, is granted to `authenticated` only, and joins the definer-execution inventory with the policy that needs it.
-3. The server caller resolves organization and role before the call. A service-only list or search function revokes browser execution.
+3. The server caller resolves organization and role first.
 4. An `app_private` function reading tenant rows takes `p_organization_id` or a tenant row, or `security_boundaries.sql` exempts it.
-5. Run `bun run test:verify --group sql:security` and the SQL group that owns the function.
+5. Run `bun run test:verify --group sql:security` and the function's SQL group.
 
 Wrong turn: granting `authenticated`, so the browser runs the function past every policy with its owner's rights.
 
@@ -74,8 +74,6 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - RLS checks effective personnel access wherever a policy or its helper reads `organization_members`, `job_assignments` or `employee_records`.
 - **Project lead.** `app_private.work_lead_scope` alone decides who leads which work. A lead reads Arbeitsnachweise (`authorizeWorkArtifactRead`), writes none.
 - Client roles write no table directly, except a user's own name and avatar.
-- Nothing is granted to `anon` without the owner's approval.
-- A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly what is needed.
 - Grant the sequence privileges an intended insert needs. The service role bypasses RLS, not SQL privileges.
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
 - **Service-role queries.** A query on organization data passes an organization from the resolved context, or carries a reviewed `tenant-scope` reason.
