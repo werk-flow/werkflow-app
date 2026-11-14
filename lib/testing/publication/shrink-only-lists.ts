@@ -104,6 +104,11 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
     file: 'supabase/tests/hot_read_volume.sql',
     extract: { kind: 'sql-object', name: 'history_reads' },
   },
+  {
+    id: 'legacy definer breaches',
+    file: 'supabase/tests/security_boundaries.sql',
+    extract: { kind: 'sql-object', name: 'legacy_definer_breaches' },
+  },
   variable('empty-state sentences', 'lib/ui/empty-state-copy.test.ts', 'REVIEWED_SENTENCES'),
   variable(
     'pending-state locators',
