@@ -24,7 +24,7 @@ const DUE_ACTION_ERROR_MESSAGES: Record<string, string> = {
   maintenance_next_action_owner_invalid:
     'Die gewählte Person ist nicht mehr im Büro oder Admin. Bitte wähle eine andere Person.',
   maintenance_next_action_date_invalid:
-    'Das Zieldatum muss nach dem Abschluss liegen, höchstens ein Jahr später. Eine Rückkehr liegt vor der nächsten regulären Fälligkeit.',
+    'Das Zieldatum muss nach dem Abschluss liegen, eine Rückkehr vor der nächsten regulären Fälligkeit.',
   maintenance_return_date_taken:
     'An diesem Tag hat der Wartungsplan schon eine Fälligkeit. Bitte wähle für die Rückkehr einen anderen Tag.',
 };

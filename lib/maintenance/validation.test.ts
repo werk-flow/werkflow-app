@@ -193,6 +193,10 @@ describe('maintenance validation boundaries', () => {
     expect(parse({ ...unfinished, completedOn: '2026-10-31', nextActionTargetDate: '2026-11-01' })).toBe(
       true,
     );
+    // Only a Rückkehr has a bound beyond the visit, the regular next due date, which the database checks.
+    expect(
+      parse({ ...unfinished, nextAction: 'offer_replacement', nextActionTargetDate: '2028-01-15' }),
+    ).toBe(true);
     const none = { ...unfinished, nextAction: 'none', nextActionOwnerId: null, nextActionTargetDate: null };
     expect(parse({ ...none, nextActionNote: 'Kunde kümmert sich selbst' })).toBe(true);
     expect(parse({ ...none, nextActionNote: '' })).toBe(false);

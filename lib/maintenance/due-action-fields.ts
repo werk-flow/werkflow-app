@@ -133,6 +133,8 @@ function missingNextActionFields(
   if (!nextAction) errors.nextAction = 'Bitte wähle den nächsten Schritt.';
   if (nextAction === 'none' && nextActionNote.trim().length < 3) {
     errors.nextActionNote = 'Bitte begründe mit mindestens 3 Zeichen, warum nichts folgt.';
+  } else if (nextAction === 'none' && nextActionNote.trim().length > 1000) {
+    errors.nextActionNote = 'Bitte fasse die Begründung in höchstens 1.000 Zeichen.';
   }
   if (nextAction && nextAction !== 'none') {
     if (!nextActionOwnerId) errors.nextActionOwnerId = 'Bitte wähle, wer sich kümmert.';

@@ -1,16 +1,18 @@
 -- A partial or unresolved maintenance visit names its Mängel, the next action
 -- and its owner (migration 20261210130000_name_the_next_action_of_an_unfinished_visit.sql):
 -- * Completing partial or unresolved without a next action or without a
---   Mangel is refused, through the new entry and the previous one; the owner
+--   Mangel is refused; the previous entry, kept for the deployed build,
+--   still completes one without a finding, as that build expects; the owner
 --   must be an Admin or Büro member of the organization; the target date lies
---   after the visit, and a Rückkehr's before the regular next due date.
+--   after the visit, a Rückkehr's before the regular next due date, any
+--   other step's as late as the office decides.
 -- * A Rückkehr opens a return due item on the same plan revision on the target
 --   date, leaves the regular next due date unchanged and gives the owner a
 --   follow-up on the visit job; completing the return item does not advance
 --   the plan. Garantieprüfung gives a follow-up only; Keine records its reason.
 -- * Employees and another organization are refused; a replay adds nothing.
 -- Only the service role executes the entry; no role executes its body, and the
--- findings are append-only.
+-- findings refuse every update and delete.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 
@@ -96,7 +98,7 @@ $$;
 
 do $$ declare
   v_entry constant text := 'public.complete_maintenance_visit(uuid,uuid,bigint,public.maintenance_scope_outcome,date,uuid[],text,text[],public.maintenance_next_action,uuid,date,text,uuid,uuid)';
-  v_body constant text := 'app_private.complete_maintenance_due_work_with_next_action(uuid,uuid,bigint,public.maintenance_scope_outcome,date,uuid[],text,text[],public.maintenance_next_action,uuid,date,text,uuid,uuid)';
+  v_body constant text := 'app_private.complete_maintenance_due_work_with_next_action(uuid,uuid,bigint,public.maintenance_scope_outcome,date,uuid[],text,text[],public.maintenance_next_action,uuid,date,text,uuid,uuid,boolean)';
   v_role text;
 begin
   if has_function_privilege('anon', v_entry, 'execute')
@@ -134,10 +136,6 @@ do $$ declare
 begin
   perform pg_temp.expect_refusal('unresolved without a next action',
     pg_temp.complete_statement(v_org, v_due, 'unresolved', v_defects, 'null', 'null', 'null', 'null', v_admin),
-    'maintenance_next_action_required');
-  perform pg_temp.expect_refusal('partial through the previous entry', format(
-    'select public.complete_maintenance_due_work(%s, %s, 1, %L, date %L, array[%L]::uuid[], %L, %s, gen_random_uuid())',
-    v_org, v_due, 'partial', '2026-03-11', '47050000-0000-4000-8000-000000000046', 'Wartung dokumentiert', v_admin),
     'maintenance_next_action_required');
   perform pg_temp.expect_refusal('unresolved without a Mangel',
     pg_temp.complete_statement(v_org, v_due, 'unresolved', 'array[''  '']', '''warranty_check''', v_admin, v_target, 'null', v_admin),
@@ -288,7 +286,8 @@ begin
 end $$;
 
 -- Garantieprüfung gives the owner a follow-up and opens no due item; Keine
--- records its reason without a follow-up; the previous entry still completes.
+-- records its reason without a follow-up; the previous entry still completes
+-- an unfinished visit without a finding, as the deployed build expects.
 do $$ declare
   v_org constant uuid := '47050000-0000-4000-8000-000000000010';
   v_admin constant uuid := '47050000-0000-4000-8000-000000000001';
@@ -300,7 +299,7 @@ begin
   select count(*) into v_items from public.maintenance_due_work due_work where due_work.organization_id = v_org;
   perform public.complete_maintenance_visit(v_org, '47050000-0000-4000-8000-000000000072', 1, 'unresolved',
     '2026-03-11', v_evidence, 'Nicht behoben', array['Umwälzpumpe defekt'], 'warranty_check', v_admin,
-    '2026-03-25', null, v_admin, gen_random_uuid());
+    '2027-06-01', null, v_admin, gen_random_uuid());
   select * into v_finding from public.maintenance_visit_findings finding
   where finding.organization_id = v_org and finding.maintenance_due_work_id = '47050000-0000-4000-8000-000000000072';
   if v_finding.next_action is distinct from 'warranty_check' or v_finding.return_due_work_id is not null
@@ -321,11 +320,24 @@ begin
     raise exception 'Keine did not record its reason alone: %', to_jsonb(v_finding);
   end if;
 
-  v_after := public.complete_maintenance_due_work(v_org, '47050000-0000-4000-8000-000000000074', 1, 'complete',
+  v_after := public.complete_maintenance_due_work(v_org, '47050000-0000-4000-8000-000000000074', 1, 'partial',
     '2026-05-11', v_evidence, 'Wartung dokumentiert', v_admin, gen_random_uuid());
-  if v_after.status is distinct from 'completed' or v_after.next_due_date is distinct from date '2027-05-10' then
-    raise exception 'the previous entry no longer completes a complete visit: %', to_jsonb(v_after);
+  if v_after.status is distinct from 'completed' or v_after.next_due_date is distinct from date '2027-05-10'
+     or exists (select 1 from public.maintenance_visit_findings finding
+       where finding.organization_id = v_org and finding.maintenance_due_work_id = v_after.id) then
+    raise exception 'the previous entry no longer completes as the deployed build expects: %', to_jsonb(v_after);
   end if;
+end $$;
+
+-- Even the table owner cannot rewrite or delete a finding.
+reset role;
+do $$ begin
+  perform pg_temp.expect_refusal('a finding update', format(
+    'update public.maintenance_visit_findings set note = %L where organization_id = %L',
+    'Geändert', '47050000-0000-4000-8000-000000000010'), 'maintenance_history_is_immutable');
+  perform pg_temp.expect_refusal('a finding delete', format(
+    'delete from public.maintenance_visit_findings where organization_id = %L',
+    '47050000-0000-4000-8000-000000000010'), 'maintenance_history_is_immutable');
 end $$;
 
 rollback;

@@ -38,7 +38,7 @@ import { useJobEntityOptions, type JobEntityOptionsState } from '@/hooks/use-job
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { MaintenanceDueActionKind } from '@/lib/maintenance/due-action-fields';
 import { useMaintenanceDueAction, type MaintenanceDueActionController } from './use-maintenance-due-action';
-import { formatBerlin, parseIsoLocalDate } from '@/lib/utils';
+import { formatBerlin, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 
 const EVIDENCE_LIST_CLASS = 'max-h-40 space-y-2 overflow-y-auto rounded-md border p-3';
 const EVIDENCE_ROW_CLASS = 'flex items-center gap-2 text-sm';
@@ -290,9 +290,7 @@ function DueNextActionFields({
             <DatePicker
               ariaLabel="Zieldatum"
               value={parseIsoLocalDate(controller.nextActionTargetDate)}
-              onChange={(value) =>
-                controller.setNextActionTargetDate(value ? formatBerlinLocalDate(value) : '')
-              }
+              onChange={(value) => controller.setNextActionTargetDate(value ? toLocalDateString(value) : '')}
             />
           </Field>
         )}
@@ -306,6 +304,7 @@ function DueNextActionFields({
           error={fieldErrors.nextActionNote}
         >
           <Textarea
+            maxLength={1000}
             value={controller.nextActionNote}
             onChange={(event) => controller.setNextActionNote(event.target.value)}
           />

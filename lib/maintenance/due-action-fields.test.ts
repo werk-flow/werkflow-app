@@ -68,6 +68,9 @@ describe('the due action dialog asks only for what the chosen action sends', () 
       nextActionNote: 'Bitte begründe mit mindestens 3 Zeichen, warum nichts folgt.',
     });
     expect(missing({ ...named, defectsText: 'ab' })).toHaveProperty('defects');
+    expect(missing({ ...named, nextAction: 'none', nextActionNote: 'x'.repeat(1001) })).toHaveProperty(
+      'nextActionNote',
+    );
   });
 
   test('a complete visit asks for no Mängel and no next step', () => {

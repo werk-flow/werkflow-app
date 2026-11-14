@@ -14,8 +14,9 @@
 --   Its target lies after the visit and before the regular next due date, so
 --   it never takes a date the plan generates later.
 -- * The previous entry public.complete_maintenance_due_work stays for the
---   previous release's code and reads through the new body without a next
---   action, so it refuses `partial` and `unresolved` from now on.
+--   previous release's code and reads through the new body as that code
+--   expects: an unfinished visit without findings or a next action, so a
+--   rollback keeps working. The new code calls only the new entry.
 
 create type public.maintenance_next_action as enum (
   'return_visit', 'warranty_check', 'offer_replacement', 'none'
@@ -80,6 +81,8 @@ create index maintenance_visit_findings_follow_up_idx
 alter table public.maintenance_visit_findings enable row level security;
 revoke all on table public.maintenance_visit_findings from public, anon, authenticated, service_role;
 grant select, insert on table public.maintenance_visit_findings to service_role;
+create trigger maintenance_visit_findings_immutable before update or delete on public.maintenance_visit_findings
+for each row execute function app_private.prevent_maintenance_history_mutation();
 
 -- The completion body both entries share: evidence, the completed item, the
 -- regular next item (actual-completion plans), and for an unfinished visit
@@ -99,7 +102,8 @@ create function app_private.complete_maintenance_due_work_with_next_action(
   p_next_action_target_date date,
   p_next_action_note text,
   p_actor_id uuid,
-  p_idempotency_key uuid
+  p_idempotency_key uuid,
+  p_previous_entry boolean
 )
 returns public.maintenance_due_work
 language plpgsql security invoker set search_path = ''
@@ -142,7 +146,7 @@ begin
     raise exception 'maintenance_due_evidence_required';
   end if;
   if length(btrim(coalesce(p_reason, ''))) not between 3 and 1000 then raise exception 'maintenance_reason_required'; end if;
-  if not v_unfinished then
+  if not v_unfinished or p_previous_entry then
     if p_next_action is not null or cardinality(v_defects) > 0 or p_next_action_owner_id is not null
        or p_next_action_target_date is not null or v_note is not null then
       raise exception 'maintenance_next_action_not_allowed';
@@ -210,7 +214,6 @@ begin
   end if;
   if p_next_action is not null and p_next_action <> 'none' and (
     p_next_action_target_date <= p_completed_on
-    or p_next_action_target_date > p_completed_on + 365
     or (p_next_action = 'return_visit' and p_next_action_target_date >= v_regular_next_date)
   ) then
     raise exception 'maintenance_next_action_date_invalid';
@@ -315,7 +318,7 @@ begin
       p_actor_id
     );
   end if;
-  if v_unfinished then
+  if v_unfinished and not p_previous_entry then
     insert into public.maintenance_visit_findings (
       organization_id, maintenance_due_work_id, defects, next_action, owner_user_id,
       target_date, note, return_due_work_id, client_follow_up_id, created_by
@@ -360,13 +363,15 @@ begin
   return app_private.complete_maintenance_due_work_with_next_action(
     p_organization_id, p_maintenance_due_work_id, p_expected_version, p_scope_outcome,
     p_completed_on, p_work_artifact_revision_ids, p_reason, p_defects, p_next_action,
-    p_next_action_owner_id, p_next_action_target_date, p_next_action_note, p_actor_id, p_idempotency_key
+    p_next_action_owner_id, p_next_action_target_date, p_next_action_note, p_actor_id, p_idempotency_key,
+    false
   );
 end;
 $$;
 
--- The previous release's entry: the same body without a next action, so an
--- unfinished visit is refused until the new code names one.
+-- The previous release's entry: the same body as that code expects, an
+-- unfinished visit without findings or a next action. Dropped after the next
+-- production release (lib/security/retired-functions.test.ts).
 create or replace function public.complete_maintenance_due_work(
   p_organization_id uuid,
   p_maintenance_due_work_id uuid,
@@ -387,7 +392,7 @@ begin
   return app_private.complete_maintenance_due_work_with_next_action(
     p_organization_id, p_maintenance_due_work_id, p_expected_version, p_scope_outcome,
     p_completed_on, p_work_artifact_revision_ids, p_reason, null, null, null, null, null,
-    p_actor_id, p_idempotency_key
+    p_actor_id, p_idempotency_key, true
   );
 end;
 $$;
@@ -396,7 +401,7 @@ $$;
 -- (docs/technical/security.md, "Add a privileged function", condition a).
 revoke all on function app_private.complete_maintenance_due_work_with_next_action(
   uuid, uuid, bigint, public.maintenance_scope_outcome, date, uuid[], text, text[],
-  public.maintenance_next_action, uuid, date, text, uuid, uuid
+  public.maintenance_next_action, uuid, date, text, uuid, uuid, boolean
 ) from public, anon, authenticated, service_role;
 revoke all on function public.complete_maintenance_visit(
   uuid, uuid, bigint, public.maintenance_scope_outcome, date, uuid[], text, text[],
