@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 
-// The workspace reads one page of each list from `list_maintenance_workspace_page`
+// The workspace reads one page of each list from `read_maintenance_workspace_page`
 // and hydrates the rows. The option catalog holds active sites only. A plan
 // whose site was later deactivated used to vanish from the workspace together
 // with its due work; it now stays listed under its site name, and a failed
@@ -22,7 +22,7 @@ const tableRows: Record<string, unknown[]> = {
     },
   ],
   maintenance_due_work: [
-    { id: DUE, maintenance_plan_id: PLAN, status: 'open', due_date: '2026-11-01', job_id: null },
+    { id: DUE, maintenance_plan_id: PLAN, status: 'open', due_date: '2020-01-01', job_id: null },
   ],
   maintenance_coverages: [],
   maintenance_plan_revisions: [
@@ -39,7 +39,7 @@ const tableRows: Record<string, unknown[]> = {
   service_cases: [],
 };
 const selection = {
-  due: { total: 120, hasAny: true, ids: [DUE] },
+  due: { total: 120, hasAny: true, overdue: 7, ids: [DUE] },
   plans: { total: 75, hasAny: true, ids: [PLAN] },
   coverages: { total: 0, hasAny: false, ids: [] },
 };
@@ -84,7 +84,7 @@ const admin = {
   },
 };
 
-const QUERY = { search: 'wp', duePage: 3, planPage: 2, coveragePage: 1 };
+const QUERY = { search: 'wp', overdueOnly: true, duePage: 3, planPage: 2, coveragePage: 1 };
 
 async function loadMaintenanceWorkspace(): Promise<(typeof import('./actions'))['getMaintenanceWorkspace']> {
   mock.module('server-only', () => ({}));
@@ -129,19 +129,22 @@ test.skipIf(!ISOLATED)('a plan on a deactivated site stays listed with its due w
   expect(result.workspace.plans.map((plan) => [plan.planNumber, plan.siteName])).toEqual([
     ['WP-1', 'Altes Lager'],
   ]);
-  expect(result.workspace.dueWork.map((due) => [due.id, due.plannedDurationMinutes])).toEqual([[DUE, 90]]);
+  expect(result.workspace.dueWork.map((due) => [due.id, due.plannedDurationMinutes, due.overdue])).toEqual([
+    [DUE, 90, true],
+  ]);
 });
 
-test.skipIf(!ISOLATED)('the database selects each page and owns the totals', async () => {
+test.skipIf(!ISOLATED)('the database selects each page, the overdue filter and owns the totals', async () => {
   const getMaintenanceWorkspace = await loadMaintenanceWorkspace();
   const result = await getMaintenanceWorkspace(QUERY);
   if (!result.success) throw new Error(result.error);
   expect(rpcCalls).toEqual([
     {
-      name: 'list_maintenance_workspace_page',
+      name: 'read_maintenance_workspace_page',
       args: expect.objectContaining({
         p_organization_id: 'org',
         p_search: 'wp',
+        p_overdue_only: true,
         p_due_page: 3,
         p_plan_page: 2,
         p_coverage_page: 1,
@@ -149,8 +152,9 @@ test.skipIf(!ISOLATED)('the database selects each page and owns the totals', asy
       }),
     } satisfies Record<string, unknown>,
   ]);
+  expect(String(rpcCalls[0]?.args.p_today)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   expect(result.workspace.totals).toEqual({
-    due: { total: 120, hasAny: true },
+    due: { total: 120, hasAny: true, overdue: 7 },
     plans: { total: 75, hasAny: true },
     coverages: { total: 0, hasAny: false },
   });

@@ -14,8 +14,8 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 // the static toolbar paints before the data and the workspace still loads
 // once. The cache keys on the query's primitive values.
 const loadMaintenanceWorkspace = cache(
-  (search: string, duePage: number, planPage: number, coveragePage: number) =>
-    getMaintenanceWorkspace({ search, duePage, planPage, coveragePage }),
+  (search: string, overdueOnly: boolean, duePage: number, planPage: number, coveragePage: number) =>
+    getMaintenanceWorkspace({ search, overdueOnly, duePage, planPage, coveragePage }),
 );
 
 // The dialogs' small catalogs (published templates, follow-up owners), read
@@ -26,6 +26,7 @@ async function readWorkspace(searchParams: SearchParams) {
   const query = parseMaintenanceWorkspaceQuery(await searchParams);
   const result = await loadMaintenanceWorkspace(
     query.search,
+    query.overdueOnly,
     query.duePage,
     query.planPage,
     query.coveragePage,

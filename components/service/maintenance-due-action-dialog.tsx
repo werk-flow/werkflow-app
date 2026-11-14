@@ -23,6 +23,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { TimeInput } from '@/components/ui/time-input';
 import {
+  MAINTENANCE_MISSED_VISIT_REASONS,
+  MAINTENANCE_MISSED_VISIT_REASON_LABELS,
   MAINTENANCE_SCOPE_OUTCOMES,
   MAINTENANCE_SCOPE_OUTCOME_LABELS,
   type MaintenanceDueItem,
@@ -43,6 +45,7 @@ const DUE_ACTION_KINDS = {
   create_visit: true,
   schedule: true,
   complete: true,
+  visit_missed: true,
   link_service_case: true,
   skipped: true,
   cancelled: true,
@@ -76,6 +79,7 @@ function DueActionSelect({
           {due.status === 'open' && <SelectItem value="create_visit">Wartungsauftrag anlegen</SelectItem>}
           {canSchedule && <SelectItem value="schedule">Termin im Kalender planen</SelectItem>}
           {canComplete && <SelectItem value="complete">Wartung abschließen</SelectItem>}
+          {canComplete && <SelectItem value="visit_missed">Besuch hat nicht stattgefunden</SelectItem>}
           <SelectItem value="link_service_case">Reaktiven Servicefall verknüpfen</SelectItem>
           <SelectItem value="skipped">Fälligkeit überspringen</SelectItem>
           <SelectItem value="cancelled">Fälligkeit absagen</SelectItem>
@@ -186,6 +190,36 @@ function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement
   );
 }
 
+/** The reason of a visit that did not happen; the item returns to the open list. */
+function DueVisitMissedFields({ controller }: DueActionFieldsProps): ReactElement {
+  return (
+    <Field
+      label="Grund"
+      htmlFor="due-missed-reason"
+      description="Die Fälligkeit ist danach wieder offen und behält ihr Fälligkeitsdatum. Der Auftrag bleibt bestehen und steht im Verlauf. Lege dann einen neuen Besuch an."
+    >
+      <Select
+        value={controller.missedReason}
+        onValueChange={(value) => {
+          const reason = MAINTENANCE_MISSED_VISIT_REASONS.find((candidate) => candidate === value);
+          if (reason) controller.setMissedReason(reason);
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MAINTENANCE_MISSED_VISIT_REASONS.map((value) => (
+            <SelectItem key={value} value={value}>
+              {MAINTENANCE_MISSED_VISIT_REASON_LABELS[value]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
 function DueServiceCaseField({
   controller,
   caseSearch,
@@ -270,6 +304,7 @@ export function MaintenanceDueActionDialog({
           <DueActionSelect controller={controller} due={due} />
           {action === 'schedule' && <DueScheduleFields controller={controller} />}
           {action === 'complete' && <DueCompletionFields controller={controller} />}
+          {action === 'visit_missed' && <DueVisitMissedFields controller={controller} />}
           {action === 'link_service_case' && (
             <DueServiceCaseField controller={controller} caseSearch={caseSearch} />
           )}

@@ -188,7 +188,7 @@ const pages = {
 // The handover routes render this server component, which redirects itself.
 const syncServerComponents = new Set([WorkHandoverPage]);
 const refused = (page: Render) => refusal(page, syncServerComponents);
-const workspaceQuery = { search: '', duePage: 1, planPage: 1, coveragePage: 1 };
+const workspaceQuery = { search: '', overdueOnly: false, duePage: 1, planPage: 1, coveragePage: 1 };
 const notAuthorized = { success: false, error: 'not_authorized' };
 
 /** Signs in with the membership rows the handover-review responsibility resolves from. */

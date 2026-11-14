@@ -15,13 +15,19 @@ import { useListNavigation } from '@/hooks/use-list-navigation';
 import { useLiveView } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { MaintenanceCatalogs, MaintenancePlanItem, MaintenanceWorkspace } from '@/lib/maintenance/types';
-import { MAINTENANCE_PAGE_PARAMS, type MaintenanceWorkspaceQuery } from '@/lib/maintenance/workspace-page';
+import {
+  MAINTENANCE_DUE_FILTER_PARAM,
+  MAINTENANCE_OVERDUE_FILTER_VALUE,
+  MAINTENANCE_PAGE_PARAMS,
+  type MaintenanceWorkspaceQuery,
+} from '@/lib/maintenance/workspace-page';
 import { MaintenanceCoverageDialog } from './maintenance-coverage-dialog';
 import { MaintenanceCoverageDocumentsDialog } from './maintenance-coverage-documents-dialog';
 import { MaintenanceCoverageFollowUpDialog } from './maintenance-coverage-follow-up-dialog';
 import { MaintenanceDueActionDialog } from './maintenance-due-action-dialog';
 import {
   MaintenanceCoverageList,
+  MaintenanceDueFilter,
   MaintenanceDueList,
   type DueAction,
   type MaintenanceCoverage,
@@ -76,7 +82,7 @@ export function MaintenanceContent({
         placeholder="Plan, Kunde, Einsatzort, Auftrag oder Anlage suchen…"
       />
       <MaintenanceWorkspaceView
-        key={`${query.search}|${query.duePage}|${query.planPage}|${query.coveragePage}`}
+        key={`${query.search}|${query.overdueOnly}|${query.duePage}|${query.planPage}|${query.coveragePage}`}
         initial={initial}
         catalogs={catalogs}
         query={query}
@@ -84,6 +90,12 @@ export function MaintenanceContent({
         onTabChange={setTab}
         busy={navigation.busy}
         onPageChange={(list, page) => navigation.navigate({ [MAINTENANCE_PAGE_PARAMS[list]]: page })}
+        onOverdueOnlyChange={(overdueOnly) =>
+          navigation.navigate({
+            [MAINTENANCE_DUE_FILTER_PARAM]: overdueOnly ? MAINTENANCE_OVERDUE_FILTER_VALUE : null,
+            [MAINTENANCE_PAGE_PARAMS.due]: null,
+          })
+        }
       />
     </>
   );
@@ -123,6 +135,7 @@ type MaintenanceTabsProps = {
   onTabChange: (tab: MaintenanceList) => void;
   busy: boolean;
   onPageChange: (list: MaintenanceList, page: number) => void;
+  onOverdueOnlyChange: (overdueOnly: boolean) => void;
   isBusy: (id: string) => boolean;
   pendingPlans: ReturnType<typeof useMaintenancePendingCreates>['pendingPlans'];
   pendingCoverages: ReturnType<typeof useMaintenancePendingCreates>['pendingCoverages'];
@@ -145,6 +158,53 @@ function MaintenanceTabList({ totals }: { totals: MaintenanceWorkspace['totals']
   );
 }
 
+/** The due list with its „Überfällig“ filter and its page controls. */
+function MaintenanceDueTab({
+  workspace,
+  query,
+  busy,
+  onPageChange,
+  onOverdueOnlyChange,
+  isBusy,
+  onDueActionClick,
+}: {
+  workspace: MaintenanceWorkspace;
+  query: MaintenanceWorkspaceQuery;
+  busy: boolean;
+  onPageChange: (page: number) => void;
+  onOverdueOnlyChange: (overdueOnly: boolean) => void;
+  isBusy: (id: string) => boolean;
+  onDueActionClick: (action: DueAction) => void;
+}): ReactElement {
+  return (
+    <>
+      {/* Without any due work there is nothing to filter. */}
+      {workspace.totals.due.hasAny && (
+        <MaintenanceDueFilter
+          overdueOnly={query.overdueOnly}
+          overdueCount={workspace.totals.due.overdue}
+          busy={busy}
+          onChange={onOverdueOnlyChange}
+        />
+      )}
+      <MaintenanceDueList
+        openDue={workspace.dueWork}
+        hasAnyDue={workspace.totals.due.hasAny}
+        overdueOnly={query.overdueOnly}
+        isBusy={isBusy}
+        onDueActionClick={onDueActionClick}
+      />
+      <ListPagination
+        label="Fälligkeiten"
+        page={query.duePage}
+        total={workspace.totals.due.total}
+        busy={busy}
+        onPageChange={onPageChange}
+      />
+    </>
+  );
+}
+
 /** The three lists, each with its count in the tab and its page controls. */
 function MaintenanceTabs({
   workspace,
@@ -153,6 +213,7 @@ function MaintenanceTabs({
   onTabChange,
   busy,
   onPageChange,
+  onOverdueOnlyChange,
   isBusy,
   pendingPlans,
   pendingCoverages,
@@ -169,18 +230,14 @@ function MaintenanceTabs({
     >
       <MaintenanceTabList totals={totals} />
       <TabsContent value="due" className="space-y-3">
-        <MaintenanceDueList
-          openDue={workspace.dueWork}
-          hasAnyDue={totals.due.hasAny}
-          isBusy={isBusy}
-          onDueActionClick={targets.setDueAction}
-        />
-        <ListPagination
-          label="Fälligkeiten"
-          page={query.duePage}
-          total={totals.due.total}
+        <MaintenanceDueTab
+          workspace={workspace}
+          query={query}
           busy={busy}
           onPageChange={(page) => onPageChange('due', page)}
+          onOverdueOnlyChange={onOverdueOnlyChange}
+          isBusy={isBusy}
+          onDueActionClick={targets.setDueAction}
         />
       </TabsContent>
       <TabsContent value="plans" className="space-y-3">
@@ -302,6 +359,7 @@ function MaintenanceWorkspaceView({
   onTabChange,
   busy,
   onPageChange,
+  onOverdueOnlyChange,
 }: {
   initial: MaintenanceWorkspace;
   catalogs: MaintenanceCatalogs | null;
@@ -310,6 +368,7 @@ function MaintenanceWorkspaceView({
   onTabChange: (tab: MaintenanceList) => void;
   busy: boolean;
   onPageChange: (list: MaintenanceList, page: number) => void;
+  onOverdueOnlyChange: (overdueOnly: boolean) => void;
 }): ReactElement {
   const { activeOrgId } = useOrganization();
   const targets = useMaintenanceDialogTargets();
@@ -356,6 +415,7 @@ function MaintenanceWorkspaceView({
           onTabChange={onTabChange}
           busy={busy}
           onPageChange={onPageChange}
+          onOverdueOnlyChange={onOverdueOnlyChange}
           isBusy={settling.isBusy}
           pendingPlans={pendingPlans}
           pendingCoverages={pendingCoverages}

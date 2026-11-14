@@ -6,11 +6,17 @@ const listPageSchema = z.number().int().min(1).max(1_000_000);
 
 export const maintenanceWorkspaceQuerySchema = z.object({
   search: z.string().trim().max(250),
+  /** Only the überfällig due work in the due list. */
+  overdueOnly: z.boolean(),
   duePage: listPageSchema,
   planPage: listPageSchema,
   coveragePage: listPageSchema,
 });
 export type MaintenanceWorkspaceQuery = z.infer<typeof maintenanceWorkspaceQuerySchema>;
+
+/** The URL parameter and value of the due list's „Überfällig“ filter. */
+export const MAINTENANCE_DUE_FILTER_PARAM = 'faellig';
+export const MAINTENANCE_OVERDUE_FILTER_VALUE = 'ueberfaellig';
 
 /** The URL parameter of each list's page; the search shares `q`. */
 export const MAINTENANCE_PAGE_PARAMS = {
@@ -19,7 +25,7 @@ export const MAINTENANCE_PAGE_PARAMS = {
   coverages: 'coveragePage',
 } as const;
 
-/** URL state of `/service/wartung`; an unknown value falls back to the first page of every list. */
+/** URL state of `/service/wartung`; an unknown value falls back to every due item and the first page of every list. */
 export function parseMaintenanceWorkspaceQuery(
   params: Record<string, string | string[] | undefined>,
 ): MaintenanceWorkspaceQuery {
@@ -29,6 +35,7 @@ export function parseMaintenanceWorkspaceQuery(
   };
   return {
     search: (single('q') ?? '').trim().slice(0, 250),
+    overdueOnly: single(MAINTENANCE_DUE_FILTER_PARAM) === MAINTENANCE_OVERDUE_FILTER_VALUE,
     duePage: parseListPage(single(MAINTENANCE_PAGE_PARAMS.due)),
     planPage: parseListPage(single(MAINTENANCE_PAGE_PARAMS.plans)),
     coveragePage: parseListPage(single(MAINTENANCE_PAGE_PARAMS.coverages)),

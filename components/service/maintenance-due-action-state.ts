@@ -3,12 +3,14 @@ import {
   completeMaintenanceDueWork,
   createMaintenanceVisit,
   linkMaintenanceServiceCase,
+  recordMaintenanceVisitMissed,
   scheduleMaintenanceVisit,
   setMaintenanceDueException,
 } from '@/lib/maintenance/actions';
 import type {
   MaintenanceActionResult,
   MaintenanceDueItem,
+  MaintenanceMissedVisitReason,
   MaintenanceScopeOutcome,
 } from '@/lib/maintenance/types';
 import { parseHoursInputToMinutes } from '@/lib/jobs/planned-working';
@@ -17,6 +19,7 @@ export type MaintenanceDueActionKind =
   | 'create_visit'
   | 'schedule'
   | 'complete'
+  | 'visit_missed'
   | 'link_service_case'
   | 'skipped'
   | 'cancelled'
@@ -33,6 +36,7 @@ export type MaintenanceDueActionValues = {
   completedOn: string;
   evidenceIds: string[];
   serviceCaseId: string;
+  missedReason: MaintenanceMissedVisitReason;
 };
 
 export type MaintenanceDueRequiredField =
@@ -44,7 +48,7 @@ export type MaintenanceDueRequiredField =
   | 'reason';
 
 // Focus order on a failed submit.
-export const MAINTENANCE_DUE_REQUIRED_FIELD_IDS: Array<[MaintenanceDueRequiredField, string]> = [
+const MAINTENANCE_DUE_REQUIRED_FIELD_IDS: Array<[MaintenanceDueRequiredField, string]> = [
   ['date', 'due-date'],
   ['durationHours', 'due-duration'],
   ['completedOn', 'due-completed'],
@@ -52,6 +56,13 @@ export const MAINTENANCE_DUE_REQUIRED_FIELD_IDS: Array<[MaintenanceDueRequiredFi
   ['reason', 'due-reason'],
   ['evidenceIds', 'due-evidence'],
 ];
+
+/** The missing fields by control id, in focus order. */
+export function dueActionErrorsById(
+  missing: Partial<Record<MaintenanceDueRequiredField, string>>,
+): Record<string, string | undefined> {
+  return Object.fromEntries(MAINTENANCE_DUE_REQUIRED_FIELD_IDS.map(([key, id]) => [id, missing[key]]));
+}
 
 // Mirrors the maintenance validation schemas per action so the user sees the
 // missing field instead of the generic invalid_input message.
@@ -76,7 +87,8 @@ export function missingDueActionFields(
   if (action === 'link_service_case' && !serviceCaseId) {
     errors.serviceCaseId = 'Bitte wähle einen Servicefall.';
   }
-  if (reasonRequired && reason.trim().length < 3) {
+  // An optional note that is filled must still meet the server's three characters.
+  if ((reasonRequired || reason.trim()) && reason.trim().length < 3) {
     errors.reason = 'Bitte gib eine Begründung mit mindestens 3 Zeichen an.';
   }
   return errors;
@@ -90,7 +102,17 @@ const DUE_ACTION_ERROR_MESSAGES: Record<string, string> = {
     'Das Abschlussdatum muss im Wartungsfenster liegen und darf nicht in der Zukunft liegen.',
   maintenance_due_batch_incompatible:
     'Diese Fälligkeiten können nicht in einem Auftrag zusammengeführt werden.',
+  maintenance_due_visit_missed_not_allowed:
+    'Diese Fälligkeit hat keinen offenen Wartungsauftrag mehr. Bitte lade die Seite neu.',
 };
+
+/** Whether the reason field must be filled for the chosen action. */
+export function dueActionReasonRequired(
+  values: Pick<MaintenanceDueActionValues, 'action' | 'missedReason'>,
+): boolean {
+  if (values.action === 'visit_missed') return values.missedReason === 'other';
+  return !['schedule', 'create_visit', 'complete'].includes(values.action);
+}
 
 export function dueActionErrorMessage(code: string): string {
   return describeFailure(
@@ -133,6 +155,15 @@ export async function runMaintenanceDueAction(
       completedOn: values.completedOn,
       workArtifactRevisionIds: values.evidenceIds,
       reason: reason || 'Wartungsumfang dokumentiert',
+      idempotencyKey,
+    });
+  }
+  if (action === 'visit_missed') {
+    return recordMaintenanceVisitMissed({
+      dueWorkId: due.id,
+      expectedVersion: due.version,
+      missedReason: values.missedReason,
+      note: reason,
       idempotencyKey,
     });
   }

@@ -8,14 +8,16 @@ import { readInBackground } from '@/lib/data/background-read-client';
 import type {
   MaintenanceDueItem,
   MaintenanceEvidenceOption,
+  MaintenanceMissedVisitReason,
   MaintenanceScopeOutcome,
 } from '@/lib/maintenance/types';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatMinutesAsHoursInput } from '@/lib/jobs/planned-working';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
-  MAINTENANCE_DUE_REQUIRED_FIELD_IDS,
   dueActionErrorMessage,
+  dueActionErrorsById,
+  dueActionReasonRequired,
   missingDueActionFields,
   runMaintenanceDueAction,
   type MaintenanceDueActionKind,
@@ -44,6 +46,7 @@ export type MaintenanceDueActionController = MaintenanceDueActionValues & {
   setCompletedOn: (completedOn: string) => void;
   setEvidenceIds: Dispatch<SetStateAction<string[]>>;
   setServiceCaseId: (serviceCaseId: string) => void;
+  setMissedReason: (missedReason: MaintenanceMissedVisitReason) => void;
   evidence: MaintenanceEvidenceOption[];
   isEvidenceLoading: boolean;
   evidenceFailure: ReadFailure | null;
@@ -83,6 +86,7 @@ export function useMaintenanceDueAction({
   const [completedOn, setCompletedOn] = useState(formatBerlinLocalDate(new Date()));
   const [evidenceIds, setEvidenceIds] = useState<string[]>([]);
   const [serviceCaseId, setServiceCaseId] = useState('');
+  const [missedReason, setMissedReason] = useState<MaintenanceMissedVisitReason>('customer_absent');
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
   const idempotencyKey = useRef(crypto.randomUUID());
@@ -98,6 +102,7 @@ export function useMaintenanceDueAction({
     completedOn,
     evidenceIds,
     serviceCaseId,
+    missedReason,
   };
   const { run, isPending } = useServerAction(async () => {
     setError(null);
@@ -112,17 +117,14 @@ export function useMaintenanceDueAction({
   });
   // The reason field is hidden for schedule, so it must never count as missing there.
   const showReason = action !== 'schedule';
-  const reasonRequired = showReason && action !== 'create_visit' && action !== 'complete';
+  const reasonRequired = dueActionReasonRequired(values);
   const missingFields = missingDueActionFields(values, reasonRequired);
   const fieldErrors = attempted ? missingFields : {};
 
   function submit(): void {
     setError(null);
     setAttempted(true);
-    const errorsById = Object.fromEntries(
-      MAINTENANCE_DUE_REQUIRED_FIELD_IDS.map(([key, id]) => [id, missingFields[key]]),
-    );
-    if (focusFirstInvalidField(errorsById)) return;
+    if (focusFirstInvalidField(dueActionErrorsById(missingFields))) return;
     void run();
   }
 
@@ -137,6 +139,7 @@ export function useMaintenanceDueAction({
     setCompletedOn,
     setEvidenceIds,
     setServiceCaseId,
+    setMissedReason,
     evidence: evidenceRead.data?.options ?? NO_EVIDENCE,
     // Without a job no evidence can load, so completing stays held as before the read.
     isEvidenceLoading: !jobId || evidenceRead.loading,
