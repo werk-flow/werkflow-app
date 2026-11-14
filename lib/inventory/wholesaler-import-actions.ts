@@ -1,20 +1,9 @@
 'use server';
 
-import { randomUUID } from 'node:crypto';
-
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
-import { bindUploadPathToCreator } from '@/lib/documents/storage-path';
 import { logError } from '@/lib/logging';
 import { formatProfileName } from '@/lib/members/profile-name';
 import { resolveActionContext, type ActionContext } from '@/lib/org/action-context';
-import {
-  createSignedUploadUrl,
-  discardStorageObjects,
-  headStorageObject,
-  readStorageObject,
-  uploadStagingPath,
-} from '@/lib/storage/r2';
-import { uploadRuleFailure, type UploadRule } from '@/lib/storage/upload-rules';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
 import { ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
@@ -22,52 +11,31 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import type { WholesalerReportLine } from './wholesaler-import-lines';
 import {
-  deliveryContentHash,
-  guessUnitMapping,
-  stagedDeliveryLines,
-  type StagedImportLine,
-} from './wholesaler-import-staging';
-import {
   confirmAnswerSchema,
   confirmWholesalerImportInputSchema,
+  openWholesalerImportInputSchema,
   previewAnswerSchema,
-  previewWholesalerImportInputSchema,
-  WHOLESALER_FILE_CONTENT_TYPE,
-  WHOLESALER_IMPORT_MAX_FILE_BYTES,
+  stageWholesalerImportLinesInputSchema,
   wholesalerImportIdInputSchema,
   wholesalerReportPartInputSchema,
-  wholesalerUploadTicketInputSchema,
   type ConfirmWholesalerImportInput,
-  type PreviewWholesalerImportInput,
+  type OpenWholesalerImportInput,
+  type StageWholesalerImportLinesInput,
   type WholesalerImportIdInput,
   type WholesalerImportPreview,
-  type WholesalerPreviewEffects,
   type WholesalerImportResult,
+  type WholesalerPreviewEffects,
   type WholesalerReportPartInput,
-  type WholesalerUploadTicketInput,
 } from './wholesaler-import-schemas';
-import {
-  readWholesalerDelivery,
-  wholesalerReaderInstalled,
-  type WholesalerDelivery,
-  type WholesalerFile,
-} from './wholesaler-reader';
 
 // The wholesaler import's Server Actions (werk-flow/werkflow-planning#375).
-// Only Admin and Büro import. The browser uploads a delivery's files through
-// signed URLs into the uploader's own staging folder; the preview reads them
-// there, parses them with the one reader seam, stages the lines on a batch
-// and deletes the files, whatever its outcome. The confirm writes the
-// catalog from the staged lines in one database call. No byte passes through
-// an action, and no own article or price changes here.
+// Only Admin and Büro import. The browser reads a delivery's files and sends
+// only the parsed lines: the open names the delivery and its supplier, each
+// stage call adds one part of the lines to the batch, and the preview ends
+// the staging and answers the batch's effects. The confirm writes the
+// catalog from the staged lines in one database call. No file byte passes an
+// action (decision 0001), and no own article or price changes here.
 
-const DELIVERY_RULE: UploadRule = {
-  mimeTypes: [WHOLESALER_FILE_CONTENT_TYPE],
-  maxSizeBytes: WHOLESALER_IMPORT_MAX_FILE_BYTES,
-};
-/** Lines per staging call, and how many calls run at once. */
-const STAGE_CHUNK_LINES = 2000;
-const STAGE_PARALLEL_CALLS = 4;
 /** The report lines one call answers; the browser asks for parts until none is left. */
 const REPORT_PART_LINES = 20_000;
 
@@ -82,132 +50,67 @@ async function resolveImportManager(): Promise<ManagerContext | ActionFailure> {
   return auth;
 }
 
-/** The key of a delivery's file: the organization's import folder, the upload, the uploader, the file's place. */
-function deliveryFilePath(context: ActionContext, uploadId: string, index: number): string {
-  return bindUploadPathToCreator(`${context.orgId}/wholesaler-imports/${uploadId}/${index}`, context.userId);
+/**
+ * Opens the batch of one delivery of a supplier of the caller's organization,
+ * with the delivery's header, rebate groups and the kinds of lines the reader
+ * left out. Opening drops the caller's earlier open batch.
+ */
+export async function openWholesalerImport(
+  rawInput: OpenWholesalerImportInput,
+): Promise<ActionResult<{ importId: string }>> {
+  const parsed = openWholesalerImportInputSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
+  const auth = await resolveImportManager();
+  if (!auth.success) return auth;
+
+  const { data, error } = await createSupabaseAdminClient().rpc(
+    'open_supplier_catalog_import',
+    rpcArgs('open_supplier_catalog_import', {
+      p_organization_id: auth.context.orgId,
+      p_actor_id: auth.context.userId,
+      p_supplier_id: input.supplierId,
+      p_file_names: input.fileNames,
+      p_content_hash: input.contentHash,
+      p_header: input.header && {
+        format_version: input.header.formatVersion,
+        supplier_text: input.header.supplierText,
+        date: input.header.date,
+        currency: input.header.currency,
+      },
+      p_rebate_groups: input.rebateGroups.map((group) => ({
+        rebate_group: group.rebateGroup,
+        text: group.text,
+        discount: group.discount,
+      })),
+      p_skipped: input.skipped,
+    }),
+  );
+  if (error) return refusal(error, 'save_failed', 'openWholesalerImport: open failed');
+  return { success: true, importId: data };
 }
 
-async function supplierOfOrganization(
-  admin: AdminClient,
-  organizationId: string,
-  supplierId: string,
+/** Adds one part of a delivery's parsed lines to the caller's open batch. */
+export async function stageWholesalerImportLines(
+  rawInput: StageWholesalerImportLinesInput,
 ): Promise<ActionResult> {
-  const { data, error } = await admin
-    .from('inventory_suppliers')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .eq('id', supplierId)
-    .maybeSingle();
-  if (error) {
-    logError('wholesaler import: supplier read failed', error);
-    return { success: false, error: 'load_failed' };
-  }
-  return data ? { success: true } : { success: false, error: 'supplier_not_found' };
-}
-
-/** Signs one upload per file of a delivery, each into the caller's own staging folder. */
-export async function createWholesalerImportUploadTicket(
-  rawInput: WholesalerUploadTicketInput,
-): Promise<ActionResult<{ uploadId: string; uploadUrls: string[]; contentType: string }>> {
-  const parsed = wholesalerUploadTicketInputSchema.safeParse(rawInput);
+  const parsed = stageWholesalerImportLinesInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await resolveImportManager();
   if (!auth.success) return auth;
-  if (!wholesalerReaderInstalled()) return { success: false, error: 'reader_unavailable' };
-  for (const file of parsed.data.files) {
-    const ruleFailure = uploadRuleFailure(DELIVERY_RULE, WHOLESALER_FILE_CONTENT_TYPE, file.sizeBytes);
-    if (ruleFailure) return { success: false, error: ruleFailure };
-  }
-  const supplier = await supplierOfOrganization(
-    createSupabaseAdminClient(),
-    auth.context.orgId,
-    parsed.data.supplierId,
+
+  const { error } = await createSupabaseAdminClient().rpc(
+    'stage_supplier_catalog_import_lines',
+    rpcArgs('stage_supplier_catalog_import_lines', {
+      p_organization_id: auth.context.orgId,
+      p_actor_id: auth.context.userId,
+      p_import_id: parsed.data.importId,
+      p_lines: parsed.data.lines satisfies Json,
+    }),
   );
-  if (!supplier.success) return supplier;
-
-  const uploadId = randomUUID();
-  try {
-    const uploadUrls = await Promise.all(
-      parsed.data.files.map((_, index) =>
-        createSignedUploadUrl({
-          organizationId: auth.context.orgId,
-          path: deliveryFilePath(auth.context, uploadId, index),
-          contentType: WHOLESALER_FILE_CONTENT_TYPE,
-        }),
-      ),
-    );
-    return { success: true, uploadId, uploadUrls, contentType: WHOLESALER_FILE_CONTENT_TYPE };
-  } catch (error) {
-    logError('createWholesalerImportUploadTicket: signing failed', error);
-    return { success: false, error: 'ticket_failed' };
-  }
-}
-
-/** The delivery's files from the caller's staging folder, or why they cannot be read. */
-async function readDeliveryFiles(
-  context: ActionContext,
-  input: PreviewWholesalerImportInput,
-): Promise<ActionResult<{ files: WholesalerFile[] }>> {
-  const files: WholesalerFile[] = [];
-  for (const [index, name] of input.fileNames.entries()) {
-    const path = uploadStagingPath(context.orgId, deliveryFilePath(context, input.uploadId, index));
-    try {
-      // The signed upload binds no size: the stored size is checked before any byte is read.
-      const head = await headStorageObject({ organizationId: context.orgId, path });
-      if (!head.exists) return { success: false, error: 'file_missing' };
-      const ruleFailure = uploadRuleFailure(DELIVERY_RULE, WHOLESALER_FILE_CONTENT_TYPE, head.sizeBytes);
-      if (ruleFailure) return { success: false, error: ruleFailure };
-      // A key written again since the check is read only to one byte past the limit.
-      const bytes = await readStorageObject({
-        organizationId: context.orgId,
-        path,
-        maxBytes: WHOLESALER_IMPORT_MAX_FILE_BYTES,
-      });
-      if (bytes.byteLength > WHOLESALER_IMPORT_MAX_FILE_BYTES)
-        return { success: false, error: 'file_too_large' };
-      files.push({ name, bytes });
-    } catch (error) {
-      if (error instanceof Error && error.message === 'storage_object_missing')
-        return { success: false, error: 'file_missing' };
-      logError('previewWholesalerImport: file read failed', error);
-      return { success: false, error: 'upload_failed' };
-    }
-  }
-  return { success: true, files };
-}
-
-/** Stages the lines in chunks, a few calls at a time; the first failure ends it. */
-async function stageLines(
-  admin: AdminClient,
-  context: ActionContext,
-  importId: string,
-  lines: readonly StagedImportLine[],
-): Promise<ActionResult> {
-  const chunks: StagedImportLine[][] = [];
-  for (let start = 0; start < lines.length; start += STAGE_CHUNK_LINES) {
-    chunks.push(lines.slice(start, start + STAGE_CHUNK_LINES));
-  }
-  let next = 0;
-  let failure: ActionFailure | null = null;
-  async function worker(): Promise<void> {
-    while (failure === null && next < chunks.length) {
-      const chunk = chunks[next];
-      next += 1;
-      if (!chunk) return;
-      const { error } = await admin.rpc(
-        'stage_supplier_catalog_import_lines',
-        rpcArgs('stage_supplier_catalog_import_lines', {
-          p_organization_id: context.orgId,
-          p_actor_id: context.userId,
-          p_import_id: importId,
-          p_lines: chunk satisfies Json,
-        }),
-      );
-      if (error) failure = refusal(error, 'save_failed', 'previewWholesalerImport: staging failed');
-    }
-  }
-  await Promise.all(Array.from({ length: STAGE_PARALLEL_CALLS }, worker));
-  return failure ?? { success: true };
+  return error
+    ? refusal(error, 'save_failed', 'stageWholesalerImportLines: staging failed')
+    : { success: true };
 }
 
 async function importerName(
@@ -227,80 +130,29 @@ async function importerName(
   return { success: true, name: data ? formatProfileName(data) : 'Unbekannt' };
 }
 
-/** Parses the delivery's files with the one reader seam, into the lines the batch stages. */
-function parseDelivery(
-  files: WholesalerFile[],
-): ActionResult<{ delivery: WholesalerDelivery; lines: StagedImportLine[] }> {
-  let reading;
-  try {
-    reading = readWholesalerDelivery(files);
-  } catch (error) {
-    logError('previewWholesalerImport: delivery unreadable', error);
-    return { success: false, error: 'delivery_unreadable' };
-  }
-  if (!reading.installed) return { success: false, error: 'reader_unavailable' };
-  const lines = stagedDeliveryLines(reading.delivery);
-  if (lines.length === 0) return { success: false, error: 'delivery_empty' };
-  return { success: true, delivery: reading.delivery, lines };
-}
-
-/** Opens the batch with the delivery's header and rebate groups and stages its lines; answers the batch. */
-async function openStagedImport(
-  admin: AdminClient,
-  context: ActionContext,
-  input: PreviewWholesalerImportInput,
-  files: WholesalerFile[],
-  { delivery, lines }: { delivery: WholesalerDelivery; lines: StagedImportLine[] },
-): Promise<ActionResult<{ importId: string }>> {
-  const opened = await admin.rpc(
-    'open_supplier_catalog_import',
-    rpcArgs('open_supplier_catalog_import', {
-      p_organization_id: context.orgId,
-      p_actor_id: context.userId,
-      p_supplier_id: input.supplierId,
-      p_file_names: input.fileNames,
-      p_content_hash: await deliveryContentHash(files),
-      p_header: delivery.header && {
-        format_version: delivery.header.formatVersion,
-        supplier_text: delivery.header.supplierText,
-        date: delivery.header.date,
-        currency: delivery.header.currency,
-      },
-      p_rebate_groups: delivery.rebateGroups.map((group) => ({
-        rebate_group: group.rebateGroup,
-        text: group.text,
-        discount: group.discount,
-      })),
-      p_skipped: delivery.skipped,
-    }),
-  );
-  if (opened.error) return refusal(opened.error, 'save_failed', 'previewWholesalerImport: open failed');
-  const importId = opened.data;
-  const staged = await stageLines(admin, context, importId, lines);
-  if (!staged.success) {
-    await abandonImport(admin, context, importId);
-    return staged;
-  }
-  return { success: true, importId };
-}
-
-/** The staged batch's effects as the database answers them, with the name of whoever took the delivery over before. */
-async function readPreviewEffects(
-  admin: AdminClient,
-  context: ActionContext,
-  importId: string,
-): Promise<
+/**
+ * Ends the staging of the caller's batch and answers what it would do to the
+ * catalog: each unit text's articles, the price and deletion effects, the
+ * rejected lines' count, and an earlier import of the same delivery.
+ */
+export async function previewWholesalerImport(rawInput: WholesalerImportIdInput): Promise<
   ActionResult<{
     effects: WholesalerPreviewEffects;
     repeat: WholesalerImportPreview['repeat'];
   }>
 > {
+  const parsed = wholesalerImportIdInputSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const auth = await resolveImportManager();
+  if (!auth.success) return auth;
+
+  const admin = createSupabaseAdminClient();
   const previewed = await admin.rpc(
     'preview_supplier_catalog_import',
     rpcArgs('preview_supplier_catalog_import', {
-      p_organization_id: context.orgId,
-      p_actor_id: context.userId,
-      p_import_id: importId,
+      p_organization_id: auth.context.orgId,
+      p_actor_id: auth.context.userId,
+      p_import_id: parsed.data.importId,
     }),
   );
   if (previewed.error)
@@ -315,76 +167,6 @@ async function readPreviewEffects(
   const person = await importerName(admin, earlier.confirmed_by);
   if (!person.success) return person;
   return { success: true, effects, repeat: { confirmedAt: earlier.confirmed_at, confirmedBy: person.name } };
-}
-
-/** The rejected lines the preview lists. */
-function rejectedLines(lines: readonly StagedImportLine[]): WholesalerReportLine[] {
-  return lines.flatMap((line) =>
-    line.kind === 'rejection'
-      ? [
-          {
-            fileName: line.file_name,
-            lineNumber: line.line_number,
-            articleNumber: line.article_number,
-            reason: line.reason ?? 'Die Zeile konnte nicht gelesen werden.',
-          },
-        ]
-      : [],
-  );
-}
-
-/**
- * Reads the uploaded delivery, stages its lines on a new batch and answers
- * the preview: what each unit text's articles would do to the catalog, the
- * price and deletion effects, rejected lines, and an earlier import of the
- * same delivery. The uploaded files are deleted once read, whatever the outcome.
- */
-export async function previewWholesalerImport(
-  rawInput: PreviewWholesalerImportInput,
-): Promise<ActionResult<{ preview: WholesalerImportPreview }>> {
-  const parsed = previewWholesalerImportInputSchema.safeParse(rawInput);
-  if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const input = parsed.data;
-  const auth = await resolveImportManager();
-  if (!auth.success) return auth;
-  const { context } = auth;
-
-  const read = await readDeliveryFiles(context, input);
-  // The staged lines are what the confirm writes; the files are not needed after this read.
-  await discardStorageObjects({
-    organizationId: context.orgId,
-    paths: input.fileNames.map((_, index) =>
-      uploadStagingPath(context.orgId, deliveryFilePath(context, input.uploadId, index)),
-    ),
-  });
-  if (!read.success) return read;
-  const parsedDelivery = parseDelivery(read.files);
-  if (!parsedDelivery.success) return parsedDelivery;
-  const { delivery, lines } = parsedDelivery;
-
-  const admin = createSupabaseAdminClient();
-  const opened = await openStagedImport(admin, context, input, read.files, parsedDelivery);
-  if (!opened.success) return opened;
-  const previewed = await readPreviewEffects(admin, context, opened.importId);
-  if (!previewed.success) return previewed;
-  const { effects } = previewed;
-  return {
-    success: true,
-    preview: {
-      importId: opened.importId,
-      delivery: {
-        formatVersion: delivery.header?.formatVersion ?? null,
-        supplierText: delivery.header?.supplierText ?? null,
-        date: delivery.header?.date ?? null,
-        fileNames: input.fileNames,
-      },
-      ...effects,
-      suggestedUnits: guessUnitMapping(effects.units.map((unit) => unit.unitText)),
-      rejections: rejectedLines(lines),
-      rebateGroups: delivery.rebateGroups.length,
-      repeat: previewed.repeat,
-    },
-  };
 }
 
 /**
@@ -419,29 +201,21 @@ export async function confirmWholesalerImport(
   return { success: true, result, alreadyConfirmed };
 }
 
-async function abandonImport(
-  admin: AdminClient,
-  context: ActionContext,
-  importId: string,
-): Promise<ActionResult> {
-  const { error } = await admin.rpc(
-    'abandon_supplier_catalog_import',
-    rpcArgs('abandon_supplier_catalog_import', {
-      p_organization_id: context.orgId,
-      p_actor_id: context.userId,
-      p_import_id: importId,
-    }),
-  );
-  return error ? refusal(error, 'save_failed', 'abandonWholesalerImport: abandon failed') : { success: true };
-}
-
 /** Drops a preview the office leaves without confirming; a confirmed import stays as it is. */
 export async function abandonWholesalerImport(rawInput: WholesalerImportIdInput): Promise<ActionResult> {
   const parsed = wholesalerImportIdInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await resolveImportManager();
   if (!auth.success) return auth;
-  return abandonImport(createSupabaseAdminClient(), auth.context, parsed.data.importId);
+  const { error } = await createSupabaseAdminClient().rpc(
+    'abandon_supplier_catalog_import',
+    rpcArgs('abandon_supplier_catalog_import', {
+      p_organization_id: auth.context.orgId,
+      p_actor_id: auth.context.userId,
+      p_import_id: parsed.data.importId,
+    }),
+  );
+  return error ? refusal(error, 'save_failed', 'abandonWholesalerImport: abandon failed') : { success: true };
 }
 
 /** The reason a line a confirmed import kept names in its report. */

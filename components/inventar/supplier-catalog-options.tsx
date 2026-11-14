@@ -51,25 +51,13 @@ function CatalogOption({
             </span>
           )}
         </span>
-        {adopting && (
-          <span className="mt-1 block text-xs text-muted-foreground" role="status">
-            Wird als eigener Artikel angelegt …
-          </span>
-        )}
       </span>
       <Plus className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
     </PlainButton>
   );
 }
 
-function CatalogResults({ catalog }: { catalog: SupplierCatalogPicker }) {
-  if (!catalog.searched) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        Ab drei Zeichen sucht die Suche auch in den Großhandelskatalogen.
-      </p>
-    );
-  }
+function CatalogMatches({ catalog }: { catalog: SupplierCatalogPicker }) {
   return (
     <section aria-label="Aus dem Großhandelskatalog" className="space-y-2">
       <p className="text-sm font-medium">Aus dem Großhandelskatalog</p>
@@ -109,8 +97,31 @@ function CatalogResults({ catalog }: { catalog: SupplierCatalogPicker }) {
           Artikelnummer ein, um weitere zu finden.
         </p>
       )}
-      <ErrorText>{catalog.adoptFailure}</ErrorText>
     </section>
+  );
+}
+
+/**
+ * The catalog matches once the search is long enough. A running or failed
+ * adopt stays in view whatever the search shows since, until it settles.
+ */
+function CatalogResults({ catalog }: { catalog: SupplierCatalogPicker }) {
+  return (
+    <div className="space-y-2">
+      {catalog.searched ? (
+        <CatalogMatches catalog={catalog} />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Ab drei Zeichen sucht die Suche auch in den Großhandelskatalogen.
+        </p>
+      )}
+      {catalog.adoptingId !== null && (
+        <p className="text-xs text-muted-foreground" role="status">
+          Der Katalogartikel wird als eigener Artikel angelegt …
+        </p>
+      )}
+      <ErrorText>{catalog.adoptFailure}</ErrorText>
+    </div>
   );
 }
 

@@ -1,7 +1,7 @@
 -- The office imports a wholesaler delivery into a supplier catalog with a
 -- preview, and a catalog article becomes an own article on first use
 -- (werk-flow/werkflow-planning#375, migration
--- 20261210130001_keep_a_supplier_catalog_beside_the_own_articles.sql).
+-- 20261214090001_keep_a_supplier_catalog_beside_the_own_articles.sql).
 -- Made-up organizations, wholesalers and articles only.
 begin;
 
@@ -237,9 +237,11 @@ begin
     is distinct from array[
       '(NR-1501,"Kupferrohr 15 mm",meter,list,61000,100)', '(NR-1502,"Pressfitting 15 mm",piece,net,389,1)'
     ] then
-    raise exception 'the catalog holds %', (select jsonb_agg(c) from public.inventory_supplier_catalog_articles c);
+    raise exception 'the catalog holds %', (select jsonb_agg(c) from public.inventory_supplier_catalog_articles c
+      where c.organization_id = '37500000-0000-4000-8000-000000000010');
   end if;
-  if (select discount from public.inventory_supplier_rebate_groups where rebate_group = 'CU1')
+  if (select discount from public.inventory_supplier_rebate_groups
+      where organization_id = '37500000-0000-4000-8000-000000000010' and rebate_group = 'CU1')
     is distinct from '{"kind":"percent","hundredthsOfPercent":3000}'::jsonb then
     raise exception 'the rebate group was not kept as data';
   end if;
@@ -380,7 +382,8 @@ begin
     '37500000-0000-4000-8000-000000000001', v_westrohr_import);
   perform public.confirm_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
     '37500000-0000-4000-8000-000000000001', v_westrohr_import, '{"m":"meter"}');
-  select id into v_catalog_id from public.inventory_supplier_catalog_articles where article_number = 'WR-15';
+  select id into v_catalog_id from public.inventory_supplier_catalog_articles
+  where organization_id = '37500000-0000-4000-8000-000000000010' and article_number = 'WR-15';
 
   perform pg_temp.expect_refusal('an employee adopts a catalog article',
     format($f$select public.adopt_supplier_catalog_article('37500000-0000-4000-8000-000000000010',
@@ -421,7 +424,8 @@ begin
   -- Nordrohr's NR-1501 answers the own article that already carries the number.
   v_first := public.adopt_supplier_catalog_article('37500000-0000-4000-8000-000000000010',
     '37500000-0000-4000-8000-000000000002',
-    (select id from public.inventory_supplier_catalog_articles where article_number = 'NR-1501'));
+    (select id from public.inventory_supplier_catalog_articles
+      where organization_id = '37500000-0000-4000-8000-000000000010' and article_number = 'NR-1501'));
   if v_first is distinct from '{"item_id":"37500000-0000-4000-8000-000000000020","created":false}'::jsonb
     or (select count(*) from public.inventory_item_prices where item_id = '37500000-0000-4000-8000-000000000020') <> 1 then
     raise exception 'adopting a number an own article carries answered %', v_first;

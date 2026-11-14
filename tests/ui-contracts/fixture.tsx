@@ -64,6 +64,10 @@ import {
   initializeWholesalerImportBoundary,
   WholesalerImportContractFixture,
 } from './wholesaler-import-boundaries';
+import {
+  initializeSupplierCatalogBoundary,
+  SupplierCatalogContractFixture,
+} from './supplier-catalog-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
 import { ArticleTermsContractFixture, initializeArticleTermsBoundary } from './article-terms-boundaries';
 import {
@@ -129,6 +133,7 @@ initializeInventoryUnitBoundary();
 initializeArticleTermsBoundary();
 initializeInventoryImportBoundary();
 initializeWholesalerImportBoundary();
+initializeSupplierCatalogBoundary();
 initializeInventoryMovementsBoundary();
 initializeLeistungenBoundary();
 const personnelInitialData = initializePersonnelBoundary();
@@ -623,6 +628,8 @@ createRoot(root).render(
     </BannerProvider>
   ) : window.uiContractFixture === 'wholesaler-import' ? (
     <WholesalerImportContractFixture />
+  ) : window.uiContractFixture === 'supplier-catalog' ? (
+    <SupplierCatalogContractFixture />
   ) : window.uiContractFixture === 'inventory-movements' ? (
     <InventoryMovementsContractFixture />
   ) : window.uiContractFixture === 'leistungen' ? (

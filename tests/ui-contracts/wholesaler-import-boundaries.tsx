@@ -4,19 +4,34 @@ import { Button } from '@/components/ui/button';
 import type { WholesalerReportLine } from '@/lib/inventory/wholesaler-import-lines';
 import type {
   ConfirmWholesalerImportInput,
+  OpenWholesalerImportInput,
+  StageWholesalerImportLinesInput,
   WholesalerImportPreview,
   WholesalerImportResult,
+  WholesalerPreviewEffects,
 } from '@/lib/inventory/wholesaler-import-schemas';
 
 // The wholesaler import dialog over stand-ins of its actions
-// (lib/inventory/wholesaler-import-actions.ts): a made-up delivery of
-// „Großhandel Nordrohr“ whose unit text „Rolle 50m“ names no unit, an
-// optional earlier import, and a preview that can fail.
+// (lib/inventory/wholesaler-import-actions.ts). The browser path is real: the
+// dialog reads the chosen files through lib/inventory/wholesaler-reader.ts,
+// whose reader is the fake in ./wholesaler-reader-boundaries.ts, and sends the
+// parsed lines in parts. The stand answers the database's effects: a made-up
+// delivery of „Großhandel Nordrohr“ whose unit text „Rolle 50m“ names no
+// unit, an optional earlier import, and a preview that can fail.
 
 type WholesalerImportContract = {
-  uploaded: string[];
-  uploadFails: boolean;
-  preview: WholesalerImportPreview;
+  /** The file names the fake reader got, and whether it fails or how many „Meter“ articles it reads. */
+  read: string[];
+  readerFails: boolean;
+  meterArticles: number;
+  opened: OpenWholesalerImportInput[];
+  /** Each staging call's lines, in the order they arrived. */
+  staged: StageWholesalerImportLinesInput['lines'][];
+  stageError: string | null;
+  /** Keeps every staging call waiting, so the dialog stays on its sending line. */
+  stageHeld: boolean;
+  effects: WholesalerPreviewEffects;
+  repeat: WholesalerImportPreview['repeat'];
   previewError: string | null;
   confirmations: ConfirmWholesalerImportInput[];
   abandoned: string[];
@@ -28,14 +43,7 @@ declare global {
   }
 }
 
-const PREVIEW: WholesalerImportPreview = {
-  importId: 'import-1',
-  delivery: {
-    formatVersion: '4',
-    supplierText: 'Großhandel Nordrohr GmbH, Bremen',
-    date: '2037-11-02',
-    fileNames: ['nordrohr-artikel.dat', 'nordrohr-preise.dat'],
-  },
+const EFFECTS: WholesalerPreviewEffects = {
   units: [
     {
       unitText: 'Meter',
@@ -65,65 +73,69 @@ const PREVIEW: WholesalerImportPreview = {
       priceChanged: 0,
     },
   ],
-  suggestedUnits: { Meter: 'meter', 'Rolle 50m': null, Stück: 'piece' },
   priceUpdates: 4,
   priceUnmatched: 1,
   removed: 2,
   rejected: 2,
-  rejections: [
-    {
-      fileName: 'nordrohr-artikel.dat',
-      lineNumber: 17,
-      articleNumber: null,
-      reason: 'Der Artikel hat keine Artikelnummer.',
-    },
-    {
-      fileName: 'nordrohr-preise.dat',
-      lineNumber: 4,
-      articleNumber: 'NR-2201',
-      reason: 'Der Zeile fehlen Angaben.',
-    },
-  ],
-  rebateGroups: 3,
-  repeat: null,
 };
+
+/** The report of the stand's confirmed import. */
+const REPORT: WholesalerReportLine[] = [
+  {
+    fileName: 'nordrohr-artikel.dat',
+    lineNumber: 17,
+    articleNumber: null,
+    reason: 'Der Artikel hat keine Artikelnummer.',
+  },
+  {
+    fileName: 'nordrohr-preise.dat',
+    lineNumber: 4,
+    articleNumber: null,
+    reason: 'Der Zeile fehlen Angaben.',
+  },
+];
 
 export function initializeWholesalerImportBoundary(): void {
   window.uiContractWholesalerImport = {
-    uploaded: [],
-    uploadFails: false,
-    preview: PREVIEW,
+    read: [],
+    readerFails: false,
+    meterArticles: 120,
+    opened: [],
+    staged: [],
+    stageError: null,
+    stageHeld: false,
+    effects: EFFECTS,
+    repeat: null,
     previewError: null,
     confirmations: [],
     abandoned: [],
   };
 }
 
-export async function createWholesalerImportUploadTicket(input: {
-  files: { name: string }[];
-}): Promise<{ success: true; uploadId: string; uploadUrls: string[]; contentType: string }> {
-  return {
-    success: true,
-    uploadId: 'upload-1',
-    uploadUrls: input.files.map((_, index) => `https://storage.example.test/upload-${index}`),
-    contentType: 'application/octet-stream',
-  };
+export async function openWholesalerImport(
+  input: OpenWholesalerImportInput,
+): Promise<{ success: true; importId: string }> {
+  window.uiContractWholesalerImport.opened.push(input);
+  return { success: true, importId: 'import-1' };
 }
 
-/** The upload to storage: records the file names, or fails when the spec says so. */
-export async function uploadDeliveryFiles(files: readonly File[]): Promise<boolean> {
+export async function stageWholesalerImportLines(
+  input: StageWholesalerImportLinesInput,
+): Promise<{ success: true } | { success: false; error: string }> {
   const contract = window.uiContractWholesalerImport;
-  if (contract.uploadFails) return false;
-  contract.uploaded.push(...files.map((file) => file.name));
-  return true;
+  if (contract.stageHeld) return new Promise(() => undefined);
+  if (contract.stageError) return { success: false, error: contract.stageError };
+  contract.staged.push(input.lines);
+  return { success: true };
 }
 
 export async function previewWholesalerImport(): Promise<
-  { success: true; preview: WholesalerImportPreview } | { success: false; error: string }
+  | { success: true; effects: WholesalerPreviewEffects; repeat: WholesalerImportPreview['repeat'] }
+  | { success: false; error: string }
 > {
   const contract = window.uiContractWholesalerImport;
   if (contract.previewError) return { success: false, error: contract.previewError };
-  return { success: true, preview: contract.preview };
+  return { success: true, effects: contract.effects, repeat: contract.repeat };
 }
 
 export async function confirmWholesalerImport(
@@ -157,12 +169,7 @@ export async function readWholesalerImportReport(): Promise<{
   lines: WholesalerReportLine[];
   next: null;
 }> {
-  return { success: true, lines: window.uiContractWholesalerImport.preview.rejections, next: null };
-}
-
-/** The material picker's adopt; no contract here chooses a catalog row. */
-export async function adoptSupplierCatalogArticle(): Promise<{ success: false; error: string }> {
-  return { success: false, error: 'catalog_article_not_found' };
+  return { success: true, lines: REPORT, next: null };
 }
 
 const SUPPLIERS = [{ id: 'nordrohr', name: 'Großhandel Nordrohr' }];

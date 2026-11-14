@@ -4,22 +4,24 @@ import { useState } from 'react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
+import type { ActionFailure } from '@/lib/action-result';
 import type { InventoryUnitCode } from '@/lib/inventory/units';
 import {
   abandonWholesalerImport,
   confirmWholesalerImport,
-  createWholesalerImportUploadTicket,
+  openWholesalerImport,
   previewWholesalerImport,
   readWholesalerImportReport,
+  stageWholesalerImportLines,
 } from '@/lib/inventory/wholesaler-import-actions';
 import {
   wholesalerImportReportCsv,
   type WholesalerReportLine,
 } from '@/lib/inventory/wholesaler-import-lines';
-import { uploadDeliveryFiles } from '@/lib/inventory/wholesaler-import-upload';
 import {
   WHOLESALER_IMPORT_MAX_FILE_BYTES,
   WHOLESALER_IMPORT_MAX_FILES,
+  WHOLESALER_STAGE_MAX_LINES,
   type WholesalerImportPreview,
   type WholesalerImportResult,
 } from '@/lib/inventory/wholesaler-import-schemas';
@@ -33,23 +35,26 @@ type WholesalerImportStep =
   | { kind: 'preview'; preview: WholesalerImportPreview; supplierId: string }
   | { kind: 'result'; importId: string; result: WholesalerImportResult; alreadyConfirmed: boolean };
 
-/** What a running step does, for the line under the form. */
-type WholesalerImportPhase = 'uploading' | 'reading' | 'confirming' | null;
+/** What a running step does, for the line under the form; sending counts the lines the server has. */
+export type WholesalerImportPhase =
+  | { kind: 'reading' }
+  | { kind: 'sending'; sent: number; total: number }
+  | { kind: 'confirming' };
 
 /** The sentences of the codes this import owns; a shared code keeps its shared sentence. */
 const FAILURE_MESSAGES: Readonly<Partial<Record<string, string>>> = {
   reader_unavailable: 'Dieser Import ist in dieser Umgebung nicht verfügbar.',
-  file_too_large: 'Eine Datei ist größer als 250 MB. Teile die Lieferung auf.',
-  file_empty: 'Eine Datei ist leer. Wähle die Dateien der Lieferung noch einmal.',
-  file_missing: 'Die Dateien sind nicht angekommen. Versuch es noch einmal.',
-  upload_failed: 'Die Dateien konnten nicht hochgeladen werden. Versuch es noch einmal.',
+  file_unreadable: 'Eine Datei konnte nicht gelesen werden. Wähle die Dateien der Lieferung noch einmal.',
   delivery_unreadable:
     'Die Lieferung konnte nicht gelesen werden. Prüfe, ob alle Dateien zu einer Lieferung gehören.',
   delivery_empty: 'Die Dateien enthalten keine Artikel, Preise oder Löschungen.',
+  invalid_input:
+    'Die Lieferung enthält Angaben, die der Import nicht übernehmen kann. Es wurde nichts übernommen.',
   supplier_not_found: 'Diesen Lieferanten gibt es nicht mehr. Wähle einen anderen.',
   import_not_found: 'Diese Vorschau gilt nicht mehr. Lade die Lieferung noch einmal.',
 };
-const UPLOAD_FAILED = 'Die Dateien konnten nicht hochgeladen werden. Versuch es noch einmal.';
+const PREVIEW_FAILED =
+  'Die Vorschau konnte nicht erstellt werden. Es wurde nichts übernommen. Versuch es noch einmal.';
 
 /** The choose step's checks in visual order, keyed by control id; shown after the first submit attempt. */
 function chooseErrors(
@@ -72,50 +77,73 @@ function chooseErrors(
   };
 }
 
+/** The sentence for an action's failure, or for a call that did not answer. */
+function previewFailure(result: ActionFailure | null): { error: string } {
+  return { error: result ? describeFailure(result.error, FAILURE_MESSAGES, PREVIEW_FAILED) : PREVIEW_FAILED };
+}
+
 /**
- * Signs, uploads and previews one delivery; answers the preview or the
- * sentence that says why not. `onReading` marks the end of the upload.
+ * Reads one delivery in the browser, sends its parsed lines in parts and
+ * answers the preview, or the sentence that says why not. The reader loads
+ * with the first delivery the dialog reads; no other page carries it.
  */
-async function uploadAndPreview(
+async function readAndPreview(
   supplierId: string,
   files: readonly File[],
-  onReading: () => void,
+  onPhase: (phase: WholesalerImportPhase) => void,
 ): Promise<{ preview: WholesalerImportPreview } | { error: string }> {
-  const ticket = await createWholesalerImportUploadTicket({
+  const staging = await import('@/lib/inventory/wholesaler-import-staging');
+  const read = await staging.readDeliveryFiles(files).catch(() => null);
+  if (!read) return previewFailure({ success: false, error: 'file_unreadable' });
+  if (!read.success) return previewFailure(read);
+  const { delivery, lines } = read;
+  const fileNames = files.map((file) => file.name);
+
+  const opened = await openWholesalerImport({
     supplierId,
-    files: files.map((file) => ({ name: file.name, sizeBytes: file.size })),
+    fileNames,
+    contentHash: read.contentHash,
+    header: delivery.header,
+    rebateGroups: delivery.rebateGroups,
+    skipped: delivery.skipped,
   }).catch(() => null);
-  if (!ticket?.success) {
-    return {
-      error: ticket
-        ? describeFailure(
-            ticket.error,
-            FAILURE_MESSAGES,
-            'Der Upload konnte nicht vorbereitet werden. Versuch es noch einmal.',
-          )
-        : 'Der Upload konnte nicht vorbereitet werden. Versuch es noch einmal.',
-    };
+  if (!opened?.success) return previewFailure(opened);
+  const { importId } = opened;
+
+  let sent = 0;
+  onPhase({ kind: 'sending', sent, total: lines.length });
+  for (const part of staging.stagingParts(lines, WHOLESALER_STAGE_MAX_LINES)) {
+    const staged = await stageWholesalerImportLines({ importId, lines: part }).catch(() => null);
+    if (!staged?.success) {
+      void abandonPreview(importId);
+      return previewFailure(staged);
+    }
+    sent += part.length;
+    onPhase({ kind: 'sending', sent, total: lines.length });
   }
-  if (!(await uploadDeliveryFiles(files, ticket.uploadUrls, ticket.contentType)))
-    return { error: UPLOAD_FAILED };
-  onReading();
-  const result = await previewWholesalerImport({
-    uploadId: ticket.uploadId,
-    supplierId,
-    fileNames: files.map((file) => file.name),
-  }).catch(() => null);
-  if (!result?.success) {
-    return {
-      error: result
-        ? describeFailure(
-            result.error,
-            FAILURE_MESSAGES,
-            'Die Vorschau konnte nicht erstellt werden. Es wurde nichts übernommen. Versuch es noch einmal.',
-          )
-        : 'Die Vorschau konnte nicht erstellt werden. Es wurde nichts übernommen. Versuch es noch einmal.',
-    };
+
+  const previewed = await previewWholesalerImport({ importId }).catch(() => null);
+  if (!previewed?.success) {
+    void abandonPreview(importId);
+    return previewFailure(previewed);
   }
-  return { preview: result.preview };
+  const { effects, repeat } = previewed;
+  return {
+    preview: {
+      importId,
+      delivery: {
+        formatVersion: delivery.header?.formatVersion ?? null,
+        supplierText: delivery.header?.supplierText ?? null,
+        date: delivery.header?.date ?? null,
+        fileNames,
+      },
+      ...effects,
+      suggestedUnits: staging.guessUnitMapping(effects.units.map((unit) => unit.unitText)),
+      rejections: staging.rejectedLines(lines),
+      rebateGroups: delivery.rebateGroups.length,
+      repeat,
+    },
+  };
 }
 
 /** Every line of a confirmed import's report, read part by part; null when a part failed. */
@@ -204,7 +232,7 @@ export function useWholesalerImport({ onOpenChange }: { onOpenChange: (open: boo
   const [step, setStep] = useState<WholesalerImportStep>({ kind: 'choose' });
   const choice = useDeliveryChoice();
   const decisions = usePreviewDecisions(step);
-  const [phase, setPhase] = useState<WholesalerImportPhase>(null);
+  const [phase, setPhase] = useState<WholesalerImportPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = usePendingTask();
 
@@ -213,7 +241,7 @@ export function useWholesalerImport({ onOpenChange }: { onOpenChange: (open: boo
     setError(null);
   }
 
-  function runStep(firstPhase: WholesalerImportPhase, task: () => Promise<void>) {
+  function runStep(firstPhase: WholesalerImportPhase | null, task: () => Promise<void>) {
     setError(null);
     setPhase(firstPhase);
     void run(() =>
@@ -239,16 +267,16 @@ export function useWholesalerImport({ onOpenChange }: { onOpenChange: (open: boo
       onOpenChange(nextOpen);
     },
     preview: () =>
-      runStep('uploading', async () => {
+      runStep({ kind: 'reading' }, async () => {
         const { supplierId } = choice;
-        const answer = await uploadAndPreview(supplierId, choice.files, () => setPhase('reading'));
+        const answer = await readAndPreview(supplierId, choice.files, setPhase);
         if ('error' in answer) return setError(answer.error);
         decisions.start(answer.preview);
         setStep({ kind: 'preview', preview: answer.preview, supplierId });
       }),
     confirm: (current: WholesalerImportPreview) => {
       if (!decisions.readyToConfirm()) return;
-      runStep('confirming', async () => {
+      runStep({ kind: 'confirming' }, async () => {
         const unitMapping = Object.fromEntries(
           current.units.map((unit) => [unit.unitText, decisions.unitMapping[unit.unitText] ?? null]),
         );

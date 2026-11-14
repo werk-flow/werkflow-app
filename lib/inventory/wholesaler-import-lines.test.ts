@@ -3,7 +3,7 @@
 // a unit only when the unit list knows it. Synthetic data, no wholesaler file.
 import { expect, test } from 'bun:test';
 import { wholesalerImportReportCsv, wholesalerPreviewTotals } from './wholesaler-import-lines';
-import { deliveryContentHash, guessUnitMapping, stagedDeliveryLines } from './wholesaler-import-staging';
+import { guessUnitMapping, readDeliveryFiles } from './wholesaler-import-staging';
 import type { WholesalerDelivery } from './wholesaler-reader';
 
 const ARTICLE = {
@@ -37,8 +37,40 @@ function delivery(overrides: Partial<WholesalerDelivery>): WholesalerDelivery {
   };
 }
 
-test('a price change of a delivered article becomes its price; one of another article stays a price line', () => {
-  const lines = stagedDeliveryLines(
+type DeliveryReader = NonNullable<Parameters<typeof readDeliveryFiles>[1]>;
+
+/** A fake reader that answers `read` in the reader's own words, whatever the bytes. */
+function fakeReader(read: WholesalerDelivery): DeliveryReader {
+  return () => ({
+    header: read.header && {
+      version: read.header.formatVersion,
+      supplierText: read.header.supplierText,
+      date: read.header.date,
+      currency: read.header.currency,
+    },
+    articles: read.articles.map(({ name, nameAddition, ...article }) => ({
+      ...article,
+      shortText1: name,
+      shortText2: nameAddition,
+    })),
+    deletions: read.deletions,
+    priceChanges: read.priceChanges,
+    productGroups: read.productGroups,
+    rebateGroups: read.rebateGroups,
+    skipped: read.skipped.map(({ kind, lines }) => ({ recordType: kind, lines })),
+    rejected: read.rejections,
+  });
+}
+
+/** The lines the browser stages for a delivery the fake reader answers. */
+async function stagedDeliveryLines(read: WholesalerDelivery) {
+  const reading = await readDeliveryFiles([new File([new Uint8Array([1])], 'lieferung')], fakeReader(read));
+  if (!reading.success) throw new Error(reading.error);
+  return reading.lines;
+}
+
+test('a price change of a delivered article becomes its price; one of another article stays a price line', async () => {
+  const lines = await stagedDeliveryLines(
     delivery({
       articles: [ARTICLE],
       priceChanges: [
@@ -69,8 +101,8 @@ test('a price change of a delivered article becomes its price; one of another ar
   ]);
 });
 
-test('a price change of a rejected article stays a price line for the catalog row', () => {
-  const lines = stagedDeliveryLines(
+test('a price change of a rejected article stays a price line for the catalog row', async () => {
+  const lines = await stagedDeliveryLines(
     delivery({
       articles: [{ ...ARTICLE, name: ' ' }],
       priceChanges: [
@@ -91,8 +123,8 @@ test('a price change of a rejected article stays a price line for the catalog ro
   ]);
 });
 
-test('a price given only on request is no price, never a zero', () => {
-  const [onRequest] = stagedDeliveryLines(
+test('a price given only on request is no price, never a zero', async () => {
+  const [onRequest] = await stagedDeliveryLines(
     delivery({
       priceChanges: [
         {
@@ -109,8 +141,8 @@ test('a price given only on request is no price, never a zero', () => {
   expect(onRequest).toMatchObject({ kind: 'price', price_kind: null, price_cents: null });
 });
 
-test('an article without number or name is a rejected line with a reason, and the reader’s rejections stay', () => {
-  const lines = stagedDeliveryLines(
+test('an article without number or name is a rejected line with a reason, and the reader’s rejections stay', async () => {
+  const lines = await stagedDeliveryLines(
     delivery({
       articles: [
         { ...ARTICLE, line: 3, articleNumber: '  ' },
@@ -131,12 +163,31 @@ test('an article without number or name is a rejected line with a reason, and th
 });
 
 test('the same files give the same delivery key in any order, and other bytes another key', async () => {
-  const first = { name: 'a', bytes: new Uint8Array([1, 2]) };
-  const second = { name: 'b', bytes: new Uint8Array([3]) };
-  const key = await deliveryContentHash([first, second]);
+  const reader = fakeReader(delivery({ articles: [ARTICLE] }));
+  const keyOf = async (files: File[]) => {
+    const reading = await readDeliveryFiles(files, reader);
+    if (!reading.success) throw new Error(reading.error);
+    return reading.contentHash;
+  };
+  const first = new File([new Uint8Array([1, 2])], 'a');
+  const second = new File([new Uint8Array([3])], 'b');
+  const key = await keyOf([first, second]);
   expect(key).toMatch(/^[0-9a-f]{64}$/);
-  expect(await deliveryContentHash([second, first])).toBe(key);
-  expect(await deliveryContentHash([first, { ...second, bytes: new Uint8Array([4]) }])).not.toBe(key);
+  expect(await keyOf([second, first])).toBe(key);
+  expect(await keyOf([first, new File([new Uint8Array([4])], 'b')])).not.toBe(key);
+});
+
+test('a delivery the reader refuses or that holds nothing is no delivery to stage', async () => {
+  const file = new File([new Uint8Array([1])], 'lieferung');
+  expect(await readDeliveryFiles([file], null)).toEqual({ success: false, error: 'reader_unavailable' });
+  expect(await readDeliveryFiles([file], fakeReader(delivery({})))).toEqual({
+    success: false,
+    error: 'delivery_empty',
+  });
+  const throwing: DeliveryReader = () => {
+    throw new Error('unreadable');
+  };
+  expect(await readDeliveryFiles([file], throwing)).toEqual({ success: false, error: 'delivery_unreadable' });
 });
 
 test('a unit text names a unit of the list or nothing, never Stück by default', () => {

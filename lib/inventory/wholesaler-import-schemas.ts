@@ -6,14 +6,14 @@ import { INVENTORY_UNITS, type InventoryUnitCode } from './units';
 
 // The boundary of the wholesaler import and the supplier catalog: action
 // inputs, the database's answers, and the shapes the dialog and the picker
-// read. A delivery's bytes never pass an action: the browser uploads them
-// through a signed URL (docs/technical/document-storage-and-access.md).
+// read. The browser reads a delivery's files; only its parsed lines pass an
+// action, in parts, never a file's bytes (decision 0001).
 
-/** Files one delivery may hold, and the size of each. */
+/** Files one delivery may hold, and the size of each the browser reads. */
 export const WHOLESALER_IMPORT_MAX_FILES = 10;
 export const WHOLESALER_IMPORT_MAX_FILE_BYTES = 250 * 1024 * 1024;
-/** The one content type an upload of a delivery file is signed and sent with: the files are plain bytes. */
-export const WHOLESALER_FILE_CONTENT_TYPE = 'application/octet-stream';
+/** The staged lines one call carries at most. */
+export const WHOLESALER_STAGE_MAX_LINES = 2000;
 /** A catalog search needs this many characters, so its index can narrow it. */
 export const SUPPLIER_CATALOG_SEARCH_MIN_LENGTH = 3;
 /** The catalog rows one search shows; more matches are reported, never cut silently. */
@@ -21,22 +21,65 @@ export const SUPPLIER_CATALOG_SEARCH_LIMIT = 20;
 
 const unitCodeSchema = z.literal(INVENTORY_UNITS.map((unit) => unit.code));
 const fileNameSchema = boundedText(200);
+const count = z.number().int().nonnegative();
+/** A short field of a delivery line: a number, a group, an EAN, a code. */
+const deliveryField = boundedText(200).nullable();
 
-export const wholesalerUploadTicketInputSchema = z.object({
-  supplierId: uuidSchema,
-  files: z
-    .array(z.object({ name: fileNameSchema, sizeBytes: z.number().int() }))
-    .min(1)
-    .max(WHOLESALER_IMPORT_MAX_FILES),
-});
-export type WholesalerUploadTicketInput = z.infer<typeof wholesalerUploadTicketInputSchema>;
+const discountSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('rebate_group'), rebateGroup: boundedText(200) }),
+  z.object({ kind: z.literal('percent'), hundredthsOfPercent: z.number().int() }),
+  z.object({ kind: z.literal('unread'), code: boundedText(50), value: boundedText(200) }),
+]);
 
-export const previewWholesalerImportInputSchema = z.object({
-  uploadId: uuidSchema,
+/** The delivery's own facts the batch keeps: header, rebate groups and the kinds of lines left out. */
+export const openWholesalerImportInputSchema = z.object({
   supplierId: uuidSchema,
   fileNames: z.array(fileNameSchema).min(1).max(WHOLESALER_IMPORT_MAX_FILES),
+  /** The SHA-256 of the delivery, computed in the browser, for the repeat warning. */
+  contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+  header: z
+    .object({
+      formatVersion: boundedText(50),
+      supplierText: boundedText(500),
+      date: z.iso.date().nullable(),
+      currency: boundedText(20),
+    })
+    .nullable(),
+  rebateGroups: z
+    .array(z.object({ rebateGroup: boundedText(200), discount: discountSchema, text: boundedText(500) }))
+    .max(5000),
+  skipped: z.array(z.object({ kind: boundedText(50), lines: count })).max(100),
 });
-export type PreviewWholesalerImportInput = z.infer<typeof previewWholesalerImportInputSchema>;
+export type OpenWholesalerImportInput = z.infer<typeof openWholesalerImportInputSchema>;
+
+/** One staged line, in the database's column names, as `stage_supplier_catalog_import_lines` takes it. */
+const stagedImportLineSchema = z.object({
+  ordinal: count,
+  kind: z.enum(['article', 'price', 'deletion', 'rejection']),
+  file_name: fileNameSchema,
+  line_number: count,
+  article_number: deliveryField,
+  name: boundedText(500).nullable(),
+  name_addition: boundedText(500).nullable(),
+  unit_text: deliveryField,
+  price_quantity: z.literal(PRICE_QUANTITIES).nullable(),
+  price_kind: z.enum(['list', 'net']).nullable(),
+  price_cents: z.number().int().min(0).max(2_147_483_647).nullable(),
+  rebate_group: deliveryField,
+  main_product_group: deliveryField,
+  product_group: deliveryField,
+  ean: deliveryField,
+  matchcode: deliveryField,
+  reason_code: boundedText(100).nullable(),
+  reason: boundedText(1000).nullable(),
+});
+export type StagedImportLine = z.infer<typeof stagedImportLineSchema>;
+
+export const stageWholesalerImportLinesInputSchema = z.object({
+  importId: uuidSchema,
+  lines: z.array(stagedImportLineSchema).min(1).max(WHOLESALER_STAGE_MAX_LINES),
+});
+export type StageWholesalerImportLinesInput = z.infer<typeof stageWholesalerImportLinesInputSchema>;
 
 export const confirmWholesalerImportInputSchema = z.object({
   importId: uuidSchema,
@@ -57,8 +100,6 @@ export const supplierCatalogSearchInputSchema = z.object({ search: boundedText(2
 
 export const adoptSupplierCatalogArticleInputSchema = z.object({ catalogArticleId: uuidSchema });
 export type AdoptSupplierCatalogArticleInput = z.infer<typeof adoptSupplierCatalogArticleInputSchema>;
-
-const count = z.number().int().nonnegative();
 
 /** One unit text of a delivery: its articles and what they would do to the catalog. */
 const unitEffectSchema = z

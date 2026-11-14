@@ -26,17 +26,22 @@ import { formatFileSize } from '@/lib/documents/format';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { ImportCountGrid, RevealedImportRows } from './inventory-import-outcomes';
-import { useWholesalerImport } from './use-wholesaler-import';
+import { useWholesalerImport, type WholesalerImportPhase } from './use-wholesaler-import';
 
 type WholesalerImport = ReturnType<typeof useWholesalerImport>;
 
 const UNIT_OPTIONS = OFFERED_INVENTORY_UNITS.map((unit) => ({ value: unit.code, label: unit.label }));
 
-const PHASE_TEXT = {
-  uploading: 'Die Dateien werden hochgeladen …',
-  reading: 'Die Lieferung wird gelesen …',
-  confirming: 'Die Lieferung wird in den Katalog übernommen …',
-} as const;
+function phaseText(phase: WholesalerImportPhase): string {
+  switch (phase.kind) {
+    case 'reading':
+      return 'Die Lieferung wird gelesen …';
+    case 'sending':
+      return `Die Zeilen werden übertragen … ${phase.sent.toLocaleString('de-DE')} von ${phase.total.toLocaleString('de-DE')}`;
+    case 'confirming':
+      return 'Die Lieferung wird in den Katalog übernommen …';
+  }
+}
 
 function formatDeliveryDate(date: string | null): string {
   if (!date) return 'nicht angegeben';
@@ -381,7 +386,7 @@ export function WholesalerImportDialog({
             {step.kind === 'result' && <ResultStep wholesalerImport={wholesalerImport} step={step} />}
             {wholesalerImport.phase && (
               <p className="text-sm text-muted-foreground" role="status">
-                {PHASE_TEXT[wholesalerImport.phase]}
+                {phaseText(wholesalerImport.phase)}
               </p>
             )}
             <ErrorText>{wholesalerImport.error}</ErrorText>

@@ -14,9 +14,9 @@
 --    supplier as data. Nothing here applies a rebate or changes a price of an
 --    own article; werk-flow/werkflow-planning#477 does.
 -- 3. An import is a batch (inventory_supplier_catalog_imports) with its
---    staged lines (inventory_supplier_catalog_import_lines). The server reads
---    the uploaded delivery, opens the batch, stages its lines in chunks and
---    asks for the preview: per unit text of the delivery, how many articles
+--    staged lines (inventory_supplier_catalog_import_lines). The browser reads
+--    the delivery and sends its parsed lines: the server opens the batch,
+--    stages the lines in chunks and asks for the preview: per unit text of the delivery, how many articles
 --    are new, changed or unchanged and how many prices change. The office
 --    maps each unit text to the unit list; the confirm writes the catalog in
 --    one call with that mapping. An article whose unit text stays unmapped is

@@ -1,6 +1,6 @@
 -- The supplier catalog search reads its trigram index at 200 000 rows, and
 -- finds its text literally (werk-flow/werkflow-planning#375, migration
--- 20261210130001_keep_a_supplier_catalog_beside_the_own_articles.sql). The
+-- 20261214090001_keep_a_supplier_catalog_beside_the_own_articles.sql). The
 -- plan is of public.search_supplier_catalog_articles' own statement, with its
 -- parameters filled in. Synthetic rows only.
 begin;

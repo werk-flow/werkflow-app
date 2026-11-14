@@ -1,34 +1,16 @@
-import type { PriceQuantity } from './line-amount';
+import type { ActionResult } from '@/lib/action-result';
 import { normalizeInventoryUnitInput, type InventoryUnitCode } from './units';
-import type { WholesalerDelivery } from './wholesaler-reader';
+import type { WholesalerReportLine } from './wholesaler-import-lines';
+import type { StagedImportLine } from './wholesaler-import-schemas';
+import { readWholesalerDelivery, type WholesalerDelivery } from './wholesaler-reader';
 
-// The wholesaler import's staging rules on the server, without a database or
-// a file: how a read delivery becomes the lines the preview stages, how a
-// delivery is recognized again, and which unit a unit text guesses.
-// The database decides each line's effect on the catalog (migration
-// 20261210130000).
-
-/** One staged line, in the database's column names, as `stage_supplier_catalog_import_lines` takes it. */
-export type StagedImportLine = {
-  ordinal: number;
-  kind: 'article' | 'price' | 'deletion' | 'rejection';
-  file_name: string;
-  line_number: number;
-  article_number: string | null;
-  name: string | null;
-  name_addition: string | null;
-  unit_text: string | null;
-  price_quantity: PriceQuantity | null;
-  price_kind: 'list' | 'net' | null;
-  price_cents: number | null;
-  rebate_group: string | null;
-  main_product_group: string | null;
-  product_group: string | null;
-  ean: string | null;
-  matchcode: string | null;
-  reason_code: string | null;
-  reason: string | null;
-};
+// The wholesaler import's browser half: it reads a delivery's files with the
+// one reader seam, turns the delivery into the lines the batch stages, keys
+// the delivery for the repeat warning and splits the lines into the parts
+// each staging call carries. The file's bytes never leave the browser
+// (decision 0001). The dialog loads this module, and with it the reader,
+// only when it reads a delivery. The database decides each line's effect on
+// the catalog (migration 20261214090001).
 
 const EMPTY_LINE = {
   article_number: null,
@@ -112,7 +94,7 @@ function articleLine(
  * article without number or name is a rejected line, as is every line the
  * reader refused.
  */
-export function stagedDeliveryLines(delivery: WholesalerDelivery): StagedImportLine[] {
+function stagedDeliveryLines(delivery: WholesalerDelivery): StagedImportLine[] {
   const lines: Omit<StagedImportLine, 'ordinal'>[] = [];
   const latestPriceChange = new Map(
     delivery.priceChanges.map((change) => [change.articleNumber.trim(), change]),
@@ -164,6 +146,22 @@ export function stagedDeliveryLines(delivery: WholesalerDelivery): StagedImportL
   return lines.map((line, ordinal) => ({ ...line, ordinal }));
 }
 
+/** The rejected lines the preview lists, with file, line and reason. */
+export function rejectedLines(lines: readonly StagedImportLine[]): WholesalerReportLine[] {
+  return lines.flatMap((line) =>
+    line.kind === 'rejection'
+      ? [
+          {
+            fileName: line.file_name,
+            lineNumber: line.line_number,
+            articleNumber: line.article_number,
+            reason: line.reason ?? 'Die Zeile konnte nicht gelesen werden.',
+          },
+        ]
+      : [],
+  );
+}
+
 /** The hex SHA-256 of bytes. */
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes.slice()));
@@ -175,9 +173,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
  * file-name order. The same files give the same key, whatever order they
  * were chosen in.
  */
-export async function deliveryContentHash(
-  files: readonly { name: string; bytes: Uint8Array }[],
-): Promise<string> {
+async function deliveryContentHash(files: readonly { name: string; bytes: Uint8Array }[]): Promise<string> {
   const sorted = [...files].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   // One file at a time, so at most one copy of a large file is held for its digest.
   const fileHashes: string[] = [];
@@ -188,4 +184,60 @@ export async function deliveryContentHash(
 /** The unit each unit text of a delivery names, or null where the office must choose. */
 export function guessUnitMapping(unitTexts: readonly string[]): Record<string, InventoryUnitCode | null> {
   return Object.fromEntries(unitTexts.map((text) => [text, normalizeInventoryUnitInput(text)]));
+}
+
+/** What the browser read from a delivery, or why it read nothing. */
+type DeliveryReading = ActionResult<
+  { delivery: WholesalerDelivery; lines: StagedImportLine[]; contentHash: string },
+  'reader_unavailable' | 'delivery_unreadable' | 'delivery_empty'
+>;
+
+/**
+ * Reads a delivery's files in the browser with the reader this build
+ * carries, or `reader` in a test: the delivery, the lines the batch stages,
+ * and the delivery's content key.
+ */
+export async function readDeliveryFiles(
+  files: readonly File[],
+  reader?: Parameters<typeof readWholesalerDelivery>[1],
+): Promise<DeliveryReading> {
+  const read = await Promise.all(
+    files.map(async (file) => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })),
+  );
+  let reading;
+  try {
+    reading = readWholesalerDelivery(read, reader);
+  } catch {
+    return { success: false, error: 'delivery_unreadable' };
+  }
+  if (!reading.installed) return { success: false, error: 'reader_unavailable' };
+  const lines = stagedDeliveryLines(reading.delivery);
+  if (lines.length === 0) return { success: false, error: 'delivery_empty' };
+  return { success: true, delivery: reading.delivery, lines, contentHash: await deliveryContentHash(read) };
+}
+
+/** The JSON characters one staging call carries at most, well below the 1 MB a Server Action takes. */
+const STAGE_PART_MAX_CHARACTERS = 400_000;
+
+/**
+ * The lines in delivery order, split into the parts the staging calls carry:
+ * each at most `maxLines` lines and about 400 000 JSON characters, so a part
+ * of long names still fits one request.
+ */
+export function stagingParts(lines: readonly StagedImportLine[], maxLines: number): StagedImportLine[][] {
+  const parts: StagedImportLine[][] = [];
+  let part: StagedImportLine[] = [];
+  let characters = 0;
+  for (const line of lines) {
+    const size = JSON.stringify(line).length;
+    if (part.length > 0 && (part.length === maxLines || characters + size > STAGE_PART_MAX_CHARACTERS)) {
+      parts.push(part);
+      part = [];
+      characters = 0;
+    }
+    part.push(line);
+    characters += size;
+  }
+  if (part.length > 0) parts.push(part);
+  return parts;
 }

@@ -395,21 +395,10 @@ export async function putStorageObject({
 export async function readStorageObject({
   organizationId,
   path,
-  maxBytes,
-}: OrganizationScope & {
-  path: string;
-  /** Reads at most one byte more than this, so a caller refuses a larger object without holding it. */
-  maxBytes?: number;
-}): Promise<Uint8Array> {
+}: OrganizationScope & { path: string }): Promise<Uint8Array> {
   assertOrganizationStorageKey(organizationId, path);
   try {
-    const result = await getR2Client().send(
-      new GetObjectCommand({
-        Bucket: getR2BucketName(),
-        Key: path,
-        ...(maxBytes === undefined ? {} : { Range: `bytes=0-${maxBytes}` }),
-      }),
-    );
+    const result = await getR2Client().send(new GetObjectCommand({ Bucket: getR2BucketName(), Key: path }));
     if (!result.Body) throw new Error('storage_object_missing');
     return await result.Body.transformToByteArray();
   } catch (error) {

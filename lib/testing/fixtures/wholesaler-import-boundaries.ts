@@ -1,15 +1,13 @@
 // The wholesaler import and supplier catalog actions over the in-memory
 // database (werk-flow/werkflow-planning#375). A field worker is refused the
-// upload ticket, the preview, the confirm, the abandon, the report, the
-// catalog search and the adopt before any database or storage call. Büro gets
-// no ticket for another organization's wholesaler and signs uploads only into
-// its own folder; the preview reads only that folder and deletes what it read;
-// the confirm, the preview's batch and the adopt carry the caller's
-// organization and actor, so another organization's batch or catalog row is
-// not found. supabase/tests/inventory_supplier_catalog.sql proves the database
-// functions' own refusals. The reader is a fake with synthetic data.
+// open, the staging, the preview, the confirm, the abandon, the report, the
+// catalog search and the adopt before any database call. The browser reads a
+// delivery, so no action takes a file: each takes parsed lines and carries the
+// caller's organization and actor in its one call, so another organization's
+// wholesaler, batch or catalog row is not found.
+// supabase/tests/inventory_supplier_catalog.sql proves the database functions'
+// own refusals. Synthetic data only.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
 
 import {
   CALLER_ID,
@@ -18,7 +16,6 @@ import {
   installActionWorld,
   signInAs,
 } from './action-boundary-world';
-import { WHOLESALER_IMPORT_MAX_FILE_BYTES } from '@/lib/inventory/wholesaler-import-schemas';
 import { assertRefused, refuseForeignIds } from './operations-boundary-refusals';
 
 const ownSupplierId = '37500000-0000-4000-8000-000000000030';
@@ -26,65 +23,6 @@ const foreignSupplierId = '37500000-0000-4000-8000-000000000039';
 const foreignImportId = '37500000-0000-4000-8000-000000000049';
 const ownImportId = '37500000-0000-4000-8000-000000000048';
 const foreignCatalogId = '37500000-0000-4000-8000-000000000059';
-const uploadId = '37500000-0000-4000-8000-000000000060';
-
-const storageCalls: string[] = [];
-mock.module('@/lib/storage/r2', () => ({
-  createSignedUploadUrl: async ({ organizationId, path }: { organizationId: string; path: string }) => {
-    storageCalls.push(`sign ${organizationId} ${path}`);
-    return 'https://storage.example.test/signed';
-  },
-  uploadStagingPath: (_organizationId: string, path: string) => `staging:${path}`,
-  headStorageObject: async ({ path }: { path: string }) => {
-    storageCalls.push(`head ${path}`);
-    return { exists: true, sizeBytes: 3, contentType: 'application/octet-stream' };
-  },
-  readStorageObject: async ({ path, maxBytes }: { path: string; maxBytes?: number }) => {
-    storageCalls.push(`read ${path} up to ${maxBytes}`);
-    return new Uint8Array([1, 2, 3]);
-  },
-  discardStorageObjects: async ({ paths }: { paths: readonly string[] }) => {
-    for (const path of paths) storageCalls.push(`discard ${path}`);
-  },
-}));
-mock.module('@/lib/inventory/wholesaler-reader', () => ({
-  wholesalerReaderInstalled: () => true,
-  readWholesalerDelivery: () => ({
-    installed: true,
-    delivery: {
-      header: {
-        formatVersion: '4',
-        supplierText: 'Großhandel Nordrohr',
-        date: '2037-11-02',
-        currency: 'EUR',
-      },
-      articles: [
-        {
-          file: 'lieferung',
-          line: 1,
-          articleNumber: 'NR-1501',
-          change: 'new',
-          name: 'Kupferrohr 15 mm',
-          nameAddition: '',
-          unit: 'Meter',
-          priceQuantity: 100,
-          price: { kind: 'list', amountCents: 61000 },
-          rebateGroup: null,
-          mainProductGroup: null,
-          productGroup: null,
-          ean: null,
-          matchcode: null,
-        },
-      ],
-      deletions: [],
-      priceChanges: [],
-      productGroups: [],
-      rebateGroups: [],
-      skipped: [],
-      rejections: [],
-    },
-  }),
-}));
 
 const world = installActionWorld({
   inventory_suppliers: [
@@ -113,17 +51,52 @@ const imports = await import('@/lib/inventory/wholesaler-import-actions');
 const { adoptSupplierCatalogArticle } = await import('@/lib/inventory/supplier-catalog-actions');
 const { searchSupplierCatalog } = await import('@/lib/inventory/supplier-catalog-search');
 
-const files = [{ name: 'lieferung', sizeBytes: 1024 }];
-const ticket = (supplierId: string) =>
+const LINE = {
+  ordinal: 0,
+  kind: 'article',
+  file_name: 'lieferung',
+  line_number: 1,
+  article_number: 'NR-1501',
+  name: 'Kupferrohr 15 mm',
+  name_addition: '',
+  unit_text: 'Meter',
+  price_quantity: 100,
+  price_kind: 'list',
+  price_cents: 61000,
+  rebate_group: null,
+  main_product_group: null,
+  product_group: null,
+  ean: null,
+  matchcode: null,
+  reason_code: null,
+  reason: null,
+} as const;
+const open = (supplierId: string) =>
   [
-    'createWholesalerImportUploadTicket',
-    () => imports.createWholesalerImportUploadTicket({ supplierId, files }),
+    'openWholesalerImport',
+    () =>
+      imports.openWholesalerImport({
+        supplierId,
+        fileNames: ['lieferung'],
+        contentHash: 'a'.repeat(64),
+        header: {
+          formatVersion: '4',
+          supplierText: 'Großhandel Nordrohr',
+          date: '2037-11-02',
+          currency: 'EUR',
+        },
+        rebateGroups: [],
+        skipped: [],
+      }),
   ] as const;
-const preview = (supplierId: string) =>
-  [
-    'previewWholesalerImport',
-    () => imports.previewWholesalerImport({ uploadId, supplierId, fileNames: ['lieferung'] }),
-  ] as const;
+const stage = [
+  'stageWholesalerImportLines',
+  () => imports.stageWholesalerImportLines({ importId: foreignImportId, lines: [LINE] }),
+] as const;
+const preview = [
+  'previewWholesalerImport',
+  () => imports.previewWholesalerImport({ importId: foreignImportId }),
+] as const;
 const confirm = [
   'confirmWholesalerImport',
   () => imports.confirmWholesalerImport({ importId: foreignImportId, unitMapping: { Meter: 'meter' } }),
@@ -146,49 +119,37 @@ const search = ['searchSupplierCatalog', () => searchSupplierCatalog('Kupferrohr
 signInAs(world, 'employee');
 await assertRefused(
   world,
-  [ticket(ownSupplierId), preview(ownSupplierId), confirm, abandon, report, adopt, search],
+  [open(ownSupplierId), stage, preview, confirm, abandon, report, adopt, search],
   { success: false, error: 'not_authorized' },
   'none',
 );
-assert.deepEqual(storageCalls, [], 'a refused field worker reached storage');
 
-// Büro gets no upload for another organization's wholesaler, and signs its own
-// uploads into its organization's folder, under a folder of its own.
+// Büro opens no batch for another organization's wholesaler: the one call
+// carries the caller's organization and actor.
 signInAs(world, 'buero');
-await assertRefused(
-  world,
-  [ticket(foreignSupplierId)],
-  { success: false, error: 'supplier_not_found' },
-  'reads',
-);
-assert.deepEqual(storageCalls, [], 'a refused ticket signed an upload');
-const signed = await imports.createWholesalerImportUploadTicket({ supplierId: ownSupplierId, files });
-assert.ok(signed.success);
-assert.match(
-  storageCalls[0] ?? '',
-  new RegExp(
-    `^sign ${ORGANIZATION_A} ${ORGANIZATION_A}/wholesaler-imports/${signed.uploadId}/${CALLER_ID}/0$`,
-  ),
-);
-
-// The preview reads the caller's own folder and deletes what it read; its
-// batch names the caller's organization and actor, so another organization's
-// wholesaler is not found.
-storageCalls.length = 0;
 refuseForeignIds(world, new Map([[foreignSupplierId, 'supplier_not_found']]));
 await assertRefused(
   world,
-  [preview(foreignSupplierId)],
+  [open(foreignSupplierId)],
   { success: false, error: 'supplier_not_found' },
   'one-call',
 );
-const ownFile = `staging:${ORGANIZATION_A}/wholesaler-imports/${uploadId}/${CALLER_ID}/0`;
-// The read is bounded too: a file written again after the size check is never held whole.
-assert.deepEqual(storageCalls, [
-  `head ${ownFile}`,
-  `read ${ownFile} up to ${WHOLESALER_IMPORT_MAX_FILE_BYTES}`,
-  `discard ${ownFile}`,
-]);
+
+// A part of more lines than one call carries, or a line of another shape, is refused before the database.
+world.rpcCalls.length = 0;
+const tooMany = Array.from({ length: 2001 }, (_, ordinal) => ({ ...LINE, ordinal }));
+assert.deepEqual(await imports.stageWholesalerImportLines({ importId: ownImportId, lines: tooMany }), {
+  success: false,
+  error: 'invalid_input',
+});
+assert.deepEqual(
+  await imports.stageWholesalerImportLines({
+    importId: ownImportId,
+    lines: [{ ...LINE, price_cents: -1 }],
+  }),
+  { success: false, error: 'invalid_input' },
+);
+assert.equal(world.rpcCalls.length, 0, 'a refused part reached the database');
 
 // Another organization's batch and catalog row are not found by the one call
 // that carries the caller's organization and actor.
@@ -199,7 +160,12 @@ refuseForeignIds(
     [foreignCatalogId, 'catalog_article_not_found'],
   ]),
 );
-await assertRefused(world, [confirm, abandon], { success: false, error: 'import_not_found' }, 'one-call');
+await assertRefused(
+  world,
+  [stage, preview, confirm, abandon],
+  { success: false, error: 'import_not_found' },
+  'one-call',
+);
 await assertRefused(world, [adopt], { success: false, error: 'catalog_article_not_found' }, 'one-call');
 await assertRefused(world, [report], { success: false, error: 'import_not_found' }, 'reads');
 

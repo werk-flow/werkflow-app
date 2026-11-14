@@ -2,10 +2,12 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openContractFixture } from './open-fixture';
 
 // werk-flow/werkflow-planning#375: the office imports a wholesaler delivery
-// into the supplier's catalog with a preview. A unit text the office leaves
-// unmapped rejects its articles, the counts follow the choice, a delivery
-// taken over before waits for the office's decision, nothing is confirmed
-// before „Übernehmen“, and leaving the preview drops it. Made-up data only.
+// into the supplier's catalog with a preview. The browser reads the files
+// through the reader seam (a fake here) and sends only parsed lines, in parts
+// that each fit one call. A unit text the office leaves unmapped rejects its
+// articles, the counts follow the choice, a delivery taken over before waits
+// for the office's decision, nothing is confirmed before „Übernehmen“, and
+// leaving the preview drops it. Made-up data only.
 
 test.beforeEach(async ({ page }) => {
   await openContractFixture(page, 'wholesaler-import');
@@ -79,9 +81,9 @@ test('a submit without supplier or file marks both and focuses the supplier', as
 
 test('a delivery taken over before waits for „Trotzdem übernehmen“', async ({ page }) => {
   await page.evaluate(() => {
-    window.uiContractWholesalerImport.preview = {
-      ...window.uiContractWholesalerImport.preview,
-      repeat: { confirmedAt: '2037-11-03T09:30:00.000Z', confirmedBy: 'Bernd Buchung' },
+    window.uiContractWholesalerImport.repeat = {
+      confirmedAt: '2037-11-03T09:30:00.000Z',
+      confirmedBy: 'Bernd Buchung',
     };
   });
   const dialog = await openPreview(page);
@@ -97,10 +99,53 @@ test('a delivery taken over before waits for „Trotzdem übernehmen“', async 
   expect((await contract(page)).confirmations).toHaveLength(1);
 });
 
-test('a delivery the server cannot read says why and confirms nothing', async ({ page }) => {
+test('the browser reads the files and sends only their parsed lines, each part small enough for one call', async ({
+  page,
+}) => {
+  // 2 600 „Meter“ articles make more lines than one part carries.
+  await page.evaluate(() => {
+    window.uiContractWholesalerImport.meterArticles = 2600;
+  });
+  await openPreview(page);
+  const { read, opened, staged } = await contract(page);
+  expect(read).toEqual(['nordrohr-artikel.dat', 'nordrohr-preise.dat']);
+  expect(opened).toHaveLength(1);
+  expect(opened[0]?.fileNames).toEqual(['nordrohr-artikel.dat', 'nordrohr-preise.dat']);
+  expect(opened[0]?.contentHash).toMatch(/^[0-9a-f]{64}$/);
+  expect(opened[0]?.rebateGroups).toHaveLength(3);
+  // 2 645 articles, the one without a number and the reader's refused line, in delivery order.
+  expect(staged.length).toBeGreaterThan(1);
+  const ordinals = staged.flat().map((line) => line.ordinal);
+  expect(ordinals).toEqual(Array.from({ length: 2647 }, (_, ordinal) => ordinal));
+  for (const part of staged) {
+    expect(part.length).toBeLessThanOrEqual(2000);
+    expect(JSON.stringify(part).length).toBeLessThan(450_000);
+  }
+});
+
+test('a delivery the browser cannot read says why and sends nothing', async ({ page }) => {
   const dialog = await failPreview(page);
   await expect(dialog.getByRole('button', { name: 'Vorschau anzeigen', exact: true })).toBeEnabled();
-  expect((await contract(page)).confirmations).toEqual([]);
+  const { opened, staged, confirmations } = await contract(page);
+  expect({ opened, staged, confirmations }).toEqual({ opened: [], staged: [], confirmations: [] });
+});
+
+test('a part the server refuses drops the batch and shows no preview', async ({ page }) => {
+  await page.evaluate(() => {
+    window.uiContractWholesalerImport.stageError = 'save_failed';
+  });
+  const dialog = await openDialog(page);
+  await dialog.getByRole('combobox', { name: /Großhändler/ }).click();
+  await page.getByRole('option', { name: 'Großhandel Nordrohr', exact: true }).click();
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'nordrohr-artikel.dat',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from('synthetisch'),
+  });
+  await dialog.getByRole('button', { name: 'Vorschau anzeigen', exact: true }).click();
+  await expect(dialog.getByText(/Es wurde nichts übernommen/)).toBeVisible();
+  await expect(dialog.getByText('Vorschau der Lieferung. Noch ist nichts übernommen.')).toHaveCount(0);
+  await expect.poll(async () => (await contract(page)).abandoned).toEqual(['import-1']);
 });
 
 test('closing the preview drops it on the server', async ({ page }) => {
@@ -110,10 +155,10 @@ test('closing the preview drops it on the server', async ({ page }) => {
   await expect.poll(async () => (await contract(page)).abandoned).toEqual(['import-1']);
 });
 
-/** Chooses supplier and one file and asks for a preview the stand refuses as unreadable. */
+/** Chooses supplier and one file and asks for a preview of a delivery the reader cannot read. */
 async function failPreview(page: Page): Promise<Locator> {
   await page.evaluate(() => {
-    window.uiContractWholesalerImport.previewError = 'delivery_unreadable';
+    window.uiContractWholesalerImport.readerFails = true;
   });
   const dialog = await openDialog(page);
   await dialog.getByRole('combobox', { name: /Großhändler/ }).click();
@@ -140,6 +185,24 @@ const CAPTURES: ReadonlyArray<readonly [string, (page: Page) => Promise<unknown>
     },
   ],
   ['fehler', failPreview],
+  [
+    'uebertragen',
+    async (page) => {
+      await page.evaluate(() => {
+        window.uiContractWholesalerImport.stageHeld = true;
+      });
+      const dialog = await openDialog(page);
+      await dialog.getByRole('combobox', { name: /Großhändler/ }).click();
+      await page.getByRole('option', { name: 'Großhandel Nordrohr', exact: true }).click();
+      await dialog.locator('input[type="file"]').setInputFiles({
+        name: 'nordrohr-artikel.dat',
+        mimeType: 'application/octet-stream',
+        buffer: Buffer.from('synthetisch'),
+      });
+      await dialog.getByRole('button', { name: 'Vorschau anzeigen', exact: true }).click();
+      await expect(dialog.getByRole('status')).toHaveText('Die Zeilen werden übertragen … 0 von 167');
+    },
+  ],
 ];
 
 for (const [name, reach] of CAPTURES) {
