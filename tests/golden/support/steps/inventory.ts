@@ -53,6 +53,7 @@ const INVENTORY_LABELS = {
   planMaterial: 'Material planen',
   takeFromStock: 'Aus Lager entnehmen',
   importCsv: 'CSV importieren',
+  importWholesaler: 'Großhandel importieren',
   importPreview: 'Vorschau anzeigen',
   importBook: 'Jetzt buchen',
   importDone: 'Fertig',
@@ -67,6 +68,7 @@ const INVENTORY_DIALOGS = {
   createLocation: 'Lager anlegen',
   adjustStock: 'Bestand ändern',
   importCsv: INVENTORY_LABELS.importCsv,
+  importWholesaler: INVENTORY_LABELS.importWholesaler,
   quickCreateLocation: 'Lager erstellen',
   quickCreateSupplier: INVENTORY_LABELS.newSupplier,
 } as const;
@@ -169,6 +171,11 @@ export function createItemButton(page: Page): Locator {
 
 export function createLocationButton(page: Page): Locator {
   return page.getByRole('button', { name: INVENTORY_DIALOGS.createLocation, exact: true });
+}
+
+/** The header button that opens the wholesaler import. */
+export function wholesalerImportButton(page: Page): Locator {
+  return page.getByRole('button', { name: INVENTORY_LABELS.importWholesaler, exact: true });
 }
 
 export function csvImportButton(page: Page): Locator {

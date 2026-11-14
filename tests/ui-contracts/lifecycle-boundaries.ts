@@ -71,6 +71,7 @@ declare global {
       | 'inventory-unit'
       | 'article-terms'
       | 'inventory-import'
+      | 'wholesaler-import'
       | 'inventory-movements'
       | 'leistungen'
       | 'site-access-review'

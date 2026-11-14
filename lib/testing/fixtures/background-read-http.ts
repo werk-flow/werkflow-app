@@ -212,6 +212,9 @@ mock.module('@/lib/inventory/actions', () => ({
   getInventoryPickerPage: seam('inventory-picker-page'),
   getInventoryPickerOptionsForJob: seam('job-inventory-picker-options'),
 }));
+mock.module('@/lib/inventory/supplier-catalog-search', () => ({
+  searchSupplierCatalog: seam('supplier-catalog-search'),
+}));
 mock.module('@/lib/clients/actions', () => ({ getClientRelations: seam('client-relations') }));
 mock.module('@/lib/documents/actions', () => ({
   getAttachableDocuments: seam('attachable-documents'),
@@ -457,6 +460,7 @@ const inputs: Record<string, unknown> = {
   'attachable-documents': { targetType: 'job', targetId: jobId, searchQuery: 'Plan', category: 'all' },
   'inventory-picker-page': { search: '', exactItemId: jobId },
   'job-inventory-picker-options': { jobId, search: 'Rohr', exactItemId: jobId },
+  'supplier-catalog-search': { search: 'Kupferrohr' },
   'dispatch-readiness': { occurrenceId: jobId },
   'assignment-availability': { organizationId, localDate: '2026-11-04' },
   'absence-affected-visits': { employeeRecordId: jobId, startDate: '2026-10-30', endDate: null },
@@ -524,6 +528,7 @@ const readerArguments: Record<string, unknown> = {
   'client-relations': jobId,
   'inventory-picker-page': ['', jobId],
   'job-inventory-picker-options': [jobId, 'Rohr', jobId],
+  'supplier-catalog-search': 'Kupferrohr',
   'parking-responsible-options': undefined,
   'maintenance-coverage-documents': jobId,
   'maintenance-evidence-options': jobId,

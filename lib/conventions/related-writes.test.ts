@@ -69,6 +69,8 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
     'Independent by design: submit_problem_report saves the report in one call before the answer; the scrubbed copy is derived from the saved report after the answer and written in its own call (record_problem_report_scrub), because a failed scrub must leave the report and its receipt as they are. The daily run scrubs a report whose scrub never ran.',
   'lib/problem-reports/support-actions.ts::fileProblemReportForCaller':
     'Independent by design, as submitProblemReport: file_problem_report_for_caller saves the report and its signals in one call before the answer; the scrubbed copy is derived from the saved report after the answer and written in its own call (record_problem_report_scrub), because a failed scrub must leave the report as it is. The daily run scrubs a report whose scrub never ran.',
+  'lib/inventory/wholesaler-import-actions.ts::previewWholesalerImport':
+    'Ordered draft: open_supplier_catalog_import opens a staging batch and stage_supplier_catalog_import_lines appends the parsed delivery in chunks, because one request cannot carry several hundred thousand lines; only preview_supplier_catalog_import marks the batch previewed, and only a previewed batch can be confirmed, in one call. A batch whose staging failed is abandoned at once, or by the same person’s next import.',
   'lib/documents/actions.ts::linkDocumentsToTarget':
     'Independent by design: each document is authorized and linked by its own update_document_links call, and the result reports linked and failed counts as partial_update; a refused document keeps the links of the others.',
 };

@@ -115,6 +115,16 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/inventory\/import-actions$/ }, () => ({
               path: join(import.meta.dir, 'inventory-import-boundaries.tsx'),
             }));
+            // The wholesaler import dialog's actions and upload, and the material picker's catalog adopt, answer through their contract.
+            builder.onResolve(
+              {
+                filter:
+                  /^@\/lib\/inventory\/(wholesaler-import-actions|wholesaler-import-upload|supplier-catalog-actions)$/,
+              },
+              () => ({
+                path: join(import.meta.dir, 'wholesaler-import-boundaries.tsx'),
+              }),
+            );
             builder.onResolve({ filter: /^@\/lib\/members\/actions$/ }, () => ({
               path: join(import.meta.dir, 'member-role-service-boundaries.ts'),
             }));

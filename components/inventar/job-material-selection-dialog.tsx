@@ -30,6 +30,7 @@ import {
 } from './job-material-dialog-model';
 import { MaterialDialogRowCard } from './job-material-dialog-row';
 import { MaterialItemPicker } from './job-material-item-picker';
+import type { SupplierCatalogPicker } from './use-supplier-catalog-search';
 
 const SUBMIT_LABELS: Record<MaterialDialogMode, string> = {
   plan: 'Speichern',
@@ -50,6 +51,8 @@ type MaterialSelectionDialogProps = {
   isSearching: boolean;
   searchFailed: boolean;
   onRetrySearch: () => void;
+  /** The office's wholesaler catalogs below the own articles; null for a field worker. */
+  supplierCatalog?: SupplierCatalogPicker | null | undefined;
   onSave: () => void;
 };
 
@@ -110,8 +113,12 @@ function MaterialCatalogColumn({
   isSearching,
   searchFailed,
   onRetrySearch,
+  supplierCatalog,
   editor,
-}: Pick<MaterialSelectionDialogProps, 'items' | 'isSearching' | 'searchFailed' | 'onRetrySearch'> & {
+}: Pick<
+  MaterialSelectionDialogProps,
+  'items' | 'isSearching' | 'searchFailed' | 'onRetrySearch' | 'supplierCatalog'
+> & {
   dialog: MaterialDialogState;
   showSupplier: boolean;
   editor: MaterialDialogEditor;
@@ -133,6 +140,7 @@ function MaterialCatalogColumn({
       searchFailed={searchFailed}
       onRetrySearch={onRetrySearch}
       onAdd={editor.addItem}
+      supplierCatalog={supplierCatalog ?? null}
     />
   );
 }
@@ -179,6 +187,7 @@ export function MaterialSelectionDialog({
   isSearching,
   searchFailed,
   onRetrySearch,
+  supplierCatalog,
   onSave,
 }: MaterialSelectionDialogProps) {
   if (!dialog) return null;
@@ -222,6 +231,7 @@ export function MaterialSelectionDialog({
                 isSearching={isSearching}
                 searchFailed={searchFailed}
                 onRetrySearch={onRetrySearch}
+                supplierCatalog={supplierCatalog}
                 editor={editor}
               />
             )}
