@@ -207,7 +207,8 @@ function positionFlow(
       drawLeft(page, firstLine, columns.textLeft, line, fonts.regular, BODY_SIZE);
       const quantity = `${formatQuantity(position.quantity)} ${position.unitLabel}`;
       drawRight(page, quantity, columns.quantityRight, line, fonts.regular, BODY_SIZE);
-      const unitPrice = formatEuroCents(position.unitPriceCents);
+      const per = position.priceQuantity && position.priceQuantity !== 1 ? `/${position.priceQuantity}` : '';
+      const unitPrice = `${formatEuroCents(position.unitPriceCents)}${per}`;
       drawRight(page, unitPrice, columns.priceRight, line, fonts.regular, BODY_SIZE);
       // A Bedarfs- or Alternativposition is not in the sum: its amount stands in
       // parentheses, so a reader adding up the column gets the subtotal.
@@ -268,7 +269,7 @@ function sectionFlow(section: DocumentSection, fonts: Fonts, textWidth: number):
       drawRule(page, columns.textLeft, columns.amountRight, top + 4);
       drawLeft(
         page,
-        `Summe ${section.number} ${section.title}`,
+        ['Summe', section.number, section.title].filter(Boolean).join(' '),
         columns.textLeft,
         top + 9,
         fonts.bold,
@@ -322,7 +323,7 @@ function totalsFlow(document: BusinessDocument, fonts: Fonts): FlowItem[] {
     { cells: ['USt.-Satz', 'Netto', 'USt.', 'Brutto'], font: fonts.bold, size: 8 },
     ...totals.byRate.map((rate) => ({
       cells: [
-        formatTaxRate(rate.rateBasisPoints),
+        rate.label ?? formatTaxRate(rate.rateBasisPoints),
         formatEuroCents(rate.netCents),
         formatEuroCents(rate.vatCents),
         formatEuroCents(rate.grossCents),
@@ -629,6 +630,14 @@ async function embedFonts(pdf: PDFDocument): Promise<Fonts> {
 
 /** Renders a business document to PDF bytes. */
 export async function renderBusinessDocument(document: BusinessDocument): Promise<Uint8Array> {
+  return (await drawBusinessDocument(document)).save();
+}
+
+/**
+ * The drawn document before it is saved, so the e-invoice output
+ * (`e-invoice.ts`) adds its PDF/A-3 parts to the same pages.
+ */
+export async function drawBusinessDocument(document: BusinessDocument): Promise<PDFDocument> {
   const date = new Date(`${document.issuedOn}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) throw new Error('document_date_invalid');
   const { stationery } = document;
@@ -675,5 +684,5 @@ export async function renderBusinessDocument(document: BusinessDocument): Promis
   pdf.setCreator('WerkFlow');
   pdf.setCreationDate(date);
   pdf.setModificationDate(date);
-  return pdf.save();
+  return pdf;
 }
