@@ -521,8 +521,10 @@ function nextPath(list: Token[], path: string[] | null): string[] | null {
   }
   for (let at = 0; at < list.length; at += 1) {
     if (words[at] !== 'set_config' || list[at + 2]?.text !== 'search_path') continue;
+    // Only a lone literal is read; an expression such as 'pub' || 'lic' leaves no known path.
     const value = list[at + 4];
-    return value?.string ? pathSchemas([value]) : null;
+    const end = words[at + 5];
+    return value?.string && (end === ',' || end === ')') ? pathSchemas([value]) : null;
   }
   return path;
 }

@@ -126,6 +126,12 @@ test('an unqualified name stands for every schema on the search path, and an unk
   );
   expect(unknown.opaque).toEqual(['insert into jobs values (1)']);
   expect(unknown.targets).toEqual([{ kind: 'relation', schema: 'public', name: 'kept' }]);
+  // A path built by an expression is unknown, not its first literal.
+  expect(
+    migrationChanges(
+      "select set_config('search_path', 'pub' || 'lic', false); alter table jobs add column a int;",
+    ).opaque,
+  ).toEqual(['alter table jobs add column a int']);
 });
 
 test('SELECT INTO, SET SCHEMA and RENAME TO name the object under its new identity', () => {
