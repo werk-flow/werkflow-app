@@ -1,5 +1,5 @@
 -- A project lead per project or job (20261201150000_name_a_project_lead_per_work.sql
--- and 20261204110000_name_and_end_a_project_lead.sql, werk-flow/werkflow-planning#381).
+-- and 20261210120000_name_and_end_a_project_lead.sql, werk-flow/werkflow-planning#381).
 -- Admin and Büro name and end a lead in one call each, against the holding
 -- they saw. A holding names a member of the work's own
 -- organization, one open holding per work, and stays as history. The lead of
@@ -299,7 +299,7 @@ begin
 end;
 $$;
 
--- The office's naming and ending (20261204110000_name_and_end_a_project_lead.sql),
+-- The office's naming and ending (20261210120000_name_and_end_a_project_lead.sql),
 -- called as the server calls them, as service_role: only a manager of the
 -- organization, only its own work and members, and a call whose holding
 -- changed meanwhile is refused; a repeat changes nothing.
