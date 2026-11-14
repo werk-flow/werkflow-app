@@ -10,6 +10,7 @@ import { maintenanceCoverageSchema, maintenancePlanSchema } from '../../../../li
 import { addLocalMonthsClamped } from '../../../../lib/date-time/berlin';
 import { serviceCaseCreateSchema, serviceCaseUpdateSchema } from '../../../../lib/service-cases/validation';
 import { toJson } from '../../../../lib/supabase/json';
+import { rpcArgs } from '../../../../lib/supabase/rpc-args';
 import type { ServiceCaseChargeContext } from '../../../../lib/service-cases/types';
 import { createAdminClient, persisted, type Persisted } from './shared';
 
@@ -640,4 +641,37 @@ export async function getServiceCaseByNumber(
     summary: data.summary,
     sourceRequestId: data.source_request_id,
   });
+}
+
+/**
+ * Links a seeded plan's first open due item to a seeded job, as „Auftrag
+ * anlegen“ does, so its row offers „Abschließen“.
+ */
+export async function seedMaintenanceVisitLink(input: SeedActor & { planId: string; jobId: string }): Promise<void> {
+  const admin = createAdminClient();
+  const { data: due } = await admin
+    .from('maintenance_due_work')
+    .select('id, version')
+    .eq('organization_id', input.orgId)
+    .eq('maintenance_plan_id', input.planId)
+    .eq('status', 'open')
+    .order('due_date')
+    .limit(1)
+    .single()
+    .throwOnError();
+  await admin
+    .rpc(
+      'link_maintenance_due_visit',
+      rpcArgs('link_maintenance_due_visit', {
+        p_organization_id: input.orgId,
+        p_maintenance_due_work_ids: [due.id],
+        p_job_id: input.jobId,
+        p_planning_occurrence_id: null,
+        p_expected_versions: [due.version],
+        p_reason: 'Wartungsauftrag angelegt',
+        p_actor_id: input.actorId,
+        p_idempotency_key: randomUUID(),
+      }),
+    )
+    .throwOnError();
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  dueActionErrorsById,
   dueActionReasonRequired,
   missingDueActionFields,
   type MaintenanceDueActionValues,
@@ -17,6 +18,11 @@ const VALUES: MaintenanceDueActionValues = {
   evidenceIds: [],
   serviceCaseId: '',
   missedReason: 'customer_absent',
+  defectsText: '',
+  nextAction: null,
+  nextActionOwnerId: '',
+  nextActionTargetDate: '',
+  nextActionNote: '',
 };
 
 const missing = (values: MaintenanceDueActionValues) =>
@@ -35,5 +41,36 @@ describe('the due action dialog asks only for what the chosen action sends', () 
 
   test('a short note left from another action never blocks scheduling, which hides it', () => {
     expect(missing({ ...VALUES, action: 'schedule', reason: 'ab' })).toEqual({});
+  });
+
+  test('an unfinished visit marks its Mängel, next step, owner and target date, Mängel first', () => {
+    const unfinished: MaintenanceDueActionValues = {
+      ...VALUES,
+      action: 'complete',
+      scopeOutcome: 'unresolved',
+      evidenceIds: ['revision'],
+      reason: 'Nicht erledigt',
+    };
+    const errors = missing(unfinished);
+    expect(Object.keys(errors).sort()).toEqual(['defects', 'nextAction']);
+    expect(Object.entries(dueActionErrorsById(errors)).find(([, error]) => error)?.[0]).toBe('due-defects');
+    const named: MaintenanceDueActionValues = {
+      ...unfinished,
+      defectsText: 'Brenner zündet verzögert\n\n',
+      nextAction: 'return_visit',
+    };
+    expect(Object.keys(missing(named)).sort()).toEqual(['nextActionOwnerId', 'nextActionTargetDate']);
+    expect(missing({ ...named, nextActionOwnerId: 'owner', nextActionTargetDate: '2026-11-14' })).toHaveProperty(
+      'nextActionTargetDate',
+    );
+    expect(missing({ ...named, nextActionOwnerId: 'owner', nextActionTargetDate: '2026-11-30' })).toEqual({});
+    expect(missing({ ...named, nextAction: 'none' })).toEqual({
+      nextActionNote: 'Bitte begründe mit mindestens 3 Zeichen, warum nichts folgt.',
+    });
+    expect(missing({ ...named, defectsText: 'ab' })).toHaveProperty('defects');
+  });
+
+  test('a complete visit asks for no Mängel and no next step', () => {
+    expect(missing({ ...VALUES, action: 'complete', evidenceIds: ['revision'], reason: 'Erledigt' })).toEqual({});
   });
 });

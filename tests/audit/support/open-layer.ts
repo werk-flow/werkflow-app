@@ -32,6 +32,7 @@ export async function openLayerAt(
   await pressKey(page, 'Enter', { into: trigger });
   const layer = opener.layer(page);
   await expect(layer, 'Enter on the trigger opens the dialog').toBeVisible();
+  await opener.prepareLayer?.(layer, page);
   if (options.settleLayer ?? true) await settled(layer);
   if (plan.narrowTo) await page.setViewportSize(plan.narrowTo);
   return { trigger, layer };

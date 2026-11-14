@@ -7,7 +7,7 @@ import {
   scheduleMaintenanceVisit,
   setMaintenanceDueException,
 } from '@/lib/maintenance/actions';
-import type { MaintenanceDueActionValues } from '@/lib/maintenance/due-action-fields';
+import { parseDefects, type MaintenanceDueActionValues } from '@/lib/maintenance/due-action-fields';
 import type { MaintenanceActionResult, MaintenanceDueItem } from '@/lib/maintenance/types';
 import { parseHoursInputToMinutes } from '@/lib/jobs/planned-working';
 
@@ -21,6 +21,12 @@ const DUE_ACTION_ERROR_MESSAGES: Record<string, string> = {
     'Diese Fälligkeiten können nicht in einem Auftrag zusammengeführt werden.',
   maintenance_due_visit_missed_not_allowed:
     'Diese Fälligkeit hat keinen offenen Wartungsauftrag mehr. Bitte lade die Seite neu.',
+  maintenance_next_action_owner_invalid:
+    'Die gewählte Person ist nicht mehr im Büro oder Admin. Bitte wähle eine andere Person.',
+  maintenance_next_action_date_invalid:
+    'Das Zieldatum muss nach dem Abschluss liegen, höchstens ein Jahr später. Eine Rückkehr liegt vor der nächsten regulären Fälligkeit.',
+  maintenance_return_date_taken:
+    'An diesem Tag hat der Wartungsplan schon eine Fälligkeit. Bitte wähle für die Rückkehr einen anderen Tag.',
 };
 
 export function dueActionErrorMessage(code: string): string {
@@ -57,6 +63,9 @@ export async function runMaintenanceDueAction(
     });
   }
   if (action === 'complete') {
+    const unfinished = values.scopeOutcome !== 'complete';
+    const { nextAction } = values;
+    const owned = unfinished && nextAction !== null && nextAction !== 'none';
     return completeMaintenanceDueWork({
       dueWorkId: due.id,
       expectedVersion: due.version,
@@ -64,6 +73,12 @@ export async function runMaintenanceDueAction(
       completedOn: values.completedOn,
       workArtifactRevisionIds: values.evidenceIds,
       reason: reason || 'Wartungsumfang dokumentiert',
+      // A complete visit sends no Mängel or next step, even if the user filled them before.
+      defects: unfinished ? parseDefects(values.defectsText) : [],
+      nextAction: unfinished ? nextAction : null,
+      nextActionOwnerId: owned ? values.nextActionOwnerId : null,
+      nextActionTargetDate: owned ? values.nextActionTargetDate : null,
+      nextActionNote: unfinished && nextAction === 'none' ? values.nextActionNote : '',
       idempotencyKey,
     });
   }

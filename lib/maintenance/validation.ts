@@ -6,6 +6,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import {
   MAINTENANCE_COVERAGE_STATUSES,
   MAINTENANCE_MISSED_VISIT_REASONS,
+  MAINTENANCE_NEXT_ACTIONS,
   MAINTENANCE_NEXT_DUE_BASES,
   MAINTENANCE_SCOPE_OUTCOMES,
 } from './types';
@@ -155,12 +156,39 @@ export const maintenanceVisitMissedSchema = z
     message: 'Bitte beschreibe den Grund mit mindestens 3 Zeichen.',
   });
 
-export const maintenanceCompletionSchema = z.object({
-  dueWorkId: uuidSchema,
-  expectedVersion: z.number().int().positive(),
-  scopeOutcome: z.enum(MAINTENANCE_SCOPE_OUTCOMES),
-  completedOn: z.string().date(),
-  workArtifactRevisionIds: z.array(uuidSchema).min(1).max(50),
-  reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: uuidSchema,
-});
+/**
+ * „Wartung abschließen“. A partial or unresolved visit names one to ten
+ * Mängel and its next action: Keine with a reason, or an action with an owner
+ * and a target date after the visit. A complete visit names none of them.
+ */
+export const maintenanceCompletionSchema = z
+  .object({
+    dueWorkId: uuidSchema,
+    expectedVersion: z.number().int().positive(),
+    scopeOutcome: z.enum(MAINTENANCE_SCOPE_OUTCOMES),
+    completedOn: z.string().date(),
+    workArtifactRevisionIds: z.array(uuidSchema).min(1).max(50),
+    reason: z.string().trim().min(3).max(1000),
+    defects: z.array(z.string().trim().min(3).max(160)).max(10),
+    nextAction: z.enum(MAINTENANCE_NEXT_ACTIONS).nullable(),
+    nextActionOwnerId: uuidSchema.nullable(),
+    nextActionTargetDate: z.string().date().nullable(),
+    nextActionNote: z.string().trim().max(1000),
+    idempotencyKey: uuidSchema,
+  })
+  .refine((value) => {
+    const { scopeOutcome, defects, nextAction, nextActionOwnerId, nextActionTargetDate, nextActionNote } = value;
+    if (scopeOutcome === 'complete') {
+      return defects.length === 0 && !nextAction && !nextActionOwnerId && !nextActionTargetDate && !nextActionNote;
+    }
+    if (!nextAction || defects.length === 0) return false;
+    if (nextAction === 'none') {
+      return nextActionNote.length >= 3 && !nextActionOwnerId && !nextActionTargetDate;
+    }
+    return (
+      nextActionOwnerId !== null &&
+      nextActionTargetDate !== null &&
+      nextActionTargetDate > value.completedOn &&
+      !nextActionNote
+    );
+  });
