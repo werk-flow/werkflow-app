@@ -82,7 +82,7 @@ The notifier checks every 10 minutes that your PRs and your epic move: a thread 
 - a time: snooze your thread until then with `t3_thread_update` (`snoozedUntil`), and say why in the State;
 - another epic's issue or PR: a `Waiting: <your threadId>` comment on it.
 
-A reason whose item shows no movement for 4 hours stops counting. A message that starts with `[notifier]` lists the facts: act on them, or record a real reason. At the third stall message in a row for the same item, ask the owner through the question tool.
+A snooze or a `Waiting:` comment stops counting once its item shows no movement for 4 hours; an open question to the owner counts until it is answered. A message that starts with `[notifier]` lists the facts: act on them, or record a real reason. At the third stall message in a row for the same item, ask the owner through the question tool.
 
 ## Hand over at about 400k
 
