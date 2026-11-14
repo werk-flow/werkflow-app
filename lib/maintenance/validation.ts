@@ -177,9 +177,12 @@ export const maintenanceCompletionSchema = z
     idempotencyKey: uuidSchema,
   })
   .refine((value) => {
-    const { scopeOutcome, defects, nextAction, nextActionOwnerId, nextActionTargetDate, nextActionNote } = value;
+    const { scopeOutcome, defects, nextAction, nextActionOwnerId, nextActionTargetDate, nextActionNote } =
+      value;
     if (scopeOutcome === 'complete') {
-      return defects.length === 0 && !nextAction && !nextActionOwnerId && !nextActionTargetDate && !nextActionNote;
+      return (
+        defects.length === 0 && !nextAction && !nextActionOwnerId && !nextActionTargetDate && !nextActionNote
+      );
     }
     if (!nextAction || defects.length === 0) return false;
     if (nextAction === 'none') {

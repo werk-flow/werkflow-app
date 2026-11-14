@@ -290,7 +290,9 @@ function DueNextActionFields({
             <DatePicker
               ariaLabel="Zieldatum"
               value={parseIsoLocalDate(controller.nextActionTargetDate)}
-              onChange={(value) => controller.setNextActionTargetDate(value ? formatBerlinLocalDate(value) : '')}
+              onChange={(value) =>
+                controller.setNextActionTargetDate(value ? formatBerlinLocalDate(value) : '')
+              }
             />
           </Field>
         )}

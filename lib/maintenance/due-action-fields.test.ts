@@ -60,9 +60,9 @@ describe('the due action dialog asks only for what the chosen action sends', () 
       nextAction: 'return_visit',
     };
     expect(Object.keys(missing(named)).sort()).toEqual(['nextActionOwnerId', 'nextActionTargetDate']);
-    expect(missing({ ...named, nextActionOwnerId: 'owner', nextActionTargetDate: '2026-11-14' })).toHaveProperty(
-      'nextActionTargetDate',
-    );
+    expect(
+      missing({ ...named, nextActionOwnerId: 'owner', nextActionTargetDate: '2026-11-14' }),
+    ).toHaveProperty('nextActionTargetDate');
     expect(missing({ ...named, nextActionOwnerId: 'owner', nextActionTargetDate: '2026-11-30' })).toEqual({});
     expect(missing({ ...named, nextAction: 'none' })).toEqual({
       nextActionNote: 'Bitte begründe mit mindestens 3 Zeichen, warum nichts folgt.',
@@ -71,6 +71,8 @@ describe('the due action dialog asks only for what the chosen action sends', () 
   });
 
   test('a complete visit asks for no Mängel and no next step', () => {
-    expect(missing({ ...VALUES, action: 'complete', evidenceIds: ['revision'], reason: 'Erledigt' })).toEqual({});
+    expect(missing({ ...VALUES, action: 'complete', evidenceIds: ['revision'], reason: 'Erledigt' })).toEqual(
+      {},
+    );
   });
 });

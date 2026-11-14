@@ -132,7 +132,12 @@ function prepareMaintenanceVisit({ world, businessDate }: SurfaceContext): Promi
     const names = serviceAuditNames(world);
     const actor = { orgId: world.orgId, actorId: world.users.admin.id };
     const { clientId, siteId } = await seedServiceCustomer(world, names.visitClient);
-    const equipment = await seedInstalledEquipment({ ...actor, clientId, siteId, name: names.maintenanceEquipment });
+    const equipment = await seedInstalledEquipment({
+      ...actor,
+      clientId,
+      siteId,
+      name: names.maintenanceEquipment,
+    });
     const template = await seedPublishedWorkTemplate({
       ...actor,
       name: `${names.maintenanceTemplate} Besuch`,
@@ -150,7 +155,13 @@ function prepareMaintenanceVisit({ world, businessDate }: SurfaceContext): Promi
       intervalMonths: 12,
       businessDate,
     });
-    const jobId = await seedJob({ ...actor, jobNumber: names.visitJobNumber, title: 'Wartungsbesuch', clientId, siteId });
+    const jobId = await seedJob({
+      ...actor,
+      jobNumber: names.visitJobNumber,
+      title: 'Wartungsbesuch',
+      clientId,
+      siteId,
+    });
     await seedMaintenanceVisitLink({ ...actor, planId: plan.id, jobId });
     await seedWorkReportDraft({
       ...actor,

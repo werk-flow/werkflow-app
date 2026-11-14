@@ -647,7 +647,9 @@ export async function getServiceCaseByNumber(
  * Links a seeded plan's first open due item to a seeded job, as „Auftrag
  * anlegen“ does, so the visit can be completed.
  */
-export async function seedMaintenanceVisitLink(input: SeedActor & { planId: string; jobId: string }): Promise<void> {
+export async function seedMaintenanceVisitLink(
+  input: SeedActor & { planId: string; jobId: string },
+): Promise<void> {
   const admin = createAdminClient();
   const { data: due } = await admin
     .from('maintenance_due_work')

@@ -128,9 +128,9 @@ describe('maintenance validation boundaries', () => {
       }).success,
     ).toBe(true);
     expect(maintenanceCompletionSchema.safeParse(COMPLETE_VISIT).success).toBe(true);
-    expect(maintenanceCompletionSchema.safeParse({ ...COMPLETE_VISIT, workArtifactRevisionIds: [] }).success).toBe(
-      false,
-    );
+    expect(
+      maintenanceCompletionSchema.safeParse({ ...COMPLETE_VISIT, workArtifactRevisionIds: [] }).success,
+    ).toBe(false);
   });
 
   test('rejects visit batches without one expected version per due item', () => {
@@ -187,8 +187,12 @@ describe('maintenance validation boundaries', () => {
     expect(parse({ ...unfinished, nextActionTargetDate: null })).toBe(false);
     // The target lies after the visit; a month end and a leap day are ordinary dates.
     expect(parse({ ...unfinished, nextActionTargetDate: '2026-10-01' })).toBe(false);
-    expect(parse({ ...unfinished, completedOn: '2028-02-28', nextActionTargetDate: '2028-02-29' })).toBe(true);
-    expect(parse({ ...unfinished, completedOn: '2026-10-31', nextActionTargetDate: '2026-11-01' })).toBe(true);
+    expect(parse({ ...unfinished, completedOn: '2028-02-28', nextActionTargetDate: '2028-02-29' })).toBe(
+      true,
+    );
+    expect(parse({ ...unfinished, completedOn: '2026-10-31', nextActionTargetDate: '2026-11-01' })).toBe(
+      true,
+    );
     const none = { ...unfinished, nextAction: 'none', nextActionOwnerId: null, nextActionTargetDate: null };
     expect(parse({ ...none, nextActionNote: 'Kunde kümmert sich selbst' })).toBe(true);
     expect(parse({ ...none, nextActionNote: '' })).toBe(false);
