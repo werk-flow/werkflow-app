@@ -159,6 +159,22 @@ export const APP_FAMILIES: readonly AppFamily[] = [
   },
   { id: 'inventar', role: 'admin', covers: ['/inventar'], route: fixed('/inventar'), heading: 'Inventar' },
   {
+    id: 'angebote',
+    role: 'admin',
+    covers: ['/angebote'],
+    route: fixed('/angebote'),
+    heading: 'Angebote',
+  },
+  {
+    id: 'angebot',
+    role: 'admin',
+    covers: ['/angebote/[offerId]'],
+    route: (details) => `/angebote/${details.offerId}`,
+    // The area layout keeps „Angebote“ as the page's h1 above the offer.
+    heading: 'Angebote',
+    title: VISUAL_NAMES.offer,
+  },
+  {
     id: 'angebote-leistungen',
     role: 'admin',
     covers: ['/angebote/leistungen'],

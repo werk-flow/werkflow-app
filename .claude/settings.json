@@ -61,6 +61,16 @@
         ]
       },
       {
+        "matcher": "mcp__.*__(delegate_task|t3_thread_launch|create_threads)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-child-start-without-room.ts\"; code=$?; [ \"$code\" -eq 0 ] || [ \"$code\" -eq 2 ] || echo \"Refused: the child-start guard failed with exit $code, so it cannot tell whether this machine has room.\" >&2; [ \"$code\" -eq 0 ] && exit 0; exit 2",
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "matcher": "Bash|Read|Grep",
         "hooks": [
           {

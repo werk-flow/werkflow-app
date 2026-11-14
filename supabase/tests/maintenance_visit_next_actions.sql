@@ -1,5 +1,5 @@
 -- A partial or unresolved maintenance visit names its Mängel, the next action
--- and its owner (migration 20261210130000_name_the_next_action_of_an_unfinished_visit.sql):
+-- and its owner (migration 20261210130004_name_the_next_action_of_an_unfinished_visit.sql):
 -- * Completing partial or unresolved without a next action or without a
 --   Mangel is refused; the previous entry, kept for the deployed build,
 --   still completes one without a finding, as that build expects; the owner

@@ -77,7 +77,7 @@ const navItems: NavItem[] = [
     managerOrAbove: true,
   },
   {
-    href: '/angebote/leistungen',
+    href: '/angebote',
     activePrefix: '/angebote',
     label: 'Angebote',
     icon: ReceiptText,
