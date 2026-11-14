@@ -2,25 +2,31 @@
 // (docs/technical/environments.md, "The migration rule"). DEV and PROD apply a
 // merged migration after main's newer ones, a fresh database in version order;
 // two migrations commute when they change different objects. The reader names
-// each statement's targets. A statement it cannot read is opaque, and an opaque
-// statement conflicts with every other migration, so the gate refuses rather
-// than guesses. It misses a change made only through a call: a function body or
-// trigger that writes when a later statement runs it, and the targets of
-// dynamic SQL in a function it creates.
+// each statement's targets by bare name, with the schema only when the SQL
+// writes it. It follows neither the search path nor an object's kind: an
+// unqualified name matches that name in every schema, and a table, view,
+// index, function or type of one name are one target. A statement it cannot
+// read is opaque, and an opaque statement conflicts with every other migration.
+// Each choice can add a conflict PostgreSQL would not have, which costs a
+// rename, and never drops one. It misses a change made only through a call: a
+// function body or trigger that writes when a later statement runs it, and the
+// targets of dynamic SQL in a function it creates.
 
-/** One changed object: its kind, schema and name. A `*` name stands for every object of that kind in the schema. */
-type MigrationTarget = { kind: TargetKind; schema: string; name: string };
+/**
+ * One changed object. `schema` is null for an unqualified name, which matches every schema; a `*`
+ * name stands for every object in the schema. A policy or trigger is named on its table with its own
+ * name in `part`; a publication member is its table with the publication in `part`.
+ */
+type MigrationTarget = { kind: TargetKind; schema: string | null; name: string; part: string | null };
 
 type TargetKind =
-  | 'relation'
-  | 'function'
-  | 'type'
-  | 'schema'
-  | 'extension'
-  | 'role'
+  | 'object'
   | 'policy'
   | 'trigger'
   | 'publication'
+  | 'schema'
+  | 'extension'
+  | 'role'
   | 'cron job';
 
 export type MigrationChanges = {
@@ -123,13 +129,10 @@ function tokens(statement: string): Token[] {
   return result;
 }
 
-/** Reads one statement's tokens from a position, with the default schema of the file at that point. */
+/** Reads one statement's tokens from a position. */
 class Reader {
   position = 0;
-  constructor(
-    readonly tokens: Token[],
-    readonly defaultSchema: string,
-  ) {}
+  constructor(readonly tokens: Token[]) {}
 
   peek(offset = 0): string {
     const token = this.tokens[this.position + offset];
@@ -156,11 +159,11 @@ class Reader {
     return token.text;
   }
 
-  /** A possibly schema-qualified name, as [schema, name]. */
-  qualified(): [string, string] | null {
+  /** A possibly schema-qualified name; the schema is null when the SQL does not write it. */
+  qualified(): Name | null {
     const first = this.identifier();
     if (first === null) return null;
-    if (this.peek() !== '.') return [this.defaultSchema, first];
+    if (this.peek() !== '.') return [null, first];
     this.position += 1;
     const second = this.identifier();
     return second === null ? null : [first, second];
@@ -191,30 +194,35 @@ class Reader {
   }
 }
 
-const RELATION_WORDS: Record<string, string[]> = {
-  table: ['table'],
-  view: ['view'],
-  materialized: ['materialized', 'view'],
-  sequence: ['sequence'],
-  index: ['index'],
-  foreign: ['foreign', 'table'],
-};
+type Name = [schema: string | null, name: string];
 
 type Read = MigrationTarget[] | null;
 
-const target = (kind: TargetKind, schema: string, name: string): MigrationTarget => ({ kind, schema, name });
+const target = (
+  kind: TargetKind,
+  schema: string | null,
+  name: string,
+  part: string | null = null,
+): MigrationTarget => ({
+  kind,
+  schema,
+  name,
+  part,
+});
 
-/** A comma list of qualified names of one kind; for functions, each argument list is skipped. */
-function names(reader: Reader, kind: TargetKind): Read {
-  const result: MigrationTarget[] = [];
+/** A comma list of qualified names; each argument list is skipped. */
+function names(reader: Reader): Name[] | null {
+  const result: Name[] = [];
   do {
     const name = reader.qualified();
     if (name === null) return null;
-    result.push(target(kind, ...name));
+    result.push(name);
     reader.group();
   } while (reader.accept(','));
   return result;
 }
+
+const objects = (found: Name[] | null): Read => found?.map((name) => target('object', ...name)) ?? null;
 
 /** `<name> on <table>`, as policies and triggers are named, with a new name after `rename to`. */
 function attached(reader: Reader, kind: 'policy' | 'trigger'): Read {
@@ -223,13 +231,11 @@ function attached(reader: Reader, kind: 'policy' | 'trigger'): Read {
   const table = reader.qualified();
   if (table === null) return null;
   const renamed = reader.accept('rename', 'to') ? reader.identifier() : null;
-  return [name, ...(renamed === null ? [] : [renamed])].map((each) =>
-    target(kind, table[0], `${table[1]}.${each}`),
-  );
+  return [name, ...(renamed === null ? [] : [renamed])].map((each) => target(kind, ...table, each));
 }
 
 /** `rename to <name>` or `set schema <schema>` in an ALTER: the object under its new identity is changed too. */
-function renamedTo(reader: Reader, kind: TargetKind, found: MigrationTarget[]): MigrationTarget[] {
+function renamedTo(reader: Reader, found: MigrationTarget[]): MigrationTarget[] {
   const result: MigrationTarget[] = [];
   const start = reader.position;
   const rename = reader.find('rename');
@@ -239,30 +245,39 @@ function renamedTo(reader: Reader, kind: TargetKind, found: MigrationTarget[]): 
   for (let at = reader.find('set'); at !== -1; at = reader.find('set')) {
     reader.position = at + 1;
     const schema = reader.accept('schema') ? reader.identifier() : null;
-    if (schema !== null) result.push(...found.map((old) => target(kind, schema, old.name)));
+    if (schema !== null) result.push(...found.map((old) => target('object', schema, old.name)));
   }
   const first = found[0];
-  if (name !== null && first !== undefined) result.push(target(kind, first.schema, name));
+  if (name !== null && first !== undefined) result.push(target('object', first.schema, name));
   return result;
 }
 
 type Verb = 'create' | 'alter' | 'drop' | 'comment';
 
+const RELATION_WORDS = [
+  ['table'],
+  ['view'],
+  ['materialized', 'view'],
+  ['sequence'],
+  ['index'],
+  ['foreign', 'table'],
+];
+
 /** A relation after its kind word: CREATE INDEX names its table too, ALTER a new name. */
 function relationTargets(reader: Reader, kind: string, verb: Verb): Read {
   reader.skip(['concurrently'], ['if', 'not', 'exists'], ['if', 'exists'], ['only']);
   if (kind === 'index' && verb === 'create') {
-    // CREATE INDEX [name] ON table: the index, and the table it is built on.
+    // CREATE INDEX [name] ON table: the index, in the table's schema, and the table.
     const index = reader.peek() === 'on' ? null : reader.identifier();
     if (!reader.accept('on')) return null;
     reader.skip(['only']);
     const table = reader.qualified();
     if (table === null) return null;
-    return [target('relation', ...table), ...(index === null ? [] : [target('relation', table[0], index)])];
+    return [target('object', ...table), ...(index === null ? [] : [target('object', table[0], index)])];
   }
   if (verb === 'comment') {
     const name = reader.qualified();
-    return name === null ? null : [target('relation', ...name)];
+    return name === null ? null : [target('object', ...name)];
   }
   if (
     verb === 'create' &&
@@ -270,12 +285,11 @@ function relationTargets(reader: Reader, kind: string, verb: Verb): Read {
   ) {
     // A view or CREATE TABLE AS fixes what it reads when it runs, `select *` included.
     const name = reader.qualified();
-    return name === null ? null : [target('relation', ...name), ...readRelations(reader)];
+    return name === null ? null : [target('object', ...name), ...readTargets(reader)];
   }
-  const found = names(reader, 'relation');
-  const first = found?.[0];
-  if (found === null || first === undefined) return null;
-  return verb === 'alter' ? [...found, ...renamedTo(reader, 'relation', found)] : found;
+  const found = objects(names(reader));
+  if (found === null || !found.length) return null;
+  return verb === 'alter' ? [...found, ...renamedTo(reader, found)] : found;
 }
 
 /** COMMENT ON COLUMN and COMMENT ON CONSTRAINT: the table they belong to. */
@@ -287,25 +301,18 @@ function tablePartTargets(reader: Reader): Read {
       if (part === null) return null;
       parts.push(part);
     } while (reader.accept('.'));
-    const [schema, table] = parts.length === 3 ? parts : [reader.defaultSchema, parts[0]];
+    const [schema, table] = parts.length === 3 ? parts : [null, parts[0]];
     return schema === undefined || table === undefined || parts.length < 2
       ? null
-      : [target('relation', schema, table)];
+      : [target('object', schema, table)];
   }
   if (!reader.accept('constraint') || reader.identifier() === null || !reader.accept('on')) return null;
   reader.skip(['domain']);
   const table = reader.qualified();
-  return table === null ? null : [target('relation', ...table)];
+  return table === null ? null : [target('object', ...table)];
 }
 
-const ROUTINE_AND_TYPE_WORDS = [
-  ['function', 'function'],
-  ['procedure', 'function'],
-  ['routine', 'function'],
-  ['aggregate', 'function'],
-  ['type', 'type'],
-  ['domain', 'type'],
-] as const;
+const ROUTINE_AND_TYPE_WORDS = ['function', 'procedure', 'routine', 'aggregate', 'type', 'domain'];
 
 /** Policies and triggers, named with their table. */
 function attachedTargets(reader: Reader, kind: 'policy' | 'trigger', verb: Verb): Read {
@@ -317,7 +324,7 @@ function attachedTargets(reader: Reader, kind: 'policy' | 'trigger', verb: Verb)
   if (name === null || on === -1) return null;
   reader.position = on + 1;
   const table = reader.qualified();
-  return table === null ? null : [target('trigger', table[0], `${table[1]}.${name}`)];
+  return table === null ? null : [target('trigger', ...table, name)];
 }
 
 /** The object after CREATE, ALTER, DROP or COMMENT ON, from its kind word on. */
@@ -331,17 +338,16 @@ function objectTargets(reader: Reader, verb: Verb): Read {
     ['constraint'],
     ['recursive'],
   );
-  for (const words of Object.values(RELATION_WORDS))
+  for (const words of RELATION_WORDS)
     if (reader.accept(...words)) return relationTargets(reader, words[0] ?? '', verb);
   if (verb === 'comment' && (reader.peek() === 'column' || reader.peek() === 'constraint'))
     return tablePartTargets(reader);
-  for (const [word, kind] of ROUTINE_AND_TYPE_WORDS) {
+  for (const word of ROUTINE_AND_TYPE_WORDS) {
     if (!reader.accept(word)) continue;
     reader.skip(['if', 'not', 'exists'], ['if', 'exists']);
-    const found = names(reader, kind);
-    const first = found?.[0];
-    if (found === null || first === undefined) return null;
-    return verb === 'alter' ? [...found, ...renamedTo(reader, kind, found)] : found;
+    const found = objects(names(reader));
+    if (found === null || !found.length) return null;
+    return verb === 'alter' ? [...found, ...renamedTo(reader, found)] : found;
   }
   for (const kind of ['policy', 'trigger'] as const)
     if (reader.accept(kind)) return attachedTargets(reader, kind, verb);
@@ -351,8 +357,8 @@ function objectTargets(reader: Reader, verb: Verb): Read {
     const name = reader.identifier();
     if (name === null) return null;
     if (kind === 'publication')
-      return verb === 'alter' ? publication(reader, name) : [target('publication', '', `${name}.*`)];
-    return [target(kind === 'user' || kind === 'group' ? 'role' : kind, '', name)];
+      return verb === 'alter' ? publication(reader, name) : [target('publication', null, '*', name)];
+    return [target(kind === 'user' || kind === 'group' ? 'role' : kind, null, name)];
   }
   return null;
 }
@@ -360,12 +366,9 @@ function objectTargets(reader: Reader, verb: Verb): Read {
 /** ALTER PUBLICATION p ADD|DROP TABLE t: that table's membership; any other change: the whole publication. */
 function publication(reader: Reader, name: string): Read {
   if (!(reader.accept('add', 'table') || reader.accept('drop', 'table')))
-    return [target('publication', '', `${name}.*`)];
+    return [target('publication', null, '*', name)];
   reader.skip(['only']);
-  const tables = names(reader, 'relation');
-  return tables === null
-    ? null
-    : tables.map((table) => target('publication', '', `${name}.${table.schema}.${table.name}`));
+  return names(reader)?.map((table) => target('publication', ...table, name)) ?? null;
 }
 
 /** GRANT and REVOKE: the objects after ON, or the roles when there is no ON. */
@@ -375,35 +378,22 @@ function privilegeTargets(reader: Reader): Read {
     const to = Math.max(reader.find('to'), reader.find('from'));
     if (to === -1) return null;
     reader.position = to + 1;
-    return names(reader, 'role')?.map((role) => target('role', '', role.name)) ?? null;
+    return names(reader)?.map(([, role]) => target('role', null, role)) ?? null;
   }
   reader.position = on + 1;
   if (reader.accept('all')) {
-    const kind = reader.identifier();
+    const kind = reader.identifier() ?? '';
     if (!reader.accept('in', 'schema')) return null;
-    const schemas = names(reader, 'schema');
-    const as: TargetKind | null =
-      kind === 'tables' || kind === 'sequences'
-        ? 'relation'
-        : kind === 'functions' || kind === 'routines' || kind === 'procedures'
-          ? 'function'
-          : null;
-    return as === null || schemas === null ? null : schemas.map((schema) => target(as, schema.name, '*'));
+    const schemas = names(reader);
+    return !['tables', 'sequences', 'functions', 'routines', 'procedures'].includes(kind) || schemas === null
+      ? null
+      : schemas.map(([, schema]) => target('object', schema, '*'));
   }
-  for (const [word, kind] of [
-    ['function', 'function'],
-    ['procedure', 'function'],
-    ['routine', 'function'],
-    ['type', 'type'],
-    ['domain', 'type'],
-    ['sequence', 'relation'],
-    ['table', 'relation'],
-  ] as const)
-    if (reader.accept(word)) return names(reader, kind);
   if (reader.accept('schema'))
-    return names(reader, 'schema')?.map((schema) => target('schema', '', schema.name)) ?? null;
+    return names(reader)?.map(([, schema]) => target('schema', null, schema)) ?? null;
   if (['database', 'language', 'tablespace', 'foreign', 'large'].includes(reader.peek())) return null;
-  return names(reader, 'relation');
+  reader.skip(['function'], ['procedure'], ['routine'], ['type'], ['domain'], ['sequence'], ['table']);
+  return objects(names(reader));
 }
 
 /** `select f(...)` with one known call; any other call in a SELECT is opaque. */
@@ -419,7 +409,7 @@ function selectTargets(reader: Reader): Read {
   for (const call of calls) {
     if (['set_config', 'pg_catalog.set_config', 'pg_notify', 'count', 'exists'].includes(call.name)) continue;
     if (['cron.schedule', 'cron.unschedule'].includes(call.name) && call.first?.string)
-      result.push(target('cron job', 'cron', call.first.text));
+      result.push(target('cron job', null, call.first.text));
     else return null;
   }
   return result;
@@ -459,14 +449,21 @@ const NOT_AN_ALIAS = new Set([
 ]);
 
 /**
- * The relations after FROM, JOIN and USING. A view, CREATE TABLE AS and a data statement copy what
- * they read when they run, so a newer change to what they read conflicts with them.
+ * What a view, CREATE TABLE AS or data statement reads: the names after FROM, JOIN and USING, and
+ * every name it calls. Each copies what it reads when it runs, so a newer change to one of them
+ * conflicts with it. A WITH query's name counts too: telling it from a table of that name needs scopes.
  */
-function readRelations(reader: Reader): MigrationTarget[] {
-  // A WITH query's name counts too: telling it from a table of the same name needs scopes.
+function readTargets(reader: Reader): MigrationTarget[] {
   const result: MigrationTarget[] = [];
   reader.tokens.forEach((token, at) => {
-    if (token.quoted || token.string || !['from', 'join', 'using'].includes(token.text)) return;
+    if (token.string) return;
+    if (reader.tokens[at + 1]?.text === '(' && !reader.tokens[at + 1]?.quoted) {
+      const dot = reader.tokens[at - 1];
+      reader.position = dot?.text === '.' && !dot.quoted ? at - 2 : at;
+      const called = reader.qualified();
+      if (called !== null) result.push(target('object', ...called));
+    }
+    if (token.quoted || !['from', 'join', 'using'].includes(token.text)) return;
     reader.position = at + 1;
     for (;;) {
       reader.skip(['only'], ['lateral']);
@@ -475,7 +472,7 @@ function readRelations(reader: Reader): MigrationTarget[] {
       else {
         const name = reader.qualified();
         if (name === null) return;
-        result.push(target('relation', ...name));
+        result.push(target('object', ...name));
         reader.group();
       }
       reader.accept('as');
@@ -514,13 +511,13 @@ function dataTargets(reader: Reader): Read {
     if (after === -1) continue;
     reader.position = after;
     reader.skip(['temporary'], ['temp'], ['unlogged'], ['table'], ['only']);
-    const found = names(reader, 'relation');
+    const found = objects(names(reader));
     if (found === null) return null;
     result.push(...found);
   }
   if (!result.length) return selectTargets(reader);
   const unique = new Map(
-    [...result, ...readRelations(reader)].map((found) => [`${found.schema}\u0001${found.name}`, found]),
+    [...result, ...readTargets(reader)].map((found) => [`${found.schema ?? ''}\u0001${found.name}`, found]),
   );
   return [...unique.values()];
 }
@@ -531,8 +528,10 @@ const NO_TARGET = new Set([
   'end',
   'start',
   'rollback',
+  'abort',
   'savepoint',
   'release',
+  'set',
   'reset',
   'notify',
   'analyze',
@@ -552,137 +551,43 @@ function statementTargets(reader: Reader): Read {
   if (verb === 'grant' || verb === 'revoke') return privilegeTargets(reader);
   if (verb === 'refresh' && reader.accept('materialized', 'view')) {
     reader.skip(['concurrently']);
-    return names(reader, 'relation');
+    return objects(names(reader));
   }
   if (['insert', 'update', 'delete', 'merge', 'truncate', 'with', 'select'].includes(verb))
     return dataTargets(reader);
   return null;
 }
 
-/** Stands for the search path in an unqualified name until the statement's targets are known. */
-const UNQUALIFIED = '\u0000';
-
-/** The schemas of a search path value, or null when it cannot be read or names none. */
-function pathSchemas(values: Token[]): string[] | null {
-  const schemas: string[] = [];
-  for (const value of values) {
-    if (!value.quoted && !value.string && value.text === ',') continue;
-    // Inside a string each element is read as a name: unquoted ones fold their ASCII letters.
-    const parts = value.string
-      ? value.text.split(',').map((part) => {
-          const trimmed = part.trim();
-          return /^".*"$/.test(trimmed)
-            ? trimmed.slice(1, -1)
-            : trimmed.replace(/[A-Z]+/g, (upper) => upper.toLowerCase());
-        })
-      : [value.text];
-    for (const part of parts) {
-      if (!value.quoted && !value.string && part === 'default') return ['public'];
-      if (!/^[\p{L}_][\p{L}\p{N}_$]*$/u.test(part)) {
-        if (part === '$user' || part === '') continue;
-        return null;
-      }
-      schemas.push(part);
-    }
-  }
-  return schemas.length ? schemas : null;
-}
-
-type PathChange = { schemas: string[] | null; local: boolean | null };
-
-/**
- * How a statement changes the search path: SET, SET SCHEMA, RESET or
- * `set_config('search_path', ...)`; undefined when it does not. `local` is null when the reader
- * cannot tell whether the change ends with the transaction. A value it cannot take apart leaves
- * no known path.
- */
-function pathChange(list: Token[]): PathChange | undefined {
-  const words = list.map((token) => (token.quoted || token.string ? '' : token.text));
-  if (words[0] === 'reset' && (words[1] === 'search_path' || words[1] === 'all'))
-    return { schemas: ['public'], local: false };
-  if (words[0] === 'set') {
-    // SET SCHEMA 'x' is PostgreSQL's alias for SET search_path TO 'x'.
-    const at = words.findIndex((word, index) => index <= 2 && (word === 'search_path' || word === 'schema'));
-    if (at === -1) return undefined;
-    const schemas = pathSchemas(
-      list.slice(at + 1).filter((token) => token.text !== 'to' && token.text !== '='),
-    );
-    return { schemas, local: words[1] === 'local' };
-  }
-  for (let at = 0; at < list.length; at += 1) {
-    if (words[at] !== 'set_config' || list[at + 2]?.text !== 'search_path') continue;
-    // Only a lone literal is read; an expression such as 'pub' || 'lic' leaves no known path.
-    const value = list[at + 4];
-    const end = words[at + 5];
-    const local = words[at + 6] === 'true' ? true : words[at + 6] === 'false' ? false : null;
-    return { schemas: value?.string && (end === ',' || end === ')') ? pathSchemas([value]) : null, local };
-  }
-  return undefined;
-}
-
-/** One target per schema of the search path for an unqualified name; null when the path is unknown. */
-function resolved(found: MigrationTarget[], path: string[] | null): Read {
-  const result: MigrationTarget[] = [];
-  for (const each of found) {
-    if (!each.schema.includes(UNQUALIFIED) && !each.name.includes(UNQUALIFIED)) result.push(each);
-    else if (path === null) return null;
-    else
-      for (const schema of path)
-        result.push({
-          ...each,
-          schema: each.schema.replaceAll(UNQUALIFIED, schema),
-          name: each.name.replaceAll(UNQUALIFIED, schema),
-        });
-  }
-  return result;
-}
-
-/**
- * What one migration changes. An unqualified name stands for every schema on the search path,
- * which starts at `public`; under a path the reader cannot read, it is opaque.
- */
+/** What one migration changes. */
 export function migrationChanges(sql: string): MigrationChanges {
   const changes: MigrationChanges = { targets: [], opaque: [] };
-  // A SET LOCAL path ends with its transaction; the session path stays.
-  let session: string[] | null = ['public'];
-  let path: string[] | null = session;
-  const apply = (change: PathChange): void => {
-    path = change.schemas;
-    if (change.local !== true) session = change.local === false ? change.schemas : null;
-  };
   for (const statement of statements(sql)) {
-    const list = tokens(statement);
-    const change = pathChange(list);
-    const verb = list[0]?.text ?? '';
-    if (verb === 'set') {
-      if (change !== undefined) apply(change);
-      continue;
-    }
-    const read = statementTargets(new Reader(list, UNQUALIFIED));
-    const found = read === null ? null : resolved(read, path);
+    const found = statementTargets(new Reader(tokens(statement)));
     if (found === null) changes.opaque.push(statement.replace(/\s+/g, ' ').slice(0, 60));
     else changes.targets.push(...found);
-    if (change !== undefined) apply(change);
-    else if (['commit', 'end', 'rollback', 'abort'].includes(verb)) path = session;
   }
   return changes;
 }
 
-const label = (found: MigrationTarget): string =>
-  `${found.kind} ${found.schema ? `${found.schema}.` : ''}${found.name}`;
+const qualifiedName = (found: MigrationTarget): string =>
+  found.schema === null ? found.name : `${found.schema}.${found.name}`;
 
+function label(found: MigrationTarget): string {
+  if (found.kind === 'object') return qualifiedName(found);
+  if (found.kind === 'policy' || found.kind === 'trigger')
+    return `${found.kind} ${found.part ?? ''} on ${qualifiedName(found)}`;
+  if (found.kind === 'publication')
+    return `publication ${found.part ?? ''}${found.name === '*' ? '' : `, table ${qualifiedName(found)}`}`;
+  return `${found.kind} ${found.name}`;
+}
+
+/** One kind, one part, a schema that matches (an unqualified name matches every one), one name or `*`. */
 function overlaps(left: MigrationTarget, right: MigrationTarget): boolean {
-  if (left.kind !== right.kind) return false;
-  if (left.kind === 'publication') {
-    const [leftName, ...leftTable] = left.name.split('.');
-    const [rightName, ...rightTable] = right.name.split('.');
-    return (
-      leftName === rightName &&
-      (leftTable.join('.') === rightTable.join('.') || left.name.endsWith('.*') || right.name.endsWith('.*'))
-    );
-  }
   return (
-    left.schema === right.schema && (left.name === right.name || left.name === '*' || right.name === '*')
+    left.kind === right.kind &&
+    left.part === right.part &&
+    (left.schema === null || right.schema === null || left.schema === right.schema) &&
+    (left.name === right.name || left.name === '*' || right.name === '*')
   );
 }
 
@@ -694,6 +599,7 @@ export function sharedChanges(left: MigrationChanges, right: MigrationChanges): 
     shared.add(`a statement it cannot read on the other side ("${statement}")`);
   for (const mine of left.targets)
     for (const theirs of right.targets)
-      if (overlaps(mine, theirs)) shared.add(label(mine.name === '*' ? theirs : mine));
+      if (overlaps(mine, theirs))
+        shared.add(label(mine.name === '*' || (mine.schema === null && theirs.name !== '*') ? theirs : mine));
   return [...shared].sort();
 }

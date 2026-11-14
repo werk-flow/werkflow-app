@@ -60,7 +60,7 @@ test('a migration older than a main migration that changes the same object fails
   const root = repository();
   addMigration(root, '20261022120000_job_due.sql', 'alter table public.jobs add column due date;\n', false);
   expect(problems(root)).toEqual([
-    'supabase/migrations/20261022120000_job_due.sql changes what a migration with a higher version on main also changes: 20261025100000_job_note.sql (relation public.jobs). DEV and PROD applied that one first and a fresh database applies it after, so their schemas could differ. Rename it to supabase/migrations/20261025100001_job_due.sql (docs/technical/environments.md, "The migration rule").',
+    'supabase/migrations/20261022120000_job_due.sql changes what a migration with a higher version on main also changes: 20261025100000_job_note.sql (public.jobs). DEV and PROD applied that one first and a fresh database applies it after, so their schemas could differ. Rename it to supabase/migrations/20261025100001_job_due.sql (docs/technical/environments.md, "The migration rule").',
   ]);
 });
 
