@@ -11,6 +11,7 @@ import {
   supplierCatalogSearchInputSchema,
   type SupplierCatalogOption,
 } from './wholesaler-import-schemas';
+import { literalSubstringPattern } from './wholesaler-import-lines';
 
 // The search of the imported wholesaler catalogs for the job-material picker
 // (werk-flow/werkflow-planning#375), read in the background
@@ -37,7 +38,7 @@ export async function searchSupplierCatalog(
       'id, article_number, name, name_addition, unit, price_kind, price_cents, price_quantity, inventory_suppliers!inventory_supplier_catalog_articles_supplier_fk(name)',
     )
     .eq('organization_id', auth.context.orgId)
-    .like('search_text', `%${term}%`)
+    .like('search_text', literalSubstringPattern(term))
     .order('name')
     .order('id')
     // One row more than shown tells the picker that more rows match.

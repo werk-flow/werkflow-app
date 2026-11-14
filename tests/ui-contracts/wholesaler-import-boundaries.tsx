@@ -155,8 +155,9 @@ export async function abandonWholesalerImport(input: { importId: string }): Prom
 export async function readWholesalerImportReport(): Promise<{
   success: true;
   lines: WholesalerReportLine[];
+  next: null;
 }> {
-  return { success: true, lines: window.uiContractWholesalerImport.preview.rejections };
+  return { success: true, lines: window.uiContractWholesalerImport.preview.rejections, next: null };
 }
 
 /** The material picker's adopt; no contract here chooses a catalog row. */

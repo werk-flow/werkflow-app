@@ -17,7 +17,7 @@ import {
 import { uploadRuleFailure, type UploadRule } from '@/lib/storage/upload-rules';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
-import { readAllRows } from '@/lib/supabase/query-batches';
+import { ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import {
@@ -35,6 +35,7 @@ import {
   WHOLESALER_FILE_CONTENT_TYPE,
   WHOLESALER_IMPORT_MAX_FILE_BYTES,
   wholesalerImportIdInputSchema,
+  wholesalerReportPartInputSchema,
   wholesalerUploadTicketInputSchema,
   type ConfirmWholesalerImportInput,
   type PreviewWholesalerImportInput,
@@ -42,6 +43,7 @@ import {
   type WholesalerImportPreview,
   type WholesalerPreviewEffects,
   type WholesalerImportResult,
+  type WholesalerReportPartInput,
   type WholesalerUploadTicketInput,
 } from './wholesaler-import-schemas';
 import {
@@ -66,8 +68,8 @@ const DELIVERY_RULE: UploadRule = {
 /** Lines per staging call, and how many calls run at once. */
 const STAGE_CHUNK_LINES = 2000;
 const STAGE_PARALLEL_CALLS = 4;
-/** The most rejected lines one report lists; a larger report answers `report_too_large`. */
-const REPORT_ROW_CAP = 100_000;
+/** The report lines one call answers; the browser asks for parts until none is left. */
+const REPORT_PART_LINES = 20_000;
 
 const refusal = writeRefusalFor(new Set(['not_authorized', 'supplier_not_found', 'import_not_found']));
 
@@ -444,11 +446,15 @@ function reportReason(line: { kind: string; unit_text: string | null; reason: st
   return line.reason ?? 'Die Zeile konnte nicht gelesen werden.';
 }
 
-/** The lines a confirmed import did not take, with their reasons, for the downloadable report. */
+/**
+ * One part of the lines a confirmed import did not take, with their reasons,
+ * for the downloadable report: from the line `from` on, and where the next
+ * part starts, or null after the last.
+ */
 export async function readWholesalerImportReport(
-  rawInput: WholesalerImportIdInput,
-): Promise<ActionResult<{ lines: WholesalerReportLine[] }>> {
-  const parsed = wholesalerImportIdInputSchema.safeParse(rawInput);
+  rawInput: WholesalerReportPartInput,
+): Promise<ActionResult<{ lines: WholesalerReportLine[]; next: number | null }>> {
+  const parsed = wholesalerReportPartInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await resolveImportManager();
   if (!auth.success) return auth;
@@ -466,29 +472,31 @@ export async function readWholesalerImportReport(
   }
   if (!batch.data) return { success: false, error: 'import_not_found' };
 
-  const rows = await readAllRows(
-    (from, to) =>
-      admin
-        .from('inventory_supplier_catalog_import_lines')
-        .select('kind, file_name, line_number, article_number, unit_text, reason')
-        .eq('organization_id', auth.context.orgId)
-        .eq('import_id', parsed.data.importId)
-        .order('ordinal')
-        .range(from, to),
-    { cap: REPORT_ROW_CAP },
-  );
-  if (rows.error) {
-    logError('readWholesalerImportReport: lines read failed', rows.error);
-    return { success: false, error: 'load_failed' };
+  // One part of the report per call, in pages the Data API answers whole; the
+  // browser asks for the next part until none is left, so every line reaches it.
+  const lines: WholesalerReportLine[] = [];
+  const start = parsed.data.from;
+  for (let from = start; from < start + REPORT_PART_LINES; from += ROW_PAGE_SIZE) {
+    const page = await admin
+      .from('inventory_supplier_catalog_import_lines')
+      .select('kind, file_name, line_number, article_number, unit_text, reason')
+      .eq('organization_id', auth.context.orgId)
+      .eq('import_id', parsed.data.importId)
+      .order('ordinal')
+      .range(from, from + ROW_PAGE_SIZE - 1);
+    if (page.error) {
+      logError('readWholesalerImportReport: lines read failed', page.error);
+      return { success: false, error: 'load_failed' };
+    }
+    lines.push(
+      ...page.data.map((line) => ({
+        fileName: line.file_name,
+        lineNumber: line.line_number,
+        articleNumber: line.article_number,
+        reason: reportReason(line),
+      })),
+    );
+    if (page.data.length < ROW_PAGE_SIZE) return { success: true, lines, next: null };
   }
-  if (rows.overflow) return { success: false, error: 'report_too_large' };
-  return {
-    success: true,
-    lines: rows.data.map((line) => ({
-      fileName: line.file_name,
-      lineNumber: line.line_number,
-      articleNumber: line.article_number,
-      reason: reportReason(line),
-    })),
-  };
+  return { success: true, lines, next: start + REPORT_PART_LINES };
 }

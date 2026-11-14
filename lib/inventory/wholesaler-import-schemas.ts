@@ -47,6 +47,12 @@ export type ConfirmWholesalerImportInput = z.infer<typeof confirmWholesalerImpor
 export const wholesalerImportIdInputSchema = z.object({ importId: uuidSchema });
 export type WholesalerImportIdInput = z.infer<typeof wholesalerImportIdInputSchema>;
 
+export const wholesalerReportPartInputSchema = z.object({
+  importId: uuidSchema,
+  from: z.number().int().nonnegative(),
+});
+export type WholesalerReportPartInput = z.infer<typeof wholesalerReportPartInputSchema>;
+
 export const supplierCatalogSearchInputSchema = z.object({ search: boundedText(200) });
 
 export const adoptSupplierCatalogArticleInputSchema = z.object({ catalogArticleId: uuidSchema });

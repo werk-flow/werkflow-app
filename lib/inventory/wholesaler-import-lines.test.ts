@@ -5,6 +5,7 @@ import { expect, test } from 'bun:test';
 import {
   deliveryContentHash,
   guessUnitMapping,
+  literalSubstringPattern,
   stagedDeliveryLines,
   wholesalerImportReportCsv,
   wholesalerPreviewTotals,
@@ -219,4 +220,10 @@ test('the preview counts follow the unit choice: an unmapped unit text rejects i
     changed: 2,
     unchanged: 0,
   });
+});
+
+test('a catalog search for a number with _ or % finds that text only, never a wildcard match', () => {
+  expect(literalSubstringPattern('nr_15%')).toBe('%nr\\_15\\%%');
+  expect(literalSubstringPattern('a\\b')).toBe('%a\\\\b%');
+  expect(literalSubstringPattern('kupferrohr 15')).toBe('%kupferrohr 15%');
 });

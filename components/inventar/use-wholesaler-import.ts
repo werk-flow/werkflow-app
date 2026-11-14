@@ -11,7 +11,10 @@ import {
   previewWholesalerImport,
   readWholesalerImportReport,
 } from '@/lib/inventory/wholesaler-import-actions';
-import { wholesalerImportReportCsv } from '@/lib/inventory/wholesaler-import-lines';
+import {
+  wholesalerImportReportCsv,
+  type WholesalerReportLine,
+} from '@/lib/inventory/wholesaler-import-lines';
 import { uploadDeliveryFiles } from '@/lib/inventory/wholesaler-import-upload';
 import {
   WHOLESALER_IMPORT_MAX_FILE_BYTES,
@@ -111,11 +114,21 @@ async function uploadAndPreview(
   return { preview: result.preview };
 }
 
-/** Why the report could not be offered. */
-function reportFailure(error: string | undefined): string {
-  return error === 'report_too_large'
-    ? 'Der Bericht hat mehr als 100.000 Zeilen und kann nicht erstellt werden.'
-    : 'Der Bericht konnte nicht geladen werden. Versuch es noch einmal.';
+/** Every line of a confirmed import's report, read part by part; null when a part failed. */
+async function readWholeReport(importId: string): Promise<WholesalerReportLine[] | null> {
+  const lines: WholesalerReportLine[] = [];
+  let from: number | null = 0;
+  while (from !== null) {
+    const part: Awaited<ReturnType<typeof readWholesalerImportReport>> | null =
+      await readWholesalerImportReport({
+        importId,
+        from,
+      }).catch(() => null);
+    if (!part?.success) return null;
+    lines.push(...part.lines);
+    from = part.next;
+  }
+  return lines;
 }
 
 /** Drops an open preview on the server; a failure leaves it for this person's next import to drop. */
@@ -257,11 +270,9 @@ export function useWholesalerImport({ onOpenChange }: { onOpenChange: (open: boo
     },
     downloadReport: (importId: string) =>
       runStep(null, async () => {
-        const report = await readWholesalerImportReport({ importId }).catch(() => null);
-        if (report?.success) {
-          return downloadImportReport('grosshandel-import', wholesalerImportReportCsv(report.lines));
-        }
-        setError(reportFailure(report?.error));
+        const lines = await readWholeReport(importId);
+        if (lines) return downloadImportReport('grosshandel-import', wholesalerImportReportCsv(lines));
+        setError('Der Bericht konnte nicht geladen werden. Versuch es noch einmal.');
       }),
   };
 }

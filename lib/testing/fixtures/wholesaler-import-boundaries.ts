@@ -23,6 +23,7 @@ import { assertRefused, refuseForeignIds } from './operations-boundary-refusals'
 const ownSupplierId = '37500000-0000-4000-8000-000000000030';
 const foreignSupplierId = '37500000-0000-4000-8000-000000000039';
 const foreignImportId = '37500000-0000-4000-8000-000000000049';
+const ownImportId = '37500000-0000-4000-8000-000000000048';
 const foreignCatalogId = '37500000-0000-4000-8000-000000000059';
 const uploadId = '37500000-0000-4000-8000-000000000060';
 
@@ -91,7 +92,20 @@ const world = installActionWorld({
   ],
   inventory_supplier_catalog_imports: [
     { id: foreignImportId, organization_id: ORGANIZATION_B, status: 'confirmed', created_by: CALLER_ID },
+    { id: ownImportId, organization_id: ORGANIZATION_A, status: 'confirmed', created_by: CALLER_ID },
   ],
+  // A report longer than one part: 20 500 articles whose unit stayed unmapped.
+  inventory_supplier_catalog_import_lines: Array.from({ length: 20_500 }, (_, ordinal) => ({
+    organization_id: ORGANIZATION_A,
+    import_id: ownImportId,
+    ordinal,
+    kind: 'article',
+    file_name: 'lieferung',
+    line_number: ordinal + 1,
+    article_number: `NR-${ordinal}`,
+    unit_text: 'XYZ',
+    reason: null,
+  })),
   inventory_supplier_catalog_articles: [
     { id: foreignCatalogId, organization_id: ORGANIZATION_B, search_text: 'nr-1501 kupferrohr 15 mm' },
   ],
@@ -121,7 +135,7 @@ const abandon = [
 ] as const;
 const report = [
   'readWholesalerImportReport',
-  () => imports.readWholesalerImportReport({ importId: foreignImportId }),
+  () => imports.readWholesalerImportReport({ importId: foreignImportId, from: 0 }),
 ] as const;
 const adopt = [
   'adoptSupplierCatalogArticle',
@@ -187,3 +201,19 @@ await assertRefused(world, [report], { success: false, error: 'import_not_found'
 
 // The search reads only the caller's organization.
 assert.deepEqual(await search[1](), { success: true, options: [], hasMore: false });
+
+// The report reaches every line in parts: 20 000, then the remaining 500.
+const firstPart = await imports.readWholesalerImportReport({ importId: ownImportId, from: 0 });
+assert.ok(firstPart.success);
+assert.equal(firstPart.lines.length, 20_000);
+assert.equal(firstPart.next, 20_000);
+const lastPart = await imports.readWholesalerImportReport({ importId: ownImportId, from: 20_000 });
+assert.ok(lastPart.success);
+assert.equal(lastPart.lines.length, 500);
+assert.equal(lastPart.next, null);
+assert.deepEqual(lastPart.lines.at(-1), {
+  fileName: 'lieferung',
+  lineNumber: 20_500,
+  articleNumber: 'NR-20499',
+  reason: 'Die Einheit „XYZ“ ist keiner Einheit zugeordnet.',
+});

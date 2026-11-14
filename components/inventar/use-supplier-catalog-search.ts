@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -97,8 +97,9 @@ function useCatalogAdopt(dialogOpen: boolean, setDialog: SetDialog, picker: Pick
   const [adoptError, setAdoptError] = useState<string | null>(null);
   const { run } = usePendingTask();
   // Counts each opening of the material dialog, so an adopt joins only the dialog it started in.
+  // A layout effect runs inside the commit that opens the dialog, before any awaited answer lands.
   const dialogSession = useRef(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (dialogOpen) dialogSession.current += 1;
   }, [dialogOpen]);
 
