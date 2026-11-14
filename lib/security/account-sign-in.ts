@@ -162,8 +162,10 @@ const DATA_PROGRAMS = new Set([...INERT_PROGRAMS, 'which', 'type']);
 
 /**
  * Whether a command may run its input as commands, so a data program's words piped into it are no
- * data: a shell without a `-c` script or a script file, or with `-s`, `xargs` or `source`, also
- * behind a wrapper (`env bash`).
+ * data: `xargs`, `source`, and a shell, also behind a wrapper (`env bash`), unless it runs a `-c`
+ * script without `-s`. A word after the shell may be an option's value or a redirection, so the
+ * guard never takes one for a script file: a false refusal costs a rewrite, a false pass an account
+ * token.
  */
 function runsInput(words: ShellWord[]): boolean {
   if (program(words)?.name === '.') return true;
@@ -171,14 +173,10 @@ function runsInput(words: ShellWord[]): boolean {
   if (names.some((name) => name === 'xargs' || name === 'source')) return true;
   const shell = names.findIndex((name) => SHELLS.has(name));
   if (shell === -1) return false;
-  // Options come first: `-s` reads the script from input, `-c` takes it as an argument, and the
-  // first operand is a script file.
-  for (const word of words.slice(shell + 1)) {
-    if (SCRIPT_FLAG.test(word.text)) return false;
-    if (/^-[a-z]*s[a-z]*$/.test(word.text)) return true;
-    if (!word.text.startsWith('-')) return false;
-  }
-  return true;
+  const options = words.slice(shell + 1).map((word) => word.text);
+  const script = options.some((text) => SCRIPT_FLAG.test(text));
+  const stdin = options.some((text) => /^-[a-z]*s[a-z]*$/.test(text));
+  return !script || stdin;
 }
 
 /** Mentions in raw words, without their substitutions, whose commands are read on their own. */

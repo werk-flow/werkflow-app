@@ -153,6 +153,15 @@ test('a mention the guard cannot verify as data is refused', () => {
     'echo "vercel list" | env bash',
     "printf 'vercel list\\n' | bash -s -- arg",
     "echo 'vercel whoami' | bash -s -- staging",
+    // Text piped into a shell runs unless the shell takes a -c script: an option's value or a
+    // redirection is never read as a script file.
+    "printf 'vercel whoami\\n' | bash -o pipefail",
+    "printf 'vercel whoami\\n' | bash 2>/dev/null",
+    "printf 'vercel whoami\\n' | bash -O extglob",
+    "printf 'gh auth login\\n' | bash --norc",
+    "printf 'vercel whoami\\n' | command /bin/zsh",
+    "printf 'vercel whoami\\n' | bash ./script.sh",
+    "printf 'vercel whoami\\n' | bash -s -c 'cat'",
     "printf 'gh auth login\\n' | bash -ls arg",
     "printf 'supabase --debug login\\n' | bash",
     `python3 -c 'import os; os.system("supabase --debug login")'`,
@@ -197,6 +206,8 @@ test('everyday commands, other subcommands and mentions as data pass', () => {
     'supabase --workdir "$PWD" db diff',
     'echo "vercel list"; bash ./script.sh',
     'echo "vercel list" > note.md && bash -n ./check.sh',
+    // A -c script takes precedence over piped input.
+    'echo "vercel list" | bash -c \'wc -l\'',
     'claude mcp add --scope user --transport http supabase "https://example.test/mcp"',
     'brew uninstall vercel-cli',
     'which vercel',
