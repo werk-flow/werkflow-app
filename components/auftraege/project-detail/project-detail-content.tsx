@@ -97,6 +97,8 @@ function useProjectDetailRealtime({ router, liveProjectId, isAdminOrManager }: P
       'job_instruction_items',
       'job_instruction_item_evidence_fulfillments',
       'work_handover_packages',
+      // A holding named or ended on this project shows or hides „Deine Projektleitung“.
+      'work_leads',
     ],
   });
 
