@@ -445,7 +445,11 @@ export async function createInventoryItem(
   const dialog = inventoryDialog(page, 'createItem');
   await dialog.locator('#inventory-item-name').fill(options.name);
   if (options.unit) {
-    await selectFromSearchable(page, dialog.locator('#inventory-item-unit'), getInventoryUnitLabel(options.unit));
+    await selectFromSearchable(
+      page,
+      dialog.locator('#inventory-item-unit'),
+      getInventoryUnitLabel(options.unit),
+    );
   }
   if (options.locationName) {
     await selectFromSearchable(
