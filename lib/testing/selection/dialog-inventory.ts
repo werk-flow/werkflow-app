@@ -619,6 +619,10 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/auftraege/projekt/[projectNumber]', role: 'admin', opener: 'work.project-jobs' }],
     },
+  "components/auftraege/project-detail/work-lead-section.tsx#WorkLeadDialog|{current ? 'Projektleitung ändern' : 'Projektleitung benennen'}":
+    {
+      audits: [{ route: '/auftraege/projekt/[projectNumber]', role: 'admin', opener: 'work.name-work-lead' }],
+    },
   'components/auftraege/shared/client-assignment-dialog.tsx#ClientAssignmentDialog|{title}': {
     audits: [{ route: '/auftraege/[jobNumber]', role: 'admin', opener: 'work.assign-client' }],
   },
