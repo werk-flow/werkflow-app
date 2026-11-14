@@ -64,6 +64,81 @@ export function mergeCorrectionProposal(
     };
   }
   if (kind !== 'edit') return proposed;
+  return editSource(before, proposed, patch);
+}
+
+/** Facts of one activity context: the same activity, job and person throughout. */
+function sharesOneContext(facts: readonly TimeCorrectionFact[]): boolean {
+  const [first] = facts;
+  return facts.every(
+    (fact) =>
+      fact.activityKind === first?.activityKind &&
+      fact.jobId === first?.jobId &&
+      fact.userId === first?.userId &&
+      fact.employeeRecordId === first?.employeeRecordId,
+  );
+}
+
+/** Whether the open time continues across midnight here: a clock_out and a clock_in at the same instant. */
+function continuesAcrossMidnight(facts: readonly TimeCorrectionFact[]): boolean {
+  return facts.some((fact, index) => {
+    const next = facts[index + 1];
+    return (
+      fact.entryType === 'clock_out' &&
+      next?.entryType === 'clock_in' &&
+      Date.parse(next.timestamp) === Date.parse(fact.timestamp)
+    );
+  });
+}
+
+// An edit changes times only; the source's activity and job stay.
+function editSource(
+  before: TimeCorrectionSnapshot,
+  proposed: TimeCorrectionSnapshot,
+  patch: TimeCorrectionFact,
+): TimeCorrectionSnapshot {
+  const [opening] = before.facts;
+  const [start, end] = proposed.facts;
+  // One whole pair for a source of whole pairs (a span that may run over
+  // several days) replaces it, so no later day piece survives the edit.
+  if (
+    opening &&
+    proposed.facts.length === 2 &&
+    start?.entryType === 'clock_in' &&
+    end?.entryType === 'clock_out' &&
+    before.facts.every((fact, index) => fact.entryType === (index % 2 === 0 ? 'clock_in' : 'clock_out')) &&
+    before.facts.length % 2 === 0 &&
+    sharesOneContext(before.facts)
+  ) {
+    return {
+      schemaVersion: 1,
+      facts: [start, end].map((fact) => ({
+        ...opening,
+        factId: fact.factId,
+        entryType: fact.entryType,
+        timestamp: fact.timestamp,
+      })),
+    };
+  }
+  const closing = before.facts.at(-1);
+  // A new end of a source that spans several days ends the span there: the
+  // day pieces after it go, and submission splits the result at midnight again.
+  if (
+    proposed.facts.length === 1 &&
+    patch.entryType === 'clock_out' &&
+    closing?.entryType === 'clock_out' &&
+    opening &&
+    Date.parse(patch.timestamp) > Date.parse(opening.timestamp) &&
+    continuesAcrossMidnight(before.facts)
+  ) {
+    return {
+      schemaVersion: 1,
+      facts: [
+        ...before.facts.filter((fact) => Date.parse(fact.timestamp) < Date.parse(patch.timestamp)),
+        { ...closing, timestamp: patch.timestamp },
+      ],
+    };
+  }
   const exactIndex = before.facts.findIndex((fact) => fact.entryType === patch.entryType);
   const directionIndex = before.facts.findIndex(
     (fact) =>
