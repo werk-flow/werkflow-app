@@ -30,7 +30,8 @@ alter type public.installed_equipment_event_type add value if not exists 'parent
 alter type public.maintenance_due_event_type add value if not exists 'equipment_replaced';
 
 -- The running plans whose current revision covers the equipment, with their
--- template and the next open due date. The replace dialog lists them, and
+-- template and the earliest open due date bound to the equipment on any of
+-- the plan's revisions (the items a carry moves). The replace dialog lists them, and
 -- replace_installed_equipment requires one choice for each.
 create function public.list_installed_equipment_replacement_plans(
   p_organization_id uuid,
@@ -50,9 +51,12 @@ as $$
     (
       select min(due_work.due_date)
       from public.maintenance_due_work due_work
+      join public.maintenance_plan_revision_equipment due_link
+        on due_link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+       and due_link.organization_id = due_work.organization_id
+       and due_link.equipment_id = p_equipment_id
       where due_work.organization_id = plan.organization_id
         and due_work.maintenance_plan_id = plan.id
-        and due_work.maintenance_plan_revision_id = plan.current_revision_id
         and due_work.status in ('open', 'visit_created')
     )
   from public.maintenance_plans plan
@@ -113,8 +117,9 @@ $$;
 -- such items share a cadence date, the one with a visit (else the newer) moves
 -- and the other is superseded with a reason, so the date stays due exactly
 -- once. Completed and closed due work stays on its revision. A planned-date
--- revision starts one interval after the plan's latest due date, so a later
--- generation recreates no due work of any status; an actual-completion
+-- revision continues the current revision's cadence one interval after its
+-- latest due date of any status, so a later generation neither recreates
+-- settled work nor skips a date of that cadence; an actual-completion
 -- revision starts at the earliest moved date, else at the latest completion's
 -- next date. The caller holds the plan's row lock and checked the manager role.
 create function app_private.carry_maintenance_plan_to_equipment(
@@ -152,7 +157,8 @@ begin
     into v_first_due
     from public.maintenance_due_work due_work
     where due_work.organization_id = p_plan.organization_id
-      and due_work.maintenance_plan_id = p_plan.id;
+      and due_work.maintenance_plan_id = p_plan.id
+      and due_work.maintenance_plan_revision_id = v_revision.id;
   else
     select coalesce(
       min(due_work.original_due_date) filter (where due_work.status in ('open', 'visit_created')),
@@ -184,12 +190,16 @@ begin
   insert into public.maintenance_plan_revision_equipment (
     organization_id, maintenance_plan_revision_id, equipment_id, created_by
   )
-  select distinct p_plan.organization_id, v_revision_id,
-    case when link.equipment_id = p_from_equipment_id then p_to_equipment_id else link.equipment_id end,
-    p_actor_id
-  from public.maintenance_plan_revision_equipment link
-  where link.maintenance_plan_revision_id = v_revision.id
-    and link.organization_id = p_plan.organization_id;
+  select p_plan.organization_id, v_revision_id, carried.equipment_id, p_actor_id
+  from (
+    select case when link.equipment_id = p_from_equipment_id then p_to_equipment_id else link.equipment_id end
+      as equipment_id
+    from public.maintenance_plan_revision_equipment link
+    where link.maintenance_plan_revision_id = v_revision.id
+      and link.organization_id = p_plan.organization_id
+    union
+    select p_to_equipment_id
+  ) carried;
   update public.maintenance_plans plan set
     current_revision_id = v_revision_id,
     version = plan.version + 1, updated_by = p_actor_id, updated_at = now()
@@ -548,12 +558,27 @@ begin
       and event.idempotency_key = v_corrected.idempotency_key;
     if not found then raise exception 'installed_equipment_successor_origin_invalid'; end if;
 
+    -- Every running plan of the successor and every plan, also a terminated
+    -- or archived one, that still holds open work bound to it; the status
+    -- stays as it is.
     for v_plan in
       select plan.* from public.maintenance_plans plan
-      where plan.id in (
-        select running.plan_id
-        from public.list_installed_equipment_replacement_plans(p_organization_id, v_successor.id) running
-      ) and plan.organization_id = p_organization_id
+      where plan.organization_id = p_organization_id
+        and (
+          plan.id in (
+            select running.plan_id
+            from public.list_installed_equipment_replacement_plans(p_organization_id, v_successor.id) running
+          ) or exists (
+            select 1 from public.maintenance_due_work due_work
+            join public.maintenance_plan_revision_equipment link
+              on link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+             and link.organization_id = due_work.organization_id
+             and link.equipment_id = v_successor.id
+            where due_work.organization_id = p_organization_id
+              and due_work.maintenance_plan_id = plan.id
+              and due_work.status in ('open', 'visit_created')
+          )
+        )
       order by plan.id
       for update
     loop

@@ -187,6 +187,19 @@ begin
 end;
 $$;
 
+-- The dialog names the overdue item an earlier revision left open as the
+-- plan's next due date.
+do $$ begin
+  if (
+    select running.next_due_date
+    from public.list_installed_equipment_replacement_plans(
+      '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000040') running
+    where running.plan_id = '46600000-0000-4000-8000-000000000050'
+  ) is distinct from (select overdue_date from pg_temp.world) then
+    raise exception 'the replacement plans do not show the overdue item of an earlier revision';
+  end if;
+end $$;
+
 -- A plan left behind without a reason refuses the whole replacement.
 select pg_temp.expect_refusal('plan left without a reason', $sql$
   select pg_temp.replace(
@@ -285,12 +298,14 @@ begin
      or v_overdue.maintenance_plan_revision_id is distinct from v_revision.id then
     raise exception 'the overdue due item did not stay open with its due date on the new revision';
   end if;
-  if v_revision.first_due_date <= coalesce((
-       select max(due_work.original_due_date) from public.maintenance_due_work due_work
+  if v_revision.first_due_date is distinct from (
+       select app_private.add_months_clamped(max(due_work.original_due_date), 12)
+       from public.maintenance_due_work due_work
        where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
-         and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000050'), 'infinity'::date)
+         and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000050'
+         and due_work.original_due_date > pg_temp.berlin_today())
      or v_revision.effective_from_date is distinct from pg_temp.berlin_today() then
-    raise exception 'the carried revision does not start after the plan''s latest due date';
+    raise exception 'the carried revision does not continue after the current revision''s latest due date';
   end if;
   if (
     select due_work.maintenance_plan_revision_id from public.maintenance_due_work due_work
@@ -421,11 +436,20 @@ do $$ begin
   end if;
 end $$;
 
--- Correcting the replacement carries the plan and the component back before
--- the successor is voided; the overdue item stays open with its date.
+-- Correcting the replacement carries the plan, even after it was terminated,
+-- and the component back before the successor is voided; the overdue item
+-- stays open with its date and the plan stays terminated.
 do $$
 declare v_predecessor public.installed_equipment%rowtype;
 begin
+  perform public.transition_maintenance_plan_with_due_work(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000050',
+    (select plan.version from public.maintenance_plans plan
+     where plan.organization_id = '46600000-0000-4000-8000-000000000010'
+       and plan.id = '46600000-0000-4000-8000-000000000050'),
+    'terminated', 'Wartung beendet', '46600000-0000-4000-8000-000000000001',
+    '46600000-0000-4000-8000-000000000079', (pg_temp.berlin_today() + interval '6 months')::date
+  );
   select * into strict v_predecessor from public.installed_equipment equipment
   where equipment.organization_id = '46600000-0000-4000-8000-000000000010'
     and equipment.id = '46600000-0000-4000-8000-000000000040';
@@ -443,6 +467,7 @@ begin
     join public.maintenance_due_work due_work on due_work.maintenance_plan_revision_id = plan.current_revision_id
     where plan.organization_id = '46600000-0000-4000-8000-000000000010'
       and plan.id = '46600000-0000-4000-8000-000000000050'
+      and plan.status = 'terminated'
       and link.equipment_id = '46600000-0000-4000-8000-000000000040'
       and due_work.id = (select overdue_due from pg_temp.world)
       and due_work.status = 'open'
