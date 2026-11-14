@@ -18,6 +18,10 @@
 -- 4. The repeat check comes after the membership check and before the
 --    article, Lager, stock and line checks: the first booking changed what
 --    those read. The actions still check the job access before each call.
+--    It compares what the caller sent: the project of a job's booking is the
+--    server's reading of the job, which a move to another project changes, so
+--    it compares the job alone. An unplanned take's note lives on its line;
+--    a note the office changed since refuses the repeat, which books nothing.
 -- 5. record_inventory_movement answers a repeat with the movement's own
 --    result. take_unplanned_inventory_material checks the id before it
 --    creates its line and answers with the stock after the first take.
@@ -107,7 +111,8 @@ begin
         and v_booked.movement_type = p_movement_type
         and v_booked.quantity_delta = p_quantity_delta::numeric(12,3)
         and v_booked.job_id is not distinct from p_job_id
-        and v_booked.project_id is not distinct from p_project_id
+        -- A job's project is the server's reading of the job, which a move since may have changed.
+        and (p_job_id is not null or v_booked.project_id is not distinct from p_project_id)
         and v_booked.job_material_line_id is not distinct from p_job_material_line_id
         and v_booked.import_batch_id is not distinct from p_import_batch_id
         and v_booked.reason is not distinct from v_reason
@@ -331,6 +336,7 @@ begin
         and exists (
           select 1 from public.job_material_lines line
           where line.id = v_booked.job_material_line_id and line.is_unplanned
+            and line.notes is not distinct from nullif(btrim(coalesce(p_notes, '')), '')
         )
       then
         return v_booked.quantity_after;

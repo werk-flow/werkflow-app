@@ -42,7 +42,9 @@ insert into public.inventory_locations (id, organization_id, name, location_type
 
 insert into public.projects (id, organization_id, name, created_by) values
 ('3b000000-0000-4000-8000-000000000040', '3b000000-0000-4000-8000-000000000010',
- 'Bad Musterstraße', '3b000000-0000-4000-8000-000000000001');
+ 'Bad Musterstraße', '3b000000-0000-4000-8000-000000000001'),
+('3b000000-0000-4000-8000-000000000041', '3b000000-0000-4000-8000-000000000010',
+ 'Heizung Lindenhof', '3b000000-0000-4000-8000-000000000001');
 
 insert into public.jobs (id, organization_id, title, project_id, created_by) values
 ('3b000000-0000-4000-8000-000000000050', '3b000000-0000-4000-8000-000000000010',
@@ -87,6 +89,7 @@ declare
   v_location constant uuid := '3b000000-0000-4000-8000-000000000030';
   v_foreign_location constant uuid := '3b000000-0000-4000-8000-000000000031';
   v_project constant uuid := '3b000000-0000-4000-8000-000000000040';
+  v_other_project constant uuid := '3b000000-0000-4000-8000-000000000041';
   v_job constant uuid := '3b000000-0000-4000-8000-000000000050';
   v_line constant uuid := '3b000000-0000-4000-8000-000000000060';
   v_take_key constant uuid := '3b000000-0000-4000-8000-0000000000a1';
@@ -127,6 +130,19 @@ begin
   then
     raise exception 'a repeated take must answer with the first movement and its stock before and after';
   end if;
+
+  -- A repeat after the office moved the job to another project still answers
+  -- with the first take: the action sends the job's project as it reads it now.
+  update public.jobs set project_id = v_other_project where id = v_job;
+  update public.job_material_lines set project_id = v_other_project where job_id = v_job;
+  select * into v_repeat from public.record_inventory_movement(
+    v_org, v_worker, v_pipe, v_location, 'job_take', -3, v_job, v_other_project, v_line, null, 'Für Auftrag entnommen', v_take_key
+  );
+  if v_repeat.movement_id is distinct from v_first.movement_id then
+    raise exception 'a repeated take after the job moved to another project must answer with the first movement';
+  end if;
+  update public.jobs set project_id = v_project where id = v_job;
+  update public.job_material_lines set project_id = v_project where job_id = v_job;
 
   -- 2. A repeat after the first take used up the stock still answers with it.
   perform public.record_inventory_movement(
@@ -200,7 +216,7 @@ begin
   for v_refusal in
     select refusal from (values
       ('take quantity'), ('take actor'), ('return quantity'), ('use quantity'), ('use note'),
-      ('unplanned quantity'), ('unplanned for a planned take'), ('planned line for an unplanned take'),
+      ('unplanned quantity'), ('unplanned note'), ('unplanned for a planned take'), ('planned line for an unplanned take'),
       ('use under a take''s id'), ('take under a use''s id'), ('unplanned under a use''s id')
     ) as attempt(refusal)
   loop
@@ -222,6 +238,9 @@ begin
         when 'unplanned quantity' then
           perform public.take_unplanned_inventory_material(
             v_org, v_worker, v_job, null, v_pipe, v_location, 1, 'Nachgekauft', 'Nachgekauft', v_unplanned_key);
+        when 'unplanned note' then
+          perform public.take_unplanned_inventory_material(
+            v_org, v_worker, v_job, null, v_pipe, v_location, 2, 'Nachgekauft', 'Für Auftrag entnommen', v_unplanned_key);
         when 'unplanned for a planned take' then
           perform public.take_unplanned_inventory_material(
             v_org, v_worker, v_job, null, v_pipe, v_location, 3, 'Für Auftrag entnommen', null, v_take_key);
