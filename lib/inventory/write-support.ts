@@ -51,7 +51,7 @@ export async function ensureInventoryDefaults(admin: AdminClient, context: AuthC
 }
 
 // The refusals of save_inventory_item, import_inventory_row (migration
-// 20261004151000), take_unplanned_inventory_material (20261204090000) and the
+// 20261004151000), take_unplanned_inventory_material (20261204110000) and the
 // unit guard (20261204100000) that the action passes on as its failure code.
 const INVENTORY_WRITE_REFUSALS = new Set([
   'not_authorized',
