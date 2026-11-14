@@ -33,6 +33,7 @@ import {
   maintenanceScheduleSchema,
   maintenanceServiceCaseLinkSchema,
   maintenanceTransitionSchema,
+  maintenanceVisitMissedSchema,
   maintenanceVisitSchema,
 } from './validation';
 import { logError } from '@/lib/logging';
@@ -71,6 +72,7 @@ function maintenanceFailureCode(error: { message?: string } | null, fallback: st
     'maintenance_completion_date_invalid',
     'maintenance_due_evidence_required',
     'maintenance_due_evidence_mismatch',
+    'maintenance_due_visit_missed_not_allowed',
   ];
   return known.find((value) => error?.message?.includes(value)) ?? fallback;
 }
@@ -411,6 +413,37 @@ export async function setMaintenanceDueException(input: unknown): Promise<Mainte
       success: false,
       error: maintenanceFailureCode(error, 'maintenance_exception_failed'),
     };
+  refreshMaintenancePaths();
+  return { success: true };
+}
+
+/**
+ * „Besuch hat nicht stattgefunden“: the due item leaves its visit job and is
+ * open again with its due date, for a new visit; the history names the job
+ * and the reason. One database call. Office roles only.
+ */
+export async function recordMaintenanceVisitMissed(input: unknown): Promise<MaintenanceActionResult> {
+  const parsed = maintenanceVisitMissedSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const context = await requireServiceManager();
+  if ('success' in context) return context;
+  const { error } = await context.admin.rpc('record_maintenance_visit_missed', {
+    p_organization_id: context.organizationId,
+    p_maintenance_due_work_id: parsed.data.dueWorkId,
+    p_expected_version: parsed.data.expectedVersion,
+    p_missed_reason: parsed.data.missedReason,
+    p_note: parsed.data.note,
+    p_actor_id: context.actorId,
+    p_idempotency_key: parsed.data.idempotencyKey,
+  });
+  if (error) {
+    const code = maintenanceFailureCode(error, 'maintenance_visit_missed_failed');
+    // A known refusal is the user's case; anything else is a failure to diagnose.
+    if (code === 'maintenance_visit_missed_failed') {
+      logError('recordMaintenanceVisitMissed: record_maintenance_visit_missed failed', error);
+    }
+    return { success: false, error: code };
+  }
   refreshMaintenancePaths();
   return { success: true };
 }

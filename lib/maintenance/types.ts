@@ -18,6 +18,23 @@ export const MAINTENANCE_NEXT_DUE_BASES = [
   'actual_completion_date',
 ] as const satisfies readonly Database['public']['Enums']['maintenance_next_due_basis'][];
 
+/** The reasons a manager records for a visit that did not happen; `job_cancelled` is recorded by the job's cancellation. */
+export const MAINTENANCE_MISSED_VISIT_REASONS = [
+  'customer_absent',
+  'customer_cancelled',
+  'postponed',
+  'other',
+] as const satisfies readonly Database['public']['Enums']['maintenance_missed_visit_reason'][];
+
+export type MaintenanceMissedVisitReason = (typeof MAINTENANCE_MISSED_VISIT_REASONS)[number];
+
+export const MAINTENANCE_MISSED_VISIT_REASON_LABELS: Record<MaintenanceMissedVisitReason, string> = {
+  customer_absent: 'Kunde nicht angetroffen',
+  customer_cancelled: 'Abgesagt',
+  postponed: 'Verschoben',
+  other: 'Anderer Grund',
+};
+
 export type MaintenancePlanStatus = Database['public']['Enums']['maintenance_plan_status'];
 export type MaintenanceCoverageStatus = Database['public']['Enums']['maintenance_coverage_status'];
 export type MaintenanceDueStatus = Database['public']['Enums']['maintenance_due_status'];
@@ -148,6 +165,8 @@ export type MaintenanceDueItem = {
   completedOn: string | null;
   exceptionReason: string | null;
   version: number;
+  /** Still owed and due before today in Berlin (`isMaintenanceDueOverdue`). */
+  overdue: boolean;
   equipment: MaintenanceEquipmentOption[];
   /** The plan's current planned visit duration, the default of the scheduling step. */
   plannedDurationMinutes: number;
@@ -167,7 +186,10 @@ export type MaintenanceWorkspace = {
   plans: MaintenancePlanItem[];
   dueWork: MaintenanceDueItem[];
   coverages: MaintenanceCoverageItem[];
-  totals: Record<'due' | 'plans' | 'coverages', MaintenanceListTotal>;
+  totals: Record<'plans' | 'coverages', MaintenanceListTotal> & {
+    /** `total` counts the shown filter; `overdue` the overdue rows the search matches. */
+    due: MaintenanceListTotal & { overdue: number };
+  };
   currentActorId: string;
 };
 

@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import type { ReactElement } from 'react';
 import { CalendarClock, FileCheck2, MapPin } from 'lucide-react';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
@@ -145,18 +146,71 @@ function MaintenanceDueRowActions({
   );
 }
 
+/** „Alle“ or only „Überfällig“; the server filters, counts and pages. */
+export function MaintenanceDueFilter({
+  overdueOnly,
+  overdueCount,
+  busy,
+  onChange,
+}: {
+  overdueOnly: boolean;
+  /** Overdue due work the search matches. */
+  overdueCount: number;
+  busy: boolean;
+  onChange: (overdueOnly: boolean) => void;
+}): ReactElement {
+  return (
+    <div role="group" aria-label="Fälligkeiten filtern" className="flex flex-wrap items-center gap-1">
+      <Button
+        type="button"
+        size="sm"
+        variant={overdueOnly ? 'ghost' : 'secondary'}
+        aria-pressed={!overdueOnly}
+        disabled={busy}
+        onClick={() => onChange(false)}
+      >
+        Alle
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant={overdueOnly ? 'secondary' : 'ghost'}
+        aria-pressed={overdueOnly}
+        disabled={busy}
+        onClick={() => onChange(true)}
+      >
+        Überfällig
+        <span data-testid="maintenance-overdue-count" className="text-xs text-muted-foreground">
+          {overdueCount}
+        </span>
+      </Button>
+    </div>
+  );
+}
+
 export function MaintenanceDueList({
   openDue,
   hasAnyDue,
+  overdueOnly,
   isBusy,
   onDueActionClick,
 }: {
   openDue: MaintenanceDueItem[];
   /** False while the organization has no open due work at all, whatever the search. */
   hasAnyDue: boolean;
+  overdueOnly: boolean;
   isBusy: (id: string) => boolean;
   onDueActionClick: (action: DueAction) => void;
 }): ReactElement {
+  if (openDue.length === 0 && hasAnyDue && overdueOnly) {
+    return (
+      <EmptyState
+        icon={CalendarClock}
+        title="Keine überfällige Fälligkeit gefunden"
+        description="Zur Suche liegt keine offene Fälligkeit vor heute. Wähle „Alle“, um die kommenden zu sehen."
+      />
+    );
+  }
   if (openDue.length === 0 && hasAnyDue) {
     return (
       <EmptyState
@@ -182,11 +236,13 @@ export function MaintenanceDueList({
             variant="plain"
             data-testid="maintenance-due-row"
             data-due-date={due.dueDate}
+            data-overdue={due.overdue ? '' : undefined}
             className={DUE_ROW_CLASS}
           >
-            <span>
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1 @3xl/maintenance:block">
               <span className="block font-medium">{formatMaintenanceDate(due.dueDate)}</span>
-              <span className="text-xs text-muted-foreground">
+              {due.overdue && <Badge variant="warning">Überfällig</Badge>}
+              <span className="block text-xs text-muted-foreground">
                 {MAINTENANCE_DUE_STATUS_LABELS[due.status]}
               </span>
             </span>

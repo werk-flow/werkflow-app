@@ -47,6 +47,7 @@ const {
   setMaintenanceDueException,
   completeMaintenanceDueWork,
   linkMaintenanceServiceCase,
+  recordMaintenanceVisitMissed,
   getMaintenanceEvidenceOptions,
   getAssignedMaintenanceContextForJob,
 } = await import('@/lib/maintenance/actions');
@@ -56,7 +57,8 @@ const dueChange = { dueWorkId: foreignDueWorkId, expectedVersion: 1, reason, ide
 const officeCalls = [
   [
     'getMaintenanceWorkspace',
-    () => getMaintenanceWorkspace({ search: '', duePage: 1, planPage: 1, coveragePage: 1 }),
+    () =>
+      getMaintenanceWorkspace({ search: '', overdueOnly: false, duePage: 1, planPage: 1, coveragePage: 1 }),
   ],
   ['getMaintenanceCatalogs', () => getMaintenanceCatalogs()],
   [
@@ -115,6 +117,17 @@ const officeCalls = [
       }),
   ],
   ['getMaintenanceEvidenceOptions', () => getMaintenanceEvidenceOptions(foreignJobId)],
+  [
+    'recordMaintenanceVisitMissed',
+    () =>
+      recordMaintenanceVisitMissed({
+        dueWorkId: foreignDueWorkId,
+        expectedVersion: 1,
+        missedReason: 'customer_absent',
+        note: '',
+        idempotencyKey,
+      }),
+  ],
 ] as const;
 const fieldContext = [
   'getAssignedMaintenanceContextForJob',
@@ -150,6 +163,7 @@ const refusals = [
   [officeCalls[5], 'maintenance_due_not_found'],
   [officeCalls[6], 'maintenance_due_not_found'],
   [officeCalls[7], 'maintenance_plan_not_found'],
+  [officeCalls[9], 'maintenance_due_not_found'],
 ] as const;
 for (const [call, error] of refusals) {
   await assertRefused(world, [call], { success: false, error }, 'one-call');

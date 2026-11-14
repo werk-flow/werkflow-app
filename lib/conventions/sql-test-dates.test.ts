@@ -47,7 +47,8 @@ const REVIEWED_NEAR_FUTURE_DATES: Readonly<Record<string, ReviewedDates>> = {
   },
   'maintenance_list_pages.sql': {
     dates: { '2027-01-01': 2, '2030-01-01': 5, '2031-01-01': 4 },
-    reason: 'list_maintenance_workspace_page reads the injected p_due_through, never the clock.',
+    reason:
+      'list_maintenance_workspace_page lists by the injected p_due_through; the clock decides only the overdue count, which the file never reads.',
   },
   'people_boundaries.sql': {
     dates: { '2026-12-01': 2, '2026-12-02': 2 },
