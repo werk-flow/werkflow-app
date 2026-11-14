@@ -34,6 +34,20 @@ describe('toEn16931', () => {
     );
   });
 
+  test('text keeps what looks like an entity reference: the writer decodes none of it', () => {
+    const [first] = STANDARD_RATE_INVOICE.lines;
+    if (!first) throw new Error('fixture without lines');
+    const xml = toEn16931(
+      calculateInvoice({
+        ...STANDARD_RATE_INVOICE,
+        buyer: { ...STANDARD_RATE_INVOICE.buyer, name: 'Müller & Söhne &amp; Co' },
+        lines: [{ ...first, name: 'Ersatzteil &lt;A&gt; "B"' }],
+      }),
+    );
+    expect(xml).toContain('<ram:Name>Müller &amp; Söhne &amp;amp; Co</ram:Name>');
+    expect(xml).toContain('<ram:Name>Ersatzteil &amp;lt;A&amp;gt; "B"</ram:Name>');
+  });
+
   test('the § 19 exemption carries its reason and a zero rate', () => {
     const xml = toEn16931(calculateInvoice(EXEMPT_INVOICE));
     expect(xml).toContain(

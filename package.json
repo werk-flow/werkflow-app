@@ -101,7 +101,6 @@
     "saxon-js": "2.7.0",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.4.0",
-    "xmlbuilder2": "4.0.3",
     "zod": "^4.6.7"
   },
   "browserslist": [

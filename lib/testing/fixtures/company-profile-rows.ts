@@ -1,12 +1,16 @@
 // Company document profile rows for the route boundary fixtures.
 
+import type { Database } from '@/lib/supabase/database.types';
+
+type CompanyProfileRow = Database['public']['Tables']['company_document_profiles']['Row'];
+
 /** A saved company profile row without files, as the table holds it. */
 export const companyProfileRow = (
   organizationId: string,
   companyName: string,
   iban: string,
   details: { vatId?: string; registerNumber?: string } = {},
-) => ({
+): CompanyProfileRow => ({
   organization_id: organizationId,
   company_name: companyName,
   street: 'Sonnenweg 1',
@@ -37,10 +41,13 @@ export const companyProfileRow = (
   stationery_following_left_mm: 25,
   logo_storage_path: null,
   logo_mime_type: null,
+  logo_size_bytes: null,
   stationery_first_storage_path: null,
   stationery_first_mime_type: null,
+  stationery_first_size_bytes: null,
   stationery_following_storage_path: null,
   stationery_following_mime_type: null,
+  stationery_following_size_bytes: null,
   version: 1,
   updated_at: '2026-11-12T08:00:00.000Z',
   updated_by: null,

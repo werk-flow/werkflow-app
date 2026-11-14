@@ -2,6 +2,7 @@ import type { CompanyDocumentProfile } from '@/lib/company-profile/profile';
 import { readCompanyProfile } from '@/lib/company-profile/reads';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { getCachedMemberships } from '@/lib/data/cached';
+import { withReadRequest } from '@/lib/data/read-request-cache';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
 import { checkEn16931, type En16931Finding } from '@/lib/invoicing/check-en16931';
 import type { InvoiceDraft } from '@/lib/invoicing/model';
@@ -64,47 +65,51 @@ function refusalText(errors: En16931Finding[]): string {
  * as seller, for Admin and Büro of the active organization only. XML the CEN
  * rules refuse is never sent: the office gets the fields to fix instead.
  */
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   try {
-    const auth = await resolveActionContext();
-    if (!auth.success) {
-      const status = auth.error === 'not_authenticated' ? 401 : 403;
-      return Response.json({ error: auth.error }, { status, headers: privateHeaders });
-    }
-    const { context } = auth;
-    if (!context.isManagerOrAbove) {
-      return Response.json({ error: 'not_authorized' }, { status: 403, headers: privateHeaders });
-    }
-    const memberships = await getCachedMemberships(context.userId);
-    const organization = memberships.find((membership) => membership.orgId === context.orgId);
-    if (!organization) {
-      return Response.json({ error: 'not_authorized' }, { status: 403, headers: privateHeaders });
-    }
-    const read = await readCompanyProfile(createSupabaseAdminClient(), context);
-    if (!read.success) {
-      return read.error === 'not_authorized'
-        ? Response.json({ error: 'not_authorized' }, { status: 403, headers: privateHeaders })
-        : Response.json({ error: 'load_failed' }, { status: 500, headers: privateHeaders });
-    }
-    const seller = sellerOf(read.profile, organization.name);
-    const draft = sampleInvoice(seller, payeeOf(read.profile), getBusinessTodayIso());
-    const xml = toEn16931(calculateInvoice(draft));
-    const check = await checkEn16931(xml);
-    if (!check.valid) {
-      return new Response(refusalText(check.errors), {
-        status: 422,
-        headers: { ...privateHeaders, 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
-    return new Response(xml, {
-      headers: {
-        ...privateHeaders,
-        'Content-Type': 'application/xml; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="Muster-E-Rechnung.xml"',
-      },
-    });
+    return await withReadRequest(request, sampleInvoiceResponse);
   } catch (error) {
     logError('sampleInvoiceXml: build or check failed', error);
     return Response.json({ error: 'render_failed' }, { status: 500, headers: privateHeaders });
   }
+}
+
+async function sampleInvoiceResponse(): Promise<Response> {
+  const auth = await resolveActionContext();
+  if (!auth.success) {
+    const status = auth.error === 'not_authenticated' ? 401 : 403;
+    return Response.json({ error: auth.error }, { status, headers: privateHeaders });
+  }
+  const { context } = auth;
+  if (!context.isManagerOrAbove) {
+    return Response.json({ error: 'not_authorized' }, { status: 403, headers: privateHeaders });
+  }
+  const memberships = await getCachedMemberships(context.userId);
+  const organization = memberships.find((membership) => membership.orgId === context.orgId);
+  if (!organization) {
+    return Response.json({ error: 'not_authorized' }, { status: 403, headers: privateHeaders });
+  }
+  const read = await readCompanyProfile(createSupabaseAdminClient(), context);
+  if (!read.success) {
+    return read.error === 'not_authorized'
+      ? Response.json({ error: 'not_authorized' }, { status: 403, headers: privateHeaders })
+      : Response.json({ error: 'load_failed' }, { status: 500, headers: privateHeaders });
+  }
+  const seller = sellerOf(read.profile, organization.name);
+  const draft = sampleInvoice(seller, payeeOf(read.profile), getBusinessTodayIso());
+  const xml = toEn16931(calculateInvoice(draft));
+  const check = await checkEn16931(xml);
+  if (!check.valid) {
+    return new Response(refusalText(check.errors), {
+      status: 422,
+      headers: { ...privateHeaders, 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
+  return new Response(xml, {
+    headers: {
+      ...privateHeaders,
+      'Content-Type': 'application/xml; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="Muster-E-Rechnung.xml"',
+    },
+  });
 }

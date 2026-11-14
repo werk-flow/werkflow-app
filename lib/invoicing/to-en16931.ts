@@ -1,9 +1,7 @@
 // The EN 16931 mapping of the invoice core: a calculated invoice becomes
 // ZUGFeRD / Factur-X XML in the EN 16931 profile (UN/CEFACT CII D16B). This is
-// the only file that touches the XML writer library, so the writer stays
-// swappable. It writes the computed amounts as they are and computes none.
-
-import { create } from 'xmlbuilder2';
+// the only file that writes invoice XML. It writes the computed amounts as
+// they are and computes none.
 
 import { formatGermanDate } from '@/lib/utils';
 
@@ -16,7 +14,31 @@ const EN16931_PROFILE = 'urn:cen.eu:en16931:2017';
 /** SEPA credit transfer (UNTDID 4461). */
 const SEPA_CREDIT_TRANSFER = '58';
 
+/** An element's content: `@name` keys are attributes, `#` its text, other keys child elements in order. */
 type XmlNode = { [element: string]: string | XmlNode | XmlNode[] };
+
+const escapeText = (text: string) =>
+  text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+/** One element and its children, two spaces per level; an element with only text stays on one line. */
+function element(name: string, content: string | XmlNode, depth: number): string {
+  const pad = '  '.repeat(depth);
+  if (typeof content === 'string') return `${pad}<${name}>${escapeText(content)}</${name}>`;
+  const entries = Object.entries(content);
+  const attributes = entries
+    .filter(([key]) => key.startsWith('@'))
+    .map(([key, value]) => ` ${key.slice(1)}="${escapeText(String(value)).replaceAll('"', '&quot;')}"`)
+    .join('');
+  const text = content['#'];
+  const children = entries
+    .filter(([key]) => key !== '#' && !key.startsWith('@'))
+    .flatMap(([key, value]) =>
+      (Array.isArray(value) ? value : [value]).map((item) => element(key, item, depth + 1)),
+    );
+  if (typeof text === 'string') return `${pad}<${name}${attributes}>${escapeText(text)}</${name}>`;
+  if (children.length === 0) return `${pad}<${name}${attributes}/>`;
+  return [`${pad}<${name}${attributes}>`, ...children, `${pad}</${name}>`].join('\n');
+}
 
 /** Cents as a decimal amount with two places: -350 → `-3.50`. */
 function amount(cents: number): string {
@@ -177,48 +199,46 @@ function headerSettlement(invoice: CalculatedInvoice): XmlNode {
 export function toEn16931(invoice: CalculatedInvoice): string {
   const { delivery } = invoice;
   const document: XmlNode = {
-    'rsm:CrossIndustryInvoice': {
-      '@xmlns:rsm': 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100',
-      '@xmlns:ram': 'urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100',
-      '@xmlns:qdt': 'urn:un:unece:uncefact:data:standard:QualifiedDataType:100',
-      '@xmlns:udt': 'urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100',
-      'rsm:ExchangedDocumentContext': {
-        'ram:GuidelineSpecifiedDocumentContextParameter': { 'ram:ID': EN16931_PROFILE },
-      },
-      'rsm:ExchangedDocument': {
-        'ram:ID': invoice.number,
-        'ram:TypeCode': invoice.typeCode,
-        'ram:IssueDateTime': dateTime(invoice.issueDate),
-        ...(invoice.notes.length
-          ? { 'ram:IncludedNote': invoice.notes.map((note) => ({ 'ram:Content': note })) }
+    '@xmlns:rsm': 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100',
+    '@xmlns:ram': 'urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100',
+    '@xmlns:qdt': 'urn:un:unece:uncefact:data:standard:QualifiedDataType:100',
+    '@xmlns:udt': 'urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100',
+    'rsm:ExchangedDocumentContext': {
+      'ram:GuidelineSpecifiedDocumentContextParameter': { 'ram:ID': EN16931_PROFILE },
+    },
+    'rsm:ExchangedDocument': {
+      'ram:ID': invoice.number,
+      'ram:TypeCode': invoice.typeCode,
+      'ram:IssueDateTime': dateTime(invoice.issueDate),
+      ...(invoice.notes.length
+        ? { 'ram:IncludedNote': invoice.notes.map((note) => ({ 'ram:Content': note })) }
+        : {}),
+    },
+    'rsm:SupplyChainTradeTransaction': {
+      'ram:IncludedSupplyChainTradeLineItem': invoice.lines.map(lineItem),
+      'ram:ApplicableHeaderTradeAgreement': {
+        ...(invoice.buyerReference ? { 'ram:BuyerReference': invoice.buyerReference } : {}),
+        'ram:SellerTradeParty': tradeParty(invoice.seller),
+        'ram:BuyerTradeParty': tradeParty(invoice.buyer),
+        ...(invoice.orderReference
+          ? { 'ram:BuyerOrderReferencedDocument': { 'ram:IssuerAssignedID': invoice.orderReference } }
           : {}),
       },
-      'rsm:SupplyChainTradeTransaction': {
-        'ram:IncludedSupplyChainTradeLineItem': invoice.lines.map(lineItem),
-        'ram:ApplicableHeaderTradeAgreement': {
-          ...(invoice.buyerReference ? { 'ram:BuyerReference': invoice.buyerReference } : {}),
-          'ram:SellerTradeParty': tradeParty(invoice.seller),
-          'ram:BuyerTradeParty': tradeParty(invoice.buyer),
-          ...(invoice.orderReference
-            ? { 'ram:BuyerOrderReferencedDocument': { 'ram:IssuerAssignedID': invoice.orderReference } }
-            : {}),
-        },
-        'ram:ApplicableHeaderTradeDelivery': {
-          ...(invoice.deliverTo
-            ? {
-                'ram:ShipToTradeParty': {
-                  'ram:Name': invoice.deliverTo.name,
-                  'ram:PostalTradeAddress': postalAddress(invoice.deliverTo.address),
-                },
-              }
-            : {}),
-          ...(delivery.kind === 'date'
-            ? { 'ram:ActualDeliverySupplyChainEvent': { 'ram:OccurrenceDateTime': dateTime(delivery.date) } }
-            : {}),
-        },
-        'ram:ApplicableHeaderTradeSettlement': headerSettlement(invoice),
+      'ram:ApplicableHeaderTradeDelivery': {
+        ...(invoice.deliverTo
+          ? {
+              'ram:ShipToTradeParty': {
+                'ram:Name': invoice.deliverTo.name,
+                'ram:PostalTradeAddress': postalAddress(invoice.deliverTo.address),
+              },
+            }
+          : {}),
+        ...(delivery.kind === 'date'
+          ? { 'ram:ActualDeliverySupplyChainEvent': { 'ram:OccurrenceDateTime': dateTime(delivery.date) } }
+          : {}),
       },
+      'ram:ApplicableHeaderTradeSettlement': headerSettlement(invoice),
     },
   };
-  return create({ version: '1.0', encoding: 'UTF-8' }, document).end({ prettyPrint: true });
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${element('rsm:CrossIndustryInvoice', document, 0)}\n`;
 }

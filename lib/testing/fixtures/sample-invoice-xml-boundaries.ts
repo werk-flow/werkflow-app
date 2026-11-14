@@ -18,7 +18,8 @@ const world = installActionWorld({
     companyProfileRow(ORGANIZATION_B, 'Fremde Haustechnik GmbH', 'DE00 2222 2222 2222 2222 22'),
   ],
 });
-const { GET } = await import('@/app/api/musterrechnung/route');
+const route = await import('@/app/api/musterrechnung/route');
+const GET = () => route.GET(new Request('http://localhost/api/musterrechnung'));
 
 async function expectRefusal(status: number): Promise<void> {
   const response = await GET();
