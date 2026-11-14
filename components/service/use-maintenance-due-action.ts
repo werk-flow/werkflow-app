@@ -15,15 +15,14 @@ import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatMinutesAsHoursInput } from '@/lib/jobs/planned-working';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
-  dueActionErrorMessage,
   dueActionErrorsById,
   dueActionReasonRequired,
   missingDueActionFields,
-  runMaintenanceDueAction,
   type MaintenanceDueActionKind,
   type MaintenanceDueActionValues,
   type MaintenanceDueRequiredField,
-} from './maintenance-due-action-state';
+} from '@/lib/maintenance/due-action-fields';
+import { dueActionErrorMessage, runMaintenanceDueAction } from './maintenance-due-action-state';
 
 const NO_EVIDENCE: MaintenanceEvidenceOption[] = [];
 

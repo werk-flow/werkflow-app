@@ -36,9 +36,11 @@ create index maintenance_due_work_events_missed_job_idx
   where missed_job_id is not null;
 
 -- Returns one due item with a visit job to `open` and records the missed
--- visit. The caller holds the item's row lock and has checked its state.
+-- visit, under the item's row lock and at the stated version.
 create function app_private.reopen_missed_maintenance_due_work(
-  p_before public.maintenance_due_work,
+  p_organization_id uuid,
+  p_maintenance_due_work_id uuid,
+  p_expected_version bigint,
   p_missed_reason public.maintenance_missed_visit_reason,
   p_reason text,
   p_actor_id uuid,
@@ -47,17 +49,24 @@ create function app_private.reopen_missed_maintenance_due_work(
   p_request_payload jsonb
 )
 returns public.maintenance_due_work
-language plpgsql security definer set search_path = ''
+language plpgsql security invoker set search_path = ''
 as $$
 declare
+  v_before public.maintenance_due_work%rowtype;
   v_after public.maintenance_due_work%rowtype;
   v_previous_write text := coalesce(current_setting('app.maintenance_write', true), '');
 begin
+  select * into v_before from public.maintenance_due_work due_work
+  where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id
+  for update;
+  if not found then raise exception 'maintenance_due_not_found'; end if;
+  if v_before.version <> p_expected_version then raise exception 'maintenance_stale_version'; end if;
+  if v_before.status <> 'visit_created' then raise exception 'maintenance_due_visit_missed_not_allowed'; end if;
   perform set_config('app.maintenance_write', 'true', true);
   update public.maintenance_due_work due_work set status = 'open',
     job_id = null, planning_occurrence_id = null, version = due_work.version + 1,
     updated_by = p_actor_id, updated_at = now()
-  where due_work.id = p_before.id and due_work.organization_id = p_before.organization_id
+  where due_work.id = v_before.id and due_work.organization_id = p_organization_id
   returning * into v_after;
   perform set_config('app.maintenance_write', v_previous_write, true);
   insert into public.maintenance_due_work_events (
@@ -65,9 +74,9 @@ begin
     request_operation, idempotency_key, request_payload, before_snapshot, after_snapshot,
     missed_job_id, missed_reason
   ) values (
-    p_before.organization_id, p_before.id, 'visit_missed', p_actor_id,
+    p_organization_id, v_before.id, 'visit_missed', p_actor_id,
     nullif(btrim(coalesce(p_reason, '')), ''), p_request_operation, p_idempotency_key,
-    p_request_payload, to_jsonb(p_before), to_jsonb(v_after), p_before.job_id, p_missed_reason
+    p_request_payload, to_jsonb(v_before), to_jsonb(v_after), v_before.job_id, p_missed_reason
   );
   return v_after;
 end;
@@ -85,11 +94,10 @@ create function public.record_maintenance_visit_missed(
   p_idempotency_key uuid
 )
 returns public.maintenance_due_work
-language plpgsql security definer set search_path = ''
+language plpgsql security invoker set search_path = ''
 as $$
 declare
   v_existing public.maintenance_due_work_events%rowtype;
-  v_before public.maintenance_due_work%rowtype;
   v_note text := nullif(btrim(coalesce(p_note, '')), '');
   v_payload jsonb := jsonb_build_object('missedReason', p_missed_reason, 'note', v_note);
 begin
@@ -111,13 +119,9 @@ begin
     return (select due_work from public.maintenance_due_work due_work
       where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id);
   end if;
-  select * into v_before from public.maintenance_due_work due_work
-  where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id for update;
-  if not found then raise exception 'maintenance_due_not_found'; end if;
-  if v_before.version <> p_expected_version then raise exception 'maintenance_stale_version'; end if;
-  if v_before.status <> 'visit_created' then raise exception 'maintenance_due_visit_missed_not_allowed'; end if;
   return app_private.reopen_missed_maintenance_due_work(
-    v_before, p_missed_reason, v_note, p_actor_id, 'due_visit_missed', p_idempotency_key, v_payload
+    p_organization_id, p_maintenance_due_work_id, p_expected_version, p_missed_reason, v_note,
+    p_actor_id, 'due_visit_missed', p_idempotency_key, v_payload
   );
 end;
 $$;
@@ -132,23 +136,23 @@ create function app_private.reopen_maintenance_due_work_of_cancelled_job(
   p_reason text,
   p_cancellation_event_id uuid
 )
-returns void language plpgsql security definer set search_path = ''
+returns void language plpgsql security invoker set search_path = ''
 as $$
 declare
-  v_before public.maintenance_due_work%rowtype;
+  v_due record;
   v_reason text := left(nullif(btrim(coalesce(p_reason, '')), ''), 1000);
 begin
   if v_reason is not null and length(v_reason) < 3 then v_reason := null; end if;
-  for v_before in
-    select * from public.maintenance_due_work due_work
+  for v_due in
+    select due_work.id, due_work.version from public.maintenance_due_work due_work
     where due_work.organization_id = p_organization_id and due_work.job_id = p_job_id
       and due_work.status = 'visit_created'
     order by due_work.id
     for update
   loop
     perform app_private.reopen_missed_maintenance_due_work(
-      v_before, 'job_cancelled', v_reason, p_actor_id,
-      'due_job_cancelled:' || v_before.id::text, p_cancellation_event_id,
+      p_organization_id, v_due.id, v_due.version, 'job_cancelled', v_reason, p_actor_id,
+      'due_job_cancelled:' || v_due.id::text, p_cancellation_event_id,
       jsonb_build_object('missedReason', 'job_cancelled', 'jobId', p_job_id)
     );
   end loop;
@@ -327,10 +331,10 @@ create or replace function public.list_maintenance_workspace_page(
 $$;
 
 revoke all on function app_private.reopen_missed_maintenance_due_work(
-  public.maintenance_due_work, public.maintenance_missed_visit_reason, text, uuid, text, uuid, jsonb
+  uuid, uuid, bigint, public.maintenance_missed_visit_reason, text, uuid, text, uuid, jsonb
 ) from public, anon, authenticated;
 grant execute on function app_private.reopen_missed_maintenance_due_work(
-  public.maintenance_due_work, public.maintenance_missed_visit_reason, text, uuid, text, uuid, jsonb
+  uuid, uuid, bigint, public.maintenance_missed_visit_reason, text, uuid, text, uuid, jsonb
 ) to service_role;
 revoke all on function app_private.reopen_maintenance_due_work_of_cancelled_job(uuid, uuid, uuid, text, uuid)
   from public, anon, authenticated;

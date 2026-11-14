@@ -31,7 +31,7 @@ import {
 } from '@/lib/maintenance/types';
 import { useJobEntityOptions, type JobEntityOptionsState } from '@/hooks/use-job-entity-options';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
-import type { MaintenanceDueActionKind } from './maintenance-due-action-state';
+import type { MaintenanceDueActionKind } from '@/lib/maintenance/due-action-fields';
 import { useMaintenanceDueAction, type MaintenanceDueActionController } from './use-maintenance-due-action';
 import { formatBerlin, parseIsoLocalDate } from '@/lib/utils';
 

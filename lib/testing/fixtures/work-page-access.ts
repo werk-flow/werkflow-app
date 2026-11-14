@@ -214,9 +214,13 @@ world.rpc = ({ name }) => {
   // Nobody here leads a project (supabase/tests/work_leads.sql proves the rule).
   if (name === 'read_work_lead_scope') return { data: { projectIds: [], jobIds: [] }, error: null };
   if (name === 'list_service_case_page') return { data: selection([caseId]), error: null };
-  if (name === 'list_maintenance_workspace_page')
+  if (name === 'read_maintenance_workspace_page')
     return {
-      data: { due: selection([]), plans: selection([]), coverages: selection([coverageId]) },
+      data: {
+        due: { ...selection([]), overdue: 0 },
+        plans: selection([]),
+        coverages: selection([coverageId]),
+      },
       error: null,
     };
   return { data: null, error: null };
