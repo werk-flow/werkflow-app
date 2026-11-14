@@ -2,10 +2,6 @@
 
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 
-import {
-  DEFECT_SEVERITY_LABELS,
-  DEFECT_STATE_LABELS,
-} from '@/components/auftraege/artifacts/work-artifact-content';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,7 +24,11 @@ import type {
 } from '@/lib/installed-equipment/field-history-reads';
 import { MAINTENANCE_SCOPE_OUTCOME_LABELS } from '@/lib/maintenance/types';
 import { formatBerlin } from '@/lib/utils';
-import { WORK_ARTIFACT_UNIT_LABELS } from '@/lib/work-artifacts/types';
+import {
+  DEFECT_SEVERITY_LABELS,
+  DEFECT_STATE_LABELS,
+  WORK_ARTIFACT_UNIT_LABELS,
+} from '@/lib/work-artifacts/types';
 
 // Loaded on the worker's intent through components/shared/lazy-dialog.tsx, so
 // the field work pack's cold start never carries it (`lab.field.cold-start`).
