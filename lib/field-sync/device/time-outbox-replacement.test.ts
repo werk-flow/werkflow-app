@@ -9,11 +9,24 @@ import { replacedSegmentEnd, replacementWindow, sessionReplacement } from './tim
 // session's recorded end with the captured one (decision record 0010, "a late chain of a session that
 // still runs"). Which chains offer it, and which recorded entry it edits.
 
-/** A stopped chain of `actions`, an hour apart from 09:00 UTC, the first expecting `sessionId`. */
-function stoppedChain(actions: Array<'start' | 'switch' | 'end'>, sessionId: string | null): ClockDeviceView {
+const SEGMENT = '60000000-0000-4000-8000-000000000001';
+const EARLIER_SEGMENT = '60000000-0000-4000-8000-000000000002';
+/** A segment of another session, which another device started before the chain began. */
+const OTHER_SESSION_SEGMENT = '60000000-0000-4000-8000-000000000003';
+
+/**
+ * A stopped chain of `actions`, six hours apart from 09:00 UTC, the first expecting `sessionId`,
+ * captured while the kept clock showed `chainSegmentId` running.
+ */
+function stoppedChain(
+  actions: Array<'start' | 'switch' | 'end'>,
+  sessionId: string | null,
+  chainSegmentId: string | null = SEGMENT,
+): ClockDeviceView {
   return {
     status: 'stopped',
     state: null,
+    chainSegmentId,
     events: actions.map((action, index) => ({
       operationId: `50000000-0000-4000-8000-0000000000c${index}`,
       capturedAt: `2026-11-09T${String(9 + index * 6).padStart(2, '0')}:00:00.000Z`,
@@ -25,9 +38,6 @@ function stoppedChain(actions: Array<'start' | 'switch' | 'end'>, sessionId: str
     })),
   };
 }
-
-const SEGMENT = '60000000-0000-4000-8000-000000000001';
-const EARLIER_SEGMENT = '60000000-0000-4000-8000-000000000002';
 
 function entry(
   segmentId: string,
@@ -56,7 +66,11 @@ function entry(
 describe('the replacement a stopped chain offers', () => {
   test('covers a chain whose first event expects a session and whose first day ends it', () => {
     const replacement = sessionReplacement(stoppedChain(['switch', 'end'], SESSION_ID), WORKING);
-    expect(replacement).toMatchObject({ sessionId: SESSION_ID, capturedEnd: '2026-11-09T15:00:00.000Z' });
+    expect(replacement).toMatchObject({
+      sessionId: SESSION_ID,
+      segmentId: SEGMENT,
+      capturedEnd: '2026-11-09T15:00:00.000Z',
+    });
     expect(replacement?.events.map((event) => event.action)).toEqual(['switch', 'end']);
   });
 
@@ -79,6 +93,10 @@ describe('the replacement a stopped chain offers', () => {
       if (!head) throw new Error('Missing head fixture.');
       expect(sessionReplacement({ ...chain, events: [{ ...head, status }, ...rest] }, WORKING)).toBeNull();
     }
+  });
+
+  test('is not offered when the phone does not know which segment ran when the chain began', () => {
+    expect(sessionReplacement(stoppedChain(['switch', 'end'], SESSION_ID, null), WORKING)).toBeNull();
   });
 
   test('is not offered while the server’s clock is unknown', () => {
@@ -122,6 +140,17 @@ describe('the entry the replacement edits', () => {
       entry(EARLIER_SEGMENT, 'clock_out', '2026-11-09T06:00:00.000Z'),
     ];
     expect(replacedSegmentEnd([...earlier, ...recovered], replacement)?.canonicalSegmentId).toBe(SEGMENT);
+  });
+
+  test('is never another session’s segment, even one that ran from the chain’s start past its captured end', () => {
+    // Another device ended the expected session at 08:00 and started another at 08:30.
+    const otherSession = [
+      entry(SEGMENT, 'clock_in', '2026-11-09T07:00:00.000Z'),
+      entry(SEGMENT, 'clock_out', '2026-11-09T08:00:00.000Z'),
+      entry(OTHER_SESSION_SEGMENT, 'clock_in', '2026-11-09T08:30:00.000Z'),
+      entry(OTHER_SESSION_SEGMENT, 'clock_out', '2026-11-09T17:00:00.000Z'),
+    ];
+    expect(replacedSegmentEnd(otherSession, replacement)).toBeNull();
   });
 
   test('is missing when the session ended before the captured end: nothing recorded runs past it', () => {

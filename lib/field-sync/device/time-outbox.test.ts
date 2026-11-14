@@ -172,6 +172,21 @@ describe('an event the server does not record', () => {
     ]);
   });
 
+  test('a stopped chain names the server segment its kept clock showed running when the chain began', async () => {
+    const segmentId = '60000000-0000-4000-8000-000000000001';
+    await capture(WORKER, command('end', { expectedSessionId: SESSION_ID, expectedVersion: 3 }), {
+      base: { ...WORKING, currentSegmentId: segmentId },
+    });
+    const { options } = server((envelope) =>
+      result(envelope, { outcome: 'conflict', code: 'correction_required' }, 200),
+    );
+
+    await sendTimeOutbox(WORKER, options);
+
+    const view = clockDeviceView(await readTimeOutbox(WORKER), new Date('2026-11-11T09:00:00.000Z'));
+    expect(view).toEqual(expect.objectContaining({ status: 'stopped', chainSegmentId: segmentId }));
+  });
+
   test('a conflict never overwrites server state: the event is not resent, not rewritten, and the clock shows no state of its own', async () => {
     const end = command('end', { expectedSessionId: SESSION_ID, expectedVersion: 3 });
     await capture(WORKER, end, { base: WORKING });

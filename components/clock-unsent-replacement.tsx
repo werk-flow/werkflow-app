@@ -43,6 +43,9 @@ const ReplacementDialog = lazyDialog(() =>
 const KEPT = 'Deine Zeiten bleiben auf diesem Gerät.';
 const END_FAILED = `Die laufende Zeiterfassung konnte nicht beendet werden. Prüfe deine Verbindung und versuche es erneut. ${KEPT}`;
 const READ_FAILED = `Deine erfassten Zeiten konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut. ${KEPT}`;
+/** A request of another kind leaves the recorded end as it is, so the captured times are still needed. */
+const NOT_REPLACED =
+  'Deine Korrektur ändert nicht das Ende deiner Zeiterfassung, deshalb bleiben deine Zeiten auf diesem Gerät. Beantrage eine Korrektur des Endes, oder lösche die Zeiten hier, wenn sie nicht mehr gebraucht werden.';
 const NOT_FOUND = `Die Zeiterfassung, die diese Zeiten ersetzen, wurde nicht gefunden. Notiere dir die Zeiten, lösche sie hier und beantrage die Korrektur unter Zeiterfassung. ${KEPT}`;
 
 /**
@@ -202,8 +205,11 @@ export default function ClockUnsentReplacement({
           organizationId={organizationId}
           entry={target.entry}
           closedPeriods={closedPeriods}
-          // The request is filed: only now do the events it covers leave the phone.
-          onSubmitted={() => void onFiled(target.covers.events)}
+          // Only a filed edit replaces the recorded end: only then do the events it covers leave the phone.
+          onSubmitted={(filed) => {
+            if (filed.kind === 'edit') void onFiled(target.covers.events);
+            else setError(NOT_REPLACED);
+          }}
         />
       )}
     </div>

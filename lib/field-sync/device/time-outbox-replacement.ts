@@ -12,6 +12,8 @@ export type SessionReplacement = {
   events: UnsentTimeEvent[];
   /** The server's session the chain's first event expects. */
   sessionId: string;
+  /** The session's segment that ran when the chain began: the one whose end the correction replaces. */
+  segmentId: string;
   /** When the person ended work, as the phone captured it. */
   capturedEnd: string;
 };
@@ -20,7 +22,8 @@ export type SessionReplacement = {
  * The replacement a late chain offers: its first event came too late to be recorded by itself
  * (`correction_required`), expects a session on the server, and the events one correction covers
  * (correctionScope) end it. Null for any other stop, a chain that starts its own session or holds no
- * end, and while the server's clock is unknown.
+ * end, while the server's clock is unknown, and when the phone does not know which segment ran when
+ * the chain began: without it, another session's time could be corrected.
  */
 export function sessionReplacement(
   view: ClockDeviceView,
@@ -28,11 +31,13 @@ export function sessionReplacement(
 ): SessionReplacement | null {
   const [first] = view.events;
   const sessionId = first?.expected?.sessionId;
+  const segmentId = view.chainSegmentId;
   // Only a late chain: a conflict or a refusal is no captured truth the server lacks, and stays as it is.
-  if (view.status !== 'stopped' || first?.status !== 'correction' || !confirmed || !sessionId) return null;
+  if (view.status !== 'stopped' || first?.status !== 'correction' || !confirmed || !sessionId || !segmentId)
+    return null;
   const events = correctionScope(view);
   const end = events.findLast((event) => event.action === 'end');
-  return end ? { events, sessionId, capturedEnd: end.capturedAt } : null;
+  return end ? { events, sessionId, segmentId, capturedEnd: end.capturedAt } : null;
 }
 
 /** The window the session's recorded entries are read in: from the Berlin day the chain began until now. */
@@ -42,10 +47,10 @@ export function replacementWindow(replacement: SessionReplacement, now: Date): {
 }
 
 /**
- * The entry the correction edits: the last end the server recorded for the one segment that ran
- * when the chain began and still ran at its captured end. Its time is the captured end, which the
- * correction form shows as the new time. Null when no single such segment exists: the session ended
- * before the captured end, or a correction already replaced it.
+ * The entry the correction edits: the last end the server recorded for the segment that ran when the
+ * chain began, when it still ran at the chain's captured end. Its time is the captured end, which the
+ * correction form shows as the new time. Null otherwise: the session ended before the captured end,
+ * a correction already replaced it, or another device changed the session meanwhile.
  */
 export function replacedSegmentEnd(
   entries: readonly TimeEntry[],
@@ -53,19 +58,15 @@ export function replacedSegmentEnd(
 ): TimeEntry | null {
   const begin = Date.parse(replacement.events[0]?.capturedAt ?? replacement.capturedEnd);
   const end = Date.parse(replacement.capturedEnd);
-  const bySegment = new Map<string, TimeEntry[]>();
-  for (const entry of entries) {
-    if (entry.sourceKind !== 'canonical_segment' || !entry.canonicalSegmentId) continue;
-    bySegment.set(entry.canonicalSegmentId, [...(bySegment.get(entry.canonicalSegmentId) ?? []), entry]);
-  }
-  const candidates = [...bySegment.values()].flatMap((pieces) => {
-    const ordered = pieces.toSorted(
-      (left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp),
-    );
-    const last = ordered.findLast((piece) => piece.entryType === 'clock_out');
-    const ranAtBegin = ordered.some((piece) => Date.parse(piece.timestamp) <= begin);
-    return last && ranAtBegin && Date.parse(last.timestamp) >= end ? [last] : [];
-  });
-  const [only] = candidates;
-  return candidates.length === 1 && only ? { ...only, timestamp: replacement.capturedEnd } : null;
+  const ordered = entries
+    .filter(
+      (entry) =>
+        entry.sourceKind === 'canonical_segment' && entry.canonicalSegmentId === replacement.segmentId,
+    )
+    .toSorted((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
+  const last = ordered.findLast((piece) => piece.entryType === 'clock_out');
+  const ranAtBegin = ordered.some((piece) => Date.parse(piece.timestamp) <= begin);
+  return last && ranAtBegin && Date.parse(last.timestamp) >= end
+    ? { ...last, timestamp: replacement.capturedEnd }
+    : null;
 }

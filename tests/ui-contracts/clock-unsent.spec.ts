@@ -277,6 +277,8 @@ async function keepLateChain(
 
 const RUNNING_SINCE_SEVEN = {
   ...RUNNING_CLOCK_STATE,
+  // The segment the kept clock shows running when the late chain begins.
+  currentSegmentId: 'recovered-segment',
   clockInTime: '2026-11-09T07:00:00.000Z',
   statusStartedAt: '2026-11-09T07:00:00.000Z',
 };
@@ -416,6 +418,12 @@ test('a late chain of a session the server still holds open is settled by one gu
   // Closing the form files nothing: the events stay.
   await form.getByRole('button', { name: 'Formular schließen', exact: true }).click();
   await expect(form).toHaveCount(0);
+  expect(await unsentOnDevice(page)).toHaveLength(2);
+
+  // A request of another kind leaves the recorded end as it is: the events stay, and the flow says so.
+  await correct.click();
+  await form.getByRole('button', { name: 'Andere Korrektur einreichen', exact: true }).click();
+  await expect(section).toContainText('Deine Korrektur ändert nicht das Ende deiner Zeiterfassung');
   expect(await unsentOnDevice(page)).toHaveLength(2);
 
   await correct.click();

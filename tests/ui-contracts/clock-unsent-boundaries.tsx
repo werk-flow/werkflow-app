@@ -95,7 +95,7 @@ type TimeCorrectionDialogProps = ComponentProps<
   typeof import('@/components/zeiterfassung/time-correction-dialog').TimeCorrectionDialog
 >;
 
-/** The correction form, as far as the flow uses it: the entry it edits, a filed request, a closed form. */
+/** The correction form, as far as the flow uses it: the entry it edits, a filed request of a kind, a closed form. */
 export function TimeCorrectionDialog({ open, onOpenChange, entry, onSubmitted }: TimeCorrectionDialogProps) {
   if (!open) return null;
   return (
@@ -108,10 +108,20 @@ export function TimeCorrectionDialog({ open, onOpenChange, entry, onSubmitted }:
         onClick={() => {
           // The real form closes, then reports the filed request.
           onOpenChange?.(false);
-          onSubmitted?.();
+          onSubmitted?.({ kind: 'edit' });
         }}
       >
         Korrektur einreichen
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          // The person switched the form to another kind: it leaves the recorded end as it is.
+          onOpenChange?.(false);
+          onSubmitted?.({ kind: 'reclassify' });
+        }}
+      >
+        Andere Korrektur einreichen
       </button>
       <button type="button" onClick={() => onOpenChange?.(false)}>
         Formular schließen
