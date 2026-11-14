@@ -27,12 +27,14 @@ export const readDelivery = undefined;
 /** A source file directly in the reader's src/; its tests stay behind. */
 const SOURCE_FILE = /^src\/[a-z0-9-]+\.ts$/;
 const TEST_FILE = /\.test\.ts$/;
-const FULL_COMMIT = /^[0-9a-f]{40}$/;
+const FULL_SHA = /^[0-9a-f]{40}$/;
 
-const commitSchema = z.object({ sha: z.string(), tree: z.object({ sha: z.string() }) });
+/** Every SHA GitHub returns: it goes into the next request's URL and into messages, so nothing else passes. */
+const gitSha = z.string().regex(FULL_SHA);
+const commitSchema = z.object({ sha: gitSha, tree: z.object({ sha: gitSha }) });
 const treeSchema = z.object({
   truncated: z.boolean(),
-  tree: z.array(z.object({ path: z.string(), type: z.string(), sha: z.string() })),
+  tree: z.array(z.object({ path: z.string(), type: z.string(), sha: gitSha })),
 });
 
 /** A failure whose message names the cause and never carries the key. */
@@ -70,7 +72,7 @@ function isVercelDeployment(env: InstallOptions['env']): boolean {
 
 /** The reader's source files at the pinned commit, by path. GitHub's Git data API takes a SHA only, never a branch. */
 async function downloadReader(token: string, fetch: Fetch): Promise<Record<string, string>> {
-  if (!FULL_COMMIT.test(pin.commit))
+  if (!FULL_SHA.test(pin.commit))
     throw new ReaderInstallError('lib/inventory/wholesaler-reader-pin.json must name a full commit SHA.');
   const get = async (path: string, accept: string): Promise<Response> => {
     const url = `https://api.github.com/repos/${pin.repository}/${path}`;
@@ -103,7 +105,7 @@ async function downloadReader(token: string, fetch: Fetch): Promise<Record<strin
     'the commit',
   );
   if (commit.sha !== pin.commit)
-    throw new ReaderInstallError(`GitHub returned commit ${commit.sha} instead of the pinned ${pin.commit}.`);
+    throw new ReaderInstallError(`GitHub returned another commit than the pinned ${pin.commit}.`);
   const tree = parsed(
     treeSchema,
     await (await get(`git/trees/${commit.tree.sha}?recursive=1`, json)).json(),

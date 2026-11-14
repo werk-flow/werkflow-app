@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { installWholesalerReader } from '../lib/inventory/wholesaler-reader-install';
 
-// The second step of `postinstall` (package.json): installs the wholesaler-file reader with
+// The first step of `postinstall` (package.json): installs the wholesaler-file reader with
 // WERKFLOW_DATANORM_TOKEN, or its stand-in without it (lib/inventory/wholesaler-reader-install.ts).
 // `--github-login` uses this machine's GitHub login (`gh auth token`) when the variable is unset,
 // to run the real reader on an agent machine; nothing passes it by default.

@@ -123,7 +123,7 @@ Between releases, merged migrations wait on DEV. `migrations:check`, `types:chec
 T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts` in the background.
 
 - Wait for `.t3/setup-done` before any command. While it waits for its turn or for room, `.t3/setup-running` says why (`lib/testing/runner/setup-turn.ts`). On `.t3/setup-failed`, repair the cause and rerun `bun scripts/setup-worktree.ts`.
-- After `bun.lock` changes, run `bun install --frozen-lockfile`; until then `check:changed` and `test:verify` refuse.
+- After `bun.lock` or `lib/inventory/wholesaler-reader-pin.json` changes, run `bun install --frozen-lockfile`; until then `check:changed` and `test:verify` refuse.
 - A checkout keeps its own `.next`, workspace lock, `.agent-logs/` and ports (`lib/testing/runner/app-port.ts`).
 - Every worktree shares one local stack. Browser groups of several worktrees run side by side, except one that measures or restarts a stack service: it holds the stack alone (`lib/testing/runner/stack-lock.ts`).
 - `bun run check:changed`, `test:verify`, `typecheck`, `build` (a test server's too) and a `lint` over 150 files take a machine-wide slot (`lib/testing/runner/heavy-slot.ts`): the first unless the machine is blocked, further ones with measured room (`bun run room`). Serving and CI take none. A hook refuses a direct whole-repository `tsc`, wider `eslint` or `next build` and names the slot command (`lib/testing/runner/heavy-command.ts`). Other heavy work: `bun scripts/heavy.ts -- <command>`.

@@ -17,21 +17,33 @@ type FakeGitHub = {
   requests: { url: string; authorization: string | null }[];
 };
 
+/** A synthetic Git SHA: 40 hex digits. */
+const sha = (digit: string): string => digit.repeat(40);
+const TREE = sha('1');
+const INDEX_BLOB = sha('2');
+const READER_BLOB = sha('3');
+
 /** GitHub's Git data API for a synthetic reader: the pinned commit, its tree and blobs. */
 function fakeGitHub(
-  answer: { commitSha?: string; status?: number; truncated?: boolean; unreachable?: boolean } = {},
+  answer: {
+    commitSha?: string;
+    blobSha?: string;
+    status?: number;
+    truncated?: boolean;
+    unreachable?: boolean;
+  } = {},
 ) {
   const tree = [
-    { path: 'src', type: 'tree', sha: 'tree-src' },
-    { path: 'src/index.ts', type: 'blob', sha: 'blob-index' },
-    { path: 'src/reader.ts', type: 'blob', sha: 'blob-reader' },
-    { path: 'src/reader.test.ts', type: 'blob', sha: 'blob-test' },
-    { path: 'src/nested/deep.ts', type: 'blob', sha: 'blob-deep' },
-    { path: 'README.md', type: 'blob', sha: 'blob-readme' },
+    { path: 'src', type: 'tree', sha: sha('4') },
+    { path: 'src/index.ts', type: 'blob', sha: INDEX_BLOB },
+    { path: 'src/reader.ts', type: 'blob', sha: answer.blobSha ?? READER_BLOB },
+    { path: 'src/reader.test.ts', type: 'blob', sha: sha('5') },
+    { path: 'src/nested/deep.ts', type: 'blob', sha: sha('6') },
+    { path: 'README.md', type: 'blob', sha: sha('7') },
   ];
   const blobs: Record<string, string> = {
-    'blob-index': "export { readDelivery } from './reader';\n",
-    'blob-reader': 'export const readDelivery = () => null;\n',
+    [INDEX_BLOB]: "export { readDelivery } from './reader';\n",
+    [READER_BLOB]: 'export const readDelivery = () => null;\n',
   };
   const github: FakeGitHub = {
     requests: [],
@@ -42,8 +54,8 @@ function fakeGitHub(
         return new Response(`{"message":"Bad credentials ${KEY}"}`, { status: answer.status });
       const path = url.slice(API.length);
       if (path === `git/commits/${pin.commit}`)
-        return Response.json({ sha: answer.commitSha ?? pin.commit, tree: { sha: 'tree-root' } });
-      if (path === 'git/trees/tree-root?recursive=1')
+        return Response.json({ sha: answer.commitSha ?? pin.commit, tree: { sha: TREE } });
+      if (path === `git/trees/${TREE}?recursive=1`)
         return Response.json({ truncated: answer.truncated ?? false, tree });
       const blob = blobs[path.replace('git/blobs/', '')];
       return blob === undefined ? new Response('', { status: 404 }) : new Response(blob);
@@ -128,9 +140,9 @@ test("a key installs the reader's source files at the pinned commit, without its
     expect(readdirSync(join(root, SOURCE)).sort()).toEqual(['index.ts', 'reader.ts']);
     expect(github.requests.map((request) => request.url.slice(API.length))).toEqual([
       `git/commits/${pin.commit}`,
-      'git/trees/tree-root?recursive=1',
-      'git/blobs/blob-index',
-      'git/blobs/blob-reader',
+      `git/trees/${TREE}?recursive=1`,
+      `git/blobs/${INDEX_BLOB}`,
+      `git/blobs/${READER_BLOB}`,
     ]);
     expect(github.requests.every((request) => request.url.startsWith(API))).toBe(true);
     expect(existsSync(join(root, 'vendor', 'wholesaler-reader.partial'))).toBe(false);
@@ -139,9 +151,12 @@ test("a key installs the reader's source files at the pinned commit, without its
   }
 });
 
-test('an answer for another commit, a truncated tree or a failed request is refused and keeps the earlier install', async () => {
+test('an answer for another commit, with a malformed SHA or a truncated tree, or a failed request, is refused and keeps the earlier install', async () => {
   for (const answer of [
-    { commitSha: 'f'.repeat(40) },
+    { commitSha: sha('f') },
+    // An answer whose SHAs carry other text, here the key, never reaches a URL or a message.
+    { commitSha: KEY },
+    { blobSha: KEY },
     { truncated: true },
     { status: 401 },
     { unreachable: true },
@@ -167,7 +182,10 @@ test('the key reaches GitHub in the Authorization header only and appears in no 
   const shown: string[] = [];
   for (const answer of [
     {},
-    { commitSha: 'f'.repeat(40) },
+    { commitSha: sha('f') },
+    // An answer whose SHAs carry other text, here the key, never reaches a URL or a message.
+    { commitSha: KEY },
+    { blobSha: KEY },
     { truncated: true },
     { status: 401 },
     { unreachable: true },
@@ -189,7 +207,7 @@ test('the key reaches GitHub in the Authorization header only and appears in no 
       rmSync(root, { recursive: true, force: true });
     }
   }
-  expect(shown).toHaveLength(5);
+  expect(shown).toHaveLength(7);
   for (const text of shown) expect(text).not.toContain(KEY);
 });
 
