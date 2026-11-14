@@ -463,22 +463,21 @@ const NOT_AN_ALIAS = new Set([
  * they read when they run, so a newer change to what they read conflicts with them.
  */
 function readRelations(reader: Reader): MigrationTarget[] {
+  // A WITH query's name counts too: telling it from a table of the same name needs scopes.
   const result: MigrationTarget[] = [];
-  // A WITH query's own name (`name as (`) is no relation.
-  const queries = new Set(
-    reader.tokens.flatMap((token, at) =>
-      reader.tokens[at + 1]?.text === 'as' && reader.tokens[at + 2]?.text === '(' ? [token.text] : [],
-    ),
-  );
   reader.tokens.forEach((token, at) => {
     if (token.quoted || token.string || !['from', 'join', 'using'].includes(token.text)) return;
     reader.position = at + 1;
     for (;;) {
       reader.skip(['only'], ['lateral']);
-      const name = reader.peek() === '(' ? null : reader.qualified();
-      if (name === null) return;
-      if (name[0] !== UNQUALIFIED || !queries.has(name[1])) result.push(target('relation', ...name));
-      reader.group();
+      // A subquery's own FROM is read where it stands; the list goes on after it.
+      if (reader.peek() === '(') reader.group();
+      else {
+        const name = reader.qualified();
+        if (name === null) return;
+        result.push(target('relation', ...name));
+        reader.group();
+      }
       reader.accept('as');
       if (!NOT_AN_ALIAS.has(reader.peek()) && reader.peek() !== ',' && reader.identifier() !== null)
         reader.group();
@@ -568,8 +567,14 @@ function pathSchemas(values: Token[]): string[] | null {
   const schemas: string[] = [];
   for (const value of values) {
     if (!value.quoted && !value.string && value.text === ',') continue;
+    // Inside a string each element is read as a name: unquoted ones fold their ASCII letters.
     const parts = value.string
-      ? value.text.split(',').map((part) => part.trim().replace(/^"|"$/g, ''))
+      ? value.text.split(',').map((part) => {
+          const trimmed = part.trim();
+          return /^".*"$/.test(trimmed)
+            ? trimmed.slice(1, -1)
+            : trimmed.replace(/[A-Z]+/g, (upper) => upper.toLowerCase());
+        })
       : [value.text];
     for (const part of parts) {
       if (!value.quoted && !value.string && part === 'default') return ['public'];
@@ -583,27 +588,36 @@ function pathSchemas(values: Token[]): string[] | null {
   return schemas.length ? schemas : null;
 }
 
+type PathChange = { schemas: string[] | null; local: boolean | null };
+
 /**
- * The search path after a statement: SET, RESET or `set_config('search_path', ...)` changes it,
- * any other statement keeps `path`. A value the reader cannot take apart leaves no path.
+ * How a statement changes the search path: SET, SET SCHEMA, RESET or
+ * `set_config('search_path', ...)`; undefined when it does not. `local` is null when the reader
+ * cannot tell whether the change ends with the transaction. A value it cannot take apart leaves
+ * no known path.
  */
-function nextPath(list: Token[], path: string[] | null): string[] | null {
+function pathChange(list: Token[]): PathChange | undefined {
   const words = list.map((token) => (token.quoted || token.string ? '' : token.text));
-  if (words[0] === 'reset' && (words[1] === 'search_path' || words[1] === 'all')) return ['public'];
+  if (words[0] === 'reset' && (words[1] === 'search_path' || words[1] === 'all'))
+    return { schemas: ['public'], local: false };
   if (words[0] === 'set') {
     // SET SCHEMA 'x' is PostgreSQL's alias for SET search_path TO 'x'.
     const at = words.findIndex((word, index) => index <= 2 && (word === 'search_path' || word === 'schema'));
-    if (at === -1) return path;
-    return pathSchemas(list.slice(at + 1).filter((token) => token.text !== 'to' && token.text !== '='));
+    if (at === -1) return undefined;
+    const schemas = pathSchemas(
+      list.slice(at + 1).filter((token) => token.text !== 'to' && token.text !== '='),
+    );
+    return { schemas, local: words[1] === 'local' };
   }
   for (let at = 0; at < list.length; at += 1) {
     if (words[at] !== 'set_config' || list[at + 2]?.text !== 'search_path') continue;
     // Only a lone literal is read; an expression such as 'pub' || 'lic' leaves no known path.
     const value = list[at + 4];
     const end = words[at + 5];
-    return value?.string && (end === ',' || end === ')') ? pathSchemas([value]) : null;
+    const local = words[at + 6] === 'true' ? true : words[at + 6] === 'false' ? false : null;
+    return { schemas: value?.string && (end === ',' || end === ')') ? pathSchemas([value]) : null, local };
   }
-  return path;
+  return undefined;
 }
 
 /** One target per schema of the search path for an unqualified name; null when the path is unknown. */
@@ -629,19 +643,27 @@ function resolved(found: MigrationTarget[], path: string[] | null): Read {
  */
 export function migrationChanges(sql: string): MigrationChanges {
   const changes: MigrationChanges = { targets: [], opaque: [] };
-  let path: string[] | null = ['public'];
+  // A SET LOCAL path ends with its transaction; the session path stays.
+  let session: string[] | null = ['public'];
+  let path: string[] | null = session;
+  const apply = (change: PathChange): void => {
+    path = change.schemas;
+    if (change.local !== true) session = change.local === false ? change.schemas : null;
+  };
   for (const statement of statements(sql)) {
     const list = tokens(statement);
-    const next = nextPath(list, path);
-    if (list[0]?.text === 'set') {
-      path = next;
+    const change = pathChange(list);
+    const verb = list[0]?.text ?? '';
+    if (verb === 'set') {
+      if (change !== undefined) apply(change);
       continue;
     }
     const read = statementTargets(new Reader(list, UNQUALIFIED));
     const found = read === null ? null : resolved(read, path);
-    path = next;
     if (found === null) changes.opaque.push(statement.replace(/\s+/g, ' ').slice(0, 60));
     else changes.targets.push(...found);
+    if (change !== undefined) apply(change);
+    else if (['commit', 'end', 'rollback', 'abort'].includes(verb)) path = session;
   }
   return changes;
 }

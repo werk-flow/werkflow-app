@@ -31,6 +31,8 @@ test('a table, its columns, constraints, indexes, comments and rows name the tab
     'relation public.jobs',
     'relation app_private.queue',
     'relation public.archive',
+    // A WITH query's name counts as a relation too, conservatively.
+    'relation public.gone',
     'relation public.jobs_staging',
     'relation public.jobs_old',
   ]);
@@ -147,6 +149,7 @@ test('SELECT INTO, SET SCHEMA and RENAME TO name the object under its new identi
   ).toEqual([
     'relation public.copied',
     'relation public.scratch',
+    'relation public.source',
     'relation public.jobs',
     'relation app_private.jobs',
     'function public.f',
@@ -235,6 +238,8 @@ test('a view, CREATE TABLE AS and a data copy conflict with a newer change to wh
     'create table job_copy as select * from jobs;',
     'with fresh as (select id from jobs) insert into archive select * from fresh;',
     'update visits set due = j.due from archive a, jobs j where j.id = visits.job_id;',
+    'with jobs as (select * from jobs) insert into archive select * from jobs;',
+    'create view summary as select j.* from (select 1) seed, jobs j;',
   ])
     expect(sharedChanges(migrationChanges(reader), addNote), reader).toEqual(['relation public.jobs']);
   // A pure SELECT changes nothing.
@@ -251,4 +256,23 @@ test('SET SCHEMA moves the search path, and creating or dropping a publication c
       migrationChanges('drop publication supabase_realtime; create publication supabase_realtime;'),
     ),
   ).toEqual(['publication supabase_realtime.public.jobs']);
+});
+
+test('a SET LOCAL path ends with its transaction, and a string path folds unquoted names', () => {
+  expect(
+    named(
+      "begin; set local schema 'app_private'; alter table jobs add a int; commit; alter table jobs add b int; set search_path = 'App_Private, \"Mixed\"'; truncate t;",
+    ),
+  ).toEqual([
+    'relation app_private.jobs',
+    'relation public.jobs',
+    'relation app_private.t',
+    'relation Mixed.t',
+  ]);
+  // A set_config whose scope the reader cannot tell leaves no known path after the transaction.
+  expect(
+    migrationChanges(
+      "begin; select set_config('search_path', 'app_private', is_local); commit; alter table jobs add c int;",
+    ).opaque,
+  ).toEqual(['alter table jobs add c int']);
 });
