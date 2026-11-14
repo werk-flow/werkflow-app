@@ -61,6 +61,10 @@ const config: KnipConfig = {
     // reader and the line arithmetic rule exist before E2a's offers import
     // them. Remove this entry with the first production import.
     'lib/inventory/{article-prices,line-amount}.ts!',
+    // The wholesaler-file reader's seam (werk-flow/werkflow-planning#395)
+    // exists before the wholesaler import (werk-flow/werkflow-planning#375)
+    // imports it. Remove this entry with that import.
+    'lib/inventory/wholesaler-reader.ts!',
     // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
     // the offer calculation imports it. Remove this entry with that import.
     'lib/price-catalog/leistung-prices.ts!',

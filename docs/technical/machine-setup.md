@@ -29,7 +29,7 @@ The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-pl
 
 | Job | Runs on |
 | --- | --- |
-| `worktree-cleanup`, load watch | Each machine, for itself |
+| `worktree-cleanup`, load watch, [merge notice](coderabbit.md#the-merge-gate) (also for `Waiting:` blockers) | Each machine, for itself |
 | [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | The PC and the Mac; only the lease holder acts. A further machine runs only its own `worktree-cleanup` and load watch |
 | [Production watcher](recovery-and-incidents.md#monitoring) | Where its [token](environments.md#credentials) is |
 | [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The PC, beside the stack |
