@@ -4,7 +4,7 @@
 // shorter one ends through a plain end. The file spawns itself: module mocks
 // stay in the child.
 import assert from 'node:assert/strict';
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, setSystemTime, test } from 'bun:test';
 import { createInMemoryAdmin, type InMemoryTables } from '@/lib/testing/fixtures/in-memory-admin';
 
 const FIXTURE_FLAG = 'SIGN_OUT_SESSION_END_FIXTURE';
@@ -18,7 +18,8 @@ const sessions = {
 };
 
 async function runFixture(): Promise<void> {
-  const now = Date.now();
+  const now = Date.parse('2026-03-04T08:00:00.000Z');
+  setSystemTime(now);
   const openSession = (
     session: { id: string; org: string },
     openForMs: number,
@@ -67,12 +68,12 @@ async function runFixture(): Promise<void> {
   assert.deepEqual(
     sent(sessions.thirtyHours),
     [{ action: 'recover_end', acknowledgeLong: true }],
-    'a session open 30 hours ends with the recovery marker, not as the person own end',
+    "a session open 30 hours ends with the recovery marker, not as the person's own end",
   );
   assert.deepEqual(
     sent(sessions.twoHours),
     [{ action: 'end', acknowledgeLong: false }],
-    'a session open 2 hours ends as the person own end',
+    "a session open 2 hours ends as the person's own end",
   );
   assert.deepEqual(
     sent(sessions.flagged),
