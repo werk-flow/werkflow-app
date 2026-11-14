@@ -219,7 +219,8 @@ create table public.inventory_supplier_rebate_groups (
   constraint inventory_supplier_rebate_groups_import_fk foreign key (import_id, organization_id)
     references public.inventory_supplier_catalog_imports (id, organization_id),
   constraint inventory_supplier_rebate_groups_group_check
-    check (length(btrim(rebate_group)) between 1 and 40),
+    -- As long as the action's schema lets a group be, so the confirm drops none it accepted.
+    check (length(btrim(rebate_group)) between 1 and 200),
   constraint inventory_supplier_rebate_groups_discount_check check (jsonb_typeof(discount) = 'object')
 );
 
@@ -750,7 +751,7 @@ begin
     coalesce(entry.value->>'text', ''), entry.value->'discount', v_import.id
   from jsonb_array_elements(v_import.rebate_groups) with ordinality entry
   where jsonb_typeof(entry.value->'discount') = 'object'
-    and length(btrim(coalesce(entry.value->>'rebate_group', ''))) between 1 and 40
+    and length(btrim(coalesce(entry.value->>'rebate_group', ''))) between 1 and 200
   order by btrim(entry.value->>'rebate_group'), entry.ordinality desc
   on conflict (organization_id, supplier_id, rebate_group) do update set
     text = excluded.text,

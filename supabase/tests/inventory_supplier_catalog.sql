@@ -158,7 +158,12 @@ insert into catalog_test_state values ('first', public.open_supplier_catalog_imp
   '37500000-0000-4000-8000-000000000010', '37500000-0000-4000-8000-000000000002',
   '37500000-0000-4000-8000-000000000030', array['lieferung-nordrohr'], repeat('a', 64),
   '{"format_version":"4","supplier_text":"Großhandel Nordrohr","date":"2037-11-02","currency":"EUR"}',
-  '[{"rebate_group":"CU1","text":"Kupfer","discount":{"kind":"percent","hundredthsOfPercent":3000}}]', '[]'));
+  -- The second rebate group is as long as the action's schema lets one be.
+  jsonb_build_array(
+    '{"rebate_group":"CU1","text":"Kupfer","discount":{"kind":"percent","hundredthsOfPercent":3000}}'::jsonb,
+    jsonb_build_object('rebate_group', repeat('Ü', 200), 'text', 'Lange Gruppe',
+      'discount', '{"kind":"percent","hundredthsOfPercent":1000}'::jsonb)),
+  '[]'));
 do $$
 declare
   v_import uuid := (select value from catalog_test_state where key = 'first');
@@ -244,6 +249,11 @@ begin
       where organization_id = '37500000-0000-4000-8000-000000000010' and rebate_group = 'CU1')
     is distinct from '{"kind":"percent","hundredthsOfPercent":3000}'::jsonb then
     raise exception 'the rebate group was not kept as data';
+  end if;
+  -- A group the action accepts is kept, never dropped at the confirm.
+  if not exists (select 1 from public.inventory_supplier_rebate_groups
+      where organization_id = '37500000-0000-4000-8000-000000000010' and rebate_group = repeat('Ü', 200)) then
+    raise exception 'a rebate group of 200 characters, which the action accepts, was dropped';
   end if;
   -- The batch keeps only the lines its report names: the pipe's superseded
   -- line with the unmapped unit is no rejection, since its later line was written.
