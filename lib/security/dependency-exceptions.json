@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dependencyDigest": "5b553bc0a8455b5c38cf63a58d5eaa84a50da4b9c0b852bd05254963616cec66",
+  "dependencyDigest": "5d2a450311bdad0961843e63d726274188fc3406dc32ce1105bcede7e3eae3b3",
   "exceptions": [
     {
       "package": "minimatch",
@@ -19,7 +19,8 @@
         "Re-reviewed on 2026-11-07 for a patched @supabase/ssr 0.7.0 (werk-flow/werkflow-planning#232): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
         "Re-reviewed on 2026-11-08 for @vercel/functions 3.10.6 (werk-flow/werkflow-planning#288): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
         "Re-reviewed on 2026-11-09 for the dev dependency fake-indexeddb 6.2.6, which has no dependencies (werk-flow/werkflow-planning#318): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
-        "Re-reviewed on 2026-11-12 for pdf-lib 1.17.1, @pdf-lib/fontkit 1.1.1 and the dev dependency unpdf 1.9.1 (werk-flow/werkflow-planning#377): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency."
+        "Re-reviewed on 2026-11-12 for pdf-lib 1.17.1, @pdf-lib/fontkit 1.1.1 and the dev dependency unpdf 1.9.1 (werk-flow/werkflow-planning#377): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
+        "Re-reviewed on 2026-11-14 for saxon-js 2.7.0 (with axios), xmlbuilder2 4.0.3 and the dev dependency xslt3 2.7.0 (werk-flow/werkflow-planning#454): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency."
       ]
     }
   ]
