@@ -83,6 +83,7 @@ async function recordMovement(
     projectId?: string | null;
     jobMaterialLineId?: string | null;
     reason?: string | null;
+    operationId?: string;
   },
 ): Promise<ActionResult<{ quantityAfter: number }>> {
   const { data, error } = await admin.rpc(
@@ -99,11 +100,14 @@ async function recordMovement(
       p_job_material_line_id: input.jobMaterialLineId ?? null,
       p_import_batch_id: null,
       p_reason: cleanText(input.reason),
+      p_operation_id: input.operationId ?? null,
     }),
   );
 
   if (error) {
     if (error.message === 'return_exceeds_taken') return { success: false, error: 'return_exceeds_taken' };
+    if (error.message === 'material_idempotency_conflict')
+      return { success: false, error: 'material_idempotency_conflict' };
     if (error.message === 'material_line_item_changed') return { success: false, error: 'line_changed' };
     logError('Error recording inventory movement.', { code: error.code ?? 'unknown' });
     if (error.message?.includes('inventory stock cannot go below zero')) {
@@ -533,6 +537,7 @@ export async function takeJobMaterial(
       projectId: jobContext.job.project_id,
       jobMaterialLineId: existingLine.id,
       reason: input.reason || 'Für Auftrag entnommen',
+      operationId: input.operationId,
     });
   } else {
     if (!input.itemId) return { success: false, error: 'item_required' };
@@ -544,6 +549,7 @@ export async function takeJobMaterial(
       quantity,
       reason: input.reason,
       defaultReason: 'Für Auftrag entnommen',
+      operationId: input.operationId,
     });
   }
   if (!result.success) return result;
@@ -594,6 +600,7 @@ export async function takeProjectMaterial(
       projectId: projectContext.project.id,
       jobMaterialLineId: existingLine.id,
       reason: input.reason || 'Für Projekt entnommen',
+      operationId: input.operationId,
     });
   } else {
     if (!input.itemId) return { success: false, error: 'item_required' };
@@ -605,6 +612,7 @@ export async function takeProjectMaterial(
       quantity,
       reason: input.reason,
       defaultReason: 'Für Projekt entnommen',
+      operationId: input.operationId,
     });
   }
   if (!result.success) return result;
@@ -657,14 +665,8 @@ export async function returnJobMaterial(
     return { success: false, error: 'line_not_found' };
   }
 
-  // Used material is built in; only what is neither used nor returned comes back.
-  const stillOut = normalizeQuantity(
-    toNumber(line.taken_quantity) - toNumber(line.used_quantity) - toNumber(line.returned_quantity),
-  );
-  if (quantity > stillOut) {
-    return { success: false, error: 'return_exceeds_taken' };
-  }
-
+  // record_inventory_movement refuses a return beyond what is neither used nor
+  // returned; it answers a retry first, which a check here would refuse.
   const result = await recordMovement(admin, auth.context, {
     itemId: line.item_id,
     locationId: input.locationId,
@@ -674,6 +676,7 @@ export async function returnJobMaterial(
     projectId,
     jobMaterialLineId: line.id,
     reason: input.reason || (jobId ? 'Von Auftrag zurückgelegt' : 'Von Projekt zurückgelegt'),
+    operationId: input.operationId,
   });
 
   if (!result.success) return result;

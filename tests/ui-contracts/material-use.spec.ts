@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { isUuid } from '@/lib/validation/uuid';
 import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fixture';
 
 // Recording used material names article, quantity, unit and effect before the
@@ -44,6 +45,46 @@ test('a refused use restores the line and reopens the dialog with the reason', a
   expect(
     await page.evaluate(() => window.uiContractMaterial.lines.map((entry) => entry.usedQuantity)),
   ).toEqual([0]);
+});
+
+/** The operation id of every use the page sent, in order. */
+function sentOperationIds(page: import('@playwright/test').Page): Promise<unknown[]> {
+  return page.evaluate(() =>
+    window.uiContractWrites.calls.map((call) =>
+      typeof call.input === 'object' && call.input !== null && 'operationId' in call.input
+        ? call.input.operationId
+        : null,
+    ),
+  );
+}
+
+// One dialog opening names its booking once: a press after a failed answer
+// sends the same operation id, so a booking whose answer was lost books once.
+// A new opening is a new booking with a new id.
+test('a retried use sends the operation id of its dialog opening, a new opening a new one', async ({
+  page,
+}) => {
+  const { line, dialog } = await bookUse(page);
+
+  await answerHeldWrite(page, 'use_failed');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Verbrauch buchen', exact: true }).click();
+  await expect.poll(() => sentOperationIds(page)).toHaveLength(2);
+  await answerHeldWrite(page, null);
+  await expect(line.getByRole('status', { name: 'Wird gespeichert', exact: true })).toHaveCount(0);
+
+  await line.getByRole('button', { name: 'Verbraucht', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Verbrauch buchen', exact: true }).click();
+  await expect.poll(() => sentOperationIds(page)).toHaveLength(3);
+  await answerHeldWrite(page, 'material_idempotency_conflict');
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'Diese Buchung wurde schon mit anderen Angaben gespeichert. Schließe den Dialog und prüfe die Materialposition.',
+  );
+
+  const [first, retry, next] = await sentOperationIds(page);
+  expect(typeof first === 'string' && isUuid(first)).toBe(true);
+  expect(retry).toBe(first);
+  expect(next).not.toBe(first);
 });
 
 test('an accepted use keeps the new facts once the line is read again', async ({ page }) => {

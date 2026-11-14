@@ -2,9 +2,10 @@ import { expect, mock } from 'bun:test';
 import { resolve } from 'node:path';
 
 // Run in a child process so replaced framework modules cannot leak into other tests.
-// Drives the real upsertInventoryItem, takeJobMaterial, takeProjectMaterial and returnJobMaterial
-// against a fake service-role client: each save or unplanned take is one
-// database function call with the server-resolved organization and actor, no
+// Drives the real upsertInventoryItem, takeJobMaterial, takeProjectMaterial,
+// returnJobMaterial and recordJobMaterialUse against a fake service-role
+// client: each save or booking is one database function call with the
+// server-resolved organization and actor and the caller's operation id, no
 // direct table write follows it, and the function's refusal codes reach the
 // caller.
 const root = resolve(import.meta.dir, '../../..');
@@ -20,6 +21,7 @@ const CATEGORY = '00000000-0000-4000-8000-0000000000b3';
 const JOB = '00000000-0000-4000-8000-0000000000b4';
 const FOREIGN_JOB = '00000000-0000-4000-8000-0000000000b5';
 const PROJECT = '00000000-0000-4000-8000-0000000000b6';
+const OPERATION = '00000000-0000-4000-8000-0000000000b8';
 
 let tables: Record<string, Row[]> = {};
 let tableWrites = 0;
@@ -85,6 +87,7 @@ const logged: unknown[][] = [];
 console.error = (...args: unknown[]) => logged.push(args);
 
 const { returnJobMaterial, takeJobMaterial, takeProjectMaterial } = await import('../../inventory/actions');
+const { recordJobMaterialUse } = await import('../../inventory/material-use-actions');
 const { upsertInventoryItem } = await import('../../inventory/catalog-actions');
 
 function reset(result: RpcResult, { isManager = true }: { isManager?: boolean } = {}) {
@@ -186,7 +189,7 @@ expect(rpcCalls).toEqual([]);
 // 5. An unplanned job take is one take_unplanned_inventory_material call; the
 //    function reads the job's project itself. A refused take writes no line
 //    and deletes nothing.
-const takeInput = { jobId: JOB, itemId: ITEM, locationId: LOCATION, quantity: 2 };
+const takeInput = { operationId: OPERATION, jobId: JOB, itemId: ITEM, locationId: LOCATION, quantity: 2 };
 reset({ data: 3, error: null });
 expect(await takeJobMaterial(takeInput)).toEqual({ success: true, quantityAfter: 3 });
 expect(rpcCalls).toEqual([
@@ -202,6 +205,7 @@ expect(rpcCalls).toEqual([
       p_quantity: 2,
       p_reason: 'Für Auftrag entnommen',
       p_notes: null,
+      p_operation_id: OPERATION,
     },
   },
 ]);
@@ -235,7 +239,13 @@ expect(rpcCalls[0]?.args).toMatchObject({ p_reason: 'Nachgekauft', p_notes: 'Nac
 // 7. An unplanned project take names only the project.
 reset({ data: 4, error: null });
 expect(
-  await takeProjectMaterial({ projectId: PROJECT, itemId: ITEM, locationId: LOCATION, quantity: 1 }),
+  await takeProjectMaterial({
+    operationId: OPERATION,
+    projectId: PROJECT,
+    itemId: ITEM,
+    locationId: LOCATION,
+    quantity: 1,
+  }),
 ).toEqual({
   success: true,
   quantityAfter: 4,
@@ -250,7 +260,7 @@ expect(tableWrites).toBe(0);
 // 8. A return the function refuses under the line's lock reaches the caller as
 //    its code, even after the server's own check of the line passed.
 const LINE = '00000000-0000-4000-8000-0000000000b7';
-const returnInput = { lineId: LINE, locationId: LOCATION, quantity: 2 };
+const returnInput = { operationId: OPERATION, lineId: LINE, locationId: LOCATION, quantity: 2 };
 reset(refusal('return_exceeds_taken'));
 tables.job_material_lines = [
   { id: LINE, organization_id: ORG, job_id: JOB, item_id: ITEM, taken_quantity: 4, returned_quantity: 1 },
@@ -259,8 +269,9 @@ expect(await returnJobMaterial(returnInput)).toEqual({ success: false, error: 'r
 expect(rpcCalls).toHaveLength(1);
 expect(logged).toEqual([]);
 
-// 8b. Returning exactly what is open after a decimal use reaches the function:
-//     0.3 taken minus 0.1 used is 0.2, not a binary remainder just below it.
+// 8b. A retried return reaches the function under its operation id, also when
+//     the line already shows the first return as nothing left open: the
+//     function answers the repeat with the first movement's result.
 reset({ data: [{ movement_id: 'movement', quantity_before: 0, quantity_after: 0.2 }], error: null });
 tables.job_material_lines = [
   {
@@ -270,14 +281,24 @@ tables.job_material_lines = [
     item_id: ITEM,
     taken_quantity: 0.3,
     used_quantity: 0.1,
-    returned_quantity: 0,
+    returned_quantity: 0.2,
   },
 ];
 expect(await returnJobMaterial({ ...returnInput, quantity: 0.2 })).toEqual({
   success: true,
   quantityAfter: 0.2,
 });
-expect(rpcCalls).toHaveLength(1);
+expect(rpcCalls).toEqual([
+  {
+    name: 'record_inventory_movement',
+    args: expect.objectContaining({
+      p_movement_type: 'job_return',
+      p_quantity_delta: 0.2,
+      p_job_material_line_id: LINE,
+      p_operation_id: OPERATION,
+    }),
+  } satisfies Record<string, unknown>,
+]);
 
 // 9. A take the function refuses because the line's item changed since the
 //    server read the line reaches the caller as line_changed, unlogged.
@@ -285,7 +306,15 @@ reset(refusal('material_line_item_changed'));
 tables.job_material_lines = [
   { id: LINE, organization_id: ORG, job_id: JOB, item_id: ITEM, taken_quantity: 0, returned_quantity: 0 },
 ];
-expect(await takeJobMaterial({ jobId: JOB, lineId: LINE, locationId: LOCATION, quantity: 1 })).toEqual({
+expect(
+  await takeJobMaterial({
+    operationId: OPERATION,
+    jobId: JOB,
+    lineId: LINE,
+    locationId: LOCATION,
+    quantity: 1,
+  }),
+).toEqual({
   success: false,
   error: 'line_changed',
 });
@@ -296,3 +325,63 @@ expect(rpcCalls).toEqual([
   } satisfies Record<string, unknown>,
 ]);
 expect(logged).toEqual([]);
+
+// 10. Every press of one dialog sends the same operation id, and the function's
+//     answer to a repeat is the action's answer: a take on a planned line, a
+//     use and a return each name the id; an id the function refuses as booked
+//     with other content reaches the caller as material_idempotency_conflict,
+//     unlogged.
+const lineTake = { operationId: OPERATION, jobId: JOB, lineId: LINE, locationId: LOCATION, quantity: 1 };
+const useInput = { operationId: OPERATION, lineId: LINE, quantity: 1, note: null };
+reset({ data: [{ movement_id: 'movement', quantity_before: 5, quantity_after: 4 }], error: null });
+tables.job_material_lines = [
+  { id: LINE, organization_id: ORG, job_id: JOB, item_id: ITEM, taken_quantity: 0, returned_quantity: 0 },
+];
+expect(await takeJobMaterial(lineTake)).toEqual({ success: true, quantityAfter: 4 });
+expect(await takeJobMaterial(lineTake)).toEqual({ success: true, quantityAfter: 4 });
+expect(rpcCalls.map((call) => [call.name, call.args.p_operation_id])).toEqual([
+  ['record_inventory_movement', OPERATION],
+  ['record_inventory_movement', OPERATION],
+]);
+
+reset({ data: 1, error: null });
+tables.job_material_lines = [
+  { id: LINE, organization_id: ORG, job_id: JOB, project_id: PROJECT, status: 'taken' },
+];
+expect(await recordJobMaterialUse(useInput)).toEqual({ success: true, usedQuantity: 1 });
+expect(rpcCalls).toEqual([
+  {
+    name: 'record_job_material_use',
+    args: expect.objectContaining({ p_job_material_line_id: LINE, p_quantity: 1, p_operation_id: OPERATION }),
+  } satisfies Record<string, unknown>,
+]);
+expect(await recordJobMaterialUse({ ...useInput, operationId: 'not-a-uuid' })).toEqual({
+  success: false,
+  error: 'invalid_input',
+});
+
+for (const book of [
+  () => takeJobMaterial(lineTake),
+  () => takeJobMaterial(takeInput),
+  () => returnJobMaterial(returnInput),
+  () => recordJobMaterialUse(useInput),
+]) {
+  reset(refusal('material_idempotency_conflict'));
+  tables.job_material_lines = [
+    {
+      id: LINE,
+      organization_id: ORG,
+      job_id: JOB,
+      project_id: PROJECT,
+      item_id: ITEM,
+      status: 'taken',
+      taken_quantity: 4,
+      used_quantity: 0,
+      returned_quantity: 0,
+    },
+  ];
+  expect(await book()).toEqual({ success: false, error: 'material_idempotency_conflict' });
+  expect(rpcCalls).toHaveLength(1);
+  expect(tableWrites).toBe(0);
+  expect(logged).toEqual([]);
+}

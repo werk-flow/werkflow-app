@@ -13,6 +13,7 @@ import type { JobMaterialLine } from '@/lib/inventory/types';
 function dialogRow(patch: Partial<MaterialDialogRow> = {}): MaterialDialogRow {
   return {
     key: 'line-1',
+    operationId: '00000000-0000-4000-8000-000000000001',
     lineId: 'line-1',
     itemId: 'item-1',
     locationId: 'location-1',

@@ -60,7 +60,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - **Route handlers.** Each handler or its action authenticates the caller; field sync accepts bearer tokens too. No response or redirect carries an error's message or details.
 - **Auth links.** No browser client reads a URL session (`auth-url-session.spec.ts`). A GET redeems an invite only after a code exchange in that request; a reset hash waits in an httpOnly cookie for the reset page's click (`lib/auth/recovery-link.ts`).
 - **Email in URLs.** No URL carries a provider message or an email address. The next step reads the address from an httpOnly cookie scoped to its page (`lib/auth/address-cookies.ts`), the invite row, or the session.
-- **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; a new authenticated area is routed there. `app/(app)/layout.tsx` checks the session again and is the authority.
+- **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; route a new one there. `app/(app)/layout.tsx` checks the session again and is the authority.
 - **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy passes the request to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
 - **Redirects.** A return destination from a query string goes through `resolveSafeReturnPath` and is a same-origin path. An invite code is a UUID before the app echoes it.
 - **Organization cookie.** A hint: the server accepts it only for a current member and sets it for no one else.
@@ -97,7 +97,7 @@ The edge functions accept only the project's secret keys and escape every interp
 
 ### Browser
 
-Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to `POST /api/csp-report`, which is unauthenticated, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
+Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to the unauthenticated `POST /api/csp-report`, which stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
 
 The service worker (`/sw.js`, [versioned per build](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-13-the-build-writes-the-shells-version)) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the stored day ([one exception](#known-residual-exposure)); unsent work stays, untrusted ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
 
@@ -109,7 +109,7 @@ A reader cached across requests throws `CachedReadError` on a failed read, so th
 
 Every plan carries an advisory check under 24 hours old. An unknown finding fails, as does an exception that is expired, outgrown or on a changed dependency tree, matching or not. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
 
-An exception matching no finding on an unchanged tree means the registry narrowed the advisory: the check passes with a note; remove the exception.
+On an unchanged tree, an exception matching no finding passes with a note: remove it.
 
 ## Never
 
@@ -124,7 +124,8 @@ An exception matching no finding on an unchanged tree means the registry narrowe
 - Cache a permission fact across requests, or an authenticated response at the CDN.
 - Add a retry or a cookie fallback that turns a failed identity check into access.
 - Write to PROD outside the `release` workflow.
-- Read PROD data in an agent session: results reach the model provider (`bun run prod:inspect` returns metadata only). Hooks enforce it for MCP tools and `vercel logs`, against accidental reads, not deliberate evasion; other shell paths are a [backlog](enforcement-ladder-backlog.md) row.
+- Read PROD data in an agent session: results reach the model provider ([which tool reaches what](environments.md#which-tool-reaches-what)).
+- Start a sign-in or run the Vercel CLI as an agent: the owner cannot tell who asked, and the token reaches PROD (`refuse-account-sign-in.ts`). Sign-ins are owner steps: numbered steps (machine, window, command, what the owner sees) under "Owner queue" on your epic or issue, then the question tool; keep working.
 
 ## Verify your work
 
@@ -151,7 +152,7 @@ List each owner-accepted residual exposure until it closes.
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
 - Unsent work outlives sign-out on the phone, readable to whoever unlocks its browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them.
-- An unreadable report draft is never sent, so the lost-access deletion never starts for it; it stays until its person deletes it ([owner decision](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-stored-records-stay-readable)).
+- An unreadable report draft is never sent, so the lost-access deletion never starts; it stays until its person deletes it ([owner decision](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-stored-records-stay-readable)).
 
 ## Revocation boundaries
 
@@ -160,8 +161,8 @@ List each owner-accepted residual exposure until it closes.
 | Privileged server reads and actions | Identity, membership, role, object and lifecycle rules load again on each request and render. Scheduled restrictions apply at read time. |
 | Direct database clients | RLS consults current membership and effective personnel access. A valid JWT alone grants no organization access. |
 | Realtime | INSERT and UPDATE use the table's current RLS. Deletion notices use the protected transport. Freshness inside one organization is no evidence of tenant denial. |
-| Signed file URLs already issued | A URL is a bearer capability. Revocation prevents new signing; an issued URL lives until expiry, and a download cannot be recalled. |
-| Auth sessions | [Supabase sign-out](https://supabase.com/docs/guides/auth/signout) lets an issued access token live until expiry. During an incident, suspend operational access and follow the [runbook](recovery-and-incidents.md). |
+| Signed file URLs already issued | A URL is a bearer capability: revocation stops new signing, an issued URL lives until expiry. |
+| Auth sessions | [Supabase sign-out](https://supabase.com/docs/guides/auth/signout) lets an issued access token live until expiry. In an incident, suspend operational access ([runbook](recovery-and-incidents.md)). |
 
 ## Sensitive data and owner decisions
 
@@ -173,7 +174,7 @@ List each owner-accepted residual exposure until it closes.
 | Logs, traces, test artifacts | Diagnosis and test evidence. Fixtures are synthetic. | Limit access and remove secrets from exported evidence. Ignored files are neither encrypted nor purged automatically. |
 | Backups and retained file versions | Recovery. Database backups hold no file bytes. | [The runbook](recovery-and-incidents.md) records coverage and accepted loss. Deleting a live record does not erase a backup. |
 
-Before sensitive client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Product analytics or session replay needs the owner's privacy and cost decision first.
+Before client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Analytics or session replay needs the owner's decision first.
 
 ## Read-request authorization reuse
 
