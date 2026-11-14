@@ -71,8 +71,8 @@ export function returnToApp(): Promise<boolean> {
 }
 
 /**
- * The way back the page starts on its own (`online`, its start): `returnToApp`, again after each
- * settle pause while the phone reports a network. Resolves false once the checks are spent or the
+ * The way back after `online`: `returnToApp`, again after each settle pause while the phone
+ * reports a network. Resolves false once the checks are spent or the
  * network report is gone; the next `online` starts it anew.
  */
 export function returnWhenReachable(): Promise<boolean> {

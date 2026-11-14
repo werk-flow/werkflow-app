@@ -13,6 +13,7 @@ import {
   expectNextBuildShellAfterUpdate,
   expectShellOfServedBuild,
   offlineFallback,
+  offlineRetryButton,
   expectNoServiceWorkerCaches,
   expectOnlyShellFilesCached,
   expectOwnedCacheDeleted,
@@ -67,8 +68,12 @@ test('the app shell opens without signal and keeps nothing of the person @AUDIT-
     await retryWithoutSignal(page);
   });
 
-  await test.step('the signal coming back opens the page by itself', async () => {
+  await test.step('with the signal back, a tap opens the page', async () => {
+    // Chromium's offline emulation leaves this page's navigator.onLine true and fires no `online`,
+    // so nothing returns on its own here and the tap is the way back; the UI contract
+    // tests/ui-contracts/offline-retry.spec.ts proves the return on `online`.
     await setNetwork(page, 'online');
+    await offlineRetryButton(page).click();
     await expect(jobListReady(page)).toBeVisible();
     await expect(page).toHaveURL(/\/auftraege$/);
   });

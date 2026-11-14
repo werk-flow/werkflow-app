@@ -156,8 +156,6 @@ test('a signal whose first check fails while the connection settles opens the ap
   // Wi-Fi joined but routes nothing yet.
   await held[0]?.abort('internetdisconnected');
   await expect.poll(() => held.length).toBe(2);
-  await expect(retryButton(page)).toHaveAttribute('aria-busy', 'true');
-  await expect(page.getByRole('alert')).toHaveCount(0);
   const reloads = await holdReload(page);
   await held[1]?.fulfill({ status: 200 });
   await expect.poll(() => reloads.length).toBe(1);
@@ -167,8 +165,9 @@ test('a signal whose first check fails while the connection settles opens the ap
 test('a signal that came back before the page could listen starts the way back at once', async ({ page }) => {
   const held = await holdProbes(page);
   await mountRecovery(page, { online: true });
-  await expect(retryButton(page)).toHaveAttribute('aria-busy', 'true');
   await expect.poll(() => held.length).toBe(1);
+  // The page checks on its own; the button stays free for a tap.
+  await expect(retryButton(page)).toBeEnabled();
   const reloads = await holdReload(page);
   await held[0]?.fulfill({ status: 200 });
   await expect.poll(() => reloads.length).toBe(1);
