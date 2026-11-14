@@ -94,7 +94,7 @@ create function public.record_maintenance_visit_missed(
   p_idempotency_key uuid
 )
 returns public.maintenance_due_work
-language plpgsql security invoker set search_path = ''
+language plpgsql security definer set search_path = ''
 as $$
 declare
   v_existing public.maintenance_due_work_events%rowtype;
@@ -330,16 +330,13 @@ create or replace function public.list_maintenance_workspace_page(
   );
 $$;
 
+-- Steps: no role executes them; the definer entry points above reach them
+-- (docs/technical/security.md, "Add a privileged function", condition a).
 revoke all on function app_private.reopen_missed_maintenance_due_work(
   uuid, uuid, bigint, public.maintenance_missed_visit_reason, text, uuid, text, uuid, jsonb
-) from public, anon, authenticated;
-grant execute on function app_private.reopen_missed_maintenance_due_work(
-  uuid, uuid, bigint, public.maintenance_missed_visit_reason, text, uuid, text, uuid, jsonb
-) to service_role;
+) from public, anon, authenticated, service_role;
 revoke all on function app_private.reopen_maintenance_due_work_of_cancelled_job(uuid, uuid, uuid, text, uuid)
-  from public, anon, authenticated;
-grant execute on function app_private.reopen_maintenance_due_work_of_cancelled_job(uuid, uuid, uuid, text, uuid)
-  to service_role;
+  from public, anon, authenticated, service_role;
 revoke all on function public.record_maintenance_visit_missed(
   uuid, uuid, bigint, public.maintenance_missed_visit_reason, text, uuid, uuid
 ) from public, anon, authenticated;
