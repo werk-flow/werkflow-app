@@ -299,9 +299,14 @@ begin
 end;
 $$;
 
--- The office's naming and ending (20261204110000_name_and_end_a_project_lead.sql):
--- only a manager of the organization, only its own work and members, and a
--- call whose holding changed meanwhile is refused; a repeat changes nothing.
+-- The office's naming and ending (20261204110000_name_and_end_a_project_lead.sql),
+-- called as the server calls them, as service_role: only a manager of the
+-- organization, only its own work and members, and a call whose holding
+-- changed meanwhile is refused; a repeat changes nothing.
+grant execute on function pg_temp.expect_refusal(text, text, text) to service_role;
+grant execute on function pg_temp.open_lead(uuid, uuid) to service_role;
+grant execute on function pg_temp.record_of(uuid) to service_role;
+set local role service_role;
 do $$
 declare
   v_org constant uuid := '4f200000-0000-4000-8000-0000000000a0';
@@ -377,6 +382,38 @@ begin
 end;
 $$;
 
+reset role;
+
+-- A change of a job or an instruction in a led project touches the open
+-- holding, so the lead, who reads no row of a job they are not on, hears of it
+-- through the holding's Realtime event. Work of another project does not.
+do $$
+declare
+  v_holding uuid;
+  v_before tid;
+begin
+  perform pg_temp.name_lead('4f200000-0000-4000-8000-000000000011', null, '4f200000-0000-4000-8000-000000000004');
+  v_holding := pg_temp.open_lead('4f200000-0000-4000-8000-000000000011', null);
+  v_before := (select ctid from public.work_leads where id = v_holding);
+  update public.jobs set title = 'Lüftung Dachgeschoss' where id = '4f200000-0000-4000-8000-000000000022';
+  if (select ctid from public.work_leads where id = v_holding) is not distinct from v_before then
+    raise exception 'a changed job of a led project did not touch its holding';
+  end if;
+  v_before := (select ctid from public.work_leads where id = v_holding);
+  insert into public.job_instruction_items (organization_id, job_id, content, created_by)
+  values ('4f200000-0000-4000-8000-0000000000a0', '4f200000-0000-4000-8000-000000000022',
+    'Filter tauschen', '4f200000-0000-4000-8000-000000000001');
+  if (select ctid from public.work_leads where id = v_holding) is not distinct from v_before then
+    raise exception 'a new instruction in a led project did not touch its holding';
+  end if;
+  v_before := (select ctid from public.work_leads where id = v_holding);
+  update public.jobs set title = 'Heizung Erdgeschoss' where id = '4f200000-0000-4000-8000-000000000020';
+  if (select ctid from public.work_leads where id = v_holding) is distinct from v_before then
+    raise exception 'a job of another project touched the holding';
+  end if;
+end;
+$$;
+
 -- The organization's deletion removes its holdings with the rest.
 insert into public.projects (id, organization_id, name, project_number, created_by) values
   ('4f200000-0000-4000-8000-000000000013', '4f200000-0000-4000-8000-0000000000c0', 'Altbau',
@@ -433,7 +470,7 @@ $$;
 select set_config('request.jwt.claims', '{"sub":"4f200000-0000-4000-8000-000000000001","role":"authenticated"}', true);
 do $$
 begin
-  if (select count(*) from public.work_leads) <> 7 then raise exception 'the Admin does not see every holding'; end if;
+  if (select count(*) from public.work_leads) <> 8 then raise exception 'the Admin does not see every holding'; end if;
 end;
 $$;
 reset role;

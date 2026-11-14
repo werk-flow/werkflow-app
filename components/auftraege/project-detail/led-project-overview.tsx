@@ -12,10 +12,20 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import type { LedJob, LedProjectOverview } from '@/lib/projects/work-lead-types';
+import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 import { formatGermanDate } from '@/lib/utils';
 import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
 import { WorkArtifactsSection } from '../artifacts/work-artifacts-section';
 import { WORK_EXECUTION_CLASSES } from '../status-classes';
+
+/**
+ * The list's identity for its remount. A lead gets no Arbeitsnachweis event
+ * of work they are not on, and a live list takes server data only at mount,
+ * so a route render with changed Arbeitsnachweise mounts the list afresh.
+ */
+function artifactsStamp(artifacts: readonly WorkArtifactSummary[]): string {
+  return artifacts.map((artifact) => `${artifact.id}:${artifact.version}`).join(',');
+}
 
 type LeadViewer = {
   currentUserId: string;
@@ -43,6 +53,7 @@ export function LedProjectPage({
       />
       <PageBody className="space-y-6">
         <WorkArtifactsSection
+          key={artifactsStamp(overview.projectArtifacts)}
           targetType="project"
           targetId={overview.projectId}
           initialArtifacts={overview.projectArtifacts}
@@ -68,7 +79,9 @@ export function LedJobsSection({
   currentUserId,
   canApprove,
 }: LeadViewer & { overview: LedProjectOverview | 'failed' }): ReactElement {
-  useRealtimeRouterRefresh({ tables: ['jobs', 'job_instruction_items', 'work_leads'] });
+  // The lead reads no row of a job they are not on: a change of the project's
+  // jobs, instructions and Arbeitsnachweise touches the lead's own holding.
+  useRealtimeRouterRefresh({ tables: ['work_leads'] });
   // One job's Arbeitsnachweise at a time: each list keeps its own live view.
   const [openJobId, setOpenJobId] = useState<string | null>(null);
   return (
@@ -163,6 +176,7 @@ function LedJobItem({
       </Button>
       {open && (
         <WorkArtifactsSection
+          key={artifactsStamp(job.artifacts)}
           targetType="job"
           targetId={job.id}
           initialArtifacts={job.artifacts}

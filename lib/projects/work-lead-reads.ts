@@ -19,35 +19,50 @@ import {
 
 const UNKNOWN_PERSON = 'Unbekannte Person';
 
-function personName(person: { first_name: string | null; last_name: string | null }): string | null {
+function joinedName(person: { first_name: string | null; last_name: string | null }): string | null {
   return [person.first_name, person.last_name].filter(Boolean).join(' ') || null;
 }
 
-/** The names of the leads (their personnel records) and of who named or ended them; null when a read failed. */
+/**
+ * The leads' personnel records and the names of the leads and of who named or
+ * ended them, from their profiles first; null when a read failed.
+ */
 async function readHoldingNames(orgId: string, employeeRecordIds: string[], actorIds: string[]) {
   const admin = createSupabaseAdminClient();
-  const [records, profiles] = await Promise.all([
-    readInBatches(employeeRecordIds, (batch) =>
-      admin
-        .from('employee_records')
-        .select('id, user_id, first_name, last_name')
-        .eq('organization_id', orgId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(actorIds, (batch) =>
-      admin
-        .from('profiles')
-        .select('id, first_name, last_name')
-        .in('id', [...batch]),
-    ),
-  ]);
-  if (records.error || profiles.error) {
-    logReadFailure('getWorkLead: names read failed', records.error ?? profiles.error);
+  const records = await readInBatches(employeeRecordIds, (batch) =>
+    admin
+      .from('employee_records')
+      .select('id, user_id, first_name, last_name')
+      .eq('organization_id', orgId)
+      .in('id', [...batch]),
+  );
+  if (records.error) {
+    logReadFailure('getWorkLead: employee_records read failed', records.error);
     return null;
   }
+  const leadUserIds = records.data.flatMap((record) => (record.user_id ? [record.user_id] : []));
+  const profiles = await readInBatches([...new Set([...actorIds, ...leadUserIds])], (batch) =>
+    admin
+      .from('profiles')
+      .select('id, first_name, last_name')
+      .in('id', [...batch]),
+  );
+  if (profiles.error) {
+    logReadFailure('getWorkLead: profiles read failed', profiles.error);
+    return null;
+  }
+  const profileNames = new Map(profiles.data.map((profile) => [profile.id, joinedName(profile)]));
   return {
-    records: new Map(records.data.map((record) => [record.id, record])),
-    actorNames: new Map(profiles.data.map((profile) => [profile.id, personName(profile)])),
+    records: new Map(
+      records.data.map((record) => [
+        record.id,
+        {
+          userId: record.user_id,
+          name: (record.user_id ? profileNames.get(record.user_id) : null) ?? joinedName(record),
+        },
+      ]),
+    ),
+    actorNames: profileNames,
   };
 }
 
@@ -94,8 +109,8 @@ export async function getWorkLead(
     const record = names.records.get(row.employee_record_id);
     return {
       id: row.id,
-      userId: record?.user_id ?? null,
-      name: (record && personName(record)) ?? UNKNOWN_PERSON,
+      userId: record?.userId ?? null,
+      name: record?.name ?? UNKNOWN_PERSON,
       startedAt: row.started_at,
       startedByName: row.started_by ? (names.actorNames.get(row.started_by) ?? null) : null,
       endedAt: row.ended_at,
@@ -110,19 +125,29 @@ export async function getWorkLead(
 
 /** The instructions of the jobs in their order, without who changed them; null when the read failed. */
 async function readLedInstructions(orgId: string, jobIds: string[]) {
+  const admin = createSupabaseAdminClient();
+  // A batch of jobs may hold more items than one response, so each batch reads page by page.
   const items = await readInBatches(jobIds, (batch) =>
-    createSupabaseAdminClient()
-      .from('job_instruction_items')
-      .select('id, job_id, content, requirement_state, is_completed, sort_order')
-      .eq('organization_id', orgId)
-      .in('job_id', [...batch]),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('job_instruction_items')
+          .select('id, job_id, content, requirement_state, is_completed, sort_order')
+          .eq('organization_id', orgId)
+          .in('job_id', [...batch])
+          .order('job_id')
+          .order('sort_order')
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
   );
   if (items.error) {
     logReadFailure('getLedProjectOverview: job_instruction_items read failed', items.error);
     return null;
   }
   const byJob = new Map<string, LedInstruction[]>();
-  for (const item of items.data.toSorted((left, right) => left.sort_order - right.sort_order)) {
+  for (const item of items.data) {
     if (!item.job_id) continue;
     const list = byJob.get(item.job_id) ?? [];
     list.push({

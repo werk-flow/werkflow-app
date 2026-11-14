@@ -255,7 +255,7 @@ function projectWorkLeadSection({ workLeadPanel, members }: ProjectDetailContent
       targetType="project"
       targetId={projectId}
       panel={workLeadPanel === 'failed' ? null : workLeadPanel}
-      members={members ?? []}
+      members={members}
     />
   );
 }

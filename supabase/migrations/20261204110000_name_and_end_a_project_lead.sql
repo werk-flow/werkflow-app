@@ -17,37 +17,16 @@
 -- the manager role and pass them. The functions check the actor again, load
 -- every id inside the organization and write.
 --
--- Expand-only: two new functions; the previous release calls neither.
+-- A project lead reads no row of a job they are not on, so the jobs'
+-- Realtime events never reach them. A change of a job, an instruction or an
+-- Arbeitsnachweis of a project touches the project's open holding instead,
+-- whose event the lead receives (data model: touch the owning root).
+--
+-- Expand-only: two new functions and three triggers that only touch
+-- updated_at of an open holding; the previous release calls neither function
+-- and reads updated_at of no holding.
 --
 -- Prevention: Tier 1 (function checks), Tier 2 supabase/tests/work_leads.sql.
-
--- Locks the project or job for the naming; false when it is not in the
--- organization.
-create function app_private.lock_work_lead_target(
-  p_organization_id uuid,
-  p_project_id uuid,
-  p_job_id uuid
-)
-returns boolean
-language plpgsql
-security invoker
-set search_path to ''
-as $$
-begin
-  if num_nonnulls(p_project_id, p_job_id) <> 1 then raise exception 'work_lead_target_invalid'; end if;
-  if p_project_id is not null then
-    perform 1 from public.projects project
-    where project.id = p_project_id and project.organization_id = p_organization_id
-    for no key update;
-  else
-    perform 1 from public.jobs job
-    where job.id = p_job_id and job.organization_id = p_organization_id
-    for no key update;
-  end if;
-  return found;
-end;
-$$;
-revoke all on function app_private.lock_work_lead_target(uuid, uuid, uuid) from public, anon, authenticated;
 
 create function public.name_work_lead(
   p_organization_id uuid,
@@ -70,9 +49,18 @@ begin
   if not app_private.p1_24_is_manager(p_organization_id, p_actor_id) then
     raise exception 'work_lead_not_authorized';
   end if;
-  if not app_private.lock_work_lead_target(p_organization_id, p_project_id, p_job_id) then
-    raise exception 'work_lead_target_not_found';
+  -- The target's row lock orders concurrent calls on the same work.
+  if num_nonnulls(p_project_id, p_job_id) <> 1 then raise exception 'work_lead_target_invalid'; end if;
+  if p_project_id is not null then
+    perform 1 from public.projects project
+    where project.id = p_project_id and project.organization_id = p_organization_id
+    for no key update;
+  else
+    perform 1 from public.jobs job
+    where job.id = p_job_id and job.organization_id = p_organization_id
+    for no key update;
   end if;
+  if not found then raise exception 'work_lead_target_not_found'; end if;
 
   -- A member of this organization with effective access who has not left,
   -- as the lead rule counts them.
@@ -127,9 +115,18 @@ begin
   if not app_private.p1_24_is_manager(p_organization_id, p_actor_id) then
     raise exception 'work_lead_not_authorized';
   end if;
-  if not app_private.lock_work_lead_target(p_organization_id, p_project_id, p_job_id) then
-    raise exception 'work_lead_target_not_found';
+  -- The target's row lock orders concurrent calls on the same work.
+  if num_nonnulls(p_project_id, p_job_id) <> 1 then raise exception 'work_lead_target_invalid'; end if;
+  if p_project_id is not null then
+    perform 1 from public.projects project
+    where project.id = p_project_id and project.organization_id = p_organization_id
+    for no key update;
+  else
+    perform 1 from public.jobs job
+    where job.id = p_job_id and job.organization_id = p_organization_id
+    for no key update;
   end if;
+  if not found then raise exception 'work_lead_target_not_found'; end if;
 
   select work_lead.id into v_open_id from public.work_leads work_lead
   where work_lead.organization_id = p_organization_id
@@ -143,3 +140,60 @@ end;
 $$;
 revoke all on function public.end_work_lead(uuid, uuid, uuid, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.end_work_lead(uuid, uuid, uuid, uuid, uuid) to service_role;
+
+-- The touch. Each trigger names the projects whose open holding signals the
+-- change; a project without one updates no row.
+create function app_private.touch_work_lead_of_projects(p_project_ids uuid[])
+returns void
+language sql
+security definer
+set search_path to ''
+as $$
+  update public.work_leads work_lead set updated_at = now()
+  where work_lead.ended_at is null and work_lead.project_id = any (p_project_ids);
+$$;
+revoke all on function app_private.touch_work_lead_of_projects(uuid[]) from public, anon, authenticated;
+
+create function app_private.touch_work_lead_from_job()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $$
+begin
+  perform app_private.touch_work_lead_of_projects(array_remove(array[
+    case when tg_op <> 'DELETE' then new.project_id end,
+    case when tg_op <> 'INSERT' then old.project_id end
+  ], null));
+  return null;
+end;
+$$;
+revoke all on function app_private.touch_work_lead_from_job() from public, anon, authenticated;
+
+-- An instruction item or an Arbeitsnachweis names its job or its project.
+create function app_private.touch_work_lead_from_work_row()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $$
+declare
+  v_row jsonb := to_jsonb(case when tg_op = 'DELETE' then old else new end);
+begin
+  perform app_private.touch_work_lead_of_projects(array(
+    select (v_row->>'project_id')::uuid where v_row->>'project_id' is not null
+    union
+    select job.project_id from public.jobs job
+    where job.id = (v_row->>'job_id')::uuid and job.project_id is not null
+  ));
+  return null;
+end;
+$$;
+revoke all on function app_private.touch_work_lead_from_work_row() from public, anon, authenticated;
+
+create trigger touch_work_lead after insert or update or delete on public.jobs
+  for each row execute function app_private.touch_work_lead_from_job();
+create trigger touch_work_lead after insert or update or delete on public.job_instruction_items
+  for each row execute function app_private.touch_work_lead_from_work_row();
+create trigger touch_work_lead after insert or update on public.work_artifacts
+  for each row execute function app_private.touch_work_lead_from_work_row();

@@ -43,6 +43,8 @@ export const WORK_LEAD_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   work_lead_changed:
     'Die Projektleitung wurde gerade von jemand anderem geändert. Prüfe sie und versuche es erneut.',
   work_lead_target_not_found: 'Diese Arbeit gibt es nicht mehr.',
+  work_lead_unconfirmed:
+    'Die Antwort kam nicht an. Prüfe die Projektleitung nach dem Neuladen, bevor du es erneut versuchst.',
 };
 
 /**

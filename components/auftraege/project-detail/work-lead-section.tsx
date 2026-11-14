@@ -38,11 +38,14 @@ import { formatGermanDate } from '@/lib/utils';
 
 const LEAD_FIELD_ID = 'work-lead-person';
 const SAVE_FAILED = 'Die Projektleitung wurde nicht gespeichert. Versuche es erneut.';
+/** A write whose answer never arrived: it may have applied, so the person checks before a retry. */
+const UNCONFIRMED = { success: false, error: 'work_lead_unconfirmed' } as const;
 
 type WorkLeadSectionProps = WorkLeadTarget & {
   /** Null when the read failed: the section shows the failure with a retry. */
   panel: WorkLeadPanel | null;
-  members: OrgMemberOption[];
+  /** Null when the member read failed: the dialog shows the failure instead of the choice. */
+  members: OrgMemberOption[] | null;
 };
 
 /**
@@ -70,13 +73,18 @@ export function WorkLeadSection({
         Projektleitung
       </SectionTitle>
       {panel ? (
-        <WorkLeadSummary panel={panel} targetType={targetType} onOpen={() => setDialogOpen(true)} />
+        <WorkLeadSummary
+          panel={panel}
+          targetType={targetType}
+          // Naming needs the team; a failed member read shows its retry instead of an empty choice.
+          onOpen={members ? () => setDialogOpen(true) : null}
+        />
       ) : (
         <RegionLoadError title="Projektleitung nicht geladen">
           Die Projektleitung konnte gerade nicht geladen werden.
         </RegionLoadError>
       )}
-      {panel && dialogOpen && (
+      {panel && members && dialogOpen && (
         <WorkLeadDialog
           target={target}
           panel={panel}
@@ -95,7 +103,7 @@ function WorkLeadSummary({
 }: {
   panel: WorkLeadPanel;
   targetType: WorkLeadTarget['targetType'];
-  onOpen: () => void;
+  onOpen: (() => void) | null;
 }) {
   const { current, history } = panel;
   return (
@@ -116,9 +124,15 @@ function WorkLeadSummary({
           }
         />
       )}
-      <Button type="button" variant="outline" size="sm" onClick={onOpen}>
-        {current ? 'Ändern oder beenden' : 'Projektleitung benennen'}
-      </Button>
+      {onOpen ? (
+        <Button type="button" variant="outline" size="sm" onClick={onOpen}>
+          {current ? 'Ändern oder beenden' : 'Projektleitung benennen'}
+        </Button>
+      ) : (
+        <RegionLoadError title="Mitarbeiterliste nicht geladen">
+          Ohne die Mitarbeiterliste kannst du die Projektleitung gerade nicht ändern.
+        </RegionLoadError>
+      )}
       {history.length > 0 && (
         <FormDisclosure label="Verlauf">
           <ul className="space-y-2 text-sm" aria-label="Verlauf der Projektleitung">
@@ -175,11 +189,13 @@ function useWorkLeadWrites(target: WorkLeadTarget, panel: WorkLeadPanel, onClose
     name: (userId: string) =>
       void naming
         .run({ ...target, userId, expectedLeadId: current?.id ?? null })
+        .catch(() => UNCONFIRMED)
         .then((result) => finish(result, 'Projektleitung gespeichert.')),
     end: (leadId: string) => {
       setError(null);
       void ending
         .run({ ...target, expectedLeadId: leadId })
+        .catch(() => UNCONFIRMED)
         .then((result) => finish(result, 'Projektleitung beendet.'));
     },
   };
