@@ -24,6 +24,7 @@ import type {
   MaintenanceTemplateOption,
   MaintenanceWorkspaceResult,
 } from './types';
+import { isMaintenanceDueOverdue } from './overdue';
 import type { MaintenanceWorkspaceQuery } from './workspace-page';
 
 const LOAD_FAILED = { success: false, error: 'maintenance_load_failed' } as const;
@@ -300,6 +301,7 @@ function toMaintenanceDueItem(
   due: Tables<'maintenance_due_work'>,
   plan: MaintenancePlanItem,
   jobNumbers: Map<string, string>,
+  today: string,
 ): MaintenanceDueItem {
   return {
     id: due.id,
@@ -320,6 +322,7 @@ function toMaintenanceDueItem(
     completedOn: due.completed_on,
     exceptionReason: due.exception_reason,
     version: due.version,
+    overdue: isMaintenanceDueOverdue({ dueDate: due.due_date, status: due.status }, today),
     equipment: plan.equipment,
     plannedDurationMinutes: plan.plannedDurationMinutes,
   };
@@ -471,7 +474,7 @@ const listSelectionSchema = z.object({
   ids: z.array(uuidSchema).max(LIST_PAGE_SIZE),
 });
 const workspaceSelectionSchema = z.object({
-  due: listSelectionSchema,
+  due: listSelectionSchema.extend({ overdue: z.number().int().nonnegative() }),
   plans: listSelectionSchema,
   coverages: listSelectionSchema,
 });
@@ -480,12 +483,15 @@ const workspaceSelectionSchema = z.object({
 async function readWorkspaceSelection(
   context: ManagerContext,
   query: MaintenanceWorkspaceQuery,
+  today: string,
   throughDate: string,
 ) {
-  const selected = await context.admin.rpc('list_maintenance_workspace_page', {
+  const selected = await context.admin.rpc('read_maintenance_workspace_page', {
     p_organization_id: context.organizationId,
+    p_today: today,
     p_due_through: throughDate,
     p_search: query.search,
+    p_overdue_only: query.overdueOnly,
     p_due_page: query.duePage,
     p_plan_page: query.planPage,
     p_coverage_page: query.coveragePage,
@@ -558,7 +564,8 @@ function toMaintenanceCoverageItem(
 
 /**
  * One page of each workspace list. The database applies the search, the
- * horizon and the counts before the page boundary; this reader hydrates the
+ * „Überfällig“ filter against today in Berlin, the horizon and the counts
+ * before the page boundary; this reader hydrates the
  * page rows and the names they reference. The caller has established the
  * manager context.
  */
@@ -569,7 +576,7 @@ export async function readMaintenanceWorkspace(
   const { admin, organizationId } = context;
   const today = formatBerlinLocalDate(new Date());
   const throughDate = addLocalMonthsClamped(today, 18);
-  const selection = await readWorkspaceSelection(context, query, throughDate);
+  const selection = await readWorkspaceSelection(context, query, today, throughDate);
   if (!selection) return LOAD_FAILED;
   const { due, plans, coverages } = selection;
 
@@ -618,11 +625,11 @@ export async function readMaintenanceWorkspace(
       }),
       dueWork: dueRows.flatMap((row) => {
         const plan = planItems.get(row.maintenance_plan_id);
-        return plan ? [toMaintenanceDueItem(row, plan, jobNumbers)] : [];
+        return plan ? [toMaintenanceDueItem(row, plan, jobNumbers, today)] : [];
       }),
       coverages: coverageRows.map((coverage) => toMaintenanceCoverageItem(coverage, lookups, today)),
       totals: {
-        due: { total: due.total, hasAny: due.hasAny },
+        due: { total: due.total, hasAny: due.hasAny, overdue: due.overdue },
         plans: { total: plans.total, hasAny: plans.hasAny },
         coverages: { total: coverages.total, hasAny: coverages.hasAny },
       },

@@ -392,8 +392,8 @@ begin
   then
     raise exception 'a client role can read or write material use events';
   end if;
-  if has_function_privilege('authenticated', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid)', 'execute')
-    or has_function_privilege('anon', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid)', 'execute')
+  if has_function_privilege('authenticated', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid, uuid)', 'execute')
+    or has_function_privilege('anon', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid, uuid)', 'execute')
   then
     raise exception 'a client role can record material use';
   end if;

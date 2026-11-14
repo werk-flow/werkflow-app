@@ -329,6 +329,22 @@ Decided for werk-flow/werkflow-planning#403 on the second round of its outside r
 
 Owner decision for werk-flow/werkflow-planning#447. The person's last recorded time, before which a captured event is `conflict` with `version_conflict`, includes the time of every current approved `Zeitkorrektur`. A late clock-in captured inside hours the office already approved is refused on the phone as „Konflikt“, so the hours never count twice.
 
+## Amendment 2026-11-14: a discard waits only for what it deletes
+
+Decided for werk-flow/werkflow-planning#407. It sharpens the time outbox's invariant 6.
+
+- **Sends.** Each chain, one person's events in one organization, has a lock of its own. A discard or deletion waits only for a send of a chain that holds an event it deletes, never for another person's or organization's. Each also holds the one lock every chain shared before, in shared mode, so a tab open across a deployment, which still takes that lock alone, never sends or deletes beside this version.
+- **Open online calls.** A shown action still in the kept store, behind an open online call or a stop, is deleted there. It waits only for its own online call, never for another action's.
+- **A stop that appears after the question opened.** It no longer fails „Verwerfen“. What the question showed goes, the stop stays, and the question names it as work that came after the question.
+
+## Amendment 2026-11-14: the shell requests send the origin's cookies
+
+Decided for werk-flow/werkflow-planning#22 after the real iPhone run (OQ-5, step 9): on staging the installed app, opened cold without signal, showed Safari's own offline page. Staging sits behind Vercel Authentication, which answers every request without its `_vercel_jwt` cookie with a redirect to Vercel's sign-in. The worker fetched its shell without cookies and refused redirects, so its install failed and no worker served the start. Production has no Vercel Authentication and was not affected.
+
+- **The shell requests send the origin's cookies** (`credentials: 'same-origin'`). The offline page and the build files answer the same bytes for every request: the page is prerendered, and `proxy.ts`, which reads and refreshes the session, never runs on a shell path, so no answer sets a cookie. A rule test pins the proxy's paths (`lib/security/service-worker.test.ts`).
+- **The worker refuses a personal answer.** A redirect, a status outside 200 to 299, or an offline page marked `private` or `no-store`, as Next.js marks a page rendered for one request, fails the fill; the cache keeps nothing of it.
+- **Rejected: a Vercel setting.** Turning Vercel Authentication off for staging exposes a preview of unreleased work; a bypass secret in the worker is public in its script.
+
 ## Amendment 2026-11-14: what the clock shows while the connection changes
 
 Owner requirement of 2026-11-14 (werk-flow/werkflow-planning#22), from a real phone that showed „Wartet auf Netz“, then not clocked in, then the right state after the signal came back. It changes what the clock shows, never what is recorded. `lib/field-sync/device/shown-clock-rule.ts` owns the rule and `shown-clock.ts` holds it across renders; the clock's provider and dock read only from them.
@@ -338,4 +354,3 @@ Owner requirement of 2026-11-14 (werk-flow/werkflow-planning#22), from a real ph
 - **One calm marker.** „Wartet auf Netz“ while actions wait without signal, „Wird übertragen“ while they wait with signal or their answer is due, „Ohne Netz“ for a confirmed clock without signal. The phone's own report of its network decides the words, never the state shown.
 - **A start that may hold unsent work** shows no clock until the outbox answered, also when its code cannot load, so the server's clock from before the unsent actions never shows.
 - **Today's view** has no state of its own that the connection changes: the page without signal reads the stored day once, and the prerendered no-signal page stands until that read answers, because it must work without its script.
-

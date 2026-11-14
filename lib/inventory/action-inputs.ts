@@ -72,6 +72,8 @@ export type UpdateJobMaterialLineInput = {
 };
 
 export type TakeJobMaterialInput = {
+  /** Names the booking; a call under a booked id answers with that booking. */
+  operationId: string;
   jobId: string;
   lineId?: string | null;
   itemId?: string | null;
@@ -81,6 +83,8 @@ export type TakeJobMaterialInput = {
 };
 
 export type ReturnJobMaterialInput = {
+  /** Names the booking; a call under a booked id answers with that booking. */
+  operationId: string;
   lineId: string;
   locationId: string;
   quantity: number;
@@ -88,6 +92,8 @@ export type ReturnJobMaterialInput = {
 };
 
 export type RecordJobMaterialUseInput = {
+  /** Names the booking; a call under a booked id answers with that booking. */
+  operationId: string;
   lineId: string;
   quantity: number;
   note?: string | null;
