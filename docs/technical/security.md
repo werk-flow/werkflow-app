@@ -63,7 +63,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; route a new one there. `app/(app)/layout.tsx` checks the session again and is the authority.
 - **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy passes the request to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
 - **Redirects.** A return destination from a query string goes through `resolveSafeReturnPath` and is a same-origin path. An invite code is a UUID before the app echoes it.
-- **Organization cookie.** The cookie is a hint. The server accepts it only for a current member and refuses to set it for a non-member.
+- **Organization cookie.** A hint: the server accepts it only for a current member and sets it for no one else.
 - **Joining.** Join codes are cryptographically random. A code creates a join request, never a membership; only an Admin or Büro approval in that organization creates it, in one database function. A signed-in user gets limited join attempts per hour.
 - **Cross-organization writes.** A write that names another record checks that it belongs to the caller's organization and, where it applies, to the same person.
 - **Abuse limits.** Invite mail, invite redemption, join codes, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
@@ -139,7 +139,7 @@ On an unchanged tree, an exception matching no finding passes with a note: remov
 List each owner-accepted residual exposure until it closes.
 
 - The script policy allows `'unsafe-inline'`, so injected inline scripts run: a per-request nonce needs per-request rendering, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
-- No edge rate limit covers every request; the app and Supabase Auth limit only their own operations ([Add a Server Action](#add-a-server-action-or-route-handler)). Edge limiting is the owner's Vercel plan decision.
+- No edge rate limit covers every request; the app and Supabase Auth limit only their own operations. Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive a deleted row's identity, never its content.
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once (beta; closes with werk-flow/werkflow-planning#248).
 - The code step keeps the address up to one hour in an httpOnly cookie scoped to `/verify`.
@@ -150,7 +150,7 @@ List each owner-accepted residual exposure until it closes.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
-- Unsent work outlives sign-out on the phone, readable to whoever unlocks its browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them.
+- Unsent work outlives sign-out, readable to whoever unlocks the phone's browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them, an [unreadable draft](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-stored-records-stay-readable) until its person deletes it.
 
 ## Revocation boundaries
 

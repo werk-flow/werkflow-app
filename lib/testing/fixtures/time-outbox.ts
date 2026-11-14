@@ -227,19 +227,24 @@ export async function resetDevice(): Promise<void> {
   await deleteDatabase(TIME_OUTBOX_DATABASE);
 }
 
-/** Web Locks within this one tab: each lock name runs its holders one after the other, and `ifAvailable` sees a held one. */
+/**
+ * Web Locks within this one tab: an exclusive holder waits for every holder before it, a `shared`
+ * one only for the exclusive ones, and `ifAvailable` sees a held lock.
+ */
 export function installTabLocks(): void {
-  const held = new Map<string, Promise<unknown>>();
+  /** Per lock name: when every holder so far has ended, and when every exclusive one has. */
+  const tails = new Map<string, { all: Promise<unknown>; exclusive: Promise<unknown> }>();
   const holding = new Map<string, number>();
   type LockWork = (lock: object | null) => Promise<unknown> | unknown;
+  type LockOptions = { ifAvailable?: boolean; mode?: 'shared' | 'exclusive' };
   Object.defineProperty(globalThis.navigator, 'locks', {
     configurable: true,
     value: {
-      request: (name: string, options: { ifAvailable?: boolean } | LockWork, given?: LockWork) => {
+      request: (name: string, options: LockOptions | LockWork, given?: LockWork) => {
         const work = typeof options === 'function' ? options : given;
         if (!work) throw new Error('a lock request needs its work');
-        if (typeof options !== 'function' && options.ifAvailable && (holding.get(name) ?? 0) > 0)
-          return Promise.resolve(work(null));
+        const { ifAvailable = false, mode = 'exclusive' } = typeof options === 'function' ? {} : options;
+        if (ifAvailable && (holding.get(name) ?? 0) > 0) return Promise.resolve(work(null));
         const hold = async (): Promise<unknown> => {
           holding.set(name, (holding.get(name) ?? 0) + 1);
           try {
@@ -248,13 +253,15 @@ export function installTabLocks(): void {
             holding.set(name, (holding.get(name) ?? 1) - 1);
           }
         };
-        const run = (held.get(name) ?? Promise.resolve()).then(hold, hold);
+        const tail = tails.get(name) ?? { all: Promise.resolve(), exclusive: Promise.resolve() };
+        const run = (mode === 'shared' ? tail.exclusive : tail.all).then(hold, hold);
         // The next holder waits for this one either way; the failure reaches the caller through `run`.
         const settled = run.then(
           () => undefined,
           () => undefined,
         );
-        held.set(name, settled);
+        const all = Promise.all([tail.all, settled]);
+        tails.set(name, mode === 'shared' ? { all, exclusive: tail.exclusive } : { all, exclusive: all });
         return run;
       },
     },
