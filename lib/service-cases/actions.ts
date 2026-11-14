@@ -41,6 +41,7 @@ import type {
   ServiceCaseUpdateInput,
 } from './types';
 import { logError } from '@/lib/logging';
+import { captureUsage } from '@/lib/usage-statistics/capture';
 import {
   requireServiceManager,
   type ServiceAdminClient as AdminClient,
@@ -615,6 +616,8 @@ export async function createServiceCase(input: ServiceCaseCreateInput): Promise<
     return { success: false, error: serviceCaseFailureCode(error, 'service_case_create_failed') };
   }
   refreshServicePaths(data.case_number);
+  // „Als Servicefall übernehmen“ converts the Anfrage, as a conversion into a job or project does.
+  if (parsed.data.sourceRequestId) captureUsage(context.organizationId, 'request', 'completed');
   return { success: true, serviceCase: data };
 }
 
