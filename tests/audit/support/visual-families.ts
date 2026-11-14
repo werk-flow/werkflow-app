@@ -175,6 +175,20 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     title: VISUAL_NAMES.offer,
   },
   {
+    id: 'rechnungen',
+    role: 'admin',
+    covers: ['/rechnungen'],
+    route: fixed('/rechnungen'),
+    heading: 'Rechnungen',
+  },
+  {
+    id: 'rechnung',
+    role: 'admin',
+    covers: ['/rechnungen/[invoiceId]'],
+    route: (details) => `/rechnungen/${details.invoiceId}`,
+    heading: 'Rechnungsentwurf',
+  },
+  {
     id: 'angebote-leistungen',
     role: 'admin',
     covers: ['/angebote/leistungen'],

@@ -1,0 +1,17 @@
+Menü öffnen
+Rechnungen
+Jede Rechnung mit Kunde, Rechnungsempfänger und Betrag.
+Rechnung erstellen
+Alle Status
+1
+Rechnung
+Familie Hoffmann
+Entwurf
+Ohne Nummer
+553,35 €
+geändert
+01.01.2026
+1–1
+von
+1
+Nicht eingestempelt

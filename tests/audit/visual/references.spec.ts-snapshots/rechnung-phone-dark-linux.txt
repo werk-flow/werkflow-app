@@ -1,0 +1,33 @@
+Menü öffnen
+Rechnungen
+Rechnungsentwurf
+Entwurf
+Entwurf löschen
+Kunde
+Familie Hoffmann
+Rechnungsempfänger
+Familie Hoffmann
+Lindenstraße 4, 71032 Böblingen
+Abrechnen für
+Ohne Bezug
+Positionen
+Position hinzufügen
+1
+.
+Bezeichnung
+*
+Pflichtfeld
+Beschreibung
+Menge
+*
+Pflichtfeld
+Einheit
+Stück
+Einzelpreis netto
+*
+Pflichtfeld
+USt.
+19 %
+Netto:
+329,00 €
+Nicht eingestempelt
