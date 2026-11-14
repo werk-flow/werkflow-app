@@ -16,7 +16,7 @@ function missedVisitCaptures(): OpenSet {
         view: { kind: 'page' },
         widths: [1280, 375],
         schemes: ['light', 'dark'],
-        reveal: 'Fälligkeiten',
+        reveal: 'Abdeckung erfassen',
       },
       ...inventoryCaptures().filter(
         (capture) => capture.view.kind === 'dialog' && capture.view.opener === 'service.due-action',
