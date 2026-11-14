@@ -101,12 +101,14 @@ describe('derived equipment form schemas', () => {
         effectiveAt: '2026-08-29T08:00:00+02:00',
         reason: 'Defekte Anlage fachgerecht ersetzt',
         idempotencyKey: '00000000-0000-4000-8000-000000000016',
+        carryOver: { plans: [], components: [] },
       },
     },
   ] as const;
 
   for (const { name, schema, required } of schemas) {
     test(`${name} preserves subtype/category validation`, () => {
+      expect(schema.safeParse({ ...base, ...required }).success).toBe(true);
       expect(schema.safeParse({ ...base, ...required, subtype: 'buffer_storage' }).success).toBe(false);
     });
 
@@ -135,6 +137,27 @@ describe('derived equipment form schemas', () => {
 });
 
 describe('equipment lifecycle validation', () => {
+  test('a replacement refuses a plan left on the predecessor without a reason', () => {
+    const replacement = {
+      ...base,
+      predecessorId: '00000000-0000-4000-8000-000000000014',
+      successorId: '00000000-0000-4000-8000-000000000015',
+      expectedVersion: 1,
+      effectiveAt: '2026-08-29T08:00:00+02:00',
+      reason: 'Defekte Anlage fachgerecht ersetzt',
+      idempotencyKey: '00000000-0000-4000-8000-000000000016',
+    };
+    const plan = { planId: '00000000-0000-4000-8000-000000000017', expectedVersion: 3, carry: false };
+    const carryOver = (reason: string | null) => ({ plans: [{ ...plan, reason }], components: [] });
+    expect(equipmentReplacementSchema.safeParse({ ...replacement, carryOver: carryOver(' ') }).success).toBe(
+      false,
+    );
+    expect(
+      equipmentReplacementSchema.safeParse({ ...replacement, carryOver: carryOver('Plan endet hier') })
+        .success,
+    ).toBe(true);
+  });
+
   test('keeps replacement out of the generic transition action', () => {
     expect(getAllowedEquipmentTransitions('active')).not.toContain('replaced');
     expect(getAllowedEquipmentTransitions('replaced')).toEqual([]);

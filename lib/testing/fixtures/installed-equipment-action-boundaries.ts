@@ -1,9 +1,17 @@
 // Actual installed-equipment actions over the in-memory database: a field
-// worker is refused every register read and write before any database access
-// and sees a job's equipment only on an own assigned job; equipment, sites,
-// documents and jobs of another organization are unreachable.
+// worker, assigned or not, is refused every register read and write (the
+// replacement with its plan and component choices and the predecessor history
+// included) before any database access and sees a job's equipment only on an
+// own assigned job; equipment, sites, documents and jobs of another
+// organization are unreachable.
 import assert from 'node:assert/strict';
-import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
+import {
+  CALLER_ID,
+  ORGANIZATION_A,
+  ORGANIZATION_B,
+  installActionWorld,
+  signInAs,
+} from './action-boundary-world';
 import type { EquipmentFormInput } from '@/lib/installed-equipment/types';
 import { assertRefused, refuseForeignIds } from './operations-boundary-refusals';
 
@@ -17,6 +25,8 @@ const foreignDocumentId = '84000000-0000-4000-8000-000000000007';
 const foreignEventId = '84000000-0000-4000-8000-000000000008';
 const newEquipmentId = '84000000-0000-4000-8000-000000000009';
 const idempotencyKey = '84000000-0000-4000-8000-00000000000a';
+const foreignPlanId = '84000000-0000-4000-8000-00000000000b';
+const foreignComponentId = '84000000-0000-4000-8000-00000000000c';
 
 const world = installActionWorld({
   jobs: [
@@ -45,6 +55,7 @@ const world = installActionWorld({
 });
 const {
   getInstalledEquipmentDetailByNumber,
+  getEquipmentPredecessorHistory,
   getInstalledEquipmentForClient,
   getAssignedEquipmentForJob,
   createInstalledEquipment,
@@ -100,6 +111,10 @@ const writes = [
         predecessorId: foreignEquipmentId,
         successorId: newEquipmentId,
         effectiveAt,
+        carryOver: {
+          plans: [{ planId: foreignPlanId, expectedVersion: 1, carry: true }],
+          components: [{ equipmentId: foreignComponentId, carry: true }],
+        },
       }),
   ],
   [
@@ -135,11 +150,23 @@ const writes = [
 ] as const;
 const registerReads = [
   ['getInstalledEquipmentDetailByNumber', () => getInstalledEquipmentDetailByNumber('ANL-0001')],
+  [
+    'getEquipmentPredecessorHistory',
+    () => getEquipmentPredecessorHistory({ equipmentId: foreignEquipmentId, offset: 0 }),
+  ],
   ['getInstalledEquipmentForClient', () => getInstalledEquipmentForClient(foreignClientId)],
 ] as const;
 
-// Field workers are refused the register before the service-role client exists.
+// Field workers are refused the register before the service-role client
+// exists, also when assigned to the job the equipment serves.
 signInAs(world, 'employee');
+await assertRefused(
+  world,
+  [...registerReads, ...writes],
+  { success: false, error: 'not_authorized' },
+  'none',
+);
+world.tables.job_assignments?.push({ id: newEquipmentId, job_id: ownJobId, user_id: CALLER_ID });
 await assertRefused(
   world,
   [...registerReads, ...writes],
@@ -163,7 +190,7 @@ await assertRefused(
 signInAs(world, 'buero');
 await assertRefused(
   world,
-  [registerReads[0]],
+  [registerReads[0], registerReads[1]],
   { success: false, error: 'installed_equipment_not_found' },
   'reads',
 );

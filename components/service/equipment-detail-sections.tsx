@@ -12,6 +12,7 @@ import {
   EQUIPMENT_STATE_LABELS,
   EQUIPMENT_SUBTYPE_LABELS,
   type EquipmentDetail,
+  type EquipmentEvent,
 } from '@/lib/installed-equipment/types';
 import { formatBerlinDateTime, formatLocalCalendarDay, parseIsoLocalDate } from '@/lib/utils';
 
@@ -34,6 +35,10 @@ const EVENT_LABELS: Readonly<Record<EquipmentDetail['events'][number]['eventType
   source_linked: 'Herkunftsnachweis verknüpft',
   document_linked: 'Dokument verknüpft',
   document_unlinked: 'Dokumentverknüpfung entfernt',
+  maintenance_plan_carried_over: 'Wartungsplan beim Austausch übertragen',
+  maintenance_plan_left: 'Wartungsplan beim Vorgänger belassen',
+  component_carried_over: 'Komponente vom Vorgänger übernommen',
+  parent_replaced: 'Übergeordnete Anlage gewechselt',
 };
 
 function formatEquipmentDate(value: string | null | undefined): string {
@@ -143,6 +148,64 @@ export function EquipmentDataSection({
   );
 }
 
+/** Events as a timeline, newest first; `origin` names the record an event belongs to when it is not this one. */
+export function EquipmentHistoryTimeline<Event extends EquipmentEvent>({
+  events,
+  origin,
+}: {
+  events: readonly Event[];
+  origin?: (event: Event) => string;
+}): ReactElement {
+  return (
+    <div className="mt-4 space-y-0">
+      {events.map((event, index) => (
+        <div key={event.id} className="relative grid grid-cols-[1rem_minmax(0,1fr)] gap-3 pb-5 last:pb-0">
+          <div className="relative">
+            <span className="absolute left-1/2 top-1.5 size-2 -translate-x-1/2 rounded-full bg-primary" />
+            {index < events.length - 1 && (
+              <span className="absolute left-1/2 top-3 h-[calc(100%+0.5rem)] w-px -translate-x-1/2 bg-border" />
+            )}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-medium">
+                {EVENT_LABELS[event.eventType]}
+                {event.subjectLabel && <span className="font-normal"> · {event.subjectLabel}</span>}
+              </h3>
+              <time className="text-xs text-muted-foreground">{formatBerlinDateTime(event.effectiveAt)}</time>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {origin && <span className="font-medium text-foreground">{origin(event)} · </span>}
+              {event.actorName} · erfasst {formatBerlinDateTime(event.recordedAt)}
+            </p>
+            {event.reason && <p className="mt-2 text-sm">{event.reason}</p>}
+            {event.links.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {event.links.map((link) =>
+                  link.href ? (
+                    <Link
+                      key={link.id}
+                      href={link.href}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-primary-text hover:underline"
+                    >
+                      {link.label}
+                      <ExternalLink className="size-3" />
+                    </Link>
+                  ) : (
+                    <span key={link.id} className="text-xs text-muted-foreground">
+                      {link.label}
+                    </span>
+                  ),
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function EquipmentHistorySection({
   events,
   sourceBusy,
@@ -160,50 +223,7 @@ export function EquipmentHistorySection({
       <p className="mt-1 text-sm text-muted-foreground">
         Strukturierte Änderungen und exakte Bezüge, neueste zuerst.
       </p>
-      <div className="mt-4 space-y-0">
-        {events.map((event, index) => (
-          <div key={event.id} className="relative grid grid-cols-[1rem_minmax(0,1fr)] gap-3 pb-5 last:pb-0">
-            <div className="relative">
-              <span className="absolute left-1/2 top-1.5 size-2 -translate-x-1/2 rounded-full bg-primary" />
-              {index < events.length - 1 && (
-                <span className="absolute left-1/2 top-3 h-[calc(100%+0.5rem)] w-px -translate-x-1/2 bg-border" />
-              )}
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-medium">{EVENT_LABELS[event.eventType]}</h3>
-                <time className="text-xs text-muted-foreground">
-                  {formatBerlinDateTime(event.effectiveAt)}
-                </time>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {event.actorName} · erfasst {formatBerlinDateTime(event.recordedAt)}
-              </p>
-              {event.reason && <p className="mt-2 text-sm">{event.reason}</p>}
-              {event.links.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {event.links.map((link) =>
-                    link.href ? (
-                      <Link
-                        key={link.id}
-                        href={link.href}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-primary-text hover:underline"
-                      >
-                        {link.label}
-                        <ExternalLink className="size-3" />
-                      </Link>
-                    ) : (
-                      <span key={link.id} className="text-xs text-muted-foreground">
-                        {link.label}
-                      </span>
-                    ),
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+      <EquipmentHistoryTimeline events={events} />
     </section>
   );
 }
