@@ -117,10 +117,10 @@ begin
   if not exists (
     select 1 from public.work_templates
     where id = v_template and draft_version_id is null and current_published_version_id = v_first_version
-  ) or (select status from public.work_template_versions where id = v_first_version) <> 'published'
+  ) or (select status from public.work_template_versions where id = v_first_version) is distinct from 'published'
   then raise exception 'publishing did not make version 1 the current published version'; end if;
   if (select array_agg(event_type order by created_at, event_type) from public.work_template_events
-      where template_id = v_template) <> array['created', 'draft_saved', 'published']
+      where template_id = v_template) is distinct from array['created', 'draft_saved', 'published']
   then raise exception 'template history is not created, draft_saved, published'; end if;
 
   -- A published version and its children are immutable; history is append-only.
@@ -150,7 +150,7 @@ begin
   then raise exception 'applying version 1 did not create an application'; end if;
   if (select array_agg(content order by sort_order) from public.job_instruction_items
       where job_id = v_job and work_template_application_id = v_application)
-     <> array['Anlage prüfen', 'Messwerte notieren']
+     is distinct from array['Anlage prüfen', 'Messwerte notieren']
   then raise exception 'the applied job does not carry the version 1 items'; end if;
   if (select count(*) from public.job_instruction_item_evidence_requirements evidence
       join public.job_instruction_items item on item.id = evidence.instruction_item_id
@@ -175,7 +175,7 @@ begin
 
   -- The same request replays; the same version is not applied twice.
   v_result := public.apply_work_template(v_org, v_first_version, v_admin, 'p113-sql-apply-1', p_job_id => v_job);
-  if (v_result->>'applicationId')::uuid <> v_application or (v_result->>'wasCreated')::boolean
+  if (v_result->>'applicationId')::uuid is distinct from v_application or (v_result->>'wasCreated')::boolean
   then raise exception 'an idempotent replay created a second application'; end if;
   begin
     perform public.apply_work_template(v_org, v_first_version, v_admin, 'p113-sql-apply-2', p_job_id => v_job);
@@ -194,7 +194,7 @@ begin
   );
   perform public.publish_work_template(v_org, v_template, v_admin);
   if (select array_agg(content order by sort_order) from public.work_template_items
-      where version_id = v_first_version) <> array['Anlage prüfen', 'Messwerte notieren']
+      where version_id = v_first_version) is distinct from array['Anlage prüfen', 'Messwerte notieren']
   then raise exception 'version 2 rewrote the version 1 items'; end if;
   if exists (select 1 from public.job_instruction_items
       where job_id = v_job and content = 'Anlage vollständig prüfen')
@@ -259,7 +259,7 @@ begin
     p_project_id => v_project);
   select count(*) into v_count from public.job_instruction_items
   where project_id = v_project and job_id is null and content = 'Baustelle vorbereiten';
-  if v_count <> 1 then raise exception 'the project template did not write onto the project'; end if;
+  if v_count is distinct from 1 then raise exception 'the project template did not write onto the project'; end if;
   if exists (select 1 from public.jobs where project_id = v_project)
   then raise exception 'a project template created a child job'; end if;
 end;

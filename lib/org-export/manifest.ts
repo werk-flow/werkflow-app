@@ -8,7 +8,8 @@ import { getFolderPath } from '@/lib/documents/folder-tree';
 import type { DocumentArchiveRows } from './documents';
 
 // The document manifest of an organization export: one row per document
-// whose files the export holds, with its folder path, links, category,
+// whose files the export holds (the company profile's logo and stationery
+// belong to none), with its folder path, links, category,
 // document date, retention, filed state, origin and every version's place in
 // the archive.
 
@@ -77,6 +78,8 @@ export function buildDocumentManifest(
   }
   const filesByDocument = new Map<string, ManifestFile[]>();
   for (const file of files) {
+    // A file of the company document profile belongs to no document.
+    if (file.document_id === null) continue;
     const documentFiles = filesByDocument.get(file.document_id);
     if (documentFiles) documentFiles.push(file);
     else filesByDocument.set(file.document_id, [file]);

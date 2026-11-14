@@ -33,7 +33,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal and sqlstate <> p_refusal then
+    if sqlerrm is distinct from p_refusal and sqlstate is distinct from p_refusal then
       raise exception '% refused with % (%) instead of %', p_label, sqlerrm, sqlstate, p_refusal;
     end if;
     return;
@@ -124,7 +124,7 @@ select '47000000-0000-0000-0000-000000000010', montage, '2039-01-01', 7500, 4600
 -- The create trims the number and stores the first price as a version.
 do $$
 begin
-  if (select leistung_number from public.leistungen where id = (select montage from ids)) <> 'L-100' then
+  if (select leistung_number from public.leistungen where id = (select montage from ids)) is distinct from 'L-100' then
     raise exception 'create_leistung kept the untrimmed number';
   end if;
   if (select count(*) from public.leistung_price_versions where leistung_id = (select montage from ids)) <> 4 then
@@ -157,8 +157,8 @@ begin
       or v_found.sale_price_cents is distinct from v_case.sale
       or v_found.cost_rate_cents is distinct from v_case.cost
       or v_found.valid_from is distinct from v_case.valid_from
-      or v_found.unit <> 'hour'
-      or v_found.tax_rate_basis_points <> 1900 then
+      or v_found.unit is distinct from 'hour'
+      or v_found.tax_rate_basis_points is distinct from 1900 then
       raise exception 'price on % picked % / % from %, expected % / % from %', v_case.on_day,
         v_found.sale_price_cents, v_found.cost_rate_cents, v_found.valid_from, v_case.sale, v_case.cost, v_case.valid_from;
     end if;
@@ -177,7 +177,7 @@ begin
     array[(select anfahrt from ids), (select archived from ids), (select foreign_leistung from ids)],
     '2038-11-12'
   );
-  if v_rows <> 2 then raise exception 'price on day answered % rows instead of the own two', v_rows; end if;
+  if v_rows is distinct from 2 then raise exception 'price on day answered % rows instead of the own two', v_rows; end if;
   if exists (
     select 1 from public.leistung_prices_on_day('47000000-0000-0000-0000-000000000010', array[(select anfahrt from ids)], '2038-11-12')
     where sale_price_cents is not null or price_version_id is not null

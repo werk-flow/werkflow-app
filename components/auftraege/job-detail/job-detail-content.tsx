@@ -10,6 +10,7 @@ import { UsableContent } from '@/components/shared/usable-content';
 import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 import type { WorkRequestEntry } from '@/lib/requests/types';
+import type { WorkBillingParties } from '@/lib/billing-parties/types';
 
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { JobTimeParticipant, TimeEntry } from '@/lib/time-tracking/types';
@@ -27,6 +28,8 @@ import type { OrganizationDocument } from '@/lib/documents/types';
 import type { InventoryLocation, InventoryPickerOption, JobMaterialLine } from '@/lib/inventory/types';
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
 import { JobDetailMainColumn, JobDetailSideColumn } from './job-detail-columns';
+import { WorkLeadSection } from '../project-detail/work-lead-section';
+import type { WorkLeadPanel } from '@/lib/projects/work-lead-types';
 import { JobDetailContentDialogs, useJobDetailDialogVisibility } from './job-detail-content-dialogs';
 import { JobDetailHeader } from './job-detail-header';
 import { JobDetailOverview } from './job-detail-overview';
@@ -133,6 +136,10 @@ interface JobDetailContentProps {
   originRequest?: OriginRequestLink;
   // The requests attached to the job; undefined when the server read failed.
   requestEntries: WorkRequestEntry[] | undefined;
+  // Office-only; undefined when the server read failed, and the section reads it.
+  billingParties?: WorkBillingParties | undefined;
+  /** Admin and Büro on a standalone job: its „Projektleitung“; absent where the screen names none. */
+  workLeadPanel?: WorkLeadPanel | 'failed';
 }
 
 /** Every hook of the job page, in render order: the live job, dialogs, assignments, fields, time and refresh. */
@@ -220,6 +227,7 @@ function JobDetailContentColumns({
         documents={documents}
         timeEntries={view.timeEntries}
         setShowClientDialog={view.dialogs.setShowClientDialog}
+        billingParties={content.billingParties}
         openAssignDialog={view.assignment.openAssignDialog}
         isUnassigning={view.assignment.isUnassigning}
         handleUnassign={view.assignment.handleUnassign}
@@ -239,6 +247,16 @@ function JobDetailContentColumns({
         refreshTime={view.refreshTime}
         timeSummary={view.timeSummary}
         setShowProjectDialog={view.dialogs.setShowProjectDialog}
+        workLeadSection={
+          content.workLeadPanel ? (
+            <WorkLeadSection
+              targetType="job"
+              targetId={liveJob.id}
+              panel={content.workLeadPanel === 'failed' ? null : content.workLeadPanel}
+              members={content.members}
+            />
+          ) : null
+        }
       />
     </DetailColumns>
   );

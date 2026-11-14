@@ -2,6 +2,7 @@ import type { Database } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import type { InventoryMovementPageRow, InventoryPageQuery } from './list-page';
 import { INVENTORY_UNITS } from './units';
+import type { ArticleTermsPage } from './article-price-terms';
 
 // The values the database check constraints allow for each text column.
 export const INVENTORY_ITEM_TYPES = ['material', 'consumable', 'tool', 'asset'] as const;
@@ -151,6 +152,8 @@ export type InventoryOverview = {
   locations: InventoryLocation[];
   suppliers: InventorySupplier[];
   items: InventoryOverviewItem[];
+  /** The supplier references and prices of the listed items, for the article dialog. */
+  articleTerms: ArticleTermsPage;
   summary: {
     totalItems: number;
     stockedItems: number;

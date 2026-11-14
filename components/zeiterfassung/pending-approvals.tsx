@@ -14,7 +14,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { describeBatchRefusal, describeFailure } from '@/lib/action-messages';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView, type LiveViewResult, type LiveViewState } from '@/hooks/use-live-view';
-import { PendingApprovalsHeader } from './pending-approvals-header';
+import { PendingApprovalsHeader, type ConfirmedSessions } from './pending-approvals-header';
 import { combinePendingApprovalItems, PendingApprovalsList } from './pending-approvals-list';
 
 interface PendingApprovalsProps {
@@ -111,7 +111,6 @@ type PendingApprovalReviewsInput = {
   view: LiveViewState<PendingApprovalData>;
   sessionList: ReviewList;
   changeRequestList: ReviewList;
-  sessions: PendingSession[];
   setActionError: (error: string | null) => void;
   showBanner: ReturnType<typeof useBanner>['showBanner'];
 };
@@ -121,30 +120,31 @@ function pendingApprovalReviews({
   view,
   sessionList,
   changeRequestList,
-  sessions,
   setActionError,
   showBanner,
 }: PendingApprovalReviewsInput) {
-  // Confirmation appears only after the server accepted the review.
+  // Confirmation appears only after the server accepted the review. Answers the refusal, or null.
   const review = async (
     list: ReviewList,
     ids: string[],
     write: () => Promise<ActionResult>,
     confirmation: string,
     describeRefusal: (error: string) => string,
-  ) => {
+  ): Promise<string | null> => {
     setActionError(null);
     view.invalidate();
     for (const id of ids) list.remove(id);
     const result = await write().catch(() => ({ success: false as const, error: 'unexpected_error' }));
+    let refusal: string | null = null;
     if (result.success) {
       showBanner({ variant: 'success', message: confirmation });
     } else {
       for (const id of ids) list.rollback(id);
-      setActionError(describeRefusal(result.error));
+      refusal = describeRefusal(result.error);
     }
     // Read again: another session may have decided items meanwhile.
     await view.refresh();
+    return refusal;
   };
 
   const reviewPendingSession = (session: PendingSession, decision: 'approved' | 'rejected') =>
@@ -154,19 +154,17 @@ function pendingApprovalReviews({
       () => reviewEntries(session.entryIds, decision),
       decision === 'approved' ? 'Der Zeiteintrag wurde genehmigt.' : 'Der Zeiteintrag wurde abgelehnt.',
       getEntryReviewErrorMessage,
-    );
+    ).then(setActionError);
 
-  // One round trip for the whole backlog; the server re-checks every entry.
-  const approveAllSessions = () =>
+  // One round trip for the confirmed entries; the server re-checks every one and refuses all when one
+  // is no longer pending. The rows stay until the answer: the confirmation that shows a refusal sits
+  // in the header, which only these rows keep open.
+  const approveAllSessions = (confirmed: ConfirmedSessions) =>
     review(
       sessionList,
-      sessions.map((session) => session.id),
-      () =>
-        reviewEntries(
-          sessions.flatMap((session) => session.entryIds),
-          'approved',
-        ),
-      `${sessions.length} Zeiteinträge wurden genehmigt.`,
+      [],
+      () => reviewEntries(confirmed.entryIds, 'approved'),
+      `${confirmed.count} Zeiteinträge wurden genehmigt.`,
       getEntryReviewErrorMessage,
     );
 
@@ -179,7 +177,7 @@ function pendingApprovalReviews({
         ? 'Der Änderungsantrag wurde genehmigt.'
         : 'Der Änderungsantrag wurde abgelehnt.',
       getApprovalErrorMessage,
-    );
+    ).then(setActionError);
 
   return { reviewPendingSession, approveAllSessions, reviewPendingChangeRequest };
 }
@@ -239,7 +237,6 @@ export function PendingApprovals({
     view,
     sessionList,
     changeRequestList,
-    sessions,
     setActionError,
     showBanner,
   });
@@ -257,7 +254,7 @@ export function PendingApprovals({
           isInitialLoading={isInitialLoading}
           loadFailed={Boolean(error) && allItems.length === 0}
           itemCount={allItems.length}
-          sessionCount={sessions.length}
+          sessions={sessions}
           approveAllSessions={approveAllSessions}
           onRefresh={view.refresh}
         />

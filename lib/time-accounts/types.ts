@@ -81,6 +81,8 @@ export type DailyTargetInput = {
   source: 'schedule' | 'employment_condition' | 'default';
   vacationMinutes: number;
   sicknessMinutes: number;
+  /** The normal target a Berufsschule day credits; shown in the period review, not stored. */
+  schoolMinutes: number;
 };
 
 export type RoundedTimeBucket = TimeActivityContext & {

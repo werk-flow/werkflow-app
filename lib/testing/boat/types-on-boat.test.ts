@@ -15,7 +15,7 @@ import {
 } from './types-on-boat';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
-const noDrift = { stackOnly: [], treeOnly: [], changed: [], unverified: [] };
+const noDrift = { stackOnly: [], treeOnly: [], changed: [], unverified: [], unknownVersions: [] };
 
 test("CI and a Boat machine read their own stack without asking the shared stack's ledger", () => {
   const readDrift = () => {

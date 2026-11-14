@@ -12,6 +12,7 @@ import { seedTeam } from '../../../golden/support/db/qualifications';
 import { createAdminClient } from '../../../golden/support/db/shared';
 import { seedJob } from '../../../golden/support/db/work';
 import { seedSicknessReport } from '../../../golden/support/db/sickness';
+import { seedSchoolDay } from '../../../golden/support/db/school-days';
 import {
   memberMenuItem,
   memberRow,
@@ -41,11 +42,19 @@ import {
   sicknessReportMenuItem,
   sicknessReportRangeText,
 } from '../../../golden/support/steps/sickness';
+import {
+  addSchoolDayButton,
+  schoolDayActionsButton,
+  schoolDayCancelConfirmation,
+  schoolDayDialog,
+  schoolDayMenuItem,
+} from '../../../golden/support/steps/school-days';
 import type { TestWorld } from '../../../golden/support/world';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { openSurface } from '../surface-routes';
 import { worldName } from '../../../../lib/testing/seed-world-plan';
+import { describeSchoolDay } from '../../../../lib/personnel/school-days';
 
 // The seeded versions and reports lie years ahead of the business date, so
 // they change no current target, entitlement or absence of the employee.
@@ -211,7 +220,74 @@ function sicknessOpener(
   };
 }
 
+/** The weekly school rule of the audit apprentice, years ahead of the business date. */
+function apprenticeSchoolRuleStart(businessDate: string): string {
+  return `${yearsAhead(businessDate, 3)}-09-01`;
+}
+
+function apprenticeRuleText(businessDate: string): string {
+  return describeSchoolDay({
+    id: 'audit',
+    employeeRecordId: 'audit',
+    kind: 'weekday',
+    weekday: 1,
+    startDate: apprenticeSchoolRuleStart(businessDate),
+    endDate: null,
+    cancelledAt: null,
+  });
+}
+
+/** An apprentice without a login, with a weekly school rule, opened on the detail page. */
+async function openApprenticeRecord(context: SurfaceContext): Promise<void> {
+  const { world, businessDate } = context;
+  await openNoLoginRecord(context, 'people.apprentice-record', 'Azubi', async (recordId) => {
+    await seedEmploymentCondition({
+      organizationId: world.orgId,
+      employeeRecordId: recordId,
+      actorUserId: world.users.admin.id,
+      validFrom: businessDate,
+      employmentType: 'ausbildung',
+      weeklyHours: 40,
+      vacationDaysPerYear: 30,
+      note: `Layout Ausbildung ${world.runId}`,
+    });
+    await seedSchoolDay({
+      organizationId: world.orgId,
+      employeeRecordId: recordId,
+      actorUserId: world.users.admin.id,
+      rule: { kind: 'weekday', weekday: 1, startDate: apprenticeSchoolRuleStart(businessDate) },
+    });
+  });
+}
+
+function schoolDayMenuOpener(
+  item: Parameters<typeof schoolDayMenuItem>[1],
+  layer: (page: Page) => Locator,
+): DialogOpener {
+  return {
+    trigger: async (context: SurfaceContext) => {
+      await openApprenticeRecord(context);
+      return openMenuItem(
+        schoolDayActionsButton(context.page, apprenticeRuleText(context.businessDate)),
+        schoolDayMenuItem(context.page, item),
+      );
+    },
+    layer,
+    returnFocus: ({ page, businessDate }: SurfaceContext) =>
+      schoolDayActionsButton(page, apprenticeRuleText(businessDate)),
+  };
+}
+
 export const PEOPLE_OPENERS = {
+  'people.school-day-add': {
+    trigger: async (context) => {
+      await openApprenticeRecord(context);
+      return addSchoolDayButton(context.page);
+    },
+    layer: (page) => schoolDayDialog(page, 'add'),
+  },
+  'people.school-day-end': schoolDayMenuOpener('end', (page) => schoolDayDialog(page, 'end')),
+  'people.school-day-cancel': schoolDayMenuOpener('cancel', schoolDayCancelConfirmation),
   'people.create-personnel': {
     trigger: async ({ page }) => createPersonnelRecordButton(page),
     layer: (page) => peopleDialog(page, 'createRecord'),

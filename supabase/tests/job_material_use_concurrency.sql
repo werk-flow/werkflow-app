@@ -114,7 +114,7 @@ begin
                          where event.job_material_line_id = line.id)
     from public.job_material_lines line where line.id = '38000000-0000-4000-8000-000000000050'
   $read$) as line(status text, events integer);
-  if v_status = 'cancelled' or v_events <> 2 then
+  if v_status = 'cancelled' or v_events is distinct from 2 then
     raise exception 'the line must stay with both its events, got status % and % events', v_status, v_events;
   end if;
 end $$;

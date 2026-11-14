@@ -101,6 +101,14 @@ export function initializeServiceBoundaries(): void {
       ) {
         return browserFetch(input, init);
       }
+      // The company letterhead contract answers the Musterangebot at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'company-letterhead' &&
+        input === '/api/musterangebot' &&
+        (init?.method ?? 'GET') === 'GET'
+      ) {
+        return browserFetch(input, init);
+      }
       if (input !== '/auth/callback') throw new Error('Unexpected request in isolated UI contracts.');
       window.uiContractServices.callbackCalls += 1;
       if (window.uiContractServices.callbackFailure)

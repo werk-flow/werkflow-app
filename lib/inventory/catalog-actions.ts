@@ -5,9 +5,19 @@ import { logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { upsertInventoryItemSchema } from './action-schemas';
+import { writeRefusalFor } from '@/lib/supabase/write-refusal';
+import {
+  addArticlePriceSchema,
+  removeArticleSupplierSchema,
+  saveArticleSupplierSchema,
+  upsertInventoryItemSchema,
+  type AddArticlePriceInput,
+  type RemoveArticleSupplierInput,
+  type SaveArticleSupplierInput,
+} from './action-schemas';
 import {
   loadActiveInventoryLocations,
+  loadArticleTermsPage,
   loadInventoryMovementPage,
   loadInventoryOverviewLists,
 } from './catalog-reads';
@@ -26,8 +36,23 @@ import {
 } from './write-support';
 
 // The office's catalog Server Actions: the inventory page, its movement
-// history, the storage locations of the work-template editor, and an item's
-// save. Each one is for managers only.
+// history, the storage locations of the work-template editor, an item's save,
+// and its supplier references and dated prices. Each one is for managers only.
+
+// The refusals of save_inventory_item_supplier, remove_inventory_item_supplier
+// and add_inventory_item_price (migration 20261203150000).
+const articleTermsRefusal = writeRefusalFor(
+  new Set([
+    'not_authorized',
+    'invalid_input',
+    'item_not_found',
+    'supplier_not_found',
+    'supplier_required',
+    'supplier_reference_not_found',
+    'supplier_reference_taken',
+    'unit_changed',
+  ]),
+);
 
 export async function getInventoryOverview(
   input: unknown = {},
@@ -49,7 +74,10 @@ export async function getInventoryOverview(
   const parsedPage = inventoryPageResultSchema.safeParse(pageResult.data);
   if (!parsedPage.success) return { success: false, error: 'inventory_failed' };
   const page = parsedPage.data;
-  const lists = await loadInventoryOverviewLists(admin, orgId, page);
+  const [lists, articleTerms] = await Promise.all([
+    loadInventoryOverviewLists(admin, orgId, page),
+    loadArticleTermsPage(admin, orgId, page.ids),
+  ]);
   if (!lists.success) return lists;
 
   const summary = page.summary;
@@ -61,6 +89,7 @@ export async function getInventoryOverview(
       locations: lists.locations,
       suppliers: lists.suppliers,
       items: lists.items,
+      articleTerms,
       summary,
       page: {
         query,
@@ -143,6 +172,16 @@ export async function upsertInventoryItem(
   }
 
   const admin = createSupabaseAdminClient();
+  // A new article starts with its supplier and prices; an existing one changes
+  // them in the dialog's „Lieferanten“ and „Preise“, so its save leaves them out.
+  const supplierAndPrices = input.id
+    ? {}
+    : {
+        supplier_id: cleanText(input.supplierId),
+        supplier_article_number: cleanText(input.supplierArticleNumber),
+        purchase_price_cents: normalizePrice(input.purchasePriceCents),
+        sale_price_cents: normalizePrice(input.salePriceCents),
+      };
   const item = {
     item_type: input.itemType,
     name,
@@ -151,10 +190,7 @@ export async function upsertInventoryItem(
     unit,
     internal_sku: cleanText(input.internalSku),
     manufacturer: cleanText(input.manufacturer),
-    supplier_id: cleanText(input.supplierId),
-    supplier_article_number: cleanText(input.supplierArticleNumber),
-    purchase_price_cents: normalizePrice(input.purchasePriceCents),
-    sale_price_cents: normalizePrice(input.salePriceCents),
+    ...supplierAndPrices,
     is_billable: input.isBillable,
     global_minimum_stock: normalizeQuantity(input.globalMinimumStock ?? 0),
     global_target_stock:
@@ -174,7 +210,7 @@ export async function upsertInventoryItem(
       p_actor_id: auth.context.userId,
       p_item_id: input.id ?? null,
       p_item: item,
-      p_supplier_name: cleanText(input.supplierName),
+      p_supplier_name: input.id ? null : cleanText(input.supplierName),
       p_barcode: cleanText(input.barcode),
       p_initial_location_id: requestedInitialLocationId,
       p_initial_quantity: input.id ? 0 : initialQuantity,
@@ -186,4 +222,113 @@ export async function upsertInventoryItem(
 
   invalidateInventory();
   return { success: true, item: toInventoryItem(data) };
+}
+
+/** Rounds a conversion quantity to the thousandths `numeric(12,3)` keeps. */
+function conversionQuantity(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+/**
+ * Creates or changes one supplier reference of an article: the supplier, its
+ * article number and the purchase unit with its conversion to the base unit.
+ * A preferred reference becomes the article's supplier.
+ */
+export async function saveArticleSupplier(
+  rawInput: SaveArticleSupplierInput,
+): Promise<ActionResult<{ referenceId: string }>> {
+  const parsedInput = saveArticleSupplierSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return { success: false, error: auth.error };
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+
+  const supplierName = cleanText(input.supplierName);
+  if (!input.supplierId && !supplierName) return { success: false, error: 'supplier_required' };
+  const packQuantity = input.purchaseUnit ? conversionQuantity(input.packQuantity) : 1;
+  const baseQuantity = input.purchaseUnit ? conversionQuantity(input.baseQuantity) : 1;
+  if (packQuantity <= 0 || baseQuantity <= 0) return { success: false, error: 'invalid_conversion' };
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.rpc(
+    'save_inventory_item_supplier',
+    rpcArgs('save_inventory_item_supplier', {
+      p_organization_id: auth.context.orgId,
+      p_actor_id: auth.context.userId,
+      p_item_id: input.itemId,
+      p_unit: input.unit,
+      p_reference_id: input.referenceId,
+      p_supplier_id: input.supplierId,
+      p_supplier_name: input.supplierId ? null : supplierName,
+      p_supplier_article_number: cleanText(input.supplierArticleNumber),
+      p_purchase_unit: input.purchaseUnit,
+      p_pack_quantity: packQuantity,
+      p_base_quantity: baseQuantity,
+      p_is_preferred: input.isPreferred,
+    }),
+  );
+  if (error || !data) {
+    return articleTermsRefusal(
+      error,
+      'save_failed',
+      'saveArticleSupplier: save_inventory_item_supplier failed',
+    );
+  }
+  invalidateInventory();
+  return { success: true, referenceId: data };
+}
+
+/** Removes one supplier reference; the oldest remaining one becomes preferred when needed. */
+export async function removeArticleSupplier(rawInput: RemoveArticleSupplierInput): Promise<ActionResult> {
+  const parsedInput = removeArticleSupplierSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return { success: false, error: auth.error };
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.rpc('remove_inventory_item_supplier', {
+    p_organization_id: auth.context.orgId,
+    p_actor_id: auth.context.userId,
+    p_reference_id: parsedInput.data.referenceId,
+  });
+  if (error) {
+    return articleTermsRefusal(
+      error,
+      'save_failed',
+      'removeArticleSupplier: remove_inventory_item_supplier failed',
+    );
+  }
+  invalidateInventory();
+  return { success: true };
+}
+
+/** Records a purchase or sale price of an article from its first day on; earlier prices stay. */
+export async function addArticlePrice(
+  rawInput: AddArticlePriceInput,
+): Promise<ActionResult<{ priceId: string }>> {
+  const parsedInput = addArticlePriceSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return { success: false, error: auth.error };
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.rpc('add_inventory_item_price', {
+    p_organization_id: auth.context.orgId,
+    p_actor_id: auth.context.userId,
+    p_item_id: input.itemId,
+    p_unit: input.unit,
+    p_kind: input.kind,
+    p_amount_cents: input.amountCents,
+    p_price_quantity: input.priceQuantity,
+    p_valid_from: input.validFrom,
+  });
+  if (error || !data) {
+    return articleTermsRefusal(error, 'save_failed', 'addArticlePrice: add_inventory_item_price failed');
+  }
+  invalidateInventory();
+  return { success: true, priceId: data };
 }

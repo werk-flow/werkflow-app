@@ -105,7 +105,7 @@ begin
     '26143000-0000-0000-0000-000000000041');
   v_running := public.reserve_payroll_export(v_admin, v_org, v_fixture.period_id, v_fixture.mapping_id, 'p1-23-v1',
     repeat('4', 64), v_fixture.ready_id, '26143000-0000-0000-0000-000000000042', repeat('5', 64));
-  if (select state from public.payroll_exports where id = v_running) <> 'generating' then
+  if (select state from public.payroll_exports where id = v_running) is distinct from 'generating' then
     raise exception 'the export after a failed successor was not reserved';
   end if;
 end;
@@ -141,14 +141,14 @@ begin
     repeat('6', 64), v_fixture.ready_id, '26143000-0000-0000-0000-000000000044', repeat('8', 64));
   select * into v_abandoned from public.payroll_exports
   where operation_id = '26143000-0000-0000-0000-000000000042';
-  if v_abandoned.state <> 'failed' or v_abandoned.failure_reason <> 'generation_abandoned'
+  if v_abandoned.state is distinct from 'failed' or v_abandoned.failure_reason is distinct from 'generation_abandoned'
     or not exists (select 1 from public.payroll_export_events where export_id = v_abandoned.id
       and event_type = 'failed' and event_payload->>'failure_reason' = 'generation_abandoned')
-    or (select state from public.payroll_exports where id = v_next) <> 'generating'
-    or (select state from public.payroll_exports where id = v_fixture.ready_id) <> 'ready'
+    or (select state from public.payroll_exports where id = v_next) is distinct from 'generating'
+    or (select state from public.payroll_exports where id = v_fixture.ready_id) is distinct from 'ready'
   then raise exception 'the abandoned export was not failed or the next one not reserved'; end if;
   -- A fresh generating export is never taken for abandoned.
-  if (select state from public.payroll_exports where id = v_next) <> 'generating' then
+  if (select state from public.payroll_exports where id = v_next) is distinct from 'generating' then
     raise exception 'the fresh export changed state';
   end if;
 end;

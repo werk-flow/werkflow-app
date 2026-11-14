@@ -54,6 +54,8 @@ const REQUEST_COPY = {
   convertToServiceTitle: 'Anfrage als Servicefall übernehmen?',
   attachToWork: 'Zu Arbeit hinzufügen',
   attachToWorkTitle: 'Zu bestehender Arbeit hinzufügen',
+  billingParties: 'Auftraggeber und Rechnungsempfänger ändern',
+  billingPartiesTitle: 'Auftraggeber und Rechnungsempfänger',
 } as const;
 
 /** The row actions of the request's contextual „Dokumente & Bilder“ frame. */
@@ -254,6 +256,16 @@ export function requestAttachToWorkButton(page: Page): Locator {
 /** The dialog that lists the customer's open work, named by its title. */
 export function requestAttachToWorkDialog(page: Page): Locator {
   return page.getByRole('dialog', { name: REQUEST_COPY.attachToWorkTitle, exact: true });
+}
+
+/** The Details card's action that chooses the Auftraggeber and the Rechnungsempfänger. */
+export function requestBillingPartiesButton(page: Page): Locator {
+  return page.getByRole('button', { name: REQUEST_COPY.billingParties, exact: true });
+}
+
+/** The dialog that chooses the Auftraggeber and the Rechnungsempfänger, named by its title. */
+export function billingPartiesDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: REQUEST_COPY.billingPartiesTitle, exact: true });
 }
 
 /** The customer card's action that matches an unknown caller to an existing customer. */

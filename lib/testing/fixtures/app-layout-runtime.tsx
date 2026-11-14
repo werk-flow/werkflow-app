@@ -13,6 +13,7 @@ const leaves = new Map<string, (props: { children?: ReactNode }) => ReactNode>()
 for (const [modulePath, exportName] of [
   ['@/components/organization/organization-context', 'OrganizationProvider'],
   ['@/components/organization/organization-realtime-bridge', 'OrganizationRealtimeBridge'],
+  ['@/components/organization/organization-page-scope', 'OrganizationPageScope'],
   ['@/components/user/user-profile-context', 'UserProfileProvider'],
   ['@/components/realtime/realtime-provider', 'RealtimeProvider'],
   ['@/components/ui/banner', 'BannerProvider'],
@@ -96,7 +97,10 @@ assert.ok(
 assert.equal(clockProviderProps.initialState, undefined);
 assert.equal(activeJobsProviderProps.initialActiveJobIds, undefined);
 assert.equal(activeJobsProviderProps.initialOrganizationId, undefined);
-// The page content sits in the clock dock's bottom reserve inside the shell.
-const reserve = propsByName.get('AppShell')?.children;
+// The page content sits in the clock dock's bottom reserve, scoped to the server's organization.
+const pageScope = propsByName.get('OrganizationPageScope');
+assert.ok(pageScope, 'the layout scopes the page content');
+assert.equal(pageScope.organizationId, organizationId, 'the page scope is keyed by the active organization');
+const reserve = pageScope.children;
 assert.ok(isValidElement<{ children: ReactNode }>(reserve), 'the shell holds the clock dock reserve');
 assert.equal(reserve.props.children, 'Authorized page content');

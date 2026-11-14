@@ -14,6 +14,14 @@ const LAYER_ROOTS: Readonly<Record<string, DialogKind>> = {
   SheetContent: 'sheet',
 };
 
+/**
+ * A shared component that renders a whole layer from its props: each use is
+ * that layer, keyed by its `title` prop, and its own file holds no layer.
+ */
+const WRAPPED_LAYERS: Readonly<Record<string, { file: string; kind: DialogKind }>> = {
+  ConfirmActionDialog: { file: 'components/shared/confirm-action-dialog.tsx', kind: 'alert-dialog' },
+};
+
 const LAYER_TITLES: Readonly<Record<DialogKind, string>> = {
   dialog: 'DialogTitle',
   'alert-dialog': 'AlertDialogTitle',
@@ -422,6 +430,36 @@ function inspectLayer(
   return contract;
 }
 
+/** One use of a wrapped layer: its title prop as the title's source text, its children as content. */
+function inspectWrappedLayer(
+  sources: ParsedSources,
+  file: string,
+  node: ts.JsxElement | ts.JsxSelfClosingElement,
+  kind: DialogKind,
+): DialogContract {
+  const opening = ts.isJsxElement(node) ? node.openingElement : node;
+  const title = opening.attributes.properties.find(
+    (part): part is ts.JsxAttribute => ts.isJsxAttribute(part) && part.name.getText() === 'title',
+  )?.initializer;
+  const owner = `${file}#${ownerName(node)}`;
+  const contract: DialogContract = {
+    key: `${owner}|${title && ts.isStringLiteral(title) ? title.text : (title?.getText() ?? '')}`,
+    kind,
+    owner,
+    forms: 0,
+    bodies: 0,
+    uncoveredControls: [],
+    contentScrolls: false,
+    formBoundaries: [],
+    associatedSubmits: [],
+  };
+  if (ts.isJsxElement(node)) {
+    const walk = { sources, layer: node, contract };
+    for (const child of node.children) walkLayer(walk, child, false, new Set());
+  }
+  return contract;
+}
+
 /** Follow rendered component returns, never unrelated functions or nested portals. */
 export function inspectDialogs(files: ReadonlyMap<string, string>): DialogContract[] {
   const sources = new Map(
@@ -432,12 +470,20 @@ export function inspectDialogs(files: ReadonlyMap<string, string>): DialogContra
   );
 
   const contracts: DialogContract[] = [];
+  const wrapperFiles = new Set(Object.values(WRAPPED_LAYERS).map((wrapped) => wrapped.file));
   for (const [file, source] of sources) {
+    if (wrapperFiles.has(file)) continue;
     function discover(node: ts.Node): void {
       const kind = ts.isJsxElement(node)
         ? LAYER_ROOTS[layerTagName(sources, node.openingElement)]
         : undefined;
       if (ts.isJsxElement(node) && kind) contracts.push(inspectLayer(sources, file, source, node, kind));
+      const wrapped =
+        ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)
+          ? WRAPPED_LAYERS[layerTagName(sources, ts.isJsxElement(node) ? node.openingElement : node)]
+          : undefined;
+      if (wrapped && (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)))
+        contracts.push(inspectWrappedLayer(sources, file, node, wrapped.kind));
       ts.forEachChild(node, discover);
     }
     discover(source);

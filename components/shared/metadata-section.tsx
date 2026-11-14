@@ -15,6 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { SectionTitle } from '@/components/shared/section-title';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -127,21 +128,21 @@ function createFieldSaveHandlers(state: MetadataSectionState) {
   const { editValue, currentConfig, pendingSaveConfirmation, runSave } = state;
   const { setEditingFieldLabel, setEditValue, setPendingSaveConfirmation, setSaveError } = state;
 
-  const persistFieldValue = (value: string, onSave: (newValue: string) => Promise<void>) => {
-    setSaveError(null);
-    void (async () => {
-      try {
-        await runSave(value, onSave);
-        setEditingFieldLabel(null);
-        setEditValue('');
-      } catch (error) {
-        setSaveError(
-          error instanceof MetadataSaveError
-            ? error.message
-            : 'Die Änderung konnte nicht gespeichert werden.',
-        );
-      }
-    })();
+  /** Answers the failure to show, or null once the value is saved and the editor closed. */
+  const persistFieldValue = async (
+    value: string,
+    onSave: (newValue: string) => Promise<void>,
+  ): Promise<string | null> => {
+    try {
+      await runSave(value, onSave);
+      setEditingFieldLabel(null);
+      setEditValue('');
+      return null;
+    } catch (error) {
+      return error instanceof MetadataSaveError
+        ? error.message
+        : 'Die Änderung konnte nicht gespeichert werden.';
+    }
   };
 
   const handleSave = () => {
@@ -160,15 +161,15 @@ function createFieldSaveHandlers(state: MetadataSectionState) {
       return;
     }
 
-    persistFieldValue(editValue, currentConfig.onSave);
+    setSaveError(null);
+    void persistFieldValue(editValue, currentConfig.onSave).then(setSaveError);
   };
 
-  const handleConfirmSave = () => {
-    if (!pendingSaveConfirmation) return;
-    const confirmation = pendingSaveConfirmation;
-    setPendingSaveConfirmation(null);
-    persistFieldValue(confirmation.newValue, confirmation.onSave);
-  };
+  // The confirmation stays open with the failure; on success it closes and the editor with it.
+  const handleConfirmSave = (): Promise<string | null> =>
+    pendingSaveConfirmation
+      ? persistFieldValue(pendingSaveConfirmation.newValue, pendingSaveConfirmation.onSave)
+      : Promise.resolve(null);
 
   return { handleSave, handleConfirmSave };
 }
@@ -221,34 +222,23 @@ export function MetadataSection({ title, fields, isEditable }: MetadataSectionPr
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Zurück</AlertDialogCancel>
+            {/* eslint-disable-next-line ui/confirm-action-stays-open -- discarding the draft only changes local state and cannot fail */}
             <AlertDialogAction onClick={navigation.handleDiscardAndContinue}>
               Verwerfen und wechseln
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <AlertDialog
+      <ConfirmActionDialog
         open={pendingSaveConfirmation !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingSaveConfirmation(null);
-        }}
-        pending={isPending}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{pendingSaveConfirmation?.title}</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div>{pendingSaveConfirmation?.description}</div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmSave} disabled={isPending}>
-              {isPending ? pendingSaveConfirmation?.loadingLabel : pendingSaveConfirmation?.confirmLabel}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onOpenChange={(open) => !open && setPendingSaveConfirmation(null)}
+        title={pendingSaveConfirmation?.title}
+        description={pendingSaveConfirmation?.description}
+        confirmLabel={
+          isPending ? pendingSaveConfirmation?.loadingLabel : pendingSaveConfirmation?.confirmLabel
+        }
+        onConfirm={handleConfirmSave}
+      />
     </>
   );
 }

@@ -95,6 +95,13 @@ export function stackLockConflicts(
   });
 }
 
+/** A hold that was asked not to wait and found the stack held; it names the holders in its way. */
+export class StackHeldError extends Error {
+  constructor(readonly holders: readonly StackLockHolder[]) {
+    super(`The local stack is held by ${holders.map((holder) => holder.operation).join(', ')}.`);
+  }
+}
+
 function abortReason(signal: AbortSignal): Error {
   return signal.reason instanceof Error ? signal.reason : new Error('The stack lock wait was cancelled.');
 }
@@ -119,10 +126,17 @@ async function pause(signal: AbortSignal | undefined): Promise<void> {
  * Runs `operation` while this process holds the local stack in `mode`. A
  * child process inherits the hold through the environment `operation`
  * receives. A waiting exclusive holder registers first, so new shared holders
- * queue behind it.
+ * queue behind it. With `wait: false` it throws a StackHeldError instead of
+ * waiting, and leaves no registration behind.
  */
 export async function withStackLock<T>(
-  input: { mode: StackLockMode; operation: string; repositoryRoot: string; signal?: AbortSignal },
+  input: {
+    mode: StackLockMode;
+    operation: string;
+    repositoryRoot: string;
+    signal?: AbortSignal;
+    wait?: boolean;
+  },
   operation: (holdEnvironment: Readonly<Record<string, string>>) => Promise<T>,
 ): Promise<T> {
   const inheritedToken = process.env[TOKEN_ENV];
@@ -151,6 +165,7 @@ export async function withStackLock<T>(
       if (holder.mode === 'shared') register();
       const conflicts = stackLockConflicts(holder, readStackLockHolders(directory));
       if (!conflicts.length) break;
+      if (input.wait === false) throw new StackHeldError(conflicts);
       // A shared holder steps back while an exclusive one holds or waits.
       if (holder.mode === 'shared') rmSync(path, { force: true });
       const waitingFor = conflicts

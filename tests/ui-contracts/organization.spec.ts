@@ -56,3 +56,118 @@ test('a rejected organization switch retains the current scope and can recover',
   await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
   await expect(page.getByLabel('Wechselstatus')).toHaveText('Bereit');
 });
+
+/** Answers the oldest held save once its code waits for the answer, and waits until that code ran. */
+async function answerSave(page: Page, answered: number, saved = true): Promise<void> {
+  await expect.poll(() => page.evaluate(() => window.organizationContract.pendingSaves.length)).toBe(1);
+  await page.evaluate((ok) => window.organizationContract.pendingSaves.shift()?.(ok), saved);
+  await expect.poll(() => page.evaluate(() => window.organizationContract.answeredSaves)).toBe(answered);
+}
+
+/** Records the text of every banner that renders from now on, also one that is replaced at once. */
+async function recordBanners(page: Page): Promise<() => Promise<string[]>> {
+  await page.evaluate(() => {
+    const shown = window.organizationContract.shownBanners;
+    new MutationObserver(() => {
+      for (const alert of document.querySelectorAll('[data-banner-id]')) {
+        const text = alert.textContent ?? '';
+        if (!shown.includes(text)) shown.push(text);
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  return () => page.evaluate(() => window.organizationContract.shownBanners.slice());
+}
+
+test("a switch starts the page's state fresh with the new server props and drops the old page's late feedback", async ({
+  page,
+}) => {
+  const shownBanners = await recordBanners(page);
+  const draft = page.getByLabel('Entwurf');
+  await draft.fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  // Until the new organization's server props arrive, the page still shows the first one's state.
+  await expect(draft).toHaveValue('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
+  await expect(draft).toHaveValue('');
+  await answerSave(page, 1);
+
+  // The new organization's page shows its own feedback, and only that one ever rendered.
+  await draft.fill('Notiz der zweiten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await answerSave(page, 2);
+  await expect(page.getByRole('alert')).toContainText('Gespeichert: Notiz der zweiten Organisation');
+  expect(await shownBanners()).toEqual(['Gespeichert: Notiz der zweiten Organisation']);
+});
+
+test("a failure the old page's write reports after a switch still shows, without a retry in the new organization", async ({
+  page,
+}) => {
+  await page.getByLabel('Entwurf').fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
+  await expect(page.getByLabel('Entwurf')).toHaveValue('');
+
+  await answerSave(page, 1, false);
+  const failure = page.getByRole('alert');
+  await expect(failure).toContainText('Nicht gespeichert: Notiz der ersten Organisation');
+  await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
+});
+
+test('a failure the old page showed before a switch keeps its text but loses its retry in the new organization', async ({
+  page,
+}) => {
+  await page.getByLabel('Entwurf').fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await answerSave(page, 1, false);
+  const failure = page.getByRole('alert');
+  await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(1);
+
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
+  await expect(page.getByLabel('Entwurf')).toHaveValue('');
+
+  await expect(failure).toContainText('Nicht gespeichert: Notiz der ersten Organisation');
+  await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
+});
+
+test("an old page's save that answers in the replacing commit, before its passive effects, forwards neither its confirmation nor a retry", async ({
+  page,
+}) => {
+  const shownBanners = await recordBanners(page);
+  await page.getByLabel('Entwurf').fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  await expect.poll(() => page.evaluate(() => window.organizationContract.pendingSaves.length)).toBe(2);
+  await page.evaluate(() => {
+    window.organizationContract.answersOnCommit = [true, false];
+  });
+  await page.getByRole('button', { name: 'Serverdaten später übernehmen' }).click();
+  await expect.poll(() => page.evaluate(() => window.organizationContract.answeredSaves)).toBe(2);
+
+  const failure = page.getByRole('alert');
+  await expect(failure).toContainText('Nicht gespeichert: Notiz der ersten Organisation');
+  await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
+  expect(await shownBanners()).toEqual(['Nicht gespeichert: Notiz der ersten Organisation']);
+});
+
+test("the old page's progress banner leaves with the page a switch replaced", async ({ page }) => {
+  const draft = page.getByLabel('Entwurf');
+  await draft.fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf mit Fortschritt speichern' }).click();
+  await expect(page.getByRole('alert')).toContainText('Wird gespeichert: Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
+  await expect(draft).toHaveValue('');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+
+  await answerSave(page, 1);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});

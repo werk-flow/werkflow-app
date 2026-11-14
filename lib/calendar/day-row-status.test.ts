@@ -72,6 +72,10 @@ describe('dayRowLabel and isDayRowOff', () => {
     const sick = boardDay({ absence: { type: 'sickness', portion: 'full' } });
     expect(dayRowLabel(sick)).toBe('Krank');
     expect(isDayRowOff(sick)).toBe(true);
+    // A Berufsschule day is no sickness (werk-flow/werkflow-planning#165).
+    const school = boardDay({ absence: { type: 'school', portion: 'full' } });
+    expect(dayRowLabel(school)).toBe('Berufsschule');
+    expect(isDayRowOff(school)).toBe(true);
   });
 
   test('holiday and closure prefer their label; a day without target is no working day', () => {

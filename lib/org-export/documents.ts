@@ -8,11 +8,27 @@ import { readCompleteRows } from '@/lib/supabase/query-batches';
 import type { ExportSourceFile } from './plan';
 
 // The organization's documents as the export reads them: for the file plan
-// at the start, and for the manifest in the data part. Every read filters on
+// at the start, and for the manifest in the data part. The plan also holds
+// the company document profile's logo and stationery. Every read filters on
 // the caller's organization.
 
 /** The most rows one read of the export takes; above it the export fails as too large. */
 export const EXPORT_ROW_CAP = 1_000_000;
+
+const PROFILE_FILE_COLUMNS =
+  'logo_storage_path, logo_mime_type, logo_size_bytes, stationery_first_storage_path, stationery_first_mime_type, stationery_first_size_bytes, stationery_following_storage_path, stationery_following_mime_type, stationery_following_size_bytes';
+type ProfileFileRow = Pick<
+  Tables<'company_document_profiles'>,
+  | 'logo_storage_path'
+  | 'logo_mime_type'
+  | 'logo_size_bytes'
+  | 'stationery_first_storage_path'
+  | 'stationery_first_mime_type'
+  | 'stationery_first_size_bytes'
+  | 'stationery_following_storage_path'
+  | 'stationery_following_mime_type'
+  | 'stationery_following_size_bytes'
+>;
 
 export type DocumentArchiveRows = {
   documents: Tables<'documents'>[];
@@ -21,6 +37,8 @@ export type DocumentArchiveRows = {
   links: Tables<'document_links'>[];
   /** The personnel access class of each personnel document. */
   personnelClasses: Map<string, Tables<'personnel_documents'>['access_class']>;
+  /** The company document profile's stored files; null before the first save. */
+  profileFiles: ProfileFileRow | null;
 };
 
 function rowsOrThrow<Row>(result: { data: Row[]; error: { message: string } | null }): Row[] {
@@ -33,7 +51,7 @@ export async function readDocumentArchive(
   admin: AdminClient,
   organizationId: string,
 ): Promise<DocumentArchiveRows> {
-  const [documents, versions, folders, links, personnel] = await Promise.all([
+  const [documents, versions, folders, links, personnel, profile] = await Promise.all([
     readCompleteRows(
       (from, to) =>
         admin.from('documents').select('*').eq('organization_id', organizationId).order('id').range(from, to),
@@ -79,13 +97,20 @@ export async function readDocumentArchive(
           .range(from, to),
       EXPORT_ROW_CAP,
     ),
+    admin
+      .from('company_document_profiles')
+      .select(PROFILE_FILE_COLUMNS)
+      .eq('organization_id', organizationId)
+      .maybeSingle(),
   ]);
+  if (profile.error) throw new Error('load_failed');
   return {
     documents: rowsOrThrow(documents),
     versions: rowsOrThrow(versions),
     folders: new Map(rowsOrThrow(folders).map((row) => [row.id, toDocumentFolder(row)])),
     links: rowsOrThrow(links),
     personnelClasses: new Map(rowsOrThrow(personnel).map((row) => [row.document_id, row.access_class])),
+    profileFiles: profile.data,
   };
 }
 
@@ -138,5 +163,47 @@ export function exportSourceFiles(archive: DocumentArchiveRows): ExportSourceFil
       },
     ];
   });
-  return [...current, ...earlier];
+  return [...current, ...earlier, ...profileSourceFiles(archive.profileFiles)];
+}
+
+const PROFILE_FILE_EXTENSIONS: Readonly<Record<string, string>> = {
+  'application/pdf': '.pdf',
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+};
+
+/** The profile's logo and stationery, under `Dateien/Briefpapier`, with the size each recorded as stored. */
+function profileSourceFiles(profile: ProfileFileRow | null): ExportSourceFile[] {
+  if (!profile) return [];
+  const files = [
+    ['Logo', profile.logo_storage_path, profile.logo_mime_type, profile.logo_size_bytes],
+    [
+      'Briefpapier erste Seite',
+      profile.stationery_first_storage_path,
+      profile.stationery_first_mime_type,
+      profile.stationery_first_size_bytes,
+    ],
+    [
+      'Briefpapier Folgeseiten',
+      profile.stationery_following_storage_path,
+      profile.stationery_following_mime_type,
+      profile.stationery_following_size_bytes,
+    ],
+  ] as const;
+  // The table's checks set path, type and size together.
+  return files.flatMap(([displayName, sourcePath, mimeType, fileBytes]) =>
+    sourcePath === null || mimeType === null || fileBytes === null
+      ? []
+      : [
+          {
+            sourcePath,
+            documentId: null,
+            versionNumber: null,
+            fileBytes,
+            displayName,
+            originalFileName: `${displayName}${PROFILE_FILE_EXTENSIONS[mimeType] ?? ''}`,
+            location: ['Briefpapier'],
+          },
+        ],
+  );
 }

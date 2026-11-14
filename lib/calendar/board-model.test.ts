@@ -11,6 +11,7 @@ import {
   plannedWorkDays,
   reassignmentChanges,
   rowOwnsJob,
+  schoolCalendarEntries,
   unavailableAssignees,
   type BoardPeople,
   type BoardRowModel,
@@ -186,12 +187,48 @@ describe('board items', () => {
           openEnded: false,
         },
       ],
+      school: [],
       employeeRecordId: 'r1',
     });
     expect(items.map((item) => [item.label, item.startDate, item.endDateExclusive, item.pending])).toEqual([
       ['Urlaub – Sven (angefragt)', '2026-09-14', '2026-09-17', true],
       ['Abwesend – Sven (halber Tag) (bis auf Weiteres)', '2026-09-18', '2026-09-19', false],
     ]);
+  });
+
+  test('Berufsschule days become one bar per run of consecutive days, named for the person', () => {
+    const day = (employeeRecordId: string, date: string, type: 'school' | 'vacation') => ({
+      employeeRecordId,
+      date,
+      targetMinutes: 0,
+      baseTargetMinutes: 480,
+      reason: 'working' as const,
+      label: null,
+      absence: { type, portion: 'full' as const },
+      pendingVacation: false,
+    });
+    const school = schoolCalendarEntries({
+      rows: [
+        { employeeRecordId: 'r1', displayName: 'Mia' },
+        { employeeRecordId: 'r2', displayName: 'Kai' },
+      ],
+      days: [
+        day('r1', '2026-10-06', 'school'),
+        day('r1', '2026-10-05', 'school'),
+        day('r1', '2026-10-12', 'school'),
+        day('r2', '2026-10-05', 'vacation'),
+      ],
+    });
+    expect(school).toEqual([
+      { employeeRecordId: 'r1', personName: 'Mia', startDate: '2026-10-05', endDate: '2026-10-06' },
+      { employeeRecordId: 'r1', personName: 'Mia', startDate: '2026-10-12', endDate: '2026-10-12' },
+    ]);
+    const items = absenceItems({ vacation: [], sickness: [], school, employeeRecordId: 'r1' });
+    expect(items.map((item) => [item.kind, item.label, item.startDate, item.endDateExclusive])).toEqual([
+      ['school', 'Berufsschule – Mia', '2026-10-05', '2026-10-07'],
+      ['school', 'Berufsschule – Mia', '2026-10-12', '2026-10-13'],
+    ]);
+    expect(absenceItems({ vacation: [], sickness: [], school, employeeRecordId: 'r2' })).toEqual([]);
   });
 
   test('actual minutes sum the work blocks per person and local date and carry the provisional flag', () => {

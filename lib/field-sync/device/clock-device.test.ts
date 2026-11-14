@@ -177,6 +177,7 @@ async function isolatedTests(): Promise<void> {
   }
 
   beforeEach(async () => {
+    setSystemTime(new Date('2026-11-11T12:00:00.000Z')); // The fixtures' day: a week on, they expire.
     storage.clear();
     sent.length = 0;
     sessionUserId = WORKER.userId;

@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 
+import type { ConfirmActionStep } from '@/components/shared/confirm-action-dialog';
 import { describeFailure } from '@/lib/action-messages';
 import { permanentlyDeleteDocument } from '@/lib/documents/actions';
 import { deleteDocumentFolder } from '@/lib/documents/folder-actions';
 import { deleteDocument } from '@/lib/documents/library-actions';
-import type { DocumentFolder, DocumentMutationResult, OrganizationDocument } from '@/lib/documents/types';
+import type { DocumentFolder, OrganizationDocument } from '@/lib/documents/types';
 import type { DocumentLibraryMutations } from './use-document-library-mutations';
 import type { DocumentLibrarySelection } from './use-document-library-selection';
 
@@ -18,12 +19,13 @@ const PERMANENT_DELETE_ERROR_MESSAGES = {
     'Die Aufbewahrungsfrist der Datei läuft noch. Bis zu ihrem Ende lässt sie sich nicht endgültig löschen.',
 } satisfies Record<string, string>;
 
-export type DocumentConfirmDialogState = {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  onConfirm: () => void;
-} | null;
+export type DocumentConfirmDialogState =
+  | ({
+      title: string;
+      description: string;
+      confirmLabel: string;
+    } & ConfirmActionStep)
+  | null;
 
 // Folders have no restore action, so a selection that contains one reports
 // without offering „Rückgängig".
@@ -79,18 +81,18 @@ function folderDeleteConfirmation({
     title: 'Ordner löschen?',
     description: `Der Ordner „${folder.name}“ und alle enthaltenen Dateien werden in den Papierkorb verschoben.`,
     confirmLabel: 'Ordner löschen',
-    onConfirm: () => {
-      selection.removeFolderFromSelection(folder.id);
+    onConfirm: async () => {
       // A thrown action counts as a failure, so the error shows in both cases.
-      void runMutation(folder.id, async () => {
+      const succeeded = await runMutation(folder.id, async () => {
         const result = await deleteDocumentFolder(folder.id);
         if (!result.success) return result;
         showFeedback('success', 'Ordner wurde in den Papierkorb verschoben.');
         await waitForDocuments();
         return result;
-      }).then((succeeded) => {
-        if (!succeeded) showFeedback('error', 'Der Ordner konnte nicht gelöscht werden.');
       });
+      if (!succeeded) return 'Der Ordner konnte nicht gelöscht werden.';
+      selection.removeFolderFromSelection(folder.id);
+      return null;
     },
   };
 }
@@ -110,32 +112,20 @@ function permanentDeleteConfirmation({
     title: 'Datei endgültig löschen?',
     description: `„${document.displayName}“ wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`,
     confirmLabel: 'Endgültig löschen',
-    onConfirm: () => {
+    // A refusal such as a running retention period is correctable, so it shows in the open confirmation.
+    onConfirm: async () => {
+      const result = await busy.run(document.id, () => permanentlyDeleteDocument(document.id));
+      if (!result.success) {
+        return describeFailure(
+          result.error,
+          PERMANENT_DELETE_ERROR_MESSAGES,
+          'Die Datei konnte nicht endgültig gelöscht werden.',
+        );
+      }
       removeDocumentsFromSelection([document.id]);
       documentList.remove(document.id);
-      void busy
-        .run(document.id, () => permanentlyDeleteDocument(document.id))
-        .catch(
-          (): DocumentMutationResult => ({
-            success: false,
-            error: 'request_failed',
-          }),
-        )
-        .then((result) => {
-          if (!result.success) {
-            documentList.rollback(document.id);
-            showFeedback(
-              'error',
-              describeFailure(
-                result.error,
-                PERMANENT_DELETE_ERROR_MESSAGES,
-                'Die Datei konnte nicht endgültig gelöscht werden.',
-              ),
-            );
-            return;
-          }
-          showFeedback('success', 'Datei wurde endgültig gelöscht.');
-        });
+      showFeedback('success', 'Datei wurde endgültig gelöscht.');
+      return null;
     },
   };
 }
@@ -165,6 +155,8 @@ function selectionDeleteConfirmation({
     title: 'Ausgewählte Einträge löschen?',
     description: `${selectedItemLabel} ${itemCount === 1 ? 'wird' : 'werden'} in den Papierkorb verschoben.`,
     confirmLabel: 'Einträge löschen',
+    // The trash is undoable: the rows leave at once and a failed one comes back with its error.
+    closesAtOnce: true,
     onConfirm: () => {
       clearSelection();
       // Documents only: the undoable path.
@@ -208,6 +200,8 @@ export function useDocumentDeleteActions({
       title: 'Datei löschen?',
       description: `„${document.displayName}“ wird in den Papierkorb verschoben und kann dort wiederhergestellt werden.`,
       confirmLabel: 'Datei löschen',
+      // Undoable: the row leaves at once and comes back with its error on a failure.
+      closesAtOnce: true,
       onConfirm: () => {
         removeDocumentsFromSelection([document.id]);
         void trashDocuments([document]);

@@ -125,7 +125,7 @@ begin
 
   -- The author withdraws the whole pending submission in one call.
   if public.withdraw_pending_time_entries(v_employee, v_org,
-    array['28200000-0000-0000-0000-000000000021', '28200000-0000-0000-0000-000000000022']::uuid[]) <> 2
+    array['28200000-0000-0000-0000-000000000021', '28200000-0000-0000-0000-000000000022']::uuid[]) is distinct from 2
   then raise exception 'the withdrawal did not remove the submission'; end if;
   if exists (select 1 from public.time_entries
     where id in ('28200000-0000-0000-0000-000000000021', '28200000-0000-0000-0000-000000000022'))
@@ -137,9 +137,9 @@ begin
   then raise exception 'the withdrawal did not record one event per entry'; end if;
   select * into strict v_event from public.time_entry_withdrawals
   where organization_id = v_org and entry_id = '28200000-0000-0000-0000-000000000021';
-  if v_event.actor_id <> v_employee or v_event.entry_timestamp <> v_clock_in_at
-    or v_event.withdrawn_entry ->> 'entry_type' <> 'clock_in'
-    or (v_event.withdrawn_entry ->> 'timestamp')::timestamptz <> v_clock_in_at
+  if v_event.actor_id is distinct from v_employee or v_event.entry_timestamp is distinct from v_clock_in_at
+    or v_event.withdrawn_entry ->> 'entry_type' is distinct from 'clock_in'
+    or (v_event.withdrawn_entry ->> 'timestamp')::timestamptz is distinct from v_clock_in_at
   then raise exception 'the withdrawal was not recorded as it happened: %', row_to_json(v_event); end if;
 
   -- The record is append-only, also for the service role.

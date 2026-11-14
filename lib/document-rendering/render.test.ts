@@ -8,8 +8,14 @@ import type { BusinessDocument, DocumentImage, DocumentPosition, DocumentSection
 type StationeryPage = NonNullable<BusinessDocument['stationery']>['firstPage'];
 
 mock.module('server-only', () => ({}));
-const { renderBusinessDocument } = await import('./render');
+const { canEmbedFile, renderBusinessDocument } = await import('./render');
 const { sampleOffer } = await import('./sample-offer');
+const { offerLetterhead } = await import('@/lib/company-profile/letterhead');
+const { EMPTY_COMPANY_PROFILE_DETAILS } = await import('@/lib/company-profile/profile');
+
+/** The Musterangebot of an organization that has saved no profile yet. */
+const plainSample = (organizationName: string) =>
+  sampleOffer(offerLetterhead(EMPTY_COMPANY_PROFILE_DETAILS, {}, organizationName), '2026-11-12');
 
 const MM = 72 / 25.4;
 const PAGE_HEIGHT = 297 * MM;
@@ -371,6 +377,105 @@ describe('the business document renderer', () => {
     await expect(renderBusinessDocument(cramped)).rejects.toThrow('document_margins_leave_no_room');
   });
 
+  test('without stationery the page number keeps clear space above the footer rule', async () => {
+    const footerRuleTop = PAGE_HEIGHT - (15 + 17) * MM;
+    const pages = await readPages(await renderBusinessDocument(installationOffer));
+    pages.forEach((lines, index) => {
+      const pageNumber = lines.find((line) => line.text === `Seite ${index + 1} von ${pages.length}`);
+      // `top` is the baseline; the rule needs at least 2 mm below it.
+      expect(pageNumber?.top ?? PAGE_HEIGHT).toBeLessThanOrEqual(footerRuleTop - 2 * MM);
+    });
+  });
+
+  test('footer columns never run into each other or off the page, and a taller footer moves the page number up', async () => {
+    const roomy = [
+      ['Haustechnik Sonnenberg GmbH', 'Sonnenweg 1', '01234 Sonnenstadt'],
+      ['Tel. 0123 456789', 'info@sonnenberg.example'],
+      ['Amtsgericht Sonnenstadt HRB 00000', 'Geschäftsführerin: Erika Musterfrau', 'USt-IdNr. DE000000000'],
+      ['Musterbank', 'IBAN DE00 0000 0000 0000 0000 00', 'BIC MUSTDEXXXXX'],
+    ];
+    const crowded = [
+      ['Heizungsbau Sonnenberg und Partner Meisterbetrieb GmbH & Co. KG', 'Sonnenweg 1', '01234 Sonnenstadt'],
+      ['Tel. 0123 456789', 'info@heizungsbau-sonnenberg-und-partner.example'],
+      [
+        'Amtsgericht Sonnenstadt HRA 00000, Komplementärin Sonnenberg Verwaltungs-GmbH',
+        'Geschäftsführerin: Erika Musterfrau, Geschäftsführer: Max Mustermann',
+        'St.-Nr. 000/000/00000',
+        'USt-IdNr. DE000000000',
+      ],
+      ['Musterbank Sonnenstadt', 'IBAN DE00 0000 0000 0000 0000 00', 'BIC MUSTDEXXXXX'],
+    ];
+    for (const footerColumns of [roomy, crowded]) {
+      const bytes = await renderBusinessDocument({ ...installationOffer, footerColumns });
+      const content = await (await (await getDocumentProxy(bytes.slice())).getPage(1)).getTextContent();
+      const footerItems = content.items.flatMap((item) =>
+        'str' in item && item.str.trim() && Number(item.transform[3]) < 7
+          ? [
+              {
+                text: item.str,
+                y: Math.round(Number(item.transform[5])),
+                left: Number(item.transform[4]),
+                right: Number(item.transform[4]) + item.width,
+              },
+            ]
+          : [],
+      );
+      for (const item of footerItems)
+        expect(item.right, item.text).toBeLessThanOrEqual((210 - 20) * MM + 0.01);
+      for (const item of footerItems) {
+        const overlapping = footerItems.find(
+          (other) =>
+            other !== item && other.y === item.y && other.left > item.left && other.left < item.right,
+        );
+        expect(overlapping?.text, item.text).toBeUndefined();
+      }
+      // Nothing is cut: a word too long for its column breaks, but every character is printed.
+      const printed = footerItems.map((item) => item.text).join('');
+      for (const word of footerColumns.flat().join(' ').split(' ')) expect(printed).toContain(word);
+      // A row joins the footer columns that share its baseline, so the first row holding „Tel.“ is
+      // the footer's first line: 6.5 pt type, 4 pt below the rule.
+      const lines = (await readPages(bytes))[0] ?? [];
+      const footerRows = lines.filter((line) => line.text.includes('Tel.'));
+      expect(footerRows.length, 'the footer row with „Tel.“').toBeGreaterThan(0);
+      const footerRuleTop = Math.min(...footerRows.map((line) => line.top)) - 4 - 6.5;
+      const pageNumber = lines.find((line) => line.text.startsWith('Seite 1 von'));
+      // `top` is the baseline; the rule needs at least 2 mm below it.
+      expect(pageNumber?.top ?? PAGE_HEIGHT).toBeLessThanOrEqual(footerRuleTop - 2 * MM);
+    }
+    // The roomy footer keeps every line whole: the IBAN is one line.
+    const roomyText =
+      (await readPages(await renderBusinessDocument({ ...installationOffer, footerColumns: roomy })))[0] ??
+      [];
+    expect(roomyText.some((line) => line.text.includes('IBAN DE00 0000 0000 0000 0000 00'))).toBe(true);
+  });
+
+  test('only a file the renderer can draw passes the embed check', async () => {
+    const blank = await PDFDocument.create({ updateMetadata: false });
+    blank.addPage();
+    const blankPdf = { format: 'pdf' as const, bytes: await blank.save() };
+    expect(await canEmbedFile(blankPdf, 'page')).toBe(false);
+    expect(await canEmbedFile({ format: 'png', bytes: new Uint8Array([1, 2, 3]) }, 'image')).toBe(false);
+    expect(await canEmbedFile(firstStationery.file, 'page')).toBe(true);
+    expect(await canEmbedFile(firstStationery.file, 'image')).toBe(false);
+    expect(await canEmbedFile(followingStationery.file, 'page')).toBe(true);
+    expect(await canEmbedFile(logoPng, 'image')).toBe(true);
+  });
+
+  test('a Bedarfs- or Alternativposition prints its amount in parentheses, with its mark below the text', async () => {
+    const lines = (await readPages(await renderBusinessDocument(plainSample('Muster GmbH'))))[0] ?? [];
+    const head = (start: string) => lines.find((line) => line.text.startsWith(start));
+    expect(head('2.1 ')?.text).toEndWith(' 4.890,00 €');
+    expect(head('2.4 ')?.text).toEndWith(' 185,00 € (185,00 €)');
+    expect(head('2.5 ')?.text).toEndWith(' 4.520,00 € (4.520,00 €)');
+    for (const [start, mark] of [
+      ['2.4 ', 'Bedarfsposition'],
+      ['2.5 ', 'Alternativposition'],
+    ] as const) {
+      const markLine = lines.find((line) => line.text === mark);
+      expect(markLine?.top ?? 0).toBeGreaterThan(head(start)?.top ?? PAGE_HEIGHT);
+    }
+  });
+
   test('the same document renders to the same bytes', async () => {
     for (const document of [serviceOffer, installationOffer, stationeryOffer]) {
       expect(
@@ -382,7 +487,7 @@ describe('the business document renderer', () => {
   });
 
   test('the Musterangebot names the organization as sender and adds up', async () => {
-    const offer = sampleOffer('Haustechnik Sonnenberg GmbH', '2026-11-12');
+    const offer = plainSample('Haustechnik Sonnenberg GmbH');
     for (const section of offer.sections) {
       const counted = section.positions.filter((item) => item.kind === 'standard');
       expect(counted.reduce((sum, item) => sum + item.amountCents, 0)).toBe(section.subtotalCents);

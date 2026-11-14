@@ -117,11 +117,11 @@ begin
     v_org, v_buero, v_job, null, v_pipe, 2.5, v_location, '  Für den Badheizkörper  ', 'order_line', v_source
   );
   select * into v_line from public.job_material_lines where id = v_first;
-  if v_line.job_id <> v_job or v_line.project_id is distinct from v_project or v_line.item_id <> v_pipe
-    or v_line.planned_quantity <> 2.5 or v_line.preferred_location_id <> v_location
-    or not v_line.is_billable or v_line.notes <> 'Für den Badheizkörper' or v_line.created_by <> v_buero
-    or v_line.status <> 'planned' or v_line.taken_quantity <> 0 or v_line.is_unplanned
-    or v_line.source_kind <> 'order_line' or v_line.source_id <> v_source
+  if v_line.job_id is distinct from v_job or v_line.project_id is distinct from v_project or v_line.item_id is distinct from v_pipe
+    or v_line.planned_quantity is distinct from 2.5 or v_line.preferred_location_id is distinct from v_location
+    or not v_line.is_billable or v_line.notes is distinct from 'Für den Badheizkörper' or v_line.created_by is distinct from v_buero
+    or v_line.status is distinct from 'planned' or v_line.taken_quantity is distinct from 0 or v_line.is_unplanned
+    or v_line.source_kind is distinct from 'order_line' or v_line.source_id is distinct from v_source
   then
     raise exception 'the planned line does not hold what the call named: %', row_to_json(v_line);
   end if;
@@ -130,12 +130,12 @@ begin
   v_repeat := public.plan_job_material(
     v_org, v_admin, v_job, null, v_fitting, 7, null, 'Zweiter Aufruf', 'order_line', v_source
   );
-  if v_repeat <> v_first then
+  if v_repeat is distinct from v_first then
     raise exception 'a repeated source must answer with the first line, got % instead of %', v_repeat, v_first;
   end if;
   select count(*) into v_count from public.job_material_lines
   where organization_id = v_org and source_id = v_source;
-  if v_count <> 1 then
+  if v_count is distinct from 1 then
     raise exception 'a repeated source must leave one line, found %', v_count;
   end if;
   if (select row_to_json(line)::text from public.job_material_lines line where id = v_first)
@@ -166,7 +166,7 @@ begin
   v_first := public.plan_job_material(v_org, v_admin, null, v_project, v_fitting, 3, null, null, null, null);
   v_repeat := public.plan_job_material(v_org, v_admin, null, v_project, v_fitting, 3, null, null, null, null);
   select * into v_line from public.job_material_lines where id = v_first;
-  if v_first = v_repeat or v_line.job_id is not null or v_line.project_id <> v_project
+  if v_first = v_repeat or v_line.job_id is not null or v_line.project_id is distinct from v_project
     or v_line.is_billable or v_line.source_kind is not null or v_line.source_id is not null
   then
     raise exception 'calls without a source must each plan a project line of their own';
@@ -220,7 +220,7 @@ begin
   ) then
     raise exception 'another organization''s source must plan a line of its own organization';
   end if;
-  if (select count(*) from public.job_material_lines where organization_id = v_org) <> v_count then
+  if (select count(*) from public.job_material_lines where organization_id = v_org) is distinct from v_count then
     raise exception 'a refused or foreign call must leave this organization''s lines unchanged';
   end if;
 end $$;

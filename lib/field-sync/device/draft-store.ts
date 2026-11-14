@@ -39,6 +39,19 @@ export const DRAFT_NO_ACCESS_KEPT_MS = 7 * 24 * 60 * 60 * 1000;
 /** The person and organization a draft belongs to. */
 export type DraftHolder = DeviceHolder;
 
+/**
+ * Whose drafts a session end reads: one person's, in one organization, or in every organization
+ * (`null`) before a sign-out, which ends them all (unsent-work.ts, UnsentScope).
+ */
+export type DraftScope = { userId: string; organizationId: string | null };
+
+function inScope(record: DraftHolder, scope: DraftScope): boolean {
+  return (
+    record.userId === scope.userId &&
+    (scope.organizationId === null || record.organizationId === scope.organizationId)
+  );
+}
+
 export type DraftPhoto = {
   /** The id of the photo's link on the revision, created once on the device. */
   id: string;
@@ -142,7 +155,18 @@ const heldRecordSchema = z.object({
 });
 
 /** A draft on the device that this version of the code cannot read: it is never sent, changed or deleted by itself. */
-type UnreadableDraft = { id: string; jobId: string | null };
+export type UnreadableDraft = { id: string; jobId: string | null };
+
+/** An unreadable draft with its record as stored, which a session end compares to the state it showed. */
+export type HeldUnreadableDraft = UnreadableDraft & { record: unknown };
+
+/** The record as an unreadable draft in the scope, or null when it is readable or someone else's. */
+function unreadableInScope(record: unknown, scope: DraftScope): UnreadableDraft | null {
+  const held = heldRecordSchema.safeParse(record);
+  if (!held.success || !inScope(held.data, scope) || storedDraft(record)) return null;
+  const { id, jobId } = held.data;
+  return { id, jobId: typeof jobId === 'string' ? jobId : null };
+}
 
 /** The record as a draft, or null when this version of the code cannot read it. */
 function storedDraft(record: unknown): StoredDraft | null {
@@ -247,17 +271,34 @@ export async function listDraftsOnDevice(
   holder: DraftHolder,
   now: Date = new Date(),
 ): Promise<StoredDraft[]> {
+  return (await listDraftsInScopeOnDevice(holder, now)).drafts;
+}
+
+/**
+ * The scope's drafts, oldest change first, and its records this version cannot read, read in one
+ * transaction. Deletes every lost-access draft past its time on the way, as listDraftsOnDevice does.
+ * Throws when IndexedDB itself fails: a session end then asks, it never answers that nothing waits.
+ */
+export async function listDraftsInScopeOnDevice(
+  scope: DraftScope,
+  now: Date = new Date(),
+): Promise<{ drafts: StoredDraft[]; unreadable: HeldUnreadableDraft[] }> {
   const records: unknown[] = await inDraftStore('readwrite', (store) => {
     const request = store.getAll();
     request.addEventListener('success', () => deleteExpired(store, request.result, now));
     return request;
   });
-  return records
+  const drafts = records
     .flatMap((record) => {
       const draft = storedDraft(record);
-      return draft && belongsTo(draft, holder) && !noAccessTimeOver(draft, now) ? [draft] : [];
+      return draft && inScope(draft, scope) && !noAccessTimeOver(draft, now) ? [draft] : [];
     })
     .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
+  const unreadable = records.flatMap((record) => {
+    const draft = unreadableInScope(record, scope);
+    return draft ? [{ ...draft, record }] : [];
+  });
+  return { drafts, unreadable };
 }
 
 /**
@@ -267,11 +308,7 @@ export async function listDraftsOnDevice(
  */
 export async function listUnreadableDraftsOnDevice(holder: DraftHolder): Promise<UnreadableDraft[]> {
   const records: unknown[] = await inDraftStore('readonly', (store) => store.getAll());
-  return records.flatMap((record) => {
-    const held = heldRecordSchema.safeParse(record);
-    if (!held.success || !belongsTo(held.data, holder) || storedDraft(record)) return [];
-    return [{ id: held.data.id, jobId: typeof held.data.jobId === 'string' ? held.data.jobId : null }];
-  });
+  return records.flatMap((record) => unreadableInScope(record, holder) ?? []);
 }
 
 /**
@@ -336,8 +373,7 @@ export async function deleteUnreadableDraftOnDevice(holder: DraftHolder, id: str
   await inDraftStore('readwrite', (store) => {
     const request = store.get(id);
     request.addEventListener('success', () => {
-      const held = heldRecordSchema.safeParse(request.result);
-      if (!held.success || !belongsTo(held.data, holder) || storedDraft(request.result)) return;
+      if (!unreadableInScope(request.result, holder)) return;
       store.delete(id);
       markWhatRemains(store);
       deleted = true;
@@ -347,14 +383,35 @@ export async function deleteUnreadableDraftOnDevice(holder: DraftHolder, id: str
   return deleted;
 }
 
-/** Deletes every draft of the holder, after the person chose to discard their unsent work. */
-export async function deleteDraftsOnDevice(holder: DraftHolder): Promise<void> {
+/**
+ * What a session end's question showed: each readable draft by its id with the last-change time it
+ * was shown at, and whether it showed a record this version cannot read as that record is now.
+ */
+export type ShownDrafts = {
+  drafts: ReadonlyMap<string, string>;
+  unreadable: (draft: HeldUnreadableDraft) => boolean;
+};
+
+/** The record's id when the question showed it as it is now, in the scope; otherwise null. */
+function shownIdOf(record: unknown, scope: DraftScope, shown: ShownDrafts): string | null {
+  const draft = storedDraft(record);
+  if (draft) return inScope(draft, scope) && shown.drafts.get(draft.id) === draft.updatedAt ? draft.id : null;
+  const unreadable = unreadableInScope(record, scope);
+  return unreadable && shown.unreadable({ ...unreadable, record }) ? unreadable.id : null;
+}
+
+/**
+ * Deletes the scope's drafts a session end's question showed, after the person confirmed the
+ * discard, in one transaction. A draft changed since it was shown, one written since, and every
+ * record outside the scope stay: the person never saw them.
+ */
+export async function deleteShownDraftsOnDevice(scope: DraftScope, shown: ShownDrafts): Promise<void> {
   await inDraftStore('readwrite', (store) => {
     const request = store.getAll();
     request.addEventListener('success', () => {
       for (const record of request.result) {
-        const draft = storedDraft(record);
-        if (draft && belongsTo(draft, holder)) store.delete(draft.id);
+        const id = shownIdOf(record, scope, shown);
+        if (id !== null) store.delete(id);
       }
       markWhatRemains(store);
     });

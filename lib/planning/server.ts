@@ -22,6 +22,7 @@ import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admi
 import type { Database, Json, Tables } from '@/lib/supabase/database.types';
 import { toJson } from '@/lib/supabase/json';
 import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
+import { loadSchoolDaySpansByRecord } from '@/lib/personnel/school-day-server';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { fingerprintSnapshot } from './capacity';
 import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
@@ -150,8 +151,9 @@ function resolveTargetsByEmployeeDate(input: {
   calendar: OrganizationHolidayCalendar;
   vacationSpans: Map<string, ApprovedAbsenceSpan[]>;
   sicknessSpans: Map<string, ApprovedAbsenceSpan[]>;
+  schoolSpans: Map<string, ApprovedAbsenceSpan[]>;
 }): Map<string, DailyTarget> {
-  const { calendar, vacationSpans, sicknessSpans } = input;
+  const { calendar, vacationSpans, sicknessSpans, schoolSpans } = input;
   const schedulesByRecord = new Map<string, ReturnType<typeof toWorkSchedule>[]>();
   for (const row of input.scheduleRows) {
     const schedule = toWorkSchedule(row);
@@ -181,6 +183,7 @@ function resolveTargetsByEmployeeDate(input: {
           absences: [
             ...(vacationSpans.get(employeeRecordId) ?? []),
             ...(sicknessSpans.get(employeeRecordId) ?? []),
+            ...(schoolSpans.get(employeeRecordId) ?? []),
           ],
         }),
       );
@@ -191,8 +194,9 @@ function resolveTargetsByEmployeeDate(input: {
 
 /**
  * The per-person daily targets the planning assessment and the Plantafel read
- * share: schedules, employment conditions, holiday context, approved vacation
- * and sickness spans, plus the pending vacation requests that only warn.
+ * share: schedules, employment conditions, holiday context, approved vacation,
+ * sickness and Berufsschule spans, plus the pending vacation requests that
+ * only warn.
  * One home, so a board cell and a planning warning can never disagree.
  */
 export async function loadDailyTargetsByRecord(input: {
@@ -248,6 +252,16 @@ export async function loadDailyTargetsByRecord(input: {
   }
   // The span readers log their own failure; a missing span map is not "no absence".
   if (!vacationSpans || !sicknessSpans) return null;
+  // School days exist only for apprentices (addSchoolDay refuses anyone
+  // without an Ausbildung condition), so a window without one reads none:
+  // every board and planning check would otherwise pay one more request.
+  const hasApprentice = (conditionsResult.data ?? []).some(
+    (condition) => condition.employment_type === 'ausbildung',
+  );
+  const schoolSpans = hasApprentice
+    ? await loadSchoolDaySpansByRecord(input.orgId, windowStart, windowEnd)
+    : new Map<string, ApprovedAbsenceSpan[]>();
+  if (!schoolSpans) return null;
 
   const targetByEmployeeDate = resolveTargetsByEmployeeDate({
     employees: input.employees,
@@ -257,6 +271,7 @@ export async function loadDailyTargetsByRecord(input: {
     calendar,
     vacationSpans,
     sicknessSpans,
+    schoolSpans,
   });
   return { targetByEmployeeDate, pendingVacation: pendingVacationResult.data ?? [] };
 }

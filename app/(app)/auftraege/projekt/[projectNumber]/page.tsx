@@ -21,6 +21,9 @@ import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getProjectInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
+import { getLedProjectOverview, getWorkLead } from '@/lib/projects/work-lead-reads';
+import { LedProjectPage } from '@/components/auftraege/project-detail/led-project-overview';
+import type { LedProjectOverview } from '@/lib/projects/work-lead-types';
 
 interface ProjectDetailPageProps {
   params: Promise<{ projectNumber: string }>;
@@ -32,6 +35,27 @@ type ProjectDetailReadScope = {
   userId: string;
   isAdminOrManager: boolean;
 };
+
+/** Admin and Büro read the project's „Projektleitung“; an employee reads the jobs they lead as it. */
+async function readWorkLeads(
+  projectResultPromise: ReturnType<typeof getProjectByNumber>,
+  projectNumber: string,
+  isAdminOrManager: boolean,
+) {
+  if (!isAdminOrManager) {
+    return {
+      workLeadResult: null,
+      ledOverviewResult: await getLedProjectOverview(decodeURIComponent(projectNumber)),
+    };
+  }
+  const result = await projectResultPromise;
+  return {
+    workLeadResult: result.success
+      ? await getWorkLead({ targetType: 'project', targetId: result.details.project.id })
+      : null,
+    ledOverviewResult: null,
+  };
+}
 
 async function loadProjectDetailReads({
   projectNumber,
@@ -69,10 +93,7 @@ async function loadProjectDetailReads({
   });
   const handoverWorkspacePromise = projectResultPromise.then((result) =>
     result.success
-      ? getWorkHandoverWorkspace({
-          targetType: 'project',
-          targetId: result.details.project.id,
-        })
+      ? getWorkHandoverWorkspace({ targetType: 'project', targetId: result.details.project.id })
       : null,
   );
 
@@ -87,6 +108,7 @@ async function loadProjectDetailReads({
     instructionItemsResult,
     approvalHolder,
     handoverWorkspaceResult,
+    workLeadReads,
   ] = await Promise.all([
     projectResultPromise,
     // The create-job dialog assigns employees; only managers open it.
@@ -99,6 +121,7 @@ async function loadProjectDetailReads({
     instructionItemsResultPromise,
     approvalHolderPromise,
     handoverWorkspacePromise,
+    readWorkLeads(projectResultPromise, projectNumber, isAdminOrManager),
   ]);
   return {
     result,
@@ -111,7 +134,17 @@ async function loadProjectDetailReads({
     instructionItemsResult,
     approvalHolder,
     handoverWorkspaceResult,
+    ...workLeadReads,
   };
+}
+
+/** The viewer's lead overview: null when they lead nothing here, `failed` when the read failed. */
+function ledOverviewFrom(
+  result: Awaited<ReturnType<typeof getLedProjectOverview>> | null,
+): LedProjectOverview | 'failed' | null {
+  if (!result) return null;
+  if (result.success) return result.overview;
+  return result.error === 'not_authorized' ? null : 'failed';
 }
 
 type ProjectDetailReads = Awaited<ReturnType<typeof loadProjectDetailReads>>;
@@ -129,6 +162,8 @@ function projectDetailRegions(
     instructionItemsResult,
     approvalHolder,
     handoverWorkspaceResult,
+    workLeadResult,
+    ledOverviewResult,
   }: ProjectDetailReads,
   isAdminOrManager: boolean,
 ) {
@@ -177,6 +212,8 @@ function projectDetailRegions(
     inventoryLocations,
     lifecycleSnapshot: lifecycleResult?.success ? lifecycleResult.snapshot : null,
     handoverWorkspace,
+    workLeadPanel: workLeadResult ? (workLeadResult.success ? workLeadResult.panel : 'failed') : null,
+    ledOverview: ledOverviewFrom(ledOverviewResult),
   } satisfies Partial<ProjectDetailContentProps>;
 }
 
@@ -238,6 +275,22 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
       <RegionLoadError title="Das Projekt konnte nicht geladen werden">
         Das Projekt ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
       </RegionLoadError>
+    );
+  }
+
+  // A „Projektleitung“ who works on none of the jobs reads the project through the lead's view.
+  const ledOverview = ledOverviewFrom(reads.ledOverviewResult);
+  if (!result.success && ledOverview) {
+    return ledOverview === 'failed' ? (
+      <RegionLoadError title="Das Projekt konnte nicht geladen werden">
+        Das Projekt ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    ) : (
+      <LedProjectPage
+        overview={ledOverview}
+        currentUserId={user.id}
+        canApprove={Boolean(reads.approvalHolder)}
+      />
     );
   }
 

@@ -14,6 +14,7 @@ const leaves = new Map<string, (props: { children?: ReactNode }) => ReactNode>()
 for (const [modulePath, exportName] of [
   ['@/components/organization/organization-context', 'OrganizationProvider'],
   ['@/components/organization/organization-realtime-bridge', 'OrganizationRealtimeBridge'],
+  ['@/components/organization/organization-page-scope', 'OrganizationPageScope'],
   ['@/components/user/user-profile-context', 'UserProfileProvider'],
   ['@/components/realtime/realtime-provider', 'RealtimeProvider'],
   ['@/components/ui/banner', 'BannerProvider'],
@@ -162,7 +163,7 @@ assert.ok(
   'the layout renders its providers inside Suspense',
 );
 const shell = await render(() => providers);
-const reserve = propsOf(shell, 'AppShell')?.children;
+const reserve = propsOf(shell, 'OrganizationPageScope')?.children;
 assert.ok(isValidElement<{ children: ReactNode }>(reserve), 'the shell holds the clock dock reserve');
 assert.equal(reserve.props.children, 'Authorized page content');
 assert.equal(reads.get('subscriptions'), 1, 'only the upgrade page read the subscription');

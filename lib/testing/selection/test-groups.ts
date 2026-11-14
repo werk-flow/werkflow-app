@@ -281,6 +281,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['layout:people', 'layout/surfaces-people.spec.ts', ['personnel']],
   ['layout:personnel', 'layout/surfaces-personnel.spec.ts', ['personnel', 'documents']],
   ['layout:personnel-absence', 'layout/surfaces-personnel-absence.spec.ts', ['personnel', 'time']],
+  ['layout:personnel-records', 'layout/surfaces-personnel-records.spec.ts', ['personnel', 'time']],
   ['layout:settings', 'layout/surfaces-settings.spec.ts', ['attention', 'personnel']],
   ['layout:documents', 'layout/surfaces-documents.spec.ts', ['documents']],
   ['layout:inventory', 'layout/surfaces-inventory.spec.ts', ['inventory']],
@@ -312,6 +313,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
   ['security:offline-clock', 'security/offline-clock.spec.ts', ['standalone', 'time']],
+  // No browser request reaches PostHog while a counted workflow step runs (usage statistics).
+  ['security:usage-statistics', 'security/usage-statistics.spec.ts', ['time']],
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
   // The no-signal visit end to end, and the office's refusals of a replay (decision record 0010).
   [
@@ -354,7 +357,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['work', 'time', 'documents', 'inventory'],
   ],
   ['p1-21', ['p1_21_time_segments.sql', 'clock_job_row_lock.sql'], ['time', 'personnel', 'work']],
-  ['p1-22', ['p1_22_time_corrections.sql'], ['time', 'personnel', 'work']],
+  [
+    'p1-22',
+    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql'],
+    ['time', 'personnel', 'work'],
+  ],
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
   [
     'p1-23',
@@ -387,6 +394,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
   ['client-site-roles', ['client_site_roles.sql'], ['customers', 'service']],
+  ['work-billing-parties', ['work_billing_parties.sql'], ['customers', 'work', 'service']],
   ['site-access-proposals', ['site_access_proposals.sql'], ['customers', 'work', 'attention']],
   [
     'request-callback-and-equipment',
@@ -395,6 +403,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['sickness-report-writes', ['sickness_report_writes.sql'], ['personnel']],
   ['vacation-history-writes', ['vacation_history_writes.sql'], ['personnel']],
+  ['school-days', ['school_days.sql'], ['personnel', 'time']],
   [
     'planning',
     ['planning_occurrences.sql', 'planning_dispatch.sql', 'planning_operation_assessments.sql'],
@@ -402,13 +411,21 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
+  ['maintenance-missed-visits', ['maintenance_missed_visits.sql'], ['service', 'work']],
   [
     'inventory-ledger',
     [
       'inventory_ledger.sql',
       'inventory_atomic_writes.sql',
+      'inventory_import_preview.sql',
+      'inventory_article_prices.sql',
+      'inventory_article_prices_concurrency.sql',
+      'inventory_item_units.sql',
+      'inventory_item_units_concurrency.sql',
       'job_material_use.sql',
       'job_material_use_concurrency.sql',
+      'job_material_retries.sql',
+      'job_material_retries_concurrency.sql',
       'job_material_planning.sql',
       'job_material_planning_concurrency.sql',
     ],
@@ -434,8 +451,14 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
+  ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
+  [
+    'company-document-profiles',
+    ['company_document_profiles.sql', 'company_document_profiles_concurrency.sql'],
+    ['documents'],
+  ],
   [
     'problem-reports',
     ['problem_reports.sql', 'problem_report_support.sql', 'problem_report_handout.sql'],

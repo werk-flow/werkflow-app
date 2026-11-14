@@ -23,8 +23,9 @@ const drift = {
   treeOnly: ['20261201090000_zeiterfassung_settings'],
   changed: [],
   unverified: [],
+  unknownVersions: [],
 };
-const noDrift = { stackOnly: [], treeOnly: [], changed: [], unverified: [] };
+const noDrift = { stackOnly: [], treeOnly: [], changed: [], unverified: [], unknownVersions: [] };
 const absent = () => ({ kind: 'absent' as const });
 
 test('a capture, a reference update and any other focused audit or golden run are focused kinds', () => {

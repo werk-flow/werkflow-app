@@ -70,6 +70,10 @@ const SYNCHRONOUS_TABLES = [
   // The price history of one Leistung, rendered from the list page's payload
   // inside its dialog; the list's skeleton and failure cover the read.
   'components/angebote/leistungen/leistung-price-dialog.tsx',
+  // The price history of one article, rendered from the inventory page's
+  // payload inside the article dialog; the page's skeleton covers the read,
+  // and a failed read shows „Erneut laden“ in the tab.
+  'components/inventar/article-prices-panel.tsx',
 ];
 
 type Opening = ts.JsxOpeningElement | ts.JsxSelfClosingElement;

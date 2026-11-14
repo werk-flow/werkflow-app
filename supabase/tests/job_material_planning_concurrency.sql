@@ -123,7 +123,7 @@ begin
     where line.organization_id = '3a000000-0000-4000-8000-000000000010'
       and line.job_id = '3a000000-0000-4000-8000-000000000050'
   $read$, p_project_id, p_line_id)) as line(lines integer, misplaced integer, planned integer, job_project uuid);
-  if v_job_project is distinct from p_project_id or v_misplaced <> 0 or v_planned <> 1 then
+  if v_job_project is distinct from p_project_id or v_misplaced is distinct from 0 or v_planned is distinct from 1 then
     raise exception '%: % of % lines elsewhere, planned line found % times, job on %',
       p_failure, v_misplaced, v_lines, v_planned, v_job_project;
   end if;
@@ -157,7 +157,7 @@ begin
     select count(*)::integer, max(planned_quantity) from public.job_material_lines
     where organization_id = '3a000000-0000-4000-8000-000000000010'
   $read$) as line(lines integer, planned numeric);
-  if v_lines <> 1 or v_planned <> 2 then
+  if v_lines is distinct from 1 or v_planned is distinct from 2 then
     raise exception 'two calls of one source must leave the first line alone, got % lines planning %', v_lines, v_planned;
   end if;
 end $$;

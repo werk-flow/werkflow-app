@@ -131,13 +131,13 @@ const {
   takeJobMaterial,
   takeProjectMaterial,
   returnJobMaterial,
-  importInventoryRows,
 } = await import('@/lib/inventory/actions');
 const { recordJobMaterialUse } = await import('@/lib/inventory/material-use-actions');
 const { readJobMaterialConsumption } = await import('@/lib/inventory/material-line-reads');
-const use = { quantity: 1, note: null };
+const operationId = '90000000-0000-4000-8000-0000000000aa';
+const use = { operationId, quantity: 1, note: null };
 
-const take = { locationId: foreignLocationId, quantity: 1 };
+const take = { operationId, locationId: foreignLocationId, quantity: 1 };
 const upsert = [
   'upsertInventoryItem',
   () =>
@@ -171,11 +171,6 @@ const officeOnly = [
     'createProjectMaterialLine',
     () =>
       createProjectMaterialLine({ projectId: foreignProjectId, itemId: foreignItemId, plannedQuantity: 2 }),
-  ],
-  [
-    'importInventoryRows',
-    () =>
-      importInventoryRows({ fileName: 'inventar.csv', columnMapping: {}, rows: [{ name: 'Kupferrohr' }] }),
   ],
   // The movement history names people and job material: office only.
   ['getInventoryMovementHistory', () => getInventoryMovementHistory({ tab: 'movements' })],

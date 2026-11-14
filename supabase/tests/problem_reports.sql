@@ -238,20 +238,20 @@ declare
   v_org constant uuid := '33100000-0000-0000-0000-000000000010';
   v_next integer;
 begin
-  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000025') <> 1 then
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000025') is distinct from 1 then
     raise exception 'an organization does not number its reports from 1';
   end if;
   v_next := (select max(number) + 1 from public.problem_reports where organization_id = v_org);
   insert into public.problem_reports (id, organization_id, reporter_id, filed_by_id, description, context)
   values ('33100000-0000-0000-0000-000000000027', v_org, '33100000-0000-0000-0000-000000000002',
     '33100000-0000-0000-0000-000000000002', 'Neu', '{}');
-  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000027') <> v_next then
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000027') is distinct from v_next then
     raise exception 'a new report did not take the next number of its organization';
   end if;
   insert into public.problem_reports (id, organization_id, reporter_id, filed_by_id, description, context, number)
   values ('33100000-0000-0000-0000-000000000028', v_org, '33100000-0000-0000-0000-000000000002',
     '33100000-0000-0000-0000-000000000002', 'Eigene Nummer', '{}', 1);
-  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000028') <> v_next + 1 then
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000028') is distinct from v_next + 1 then
     raise exception 'a report kept a number the writer chose';
   end if;
   begin
@@ -273,9 +273,9 @@ declare
   v_first integer;
 begin
   v_first := public.submit_problem_report(v_report, v_org, v_worker, 'Einmal', '{}');
-  if public.submit_problem_report(v_report, v_org, v_worker, 'Noch einmal', '{}') <> v_first
+  if public.submit_problem_report(v_report, v_org, v_worker, 'Noch einmal', '{}') is distinct from v_first
     or (select count(*) from public.problem_reports where id = v_report) <> 1
-    or (select description from public.problem_reports where id = v_report) <> 'Einmal'
+    or (select description from public.problem_reports where id = v_report) is distinct from 'Einmal'
   then raise exception 'a retried report save did not find its own report'; end if;
   begin
     perform public.submit_problem_report(v_report, v_org, '33100000-0000-0000-0000-000000000001', 'Fremd', '{}');
@@ -460,10 +460,10 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'scrubbed_copy_incomplete' then raise; end if;
   end;
-  if (select scrub_state from public.problem_reports where id = v_report) <> 'ausstehend'
+  if (select scrub_state from public.problem_reports where id = v_report) is distinct from 'ausstehend'
   then raise exception 'a refused scrub changed the report'; end if;
 
-  if public.record_problem_report_scrub(v_org, v_report, null, null) <> 'nicht_bereinigbar'
+  if public.record_problem_report_scrub(v_org, v_report, null, null) is distinct from 'nicht_bereinigbar'
   then raise exception 'a failed scrub did not answer the failed state'; end if;
   if not exists (
     select 1 from public.problem_reports
@@ -471,10 +471,10 @@ begin
       and scrubbed_description is null and scrubbed_context is null
   ) then raise exception 'a failed scrub left a copy or the wrong state'; end if;
   if public.record_problem_report_scrub(v_org, v_report, 'Bitte [Person 1] dunkler', '{"offline":false}')
-    <> 'bereinigt'
+    is distinct from 'bereinigt'
   then raise exception 'a scrub after a failed one was not written'; end if;
-  if public.record_problem_report_scrub(v_org, v_report, null, null) <> 'bereinigt'
-    or public.record_problem_report_scrub(v_org, v_report, 'Andere Kopie', '{}') <> 'bereinigt'
+  if public.record_problem_report_scrub(v_org, v_report, null, null) is distinct from 'bereinigt'
+    or public.record_problem_report_scrub(v_org, v_report, 'Andere Kopie', '{}') is distinct from 'bereinigt'
   then raise exception 'a report with its copy did not answer `bereinigt`'; end if;
   if not exists (
     select 1 from public.problem_reports
@@ -520,15 +520,15 @@ declare
   v_org constant uuid := '33100000-0000-0000-0000-000000000010';
 begin
   if public.apply_problem_report_retention('33100000-0000-0000-0000-000000000011', '33100000-0000-0000-0000-000000000020')
-    <> 'not_due'
+    is distinct from 'not_due'
     or (select description from public.problem_reports where id = '33100000-0000-0000-0000-000000000020') is null
   then raise exception 'retention changed a report named under another organization'; end if;
-  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000020') <> 'originals_deleted'
-    or public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000021') <> 'originals_deleted'
+  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000020') is distinct from 'originals_deleted'
+    or public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000021') is distinct from 'originals_deleted'
   then raise exception 'due originals were not deleted'; end if;
-  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000022') <> 'not_due'
-    or public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000023') <> 'not_due'
-    or public.apply_problem_report_retention(v_org, gen_random_uuid()) <> 'not_due'
+  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000022') is distinct from 'not_due'
+    or public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000023') is distinct from 'not_due'
+    or public.apply_problem_report_retention(v_org, gen_random_uuid()) is distinct from 'not_due'
   then raise exception 'a report that is not due was changed'; end if;
 
   if exists (
@@ -572,7 +572,7 @@ do $$
 declare
   v_org constant uuid := '33100000-0000-0000-0000-000000000010';
 begin
-  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000024') <> 'report_deleted' then
+  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000024') is distinct from 'report_deleted' then
     raise exception 'the due report was not deleted';
   end if;
   if exists (select 1 from public.problem_reports where id = '33100000-0000-0000-0000-000000000024')

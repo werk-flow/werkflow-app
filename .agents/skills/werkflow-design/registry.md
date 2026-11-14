@@ -22,6 +22,7 @@ First ask of every choice: entities or a fixed enum? A raw `Select` holds a fixe
 | State label | `Badge` (`secondary`, `success`, `warning`, `destructive`, `outline`; no orange) |
 | Dialog | `DialogContent size` (`sm` to `4xl`, `window`), `DialogBody`, root `pending`; `placement="anchored"` for a sheet above the clock dock; `workspace` for tabbed create forms |
 | Dialog only some roles open (create, edit) | `lazyDialog` (`components/shared/lazy-dialog`): its module downloads on the opener's intent (`PageActionButton` through `usePageActionLoader`, `RowActionsMenu onOpen`) or on first open |
+| Confirmation whose action runs a request | `ConfirmActionDialog` (`components/shared/confirm-action-dialog`): stays open while the request runs and on failure, shows the failure in its footer, closes on success |
 | Destructive confirmation | `AlertDialog`, root `pending`; `AlertDialogBody` scrolls a long confirmation between header and footer; without it the footer sticks to the bottom; a failed confirm shows in `AlertDialogFooter error` |
 | Sheet, menu, popover | `Sheet`, `DropdownMenu`, `ContextMenu`, `Popover` |
 | Row menu that survives an optimistic replace or a Realtime remount | `RowActionsMenu` |

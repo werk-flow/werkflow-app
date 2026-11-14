@@ -365,6 +365,25 @@ describe('lab payload rules', () => {
     expect(text.find((row) => row.target.endsWith('#requests'))?.status).toBe('ungated');
     expect(text.find((row) => row.target.endsWith('#encodedBytes'))?.status).toBe('ungated');
   });
+
+  test("a shape's bytes are judged only at its reference request count: they sum a count that follows echo timing", () => {
+    const base = reference();
+    const target = 'action:/auftraege/[jobNumber]#decodedBytes';
+    const coalesced = observation({ bytes: 10_000 });
+    const [payload] = coalesced.payloads;
+    if (!payload) throw new Error('the observation carries one shape');
+    const otherCount = { ...coalesced, payloads: [{ ...payload, requests: 2 }] };
+    expect(
+      rowOf(compareLabStep({ step: STEP, observation: otherCount, reference: base }), target).status,
+    ).toBe('ungated');
+    expect(
+      rowOf(compareLabStep({ step: STEP, observation: coalesced, reference: base }), target).status,
+    ).toBe('shrank');
+    const unmeasured = { ...coalesced, payloads: [{ ...payload, requests: 2, decodedBytes: null }] };
+    expect(
+      rowOf(compareLabStep({ step: STEP, observation: unmeasured, reference: base }), target).status,
+    ).toBe('measurement-missing');
+  });
 });
 
 test('ungating removes one count from one step and records why', () => {

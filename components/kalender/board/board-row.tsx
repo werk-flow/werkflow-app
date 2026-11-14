@@ -16,7 +16,13 @@ import {
   type BoardLaneItem,
   type BoardSpanItem,
 } from '@/lib/calendar/board-layout';
-import { absenceItems, occurrenceSpan, type BoardRowModel } from '@/lib/calendar/board-model';
+import {
+  absenceItems,
+  occurrenceSpan,
+  type BoardAbsenceItem,
+  type BoardRowModel,
+  type SchoolCalendarEntry,
+} from '@/lib/calendar/board-model';
 import { BOARD_ROW_CONTENT_CHECKS } from '@/lib/calendar/board-row-memo';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
@@ -40,7 +46,7 @@ import {
 type LaneEntry = BoardSpanItem &
   (
     | { kind: 'job'; job: CalendarJob }
-    | { kind: 'absence'; label: string; pending: boolean; absenceKind: 'vacation' | 'sickness' }
+    | { kind: 'absence'; label: string; pending: boolean; absenceKind: BoardAbsenceItem['kind'] }
   );
 
 export type BoardRowProps = {
@@ -50,6 +56,7 @@ export type BoardRowProps = {
   jobs: CalendarJob[];
   vacation: readonly VacationCalendarEntry[];
   sickness: readonly SicknessCalendarEntry[];
+  school: readonly SchoolCalendarEntry[];
   days: ReadonlyMap<string, CalendarBoardDay>;
   planned: ReadonlyMap<string, number>;
   /** The person-days scheduled work covers, from every visit, filtered or not. */
@@ -70,7 +77,13 @@ export type BoardRowProps = {
 
 /** The row's visits and, for a person, the absences, packed into lanes. */
 function boardRowLanes(
-  { jobs, vacation, sickness, columns }: Pick<BoardRowProps, 'jobs' | 'vacation' | 'sickness' | 'columns'>,
+  {
+    jobs,
+    vacation,
+    sickness,
+    school,
+    columns,
+  }: Pick<BoardRowProps, 'jobs' | 'vacation' | 'sickness' | 'school' | 'columns'>,
   row: CalendarBoardRow | null,
 ) {
   const items: LaneEntry[] = [];
@@ -79,7 +92,12 @@ function boardRowLanes(
     if (span) items.push({ ...span, kind: 'job', job });
   }
   if (row) {
-    for (const absence of absenceItems({ vacation, sickness, employeeRecordId: row.employeeRecordId })) {
+    for (const absence of absenceItems({
+      vacation,
+      sickness,
+      school,
+      employeeRecordId: row.employeeRecordId,
+    })) {
       items.push({
         ...absence,
         kind: 'absence',
@@ -202,13 +220,13 @@ function boardRowLane(
  * content and a multi-day occurrence is one element.
  */
 export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
-  const { model, columns, jobs, vacation, sickness, compact, scrollable, isolate } = props;
+  const { model, columns, jobs, vacation, sickness, school, compact, scrollable, isolate } = props;
   const row = model.kind === 'person' ? model.row : null;
   const laneHeight = compact ? BOARD_LANE_HEIGHT.compact : BOARD_LANE_HEIGHT.comfortable;
 
   const { lanes, laneCount } = useMemo(
-    () => boardRowLanes({ jobs, vacation, sickness, columns }, row),
-    [columns, jobs, row, sickness, vacation],
+    () => boardRowLanes({ jobs, vacation, sickness, school, columns }, row),
+    [columns, jobs, row, school, sickness, vacation],
   );
 
   const rowLabel = row ? row.displayName : 'Ohne Zuweisung';

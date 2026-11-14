@@ -166,6 +166,7 @@ function partLines(partCount: number): string[] {
     `höchstens ${PART_FILE_LIMIT.toLocaleString('de-DE')} Dateien oder ${formatFileSize(PART_BYTE_LIMIT)} je Teil.`,
     'Personalakten liegen unter „Dateien/Personalakten“, Dateien aus dem Papierkorb unter',
     '„Dateien/Papierkorb“. Frühere Versionen tragen „(Version n)“ im Namen.',
+    'Logo und Briefpapier aus den Firmenangaben liegen unter „Dateien/Briefpapier“.',
   ];
 }
 

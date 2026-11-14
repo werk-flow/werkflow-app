@@ -95,7 +95,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -178,18 +178,18 @@ begin
   v_first := public.propose_site_access('46000000-0000-0000-0000-000000000003',
     '46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000030',
     '46000000-0000-0000-0000-000000000040', ' Frau Neu ', '0171 555', null, null);
-  if v_first.status <> 'open' or v_first.contact_name <> 'Frau Neu' or v_first.client_id <> '46000000-0000-0000-0000-000000000020'
-    or v_first.proposed_by <> '46000000-0000-0000-0000-000000000003'
+  if v_first.status is distinct from 'open' or v_first.contact_name is distinct from 'Frau Neu' or v_first.client_id is distinct from '46000000-0000-0000-0000-000000000020'
+    or v_first.proposed_by is distinct from '46000000-0000-0000-0000-000000000003'
   then raise exception 'the proposal was not recorded as given: %', row_to_json(v_first); end if;
   v_second := public.propose_site_access('46000000-0000-0000-0000-000000000003',
     '46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000030',
     '46000000-0000-0000-0000-000000000040', 'Frau Neumann', '0171 556', 'Klingel 3', 'Seiteneingang, Code beim Büro');
-  if v_second.id <> v_first.id or v_second.contact_name <> 'Frau Neumann' or v_second.access_notes is null
+  if v_second.id is distinct from v_first.id or v_second.contact_name is distinct from 'Frau Neumann' or v_second.access_notes is null
     or (select count(*) from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030') <> 1
   then raise exception 'a second proposal did not replace the open one'; end if;
   if (select access_notes from public.client_sites where id = '46000000-0000-0000-0000-000000000040')
-      <> 'Schlüssel beim Hausmeister'
-    or (select name from public.client_contacts where id = '46000000-0000-0000-0000-000000000050') <> 'Herr Alt'
+      is distinct from 'Schlüssel beim Hausmeister'
+    or (select name from public.client_contacts where id = '46000000-0000-0000-0000-000000000050') is distinct from 'Herr Alt'
   then raise exception 'a proposal changed the Einsatzort by itself'; end if;
 end;
 $$;
@@ -203,15 +203,15 @@ begin
   insert into public.client_requests (organization_id, summary, created_by)
   values ('46000000-0000-0000-0000-000000000010', 'Heizung kalt', '46000000-0000-0000-0000-000000000002');
   v_sets := public.read_manager_attention_sets('46000000-0000-0000-0000-000000000010', 100);
-  if jsonb_array_length(v_sets -> 'access_proposals') <> 1
+  if jsonb_array_length(v_sets -> 'access_proposals') is distinct from 1
     or (v_sets -> 'access_proposals' -> 0) ? 'contact_name'
-    or (v_sets -> 'requests') <> (
+    or (v_sets -> 'requests') is distinct from (
       select jsonb_agg(to_jsonb(request) order by request.received_at, request.id)
       from public.list_open_request_attention('46000000-0000-0000-0000-000000000010') request
     )
   then raise exception 'the combined read differs from the open requests and proposals: %', v_sets; end if;
-  if jsonb_array_length(public.read_manager_attention_sets('46000000-0000-0000-0000-000000000011', 100) -> 'access_proposals') <> 0
-    or jsonb_array_length(public.read_manager_attention_sets('46000000-0000-0000-0000-000000000010', 0) -> 'requests') <> 1
+  if jsonb_array_length(public.read_manager_attention_sets('46000000-0000-0000-0000-000000000011', 100) -> 'access_proposals') is distinct from 0
+    or jsonb_array_length(public.read_manager_attention_sets('46000000-0000-0000-0000-000000000010', 0) -> 'requests') is distinct from 1
   then raise exception 'the combined read crosses the organization or cuts below its limit plus one'; end if;
 end;
 $$;
@@ -227,7 +227,7 @@ begin
   perform public.propose_site_access('46000000-0000-0000-0000-000000000003',
     '46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000030',
     '46000000-0000-0000-0000-000000000040', 'Frau Neumann', '0171 556', 'Klingel 3', 'Seiteneingang, Code beim Büro');
-  if (select revision from public.site_access_proposals where id = v_reviewed.id) <> v_reviewed.revision + 1
+  if (select revision from public.site_access_proposals where id = v_reviewed.id) is distinct from v_reviewed.revision + 1
   then raise exception 'a replacement kept the revision'; end if;
   begin
     perform public.accept_site_access_proposal('46000000-0000-0000-0000-000000000002',
@@ -243,8 +243,8 @@ begin
   exception when others then
     if sqlerrm <> 'proposal_changed' then raise; end if;
   end;
-  if (select status from public.site_access_proposals where id = v_reviewed.id) <> 'open'
-    or exists (select 1 from public.client_contacts where name = 'Frau Neumann')
+  if (select status from public.site_access_proposals where id = v_reviewed.id) is distinct from 'open'
+    or exists (select 1 from public.client_contacts where organization_id = '46000000-0000-0000-0000-000000000010' and name = 'Frau Neumann')
   then raise exception 'a refused stale decision changed a row'; end if;
 end;
 $$;
@@ -274,8 +274,8 @@ select pg_temp.expect_refusal('correcting another Einsatzort''s Zugangskontakt',
 reset role;
 do $$
 begin
-  if (select status from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030') <> 'open'
-    or (select name from public.client_contacts where id = '46000000-0000-0000-0000-000000000051') <> 'Frau Birke'
+  if (select status from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030') is distinct from 'open'
+    or (select name from public.client_contacts where id = '46000000-0000-0000-0000-000000000051') is distinct from 'Frau Birke'
   then raise exception 'a refused acceptance changed a row'; end if;
 end;
 $$;
@@ -294,20 +294,20 @@ begin
     (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
     'Schlüssel beim Hausmeister', '46000000-0000-0000-0000-000000000050', 'Herr Alt', '030 111', 'Hausmeister');
   select * into v_contact from public.client_contacts where id = '46000000-0000-0000-0000-000000000050';
-  if v_contact.name <> 'Frau Neumann' or v_contact.phone <> '0171 556' or v_contact.notes <> 'Klingel 3'
-    or v_contact.site_role <> 'zugangskontakt'
+  if v_contact.name is distinct from 'Frau Neumann' or v_contact.phone is distinct from '0171 556' or v_contact.notes is distinct from 'Klingel 3'
+    or v_contact.site_role is distinct from 'zugangskontakt'
   then raise exception 'acceptance did not correct the Zugangskontakt: %', row_to_json(v_contact); end if;
   if (select access_notes from public.client_sites where id = '46000000-0000-0000-0000-000000000040')
-      <> 'Seiteneingang, Code beim Büro'
+      is distinct from 'Seiteneingang, Code beim Büro'
   then raise exception 'acceptance did not write the access notes'; end if;
   if (select count(*) from public.client_master_events
       where contact_id = '46000000-0000-0000-0000-000000000050' and event_type = 'changed'
         and actor_id = '46000000-0000-0000-0000-000000000002'
         and event_payload ->> 'field' in ('name', 'phone')) <> 2
   then raise exception 'the corrected contact has no history naming the manager'; end if;
-  if v_proposal.status <> 'accepted' or v_proposal.decided_by <> '46000000-0000-0000-0000-000000000002'
-    or v_proposal.proposed_by <> '46000000-0000-0000-0000-000000000003'
-    or v_proposal.applied_contact_id <> '46000000-0000-0000-0000-000000000050' or not v_proposal.applied_access_notes
+  if v_proposal.status is distinct from 'accepted' or v_proposal.decided_by is distinct from '46000000-0000-0000-0000-000000000002'
+    or v_proposal.proposed_by is distinct from '46000000-0000-0000-0000-000000000003'
+    or v_proposal.applied_contact_id is distinct from '46000000-0000-0000-0000-000000000050' or not v_proposal.applied_access_notes
     or v_proposal.contact_name is not null or v_proposal.contact_phone is not null
     or v_proposal.contact_note is not null or v_proposal.access_notes is not null
   then raise exception 'the accepted proposal is not recorded as decided: %', row_to_json(v_proposal); end if;
@@ -337,9 +337,9 @@ begin
     (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
       and status = 'open'), null);
   select * into v_contact from public.client_contacts where id = v_proposal.applied_contact_id;
-  if v_contact.client_id <> '46000000-0000-0000-0000-000000000020'
-    or v_contact.site_id <> '46000000-0000-0000-0000-000000000040' or v_contact.site_role <> 'zugangskontakt'
-    or v_contact.name <> 'Herr Pförtner' or v_contact.created_by <> '46000000-0000-0000-0000-000000000001'
+  if v_contact.client_id is distinct from '46000000-0000-0000-0000-000000000020'
+    or v_contact.site_id is distinct from '46000000-0000-0000-0000-000000000040' or v_contact.site_role is distinct from 'zugangskontakt'
+    or v_contact.name is distinct from 'Herr Pförtner' or v_contact.created_by is distinct from '46000000-0000-0000-0000-000000000001'
     or v_proposal.applied_access_notes
   then raise exception 'acceptance did not add the Zugangskontakt: %', row_to_json(v_contact); end if;
 
@@ -381,15 +381,15 @@ begin
       and status = 'open'),
     (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
       and status = 'open'), ' Die Nachbarin hat keinen Schlüssel. ');
-  if v_proposal.status <> 'rejected' or v_proposal.rejection_reason <> 'Die Nachbarin hat keinen Schlüssel.'
-    or v_proposal.proposed_by <> '46000000-0000-0000-0000-000000000003'
-    or v_proposal.decided_by <> '46000000-0000-0000-0000-000000000002' or v_proposal.decided_at is null
+  if v_proposal.status is distinct from 'rejected' or v_proposal.rejection_reason is distinct from 'Die Nachbarin hat keinen Schlüssel.'
+    or v_proposal.proposed_by is distinct from '46000000-0000-0000-0000-000000000003'
+    or v_proposal.decided_by is distinct from '46000000-0000-0000-0000-000000000002' or v_proposal.decided_at is null
     or v_proposal.contact_name is not null or v_proposal.contact_phone is not null
     or v_proposal.contact_note is not null or v_proposal.access_notes is not null
   then raise exception 'the rejected proposal is not recorded as decided: %', row_to_json(v_proposal); end if;
-  if exists (select 1 from public.client_contacts where name = 'Erika Musterfrau')
+  if exists (select 1 from public.client_contacts where organization_id = '46000000-0000-0000-0000-000000000010' and name = 'Erika Musterfrau')
     or (select access_notes from public.client_sites where id = '46000000-0000-0000-0000-000000000040')
-      <> 'Tor klemmt, fest drücken'
+      is distinct from 'Tor klemmt, fest drücken'
   then raise exception 'a rejection changed the Einsatzort'; end if;
 end;
 $$;
@@ -456,9 +456,9 @@ begin
   exception when others then
     if sqlerrm <> 'site_changed' then raise; end if;
   end;
-  if (select access_notes from public.client_sites where id = '46000000-0000-0000-0000-000000000040') <> 'Code 1111'
-    or (select name from public.client_contacts where id = '46000000-0000-0000-0000-000000000050') <> 'Frau Erste'
-    or (select status from public.site_access_proposals where id = v_second.id) <> 'open'
+  if (select access_notes from public.client_sites where id = '46000000-0000-0000-0000-000000000040') is distinct from 'Code 1111'
+    or (select name from public.client_contacts where id = '46000000-0000-0000-0000-000000000050') is distinct from 'Frau Erste'
+    or (select status from public.site_access_proposals where id = v_second.id) is distinct from 'open'
   then raise exception 'a refused acceptance over a changed Einsatzort changed a row'; end if;
 end;
 $$;
@@ -492,8 +492,8 @@ begin
   exception when others then
     if sqlerrm <> 'site_changed' then raise; end if;
   end;
-  if (select notes from public.client_contacts where id = '46000000-0000-0000-0000-000000000050') <> 'Nur vormittags'
-    or (select status from public.site_access_proposals where id = v_second.id) <> 'open'
+  if (select notes from public.client_contacts where id = '46000000-0000-0000-0000-000000000050') is distinct from 'Nur vormittags'
+    or (select status from public.site_access_proposals where id = v_second.id) is distinct from 'open'
   then raise exception 'a refused acceptance over a changed contact note changed a row'; end if;
 end;
 $$;
@@ -534,7 +534,7 @@ begin
     or (select proposal from public.site_access_proposals proposal where proposal.id = v_open.id)
       is distinct from v_open
     or (select count(*) from public.client_master_events
-        where contact_id = '46000000-0000-0000-0000-000000000050') <> v_events
+        where contact_id = '46000000-0000-0000-0000-000000000050') is distinct from v_events
     or (select access_notes from public.client_sites where id = '46000000-0000-0000-0000-000000000040')
       is distinct from v_notes
   then raise exception 'a failed acceptance left a partial write'; end if;
@@ -559,10 +559,10 @@ $$;
 grant execute on function pg_temp.visible_proposals(uuid) to authenticated;
 do $$
 begin
-  if pg_temp.visible_proposals('46000000-0000-0000-0000-000000000002') <> 4
-    or pg_temp.visible_proposals('46000000-0000-0000-0000-000000000003') <> 4
-    or pg_temp.visible_proposals('46000000-0000-0000-0000-000000000004') <> 0
-    or pg_temp.visible_proposals('46000000-0000-0000-0000-000000000005') <> 0
+  if pg_temp.visible_proposals('46000000-0000-0000-0000-000000000002') is distinct from 4
+    or pg_temp.visible_proposals('46000000-0000-0000-0000-000000000003') is distinct from 4
+    or pg_temp.visible_proposals('46000000-0000-0000-0000-000000000004') is distinct from 0
+    or pg_temp.visible_proposals('46000000-0000-0000-0000-000000000005') is distinct from 0
   then raise exception 'the proposal policy shows rows outside the managers and the job''s team'; end if;
 end;
 $$;

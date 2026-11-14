@@ -45,6 +45,8 @@ export type PeriodResultRow = {
   employeeName: string;
   /** Every day's Soll comes from a Wochenplan. */
   authoritativeTargets: boolean;
+  /** The normal target the person's Berufsschule days credit in the period; 0 without any. */
+  schoolMinutes: number;
   outcome: ({ computed: true } & PeriodResultValues) | { computed: false; causes: UncomputedResultCause[] };
 };
 
@@ -68,6 +70,7 @@ export function toPeriodResultRows(
   results: readonly StoredResult[],
   findings: readonly StoredFinding[],
   nameByEmployee: ReadonlyMap<string, string>,
+  schoolMinutesByEmployee: ReadonlyMap<string, number>,
 ): PeriodResultRow[] {
   const causesByEmployee = new Map<string, UncomputedResultCause[]>();
   for (const finding of findings) {
@@ -83,6 +86,7 @@ export function toPeriodResultRows(
         employeeRecordId: result.employee_record_id,
         employeeName: nameByEmployee.get(result.employee_record_id) ?? 'Unbekannt',
         authoritativeTargets: result.authoritative_targets,
+        schoolMinutes: schoolMinutesByEmployee.get(result.employee_record_id) ?? 0,
         outcome:
           causes.length > 0
             ? { computed: false, causes: employeeSetupGapOrder(causes) }

@@ -1,6 +1,8 @@
 import {
+  ABSENCE_LABELS,
   boardDayKey,
   isNoteEntry,
+  type CalendarBoardDay,
   type CalendarBoardRow,
   type CalendarBoardRowlessAssignee,
   type CalendarDispatchState,
@@ -194,14 +196,57 @@ export function plannedWorkDays(
 }
 
 export type BoardAbsenceItem = BoardSpanItem & {
-  kind: 'vacation' | 'sickness';
+  kind: 'vacation' | 'sickness' | 'school';
   pending: boolean;
   label: string;
 };
 
+/** A run of one person's consecutive Berufsschule days. */
+export type SchoolCalendarEntry = {
+  employeeRecordId: string;
+  personName: string;
+  startDate: string;
+  endDate: string;
+};
+
+/**
+ * The window's Berufsschule days as runs per person, from the board's
+ * capacity days (the planning owner's target resolution): a day whose
+ * absence is a school day. A day covered by a vacation or a sickness shows
+ * that absence instead, as the target attributes it.
+ */
+export function schoolCalendarEntries(board: {
+  rows: readonly Pick<CalendarBoardRow, 'employeeRecordId' | 'displayName'>[];
+  days: readonly CalendarBoardDay[];
+}): SchoolCalendarEntry[] {
+  const nameByRecord = new Map(board.rows.map((row) => [row.employeeRecordId, row.displayName]));
+  const schoolDays = board.days
+    .filter((day) => day.absence?.type === 'school')
+    .toSorted(
+      (left, right) =>
+        left.employeeRecordId.localeCompare(right.employeeRecordId) || left.date.localeCompare(right.date),
+    );
+  const entries: SchoolCalendarEntry[] = [];
+  for (const day of schoolDays) {
+    const last = entries.at(-1);
+    if (last?.employeeRecordId === day.employeeRecordId && addLocalDays(last.endDate, 1) === day.date) {
+      last.endDate = day.date;
+      continue;
+    }
+    entries.push({
+      employeeRecordId: day.employeeRecordId,
+      personName: nameByRecord.get(day.employeeRecordId) ?? 'Unbekannt',
+      startDate: day.date,
+      endDate: day.date,
+    });
+  }
+  return entries;
+}
+
 export function absenceItems(input: {
   vacation: readonly VacationCalendarEntry[];
   sickness: readonly SicknessCalendarEntry[];
+  school: readonly SchoolCalendarEntry[];
   /** One person's absences on the board; null lists everyone's (the month). */
   employeeRecordId: string | null;
 }): BoardAbsenceItem[] {
@@ -230,6 +275,18 @@ export function absenceItems(input: {
       kind: 'sickness',
       pending: false,
       label: `Abwesend – ${entry.personName}${half}${entry.openEnded ? ' (bis auf Weiteres)' : ''}`,
+    });
+  }
+  for (const entry of input.school) {
+    if (input.employeeRecordId !== null && entry.employeeRecordId !== input.employeeRecordId) continue;
+    items.push({
+      key: `school:${entry.employeeRecordId}:${entry.startDate}`,
+      startDate: entry.startDate,
+      endDateExclusive: addLocalDays(entry.endDate, 1),
+      sortMinutes: -2,
+      kind: 'school',
+      pending: false,
+      label: `${ABSENCE_LABELS.school} – ${entry.personName}`,
     });
   }
   return items;

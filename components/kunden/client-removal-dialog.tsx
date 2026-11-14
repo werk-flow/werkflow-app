@@ -49,6 +49,11 @@ const LINK_LABELS: readonly (readonly [kind: ClientLinkKind, one: string, many: 
   ['documents', 'Dokument', 'Dokumente'],
   ['follow_ups', 'Nachfassaktion', 'Nachfassaktionen'],
   ['site_roles', 'Rolle an einem Einsatzort', 'Rollen an Einsatzorten'],
+  [
+    'billing_parties',
+    'Arbeit als Auftraggeber oder Rechnungsempfänger',
+    'Arbeiten als Auftraggeber oder Rechnungsempfänger',
+  ],
 ];
 
 /** „2 Aufträge, 1 Anfrage“: what links to the customer. */

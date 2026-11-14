@@ -35,7 +35,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_message then
+    if sqlerrm is distinct from p_message then
       raise exception '%: expected %, got %', p_label, p_message, sqlerrm;
     end if;
     return;
@@ -86,14 +86,14 @@ begin
   end if;
   v_first := public.confirm_payroll_mapping_version(
     v_admin, v_org, null, '[]', pg_temp.codes('1000'), gen_random_uuid(), repeat('a', 64));
-  if (select version from public.payroll_mapping_versions where id = v_first) <> 1 then
+  if (select version from public.payroll_mapping_versions where id = v_first) is distinct from 1 then
     raise exception 'the first confirmation did not create version 1';
   end if;
 
   -- A table read from version 1 becomes version 2.
   v_second := public.confirm_payroll_mapping_version(
     v_admin, v_org, 1, '[]', pg_temp.codes('1200'), gen_random_uuid(), repeat('b', 64));
-  if (select version from public.payroll_mapping_versions where id = v_second) <> 2
+  if (select version from public.payroll_mapping_versions where id = v_second) is distinct from 2
     or (select current_version_id from public.payroll_mapping_profiles where organization_id = v_org)
       is distinct from v_second then
     raise exception 'a confirmation from the current version did not become the current version 2';

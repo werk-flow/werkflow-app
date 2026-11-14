@@ -299,12 +299,13 @@ export function attemptStoragePath(path: string): string {
 
 /**
  * Copies a browser upload from the staging key of `path` to a key of its own
- * on the server, removes the staging object and returns the head and key of
- * the copy. The copy is what finalize verifies and registers: only the server
- * writes it, and only this attempt. A missing staging object reads as a
- * missing upload.
+ * on the server and returns the head and key of the copy. The copy is what
+ * finalize verifies and registers: only the server writes it, and only this
+ * attempt. The staging object stays, so a finalize whose registration may not
+ * have committed can copy it again under the same upload. A missing staging
+ * object reads as a missing upload.
  */
-export async function promoteUploadedObject({
+export async function copyStagedUpload({
   organizationId,
   path,
 }: OrganizationScope & { path: string }): Promise<PromotedUpload> {
@@ -317,16 +318,29 @@ export async function promoteUploadedObject({
       return { exists: false, sizeBytes: null, contentType: null, path: attemptPath };
     throw error;
   }
-  let head: StorageObjectHead;
   try {
-    head = await headStorageObject({ organizationId, path: attemptPath });
+    return { ...(await headStorageObject({ organizationId, path: attemptPath })), path: attemptPath };
   } catch (error) {
-    // The staging object stays, so a retry promotes it again into a key of its own.
     await discardStorageObjects({ organizationId, paths: [attemptPath] });
     throw error;
   }
-  await discardStorageObjects({ organizationId, paths: [stagingPath] });
-  return { ...head, path: attemptPath };
+}
+
+/**
+ * `copyStagedUpload`, then removes the staging object: a retry of this upload
+ * finds nothing left to copy.
+ */
+export async function promoteUploadedObject(
+  scope: OrganizationScope & { path: string },
+): Promise<PromotedUpload> {
+  const copy = await copyStagedUpload(scope);
+  if (copy.exists) {
+    await discardStorageObjects({
+      organizationId: scope.organizationId,
+      paths: [uploadStagingPath(scope.organizationId, scope.path)],
+    });
+  }
+  return copy;
 }
 
 function isPreconditionFailed(error: unknown): boolean {

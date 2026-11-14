@@ -60,7 +60,7 @@ begin
     p_decision, 'Geprüft', p_actor_id, gen_random_uuid());
   raise exception 'decision refusal: %', p_label;
 exception when others then
-  if sqlerrm <> p_code then raise; end if;
+  if sqlerrm is distinct from p_code then raise; end if;
 end;
 $$;
 
@@ -74,7 +74,7 @@ begin
     'Zurückgezogen', p_actor_id, gen_random_uuid());
   raise exception 'withdrawal refusal: %', p_label;
 exception when others then
-  if sqlerrm <> p_code then raise; end if;
+  if sqlerrm is distinct from p_code then raise; end if;
 end;
 $$;
 
@@ -132,14 +132,14 @@ begin
     'manual_adjustment', 30, '2026-10-02', 'Nachtrag', buero_one, gen_random_uuid(), repeat('b', 64));
   perform pg_temp.expect_decision_refused('the proposer approves', request_id, buero_one, 'approved', 'own_proposal');
   perform pg_temp.expect_decision_refused('the proposer rejects', request_id, buero_one, 'rejected', 'own_proposal');
-  if (select current_balance_minutes from public.time_accounts where id = account_id) <> 0
-    or (select status from public.time_account_adjustment_requests where id = request_id) <> 'submitted'
+  if (select current_balance_minutes from public.time_accounts where id = account_id) is distinct from 0
+    or (select status from public.time_account_adjustment_requests where id = request_id) is distinct from 'submitted'
     then raise exception 'a refused own decision changed the request or the balance'; end if;
   perform public.decide_time_account_adjustment(
     '4e000000-0000-4000-8000-000000000010', request_id,
     (select version from public.time_account_adjustment_requests where id = request_id),
     'approved', 'Geprüft', buero_two, gen_random_uuid());
-  if (select current_balance_minutes from public.time_accounts where id = account_id) <> 30
+  if (select current_balance_minutes from public.time_accounts where id = account_id) is distinct from 30
     then raise exception 'a second Büro member could not approve an employee adjustment'; end if;
 
   -- A Büro member proposes for another: the proposer, the subject and Büro scope refuse; the Admin decides.
@@ -158,7 +158,7 @@ begin
     '4e000000-0000-4000-8000-000000000010', request_id,
     (select version from public.time_account_adjustment_requests where id = request_id),
     'approved', 'Geprüft', admin, gen_random_uuid());
-  if (select current_balance_minutes from public.time_accounts where id = account_id) <> -60
+  if (select current_balance_minutes from public.time_accounts where id = account_id) is distinct from -60
     then raise exception 'the Admin could not approve a Büro adjustment'; end if;
 
   -- A Büro member proposes for the Admin: the Admin is the subject, the other Büro member is out of scope.
@@ -201,8 +201,8 @@ begin
     '4e000000-0000-4000-8000-000000000010', withdrawn_request_id,
     (select version from public.time_account_adjustment_requests where id = withdrawn_request_id),
     'Zurückgezogen', buero_one, gen_random_uuid());
-  if (select status from public.time_account_adjustment_requests where id = withdrawn_request_id) <> 'withdrawn'
-    or (select current_balance_minutes from public.time_accounts where id = employee_account_id) <> balance_before
+  if (select status from public.time_account_adjustment_requests where id = withdrawn_request_id) is distinct from 'withdrawn'
+    or (select current_balance_minutes from public.time_accounts where id = employee_account_id) is distinct from balance_before
     or not exists (select 1 from public.time_account_adjustment_events event
       where event.request_id = withdrawn_request_id and event.event_type = 'withdrawn' and event.actor_id = buero_one)
     then raise exception 'the proposer could not withdraw an open request without a balance change'; end if;

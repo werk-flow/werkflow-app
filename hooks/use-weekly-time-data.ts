@@ -98,6 +98,8 @@ export function useWeeklyTimeData({
       'work_schedules',
       'employment_conditions',
       'organization_closure_days',
+      // A Berufsschule day the office records credits the day's target.
+      'school_days',
       // The holiday region; a saved break rule also reads the week again through the policy view.
       'organization_settings',
     ],

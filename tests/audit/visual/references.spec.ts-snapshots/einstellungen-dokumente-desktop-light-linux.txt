@@ -49,12 +49,26 @@ Kundenverwaltung und Defaults
 Datenexport
 Alle Daten herunterladen
 Dokumente & Briefpapier
-Zeigt am Musterangebot, wie deine Angebote als PDF bei deinen Kunden ankommen.
+Firmenangaben, Logo und Briefpapier für deine Angebote, dazu ein Musterangebot als PDF.
 Gilt für Haustechnik Krämer GmbH
-Musterangebot
-So kommt ein Angebot als PDF bei deinen Kunden an: dein Firmenname als Absender, ein erfundener Kunde und erfundene Preise.
-Musterangebot.pdf
-PDF-Datei, wie dein Kunde sie bekommt
-Öffnen
-Herunterladen
+Firmenangaben
+Diese Angaben stehen im Briefkopf und im Fuß jedes Angebots.
+Ein Geschäftsbrief nennt üblicherweise Firma mit Rechtsform, Anschrift, Registergericht und Registernummer, Geschäftsführung oder Inhaber, Steuernummer oder USt-IdNr. und eine Bankverbindung.
+Noch nicht hinterlegt:
+Firma mit Rechtsform, Anschrift, Registergericht und Registernummer, Geschäftsführung oder Inhaber, Steuernummer oder USt-IdNr., Bankverbindung
+.
+Firma und Anschrift
+Firma mit Rechtsform
+Straße und Hausnummer
+PLZ
+Ort
+Kontakt
+Telefon
+E-Mail
+Website
+Register und Steuern
+Registergericht
+Zum Beispiel „Amtsgericht Musterstadt“.
+Registernummer
+Zum Beispiel „HRB 12345“.
 Nicht eingestempelt

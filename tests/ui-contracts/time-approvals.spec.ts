@@ -110,3 +110,90 @@ test('a refused correction comes back with the reason and never confirms', async
   await expect(page.getByRole('alert')).toHaveText('Die Entscheidung konnte nicht gespeichert werden.');
   expect(await page.evaluate(() => window.uiContractTimeApprovals.corrections)).toHaveLength(1);
 });
+
+test('a refused „Alle genehmigen“ keeps its confirmation open with the reason, even when the read leaves one session', async ({
+  page,
+}) => {
+  // Two pending sessions: the bulk action exists.
+  await page.evaluate(() => {
+    const state = window.uiContractTimeApprovals;
+    const [session] = state.sessions;
+    if (!session) throw new Error('The fixture starts with one pending session.');
+    state.sessions = [
+      session,
+      { ...session, id: 'contract-second-session', entryIds: ['contract-second-entry'] },
+    ];
+  });
+  await page.getByRole('button', { name: 'Anträge aktualisieren', exact: true }).click();
+  await page.getByRole('button', { name: 'Alle genehmigen', exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Alle Zeiteinträge genehmigen?', exact: true });
+  await confirmation.getByRole('button', { name: 'Genehmigen', exact: true }).click();
+  await expectHeldWrite(page, 'review-entries');
+
+  // Another session approved one of them meanwhile: the read after the refusal lists one session.
+  await page.evaluate(() => {
+    const state = window.uiContractTimeApprovals;
+    state.sessions = state.sessions.slice(0, 1);
+  });
+  await answerHeldWrite(page, 'entry_not_pending');
+  await expect(confirmation.getByRole('alert')).toHaveText(
+    'Ein Eintrag wurde bereits bearbeitet. Die Ansicht wurde aktualisiert. Es wurde nichts geändert.',
+  );
+  await expect(page.getByRole('button', { name: 'Alle genehmigen', exact: true })).toHaveCount(0);
+  await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await expect(confirmation).toHaveCount(0);
+});
+
+test('a retried „Alle genehmigen“ sends the entries the person confirmed, never a session the read added since', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    const state = window.uiContractTimeApprovals;
+    const [session] = state.sessions;
+    if (!session) throw new Error('The fixture starts with one pending session.');
+    state.sessions = [
+      session,
+      { ...session, id: 'contract-second-session', entryIds: ['contract-second-entry'] },
+    ];
+  });
+  await page.getByRole('button', { name: 'Anträge aktualisieren', exact: true }).click();
+  const confirmed = await page.evaluate(() =>
+    window.uiContractTimeApprovals.sessions.flatMap((session) => session.entryIds),
+  );
+  await page.getByRole('button', { name: 'Alle genehmigen', exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Alle Zeiteinträge genehmigen?', exact: true });
+  const approve = confirmation.getByRole('button', { name: 'Genehmigen', exact: true });
+  await approve.click();
+  await expectHeldWrite(page, 'review-entries');
+
+  // Meanwhile the first session was decided elsewhere and a third one arrived: the read after the
+  // refusal lists the second and the new session.
+  await page.evaluate(() => {
+    const state = window.uiContractTimeApprovals;
+    const [first, second] = state.sessions;
+    if (!first || !second) throw new Error('Two sessions are pending.');
+    state.sessions = [second, { ...first, id: 'contract-new-session', entryIds: ['contract-new-entry'] }];
+  });
+  await answerHeldWrite(page, 'entry_not_pending');
+  await expect(confirmation.getByRole('alert')).toHaveText(
+    'Ein Eintrag wurde bereits bearbeitet. Die Ansicht wurde aktualisiert. Es wurde nichts geändert.',
+  );
+  await expect(confirmation).toContainText('2 ausstehende Zeiteinträge werden genehmigt.');
+
+  // The retry sends the confirmed snapshot; the server refuses it again rather than widening it.
+  await approve.click();
+  const sentEntryIds = () =>
+    page.evaluate(() =>
+      window.uiContractWrites.calls.map((call) =>
+        call.input && typeof call.input === 'object' && 'entryIds' in call.input ? call.input.entryIds : null,
+      ),
+    );
+  await expect.poll(sentEntryIds).toEqual([confirmed, confirmed]);
+  await answerHeldWrite(page, 'entry_not_pending');
+  await expect(confirmation.getByRole('alert')).toHaveText(
+    'Ein Eintrag wurde bereits bearbeitet. Die Ansicht wurde aktualisiert. Es wurde nichts geändert.',
+  );
+  expect(
+    await page.evaluate(() => window.uiContractTimeApprovals.sessions.map((session) => session.id)),
+  ).toEqual(['contract-second-session', 'contract-new-session']);
+});

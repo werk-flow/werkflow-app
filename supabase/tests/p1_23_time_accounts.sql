@@ -111,7 +111,7 @@ begin
     '23000000-0000-0000-0000-000000000010', employee_id, 15, '2026-07-01',
     'Test-Eröffnung', '23000000-0000-0000-0000-000000000001',
     '23000000-0000-0000-0000-000000000021', repeat('b', 64));
-  if (select current_balance_minutes from public.time_accounts where id = employee_account_id) <> 15
+  if (select current_balance_minutes from public.time_accounts where id = employee_account_id) is distinct from 15
     then raise exception 'opening balance was not materialized'; end if;
 
   source_fingerprint := app_private.compute_p1_23_source_fingerprint(
@@ -123,7 +123,7 @@ begin
     '23000000-0000-0000-0000-000000000010',
     'clock_in', '2026-08-15 08:00:00+02', true, 'approved'
   );
-  if source_fingerprint <> app_private.compute_p1_23_source_fingerprint(
+  if source_fingerprint is distinct from app_private.compute_p1_23_source_fingerprint(
     '23000000-0000-0000-0000-000000000010', '2026-07-01', '2026-07-31'
   ) then raise exception 'future activity invalidated an earlier period'; end if;
   insert into public.organization_closure_days(
@@ -138,7 +138,7 @@ begin
   ) then raise exception 'period closure-day change did not invalidate the calculation'; end if;
   delete from public.organization_closure_days
     where id = '23000000-0000-0000-0000-000000000029';
-  if source_fingerprint <> app_private.compute_p1_23_source_fingerprint(
+  if source_fingerprint is distinct from app_private.compute_p1_23_source_fingerprint(
     '23000000-0000-0000-0000-000000000010', '2026-07-01', '2026-07-31'
   ) then raise exception 'restored calendar did not restore the period fingerprint'; end if;
   employee_results := jsonb_build_array(
@@ -185,7 +185,7 @@ begin
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     '2026-07-01', '2026-07-31', source_fingerprint, employee_results, daily_results, '[]', '[]',
     '23000000-0000-0000-0000-000000000050', repeat('d', 64));
-  if v_calculation_id <> replayed_calculation_id then raise exception 'prepare replay changed identity'; end if;
+  if v_calculation_id is distinct from replayed_calculation_id then raise exception 'prepare replay changed identity'; end if;
 
   begin
     perform public.prepare_time_period(
@@ -235,7 +235,7 @@ begin
   then raise exception 'the finding decision replay lookup runs before the period lock'; end if;
   if (select period.version from public.time_periods period
       join public.time_period_calculations calculation on calculation.period_id = period.id
-      where calculation.id = v_calculation_id) <> period_version_before_decision + 1
+      where calculation.id = v_calculation_id) is distinct from period_version_before_decision + 1
   then raise exception 'a finding decision did not touch the published period root exactly once'; end if;
   if not exists (select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'time_periods')
@@ -281,7 +281,7 @@ begin
   exception when others then
     if sqlerrm <> 'period_order_probe' then raise; end if;
   end;
-  if current_user <> 'service_role'
+  if current_user is distinct from 'service_role'
     then raise exception 'the reopen probe left the owner role active'; end if;
   -- The order lock comes before every period lock, so a close and a reopen
   -- cannot wait for each other's period lock while each holds its own.
@@ -302,8 +302,8 @@ begin
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     (select period_id from public.time_period_calculations where id = v_calculation_id),
     '23000000-0000-0000-0000-000000000054', repeat('1', 64));
-  if close_id <> replayed_close_id then raise exception 'close replay changed identity'; end if;
-  if (select current_balance_minutes from public.time_accounts where id = employee_account_id) <> 75
+  if close_id is distinct from replayed_close_id then raise exception 'close replay changed identity'; end if;
+  if (select current_balance_minutes from public.time_accounts where id = employee_account_id) is distinct from 75
     then raise exception 'materialized employee balance is wrong'; end if;
   begin
     perform app_private.assert_p1_23_period_open(
@@ -387,20 +387,20 @@ begin
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     export_id, document_id, repeat('6', 64), 123,
     '23000000-0000-0000-0000-000000000062');
-  if (select state from public.payroll_exports where id = export_id) <> 'ready'
+  if (select state from public.payroll_exports where id = export_id) is distinct from 'ready'
     then raise exception 'export was not finalized'; end if;
 
   perform public.reopen_time_period(
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     (select period_id from public.time_period_calculations where id = v_calculation_id),
     'Korrektur erforderlich', '23000000-0000-0000-0000-000000000070', repeat('7', 64));
-  if (select current_balance_minutes from public.time_accounts where id = employee_account_id) <> 15
+  if (select current_balance_minutes from public.time_accounts where id = employee_account_id) is distinct from 15
     then raise exception 'reopen did not reverse the closed balance'; end if;
   if (select state from public.time_periods
       where id = (select period_id from public.time_period_calculations where id = v_calculation_id))
-      <> 'reopened'
+      is distinct from 'reopened'
     or not exists (select 1 from public.time_period_close_versions where id = close_id)
-    or (select state from public.payroll_exports where id = export_id) <> 'ready'
+    or (select state from public.payroll_exports where id = export_id) is distinct from 'ready'
     then raise exception 'reopen discarded the close version or the export history'; end if;
   if (select count(*) from public.time_account_events
       where organization_id = '23000000-0000-0000-0000-000000000010'
@@ -430,8 +430,8 @@ begin
     '23000000-0000-0000-0000-000000000001',
     '23000000-0000-0000-0000-000000000072'
   );
-  if (select current_balance_minutes from public.time_accounts where id = employee_account_id) <> 15
-     or (select version from public.time_accounts where id = employee_account_id) <> account_version_after_submit
+  if (select current_balance_minutes from public.time_accounts where id = employee_account_id) is distinct from 15
+     or (select version from public.time_accounts where id = employee_account_id) is distinct from account_version_after_submit
     then raise exception 'rejected adjustment mutated the account root'; end if;
 
   -- The close counts only the latest decision of an approval-required
@@ -537,7 +537,7 @@ begin
   perform public.close_time_period(
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     july_period_id, '23000000-0000-0000-0000-000000000087', repeat('c', 64));
-  if (select state from public.time_periods where id = july_period_id) <> 'closed'
+  if (select state from public.time_periods where id = july_period_id) is distinct from 'closed'
     then raise exception 'a period did not close on an approval that followed a rejection'; end if;
 end;
 $$;
