@@ -49,6 +49,17 @@ const NOT_REPLACED =
 const NOT_FOUND = `Die Zeiterfassung, die diese Zeiten ersetzen, wurde nicht gefunden. Notiere dir die Zeiten, lösche sie hier und beantrage die Korrektur unter Zeiterfassung. ${KEPT}`;
 
 /**
+ * The operation ids of the flow's end and recovery requests. A retry after a lost answer sends the
+ * same request under the same id, so the server replays it instead of ending twice. A request at
+ * another version is another operation: the server refuses a known id with a changed request.
+ */
+type OperationIds = {
+  id: (action: 'end' | 'recover_end', version: number | null) => string;
+  /** The server answered: the next attempt is a new decision, never a replay of that answer. */
+  forget: () => void;
+};
+
+/**
  * Ends the session the chain expects, unless the server already ended it. A session the server moved
  * to recovery meanwhile ends through recovery. Answers whether it is ended.
  */
@@ -56,11 +67,11 @@ async function endSession(input: {
   organizationId: string;
   sessionId: string;
   version: number | null;
-  operationId: string;
+  operationIds: OperationIds;
 }): Promise<boolean> {
   const ended = await transitionTimeActivity({
     organizationId: input.organizationId,
-    operationId: input.operationId,
+    operationId: input.operationIds.id('end', input.version),
     action: 'end',
     expectedSessionId: input.sessionId,
     expectedVersion: input.version,
@@ -71,7 +82,7 @@ async function endSession(input: {
   if (ended.outcome !== 'recovery_required') return ended.outcome === 'ended';
   const recovered = await transitionTimeActivity({
     organizationId: input.organizationId,
-    operationId: crypto.randomUUID(),
+    operationId: input.operationIds.id('recover_end', ended.version),
     action: 'recover_end',
     expectedSessionId: input.sessionId,
     expectedVersion: ended.version,
@@ -108,7 +119,7 @@ async function prepareReplacement(input: {
   userId: string;
   /** The running session's version, or null when the session no longer runs. */
   runningVersion: number | null | undefined;
-  endOperation: string;
+  operationIds: OperationIds;
   refresh: () => Promise<void>;
 }): Promise<Prepared> {
   const { replacement, organizationId } = input;
@@ -119,8 +130,9 @@ async function prepareReplacement(input: {
         organizationId,
         sessionId: replacement.sessionId,
         version: input.runningVersion,
-        operationId: input.endOperation,
+        operationIds: input.operationIds,
       });
+      if (!ended) input.operationIds.forget();
       await input.refresh();
       if (!ended) return { error: END_FAILED };
       step = 'read';
@@ -159,8 +171,19 @@ export default function ClockUnsentReplacement({
   const [error, setError] = useState<string | null>(null);
   // What the form edits, with the events it covers as the flow saw them when it started.
   const [target, setTarget] = useState<{ entry: TimeEntry; covers: SessionReplacement } | null>(null);
-  // One end per flow: a retry after a lost answer replays the same operation instead of a second end.
-  const endOperation = useRef(crypto.randomUUID());
+  // One id per end or recovery request: a retry after a lost answer replays it instead of a second end.
+  const operations = useRef(new Map<string, string>());
+  const operationIds: OperationIds = {
+    id: (action, version) => {
+      const key = `${action}:${String(version)}`;
+      const known = operations.current.get(key);
+      if (known) return known;
+      const created = crypto.randomUUID();
+      operations.current.set(key, created);
+      return created;
+    },
+    forget: () => operations.current.clear(),
+  };
   const closedPeriods = useClosedTimePeriods(organizationId, target !== null);
   // The clock offers an end only for a running session; only that session's end is this flow's.
   const running =
@@ -176,7 +199,7 @@ export default function ClockUnsentReplacement({
         organizationId,
         userId,
         runningVersion: running ? (confirmed?.sessionVersion ?? null) : undefined,
-        endOperation: endOperation.current,
+        operationIds,
         refresh,
       });
       if ('error' in prepared) setError(prepared.error);
