@@ -328,6 +328,11 @@ export async function deleteJob(rawJobId: string): Promise<DeleteJobResult> {
     if (error) {
       // A take booked after the check: the ledger keeps it, so the delete is refused.
       if (isMaterialHistoryRefusal(error)) return { success: false, error: MATERIAL_HISTORY_EXISTS };
+      // Lifecycle events, blockers, dependencies, Arbeitsnachweise, requests or a Projektleitung
+      // (app_private.prevent_historic_work_delete): the history stays, so the job does.
+      if (error.message === 'work_with_history_cannot_be_deleted') {
+        return { success: false, error: 'work_history_exists' };
+      }
       // Deleting a job clears time_entries.job_id; a closed period refuses that write.
       return { success: false, error: timeWriteFailure('Error deleting job:', error, 'delete_failed') };
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Building2, FolderOpen } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -268,6 +268,8 @@ type JobDetailSideColumnProps = {
   refreshTime: () => Promise<void>;
   timeSummary: JobDetailTimeSummary;
   setShowProjectDialog: (open: boolean) => void;
+  /** The „Projektleitung“ of a standalone job for Admin and Büro; null elsewhere. */
+  workLeadSection: ReactNode;
 };
 
 /** Right column: project, dispatch, materials, qualifications, documents and recorded time. */
@@ -284,6 +286,7 @@ export function JobDetailSideColumn({
   refreshTime,
   timeSummary,
   setShowProjectDialog,
+  workLeadSection,
 }: JobDetailSideColumnProps) {
   return (
     <div className="space-y-6">
@@ -308,6 +311,8 @@ export function JobDetailSideColumn({
           onEmptyClick={isAdminOrManager ? () => setShowProjectDialog(true) : undefined}
         />
       )}
+
+      {workLeadSection}
 
       <JobDispatchSection jobId={liveJob.id} />
 

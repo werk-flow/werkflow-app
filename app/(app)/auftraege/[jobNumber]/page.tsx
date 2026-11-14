@@ -20,6 +20,7 @@ import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
 import { jobDetailHref } from '@/lib/jobs/routes';
+import { getWorkLead } from '@/lib/projects/work-lead-reads';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
@@ -62,6 +63,12 @@ function loadJobDetailReads(
   const requestEntriesPromise = jobResultPromise.then((result) =>
     result.success ? getWorkRequestEntries({ kind: 'job', id: result.job.id }) : null,
   );
+  // The „Projektleitung“ of a standalone job; a job of a project shows its project's.
+  const workLeadPromise = jobResultPromise.then((result) =>
+    result.success && !result.job.project
+      ? getWorkLead({ targetType: 'job', targetId: result.job.id })
+      : null,
+  );
 
   // Origin request (P1-02): read through the RLS-enforced client, so only
   // managers (who may see requests) get the back-link.
@@ -88,6 +95,7 @@ function loadJobDetailReads(
     handoverWorkspacePromise,
     originRequestPromise,
     requestEntriesPromise,
+    workLeadPromise,
   ]);
 }
 
@@ -148,6 +156,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     handoverWorkspaceResult,
     originRequest,
     requestEntriesResult,
+    workLeadResult,
   ] = await loadJobDetailReads(supabase, { jobNumber, activeOrgId, userId: user.id });
 
   // A missing or forbidden job leaves the page; a failed read must not look like one.
@@ -209,6 +218,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       billingParties={result.billingParties}
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
       handoverWorkspace={handoverWorkspace}
+      {...(workLeadResult ? { workLeadPanel: workLeadResult.success ? workLeadResult.panel : 'failed' } : {})}
     />
   );
 }
