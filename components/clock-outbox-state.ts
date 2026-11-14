@@ -19,14 +19,28 @@ import type { TimeTransitionResult } from '@/lib/time-tracking/types';
 /** The answer of a clock action that neither reached the server nor was kept on the phone. */
 export const CLOCK_ACTION_FAILED: TimeTransitionResult = { success: false, error: 'time_transition_failed' };
 
+type ClockOutboxModule = typeof import('@/components/clock-unsent-events');
+
+let loadedOutbox: ClockOutboxModule | null = null;
+
 /** The one lazy load of the clock's outbox and its view; it rejects without signal. */
-export function loadClockOutbox(): Promise<typeof import('@/components/clock-unsent-events')> {
-  return import('@/components/clock-unsent-events');
+async function loadClockOutbox(): Promise<ClockOutboxModule> {
+  loadedOutbox = await import('@/components/clock-unsent-events');
+  return loadedOutbox;
+}
+
+/** The outbox's module once it loaded: every unsent view came through it, so the view renders without waiting. */
+export function loadedClockOutbox(): ClockOutboxModule | null {
+  return loadedOutbox;
 }
 
 export type ClockOutboxState = {
   /** What the phone's outbox holds unsent for the person, once its code ran. */
   view: ClockDeviceView | null;
+  /** When the outbox last answered (`performance.now()`), so a clock read can be told apart as older or newer. */
+  answeredAt: number;
+  /** The device may hold unsent work, and the outbox has not answered yet nor failed to load. */
+  checking: boolean;
   /** This page kept an action the outbox does not show yet: its code could not load without signal. */
   kept: boolean;
   /** Unsent work the page started with that the outbox has not shown yet; read when an action starts. */
@@ -80,9 +94,18 @@ function useKeepers(
   return { keep, callKept };
 }
 
+/** Marks the page's first look at the device as open until it answered, failed or found no signal. */
+async function watchCheck(check: Promise<void>, setChecking: (checking: boolean) => void): Promise<void> {
+  setChecking(true);
+  await check;
+  setChecking(false);
+}
+
 export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void>): ClockOutboxState {
-  const [view, setView] = useState<ClockDeviceView | null>(null);
+  const [answer, setAnswer] = useState<{ view: ClockDeviceView | null; at: number }>({ view: null, at: -1 });
+  const view = answer.view;
   const [kept, setKept] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [deviceFailed, setDeviceFailed] = useState(false);
   const attachRef = useRef<(() => void) | null>(null);
   // The wipe signal the page started under: after another tab's wipe it keeps nothing more.
@@ -99,7 +122,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
       if (ended) return;
       // After another tab's sign-out or switch the person's waiting events are out of sight: a tap waits behind them.
       uncheckedRef.current = holdEnded;
-      setView(next);
+      setAnswer({ view: next, at: performance.now() });
       setKept(false);
     };
     /** Hands kept actions to the outbox; without signal they stay kept until the next `online`. */
@@ -126,7 +149,8 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
     signalRef.current = sharedWipeGeneration();
     // Until the outbox shows what waits, a new action goes behind it, never past it to the server.
     uncheckedRef.current = deviceMayHoldUnsentWork();
-    if (uncheckedRef.current) attachNow();
+    // The clock shows nothing it is not sure of until this first look answered (shown-clock.ts).
+    if (uncheckedRef.current) void watchCheck(attach(), setChecking);
     // Every return of the network asks the outbox: another tab may have sent what this page kept.
     window.addEventListener('online', attachNow);
     // Another tab kept an action: until the outbox shows it, a tap here waits behind it.
@@ -144,7 +168,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
       window.removeEventListener('storage', onKept);
       detach?.();
       // The next person or organization never sees these events.
-      setView(null);
+      setAnswer({ view: null, at: performance.now() });
       setKept(false);
       setDeviceFailed(false);
     };
@@ -152,5 +176,15 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
 
   const holderNow = useCallback(() => holderRef.current, []);
   const { keep, callKept } = useKeepers(view?.status === 'stopped', signalRef, attachRef, setKept);
-  return { view, kept, unchecked: uncheckedRef, deviceFailed, holderNow, keep, callKept };
+  return {
+    view,
+    answeredAt: answer.at,
+    checking,
+    kept,
+    unchecked: uncheckedRef,
+    deviceFailed,
+    holderNow,
+    keep,
+    callKept,
+  };
 }

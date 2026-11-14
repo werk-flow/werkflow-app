@@ -458,7 +458,8 @@ test('while the outbox of a device that holds unsent work has not answered yet, 
   await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
 
   await expect(clockStatus(page)).toHaveText('Arbeit');
-  await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
+  // The phone has network: the action waits for its turn, not for signal.
+  await expect(unsentBadge(clockDock(page))).toHaveText('Wird übertragen');
   expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
   expect(server.sent).toEqual([]);
   // The waiting work may be another person's: the action keeps the clock the server confirmed.

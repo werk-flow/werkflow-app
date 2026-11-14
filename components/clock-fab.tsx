@@ -1,16 +1,18 @@
 'use client';
 
-import { Clock3, Coffee, Play } from 'lucide-react';
-import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { Clock3, CloudUpload, Coffee, Play, WifiOff } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 
 import { ClockActionList } from '@/components/clock-action-list';
-import { loadClockOutbox } from '@/components/clock-outbox-state';
+import { loadedClockOutbox } from '@/components/clock-outbox-state';
 import { useClockState } from '@/components/clock-state-provider';
 import { useOrganization } from '@/components/organization/organization-context';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SectionError } from '@/components/ui/section-error';
 import { usePendingTask } from '@/hooks/use-server-action';
+import type { ClockMarker } from '@/lib/field-sync/device/shown-clock-rule';
 import type { ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
 import {
   deriveClockActions,
@@ -24,35 +26,67 @@ import type { LiveClockState } from '@/lib/time-tracking/types';
 import { useBanner } from '@/components/ui/banner';
 import { cn, formatBerlinTime } from '@/lib/utils';
 
-/** The events this phone holds unsent, as a badge in the dock and a section in the sheet; loaded only while some exist. */
-const ClockUnsentEvents = lazy(() =>
-  // The outbox's own code came through this same load, so its view cannot be missing alone.
-  loadClockOutbox().catch(() => ({ default: () => null })),
-);
-
 /**
- * The phone's unsent clock events at one place of the clock, or nothing while it holds none. A
- * function, not a component: the dock renders with every clock change, and lab counts count components.
+ * The phone's unsent clock events at one place of the clock, or nothing while it holds none. The
+ * outbox's view came with the load that produced them, so it renders in the same frame as the clock.
+ * A function, not a component: the dock renders with every clock change, and lab counts count components.
  */
 function unsentEvents(unsent: ClockDeviceView | null, place: 'dock' | 'sheet'): ReactNode | undefined {
-  return unsent ? (
-    <Suspense>
-      <ClockUnsentEvents place={place} />
-    </Suspense>
-  ) : undefined;
+  const Events = unsent && loadedClockOutbox()?.default;
+  return Events ? <Events place={place} /> : undefined;
 }
 
-/** The dock's mark for actions this page kept while the outbox's own view cannot load: there is no signal to load it with. */
-const WAITS_FOR_NETWORK = (
-  <span className="text-xs text-muted-foreground" data-clock-unsent="pending">
-    Wartet auf Netz
-  </span>
-);
+/**
+ * The dock's one calm marker while the clock shows what the server has not answered (shown-clock.ts).
+ * A function, not a component, for the same reason as `unsentEvents`.
+ */
+function markerBadge(marker: ClockMarker): ReactNode {
+  if (!marker) return null;
+  const Icon = marker === 'sending' ? CloudUpload : WifiOff;
+  return (
+    <Badge
+      variant="outline"
+      {...(marker === 'offline' ? { 'data-clock-offline': '' } : { 'data-clock-unsent': 'pending' })}
+    >
+      <Icon aria-hidden="true" />
+      {marker === 'sending' ? 'Wird übertragen' : marker === 'waiting' ? 'Wartet auf Netz' : 'Ohne Netz'}
+    </Badge>
+  );
+}
 
 /** What runs now, as the dock and the sheet name it; null while nothing runs or the state is unknown. */
 function runningLabel(state: LiveClockState | null): string | null {
   if (state?.currentActivity) return describeActivity(state.currentActivity, state.activeJobInfo);
   return state?.legacyOpen ? 'Laufende Erfassung' : null;
+}
+
+/**
+ * What runs now, that nobody is clocked in, or the read's failure; empty while nothing is sure. A
+ * function, not a component: the dock renders with every clock change, and lab counts count components.
+ * Two lines keep a job's number and customer readable on a phone.
+ */
+function statusLine(
+  clock: Pick<ReturnType<typeof useClockState>, 'state' | 'statusError' | 'refresh'>,
+  currentLabel: string | null,
+): ReactNode {
+  const { state, statusError, refresh } = clock;
+  if (statusError)
+    return (
+      <SectionError className="min-w-0 flex-1" onRetry={() => void refresh()}>
+        Der Zeitstatus konnte nicht sicher geladen werden.
+      </SectionError>
+    );
+  return (
+    <p
+      data-clock-status=""
+      className={cn(
+        'line-clamp-2 min-h-5 min-w-0 break-words text-sm sm:max-w-md',
+        state?.isClockedIn ? 'font-medium text-foreground' : 'text-muted-foreground',
+      )}
+    >
+      {!state ? null : state.isClockedIn ? currentLabel : 'Nicht eingestempelt'}
+    </p>
+  );
 }
 
 /** The CSS variable that carries the dock's height to the app layout's bottom reserve. */
@@ -131,12 +165,12 @@ function useClockFabControls(transitionActivity: ReturnType<typeof useClockState
 
 /** The confirmed state for measurements and tests; a pending transition is never "in" or "out". */
 function confirmedClockState(clock: {
-  isReady: boolean;
+  isShown: boolean;
   isPending: boolean;
   isOnBreak: boolean;
   isClockedIn: boolean;
 }): 'loading' | 'pending' | 'break' | 'in' | 'out' {
-  if (!clock.isReady) return 'loading';
+  if (!clock.isShown) return 'loading';
   if (clock.isPending) return 'pending';
   if (clock.isOnBreak) return 'break';
   return clock.isClockedIn ? 'in' : 'out';
@@ -145,7 +179,7 @@ function confirmedClockState(clock: {
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();
   const clock = useClockState();
-  const { state, unsent, isLoading, isReady, isPending, statusError, refresh, transitionActivity } = clock;
+  const { state, unsent, marker, isLoading, isReady, isPending, statusError, transitionActivity } = clock;
   const controls = useClockFabControls(transitionActivity);
 
   if (!activeOrgId || !activeOrg) return null;
@@ -154,7 +188,7 @@ export function ClockFAB() {
   const recovery = Boolean(state?.recoveryReason);
   const currentLabel = runningLabel(state);
   // Unsent events are not the server's state yet: the clock is neither confirmed in nor out.
-  const unconfirmed = isPending || unsent !== null || clock.waitsForNetwork;
+  const unconfirmed = isPending || unsent !== null || (marker !== null && marker !== 'offline');
   // Hot keys act directly; a job-choice hot key opens the sheet with its picker
   // already open. Recovery hides the hot keys, so they never bypass its review.
   const hotKeys = isClockedIn && !recovery ? selectClockHotKeys(deriveClockActions(state)) : [];
@@ -189,32 +223,21 @@ export function ClockFAB() {
       <div
         ref={publishDockHeight}
         data-clock-fab=""
-        data-clock-state={confirmedClockState({ isReady, isPending: unconfirmed, isOnBreak, isClockedIn })}
+        data-clock-state={confirmedClockState({
+          isShown: state !== null && !statusError,
+          isPending: unconfirmed,
+          isOnBreak,
+          isClockedIn,
+        })}
         // The dock spans the content column; the app layout reserves its height, so no page control sits under it.
         // On a phone the button keeps the bottom: a late clock read adds the hot keys' row above, not under it.
         className="fixed inset-x-0 bottom-0 z-30 flex items-end gap-3 border-t bg-card px-4 py-2 will-change-transform sm:items-center sm:px-6 md:left-64"
         style={{ contain: 'layout style' }}
       >
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 self-center sm:flex-row sm:items-center sm:gap-3">
-          {statusError ? (
-            <SectionError className="min-w-0 flex-1" onRetry={() => void refresh()}>
-              Der Zeitstatus konnte nicht sicher geladen werden.
-            </SectionError>
-          ) : (
-            // What runs now, or that nobody is clocked in; empty while the state loads. Inline, not a
-            // component: the dock renders with every clock change, and lab counts count components.
-            // Two lines keep a job's number and customer readable on a phone.
-            <p
-              data-clock-status=""
-              className={cn(
-                'line-clamp-2 min-h-5 min-w-0 break-words text-sm sm:max-w-md',
-                isClockedIn ? 'font-medium text-foreground' : 'text-muted-foreground',
-              )}
-            >
-              {!isReady ? null : isClockedIn ? currentLabel : 'Nicht eingestempelt'}
-            </p>
-          )}
-          {unsentEvents(unsent, 'dock') ?? (clock.waitsForNetwork ? WAITS_FOR_NETWORK : null)}
+          {statusLine(clock, currentLabel)}
+          {/* Waiting events carry the marker; a stopped chain carries its own badge. */}
+          {marker ? markerBadge(marker) : unsentEvents(unsent, 'dock')}
           <ClockHotKeys
             hotKeys={hotKeys}
             pendingHotKey={controls.pendingHotKey}

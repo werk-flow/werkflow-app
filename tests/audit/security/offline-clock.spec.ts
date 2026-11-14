@@ -1,3 +1,4 @@
+import { z } from '@/lib/zod';
 import { expect, test } from '../support/fixtures';
 import { openPage } from '../../golden/support/streamed-content';
 import {
@@ -5,6 +6,7 @@ import {
   clockInLauncher,
   clockStartSheet,
   clockStatus,
+  clockOut,
   tapClockOut,
 } from '../../golden/support/steps/time-tracking';
 import { bypassHttpCache, setNetwork, waitForOfflineShell } from '../support/offline-shell';
@@ -89,6 +91,56 @@ test('a clock start and end without signal are recorded once, at their captured 
   await test.step('„Meine Zeit“ shows the session as work at the captured times', async () => {
     await expect(await meineZeitActivity(page, world)).toBeVisible();
   });
+});
+
+test('a kept clock-in on an open page reaches the server when the signal returns, and the clock never shows another state on the way @AUDIT-SECURITY-OFFLINE-CLOCK', async ({
+  employeePage: page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/dashboard');
+  await expect(clockInLauncher(page)).toBeEnabled();
+  await waitForOfflineShell(page);
+  // Every distinct screen of the dock from here on: its status line and its marker
+  // (lib/field-sync/device/shown-clock.ts).
+  await page.evaluate(() => {
+    const screens: string[] = [];
+    Object.assign(window, { clockScreens: screens });
+    const screen = (): string => {
+      const dock = document.querySelector('[data-clock-fab]');
+      const status = dock?.querySelector('[data-clock-status]');
+      const marks = Array.from(
+        dock?.querySelectorAll('[data-clock-unsent], [data-clock-offline]') ?? [],
+        (mark) => mark.textContent.trim(),
+      );
+      return [status ? status.textContent.trim() || 'leer' : 'Fehler', ...marks].join(' · ');
+    };
+    screens.push(screen());
+    new MutationObserver(() => {
+      const next = screen();
+      if (screens.at(-1) !== next) screens.push(next);
+    }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+  });
+
+  await bypassHttpCache(page);
+  await setNetwork(page, 'offline');
+  await clockInLauncher(page).click();
+  await startWorkAction(clockStartSheet(page)).click();
+  await expect(unsentBadge(clockDock(page), UNSENT_COPY.waiting)).toBeVisible();
+  await setNetwork(page, 'online');
+  await expectTimeEventsOnDevice(page, []);
+  await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'in');
+
+  const screens = z.array(z.string()).parse(await page.evaluate(() => Reflect.get(window, 'clockScreens')));
+  const working = (await clockStatus(page).textContent())?.trim() ?? '';
+  expect(screens).toEqual([
+    UNSENT_COPY.clockedOut,
+    `${UNSENT_COPY.clockedOut} · Ohne Netz`,
+    `${working} · ${UNSENT_COPY.waiting}`,
+    `${working} · Wird übertragen`,
+    working,
+  ]);
+  // The next test starts from a stopped clock.
+  await clockOut(page);
 });
 
 test('an online clock call whose page closed before the answer is recorded once, whether or not it reached the server @AUDIT-SECURITY-OFFLINE-CLOCK', async ({
