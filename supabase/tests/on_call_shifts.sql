@@ -237,6 +237,40 @@ begin
 end;
 $$;
 
+-- A person who left is never newly named, even on a shift that started before
+-- their exit; a changed personnel phone touches their coming shift, which is
+-- the Realtime signal every member receives.
+do $$
+declare
+  v_max uuid := pg_temp.record_of('46900000-0000-4000-8000-000000000003');
+  v_lena uuid := pg_temp.record_of('46900000-0000-4000-8000-000000000004');
+  v_touched timestamptz;
+begin
+  update public.employee_records set entry_date = (now() at time zone 'Europe/Berlin')::date - 30,
+    exit_date = (now() at time zone 'Europe/Berlin')::date - 1
+  where id = v_max;
+  perform pg_temp.expect_refusal('naming a person who left on a backdated shift',
+    format('select pg_temp.plan(gen_random_uuid(), now() - interval ''3 days'', now() + interval ''1 day'', ''Lüftung'', %L)',
+      array[v_max]),
+    'on_call_member_invalid');
+  update public.employee_records set exit_date = null where id = v_max;
+
+  update public.on_call_shifts set updated_at = now() - interval '1 hour'
+  where id = '46900000-0000-4000-8000-000000000105';
+  update public.employee_records set phone = '+49 30 1234567' where id = v_lena;
+  select updated_at into strict v_touched from public.on_call_shifts
+  where id = '46900000-0000-4000-8000-000000000105';
+  if v_touched is distinct from now() then
+    raise exception 'a changed phone did not touch the coming shift of the person';
+  end if;
+  if (select count(*) from public.on_call_shift_events
+      where shift_id = '46900000-0000-4000-8000-000000000105'
+        and organization_id = '46900000-0000-4000-8000-0000000000a0') <> 2 then
+    raise exception 'the touch wrote history';
+  end if;
+end;
+$$;
+
 -- The office read carries history and people; the field read neither.
 do $$
 declare

@@ -135,6 +135,39 @@ create trigger emit_realtime_deletion after delete on public.on_call_shifts
   for each row execute function app_private.emit_realtime_deletion();
 alter publication supabase_realtime add table public.on_call_shifts;
 
+-- A changed name or phone on a personnel record reaches every member's open
+-- view: the person's current and coming shifts are touched, and the touch is
+-- the Realtime event on the shift that every member may read. Employees never
+-- read the personnel record itself. Definer rights, because a record write
+-- of any caller must be able to touch the shift.
+create function app_private.signal_on_call_contact_change()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $$
+begin
+  update public.on_call_shifts shift
+  set updated_at = now()
+  where shift.organization_id = new.organization_id
+    and shift.ends_at > now()
+    and shift.cancelled_at is null
+    and exists (select 1 from public.on_call_shift_members member
+      where member.shift_id = shift.id and member.organization_id = shift.organization_id
+        and member.employee_record_id = new.id);
+  return null;
+end;
+$$;
+revoke all on function app_private.signal_on_call_contact_change() from public, anon, authenticated;
+
+create trigger signal_on_call_contact_change
+  after update of first_name, last_name, phone on public.employee_records
+  for each row
+  when (old.first_name is distinct from new.first_name
+    or old.last_name is distinct from new.last_name
+    or old.phone is distinct from new.phone)
+  execute function app_private.signal_on_call_contact_change();
+
 -- 3. Writes.
 
 -- The actor is an Admin or Büro member of the organization with effective
@@ -198,7 +231,15 @@ begin
     where record.organization_id = p_organization_id
       and record.id = any (v_member_ids)
       and (record.exit_date is null
-        or record.exit_date >= (p_starts_at at time zone 'Europe/Berlin')::date)
+        -- A person already on the shift stays through a change; a newly named
+        -- one is still employed on the shift's first day and today.
+        or exists (select 1 from public.on_call_shift_members member
+          where member.shift_id = p_shift_id and member.organization_id = p_organization_id
+            and member.employee_record_id = record.id)
+        or record.exit_date >= greatest(
+          (p_starts_at at time zone 'Europe/Berlin')::date,
+          (now() at time zone 'Europe/Berlin')::date
+        ))
   ) <> cardinality(v_member_ids) then
     raise exception 'on_call_member_invalid';
   end if;
