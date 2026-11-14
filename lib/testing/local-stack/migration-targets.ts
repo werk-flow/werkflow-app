@@ -602,13 +602,18 @@ function statementTargets(reader: Reader): Read {
  */
 const cascades = (words: Token[]): boolean =>
   words.some((token, at) => {
-    const previous = words[at - 1];
-    return (
-      !token.quoted &&
-      !token.string &&
-      token.text === 'cascade' &&
-      !(previous !== undefined && !previous.quoted && ['delete', 'update'].includes(previous.text))
-    );
+    const action = words[at - 1];
+    const on = words[at - 2];
+    // Only `ON DELETE CASCADE` and `ON UPDATE CASCADE` are a foreign key rule: a schema or table
+    // may itself be named `delete` or `update` (`DROP SCHEMA delete CASCADE`).
+    const rule =
+      action !== undefined &&
+      on !== undefined &&
+      !action.quoted &&
+      !on.quoted &&
+      on.text === 'on' &&
+      ['delete', 'update'].includes(action.text);
+    return !token.quoted && !token.string && token.text === 'cascade' && !rule;
   });
 
 /** What one migration changes. */
