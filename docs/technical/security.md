@@ -32,11 +32,11 @@ Wrong turn: trusting an id because the UI offers only own records. Every export 
 
 ### Add a privileged function
 
-1. Write `SECURITY DEFINER` only when one transaction must cross RLS, such as an approval that creates a membership. A function that writes related rows for a server action runs as `security invoker`.
+1. Write `SECURITY DEFINER` only when one transaction must cross RLS, such as an approval that creates a membership. A Server Action's write function runs as `security invoker`, or as definer when (a) no role, not even `service_role`, executes a volatile `app_private` function it reaches; (b) only `service_role` executes it; (c) it rechecks the actor's role and organization; (d) its `search_path` is `''`. `security_boundaries.sql` checks (a), (b) and (d) on public definer functions; review owns (c).
 2. A public function is executable by `service_role` only. An RLS helper that policies call goes into `app_private`, is granted to `authenticated` only, and joins the definer-execution inventory with the policy that needs it.
-3. The server caller resolves organization and role before the call. A service-only list or search function revokes browser execution.
+3. The server caller resolves organization and role first.
 4. An `app_private` function reading tenant rows takes `p_organization_id` or a tenant row, or `security_boundaries.sql` exempts it.
-5. Run `bun run test:verify --group sql:security` and the SQL group that owns the function.
+5. Run `bun run test:verify --group sql:security` and the function's SQL group.
 
 Wrong turn: granting `authenticated`, so the browser runs the function past every policy with its owner's rights.
 
@@ -63,7 +63,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; route a new one there. `app/(app)/layout.tsx` checks the session again and is the authority.
 - **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy passes the request to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
 - **Redirects.** A return destination from a query string goes through `resolveSafeReturnPath` and is a same-origin path. An invite code is a UUID before the app echoes it.
-- **Organization cookie.** The cookie is a hint, accepted and set only for a current member.
+- **Organization cookie.** A hint: the server accepts it only for a current member and sets it for no one else.
 - **Joining.** Join codes are cryptographically random. A code creates a join request, never a membership; only an Admin or Büro approval in that organization creates it, in one database function. A signed-in user gets limited join attempts per hour.
 - **Cross-organization writes.** A write that names another record checks that it belongs to the caller's organization and, where it applies, to the same person.
 - **Abuse limits.** Invite mail, invite redemption, join codes, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
@@ -74,8 +74,6 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - RLS checks effective personnel access wherever a policy or its helper reads `organization_members`, `job_assignments` or `employee_records`.
 - **Project lead.** `app_private.work_lead_scope` alone decides who leads which work. A lead reads Arbeitsnachweise (`authorizeWorkArtifactRead`), writes none.
 - Client roles write no table directly, except a user's own name and avatar.
-- Nothing is granted to `anon` without the owner's approval.
-- A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly what is needed.
 - Grant the sequence privileges an intended insert needs. The service role bypasses RLS, not SQL privileges.
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
 - **Service-role queries.** A query on organization data passes an organization from the resolved context, or carries a reviewed `tenant-scope` reason.
@@ -94,7 +92,7 @@ Buckets are private. Server code authorizes the target and signs a short-lived U
 
 ### Mail and providers
 
-The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold only fixed error codes and status numbers.
+The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold only fixed error codes and status numbers. `lib/usage-statistics/capture.ts` alone sends PostHog personless server events for organizations in `POSTHOG_ORGANIZATION_IDS`; its test fails on other properties or senders.
 
 ### Browser
 
@@ -105,10 +103,6 @@ The service worker (`/sw.js`, [versioned per build](../decisions/0010-offline-fi
 ### Server caches
 
 A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure.
-
-### Usage statistics
-
-Only `lib/usage-statistics/capture.ts` sends PostHog personless server events keyed by organization, for organizations in `POSTHOG_ORGANIZATION_IDS` (LQ-20). Its test fails on another property or sender.
 
 ### Supply chain
 
@@ -145,7 +139,7 @@ On an unchanged tree, an exception matching no finding passes with a note: remov
 List each owner-accepted residual exposure until it closes.
 
 - The script policy allows `'unsafe-inline'`, so injected inline scripts run: a per-request nonce needs per-request rendering, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
-- No edge rate limit covers every request; the app and Supabase Auth limit only their own operations ([Add a Server Action](#add-a-server-action-or-route-handler)). Edge limiting is the owner's Vercel plan decision.
+- No edge rate limit covers every request; the app and Supabase Auth limit only their own operations. Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive a deleted row's identity, never its content.
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once (beta; closes with werk-flow/werkflow-planning#248).
 - The code step keeps the address up to one hour in an httpOnly cookie scoped to `/verify`.
@@ -156,7 +150,7 @@ List each owner-accepted residual exposure until it closes.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
-- Unsent work outlives sign-out on the phone, readable to whoever unlocks its browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them.
+- Unsent work outlives sign-out, readable to whoever unlocks the phone's browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them, an [unreadable draft](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-stored-records-stay-readable) until its person deletes it.
 
 ## Revocation boundaries
 
@@ -178,7 +172,7 @@ List each owner-accepted residual exposure until it closes.
 | Logs, traces, test artifacts | Diagnosis and test evidence. Fixtures are synthetic. | Limit access and remove secrets from exported evidence. Ignored files are neither encrypted nor purged automatically. |
 | Backups and retained file versions | Recovery. Database backups hold no file bytes. | [The runbook](recovery-and-incidents.md) records coverage and accepted loss. Deleting a live record does not erase a backup. |
 
-Before client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa), [PostHog](https://posthog.com/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Per-person analytics or session replay needs the owner's decision.
+Before client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa), [PostHog](https://posthog.com/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Per-person analytics or session replay needs owner approval.
 
 ## Read-request authorization reuse
 

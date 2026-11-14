@@ -8,7 +8,7 @@ import {
 import { startWorkAction } from '../support/time-outbox';
 
 // Usage statistics leave only from WerkFlow's server (werk-flow/werkflow-planning#280,
-// docs/technical/security.md#usage-statistics): no PostHog script runs in the browser, so
+// docs/technical/security.md#mail-and-providers): no PostHog script runs in the browser, so
 // nothing is stored on or read from the device for analytics. A counted workflow step,
 // clocking in and out, makes no browser request to PostHog.
 

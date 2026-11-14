@@ -8,7 +8,7 @@ import {
   resetDevice,
   storage,
 } from '@/lib/testing/fixtures/time-outbox';
-import { takeInKeptClockActions, untilCallAnswers, type ClockActionToKeep } from './kept-clock-actions';
+import { takeInKeptClockActions, untilOwnCallAnswers, type ClockActionToKeep } from './kept-clock-actions';
 import { beginSessionEnd, endSessionEnd, mayKeepUnder, renewSessionEnd } from './today-wipe';
 import { callWhileKept, clockCallLock, keptActionsWait } from './unsent-mark';
 
@@ -156,20 +156,16 @@ describe('a take-in behind an open call', () => {
     const timers = spyOn(globalThis, 'setTimeout');
     try {
       let answered = false;
-      const waiting = untilCallAnswers({
-        actions: [
-          {
-            ...onlineStart('50000000-0000-4000-8000-0000000000e4'),
-            version: 1,
-            inFlight: true,
-            wipeGeneration: '',
-          },
-        ],
-        recheckAt: Date.parse('2026-11-11T07:00:10.000Z'),
-        lock: null,
+      const waiting = untilOwnCallAnswers({
+        ...onlineStart('50000000-0000-4000-8000-0000000000e4'),
+        version: 1,
+        inFlight: true,
+        wipeGeneration: '',
       }).then(() => {
         answered = true;
       });
+      // The call is judged first: too young to tell whether its page holds the lock yet.
+      await Promise.resolve();
       const index = timers.mock.calls.findIndex(([, delay]) => typeof delay === 'number' && delay > 1_000);
       const [grant] = timers.mock.calls[index] ?? [];
       if (typeof grant !== 'function') throw new Error('no wait through the first seconds');

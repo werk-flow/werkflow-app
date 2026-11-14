@@ -5,7 +5,7 @@ import { logError } from '@/lib/logging';
 import { isUuid } from '@/lib/validation/uuid';
 
 // The one way WerkFlow sends anonymous usage statistics to PostHog
-// (docs/technical/security.md#usage-statistics). Only WerkFlow's server sends,
+// (docs/technical/security.md#mail-and-providers). Only WerkFlow's server sends,
 // after a workflow step succeeded. An event names a workflow and a step and is
 // keyed by the organization alone: no person, role, record id, content or IP.
 // Without a project key, or for an organization missing from the allowlist,

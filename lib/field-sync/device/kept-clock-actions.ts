@@ -230,15 +230,28 @@ export async function takeInKeptClockActions(
 }
 
 /**
- * Resolves once the open online call a take-in deferred to can be judged: after its first seconds,
- * when its page may not hold the call's lock yet, and then once the page let go of that lock.
+ * Resolves once the online call that wrote `action` down before it ran can be judged: after its
+ * first seconds, when its page may not hold the call's lock yet, and then once the page let go of
+ * that lock. At once for an action kept without a call, or whose call already answered.
  */
-export async function untilCallAnswers({ actions, recheckAt }: DeferredTakeIn): Promise<void> {
-  if (recheckAt !== null) {
-    const wait = Math.max(0, recheckAt - Date.now());
+export async function untilOwnCallAnswers(action: KeptClockAction): Promise<void> {
+  const call = action.inFlight ? await callState(action) : { runs: false as const };
+  if (!call.runs) return;
+  if (call.recheckAt !== null) {
+    const wait = Math.max(0, call.recheckAt - Date.now());
     await new Promise<void>((resolve) => setTimeout(resolve, wait));
   }
-  const [call] = actions;
-  if (call && typeof navigator.locks?.request === 'function')
-    await navigator.locks.request(clockCallLock(call.operationId), async () => undefined);
+  if (typeof navigator.locks?.request === 'function')
+    await navigator.locks.request(clockCallLock(action.operationId), async () => undefined);
+}
+
+/**
+ * Deletes the readable kept actions whose operation ids `operationIds` names. The caller holds the
+ * take-in's lock, so no take-in moves one of them into the outbox meanwhile.
+ */
+export function removeKeptActions(operationIds: readonly string[]): void {
+  for (const key of keptActionKeys()) {
+    const kept = readKeptAction(key);
+    if (kept && operationIds.includes(kept.operationId)) localStorage.removeItem(key);
+  }
 }
