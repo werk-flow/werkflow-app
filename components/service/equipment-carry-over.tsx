@@ -99,22 +99,28 @@ function useEquipmentCarryOver(initial: EquipmentDetail | null | undefined): Equ
   };
 }
 
+/** „Übernehmen“, named for screen readers with the plan or component it carries (`subjectId`). */
 function CarryCheckbox({
   id,
-  label,
+  subjectId,
   checked,
   onChange,
 }: {
   id: string;
-  label: string;
+  subjectId: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
 }): ReactElement {
   return (
     <span className="flex shrink-0 items-center gap-2">
-      <Checkbox id={id} checked={checked} onCheckedChange={(value) => onChange(value === true)} />
-      <Label htmlFor={id} className="text-sm font-normal">
-        {label}
+      <Checkbox
+        id={id}
+        aria-labelledby={`${id}-label ${subjectId}`}
+        checked={checked}
+        onCheckedChange={(value) => onChange(value === true)}
+      />
+      <Label id={`${id}-label`} htmlFor={id} className="text-sm font-normal">
+        Übernehmen
       </Label>
     </span>
   );
@@ -150,7 +156,7 @@ function CarryPlanRow({
     <div className="space-y-2 rounded-md border p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 text-sm">
-          <p className="font-medium">
+          <p id={`equipment-carry-plan-${plan.id}-subject`} className="font-medium">
             Wartungsplan {plan.planNumber} · {plan.templateName}
           </p>
           {plan.nextDueDate && (
@@ -161,7 +167,7 @@ function CarryPlanRow({
         </div>
         <CarryCheckbox
           id={`equipment-carry-plan-${plan.id}`}
-          label="Übernehmen"
+          subjectId={`equipment-carry-plan-${plan.id}-subject`}
           checked={carry}
           onChange={onCarry}
         />
@@ -228,13 +234,13 @@ function EquipmentCarryOverSection({
           key={component.id}
           className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
         >
-          <p className="min-w-0 text-sm">
+          <p id={`equipment-carry-component-${component.id}-subject`} className="min-w-0 text-sm">
             <span className="font-medium">Komponente {component.name}</span>
             <span className="block text-xs text-muted-foreground">{component.equipmentNumber}</span>
           </p>
           <CarryCheckbox
             id={`equipment-carry-component-${component.id}`}
-            label="Übernehmen"
+            subjectId={`equipment-carry-component-${component.id}-subject`}
             checked={carried.get(component.id) ?? true}
             onChange={(checked) => setCarried(component.id, checked)}
           />

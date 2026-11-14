@@ -10,6 +10,8 @@ import { getEquipmentPredecessorHistory } from '@/lib/installed-equipment/action
 import type { EquipmentPredecessorEvent, EquipmentPredecessorHistory } from '@/lib/installed-equipment/types';
 import { EquipmentHistoryTimeline } from './equipment-detail-sections';
 
+const LOAD_FAILED = 'Ältere Einträge konnten nicht geladen werden. Versuche es erneut.';
+
 /**
  * The history of the records this Anlage replaced, after its own history:
  * the first page comes with the detail, further pages load on request.
@@ -41,9 +43,11 @@ export function EquipmentPredecessorHistorySection({
 
   async function loadOlder(offset: number): Promise<void> {
     setError(null);
-    const result = await run({ equipmentId, offset });
-    if (!result.success) {
-      setError('Ältere Einträge konnten nicht geladen werden. Versuche es erneut.');
+    // A rejected request (a gateway error) fails like a refused one; the
+    // offset stays, so the button retries the same page.
+    const result = await run({ equipmentId, offset }).catch(() => null);
+    if (!result?.success) {
+      setError(LOAD_FAILED);
       return;
     }
     setLoaded({

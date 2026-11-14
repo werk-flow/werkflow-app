@@ -96,6 +96,7 @@ const EQUIPMENT_ERROR_CODES = [
   'installed_equipment_replacement_plan_reason_required',
   'installed_equipment_replacement_too_many_plans',
   'installed_equipment_replacement_duplicate_visit',
+  'installed_equipment_replacement_plan_scope_changed',
   'maintenance_template_version_unavailable',
 ] as const;
 

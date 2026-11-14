@@ -119,7 +119,10 @@ $$;
 -- such items share a cadence date, the one with a visit (else the newer) moves
 -- and an open duplicate is superseded with a reason, so the date stays due
 -- exactly once; a second visit for the date refuses the replacement
--- ('installed_equipment_replacement_duplicate_visit'). Completed and closed due work stays on its revision. A planned-date
+-- ('installed_equipment_replacement_duplicate_visit'). An outstanding item
+-- whose revision names other Anlagen beside the old equipment than the
+-- current revision refuses it too
+-- ('installed_equipment_replacement_plan_scope_changed'). Completed and closed due work stays on its revision. A planned-date
 -- revision continues the current revision's cadence one interval after its
 -- latest due date of any status, and never before that revision's own first
 -- due date, so a later generation neither recreates settled work nor skips a
@@ -158,6 +161,46 @@ begin
   select * into strict v_revision from public.maintenance_plan_revisions revision
   where revision.id = p_plan.current_revision_id
     and revision.organization_id = p_plan.organization_id;
+  -- An outstanding item moves onto the copy of the current revision. If its
+  -- own revision names other Anlagen beside the old equipment, the move would
+  -- drop one Anlage from it and add another, so refuse instead.
+  if exists (
+    select 1
+    from public.maintenance_due_work due_work
+    join public.maintenance_plan_revision_equipment link
+      on link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+     and link.organization_id = due_work.organization_id
+     and link.equipment_id = p_from_equipment_id
+    where due_work.organization_id = p_plan.organization_id
+      and due_work.maintenance_plan_id = p_plan.id
+      and due_work.status in ('open', 'visit_created')
+      and due_work.maintenance_plan_revision_id <> v_revision.id
+      and exists (
+        (
+          select other.equipment_id from public.maintenance_plan_revision_equipment other
+          where other.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+            and other.organization_id = p_plan.organization_id
+            and other.equipment_id <> p_from_equipment_id
+          except
+          select current_link.equipment_id from public.maintenance_plan_revision_equipment current_link
+          where current_link.maintenance_plan_revision_id = v_revision.id
+            and current_link.organization_id = p_plan.organization_id
+            and current_link.equipment_id <> p_from_equipment_id
+        ) union all (
+          select current_link.equipment_id from public.maintenance_plan_revision_equipment current_link
+          where current_link.maintenance_plan_revision_id = v_revision.id
+            and current_link.organization_id = p_plan.organization_id
+            and current_link.equipment_id <> p_from_equipment_id
+          except
+          select other.equipment_id from public.maintenance_plan_revision_equipment other
+          where other.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+            and other.organization_id = p_plan.organization_id
+            and other.equipment_id <> p_from_equipment_id
+        )
+      )
+  ) then
+    raise exception 'installed_equipment_replacement_plan_scope_changed';
+  end if;
   if v_revision.next_due_basis = 'planned_due_date' then
     -- Never before the current revision's own start: a carried revision may
     -- hold only moved older items below its saved boundary.
@@ -325,7 +368,9 @@ $$;
 -- 'installed_equipment_stale_version' for a choice set that does not match or
 -- a stale plan version; 'installed_equipment_replacement_plan_reason_required'
 -- for a plan left without a reason; 'installed_equipment_replacement_too_many_plans'
--- for more than 50 running plans; 'maintenance_template_version_unavailable'
+-- for more than 50 running plans; 'installed_equipment_replacement_plan_scope_changed'
+-- for an outstanding item whose revision names other Anlagen than the current
+-- one; 'maintenance_template_version_unavailable'
 -- when a carried plan's template version is no longer published.
 create function public.replace_installed_equipment(
   p_organization_id uuid,

@@ -6,8 +6,9 @@
 -- stays on the old revision, and the carried revision (also the one a
 -- correction saves) starts after it even when it is newer than the open item,
 -- so a later generation cannot recreate it, a carried actual-completion plan
--- starts at its latest completion's next date, a plan left
--- behind needs a reason, a stale or incomplete choice refuses the whole
+-- starts at its latest completion's next date, an outstanding item whose
+-- revision names other Anlagen than the current one refuses the carry, a plan
+-- left behind needs a reason, a stale or incomplete choice refuses the whole
 -- replacement, more than 50 running plans refuse it by name, the successor
 -- reads the predecessor's history, a correction carries everything back, and
 -- only the service role executes the functions.
@@ -568,6 +569,111 @@ begin
   if v_carried is distinct from v_expected then
     raise exception 'a carried actual-completion plan starts at %, not at the latest completion''s next date %',
       v_carried, v_expected;
+  end if;
+end $$;
+
+-- A plan whose older revision with outstanding work names other Anlagen
+-- beside the predecessor than its current revision refuses the replacement:
+-- carrying that item onto the current revision's copy would drop one Anlage
+-- from it and add another. Nothing changes.
+do $$
+declare
+  v_today date := pg_temp.berlin_today();
+  v_version_id uuid := (select version_id from pg_temp.world);
+  v_equipment record;
+begin
+  for v_equipment in
+    select * from (values
+      ('46600000-0000-4000-8000-000000000150'::uuid, 'Speicher alt', '46600000-0000-4000-8000-000000000151'::uuid),
+      ('46600000-0000-4000-8000-000000000152'::uuid, 'Pufferspeicher', '46600000-0000-4000-8000-000000000153'::uuid),
+      ('46600000-0000-4000-8000-000000000154'::uuid, 'Solarstation', '46600000-0000-4000-8000-000000000155'::uuid)
+    ) as equipment(id, name, key)
+  loop
+    perform public.create_installed_equipment(
+      '46600000-0000-4000-8000-000000000010', v_equipment.id,
+      jsonb_build_object('clientId', '46600000-0000-4000-8000-000000000020',
+        'siteId', '46600000-0000-4000-8000-000000000021', 'name', v_equipment.name,
+        'category', 'heat_generation', 'state', 'active', 'identifiers', '[]'::jsonb),
+      '46600000-0000-4000-8000-000000000001', v_equipment.key
+    );
+  end loop;
+  perform public.create_maintenance_plan_with_due_work(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000160',
+    '46600000-0000-4000-8000-000000000161',
+    jsonb_build_object(
+      'clientId', '46600000-0000-4000-8000-000000000020', 'siteId', '46600000-0000-4000-8000-000000000021',
+      'maintenanceCoverageId', null, 'status', 'active', 'templateVersionId', v_version_id,
+      'effectiveFromDate', v_today - 30, 'firstDueDate', v_today - 30, 'intervalMonths', 12,
+      'dueWindowBeforeDays', 0, 'dueWindowAfterDays', 0, 'plannedDurationMinutes', 60,
+      'nextDueBasis', 'planned_due_date', 'operationalInstructions', null,
+      'overlapReason', 'Speicher getrennt', 'reason', 'Wartungsplan angelegt',
+      'equipmentIds', jsonb_build_array('46600000-0000-4000-8000-000000000150',
+        '46600000-0000-4000-8000-000000000152')),
+    '46600000-0000-4000-8000-000000000001', '46600000-0000-4000-8000-000000000162',
+    (v_today + interval '6 months')::date
+  );
+  perform public.revise_maintenance_plan_with_due_work(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000160',
+    '46600000-0000-4000-8000-000000000163',
+    (select plan.version from public.maintenance_plans plan
+     where plan.organization_id = '46600000-0000-4000-8000-000000000010'
+       and plan.id = '46600000-0000-4000-8000-000000000160'),
+    jsonb_build_object(
+      'templateVersionId', v_version_id, 'effectiveFromDate', v_today,
+      'firstDueDate', v_today + 200, 'intervalMonths', 12,
+      'dueWindowBeforeDays', 0, 'dueWindowAfterDays', 0, 'plannedDurationMinutes', 60,
+      'nextDueBasis', 'planned_due_date', 'operationalInstructions', null,
+      'overlapReason', 'Speicher getrennt',
+      'equipmentIds', jsonb_build_array('46600000-0000-4000-8000-000000000150',
+        '46600000-0000-4000-8000-000000000154')),
+    'Solarstation statt Pufferspeicher', '46600000-0000-4000-8000-000000000001',
+    '46600000-0000-4000-8000-000000000164', (v_today + interval '6 months')::date
+  );
+  if not exists (
+    select 1 from public.maintenance_due_work due_work
+    join public.maintenance_plan_revision_equipment link
+      on link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+     and link.organization_id = due_work.organization_id
+     and link.equipment_id = '46600000-0000-4000-8000-000000000152'
+    where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
+      and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000160'
+      and due_work.status = 'open' and due_work.due_date = v_today - 30
+  ) then
+    raise exception 'fixture: expected the overdue item open on the revision with the Pufferspeicher';
+  end if;
+end $$;
+
+select pg_temp.expect_refusal('a carry onto a revision with other Anlagen than the item''s own', $sql$
+  select public.replace_installed_equipment(
+    '46600000-0000-4000-8000-000000000010', '46600000-0000-4000-8000-000000000150',
+    '46600000-0000-4000-8000-000000000170', 1,
+    jsonb_build_object('name', 'Speicher neu', 'category', 'heat_generation', 'state', 'active',
+      'identifiers', '[]'::jsonb),
+    now(), 'Speicher undicht', '46600000-0000-4000-8000-000000000001',
+    '46600000-0000-4000-8000-000000000171',
+    jsonb_build_object(
+      'plans', jsonb_build_array(pg_temp.plan_choice('46600000-0000-4000-8000-000000000160', true, null)),
+      'components', '[]'::jsonb)
+  )
+$sql$, 'installed_equipment_replacement_plan_scope_changed');
+
+do $$
+begin
+  if (
+    select equipment.state from public.installed_equipment equipment
+    where equipment.organization_id = '46600000-0000-4000-8000-000000000010'
+      and equipment.id = '46600000-0000-4000-8000-000000000150'
+  ) is distinct from 'active' or exists (
+    select 1 from public.maintenance_due_work due_work
+    join public.maintenance_plan_revision_equipment link
+      on link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+     and link.organization_id = due_work.organization_id
+     and link.equipment_id = '46600000-0000-4000-8000-000000000154'
+    where due_work.organization_id = '46600000-0000-4000-8000-000000000010'
+      and due_work.maintenance_plan_id = '46600000-0000-4000-8000-000000000160'
+      and due_work.due_date = pg_temp.berlin_today() - 30
+  ) then
+    raise exception 'a refused carry changed the Anlage or moved the overdue item onto other Anlagen';
   end if;
 end $$;
 

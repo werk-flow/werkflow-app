@@ -11,6 +11,8 @@ export const REPLACEMENT_TOO_MANY_PLANS_MESSAGE = `Diese Anlage hat mehr als ${R
 const REPLACEMENT_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   installed_equipment_replacement_duplicate_visit:
     'Ein Wartungsplan hat zwei Besuche für dieselbe Fälligkeit. Schließe zuerst einen davon ab, dann kannst du die Anlage ersetzen.',
+  installed_equipment_replacement_plan_scope_changed:
+    'Ein Wartungsplan hat noch offene Fälligkeiten aus einer älteren Fassung, die andere Anlagen umfasst als die aktuelle. Schließe diese Fälligkeiten zuerst ab, oder lass den Plan beim Vorgänger.',
   installed_equipment_replacement_plan_reason_required:
     'Bitte begründe, warum der Wartungsplan beim Vorgänger bleibt.',
   installed_equipment_replacement_too_many_plans: REPLACEMENT_TOO_MANY_PLANS_MESSAGE,
