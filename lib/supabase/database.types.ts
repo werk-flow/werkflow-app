@@ -3222,6 +3222,7 @@ export type Database = {
           job_material_line_id: string | null;
           location_id: string;
           movement_type: string;
+          operation_id: string | null;
           organization_id: string;
           project_id: string | null;
           quantity_after: number;
@@ -3239,6 +3240,7 @@ export type Database = {
           job_material_line_id?: string | null;
           location_id: string;
           movement_type: string;
+          operation_id?: string | null;
           organization_id: string;
           project_id?: string | null;
           quantity_after: number;
@@ -3256,6 +3258,7 @@ export type Database = {
           job_material_line_id?: string | null;
           location_id?: string;
           movement_type?: string;
+          operation_id?: string | null;
           organization_id?: string;
           project_id?: string | null;
           quantity_after?: number;
@@ -4130,6 +4133,7 @@ export type Database = {
           job_id: string | null;
           job_material_line_id: string;
           note: string | null;
+          operation_id: string | null;
           organization_id: string;
           project_id: string | null;
           quantity: number;
@@ -4146,6 +4150,7 @@ export type Database = {
           job_id?: string | null;
           job_material_line_id: string;
           note?: string | null;
+          operation_id?: string | null;
           organization_id: string;
           project_id?: string | null;
           quantity: number;
@@ -4162,6 +4167,7 @@ export type Database = {
           job_id?: string | null;
           job_material_line_id?: string;
           note?: string | null;
+          operation_id?: string | null;
           organization_id?: string;
           project_id?: string | null;
           quantity?: number;
@@ -4834,6 +4840,10 @@ export type Database = {
           id: string;
           idempotency_key: string;
           maintenance_due_work_id: string;
+          missed_job_id: string | null;
+          missed_reason:
+            | Database["public"]["Enums"]["maintenance_missed_visit_reason"]
+            | null;
           organization_id: string;
           reason: string | null;
           recorded_at: string;
@@ -4848,6 +4858,10 @@ export type Database = {
           id?: string;
           idempotency_key: string;
           maintenance_due_work_id: string;
+          missed_job_id?: string | null;
+          missed_reason?:
+            | Database["public"]["Enums"]["maintenance_missed_visit_reason"]
+            | null;
           organization_id: string;
           reason?: string | null;
           recorded_at?: string;
@@ -4862,6 +4876,10 @@ export type Database = {
           id?: string;
           idempotency_key?: string;
           maintenance_due_work_id?: string;
+          missed_job_id?: string | null;
+          missed_reason?:
+            | Database["public"]["Enums"]["maintenance_missed_visit_reason"]
+            | null;
           organization_id?: string;
           reason?: string | null;
           recorded_at?: string;
@@ -4874,6 +4892,13 @@ export type Database = {
             columns: ["maintenance_due_work_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_events_missed_job_fkey";
+            columns: ["missed_job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -16876,6 +16901,16 @@ export type Database = {
         };
         Returns: undefined;
       };
+      end_work_lead: {
+        Args: {
+          p_actor_id: string;
+          p_expected_lead_id: string;
+          p_job_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: Json;
+      };
       ensure_inventory_defaults: {
         Args: { p_actor_id: string; p_org_id: string };
         Returns: undefined;
@@ -17941,6 +17976,17 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      name_work_lead: {
+        Args: {
+          p_actor_id: string;
+          p_expected_lead_id: string;
+          p_job_id: string;
+          p_lead_user_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: Json;
+      };
       open_time_account: {
         Args: {
           p_actor_id: string;
@@ -18200,6 +18246,20 @@ export type Database = {
           unit: string;
         }[];
       };
+      read_maintenance_workspace_page: {
+        Args: {
+          p_coverage_page: number;
+          p_due_page: number;
+          p_due_through: string;
+          p_organization_id: string;
+          p_overdue_only: boolean;
+          p_page_size: number;
+          p_plan_page: number;
+          p_search: string;
+          p_today: string;
+        };
+        Returns: Json;
+      };
       read_manager_attention_sets: {
         Args: { p_limit: number; p_organization_id: string };
         Returns: Json;
@@ -18284,6 +18344,7 @@ export type Database = {
           p_job_material_line_id?: string;
           p_location_id: string;
           p_movement_type: string;
+          p_operation_id?: string;
           p_organization_id: string;
           p_project_id?: string;
           p_quantity_delta: number;
@@ -18301,10 +18362,52 @@ export type Database = {
           p_corrects_event_id?: string;
           p_job_material_line_id: string;
           p_note?: string;
+          p_operation_id?: string;
           p_organization_id: string;
           p_quantity: number;
         };
         Returns: number;
+      };
+      record_maintenance_visit_missed: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_missed_reason: Database["public"]["Enums"]["maintenance_missed_visit_reason"];
+          p_note: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       record_organization_export_download: {
         Args: {
@@ -19865,6 +19968,7 @@ export type Database = {
           p_job_id: string;
           p_location_id: string;
           p_notes: string;
+          p_operation_id?: string;
           p_organization_id: string;
           p_project_id: string;
           p_quantity: number;
@@ -21279,7 +21383,8 @@ export type Database = {
         | "skipped"
         | "cancelled"
         | "superseded"
-        | "service_case_linked";
+        | "service_case_linked"
+        | "visit_missed";
       maintenance_due_status:
         | "open"
         | "visit_created"
@@ -21287,6 +21392,12 @@ export type Database = {
         | "skipped"
         | "cancelled"
         | "superseded";
+      maintenance_missed_visit_reason:
+        | "customer_absent"
+        | "customer_cancelled"
+        | "postponed"
+        | "other"
+        | "job_cancelled";
       maintenance_next_due_basis: "planned_due_date" | "actual_completion_date";
       maintenance_plan_event_type:
         | "created"
@@ -21930,6 +22041,7 @@ export const Constants = {
         "cancelled",
         "superseded",
         "service_case_linked",
+        "visit_missed",
       ],
       maintenance_due_status: [
         "open",
@@ -21938,6 +22050,13 @@ export const Constants = {
         "skipped",
         "cancelled",
         "superseded",
+      ],
+      maintenance_missed_visit_reason: [
+        "customer_absent",
+        "customer_cancelled",
+        "postponed",
+        "other",
+        "job_cancelled",
       ],
       maintenance_next_due_basis: [
         "planned_due_date",

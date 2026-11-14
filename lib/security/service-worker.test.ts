@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 import { serviceWorkerScript } from '@/lib/offline/service-worker-script';
 
 // Rule test: the page clears the caches the service worker owns by their name
@@ -50,4 +51,78 @@ test('the shell asset pattern finds only root-relative paths of this origin', ()
     '/icons/icon-192.png',
     '/_next/static/css/app-3c4d.css',
   ]);
+});
+
+// Rule test: the shell requests send the origin's cookies, so a deployment
+// behind Vercel Authentication answers them (werk-flow/werkflow-planning#22).
+// The cached bytes stay free of the person only while proxy.ts, which reads
+// and refreshes the session, never runs on a shell path.
+/**
+ * The entries of `config.matcher` in proxy.ts, parsed without running the proxy
+ * (its imports break AsyncLocalStorage for later tests in the run). An element
+ * that is not a plain string literal comes back as its source text, so the
+ * caller's form check refuses it.
+ */
+function proxyMatcherEntries(): string[] {
+  const path = join(root, 'proxy.ts');
+  const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
+  const entries: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isPropertyAssignment(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === 'matcher' &&
+      ts.isArrayLiteralExpression(node.initializer)
+    ) {
+      for (const element of node.initializer.elements) {
+        entries.push(ts.isStringLiteral(element) ? element.text : element.getText(source));
+      }
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return entries;
+}
+
+test('the proxy never runs on a path the shell caches', () => {
+  // Only a literal path or a literal prefix with `/:path*` can be judged here; any
+  // other Next.js matcher form, such as `/(.*)` or a template literal, fails until
+  // this test learns it.
+  const judgeable = /^\/(?:[\w-]+(?:\/[\w-]+)*)?(?:\/:path\*)?$/;
+  const entries = proxyMatcherEntries();
+  expect(entries.length).toBeGreaterThan(0);
+  expect(entries.filter((entry) => !judgeable.test(entry))).toEqual([]);
+  const runsOn = (entry: string, path: string): boolean => {
+    if (!entry.endsWith('/:path*')) return entry === path;
+    const base = entry.slice(0, -'/:path*'.length);
+    return path === base || path.startsWith(`${base}/`);
+  };
+  for (const path of [
+    '/offline',
+    '/sw.js',
+    '/_next/static/chunks/app.js',
+    '/icons/icon-192.png',
+    '/logo.svg',
+  ]) {
+    expect(
+      entries.filter((entry) => runsOn(entry, path)),
+      `proxy.ts runs on ${path}`,
+    ).toEqual([]);
+  }
+  for (const escaped of ['/(.*)', '`/(.*)`', '"/offline"']) expect(judgeable.test(escaped)).toBe(false);
+});
+
+// Rule test: a dynamic page could hold the person whose cookies the shell
+// request sent. Next.js marks such a page private and no-store; the worker
+// refuses to cache an offline page with that mark.
+test('the worker refuses an offline page the server rendered for one request', () => {
+  const source = worker.match(/const PER_REQUEST = \/(.+)\/i;/)?.[1];
+  expect(source).toBeDefined();
+  const perRequest = new RegExp(source ?? '', 'i');
+  expect(perRequest.test('private, no-cache, no-store, max-age=0, must-revalidate')).toBe(true);
+  expect(perRequest.test('no-store, must-revalidate')).toBe(true);
+  expect(perRequest.test('public, max-age=0, must-revalidate')).toBe(false);
+  expect(perRequest.test('s-maxage=31536000')).toBe(false);
+  expect(worker).toMatch(/if \(PER_REQUEST\.test\(page\.headers\.get\('Cache-Control'\) \?\? ''\)\)\s+throw/);
 });

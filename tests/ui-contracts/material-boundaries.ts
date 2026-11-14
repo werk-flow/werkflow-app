@@ -111,6 +111,7 @@ export async function createJobMaterialLineContract(input: {
 }
 
 export async function recordJobMaterialUseContract(input: {
+  operationId: string;
   lineId: string;
   quantity: number;
   note?: string | null;

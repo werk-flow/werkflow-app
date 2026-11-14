@@ -550,31 +550,214 @@ end;
 $$;
 drop table public.werkflow_privilege_probe;
 
--- No SECURITY DEFINER function in the exposed schema may be
--- executable by anon or authenticated, and the service-role lookups stay closed.
+-- A public SECURITY DEFINER function is a server-only entry
+-- (docs/technical/security.md, "Add a privileged function"). No role but
+-- service_role executes it, also not through PUBLIC. Unless it is a trigger,
+-- it pins search_path to '', and no role, service_role included, executes a
+-- volatile app_private function it reaches through app_private or public
+-- calls, so no caller skips the entry's recheck of role and organization. A
+-- stable helper writes nothing; the RLS helpers among them have their own
+-- inventory below. A call is found by its schema-qualified name in a body,
+-- in any case, with optional quotes and spaces, or by the dependency a
+-- BEGIN ATOMIC body records; a call through dynamic SQL is not.
+-- legacy_definer_breaches names each breach that predates the rule, as the
+-- line the check reports; lib/testing/publication/shrink-only-lists.ts keeps
+-- it from growing, and a listed breach that is gone fails until it leaves the
+-- list (docs/technical/enforcement-ladder-backlog.md, "Legacy definer entries").
+create function pg_temp.legacy_definer_breaches() returns jsonb language plpgsql as $$
+declare
+  legacy_definer_breaches constant jsonb := jsonb_build_object(
+    'public.generate_job_number(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.generate_personnel_number(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.generate_project_number(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.generate_request_number(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.get_org_members_for_user(uuid, uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.get_user_admin_or_manager_org_ids(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.get_user_org_ids(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.redeem_organization_invite_for_user(text, uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'step app_private.assert_installed_equipment_manager(uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.assert_maintenance_equipment_set(uuid, uuid, uuid, uuid, jsonb, text) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.assert_maintenance_manager(uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.assert_p1_23_period_open(uuid, date) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.assert_service_case_manager(uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.get_org_members_for_user(uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.insert_maintenance_revision_equipment(uuid, uuid, uuid, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.is_time_approval_holder(uuid, uuid, uuid) executable by authenticated',
+      'RLS helper declared volatile',
+    'step app_private.lock_maintenance_operation(uuid, text, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.lock_service_case_operation(uuid, text, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.next_installed_equipment_number(uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.next_maintenance_number(uuid, text) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.next_service_case_number(uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.p1_24_assert_replay(uuid, uuid, text) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.p1_24_record_operation(uuid, uuid, text, text, uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.project_plan_onto_job(uuid, uuid, uuid, uuid[]) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_installed_equipment_event(uuid, uuid, installed_equipment_event_type, installed_equipment_state, installed_equipment_state, timestamp with time zone, uuid, text, text, uuid, uuid, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_maintenance_coverage_event(uuid, uuid, maintenance_coverage_event_type, uuid, text, text, uuid, jsonb, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_maintenance_due_event(uuid, uuid, maintenance_due_event_type, uuid, text, text, uuid, jsonb, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_maintenance_plan_event(uuid, uuid, maintenance_plan_event_type, uuid, text, text, uuid, jsonb, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_planning_operation_assessment(uuid, uuid, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_service_case_event(uuid, uuid, service_case_event_type, uuid, text, text, uuid, jsonb, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.redeem_organization_invite_for_user(text, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.sync_installed_equipment_identifiers(uuid, uuid, uuid, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.sync_service_case_equipment_links(uuid, uuid, uuid, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.transition_work_execution_for_handover(uuid, uuid, text, uuid, bigint, work_execution_state, text, boolean, text) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.validate_time_segment_input(uuid, uuid, org_role, time_segment_kind, time_allocation_kind, uuid, planning_internal_type, time_travel_route, time_travel_role, time_standby_context) executable by service_role',
+      'older step, granted before the rule'
+  );
+begin
+  return legacy_definer_breaches;
+end;
+$$;
+
+create function pg_temp.definer_entry_breaches() returns text language sql as $$
+  with recursive routine as (
+    select p.oid, p.prosrc, n.nspname, p.proname,
+      n.nspname || '.' || p.proname || '(' || pg_catalog.oidvectortypes(p.proargtypes) || ')' as signature,
+      p.prosecdef, p.prorettype = 'trigger'::regtype as is_trigger, p.provolatile = 'v' as volatile,
+      coalesce(p.proconfig @> array['search_path=""'], false) as pinned
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname in ('public', 'app_private')
+  ), entry as (
+    select * from routine where nspname = 'public' and prosecdef
+  ), reached (oid) as (
+    select entry.oid from entry where not entry.is_trigger
+    union
+    select callee.oid from reached join routine caller on caller.oid = reached.oid
+    join routine callee on exists (
+      -- a parsed body (BEGIN ATOMIC) records its calls; its prosrc is empty
+      select 1 from pg_depend d
+      where d.classid = 'pg_proc'::regclass and d.objid = caller.oid
+        and d.refclassid = 'pg_proc'::regclass and d.refobjid = callee.oid
+    ) or case when strpos(lower(caller.prosrc), lower(callee.proname)) > 0
+      then caller.prosrc ~* ('\m"?' || callee.nspname || '"?\s*\.\s*"?' || callee.proname || '"?\s*\(')
+      else false end
+  ), executor (oid, role_name) as (
+    -- direct grants, and what a client role inherits through membership
+    select p.oid, case when acl.grantee = 0 then 'PUBLIC' else acl.grantee::regrole::text end
+    from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+    where acl.privilege_type = 'EXECUTE' and acl.grantee <> p.proowner
+    union
+    select routine.oid, client.role_name from routine
+    cross join (values ('anon'), ('authenticated')) as client (role_name)
+    where has_function_privilege(client.role_name, routine.oid, 'EXECUTE')
+  ), breach (line) as (
+    select entry.signature || ' executable by ' || executor.role_name
+    from entry join executor on executor.oid = entry.oid where executor.role_name <> 'service_role'
+    union
+    select entry.signature || ' does not pin search_path to empty' from entry
+    where not entry.is_trigger and not entry.pinned
+    union
+    select 'step ' || routine.signature || ' executable by ' || executor.role_name
+    from reached join routine on routine.oid = reached.oid
+    join executor on executor.oid = routine.oid
+    where routine.nspname = 'app_private' and routine.volatile and not routine.is_trigger
+  ), legacy (line) as (
+    select jsonb_object_keys(pg_temp.legacy_definer_breaches())
+  ), finding (line) as (
+    select 'unlisted: ' || line from breach where line not in (select line from legacy)
+    union all
+    select 'listed but gone: ' || line from legacy where line not in (select line from breach)
+  )
+  select string_agg(line, '; ' order by line) from finding;
+$$;
+
+do $$
+declare offender text := pg_temp.definer_entry_breaches();
+begin
+  if offender is not null then
+    raise exception 'SECURITY DEFINER entry rule broken: %', offender;
+  end if;
+end;
+$$;
+
+-- Probe: an inventory entry granted to authenticated, one that lost its
+-- search_path, a step granted to service_role, and a step reached through a
+-- public invoker function with a quoted, spaced call, one called in upper
+-- case, and one reached through a BEGIN ATOMIC body must each be reported.
+savepoint definer_entry_probe;
+grant execute on function public.save_inventory_item(uuid, uuid, uuid, jsonb, text, text, uuid, numeric)
+  to authenticated;
+alter function public.import_inventory_row(uuid, uuid, uuid, jsonb, text, text, text, text, numeric, text)
+  reset search_path;
+grant execute on function app_private.lock_inventory_manager(uuid, uuid) to service_role;
+create function app_private.werkflow_step_probe() returns void language sql volatile as 'select';
+grant execute on function app_private.werkflow_step_probe() to service_role;
+create function app_private.werkflow_upper_step_probe() returns void language sql volatile as 'select';
+grant execute on function app_private.werkflow_upper_step_probe() to service_role;
+create function app_private.werkflow_atomic_step_probe() returns void language sql volatile as 'select';
+grant execute on function app_private.werkflow_atomic_step_probe() to service_role;
+create function public.werkflow_atomic_hop_probe() returns void language sql
+  begin atomic select app_private.werkflow_atomic_step_probe(); end;
+create function public.werkflow_hop_probe() returns void language plpgsql set search_path = '' as
+  $body$ begin perform "app_private" . "werkflow_step_probe" (); end; $body$;
+create function public.werkflow_entry_probe() returns void language plpgsql security definer
+  set search_path = '' as $body$
+  begin
+    perform public.werkflow_hop_probe();
+    perform APP_PRIVATE.WERKFLOW_UPPER_STEP_PROBE();
+    perform public.werkflow_atomic_hop_probe();
+  end;
+  $body$;
+do $$
+begin
+  if pg_temp.definer_entry_breaches() is distinct from concat_ws('; ',
+    'unlisted: public.import_inventory_row(uuid, uuid, uuid, jsonb, text, text, text, text, numeric, text) does not pin search_path to empty',
+    'unlisted: public.save_inventory_item(uuid, uuid, uuid, jsonb, text, text, uuid, numeric) executable by authenticated',
+    'unlisted: step app_private.lock_inventory_manager(uuid, uuid) executable by service_role',
+    'unlisted: step app_private.werkflow_atomic_step_probe() executable by service_role',
+    'unlisted: step app_private.werkflow_step_probe() executable by service_role',
+    'unlisted: step app_private.werkflow_upper_step_probe() executable by service_role'
+  ) then
+    raise exception 'SECURITY DEFINER entry rule missed the probe: %', pg_temp.definer_entry_breaches();
+  end if;
+end;
+$$;
+rollback to savepoint definer_entry_probe;
+
+-- The service-role lookups and the client-facing wrappers stay closed.
 do $$
 declare
   offender text;
 begin
-  select string_agg(p.proname, ', ' order by p.proname) into offender
-  from pg_proc p
-  join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public'
-    and p.prosecdef
-    and (
-      has_function_privilege('anon', p.oid, 'execute')
-      or has_function_privilege('authenticated', p.oid, 'execute')
-    );
-  if offender is not null then
-    raise exception 'security definer functions executable by client roles: %', offender;
-  end if;
-
   foreach offender in array array[
     'public.check_user_exists_by_email(text)',
     'app_private.check_user_exists_by_email(text)',
     'public.get_invite_by_code(text)',
     'app_private.get_invite_by_code(text)',
-    'public.set_job_assignment_organization()',
     'public.guard_automatic_time_entry_timestamps()',
     'public.update_updated_at_column()'
   ] loop
