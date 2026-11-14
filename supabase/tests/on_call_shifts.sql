@@ -328,6 +328,17 @@ begin
 end;
 $$;
 
+-- Organization B has its own shift, so the probes below see a leak in both directions.
+do $$
+begin
+  perform public.plan_on_call_shift(
+    '46900000-0000-4000-8000-000000000005', '46900000-0000-4000-8000-0000000000b0',
+    '46900000-0000-4000-8000-0000000001b1', now() + interval '1 day', now() + interval '2 days',
+    'Sanitär', null, array[pg_temp.record_of('46900000-0000-4000-8000-000000000006')], false
+  );
+end;
+$$;
+
 -- An employee reads the shifts and people of their organization and writes none.
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"46900000-0000-4000-8000-000000000003","role":"authenticated"}', true);
@@ -358,13 +369,17 @@ begin
   raise exception 'an employee updated a shift';
 end;
 $$;
--- A member of another organization reads nothing.
+-- A member of organization B reads nothing of A and only its own shift.
 select set_config('request.jwt.claims', '{"sub":"46900000-0000-4000-8000-000000000006","role":"authenticated"}', true);
 do $$
 begin
-  if exists (select 1 from public.on_call_shifts where organization_id in ('46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-0000000000b0'))
-    or exists (select 1 from public.on_call_shift_members where organization_id in ('46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-0000000000b0')) then
+  if exists (select 1 from public.on_call_shifts where organization_id = '46900000-0000-4000-8000-0000000000a0')
+    or exists (select 1 from public.on_call_shift_members where organization_id = '46900000-0000-4000-8000-0000000000a0') then
     raise exception 'a foreign organization reads shifts';
+  end if;
+  -- The same reader sees its own organization's shift, so the probe above is not empty by accident.
+  if (select count(*) from public.on_call_shifts where organization_id in ('46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-0000000000b0')) <> 1 then
+    raise exception 'a member of organization B does not read exactly its own shift';
   end if;
 end;
 $$;
