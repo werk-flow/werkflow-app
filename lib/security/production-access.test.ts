@@ -1,5 +1,5 @@
 // Rule test: an agent's MCP tool never reaches the production Supabase project, and no MCP tool
-// or Vercel CLI call returns production log text.
+// returns production log text.
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,12 +7,7 @@ import { join, resolve } from 'node:path';
 
 import { z } from '../zod';
 
-import {
-  configuredMcpServers,
-  productionLogCommandRefusal,
-  productionMcpRefusal,
-  supabaseProjectRefs,
-} from './production-access';
+import { configuredMcpServers, productionMcpRefusal, supabaseProjectRefs } from './production-access';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const PROD = 'prodprodprodprodprod';
@@ -185,7 +180,22 @@ test('a Vercel tool that returns log text from production is refused', () => {
   expect(refusal('mcp__vercel__get_runtime_errors', scope)).toContain('returns log text');
 });
 
-// The allowed dimensions in both spellings Vercel accepts: camelCase (/metrics/v1, the CLI) and
+test('a Vercel tool that returns a decrypted environment value is refused', () => {
+  for (const [tool, input] of [
+    ['get_project_env', { idOrName: 'prj_a', id: 'env_a' }],
+    ['get_shared_env_var', { id: 'env_a' }],
+    ['filter_project_envs', { idOrName: 'prj_a', decrypt: 'true' }],
+    ['filter_project_envs', { idOrName: 'prj_a', decrypt: true }],
+  ] as const)
+    expect(refusal(`${VERCEL}${tool}`, input), tool).toContain('returns an environment value');
+  for (const decrypt of [undefined, 'false', false])
+    expect(
+      refusal(`${VERCEL}filter_project_envs`, { idOrName: 'prj_a', decrypt }),
+      String(decrypt),
+    ).toBeUndefined();
+});
+
+// The allowed dimensions in both spellings Vercel accepts: camelCase (/metrics/v1) and
 // snake_case (the /v2/observability API behind the MCP tool).
 const SAFE = ['route', 'httpStatus', 'errorCode', 'deploymentId', 'serverActionName'];
 const SAFE_SNAKE = ['route', 'http_status', 'error_code', 'deployment_id', 'server_action_name'];
@@ -233,221 +243,6 @@ test('deployment metadata, aggregated counts and preview logs pass', () => {
     ['get_runtime_logs', { ...scope, environment: 'preview' }],
   ] as const)
     expect(refusal(`${VERCEL}${tool}`, input), tool).toBeUndefined();
-});
-
-test('a shell command that reads Vercel logs from production is refused', () => {
-  for (const command of [
-    'vercel logs',
-    'vercel logs --deployment dpl_a --json',
-    'vercel logs requests --since 1h',
-    'vercel logs -e production',
-    'vercel logs -e preview --environment production',
-    'vercel --scope werkflows-projects logs',
-    'npx --yes vercel@65 logs --project prj_a',
-    'bunx vercel logs',
-    'vc logs',
-    'cd /x && /usr/local/bin/vercel logs | head',
-    'timeout 60 vercel logs',
-    'bash -c "vercel logs"',
-    "bash -lc 'npx vercel@65 logs --json'",
-    'eval vercel logs',
-    // A command substitution runs, quoted or not, and so does one in an expanding heredoc.
-    'echo "$(vercel logs --json)"',
-    'report="$(npx --yes vercel@65 logs --json | jq -c .)"',
-    'echo $(vercel logs)',
-    'echo "`vercel logs`"',
-    'echo "$(printf x; echo "$(vercel logs)")"',
-    'cat <<EOF\n$(vercel logs --json)\nEOF',
-    'cat <<EOF\n$(\nvercel logs\n)\nEOF',
-    // A `<<` in a comment or in quotes opens no heredoc, so the next line still runs.
-    '# <<EOF\nvercel logs',
-    'echo "<<EOF"\nvercel logs',
-    // Each delimiter form ends its heredoc at the line \`EOF\`, so the next line runs.
-    ...['\\EOF', "'EOF'", '"EOF"', 'E"OF"'].map(
-      (delimiter) => `cat > note.md <<${delimiter}\nbody\nEOF\nvercel logs`,
-    ),
-    'cat > note.md <<-EOF\n\tbody\n\tEOF\nvercel logs',
-    // Inside double quotes a backslash escapes the quote: this delimiter is E"OF.
-    'cat > note.md << "E\\"OF"\nbody\nE"OF\nvercel logs',
-    // A delimiter the reader cannot place is refused rather than guessed.
-    'cat > note.md <<"EOF\nvercel logs\nEOF"',
-    "cat > note.md <<$'EOF'\nbody\nEOF\nvercel logs",
-    // A variable can hide the subcommand, a flag or a dimension.
-    "ARGS='--group-by requestPath'\nvercel metrics vercel.request.count $ARGS",
-    'vercel $SUB --json',
-    'vercel metrics vercel.request.count --filter "$FILTER"',
-    // Unquoted, a scope value splits into further flags.
-    "ARGS='team --group-by requestPath'\nvercel metrics vercel.request.count --scope $ARGS",
-    "ARGS='team --group-by requestPath'\nvercel metrics vercel.request.count --scope=$ARGS",
-    'vercel metrics vercel.request.count --scope "$TEAM"$ARGS',
-    'vercel "$(echo logs)"',
-    // An arithmetic shift opens no heredoc.
-    'echo $((1<<2))\nvercel logs\n2',
-    '(( x <<= 1 ))\nvercel logs\n1',
-    // A body that never reaches its delimiter is read as commands: the guard errs toward refusing.
-    'cat > note.md <<EOF\nvercel logs',
-    "echo 'a\n<<EOF'\nvercel logs",
-    'cat <<EOF\nfirst\n`vercel logs`\nEOF\necho done',
-    'vercel inspect dpl_a --logs',
-    'vercel inspect dpl_a -l',
-    'vercel api /v3/deployments/dpl_a/events',
-    'vercel api "/v1/projects/prj_a/deployments/dpl_a/runtime-logs?limit=5"',
-    'vercel metrics vercel.request.count --group-by requestPath',
-    'vercel metrics vercel.request.count --group-by=request_path',
-    'vercel metrics vercel.request.count -e production --group-by route --group-by someNewDimension',
-    "vercel metrics vercel.request.count --filter 'clientIp eq 1'",
-    "vercel metrics vercel.request.count --filter 'requestPath:/kunden'",
-    'vercel metrics vercel.request.count --aggregation unique/clientIp',
-    // A raw API query hides its body from the guard; `vercel metrics` is the checked path.
-    'vercel api /metrics/v1?teamId=t -X POST --input body.json',
-    'vercel api /v2/observability/query -F groupBy=request_path',
-  ])
-    expect(productionLogCommandRefusal(command), command).toContain('Agents never read production data');
-});
-
-test('other Vercel commands and mentions of the log command pass', () => {
-  for (const command of [
-    'vercel logs -e preview',
-    'vercel logs --environment=preview --deployment dpl_a',
-    'vercel inspect dpl_a',
-    'vercel list --prod',
-    'vercel metrics vercel.request.count -e production --group-by route --group-by httpStatus',
-    `vercel metrics vercel.request.count --prod ${SAFE.map((dimension) => `--group-by ${dimension}`).join(' ')}`,
-    "vercel metrics vercel.request.count --filter 'environment:production AND httpStatus >= 500' --group-by=errorCode",
-    'vercel metrics schema vercel.request.count',
-    // Help prints the CLI's own text.
-    'vercel metrics --help',
-    'vercel metrics vercel.request.count -h',
-    'vercel logs --help',
-    'vercel api /v2/observability/schema/vercel.request.count',
-    'vercel api /v4/aliases/app.werk-flow.app',
-    'git commit -m "Refuse vercel logs"',
-    'gh pr create --body "The hook refuses vercel logs."',
-    'grep -rn "vercel logs" docs',
-    "cat > note.md <<'EOF'\nvercel logs\nEOF",
-    // Single quotes and a quoted heredoc keep a substitution literal.
-    "echo '$(vercel logs)'",
-    "cat > note.md <<'EOF'\nThe hook refuses `vercel logs` and $(vercel logs).\nEOF",
-    'cat <<<"vercel logs"',
-    // A quoted delimiter, in any form, keeps its body literal.
-    ...['\\EOF', "'EOF'", '"EOF"', 'E"OF"'].map(
-      (delimiter) => `cat > note.md <<${delimiter}\n$(vercel logs)\nEOF`,
-    ),
-    "cat > a.md <<'A' && cat > b.md <<B\nvercel logs\nA\nplain\nB",
-    'cat > note.md << "E\\"OF"\n$(vercel logs)\nE"OF',
-    // A variable may pick the team or project, and a redirection target is no argument.
-    'vercel list --scope "$TEAM" --project="$PROJECT" > "$out" 2>&1',
-    'git commit -m "Refuse \\`vercel logs\\`"',
-    'tail ~/.local/state/ci-alert.log',
-  ])
-    expect(productionLogCommandRefusal(command), command).toBeUndefined();
-});
-
-// `vercel metrics` options are an allowlist read from the CLI's own option list (vercel@65).
-test('a vercel metrics option the guard has not verified is refused', () => {
-  const metrics = (options: string) =>
-    productionLogCommandRefusal(`vercel metrics vercel.request.count ${options}`);
-  for (const options of [
-    // The deprecated shorthands of --filter, --aggregation, --limit and --granularity.
-    "-f 'requestPath:/kunden'",
-    '-a unique/clientIp',
-    '-l 5',
-    '-g 5m',
-    // Options vercel metrics does not have, and any the guard does not know.
-    '-q requestPath',
-    '--query requestPath',
-    '--unknown-flag',
-    '-A vercel-config.json',
-    // Verified options with values outside what they may take.
-    '--limit many',
-    '--order-by requestPath',
-    '--order sideways',
-    '--group-by',
-    'extra-argument',
-  ])
-    expect(metrics(options), options).toContain('Refused:');
-  for (const options of [
-    '-e production --since 24h --until now --granularity 5m --limit 50 --order-by count --order desc',
-    `--group-by route --group-by=httpStatus --filter='environment:production AND httpStatus >= 500' --aggregation count`,
-    '--prod --all --json --format json --project werkflow-app --scope werkflows-projects > out.json 2>&1',
-  ])
-    expect(metrics(options), options).toBeUndefined();
-  expect(productionLogCommandRefusal('vercel metrics query vercel.request.count --prod')).toBeUndefined();
-});
-
-// A heredoc a shell reads runs as a script, so its lines are commands for the guard.
-test('a heredoc a shell runs is read as commands', () => {
-  for (const command of [
-    "bash <<'EOF'\nvercel logs\nEOF",
-    'sh <<EOF\nvercel logs\nEOF',
-    'cat <<EOF | sh\nvercel logs\nEOF',
-    "cat <<'EOF' | bash -l\nvercel logs --json\nEOF",
-    'bash -s <<EOF\nvercel logs\nEOF',
-    "source /dev/stdin <<'EOF'\nvercel logs\nEOF",
-  ])
-    expect(productionLogCommandRefusal(command), command).toContain(
-      '`vercel logs` returns runtime log lines',
-    );
-  for (const command of [
-    "cat > note.md <<'EOF'\nvercel logs\nEOF",
-    "gh pr comment 206 --body-file - <<'EOF'\nThe hook refuses vercel logs.\nEOF",
-    "tee note.md <<'EOF' | wc -l\nvercel logs\nEOF",
-  ])
-    expect(productionLogCommandRefusal(command), command).toBeUndefined();
-});
-
-// The backstop: a mention of the CLI the guard cannot account for is refused, never allowed.
-test('a Vercel mention the guard cannot verify is refused', () => {
-  for (const command of [
-    `python3 -c "import os; os.system('vercel logs')"`,
-    `node -e "require('child_process').execSync('vercel logs')"`,
-    "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['vercel', 'logs'])\nEOF",
-    'timeout 60 bash <<EOF\nvercel logs\nEOF',
-    'X=vercel; $X logs',
-    'ls # vercel logs',
-    // git, gh and rg can run their text: an alias, --exec, a pager, --pre, a shell alias.
-    "git -c alias.x='!vercel logs' x",
-    "git rebase --exec 'vercel logs' main",
-    "git -c core.pager='vercel logs' log",
-    "rg --pre 'vercel logs' pattern .",
-    "gh alias set --shell x 'vercel logs'",
-    // git reads a heredoc as a message only through -F -.
-    "git am <<'EOF'\nvercel logs\nEOF",
-    // ANSI-C or locale quoting anywhere, substitutions and heredoc bodies included.
-    "echo $'\\''; vercel logs",
-    'echo "$(echo $\'a\')"; vercel list',
-    "cat <<EOF\n$(echo $'x')\nEOF\nvercel list",
-    'echo $"x"; vercel list',
-    '/usr/bin/env -S "vercel logs"',
-  ]) {
-    const reason = productionLogCommandRefusal(command);
-    expect(reason, command).toContain('Refused:');
-    expect(reason, command).toContain('vercel');
-  }
-  const reason = productionLogCommandRefusal(`python3 -c "import os; os.system('vercel logs')"`);
-  expect(reason).toContain('could not verify the Vercel call in `python3 -c');
-  expect(reason).toContain('vercel metrics vercel.request.count');
-});
-
-test('commands that do not name the Vercel CLI, or name it only as data, never meet the backstop', () => {
-  for (const command of [
-    'git status',
-    'git log --oneline -5 && git diff --stat origin/main',
-    'bun run test:unit',
-    'bun test lib/security',
-    'gh pr view 206 --json state,headRefOid',
-    'gh api repos/werk-flow/werkflow-app/pulls/206/comments --jq ".[].id"',
-    'git commit -m "The hook refuses vercel logs"',
-    'git commit --message="The hook refuses vercel logs"',
-    "git commit -F - <<'EOF'\nThe hook refuses vercel logs.\nEOF",
-    'gh pr create --title "Refuse vercel logs" --body "The hook refuses vercel logs."',
-    'gh pr comment 206 --body "Fixed: vercel logs is refused."',
-    'cat .vercel/project.json && jq . vercel.json',
-    'grep -rn "@vercel/functions" lib node_modules/vercel/package.json',
-    'echo Vercel',
-    'printf "%s\\n" "$(vercel list)"',
-  ])
-    expect(productionLogCommandRefusal(command), command).toBeUndefined();
 });
 
 test('servers come from every Claude Code and Codex scope, keyed as in tool names', () => {
@@ -541,29 +336,6 @@ test('the hook refuses PROD MCP calls with the reason and lets DEV calls through
   }
 });
 
-test('the shell hook refuses a production log read with the reason and lets other commands through', () => {
-  const script = resolve(repositoryRoot, '.claude/hooks/refuse-production-logs.ts');
-  const call = (stdin: string) => {
-    const result = Bun.spawnSync({
-      cmd: [process.execPath, script],
-      stdin: Buffer.from(stdin),
-      stderr: 'pipe',
-    });
-    return { exitCode: result.exitCode, output: result.stderr.toString() };
-  };
-  const bash = (command: string) => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
-  for (const stdin of [bash('npx --yes vercel@65 logs --json'), 'not json']) {
-    const refused = call(stdin);
-    expect(refused.exitCode, refused.output).toBe(2);
-    expect(refused.output).toContain('Refused:');
-  }
-  expect(call(bash('npx --yes vercel@65 logs')).output).toContain('`vercel logs` returns runtime log lines');
-  for (const stdin of [bash('vercel list --prod'), JSON.stringify({ tool_name: 'Edit', tool_input: {} })]) {
-    const allowed = call(stdin);
-    expect(allowed.exitCode, allowed.output).toBe(0);
-  }
-});
-
 const hookFileSchema = z.object({
   hooks: z.object({
     PreToolUse: z.array(z.object({ hooks: z.array(z.object({ command: z.string() })) })),
@@ -571,32 +343,24 @@ const hookFileSchema = z.object({
 });
 
 const MCP_GUARD = 'refuse-production-mcp.ts';
-const LOG_GUARD = 'refuse-production-logs.ts';
 
-/** The command an agent's hook file registers for this guard. */
-function registeredGuard(file: string, guard = MCP_GUARD): string {
+/** The command an agent's hook file registers for the MCP guard. */
+function registeredGuard(file: string): string {
   const { hooks } = hookFileSchema.parse(JSON.parse(readFileSync(resolve(repositoryRoot, file), 'utf8')));
   const command = hooks.PreToolUse.flatMap((entry) => entry.hooks)
     .map((hook) => hook.command)
-    .find((text) => text.includes(guard));
-  if (!command) throw new Error(`${file} registers no ${guard}.`);
+    .find((text) => text.includes(MCP_GUARD));
+  if (!command) throw new Error(`${file} registers no ${MCP_GUARD}.`);
   return command;
 }
 
-/** A call each guard refuses. */
-const REFUSED_CALL = {
-  [MCP_GUARD]: { tool_name: 'mcp__supabase-prod-readonly__list_tables', tool_input: {} },
-  [LOG_GUARD]: { tool_name: 'Bash', tool_input: { command: 'vercel logs' } },
-};
+const REFUSED_CALL = { tool_name: 'mcp__supabase-prod-readonly__list_tables', tool_input: {} };
 
-function runGuard(
-  command: string,
-  options: { cwd: string; path?: string; guard?: keyof typeof REFUSED_CALL },
-) {
+function runGuard(command: string, options: { cwd: string; path?: string }) {
   const result = Bun.spawnSync({
     cmd: ['/bin/sh', '-c', command],
     cwd: options.cwd,
-    stdin: Buffer.from(JSON.stringify(REFUSED_CALL[options.guard ?? MCP_GUARD])),
+    stdin: Buffer.from(JSON.stringify(REFUSED_CALL)),
     stdout: 'pipe',
     stderr: 'pipe',
     env: { ...process.env, CLAUDE_PROJECT_DIR: repositoryRoot, PATH: options.path ?? process.env.PATH ?? '' },
@@ -606,31 +370,24 @@ function runGuard(
 
 // Codex runs a command hook in the session's working directory. The registered command must
 // find the script from a subfolder.
-test('the Codex hook commands refuse a PROD call from a subfolder of the repository', () => {
-  const cwd = resolve(repositoryRoot, 'lib/security');
-  const mcp = runGuard(registeredGuard('.codex/hooks.json'), { cwd });
+test('the Codex hook command refuses a PROD call from a subfolder of the repository', () => {
+  const mcp = runGuard(registeredGuard('.codex/hooks.json'), {
+    cwd: resolve(repositoryRoot, 'lib/security'),
+  });
   expect(mcp.exitCode, mcp.stderr).toBe(2);
   expect(mcp.stderr).toContain('production server by its name');
-  const logs = runGuard(registeredGuard('.codex/hooks.json', LOG_GUARD), { cwd, guard: LOG_GUARD });
-  expect(logs.exitCode, logs.stderr).toBe(2);
-  expect(logs.stderr).toContain('`vercel logs` returns runtime log lines');
 });
 
 // Both agents block only on exit 2; any other failure of the guard would let the call through.
 test('both registered hook commands refuse when the guard itself fails', () => {
   const bin = mkdtempSync(join(tmpdir(), 'broken-bun-'));
   writeFileSync(join(bin, 'bun'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-  for (const file of ['.claude/settings.json', '.codex/hooks.json'])
-    for (const [guard, name] of [
-      [MCP_GUARD, 'MCP'],
-      [LOG_GUARD, 'log'],
-    ] as const) {
-      const result = runGuard(registeredGuard(file, guard), {
-        cwd: repositoryRoot,
-        path: `${bin}:${process.env.PATH ?? ''}`,
-        guard,
-      });
-      expect(result.exitCode, `${file} ${guard}`).toBe(2);
-      expect(result.stderr, `${file} ${guard}`).toContain(`the ${name} guard failed with exit 1`);
-    }
+  for (const file of ['.claude/settings.json', '.codex/hooks.json']) {
+    const result = runGuard(registeredGuard(file), {
+      cwd: repositoryRoot,
+      path: `${bin}:${process.env.PATH ?? ''}`,
+    });
+    expect(result.exitCode, file).toBe(2);
+    expect(result.stderr, file).toContain('the MCP guard failed with exit 1');
+  }
 });

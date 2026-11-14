@@ -2,25 +2,14 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import {
-  ANSI_C_QUOTE,
-  INERT_PROGRAMS,
-  SCRIPT_FLAG,
-  SHELLS,
-  type ShellWord,
-  program,
-  readShell,
-  withoutRedirections,
-  wordWithoutSubstitutions,
-} from './shell-words';
 import { z } from '../zod';
 
 // Agents never read production data: every tool result goes to the model
 // provider (docs/technical/environments.md, "Work on production"). The PreToolUse
 // hook .claude/hooks/refuse-production-mcp.ts refuses an MCP tool that reaches
-// the production Supabase project or returns Vercel's runtime logs, and
-// .claude/hooks/refuse-production-logs.ts refuses the same logs through the
-// Vercel CLI, for Claude Code and Codex alike.
+// the production Supabase project or returns Vercel's runtime logs, for Claude
+// Code and Codex alike. No agent runs the Vercel CLI at all
+// (lib/security/account-sign-in.ts).
 
 const ENVIRONMENTS_DOC = 'docs/technical/environments.md';
 
@@ -234,8 +223,8 @@ const VERCEL_LOG_TOOL_NAME = /(?:^|_)(?:logs?|traces?|events)(?:_|$)/;
 /**
  * The metric dimensions a query may group or filter by: codes and ids, never a
  * path, a request, a client or a referrer. Vercel spells them two ways:
- * camelCase in `/metrics/v1` and `vercel metrics`, snake_case in the
- * `/v2/observability` API behind the MCP tool. Every other name is refused,
+ * camelCase in `/metrics/v1`, snake_case in the `/v2/observability` API
+ * behind the MCP tool. Every other name is refused,
  * including ones Vercel adds later.
  */
 const SAFE_DIMENSIONS = new Set([
@@ -298,247 +287,26 @@ function observabilityQueryRefusal(input: unknown): string | undefined {
   return undefined;
 }
 
-/** An API path that returns log lines, build events or traces. */
-const LOG_ENDPOINT = /\/(?:logs|runtime-logs|events|traces?)(?:[/?]|$)/;
-/** An API path that runs a metrics query, whose body the guard cannot see from the command line. */
-const QUERY_ENDPOINT = /\/(?:metrics\/v\d|v\d\/observability\/query)\b/;
+/** Vercel MCP tools that return an environment variable's decrypted value. */
+const VALUE_TOOLS = new Set(['get_project_env', 'get_shared_env_var']);
 
-/** Why a Vercel MCP tool call would return PROD log text or request data, or undefined. */
+/** Why a Vercel MCP tool call would return PROD log text, request data or a secret value, or undefined. */
 function vercelLogToolRefusal(server: string, tool: string, input: unknown): string | undefined {
   const refuse = (why: string) => `Refused: ${why} ${LOGS_INSTEAD}`;
-  const preview =
-    typeof input === 'object' && input !== null && Reflect.get(input, 'environment') === 'preview';
+  const field = (name: string): unknown =>
+    typeof input === 'object' && input !== null ? Reflect.get(input, name) : undefined;
+  const decrypt = field('decrypt');
+  if (
+    VALUE_TOOLS.has(tool) ||
+    (tool === 'filter_project_envs' && decrypt !== undefined && decrypt !== false && decrypt !== 'false')
+  )
+    return refuse(
+      `"${tool}" returns an environment value, which may be a production secret; list names only.`,
+    );
+  const preview = field('environment') === 'preview';
   const logTool = VERCEL_LOG_TOOLS.has(tool) || (/vercel/i.test(server) && VERCEL_LOG_TOOL_NAME.test(tool));
   if (logTool && !(tool === 'get_runtime_logs' && preview))
     return refuse(`"${tool}" returns log text from production, not metadata.`);
   const query = tool === 'create_observability_query' ? observabilityQueryRefusal(input) : undefined;
   return query && refuse(query);
-}
-
-/** The values a CLI call gives a flag: `--flag value` and `--flag=value`, for each of its names. */
-function flagValues(args: readonly string[], names: readonly string[]): string[] {
-  return args.flatMap((arg, index) => {
-    if (names.includes(arg)) return [args[index + 1] ?? ''];
-    const name = names.find((candidate) => arg.startsWith(`${candidate}=`));
-    return name ? [arg.slice(name.length + 1)] : [];
-  });
-}
-
-/** Whether every environment a `vercel logs` call names is preview, and it names one. */
-function previewOnly(args: readonly string[]): boolean {
-  const environments = flagValues(args, ['-e', '--environment']);
-  return environments.length > 0 && environments.every((environment) => environment === 'preview');
-}
-
-const anyValue = (value: string) => value !== '' && !value.startsWith('-');
-
-/**
- * The `vercel metrics` options the guard has verified, from the CLI's own
- * option list (vercel@65), each with the values it accepts. The dimension
- * options take only the allowlist; the rest only pick time, scope, order or
- * output. Every other option is refused, the deprecated shorthands `-a`, `-f`,
- * `-l` and `-g` and an unknown one such as `--query` included.
- */
-const METRICS_OPTIONS = new Map<string, (value: string) => boolean>([
-  ['--group-by', (value) => SAFE_DIMENSIONS.has(value)],
-  ['--filter', safeFilter],
-  ['--aggregation', safeAggregation],
-  ['--limit', (value) => /^\d+$/.test(value)],
-  ['--order-by', (value) => value === 'value' || value === 'count'],
-  ['--order', (value) => value === 'asc' || value === 'desc'],
-  ['--environment', anyValue],
-  ['-e', anyValue],
-  ['--since', anyValue],
-  ['-s', anyValue],
-  ['--until', anyValue],
-  ['-u', anyValue],
-  ['--granularity', anyValue],
-  ['--bucket-timezone', anyValue],
-  ['--project', anyValue],
-  ['-p', anyValue],
-  ['--format', anyValue],
-  ['--scope', anyValue],
-  ['-S', anyValue],
-  ['--token', anyValue],
-  ['-t', anyValue],
-  ['--cwd', anyValue],
-]);
-const METRICS_SWITCHES = new Set([
-  '--prod',
-  '--all',
-  '--json',
-  '--debug',
-  '-d',
-  '--no-color',
-  '--non-interactive',
-]);
-
-/**
- * Why a `vercel metrics` query could return request data, or undefined when
- * every option is verified and its value allowed. `vercel metrics schema`
- * lists names only. Positional words: an optional `query`, then a metric id.
- */
-function metricsCliRefusal(args: readonly string[]): string | undefined {
-  const rest = args.slice(args.indexOf('metrics') + 1);
-  if (rest[0] === 'schema') return undefined;
-  const positional: string[] = [];
-  for (let index = 0; index < rest.length; index++) {
-    const arg = rest[index] ?? '';
-    const equals = arg.startsWith('--') ? arg.indexOf('=') : -1;
-    const name = equals === -1 ? arg : arg.slice(0, equals);
-    const accepts = METRICS_OPTIONS.get(name);
-    if (accepts) {
-      const value = equals === -1 ? rest[++index] : arg.slice(equals + 1);
-      if (value === undefined || !accepts(value))
-        return `the metrics option ${name} ${value ?? '(no value)'} is outside what the guard verified: dimensions ${[...SAFE_DIMENSIONS].join(', ')}.`;
-    } else if (METRICS_SWITCHES.has(arg)) continue;
-    else if (arg.startsWith('-')) return `the metrics option ${arg} is not one the guard verified.`;
-    else positional.push(arg);
-  }
-  const [first, second, ...more] = positional;
-  const shaped =
-    more.length === 0 &&
-    (second === undefined || first === 'query') &&
-    [first, second].every((word) => word === undefined || /^[\w.-]+$/.test(word));
-  return shaped
-    ? undefined
-    : `the metrics call has arguments the guard cannot place: ${positional.join(' ')}.`;
-}
-
-/**
- * Flags whose value only picks the team, project or folder, so a variable there
- * hides no command, as long as double quotes keep it one argument: unquoted,
- * `--scope $ARGS` splits into further flags.
- */
-const SCOPE_FLAG = /^(?:--scope|-S|--project|-p|--team|-T|--cwd)$/;
-const QUOTED_SCOPE_VALUE = /^"[^"\\]*"$/;
-const QUOTED_SCOPE_FLAG_VALUE = /^--(?:scope|project|team|cwd)="[^"\\]*"$/;
-
-/** Why one Vercel CLI call, given its argument words, would return PROD log text or request data. */
-function vercelCliRefusal(words: readonly ShellWord[]): string | undefined {
-  const expanding = withoutRedirections(words).filter(
-    (word, index, kept) =>
-      word.expands &&
-      !QUOTED_SCOPE_FLAG_VALUE.test(word.raw) &&
-      !(SCOPE_FLAG.test(kept[index - 1]?.text ?? '') && QUOTED_SCOPE_VALUE.test(word.raw)),
-  );
-  if (expanding.length > 0)
-    return `the shell expands ${expanding.map((word) => word.text).join(' ')} in a Vercel call, so the guard cannot see which command, flag or dimension it runs. Write the arguments out.`;
-  const args = withoutRedirections(words).map((word) => word.text);
-  // Help prints the CLI's own text, never data.
-  if (args.includes('--help') || args.includes('-h')) return undefined;
-  if (args.includes('logs') && !previewOnly(args))
-    return '`vercel logs` returns runtime log lines or request records from production.';
-  if (args.includes('inspect') && args.some((arg) => arg === '-l' || /^--logs(?:=|$)/.test(arg)))
-    return "`vercel inspect --logs` returns a build's output.";
-  if (args.includes('api') && args.some((arg) => LOG_ENDPOINT.test(arg)))
-    return '`vercel api` on a log, event or trace endpoint returns log text.';
-  if (args.includes('api') && args.some((arg) => QUERY_ENDPOINT.test(arg)))
-    return '`vercel api` runs a metrics query the guard cannot read; use `vercel metrics`, which it checks.';
-  return args.includes('metrics') ? metricsCliRefusal(args) : undefined;
-}
-
-const VERCEL_CLI = /^(?:vercel|vc)(?:@\S*)?$/;
-/**
- * A mention of the Vercel CLI in raw command text: `vercel`, `vc` or
- * `vercel@<version>` as a word, also as the last part of a path. Not
- * `vercel.json`, `.vercel/`, `@vercel/functions`, `node_modules/vercel/` or `Vercel`.
- */
-const VERCEL_MENTION = /(?<![\w@.$-])(?:vercel|vc)(?:@[\w.^~-]*)?(?![\w.\-/])/g;
-
-function mentions(text: string): number {
-  return text.match(VERCEL_MENTION)?.length ?? 0;
-}
-
-/** Mentions in raw words, without their substitutions, whose commands are read on their own. */
-function wordMentions(words: readonly ShellWord[]): number {
-  return words.reduce((sum, word) => sum + mentions(wordWithoutSubstitutions(word.raw)), 0);
-}
-
-/**
- * Every Vercel CLI call in a shell command, run directly, through a package
- * runner or wrapper (`npx --yes vercel@65 logs`, `timeout 60 vercel logs`), in
- * a substitution, quoted or in an expanding heredoc, in a heredoc a shell
- * reads, or in a nested shell or `eval`, with the number of CLI mentions the
- * scan accounts for: each call's program word, the arguments of a program that
- * never runs them, and data-only heredoc bodies. Undefined when the shell
- * reader cannot tell which lines run.
- */
-function scanVercel(command: string, depth = 0): { calls: ShellWord[][]; accounted: number } | undefined {
-  const reading = readShell(command);
-  if (!reading) return undefined;
-  const calls: ShellWord[][] = [];
-  let accounted = reading.dataBodies.reduce((sum, body) => sum + mentions(body), 0);
-  for (const words of reading.commands) {
-    const call = program(words);
-    const script =
-      call && SHELLS.has(call.name) ? call.args.findIndex((arg) => SCRIPT_FLAG.test(arg.text)) : -1;
-    if (call && (call.name === 'eval' || script !== -1)) {
-      // The script is read on its own; its mentions count at most as often as its raw words hold them.
-      const source = call.name === 'eval' ? call.args : call.args.slice(script + 1, script + 2);
-      const nested = depth < 4 ? scanVercel(source.map((word) => word.text).join(' '), depth + 1) : undefined;
-      if (!nested) return undefined;
-      calls.push(...nested.calls);
-      accounted += Math.min(nested.accounted, wordMentions(source));
-      continue;
-    }
-    const at = words.findIndex((word) => VERCEL_CLI.test(word.text.slice(word.text.lastIndexOf('/') + 1)));
-    const head = words[at];
-    if (head) {
-      calls.push(words.slice(at + 1));
-      accounted += wordMentions([head]);
-    } else if (call && INERT_PROGRAMS.has(call.name)) accounted += wordMentions(words);
-    else if (call && (call.name === 'git' || call.name === 'gh'))
-      accounted += wordMentions(messageValues(call.args));
-  }
-  return { calls, accounted };
-}
-
-/** Flags of `git` and `gh` whose value is only a message: `git commit -m`, `gh pr create --body`. */
-const MESSAGE_FLAG = /^(?:-m|--message|--body|--title)$/;
-const MESSAGE_FLAG_VALUE = /^(?:--message|--body|--title)=/;
-
-/**
- * The words of a `git` or `gh` call that are message values. Any other word
- * may be run: a `!` alias, `--exec`, a pager or an extension.
- */
-function messageValues(args: readonly ShellWord[]): ShellWord[] {
-  return args.filter(
-    (arg, index) => MESSAGE_FLAG_VALUE.test(arg.text) || MESSAGE_FLAG.test(args[index - 1]?.text ?? ''),
-  );
-}
-
-/**
- * Why a shell command may not run because it reads Vercel's production logs,
- * or undefined. Every Vercel CLI call must pass `vercelCliRefusal`, and every
- * mention of the CLI in the raw command must be one the scan accounts for: a
- * mention it cannot place (a comment, an interpreter's script, a heredoc an
- * unknown program reads) is refused. A script or `curl` that calls the API
- * itself without naming the CLI is the backlog's.
- */
-export function productionLogCommandRefusal(command: string): string | undefined {
-  // The reader does not parse ANSI-C or locale quoting; with one anywhere, a mention cannot be verified.
-  if (ANSI_C_QUOTE.test(command) && mentions(command) > 0)
-    return `Refused: the command uses $'...' or $"..." quoting, which the log guard does not read, and names the Vercel CLI. Write the quoting plainly. ${LOGS_INSTEAD}`;
-  const scan = scanVercel(command);
-  if (!scan)
-    return `Refused: the log guard cannot tell where a heredoc delimiter in this command ends, so it cannot rule out a log read after it. Write the delimiter plainly: <<EOF or <<'EOF'. ${LOGS_INSTEAD}`;
-  for (const words of scan.calls) {
-    const why = vercelCliRefusal(words);
-    if (why) return `Refused: ${why} ${LOGS_INSTEAD}`;
-  }
-  const named = mentions(command);
-  if (named <= scan.accounted) return undefined;
-  const lines = command
-    .split('\n')
-    .filter((line) => mentions(line) > 0)
-    .slice(0, 3)
-    .map((line) => `\`${line.trim().slice(0, 80)}\``);
-  return [
-    `Refused: the command names the Vercel CLI ${named} times, and the guard could verify only ${scan.accounted} of them`,
-    `as a checked call or as data. It could not verify the Vercel call in ${lines.join(', ')}:`,
-    'an interpreter, a comment or a program that may run its input can hide one.',
-    'Run the Vercel CLI as a plain command; for counts use `vercel metrics vercel.request.count` grouped by',
-    `${[...SAFE_DIMENSIONS].join(', ')}. ${LOGS_INSTEAD}`,
-  ].join(' ');
 }
