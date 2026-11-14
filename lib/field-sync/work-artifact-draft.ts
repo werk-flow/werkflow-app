@@ -46,7 +46,7 @@ export async function replayWorkArtifactDraft(
     draft: draft.data,
   });
   if (!result.success) return REFUSAL_VERDICTS[result.error];
-  if (!result.replayed) captureUsage(context.orgId, 'work_report', 'started');
+  if (!result.replayed) captureUsage(context.orgId, 'work_evidence', 'started');
   return result.replayed
     ? { outcome: 'replayed', code: 'replayed' }
     : { outcome: 'accepted', code: 'accepted' };

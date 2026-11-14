@@ -1,4 +1,4 @@
-// Which work report steps count as usage statistics, over the in-memory database
+// Which Arbeitsnachweis steps, of every kind, count as usage statistics, over the in-memory database
 // (werk-flow/werkflow-planning#280): a first save starts the report, a submit or a
 // review request completes it, a void abandons it, and a replay the database
 // answers with `duplicate: true` counts nothing.
@@ -69,16 +69,19 @@ const voidReport = () =>
   voidWorkArtifact({ artifactId, actionId, expectedVersion: 1, reason: 'Doppelt erfasst' });
 
 signInAs(world, 'admin');
-assert.deepEqual(await countedBy(false, save(false, null)), ['work_report_started']);
-assert.deepEqual(await countedBy(false, save(true, null)), ['work_report_started', 'work_report_completed']);
+assert.deepEqual(await countedBy(false, save(false, null)), ['work_evidence_started']);
+assert.deepEqual(await countedBy(false, save(true, null)), [
+  'work_evidence_started',
+  'work_evidence_completed',
+]);
 assert.deepEqual(await countedBy(false, save(false, 1)), [], 'a later draft save starts nothing');
-assert.deepEqual(await countedBy(false, save(true, 1)), ['work_report_completed']);
+assert.deepEqual(await countedBy(false, save(true, 1)), ['work_evidence_completed']);
 assert.deepEqual(
   await countedBy(false, requestReview),
-  ['work_report_completed'],
+  ['work_evidence_completed'],
   'a review request completes',
 );
-assert.deepEqual(await countedBy(false, voidReport), ['work_report_abandoned']);
+assert.deepEqual(await countedBy(false, voidReport), ['work_evidence_abandoned']);
 
 for (const replay of [save(true, null), requestReview, voidReport]) {
   assert.deepEqual(await countedBy(true, replay), [], 'a replay counts nothing');

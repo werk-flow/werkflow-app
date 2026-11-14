@@ -12,7 +12,7 @@ import { isUuid } from '@/lib/validation/uuid';
 // nothing leaves the server.
 
 export type UsageWorkflow =
-  | 'work_report'
+  | 'work_evidence'
   | 'time_recording'
   | 'follow_up'
   | 'request'

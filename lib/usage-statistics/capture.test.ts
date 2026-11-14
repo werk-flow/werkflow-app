@@ -43,17 +43,17 @@ afterEach(() => {
 });
 
 test('an event names workflow and step, keyed by the organization, with no person and no location', async () => {
-  captureUsage(ALLOWED_ORG, 'work_report', 'completed');
+  captureUsage(ALLOWED_ORG, 'work_evidence', 'completed');
   await flush();
   expect(sent).toEqual([
     {
       url: 'https://eu.i.posthog.com/i/v0/e/',
       body: {
         api_key: TEST_KEY,
-        event: 'work_report_completed',
+        event: 'work_evidence_completed',
         distinct_id: ALLOWED_ORG,
         properties: {
-          workflow: 'work_report',
+          workflow: 'work_evidence',
           step: 'completed',
           $process_person_profile: false,
           $geoip_disable: true,
@@ -114,7 +114,7 @@ test('a failed send is logged and never throws into the workflow step', async ()
 test('no other product source names PostHog', () => {
   const offenders = listProductSources().filter(
     (file) =>
-      !file.startsWith('lib/usage-statistics/') &&
+      file !== 'lib/usage-statistics/capture.ts' &&
       /posthog/i.test(readFileSync(resolve(repositoryRoot, file), 'utf8')),
   );
   expect(offenders).toEqual([]);

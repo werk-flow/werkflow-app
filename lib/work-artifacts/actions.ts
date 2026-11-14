@@ -253,9 +253,9 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
   // A first save opens the report; a submit, first or later, completes it. A replay counts nothing.
   if (data.duplicate !== true) {
     if (!parsed.data.expectedVersion && !parsed.data.correctsRevisionId) {
-      captureUsage(auth.context.orgId, 'work_report', 'started');
+      captureUsage(auth.context.orgId, 'work_evidence', 'started');
     }
-    if (parsed.data.submit) captureUsage(auth.context.orgId, 'work_report', 'completed');
+    if (parsed.data.submit) captureUsage(auth.context.orgId, 'work_evidence', 'completed');
   }
   // The authoritative detail after the write, read with the same permission checks as an open.
   const saved = await getWorkArtifactDetail(parsed.data.artifactId);
@@ -377,7 +377,7 @@ export async function recordWorkArtifactAction(
   revalidateWorkEvidenceViews();
   // Sending a saved draft to review completes the report, as a save with submit does.
   if (parsed.data.actionType === 'review_requested' && data.duplicate !== true) {
-    captureUsage(auth.context.orgId, 'work_report', 'completed');
+    captureUsage(auth.context.orgId, 'work_evidence', 'completed');
   }
   return {
     success: true,
@@ -411,7 +411,7 @@ export async function voidWorkArtifact(input: {
     return { success: false, error: mapArtifactError(error) };
   }
   revalidateWorkEvidenceViews();
-  if (data.duplicate !== true) captureUsage(auth.context.orgId, 'work_report', 'abandoned');
+  if (data.duplicate !== true) captureUsage(auth.context.orgId, 'work_evidence', 'abandoned');
   return {
     success: true,
     artifactId: parsed.data.artifactId,
