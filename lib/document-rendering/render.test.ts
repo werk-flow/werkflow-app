@@ -486,6 +486,44 @@ describe('the business document renderer', () => {
     }
   });
 
+  test('a tall info block moves the content down instead of running into the title', async () => {
+    const metaRows = Array.from({ length: 9 }, (_, index) => ({
+      label: `Angabe ${index + 1}`,
+      value:
+        index % 3 === 0
+          ? 'Ein langer Wert, der in diesem schmalen Feld über mehrere Zeilen umbricht'
+          : 'kurz',
+    }));
+    const [first = []] = await readPages(await renderBusinessDocument({ ...serviceOffer, metaRows }));
+    const title = first.find((line) => line.text.startsWith('Angebot ANG-2026-17'));
+    const lastInfo = first.filter((line) => line.text.startsWith('Angabe 9')).at(-1);
+    expect(title?.top ?? 0).toBeGreaterThan((lastInfo?.top ?? PAGE_HEIGHT) + 5 * MM);
+  });
+
+  test('a head that leaves no room for content is refused, never clipped', async () => {
+    const metaRows = [
+      { label: 'Bestellnummer', value: Array.from({ length: 80 }, () => 'Zeile').join('\n') },
+    ];
+    await expect(renderBusinessDocument({ ...serviceOffer, metaRows })).rejects.toThrow(RangeError);
+  });
+
+  // The invoice layout and PDF/A-3 output extend this module; an offer must
+  // not change by a byte. A new digest here is a deliberate offer change.
+  test('an offer renders to the bytes it rendered to before invoices joined the renderer', async () => {
+    const digests = await Promise.all(
+      [serviceOffer, installationOffer, stationeryOffer, plainSample('Haustechnik Sonnenberg GmbH')].map(
+        async (document) =>
+          new Bun.CryptoHasher('sha256').update(await renderBusinessDocument(document)).digest('hex'),
+      ),
+    );
+    expect(digests).toEqual([
+      'c4353c4489b186f1f8631c2256b2ddafb751a2c110efdc4888b45dcad84b0b97',
+      'a2dc3ed2b3ff7f4bf61e5007ff6a3b9c3f2ae416bed40e56c4eee79fdc014eda',
+      'e6131873ef15b6fad0a1f042a0797f23bd7c46504a6310439c21c9abc2c4b621',
+      '77d414205cb765a4c44754f95a75cbf22ad013cde2fcb5cd9d75272b8211e812',
+    ]);
+  });
+
   test('the Musterangebot names the organization as sender and adds up', async () => {
     const offer = plainSample('Haustechnik Sonnenberg GmbH');
     for (const section of offer.sections) {
