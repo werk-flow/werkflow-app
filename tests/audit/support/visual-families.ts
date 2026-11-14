@@ -238,6 +238,13 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     heading: SERVICE_AREA_HEADER.title,
   },
   {
+    id: 'service-bereitschaft',
+    role: 'admin',
+    covers: ['/service/bereitschaft'],
+    route: fixed('/service/bereitschaft'),
+    heading: SERVICE_AREA_HEADER.title,
+  },
+  {
     id: 'zeiterfassung',
     role: 'admin',
     covers: ['/zeiterfassung'],

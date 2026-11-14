@@ -8,8 +8,14 @@ import { TodayRefreshOnStart } from '@/components/auftraege/work-pack/today-refr
 import { UrlFlashBanner } from '@/components/ui/banner';
 import { OrgInfoCard } from '@/components/dashboard/org-info-card';
 import { DashboardContentSkeleton } from '@/components/loading-states/dashboard-content-skeleton';
+import { OnCallNowSkeleton } from '@/components/loading-states/on-call-skeletons';
+import { OnCallNowCard } from '@/components/on-call/on-call-now-card';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
+import { readOnCallOverview } from '@/lib/on-call/reads';
+import type { UserOrg } from '@/lib/org/types';
+import { isManagerRole } from '@/lib/roles';
 
 async function DashboardData({ activeOrgId }: { activeOrgId: string | null }) {
   if (!activeOrgId) return <OrgInfoCard initialMemberCount={null} />;
@@ -17,6 +23,20 @@ async function DashboardData({ activeOrgId }: { activeOrgId: string | null }) {
   const memberCount = await getCachedMemberCount(activeOrgId).catch(() => null);
 
   return <OrgInfoCard initialMemberCount={memberCount} />;
+}
+
+// „Bereitschaft jetzt“ for every role of the active organization
+// (werk-flow/werkflow-planning#469); the membership read established it.
+async function OnCallNowRegion({ membership, userId }: { membership: UserOrg; userId: string }) {
+  const result = await readOnCallOverview(membership.orgId, userId);
+  if (!result.success) {
+    return (
+      <RegionLoadError title="Die Bereitschaft konnte nicht geladen werden">
+        Wer gerade Bereitschaft hat, ist gerade nicht abrufbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
+  return <OnCallNowCard overview={result.overview} canPlan={isManagerRole(membership.role)} />;
 }
 
 export default async function DashboardPage() {
@@ -37,7 +57,8 @@ export default async function DashboardPage() {
   ]);
   // The start page of every role: a field worker's phone refreshes the day it keeps for signal loss here.
   // Only the gate is rendered here; the refresh takes person and organization from the client contexts.
-  const keepsToday = memberships.some((entry) => entry.orgId === activeOrgId && entry.role === 'employee');
+  const activeMembership = memberships.find((entry) => entry.orgId === activeOrgId) ?? null;
+  const keepsToday = activeMembership?.role === 'employee';
 
   return (
     <PageShell>
@@ -70,7 +91,12 @@ export default async function DashboardPage() {
         />
       </Suspense>
 
-      <PageBody>
+      <PageBody className="space-y-4">
+        {activeMembership && (
+          <Suspense fallback={<OnCallNowSkeleton />}>
+            <OnCallNowRegion membership={activeMembership} userId={user.id} />
+          </Suspense>
+        )}
         <Suspense fallback={<DashboardContentSkeleton />}>
           <DashboardData activeOrgId={activeOrgId} />
         </Suspense>

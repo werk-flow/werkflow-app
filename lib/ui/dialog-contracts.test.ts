@@ -26,6 +26,10 @@ const exceptions: Record<string, DialogException> = {
     kind: 'command',
     reason: 'Enter in the staged customer picker selects a result; assignment is explicit.',
   },
+  'components/on-call/on-call-history-dialog.tsx#OnCallHistoryDialog|Verlauf der Bereitschaft': {
+    kind: 'command',
+    reason: 'Read-only history of one shift; its only button closes it, there is nothing to submit.',
+  },
   'components/arbeitsvorlagen/apply-work-template-card.tsx#ApplyWorkTemplateCard|Arbeitsvorlage anwenden': {
     kind: 'command',
     reason:

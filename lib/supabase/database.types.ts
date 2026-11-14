@@ -5231,6 +5231,148 @@ export type Database = {
           },
         ];
       };
+      on_call_shift_events: {
+        Row: {
+          actor_id: string | null;
+          cancelled_at: string | null;
+          created_at: string;
+          ends_at: string;
+          handover_note: string;
+          id: string;
+          kind: string;
+          label: string | null;
+          member_ids: string[];
+          organization_id: string;
+          shift_id: string;
+          starts_at: string;
+          version: number;
+        };
+        Insert: {
+          actor_id?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          ends_at: string;
+          handover_note: string;
+          id?: string;
+          kind: string;
+          label?: string | null;
+          member_ids: string[];
+          organization_id: string;
+          shift_id: string;
+          starts_at: string;
+          version: number;
+        };
+        Update: {
+          actor_id?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          ends_at?: string;
+          handover_note?: string;
+          id?: string;
+          kind?: string;
+          label?: string | null;
+          member_ids?: string[];
+          organization_id?: string;
+          shift_id?: string;
+          starts_at?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "on_call_shift_events_shift_fk";
+            columns: ["shift_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "on_call_shifts";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      on_call_shift_members: {
+        Row: {
+          employee_record_id: string;
+          organization_id: string;
+          shift_id: string;
+        };
+        Insert: {
+          employee_record_id: string;
+          organization_id: string;
+          shift_id: string;
+        };
+        Update: {
+          employee_record_id?: string;
+          organization_id?: string;
+          shift_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "on_call_shift_members_employee_fk";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "on_call_shift_members_shift_fk";
+            columns: ["shift_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "on_call_shifts";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      on_call_shifts: {
+        Row: {
+          cancelled_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          ends_at: string;
+          handover_note: string;
+          id: string;
+          label: string | null;
+          organization_id: string;
+          starts_at: string;
+          updated_at: string;
+          updated_by: string | null;
+          version: number;
+        };
+        Insert: {
+          cancelled_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          ends_at: string;
+          handover_note?: string;
+          id?: string;
+          label?: string | null;
+          organization_id: string;
+          starts_at: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Update: {
+          cancelled_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          ends_at?: string;
+          handover_note?: string;
+          id?: string;
+          label?: string | null;
+          organization_id?: string;
+          starts_at?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "on_call_shifts_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       organization_capabilities: {
         Row: {
           created_at: string;
@@ -15091,6 +15233,21 @@ export type Database = {
         };
         Returns: string;
       };
+      change_on_call_shift: {
+        Args: {
+          p_actor_id: string;
+          p_confirm_overlap: boolean;
+          p_ends_at: string;
+          p_expected_version: number;
+          p_handover_note: string;
+          p_label: string;
+          p_member_ids: string[];
+          p_organization_id: string;
+          p_shift_id: string;
+          p_starts_at: string;
+        };
+        Returns: Json;
+      };
       check_user_exists_by_email: {
         Args: { p_email: string };
         Returns: {
@@ -16627,6 +16784,15 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      end_on_call_shift: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_organization_id: string;
+          p_shift_id: string;
+        };
+        Returns: Json;
+      };
       end_responsibility_delegation: {
         Args: {
           p_actor_id: string;
@@ -17152,6 +17318,21 @@ export type Database = {
           p_organization_id: string;
           p_report_id: string;
           p_support_ids: string[];
+        };
+        Returns: Json;
+      };
+      hand_over_on_call_shift: {
+        Args: {
+          p_actor_id: string;
+          p_confirm_overlap: boolean;
+          p_expected_version: number;
+          p_handover_note: string;
+          p_member_ids: string[];
+          p_next_ends_at: string;
+          p_next_label: string;
+          p_next_shift_id: string;
+          p_organization_id: string;
+          p_shift_id: string;
         };
         Returns: Json;
       };
@@ -17787,6 +17968,20 @@ export type Database = {
         };
         Returns: string;
       };
+      plan_on_call_shift: {
+        Args: {
+          p_actor_id: string;
+          p_confirm_overlap: boolean;
+          p_ends_at: string;
+          p_handover_note: string;
+          p_label: string;
+          p_member_ids: string[];
+          p_organization_id: string;
+          p_shift_id: string;
+          p_starts_at: string;
+        };
+        Returns: Json;
+      };
       prepare_time_period: {
         Args: {
           p_actor_id: string;
@@ -17987,6 +18182,15 @@ export type Database = {
       };
       read_manager_attention_sets: {
         Args: { p_limit: number; p_organization_id: string };
+        Returns: Json;
+      };
+      read_on_call_shifts: {
+        Args: {
+          p_for_office: boolean;
+          p_from: string;
+          p_organization_id: string;
+          p_until: string;
+        };
         Returns: Json;
       };
       read_open_absences: {

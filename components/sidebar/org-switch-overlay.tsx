@@ -15,6 +15,7 @@ import {
   TimePeriodsSkeleton,
 } from '@/components/loading-states/zeiterfassung-time-account-skeletons';
 import { MaintenancePageSkeleton } from '@/components/loading-states/maintenance-page-skeleton';
+import { OnCallWeekSkeleton } from '@/components/loading-states/on-call-skeletons';
 import { KundenPageSkeleton } from '@/components/loading-states/kunden-page-skeleton';
 import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
 import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
@@ -79,6 +80,14 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<readonly [prefix: string, skeleton: ()
     () => (
       <ServiceAreaSkeleton>
         <MaintenancePageSkeleton />
+      </ServiceAreaSkeleton>
+    ),
+  ],
+  [
+    '/service/bereitschaft',
+    () => (
+      <ServiceAreaSkeleton>
+        <OnCallWeekSkeleton />
       </ServiceAreaSkeleton>
     ),
   ],
