@@ -51,6 +51,7 @@ The epic issue holds a **State** section and three lists ([Decide or ask](../../
 
 - **Decided without the owner.** One line per decision, yours and each child's: what, why, the PR.
 - **Owner queue.** One entry per owner item, posted once: what the owner decides or does, your recommendation first, numbered steps where the owner must act, and what waits for it. Keep every child going that does not depend on it. Use the question tool only when nothing else in the plan can move.
+  - A sign-in or account login is always an owner step; no agent starts one ([security](../../../docs/technical/security.md#never)). Its entry names the machine, the window, the exact command and what the owner should see. Ask the owner through the question tool at once, so T3 flags it, and keep working on everything that does not need it.
 - **For the owner to look at.** Captures of the screens and copy you accepted ([rendered design acceptance](../../../docs/technical/standards-audit.md#rendered-design-acceptance)), each lab reference accepted with `lab-counts accept`, and where to try a user-visible speed change. Nothing waits for this list.
 
 A kind-3 decision that turns up mid-build is a planning defect. Put it in the Owner queue, write on the epic what the plan missed, and read the rest of the plan for more before you start the next stage.
