@@ -410,7 +410,7 @@ begin
   foreach v_function in array array[
     'public.save_inventory_item(uuid, uuid, uuid, jsonb, text, text, uuid, numeric)',
     'public.import_inventory_row(uuid, uuid, uuid, jsonb, text, text, text, text, numeric, text)',
-    'public.take_unplanned_inventory_material(uuid, uuid, uuid, uuid, uuid, uuid, numeric, text, text)'
+    'public.take_unplanned_inventory_material(uuid, uuid, uuid, uuid, uuid, uuid, numeric, text, text, uuid)'
   ] loop
     if not has_function_privilege('service_role', v_function, 'execute') then
       raise exception '% lost its service_role grant', v_function;

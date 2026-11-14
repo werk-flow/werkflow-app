@@ -3222,6 +3222,7 @@ export type Database = {
           job_material_line_id: string | null;
           location_id: string;
           movement_type: string;
+          operation_id: string | null;
           organization_id: string;
           project_id: string | null;
           quantity_after: number;
@@ -3239,6 +3240,7 @@ export type Database = {
           job_material_line_id?: string | null;
           location_id: string;
           movement_type: string;
+          operation_id?: string | null;
           organization_id: string;
           project_id?: string | null;
           quantity_after: number;
@@ -3256,6 +3258,7 @@ export type Database = {
           job_material_line_id?: string | null;
           location_id?: string;
           movement_type?: string;
+          operation_id?: string | null;
           organization_id?: string;
           project_id?: string | null;
           quantity_after?: number;
@@ -4445,6 +4448,7 @@ export type Database = {
           job_id: string | null;
           job_material_line_id: string;
           note: string | null;
+          operation_id: string | null;
           organization_id: string;
           project_id: string | null;
           quantity: number;
@@ -4461,6 +4465,7 @@ export type Database = {
           job_id?: string | null;
           job_material_line_id: string;
           note?: string | null;
+          operation_id?: string | null;
           organization_id: string;
           project_id?: string | null;
           quantity: number;
@@ -4477,6 +4482,7 @@ export type Database = {
           job_id?: string | null;
           job_material_line_id?: string;
           note?: string | null;
+          operation_id?: string | null;
           organization_id?: string;
           project_id?: string | null;
           quantity?: number;
@@ -18430,6 +18436,7 @@ export type Database = {
           p_job_material_line_id?: string;
           p_location_id: string;
           p_movement_type: string;
+          p_operation_id?: string;
           p_organization_id: string;
           p_project_id?: string;
           p_quantity_delta: number;
@@ -18447,6 +18454,7 @@ export type Database = {
           p_corrects_event_id?: string;
           p_job_material_line_id: string;
           p_note?: string;
+          p_operation_id?: string;
           p_organization_id: string;
           p_quantity: number;
         };
@@ -20034,6 +20042,7 @@ export type Database = {
           p_job_id: string;
           p_location_id: string;
           p_notes: string;
+          p_operation_id?: string;
           p_organization_id: string;
           p_project_id: string;
           p_quantity: number;
