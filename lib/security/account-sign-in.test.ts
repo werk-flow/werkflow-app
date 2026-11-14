@@ -150,6 +150,8 @@ test('a mention the guard cannot verify as data is refused', () => {
     "printf 'gh auth login\\n' | bash",
     'echo vercel list | xargs -I{} sh -c {}',
     'echo "vercel list" | env bash',
+    "printf 'vercel list\\n' | bash -s -- arg",
+    "printf 'gh auth login\\n' | bash -ls arg",
     "printf 'supabase --debug login\\n' | bash",
     `python3 -c 'import os; os.system("supabase --debug login")'`,
     'echo "gh auth login" | timeout 60 /bin/sh',

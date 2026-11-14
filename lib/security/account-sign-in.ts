@@ -136,18 +136,23 @@ const DATA_PROGRAMS = new Set([...INERT_PROGRAMS, 'which', 'type']);
 
 /**
  * Whether a command may run its input as commands, so a data program's words piped into it are no
- * data: a shell without a `-c` script or a script file, `xargs` or `source`, also behind a wrapper
- * (`env bash`).
+ * data: a shell without a `-c` script or a script file, or with `-s`, `xargs` or `source`, also
+ * behind a wrapper (`env bash`).
  */
 function runsInput(words: ShellWord[]): boolean {
   if (program(words)?.name === '.') return true;
   const names = words.map((word) => word.text.slice(word.text.lastIndexOf('/') + 1));
   if (names.some((name) => name === 'xargs' || name === 'source')) return true;
   const shell = names.findIndex((name) => SHELLS.has(name));
-  return (
-    shell !== -1 &&
-    !words.slice(shell + 1).some((word) => SCRIPT_FLAG.test(word.text) || !word.text.startsWith('-'))
-  );
+  if (shell === -1) return false;
+  // Options come first: `-s` reads the script from input, `-c` takes it as an argument, and the
+  // first operand is a script file.
+  for (const word of words.slice(shell + 1)) {
+    if (SCRIPT_FLAG.test(word.text)) return false;
+    if (/^-[a-z]*s[a-z]*$/.test(word.text)) return true;
+    if (!word.text.startsWith('-')) return false;
+  }
+  return true;
 }
 
 /** Mentions in raw words, without their substitutions, whose commands are read on their own. */
