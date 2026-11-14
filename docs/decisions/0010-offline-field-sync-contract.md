@@ -328,3 +328,11 @@ Decided for werk-flow/werkflow-planning#403 on the second round of its outside r
 ## Amendment 2026-11-13: an approved correction is recorded time
 
 Owner decision for werk-flow/werkflow-planning#447. The person's last recorded time, before which a captured event is `conflict` with `version_conflict`, includes the time of every current approved `Zeitkorrektur`. A late clock-in captured inside hours the office already approved is refused on the phone as „Konflikt“, so the hours never count twice.
+
+## Amendment 2026-11-14: the shell requests send the origin's cookies
+
+Decided for werk-flow/werkflow-planning#22 after the real iPhone run (OQ-5, step 9): on staging the installed app, opened cold without signal, showed Safari's own offline page. Staging sits behind Vercel Authentication, which answers every request without its `_vercel_jwt` cookie with a redirect to Vercel's sign-in. The worker fetched its shell without cookies and refused redirects, so its install failed and no worker served the start. Production has no Vercel Authentication and was not affected.
+
+- **The shell requests send the origin's cookies** (`credentials: 'same-origin'`). The offline page and the build files answer the same bytes for every request: the page is prerendered, and `proxy.ts`, which reads and refreshes the session, never runs on a shell path, so no answer sets a cookie. A rule test pins the proxy's paths (`lib/security/service-worker.test.ts`).
+- **The worker refuses a personal answer.** A redirect, a status outside 200 to 299, or an offline page marked `private` or `no-store`, as Next.js marks a page rendered for one request, fails the fill; the cache keeps nothing of it.
+- **Rejected: a Vercel setting.** Turning Vercel Authentication off for staging exposes a preview of unreleased work; a bypass secret in the worker is public in its script.

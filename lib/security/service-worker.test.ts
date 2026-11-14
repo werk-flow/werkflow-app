@@ -51,3 +51,48 @@ test('the shell asset pattern finds only root-relative paths of this origin', ()
     '/_next/static/css/app-3c4d.css',
   ]);
 });
+
+// Rule test: the shell requests send the origin's cookies, so a deployment
+// behind Vercel Authentication answers them (werk-flow/werkflow-planning#22).
+// The cached bytes stay free of the person only while proxy.ts, which reads
+// and refreshes the session, never runs on a shell path.
+test('the proxy never runs on a path the shell caches', () => {
+  const proxy = readFileSync(join(root, 'proxy.ts'), 'utf8');
+  const block = /matcher: \[([^\]]*)\]/.exec(proxy)?.[1];
+  if (!block) throw new Error('matcher not found in proxy.ts');
+  const entries = [...block.matchAll(/'([^']+)'/g)].flatMap(([, entry]) =>
+    entry === undefined ? [] : [entry],
+  );
+  expect(entries.length).toBeGreaterThan(0);
+  const routes = (entry: string, path: string): boolean => {
+    if (!entry.endsWith('/:path*')) return entry === path;
+    const base = entry.slice(0, -'/:path*'.length);
+    return path === base || path.startsWith(`${base}/`);
+  };
+  for (const path of [
+    '/offline',
+    '/sw.js',
+    '/_next/static/chunks/app.js',
+    '/icons/icon-192.png',
+    '/logo.svg',
+  ]) {
+    expect(
+      entries.filter((entry) => routes(entry, path)),
+      `proxy.ts routes ${path}`,
+    ).toEqual([]);
+  }
+});
+
+// Rule test: a dynamic page could hold the person whose cookies the shell
+// request sent. Next.js marks such a page private and no-store; the worker
+// refuses to cache an offline page with that mark.
+test('the worker refuses an offline page the server rendered for one request', () => {
+  const source = worker.match(/const PER_REQUEST = \/(.+)\/i;/)?.[1];
+  expect(source).toBeDefined();
+  const perRequest = new RegExp(source ?? '', 'i');
+  expect(perRequest.test('private, no-cache, no-store, max-age=0, must-revalidate')).toBe(true);
+  expect(perRequest.test('no-store, must-revalidate')).toBe(true);
+  expect(perRequest.test('public, max-age=0, must-revalidate')).toBe(false);
+  expect(perRequest.test('s-maxage=31536000')).toBe(false);
+  expect(worker).toMatch(/if \(PER_REQUEST\.test\(page\.headers\.get\('Cache-Control'\) \?\? ''\)\)\s+throw/);
+});
