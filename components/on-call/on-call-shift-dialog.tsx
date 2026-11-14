@@ -26,6 +26,7 @@ import {
   tomorrowMorningInBerlin,
 } from '@/lib/date-time/berlin';
 import { changeOnCallShift, planOnCallShift } from '@/lib/on-call/actions';
+import { startToSave } from '@/lib/on-call/rules';
 import type { OnCallPerson, OnCallShift } from '@/lib/on-call/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
@@ -95,7 +96,7 @@ function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDial
     const values = {
       organizationId,
       shiftId,
-      startsAt: startsAt.toISOString(),
+      startsAt: startToSave(shift?.startsAt ?? null, startsAt, new Date()),
       endsAt: endsAt.toISOString(),
       label,
       handoverNote: note,

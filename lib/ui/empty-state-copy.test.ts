@@ -84,7 +84,6 @@ const REVIEWED_SENTENCES: Readonly<Record<string, string>> = {
     'a field value placeholder',
   'components/auftraege/project-detail/project-detail-time-summary-card.tsx: Kein geplanter Arbeitsaufwand hinterlegt.':
     'a field value placeholder for the planned effort',
-  'components/on-call/on-call-now-card.tsx: Keine Telefonnummer hinterlegt': 'a field value placeholder',
   'components/auftraege/work-pack/field-work-pack-overview.tsx: Keine Adresse hinterlegt':
     'a field value placeholder',
   'components/inventar/job-material-item-picker.tsx: Noch keinem Lager zugeordnet':

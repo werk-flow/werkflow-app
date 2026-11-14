@@ -27,14 +27,10 @@ export function OnCallNowCard({
 }): ReactElement {
   const now = new Date(useWallClockTick(60_000));
   const current = overview.shifts.filter((shift) => isOnCallAt(shift, now));
-  const own = overview.shifts.filter(
-    (shift) =>
-      shiftPhase(shift, now) === 'planned' &&
-      shift.members.some((member) => member.employeeRecordId === overview.ownEmployeeRecordId),
-  );
+  const own = overview.ownNext.filter((shift) => shiftPhase(shift, now) === 'planned');
   return (
     <Card>
-      <LiveRouteRefresh tables={['on_call_shifts']} />
+      <LiveRouteRefresh tables={['on_call_shifts', 'profiles', 'employee_records']} />
       <CardHeader className="pb-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -95,7 +91,7 @@ function CurrentShift({ shift }: { shift: OnCallShift }): ReactElement {
                 {member.phone}
               </a>
             ) : (
-              <span className="text-sm text-muted-foreground">Keine Telefonnummer hinterlegt</span>
+              <span className="text-sm text-muted-foreground">Telefonnummer fehlt</span>
             )}
           </li>
         ))}

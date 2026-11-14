@@ -20,6 +20,16 @@ export function isOnCallAt(shift: ShiftTime, at: Date): boolean {
   return shiftPhase(shift, at) === 'running';
 }
 
+/**
+ * The start a save sends. A running shift keeps its stored instant: the form
+ * shows minutes, while a handover starts the next shift at the exact second.
+ */
+export function startToSave(storedStart: string | null, typedStart: Date, at: Date): string {
+  return storedStart !== null && Date.parse(storedStart) <= at.getTime()
+    ? storedStart
+    : typedStart.toISOString();
+}
+
 /** The Berlin week (Monday to Monday) a calendar day falls in, as the instants a list reads. */
 export function onCallWeek(localDate: string): { monday: string; from: Date; until: Date } {
   const monday = addLocalDays(localDate, -getLocalWeekday(localDate));

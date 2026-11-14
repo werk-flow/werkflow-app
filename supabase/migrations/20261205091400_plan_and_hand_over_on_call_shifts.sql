@@ -177,7 +177,6 @@ create function app_private.check_on_call_shift_state(
 )
 returns uuid[]
 language plpgsql
-stable
 security invoker
 set search_path to ''
 as $$
@@ -203,6 +202,9 @@ begin
   ) <> cardinality(v_member_ids) then
     raise exception 'on_call_member_invalid';
   end if;
+  -- One planner of the organization at a time from here to commit, so two
+  -- unconfirmed overlapping saves never both pass the question below.
+  perform pg_advisory_xact_lock(hashtextextended(p_organization_id::text || ':on-call-shifts', 0));
   if not coalesce(p_confirm_overlap, false) and exists (
     select 1 from public.on_call_shifts other
     where other.organization_id = p_organization_id
@@ -244,7 +246,12 @@ revoke all on function app_private.replace_on_call_shift_members(uuid, uuid, uui
 grant execute on function app_private.replace_on_call_shift_members(uuid, uuid, uuid[]) to service_role;
 
 -- Appends the shift's state after a write to its history.
-create function app_private.record_on_call_shift_event(p_shift_id uuid, p_kind text, p_actor_id uuid)
+create function app_private.record_on_call_shift_event(
+  p_organization_id uuid,
+  p_shift_id uuid,
+  p_kind text,
+  p_actor_id uuid
+)
 returns void
 language sql
 security invoker
@@ -257,13 +264,15 @@ as $$
   select shift.organization_id, shift.id, p_kind, shift.version, shift.starts_at, shift.ends_at,
     shift.label, shift.handover_note, shift.cancelled_at,
     array(select member.employee_record_id from public.on_call_shift_members member
-      where member.shift_id = shift.id order by member.employee_record_id),
+      where member.shift_id = shift.id and member.organization_id = shift.organization_id
+      order by member.employee_record_id),
     p_actor_id
   from public.on_call_shifts shift
-  where shift.id = p_shift_id;
+  where shift.id = p_shift_id and shift.organization_id = p_organization_id;
 $$;
-revoke all on function app_private.record_on_call_shift_event(uuid, text, uuid) from public, anon, authenticated;
-grant execute on function app_private.record_on_call_shift_event(uuid, text, uuid) to service_role;
+revoke all on function app_private.record_on_call_shift_event(uuid, uuid, text, uuid)
+  from public, anon, authenticated;
+grant execute on function app_private.record_on_call_shift_event(uuid, uuid, text, uuid) to service_role;
 
 -- Plans a shift under the id the caller chose. A call repeated after its
 -- answer was lost finds its shift and writes nothing. Refusals: not_authorized,
@@ -309,7 +318,7 @@ begin
     p_actor_id, p_actor_id
   );
   perform app_private.replace_on_call_shift_members(p_organization_id, p_shift_id, v_member_ids);
-  perform app_private.record_on_call_shift_event(p_shift_id, 'planned', p_actor_id);
+  perform app_private.record_on_call_shift_event(p_organization_id, p_shift_id, 'planned', p_actor_id);
   return jsonb_build_object('shiftId', p_shift_id, 'version', 1);
 end;
 $$;
@@ -391,7 +400,7 @@ begin
     handover_note = coalesce(p_handover_note, ''), version = shift.version + 1, updated_by = p_actor_id
   where shift.id = p_shift_id and shift.version = p_expected_version;
   perform app_private.replace_on_call_shift_members(p_organization_id, p_shift_id, v_member_ids);
-  perform app_private.record_on_call_shift_event(p_shift_id, 'changed', p_actor_id);
+  perform app_private.record_on_call_shift_event(p_organization_id, p_shift_id, 'changed', p_actor_id);
   return jsonb_build_object('shiftId', p_shift_id, 'version', v_shift.version + 1);
 end;
 $$;
@@ -422,12 +431,12 @@ begin
     update public.on_call_shifts shift
     set ends_at = v_now, version = shift.version + 1, updated_by = p_actor_id
     where shift.id = p_shift_id and shift.version = p_expected_version;
-    perform app_private.record_on_call_shift_event(p_shift_id, 'ended', p_actor_id);
+    perform app_private.record_on_call_shift_event(p_organization_id, p_shift_id, 'ended', p_actor_id);
   else
     update public.on_call_shifts shift
     set cancelled_at = v_now, version = shift.version + 1, updated_by = p_actor_id
     where shift.id = p_shift_id and shift.version = p_expected_version;
-    perform app_private.record_on_call_shift_event(p_shift_id, 'cancelled', p_actor_id);
+    perform app_private.record_on_call_shift_event(p_organization_id, p_shift_id, 'cancelled', p_actor_id);
   end if;
   return jsonb_build_object('shiftId', p_shift_id, 'version', v_shift.version + 1);
 end;
@@ -480,7 +489,7 @@ begin
   update public.on_call_shifts shift
   set ends_at = v_now, version = shift.version + 1, updated_by = p_actor_id
   where shift.id = p_shift_id and shift.version = p_expected_version;
-  perform app_private.record_on_call_shift_event(p_shift_id, 'handed_over', p_actor_id);
+  perform app_private.record_on_call_shift_event(p_organization_id, p_shift_id, 'handed_over', p_actor_id);
 
   v_member_ids := app_private.check_on_call_shift_state(
     p_organization_id, p_next_shift_id, v_now, p_next_ends_at, p_next_label, p_member_ids, p_confirm_overlap
@@ -492,7 +501,7 @@ begin
     coalesce(p_handover_note, ''), p_actor_id, p_actor_id
   );
   perform app_private.replace_on_call_shift_members(p_organization_id, p_next_shift_id, v_member_ids);
-  perform app_private.record_on_call_shift_event(p_next_shift_id, 'taken_over', p_actor_id);
+  perform app_private.record_on_call_shift_event(p_organization_id, p_next_shift_id, 'taken_over', p_actor_id);
   return jsonb_build_object('shiftId', p_next_shift_id, 'version', 1);
 end;
 $$;

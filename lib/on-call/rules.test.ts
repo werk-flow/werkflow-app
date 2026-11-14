@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { resolveBerlinWallTime } from '@/lib/date-time/berlin';
-import { onCallWeek, isOnCallAt, shiftPhase } from './rules';
+import { onCallWeek, isOnCallAt, shiftPhase, startToSave } from './rules';
 
 /** The instant of a Berlin wall time; the first one of an ambiguous autumn hour. */
 function berlin(localDateTime: string): Date {
@@ -122,5 +122,22 @@ describe('the Berlin week a list shows', () => {
     expect(week.monday).toBe(monday);
     expect(week.from.toISOString()).toBe(from);
     expect(week.until.toISOString()).toBe(until);
+  });
+});
+
+describe('the start a change saves', () => {
+  test('a running shift that a handover started at an exact second keeps that instant', () => {
+    const stored = '2026-11-14T08:12:34.567891+00:00';
+    expect(
+      startToSave(stored, new Date('2026-11-14T08:12:00.000Z'), new Date('2026-11-14T09:00:00.000Z')),
+    ).toBe(stored);
+  });
+
+  test('a planned shift saves the typed start', () => {
+    const typed = new Date('2026-11-20T15:00:00.000Z');
+    expect(startToSave('2026-11-20T14:00:00+00:00', typed, new Date('2026-11-14T09:00:00.000Z'))).toBe(
+      typed.toISOString(),
+    );
+    expect(startToSave(null, typed, new Date('2026-11-14T09:00:00.000Z'))).toBe(typed.toISOString());
   });
 });

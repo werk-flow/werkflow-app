@@ -467,7 +467,7 @@ export const DIALOG_INVENTORY = {
   'components/on-call/on-call-history-dialog.tsx#OnCallHistoryDialog|Verlauf der Bereitschaft': {
     audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-history' }],
   },
-  "components/on-call/on-call-week-content.tsx#WeekDialogs|{running ? 'Bereitschaft jetzt beenden?' : 'Bereitschaft absagen?'}":
+  "components/on-call/on-call-week-content.tsx#WeekDialogs|{runsNow ? 'Bereitschaft jetzt beenden?' : 'Bereitschaft absagen?'}":
     {
       audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-end' }],
     },

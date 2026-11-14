@@ -96,10 +96,13 @@ export const onCallReadSchema = z.object({
 });
 export type OnCallRead = z.infer<typeof onCallReadSchema>;
 
-/** What the dashboard shows every member: the shifts of the next days and the caller's own record. */
+/** One of the caller's own coming shifts. */
+export type OwnOnCallShift = Pick<OnCallShift, 'id' | 'startsAt' | 'endsAt' | 'label' | 'cancelledAt'>;
+
+/** What the dashboard shows every member: the shifts of the next days and the caller's own next shifts. */
 export type OnCallOverview = {
   shifts: OnCallShift[];
-  ownEmployeeRecordId: string | null;
+  ownNext: OwnOnCallShift[];
 };
 
 /** What the office's week list shows. */

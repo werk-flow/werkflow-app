@@ -207,6 +207,11 @@ begin
           or (shift_id = '46900000-0000-4000-8000-000000000105' and kind = 'taken_over' and version = 1))) <> 2 then
     raise exception 'the handover wrote no history for both shifts';
   end if;
+  -- The shift a handover started keeps its exact start through a note-only change.
+  perform public.change_on_call_shift('46900000-0000-4000-8000-000000000002',
+    '46900000-0000-4000-8000-0000000000a0', '46900000-0000-4000-8000-000000000105', 1,
+    (select starts_at from public.on_call_shifts where id = '46900000-0000-4000-8000-000000000105'),
+    now() + interval '1 day', 'Heizung', 'Therme Lindenstraße 4 und 6 beobachten', array[v_lena], true);
   perform pg_temp.expect_refusal('changing an ended shift',
     format('select public.end_on_call_shift(%L, %L, %L, 3)',
       '46900000-0000-4000-8000-000000000002', '46900000-0000-4000-8000-0000000000a0',

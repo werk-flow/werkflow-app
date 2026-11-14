@@ -59,16 +59,18 @@ export function OnCallWeekContent({
   const now = useWallClockTick(60_000);
   const close = () => setDialog(null);
   const sunday = addLocalDays(week.monday, 6);
+  // The clock, not the read, decides what runs: a shift that starts while the page is open can be handed over.
+  const running = runningShifts(week, now);
 
   return (
     <div className="space-y-6">
-      <LiveRouteRefresh tables={['on_call_shifts']} />
+      <LiveRouteRefresh tables={['on_call_shifts', 'profiles', 'employee_records']} />
       <SubpageHeader
         title="Bereitschaft"
         description="Wer außerhalb der Arbeitszeit erreichbar ist. Alle im Team sehen es auf dem Dashboard."
         actions={
           <div className="flex flex-wrap gap-2">
-            {week.running.length > 0 && (
+            {running.length > 0 && (
               <Button variant="outline" onClick={() => setDialog({ kind: 'handover' })}>
                 <ArrowLeftRight aria-hidden="true" />
                 Übergeben
@@ -118,10 +120,17 @@ export function OnCallWeekContent({
         week={week}
         settle={settle}
         now={now}
+        running={running}
         onClose={close}
       />
     </div>
   );
+}
+
+/** The loaded shifts that run at `now`, each once. */
+function runningShifts(week: OnCallWeekView, now: number): OnCallShift[] {
+  const byId = new Map([...week.running, ...week.shifts].map((shift) => [shift.id, shift]));
+  return [...byId.values()].filter((shift) => shiftPhase(shift, new Date(now)) === 'running');
 }
 
 function ShiftRow({
@@ -197,6 +206,7 @@ function WeekDialogs({
   week,
   settle,
   now,
+  running,
   onClose,
 }: {
   dialog: OpenDialog | null;
@@ -204,6 +214,7 @@ function WeekDialogs({
   week: OnCallWeekView;
   settle: SettleOnChange;
   now: number;
+  running: OnCallShift[];
   onClose: () => void;
 }): ReactElement | null {
   const { showBanner } = useBanner();
@@ -224,7 +235,7 @@ function WeekDialogs({
     return (
       <OnCallHandoverDialog
         organizationId={organizationId}
-        running={week.running}
+        running={running}
         people={week.people}
         settle={settle}
         onClose={onClose}
@@ -233,18 +244,18 @@ function WeekDialogs({
   if (dialog.kind === 'history')
     return <OnCallHistoryDialog shift={dialog.shift} people={week.people} onClose={onClose} />;
   const { shift } = dialog;
-  const running = shiftPhase(shift, new Date(now)) === 'running';
+  const runsNow = shiftPhase(shift, new Date(now)) === 'running';
   return (
     <ConfirmActionDialog
       open
       onOpenChange={(open) => !open && onClose()}
-      title={running ? 'Bereitschaft jetzt beenden?' : 'Bereitschaft absagen?'}
+      title={runsNow ? 'Bereitschaft jetzt beenden?' : 'Bereitschaft absagen?'}
       description={
-        running
+        runsNow
           ? 'Die Bereitschaft endet sofort. Ab dann hat niemand mehr aus dieser Bereitschaft Dienst.'
           : 'Die geplante Bereitschaft findet nicht statt. Sie bleibt im Verlauf sichtbar.'
       }
-      confirmLabel={running ? 'Jetzt beenden' : 'Absagen'}
+      confirmLabel={runsNow ? 'Jetzt beenden' : 'Absagen'}
       onConfirm={async () => {
         const since = settle.markChange();
         const result = await endShift({ organizationId, shiftId: shift.id, expectedVersion: shift.version });
@@ -252,7 +263,7 @@ function WeekDialogs({
           return describeFailure(result, ON_CALL_FAILURE_MESSAGES, 'Die Bereitschaft wurde nicht beendet.');
         showBanner({
           variant: 'success',
-          message: running ? 'Bereitschaft beendet.' : 'Bereitschaft abgesagt.',
+          message: runsNow ? 'Bereitschaft beendet.' : 'Bereitschaft abgesagt.',
         });
         void settle(since);
         return null;

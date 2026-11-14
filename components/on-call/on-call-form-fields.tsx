@@ -29,7 +29,7 @@ export function OnCallPeopleField({
     .map((person) => ({
       value: person.employeeRecordId,
       label: person.name,
-      description: person.phone ?? 'Keine Telefonnummer hinterlegt',
+      description: person.phone ?? 'Telefonnummer fehlt',
     }));
   return (
     <Field label="Wer hat Bereitschaft?" htmlFor={id} required error={error}>

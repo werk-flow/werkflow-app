@@ -7,7 +7,13 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 
 import { onCallWeek } from './rules';
-import { onCallReadSchema, type OnCallOverview, type OnCallRead, type OnCallWeekView } from './types';
+import {
+  onCallReadSchema,
+  type OnCallOverview,
+  type OnCallRead,
+  type OnCallWeekView,
+  type OwnOnCallShift,
+} from './types';
 
 // The Bereitschaft readers (werk-flow/werkflow-planning#469). The caller of a
 // reader has established the organization and the role: the dashboard for
@@ -17,6 +23,8 @@ import { onCallReadSchema, type OnCallOverview, type OnCallRead, type OnCallWeek
 /** How far ahead the dashboard shows the coming shifts. */
 const OVERVIEW_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** How many of the caller's own coming shifts the dashboard names. */
+const OWN_NEXT_COUNT = 3;
 
 async function readShifts(
   organizationId: string,
@@ -45,30 +53,62 @@ async function readShifts(
   return { success: true, read: parsed.data };
 }
 
-/** Who is on call now and in the coming days, and the caller's own personnel record to find their shifts. */
+/** The caller's next shifts that have not started, however far ahead. */
+async function readOwnNextShifts(
+  organizationId: string,
+  userId: string,
+  now: Date,
+): Promise<ActionResult<{ ownNext: OwnOnCallShift[] }, 'load_failed'>> {
+  const admin = createSupabaseAdminClient();
+  const ownRecord = await admin
+    .from('employee_records')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (ownRecord.error) {
+    logError('readOwnNextShifts: own record read failed', ownRecord.error);
+    return { success: false, error: 'load_failed' };
+  }
+  if (!ownRecord.data) return { success: true, ownNext: [] };
+  const { data, error } = await admin
+    .from('on_call_shifts')
+    .select('id, starts_at, ends_at, label, cancelled_at, on_call_shift_members!inner(employee_record_id)')
+    .eq('organization_id', organizationId)
+    .eq('on_call_shift_members.employee_record_id', ownRecord.data.id)
+    .is('cancelled_at', null)
+    .gt('starts_at', now.toISOString())
+    .order('starts_at')
+    .limit(OWN_NEXT_COUNT);
+  if (error) {
+    logError('readOwnNextShifts: shift read failed', error);
+    return { success: false, error: 'load_failed' };
+  }
+  return {
+    success: true,
+    ownNext: data.map((shift) => ({
+      id: shift.id,
+      startsAt: shift.starts_at,
+      endsAt: shift.ends_at,
+      label: shift.label,
+      cancelledAt: shift.cancelled_at,
+    })),
+  };
+}
+
+/** Who is on call now and in the coming days, and the caller's own next shifts. */
 export async function readOnCallOverview(
   organizationId: string,
   userId: string,
 ): Promise<ActionResult<{ overview: OnCallOverview }, 'load_failed'>> {
   const now = new Date();
-  const [shifts, ownRecord] = await Promise.all([
+  const [shifts, own] = await Promise.all([
     readShifts(organizationId, now, new Date(now.getTime() + OVERVIEW_DAYS * DAY_MS), false),
-    createSupabaseAdminClient()
-      .from('employee_records')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('user_id', userId)
-      .maybeSingle(),
+    readOwnNextShifts(organizationId, userId, now),
   ]);
   if (!shifts.success) return shifts;
-  if (ownRecord.error) {
-    logError('readOnCallOverview: own record read failed', ownRecord.error);
-    return { success: false, error: 'load_failed' };
-  }
-  return {
-    success: true,
-    overview: { shifts: shifts.read.shifts, ownEmployeeRecordId: ownRecord.data?.id ?? null },
-  };
+  if (!own.success) return own;
+  return { success: true, overview: { shifts: shifts.read.shifts, ownNext: own.ownNext } };
 }
 
 /** The office's week: its shifts with their history, the shifts running now and the people to plan. */
