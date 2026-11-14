@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  type Admission,
   admission,
   isStartKind,
   processTable,
@@ -10,6 +11,7 @@ import {
   runningHeavyCommands,
   type RoomReading,
   type StartKind,
+  waitForAdmission,
 } from './machine-room';
 
 const GIB = 1024 ** 3;
@@ -23,8 +25,14 @@ function temporaryDirectory(): string {
   return directory;
 }
 
-const watched = (available: number, floor: number, blocked: string | null = null): RoomReading => ({
-  room: { available: available * GIB, floor: floor * GIB, blocked, alerted: false },
+// A quiet PC: 15-minute load 2 on 14 cores, under the watch's normal line of 1.5 per core.
+const watched = (
+  available: number,
+  floor: number,
+  blocked: string | null = null,
+  load = { load: 2, cores: 14, normalLoad: 21 },
+): RoomReading => ({
+  room: { available: available * GIB, floor: floor * GIB, blocked, alerted: false, ...load },
 });
 const UNWATCHED: RoomReading = { unwatched: 'no load watch at /nowhere', fix: 'Install the load watch.' };
 const admitted = (start: StartKind, reading: RoomReading, heavy: readonly number[] = []): boolean =>
@@ -119,6 +127,81 @@ test('a blocked machine takes no start of any kind', () => {
   }
 });
 
+// The watch's normal line is 1.5 per core: 24 on the VM's 16 cores, 16.5 on the Mac's 11.
+test('a thread waits for a 15-minute load under the normal line, however much memory is free', () => {
+  // 2026-11-14 on the VM: load 29 to 55 on 16 cores all morning, 19 GiB available.
+  const vm = (load: number): RoomReading => watched(19, 3.2, null, { load, cores: 16, normalLoad: 24 });
+  const busy = admission('thread', vm(29), []);
+  expect(busy).toMatchObject({ admitted: false, measured: false, unwatched: false });
+  expect(busy.reason).toBe(
+    "19.0 GiB available plus 0.0 held by heavy commands (no heavy command runs); a thread needs 7.7: the floor of 3.2, 4.0 for a check:changed and 0.5 for each agent. The 15-minute load is 29.0 on 16 cores; a thread needs it under 24.0, the load watch's normal line.",
+  );
+  expect(admitted('thread', vm(24))).toBe(false);
+  expect(admitted('thread', vm(23.9))).toBe(true);
+  // The load line is the thread's alone: a heavy command, a setup and a device keep the memory rule
+  // and the watch's own block above 2.5 per core.
+  for (const start of ['heavy', 'setup', 'device'] as const) expect(admitted(start, vm(29))).toBe(true);
+  // Below the line, memory still decides.
+  expect(admitted('thread', watched(7.6, 3.2, null, { load: 10, cores: 16, normalLoad: 24 }))).toBe(false);
+});
+
+test('a macOS memory pressure of warn alone refuses nothing; the measured numbers decide', () => {
+  // werk-flow/werkflow-app#454: warn, 3.1 of 18 GiB available, load 2.8 on 11 cores, one agent, no
+  // heavy command. The floor is 10 % of RAM before the watch's alert opens.
+  const mac = (available: number, blocked: string): RoomReading =>
+    watched(available, 1.8, blocked, { load: 2.8, cores: 11, normalLoad: 16.5 });
+  const warn = mac(3.1, 'macOS reports memory pressure: warn');
+  expect(admitted('heavy', warn)).toBe(true);
+  expect(admitted('setup', warn)).toBe(true);
+  // A thread still needs memory for its agent and its check:changed: 3.1 GiB holds neither, and the
+  // refusal names those numbers, never the pressure.
+  const thread = admission('thread', warn, []);
+  expect(thread.admitted).toBe(false);
+  expect(thread.reason).toStartWith('3.1 GiB available plus 0.0 held by heavy commands');
+  expect(thread.reason).not.toContain('pressure');
+  expect(admitted('thread', mac(6.4, 'macOS reports memory pressure: warn'))).toBe(true);
+  // Critical still blocks every start.
+  expect(admitted('setup', mac(9, 'macOS reports memory pressure: critical'))).toBe(false);
+});
+
+test('a wait for room returns once memory and load both hold', async () => {
+  const vm = (available: number, load: number): Admission =>
+    admission('thread', watched(available, 3.2, null, { load, cores: 16, normalLoad: 24 }), []);
+  // Memory but no load line, then the load line but no memory, then both.
+  const verdicts = [vm(19, 30), vm(7, 12), vm(19, 12), vm(2, 40)];
+  const waits: string[] = [];
+  let measured = 0;
+  let pauses = 0;
+  const verdict = await waitForAdmission(
+    () => {
+      const next = verdicts[measured];
+      measured += 1;
+      if (!next) throw new Error('The wait measured past the admitted verdict.');
+      return next;
+    },
+    (refused) => waits.push(refused.reason),
+    async () => {
+      pauses += 1;
+    },
+  );
+  expect(verdict.admitted).toBe(true);
+  expect([measured, pauses]).toEqual([3, 2]);
+  // Only the first refusal is announced.
+  expect(waits).toHaveLength(1);
+  expect(waits[0]).toContain('The 15-minute load is 30.0 on 16 cores');
+  // On a machine without the watch, waiting changes nothing: the wait returns that verdict at once.
+  const unwatched = await waitForAdmission(
+    () => admission('thread', UNWATCHED, []),
+    () => {
+      throw new Error('An unwatched machine is no wait.');
+    },
+    async () => {
+      throw new Error('An unwatched machine is no wait.');
+    },
+  );
+  expect(unwatched).toMatchObject({ admitted: false, unwatched: true });
+});
+
 test('a machine without the watch keeps a heavy command, a setup and a device going and refuses a thread with the install command', () => {
   expect(admission('heavy', UNWATCHED, [])).toMatchObject({
     admitted: true,
@@ -143,9 +226,16 @@ function fixOf(reading: RoomReading): { unwatched: string; fix: string } {
   return reading;
 }
 
-function watchAnswering(status: number | null, stdout: string, stderr = ''): RoomReading {
+const WATCH_SOURCE = 'LOAD_PER_CORE = 2.5\nAVAILABLE_FLOOR = 0.10\nCLEAR_LOAD_PER_CORE = 1.5\n';
+
+function watchAnswering(
+  status: number | null,
+  stdout: string,
+  stderr = '',
+  source = WATCH_SOURCE,
+): RoomReading {
   const script = join(temporaryDirectory(), 'workstation-load.py');
-  writeFileSync(script, '');
+  writeFileSync(script, source);
   const calls: string[][] = [];
   const reading = readMachineRoom(
     { WERKFLOW_LOAD_WATCH: script },
@@ -154,6 +244,7 @@ function watchAnswering(status: number | null, stdout: string, stderr = ''): Roo
       return { status, stdout, stderr };
     },
     'linux',
+    () => ({ load: 17, cores: 14 }),
   );
   expect(calls).toEqual([['python3', '-I', script, '--room']]);
   return reading;
@@ -165,15 +256,50 @@ test('the room is the answer of the load watch', () => {
       0,
       '{"available": 10956226560, "floor": 1677124812, "blocked": null, "alerted": false, "watching": true}\n',
     ),
-  ).toEqual({ room: { available: 10956226560, floor: 1677124812, blocked: null, alerted: false } });
+  ).toEqual({
+    room: {
+      available: 10956226560,
+      floor: 1677124812,
+      blocked: null,
+      alerted: false,
+      load: 17,
+      cores: 14,
+      normalLoad: 21,
+    },
+  });
   expect(
     watchAnswering(
       0,
       '{"available": 1, "floor": 2, "blocked": "macOS reports memory pressure: warn", "alerted": true, "watching": true}',
     ),
   ).toEqual({
-    room: { available: 1, floor: 2, blocked: 'macOS reports memory pressure: warn', alerted: true },
+    room: {
+      available: 1,
+      floor: 2,
+      blocked: 'macOS reports memory pressure: warn',
+      alerted: true,
+      load: 17,
+      cores: 14,
+      normalLoad: 21,
+    },
   });
+});
+
+// The normal line is the watch's own constant, never a copy here (werk-flow/werkflow-planning
+// ops/workstation-load.py): a watch that names none is an unreadable answer.
+test('the normal load line is read from the watch, and a watch without one is no reading', () => {
+  const room = '{"available": 1, "floor": 2, "blocked": null, "alerted": false, "watching": true}';
+  const withLine = (source: string): RoomReading => watchAnswering(0, room, '', source);
+  expect(withLine('CLEAR_LOAD_PER_CORE = 2  # a comment\n')).toMatchObject({ room: { normalLoad: 28 } });
+  for (const source of [
+    '',
+    'LOAD_PER_CORE = 2.5\n',
+    'CLEAR_LOAD_PER_CORE = CORES\n',
+    '# CLEAR_LOAD_PER_CORE = 1.5\n',
+  ])
+    expect(withLine(source)).toMatchObject({
+      unwatched: expect.stringContaining('names no normal load line'),
+    });
 });
 
 test('a missing, stopped, failing or unreadable watch is no reading, never an empty room', () => {

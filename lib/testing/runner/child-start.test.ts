@@ -75,7 +75,15 @@ test('a thread starts on this machine unless the call names an environment for i
 });
 
 const pc = (available: number, blocked: string | null = null): RoomReading => ({
-  room: { available: available * GIB, floor: 1.56 * GIB, blocked, alerted: false },
+  room: {
+    available: available * GIB,
+    floor: 1.56 * GIB,
+    blocked,
+    alerted: false,
+    load: 2,
+    cores: 14,
+    normalLoad: 21,
+  },
 });
 const measured =
   (reading: RoomReading, heavy: readonly number[] = []) =>
@@ -96,6 +104,30 @@ test('a local start without room is refused with the numbers and the two ways on
   expect(
     childStartRefusal(delegate(), measured(pc(14, 'the 5-minute load is 40.0 on 14 cores, above 35.0'))),
   ).toContain('This machine takes no start now: the 5-minute load is 40.0 on 14 cores, above 35.0.');
+});
+
+test('a local start above the load line is refused however much memory is free, and passes below it', () => {
+  // The VM on 2026-11-14: 15-minute load 29 on 16 cores, 19 GiB available.
+  const vm = (load: number): RoomReading => ({
+    room: {
+      available: 19 * GIB,
+      floor: 3.2 * GIB,
+      blocked: null,
+      alerted: false,
+      load,
+      cores: 16,
+      normalLoad: 24,
+    },
+  });
+  const reason = childStartRefusal(delegate(), measured(vm(29)));
+  expect(reason).toStartWith('Refused: this machine has no room to start a thread. 19.0 GiB available');
+  expect(reason).toContain(
+    "The 15-minute load is 29.0 on 16 cores; a thread needs it under 24.0, the load watch's normal line.",
+  );
+  expect(reason).toContain('`t3_environment_links` lists them, then pass `target.environmentId`');
+  expect(reason).toContain('run `bun run room --wait thread`');
+  expect(childStartRefusal(delegate(), measured(vm(14)))).toBeUndefined();
+  expect(childStartRefusal(delegate({ environmentId: MAC }), measured(vm(55)))).toBeUndefined();
 });
 
 test('a start with room passes, and so does every thread placed on another machine', () => {
@@ -170,11 +202,13 @@ const scratch = mkdtempSync(join(tmpdir(), 'werkflow-child-start-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 test('the hook refuses a local start without room or without a reading, and passes one with room or placed elsewhere', () => {
-  const watch = (name: string, available: number): string => {
+  // The stub names its own normal line, so the machine's real load never decides: 1000 per core
+  // admits any load, 0 refuses every one.
+  const watch = (name: string, available: number, normalPerCore = 1000): string => {
     const script = join(scratch, `${name}.py`);
     writeFileSync(
       script,
-      `print('{"available": ${available * GIB}, "floor": ${1.56 * GIB}, "blocked": null, "alerted": false, "watching": true}')\n`,
+      `CLEAR_LOAD_PER_CORE = ${normalPerCore}\nprint('{"available": ${available * GIB}, "floor": ${1.56 * GIB}, "blocked": null, "alerted": false, "watching": true}')\n`,
     );
     return script;
   };
@@ -194,6 +228,7 @@ test('the hook refuses a local start without room or without a reading, and pass
     );
   const full = watch('full', 3);
   const roomy = watch('roomy', 12);
+  const busy = watch('busy', 12, 0);
   const absent = join(scratch, 'absent.py');
 
   const refused = run(JSON.stringify(delegate()), full);
@@ -202,6 +237,10 @@ test('the hook refuses a local start without room or without a reading, and pass
   expect(run(JSON.stringify(delegate()), roomy).status).toBe(0);
   expect(run(JSON.stringify(create(undefined, undefined)), roomy).status).toBe(0);
   expect(run(JSON.stringify(delegate({ environmentId: MAC })), full).status).toBe(0);
+  const loaded = run(JSON.stringify(delegate()), busy);
+  expect(loaded.status).toBe(2);
+  expect(loaded.stderr).toContain("a thread needs it under 0.0, the load watch's normal line.");
+  expect(run(JSON.stringify(delegate({ environmentId: MAC })), busy).status).toBe(0);
 
   const unwatched = run(JSON.stringify(launch()), absent);
   expect(unwatched.status).toBe(2);
