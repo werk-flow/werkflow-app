@@ -57,23 +57,20 @@ insert into public.job_material_lines (id, organization_id, job_id, project_id, 
  '3b000000-0000-4000-8000-000000000050', '3b000000-0000-4000-8000-000000000040',
  '3b000000-0000-4000-8000-000000000020', 5);
 
--- The replaced functions keep their grants: the server calls them, no client role.
+-- The replaced movement function keeps its grants: the server calls it, no
+-- client role. inventory_atomic_writes.sql and job_material_use.sql check the
+-- other two.
 do $$
 declare
-  v_signature text;
+  v_signature constant text :=
+    'public.record_inventory_movement(uuid, uuid, uuid, uuid, text, numeric, uuid, uuid, uuid, uuid, text, uuid)';
 begin
-  foreach v_signature in array array[
-    'public.record_inventory_movement(uuid, uuid, uuid, uuid, text, numeric, uuid, uuid, uuid, uuid, text, uuid)',
-    'public.take_unplanned_inventory_material(uuid, uuid, uuid, uuid, uuid, uuid, numeric, text, text, uuid)',
-    'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid, uuid)'
-  ] loop
-    if has_function_privilege('anon', v_signature, 'EXECUTE')
-      or has_function_privilege('authenticated', v_signature, 'EXECUTE')
-      or not has_function_privilege('service_role', v_signature, 'EXECUTE')
-    then
-      raise exception '% must be executable by service_role only', v_signature;
-    end if;
-  end loop;
+  if has_function_privilege('anon', v_signature, 'EXECUTE')
+    or has_function_privilege('authenticated', v_signature, 'EXECUTE')
+    or not has_function_privilege('service_role', v_signature, 'EXECUTE')
+  then
+    raise exception '% must be executable by service_role only', v_signature;
+  end if;
 end $$;
 
 set local role service_role;
