@@ -50,7 +50,7 @@ Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it ke
 
 ### Profile a customer export
 
-A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures derive from it. Wrong turn: opening an export row to "check one field".
+A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds personal data. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures derive from it. Wrong turn: opening an export row to "check one field".
 
 ## Trust boundaries
 
@@ -88,11 +88,11 @@ RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE
 
 ### Files
 
-Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; each finalization copies it to its own key and checks it. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes; only reviewed writers, such as the organization export, store a server-generated file.
+Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; each finalization copies it to its own key and checks it. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes; only reviewed writers store a server-generated file.
 
 ### Mail and providers
 
-The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold only fixed error codes and status numbers.
+The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold only fixed error codes and status numbers. `lib/usage-statistics/capture.ts` alone sends PostHog personless server events for organizations in `POSTHOG_ORGANIZATION_IDS`; its test fails on other properties or senders.
 
 ### Browser
 
@@ -172,19 +172,19 @@ List each owner-accepted residual exposure until it closes.
 | Logs, traces, test artifacts | Diagnosis and test evidence. Fixtures are synthetic. | Limit access and remove secrets from exported evidence. Ignored files are neither encrypted nor purged automatically. |
 | Backups and retained file versions | Recovery. Database backups hold no file bytes. | [The runbook](recovery-and-incidents.md) records coverage and accepted loss. Deleting a live record does not erase a backup. |
 
-Before client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Analytics or session replay needs the owner's decision first.
+Before client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa), [PostHog](https://posthog.com/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Per-person analytics or session replay needs owner approval.
 
 ## Read-request authorization reuse
 
 A GET handler may share the identity and membership reads of one request through `lib/data/read-request-cache.ts`.
 
-- Each GET gets a fresh scope. No identity or membership result crosses requests.
+- Each GET gets a fresh scope; no result crosses requests.
 - Never wrap a Server Action or a mutation. Never pass caller-supplied authorization context into a `'use server'` export.
 - A handler that takes an organization from the request requires it to equal the resolved active organization.
 - The privileged profile lookup reads through the caller's own RLS on every call.
 - A new consumer extends `lib/data/read-request-cache.test.ts`. Job-access facts share one read per render or GET scope (`lib/jobs/job-access-reads.ts`) and read fresh in a Server Action.
 
-Membership alone authorizes no retained data of a removed employee. The clock-state reads check current membership in the action itself.
+Membership alone authorizes no retained data of a removed employee; the clock-state reads check current membership themselves.
 
 ## Calendar correction input boundary
 

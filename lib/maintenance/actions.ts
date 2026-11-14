@@ -14,6 +14,7 @@ import { createPlanningEntrySchema } from '@/lib/planning/schemas';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { captureUsage } from '@/lib/usage-statistics/capture';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import type {
   FieldMaintenanceContext,
@@ -330,6 +331,7 @@ export async function createMaintenanceVisit(input: {
   }
   updateTag(CACHE_TAGS.workTemplates(context.organizationId));
   refreshMaintenancePaths();
+  captureUsage(context.organizationId, 'maintenance_visit', 'started');
   return { success: true, jobNumber: data.job_number };
 }
 
@@ -470,6 +472,7 @@ export async function completeMaintenanceDueWork(input: unknown): Promise<Mainte
       error: maintenanceFailureCode(error, 'maintenance_completion_failed'),
     };
   refreshMaintenancePaths();
+  captureUsage(context.organizationId, 'maintenance_visit', 'completed');
   return { success: true };
 }
 
