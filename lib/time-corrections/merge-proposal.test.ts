@@ -186,4 +186,35 @@ describe('an edit of a recovery-ended segment that spans several days', () => {
       ['clock_out', '2026-09-07T14:00:00.000Z'],
     ]);
   });
+
+  test('a new end keeps the later pieces when a daytime join sits before a midnight split', () => {
+    const [firstIn, firstOut, secondIn, secondOut, thirdIn, thirdOut] = before.facts;
+    if (!firstIn || !firstOut || !secondIn || !secondOut || !thirdIn || !thirdOut)
+      throw new Error('Missing source fact fixture.');
+    // 07:00-12:00, 12:00-24:00 and 00:00-16:00 Berlin: one daytime join, then midnight.
+    const mixed: TimeCorrectionSnapshot = {
+      schemaVersion: 1,
+      facts: [
+        { ...firstIn, timestamp: '2026-09-07T05:00:00.000Z' },
+        { ...firstOut, timestamp: '2026-09-07T10:00:00.000Z' },
+        { ...secondIn, timestamp: '2026-09-07T10:00:00.000Z' },
+        { ...secondOut, timestamp: '2026-09-07T22:00:00.000Z' },
+        { ...thirdIn, timestamp: '2026-09-07T22:00:00.000Z' },
+        { ...thirdOut, timestamp: '2026-09-08T14:00:00.000Z' },
+      ],
+    };
+    const proposal = mergeCorrectionProposal(
+      'edit',
+      mixed,
+      proposed(['clock_out', '2026-09-07T09:00:00.000Z']),
+    );
+    expect(proposal?.facts.map((fact) => fact.timestamp)).toEqual([
+      '2026-09-07T05:00:00.000Z',
+      '2026-09-07T09:00:00.000Z',
+      '2026-09-07T10:00:00.000Z',
+      '2026-09-07T22:00:00.000Z',
+      '2026-09-07T22:00:00.000Z',
+      '2026-09-08T14:00:00.000Z',
+    ]);
+  });
 });

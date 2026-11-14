@@ -83,18 +83,25 @@ function sharesOneContext(facts: readonly TimeCorrectionFact[]): boolean {
   );
 }
 
-/** Whether the open time continues across midnight here: a clock_out and a clock_in at the same instant. */
+/**
+ * Whether the facts are one span that only midnight splits: at least one join, and every join of a
+ * clock_out and the next clock_in sits at one instant on a Europe/Berlin midnight. A daytime join
+ * anywhere makes them separate pieces of work.
+ */
 function continuesAcrossMidnight(facts: readonly TimeCorrectionFact[]): boolean {
-  return facts.some((fact, index) => {
+  const joins = facts.flatMap((fact, index): Array<[TimeCorrectionFact, TimeCorrectionFact]> => {
     const next = facts[index + 1];
-    return (
-      fact.entryType === 'clock_out' &&
-      next?.entryType === 'clock_in' &&
-      Date.parse(next.timestamp) === Date.parse(fact.timestamp) &&
-      // Only a Berlin midnight: a daytime switch at the same instant is two pieces of work, not one span.
-      getLocalDayStart(new Date(fact.timestamp)).getTime() === Date.parse(fact.timestamp)
-    );
+    return fact.entryType === 'clock_out' && next ? [[fact, next]] : [];
   });
+  return (
+    joins.length > 0 &&
+    joins.every(
+      ([close, open]) =>
+        open.entryType === 'clock_in' &&
+        Date.parse(open.timestamp) === Date.parse(close.timestamp) &&
+        getLocalDayStart(new Date(close.timestamp)).getTime() === Date.parse(close.timestamp),
+    )
+  );
 }
 
 // An edit changes times only; the source's activity and job stay.
