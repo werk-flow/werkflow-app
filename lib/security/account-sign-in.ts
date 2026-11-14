@@ -62,11 +62,12 @@ const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 
 /**
  * Raw text that names a refused call: the program, with an optional `@version`, and its sign-in
- * words, apart by spaces, quotes or commas, so `['gh', 'auth', 'login']` in a script counts too.
+ * words, apart by spaces, quotes, commas or an opening bracket, so `['gh', 'auth', 'login']` and
+ * `execFileSync('gh', ['auth', 'login'])` in a script count too.
  * Not `vercel.json`, `.vercel/`, `@vercel/functions` or `node_modules/vercel/`.
  */
 function mentionPattern(cli: AccountCli): RegExp {
-  const verbs = cli.verbs.map((level) => `['",\\s]+(?:${level.map(escaped).join('|')})`).join('');
+  const verbs = cli.verbs.map((level) => `['",\\s[(]+(?:${level.map(escaped).join('|')})`).join('');
   return new RegExp(
     `(?<![\\w@.$-])(?:${cli.names.map(escaped).join('|')})(?:@[\\w.^~-]*)?${verbs}(?![\\w.\\-/])`,
     'g',
@@ -107,8 +108,11 @@ function startsWith(args: readonly ShellWord[], verbs: AccountCli['verbs']): boo
   return false;
 }
 
-/** Flags of `git` and `gh` whose value is only a message: `git commit -m`, `gh pr create --body`. */
-const MESSAGE_FLAG = /^(?:-m|--message|--body|--title)$/;
+/**
+ * Flags of `git` and `gh` whose value is only a message: `git commit -m` and `-am`, `gh pr create
+ * --body`, `-b` and `-t`.
+ */
+const MESSAGE_FLAG = /^(?:-[a-zA-Z]*m|-t|-b|--message|--body|--title)$/;
 const MESSAGE_FLAG_VALUE = /^(?:--message|--body|--title)=/;
 
 /**
@@ -124,12 +128,16 @@ function messageValues(args: readonly ShellWord[]): ShellWord[] {
 /** Programs whose arguments are data: the inert programs, and lookups that name a program without running it. */
 const DATA_PROGRAMS = new Set([...INERT_PROGRAMS, 'which', 'type']);
 
-/** Programs that run their input as commands, so a data program's words piped into them are no data. */
+/**
+ * Whether a command may run its input as commands, so a data program's words piped into it are no
+ * data: a shell without a `-c` script, `xargs` or `source`, also behind a wrapper (`env bash`).
+ */
 function runsInput(words: ShellWord[]): boolean {
-  const call = program(words);
-  if (!call) return false;
-  if (call.name === 'xargs' || call.name === 'source' || call.name === '.') return true;
-  return SHELLS.has(call.name) && !call.args.some((arg) => SCRIPT_FLAG.test(arg.text));
+  if (program(words)?.name === '.') return true;
+  const names = words.map((word) => word.text.slice(word.text.lastIndexOf('/') + 1));
+  if (names.some((name) => name === 'xargs' || name === 'source')) return true;
+  const shell = names.findIndex((name) => SHELLS.has(name));
+  return shell !== -1 && !words.slice(shell + 1).some((word) => SCRIPT_FLAG.test(word.text));
 }
 
 /** Mentions in raw words, without their substitutions, whose commands are read on their own. */

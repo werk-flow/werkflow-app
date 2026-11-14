@@ -149,6 +149,11 @@ test('a mention the guard cannot verify as data is refused', () => {
     'echo "vercel list" | sh',
     "printf 'gh auth login\\n' | bash",
     'echo vercel list | xargs -I{} sh -c {}',
+    'echo "vercel list" | env bash',
+    'echo "gh auth login" | timeout 60 /bin/sh',
+    // An argument array in a script names the program and its words apart.
+    `node -e 'require("child_process").execFileSync("gh", ["auth", "login"])'`,
+    `python3 -c 'import subprocess; subprocess.run(["supabase", "login"])'`,
     // ANSI-C or locale quoting anywhere, substitutions and heredoc bodies included.
     "echo $'\\''; vercel list",
     'echo $"x"; gh auth login',
@@ -194,6 +199,8 @@ test('everyday commands, other subcommands and mentions as data pass', () => {
     'echo Vercel',
     'git commit -m "Refuse vercel and gh auth login"',
     'git commit --message="The hook refuses vercel list"',
+    'git commit -am "Block vercel and gh auth login"',
+    'gh pr create -t "Block vercel" -b "Guard gh auth token"',
     "git commit -F - <<'EOF'\nThe hook refuses vercel list and supabase login.\nEOF",
     'gh pr create --title "Refuse gh auth token" --body "The hook refuses vercel list."',
     "gh pr comment 206 --body-file - <<'EOF'\nThe hook refuses `vercel list` and $(gh auth token).\nEOF",
