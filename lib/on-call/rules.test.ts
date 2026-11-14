@@ -133,6 +133,13 @@ describe('the start a change saves', () => {
     ).toBe(stored);
   });
 
+  test('a shift that started while its start was edited refuses the edit', () => {
+    const stored = '2026-11-14T15:00:00+00:00';
+    expect(
+      startToSave(stored, new Date('2026-11-15T15:00:00.000Z'), new Date('2026-11-14T15:01:00.000Z')),
+    ).toBeNull();
+  });
+
   test('a planned shift saves the typed start', () => {
     const typed = new Date('2026-11-20T15:00:00.000Z');
     expect(startToSave('2026-11-20T14:00:00+00:00', typed, new Date('2026-11-14T09:00:00.000Z'))).toBe(

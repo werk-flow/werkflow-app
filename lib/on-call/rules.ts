@@ -23,11 +23,13 @@ export function isOnCallAt(shift: ShiftTime, at: Date): boolean {
 /**
  * The start a save sends. A running shift keeps its stored instant: the form
  * shows minutes, while a handover starts the next shift at the exact second.
+ * Null when the shift started while its start was being edited: that edit can
+ * no longer apply, and the save must say so instead of dropping it.
  */
-export function startToSave(storedStart: string | null, typedStart: Date, at: Date): string {
-  return storedStart !== null && Date.parse(storedStart) <= at.getTime()
-    ? storedStart
-    : typedStart.toISOString();
+export function startToSave(storedStart: string | null, typedStart: Date, at: Date): string | null {
+  if (storedStart === null || Date.parse(storedStart) > at.getTime()) return typedStart.toISOString();
+  const storedMinute = Math.floor(Date.parse(storedStart) / 60_000);
+  return Math.floor(typedStart.getTime() / 60_000) === storedMinute ? storedStart : null;
 }
 
 /** The Berlin week (Monday to Monday) a calendar day falls in, as the instants a list reads. */

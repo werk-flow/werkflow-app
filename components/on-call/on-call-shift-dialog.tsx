@@ -96,10 +96,17 @@ function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDial
     setAttempted(true);
     setError(null);
     if (focusFirstInvalidField(errors) || !startsAt || !endsAt) return;
+    const startToSend = startToSave(shift?.startsAt ?? null, startsAt, new Date());
+    if (startToSend === null) {
+      setError(
+        'Die Bereitschaft hat inzwischen begonnen, ihr Beginn lässt sich nicht mehr ändern. Schließe den Dialog und öffne ihn neu.',
+      );
+      return;
+    }
     const values = {
       organizationId,
       shiftId,
-      startsAt: startToSave(shift?.startsAt ?? null, startsAt, new Date()),
+      startsAt: startToSend,
       endsAt: endsAt.toISOString(),
       label,
       handoverNote: note,
