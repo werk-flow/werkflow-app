@@ -18,6 +18,7 @@ import {
   installActionWorld,
   signInAs,
 } from './action-boundary-world';
+import { WHOLESALER_IMPORT_MAX_FILE_BYTES } from '@/lib/inventory/wholesaler-import-schemas';
 import { assertRefused, refuseForeignIds } from './operations-boundary-refusals';
 
 const ownSupplierId = '37500000-0000-4000-8000-000000000030';
@@ -38,8 +39,8 @@ mock.module('@/lib/storage/r2', () => ({
     storageCalls.push(`head ${path}`);
     return { exists: true, sizeBytes: 3, contentType: 'application/octet-stream' };
   },
-  readStorageObject: async ({ path }: { path: string }) => {
-    storageCalls.push(`read ${path}`);
+  readStorageObject: async ({ path, maxBytes }: { path: string; maxBytes?: number }) => {
+    storageCalls.push(`read ${path} up to ${maxBytes}`);
     return new Uint8Array([1, 2, 3]);
   },
   discardStorageObjects: async ({ paths }: { paths: readonly string[] }) => {
@@ -182,7 +183,12 @@ await assertRefused(
   'one-call',
 );
 const ownFile = `staging:${ORGANIZATION_A}/wholesaler-imports/${uploadId}/${CALLER_ID}/0`;
-assert.deepEqual(storageCalls, [`head ${ownFile}`, `read ${ownFile}`, `discard ${ownFile}`]);
+// The read is bounded too: a file written again after the size check is never held whole.
+assert.deepEqual(storageCalls, [
+  `head ${ownFile}`,
+  `read ${ownFile} up to ${WHOLESALER_IMPORT_MAX_FILE_BYTES}`,
+  `discard ${ownFile}`,
+]);
 
 // Another organization's batch and catalog row are not found by the one call
 // that carries the caller's organization and actor.

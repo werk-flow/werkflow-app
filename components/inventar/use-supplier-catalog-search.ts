@@ -95,6 +95,12 @@ function useCatalogSearchResult(searched: boolean, search: string) {
 function useCatalogAdopt(dialogOpen: boolean, setDialog: SetDialog, picker: PickerCatalog) {
   const [adoptingId, setAdoptingId] = useState<string | null>(null);
   const [adoptFailure, setAdoptFailure] = useState<string | null>(null);
+  // A reopened dialog starts without the last dialog's failure.
+  const [seenOpen, setSeenOpen] = useState(dialogOpen);
+  if (dialogOpen !== seenOpen) {
+    setSeenOpen(dialogOpen);
+    if (dialogOpen) setAdoptFailure(null);
+  }
   const { run } = usePendingTask();
   // Counts each opening of the material dialog, so an adopt joins only the dialog it started in.
   // A layout effect runs inside the commit that opens the dialog, before any awaited answer lands.

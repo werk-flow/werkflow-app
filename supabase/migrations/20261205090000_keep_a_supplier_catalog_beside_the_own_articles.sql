@@ -431,13 +431,17 @@ begin
     raise exception 'invalid_input';
   end if;
 
+  -- The update locks each open batch first: a batch a concurrent confirm
+  -- finished meanwhile is skipped and keeps the lines its report names.
+  with abandoned as (
+    update public.inventory_supplier_catalog_imports batch set status = 'abandoned'
+    where batch.organization_id = p_organization_id and batch.created_by = p_actor_id
+      and batch.status in ('staging', 'previewed')
+    returning batch.id
+  )
   delete from public.inventory_supplier_catalog_import_lines line
-  using public.inventory_supplier_catalog_imports batch
-  where line.import_id = batch.id and batch.organization_id = p_organization_id
-    and batch.created_by = p_actor_id and batch.status in ('staging', 'previewed');
-  update public.inventory_supplier_catalog_imports batch set status = 'abandoned'
-  where batch.organization_id = p_organization_id and batch.created_by = p_actor_id
-    and batch.status in ('staging', 'previewed');
+  using abandoned
+  where line.import_id = abandoned.id;
 
   begin
     insert into public.inventory_supplier_catalog_imports (

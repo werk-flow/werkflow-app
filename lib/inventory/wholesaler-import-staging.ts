@@ -179,7 +179,9 @@ export async function deliveryContentHash(
   files: readonly { name: string; bytes: Uint8Array }[],
 ): Promise<string> {
   const sorted = [...files].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  const fileHashes = await Promise.all(sorted.map((file) => sha256Hex(file.bytes)));
+  // One file at a time, so at most one copy of a large file is held for its digest.
+  const fileHashes: string[] = [];
+  for (const file of sorted) fileHashes.push(await sha256Hex(file.bytes));
   return sha256Hex(new TextEncoder().encode(fileHashes.join('\n')));
 }
 

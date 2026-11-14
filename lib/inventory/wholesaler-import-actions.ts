@@ -157,7 +157,12 @@ async function readDeliveryFiles(
       if (!head.exists) return { success: false, error: 'file_missing' };
       const ruleFailure = uploadRuleFailure(DELIVERY_RULE, WHOLESALER_FILE_CONTENT_TYPE, head.sizeBytes);
       if (ruleFailure) return { success: false, error: ruleFailure };
-      const bytes = await readStorageObject({ organizationId: context.orgId, path });
+      // A key written again since the check is read only to one byte past the limit.
+      const bytes = await readStorageObject({
+        organizationId: context.orgId,
+        path,
+        maxBytes: WHOLESALER_IMPORT_MAX_FILE_BYTES,
+      });
       if (bytes.byteLength > WHOLESALER_IMPORT_MAX_FILE_BYTES)
         return { success: false, error: 'file_too_large' };
       files.push({ name, bytes });
