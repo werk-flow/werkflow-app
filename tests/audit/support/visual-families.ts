@@ -243,6 +243,7 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     covers: ['/service/bereitschaft'],
     route: fixed('/service/bereitschaft'),
     heading: SERVICE_AREA_HEADER.title,
+    title: 'Bereitschaft',
   },
   {
     id: 'zeiterfassung',

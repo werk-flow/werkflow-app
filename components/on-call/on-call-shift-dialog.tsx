@@ -80,13 +80,16 @@ function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDial
     () => shift?.members.map((member) => member.employeeRecordId) ?? [],
   );
   const [attempted, setAttempted] = useState(false);
-  const [overlapAsked, setOverlapAsked] = useState(false);
+  // The values the overlap question was asked for; a change asks again.
+  const [overlapAskedFor, setOverlapAskedFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = usePendingTask();
   const { showBanner } = useBanner();
   const [started] = useState(() => shift !== null && Date.parse(shift.startsAt) <= Date.now());
 
   const { startsAt, endsAt, errors } = shiftFieldErrors(times, memberIds);
+  const overlapKey = `${times.startsAt}|${times.endsAt}|${label.trim()}`;
+  const overlapAsked = overlapAskedFor === overlapKey;
 
   function submit(event: FormEvent): void {
     event.preventDefault();
@@ -103,13 +106,13 @@ function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDial
       memberIds,
       confirmOverlap: overlapAsked,
     };
-    void run(async () => {
+    run(async () => {
       const since = settle.markChange();
       const result = shift
         ? await changeOnCallShift({ ...values, expectedVersion: shift.version })
         : await planOnCallShift(values);
       if (!result.success) {
-        if (result.error === 'on_call_shift_overlaps') setOverlapAsked(true);
+        if (result.error === 'on_call_shift_overlaps') setOverlapAskedFor(overlapKey);
         else
           setError(
             describeFailure(result, ON_CALL_FAILURE_MESSAGES, 'Die Bereitschaft wurde nicht gespeichert.'),
@@ -119,7 +122,7 @@ function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDial
       onClose();
       showBanner({ variant: 'success', message: shift ? 'Bereitschaft geändert.' : 'Bereitschaft geplant.' });
       await settle(since);
-    });
+    }).catch(() => setError('Die Antwort kam nicht an. Versuche es erneut; gespeichert wird nur einmal.'));
   }
 
   return {

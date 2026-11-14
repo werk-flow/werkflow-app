@@ -58,13 +58,16 @@ function useHandoverForm({ organizationId, running, settle, onClose }: Omit<Hand
   const [note, setNote] = useState('');
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [attempted, setAttempted] = useState(false);
-  const [overlapAsked, setOverlapAsked] = useState(false);
+  // The values the overlap question was asked for; a change asks again.
+  const [overlapAskedFor, setOverlapAskedFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = usePendingTask();
   const { showBanner } = useBanner();
   const now = useWallClockTick(60_000);
 
   const nextEnd = parseBerlinDateTimeInput(endsAt);
+  const overlapKey = `${currentId}|${endsAt}|${label.trim()}`;
+  const overlapAsked = overlapAskedFor === overlapKey;
   const errors = {
     'on-call-handover-current': current ? undefined : 'Bitte wähle die laufende Bereitschaft.',
     'on-call-handover-people': memberIds.length > 0 ? undefined : 'Bitte wähle, wer übernimmt.',
@@ -87,7 +90,7 @@ function useHandoverForm({ organizationId, running, settle, onClose }: Omit<Hand
     setAttempted(true);
     setError(null);
     if (focusFirstInvalidField(errors) || !current || !nextEnd) return;
-    void run(async () => {
+    run(async () => {
       const since = settle.markChange();
       const result = await handOverOnCallShift({
         organizationId,
@@ -101,14 +104,14 @@ function useHandoverForm({ organizationId, running, settle, onClose }: Omit<Hand
         confirmOverlap: overlapAsked,
       });
       if (!result.success) {
-        if (result.error === 'on_call_shift_overlaps') setOverlapAsked(true);
+        if (result.error === 'on_call_shift_overlaps') setOverlapAskedFor(overlapKey);
         else setError(describeFailure(result, ON_CALL_FAILURE_MESSAGES, 'Die Übergabe hat nicht geklappt.'));
         return;
       }
       onClose();
       showBanner({ variant: 'success', message: 'Bereitschaft übergeben.' });
       await settle(since);
-    });
+    }).catch(() => setError('Die Antwort kam nicht an. Versuche es erneut; gespeichert wird nur einmal.'));
   }
 
   return {
