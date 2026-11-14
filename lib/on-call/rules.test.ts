@@ -189,8 +189,12 @@ describe('when the dashboard card changes next', () => {
       [shift('2026-11-16T22:00', '2026-11-17T06:00', now.toISOString())],
       null,
     ],
-    // The spring change: 02:00 to 03:00 does not exist; the shift ends at its instant.
-    ['an end in the spring change', [shift('2027-03-27T18:00', '2027-03-28T04:00')], '2027-03-27T18:00'],
+    // Before the spring change: the next change is the shift's start, not its end across the gap.
+    [
+      'a coming start before the spring change',
+      [shift('2027-03-27T18:00', '2027-03-28T04:00')],
+      '2027-03-27T18:00',
+    ],
   ])('%s', (_, shifts, expected) => {
     expect(nextShiftChange(shifts, now)).toEqual(expected === null ? null : berlin(expected).getTime());
   });
