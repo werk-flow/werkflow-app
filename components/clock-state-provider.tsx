@@ -379,17 +379,21 @@ function clockReadiness(input: {
   error: string | null;
   isLoading: boolean;
   standsOnDevice: boolean;
-  /** The outbox's code failed to load during the start's first look at the device. */
+  /** The start's first look at the device failed: the outbox's code did not load, or the device store did not answer. */
   outboxFailed: boolean;
 }): { isReady: boolean; statusError: string | null } {
   const { phoneState, shown, error, isLoading, standsOnDevice, outboxFailed } = input;
   return {
-    // No action starts while the outbox's code failed to load (its retry shows), nor, while unsent
-    // actions settle with network, before the server's answer. While the first look is only open,
-    // a tap goes into the outbox behind the waiting work: a device store that never answers keeps
-    // the clock usable, and a wrong guess stops the chain with its badge.
+    // No action is built from a clock the person does not see, such as one from before the work the
+    // first device look waits for; nor after that look failed (its retry shows), nor, while unsent
+    // actions settle with network, before the server's answer.
     isReady:
-      phoneState !== null && !outboxFailed && !isLoading && !shown.actionsWait && (!error || standsOnDevice),
+      shown.state !== null &&
+      phoneState !== null &&
+      !outboxFailed &&
+      !isLoading &&
+      !shown.actionsWait &&
+      (!error || standsOnDevice),
     // While they settle, only the read that should settle them shows its failure, also without
     // network: the server's older clock is never shown in its place.
     statusError: shown.readFailed

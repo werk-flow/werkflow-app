@@ -41,7 +41,10 @@ export type ClockOutboxState = {
   answeredAt: number;
   /** The device may hold unsent work, and the outbox has not answered yet. */
   checking: boolean;
-  /** The outbox's code failed to load while `checking`: the clock is unknown until `retry` loads it. */
+  /**
+   * The first look failed: the outbox's code did not load, or the device store did not answer within
+   * `FIRST_LOOK_WAIT_MS`. The clock is unknown until `retry` gets the outbox's answer.
+   */
   loadFailed: boolean;
   /** Loads the outbox's code again and hands it what this page kept. */
   retry: () => void;
@@ -102,15 +105,30 @@ function useKeepers(
 
 /**
  * The page's first look at the device: open while the device may hold unsent work the outbox has not
- * shown, failed when the outbox's code could not load meanwhile. Only the outbox's answer or a failed
- * device storage closes it.
+ * shown, failed when the outbox's code could not load or the device store did not answer in time.
+ * Only the outbox's answer or a failed device storage closes it.
  */
 type FirstLook = 'closed' | 'open' | 'failed';
 
-/** Marks the page's first look at the device as open. */
-function watchCheck(check: () => Promise<void>, setFirstLook: (look: FirstLook) => void): void {
-  setFirstLook('open');
+/**
+ * How long the first look waits for the outbox's answer. No clock action starts while it is open, so a
+ * device store that never answers ends in the failure and its retry instead of a clock without controls.
+ */
+const FIRST_LOOK_WAIT_MS = 10_000;
+
+/** Opens the page's first look at the device; returns the stop of its one bounded wait. */
+function watchCheck(
+  check: () => Promise<void>,
+  setFirstLook: (update: (look: FirstLook) => FirstLook) => void,
+): () => void {
+  setFirstLook(() => 'open');
   void check();
+  // One bounded wait, never a poll: a later answer still closes the look (`onView`).
+  const bound = setTimeout(
+    () => setFirstLook((look) => (look === 'open' ? 'failed' : look)),
+    FIRST_LOOK_WAIT_MS,
+  );
+  return () => clearTimeout(bound);
 }
 
 /** Asks the outbox again on every return of the network and every action another tab kept; returns the stop. */
@@ -181,10 +199,11 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
     // Until the outbox shows what waits, a new action goes behind it, never past it to the server.
     uncheckedRef.current = deviceMayHoldUnsentWork();
     // The clock shows nothing it is not sure of until this first look answered (shown-clock.ts).
-    if (uncheckedRef.current) watchCheck(attach, setFirstLook);
+    const stopWaiting = uncheckedRef.current ? watchCheck(attach, setFirstLook) : null;
     const stopListening = askOutboxOnChanges(attachNow, uncheckedRef);
     return () => {
       ended = true;
+      stopWaiting?.();
       holderRef.current = null;
       attachRef.current = null;
       stopListening();
