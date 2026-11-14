@@ -28,7 +28,10 @@ async function expectRefusal(status: number): Promise<void> {
   assert.equal(response.status, status);
   assert.notEqual(response.headers.get('Content-Type'), 'application/pdf');
   const body = await response.text();
-  assert.ok(!body.startsWith('%PDF') && !body.includes('CrossIndustryInvoice'), 'a refused caller gets no invoice');
+  assert.ok(
+    !body.startsWith('%PDF') && !body.includes('CrossIndustryInvoice'),
+    'a refused caller gets no invoice',
+  );
 }
 
 world.callerId = null;
@@ -48,7 +51,10 @@ for (const role of ['admin', 'buero'] as const) {
   assert.equal(response.status, 200, `${role}: ${response.status === 200 ? '' : await response.text()}`);
   assert.equal(response.headers.get('Content-Type'), 'application/pdf');
   assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
-  assert.match(response.headers.get('Content-Disposition') ?? '', /^inline; filename="Muster-E-Rechnung\.pdf"$/);
+  assert.match(
+    response.headers.get('Content-Disposition') ?? '',
+    /^inline; filename="Muster-E-Rechnung\.pdf"$/,
+  );
   const bytes = new Uint8Array(await response.arrayBuffer());
   const xml = await readEmbeddedInvoiceXml(bytes);
   assert.ok(xml.includes('<ram:ID>urn:cen.eu:en16931:2017</ram:ID>'), 'the EN 16931 profile');

@@ -31,7 +31,8 @@ export async function readEmbeddedInvoiceXml(pdfBytes: Uint8Array): Promise<stri
   for (let index = 0; index + 1 < entries.length; index += 2) {
     if (textOf(entries[index]) !== E_INVOICE_FILE_NAME) continue;
     const spec = pdf.context.lookup(entries[index + 1], PDFDict);
-    const stream = spec.lookup(PDFName.of('EF'), PDFDict).lookup(PDFName.of('F'), PDFRawStream);
+    const stream = spec.lookup(PDFName.of('EF'), PDFDict).lookup(PDFName.of('F'));
+    if (!(stream instanceof PDFRawStream)) throw new Error('e_invoice_xml_unreadable');
     return new TextDecoder('utf-8', { fatal: true }).decode(decodePDFRawStream(stream).decode());
   }
   throw new Error('e_invoice_xml_missing');

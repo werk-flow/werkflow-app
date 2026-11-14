@@ -34,15 +34,16 @@ export async function withChangedEmbeddedXml(pdfBytes: Uint8Array): Promise<Uint
   );
   const spec = pdf.context.lookup(names[index + 1], PDFDict);
   const files = spec.lookup(PDFName.of('EF'), PDFDict);
-  const original = files.lookup(PDFName.of('F'), PDFRawStream);
+  const original = files.lookup(PDFName.of('F'));
+  if (!(original instanceof PDFRawStream)) throw new Error('fixture_embedded_file_unreadable');
   const xml = new TextDecoder().decode(decodePDFRawStream(original).decode());
   const changed = xml.replace(
     /<ram:GrandTotalAmount>(-?\d+)\.(\d{2})<\/ram:GrandTotalAmount>/,
     (_match, euros: string, cents: string) => {
-      const total = BigInt(`${euros}${cents}`) + 1n;
-      const absolute = total < 0n ? -total : total;
-      const sign = total < 0n ? '-' : '';
-      return `<ram:GrandTotalAmount>${sign}${absolute / 100n}.${String(absolute % 100n).padStart(2, '0')}</ram:GrandTotalAmount>`;
+      const total = BigInt(`${euros}${cents}`) + BigInt(1);
+      const absolute = total < BigInt(0) ? -total : total;
+      const sign = total < BigInt(0) ? '-' : '';
+      return `<ram:GrandTotalAmount>${sign}${absolute / BigInt(100)}.${String(absolute % BigInt(100)).padStart(2, '0')}</ram:GrandTotalAmount>`;
     },
   );
   if (changed === xml) throw new Error('fixture_grand_total_not_found');

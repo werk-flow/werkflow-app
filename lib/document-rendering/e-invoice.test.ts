@@ -1,5 +1,13 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFStream, decodePDFRawStream } from 'pdf-lib';
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFRawStream,
+  PDFStream,
+  decodePDFRawStream,
+} from 'pdf-lib';
 import { extractText, getDocumentProxy } from 'unpdf';
 
 import { calculateInvoice } from '@/lib/invoicing/calculate';
@@ -49,7 +57,8 @@ describe('the ZUGFeRD invoice PDF', () => {
     const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
     const { catalog, context } = pdf;
 
-    const metadata = catalog.lookup(PDFName.of('Metadata'), PDFRawStream);
+    const metadata = catalog.lookup(PDFName.of('Metadata'));
+    if (!(metadata instanceof PDFRawStream)) throw new Error('no metadata stream');
     expect(metadata.dict.has(PDFName.of('Filter'))).toBe(false);
     const xmp = new TextDecoder().decode(metadata.getContents());
     expect(xmp).toContain('<pdfaid:part>3</pdfaid:part>');

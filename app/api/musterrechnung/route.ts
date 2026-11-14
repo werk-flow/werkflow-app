@@ -98,8 +98,8 @@ async function sampleInvoiceResponse(): Promise<Response> {
     readOfferLetterhead(admin, context, organization.name),
   ]);
   if (!read.success || !letterhead.success) {
-    const failed = !read.success ? read : letterhead;
-    return failed.error === 'not_authorized'
+    const error = read.success ? (letterhead.success ? 'load_failed' : letterhead.error) : read.error;
+    return error === 'not_authorized'
       ? Response.json({ error: 'not_authorized' }, { status: 403, headers: privateHeaders })
       : Response.json({ error: 'load_failed' }, { status: 500, headers: privateHeaders });
   }

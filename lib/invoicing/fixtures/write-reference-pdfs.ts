@@ -19,7 +19,11 @@ import { REFERENCE_INVOICES } from './reference-invoices';
 /** A plain letterhead of the invoice's made-up seller: no logo and no stationery. */
 function letterheadOf({ seller, payee }: InvoiceDraft) {
   const address = [...seller.address.lines, `${seller.address.postalCode} ${seller.address.city}`];
-  const identifiers = [seller.legalRegistrationId, seller.vatId && `USt-IdNr. ${seller.vatId}`, seller.taxNumber];
+  const identifiers = [
+    seller.legalRegistrationId,
+    seller.vatId && `USt-IdNr. ${seller.vatId}`,
+    seller.taxNumber,
+  ];
   return {
     sender: { name: seller.name, addressLines: address, logo: null },
     footerColumns: [
@@ -49,4 +53,6 @@ for (const [name, draft] of Object.entries(REFERENCE_INVOICES)) {
 if (!first) throw new Error('No reference invoice.');
 await writeFile(join(out, 'broken', 'xml-changed-after-embedding.pdf'), await withChangedEmbeddedXml(first));
 await writeFile(join(out, 'broken', 'without-output-intent.pdf'), await withoutOutputIntent(first));
-process.stdout.write(`Wrote ${Object.keys(REFERENCE_INVOICES).length} reference invoices and 2 broken copies to ${out}.\n`);
+process.stdout.write(
+  `Wrote ${Object.keys(REFERENCE_INVOICES).length} reference invoices and 2 broken copies to ${out}.\n`,
+);

@@ -74,7 +74,9 @@ function metaRowsOf(invoice: CalculatedInvoice): BusinessDocument['metaRows'] {
 
 /** Exemption reasons, Zahlungsziel, Skonto and Bankverbindung, one paragraph each. */
 function closingTextOf(invoice: CalculatedInvoice): string {
-  const reasons = invoice.taxSubtotals.flatMap(({ tax }) => (tax.category === 'E' ? [tax.exemptionReason] : []));
+  const reasons = invoice.taxSubtotals.flatMap(({ tax }) =>
+    tax.category === 'E' ? [tax.exemptionReason] : [],
+  );
   const { paymentTerms, payee } = invoice;
   const owed = invoice.totals.grossCents > 0;
   const terms = owed
