@@ -11,6 +11,7 @@ import {
   ORGANIZATION_B,
   CALLER_ID,
   installActionWorld,
+  listProfileReferencesInWorld,
   signInAs,
 } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
@@ -195,7 +196,7 @@ const world = installActionWorld({
     },
   ],
   documents: [
-    document(manualId, 'Bedienungsanleitung.pdf', 'other'),
+    { ...document(manualId, 'Bedienungsanleitung.pdf', 'other'), metadata: { notiz: 'Intern' } },
     document(contractId, 'Wartungsvertrag.pdf', 'contract'),
     document(coverageManualId, 'Vertragsanlage.pdf', 'other'),
   ],
@@ -205,13 +206,27 @@ const world = installActionWorld({
     documentLink(id(47), coverageManualId, { equipment_id: equipmentId }),
     documentLink(id(48), coverageManualId, { maintenance_coverage_id: id(49) }),
   ],
+  organization_members: [{ organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'employee' }],
   personnel_documents: [],
-  profiles: [],
+  profiles: [
+    {
+      id: CALLER_ID,
+      first_name: 'Erika',
+      last_name: 'Musterfrau',
+      email: 'erika@example.test',
+      avatar_path: null,
+    },
+  ],
 });
 // Storage stands in; only the manual's view URL is ever signed.
 const unreachedStorage = () => {
   throw new Error('storage is outside this fixture');
 };
+// The uploader's name resolves as in the database, so the projection must drop it.
+world.rpc = ({ name, args }) =>
+  name === 'list_profile_references'
+    ? listProfileReferencesInWorld(world, args)
+    : { data: null, error: null };
 mock.module('@/lib/storage/r2', () => ({
   copyStorageObject: unreachedStorage,
   createSignedDownloadUrl: async () => 'https://storage.example.test/download',
@@ -277,6 +292,11 @@ assert.ok(shown.success, `the assigned employee's documents failed: ${JSON.strin
 assert.deepEqual(
   shown.documents.map((row) => row.displayName),
   ['Bedienungsanleitung.pdf'],
+);
+assert.deepEqual(
+  shown.documents.map(({ uploader, metadata }) => ({ uploader, metadata })),
+  [{ uploader: null, metadata: {} }],
+  'a field document names no uploader and carries no free-form metadata',
 );
 assert.deepEqual(await getDocumentViewSignedUrl(manualId), {
   success: true,

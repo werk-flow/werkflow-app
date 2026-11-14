@@ -587,7 +587,10 @@ export async function getFieldEquipmentDocuments(
     const hydrated = await hydrateDocuments(documentContext.context, open);
     return {
       success: true,
-      documents: hydrated.toSorted((left, right) => left.displayName.localeCompare(right.displayName, 'de')),
+      // The field sees the file, never who uploaded it or free-form metadata.
+      documents: hydrated
+        .map((document) => ({ ...document, uploader: null, metadata: {} }))
+        .toSorted((left, right) => left.displayName.localeCompare(right.displayName, 'de')),
     };
   } catch {
     return LOAD_FAILED;
