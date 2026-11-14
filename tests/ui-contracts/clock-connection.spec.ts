@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { clockDock, clockStatus } from '../golden/support/steps/time-tracking';
 import { RUNNING_CLOCK_STATE } from './clock-state-fixture';
-import { ACCEPTED, CLOCKED_OUT_STATE, mountClock, type Server } from './clock-unsent-support';
+import { ACCEPTED, CLOCKED_OUT_STATE, mountClock, type Server, type Verdict } from './clock-unsent-support';
 
 // What the clock dock shows while the connection changes (lib/field-sync/device/shown-clock.ts;
 // decision record 0010, the amendment "what the clock shows while the connection changes"). Each
@@ -260,6 +260,15 @@ test('taps after a send accepted just before the signal went are kept and go on 
   page,
 }) => {
   const server = await mountClock(page, CLOCKED_OUT_STATE);
+  // Each accepted send answers a version of its own (1, 2, 3): a tap expects the one the send before it left.
+  const sessionId = ACCEPTED.state?.sessionId ?? 'no session';
+  Object.defineProperty(server, 'verdict', {
+    get: (): Verdict => ({
+      outcome: 'accepted',
+      code: 'accepted',
+      state: { sessionId, segmentId: null, version: server.sent.length },
+    }),
+  });
   await recordScreens(page);
   await startOffline(page, server);
   const release = await holdSends(page);
@@ -302,8 +311,8 @@ test('taps after a send accepted just before the signal went are kept and go on 
   await expect(clockDock(page).locator('[data-clock-unsent]')).toHaveCount(0);
   expect(server.sent.map((envelope) => envelope.payload)).toMatchObject([
     { action: 'start', expectedSessionId: null, expectedVersion: null },
-    { action: 'switch', expectedSessionId: ACCEPTED.state?.sessionId, expectedVersion: 1 },
-    { action: 'end', expectedSessionId: ACCEPTED.state?.sessionId, expectedVersion: 1 },
+    { action: 'switch', expectedSessionId: sessionId, expectedVersion: 1 },
+    { action: 'end', expectedSessionId: sessionId, expectedVersion: 2 },
   ]);
   expect(await screens(page)).toEqual([
     ...KEPT_START,

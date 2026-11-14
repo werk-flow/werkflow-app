@@ -184,9 +184,11 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
       }
       try {
         detach = await outbox.attachClockOutbox(holder, onView, () => void refresh());
-        if (ended) detach();
+        // An attachment that ends after a switch never touches the next holder's state.
+        if (ended) return detach();
         setDeviceFailed(false);
       } catch {
+        if (ended) return;
         // The device storage failed (the outbox logged it): never mistaken for no signal, so actions go online.
         uncheckedRef.current = false;
         setDeviceFailed(true);
