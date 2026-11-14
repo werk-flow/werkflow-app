@@ -1,0 +1,46 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Angebote
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+Problem melden
+F2
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Angebote
+Angebote
+Leistungen
+Angebote
+Jedes Angebot mit Kunde, Rechnungsempfänger und Gültigkeit.
+Angebot anlegen
+Alle Status
+1
+Angebot
+Nr.
+Angebot
+Kunde
+Status
+Gültig bis
+ANG-2026-001
+Austausch Gas-Brennwerttherme
+Familie Hoffmann
+Entwurf
+01.01.2026
+1–1
+von
+1
+Nicht eingestempelt

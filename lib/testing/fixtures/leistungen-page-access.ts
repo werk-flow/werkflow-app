@@ -31,4 +31,4 @@ assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_organization_id]),
   [['list_leistung_page', ORGANIZATION_A]],
 );
-assert.ok(navItemsFor('buero').some((item) => item.href === '/angebote/leistungen'));
+assert.ok(navItemsFor('buero').some((item) => item.href === '/angebote'));
