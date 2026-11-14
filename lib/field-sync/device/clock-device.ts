@@ -3,11 +3,12 @@
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import {
+  removeKeptActions,
   removeUnreadableKeptActions,
   stopFor,
   takeInKeptClockActions,
   unreadableKeptActions,
-  untilCallAnswers,
+  untilOwnCallAnswers,
   type DeferredTakeIn,
   type KeptClockAction,
   type KeptTakeIn,
@@ -37,9 +38,16 @@ import type { UnsentScope, UnsentSource } from './unsent-work';
 
 /** Changes with every change to the outbox, so the other tabs of the origin read it again. */
 const OUTBOX_CHANGED_KEY = 'werkflow:time-outbox-changed';
-const SEND_LOCK = 'werkflow-time-outbox';
 const TAKE_IN_LOCK = 'werkflow-kept-clock-actions';
 const UNSENT_KIND = 'time';
+
+/**
+ * The lock of one chain: its sends and the deletions of its events take turns across the origin's
+ * tabs. Another person's or organization's chain never waits for it.
+ */
+function chainLock({ userId, organizationId }: OutboxHolder): string {
+  return `werkflow-time-outbox:${userId}:${organizationId}`;
+}
 
 /** Hears what the outbox holds for this tab's holder; `holdEnded` when another tab's wipe ended the hold. */
 export type ViewListener = (view: ClockDeviceView | null, holdEnded?: boolean) => void;
@@ -159,15 +167,16 @@ function lookAgainLater({ recheckAt, lock }: DeferredTakeIn): void {
 }
 
 /**
- * Deletes the events `operationIds` names once no send is in flight: a send that already left
- * finishes first, so the server never records an event the person was told is gone.
+ * Deletes the events `operationIds` names once no send of the holder's chain is in flight: a send
+ * that already left finishes first, so the server never records an event the person was told is
+ * gone. A send of another chain holds nothing back.
  */
 export async function removeShownTimeEvents(
   holder: OutboxHolder,
   operationIds: readonly string[],
   resume: LiveClockState | null,
 ): ReturnType<typeof removeTimeEvents> {
-  return exclusively(SEND_LOCK, async () => {
+  return exclusively(chainLock(holder), async () => {
     // A kept action this version cannot read is shown under its key; the person deletes it here too.
     removeUnreadableKeptActions(operationIds);
     return removeTimeEvents(holder, operationIds, resume);
@@ -287,7 +296,7 @@ export async function sendOwnTimeEvents(): Promise<void> {
   const taken = await takeInKept();
   const hold = clockHolder();
   for (const holder of await holdersToSend())
-    await exclusively(SEND_LOCK, () =>
+    await exclusively(chainLock(holder), () =>
       sendTimeOutbox(holder, {
         fetch: (url, init) => fetch(url, init),
         now: () => new Date(),
@@ -341,24 +350,18 @@ async function deferredInScope(
 }
 
 /**
- * Takes in every shown action that still waits behind an open online call, once that call answered,
- * so a discard deletes it from the outbox. Throws when a shown action cannot be taken in yet: the
- * session then stays, and the person is asked again.
+ * Deletes every shown action that still waits in the kept store, behind an open online call or a
+ * stop. Each waits only for its own online call, never for another one: a call that reaches the
+ * server first records its action, as the question said it might. A stop that appeared after the
+ * question opened holds nothing back; it stays and is asked about anew.
  */
-async function takeInShownActions(scope: UnsentScope, ids: readonly string[]): Promise<void> {
-  for (;;) {
-    const { deferred } = await takeInKept();
-    const shown = (await deferredInScope(deferred, scope)).filter((action) =>
-      ids.includes(action.operationId),
-    );
-    if (shown.length === 0 || !deferred) return;
-    // Held by a stop the person was not shown, not by an open call: nothing to wait for. The session
-    // stays, and the person is asked again with that stop named.
-    if (deferred.recheckAt === null && deferred.lock === null)
-      throw new Error('a stop the person was not shown holds an action they were shown');
-    // The page's call answers, then its entry goes or becomes a kept action this take-in moves.
-    await untilCallAnswers(deferred);
-  }
+async function removeShownKeptActions(scope: UnsentScope, ids: readonly string[]): Promise<void> {
+  const { deferred } = await takeInKept();
+  const shown = (await deferredInScope(deferred, scope)).filter((action) => ids.includes(action.operationId));
+  if (shown.length === 0) return;
+  for (const action of shown) await untilOwnCallAnswers(action);
+  // Under the take-in's lock: an action a take-in moved before is in the outbox, and the discard deletes it there.
+  await exclusively(TAKE_IN_LOCK, async () => removeKeptActions(shown.map((action) => action.operationId)));
 }
 
 /**
@@ -390,9 +393,12 @@ export const timeUnsentSource: UnsentSource = {
   async discard(scope, ids) {
     // The shown stops go first: what they held can then be taken in and discarded with them.
     removeUnreadableKeptActions(ids);
-    await takeInShownActions(scope, ids);
-    // The session ends: no server state to go on from, and what stays is asked about again.
-    for (const holder of await holdersInScope(scope)) await removeShownTimeEvents(holder, ids, null);
+    await removeShownKeptActions(scope, ids);
+    // The session ends: no server state to go on from, and what stays is asked about again. Only a
+    // chain that holds a shown event waits for its send in flight.
+    for (const holder of await holdersInScope(scope))
+      if ((await readTimeOutbox(holder)).events.some((event) => ids.includes(event.operationId)))
+        await removeShownTimeEvents(holder, ids, null);
     await outboxChanged();
   },
 };

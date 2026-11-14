@@ -328,3 +328,11 @@ Decided for werk-flow/werkflow-planning#403 on the second round of its outside r
 ## Amendment 2026-11-13: an approved correction is recorded time
 
 Owner decision for werk-flow/werkflow-planning#447. The person's last recorded time, before which a captured event is `conflict` with `version_conflict`, includes the time of every current approved `Zeitkorrektur`. A late clock-in captured inside hours the office already approved is refused on the phone as „Konflikt“, so the hours never count twice.
+
+## Amendment 2026-11-14: a discard waits only for what it deletes
+
+Decided for werk-flow/werkflow-planning#407. It sharpens the time outbox's invariant 6.
+
+- **Sends.** Each chain, one person's events in one organization, has a lock of its own. A discard or deletion waits only for a send of a chain that holds an event it deletes, never for another person's or organization's.
+- **Open online calls.** A shown action still in the kept store, behind an open online call or a stop, is deleted there. It waits only for its own online call, never for another action's.
+- **A stop that appears after the question opened.** It no longer fails „Verwerfen“. What the question showed goes, the stop stays, and the question names it as work that came after the question.
