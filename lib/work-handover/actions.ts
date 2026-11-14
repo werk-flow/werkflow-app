@@ -13,6 +13,7 @@ import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resol
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { captureUsage } from '@/lib/usage-statistics/capture';
 import type { Json } from '@/lib/supabase/database.types';
 import { attemptStoragePath, discardStorageObjects, putStorageObject } from '@/lib/storage/r2';
 import { logError } from '@/lib/logging';
@@ -336,6 +337,7 @@ export async function saveWorkHandoverDraft(
       return { success: false, error: mapHandoverError(error) };
     }
     revalidateWorkEvidenceViews();
+    if (parsed.data.expectedPackageVersion === 0) captureUsage(auth.context.orgId, 'handover', 'started');
     return { success: true, packageId: parsed.data.packageId, packageVersion: data.version };
   } catch (error) {
     return handoverFailureFromException(error, 'work_handover_action_failed', 'save_draft');
@@ -464,6 +466,7 @@ export async function releaseWorkHandover(
     // document owns another object.
     const replay = isJsonRecord(data) && data.duplicate === true ? data : null;
     if (replay) await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
+    else captureUsage(auth.context.orgId, 'handover', 'completed');
     revalidateWorkEvidenceViews();
     return {
       success: true,

@@ -4,6 +4,7 @@ import {
   maintenanceCompletionSchema,
   maintenanceCoverageSchema,
   maintenancePlanSchema,
+  maintenanceVisitMissedSchema,
   maintenanceVisitSchema,
 } from './validation';
 
@@ -136,5 +137,25 @@ describe('maintenance validation boundaries', () => {
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.path).toEqual(['expectedVersions']);
     expect(maintenanceVisitSchema.safeParse({ ...batch, expectedVersions: [1, 2] }).success).toBe(true);
+  });
+
+  test('a missed visit needs a note only for „Anderer Grund“, and a given note has three characters', () => {
+    const missed = {
+      dueWorkId: IDENTIFIERS.planId,
+      expectedVersion: 3,
+      missedReason: 'customer_absent',
+      note: '',
+      idempotencyKey: IDENTIFIERS.idempotencyKey,
+    };
+    expect(maintenanceVisitMissedSchema.safeParse(missed).success).toBe(true);
+    expect(maintenanceVisitMissedSchema.safeParse({ ...missed, note: ' x ' }).success).toBe(false);
+    expect(maintenanceVisitMissedSchema.safeParse({ ...missed, missedReason: 'other' }).success).toBe(false);
+    expect(
+      maintenanceVisitMissedSchema.safeParse({ ...missed, missedReason: 'other', note: 'Schlüssel fehlte' })
+        .success,
+    ).toBe(true);
+    expect(maintenanceVisitMissedSchema.safeParse({ ...missed, missedReason: 'job_cancelled' }).success).toBe(
+      false,
+    );
   });
 });

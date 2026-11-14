@@ -12,6 +12,7 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { jobPlanWriteFailure } from '@/lib/jobs/write-refusals';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { captureUsage } from '@/lib/usage-statistics/capture';
 import type { Database } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { composeReadinessForTarget } from '@/lib/dispatch/readiness-target';
@@ -399,6 +400,7 @@ export async function saveWorkBlocker(input: {
     return { success: false as const, error: mapWorkError(error) };
   }
   revalidateWork();
+  if (!parsed.data.blockerId) captureUsage(auth.context.orgId, 'blocker', 'started');
   return { success: true as const, blocker: data };
 }
 
@@ -421,6 +423,7 @@ export async function setWorkBlockerResolved(input: {
   });
   if (error) return { success: false as const, error: mapWorkError(error) };
   revalidateWork();
+  captureUsage(auth.context.orgId, 'blocker', 'completed');
   return { success: true as const, version: data };
 }
 

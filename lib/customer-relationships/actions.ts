@@ -4,6 +4,7 @@ import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { requireManagerAndClient, type ClientManagerContext } from '@/lib/clients/manager-access';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { captureUsage } from '@/lib/usage-statistics/capture';
 import {
   loadFollowUpOwners,
   loadFollowUps,
@@ -162,6 +163,7 @@ export async function createCustomerFollowUp(
   if (data.status !== 'open') {
     return { success: false, error: 'create_failed' };
   }
+  captureUsage(auth.context.orgId, 'follow_up', 'started');
   const [ownersResult, sourceResult] = await Promise.all([
     loadFollowUpOwners(auth.context),
     loadSingleFollowUpSource(
@@ -250,6 +252,13 @@ export async function transitionCustomerFollowUp(
   if (error) {
     logError('Failed to transition customer follow-up:', error);
     return { success: false, error: 'transition_failed' };
+  }
+  if (validatedInput.targetStatus !== 'open') {
+    captureUsage(
+      auth.context.orgId,
+      'follow_up',
+      validatedInput.targetStatus === 'completed' ? 'completed' : 'abandoned',
+    );
   }
   return { success: true };
 }

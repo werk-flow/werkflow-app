@@ -125,6 +125,60 @@ function NextDue({ value }: { value: string }): ReactElement {
   );
 }
 
+/** One running plan with its carry-over choice and, when it stays, its reason. */
+function CarryPlanRow({
+  plan,
+  carry,
+  reason,
+  error,
+  onCarry,
+  onReason,
+}: {
+  plan: EquipmentReplacementPlan;
+  carry: boolean;
+  reason: string;
+  error: string | undefined;
+  onCarry: (checked: boolean) => void;
+  onReason: (value: string) => void;
+}): ReactElement {
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 text-sm">
+          <p className="font-medium">
+            Wartungsplan {plan.planNumber} · {plan.templateName}
+          </p>
+          {plan.nextDueDate && (
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              <NextDue value={plan.nextDueDate} />
+            </div>
+          )}
+        </div>
+        <CarryCheckbox
+          id={`equipment-carry-plan-${plan.id}`}
+          label="Übernehmen"
+          checked={carry}
+          onChange={onCarry}
+        />
+      </div>
+      {!carry && (
+        <Field
+          label="Warum bleibt der Plan beim Vorgänger?"
+          htmlFor={reasonFieldId(plan.id)}
+          required
+          error={error}
+        >
+          <Textarea
+            value={reason}
+            onChange={(event) => onReason(event.target.value)}
+            placeholder="z. B. Die neue Anlage braucht keine Abgasmessung."
+          />
+        </Field>
+      )}
+    </div>
+  );
+}
+
 /** The plans and components of the replaced Anlage, each with its carry-over choice. */
 export function EquipmentCarryOverSection({
   controller,
@@ -153,45 +207,17 @@ export function EquipmentCarryOverSection({
           {REPLACEMENT_TOO_MANY_PLANS_MESSAGE}
         </p>
       )}
-      {plans.map((plan) => {
-        const carry = carried.get(plan.id) ?? true;
-        return (
-          <div key={plan.id} className="space-y-2 rounded-md border p-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0 text-sm">
-                <p className="font-medium">
-                  Wartungsplan {plan.planNumber} · {plan.templateName}
-                </p>
-                {plan.nextDueDate && (
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    <NextDue value={plan.nextDueDate} />
-                  </div>
-                )}
-              </div>
-              <CarryCheckbox
-                id={`equipment-carry-plan-${plan.id}`}
-                label="Übernehmen"
-                checked={carry}
-                onChange={(checked) => setCarried(plan.id, checked)}
-              />
-            </div>
-            {!carry && (
-              <Field
-                label="Warum bleibt der Plan beim Vorgänger?"
-                htmlFor={reasonFieldId(plan.id)}
-                required
-                error={showErrors ? errors[reasonFieldId(plan.id)] : undefined}
-              >
-                <Textarea
-                  value={reasons.get(plan.id) ?? ''}
-                  onChange={(event) => setReason(plan.id, event.target.value)}
-                  placeholder="z. B. Die neue Anlage braucht keine Abgasmessung."
-                />
-              </Field>
-            )}
-          </div>
-        );
-      })}
+      {plans.map((plan) => (
+        <CarryPlanRow
+          key={plan.id}
+          plan={plan}
+          carry={carried.get(plan.id) ?? true}
+          reason={reasons.get(plan.id) ?? ''}
+          error={showErrors ? errors[reasonFieldId(plan.id)] : undefined}
+          onCarry={(checked) => setCarried(plan.id, checked)}
+          onReason={(value) => setReason(plan.id, value)}
+        />
+      ))}
       {components.map((component) => (
         <div
           key={component.id}
