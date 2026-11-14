@@ -11,7 +11,11 @@ import {
   SUPPLIER_CATALOG_SEARCH_LIMIT,
   type SupplierCatalogOption,
 } from '@/lib/inventory/wholesaler-import-schemas';
-import type { SupplierCatalogPicker } from './use-supplier-catalog-search';
+import {
+  useSupplierCatalogSearch,
+  type SupplierCatalogPicker,
+  type SupplierCatalogSource,
+} from './use-supplier-catalog-search';
 
 const PRICE_KIND_LABELS = { list: 'Listenpreis', net: 'Nettopreis' } as const;
 
@@ -58,11 +62,7 @@ function CatalogOption({
   );
 }
 
-/**
- * The catalog rows below the own articles. Choosing one makes it an own
- * article once and adds it to the positions; a second choice takes that article.
- */
-export function SupplierCatalogOptions({ catalog }: { catalog: SupplierCatalogPicker }) {
+function CatalogResults({ catalog }: { catalog: SupplierCatalogPicker }) {
   if (!catalog.searched) {
     return (
       <p className="text-xs text-muted-foreground">
@@ -112,4 +112,20 @@ export function SupplierCatalogOptions({ catalog }: { catalog: SupplierCatalogPi
       <ErrorText>{catalog.adoptFailure}</ErrorText>
     </section>
   );
+}
+
+/**
+ * The catalog rows below the own articles while the office plans material.
+ * Choosing one makes it an own article once and adds it to the positions; a
+ * second choice takes that article. The picker loads this module only then,
+ * so a field worker's pages never download it.
+ */
+export function SupplierCatalogOptions({
+  source,
+  search,
+}: {
+  source: SupplierCatalogSource;
+  search: string;
+}) {
+  return <CatalogResults catalog={useSupplierCatalogSearch({ ...source, search })} />;
 }

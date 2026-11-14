@@ -12,7 +12,7 @@ import {
   type MaterialDialogMode,
   type MaterialDialogState,
 } from './job-material-dialog-model';
-import { useSupplierCatalogSearch, type SupplierCatalogPicker } from './use-supplier-catalog-search';
+import type { SupplierCatalogSource } from './use-supplier-catalog-search';
 
 type JobMaterialDialog = {
   dialog: MaterialDialogState | null;
@@ -26,7 +26,7 @@ type JobMaterialDialog = {
   retrySearch: () => void;
   openDialog: (mode: MaterialDialogMode, line?: JobMaterialLine) => Promise<void>;
   /** The office's wholesaler catalogs below the own articles; null for a field worker. */
-  supplierCatalog: SupplierCatalogPicker | null;
+  supplierCatalog: SupplierCatalogSource | null;
 };
 
 type JobMaterialDialogOptions = {
@@ -318,11 +318,6 @@ export function useJobMaterialDialog({
     searchFailed: catalog.searchFailed,
     retrySearch: catalog.retrySearch,
     openDialog,
-    supplierCatalog: useSupplierCatalogSearch({
-      enabled: isAdminOrManager,
-      dialog,
-      setDialog,
-      picker: catalog,
-    }),
+    supplierCatalog: isAdminOrManager ? { setDialog, picker: catalog } : null,
   };
 }

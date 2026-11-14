@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -36,6 +36,9 @@ type PickerCatalog = {
   setPickerItems: Dispatch<SetStateAction<InventoryPickerOption[]>>;
   pickerLocations: InventoryLocation[];
 };
+
+/** What the office's material dialog hands the catalog search: the dialog and the picker an adopt joins. */
+export type SupplierCatalogSource = { setDialog: SetDialog; picker: PickerCatalog };
 
 const ADOPT_ERRORS: Record<string, string> = {
   item_archived:
@@ -91,28 +94,27 @@ function useCatalogSearchResult(searched: boolean, search: string) {
   };
 }
 
-/** Makes a catalog row an own article and adds it to the open dialog's positions. */
-function useCatalogAdopt(dialogOpen: boolean, setDialog: SetDialog, picker: PickerCatalog) {
+/**
+ * Makes a catalog row an own article and adds it to the open dialog's
+ * positions. The caller lives as long as one opening of the dialog, so a
+ * reopened dialog starts without the last failure, and an adopt answered
+ * after its dialog closed joins no later one.
+ */
+function useCatalogAdopt({ setDialog, picker }: SupplierCatalogSource) {
   const [adoptingId, setAdoptingId] = useState<string | null>(null);
   const [adoptFailure, setAdoptFailure] = useState<string | null>(null);
-  // A reopened dialog starts without the last dialog's failure.
-  const [seenOpen, setSeenOpen] = useState(dialogOpen);
-  if (dialogOpen !== seenOpen) {
-    setSeenOpen(dialogOpen);
-    if (dialogOpen) setAdoptFailure(null);
-  }
   const { run } = usePendingTask();
-  // Counts each opening of the material dialog, so an adopt joins only the dialog it started in.
-  // A layout effect runs inside the commit that opens the dialog, before any awaited answer lands.
-  const dialogSession = useRef(0);
-  useLayoutEffect(() => {
-    if (dialogOpen) dialogSession.current += 1;
-  }, [dialogOpen]);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   function adopt(option: SupplierCatalogOption): void {
     setAdoptFailure(null);
     setAdoptingId(option.id);
-    const session = dialogSession.current;
     void run(async () => {
       try {
         const adopted = await adoptSupplierCatalogArticle({ catalogArticleId: option.id }).catch(() => null);
@@ -124,7 +126,7 @@ function useCatalogAdopt(dialogOpen: boolean, setDialog: SetDialog, picker: Pick
         }
         const { item } = adopted;
         picker.setPickerItems((current) => [...current.filter((entry) => entry.id !== item.id), item]);
-        if (session !== dialogSession.current) return;
+        if (!mounted.current) return;
         setDialog((current) =>
           current
             ? {
@@ -149,23 +151,17 @@ function useCatalogAdopt(dialogOpen: boolean, setDialog: SetDialog, picker: Pick
 
 /**
  * Searches the supplier catalogs while the office plans material, and makes
- * a chosen catalog row an own article that joins the dialog's positions. A
- * field worker gets nothing: the search and the action refuse them too.
+ * a chosen catalog row an own article that joins the dialog's positions. Only
+ * the office's plan dialog loads it; the search and the action refuse a field
+ * worker too.
  */
 export function useSupplierCatalogSearch({
-  enabled,
-  dialog,
-  setDialog,
-  picker,
-}: {
-  enabled: boolean;
-  dialog: MaterialDialogState | null;
-  setDialog: SetDialog;
-  picker: PickerCatalog;
-}): SupplierCatalogPicker | null {
-  const search = dialog?.search.trim() ?? '';
-  const searched = enabled && dialog?.mode === 'plan' && search.length >= SUPPLIER_CATALOG_SEARCH_MIN_LENGTH;
+  search: typed,
+  ...source
+}: SupplierCatalogSource & { search: string }): SupplierCatalogPicker {
+  const search = typed.trim();
+  const searched = search.length >= SUPPLIER_CATALOG_SEARCH_MIN_LENGTH;
   const result = useCatalogSearchResult(searched, search);
-  const adoption = useCatalogAdopt(dialog !== null, setDialog, picker);
-  return enabled ? { searched, ...result, ...adoption } : null;
+  const adoption = useCatalogAdopt(source);
+  return { searched, ...result, ...adoption };
 }

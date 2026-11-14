@@ -1,16 +1,23 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { Plus } from 'lucide-react';
 
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { SectionError } from '@/components/ui/section-error';
 import { PlainButton } from '@/components/ui/plain-button';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { InventoryPickerOption } from '@/lib/inventory/types';
 import { formatInventoryQuantity, INVENTORY_PICKER_PAGE_SIZE } from '@/lib/inventory/types';
 import type { MaterialDialogMode } from './job-material-dialog-model';
-import { SupplierCatalogOptions } from './supplier-catalog-options';
-import type { SupplierCatalogPicker } from './use-supplier-catalog-search';
+import type { SupplierCatalogSource } from './use-supplier-catalog-search';
+
+// Only the office plans from the wholesaler catalogs: the job page a field worker opens never loads them.
+const SupplierCatalogOptions = dynamic(
+  () => import('./supplier-catalog-options').then((mod) => mod.SupplierCatalogOptions),
+  { loading: () => <Skeleton className="h-4 w-2/3" /> },
+);
 
 function NoMatchingItems() {
   return (
@@ -88,7 +95,7 @@ export function MaterialItemPicker({
   onRetrySearch: () => void;
   onAdd: (item: InventoryPickerOption) => void;
   /** The office's wholesaler catalogs while planning; null otherwise. */
-  supplierCatalog?: SupplierCatalogPicker | null | undefined;
+  supplierCatalog?: SupplierCatalogSource | null | undefined;
 }) {
   return (
     <div className="space-y-3">
@@ -132,7 +139,9 @@ export function MaterialItemPicker({
           oder Barcode, um weitere zu finden.
         </p>
       )}
-      {supplierCatalog && mode === 'plan' && <SupplierCatalogOptions catalog={supplierCatalog} />}
+      {supplierCatalog && mode === 'plan' && (
+        <SupplierCatalogOptions source={supplierCatalog} search={search} />
+      )}
     </div>
   );
 }

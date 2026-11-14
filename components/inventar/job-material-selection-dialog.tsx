@@ -30,7 +30,7 @@ import {
 } from './job-material-dialog-model';
 import { MaterialDialogRowCard } from './job-material-dialog-row';
 import { MaterialItemPicker } from './job-material-item-picker';
-import type { SupplierCatalogPicker } from './use-supplier-catalog-search';
+import type { SupplierCatalogSource } from './use-supplier-catalog-search';
 
 const SUBMIT_LABELS: Record<MaterialDialogMode, string> = {
   plan: 'Speichern',
@@ -52,7 +52,7 @@ type MaterialSelectionDialogProps = {
   searchFailed: boolean;
   onRetrySearch: () => void;
   /** The office's wholesaler catalogs below the own articles; null for a field worker. */
-  supplierCatalog?: SupplierCatalogPicker | null | undefined;
+  supplierCatalog?: SupplierCatalogSource | null | undefined;
   onSave: () => void;
 };
 
