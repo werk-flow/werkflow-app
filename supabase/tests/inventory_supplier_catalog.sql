@@ -1,7 +1,7 @@
 -- The office imports a wholesaler delivery into a supplier catalog with a
 -- preview, and a catalog article becomes an own article on first use
 -- (werk-flow/werkflow-planning#375, migration
--- 20261210130000_keep_a_supplier_catalog_beside_the_own_articles.sql).
+-- 20261210130001_keep_a_supplier_catalog_beside_the_own_articles.sql).
 -- Made-up organizations, wholesalers and articles only.
 begin;
 
@@ -151,8 +151,9 @@ select pg_temp.expect_refusal('a manager of another organization opens an import
     '37500000-0000-4000-8000-000000000004', '37500000-0000-4000-8000-000000000030', array['lieferung'],
     repeat('a', 64), null, '[]', '[]')$$, 'not_authorized');
 
--- The first delivery: a pipe twice (the later line wins), a fitting, a valve
--- whose unit text the office leaves unmapped, and a line the reader refused.
+-- The first delivery: a pipe twice (the later line wins, though the earlier
+-- one names a unit text the office leaves unmapped), a fitting, a valve whose
+-- unit text the office leaves unmapped, and a line the reader refused.
 insert into catalog_test_state values ('first', public.open_supplier_catalog_import(
   '37500000-0000-4000-8000-000000000010', '37500000-0000-4000-8000-000000000002',
   '37500000-0000-4000-8000-000000000030', array['lieferung-nordrohr'], repeat('a', 64),
@@ -166,7 +167,7 @@ declare
 begin
   v_staged := public.stage_supplier_catalog_import_lines('37500000-0000-4000-8000-000000000010',
     '37500000-0000-4000-8000-000000000002', v_import, jsonb_build_array(
-      pg_temp.article(0, 'NR-1501', 'Kupferrohr 15 mm alt', 'Meter', 'list', 60000, 100),
+      pg_temp.article(0, 'NR-1501', 'Kupferrohr 15 mm alt', 'XYZ', 'list', 60000, 100),
       pg_temp.article(1, 'NR-1502', 'Pressfitting 15 mm', 'Stück', 'net', 389, 1),
       pg_temp.article(2, 'NR-1503', 'Kugelhahn 1/2"', 'XYZ', 'list', 1250, 1),
       pg_temp.article(3, 'NR-1501', 'Kupferrohr 15 mm', 'Meter', 'list', 61000, 100),
@@ -242,7 +243,8 @@ begin
     is distinct from '{"kind":"percent","hundredthsOfPercent":3000}'::jsonb then
     raise exception 'the rebate group was not kept as data';
   end if;
-  -- The batch keeps only the lines its report names.
+  -- The batch keeps only the lines its report names: the pipe's superseded
+  -- line with the unmapped unit is no rejection, since its later line was written.
   if (select array_agg(kind || ':' || coalesce(article_number, '-') order by ordinal)
       from public.inventory_supplier_catalog_import_lines where import_id = v_import)
     is distinct from array['article:NR-1503', 'rejection:-'] then

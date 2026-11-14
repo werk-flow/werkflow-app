@@ -759,11 +759,19 @@ begin
     updated_at = now()
   where (rebate.text, rebate.discount) is distinct from (excluded.text, excluded.discount);
 
-  -- The batch keeps only the lines its report names.
+  -- The batch keeps only the lines its report names: of an article, only its
+  -- latest line, and only when its unit stays unmapped.
   delete from public.inventory_supplier_catalog_import_lines line
   where line.import_id = p_import_id and (
     line.kind = 'deletion'
-    or (line.kind = 'article' and p_unit_mapping ->> line.unit_text is not null)
+    or (line.kind = 'article' and (
+      p_unit_mapping ->> line.unit_text is not null
+      or exists (
+        select 1 from public.inventory_supplier_catalog_import_lines later
+        where later.import_id = p_import_id and later.kind = 'article'
+          and later.article_number = line.article_number and later.ordinal > line.ordinal
+      )
+    ))
     or (line.kind = 'price' and (
       exists (
         select 1 from public.inventory_supplier_catalog_import_lines delivered
