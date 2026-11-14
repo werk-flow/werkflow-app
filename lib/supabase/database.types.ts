@@ -16701,6 +16701,16 @@ export type Database = {
         };
         Returns: undefined;
       };
+      end_work_lead: {
+        Args: {
+          p_actor_id: string;
+          p_expected_lead_id: string;
+          p_job_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: Json;
+      };
       ensure_inventory_defaults: {
         Args: { p_actor_id: string; p_org_id: string };
         Returns: undefined;
@@ -17750,6 +17760,17 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      name_work_lead: {
+        Args: {
+          p_actor_id: string;
+          p_expected_lead_id: string;
+          p_job_id: string;
+          p_lead_user_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: Json;
       };
       open_time_account: {
         Args: {

@@ -1,6 +1,9 @@
 export const JOB_DELETE_HISTORY_MESSAGE =
   'Der Auftrag hat eine nachvollziehbare Planungshistorie und kann deshalb nicht gelöscht werden. Setze ihn stattdessen auf einen passenden Status.';
 
+export const JOB_DELETE_WORK_HISTORY_MESSAGE =
+  'Der Auftrag hat eine nachvollziehbare Arbeitshistorie, etwa Arbeitsnachweise oder eine Projektleitung, und kann deshalb nicht gelöscht werden. Setze ihn stattdessen auf einen passenden Status.';
+
 export const JOB_DELETE_MATERIAL_MESSAGE =
   'Für den Auftrag wurde Material entnommen oder als verbraucht erfasst. Diese Materialhistorie bleibt erhalten, deshalb kann der Auftrag nicht gelöscht werden. Setze ihn stattdessen auf einen passenden Status.';
 

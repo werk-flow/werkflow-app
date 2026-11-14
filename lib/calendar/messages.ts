@@ -61,6 +61,7 @@ type CalendarActionErrorCode =
   | 'past_day_needs_reason'
   | 'period_closed'
   | 'planning_history_exists'
+  | 'work_history_exists'
   | 'planning_warning'
   | 'project_not_found'
   | 'qualification_declined'
@@ -204,6 +205,8 @@ const CALENDAR_MESSAGES = {
   no_mutable_occurrences: PAST_OR_STARTED,
   planning_history_exists:
     'Der Auftrag hat eine Planungshistorie und kann nicht gelöscht werden. Setze ihn auf einen passenden Status.',
+  work_history_exists:
+    'Der Auftrag hat eine Arbeitshistorie, etwa Arbeitsnachweise oder eine Projektleitung, und kann nicht gelöscht werden. Setze ihn auf einen passenden Status.',
   // Shape of the change
   invalid_input: SHAPE,
   invalid_occurrence: SHAPE,
