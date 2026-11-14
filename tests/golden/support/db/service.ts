@@ -5,7 +5,7 @@ import {
   equipmentReplacementSchema,
   equipmentTransitionSchema,
 } from '../../../../lib/installed-equipment/validation';
-import type { EquipmentCategory } from '../../../../lib/installed-equipment/types';
+import type { EquipmentCarryOverInput, EquipmentCategory } from '../../../../lib/installed-equipment/types';
 import { maintenanceCoverageSchema, maintenancePlanSchema } from '../../../../lib/maintenance/validation';
 import { addLocalMonthsClamped } from '../../../../lib/date-time/berlin';
 import { serviceCaseCreateSchema, serviceCaseUpdateSchema } from '../../../../lib/service-cases/validation';
@@ -63,6 +63,41 @@ export async function seedInstalledEquipment(
 }
 
 /**
+ * The replace dialog's default choice: every running plan and every component
+ * still in service below the predecessor goes to the successor.
+ */
+async function carryEverything(orgId: string, predecessorId: string): Promise<EquipmentCarryOverInput> {
+  const admin = createAdminClient();
+  const [{ data: plans }, { data: components }] = await Promise.all([
+    admin
+      .rpc('list_installed_equipment_replacement_plans', {
+        p_organization_id: orgId,
+        p_equipment_id: predecessorId,
+        p_limit: 50,
+      })
+      .throwOnError(),
+    admin
+      .from('installed_equipment')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('parent_equipment_id', predecessorId)
+      .is('voided_at', null)
+      .is('archived_at', null)
+      .not('state', 'in', '(replaced,decommissioned)')
+      .throwOnError(),
+  ]);
+  return {
+    plans: plans.map((plan) => ({
+      planId: plan.plan_id,
+      expectedVersion: plan.plan_version,
+      carry: true,
+      reason: null,
+    })),
+    components: components.map((component) => ({ equipmentId: component.id, carry: true })),
+  };
+}
+
+/**
  * Takes an equipment out of service and records its replacement as a terminal
  * action, the state a manager corrects when the exchange was recorded on the wrong asset.
  */
@@ -105,6 +140,7 @@ export async function seedInstalledEquipmentReplacement(
     .throwOnError();
   if (!inactive) throw new Error('Equipment transition seed returned no record.');
   const replacement = equipmentReplacementSchema.parse({
+    carryOver: await carryEverything(input.orgId, input.predecessorId),
     predecessorId: input.predecessorId,
     successorId: randomUUID(),
     expectedVersion: inactive.version,
@@ -130,6 +166,7 @@ export async function seedInstalledEquipmentReplacement(
       p_reason: replacement.reason,
       p_actor_id: input.actorId,
       p_idempotency_key: replacement.idempotencyKey,
+      p_carry_over: toJson(replacement.carryOver),
     })
     .throwOnError();
   if (!successor)

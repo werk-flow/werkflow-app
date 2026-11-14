@@ -1,8 +1,10 @@
 import type { CompanyDocumentProfile } from '@/lib/company-profile/profile';
-import { readCompanyProfile } from '@/lib/company-profile/reads';
+import { readCompanyProfile, readOfferLetterhead } from '@/lib/company-profile/reads';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { getCachedMemberships } from '@/lib/data/cached';
 import { withReadRequest } from '@/lib/data/read-request-cache';
+import { renderEInvoicePdf } from '@/lib/document-rendering/e-invoice';
+import { invoiceDocument } from '@/lib/document-rendering/invoice-layout';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
 import { checkEn16931, type En16931Finding } from '@/lib/invoicing/check-en16931';
 import type { InvoiceDraft } from '@/lib/invoicing/model';
@@ -61,15 +63,16 @@ function refusalText(errors: En16931Finding[]): string {
 }
 
 /**
- * The Musterrechnung as checked ZUGFeRD EN 16931 XML with the company profile
- * as seller, for Admin and Büro of the active organization only. XML the CEN
- * rules refuse is never sent: the office gets the fields to fix instead.
+ * The Musterrechnung as a ZUGFeRD PDF/A-3 with the company profile as seller
+ * and letterhead, for Admin and Büro of the active organization only. Its
+ * embedded EN 16931 XML is checked by the CEN rules first: XML they refuse is
+ * never sent, the office gets the fields to fix instead.
  */
 export async function GET(request: Request): Promise<Response> {
   try {
     return await withReadRequest(request, sampleInvoiceResponse);
   } catch (error) {
-    logError('sampleInvoiceXml: build or check failed', error);
+    logError('sampleInvoicePdf: build, check or render failed', error);
     return Response.json({ error: 'render_failed' }, { status: 500, headers: privateHeaders });
   }
 }
@@ -89,15 +92,20 @@ async function sampleInvoiceResponse(): Promise<Response> {
   if (!organization) {
     return Response.json({ error: 'not_authorized' }, { status: 403, headers: privateHeaders });
   }
-  const read = await readCompanyProfile(createSupabaseAdminClient(), context);
-  if (!read.success) {
-    return read.error === 'not_authorized'
+  const admin = createSupabaseAdminClient();
+  const [read, letterhead] = await Promise.all([
+    readCompanyProfile(admin, context),
+    readOfferLetterhead(admin, context, organization.name),
+  ]);
+  if (!read.success || !letterhead.success) {
+    const error = read.success ? (letterhead.success ? 'load_failed' : letterhead.error) : read.error;
+    return error === 'not_authorized'
       ? Response.json({ error: 'not_authorized' }, { status: 403, headers: privateHeaders })
       : Response.json({ error: 'load_failed' }, { status: 500, headers: privateHeaders });
   }
   const seller = sellerOf(read.profile, organization.name);
-  const draft = sampleInvoice(seller, payeeOf(read.profile), getBusinessTodayIso());
-  const xml = toEn16931(calculateInvoice(draft));
+  const invoice = calculateInvoice(sampleInvoice(seller, payeeOf(read.profile), getBusinessTodayIso()));
+  const xml = toEn16931(invoice);
   const check = await checkEn16931(xml);
   if (!check.valid) {
     return new Response(refusalText(check.errors), {
@@ -105,11 +113,12 @@ async function sampleInvoiceResponse(): Promise<Response> {
       headers: { ...privateHeaders, 'Content-Type': 'text/plain; charset=utf-8' },
     });
   }
-  return new Response(xml, {
+  const pdf = await renderEInvoicePdf(invoiceDocument(invoice, letterhead.letterhead), xml);
+  return new Response(Buffer.from(pdf), {
     headers: {
       ...privateHeaders,
-      'Content-Type': 'application/xml; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="Muster-E-Rechnung.xml"',
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline; filename="Muster-E-Rechnung.pdf"',
     },
   });
 }

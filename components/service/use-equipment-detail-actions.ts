@@ -7,6 +7,7 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
 import type { ActionResult } from '@/lib/action-result';
 import { readInBackground } from '@/lib/data/background-read-client';
+import { replacementErrorMessage } from '@/lib/installed-equipment/replacement-messages';
 import { getEquipmentMutationErrorMessage, type EquipmentDetail } from '@/lib/installed-equipment/types';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 
@@ -112,10 +113,9 @@ export function useEquipmentDetailActions(initial: EquipmentDetail): EquipmentDe
       if (!result.success) {
         setError({
           scope,
-          message: getEquipmentMutationErrorMessage(
-            result.error,
-            'Die Änderung konnte nicht gespeichert werden.',
-          ),
+          message:
+            replacementErrorMessage(result.error) ??
+            getEquipmentMutationErrorMessage(result.error, 'Die Änderung konnte nicht gespeichert werden.'),
         });
         return;
       }
