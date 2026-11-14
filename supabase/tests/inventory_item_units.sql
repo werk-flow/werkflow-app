@@ -27,12 +27,13 @@ insert into public.projects (id, organization_id, name, created_by) values
  'Bad Musterstraße', '39600000-0000-4000-8000-000000000001');
 
 -- 30 pipe with stock, 31 fitting on a job material line, 32 valve with neither,
--- 33 sleeve with a pack size and stock.
+-- 33 sleeve with a pack size and stock, 35 elbow whose stock went back to 0.
 insert into public.inventory_items (id, organization_id, name, item_type, unit) values
 ('39600000-0000-4000-8000-000000000030', '39600000-0000-4000-8000-000000000010', 'Kupferrohr 15 mm', 'material', 'meter'),
 ('39600000-0000-4000-8000-000000000031', '39600000-0000-4000-8000-000000000010', 'Pressfitting 15 mm', 'material', 'piece'),
 ('39600000-0000-4000-8000-000000000032', '39600000-0000-4000-8000-000000000010', 'Kugelhahn 1/2"', 'material', 'piece'),
-('39600000-0000-4000-8000-000000000033', '39600000-0000-4000-8000-000000000010', 'Schiebemuffe 15 mm', 'material', 'piece');
+('39600000-0000-4000-8000-000000000033', '39600000-0000-4000-8000-000000000010', 'Schiebemuffe 15 mm', 'material', 'piece'),
+('39600000-0000-4000-8000-000000000035', '39600000-0000-4000-8000-000000000010', 'Pressbogen 15 mm', 'material', 'piece');
 
 insert into public.job_material_lines (organization_id, project_id, item_id, planned_quantity) values
 ('39600000-0000-4000-8000-000000000010', '39600000-0000-4000-8000-000000000021',
@@ -84,6 +85,14 @@ select public.record_inventory_movement(
   '39600000-0000-4000-8000-000000000010', '39600000-0000-4000-8000-000000000001',
   '39600000-0000-4000-8000-000000000033', '39600000-0000-4000-8000-000000000020', 'initial_count', 3
 );
+select public.record_inventory_movement(
+  '39600000-0000-4000-8000-000000000010', '39600000-0000-4000-8000-000000000001',
+  '39600000-0000-4000-8000-000000000035', '39600000-0000-4000-8000-000000000020', 'initial_count', 2
+);
+select public.record_inventory_movement(
+  '39600000-0000-4000-8000-000000000010', '39600000-0000-4000-8000-000000000001',
+  '39600000-0000-4000-8000-000000000035', '39600000-0000-4000-8000-000000000020', 'stock_out', -2
+);
 select public.save_inventory_item_supplier(
   '39600000-0000-4000-8000-000000000010', '39600000-0000-4000-8000-000000000001',
   '39600000-0000-4000-8000-000000000033', 'piece', null, null, 'Großhandel Nordrohr', 'NR-SM15', 'package',
@@ -126,13 +135,28 @@ begin
 end;
 $$;
 
--- 4. An article with stock or history keeps its unit, on save and on a direct
--- update; a save that keeps the unit changes every other field.
+-- 4. An article with stock, movements or a material line keeps its unit, on
+-- save and on a direct update; a save that keeps the unit changes every other
+-- field.
 select pg_temp.expect_refusal('a unit change on an article with stock',
   $sql$select pg_temp.save_item('39600000-0000-4000-8000-000000000030', 'Kupferrohr 15 mm', 'rod')$sql$,
   'unit_in_use');
 select pg_temp.expect_refusal('a direct unit change on an article with stock',
   $sql$update public.inventory_items set unit = 'rod' where id = '39600000-0000-4000-8000-000000000030'$sql$,
+  'unit_in_use');
+do $$
+begin
+  if exists (
+    select 1 from public.inventory_stock_levels stock
+    where stock.organization_id = '39600000-0000-4000-8000-000000000010'
+      and stock.item_id = '39600000-0000-4000-8000-000000000035' and stock.quantity_on_hand <> 0
+  ) then
+    raise exception 'the elbow must hold no stock, so only its movements keep its unit';
+  end if;
+end;
+$$;
+select pg_temp.expect_refusal('a unit change on an article with movements and no stock',
+  $sql$select pg_temp.save_item('39600000-0000-4000-8000-000000000035', 'Pressbogen 15 mm', 'package')$sql$,
   'unit_in_use');
 select pg_temp.expect_refusal('a unit change on an article on a job material line',
   $sql$select pg_temp.save_item('39600000-0000-4000-8000-000000000031', 'Pressfitting 15 mm', 'package')$sql$,
@@ -165,7 +189,8 @@ begin
     '39600000-0000-4000-8000-000000000034', '39600000-0000-4000-8000-000000000020', 'initial_count', 4
   );
   select quantity_on_hand into v_stock from public.inventory_stock_levels
-  where item_id = '39600000-0000-4000-8000-000000000034';
+  where organization_id = '39600000-0000-4000-8000-000000000010'
+    and item_id = '39600000-0000-4000-8000-000000000034';
   if v_stock is distinct from 4::numeric then
     raise exception 'an article with a unit outside the list must still book stock, found %', v_stock;
   end if;
