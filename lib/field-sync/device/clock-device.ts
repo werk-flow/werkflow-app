@@ -53,11 +53,10 @@ const EARLIER_SEND_LOCK = 'werkflow-time-outbox';
  * origin's tabs. Another person's or organization's chain never waits for it.
  */
 function onChain<T>({ userId, organizationId }: OutboxHolder, work: () => Promise<T>): Promise<T> {
-  return exclusively(`werkflow-time-outbox:${userId}:${organizationId}`, () =>
-    typeof navigator.locks?.request === 'function'
-      ? navigator.locks.request(EARLIER_SEND_LOCK, { mode: 'shared' }, work)
-      : work(),
-  );
+  return exclusively(`werkflow-time-outbox:${userId}:${organizationId}`, async (): Promise<T> => {
+    if (typeof navigator.locks?.request !== 'function') return work();
+    return await navigator.locks.request(EARLIER_SEND_LOCK, { mode: 'shared' }, work);
+  });
 }
 
 /** Hears what the outbox holds for this tab's holder; `holdEnded` when another tab's wipe ended the hold. */
