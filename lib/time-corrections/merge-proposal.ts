@@ -1,3 +1,4 @@
+import { isSameActivitySelection } from '@/lib/time-tracking/clock-actions';
 import type { TimeActivitySelection } from '@/lib/time-tracking/types';
 import type { TimeCorrectionFact, TimeCorrectionSnapshot } from './types';
 import type { SubmitTimeCorrectionInput } from './validation';
@@ -75,7 +76,9 @@ function sharesOneContext(facts: readonly TimeCorrectionFact[]): boolean {
       fact.activityKind === first?.activityKind &&
       fact.jobId === first?.jobId &&
       fact.userId === first?.userId &&
-      fact.employeeRecordId === first?.employeeRecordId,
+      fact.employeeRecordId === first?.employeeRecordId &&
+      // The qualifiers too: a travel role or route of a later piece must not be lost.
+      ((!fact.activity && !first?.activity) || isSameActivitySelection(fact.activity, first?.activity)),
   );
 }
 
@@ -134,7 +137,10 @@ function editSource(
     return {
       schemaVersion: 1,
       facts: [
-        ...before.facts.filter((fact) => Date.parse(fact.timestamp) < Date.parse(patch.timestamp)),
+        // The source's own close goes too, also when the new end is later.
+        ...before.facts
+          .slice(0, -1)
+          .filter((fact) => Date.parse(fact.timestamp) < Date.parse(patch.timestamp)),
         { ...closing, timestamp: patch.timestamp },
       ],
     };

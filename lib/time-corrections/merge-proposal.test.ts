@@ -5,6 +5,7 @@ import {
   projectTimeSegmentsToLegacyTransitions,
   type TimeSegmentFact,
 } from '@/lib/time-tracking/segments';
+import type { TimeActivitySelection } from '@/lib/time-tracking/types';
 import { mergeCorrectionProposal } from './merge-proposal';
 import { applyApprovedTimeCorrections } from './projection';
 import { createSegmentCorrectionSnapshot } from './segment-snapshot';
@@ -119,5 +120,45 @@ describe('an edit of a recovery-ended segment that spans several days', () => {
       proposed(['clock_in', '2026-09-07T06:00:00.000Z']),
     );
     expect(countedMinutes(approve(proposal))).toBe(56.5 * 60);
+  });
+
+  test('a later new end replaces the close instead of adding a second one', () => {
+    const laterEnd = '2026-09-09T15:00:00.000Z';
+    const proposal = mergeCorrectionProposal('edit', before, proposed(['clock_out', laterEnd]));
+    const closes = proposal?.facts.filter((fact) => fact.entryType === 'clock_out') ?? [];
+    expect(proposal?.facts.at(-1)?.timestamp).toBe(laterEnd);
+    expect(
+      closes.filter((fact) => Date.parse(fact.timestamp) > Date.parse(recovered.endedAt ?? '')),
+    ).toHaveLength(1);
+    expect(closes.some((fact) => fact.timestamp === recovered.endedAt)).toBe(false);
+    expect(countedMinutes(approve(proposal))).toBe(58 * 60);
+  });
+
+  test('a pair edit keeps a source whose pieces differ in a qualifier', () => {
+    const travel = (travelRole: 'driver' | 'passenger'): TimeActivitySelection => ({
+      kind: 'travel',
+      allocationKind: 'unallocated',
+      jobId: null,
+      travelRoute: 'company_to_site',
+      travelRole,
+    });
+    const [firstIn, firstOut, secondIn, secondOut] = before.facts;
+    if (!firstIn || !firstOut || !secondIn || !secondOut) throw new Error('Missing source fact fixture.');
+    const mixed: TimeCorrectionSnapshot = {
+      schemaVersion: 1,
+      facts: [
+        { ...firstIn, activityKind: 'travel', activity: travel('driver') },
+        { ...firstOut, activityKind: 'travel', activity: travel('driver') },
+        { ...secondIn, activityKind: 'travel', activity: travel('passenger') },
+        { ...secondOut, activityKind: 'travel', activity: travel('passenger') },
+      ],
+    };
+    const proposal = mergeCorrectionProposal(
+      'edit',
+      mixed,
+      proposed(['clock_in', realStart], ['clock_out', realEnd]),
+    );
+    expect(proposal?.facts).toHaveLength(4);
+    expect(proposal?.facts.map((fact) => fact.activity)).toEqual(mixed.facts.map((fact) => fact.activity));
   });
 });
