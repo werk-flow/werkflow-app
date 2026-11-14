@@ -1,7 +1,7 @@
 -- The office imports a wholesaler delivery into a supplier catalog with a
 -- preview, and a catalog article becomes an own article on first use
 -- (werk-flow/werkflow-planning#375, migration
--- 20261205100000_keep_a_supplier_catalog_beside_the_own_articles.sql).
+-- 20261210130000_keep_a_supplier_catalog_beside_the_own_articles.sql).
 -- Made-up organizations, wholesalers and articles only.
 begin;
 
