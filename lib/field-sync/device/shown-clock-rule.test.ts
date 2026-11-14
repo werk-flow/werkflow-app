@@ -195,12 +195,24 @@ describe('the shown clock', () => {
     ).toEqual(['nichts', 'eingestempelt · sending', 'eingestempelt']);
   });
 
-  test('settling unsent work blocks a new action until the server answered', () => {
+  test('settling unsent work with network blocks a new action until the server answered', () => {
     let memory = advanceShownClock(NOTHING_SHOWN, { ...SETTLED, device: PENDING_START, deviceFrom: 30 });
     memory = advanceShownClock(memory, { ...SETTLED, deviceFrom: 40 });
-    expect(memory.shown.settling).toBe(true);
+    expect(memory.shown).toMatchObject({ settling: true, actionsWait: true });
     memory = advanceShownClock(memory, { ...SETTLED, server: WORKING, serverFrom: 41, deviceFrom: 40 });
-    expect(memory.shown.settling).toBe(false);
+    expect(memory.shown).toMatchObject({ settling: false, actionsWait: false });
+  });
+
+  test('a send accepted just before the signal goes leaves the held clock usable without network', () => {
+    let memory = advanceShownClock(NOTHING_SHOWN, { ...SETTLED, device: PENDING_START, deviceFrom: 30 });
+    // The send was recorded; the signal goes before the read after it answers, which is then no answer.
+    memory = advanceShownClock(memory, { ...SETTLED, deviceFrom: 40, online: false });
+    expect(seen(memory)).toBe('eingestempelt · waiting');
+    expect(memory.shown).toMatchObject({ settling: true, actionsWait: false });
+    // The person ends the clock: the tap waits like any offline tap.
+    memory = advanceShownClock(memory, { ...SETTLED, deviceFrom: 40, online: false, keptEcho: CLOCKED_OUT });
+    expect(seen(memory)).toBe('nicht eingestempelt · waiting');
+    expect(memory.shown).toMatchObject({ settling: false, actionsWait: false });
   });
 
   test('unchanged facts keep the same memory, so a render never loops', () => {

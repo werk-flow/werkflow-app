@@ -45,8 +45,13 @@ export type ShownClock = {
   /** The unsent events the dock and the sheet show. */
   device: ClockDeviceView | null;
   marker: ClockMarker;
-  /** Unsent actions settled, and the server's answer to them has not come yet: no action may start from the shown state. */
+  /** Unsent actions settled, and the server's answer to them has not come yet: the shown state is held. */
   settling: boolean;
+  /**
+   * The phone has network while it settles: no action starts until the answer comes, which is
+   * short. Without network an action goes from the shown state into the outbox, as any offline tap.
+   */
+  actionsWait: boolean;
   /** The read that should settle them failed with network: the failure shows until a read succeeds. */
   readFailed: boolean;
 };
@@ -64,7 +69,7 @@ export type ShownMemory = {
 /** Nothing shown yet: the memory a page starts with. */
 export const NOTHING_SHOWN: ShownMemory = {
   scope: null,
-  shown: { state: null, device: null, marker: null, settling: false, readFailed: false },
+  shown: { state: null, device: null, marker: null, settling: false, actionsWait: false, readFailed: false },
   local: false,
   settledAt: null,
 };
@@ -75,6 +80,7 @@ function sameShown(left: ShownClock, right: ShownClock): boolean {
     left.device === right.device &&
     left.marker === right.marker &&
     left.settling === right.settling &&
+    left.actionsWait === right.actionsWait &&
     left.readFailed === right.readFailed
   );
 }
@@ -103,10 +109,13 @@ export function advanceShownClock(held: ShownMemory, facts: ClockFacts): ShownMe
       device,
       marker: pending,
       settling: false,
+      actionsWait: false,
       readFailed: false,
     };
-  else if (readFailed) shown = { ...memory.shown, device, marker: null, settling: true, readFailed };
-  else if (settledAt !== null) shown = { ...memory.shown, marker: pending, settling: true, readFailed };
+  else if (readFailed)
+    shown = { ...memory.shown, device, marker: null, settling: true, actionsWait: online, readFailed };
+  else if (settledAt !== null)
+    shown = { ...memory.shown, marker: pending, settling: true, actionsWait: online, readFailed };
   else if (facts.checkingDevice) shown = NOTHING_SHOWN.shown;
   // A stopped chain shows the server's clock beside its own badge.
   else
@@ -115,6 +124,7 @@ export function advanceShownClock(held: ShownMemory, facts: ClockFacts): ShownMe
       device,
       marker: online || device || !server ? null : 'offline',
       settling: false,
+      actionsWait: false,
       readFailed: false,
     };
   if (

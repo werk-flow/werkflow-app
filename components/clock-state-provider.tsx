@@ -323,19 +323,22 @@ function useClockServerView(activeOrgId: string | null) {
   };
 }
 
-/** The echo of actions this page kept while the outbox does not show them yet; it ends when the outbox answers. */
-function useKeptEcho(kept: boolean, phoneState: LiveClockState | null) {
+/**
+ * The echo of actions this page kept while the outbox does not show them yet; it ends when the
+ * outbox answers. `keepEchoOn` applies a tap to `phoneState`, the clock the tap went from.
+ */
+function useKeptEcho(kept: boolean) {
   const [keptEcho, setKeptEcho] = useState<LiveClockState | null>(null);
   // A tap goes on from this page's earlier kept echo only while the outbox still does not show it.
-  const keepEcho = useCallback(
-    (echo: (from: LiveClockState) => LiveClockState) =>
+  const keepEchoOn = useCallback(
+    (phoneState: LiveClockState | null, echo: (from: LiveClockState) => LiveClockState) =>
       setKeptEcho((previous) => {
         const from = (kept && previous) || phoneState;
         return from && echo(from);
       }),
-    [kept, phoneState],
+    [kept],
   );
-  return { keptEcho: kept ? keptEcho : null, keepEcho };
+  return { keptEcho: kept ? keptEcho : null, keepEchoOn };
 }
 
 /** What the clock shows (shown-clock.ts), from the provider's server view, outbox and kept echo. */
@@ -367,7 +370,8 @@ function useProviderShownClock(
 
 /**
  * Whether a clock action may start, and the read failure the dock shows. Unsent actions carry the
- * clock (`standsOnDevice`); without network a failed read leaves the last confirmed clock usable.
+ * clock (`standsOnDevice`); without network a failed read leaves the last confirmed clock usable,
+ * and so does a wait for the answer to settled actions (`shown.actionsWait`).
  */
 function clockReadiness(input: {
   phoneState: LiveClockState | null;
@@ -378,8 +382,8 @@ function clockReadiness(input: {
 }): { isReady: boolean; statusError: string | null } {
   const { phoneState, shown, error, isLoading, standsOnDevice } = input;
   return {
-    // While unsent actions settle, no action starts from a clock the server has not answered yet.
-    isReady: phoneState !== null && !isLoading && !shown.settling && (!error || standsOnDevice),
+    // While unsent actions settle with network, no action starts before the server's answer.
+    isReady: phoneState !== null && !isLoading && !shown.actionsWait && (!error || standsOnDevice),
     // While they settle, only the read that should settle them shows its failure, also without
     // network: the server's older clock is never shown in its place.
     statusError: shown.readFailed
@@ -406,9 +410,16 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
   // What the phone holds: while unsent events wait, the clock stands where they left it; a stopped
   // chain shows the clock the server confirmed.
   const deviceState = unsent?.state ?? serverState;
-  const { keptEcho, keepEcho } = useKeptEcho(outbox.kept, deviceState);
-  const phoneState = keptEcho ?? deviceState;
+  const { keptEcho, keepEchoOn } = useKeptEcho(outbox.kept);
   const { shown, online } = useProviderShownClock(view, outbox, keptEcho, outboxHolder);
+  // While settled actions wait for their answer, the clock shown is where they left it: a tap without
+  // network goes on from there, never from the server's clock read before they were sent. The outbox
+  // gives it the session and version the last sent action left (time-outbox.ts, captureTimeEvent).
+  const phoneState = shown.settling ? shown.state : (keptEcho ?? deviceState);
+  const keepEcho = useCallback(
+    (echo: (from: LiveClockState) => LiveClockState) => keepEchoOn(phoneState, echo),
+    [keepEchoOn, phoneState],
+  );
   const { isReady, statusError } = clockReadiness({
     phoneState,
     shown,

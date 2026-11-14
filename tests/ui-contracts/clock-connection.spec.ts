@@ -216,8 +216,9 @@ test('a clock read that fails after the send keeps the clock-in apart from the s
   server.stateFails = true;
   release();
   await expect(clockDock(page).getByText('Der Zeitstatus konnte nicht sicher geladen werden.')).toBeVisible();
+  // Without network the held clock stays usable: a tap goes into the outbox behind the sent start.
   await setConnection(page, server, false);
-  await expect(page.getByLabel('Zeitstatus')).toHaveText('Nicht bereit');
+  await expect(page.getByLabel('Zeitstatus')).toHaveText(/^Bereit/);
 
   server.stateFails = false;
   await setConnection(page, server, true);
@@ -240,4 +241,64 @@ test('a start whose outbox code cannot load shows no clock instead of the server
   await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'loading');
 
   expect(await screens(page)).toEqual(['leer']);
+});
+
+test('taps after a send accepted just before the signal went are kept and go on from the session the send left', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await recordScreens(page);
+  await startOffline(page, server);
+  const release = await holdSends(page);
+  const sent = page.waitForRequest('**/api/field-sync/v1/operations');
+  await setConnection(page, server, true);
+  await sent;
+  // The read after the send has no signal to answer on.
+  let releaseReads = (): void => undefined;
+  const readsReleased = new Promise<void>((resolve) => {
+    releaseReads = resolve;
+  });
+  await page.route('**/api/time-tracking-state?**', async (route) => {
+    await readsReleased;
+    if (server.online) await route.fallback();
+    else await route.abort('internetdisconnected');
+  });
+
+  // A short burst of signal: the server records the start, then the signal goes before the read answers.
+  server.state = RECORDED_START;
+  const followUpRead = page.waitForRequest('**/api/time-tracking-state?**');
+  release();
+  await followUpRead;
+  await setConnection(page, server, false);
+  releaseReads();
+  await expect(clockDock(page).locator('[data-clock-unsent]')).toHaveText('Wartet auf Netz');
+  await expect(page.getByLabel('Zeitstatus')).toHaveText(/^Bereit/);
+
+  // The taps go on from the clock shown, never from the server's clock read before the send.
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect(clockStatus(page)).toHaveText('Pause');
+  await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Erfassung beenden', exact: true }).click();
+  await expect(clockStatus(page)).toHaveText('Nicht eingestempelt');
+  await expect(clockDock(page).locator('[data-clock-unsent]')).toHaveText('Wartet auf Netz');
+
+  // The signal returns: each tap is sent once, behind the start, the first expecting what the start left.
+  server.state = CLOCKED_OUT_STATE;
+  await setConnection(page, server, true);
+  await expect.poll(() => server.sent.length).toBe(3);
+  await expect(clockDock(page).locator('[data-clock-unsent]')).toHaveCount(0);
+  expect(server.sent.map((envelope) => envelope.payload)).toMatchObject([
+    { action: 'start', expectedSessionId: null, expectedVersion: null },
+    { action: 'switch', expectedSessionId: ACCEPTED.state?.sessionId, expectedVersion: 1 },
+    { action: 'end', expectedSessionId: ACCEPTED.state?.sessionId, expectedVersion: 1 },
+  ]);
+  expect(await screens(page)).toEqual([
+    ...KEPT_START,
+    'Arbeit · Wird übertragen',
+    'Arbeit · Wartet auf Netz',
+    'Pause · Wartet auf Netz',
+    'Nicht eingestempelt · Wartet auf Netz',
+    'Nicht eingestempelt · Wird übertragen',
+    'Nicht eingestempelt',
+  ]);
 });
