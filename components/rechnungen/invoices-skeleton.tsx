@@ -6,6 +6,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
 import { INVOICE_COLUMNS } from './invoices-columns';
 
+/** The list page's subtitle, which its route skeleton shows too. */
+export const INVOICES_SUBTITLE = 'Jede Rechnung mit Kunde, Rechnungsempfänger und Betrag.';
+
 /** Toolbar, count and rows. Loaded rows open their invoice, so skeleton rows hover too. */
 export function InvoicesListSkeleton() {
   return (
@@ -29,7 +32,11 @@ export function InvoicesListSkeleton() {
 export function InvoicesPageSkeleton() {
   return (
     <PageShell>
-      <PageHeader title="Rechnungen" actions={<Skeleton className="h-9 w-44" />} />
+      <PageHeader
+        title="Rechnungen"
+        subtitle={INVOICES_SUBTITLE}
+        actions={<Skeleton className="h-9 w-44" />}
+      />
       <PageBody>
         <div role="status" aria-label="Rechnungen werden geladen">
           <span className="sr-only">Rechnungen werden geladen.</span>

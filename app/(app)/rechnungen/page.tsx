@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
 import { InvoicesContent } from '@/components/rechnungen/invoices-content';
-import { InvoicesListSkeleton } from '@/components/rechnungen/invoices-skeleton';
+import { INVOICES_SUBTITLE, InvoicesListSkeleton } from '@/components/rechnungen/invoices-skeleton';
 import { PageActionButton, PageActionProvider, PageActionUnavailable } from '@/components/shared/page-action';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
@@ -63,7 +63,7 @@ export default async function InvoicesPage({
         </Suspense>
         <PageHeader
           title="Rechnungen"
-          subtitle="Jede Rechnung mit Kunde, Rechnungsempfänger und Betrag."
+          subtitle={INVOICES_SUBTITLE}
           actions={
             <PageActionButton>
               <Plus className="size-4" />
