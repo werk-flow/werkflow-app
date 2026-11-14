@@ -1,3 +1,4 @@
+import ts from 'typescript';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import { groupSelections } from './group-selection';
 import type { ChangeTrigger } from './change-triggers';
@@ -46,25 +47,11 @@ const RUNNER_ENTRY_POINTS = [
   'scripts/ci-plan.ts',
 ];
 const RUNNER_FOLDER = /^lib\/testing\/(runner|selection|local-stack)\//;
-/**
- * The registries a feature adds a row to: its test groups and scope prefixes, its dialogs, its phone
- * routes. The runner reads them, but a row changes which groups exist or what they open, not how
- * every group runs, so the change plans by diff: a new group's spec selects it, the runner
- * integration pilots run (group-selection.ts), and the SQL and static jobs take every registered
- * group. What a diff misses runs in main's full run within hours. As runner modules they ran every
- * browser group for 13 of 45 merged PRs (werk-flow/werkflow-planning#294). The modules they import
- * stay runner modules.
- */
-const REGISTRIES = [
-  'lib/testing/selection/test-groups.ts',
-  'lib/testing/selection/dialog-inventory.ts',
-  'lib/testing/selection/mobile-route-inventory.ts',
-];
 
 /**
  * The runner entry points and the runner, selection and local-stack modules
- * they import, directly or through other modules, except the `REGISTRIES`. A module only a spec, a
- * static check or a unit test imports selects its own groups instead. An import the graph cannot resolve takes
+ * they import, directly or through other modules. A module only a spec, a static check or a unit test imports
+ * selects its own groups instead. An import the graph cannot resolve takes
  * every module of those folders.
  */
 export function runnerModules(graph: ReadonlyMap<string, readonly string[]>): string[] {
@@ -78,9 +65,49 @@ export function runnerModules(graph: ReadonlyMap<string, readonly string[]>): st
       pending.push(...[...graph.keys()].filter((candidate) => RUNNER_FOLDER.test(candidate)));
     else pending.push(...(graph.get(file) ?? []));
   }
-  return [...reached].filter(
-    (file) => (RUNNER_ENTRY_POINTS.includes(file) || RUNNER_FOLDER.test(file)) && !REGISTRIES.includes(file),
-  );
+  return [...reached].filter((file) => RUNNER_ENTRY_POINTS.includes(file) || RUNNER_FOLDER.test(file));
+}
+
+/**
+ * The declarations of the runner's registries that hold only the rows a feature adds: test groups
+ * and scope prefixes, dialogs, phone routes. A row changes which groups exist or what they open, not
+ * how every group runs, so a change inside these alone plans by diff: a new group's spec selects
+ * it, the runner integration pilots run, and the SQL and static jobs take every registered group.
+ * What a diff misses runs in main's full run within hours. Every other statement of these modules
+ * stays runner logic. As runner logic, rows ran every browser group for 13 of 45 merged PRs
+ * (werk-flow/werkflow-planning#294).
+ */
+export const REGISTRY_ROWS: Readonly<Record<string, readonly string[]>> = {
+  'lib/testing/selection/test-groups.ts': ['TEST_SCOPE_PREFIXES', 'auditDefinitions', 'sqlDefinitions'],
+  'lib/testing/selection/dialog-inventory.ts': ['DIALOG_INVENTORY'],
+  'lib/testing/selection/mobile-route-inventory.ts': [
+    'MANAGER_PHONE_ROUTES',
+    'DYNAMIC_PHONE_ROUTES',
+    'PHONE_REDIRECTS',
+    'EMPLOYEE_PHONE_ROUTES',
+    'EMPLOYEE_WORK_PACKS',
+  ],
+};
+
+/** Whether a registry's two versions differ only inside its `REGISTRY_ROWS`; comments do not count. */
+export function changesOnlyRows(file: string, before: string, after: string): boolean {
+  const rows = REGISTRY_ROWS[file];
+  if (!rows) return false;
+  const logic = (source: string): string[] => {
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest);
+    return tree.statements.map((statement) => {
+      const [declaration, ...more] = ts.isVariableStatement(statement)
+        ? statement.declarationList.declarations
+        : [];
+      return declaration &&
+        !more.length &&
+        ts.isIdentifier(declaration.name) &&
+        rows.includes(declaration.name.text)
+        ? `rows ${declaration.name.text}: ${declaration.type?.getText(tree) ?? ''}`
+        : statement.getText(tree);
+    });
+  };
+  return JSON.stringify(logic(before)) === JSON.stringify(logic(after));
 }
 
 /** The visual groups render in the pinned Playwright image, which a runner pulls first, so they share shards of their own. */
@@ -126,6 +153,8 @@ export function ciPlan(input: {
   fullRun: string | undefined;
   /** The output of `runnerModules`. */
   runnerModules: readonly string[];
+  /** The changed registries whose change `changesOnlyRows` holds to their rows. */
+  rowChanges: readonly string[];
 }): CiPlan {
   const browserGroups = input.groups.filter(
     (group) => isBrowser(group) && !group.files.some(isPerformanceSpec),
@@ -137,7 +166,9 @@ export function ciPlan(input: {
           .filter((group) => isBrowser(group) && group.files.some(isPerformanceSpec))
           .map((group) => ({ id: group.id, reason: `${input.fullRun}: its steps, untimed` }));
   const runner = new Set(input.runnerModules);
-  const tooling = input.changedFiles?.find((file) => TOOLING_INPUTS.test(file) || runner.has(file));
+  const tooling = input.changedFiles?.find(
+    (file) => (TOOLING_INPUTS.test(file) || runner.has(file)) && !input.rowChanges.includes(file),
+  );
   const fullReason =
     input.fullRun ??
     (input.changedFiles === undefined

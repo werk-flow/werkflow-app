@@ -17,7 +17,8 @@ name: Main green notice
 # through `env`, and its log names PR numbers and commits only.
 #
 # Only a run on `main` starts it; the job's condition then picks the push runs. Unfiltered, every
-# completed CI run started one that skipped its job: about 230 runs a day (werkflow-planning#294).
+# completed CI run started one that skipped its job: about 230 runs a day
+# (werk-flow/werkflow-planning#294).
 on:
   workflow_run:
     workflows: [CI]

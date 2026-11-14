@@ -89,7 +89,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 `.github/workflows/ci.yml` runs on every PR to `main`, except a label change, each queue entry and every push to `main`. `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules: a PR's diff against its merge base, a queue entry's against its base, a push's against the previous `main` commit unless a green queue run passed that tree. Every group runs on an unreadable diff, a full run, and a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but its `REGISTRIES`).
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules: a PR's diff against its merge base, a queue entry's against its base, a push's against the previous `main` commit unless a green queue run passed that tree. Every group runs on an unreadable diff, a full run, and a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
 - **Drafts.** A draft PR runs no browser shard, and its `Check` fails while browser groups wait. `gh pr ready` runs them ([babysit a pull request](coderabbit.md#babysit-a-pull-request)).
 - **Full run and release gate.** A full run is `ci.yml` called with `full` from a `Full run` job, nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
 - **Shards.** Visual groups get their own shards; a full selection fills at most `MAX_SHARDS`, a PR's run starts four at once.
