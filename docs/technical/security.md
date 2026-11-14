@@ -98,7 +98,7 @@ The edge functions accept only the project's secret keys and escape every interp
 
 Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to the unauthenticated `POST /api/csp-report`, which stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
 
-The service worker (`/sw.js`, [versioned per build](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-13-the-build-writes-the-shells-version)) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the stored day ([one exception](#known-residual-exposure)); unsent work stays, untrusted ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
+The service worker (`/sw.js`, [versioned per build](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-13-the-build-writes-the-shells-version)) caches only the [static](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-14-the-shell-requests-send-the-origins-cookies) offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the stored day ([one exception](#known-residual-exposure)); unsent work stays, untrusted ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
 
 ### Server caches
 

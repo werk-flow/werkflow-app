@@ -336,3 +336,11 @@ Decided for werk-flow/werkflow-planning#407. It sharpens the time outbox's invar
 - **Sends.** Each chain, one person's events in one organization, has a lock of its own. A discard or deletion waits only for a send of a chain that holds an event it deletes, never for another person's or organization's. Each also holds the one lock every chain shared before, in shared mode, so a tab open across a deployment, which still takes that lock alone, never sends or deletes beside this version.
 - **Open online calls.** A shown action still in the kept store, behind an open online call or a stop, is deleted there. It waits only for its own online call, never for another action's.
 - **A stop that appears after the question opened.** It no longer fails „Verwerfen“. What the question showed goes, the stop stays, and the question names it as work that came after the question.
+
+## Amendment 2026-11-14: the shell requests send the origin's cookies
+
+Decided for werk-flow/werkflow-planning#22 after the real iPhone run (OQ-5, step 9): on staging the installed app, opened cold without signal, showed Safari's own offline page. Staging sits behind Vercel Authentication, which answers every request without its `_vercel_jwt` cookie with a redirect to Vercel's sign-in. The worker fetched its shell without cookies and refused redirects, so its install failed and no worker served the start. Production has no Vercel Authentication and was not affected.
+
+- **The shell requests send the origin's cookies** (`credentials: 'same-origin'`). The offline page and the build files answer the same bytes for every request: the page is prerendered, and `proxy.ts`, which reads and refreshes the session, never runs on a shell path, so no answer sets a cookie. A rule test pins the proxy's paths (`lib/security/service-worker.test.ts`).
+- **The worker refuses a personal answer.** A redirect, a status outside 200 to 299, or an offline page marked `private` or `no-store`, as Next.js marks a page rendered for one request, fails the fill; the cache keeps nothing of it.
+- **Rejected: a Vercel setting.** Turning Vercel Authentication off for staging exposes a preview of unreleased work; a bypass secret in the worker is public in its script.
