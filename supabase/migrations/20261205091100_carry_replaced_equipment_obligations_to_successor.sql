@@ -333,6 +333,20 @@ begin
     p_successor_payload, p_effective_at, p_reason, p_actor_id, p_idempotency_key
   );
 
+  -- Lock the components below the predecessor and the named ones, so the
+  -- comparison and the carry read the same committed rows.
+  perform 1 from public.installed_equipment component
+  where component.organization_id = p_organization_id
+    and (
+      component.parent_equipment_id = p_predecessor_id
+      or component.id in (
+        select choice."equipmentId"
+        from jsonb_to_recordset(p_carry_over->'components') as choice("equipmentId" uuid)
+      )
+    )
+  order by component.id
+  for update;
+
   -- The choices name exactly the running plans and the components below the
   -- predecessor, each once.
   if exists (

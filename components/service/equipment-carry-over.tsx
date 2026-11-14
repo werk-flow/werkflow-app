@@ -53,8 +53,11 @@ export type EquipmentCarryOverController = {
 export function useEquipmentCarryOver(
   initial: EquipmentDetail | null | undefined,
 ): EquipmentCarryOverController {
-  const plans = initial?.replacementPlans ?? [];
-  const components = (initial?.components ?? []).filter(isCarriedComponent);
+  // The plans and components as the dialog opened: a live refresh while it
+  // stays open never puts a version the manager did not review into the
+  // choices; the server refuses the outdated set instead.
+  const [plans] = useState(() => initial?.replacementPlans ?? []);
+  const [components] = useState(() => (initial?.components ?? []).filter(isCarriedComponent));
   const [carried, setCarriedMap] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [reasons, setReasons] = useState<ReadonlyMap<string, string>>(new Map());
   const isCarried = (id: string) => carried.get(id) ?? true;

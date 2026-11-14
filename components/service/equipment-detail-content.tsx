@@ -235,7 +235,12 @@ function EquipmentDetailRegion({
           )}
 
           <EquipmentHistorySection events={item.events} sourceBusy={busy.isBusy('source')} />
-          <EquipmentPredecessorHistorySection equipmentId={item.id} initial={item.predecessorHistory} />
+          {/* A refreshed first page starts the paging over. */}
+          <EquipmentPredecessorHistorySection
+            key={item.predecessorHistory.events.map((event) => event.id).join(',')}
+            equipmentId={item.id}
+            initial={item.predecessorHistory}
+          />
         </div>
 
         <EquipmentDetailSidebar
