@@ -123,6 +123,8 @@ const exceptions: Record<string, DialogException> = {
     },
   'components/service/maintenance-coverage-documents-dialog.tsx#MaintenanceCoverageDocumentsDialog|Dokumente zu {coverage.coverageNumber}':
     { kind: 'browser', reason: 'Embedded document browser owns separate link/upload/rename operations.' },
+  'components/auftraege/work-pack/field-equipment-record-dialog.tsx#FieldEquipmentRecordDialog|Verlauf und Dokumente':
+    { kind: 'browser', reason: 'Read-only history and an embedded document browser; nothing to submit.' },
   'components/service/maintenance-due-action-dialog.tsx#MaintenanceDueActionDialog|Fälligkeit bearbeiten': {
     kind: 'multiple-actions',
     reason: 'Schedule/create and skipped/cancelled/superseded transitions have different consequences.',

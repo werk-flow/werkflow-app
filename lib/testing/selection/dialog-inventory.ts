@@ -534,6 +534,10 @@ export const DIALOG_INVENTORY = {
   'components/auftraege/work-pack/field-site-access-dialog.tsx#SiteAccessProposalDialog|Zugang korrigieren': {
     audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.site-access' }],
   },
+  'components/auftraege/work-pack/field-equipment-record-dialog.tsx#FieldEquipmentRecordDialog|Verlauf und Dokumente':
+    {
+      audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.equipment-record' }],
+    },
   'components/kunden/site-access-review-dialog.tsx#SiteAccessReviewDialog|{title}': {
     audits: [{ route: '/aufgaben', role: 'admin', opener: 'customers.site-access-review' }],
   },
