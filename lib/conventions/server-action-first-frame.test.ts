@@ -60,6 +60,8 @@ const MAX_DEPTH = 4;
 
 /** "file::actionName" -> why this write needs no owner hook in this file. */
 const REVIEWED_USES: Readonly<Record<string, string>> = {
+  'components/inventar/use-wholesaler-import.ts::abandonWholesalerImport':
+    'housekeeping when the dialog closes or goes back: the dialog already shows its next state; a failed abandon leaves the batch for the same person’s next import to drop, and nothing visible depends on it',
   'components/kalender/use-calendar-preferences.ts::saveCalendarPreferences':
     'updatePreferences applies the preference to the view at once; the debounced save only persists it, and a failure costs nothing visible',
   'components/organization/organization-context.tsx::setActiveOrgCookie':

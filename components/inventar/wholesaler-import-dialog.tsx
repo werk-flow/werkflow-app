@@ -22,6 +22,7 @@ import type {
   WholesalerImportPreview,
   WholesalerImportResult,
 } from '@/lib/inventory/wholesaler-import-schemas';
+import { formatFileSize } from '@/lib/documents/format';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { ImportCountGrid, RevealedImportRows } from './inventory-import-outcomes';
@@ -36,12 +37,6 @@ const PHASE_TEXT = {
   reading: 'Die Lieferung wird gelesen …',
   confirming: 'Die Lieferung wird in den Katalog übernommen …',
 } as const;
-
-function formatFileSize(bytes: number): string {
-  return bytes >= 1024 * 1024
-    ? `${(bytes / (1024 * 1024)).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB`
-    : `${Math.max(1, Math.round(bytes / 1024)).toLocaleString('de-DE')} KB`;
-}
 
 function formatDeliveryDate(date: string | null): string {
   if (!date) return 'nicht angegeben';
@@ -71,7 +66,7 @@ function WholesalerCounts({ totals }: { totals: WholesalerImportResult }) {
 }
 
 /** Supplier and the files of one delivery. */
-function ChooseStep({
+function DeliveryChoiceStep({
   wholesalerImport,
   suppliers,
 }: {
@@ -93,7 +88,7 @@ function ChooseStep({
           onChange={wholesalerImport.setSupplierId}
           placeholder="Großhändler wählen"
           searchPlaceholder="Großhändler suchen …"
-          emptyMessage="Kein Lieferant gefunden. Lege ihn im Artikel unter „Lieferanten“ an."
+          emptyMessage="Kein Großhändler gefunden."
         />
       </Field>
       <Field
@@ -301,7 +296,7 @@ function ResultStep({
   );
 }
 
-function dialogDescription(step: WholesalerImport['step']): string {
+function wholesalerDialogDescription(step: WholesalerImport['step']): string {
   if (step.kind === 'preview') return 'Vorschau der Lieferung. Noch ist nichts übernommen.';
   if (step.kind === 'result') {
     return step.alreadyConfirmed
@@ -311,7 +306,7 @@ function dialogDescription(step: WholesalerImport['step']): string {
   return 'Lies die Artikel und Preise eines Großhändlers in seinen Katalog ein.';
 }
 
-function StepFooter({ wholesalerImport }: { wholesalerImport: WholesalerImport }) {
+function WholesalerStepFooter({ wholesalerImport }: { wholesalerImport: WholesalerImport }) {
   const { step, isPending } = wholesalerImport;
   return (
     <DialogFooter>
@@ -358,7 +353,7 @@ export function WholesalerImportDialog({
       <DialogContent size="3xl">
         <DialogHeader>
           <DialogTitle>Großhandel importieren</DialogTitle>
-          <DialogDescription>{dialogDescription(step)}</DialogDescription>
+          <DialogDescription>{wholesalerDialogDescription(step)}</DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(event) => {
@@ -374,7 +369,7 @@ export function WholesalerImportDialog({
         >
           <DialogBody className="space-y-4 py-1">
             {step.kind === 'choose' && (
-              <ChooseStep wholesalerImport={wholesalerImport} suppliers={suppliers} />
+              <DeliveryChoiceStep wholesalerImport={wholesalerImport} suppliers={suppliers} />
             )}
             {step.kind === 'preview' && (
               <PreviewStep
@@ -391,7 +386,7 @@ export function WholesalerImportDialog({
             )}
             <ErrorText>{wholesalerImport.error}</ErrorText>
           </DialogBody>
-          <StepFooter wholesalerImport={wholesalerImport} />
+          <WholesalerStepFooter wholesalerImport={wholesalerImport} />
         </form>
       </DialogContent>
     </Dialog>

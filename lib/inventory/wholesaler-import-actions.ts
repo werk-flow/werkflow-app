@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type { ActionResult } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { bindUploadPathToCreator } from '@/lib/documents/storage-path';
 import { logError } from '@/lib/logging';
 import { formatProfileName } from '@/lib/members/profile-name';
@@ -20,13 +20,13 @@ import type { Json } from '@/lib/supabase/database.types';
 import { ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
+import type { WholesalerReportLine } from './wholesaler-import-lines';
 import {
   deliveryContentHash,
   guessUnitMapping,
   stagedDeliveryLines,
   type StagedImportLine,
-  type WholesalerReportLine,
-} from './wholesaler-import-lines';
+} from './wholesaler-import-staging';
 import {
   confirmAnswerSchema,
   confirmWholesalerImportInputSchema,
@@ -75,7 +75,7 @@ const refusal = writeRefusalFor(new Set(['not_authorized', 'supplier_not_found',
 
 type ManagerContext = { success: true; context: ActionContext };
 
-async function resolveImportManager(): Promise<ManagerContext | { success: false; error: string }> {
+async function resolveImportManager(): Promise<ManagerContext | ActionFailure> {
   const auth = await resolveActionContext();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
@@ -183,7 +183,7 @@ async function stageLines(
     chunks.push(lines.slice(start, start + STAGE_CHUNK_LINES));
   }
   let next = 0;
-  let failure: { success: false; error: string } | null = null;
+  let failure: ActionFailure | null = null;
   async function worker(): Promise<void> {
     while (failure === null && next < chunks.length) {
       const chunk = chunks[next];
@@ -205,7 +205,7 @@ async function stageLines(
   return failure ?? { success: true };
 }
 
-async function personName(
+async function importerName(
   admin: AdminClient,
   personId: string | null,
 ): Promise<ActionResult<{ name: string }>> {
@@ -307,7 +307,7 @@ async function readPreviewEffects(
   }
   const { repeat: earlier, ...effects } = answer.data;
   if (!earlier) return { success: true, effects, repeat: null };
-  const person = await personName(admin, earlier.confirmed_by);
+  const person = await importerName(admin, earlier.confirmed_by);
   if (!person.success) return person;
   return { success: true, effects, repeat: { confirmedAt: earlier.confirmed_at, confirmedBy: person.name } };
 }

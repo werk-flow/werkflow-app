@@ -26,7 +26,7 @@ export type SupplierCatalogPicker = {
   retrySearch: () => void;
   /** The catalog row being made an own article, shown pending at once. */
   adoptingId: string | null;
-  adoptError: string | null;
+  adoptFailure: string | null;
   adopt: (option: SupplierCatalogOption) => void;
 };
 
@@ -94,7 +94,7 @@ function useCatalogSearchResult(searched: boolean, search: string) {
 /** Makes a catalog row an own article and adds it to the open dialog's positions. */
 function useCatalogAdopt(dialogOpen: boolean, setDialog: SetDialog, picker: PickerCatalog) {
   const [adoptingId, setAdoptingId] = useState<string | null>(null);
-  const [adoptError, setAdoptError] = useState<string | null>(null);
+  const [adoptFailure, setAdoptFailure] = useState<string | null>(null);
   const { run } = usePendingTask();
   // Counts each opening of the material dialog, so an adopt joins only the dialog it started in.
   // A layout effect runs inside the commit that opens the dialog, before any awaited answer lands.
@@ -104,14 +104,14 @@ function useCatalogAdopt(dialogOpen: boolean, setDialog: SetDialog, picker: Pick
   }, [dialogOpen]);
 
   function adopt(option: SupplierCatalogOption): void {
-    setAdoptError(null);
+    setAdoptFailure(null);
     setAdoptingId(option.id);
     const session = dialogSession.current;
     void run(async () => {
       try {
         const adopted = await adoptSupplierCatalogArticle({ catalogArticleId: option.id }).catch(() => null);
         if (!adopted?.success) {
-          return setAdoptError(
+          return setAdoptFailure(
             (adopted && ADOPT_ERRORS[adopted.error]) ??
               'Der Katalogartikel konnte nicht übernommen werden. Versuch es noch einmal.',
           );
@@ -138,7 +138,7 @@ function useCatalogAdopt(dialogOpen: boolean, setDialog: SetDialog, picker: Pick
     });
   }
 
-  return { adoptingId, adoptError, adopt };
+  return { adoptingId, adoptFailure, adopt };
 }
 
 /**

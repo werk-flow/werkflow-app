@@ -2,13 +2,8 @@
 // is recognized again whatever order its files came in, and a unit text names
 // a unit only when the unit list knows it. Synthetic data, no wholesaler file.
 import { expect, test } from 'bun:test';
-import {
-  deliveryContentHash,
-  guessUnitMapping,
-  stagedDeliveryLines,
-  wholesalerImportReportCsv,
-  wholesalerPreviewTotals,
-} from './wholesaler-import-lines';
+import { wholesalerImportReportCsv, wholesalerPreviewTotals } from './wholesaler-import-lines';
+import { deliveryContentHash, guessUnitMapping, stagedDeliveryLines } from './wholesaler-import-staging';
 import type { WholesalerDelivery } from './wholesaler-reader';
 
 const ARTICLE = {

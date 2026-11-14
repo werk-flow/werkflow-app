@@ -109,7 +109,7 @@ export function SupplierCatalogOptions({ catalog }: { catalog: SupplierCatalogPi
           Artikelnummer ein, um weitere zu finden.
         </p>
       )}
-      <ErrorText>{catalog.adoptError}</ErrorText>
+      <ErrorText>{catalog.adoptFailure}</ErrorText>
     </section>
   );
 }

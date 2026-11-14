@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
+import { describeFailure } from '@/lib/action-messages';
 import type { InventoryUnitCode } from '@/lib/inventory/units';
 import {
   abandonWholesalerImport,
@@ -35,7 +36,8 @@ type WholesalerImportStep =
 /** What a running step does, for the line under the form. */
 type WholesalerImportPhase = 'uploading' | 'reading' | 'confirming' | null;
 
-const FAILURE_MESSAGES: Record<string, string> = {
+/** The sentences of the codes this import owns; a shared code keeps its shared sentence. */
+const FAILURE_MESSAGES: Readonly<Partial<Record<string, string>>> = {
   reader_unavailable: 'Dieser Import ist in dieser Umgebung nicht verfügbar.',
   file_too_large: 'Eine Datei ist größer als 250 MB. Teile die Lieferung auf.',
   file_empty: 'Eine Datei ist leer. Wähle die Dateien der Lieferung noch einmal.',
@@ -48,10 +50,6 @@ const FAILURE_MESSAGES: Record<string, string> = {
   import_not_found: 'Diese Vorschau gilt nicht mehr. Lade die Lieferung noch einmal.',
 };
 const UPLOAD_FAILED = 'Die Dateien konnten nicht hochgeladen werden. Versuch es noch einmal.';
-
-function failureMessage(error: string | undefined, fallback: string): string {
-  return (error && FAILURE_MESSAGES[error]) ?? fallback;
-}
 
 /** The choose step's checks in visual order, keyed by control id; shown after the first submit attempt. */
 function chooseErrors(
@@ -89,10 +87,13 @@ async function uploadAndPreview(
   }).catch(() => null);
   if (!ticket?.success) {
     return {
-      error: failureMessage(
-        ticket?.error,
-        'Der Upload konnte nicht vorbereitet werden. Versuch es noch einmal.',
-      ),
+      error: ticket
+        ? describeFailure(
+            ticket.error,
+            FAILURE_MESSAGES,
+            'Der Upload konnte nicht vorbereitet werden. Versuch es noch einmal.',
+          )
+        : 'Der Upload konnte nicht vorbereitet werden. Versuch es noch einmal.',
     };
   }
   if (!(await uploadDeliveryFiles(files, ticket.uploadUrls, ticket.contentType)))
@@ -105,10 +106,13 @@ async function uploadAndPreview(
   }).catch(() => null);
   if (!result?.success) {
     return {
-      error: failureMessage(
-        result?.error,
-        'Die Vorschau konnte nicht erstellt werden. Es wurde nichts übernommen. Versuch es noch einmal.',
-      ),
+      error: result
+        ? describeFailure(
+            result.error,
+            FAILURE_MESSAGES,
+            'Die Vorschau konnte nicht erstellt werden. Es wurde nichts übernommen. Versuch es noch einmal.',
+          )
+        : 'Die Vorschau konnte nicht erstellt werden. Es wurde nichts übernommen. Versuch es noch einmal.',
     };
   }
   return { preview: result.preview };
@@ -254,10 +258,13 @@ export function useWholesalerImport({ onOpenChange }: { onOpenChange: (open: boo
         // A confirm sent twice writes once, so trying again is safe.
         if (!result?.success) {
           return setError(
-            failureMessage(
-              result?.error,
-              'Die Lieferung konnte nicht übernommen werden. Versuch es noch einmal.',
-            ),
+            result
+              ? describeFailure(
+                  result.error,
+                  FAILURE_MESSAGES,
+                  'Die Lieferung konnte nicht übernommen werden. Versuch es noch einmal.',
+                )
+              : 'Die Lieferung konnte nicht übernommen werden. Versuch es noch einmal.',
           );
         }
         const { alreadyConfirmed } = result;
