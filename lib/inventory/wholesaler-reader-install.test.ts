@@ -27,6 +27,8 @@ const READER_BLOB = sha('3');
 function fakeGitHub(
   answer: {
     commitSha?: string;
+    /** A commit answer that is not JSON, as a proxy or a broken answer may send. */
+    commitBody?: string;
     blobSha?: string;
     status?: number;
     truncated?: boolean;
@@ -53,6 +55,8 @@ function fakeGitHub(
       if (answer.status)
         return new Response(`{"message":"Bad credentials ${KEY}"}`, { status: answer.status });
       const path = url.slice(API.length);
+      if (path === `git/commits/${pin.commit}` && answer.commitBody !== undefined)
+        return new Response(answer.commitBody);
       if (path === `git/commits/${pin.commit}`)
         return Response.json({ sha: answer.commitSha ?? pin.commit, tree: { sha: TREE } });
       if (path === `git/trees/${TREE}?recursive=1`)
@@ -157,6 +161,8 @@ test('an answer for another commit, with a malformed SHA or a truncated tree, or
     // An answer whose SHAs carry other text, here the key, never reaches a URL or a message.
     { commitSha: KEY },
     { blobSha: KEY },
+    // A parse error quotes the body, so no parse error is ever shown.
+    { commitBody: `{"sha": ${KEY}}` },
     { truncated: true },
     { status: 401 },
     { unreachable: true },
@@ -186,6 +192,8 @@ test('the key reaches GitHub in the Authorization header only and appears in no 
     // An answer whose SHAs carry other text, here the key, never reaches a URL or a message.
     { commitSha: KEY },
     { blobSha: KEY },
+    // A parse error quotes the body, so no parse error is ever shown.
+    { commitBody: `{"sha": ${KEY}}` },
     { truncated: true },
     { status: 401 },
     { unreachable: true },
@@ -207,7 +215,7 @@ test('the key reaches GitHub in the Authorization header only and appears in no 
       rmSync(root, { recursive: true, force: true });
     }
   }
-  expect(shown).toHaveLength(7);
+  expect(shown).toHaveLength(8);
   for (const text of shown) expect(text).not.toContain(KEY);
 });
 

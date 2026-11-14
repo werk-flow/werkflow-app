@@ -37,8 +37,8 @@ const treeSchema = z.object({
   tree: z.array(z.object({ path: z.string(), type: z.string(), sha: gitSha })),
 });
 
-/** A failure whose message names the cause and never carries the key. */
-class ReaderInstallError extends Error {}
+/** A failure whose message names the cause and never carries the key or an answer's body; the only message the script prints. */
+export class ReaderInstallError extends Error {}
 
 type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -53,7 +53,7 @@ type InstallOptions = {
 export type ReaderInstall = { kind: 'reader'; repository: string; commit: string } | { kind: 'stand-in' };
 
 export async function installWholesalerReader(options: InstallOptions): Promise<ReaderInstall> {
-  const token = options.env.WERKFLOW_DATANORM_TOKEN?.trim() || options.githubLogin?.().trim();
+  const token = options.env.WERKFLOW_DATANORM_TOKEN?.trim() || machineLogin(options.githubLogin);
   if (!token) {
     if (isVercelDeployment(options.env))
       throw new ReaderInstallError(
@@ -66,6 +66,15 @@ export async function installWholesalerReader(options: InstallOptions): Promise<
   return { kind: 'reader', repository: pin.repository, commit: pin.commit };
 }
 
+function machineLogin(githubLogin: InstallOptions['githubLogin']): string | undefined {
+  if (!githubLogin) return undefined;
+  try {
+    return githubLogin().trim();
+  } catch {
+    throw new ReaderInstallError('`gh auth token` failed: sign in with `gh auth login`.');
+  }
+}
+
 function isVercelDeployment(env: InstallOptions['env']): boolean {
   return env.VERCEL === '1' && (env.VERCEL_ENV === 'production' || env.VERCEL_ENV === 'preview');
 }
@@ -74,7 +83,8 @@ function isVercelDeployment(env: InstallOptions['env']): boolean {
 async function downloadReader(token: string, fetch: Fetch): Promise<Record<string, string>> {
   if (!FULL_SHA.test(pin.commit))
     throw new ReaderInstallError('lib/inventory/wholesaler-reader-pin.json must name a full commit SHA.');
-  const get = async (path: string, accept: string): Promise<Response> => {
+  /** The body of one answer as text. Neither a failed request nor its body reaches a message. */
+  const get = async (path: string, accept: string): Promise<string> => {
     const url = `https://api.github.com/repos/${pin.repository}/${path}`;
     const response = await fetch(url, {
       headers: {
@@ -90,27 +100,28 @@ async function downloadReader(token: string, fetch: Fetch): Promise<Record<strin
       throw new ReaderInstallError(
         `GitHub answered ${response.status} for ${path}: the key cannot read ${pin.repository}, or the commit is not there.`,
       );
-    return response;
+    return response.text().catch(() => {
+      throw new ReaderInstallError(`GitHub's answer for ${path} broke off.`);
+    });
   };
-  const parsed = <T>(schema: z.ZodType<T>, body: unknown, what: string): T => {
+  /** A JSON answer in the schema's shape; a parse error is never shown, because it quotes the body. */
+  const getJson = async <T>(schema: z.ZodType<T>, path: string): Promise<T> => {
+    const text = await get(path, 'application/vnd.github+json');
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new ReaderInstallError(`GitHub's answer for ${path} is not JSON.`);
+    }
     const result = schema.safeParse(body);
-    if (!result.success) throw new ReaderInstallError(`GitHub's answer for ${what} has an unexpected shape.`);
+    if (!result.success) throw new ReaderInstallError(`GitHub's answer for ${path} has an unexpected shape.`);
     return result.data;
   };
-  const json = 'application/vnd.github+json';
 
-  const commit = parsed(
-    commitSchema,
-    await (await get(`git/commits/${pin.commit}`, json)).json(),
-    'the commit',
-  );
+  const commit = await getJson(commitSchema, `git/commits/${pin.commit}`);
   if (commit.sha !== pin.commit)
     throw new ReaderInstallError(`GitHub returned another commit than the pinned ${pin.commit}.`);
-  const tree = parsed(
-    treeSchema,
-    await (await get(`git/trees/${commit.tree.sha}?recursive=1`, json)).json(),
-    'the file tree',
-  );
+  const tree = await getJson(treeSchema, `git/trees/${commit.tree.sha}?recursive=1`);
   if (tree.truncated) throw new ReaderInstallError('GitHub returned a truncated file tree of the reader.');
   const sources = tree.tree.filter(
     (entry) => entry.type === 'blob' && SOURCE_FILE.test(entry.path) && !TEST_FILE.test(entry.path),
@@ -119,7 +130,7 @@ async function downloadReader(token: string, fetch: Fetch): Promise<Record<strin
     throw new ReaderInstallError(`The pinned commit has no ${STAND_IN_PATH}.`);
   const files: Record<string, string> = {};
   for (const entry of sources)
-    files[entry.path] = await (await get(`git/blobs/${entry.sha}`, 'application/vnd.github.raw+json')).text();
+    files[entry.path] = await get(`git/blobs/${entry.sha}`, 'application/vnd.github.raw+json');
   return files;
 }
 

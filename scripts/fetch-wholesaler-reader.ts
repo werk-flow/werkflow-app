@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { installWholesalerReader } from '../lib/inventory/wholesaler-reader-install';
+import { installWholesalerReader, ReaderInstallError } from '../lib/inventory/wholesaler-reader-install';
 
 // The first step of `postinstall` (package.json): installs the wholesaler-file reader with
 // WERKFLOW_DATANORM_TOKEN, or its stand-in without it (lib/inventory/wholesaler-reader-install.ts).
@@ -20,7 +20,7 @@ function githubLogin(): string {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
   });
-  if (result.status !== 0) throw new Error('`gh auth token` failed: sign in with `gh auth login`.');
+  if (result.status !== 0) throw new Error('gh auth token failed');
   return result.stdout;
 }
 
@@ -37,6 +37,8 @@ try {
       : '[wholesaler-reader] No key, so the stand-in is installed: the wholesaler import is unavailable here.',
   );
 } catch (error) {
-  console.error(`[wholesaler-reader] ${error instanceof Error ? error.message : 'The install failed.'}`);
+  // Only the installer's own messages are shown: another error may quote what GitHub sent.
+  const unexpected = `The install failed (${error instanceof Error ? error.name : 'unknown error'}).`;
+  console.error(`[wholesaler-reader] ${error instanceof ReaderInstallError ? error.message : unexpected}`);
   process.exitCode = 1;
 }
