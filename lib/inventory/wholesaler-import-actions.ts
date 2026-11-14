@@ -10,6 +10,7 @@ import { resolveActionContext, type ActionContext } from '@/lib/org/action-conte
 import {
   createSignedUploadUrl,
   discardStorageObjects,
+  headStorageObject,
   readStorageObject,
   uploadStagingPath,
 } from '@/lib/storage/r2';
@@ -149,9 +150,14 @@ async function readDeliveryFiles(
   for (const [index, name] of input.fileNames.entries()) {
     const path = uploadStagingPath(context.orgId, deliveryFilePath(context, input.uploadId, index));
     try {
-      const bytes = await readStorageObject({ organizationId: context.orgId, path });
-      const ruleFailure = uploadRuleFailure(DELIVERY_RULE, WHOLESALER_FILE_CONTENT_TYPE, bytes.byteLength);
+      // The signed upload binds no size: the stored size is checked before any byte is read.
+      const head = await headStorageObject({ organizationId: context.orgId, path });
+      if (!head.exists) return { success: false, error: 'file_missing' };
+      const ruleFailure = uploadRuleFailure(DELIVERY_RULE, WHOLESALER_FILE_CONTENT_TYPE, head.sizeBytes);
       if (ruleFailure) return { success: false, error: ruleFailure };
+      const bytes = await readStorageObject({ organizationId: context.orgId, path });
+      if (bytes.byteLength > WHOLESALER_IMPORT_MAX_FILE_BYTES)
+        return { success: false, error: 'file_too_large' };
       files.push({ name, bytes });
     } catch (error) {
       if (error instanceof Error && error.message === 'storage_object_missing')

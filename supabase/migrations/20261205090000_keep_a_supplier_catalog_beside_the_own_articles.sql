@@ -269,13 +269,15 @@ end;
 $$;
 
 -- The article lines of a batch with what each would do to the catalog: the
--- latest line per article number, its catalog row's state, and whether its
--- price differs. A unit text is compared as written, so a mapping never
--- counts an unchanged article as changed.
+-- latest line per article number, its catalog row's state and stored unit,
+-- and whether its price differs. The unit text is compared as written; the
+-- caller compares the mapped unit with catalog_unit, since the office maps
+-- units only after this answer.
 create function app_private.supplier_catalog_import_effects(p_organization_id uuid, p_import_id uuid)
 returns table (
   article_number text,
   unit_text text,
+  catalog_unit text,
   is_new boolean,
   is_changed boolean,
   price_changed boolean
@@ -292,7 +294,7 @@ as $$
       and line.kind = 'article'
     order by line.article_number, line.ordinal desc
   )
-  select latest.article_number, latest.unit_text,
+  select latest.article_number, latest.unit_text, catalog.unit,
     catalog.id is null,
     catalog.id is not null and (
       catalog.name, catalog.name_addition, catalog.unit_text, catalog.price_quantity, catalog.price_kind,
@@ -494,18 +496,33 @@ begin
     p_organization_id, p_actor_id, p_import_id, array['staging', 'previewed']
   );
 
+  -- Per unit text; an otherwise unchanged article counts per stored unit, so
+  -- the dialog counts it as changed when the office maps the text to another unit.
   select coalesce(jsonb_agg(unit order by unit->>'unit_text'), '[]'::jsonb) into v_units
   from (
     select jsonb_build_object(
-      'unit_text', effect.unit_text,
-      'articles', count(*),
-      'new', count(*) filter (where effect.is_new),
-      'changed', count(*) filter (where effect.is_changed),
-      'unchanged', count(*) filter (where not effect.is_new and not effect.is_changed),
-      'price_changed', count(*) filter (where effect.price_changed)
+      'unit_text', grouped.unit_text,
+      'articles', sum(grouped.articles),
+      'new', sum(grouped.created),
+      'changed', sum(grouped.changed),
+      'unchanged', sum(grouped.unchanged),
+      'unchanged_by_unit', coalesce(
+        jsonb_object_agg(grouped.catalog_unit, grouped.unchanged) filter (where grouped.unchanged > 0),
+        '{}'::jsonb
+      ),
+      'price_changed', sum(grouped.price_changed)
     ) as unit
-    from app_private.supplier_catalog_import_effects(p_organization_id, p_import_id) effect
-    group by effect.unit_text
+    from (
+      select effect.unit_text, effect.catalog_unit,
+        count(*) as articles,
+        count(*) filter (where effect.is_new) as created,
+        count(*) filter (where effect.is_changed) as changed,
+        count(*) filter (where not effect.is_new and not effect.is_changed) as unchanged,
+        count(*) filter (where effect.price_changed) as price_changed
+      from app_private.supplier_catalog_import_effects(p_organization_id, p_import_id) effect
+      group by effect.unit_text, effect.catalog_unit
+    ) grouped
+    group by grouped.unit_text
   ) units;
   select * into v_other from app_private.supplier_catalog_import_other_effects(p_organization_id, p_import_id);
   select count(*) into v_rejected from public.inventory_supplier_catalog_import_lines line
@@ -579,9 +596,14 @@ begin
 
   select jsonb_build_object(
     'new', count(*) filter (where effect.unit is not null and effect.is_new),
-    'changed', count(*) filter (where effect.unit is not null and effect.is_changed),
+    -- A mapping to another unit than the stored one changes the article too.
+    'changed', count(*) filter (
+      where effect.unit is not null and not effect.is_new
+        and (effect.is_changed or effect.catalog_unit is distinct from effect.unit)
+    ),
     'unchanged', count(*) filter (
       where effect.unit is not null and not effect.is_new and not effect.is_changed
+        and effect.catalog_unit = effect.unit
     ),
     'price_changed', count(*) filter (where effect.unit is not null and effect.price_changed),
     'unit_rejected', count(*) filter (where effect.unit is null),
@@ -802,11 +824,11 @@ begin
   perform app_private.write_inventory_item_supplier(
     p_organization_id, v_item.id, null, v_catalog.supplier_id, v_catalog.article_number, null, 1, 1, true
   );
-  if v_catalog.ean is not null and not exists (
-    select 1 from public.inventory_item_barcodes barcode
-    where barcode.organization_id = p_organization_id and barcode.barcode_value = v_catalog.ean
-  ) then
-    perform app_private.attach_primary_inventory_barcode(p_organization_id, v_item.id, v_catalog.ean);
+  -- An EAN another article carries, also one a concurrent adopt just took, stays with that article.
+  if v_catalog.ean is not null then
+    insert into public.inventory_item_barcodes (organization_id, item_id, barcode_value, barcode_type, is_primary)
+    values (p_organization_id, v_item.id, v_catalog.ean, 'unknown', true)
+    on conflict (organization_id, barcode_value) do nothing;
   end if;
   if v_catalog.price_cents is not null then
     perform app_private.record_inventory_item_price(

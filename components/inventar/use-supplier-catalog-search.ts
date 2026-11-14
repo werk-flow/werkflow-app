@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -19,6 +19,8 @@ export type SupplierCatalogPicker = {
   /** Whether the search text is long enough for the catalog search. */
   searched: boolean;
   options: SupplierCatalogOption[];
+  /** More rows match than the search shows. */
+  hasMore: boolean;
   isSearching: boolean;
   searchFailed: boolean;
   retrySearch: () => void;
@@ -44,7 +46,11 @@ const ADOPT_ERRORS: Record<string, string> = {
 /** The catalog rows for one search text, read after a pause in typing; a failure belongs to its text. */
 function useCatalogSearchResult(searched: boolean, search: string) {
   const searchKey = searched ? normalizeSearchText(search) : '';
-  const [result, setResult] = useState<{ key: string; options: SupplierCatalogOption[] } | null>(null);
+  const [result, setResult] = useState<{
+    key: string;
+    options: SupplierCatalogOption[];
+    hasMore: boolean;
+  } | null>(null);
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
@@ -59,7 +65,7 @@ function useCatalogSearchResult(searched: boolean, search: string) {
         if (controller.signal.aborted) return;
         if (!read.success) return setFailedKey(searchKey);
         setFailedKey(null);
-        setResult({ key: searchKey, options: read.options });
+        setResult({ key: searchKey, options: read.options, hasMore: read.hasMore });
       } finally {
         if (!controller.signal.aborted) setLoadingKey(null);
       }
@@ -73,6 +79,7 @@ function useCatalogSearchResult(searched: boolean, search: string) {
 
   return {
     options: searched && result?.key === searchKey ? result.options : [],
+    hasMore: searched && result?.key === searchKey && result.hasMore,
     // Until the first answer for this text arrives, the search counts as running.
     isSearching:
       searched && (loadingKey === searchKey || (result?.key !== searchKey && failedKey !== searchKey)),
@@ -85,14 +92,20 @@ function useCatalogSearchResult(searched: boolean, search: string) {
 }
 
 /** Makes a catalog row an own article and adds it to the open dialog's positions. */
-function useCatalogAdopt(setDialog: SetDialog, picker: PickerCatalog) {
+function useCatalogAdopt(dialogOpen: boolean, setDialog: SetDialog, picker: PickerCatalog) {
   const [adoptingId, setAdoptingId] = useState<string | null>(null);
   const [adoptError, setAdoptError] = useState<string | null>(null);
   const { run } = usePendingTask();
+  // Counts each opening of the material dialog, so an adopt joins only the dialog it started in.
+  const dialogSession = useRef(0);
+  useEffect(() => {
+    if (dialogOpen) dialogSession.current += 1;
+  }, [dialogOpen]);
 
   function adopt(option: SupplierCatalogOption): void {
     setAdoptError(null);
     setAdoptingId(option.id);
+    const session = dialogSession.current;
     void run(async () => {
       try {
         const adopted = await adoptSupplierCatalogArticle({ catalogArticleId: option.id }).catch(() => null);
@@ -104,6 +117,7 @@ function useCatalogAdopt(setDialog: SetDialog, picker: PickerCatalog) {
         }
         const { item } = adopted;
         picker.setPickerItems((current) => [...current.filter((entry) => entry.id !== item.id), item]);
+        if (session !== dialogSession.current) return;
         setDialog((current) =>
           current
             ? {
@@ -145,6 +159,6 @@ export function useSupplierCatalogSearch({
   const search = dialog?.search.trim() ?? '';
   const searched = enabled && dialog?.mode === 'plan' && search.length >= SUPPLIER_CATALOG_SEARCH_MIN_LENGTH;
   const result = useCatalogSearchResult(searched, search);
-  const adoption = useCatalogAdopt(setDialog, picker);
+  const adoption = useCatalogAdopt(dialog !== null, setDialog, picker);
   return enabled ? { searched, ...result, ...adoption } : null;
 }

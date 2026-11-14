@@ -46,7 +46,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 A wholesaler delivery for the [supplier catalog](../features/inventory.md#current-product-baseline) is read once and never kept.
 
 - Admin and Büro get one signed PUT per file for the staging key of `{organizationId}/wholesaler-imports/{uploadId}/{fileIndex}`, with a folder of the uploader before the file's place (`bindUploadPathToCreator`). The key holds no file name; the batch row keeps the names.
-- The preview recomputes each key from its own session, reads the staging objects on the server, stages the parsed lines on a batch in the database, and deletes the objects after the read, whatever its outcome. Nothing registers a key, so no copy is made, and the confirm reads only the staged lines. A retry uploads the files again.
+- The preview recomputes each key from its own session, checks each stored size against the limit before it reads a byte, reads the staging objects on the server, stages the parsed lines on a batch in the database, and deletes the objects after the read, whatever its outcome. Nothing registers a key, so no copy is made, and the confirm reads only the staged lines. A retry uploads the files again.
 - Residual: a staging object whose preview never ran, such as from a closed tab, stays as an orphan like any other unfinalized upload. A signed URL stays valid for 30 minutes, so the uploader can write the key again after the preview deleted it.
 
 ## Links and ownership

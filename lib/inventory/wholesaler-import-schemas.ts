@@ -16,6 +16,7 @@ export const WHOLESALER_IMPORT_MAX_FILE_BYTES = 250 * 1024 * 1024;
 export const WHOLESALER_FILE_CONTENT_TYPE = 'application/octet-stream';
 /** A catalog search needs this many characters, so its index can narrow it. */
 export const SUPPLIER_CATALOG_SEARCH_MIN_LENGTH = 3;
+/** The catalog rows one search shows; more matches are reported, never cut silently. */
 export const SUPPLIER_CATALOG_SEARCH_LIMIT = 20;
 
 const unitCodeSchema = z.literal(INVENTORY_UNITS.map((unit) => unit.code));
@@ -61,6 +62,7 @@ const unitEffectSchema = z
     new: count,
     changed: count,
     unchanged: count,
+    unchanged_by_unit: z.record(z.string(), count),
     price_changed: count,
   })
   .transform((unit) => ({
@@ -69,6 +71,8 @@ const unitEffectSchema = z
     created: unit.new,
     changed: unit.changed,
     unchanged: unit.unchanged,
+    /** The otherwise unchanged articles per unit the catalog stores; another unit changes them. */
+    unchangedByUnit: unit.unchanged_by_unit,
     priceChanged: unit.price_changed,
   }));
 

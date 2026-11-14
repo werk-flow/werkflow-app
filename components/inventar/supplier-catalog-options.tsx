@@ -7,7 +7,10 @@ import { ErrorText } from '@/components/ui/error-text';
 import { PlainButton } from '@/components/ui/plain-button';
 import { SectionError } from '@/components/ui/section-error';
 import { formatArticlePrice } from '@/lib/inventory/article-terms-format';
-import type { SupplierCatalogOption } from '@/lib/inventory/wholesaler-import-schemas';
+import {
+  SUPPLIER_CATALOG_SEARCH_LIMIT,
+  type SupplierCatalogOption,
+} from '@/lib/inventory/wholesaler-import-schemas';
 import type { SupplierCatalogPicker } from './use-supplier-catalog-search';
 
 const PRICE_KIND_LABELS = { list: 'Listenpreis', net: 'Nettopreis' } as const;
@@ -99,6 +102,12 @@ export function SupplierCatalogOptions({ catalog }: { catalog: SupplierCatalogPi
             title="Kein Katalogartikel gefunden."
           />
         )
+      )}
+      {catalog.hasMore && (
+        <p className="text-xs text-muted-foreground" role="status">
+          Es passen mehr als {SUPPLIER_CATALOG_SEARCH_LIMIT} Katalogartikel. Gib mehr von Bezeichnung oder
+          Artikelnummer ein, um weitere zu finden.
+        </p>
       )}
       <ErrorText>{catalog.adoptError}</ErrorText>
     </section>

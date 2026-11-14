@@ -25,7 +25,8 @@ import { downloadImportReport } from './inventory-import-outcomes';
 /** Where the dialog stands: choosing supplier and files, deciding the units in the preview, or reading the result. */
 type WholesalerImportStep =
   | { kind: 'choose' }
-  | { kind: 'preview'; preview: WholesalerImportPreview }
+  /** The supplier the preview was made for: the dialog names it, whatever the select shows since. */
+  | { kind: 'preview'; preview: WholesalerImportPreview; supplierId: string }
   | { kind: 'result'; importId: string; result: WholesalerImportResult; alreadyConfirmed: boolean };
 
 /** What a running step does, for the line under the form. */
@@ -222,10 +223,11 @@ export function useWholesalerImport({ onOpenChange }: { onOpenChange: (open: boo
     },
     preview: () =>
       runStep('uploading', async () => {
-        const answer = await uploadAndPreview(choice.supplierId, choice.files, () => setPhase('reading'));
+        const { supplierId } = choice;
+        const answer = await uploadAndPreview(supplierId, choice.files, () => setPhase('reading'));
         if ('error' in answer) return setError(answer.error);
         decisions.start(answer.preview);
-        setStep({ kind: 'preview', preview: answer.preview });
+        setStep({ kind: 'preview', preview: answer.preview, supplierId });
       }),
     confirm: (current: WholesalerImportPreview) => {
       if (!decisions.readyToConfirm()) return;

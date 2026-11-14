@@ -349,7 +349,9 @@ export function WholesalerImportDialog({
 }) {
   const wholesalerImport = useWholesalerImport({ onOpenChange });
   const { step } = wholesalerImport;
-  const supplierName = suppliers.find((supplier) => supplier.id === wholesalerImport.supplierId)?.name ?? '';
+  // The preview names the supplier it was made for, not one chosen while it loaded.
+  const previewSupplierId = step.kind === 'preview' ? step.supplierId : wholesalerImport.supplierId;
+  const supplierName = suppliers.find((supplier) => supplier.id === previewSupplierId)?.name ?? '';
 
   return (
     <Dialog open={open} onOpenChange={wholesalerImport.handleOpenChange} pending={wholesalerImport.isPending}>

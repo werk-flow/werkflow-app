@@ -22,14 +22,14 @@ import {
 /** The catalog rows whose number, texts, EAN or matchcode contain the search, in name order. */
 export async function searchSupplierCatalog(
   search: string,
-): Promise<ActionResult<{ options: SupplierCatalogOption[] }>> {
+): Promise<ActionResult<{ options: SupplierCatalogOption[]; hasMore: boolean }>> {
   const parsed = supplierCatalogSearchInputSchema.safeParse({ search });
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await resolveActionContext();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
   const term = parsed.data.search.trim().toLowerCase();
-  if (term.length < SUPPLIER_CATALOG_SEARCH_MIN_LENGTH) return { success: true, options: [] };
+  if (term.length < SUPPLIER_CATALOG_SEARCH_MIN_LENGTH) return { success: true, options: [], hasMore: false };
 
   const { data, error } = await createSupabaseAdminClient()
     .from('inventory_supplier_catalog_articles')
@@ -40,7 +40,8 @@ export async function searchSupplierCatalog(
     .like('search_text', `%${term}%`)
     .order('name')
     .order('id')
-    .limit(SUPPLIER_CATALOG_SEARCH_LIMIT);
+    // One row more than shown tells the picker that more rows match.
+    .limit(SUPPLIER_CATALOG_SEARCH_LIMIT + 1);
   if (error) {
     logError('searchSupplierCatalog: read failed', error);
     return { success: false, error: 'load_failed' };
@@ -50,5 +51,9 @@ export async function searchSupplierCatalog(
     logError('searchSupplierCatalog: unexpected row shape');
     return { success: false, error: 'load_failed' };
   }
-  return { success: true, options: rows.data };
+  return {
+    success: true,
+    options: rows.data.slice(0, SUPPLIER_CATALOG_SEARCH_LIMIT),
+    hasMore: rows.data.length > SUPPLIER_CATALOG_SEARCH_LIMIT,
+  };
 }

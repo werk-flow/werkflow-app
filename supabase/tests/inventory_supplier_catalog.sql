@@ -184,9 +184,9 @@ begin
   v_preview := public.preview_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
     '37500000-0000-4000-8000-000000000002', v_import);
   if v_preview->'units' is distinct from '[
-    {"unit_text":"Meter","articles":1,"new":1,"changed":0,"unchanged":0,"price_changed":0},
-    {"unit_text":"Stück","articles":1,"new":1,"changed":0,"unchanged":0,"price_changed":0},
-    {"unit_text":"XYZ","articles":1,"new":1,"changed":0,"unchanged":0,"price_changed":0}
+    {"unit_text":"Meter","articles":1,"new":1,"changed":0,"unchanged":0,"unchanged_by_unit":{},"price_changed":0},
+    {"unit_text":"Stück","articles":1,"new":1,"changed":0,"unchanged":0,"unchanged_by_unit":{},"price_changed":0},
+    {"unit_text":"XYZ","articles":1,"new":1,"changed":0,"unchanged":0,"unchanged_by_unit":{},"price_changed":0}
   ]'::jsonb or (v_preview->>'rejected')::integer is distinct from 1
     or v_preview->'repeat' is distinct from 'null'::jsonb then
     raise exception 'the first preview answered %', v_preview;
@@ -293,7 +293,7 @@ begin
   v_preview := public.preview_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
     '37500000-0000-4000-8000-000000000002', v_import);
   if v_preview - 'repeat' is distinct from '{"units":[{"unit_text":"Meter","articles":1,"new":0,"changed":1,
-    "unchanged":0,"price_changed":1}],"price_updates":0,"price_unmatched":1,"removed":1,"rejected":0}'::jsonb then
+    "unchanged":0,"unchanged_by_unit":{},"price_changed":1}],"price_updates":0,"price_unmatched":1,"removed":1,"rejected":0}'::jsonb then
     raise exception 'the second preview answered %', v_preview;
   end if;
   v_result := public.confirm_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
@@ -316,7 +316,7 @@ begin
   v_preview := public.preview_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
     '37500000-0000-4000-8000-000000000002', v_import);
   if v_preview->'repeat'->>'confirmed_by' is distinct from '37500000-0000-4000-8000-000000000002'
-    or v_preview->'units'->0->>'unchanged' is distinct from '1' then
+    or v_preview->'units'->0->'unchanged_by_unit' is distinct from '{"meter":1}'::jsonb then
     raise exception 'the repeated delivery answered %', v_preview;
   end if;
   insert into catalog_test_state values ('open', v_import);
@@ -370,7 +370,9 @@ begin
   perform public.stage_supplier_catalog_import_lines('37500000-0000-4000-8000-000000000010',
     '37500000-0000-4000-8000-000000000001', v_westrohr_import, jsonb_build_array(
       pg_temp.article(0, 'WR-15', 'Kupferrohr 15 mm', 'm', 'list', 61500, 100)
-        || '{"name_addition":"hart","ean":"4000000000024"}'));
+        || '{"name_addition":"hart","ean":"4000000000024"}',
+      pg_temp.article(1, 'WR-16', 'Kupferrohr 16 mm', 'm', 'net', 4200, 1)
+        || '{"ean":"4000000000024"}'));
   perform public.preview_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
     '37500000-0000-4000-8000-000000000001', v_westrohr_import);
   perform public.confirm_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
@@ -420,6 +422,49 @@ begin
   if v_first is distinct from '{"item_id":"37500000-0000-4000-8000-000000000020","created":false}'::jsonb
     or (select count(*) from public.inventory_item_prices where item_id = '37500000-0000-4000-8000-000000000020') <> 1 then
     raise exception 'adopting a number an own article carries answered %', v_first;
+  end if;
+
+  -- An EAN another article carries stays with it: the new article gets no barcode, and its net price
+  -- becomes the purchase price.
+  v_first := public.adopt_supplier_catalog_article('37500000-0000-4000-8000-000000000010',
+    '37500000-0000-4000-8000-000000000002',
+    (select id from public.inventory_supplier_catalog_articles
+      where organization_id = '37500000-0000-4000-8000-000000000010' and article_number = 'WR-16'));
+  if (v_first->>'created')::boolean is not true
+    or exists (select 1 from public.inventory_item_barcodes where item_id = (v_first->>'item_id')::uuid)
+    or (select array_agg(kind || ':' || amount_cents) from public.inventory_item_prices
+      where item_id = (v_first->>'item_id')::uuid) is distinct from array['purchase:4200'] then
+    raise exception 'adopting a row whose EAN another article carries answered %', v_first;
+  end if;
+end;
+$$;
+
+-- An unchanged article mapped to another unit than the catalog stores counts
+-- as changed, and the confirm changes its unit.
+do $$
+declare
+  v_import uuid;
+  v_preview jsonb;
+  v_result jsonb;
+begin
+  v_import := public.open_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
+    '37500000-0000-4000-8000-000000000001', '37500000-0000-4000-8000-000000000031', array['westrohr'],
+    repeat('f', 64), null, '[]', '[]');
+  perform public.stage_supplier_catalog_import_lines('37500000-0000-4000-8000-000000000010',
+    '37500000-0000-4000-8000-000000000001', v_import, jsonb_build_array(
+      pg_temp.article(0, 'WR-16', 'Kupferrohr 16 mm', 'm', 'net', 4200, 1) || '{"ean":"4000000000024"}'));
+  v_preview := public.preview_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
+    '37500000-0000-4000-8000-000000000001', v_import);
+  if v_preview->'units'->0->'unchanged_by_unit' is distinct from '{"meter":1}'::jsonb then
+    raise exception 'the preview of an unchanged article answered %', v_preview;
+  end if;
+  v_result := public.confirm_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
+    '37500000-0000-4000-8000-000000000001', v_import, '{"m":"rod"}');
+  if (v_result->>'changed')::integer is distinct from 1 or (v_result->>'unchanged')::integer is distinct from 0
+    or (select unit from public.inventory_supplier_catalog_articles
+      where organization_id = '37500000-0000-4000-8000-000000000010' and article_number = 'WR-16')
+      is distinct from 'rod' then
+    raise exception 'a confirm with another unit answered %', v_result;
   end if;
 end;
 $$;

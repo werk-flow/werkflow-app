@@ -33,6 +33,10 @@ mock.module('@/lib/storage/r2', () => ({
     return 'https://storage.example.test/signed';
   },
   uploadStagingPath: (_organizationId: string, path: string) => `staging:${path}`,
+  headStorageObject: async ({ path }: { path: string }) => {
+    storageCalls.push(`head ${path}`);
+    return { exists: true, sizeBytes: 3, contentType: 'application/octet-stream' };
+  },
   readStorageObject: async ({ path }: { path: string }) => {
     storageCalls.push(`read ${path}`);
     return new Uint8Array([1, 2, 3]);
@@ -166,7 +170,7 @@ await assertRefused(
   'one-call',
 );
 const ownFile = `staging:${ORGANIZATION_A}/wholesaler-imports/${uploadId}/${CALLER_ID}/0`;
-assert.deepEqual(storageCalls, [`read ${ownFile}`, `discard ${ownFile}`]);
+assert.deepEqual(storageCalls, [`head ${ownFile}`, `read ${ownFile}`, `discard ${ownFile}`]);
 
 // Another organization's batch and catalog row are not found by the one call
 // that carries the caller's organization and actor.
@@ -182,4 +186,4 @@ await assertRefused(world, [adopt], { success: false, error: 'catalog_article_no
 await assertRefused(world, [report], { success: false, error: 'import_not_found' }, 'reads');
 
 // The search reads only the caller's organization.
-assert.deepEqual(await search[1](), { success: true, options: [] });
+assert.deepEqual(await search[1](), { success: true, options: [], hasMore: false });

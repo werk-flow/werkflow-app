@@ -74,6 +74,28 @@ test('a price change of a delivered article becomes its price; one of another ar
   ]);
 });
 
+test('a price change of a rejected article stays a price line for the catalog row', () => {
+  const lines = stagedDeliveryLines(
+    delivery({
+      articles: [{ ...ARTICLE, name: ' ' }],
+      priceChanges: [
+        {
+          file: 'preise',
+          line: 1,
+          articleNumber: 'NR-1501',
+          priceKind: 'net',
+          amountCents: 41000,
+          discounts: [],
+        },
+      ],
+    }),
+  );
+  expect(lines.map((line) => [line.kind, line.article_number])).toEqual([
+    ['rejection', 'NR-1501'],
+    ['price', 'NR-1501'],
+  ]);
+});
+
 test('a price given only on request is no price, never a zero', () => {
   const [onRequest] = stagedDeliveryLines(
     delivery({
@@ -151,11 +173,27 @@ test('the report lists file, line, article number and reason', () => {
   ]);
 });
 
-test('the preview counts follow the unit choice: an unmapped unit text rejects its articles', () => {
+test('the preview counts follow the unit choice: an unmapped unit text rejects its articles, another unit changes them', () => {
   const preview = {
     units: [
-      { unitText: 'Meter', articles: 3, created: 1, changed: 1, unchanged: 1, priceChanged: 1 },
-      { unitText: 'XYZ', articles: 2, created: 2, changed: 0, unchanged: 0, priceChanged: 0 },
+      {
+        unitText: 'Meter',
+        articles: 3,
+        created: 1,
+        changed: 1,
+        unchanged: 1,
+        unchangedByUnit: { meter: 1 },
+        priceChanged: 1,
+      },
+      {
+        unitText: 'XYZ',
+        articles: 2,
+        created: 2,
+        changed: 0,
+        unchanged: 0,
+        unchangedByUnit: {},
+        priceChanged: 0,
+      },
     ],
     priceUpdates: 4,
     priceUnmatched: 1,
@@ -176,5 +214,9 @@ test('the preview counts follow the unit choice: an unmapped unit text rejects i
   expect(wholesalerPreviewTotals(preview, { Meter: 'meter', XYZ: 'piece' })).toMatchObject({
     created: 3,
     unitRejected: 0,
+  });
+  expect(wholesalerPreviewTotals(preview, { Meter: 'rod', XYZ: null })).toMatchObject({
+    changed: 2,
+    unchanged: 0,
   });
 });

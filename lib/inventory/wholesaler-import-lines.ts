@@ -62,6 +62,51 @@ function catalogPrice(kind: 'list' | 'net', amountCents: number | null): Catalog
     : { price_kind: kind, price_cents: amountCents };
 }
 
+type DeliveryArticle = WholesalerDelivery['articles'][number];
+type DeliveryPriceChange = WholesalerDelivery['priceChanges'][number];
+
+/** One article's staged line, with its latest price change as its price, or its rejection. */
+function articleLine(
+  article: DeliveryArticle,
+  latestPriceChange: ReadonlyMap<string, DeliveryPriceChange>,
+): Omit<StagedImportLine, 'ordinal'> {
+  const articleNumber = article.articleNumber.trim();
+  const name = article.name.trim();
+  const place = { file_name: article.file, line_number: article.line };
+  if (!articleNumber || articleNumber.length > ARTICLE_NUMBER_MAX_LENGTH || !name) {
+    return {
+      ...EMPTY_LINE,
+      ...place,
+      kind: 'rejection',
+      article_number: articleNumber.slice(0, ARTICLE_NUMBER_MAX_LENGTH) || null,
+      reason_code: articleNumber ? 'article_name_missing' : 'article_number_missing',
+      reason: articleNumber ? 'Der Artikel hat keine Bezeichnung.' : 'Der Artikel hat keine Artikelnummer.',
+    };
+  }
+  const change = latestPriceChange.get(articleNumber);
+  const price = change
+    ? catalogPrice(change.priceKind, change.amountCents)
+    : article.price
+      ? catalogPrice(article.price.kind, article.price.amountCents)
+      : catalogPrice('list', null);
+  return {
+    ...EMPTY_LINE,
+    ...place,
+    kind: 'article',
+    article_number: articleNumber,
+    name: name.slice(0, NAME_MAX_LENGTH),
+    name_addition: article.nameAddition.trim().slice(0, NAME_MAX_LENGTH),
+    unit_text: article.unit.trim(),
+    price_quantity: article.priceQuantity,
+    ...price,
+    rebate_group: article.rebateGroup,
+    main_product_group: article.mainProductGroup,
+    product_group: article.productGroup,
+    ean: article.ean,
+    matchcode: article.matchcode,
+  };
+}
+
 /**
  * The lines one delivery stages, in delivery order. A price change of an
  * article the delivery also lists becomes that article's price; a price
@@ -74,47 +119,13 @@ export function stagedDeliveryLines(delivery: WholesalerDelivery): StagedImportL
   const latestPriceChange = new Map(
     delivery.priceChanges.map((change) => [change.articleNumber.trim(), change]),
   );
-  const delivered = new Set(delivery.articles.map((article) => article.articleNumber.trim()));
 
-  for (const article of delivery.articles) {
-    const articleNumber = article.articleNumber.trim();
-    const name = article.name.trim();
-    const place = { file_name: article.file, line_number: article.line };
-    if (!articleNumber || articleNumber.length > ARTICLE_NUMBER_MAX_LENGTH || !name) {
-      lines.push({
-        ...EMPTY_LINE,
-        ...place,
-        kind: 'rejection',
-        article_number: articleNumber.slice(0, ARTICLE_NUMBER_MAX_LENGTH) || null,
-        reason_code: articleNumber ? 'article_name_missing' : 'article_number_missing',
-        reason: articleNumber ? 'Der Artikel hat keine Bezeichnung.' : 'Der Artikel hat keine Artikelnummer.',
-      });
-      continue;
-    }
-    const change = latestPriceChange.get(articleNumber);
-    const price = change
-      ? catalogPrice(change.priceKind, change.amountCents)
-      : article.price
-        ? catalogPrice(article.price.kind, article.price.amountCents)
-        : catalogPrice('list', null);
-    lines.push({
-      ...EMPTY_LINE,
-      ...place,
-      kind: 'article',
-      article_number: articleNumber,
-      name: name.slice(0, NAME_MAX_LENGTH),
-      name_addition: article.nameAddition.trim().slice(0, NAME_MAX_LENGTH),
-      unit_text: article.unit.trim(),
-      price_quantity: article.priceQuantity,
-      ...price,
-      rebate_group: article.rebateGroup,
-      main_product_group: article.mainProductGroup,
-      product_group: article.productGroup,
-      ean: article.ean,
-      matchcode: article.matchcode,
-    });
-  }
+  for (const article of delivery.articles) lines.push(articleLine(article, latestPriceChange));
 
+  // Only an article the batch stages takes a price change over; a rejected one leaves it a price line.
+  const delivered = new Set(
+    lines.flatMap((line) => (line.kind === 'article' && line.article_number ? [line.article_number] : [])),
+  );
   for (const change of delivery.priceChanges) {
     const articleNumber = change.articleNumber.trim();
     if (!articleNumber || delivered.has(articleNumber) || articleNumber.length > ARTICLE_NUMBER_MAX_LENGTH)
@@ -195,7 +206,11 @@ export function wholesalerImportReportCsv(lines: readonly WholesalerReportLine[]
   );
 }
 
-/** The counts a preview shows for the office's current unit choice; an unmapped unit's articles count as rejected. */
+/**
+ * The counts a preview shows for the office's current unit choice: an
+ * unmapped unit's articles count as rejected, and an otherwise unchanged
+ * article mapped to another unit than the catalog stores counts as changed.
+ */
 export function wholesalerPreviewTotals(
   preview: Pick<
     WholesalerImportPreview,
@@ -203,17 +218,21 @@ export function wholesalerPreviewTotals(
   >,
   mapping: Readonly<Record<string, InventoryUnitCode | null>>,
 ): WholesalerImportResult {
-  const mapped = preview.units.filter((unit) => mapping[unit.unitText]);
-  const sum = (key: 'created' | 'changed' | 'unchanged' | 'priceChanged') =>
-    mapped.reduce((total, unit) => total + unit[key], 0);
+  const totals = { created: 0, changed: 0, unchanged: 0, priceChanged: 0, unitRejected: 0 };
+  for (const unit of preview.units) {
+    const mapped = mapping[unit.unitText];
+    if (!mapped) {
+      totals.unitRejected += unit.articles;
+      continue;
+    }
+    const stillUnchanged = unit.unchangedByUnit[mapped] ?? 0;
+    totals.created += unit.created;
+    totals.changed += unit.changed + unit.unchanged - stillUnchanged;
+    totals.unchanged += stillUnchanged;
+    totals.priceChanged += unit.priceChanged;
+  }
   return {
-    created: sum('created'),
-    changed: sum('changed'),
-    unchanged: sum('unchanged'),
-    priceChanged: sum('priceChanged'),
-    unitRejected: preview.units
-      .filter((unit) => !mapping[unit.unitText])
-      .reduce((total, unit) => total + unit.articles, 0),
+    ...totals,
     priceUpdates: preview.priceUpdates,
     priceUnmatched: preview.priceUnmatched,
     removed: preview.removed,
