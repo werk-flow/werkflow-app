@@ -62,7 +62,8 @@
     "format": "prettier --write --log-level warn \"**/*.{ts,tsx,mjs,js,cjs,json,jsonc,css}\"",
     "format:check": "prettier --check --log-level warn \"**/*.{ts,tsx,mjs,js,cjs,json,jsonc,css}\"",
     "realtime:check": "bun scripts/check-realtime-parity.ts",
-    "security:dependencies": "bun scripts/check-dependency-security.ts"
+    "security:dependencies": "bun scripts/check-dependency-security.ts",
+    "rules:en16931": "bun lib/invoicing/rules/compile.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1102.0",
@@ -97,6 +98,7 @@
     "react-dom": "19.2.3",
     "react-easy-crop": "^5.5.7",
     "react-hook-form": "^7.66.1",
+    "saxon-js": "2.7.0",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.6.7"
@@ -129,7 +131,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "typescript7": "npm:typescript@7.0.2",
-    "unpdf": "1.9.1"
+    "unpdf": "1.9.1",
+    "xslt3": "2.7.0"
   },
   "patchedDependencies": {
     "@supabase/ssr@0.7.0": "patches/@supabase%2Fssr@0.7.0.patch"
