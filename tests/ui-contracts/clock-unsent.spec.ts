@@ -456,7 +456,8 @@ test('while the guided correction ends the session, the sheet stays open, so its
 
   await section.getByRole('button', { name: 'Korrektur beantragen', exact: true }).click();
   await page.waitForFunction(() => window.clockContract.resolveTransition !== null);
-  // The end waits for the server: dismissing the sheet is refused.
+  // The end waits for the server: the sheet shows it busy and refuses its dismissal.
+  await expect(sheet).toHaveAttribute('aria-busy', 'true');
   await page.keyboard.press('Escape');
   await expect(sheet).toBeVisible();
 
