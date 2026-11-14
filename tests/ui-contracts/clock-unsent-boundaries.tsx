@@ -63,3 +63,59 @@ export function ManualEntryDialog({
     </div>
   );
 }
+
+// The guided correction of a late chain on a session the server holds: it reads the person's entries
+// and opens the correction form for the session's end. The contract sets what the read answers.
+
+type ClockReplacementFixture = {
+  entries: import('@/lib/time-tracking/types').TimeEntry[];
+  readFails: boolean;
+  reads: number;
+};
+
+declare global {
+  interface Window {
+    clockReplacement?: ClockReplacementFixture;
+  }
+}
+
+export async function getTimeEntries(): Promise<import('@/lib/time-tracking/types').GetTimeEntriesResult> {
+  const fixture = window.clockReplacement ?? { entries: [], readFails: false, reads: 0 };
+  fixture.reads += 1;
+  return fixture.readFails
+    ? { success: false, error: 'time_entries_unavailable' }
+    : { success: true, entries: fixture.entries };
+}
+
+export function useClosedTimePeriods(): readonly never[] {
+  return [];
+}
+
+type TimeCorrectionDialogProps = ComponentProps<
+  typeof import('@/components/zeiterfassung/time-correction-dialog').TimeCorrectionDialog
+>;
+
+/** The correction form, as far as the flow uses it: the entry it edits, a filed request, a closed form. */
+export function TimeCorrectionDialog({ open, onOpenChange, entry, onSubmitted }: TimeCorrectionDialogProps) {
+  if (!open) return null;
+  return (
+    <div role="dialog" aria-label="Zeit korrigieren">
+      <output aria-label="Vorbelegung">
+        {[entry?.canonicalSegmentId, entry?.entryType, entry?.timestamp].join(' | ')}
+      </output>
+      <button
+        type="button"
+        onClick={() => {
+          // The real form closes, then reports the filed request.
+          onOpenChange?.(false);
+          onSubmitted?.();
+        }}
+      >
+        Korrektur einreichen
+      </button>
+      <button type="button" onClick={() => onOpenChange?.(false)}>
+        Formular schließen
+      </button>
+    </div>
+  );
+}

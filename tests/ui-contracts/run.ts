@@ -133,6 +133,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               (args) => {
                 if (
                   args.importer.endsWith('clock-state-provider.tsx') ||
+                  args.importer.endsWith('clock-unsent-replacement.tsx') ||
                   args.importer.endsWith('clock-fab.tsx') ||
                   args.importer.endsWith('clock-action-list.tsx') ||
                   args.importer.endsWith('time-activity-dialog.tsx')
@@ -146,6 +147,17 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('clock-unsent-events.tsx'))
                 return { path: join(import.meta.dir, 'clock-unsent-boundaries.tsx') };
             });
+            // The guided correction reads the person's entries and opens the correction form: both outside the clock's contract.
+            builder.onResolve(
+              {
+                filter:
+                  /^@\/(lib\/time-tracking\/entry-read-actions|components\/zeiterfassung\/(use-closed-time-periods|time-correction-dialog))$/,
+              },
+              (args) => {
+                if (args.importer.endsWith('clock-unsent-replacement.tsx'))
+                  return { path: join(import.meta.dir, 'clock-unsent-boundaries.tsx') };
+              },
+            );
             builder.onResolve({ filter: /^(next\/link|next\/navigation)$/ }, (args) => {
               if (args.importer.endsWith('sidebar-link.tsx'))
                 return { path: join(import.meta.dir, 'sidebar-service-boundaries.tsx') };
