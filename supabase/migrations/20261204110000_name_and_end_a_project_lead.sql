@@ -143,16 +143,18 @@ grant execute on function public.end_work_lead(uuid, uuid, uuid, uuid, uuid) to 
 
 -- The touch. Each trigger names the projects whose open holding signals the
 -- change; a project without one updates no row.
-create function app_private.touch_work_lead_of_projects(p_project_ids uuid[])
+create function app_private.touch_work_lead_of_projects(p_organization_id uuid, p_project_ids uuid[])
 returns void
 language sql
 security definer
 set search_path to ''
 as $$
   update public.work_leads work_lead set updated_at = now()
-  where work_lead.ended_at is null and work_lead.project_id = any (p_project_ids);
+  where work_lead.organization_id = p_organization_id
+    and work_lead.ended_at is null
+    and work_lead.project_id = any (p_project_ids);
 $$;
-revoke all on function app_private.touch_work_lead_of_projects(uuid[]) from public, anon, authenticated;
+revoke all on function app_private.touch_work_lead_of_projects(uuid, uuid[]) from public, anon, authenticated;
 
 create function app_private.touch_work_lead_from_job()
 returns trigger
@@ -161,7 +163,7 @@ security definer
 set search_path to ''
 as $$
 begin
-  perform app_private.touch_work_lead_of_projects(array_remove(array[
+  perform app_private.touch_work_lead_of_projects(coalesce(new.organization_id, old.organization_id), array_remove(array[
     case when tg_op <> 'DELETE' then new.project_id end,
     case when tg_op <> 'INSERT' then old.project_id end
   ], null));
@@ -180,11 +182,13 @@ as $$
 declare
   v_row jsonb := to_jsonb(case when tg_op = 'DELETE' then old else new end);
 begin
-  perform app_private.touch_work_lead_of_projects(array(
+  perform app_private.touch_work_lead_of_projects((v_row->>'organization_id')::uuid, array(
     select (v_row->>'project_id')::uuid where v_row->>'project_id' is not null
     union
     select job.project_id from public.jobs job
-    where job.id = (v_row->>'job_id')::uuid and job.project_id is not null
+    where job.id = (v_row->>'job_id')::uuid
+      and job.organization_id = (v_row->>'organization_id')::uuid
+      and job.project_id is not null
   ));
   return null;
 end;
