@@ -8,7 +8,13 @@
 // supabase/tests/on_call_shifts.sql proves the function's own refusals.
 import assert from 'node:assert/strict';
 
-import { CALLER_ID, ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
+import {
+  CALLER_ID,
+  ORGANIZATION_A,
+  ORGANIZATION_B,
+  installActionWorld,
+  signInAs,
+} from './action-boundary-world';
 import { assertRefused, refuseForeignIds } from './operations-boundary-refusals';
 
 const shiftA = '46900000-0000-4000-8000-0000000000a1';
@@ -107,7 +113,12 @@ for (const role of ['admin', 'buero'] as const) {
   );
   for (const [name, call] of everyAction(ORGANIZATION_A, foreignShift, personA)) {
     if (name === 'planOnCallShift') continue;
-    await assertRefused(world, [[name, call]], { success: false, error: 'on_call_shift_not_found' }, 'one-call');
+    await assertRefused(
+      world,
+      [[name, call]],
+      { success: false, error: 'on_call_shift_not_found' },
+      'one-call',
+    );
   }
   await assertRefused(
     world,
@@ -134,7 +145,12 @@ for (const role of ['admin', 'buero'] as const) {
 signInAs(world, 'admin');
 await assertRefused(
   world,
-  [['endOnCallShift', () => actions.endOnCallShift({ organizationId: ORGANIZATION_A, shiftId: 'x', expectedVersion: 1 })]],
+  [
+    [
+      'endOnCallShift',
+      () => actions.endOnCallShift({ organizationId: ORGANIZATION_A, shiftId: 'x', expectedVersion: 1 }),
+    ],
+  ],
   { success: false, error: 'invalid_input' },
   'none',
 );

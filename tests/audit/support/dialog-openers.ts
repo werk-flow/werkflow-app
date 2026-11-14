@@ -4,7 +4,6 @@ import { CALENDAR_OPENERS } from './dialog-openers/calendar';
 import { CUSTOMERS_OPENERS } from './dialog-openers/customers';
 import { DOCUMENTS_OPENERS } from './dialog-openers/documents';
 import { COMMERCIAL_OPENERS, INVENTORY_OPENERS } from './dialog-openers/inventory';
-import { ON_CALL_OPENERS } from './dialog-openers/on-call';
 import { PEOPLE_OPENERS } from './dialog-openers/people';
 import { REQUESTS_OPENERS } from './dialog-openers/requests';
 import { SERVICE_OPENERS } from './dialog-openers/service';
@@ -23,7 +22,6 @@ export const DIALOG_OPENERS: Readonly<Record<DialogOpenerId, DialogOpener>> = {
   ...CUSTOMERS_OPENERS,
   ...DOCUMENTS_OPENERS,
   ...INVENTORY_OPENERS,
-  ...ON_CALL_OPENERS,
   ...PEOPLE_OPENERS,
   ...REQUESTS_OPENERS,
   ...SERVICE_OPENERS,

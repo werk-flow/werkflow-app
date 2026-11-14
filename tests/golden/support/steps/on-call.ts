@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { confirmed } from './shared';
 
 // Copy and structure of Bereitschaft (components/on-call/).
 
@@ -29,9 +30,10 @@ export function onCallHeaderButton(page: Page, action: 'plan' | 'handOver'): Loc
 
 /** The action menu button of the shift row. */
 export function onCallRowActions(page: Page, shiftId: string): Locator {
-  return page
-    .locator(`[data-row-id="${shiftId}"]`)
-    .getByRole('button', { name: ON_CALL_COPY.rowActions, exact: true });
+  return confirmed(page.locator(`[data-row-id="${shiftId}"]`).filter({ visible: true })).getByRole('button', {
+    name: ON_CALL_COPY.rowActions,
+    exact: true,
+  });
 }
 
 /** An item of an open row menu. */

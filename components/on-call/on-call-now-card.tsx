@@ -69,9 +69,7 @@ export function OnCallNowCard({
             </ul>
           </div>
         )}
-        {canPlan && (
-          <TextLink href="/service/bereitschaft">Bereitschaft planen</TextLink>
-        )}
+        {canPlan && <TextLink href="/service/bereitschaft">Bereitschaft planen</TextLink>}
       </CardContent>
     </Card>
   );

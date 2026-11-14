@@ -2,7 +2,16 @@
 
 import Link from 'next/link';
 import { useState, type ReactElement } from 'react';
-import { ArrowLeftRight, ChevronLeft, ChevronRight, History, Pencil, Plus, Siren, XCircle } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  ChevronLeft,
+  ChevronRight,
+  History,
+  Pencil,
+  Plus,
+  Siren,
+  XCircle,
+} from 'lucide-react';
 
 import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
@@ -73,14 +82,16 @@ export function OnCallWeekContent({
         }
       />
       <nav aria-label="Woche wählen" className="flex flex-wrap items-center gap-2">
-        <Button asChild variant="outline" size="icon">
-          <Link href={`${WEEK_PATH}?woche=${addLocalDays(week.monday, -7)}`} aria-label="Vorige Woche">
+        <Button asChild variant="outline" size="icon" aria-label="Vorige Woche">
+          <Link href={`${WEEK_PATH}?woche=${addLocalDays(week.monday, -7)}`}>
             <ChevronLeft aria-hidden="true" />
           </Link>
         </Button>
-        <p className="min-w-0 text-sm font-medium tabular-nums">{formatGermanDateRange(week.monday, sunday)}</p>
-        <Button asChild variant="outline" size="icon">
-          <Link href={`${WEEK_PATH}?woche=${addLocalDays(week.monday, 7)}`} aria-label="Nächste Woche">
+        <p className="min-w-0 text-sm font-medium tabular-nums">
+          {formatGermanDateRange(week.monday, sunday)}
+        </p>
+        <Button asChild variant="outline" size="icon" aria-label="Nächste Woche">
+          <Link href={`${WEEK_PATH}?woche=${addLocalDays(week.monday, 7)}`}>
             <ChevronRight aria-hidden="true" />
           </Link>
         </Button>
@@ -101,7 +112,14 @@ export function OnCallWeekContent({
           ))}
         </div>
       )}
-      <WeekDialogs dialog={dialog} organizationId={organizationId} week={week} settle={settle} onClose={close} />
+      <WeekDialogs
+        dialog={dialog}
+        organizationId={organizationId}
+        week={week}
+        settle={settle}
+        now={now}
+        onClose={close}
+      />
     </div>
   );
 }
@@ -121,7 +139,11 @@ function ShiftRow({
   const actions: RowActionMenuItem[] = [
     ...(open
       ? [
-          { label: 'Ändern', icon: <Pencil aria-hidden="true" />, onSelect: () => onOpen({ kind: 'change', shift }) },
+          {
+            label: 'Ändern',
+            icon: <Pencil aria-hidden="true" />,
+            onSelect: () => onOpen({ kind: 'change', shift }),
+          },
           {
             label: phase === 'running' ? 'Jetzt beenden' : 'Absagen',
             icon: <XCircle aria-hidden="true" />,
@@ -129,7 +151,11 @@ function ShiftRow({
           },
         ]
       : []),
-    { label: 'Verlauf', icon: <History aria-hidden="true" />, onSelect: () => onOpen({ kind: 'history', shift }) },
+    {
+      label: 'Verlauf',
+      icon: <History aria-hidden="true" />,
+      onSelect: () => onOpen({ kind: 'history', shift }),
+    },
   ];
   return (
     <ListRow variant="plain" rowId={shift.id} className="flex items-start gap-3">
@@ -144,7 +170,10 @@ function ShiftRow({
             <li key={member.employeeRecordId}>
               {member.name}
               {member.phone && (
-                <a className="ml-2 text-primary-text tabular-nums hover:underline" href={phoneHref(member.phone)}>
+                <a
+                  className="ml-2 text-primary-text tabular-nums hover:underline"
+                  href={phoneHref(member.phone)}
+                >
                   {member.phone}
                 </a>
               )}
@@ -167,12 +196,14 @@ function WeekDialogs({
   organizationId,
   week,
   settle,
+  now,
   onClose,
 }: {
   dialog: OpenDialog | null;
   organizationId: string;
   week: OnCallWeekView;
   settle: SettleOnChange;
+  now: number;
   onClose: () => void;
 }): ReactElement | null {
   const { showBanner } = useBanner();
@@ -202,7 +233,7 @@ function WeekDialogs({
   if (dialog.kind === 'history')
     return <OnCallHistoryDialog shift={dialog.shift} people={week.people} onClose={onClose} />;
   const { shift } = dialog;
-  const running = Date.parse(shift.startsAt) <= Date.now();
+  const running = shiftPhase(shift, new Date(now)) === 'running';
   return (
     <ConfirmActionDialog
       open
@@ -219,7 +250,10 @@ function WeekDialogs({
         const result = await endShift({ organizationId, shiftId: shift.id, expectedVersion: shift.version });
         if (!result.success)
           return describeFailure(result, ON_CALL_FAILURE_MESSAGES, 'Die Bereitschaft wurde nicht beendet.');
-        showBanner({ variant: 'success', message: running ? 'Bereitschaft beendet.' : 'Bereitschaft abgesagt.' });
+        showBanner({
+          variant: 'success',
+          message: running ? 'Bereitschaft beendet.' : 'Bereitschaft abgesagt.',
+        });
         void settle(since);
         return null;
       }}

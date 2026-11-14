@@ -73,7 +73,6 @@ const historyEntrySchema = z.object({
   actorName: z.string(),
   createdAt: z.string(),
 });
-export type OnCallHistoryEntry = z.infer<typeof historyEntrySchema>;
 
 const shiftSchema = z.object({
   id: z.string(),

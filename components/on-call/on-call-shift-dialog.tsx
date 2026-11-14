@@ -47,23 +47,8 @@ function defaultTimes(): { startsAt: string; endsAt: string } {
   return { startsAt, endsAt: `${addLocalDays(startsAt.slice(0, 10), 1)}T07:00` };
 }
 
-function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDialogProps, 'people'>) {
-  const [shiftId] = useState(() => shift?.id ?? crypto.randomUUID());
-  const [times, setTimes] = useState(() =>
-    shift
-      ? { startsAt: formatBerlinDateTimeInput(shift.startsAt), endsAt: formatBerlinDateTimeInput(shift.endsAt) }
-      : defaultTimes(),
-  );
-  const [label, setLabel] = useState(shift?.label ?? '');
-  const [note, setNote] = useState(shift?.handoverNote ?? '');
-  const [memberIds, setMemberIds] = useState(() => shift?.members.map((member) => member.employeeRecordId) ?? []);
-  const [attempted, setAttempted] = useState(false);
-  const [overlapAsked, setOverlapAsked] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { run, isPending } = usePendingTask();
-  const { showBanner } = useBanner();
-  const started = shift !== null && Date.parse(shift.startsAt) <= Date.now();
-
+/** The parsed times and the error of each field, keyed by the control's id. */
+function shiftFieldErrors(times: { startsAt: string; endsAt: string }, memberIds: readonly string[]) {
   const startsAt = parseBerlinDateTimeInput(times.startsAt);
   const endsAt = parseBerlinDateTimeInput(times.endsAt);
   const errors = {
@@ -75,6 +60,32 @@ function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDial
         : undefined,
     'on-call-people': memberIds.length > 0 ? undefined : 'Bitte wähle mindestens eine Person.',
   };
+  return { startsAt, endsAt, errors };
+}
+
+function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDialogProps, 'people'>) {
+  const [shiftId] = useState(() => shift?.id ?? crypto.randomUUID());
+  const [times, setTimes] = useState(() =>
+    shift
+      ? {
+          startsAt: formatBerlinDateTimeInput(shift.startsAt),
+          endsAt: formatBerlinDateTimeInput(shift.endsAt),
+        }
+      : defaultTimes(),
+  );
+  const [label, setLabel] = useState(shift?.label ?? '');
+  const [note, setNote] = useState(shift?.handoverNote ?? '');
+  const [memberIds, setMemberIds] = useState(
+    () => shift?.members.map((member) => member.employeeRecordId) ?? [],
+  );
+  const [attempted, setAttempted] = useState(false);
+  const [overlapAsked, setOverlapAsked] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { run, isPending } = usePendingTask();
+  const { showBanner } = useBanner();
+  const [started] = useState(() => shift !== null && Date.parse(shift.startsAt) <= Date.now());
+
+  const { startsAt, endsAt, errors } = shiftFieldErrors(times, memberIds);
 
   function submit(event: FormEvent): void {
     event.preventDefault();
@@ -98,7 +109,10 @@ function useShiftForm({ organizationId, shift, settle, onClose }: Omit<ShiftDial
         : await planOnCallShift(values);
       if (!result.success) {
         if (result.error === 'on_call_shift_overlaps') setOverlapAsked(true);
-        else setError(describeFailure(result, ON_CALL_FAILURE_MESSAGES, 'Die Bereitschaft wurde nicht gespeichert.'));
+        else
+          setError(
+            describeFailure(result, ON_CALL_FAILURE_MESSAGES, 'Die Bereitschaft wurde nicht gespeichert.'),
+          );
         return;
       }
       onClose();

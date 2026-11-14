@@ -19,6 +19,7 @@ import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { SettleOnChange } from '@/hooks/use-settle-on-change';
 import { usePendingTask } from '@/hooks/use-server-action';
+import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { describeFailure } from '@/lib/action-messages';
 import {
   formatBerlinDateTimeInput,
@@ -61,6 +62,7 @@ function useHandoverForm({ organizationId, running, settle, onClose }: Omit<Hand
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = usePendingTask();
   const { showBanner } = useBanner();
+  const now = useWallClockTick(60_000);
 
   const nextEnd = parseBerlinDateTimeInput(endsAt);
   const errors = {
@@ -68,7 +70,7 @@ function useHandoverForm({ organizationId, running, settle, onClose }: Omit<Hand
     'on-call-handover-people': memberIds.length > 0 ? undefined : 'Bitte wähle, wer übernimmt.',
     'on-call-handover-end-date': !nextEnd
       ? 'Bitte gib das Ende an.'
-      : nextEnd.getTime() <= Date.now()
+      : nextEnd.getTime() <= now
         ? 'Das Ende muss in der Zukunft liegen.'
         : undefined,
   };
