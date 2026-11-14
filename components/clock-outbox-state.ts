@@ -95,12 +95,9 @@ function useKeepers(
 }
 
 /** Marks the page's first look at the device as open; only the outbox's answer or a failed device storage ends it. */
-async function watchCheck(
-  check: () => Promise<void>,
-  setChecking: (checking: boolean) => void,
-): Promise<void> {
+function watchCheck(check: () => Promise<void>, setChecking: (checking: boolean) => void): void {
   setChecking(true);
-  await check();
+  void check();
 }
 
 export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void>): ClockOutboxState {
@@ -154,7 +151,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
     // Until the outbox shows what waits, a new action goes behind it, never past it to the server.
     uncheckedRef.current = deviceMayHoldUnsentWork();
     // The clock shows nothing it is not sure of until this first look answered (shown-clock.ts).
-    if (uncheckedRef.current) void watchCheck(attach, setChecking);
+    if (uncheckedRef.current) watchCheck(attach, setChecking);
     // Every return of the network asks the outbox: another tab may have sent what this page kept.
     window.addEventListener('online', attachNow);
     // Another tab kept an action: until the outbox shows it, a tap here waits behind it.
