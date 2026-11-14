@@ -18,7 +18,12 @@ import { SiteAccessReviewOpener } from '@/components/kunden/site-access-review';
 import { readSiteAccessReview } from '@/lib/site-access-proposals/review-read';
 import { SITE_ACCESS_REVIEW_PARAM } from '@/lib/site-access-proposals/types';
 import { uuidSchema } from '@/lib/validation/uuid';
+import { logError } from '@/lib/logging';
+import { readOfferPage } from '@/lib/offers/reads';
 import KundenDetailLoading from './loading';
+
+/** The newest offers the customer's page lists; a link opens the rest. */
+const CUSTOMER_OFFER_COUNT = 5;
 
 interface KundenDetailPageProps {
   params: Promise<{ clientId: string }>;
@@ -37,6 +42,12 @@ function readKundenDetail(clientId: string, activeOrgId: string, userId: string)
     getInstalledEquipmentForClient(clientId),
     getOrganizationUserPreferencesForView(activeOrgId, userId),
     getClientSiteRoles(clientId),
+    readOfferPage(activeOrgId, { status: null, search: '', clientId, page: 1 }, CUSTOMER_OFFER_COUNT).catch(
+      (error: unknown) => {
+        logError('kunde.offers_read_failed', error);
+        return null;
+      },
+    ),
   ]);
 }
 
@@ -61,6 +72,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     equipmentResult,
     { visibleColumns },
     siteRolesResult,
+    offers,
   ] = await readKundenDetail(clientId, activeOrgId, user.id);
 
   // A missing or forbidden client leaves the page; a failed read must not look like one.
@@ -127,6 +139,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       relationshipBundle={relationshipResult.success ? relationshipResult.data : null}
       equipment={equipmentResult.success ? equipmentResult.equipment : []}
       equipmentLoadFailed={!equipmentResult.success}
+      offers={offers}
     />
   );
 }

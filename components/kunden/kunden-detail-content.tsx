@@ -20,6 +20,7 @@ import { MetadataSection, type MetadataField } from '@/components/shared/metadat
 import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { ClientFinancePlaceholder } from '@/components/kunden/client-finance-placeholder';
+import { ClientOffersSection } from '@/components/kunden/client-offers-section';
 import { buildClientMetadataFields } from '@/components/kunden/client-metadata-fields';
 import { ClientHeldRolesCard } from '@/components/kunden/client-held-roles-card';
 import { ClientRelationsSection } from '@/components/kunden/client-relations-section';
@@ -27,6 +28,7 @@ import { CustomerRelationshipWorkspace } from '@/components/kunden/customer-rela
 import { ClientRemovalDialog, type ClientRemoval } from '@/components/kunden/client-removal-dialog';
 import { useClientRemoval } from '@/components/kunden/use-client-deletion';
 import { useCommunicationContactGuard } from '@/components/kunden/use-communication-contact-guard';
+import type { OfferPage } from '@/lib/offers/list-page';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
@@ -65,6 +67,8 @@ interface KundenDetailContentProps {
   relationshipBundle: CustomerRelationshipBundle | null;
   equipment: EquipmentListItem[];
   equipmentLoadFailed: boolean;
+  /** The customer's newest offers; null for a failed read. */
+  offers: OfferPage | null;
 }
 
 export function KundenDetailContent({
@@ -82,6 +86,7 @@ export function KundenDetailContent({
   relationshipBundle,
   equipment,
   equipmentLoadFailed,
+  offers,
 }: KundenDetailContentProps) {
   const removal = useClientRemoval(client);
   const contactGuard = useCommunicationContactGuard({
@@ -134,6 +139,7 @@ export function KundenDetailContent({
             visibleColumns={visibleColumns}
             currentUserId={currentUserId}
             relationshipBundle={relationshipBundle}
+            offers={offers}
           />
         </DetailColumns>
       </PageBody>
@@ -161,8 +167,10 @@ function KundenDetailActivityColumn({
   visibleColumns,
   currentUserId,
   relationshipBundle,
+  offers,
 }: Pick<
   KundenDetailContentProps,
+  | 'offers'
   | 'client'
   | 'relations'
   | 'linkedWork'
@@ -194,6 +202,7 @@ function KundenDetailActivityColumn({
         isAdminOrManager={isAdminOrManager}
         visibleColumns={visibleColumns}
       />
+      <ClientOffersSection clientId={client.id} offers={offers} />
     </div>
   );
 }
@@ -278,6 +287,7 @@ function useKundenDetailRealtime(
       'projects',
       'document_links',
       'installed_equipment',
+      'offers',
     ],
     eventFilter: (event) => !isLeavingRef.current && isCustomerDetailEvent(event, clientId, related),
   });

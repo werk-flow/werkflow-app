@@ -112,6 +112,8 @@ export async function detailDestination(
         route: `/auftraege/projekt/${details.projectNumber}/${details.nestedJobNumber}/uebergabe`,
         heading: names.nestedJob,
       };
+    case '/angebote/[offerId]':
+      return { route: `/angebote/${details.offerId}`, heading: names.offer };
     case '/auftraege/uebergaben/[targetType]/[targetId]':
       return { route: `/auftraege/uebergaben/auftrag/${details.jobId}`, heading: names.job };
   }
