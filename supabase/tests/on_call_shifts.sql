@@ -255,8 +255,11 @@ begin
     'on_call_member_invalid');
   update public.employee_records set exit_date = null where id = v_max;
 
+  -- The stamp trigger would set now(); off for the seed only, inside this transaction.
+  alter table public.on_call_shifts disable trigger on_call_shifts_updated_at;
   update public.on_call_shifts set updated_at = now() - interval '1 hour'
   where id = '46900000-0000-4000-8000-000000000105';
+  alter table public.on_call_shifts enable trigger on_call_shifts_updated_at;
   update public.employee_records set phone = '+49 30 1234567' where id = v_lena;
   select updated_at into strict v_touched from public.on_call_shifts
   where id = '46900000-0000-4000-8000-000000000105';
