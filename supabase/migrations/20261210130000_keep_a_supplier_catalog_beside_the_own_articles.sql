@@ -431,6 +431,12 @@ begin
     raise exception 'invalid_input';
   end if;
 
+  -- Two opens by one person run one after the other, so the second abandons
+  -- the first's batch instead of keeping a second open one.
+  perform pg_advisory_xact_lock(
+    hashtextextended('supplier_catalog_import:' || p_organization_id::text || ':' || p_actor_id::text, 0)
+  );
+
   -- The update locks each open batch first: a batch a concurrent confirm
   -- finished meanwhile is skipped and keeps the lines its report names.
   with abandoned as (
