@@ -34,7 +34,7 @@ export function offlineFallback(page: Page): Locator {
   return page.getByRole('heading', { level: 1, name: OFFLINE_COPY.title });
 }
 
-export function offlineRetryButton(page: Page): Locator {
+function offlineRetryButton(page: Page): Locator {
   return page.getByRole('button', { name: OFFLINE_COPY.retry });
 }
 

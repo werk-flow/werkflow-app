@@ -6,13 +6,14 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { usePendingTask } from '@/hooks/use-server-action';
-import { returnToApp } from './return-to-app';
+import { returnToApp, returnsOnStart } from './return-to-app';
 
 /**
  * „Erneut versuchen“ on the offline page. Before the page's script runs it is a plain form that
  * reloads the address the person opened. Once it runs, a tap shows the spinner at once, checks
  * the connection and reloads into the app, or says in place that there is still no signal. The
- * signal coming back (`online`) runs the same attempt.
+ * signal coming back (`online`) runs the same attempt, and so does the page's start when the phone
+ * already reports a network.
  */
 export function RetryButton() {
   const { run, isPending } = usePendingTask();
@@ -29,8 +30,10 @@ export function RetryButton() {
   useEffect(() => {
     const onOnline = (): void => void attempt();
     window.addEventListener('online', onOnline);
+    // The signal may have come back before this listener existed; no message when the start finds none.
+    if (returnsOnStart()) void run(async () => void (await returnToApp()));
     return () => window.removeEventListener('online', onOnline);
-  }, [attempt]);
+  }, [attempt, run]);
 
   const retry = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();

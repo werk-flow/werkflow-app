@@ -13,7 +13,6 @@ import {
   expectNextBuildShellAfterUpdate,
   expectShellOfServedBuild,
   offlineFallback,
-  offlineRetryButton,
   expectNoServiceWorkerCaches,
   expectOnlyShellFilesCached,
   expectOwnedCacheDeleted,
@@ -58,17 +57,20 @@ test('the app shell opens without signal and keeps nothing of the person @AUDIT-
     await expectOnlyShellFilesCached(page, [world.users.employee.email]);
   });
 
-  await test.step('a navigation without network shows the fallback, and the retry opens the page', async () => {
-    // Only the worker's cache may serve the fallback's files, so the retry proves the shell.
+  await test.step('a navigation without network shows the fallback, and a tap without signal says so', async () => {
+    // Only the worker's cache may serve the fallback's files, so the answer to the tap proves the shell.
     await bypassHttpCache(page);
     await setNetwork(page, 'offline');
     await page.goto('/auftraege');
     await expect(offlineFallback(page)).toBeVisible();
     await expect(page).toHaveURL(/\/auftraege$/);
-    await expect(offlineRetryButton(page)).toBeEnabled();
+    await retryWithoutSignal(page);
+  });
+
+  await test.step('the signal coming back opens the page by itself', async () => {
     await setNetwork(page, 'online');
-    await offlineRetryButton(page).click();
     await expect(jobListReady(page)).toBeVisible();
+    await expect(page).toHaveURL(/\/auftraege$/);
   });
 
   await test.step('sign-out empties every cache the service worker owns', async () => {
