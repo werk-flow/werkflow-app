@@ -1,4 +1,4 @@
--- Bereitschaft (20261205091400_plan_and_hand_over_on_call_shifts.sql,
+-- Bereitschaft (20261210120001_plan_and_hand_over_on_call_shifts.sql,
 -- werk-flow/werkflow-planning#469). Admin and Büro plan, change, end and hand
 -- over shifts; each write keeps its history in the same call, and a change
 -- after the start keeps the earlier version. Another shift with the same
