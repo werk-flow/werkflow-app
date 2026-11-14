@@ -351,6 +351,14 @@ export const WORK_OPENERS = {
     layer: plannedDateRemovalConfirmation,
     parents: (page) => [jobEditDialog(page)],
   },
+  'work.name-work-lead': {
+    trigger: async ({ page }) =>
+      page
+        .getByRole('main')
+        .getByTestId('work-lead-section')
+        .getByRole('button', { name: /Projektleitung benennen|Ändern oder beenden/ }),
+    layer: (page) => page.getByRole('dialog', { name: /Projektleitung (benennen|ändern)/ }),
+  },
   'work.project-jobs': {
     trigger: async ({ page }) => projectAssignJobsButton(page),
     layer: projectJobAssignmentDialog,

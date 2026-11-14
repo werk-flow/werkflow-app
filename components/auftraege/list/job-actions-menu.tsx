@@ -22,6 +22,7 @@ import {
   JOB_DELETE_FAILED_MESSAGE,
   JOB_DELETE_HISTORY_MESSAGE,
   JOB_DELETE_MATERIAL_MESSAGE,
+  JOB_DELETE_WORK_HISTORY_MESSAGE,
 } from '@/lib/jobs/messages';
 import { getJobDisplayTitle, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
 import { knownProjectOption } from '../forms/job-form-options';
@@ -37,6 +38,7 @@ const lazyEditJobDialog = lazyDialog(() =>
 const JOB_DELETE_ERROR_MESSAGES = {
   planning_history_exists: JOB_DELETE_HISTORY_MESSAGE,
   material_history_exists: JOB_DELETE_MATERIAL_MESSAGE,
+  work_history_exists: JOB_DELETE_WORK_HISTORY_MESSAGE,
 } satisfies Record<string, string>;
 
 export function describeJobDeleteError(error: string): string {
