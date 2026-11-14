@@ -34,7 +34,7 @@ import { ServiceCasesPageSkeleton } from '@/components/loading-states/service-ca
 // skeleton inside the area header. The first matching prefix wins, so a
 // subpage sits above its area.
 const ORG_SWITCH_SKELETONS: ReadonlyArray<
-  readonly [prefix: string, skeleton: (angebote: AngeboteSkeletons | null) => ReactElement | null]
+  readonly [prefix: string, skeleton: (angebote: AngeboteSkeletons | null) => ReactElement]
 > = [
   ['/mitarbeiter', () => <MitarbeiterPageSkeleton />],
   ['/aufgaben', () => <AufgabenPageSkeleton />],
@@ -107,21 +107,19 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
   ['/inventar', () => <InventarPageSkeleton />],
   [
     '/angebote/leistungen',
-    (angebote) =>
-      angebote && (
-        <AreaPageSkeleton title="Angebote" tabCount={2}>
-          <angebote.LeistungenPageSkeleton />
-        </AreaPageSkeleton>
-      ),
+    (angebote) => (
+      <AreaPageSkeleton title="Angebote" tabCount={2}>
+        {angebote && <angebote.LeistungenPageSkeleton />}
+      </AreaPageSkeleton>
+    ),
   ],
   [
     '/angebote',
-    (angebote) =>
-      angebote && (
-        <AreaPageSkeleton title="Angebote" tabCount={2}>
-          <angebote.OffersPageSkeleton />
-        </AreaPageSkeleton>
-      ),
+    (angebote) => (
+      <AreaPageSkeleton title="Angebote" tabCount={2}>
+        {angebote && <angebote.OffersPageSkeleton />}
+      </AreaPageSkeleton>
+    ),
   ],
 ];
 
@@ -152,10 +150,10 @@ function orgSwitchSkeleton(pathname: string, angebote: AngeboteSkeletons | null)
 
 type AngeboteSkeletons = typeof import('@/components/angebote/area-skeletons');
 
-// Only the office opens Angebote, so the area's skeletons load once the user is in it and no
-// field worker's start-up carries them. The switch starts from the area's page, after the load.
-// A load that fails, as without signal, leaves the area without a skeleton; the next visit tries again.
-function useAngeboteSkeletons(inAngebote: boolean): AngeboteSkeletons | null {
+// Only the office opens Angebote, so the area's content skeletons load once the user is in it
+// and no field worker's start-up carries them. Until they arrive, or when the load failed (as
+// without signal), a switch shows the area's title and tabs; each switch start tries again.
+function useAngeboteSkeletons(inAngebote: boolean, isSwitchingOrg: boolean): AngeboteSkeletons | null {
   const [skeletons, setSkeletons] = useState<AngeboteSkeletons | null>(null);
   useEffect(() => {
     if (!inAngebote || skeletons) return;
@@ -169,7 +167,7 @@ function useAngeboteSkeletons(inAngebote: boolean): AngeboteSkeletons | null {
     return () => {
       current = false;
     };
-  }, [inAngebote, skeletons]);
+  }, [inAngebote, isSwitchingOrg, skeletons]);
   return skeletons;
 }
 
@@ -177,7 +175,7 @@ function useAngeboteSkeletons(inAngebote: boolean): AngeboteSkeletons | null {
 export function OrgSwitchOverlay() {
   const { isSwitchingOrg } = useOrganization();
   const pathname = usePathname();
-  const angebote = useAngeboteSkeletons(inArea(pathname, '/angebote'));
+  const angebote = useAngeboteSkeletons(inArea(pathname, '/angebote'), isSwitchingOrg);
 
   const currentSkeleton = useMemo(() => orgSwitchSkeleton(pathname, angebote), [pathname, angebote]);
 
