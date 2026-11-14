@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { ActionContext } from '@/lib/org/action-context';
+import { captureUsage } from '@/lib/usage-statistics/capture';
 import {
   attachWorkArtifactDraft,
   type WorkArtifactDraftAttachError,
@@ -45,6 +46,7 @@ export async function replayWorkArtifactDraft(
     draft: draft.data,
   });
   if (!result.success) return REFUSAL_VERDICTS[result.error];
+  if (!result.replayed) captureUsage(context.orgId, 'work_evidence', 'started');
   return result.replayed
     ? { outcome: 'replayed', code: 'replayed' }
     : { outcome: 'accepted', code: 'accepted' };

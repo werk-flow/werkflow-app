@@ -395,6 +395,8 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   metadata: 'Metadaten',
   mime_type: 'Dateityp',
   minutes: 'Minuten',
+  missed_job_id: 'Verpasster Auftrag',
+  missed_reason: 'Grund für den verpassten Besuch',
   mode: 'Modus',
   model: 'Modell',
   monday_minutes: 'Montag (Minuten)',

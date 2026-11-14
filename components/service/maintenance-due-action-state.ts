@@ -3,84 +3,13 @@ import {
   completeMaintenanceDueWork,
   createMaintenanceVisit,
   linkMaintenanceServiceCase,
+  recordMaintenanceVisitMissed,
   scheduleMaintenanceVisit,
   setMaintenanceDueException,
 } from '@/lib/maintenance/actions';
-import type {
-  MaintenanceActionResult,
-  MaintenanceDueItem,
-  MaintenanceScopeOutcome,
-} from '@/lib/maintenance/types';
+import type { MaintenanceDueActionValues } from '@/lib/maintenance/due-action-fields';
+import type { MaintenanceActionResult, MaintenanceDueItem } from '@/lib/maintenance/types';
 import { parseHoursInputToMinutes } from '@/lib/jobs/planned-working';
-
-export type MaintenanceDueActionKind =
-  | 'create_visit'
-  | 'schedule'
-  | 'complete'
-  | 'link_service_case'
-  | 'skipped'
-  | 'cancelled'
-  | 'superseded';
-
-/** What the dialog has collected for the chosen action. */
-export type MaintenanceDueActionValues = {
-  action: MaintenanceDueActionKind;
-  reason: string;
-  date: string;
-  time: string;
-  durationHours: string;
-  scopeOutcome: MaintenanceScopeOutcome;
-  completedOn: string;
-  evidenceIds: string[];
-  serviceCaseId: string;
-};
-
-export type MaintenanceDueRequiredField =
-  | 'date'
-  | 'durationHours'
-  | 'completedOn'
-  | 'evidenceIds'
-  | 'serviceCaseId'
-  | 'reason';
-
-// Focus order on a failed submit.
-export const MAINTENANCE_DUE_REQUIRED_FIELD_IDS: Array<[MaintenanceDueRequiredField, string]> = [
-  ['date', 'due-date'],
-  ['durationHours', 'due-duration'],
-  ['completedOn', 'due-completed'],
-  ['serviceCaseId', 'maintenance-service-case'],
-  ['reason', 'due-reason'],
-  ['evidenceIds', 'due-evidence'],
-];
-
-// Mirrors the maintenance validation schemas per action so the user sees the
-// missing field instead of the generic invalid_input message.
-export function missingDueActionFields(
-  values: MaintenanceDueActionValues,
-  reasonRequired: boolean,
-): Partial<Record<MaintenanceDueRequiredField, string>> {
-  const { action, reason, date, durationHours, completedOn, evidenceIds, serviceCaseId } = values;
-  const errors: Partial<Record<MaintenanceDueRequiredField, string>> = {};
-  if (action === 'schedule') {
-    if (!date) errors.date = 'Bitte wähle ein Datum.';
-    if ((parseHoursInputToMinutes(durationHours) ?? 0) < 15) {
-      errors.durationHours = 'Bitte gib mindestens 0,25 Stunden an.';
-    }
-  }
-  if (action === 'complete') {
-    if (!completedOn) errors.completedOn = 'Bitte gib das Abschlussdatum an.';
-    if (evidenceIds.length === 0) {
-      errors.evidenceIds = 'Wähle mindestens einen versionierten Arbeitsnachweis.';
-    }
-  }
-  if (action === 'link_service_case' && !serviceCaseId) {
-    errors.serviceCaseId = 'Bitte wähle einen Servicefall.';
-  }
-  if (reasonRequired && reason.trim().length < 3) {
-    errors.reason = 'Bitte gib eine Begründung mit mindestens 3 Zeichen an.';
-  }
-  return errors;
-}
 
 const DUE_ACTION_ERROR_MESSAGES: Record<string, string> = {
   maintenance_stale_version: 'Die Fälligkeit wurde inzwischen geändert. Bitte lade die Seite neu.',
@@ -90,6 +19,8 @@ const DUE_ACTION_ERROR_MESSAGES: Record<string, string> = {
     'Das Abschlussdatum muss im Wartungsfenster liegen und darf nicht in der Zukunft liegen.',
   maintenance_due_batch_incompatible:
     'Diese Fälligkeiten können nicht in einem Auftrag zusammengeführt werden.',
+  maintenance_due_visit_missed_not_allowed:
+    'Diese Fälligkeit hat keinen offenen Wartungsauftrag mehr. Bitte lade die Seite neu.',
 };
 
 export function dueActionErrorMessage(code: string): string {
@@ -133,6 +64,15 @@ export async function runMaintenanceDueAction(
       completedOn: values.completedOn,
       workArtifactRevisionIds: values.evidenceIds,
       reason: reason || 'Wartungsumfang dokumentiert',
+      idempotencyKey,
+    });
+  }
+  if (action === 'visit_missed') {
+    return recordMaintenanceVisitMissed({
+      dueWorkId: due.id,
+      expectedVersion: due.version,
+      missedReason: values.missedReason,
+      note: reason,
       idempotencyKey,
     });
   }

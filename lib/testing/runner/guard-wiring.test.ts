@@ -1,6 +1,6 @@
 // Rule test: both agent tools run the edit guard before every tool call that can write a file,
-// Claude runs the delete guard before every shell call, and both run the Boat key, heavy command,
-// second-stack and shared stack migration guards, and the device guard before T3's device_open.
+// Claude runs the delete guard before every shell call, and both run the sign-in, Boat key, heavy
+// command, second-stack and shared stack migration guards, and the device guard before T3's device_open.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -10,7 +10,7 @@ const repositoryRoot = resolve(import.meta.dir, '../../..');
 const GUARD = 'scripts/guard-edits-during-verification.ts';
 const DELETE_GUARD = '.claude/hooks/refuse-unresolvable-delete.ts';
 const PRODUCTION_MCP_GUARD = '.claude/hooks/refuse-production-mcp.ts';
-const PRODUCTION_LOG_GUARD = '.claude/hooks/refuse-production-logs.ts';
+const SIGN_IN_GUARD = '.claude/hooks/refuse-account-sign-in.ts';
 const BOAT_KEY_GUARD = '.claude/hooks/refuse-boat-key-reads.ts';
 const HEAVY_COMMAND_GUARD = '.claude/hooks/refuse-heavy-commands.ts';
 const SECOND_STACK_GUARD = '.claude/hooks/refuse-second-stack.ts';
@@ -75,11 +75,11 @@ test('both agent tools run the production MCP guard before every MCP tool', () =
   expect(guardedTools('.codex/hooks.json', tools, PRODUCTION_MCP_GUARD)).toEqual(tools);
 });
 
-// No agent reads Vercel's production logs through the CLI (lib/security/production-access.ts);
-// both tools name every shell call `Bash`.
-test('both agent tools run the production log guard before every shell call', () => {
-  expect(guardedTools('.claude/settings.json', ['Bash'], PRODUCTION_LOG_GUARD)).toEqual(['Bash']);
-  expect(guardedTools('.codex/hooks.json', ['Bash'], PRODUCTION_LOG_GUARD)).toEqual(['Bash']);
+// No agent starts a sign-in or runs an account-wide CLI (lib/security/account-sign-in.ts); both
+// tools name every shell call `Bash`.
+test('both agent tools run the sign-in guard before every shell call', () => {
+  expect(guardedTools('.claude/settings.json', ['Bash'], SIGN_IN_GUARD)).toEqual(['Bash']);
+  expect(guardedTools('.codex/hooks.json', ['Bash'], SIGN_IN_GUARD)).toEqual(['Bash']);
 });
 
 // Only the process that calls Boat reads the Boat API key (lib/security/boat-key-access.ts). Claude
