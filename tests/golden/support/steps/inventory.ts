@@ -1,9 +1,11 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import {
   formatInventoryQuantity,
+  getInventoryUnitLabel,
   INVENTORY_ITEM_TYPE_LABELS,
   type InventoryItemType,
 } from '../../../../lib/inventory/types';
+import type { InventoryUnitCode } from '../../../../lib/inventory/units';
 import { getInventoryLocationByName, type PersistedInventoryLocation } from '../db/inventory';
 import { dismissDialog } from './interaction';
 import {
@@ -422,6 +424,8 @@ export async function createInventoryItem(
   page: Page,
   options: {
     name: string;
+    /** The unit is chosen here: once the article has stock, it keeps its unit. */
+    unit?: InventoryUnitCode;
     locationName?: string;
     initialQuantity?: number;
     supplierName?: string;
@@ -440,6 +444,9 @@ export async function createInventoryItem(
   await createItemButton(page).click();
   const dialog = inventoryDialog(page, 'createItem');
   await dialog.locator('#inventory-item-name').fill(options.name);
+  if (options.unit) {
+    await selectFromSearchable(page, dialog.locator('#inventory-item-unit'), getInventoryUnitLabel(options.unit));
+  }
   if (options.locationName) {
     await selectFromSearchable(
       page,
