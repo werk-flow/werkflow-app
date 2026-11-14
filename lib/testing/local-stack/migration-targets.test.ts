@@ -105,10 +105,61 @@ test('types, schemas, extensions, roles, publications and cron jobs are named', 
   ]);
 });
 
-test('set search_path moves the default schema of the statements after it', () => {
+test('an unqualified name stands for every schema on the search path, and an unknown path makes it opaque', () => {
   expect(
-    named('set search_path to app_private, public; create table t (id int); alter table public.u add c int;'),
-  ).toEqual(['relation app_private.t', 'relation public.u']);
+    named(
+      "set search_path to app_private, public; create table t (id int); alter table public.u add c int; set search_path to 'app_private'; update jobs set id = 1; reset search_path; delete from v;",
+    ),
+  ).toEqual([
+    'relation app_private.t',
+    'relation public.t',
+    'relation public.u',
+    'relation app_private.jobs',
+    'relation public.v',
+  ]);
+  expect(named("select set_config('search_path', 'app_private, extensions', false); truncate w;")).toEqual([
+    'relation app_private.w',
+    'relation extensions.w',
+  ]);
+  const unknown = migrationChanges(
+    "select pg_catalog.set_config('search_path', '', false); insert into jobs values (1); insert into public.kept values (1);",
+  );
+  expect(unknown.opaque).toEqual(['insert into jobs values (1)']);
+  expect(unknown.targets).toEqual([{ kind: 'relation', schema: 'public', name: 'kept' }]);
+});
+
+test('SELECT INTO, SET SCHEMA and RENAME TO name the object under its new identity', () => {
+  expect(
+    named(`
+      select 1 as id into public.copied;
+      with source as (select 1 as id) select id into temp scratch from source;
+      alter table public.jobs set schema app_private;
+      alter function public.f(int) set schema app_private;
+      alter table jobs rename to work_orders;
+      alter policy old_name on jobs rename to new_name;
+    `),
+  ).toEqual([
+    'relation public.copied',
+    'relation public.scratch',
+    'relation public.jobs',
+    'relation app_private.jobs',
+    'function public.f',
+    'function app_private.f',
+    'relation public.jobs',
+    'relation public.work_orders',
+    'policy public.jobs.old_name',
+    'policy public.jobs.new_name',
+  ]);
+});
+
+test('a non-ASCII name is read whole, and an unquoted one folds only ASCII letters', () => {
+  const unquoted = migrationChanges('alter table Büro add column x int;');
+  expect(sharedChanges(unquoted, migrationChanges('alter table "büro" add column y int;'))).toEqual([
+    'relation public.büro',
+  ]);
+  expect(named('create function prüfe() returns int as $körper$ select 1; $körper$ language sql;')).toEqual([
+    'function public.prüfe',
+  ]);
 });
 
 test('a statement the reader cannot name a target for is opaque', () => {

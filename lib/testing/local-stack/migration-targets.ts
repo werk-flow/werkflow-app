@@ -40,7 +40,7 @@ function statements(sql: string): string[] {
     if (current.trim()) result.push(current.trim());
     current = '';
   };
-  const dollarQuote = /\$([A-Za-z_][A-Za-z0-9_]*)?\$/y;
+  const dollarQuote = /\$([\p{L}_][\p{L}\p{N}_]*)?\$/uy;
   while (index < sql.length) {
     if (sql.startsWith('--', index)) {
       const end = sql.indexOf('\n', index);
@@ -65,7 +65,7 @@ function statements(sql: string): string[] {
     }
     dollarQuote.lastIndex = index;
     const dollar = dollarQuote.exec(sql);
-    if (dollar && !/[A-Za-z0-9_]$/.test(current)) {
+    if (dollar && !/[\p{L}\p{N}_]$/u.test(current)) {
       const end = sql.indexOf(dollar[0], index + dollar[0].length);
       const stop = end === -1 ? sql.length : end + dollar[0].length;
       current += sql.slice(index, stop);
@@ -74,7 +74,7 @@ function statements(sql: string): string[] {
     }
     const char = sql.charAt(index);
     if (char === "'" || char === '"') {
-      const escapes = char === "'" && /(^|[^A-Za-z0-9_])[eE]$/.test(current);
+      const escapes = char === "'" && /(^|[^\p{L}\p{N}_])[eE]$/u.test(current);
       let stop = index + 1;
       while (stop < sql.length) {
         const next = sql.charAt(stop);
@@ -95,24 +95,30 @@ function statements(sql: string): string[] {
   return result;
 }
 
-/** Words, quoted names, strings and single punctuation. A dollar-quoted body is one string token. */
+/** Words, quoted names, strings and single punctuation. A dollar-quoted body is one string token.
+ * Like PostgreSQL, an unquoted name folds ASCII letters only, so `Büro` and `"büro"` are one name. */
 function tokens(statement: string): Token[] {
   const result: Token[] = [];
   const pattern =
-    /\$([A-Za-z_][A-Za-z0-9_]*)?\$[\s\S]*?\$\1\$|[eE]'(?:[^'\\]|\\.|'')*'|'(?:[^']|'')*'|"(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_$]*|\d+(?:\.\d+)?|::|\S/g;
+    /\$([\p{L}_][\p{L}\p{N}_]*)?\$[\s\S]*?\$\1\$|[eE]'(?:[^'\\]|\\.|'')*'|'(?:[^']|'')*'|"(?:[^"]|"")*"|[\p{L}_][\p{L}\p{N}_$]*|\d+(?:\.\d+)?|::|\S/gu;
   for (const match of statement.matchAll(pattern)) {
     const text = match[0];
     if (text.startsWith('"'))
       result.push({ text: text.slice(1, -1).replaceAll('""', '"'), quoted: true, string: false });
     else if (text.startsWith('$') && text.length > 1)
-      result.push({ text: text.replace(/^\$\w*\$|\$\w*\$$/g, ''), quoted: false, string: true });
+      result.push({ text: text.replace(/^\$[^$]*\$|\$[^$]*\$$/g, ''), quoted: false, string: true });
     else if (/^[eE]?'/.test(text))
       result.push({
         text: text.replace(/^[eE]?'|'$/g, '').replaceAll("''", "'"),
         quoted: false,
         string: true,
       });
-    else result.push({ text: text.toLowerCase(), quoted: false, string: false });
+    else
+      result.push({
+        text: text.replace(/[A-Z]+/g, (upper) => upper.toLowerCase()),
+        quoted: false,
+        string: false,
+      });
   }
   return result;
 }
@@ -145,7 +151,7 @@ class Reader {
   identifier(): string | null {
     const token = this.tokens[this.position];
     if (token === undefined || token.string) return null;
-    if (!token.quoted && !/^[a-z_][a-z0-9_$]*$/.test(token.text)) return null;
+    if (!token.quoted && !/^[\p{L}_][\p{L}\p{N}_$]*$/u.test(token.text)) return null;
     this.position += 1;
     return token.text;
   }
@@ -210,22 +216,34 @@ function names(reader: Reader, kind: TargetKind): Read {
   return result;
 }
 
-/** `<name> on <table>`, as policies and triggers are named. */
+/** `<name> on <table>`, as policies and triggers are named, with a new name after `rename to`. */
 function attached(reader: Reader, kind: 'policy' | 'trigger'): Read {
   const name = reader.identifier();
   if (name === null || !reader.accept('on')) return null;
   const table = reader.qualified();
-  return table === null ? null : [target(kind, table[0], `${table[1]}.${name}`)];
+  if (table === null) return null;
+  const renamed = reader.accept('rename', 'to') ? reader.identifier() : null;
+  return [name, ...(renamed === null ? [] : [renamed])].map((each) =>
+    target(kind, table[0], `${table[1]}.${each}`),
+  );
 }
 
-/** `rename to <name>` at the end of an ALTER: the new name is changed too. */
-function renamedTo(reader: Reader, kind: TargetKind, schema: string): MigrationTarget[] {
-  const at = reader.find('rename');
-  if (at === -1) return [];
-  reader.position = at + 1;
-  if (!reader.accept('to')) return [];
-  const name = reader.identifier();
-  return name === null ? [] : [target(kind, schema, name)];
+/** `rename to <name>` or `set schema <schema>` in an ALTER: the object under its new identity is changed too. */
+function renamedTo(reader: Reader, kind: TargetKind, found: MigrationTarget[]): MigrationTarget[] {
+  const result: MigrationTarget[] = [];
+  const start = reader.position;
+  const rename = reader.find('rename');
+  reader.position = rename + 1;
+  const name = rename !== -1 && reader.accept('to') ? reader.identifier() : null;
+  reader.position = start;
+  for (let at = reader.find('set'); at !== -1; at = reader.find('set')) {
+    reader.position = at + 1;
+    const schema = reader.accept('schema') ? reader.identifier() : null;
+    if (schema !== null) result.push(...found.map((old) => target(kind, schema, old.name)));
+  }
+  const first = found[0];
+  if (name !== null && first !== undefined) result.push(target(kind, first.schema, name));
+  return result;
 }
 
 type Verb = 'create' | 'alter' | 'drop' | 'comment';
@@ -249,7 +267,7 @@ function relationTargets(reader: Reader, kind: string, verb: Verb): Read {
   const found = names(reader, 'relation');
   const first = found?.[0];
   if (found === null || first === undefined) return null;
-  return verb === 'alter' ? [...found, ...renamedTo(reader, 'relation', first.schema)] : found;
+  return verb === 'alter' ? [...found, ...renamedTo(reader, 'relation', found)] : found;
 }
 
 /** COMMENT ON COLUMN and COMMENT ON CONSTRAINT: the table they belong to. */
@@ -315,7 +333,7 @@ function objectTargets(reader: Reader, verb: Verb): Read {
     const found = names(reader, kind);
     const first = found?.[0];
     if (found === null || first === undefined) return null;
-    return verb === 'alter' ? [...found, ...renamedTo(reader, kind, first.schema)] : found;
+    return verb === 'alter' ? [...found, ...renamedTo(reader, kind, found)] : found;
   }
   for (const kind of ['policy', 'trigger'] as const)
     if (reader.accept(kind)) return attachedTargets(reader, kind, verb);
@@ -405,22 +423,26 @@ function dataTargets(reader: Reader): Read {
     const word = reader.tokens[at];
     if (word === undefined || word.quoted || word.string) continue;
     // `on conflict do update`, `for update` and `insert or update` name no table.
-    if (['do', 'for', 'or', 'of'].includes(reader.tokens[at - 1]?.text ?? '')) continue;
+    const previous = reader.tokens[at - 1]?.text ?? '';
+    if (['do', 'for', 'or', 'of'].includes(previous)) continue;
+    // SELECT ... INTO t creates the table t.
     const after =
-      word.text === 'insert' || word.text === 'merge'
-        ? reader.tokens[at + 1]?.text === 'into'
-          ? at + 2
-          : -1
-        : word.text === 'delete'
-          ? reader.tokens[at + 1]?.text === 'from'
+      word.text === 'into' && previous !== 'insert' && previous !== 'merge'
+        ? at + 1
+        : word.text === 'insert' || word.text === 'merge'
+          ? reader.tokens[at + 1]?.text === 'into'
             ? at + 2
             : -1
-          : word.text === 'update' || word.text === 'truncate'
-            ? at + 1
-            : -1;
+          : word.text === 'delete'
+            ? reader.tokens[at + 1]?.text === 'from'
+              ? at + 2
+              : -1
+            : word.text === 'update' || word.text === 'truncate'
+              ? at + 1
+              : -1;
     if (after === -1) continue;
     reader.position = after;
-    reader.skip(['table'], ['only']);
+    reader.skip(['temporary'], ['temp'], ['unlogged'], ['table'], ['only']);
     const found = names(reader, 'relation');
     if (found === null) return null;
     result.push(...found);
@@ -462,23 +484,83 @@ function statementTargets(reader: Reader): Read {
   return null;
 }
 
-/** What one migration changes. `set search_path` moves the default schema of the statements after it. */
+/** Stands for the search path in an unqualified name until the statement's targets are known. */
+const UNQUALIFIED = '\u0000';
+
+/** The schemas of a search path value, or null when it cannot be read or names none. */
+function pathSchemas(values: Token[]): string[] | null {
+  const schemas: string[] = [];
+  for (const value of values) {
+    if (!value.quoted && !value.string && value.text === ',') continue;
+    const parts = value.string
+      ? value.text.split(',').map((part) => part.trim().replace(/^"|"$/g, ''))
+      : [value.text];
+    for (const part of parts) {
+      if (!value.quoted && !value.string && part === 'default') return ['public'];
+      if (!/^[\p{L}_][\p{L}\p{N}_$]*$/u.test(part)) {
+        if (part === '$user' || part === '') continue;
+        return null;
+      }
+      schemas.push(part);
+    }
+  }
+  return schemas.length ? schemas : null;
+}
+
+/**
+ * The search path after a statement: SET, RESET or `set_config('search_path', ...)` changes it,
+ * any other statement keeps `path`. A value the reader cannot take apart leaves no path.
+ */
+function nextPath(list: Token[], path: string[] | null): string[] | null {
+  const words = list.map((token) => (token.quoted || token.string ? '' : token.text));
+  if (words[0] === 'reset' && (words[1] === 'search_path' || words[1] === 'all')) return ['public'];
+  if (words[0] === 'set') {
+    const at = words.indexOf('search_path');
+    if (at === -1 || at > 2) return path;
+    return pathSchemas(list.slice(at + 1).filter((token) => token.text !== 'to' && token.text !== '='));
+  }
+  for (let at = 0; at < list.length; at += 1) {
+    if (words[at] !== 'set_config' || list[at + 2]?.text !== 'search_path') continue;
+    const value = list[at + 4];
+    return value?.string ? pathSchemas([value]) : null;
+  }
+  return path;
+}
+
+/** One target per schema of the search path for an unqualified name; null when the path is unknown. */
+function resolved(found: MigrationTarget[], path: string[] | null): Read {
+  const result: MigrationTarget[] = [];
+  for (const each of found) {
+    if (!each.schema.includes(UNQUALIFIED) && !each.name.includes(UNQUALIFIED)) result.push(each);
+    else if (path === null) return null;
+    else
+      for (const schema of path)
+        result.push({
+          ...each,
+          schema: each.schema.replaceAll(UNQUALIFIED, schema),
+          name: each.name.replaceAll(UNQUALIFIED, schema),
+        });
+  }
+  return result;
+}
+
+/**
+ * What one migration changes. An unqualified name stands for every schema on the search path,
+ * which starts at `public`; under a path the reader cannot read, it is opaque.
+ */
 export function migrationChanges(sql: string): MigrationChanges {
   const changes: MigrationChanges = { targets: [], opaque: [] };
-  let defaultSchema = 'public';
+  let path: string[] | null = ['public'];
   for (const statement of statements(sql)) {
     const list = tokens(statement);
-    const reader = new Reader(list, defaultSchema);
-    if (reader.peek() === 'set') {
-      reader.position = 1;
-      reader.skip(['local'], ['session']);
-      if (reader.accept('search_path')) {
-        reader.skip(['to'], ['=']);
-        defaultSchema = reader.identifier() ?? defaultSchema;
-      }
+    const next = nextPath(list, path);
+    if (list[0]?.text === 'set') {
+      path = next;
       continue;
     }
-    const found = statementTargets(reader);
+    const read = statementTargets(new Reader(list, UNQUALIFIED));
+    const found = read === null ? null : resolved(read, path);
+    path = next;
     if (found === null) changes.opaque.push(statement.replace(/\s+/g, ' ').slice(0, 60));
     else changes.targets.push(...found);
   }
