@@ -2,6 +2,7 @@
 // transport; the registered readers are replaced by explicit seams.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
+import { z } from '@/lib/zod';
 import {
   AuthApiError,
   AuthRetryableFetchError,
@@ -240,6 +241,16 @@ mock.module('@/lib/service-cases/list-page-server', () => ({
 mock.module('@/lib/installed-equipment/actions', () => ({
   getInstalledEquipmentDetailByNumber: seam('equipment-detail'),
 }));
+mock.module('@/lib/installed-equipment/field-history-reads', () => ({
+  fieldHistoryInputSchema: z.object({
+    jobId: z.string(),
+    equipmentId: z.string(),
+    before: z.string().nullable(),
+  }),
+  fieldDocumentsInputSchema: z.object({ jobId: z.string(), equipmentId: z.string() }),
+  getFieldEquipmentHistory: seam('equipment-field-history'),
+  getFieldEquipmentDocuments: seam('equipment-field-documents'),
+}));
 mock.module('@/lib/installed-equipment/source-options-server', () => ({
   getEquipmentSourceOptions: seam('equipment-sources'),
 }));
@@ -462,6 +473,8 @@ const inputs: Record<string, unknown> = {
   'absence-affected-visits': { employeeRecordId: jobId, startDate: '2026-10-30', endDate: null },
   'maintenance-coverage-documents': { maintenanceCoverageId: jobId },
   'maintenance-evidence-options': { jobId },
+  'equipment-field-history': { jobId, equipmentId: jobId, before: '2026-10-01|visit:1' },
+  'equipment-field-documents': { jobId, equipmentId: jobId },
   'next-job-number': { organizationId },
   'next-project-number': { organizationId },
   'next-request-number': { organizationId },

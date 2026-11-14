@@ -8,6 +8,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import type { ParsedDocumentUploadTarget } from './action-schemas';
+import { opensThroughAssignedEquipment } from './equipment-access';
 import { earlyDeletionRefusal } from './retention';
 import { toDocumentCategory, type DocumentFolderRow, type DocumentLinkRow, type DocumentRow } from './types';
 
@@ -504,7 +505,7 @@ export async function getAuthorizedDocument(
 
   const { data: links, error: linksError } = await context.admin
     .from('document_links')
-    .select('job_id, project_id')
+    .select('job_id, project_id, equipment_id, request_id, maintenance_coverage_id, employee_id')
     .eq('document_id', row.id)
     .eq('organization_id', context.orgId);
 
@@ -515,12 +516,13 @@ export async function getAuthorizedDocument(
     return { success: false, error: 'load_failed' };
   }
 
-  // Only job and project links are read here: a customer link alone grants nothing.
-  if (assigned.jobs.length === 0) {
-    return { success: false, error: 'not_authorized' };
-  }
-
-  return { success: true, document: row, protectedAccess: null };
+  // Only job, project and Anlage links are read here: a customer link alone grants nothing.
+  if (assigned.jobs.length > 0) return { success: true, document: row, protectedAccess: null };
+  const throughEquipment = await opensThroughAssignedEquipment(context, row, links ?? []);
+  if (throughEquipment === null) return { success: false, error: 'load_failed' };
+  return throughEquipment
+    ? { success: true, document: row, protectedAccess: null }
+    : { success: false, error: 'not_authorized' };
 }
 
 /**

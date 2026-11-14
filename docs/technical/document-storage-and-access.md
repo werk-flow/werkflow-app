@@ -49,7 +49,7 @@ A document exists once. A `document_links` row points to exactly one target. A l
 - Applying a work template creates no file, folder, link, approval or signature.
 - A document becomes evidence for an artifact revision only through an explicit relation to that revision. Removing a fulfilment needs a reason.
 - A handover release freezes each source's document id, version number and storage path.
-- A link to equipment, a service case or a coverage grants an employee nothing.
+- A link to a service case or a coverage grants an employee nothing.
 - While equipment history or a service-case event depends on a link, unlink and permanent deletion are rejected. Organization teardown is the guarded exception.
 - A protected personnel file is a `documents` row plus `personnel_documents` metadata keyed to the personnel record. No ordinary link, no folder; the library excludes it.
 - Creating a job, project, customer or employee creates no folder. Entity names change and automatic folders go stale. Before automatic folders or AI extraction arrive, update the feature spec with the decided UX.
@@ -63,13 +63,13 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 | `/dokumente` library, folders, trash | Yes | No; the route redirects |
 | Upload on a job page | Yes | Only on an assigned job |
 | Upload on a project, customer or employee page | Yes | No |
-| View or download the current version | Yes | Only when linked to an assigned job, or to a project with an assigned job |
+| View or download the current version | Yes | Only when linked to an assigned job, its project or, ordinary only, its Anlage |
 | Earlier versions and audit history | Yes | No |
 | Rename, move, copy, delete, link, unlink, reclassify, new version | Yes | No |
 | Document date, retention class, filing, and seeing them | Yes | No |
 | Origin (source system and old number) | See and change until filed | See, on a document they may read |
 
-- Field access follows assigned work: `lib/documents/access.ts` decides it, and `app_private.can_access_document` holds the same rule for Realtime. A customer or employee link alone grants nothing.
+- Field access follows assigned work: `lib/documents/access.ts` and `equipment-access.ts` decide it, and `app_private.can_access_document` holds the same rule for Realtime. A customer or employee link alone grants nothing.
 - A field worker's document carries only the links `readableDocumentLinks` keeps: an assigned job, that job's project or customer, and the worker. `hydrateDocuments` takes the caller's context, so no reader resolves another link's names for them.
 - The version and audit history of an ordinary document stays with managers: both history actions authorize through `getDocumentWithHistory`, and the `document_versions` and `document_audit_events` policies give an assignment no ordinary row. A protected personnel document keeps its own rule below.
 - Every project-level write needs a manager, the upload ticket and finalize included. Exporting a project-level `Arbeitsnachweis` is such a write.
