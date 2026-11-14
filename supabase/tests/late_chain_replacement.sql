@@ -91,6 +91,8 @@ declare
   v_request uuid;
   v_facts jsonb;
   v_counted interval;
+  v_recorded_end timestamptz;
+  v_read_before jsonb;
 begin
   select id into v_employee_record from public.employee_records
   where organization_id = c_org and user_id = c_employee;
@@ -126,6 +128,8 @@ begin
   then raise exception 'the ended session is not closed'; end if;
 
   -- 4. The replacement: the ended segment, edited to the captured pair (one day piece each side of midnight).
+  -- Its before snapshot holds the segment as recorded, up to the online end, as the correction form files it.
+  select ended_at into v_recorded_end from public.time_segments where id = v_segment;
   perform set_config('TimeZone', 'UTC', true);
   select updated_at::text into v_segment_version from public.time_segments where id = v_segment;
   perform set_config('TimeZone', 'Europe/Berlin', true);
@@ -154,7 +158,13 @@ begin
     p_kind => 'edit', p_reason => 'Ohne Netz erfasstes Ende',
     p_source_scope_key => repeat('d', 64),
     p_source_fingerprint => repeat('e', 64),
-    p_before_snapshot => '{"schemaVersion":1,"facts":[]}'::jsonb,
+    p_before_snapshot => jsonb_build_object('schemaVersion', 1, 'facts', jsonb_build_array(
+      jsonb_build_object('factId', 'b1', 'employeeRecordId', v_employee_record, 'userId', c_employee,
+        'entryType', 'clock_in', 'timestamp', v_started_at, 'jobId', null, 'activityKind', 'work',
+        'isManual', false),
+      jsonb_build_object('factId', 'b2', 'employeeRecordId', v_employee_record, 'userId', c_employee,
+        'entryType', 'clock_out', 'timestamp', v_recorded_end, 'jobId', null, 'activityKind', 'work',
+        'isManual', false))),
     p_proposed_snapshot => jsonb_build_object('schemaVersion', 1, 'facts', v_facts),
     p_sources => jsonb_build_array(jsonb_build_object(
       'kind', 'canonical_segment', 'id', v_segment, 'version', v_segment_version)),
@@ -191,6 +201,23 @@ begin
   then raise exception 'the approved replacement counts % instead of the captured 9 hours', v_counted; end if;
   if (select status from public.time_sessions where id = v_session) is distinct from 'closed'
   then raise exception 'the session reopened'; end if;
+
+  -- The reader the time views use returns the approved application also for a window after the
+  -- captured span, where only the recorded end lies: its before snapshot holds the ended segment, so
+  -- the views suppress the segment there instead of counting it beside the replacement.
+  select application.before_snapshot into v_read_before
+  from public.read_time_correction_applications(
+    c_org, array[c_employee], v_captured_end + interval '1 hour', now()
+  ) application
+  where application.request_id = v_request;
+  if v_read_before is null
+  then raise exception 'the reader misses the replacement after the captured span, so the ended segment counts twice'; end if;
+  if not exists (
+    select 1 from jsonb_array_elements(v_read_before->'facts') fact
+    where fact->>'entryType' = 'clock_out' and (fact->>'timestamp')::timestamptz = v_recorded_end
+  ) or (select count(*) from public.time_correction_request_sources
+        where request_id = v_request and time_segment_id = v_segment) <> 1
+  then raise exception 'the read replacement does not hold and suppress the ended segment: %', v_read_before; end if;
 
   -- The phone's late end, sent once more, still records nothing beside the replacement.
   begin

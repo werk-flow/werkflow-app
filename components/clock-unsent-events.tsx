@@ -259,7 +259,13 @@ function UnsentActions({
 }
 
 /** The sheet's section: every unsent event, what happens to it, and the person's choices. */
-function UnsentPanel({ view }: { view: ClockDeviceView }) {
+type UnsentPanelProps = {
+  view: ClockDeviceView;
+  /** The sheet's dismissal waits for a running request of the section (useReportPending). */
+  onPendingChange?: ((pending: boolean) => void) | undefined;
+};
+
+function UnsentPanel({ view, onPendingChange }: UnsentPanelProps) {
   const { confirmed } = useClockState();
   const { perform, running, isPending, error } = useOutboxAction();
   // What each question saw when it opened: a deletion or a correction acts on exactly that, never on
@@ -301,9 +307,8 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
           organizationId={holder.organizationId}
           userId={holder.userId}
           busy={isPending}
-          onFiled={async (events) => {
-            await deleteEvents(events);
-          }}
+          onFiled={(events) => deleteEvents(events).then(() => undefined)}
+          onPendingChange={onPendingChange}
         />
       )}
       <UnsentActions
@@ -350,8 +355,15 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
  * The clock's unsent events: a badge in the dock, the full section in the sheet. Renders nothing
  * while the phone holds none for the signed-in person.
  */
-export default function ClockUnsentEvents({ place }: { place: 'dock' | 'sheet' }) {
+export default function ClockUnsentEvents({
+  place,
+  onPendingChange,
+}: Pick<UnsentPanelProps, 'onPendingChange'> & { place: 'dock' | 'sheet' }) {
   const { unsent } = useClockState();
   if (!unsent) return null;
-  return place === 'dock' ? <UnsentStatusBadge view={unsent} /> : <UnsentPanel view={unsent} />;
+  return place === 'dock' ? (
+    <UnsentStatusBadge view={unsent} />
+  ) : (
+    <UnsentPanel view={unsent} onPendingChange={onPendingChange} />
+  );
 }

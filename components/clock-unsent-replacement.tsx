@@ -7,6 +7,7 @@ import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
+import { useReportPending } from '@/hooks/use-report-pending';
 import { usePendingTask } from '@/hooks/use-server-action';
 import {
   replacedSegmentEnd,
@@ -151,13 +152,7 @@ async function prepareReplacement(input: {
   }
 }
 
-export default function ClockUnsentReplacement({
-  replacement,
-  organizationId,
-  userId,
-  busy,
-  onFiled,
-}: {
+type ClockUnsentReplacementProps = {
   replacement: SessionReplacement;
   organizationId: string;
   userId: string;
@@ -165,9 +160,15 @@ export default function ClockUnsentReplacement({
   busy: boolean;
   /** The correction is filed: the events it covers leave the phone. */
   onFiled: (events: SessionReplacement['events']) => Promise<void>;
-}) {
+  /** Reports the end or the read running, so the sheet refuses its dismissal until it answers. */
+  onPendingChange: ((pending: boolean) => void) | undefined;
+};
+
+export default function ClockUnsentReplacement(props: ClockUnsentReplacementProps) {
+  const { replacement, organizationId, userId, busy, onFiled, onPendingChange } = props;
   const { confirmed, refresh } = useClockState();
   const { run, isPending } = usePendingTask();
+  useReportPending(isPending, onPendingChange);
   const [error, setError] = useState<string | null>(null);
   // What the form edits, with the events it covers as the flow saw them when it started.
   const [target, setTarget] = useState<{ entry: TimeEntry; covers: SessionReplacement } | null>(null);

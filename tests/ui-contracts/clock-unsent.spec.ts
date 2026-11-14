@@ -433,6 +433,40 @@ test('a late chain of a session the server still holds open is settled by one gu
   expect(server.sent.map((envelope) => envelope.payload.action)).not.toContain('end');
 });
 
+test('while the guided correction ends the session, the sheet stays open, so its answer and the next step are not lost', async ({
+  page,
+}) => {
+  const running = RUNNING_SINCE_SEVEN;
+  await mountClock(page, running, () => undefined, {
+    outcome: 'conflict',
+    code: 'correction_required',
+  });
+  await keepLateChain(page, running, [
+    ['switch', '2026-11-09T09:00:00.000Z'],
+    ['end', '2026-11-09T15:00:00.000Z'],
+  ]);
+  await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
+  const sheet = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Laufende Zeiterfassung' }) });
+  const section = unsentSection(page);
+  await page.evaluate(() => {
+    window.clockContract.refuse = true;
+  });
+
+  await section.getByRole('button', { name: 'Korrektur beantragen', exact: true }).click();
+  await page.waitForFunction(() => window.clockContract.resolveTransition !== null);
+  // The end waits for the server: dismissing the sheet is refused.
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeVisible();
+
+  await answerTransition(page);
+  await expect(section).toContainText('Die laufende Zeiterfassung konnte nicht beendet werden.');
+  // Once the end answered, the sheet closes as usual.
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+});
+
 test('a guided correction filed as another kind than an edit leaves the recorded end, so the events stay and the flow says so', async ({
   page,
 }) => {
