@@ -117,7 +117,12 @@ export const updateJobMaterialLineSchema = z.object({
   notes: nullableBoundedText(2000),
 });
 
+// One booking's operation id: the dialog creates it per position when it opens
+// and sends it with every press, so a retry books once.
+const operationId = uuidSchema;
+
 const takeMaterialFields = {
+  operationId,
   lineId: optionalId,
   itemId: optionalId,
   locationId: uuidSchema,
@@ -129,6 +134,7 @@ export const takeJobMaterialSchema = z.object({ ...takeMaterialFields, jobId: uu
 export const takeProjectMaterialSchema = z.object({ ...takeMaterialFields, projectId: uuidSchema });
 
 export const returnJobMaterialSchema = z.object({
+  operationId,
   lineId: uuidSchema,
   locationId: uuidSchema,
   quantity: amount,
@@ -136,6 +142,7 @@ export const returnJobMaterialSchema = z.object({
 });
 
 export const recordJobMaterialUseSchema = z.object({
+  operationId,
   lineId: uuidSchema,
   quantity: amount,
   note: nullableBoundedText(2000),
