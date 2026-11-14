@@ -12,7 +12,7 @@ import { createOfferSchema, type CreateOfferInput } from './action-schemas';
 // organization and manager role on the server and passes only those; the
 // database function checks the actor again, refuses every id outside the
 // organization and writes the history in the same call
-// (supabase/migrations/20261204100000_keep_offers_for_the_right_customer_and_recipient.sql).
+// (supabase/migrations/20261210100000_keep_offers_for_the_right_customer_and_recipient.sql).
 
 const createRefusal = writeRefusalFor(
   new Set(['not_authorized', 'client_not_found', 'client_archived', 'site_not_found', 'contact_not_found']),

@@ -2,7 +2,7 @@ import { z } from '@/lib/zod';
 
 // An Angebot without positions: number, title, customer, recipient, validity,
 // texts and the responsible member
-// (supabase/migrations/20261204100000_keep_offers_for_the_right_customer_and_recipient.sql).
+// (supabase/migrations/20261210100000_keep_offers_for_the_right_customer_and_recipient.sql).
 
 /** Every status the database check allows; this release writes only `entwurf`. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;

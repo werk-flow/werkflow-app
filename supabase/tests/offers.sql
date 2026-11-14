@@ -1,5 +1,5 @@
 -- The office creates an offer for the right customer and recipient, and finds
--- it again (migration 20261204100000_keep_offers_for_the_right_customer_and_recipient.sql).
+-- it again (migration 20261210100000_keep_offers_for_the_right_customer_and_recipient.sql).
 begin;
 
 insert into auth.users (
