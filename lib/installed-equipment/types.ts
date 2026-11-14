@@ -253,6 +253,11 @@ export type EquipmentArchiveInput = {
   idempotencyKey: string;
 };
 
+export type EquipmentCarryOverInput = {
+  plans: { planId: string; expectedVersion: number; carry: boolean; reason?: string | null }[];
+  components: { equipmentId: string; carry: boolean }[];
+};
+
 export type EquipmentReplacementInput = EquipmentFormInput & {
   predecessorId: string;
   successorId: string;
@@ -260,6 +265,17 @@ export type EquipmentReplacementInput = EquipmentFormInput & {
   effectiveAt: string;
   reason: string;
   idempotencyKey: string;
+  carryOver: EquipmentCarryOverInput;
+};
+
+/** A running maintenance plan of the equipment, as the replace dialog lists it. */
+export type EquipmentReplacementPlan = {
+  id: string;
+  planNumber: string;
+  version: number;
+  status: 'draft' | 'active' | 'suspended';
+  templateName: string;
+  nextDueDate: string | null;
 };
 
 export type EquipmentCorrectionInput = {
@@ -356,7 +372,21 @@ export type EquipmentEvent = {
   siteSnapshot: Json;
   beforeSnapshot: Json | null;
   afterSnapshot: Json;
+  /** The plan or component the event concerns, such as „Wartungsplan WPL-2026-001“. */
+  subjectLabel: string | null;
   links: EquipmentEventLink[];
+};
+
+/** An event of an earlier record in the replacement chain, shown „beim Vorgänger“. */
+export type EquipmentPredecessorEvent = EquipmentEvent & {
+  equipmentNumber: string;
+  equipmentName: string;
+};
+
+/** One page of the predecessors' history, newest first; `nextOffset` is null on the last page. */
+export type EquipmentPredecessorHistory = {
+  events: EquipmentPredecessorEvent[];
+  nextOffset: number | null;
 };
 
 export type EquipmentWorkLink = {
@@ -380,6 +410,11 @@ export type EquipmentDetail = EquipmentListItem & {
   parent: EquipmentListItem | null;
   components: EquipmentListItem[];
   events: EquipmentEvent[];
+  predecessorHistory: EquipmentPredecessorHistory;
+  /** The running plans a replacement asks about; empty unless the equipment can be replaced. */
+  replacementPlans: EquipmentReplacementPlan[];
+  /** More running plans than one replacement carries; the replacement is refused. */
+  replacementPlansOverflow: boolean;
   workLinks: EquipmentWorkLink[];
 };
 

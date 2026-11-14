@@ -30,11 +30,14 @@ export type DocumentPosition = {
   quantity: string;
   unitLabel: string;
   unitPriceCents: number;
+  /** The units `unitPriceCents` is for when not one, for example `100`; printed after the price. */
+  priceQuantity?: number;
   amountCents: number;
   kind: 'standard' | 'bedarf' | 'alternative';
 };
 
 export type DocumentSection = {
+  /** Empty for a document whose lines are not numbered by section, such as an invoice. */
   number: string;
   title: string;
   positions: DocumentPosition[];
@@ -43,6 +46,8 @@ export type DocumentSection = {
 
 type TaxRateTotal = {
   rateBasisPoints: number;
+  /** Printed instead of the rate, for example for a tax exemption; without it the rate prints. */
+  label?: string;
   netCents: number;
   vatCents: number;
   grossCents: number;
