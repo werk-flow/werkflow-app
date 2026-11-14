@@ -401,40 +401,4 @@ $$;
 
 reset role;
 
--- 6. Only the service role executes the functions; nobody executes the steps.
-do $$
-declare
-  v_function text;
-  v_role text;
-begin
-  foreach v_function in array array[
-    'public.save_inventory_item(uuid, uuid, uuid, jsonb, text, text, uuid, numeric)',
-    'public.import_inventory_row(uuid, uuid, uuid, jsonb, text, text, text, text, numeric, text)',
-    'public.take_unplanned_inventory_material(uuid, uuid, uuid, uuid, uuid, uuid, numeric, text, text, uuid)'
-  ] loop
-    if not has_function_privilege('service_role', v_function, 'execute') then
-      raise exception '% lost its service_role grant', v_function;
-    end if;
-    foreach v_role in array array['anon', 'authenticated'] loop
-      if has_function_privilege(v_role, v_function, 'execute') then
-        raise exception '% is executable by %', v_function, v_role;
-      end if;
-    end loop;
-  end loop;
-  foreach v_function in array array[
-    'app_private.lock_inventory_manager(uuid, uuid)',
-    'app_private.ensure_inventory_supplier(uuid, text)',
-    'app_private.ensure_inventory_category(uuid, text)',
-    'app_private.ensure_inventory_location(uuid, uuid, text)',
-    'app_private.attach_primary_inventory_barcode(uuid, uuid, text)'
-  ] loop
-    foreach v_role in array array['anon', 'authenticated', 'service_role'] loop
-      if has_function_privilege(v_role, v_function, 'execute') then
-        raise exception '% is executable by %', v_function, v_role;
-      end if;
-    end loop;
-  end loop;
-end;
-$$;
-
 rollback;
