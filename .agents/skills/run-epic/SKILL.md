@@ -65,7 +65,7 @@ For each hand-back:
 1. Call `link_pull_request` and `watch_pull_request` for the PR.
 2. Read the diff against its issue. Then babysit the PR by [Babysit a pull request](../../../docs/technical/coderabbit.md#babysit-a-pull-request): every CI and review wake is yours. Fix small gaps and small findings yourself.
    For a larger fix round, start a fresh `delegate_task` whose prompt names the PR, its head SHA, the branch and each finding to fix, and ends with the same hand-back line. Each review or re-check round is a new `delegate_task`.
-3. Merge a child with `gh pr merge <n> --squash --auto` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", and go on with the children that do not depend on it. When nothing else can move, ask through the question tool and end your turn. T3 ends the watch on the merge without a wake; the notifier then sends you one message per merged PR your thread links ([the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate)), and you start the next stage. Keep no repeating `schedule_task` to babysit: the notifier wakes you when a PR or your epic stops moving.
+3. Merge a child with `gh pr merge <n> --squash --auto` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", ask it through the question tool in the same turn, and go on with the children that do not depend on it. When nothing else can move, end your turn. T3 ends the watch on the merge without a wake; the notifier then sends you one message per merged PR your thread links ([the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate)), and you start the next stage. Keep no repeating `schedule_task` to babysit: the notifier wakes you when a PR or your epic stops moving.
 4. Bring the new `main` into an open sibling only when GitHub reports it conflicting (`DIRTY`), and keep both sides. The merge queue tests the others on the newest `main`.
 5. Classify every failed job by [Failures](../../../docs/technical/testing.md#failures) before any rerun. Only an `environment` failure gets its one retry; cite its issue.
 6. Once `gh pr view <n> --json state` reports `MERGED`, close the child issue with "Merged in <PR>."
@@ -82,7 +82,7 @@ The notifier checks every 10 minutes that your PRs and your epic move: a thread 
 - a time: snooze your thread until then with `t3_thread_update` (`snoozedUntil`), and say why in the State;
 - another epic's issue or PR: a `Waiting: <your threadId>` comment on it.
 
-A reason whose item shows no movement for 4 hours stops counting. A message that starts with `[notifier]` lists the facts: act on them, or record a real reason. At the third such message for the same item, ask the owner through the question tool.
+A reason whose item shows no movement for 4 hours stops counting. A message that starts with `[notifier]` lists the facts: act on them, or record a real reason. At the third stall message in a row for the same item, ask the owner through the question tool.
 
 ## Hand over at about 400k
 
