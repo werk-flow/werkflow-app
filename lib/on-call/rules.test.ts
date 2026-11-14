@@ -125,6 +125,14 @@ describe('the Berlin week a list shows', () => {
   });
 });
 
+test('a running shift across the spring change next changes the card at its end', () => {
+  // 02:00 to 03:00 does not exist on 2027-03-28; 04:00 is still the shift's end instant.
+  const end = berlin('2027-03-28T04:00');
+  expect(nextShiftChange([shift('2027-03-27T18:00', '2027-03-28T04:00')], berlin('2027-03-28T01:30'))).toBe(
+    end.getTime(),
+  );
+});
+
 describe('the start a change saves', () => {
   test('a running shift that a handover started at an exact second keeps that instant', () => {
     const stored = '2026-11-14T08:12:34.567891+00:00';
