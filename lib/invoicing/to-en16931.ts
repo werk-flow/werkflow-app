@@ -17,8 +17,13 @@ const SEPA_CREDIT_TRANSFER = '58';
 /** An element's content: `@name` keys are attributes, `#` its text, other keys child elements in order. */
 type XmlNode = { [element: string]: string | XmlNode | XmlNode[] };
 
-const escapeText = (text: string) =>
-  text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+/** Characters XML 1.0 cannot carry, not even as a character reference. */
+const NOT_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/;
+
+function escapeText(text: string): string {
+  if (NOT_XML.test(text)) throw new RangeError('Invoice text holds a control character XML cannot carry.');
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
 
 /** One element and its children, two spaces per level; an element with only text stays on one line. */
 function element(name: string, content: string | XmlNode, depth: number): string {

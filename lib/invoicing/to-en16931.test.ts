@@ -48,6 +48,14 @@ describe('toEn16931', () => {
     expect(xml).toContain('<ram:Name>Ersatzteil &amp;lt;A&amp;gt; "B"</ram:Name>');
   });
 
+  test('text with a control character XML 1.0 cannot carry is refused, never written', () => {
+    const draft = {
+      ...STANDARD_RATE_INVOICE,
+      seller: { ...STANDARD_RATE_INVOICE.seller, name: 'Sonnenberg\u000BGmbH' },
+    };
+    expect(() => toEn16931(calculateInvoice(draft))).toThrow(RangeError);
+  });
+
   test('the § 19 exemption carries its reason and a zero rate', () => {
     const xml = toEn16931(calculateInvoice(EXEMPT_INVOICE));
     expect(xml).toContain(
