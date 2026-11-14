@@ -18,11 +18,18 @@ import {
   expectOnlyShellFilesCached,
   expectOwnedCacheDeleted,
   plantOwnedCache,
+  retryWithoutSignal,
   setNetwork,
   waitForOfflineShell,
   withDeployableOrigin,
   withProtectedOrigin,
 } from '../support/offline-shell';
+import {
+  offlinePackText,
+  offlineStand,
+  seedTodayAssignment,
+  waitForTodayOnDevice,
+} from '../support/offline-today';
 
 // The installable app shell (werk-flow/werkflow-planning#316): the service
 // worker answers a navigation without network with the offline fallback, and
@@ -74,7 +81,11 @@ test('the app shell opens without signal and keeps nothing of the person @AUDIT-
 // The installed app on a phone without signal starts cold: no page of it is
 // open, the browser starts the worker for the start URL. Staging sits behind
 // Vercel Authentication, which redirects every request without its cookie, the
-// worker's own shell requests included (werk-flow/werkflow-planning#22, OQ-5).
+// worker's own shell requests included (werk-flow/werkflow-planning#22, OQ-5),
+// and names each image of public/ with the deployment's query. The iPhone
+// re-test of 2026-11-14 showed the plain fallback instead of the stored day, a
+// broken logo and a retry that did nothing: every file the page loads must
+// come from the shell, and the page's script must run.
 test('the installed app opens its shell on a cold start without signal, also behind deployment protection @AUDIT-SECURITY-OFFLINE-SHELL', async ({
   employeePage,
   world,
@@ -83,19 +94,23 @@ test('the installed app opens its shell on a cold start without signal, also beh
   // A cold start closes every page; the test goes on in the page it opens.
   let page = employeePage;
   await page.setViewportSize({ width: 375, height: 812 });
+  const title = `Wartung Kaltstart ${world.runId}`;
+  const instruction = `Abgasmessung ${world.runId}`;
+  await seedTodayAssignment(world, { title, instruction });
 
-  await test.step('a cold start without signal opens the shell', async () => {
-    await page.goto('/auftraege');
-    await expect(jobListReady(page)).toBeVisible();
+  await test.step('a cold start without signal shows the day the start page stored', async () => {
+    await page.goto('/dashboard');
+    await waitForTodayOnDevice(page, [title, instruction]);
     await waitForOfflineShell(page);
     await coldStartWithoutSignal(page, baseURL ?? '', async (started) => {
       page = started;
-      await expect(offlineFallback(page)).toBeVisible();
+      await expect(offlineStand(page)).toBeVisible();
+      await expect(offlinePackText(page, title)).toBeVisible();
       await setNetwork(page, 'online');
     });
   });
 
-  await test.step('behind deployment protection the shell fills, keeps nothing of the person and opens cold', async () => {
+  await test.step('behind deployment protection the shell fills, keeps nothing of the person and opens cold with its script and logo', async () => {
     await withProtectedOrigin(page, baseURL ?? '', async (origin) => {
       await page.goto(`${origin}/auftraege`);
       await expect(jobListReady(page)).toBeVisible();
@@ -103,6 +118,7 @@ test('the installed app opens its shell on a cold start without signal, also beh
       await expectOnlyShellFilesCached(page, [world.users.employee.email]);
       await coldStartWithoutSignal(page, origin, async (started) => {
         await expect(offlineFallback(started)).toBeVisible();
+        await retryWithoutSignal(started);
       });
     });
   });
