@@ -51,9 +51,6 @@ for (const [name, draft] of Object.entries(REFERENCE_INVOICES)) {
   await writeFile(join(out, 'valid', `${name}.pdf`), pdf);
 }
 if (!first) throw new Error('No reference invoice.');
-// TEMPORARY proof for the PR: a broken copy among the reference invoices must fail the job.
-await writeFile(join(out, 'valid', 'BROKEN_COPY.pdf'), await withChangedEmbeddedXml(first));
-await writeFile(join(out, 'valid', 'BROKEN_NO_OUTPUT_INTENT.pdf'), await withoutOutputIntent(first));
 await writeFile(join(out, 'broken', 'xml-changed-after-embedding.pdf'), await withChangedEmbeddedXml(first));
 await writeFile(join(out, 'broken', 'without-output-intent.pdf'), await withoutOutputIntent(first));
 process.stdout.write(
