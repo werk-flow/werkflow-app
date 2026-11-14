@@ -16,7 +16,7 @@ import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
  */
 const scopeSchema = z.object({ projectIds: z.array(uuidSchema), jobIds: z.array(uuidSchema) });
 
-type WorkLeadScope = {
+export type WorkLeadScope = {
   projectIds: ReadonlySet<string>;
   jobIds: ReadonlySet<string>;
 };
@@ -26,7 +26,7 @@ type WorkLeadScope = {
  * never kept beyond its check. Null when it could not be read, which never
  * counts as access.
  */
-async function getWorkLeadScope(
+export async function getWorkLeadScope(
   context: Pick<ActionContext, 'orgId' | 'userId'>,
 ): Promise<WorkLeadScope | null> {
   const { data, error } = await createSupabaseAdminClient().rpc('read_work_lead_scope', {

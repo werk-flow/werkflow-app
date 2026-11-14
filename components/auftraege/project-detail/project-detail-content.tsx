@@ -29,6 +29,7 @@ import type { OrgMemberOption } from '../shared/employee-multi-select';
 import type { OrganizationDocument, ProjectJobDocumentGroup } from '@/lib/documents/types';
 import type { InventoryLocation, InventoryPickerOption, ProjectMaterialSummary } from '@/lib/inventory/types';
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
+import type { LedProjectOverview, WorkLeadPanel } from '@/lib/projects/work-lead-types';
 import { ProjectDetailChildJobsCard } from './project-detail-child-jobs-card';
 import { ProjectDetailClientCard } from './project-detail-client-card';
 import { WorkBillingPartiesSection } from '../shared/work-billing-parties-loaders';
@@ -39,6 +40,8 @@ import { buildProjectDetailMetadataFields } from './project-detail-metadata-fiel
 import { ProjectDetailOverview } from './project-detail-overview';
 import { ProjectDetailProgressCard } from './project-detail-progress-card';
 import { ProjectDetailTimeSummaryCard } from './project-detail-time-summary-card';
+import { LedJobsSection } from './led-project-overview';
+import { WorkLeadSection } from './work-lead-section';
 import { useProjectDetailDialogState } from './use-project-detail-dialog-state';
 import { useProjectDetailTime } from './use-project-detail-time';
 import { formatBerlinDateTime } from '@/lib/utils';
@@ -65,6 +68,10 @@ interface ProjectDetailContentProps {
   handoverWorkspace: WorkHandoverWorkspace | 'not_reviewer' | null;
   // Set when this project was created by converting an Anfrage (P1-02).
   originRequest?: OriginRequestLink;
+  /** Admin and Büro: the project's „Projektleitung“; null for everyone else. */
+  workLeadPanel: WorkLeadPanel | 'failed' | null;
+  /** The jobs the viewer leads as the project's „Projektleitung“; null when they lead none. */
+  ledOverview: LedProjectOverview | 'failed' | null;
 }
 
 type ProjectDetailStateOptions = Pick<
@@ -90,6 +97,8 @@ function useProjectDetailRealtime({ router, liveProjectId, isAdminOrManager }: P
       'job_instruction_items',
       'job_instruction_item_evidence_fulfillments',
       'work_handover_packages',
+      // A holding named or ended on this project shows or hides „Deine Projektleitung“.
+      'work_leads',
     ],
   });
 
@@ -240,6 +249,19 @@ function projectBillingSection(projectId: string, clientId: string | null) {
   return <WorkBillingPartiesSection kind="project" id={projectId} workClientId={clientId} />;
 }
 
+/** The project's „Projektleitung“ for Admin and Büro; nothing for everyone else. */
+function projectWorkLeadSection({ workLeadPanel, members }: ProjectDetailContentProps, projectId: string) {
+  if (!workLeadPanel) return null;
+  return (
+    <WorkLeadSection
+      targetType="project"
+      targetId={projectId}
+      panel={workLeadPanel === 'failed' ? null : workLeadPanel}
+      members={members}
+    />
+  );
+}
+
 export function ProjectDetailContent(content: ProjectDetailContentProps) {
   const {
     project,
@@ -301,6 +323,8 @@ export function ProjectDetailContent(content: ProjectDetailContentProps) {
               onAssignClient={isAdminOrManager ? () => dialogState.setShowClientDialog(true) : undefined}
             />
 
+            {projectWorkLeadSection(content, liveProject.id)}
+
             {isAdminOrManager && projectBillingSection(liveProject.id, liveClient?.id ?? null)}
           </div>
 
@@ -342,6 +366,14 @@ function ProjectDetailWorkColumn({ content, state }: ProjectDetailSectionProps) 
         onAssignJobs={() => dialogState.setShowAssignJobsDialog(true)}
         membersFailed={members === null}
       />
+
+      {content.ledOverview && (
+        <LedJobsSection
+          overview={content.ledOverview}
+          currentUserId={content.currentUserId}
+          canApprove={content.canApproveWorkArtifacts}
+        />
+      )}
 
       {isAdminOrManager ? (
         <ProjectDetailManagerSections
