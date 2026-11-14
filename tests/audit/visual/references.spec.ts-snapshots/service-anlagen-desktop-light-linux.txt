@@ -25,6 +25,7 @@ Service
 Servicefälle
 Anlagen & Geräte
 Wartung
+Bereitschaft
 Anlagen & Geräte
 Installierte Anlagen an Kundeneinsatzorten mit Kennungen, Dokumenten und Servicehistorie.
 Anlage erfassen

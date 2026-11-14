@@ -3,6 +3,7 @@ Service
 Servicefälle
 Anlagen & Geräte
 Wartung
+Bereitschaft
 Wartung
 Wiederkehrende Wartung pro Einsatzort planen, fällige Arbeit in Aufträge überführen und mit versionierten Nachweisen abschließen.
 Abdeckung erfassen

@@ -3,6 +3,7 @@ Service
 Servicefälle
 Anlagen & Geräte
 Wartung
+Bereitschaft
 Servicefälle
 Störungen, Reparaturen und vermutete Gewährleistungsfälle vom Eingang bis zur Nacharbeit.
 Servicefall erfassen
