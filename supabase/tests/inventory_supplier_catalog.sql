@@ -102,7 +102,8 @@ begin
       'public.preview_supplier_catalog_import(uuid,uuid,uuid)',
       'public.confirm_supplier_catalog_import(uuid,uuid,uuid,jsonb)',
       'public.abandon_supplier_catalog_import(uuid,uuid,uuid)',
-      'public.adopt_supplier_catalog_article(uuid,uuid,uuid)'
+      'public.adopt_supplier_catalog_article(uuid,uuid,uuid)',
+      'public.search_supplier_catalog_articles(uuid,text,integer)'
     ] loop
       if has_function_privilege(v_role, v_function, 'EXECUTE') then
         raise exception '% can execute %', v_role, v_function;

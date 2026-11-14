@@ -180,12 +180,12 @@ export const catalogRowSchema = z
     price_kind: z.enum(['list', 'net']).nullable(),
     price_cents: z.number().int().nullable(),
     price_quantity: z.literal(PRICE_QUANTITIES),
-    inventory_suppliers: z.object({ name: z.string() }),
+    supplier_name: z.string(),
   })
   .transform(
     (row): SupplierCatalogOption => ({
       id: row.id,
-      supplierName: row.inventory_suppliers.name,
+      supplierName: row.supplier_name,
       articleNumber: row.article_number,
       name: row.name,
       nameAddition: row.name_addition,

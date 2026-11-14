@@ -242,6 +242,44 @@ grant select on table public.inventory_supplier_catalog_import_lines to service_
 grant select on table public.inventory_supplier_catalog_articles to service_role;
 grant select on table public.inventory_supplier_rebate_groups to service_role;
 
+-- The picker's search: the catalog rows of the organization whose search text
+-- holds p_search literally (%, _ and \ match only themselves), in name order,
+-- at most p_limit (up to 101). The pattern is escaped here, because the Data
+-- API reads * in a LIKE filter as a wildcard. The statement reads the trigram
+-- index; supabase/tests/inventory_supplier_catalog_search.sql explains it.
+create function public.search_supplier_catalog_articles(
+  p_organization_id uuid,
+  p_search text,
+  p_limit integer
+)
+returns table (
+  id uuid,
+  supplier_name text,
+  article_number text,
+  name text,
+  name_addition text,
+  unit text,
+  price_kind text,
+  price_cents integer,
+  price_quantity integer
+)
+language sql
+stable
+security invoker
+set search_path to ''
+as $$
+  select catalog.id, supplier.name, catalog.article_number, catalog.name, catalog.name_addition, catalog.unit,
+    catalog.price_kind, catalog.price_cents, catalog.price_quantity
+  from public.inventory_supplier_catalog_articles catalog
+  join public.inventory_suppliers supplier
+    on supplier.id = catalog.supplier_id and supplier.organization_id = catalog.organization_id
+  where catalog.organization_id = p_organization_id
+    and catalog.search_text like
+      '%' || replace(replace(replace(lower(p_search), '\', '\\'), '%', '\%'), '_', '\_') || '%'
+  order by catalog.name, catalog.id
+  limit least(greatest(p_limit, 1), 101);
+$$;
+
 -- An open batch of the actor in the organization, locked; import_not_found otherwise.
 create function app_private.lock_open_supplier_catalog_import(
   p_organization_id uuid,
@@ -860,6 +898,8 @@ revoke all on function public.abandon_supplier_catalog_import(uuid, uuid, uuid)
   from public, anon, authenticated;
 revoke all on function public.adopt_supplier_catalog_article(uuid, uuid, uuid)
   from public, anon, authenticated;
+revoke all on function public.search_supplier_catalog_articles(uuid, text, integer)
+  from public, anon, authenticated;
 grant execute on function public.open_supplier_catalog_import(uuid, uuid, uuid, text[], text, jsonb, jsonb, jsonb)
   to service_role;
 grant execute on function public.stage_supplier_catalog_import_lines(uuid, uuid, uuid, jsonb) to service_role;
@@ -867,3 +907,4 @@ grant execute on function public.preview_supplier_catalog_import(uuid, uuid, uui
 grant execute on function public.confirm_supplier_catalog_import(uuid, uuid, uuid, jsonb) to service_role;
 grant execute on function public.abandon_supplier_catalog_import(uuid, uuid, uuid) to service_role;
 grant execute on function public.adopt_supplier_catalog_article(uuid, uuid, uuid) to service_role;
+grant execute on function public.search_supplier_catalog_articles(uuid, text, integer) to service_role;

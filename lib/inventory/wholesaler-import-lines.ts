@@ -239,8 +239,3 @@ export function wholesalerPreviewTotals(
     rejected: preview.rejected,
   };
 }
-
-/** A LIKE pattern that finds `search` as a literal substring: `%`, `_` and `\` match only themselves. */
-export function literalSubstringPattern(search: string): string {
-  return `%${search.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
-}

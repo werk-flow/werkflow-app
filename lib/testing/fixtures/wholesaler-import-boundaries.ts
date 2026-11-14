@@ -106,9 +106,7 @@ const world = installActionWorld({
     unit_text: 'XYZ',
     reason: null,
   })),
-  inventory_supplier_catalog_articles: [
-    { id: foreignCatalogId, organization_id: ORGANIZATION_B, search_text: 'nr-1501 kupferrohr 15 mm' },
-  ],
+  inventory_supplier_catalog_articles: [{ id: foreignCatalogId, organization_id: ORGANIZATION_B }],
 });
 const imports = await import('@/lib/inventory/wholesaler-import-actions');
 const { adoptSupplierCatalogArticle } = await import('@/lib/inventory/supplier-catalog-actions');
@@ -199,8 +197,12 @@ await assertRefused(world, [confirm, abandon], { success: false, error: 'import_
 await assertRefused(world, [adopt], { success: false, error: 'catalog_article_not_found' }, 'one-call');
 await assertRefused(world, [report], { success: false, error: 'import_not_found' }, 'reads');
 
-// The search reads only the caller's organization.
+// The search reads only the caller's organization: its one call carries it.
+refuseForeignIds(world, new Map(), []);
+world.rpcCalls.length = 0;
 assert.deepEqual(await search[1](), { success: true, options: [], hasMore: false });
+assert.equal(world.rpcCalls.length, 1);
+assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);
 
 // The report reaches every line in parts: 20 000, then the remaining 500.
 const firstPart = await imports.readWholesalerImportReport({ importId: ownImportId, from: 0 });

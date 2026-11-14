@@ -1,9 +1,8 @@
--- The supplier catalog search reads its trigram index at 200 000 rows
--- (werk-flow/werkflow-planning#375, migration
+-- The supplier catalog search reads its trigram index at 200 000 rows, and
+-- finds its text literally (werk-flow/werkflow-planning#375, migration
 -- 20261205090000_keep_a_supplier_catalog_beside_the_own_articles.sql). The
--- statement below is the one lib/inventory/supplier-catalog-actions.ts sends
--- through the Data API: the organization, the lower-cased search as a
--- substring of search_text, name order, 20 rows. Synthetic rows only.
+-- plan is of public.search_supplier_catalog_articles' own statement, with its
+-- parameters filled in. Synthetic rows only.
 begin;
 
 insert into auth.users (
@@ -39,26 +38,51 @@ select '37510000-0000-4000-8000-000000000010', '37510000-0000-4000-8000-00000000
 from generate_series(1, 200000) n;
 analyze public.inventory_supplier_catalog_articles;
 
+-- One article whose number holds * and _, which must match only themselves.
+insert into public.inventory_supplier_catalog_articles (
+  organization_id, supplier_id, article_number, name, unit, unit_text, price_quantity, import_id
+) values (
+  '37510000-0000-4000-8000-000000000010', '37510000-0000-4000-8000-000000000030', 'XY-15*1_A',
+  'Sonderteil', 'piece', 'Stück', 1, '37510000-0000-4000-8000-000000000040'
+);
+analyze public.inventory_supplier_catalog_articles;
+
 do $$
 declare
+  v_statement text;
   v_plan jsonb;
-  v_rows integer;
 begin
-  execute $q$
-    explain (format json)
-    select id, article_number, name, name_addition, unit, price_kind, price_cents, price_quantity
-    from public.inventory_supplier_catalog_articles
-    where organization_id = '37510000-0000-4000-8000-000000000010' and search_text like '%typ 123456%'
-    order by name, id
-    limit 20
-  $q$ into v_plan;
+  select replace(replace(replace(proc.prosrc,
+      'p_organization_id', quote_literal('37510000-0000-4000-8000-000000000010') || '::uuid'),
+      'p_search', quote_literal('Typ 123456')),
+      'p_limit', '21')
+  into v_statement
+  from pg_proc proc
+  where proc.oid = 'public.search_supplier_catalog_articles(uuid,text,integer)'::regprocedure;
+  execute 'explain (format json) ' || v_statement into v_plan;
   if v_plan::text not like '%inventory_supplier_catalog_articles_search_idx%' then
     raise exception 'the catalog search does not read its index: %', v_plan;
   end if;
-  select count(*) into v_rows from public.inventory_supplier_catalog_articles
-  where organization_id = '37510000-0000-4000-8000-000000000010' and search_text like '%typ 123456%';
-  if v_rows is distinct from 1 then
-    raise exception 'the catalog search found % rows, not 1', v_rows;
+
+  if (select array_agg(found.article_number) from public.search_supplier_catalog_articles(
+      '37510000-0000-4000-8000-000000000010', 'Typ 123456', 21) found)
+    is distinct from array['NR-123456'] then
+    raise exception 'the catalog search did not find the one match';
+  end if;
+  -- * and _ are text, never wildcards: each search finds the one article that holds it.
+  if (select array_agg(found.article_number) from public.search_supplier_catalog_articles(
+      '37510000-0000-4000-8000-000000000010', '15*1_a', 21) found)
+    is distinct from array['XY-15*1_A'] then
+    raise exception 'a search with * and _ matched other articles';
+  end if;
+  if exists (select 1 from public.search_supplier_catalog_articles(
+      '37510000-0000-4000-8000-000000000010', '___', 21)) then
+    raise exception 'a search of three _ matched articles without one';
+  end if;
+  -- Another organization's catalog stays out.
+  if exists (select 1 from public.search_supplier_catalog_articles(
+      '37510000-0000-4000-8000-000000000011', 'Typ 123456', 21)) then
+    raise exception 'the search read another organization';
   end if;
 end;
 $$;

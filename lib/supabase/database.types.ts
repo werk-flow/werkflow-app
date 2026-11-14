@@ -19437,6 +19437,20 @@ export type Database = {
         };
         Returns: Json;
       };
+      search_supplier_catalog_articles: {
+        Args: { p_limit: number; p_organization_id: string; p_search: string };
+        Returns: {
+          article_number: string;
+          id: string;
+          name: string;
+          name_addition: string;
+          price_cents: number;
+          price_kind: string;
+          price_quantity: number;
+          supplier_name: string;
+          unit: string;
+        }[];
+      };
       search_work_predecessor_options: {
         Args: {
           p_kind: string;

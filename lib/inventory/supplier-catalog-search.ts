@@ -11,14 +11,13 @@ import {
   supplierCatalogSearchInputSchema,
   type SupplierCatalogOption,
 } from './wholesaler-import-schemas';
-import { literalSubstringPattern } from './wholesaler-import-lines';
 
 // The search of the imported wholesaler catalogs for the job-material picker
 // (werk-flow/werkflow-planning#375), read in the background
 // (lib/data/background-reads.ts). Admin and Büro only: a field worker is
-// refused, and the table holds no client grant either. The statement reads
-// the trigram index; supabase/tests/inventory_supplier_catalog_search.sql
-// proves it at 200 000 rows.
+// refused, and the table holds no client grant either. One database function
+// searches the text literally and reads the trigram index;
+// supabase/tests/inventory_supplier_catalog_search.sql proves both at 200 000 rows.
 
 /** The catalog rows whose number, texts, EAN or matchcode contain the search, in name order. */
 export async function searchSupplierCatalog(
@@ -32,17 +31,12 @@ export async function searchSupplierCatalog(
   const term = parsed.data.search.trim().toLowerCase();
   if (term.length < SUPPLIER_CATALOG_SEARCH_MIN_LENGTH) return { success: true, options: [], hasMore: false };
 
-  const { data, error } = await createSupabaseAdminClient()
-    .from('inventory_supplier_catalog_articles')
-    .select(
-      'id, article_number, name, name_addition, unit, price_kind, price_cents, price_quantity, inventory_suppliers!inventory_supplier_catalog_articles_supplier_fk(name)',
-    )
-    .eq('organization_id', auth.context.orgId)
-    .like('search_text', literalSubstringPattern(term))
-    .order('name')
-    .order('id')
+  const { data, error } = await createSupabaseAdminClient().rpc('search_supplier_catalog_articles', {
+    p_organization_id: auth.context.orgId,
+    p_search: term,
     // One row more than shown tells the picker that more rows match.
-    .limit(SUPPLIER_CATALOG_SEARCH_LIMIT + 1);
+    p_limit: SUPPLIER_CATALOG_SEARCH_LIMIT + 1,
+  });
   if (error) {
     logError('searchSupplierCatalog: read failed', error);
     return { success: false, error: 'load_failed' };
