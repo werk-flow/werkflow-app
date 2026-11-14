@@ -73,50 +73,96 @@ async function closeDialog(dialog: Locator): Promise<void> {
     .click();
 }
 
-/** From now on every connection to the draft store opens only when the spec releases it. */
+/** The spec's hold on the draft store (`holdDraftStoreOpens`). */
+type DraftStoreHold = {
+  /** Opens each held connection, the oldest first. */
+  held: Array<() => void>;
+  holding: boolean;
+  /** How many send turns run now: the connections asked for meanwhile are never held. */
+  sending: number;
+  /** How many send turns ended since the hold began. */
+  sendsEnded: number;
+};
+
+declare global {
+  interface Window {
+    draftStoreHold?: DraftStoreHold;
+  }
+}
+
+/**
+ * From now on every connection to the draft store opens only when the spec ends the hold, except
+ * one asked for while the drafts' send turn runs (the cross-tab lock of draft-sync.ts): a send that
+ * starts now runs to its end while every change before it waits for the device. The page counts
+ * the turns that ended. A connection is held from the moment it is asked for.
+ */
 async function holdDraftStoreOpens(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const held: Array<() => void> = [];
-    Object.assign(window, { heldDraftOpens: held });
+    const hold: DraftStoreHold = { held: [], holding: true, sending: 0, sendsEnded: 0 };
+    window.draftStoreHold = hold;
     const open = IDBFactory.prototype.open;
     IDBFactory.prototype.open = function (this: IDBFactory, name: string, version?: number) {
       const request = open.call(this, name, version);
-      if (name === 'werkflow-drafts')
-        request.addEventListener(
-          'success',
-          (event) => {
-            event.stopImmediatePropagation();
-            held.push(() => request.dispatchEvent(new Event('success')));
-          },
-          { once: true },
-        );
+      if (name !== 'werkflow-drafts' || !hold.holding || hold.sending > 0) return request;
+      let released = false;
+      let stopped = false;
+      request.addEventListener(
+        'success',
+        (event) => {
+          if (released) return;
+          event.stopImmediatePropagation();
+          stopped = true;
+        },
+        { once: true },
+      );
+      hold.held.push(() => {
+        released = true;
+        if (stopped) request.dispatchEvent(new Event('success'));
+      });
       return request;
     };
+    const requestLock = LockManager.prototype.request;
+    Object.defineProperty(LockManager.prototype, 'request', {
+      configurable: true,
+      writable: true,
+      value: function (this: LockManager, name: string, ...rest: unknown[]) {
+        const callback = rest.at(-1);
+        if (name !== 'werkflow-draft-send' || typeof callback !== 'function')
+          return Reflect.apply(requestLock, this, [name, ...rest]);
+        const send = async (lock: unknown): Promise<unknown> => {
+          hold.sending += 1;
+          try {
+            const result: unknown = await callback(lock);
+            return result;
+          } finally {
+            hold.sending -= 1;
+            hold.sendsEnded += 1;
+          }
+        };
+        return Reflect.apply(requestLock, this, [name, ...rest.slice(0, -1), send]);
+      },
+    });
   });
 }
 
 /** How many draft store connections wait for the spec. */
 async function heldOpens(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const held: unknown = Reflect.get(window, 'heldDraftOpens');
-    return Array.isArray(held) ? held.length : 0;
-  });
+  return page.evaluate(() => window.draftStoreHold?.held.length ?? 0);
 }
 
-/** Releases held connections, the newest first, until none comes for a while. */
-async function releaseHeldOpensNewestFirst(page: Page): Promise<void> {
-  let quiet = 0;
-  while (quiet < 5) {
-    const released = await page.evaluate(() => {
-      const held: unknown = Reflect.get(window, 'heldDraftOpens');
-      if (!Array.isArray(held) || held.length === 0) return false;
-      const release: unknown = held.pop();
-      if (typeof release === 'function') release();
-      return true;
-    });
-    quiet = released ? 0 : quiet + 1;
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
-  }
+/** How many send turns ended since the hold began. */
+async function sendsEnded(page: Page): Promise<number> {
+  return page.evaluate(() => window.draftStoreHold?.sendsEnded ?? 0);
+}
+
+/** Ends the hold: every held connection opens, the oldest first, and every later one at once. */
+async function endDraftStoreHold(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const hold = window.draftStoreHold;
+    if (!hold) return;
+    hold.holding = false;
+    for (const release of hold.held.splice(0)) release();
+  });
 }
 
 /** How many drafts the device holds, of anyone. */
@@ -140,8 +186,8 @@ async function storedDraftCount(page: Page): Promise<number> {
   });
 }
 
-/** Whether the one stored draft is sealed. */
-async function storedDraftSealed(page: Page): Promise<boolean | null> {
+/** Whether the one stored draft is sealed, and its „Ausgeführte Arbeiten“; null without a draft. */
+async function storedDraft(page: Page): Promise<{ sealed: boolean; performedWork: unknown } | null> {
   return page.evaluate(async () => {
     const opening = indexedDB.open('werkflow-drafts', 1);
     opening.onupgradeneeded = () => opening.result.createObjectStore('drafts', { keyPath: 'id' });
@@ -154,7 +200,11 @@ async function storedDraftSealed(page: Page): Promise<boolean | null> {
     );
     database.close();
     const [record] = records;
-    return typeof record === 'object' && record !== null ? Reflect.get(record, 'sealed') === true : null;
+    if (typeof record !== 'object' || record === null) return null;
+    const content: unknown = Reflect.get(record, 'content');
+    const performedWork: unknown =
+      typeof content === 'object' && content !== null ? Reflect.get(content, 'performedWork') : undefined;
+    return { sealed: Reflect.get(record, 'sealed') === true, performedWork };
   });
 }
 
@@ -437,43 +487,14 @@ test('a save right after a photo waits until the device stored the photo, and th
   await dialog.getByRole('textbox', { name: 'Titel', exact: true }).fill('Wartung Heizung');
   await dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }).fill('Brenner gereinigt');
   await expect(dialog.getByRole('button', { name: 'Fotos', exact: true })).toBeVisible();
-  // From here every connection to the draft store opens only when the spec lets it.
-  await page.evaluate(() => {
-    const held: Array<() => void> = [];
-    Object.assign(window, { heldDraftOpens: held });
-    const open = IDBFactory.prototype.open;
-    IDBFactory.prototype.open = function (this: IDBFactory, name: string, version?: number) {
-      const request = open.call(this, name, version);
-      if (name === 'werkflow-drafts')
-        request.addEventListener(
-          'success',
-          (event) => {
-            event.stopImmediatePropagation();
-            held.push(() => request.dispatchEvent(new Event('success')));
-          },
-          { once: true },
-        );
-      return request;
-    };
-  });
+  await holdDraftStoreOpens(page);
   await dialog
     .getByTestId('artifact-photo-input')
     .setInputFiles({ name: 'foto-1.png', mimeType: 'image/png', buffer: PHOTO });
   await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
-  // Release the held connections one by one until the save has settled.
-  await expect
-    .poll(async () => {
-      await page.evaluate(() => {
-        const held: unknown = Reflect.get(window, 'heldDraftOpens');
-        if (Array.isArray(held))
-          for (const release of held.splice(0)) if (typeof release === 'function') release();
-      });
-      return page
-        .getByRole('alert')
-        .filter({ hasText: /Gerade kein Netz/ })
-        .count();
-    })
-    .toBe(1);
+  // The photo reaches the device only now, after the save began.
+  await endDraftStoreHold(page);
+  await expect(page.getByRole('alert').filter({ hasText: /Gerade kein Netz/ })).toHaveCount(1);
   expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves)).toEqual([]);
   await expect(
     draftRow(page, 'Wartung Heizung').getByText('Arbeitsbericht · 1 Foto', { exact: true }),
@@ -648,7 +669,7 @@ test('text typed while an online save holds the draft sealed reaches the device 
   await dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }).fill('Brenner und Pumpe');
   await page.evaluate(() => window.uiContractWorkArtifacts.releaseSave?.());
   // The refusal unseals the draft.
-  await expect.poll(() => storedDraftSealed(page)).toBe(false);
+  await expect.poll(async () => (await storedDraft(page))?.sealed).toBe(false);
   await closeDialog(dialog);
 
   await draftRow(page, 'Wartung Heizung').getByRole('button', { name: 'Bearbeiten', exact: true }).click();
@@ -702,7 +723,7 @@ test("a save seals its draft only once it holds the drafts' send turn, so a disc
   await expect
     .poll(() => page.evaluate(async () => (await navigator.locks.query()).pending?.length ?? 0))
     .toBeGreaterThan(0);
-  expect(await storedDraftSealed(page)).toBe(false);
+  expect((await storedDraft(page))?.sealed).toBe(false);
   expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves.length)).toBe(0);
 
   await page.evaluate(() => {
@@ -762,7 +783,7 @@ test("a save that does not get the drafts' send turn within its bound saves noth
     )
     .toBe(0);
   expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves.length)).toBe(0);
-  expect(await storedDraftSealed(page)).toBe(false);
+  expect((await storedDraft(page))?.sealed).toBe(false);
   expect(await storedDraftCount(page)).toBe(1);
 });
 
@@ -880,7 +901,7 @@ test('two photos taken before the first is stored never take a draft past its ph
     await dialog
       .getByTestId('artifact-photo-input')
       .setInputFiles({ name: `foto-${index}.png`, mimeType: 'image/png', buffer: PHOTO });
-  await releaseHeldOpensNewestFirst(page);
+  await endDraftStoreHold(page);
 
   await expect(dialog.getByRole('img', { name: /^Foto \d+$/ })).toHaveCount(20);
   await expect(dialog.getByText('Ein Entwurf kann höchstens 20 Fotos haben.', { exact: true })).toBeVisible();
@@ -895,22 +916,22 @@ test('a closed dialog keeps its draft out of every send until its last change is
   await openContractFixture(page, 'work-artifact-report');
   const sent = await answerSync(page, () => ({ outcome: 'accepted', code: 'accepted' }));
   await writeReport(page, 'Wartung Heizung', 0);
+  // The draft is complete on the device, so only the open editor keeps it from a send.
+  await expect.poll(async () => (await storedDraft(page))?.performedWork).toBe('Brenner gereinigt');
   const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
   await holdDraftStoreOpens(page);
   await dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }).fill('Brenner und Pumpe');
   await expect.poll(() => heldOpens(page)).toBeGreaterThan(0);
-  await dialog
-    .locator('[data-slot="dialog-footer"]')
-    .getByRole('button', { name: 'Schließen', exact: true })
-    .click();
-  // The signal returns while the last change still waits for the device; the send's reads go first.
+  await closeDialog(dialog);
+  // The signal returns while the last change still waits for the device: a whole send runs first.
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await expect.poll(() => heldOpens(page)).toBe(2);
-  await releaseHeldOpensNewestFirst(page);
+  await expect.poll(() => sendsEnded(page)).toBe(1);
+  expect(sent.map((operation) => operation.payload.content.performedWork)).toEqual([]);
 
-  // Whatever sends the draft, it sends the last text, never the one before it.
+  // Once the last change is on the device, the next send carries it, never the text before it.
+  await endDraftStoreHold(page);
+  await expect.poll(async () => (await storedDraft(page))?.performedWork).toBe('Brenner und Pumpe');
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await releaseHeldOpensNewestFirst(page);
   await expect.poll(() => sent.length).toBeGreaterThan(0);
   expect(sent.map((operation) => operation.payload.content.performedWork)).toEqual(
     sent.map(() => 'Brenner und Pumpe'),
