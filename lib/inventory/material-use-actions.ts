@@ -63,6 +63,7 @@ export async function recordJobMaterialUse(
       p_job_material_line_id: line.id,
       p_quantity: quantity,
       p_note: cleanText(input.note),
+      p_operation_id: input.operationId,
     }),
   );
   if (error) {
@@ -70,6 +71,8 @@ export async function recordJobMaterialUse(
     if (error.message === 'material_line_not_found') return { success: false, error: 'line_not_found' };
     if (error.message === 'material_unit_changed') return { success: false, error: 'material_unit_changed' };
     if (error.message === 'not_authorized') return { success: false, error: 'not_authorized' };
+    if (error.message === 'material_idempotency_conflict')
+      return { success: false, error: 'material_idempotency_conflict' };
     logError('recordJobMaterialUse: record_job_material_use failed', { code: error.code ?? 'unknown' });
     return { success: false, error: 'use_failed' };
   }
