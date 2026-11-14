@@ -32,7 +32,7 @@ const verdict = await waitForAdmission(
   (refused) => console.log(`[room] ${waited} waits: ${refused.reason}`),
   () => new Promise((resume) => setTimeout(resume, POLL_MILLISECONDS)),
 );
-if (verdict.unwatched) {
+if (!verdict.admitted) {
   console.error(`[room] ${waited} is refused and waiting cannot change it: ${verdict.reason}`);
   process.exit(1);
 }

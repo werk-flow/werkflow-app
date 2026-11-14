@@ -73,7 +73,7 @@ export type Admission = {
   readonly reason: string;
 };
 
-type Environment = Readonly<Record<string, string | undefined>>;
+export type Environment = Readonly<Record<string, string | undefined>>;
 type CommandResult = { readonly status: number | null; readonly stdout: string; readonly stderr: string };
 type ProcessRow = { readonly pid: number; readonly parent: number; readonly resident: number };
 

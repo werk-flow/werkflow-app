@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { join, resolve } from 'node:path';
 import {
   type Admission,
   admission,
@@ -200,6 +201,28 @@ test('a wait for room returns once memory and load both hold', async () => {
     },
   );
   expect(unwatched).toMatchObject({ admitted: false, unwatched: true });
+});
+
+// `bun run room --wait` fails only on a refusal waiting cannot change: a thread on a machine without the watch.
+test('the room wait on a machine without the watch admits a heavy command, a setup and a device, and fails a thread', () => {
+  const directory = temporaryDirectory();
+  const wait = (start: StartKind) =>
+    spawnSync(process.execPath, [resolve(import.meta.dir, '../../../scripts/room.ts'), '--wait', start], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        WERKFLOW_LOAD_WATCH: join(directory, 'absent.py'),
+        WERKFLOW_HEAVY_SLOT_DIR: join(directory, 'slots'),
+      },
+    });
+  for (const start of ['heavy', 'setup', 'device'] satisfies StartKind[]) {
+    const admittedWait = wait(start);
+    expect([start, admittedWait.status]).toEqual([start, 0]);
+    expect(admittedWait.stdout).toContain(`[room] ${start} admitted: This machine's memory is not measured`);
+  }
+  const thread = wait('thread');
+  expect(thread.status).toBe(1);
+  expect(thread.stderr).toContain('[room] thread is refused and waiting cannot change it');
 });
 
 test('a machine without the watch keeps a heavy command, a setup and a device going and refuses a thread with the install command', () => {

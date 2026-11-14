@@ -2,15 +2,17 @@
 // (lib/testing/runner/child-start.ts); a thread placed on another machine passes.
 import { afterAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { childStartRefusal, localThreadStarts } from './child-start';
+import { childStartRefusal, localThreadStarts, thisEnvironmentId } from './child-start';
 import { admission, type Admission, type RoomReading } from './machine-room';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const GIB = 1024 ** 3;
 const MAC = 'environment:mac-studio';
+// This machine's own environment id, as the hook reads it from T3's data directory.
+const HERE = 'environment:pc';
 
 // PreToolUse payloads in the shape both agent tools send (`tool_name`, `tool_input`, `cwd`), with the
 // arguments of T3 Code's own tool schemas. Claude names the server `t3-code`, Codex `t3_code`.
@@ -34,7 +36,7 @@ const launch = (environmentId?: string) =>
     title: 'Review',
     message: 'Review the PR.',
     workspaceStrategy: { type: 'worktree', baseRef: 'origin/main', startFromOrigin: true },
-    delegatedFrom: { environmentId: 'environment:pc', threadId: 't1', title: 'Lead' },
+    delegatedFrom: { environmentId: HERE, threadId: 't1', title: 'Lead' },
     ...(environmentId && { environmentId }),
   });
 const create = (...targets: (object | undefined)[]) =>
@@ -46,8 +48,9 @@ const create = (...targets: (object | undefined)[]) =>
     })),
   });
 
-const starts = (call: { tool_name: string; tool_input: unknown }) =>
-  localThreadStarts(call.tool_name, call.tool_input);
+type Call = { tool_name: string; tool_input: unknown };
+const starts = (call: Call) => localThreadStarts(call.tool_name, call.tool_input, HERE);
+const startsWithoutIdentity = (call: Call) => localThreadStarts(call.tool_name, call.tool_input, undefined);
 
 test('a thread starts on this machine unless the call names an environment for it', () => {
   expect(starts(delegate())).toBe(1);
@@ -91,7 +94,7 @@ const measured =
     admission('thread', reading, heavy, threads);
 
 test('a local start without room is refused with the numbers and the two ways on', () => {
-  const reason = childStartRefusal(delegate(), measured(pc(5)));
+  const reason = childStartRefusal(delegate(), measured(pc(5)), HERE);
   expect(reason).toStartWith(
     'Refused: this machine has no room to start a thread. 5.0 GiB available plus 0.0 held',
   );
@@ -100,9 +103,13 @@ test('a local start without room is refused with the numbers and the two ways on
   );
   expect(reason).toContain('`t3_environment_links` lists them, then pass `target.environmentId`');
   expect(reason).toContain('run `bun run room --wait thread`');
-  expect(childStartRefusal(launch(), measured(pc(5)))).toBeDefined();
+  expect(childStartRefusal(launch(), measured(pc(5)), HERE)).toBeDefined();
   expect(
-    childStartRefusal(delegate(), measured(pc(14, 'the 5-minute load is 40.0 on 14 cores, above 35.0'))),
+    childStartRefusal(
+      delegate(),
+      measured(pc(14, 'the 5-minute load is 40.0 on 14 cores, above 35.0')),
+      HERE,
+    ),
   ).toContain('This machine takes no start now: the 5-minute load is 40.0 on 14 cores, above 35.0.');
 });
 
@@ -119,35 +126,54 @@ test('a local start above the load line is refused however much memory is free, 
       normalLoad: 24,
     },
   });
-  const reason = childStartRefusal(delegate(), measured(vm(29)));
+  const reason = childStartRefusal(delegate(), measured(vm(29)), HERE);
   expect(reason).toStartWith('Refused: this machine has no room to start a thread. 19.0 GiB available');
   expect(reason).toContain(
     "The 15-minute load is 29.0 on 16 cores; a thread needs it under 24.0, the load watch's normal line.",
   );
   expect(reason).toContain('`t3_environment_links` lists them, then pass `target.environmentId`');
   expect(reason).toContain('run `bun run room --wait thread`');
-  expect(childStartRefusal(delegate(), measured(vm(14)))).toBeUndefined();
-  expect(childStartRefusal(delegate({ environmentId: MAC }), measured(vm(55)))).toBeUndefined();
+  expect(childStartRefusal(delegate(), measured(vm(14)), HERE)).toBeUndefined();
+  expect(childStartRefusal(delegate({ environmentId: MAC }), measured(vm(55)), HERE)).toBeUndefined();
 });
 
 test('a start with room passes, and so does every thread placed on another machine', () => {
-  expect(childStartRefusal(delegate(), measured(pc(6.1)))).toBeUndefined();
-  expect(childStartRefusal(launch(), measured(pc(6.1)))).toBeUndefined();
+  expect(childStartRefusal(delegate(), measured(pc(6.1)), HERE)).toBeUndefined();
+  expect(childStartRefusal(launch(), measured(pc(6.1)), HERE)).toBeUndefined();
   const never = (): Admission => {
     throw new Error('A thread placed elsewhere is never measured here.');
   };
-  expect(childStartRefusal(delegate({ environmentId: MAC }), never)).toBeUndefined();
-  expect(childStartRefusal(launch(MAC), never)).toBeUndefined();
-  expect(childStartRefusal(create({ environmentId: MAC }, { environmentId: MAC }), never)).toBeUndefined();
+  expect(childStartRefusal(delegate({ environmentId: MAC }), never, HERE)).toBeUndefined();
+  expect(childStartRefusal(launch(MAC), never, HERE)).toBeUndefined();
   expect(
-    childStartRefusal(payload('mcp__t3-code__t3_thread_send', { threadId: 't', message: 'm' }), never),
+    childStartRefusal(create({ environmentId: MAC }, { environmentId: MAC }), never, HERE),
   ).toBeUndefined();
+  expect(
+    childStartRefusal(payload('mcp__t3-code__t3_thread_send', { threadId: 't', message: 'm' }), never, HERE),
+  ).toBeUndefined();
+});
+
+// T3 runs a call that names this machine's own environment here (its PeerForwarding routes only another id away).
+test("a call naming this machine's environment is measured, another machine's passes, and an unknown identity measures every one", () => {
+  expect(starts(delegate({ environmentId: HERE }))).toBe(1);
+  expect(starts(launch(HERE))).toBe(1);
+  expect(starts(create({ environmentId: HERE }, { environmentId: MAC }))).toBe(1);
+  expect(childStartRefusal(delegate({ environmentId: HERE }), measured(pc(5)), HERE)).toContain(
+    'no room to start a thread',
+  );
+  // Without its own id the guard cannot tell another machine from this one, so it measures.
+  expect(startsWithoutIdentity(delegate({ environmentId: MAC }))).toBe(1);
+  expect(startsWithoutIdentity(launch(MAC))).toBe(1);
+  expect(startsWithoutIdentity(create({ environmentId: MAC }, { environmentId: MAC }))).toBe(2);
+  expect(childStartRefusal(delegate({ environmentId: MAC }), measured(pc(5)), undefined)).toContain(
+    'no room to start a thread',
+  );
 });
 
 test('several threads in one call each cost an agent', () => {
   // 7 GiB fits two threads (6.56 needed) and not four (7.56).
-  expect(childStartRefusal(create(undefined, undefined), measured(pc(7)))).toBeUndefined();
-  const reason = childStartRefusal(create(undefined, undefined, undefined, undefined), measured(pc(7)));
+  expect(childStartRefusal(create(undefined, undefined), measured(pc(7)), HERE)).toBeUndefined();
+  const reason = childStartRefusal(create(undefined, undefined, undefined, undefined), measured(pc(7)), HERE);
   expect(reason).toContain('no room to start 4 threads');
   expect(reason).toContain('4 threads need 7.6');
   expect(reason).toEndWith('Several threads fit sooner one at a time.');
@@ -156,6 +182,7 @@ test('several threads in one call each cost an agent', () => {
     childStartRefusal(
       create(undefined, { environmentId: MAC }, { environmentId: MAC }, { environmentId: MAC }),
       measured(pc(7)),
+      HERE,
     ),
   ).toBeUndefined();
 });
@@ -174,13 +201,13 @@ test('a payload that names no tool is refused, whatever the machine has', () => 
     { tool_name: '' },
     { tool_name: null, tool_input: {} },
   ])
-    expect([JSON.stringify(call), childStartRefusal(call, roomy)]).toEqual([
+    expect([JSON.stringify(call), childStartRefusal(call, roomy, HERE)]).toEqual([
       JSON.stringify(call),
       'Refused: the child-start guard could not read the tool call, so it cannot tell whether this machine has room.',
     ]);
   // A named tool that starts no thread passes: the wiring test keeps the hook off such calls anyway.
   expect(
-    childStartRefusal({ tool_name: 'mcp__t3-code__task_status', tool_input: {} }, roomy),
+    childStartRefusal({ tool_name: 'mcp__t3-code__task_status', tool_input: {} }, roomy, HERE),
   ).toBeUndefined();
 });
 
@@ -189,7 +216,7 @@ test('a machine without the load watch starts no local thread and names the inst
     unwatched: 'no load watch at /nowhere',
     fix: 'Install the load watch: run X.',
   };
-  const reason = childStartRefusal(delegate(), measured(unwatched));
+  const reason = childStartRefusal(delegate(), measured(unwatched), HERE);
   expect(reason).toStartWith(
     "Refused: this machine cannot start a thread. This machine's memory is not measured: no load watch at /nowhere. Install the load watch: run X.",
   );
@@ -200,6 +227,18 @@ test('a machine without the load watch starts no local thread and names the inst
 
 const scratch = mkdtempSync(join(tmpdir(), 'werkflow-child-start-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+
+test("this machine's environment id is the T3 data directory's environment-id file, and a missing or empty one is unknown", () => {
+  const home = join(scratch, 't3-home');
+  mkdirSync(join(home, 'userdata'), { recursive: true });
+  writeFileSync(join(home, 'userdata', 'environment-id'), `${HERE}\n`);
+  expect(thisEnvironmentId({ T3CODE_HOME: home })).toBe(HERE);
+  expect(thisEnvironmentId({ T3CODE_HOME: join(scratch, 'no-t3-home') })).toBeUndefined();
+  const empty = join(scratch, 't3-empty');
+  mkdirSync(join(empty, 'userdata'), { recursive: true });
+  writeFileSync(join(empty, 'userdata', 'environment-id'), '\n');
+  expect(thisEnvironmentId({ T3CODE_HOME: empty })).toBeUndefined();
+});
 
 test('the hook refuses a local start without room or without a reading, and passes one with room or placed elsewhere', () => {
   // The stub names its own normal line, so the machine's real load never decides: 1000 per core
@@ -212,7 +251,10 @@ test('the hook refuses a local start without room or without a reading, and pass
     );
     return script;
   };
-  const run = (input: string, loadWatch: string) =>
+  const t3Home = join(scratch, 'hook-t3-home');
+  mkdirSync(join(t3Home, 'userdata'), { recursive: true });
+  writeFileSync(join(t3Home, 'userdata', 'environment-id'), HERE);
+  const run = (input: string, loadWatch: string, home = t3Home) =>
     spawnSync(
       process.execPath,
       [resolve(repositoryRoot, '.claude/hooks/refuse-child-start-without-room.ts')],
@@ -223,6 +265,7 @@ test('the hook refuses a local start without room or without a reading, and pass
           ...process.env,
           WERKFLOW_LOAD_WATCH: loadWatch,
           WERKFLOW_HEAVY_SLOT_DIR: join(scratch, 'slots'),
+          T3CODE_HOME: home,
         },
       },
     );
@@ -237,6 +280,14 @@ test('the hook refuses a local start without room or without a reading, and pass
   expect(run(JSON.stringify(delegate()), roomy).status).toBe(0);
   expect(run(JSON.stringify(create(undefined, undefined)), roomy).status).toBe(0);
   expect(run(JSON.stringify(delegate({ environmentId: MAC })), full).status).toBe(0);
+  expect(run(JSON.stringify(delegate({ environmentId: HERE })), full).status).toBe(2);
+  // Without this machine's id, a start named for the Mac is measured here too.
+  expect(
+    run(JSON.stringify(delegate({ environmentId: MAC })), full, join(scratch, 'no-t3-home')).status,
+  ).toBe(2);
+  expect(
+    run(JSON.stringify(delegate({ environmentId: MAC })), roomy, join(scratch, 'no-t3-home')).status,
+  ).toBe(0);
   const loaded = run(JSON.stringify(delegate()), busy);
   expect(loaded.status).toBe(2);
   expect(loaded.stderr).toContain("a thread needs it under 0.0, the load watch's normal line.");
