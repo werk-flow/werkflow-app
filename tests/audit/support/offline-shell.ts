@@ -13,7 +13,7 @@ import { openPage } from '../../golden/support/streamed-content';
 const OFFLINE_COPY = {
   title: 'Gerade kein Netz',
   retry: 'Erneut versuchen',
-  stillNoSignal: 'Noch kein Netz. Sobald du wieder Empfang hast, öffnet sich WerkFlow von selbst.',
+  stillNoSignal: 'Immer noch kein Netz. Sobald du wieder Empfang hast, öffnet sich WerkFlow von selbst.',
 } as const;
 
 const REPOSITORY_ROOT = resolve(__dirname, '../../..');

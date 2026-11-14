@@ -45,7 +45,7 @@ export function RetryButton() {
         Erneut versuchen
       </Button>
       {noSignal && (
-        <ErrorText>Noch kein Netz. Sobald du wieder Empfang hast, öffnet sich WerkFlow von selbst.</ErrorText>
+        <ErrorText>Immer noch kein Netz. Sobald du wieder Empfang hast, öffnet sich WerkFlow von selbst.</ErrorText>
       )}
     </form>
   );

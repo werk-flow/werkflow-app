@@ -48,7 +48,7 @@ test('a tap without signal is busy at once, then says in place that there is no 
   expect(held[0]?.request().method()).toBe('HEAD');
   await held[0]?.abort('internetdisconnected');
   await expect(page.getByRole('alert')).toHaveText(
-    'Noch kein Netz. Sobald du wieder Empfang hast, öffnet sich WerkFlow von selbst.',
+    'Immer noch kein Netz. Sobald du wieder Empfang hast, öffnet sich WerkFlow von selbst.',
   );
   await expect(retryButton(page)).toBeEnabled();
   await expect(retryButton(page)).not.toHaveAttribute('aria-busy');
