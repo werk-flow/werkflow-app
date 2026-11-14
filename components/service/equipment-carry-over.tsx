@@ -10,12 +10,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import {
   REPLACEMENT_TOO_MANY_PLANS_MESSAGE,
-  type EquipmentCarryOverInput,
-  type EquipmentDetail,
-  type EquipmentListItem,
-  type EquipmentReplacementPlan,
+  replacementErrorMessage,
+} from '@/lib/installed-equipment/replacement-messages';
+import type {
+  EquipmentCarryOverInput,
+  EquipmentDetail,
+  EquipmentListItem,
+  EquipmentReplacementPlan,
 } from '@/lib/installed-equipment/types';
 import { formatLocalCalendarDay, parseIsoLocalDate } from '@/lib/utils';
+import { EquipmentFormDialog } from './equipment-form-dialog';
 
 const REASON_MESSAGE = 'Bitte begründe, warum der Wartungsplan beim Vorgänger bleibt.';
 
@@ -50,12 +54,12 @@ export type EquipmentCarryOverController = {
   input: EquipmentCarryOverInput;
   /** Missing reasons keyed by control id, in visual order. */
   errors: Record<string, string | undefined>;
+  /** The message of a refusal only a replacement raises; undefined for any other code. */
+  errorMessage: (error: string | undefined) => string | undefined;
 };
 
 /** The replace dialog's choice per running plan and component; everything is carried over by default. */
-export function useEquipmentCarryOver(
-  initial: EquipmentDetail | null | undefined,
-): EquipmentCarryOverController {
+function useEquipmentCarryOver(initial: EquipmentDetail | null | undefined): EquipmentCarryOverController {
   // The plans and components as the dialog opened: a live refresh while it
   // stays open never puts a version the manager did not review into the
   // choices; the server refuses the outdated set instead.
@@ -85,6 +89,7 @@ export function useEquipmentCarryOver(
         carry: isCarried(component.id),
       })),
     },
+    errorMessage: replacementErrorMessage,
     errors: Object.fromEntries(
       plans.map((plan) => [
         reasonFieldId(plan.id),
@@ -180,7 +185,7 @@ function CarryPlanRow({
 }
 
 /** The plans and components of the replaced Anlage, each with its carry-over choice. */
-export function EquipmentCarryOverSection({
+function EquipmentCarryOverSection({
   controller,
   showErrors,
 }: {
@@ -236,5 +241,34 @@ export function EquipmentCarryOverSection({
         </div>
       ))}
     </section>
+  );
+}
+
+/**
+ * „Anlage ersetzen“: the equipment form in replace mode with the carry-over
+ * choice. It mounts when the dialog opens, so the choice starts from the plans
+ * and components shown at that moment.
+ */
+export function EquipmentReplaceDialog({
+  open,
+  onOpenChange,
+  initial,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initial: EquipmentDetail;
+}): ReactElement {
+  const controller = useEquipmentCarryOver(initial);
+  return (
+    <EquipmentFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      mode="replace"
+      initial={initial}
+      carryOver={{
+        controller,
+        render: (showErrors) => <EquipmentCarryOverSection controller={controller} showErrors={showErrors} />,
+      }}
+    />
   );
 }

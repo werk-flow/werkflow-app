@@ -54,8 +54,8 @@ type UseEquipmentFormOptions = {
   initial: EquipmentDetail | null | undefined;
   onSubmitted: ((submission: EquipmentCreateSubmission) => void) | undefined;
   onSaved: (() => void) | undefined;
-  /** A replacement's choice per running plan and component. */
-  carryOver: EquipmentCarryOverController;
+  /** A replacement's choice per running plan and component; without it a replacement carries none. */
+  carryOver: EquipmentCarryOverController | undefined;
 };
 
 export type EquipmentFormController = {
@@ -228,7 +228,7 @@ export function useEquipmentForm({
     setAttempted(true);
     const errorsById = {
       ...Object.fromEntries(EQUIPMENT_REQUIRED_FIELD_IDS.map(([key, id]) => [id, missingFields[key]])),
-      ...(mode === 'replace' ? carryOver.errors : {}),
+      ...(mode === 'replace' ? carryOver?.errors : {}),
     };
     if (focusFirstInvalidField(errorsById)) return;
     const idempotencyKey = crypto.randomUUID();
@@ -251,11 +251,11 @@ export function useEquipmentForm({
       payload,
       idempotencyKey,
       effectiveAt,
-      carryOver: carryOver.input,
+      carryOver: carryOver?.input ?? { plans: [], components: [] },
       runners: { runCreate, runUpdate, runReplace },
     });
     if (!result.success) {
-      setError(equipmentErrorMessage(result.error));
+      setError(carryOver?.errorMessage(result.error) ?? equipmentErrorMessage(result.error));
       return;
     }
     onOpenChange(false);

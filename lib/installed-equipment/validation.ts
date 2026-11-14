@@ -7,8 +7,8 @@ import {
   EQUIPMENT_STATES,
   EQUIPMENT_SUBTYPES,
   EQUIPMENT_SUBTYPES_BY_CATEGORY,
-  REPLACEMENT_PLAN_LIMIT,
 } from './types';
+import { REPLACEMENT_PLAN_LIMIT } from './replacement-messages';
 
 const trimmedNullableText = (maximum: number) => z.string().trim().max(maximum).optional().nullable();
 const optionalDate = z

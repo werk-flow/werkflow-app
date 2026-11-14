@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -28,7 +28,7 @@ import {
   type EquipmentDetail,
   type EquipmentState,
 } from '@/lib/installed-equipment/types';
-import { EquipmentCarryOverSection, useEquipmentCarryOver } from './equipment-carry-over';
+import type { EquipmentCarryOverController } from './equipment-carry-over';
 import {
   EquipmentAssignmentFields,
   EquipmentTechnicalFields,
@@ -56,6 +56,15 @@ type EquipmentFormDialogProps = {
   onSubmitted?: (submission: EquipmentCreateSubmission) => void;
   /** Edit settled by the caller (a live-view refresh) instead of a route refresh. */
   onSaved?: () => void;
+  /**
+   * A replacement's choice per running plan and component and the section that
+   * shows it. EquipmentReplaceDialog passes both, so the list, which every
+   * route's skeleton loads, never bundles the carry-over UI.
+   */
+  carryOver?: {
+    controller: EquipmentCarryOverController;
+    render: (showErrors: boolean) => ReactNode;
+  };
 };
 
 function EquipmentCategoryField({
@@ -202,15 +211,15 @@ export function EquipmentFormDialog({
   initial,
   onSubmitted,
   onSaved,
+  carryOver,
 }: EquipmentFormDialogProps): ReactElement {
-  const carryOver = useEquipmentCarryOver(initial);
   const controller = useEquipmentForm({
     onOpenChange,
     mode,
     initial,
     onSubmitted,
     onSaved,
-    carryOver,
+    carryOver: carryOver?.controller,
   });
   const { form, updateField, fieldErrors, isPending, handleSubmit } = controller;
   const title =
@@ -260,9 +269,7 @@ export function EquipmentFormDialog({
                 />
               </Field>
             )}
-            {mode === 'replace' && (
-              <EquipmentCarryOverSection controller={carryOver} showErrors={controller.attempted} />
-            )}
+            {mode === 'replace' && carryOver?.render(controller.attempted)}
             <ErrorText>{controller.error}</ErrorText>
           </DialogBody>
           <DialogFooter>

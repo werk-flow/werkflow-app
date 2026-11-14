@@ -84,12 +84,6 @@ export const EQUIPMENT_STATE_LABELS: Record<EquipmentState, string> = {
   decommissioned: 'Stillgelegt',
 };
 
-/** The most running plans one replacement carries; replace_installed_equipment refuses an Anlage with more. */
-export const REPLACEMENT_PLAN_LIMIT = 50;
-
-/** Why an Anlage with more running plans than one replacement carries cannot be replaced. */
-export const REPLACEMENT_TOO_MANY_PLANS_MESSAGE = `Diese Anlage hat mehr als ${REPLACEMENT_PLAN_LIMIT} laufende Wartungspläne. So viele kann ein Austausch nicht auf einmal übernehmen. Beende zuerst die Pläne, die nicht mehr gebraucht werden, dann kannst du die Anlage ersetzen.`;
-
 const EQUIPMENT_MUTATION_ERROR_MESSAGES: Record<string, string> = {
   installed_equipment_initial_state_invalid:
     'Der Startzustand muss „Unbekannt“, „Aktiv“ oder „Vorübergehend außer Betrieb“ sein.',
@@ -99,13 +93,6 @@ const EQUIPMENT_MUTATION_ERROR_MESSAGES: Record<string, string> = {
   installed_equipment_document_link_not_found:
     'Die Dokumentverknüpfung wurde nicht gefunden oder bereits entfernt.',
   installed_equipment_stale_version: 'Die Anlage wurde inzwischen geändert. Bitte lade die Seite neu.',
-  installed_equipment_replacement_duplicate_visit:
-    'Ein Wartungsplan hat zwei Besuche für dieselbe Fälligkeit. Schließe zuerst einen davon ab, dann kannst du die Anlage ersetzen.',
-  installed_equipment_replacement_plan_reason_required:
-    'Bitte begründe, warum der Wartungsplan beim Vorgänger bleibt.',
-  installed_equipment_replacement_too_many_plans: REPLACEMENT_TOO_MANY_PLANS_MESSAGE,
-  maintenance_template_version_unavailable:
-    'Die Arbeitsvorlage eines Wartungsplans ist nicht mehr veröffentlicht. Lass den Plan beim Vorgänger oder überarbeite ihn zuerst.',
   installed_equipment_voided: 'Dieser irrtümlich erfasste Nachfolger kann nicht mehr geändert werden.',
 };
 

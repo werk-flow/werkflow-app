@@ -53,6 +53,10 @@ type EquipmentDetailHeaderProps = {
   canChangeState: boolean;
   onEdit: () => void;
   onReplace: () => void;
+  /** Starts the replace form's download on hover or focus. */
+  onReplaceIntent: () => void;
+  /** The replace form is still downloading. */
+  replaceWaiting: boolean;
   onChangeState: () => void;
 };
 
@@ -62,6 +66,8 @@ export function EquipmentDetailHeader({
   canChangeState,
   onEdit,
   onReplace,
+  onReplaceIntent,
+  replaceWaiting,
   onChangeState,
 }: EquipmentDetailHeaderProps): ReactElement {
   return (
@@ -91,7 +97,14 @@ export function EquipmentDetailHeader({
           Bearbeiten
         </Button>
         {!['replaced', 'decommissioned'].includes(item.state) && !item.archivedAt && (
-          <Button type="button" variant="outline" onClick={onReplace}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onReplace}
+            onPointerEnter={onReplaceIntent}
+            onFocus={onReplaceIntent}
+            pending={replaceWaiting}
+          >
             <Replace className="size-4" />
             Ersetzen
           </Button>

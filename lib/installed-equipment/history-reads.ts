@@ -5,13 +5,13 @@ import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { z } from '@/lib/zod';
-import {
-  REPLACEMENT_PLAN_LIMIT,
-  type EquipmentEvent,
-  type EquipmentEventLink,
-  type EquipmentPredecessorHistory,
-  type EquipmentReplacementPlan,
-  type EquipmentRow,
+import { REPLACEMENT_PLAN_LIMIT } from './replacement-messages';
+import type {
+  EquipmentEvent,
+  EquipmentEventLink,
+  EquipmentPredecessorHistory,
+  EquipmentReplacementPlan,
+  EquipmentRow,
 } from './types';
 
 /** The equipment register's reads: the caller's organization and the service-role client. */
