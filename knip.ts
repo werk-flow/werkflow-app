@@ -57,6 +57,17 @@ const config: KnipConfig = {
     'tests/ui-contracts/playwright.config.ts!',
     // Substituted for product modules by the component-contract bundler.
     'tests/ui-contracts/*boundar*.{ts,tsx}!',
+    // The E1 ↔ E2a seam (werk-flow/werkflow-planning#15): the article price
+    // reader and the line arithmetic rule exist before E2a's offers import
+    // them. Remove this entry with the first production import.
+    'lib/inventory/{article-prices,line-amount}.ts!',
+    // The wholesaler-file reader's seam (werk-flow/werkflow-planning#395)
+    // exists before the wholesaler import (werk-flow/werkflow-planning#375)
+    // imports it. Remove this entry with that import.
+    'lib/inventory/wholesaler-reader.ts!',
+    // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
+    // the offer calculation imports it. Remove this entry with that import.
+    'lib/price-catalog/leistung-prices.ts!',
   ],
   project: ['**/*.{ts,tsx,mjs}!', '!lib/**/*.test.{ts,tsx,mjs}!', '!lib/testing/fixtures/**!'],
   // Deno functions have their own import graph; the transcript folder is

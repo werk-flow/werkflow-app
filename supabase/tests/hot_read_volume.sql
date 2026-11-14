@@ -168,7 +168,7 @@ begin
     small := pg_temp.measure(format(template, ids.small_org, ids.owner, ids.small_worker));
     large := pg_temp.measure(format(template, ids.large_org, ids.owner, ids.large_worker));
     costs := costs || jsonb_build_object(label, jsonb_build_object('large', large->'touched', 'small', small->'touched'));
-    if large->'seqScans' <> '{}' or small->'seqScans' <> '{}' then
+    if large->'seqScans' is distinct from '{}' or small->'seqScans' is distinct from '{}' then
       raise exception 'hot read % scans a table sequentially: no index serves its predicate (%)', label, large->'seqScans';
     end if;
     grown := 0;

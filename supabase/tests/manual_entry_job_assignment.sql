@@ -94,12 +94,12 @@ declare
 begin
   if (
     select xmax from public.organization_members where organization_id = v_org and user_id = v_buero
-  ) <> '0'::xid then raise exception 'the membership row is already locked'; end if;
+  ) is distinct from '0'::xid then raise exception 'the membership row is already locked'; end if;
   insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status, job_id)
   values (v_buero, v_org, 'clock_in', now() - interval '6 days', true, 'pending', v_job);
   if (
     select xmax from public.organization_members where organization_id = v_org and user_id = v_buero
-  ) <> pg_current_xact_id()::xid then
+  ) is distinct from pg_current_xact_id()::xid then
     raise exception 'a manual entry did not lock the membership it read';
   end if;
 end;

@@ -54,13 +54,57 @@ const assignment = (id: string, organizationId: string, jobId: string, userId: s
   assigned_at: now,
 });
 
+// A job with its own customer in a project that has none: the defaults follow
+// jobs.client_id, so the office still sees and changes the job's pair.
+const projectWithoutClientId = '53000000-0000-4000-8000-0000000000a1';
+const ownClientJobId = '53000000-0000-4000-8000-0000000000a2';
+
 const world = installActionWorld({
+  projects: [
+    {
+      id: projectWithoutClientId,
+      organization_id: ORGANIZATION_A,
+      name: 'Projekt ohne Kunde',
+      project_number: 'P-2026-001',
+      client_id: null,
+    },
+  ],
   jobs: [
+    {
+      ...jobRow(ownClientJobId, ORGANIZATION_A, 'A-2026-003'),
+      project_id: projectWithoutClientId,
+      client_id: clientId,
+      work_billing_parties: [
+        {
+          version: 1,
+          source: 'auftraggeber',
+          client_id: clientId,
+          recipient_client_id: clientId,
+          recipient_name: 'Familie Berger',
+          recipient_address: null,
+          created_at: '2026-11-01T08:00:00.000Z',
+          auftraggeber: { name: 'Familie Berger' },
+        },
+      ],
+    },
     {
       ...jobRow(assignedJobId, ORGANIZATION_A, 'A-2026-001'),
       client_id: clientId,
       site_id: siteId,
       contact_id: contactId,
+      // The billing parties the job read embeds: the office's alone.
+      work_billing_parties: [
+        {
+          version: 1,
+          source: 'objekt',
+          client_id: clientId,
+          recipient_client_id: clientId,
+          recipient_name: 'Hausverwaltung Lindenhof GmbH',
+          recipient_address: 'Hofweg 1, 10117 Berlin',
+          created_at: '2026-11-01T08:00:00.000Z',
+          auftraggeber: { name: 'Familie Berger' },
+        },
+      ],
     },
     jobRow(unassignedJobId, ORGANIZATION_A, 'A-2026-002'),
     jobRow(foreignJobId, ORGANIZATION_B, 'A-2026-900'),
@@ -235,6 +279,19 @@ assert.equal(managerDetails.job.client?.notes, 'Zahlt spät');
 assert.equal(managerDetails.job.site?.notes, 'Interne Standortnotiz');
 assert.equal(managerDetails.job.contact?.email, 'anna@example.test');
 assert.equal(managerDetails.job.assignments[1]?.email, 'max@example.test');
+// The office reads the job's frozen recipient with the job; the field read above carries no such field.
+const managerByNumber = await actions.getJobByNumber('A-2026-001');
+assert.ok(managerByNumber.success);
+assert.equal(managerByNumber.billingParties?.versions[0]?.recipient?.name, 'Hausverwaltung Lindenhof GmbH');
+// The job's own customer keeps its pair although its project has no customer:
+// the parties are named, not left out for a customer the read does not return.
+const ownClientJob = await actions.getJobByNumber('A-2026-003');
+assert.ok(ownClientJob.success);
+assert.equal(ownClientJob.billingParties?.hasClient, true);
+assert.deepEqual(ownClientJob.billingParties?.versions[0]?.auftraggeber, {
+  id: clientId,
+  name: 'Familie Berger',
+});
 
 // A manager of organization A reaches no job of organization B by id or by number.
 assert.deepEqual(await actions.getJobDetails(foreignJobId), jobNotFound);
@@ -254,9 +311,49 @@ assert.deepEqual(await actions.updateJob(assignedJobId, { plannedDate: '2026-11-
 assert.equal(databaseSnapshot(), initialDatabase, 'a refused schedule edit writes nothing');
 assert.deepEqual(world.rpcCalls, []);
 
+// A job whose material was taken or used keeps its material history: the
+// delete is refused with its reason before anything is deleted.
+const usedLine = {
+  id: '54000000-0000-4000-8000-000000000001',
+  organization_id: ORGANIZATION_A,
+  job_id: unassignedJobId,
+  project_id: null,
+  item_id: '54000000-0000-4000-8000-000000000002',
+  taken_quantity: 2,
+  used_quantity: 1,
+  returned_quantity: 0,
+  status: 'taken',
+};
+world.tables.job_material_lines = [usedLine];
+const beforeMaterialRefusal = databaseSnapshot();
+assert.deepEqual(await actions.deleteJob(unassignedJobId), {
+  success: false,
+  error: 'material_history_exists',
+});
+assert.equal(databaseSnapshot(), beforeMaterialRefusal, 'a refused delete keeps the job and its material');
+world.tables.job_material_lines = [];
+// When a take lands after that check, the database's refusal maps to the same code.
+const { isMaterialHistoryRefusal } = await import('@/lib/inventory/material-history');
+assert.equal(isMaterialHistoryRefusal({ code: 'P0001', message: 'inventory_ledger_append_only' }), true);
+assert.equal(
+  isMaterialHistoryRefusal({
+    code: '23503',
+    message:
+      'update or delete on table "job_material_lines" violates foreign key constraint "job_material_use_events_job_material_line_id_fkey" on table "job_material_use_events"',
+  }),
+  true,
+);
+assert.equal(
+  isMaterialHistoryRefusal({
+    code: '23503',
+    message: 'violates foreign key constraint on table "documents"',
+  }),
+  false,
+);
+
 // The same manager deletes an own job: exactly that row goes, organization B's job stays.
 assert.deepEqual(await actions.deleteJob(unassignedJobId), { success: true });
 assert.deepEqual(
   tableRows(world, 'jobs').map((job) => job.id),
-  [assignedJobId, foreignJobId],
+  [ownClientJobId, assignedJobId, foreignJobId],
 );

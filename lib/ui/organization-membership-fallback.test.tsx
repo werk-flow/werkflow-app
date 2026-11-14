@@ -48,6 +48,8 @@ async function runFixture(): Promise<void> {
     }
   }
   globalThis.localStorage = new MemoryStorage();
+  // The switch's session-end check renews its barrier on the browser's timers (unsent-work-gate.ts).
+  Object.defineProperty(globalThis, 'window', { value: globalThis, configurable: true });
 
   let membershipRows: unknown[] = [];
   const cookieWrites: string[] = [];
@@ -56,6 +58,14 @@ async function runFixture(): Promise<void> {
       auth: { getSession: async () => ({ data: { session: { user: { id: USER } } }, error: null }) },
       from: () => ({ select: () => ({ eq: async () => ({ data: membershipRows, error: null }) }) }),
     }),
+  }));
+  // The switch's check loads the report drafts' sender, whose upload path reaches server actions
+  // that only Next's bundler turns into references; no draft of this test is sent.
+  mock.module('@/lib/documents/upload-client', () => ({
+    uploadDocumentDirect: () => Promise.reject(new Error('no upload here')),
+  }));
+  mock.module('@/lib/data/background-read-client', () => ({
+    readInBackground: () => Promise.reject(new Error('no read here')),
   }));
   mock.module('@/lib/org/actions', () => ({
     setActiveOrgCookie: async (orgId: string) => {

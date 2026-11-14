@@ -33,12 +33,11 @@ export function closeEntryDetailsWithRequest(
 export function deleteEntryDetailsBlock(
   context: EntryDetailsCommandContext,
   snapshot: EntryDetailsSnapshot,
-): void {
-  const { runAction, showBanner, setError, onOpenChange, onRefresh } = context;
+): Promise<string | null> {
+  const { runAction, showBanner, onOpenChange, onRefresh } = context;
   const { isActiveBlock, startEntry, sessionEntriesForReview } = snapshot;
-  setError(null);
 
-  void runAction('delete', async () => {
+  return runAction('delete', async (): Promise<string | null> => {
     try {
       let requestCreated = false;
       const shouldConvertActiveBreakBoundaryToClockOut =
@@ -50,10 +49,7 @@ export function deleteEntryDetailsBlock(
           jobId: null,
         });
 
-        if (!result.success) {
-          setError(formatActionError(result));
-          return;
-        }
+        if (!result.success) return formatActionError(result);
 
         if ('request' in result) {
           requestCreated = true;
@@ -61,7 +57,7 @@ export function deleteEntryDetailsBlock(
 
         if (requestCreated) {
           closeEntryDetailsWithRequest(context, 'Änderungsantrag wurde zur Genehmigung eingereicht.');
-          return;
+          return null;
         }
 
         onOpenChange(false);
@@ -70,25 +66,19 @@ export function deleteEntryDetailsBlock(
           message: 'Arbeitsblock wurde gelöscht.',
         });
         onRefresh();
-        return;
+        return null;
       }
 
       const entryIds = [...new Set(sessionEntriesForReview.map((entry) => entry.id))];
 
       if (entryIds.length > 1) {
         const result = await deleteEntriesBatch(entryIds);
-        if (!result.success) {
-          setError(describeBatchRefusal(result.error, formatActionError(result.error)));
-          return;
-        }
+        if (!result.success) return describeBatchRefusal(result.error, formatActionError(result.error));
       } else {
         for (const entry of [...sessionEntriesForReview].reverse()) {
           const result = await deleteEntry(entry.id);
 
-          if (!result.success) {
-            setError(formatActionError(result.error));
-            return;
-          }
+          if (!result.success) return formatActionError(result.error);
 
           if ('request' in result) {
             requestCreated = true;
@@ -98,7 +88,7 @@ export function deleteEntryDetailsBlock(
 
       if (requestCreated) {
         closeEntryDetailsWithRequest(context, 'Löschantrag wurde zur Genehmigung eingereicht.');
-        return;
+        return null;
       }
 
       onOpenChange(false);
@@ -107,8 +97,9 @@ export function deleteEntryDetailsBlock(
         message: 'Arbeitsblock wurde gelöscht.',
       });
       onRefresh();
+      return null;
     } catch {
-      setError('Der Arbeitsblock konnte nicht gelöscht werden. Bitte versuche es erneut.');
+      return 'Der Arbeitsblock konnte nicht gelöscht werden. Bitte versuche es erneut.';
     }
   });
 }

@@ -1,30 +1,35 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { HIDDEN_STATUS_HINT, type StatusVisibility } from './member-status-visibility';
 
 interface StatusBadgeProps {
   status?: 'clocked_out' | 'working' | 'on_break' | undefined;
   isClockedIn: boolean;
   /** Whether the current working status is based on a pending entry */
   isPending?: boolean;
-  /** Whether the viewer has permission to see this member's status */
-  canViewStatus?: boolean;
+  visibility?: StatusVisibility | undefined;
 }
 
 export function StatusBadge({
   isClockedIn,
   status,
   isPending = false,
-  canViewStatus = true,
+  visibility = 'visible',
 }: StatusBadgeProps) {
   const effectiveStatus = status ?? (isClockedIn ? 'working' : 'clocked_out');
 
-  // Show "Nicht verfügbar" for members the current user can't view
-  if (!canViewStatus) {
+  // A neutral label, never one that reads as „this person is unavailable“.
+  if (visibility !== 'visible') {
+    const hint = visibility === 'hidden' ? HIDDEN_STATUS_HINT : undefined;
     return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      <span
+        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+        title={hint}
+      >
         <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-        Nicht verfügbar
+        {visibility === 'hidden' ? 'Status nicht sichtbar' : 'Status nicht geladen'}
+        {hint ? <span className="sr-only">. {hint}</span> : null}
       </span>
     );
   }

@@ -206,7 +206,7 @@ begin
   perform public.close_time_period(
     v_admin, v_org, (select period_id from public.time_period_calculations where id = v_calculation),
     '26100000-0000-0000-0000-000000000053', repeat('d', 64));
-  if (select state from public.time_periods where organization_id = v_org) <> 'closed' then
+  if (select state from public.time_periods where organization_id = v_org) is distinct from 'closed' then
     raise exception 'the period workflow did not close June';
   end if;
 end;
@@ -236,7 +236,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -391,13 +391,13 @@ declare
   v_result integer;
 begin
   if (select count(*) from public.time_entries where id = any(v_ids) and status = 'pending') <> 150
-    or (select status from public.time_entries where id = '26100000-0000-0000-0000-000000000034') <> 'pending'
-    or (select status from public.time_entries where id = '26100000-0000-0000-0002-000000000001') <> 'pending'
+    or (select status from public.time_entries where id = '26100000-0000-0000-0000-000000000034') is distinct from 'pending'
+    or (select status from public.time_entries where id = '26100000-0000-0000-0002-000000000001') is distinct from 'pending'
   then raise exception 'a refused batch changed entries'; end if;
 
   v_result := public.review_time_entries('26100000-0000-0000-0000-000000000001',
     '26100000-0000-0000-0000-000000000010', v_ids, 'approved', array['26100000-0000-0000-0000-000000000002'::uuid]);
-  if v_result <> 150 or (
+  if v_result is distinct from 150 or (
     select count(*) from public.time_entries
     where id = any(v_ids) and status = 'approved'
       and reviewed_by = '26100000-0000-0000-0000-000000000001' and reviewed_at is not null
@@ -405,7 +405,7 @@ begin
 
   v_result := public.delete_time_entries('26100000-0000-0000-0000-000000000001',
     '26100000-0000-0000-0000-000000000010', v_ids, array['26100000-0000-0000-0000-000000000002'::uuid]);
-  if v_result <> 150 or exists (select 1 from public.time_entries where id = any(v_ids)) then
+  if v_result is distinct from 150 or exists (select 1 from public.time_entries where id = any(v_ids)) then
     raise exception 'a clean deletion did not apply to every entry';
   end if;
   -- Other sessions learn of each deletion through its notice.
@@ -496,13 +496,13 @@ begin
   values ('26100000-0000-0000-0000-000000000011', '2026-07-01', '2026-07-31',
     '26100000-0000-0000-0000-000000000001')
   returning id into v_period;
-  if (select xmax from public.time_periods where id = v_period) <> '0'::xid then
+  if (select xmax from public.time_periods where id = v_period) is distinct from '0'::xid then
     raise exception 'the new period row is already locked';
   end if;
   insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status)
   values ('26100000-0000-0000-0000-000000000001', '26100000-0000-0000-0000-000000000011',
     'clock_in', '2026-07-20 08:00+02', true, 'approved');
-  if (select xmax from public.time_periods where id = v_period) <> pg_current_xact_id()::xid then
+  if (select xmax from public.time_periods where id = v_period) is distinct from pg_current_xact_id()::xid then
     raise exception 'the write did not lock the period row';
   end if;
 end;
@@ -519,11 +519,11 @@ begin
   values ('26100000-0000-0000-0000-000000000011', '2026-08-01', '2026-08-31',
     '26100000-0000-0000-0000-000000000001')
   returning id into v_period;
-  if (select xmax from public.time_periods where id = v_period) <> '0'::xid then
+  if (select xmax from public.time_periods where id = v_period) is distinct from '0'::xid then
     raise exception 'the new period row is already locked';
   end if;
   perform app_private.assert_p1_23_period_open('26100000-0000-0000-0000-000000000011', '2026-08-10');
-  if (select xmax from public.time_periods where id = v_period) <> pg_current_xact_id()::xid then
+  if (select xmax from public.time_periods where id = v_period) is distinct from pg_current_xact_id()::xid then
     raise exception 'the account-event guard did not lock the period row';
   end if;
 end;

@@ -596,7 +596,7 @@ export function copyResults(staging: string, repository: string): void {
  * folder, or an existing destination that is not a regular file or is a hard link, whose other names
  * a copy would change too. Checked for every file before the first write.
  */
-function destinationConflict(repository: string, files: readonly string[]): string | undefined {
+export function destinationConflict(repository: string, files: readonly string[]): string | undefined {
   for (const path of files) {
     const parts = path.split('/');
     const target = join(repository, path);
@@ -739,6 +739,7 @@ export async function runOnBoat(input: {
   folder: string;
   key: string;
   signal: AbortSignal;
+  remoteExit?: (code: number) => void;
 }): Promise<BoatOutcome> {
   const { args, repository, folder, signal } = input;
   const before = captureInputSnapshot(repository);
@@ -757,7 +758,7 @@ export async function runOnBoat(input: {
   if ('unavailable' in machine) return machine;
   // Only a run that returned its exit code leaves a machine worth wiping and keeping.
   const keep = async (outcome: BoatOutcome) =>
-    typeof outcome === 'number' && keepMachine(machine, { repository, form, signal });
+    typeof outcome === 'number' ? keepMachine(machine, { repository, form, signal }) : 'no exit code';
   return withMachine(
     machine,
     signal,
@@ -784,6 +785,7 @@ export async function runOnBoat(input: {
         // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
         console.info(pruneRunArchive('prune'));
         code = result.exitCode;
+        input.remoteExit?.(code);
         if (changedInputs(before, captureInputSnapshot(repository)).length) {
           console.error('Inputs changed during verification; this report cannot qualify acceptance.');
           code = 1;

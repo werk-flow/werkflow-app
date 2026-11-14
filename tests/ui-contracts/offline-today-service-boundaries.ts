@@ -4,8 +4,6 @@
 import type { StoredToday } from '@/lib/field-sync/device/today-store';
 
 export type { StoredToday };
-// The wipe signal is read as the product reads it; only the device read is held.
-export { sharedWipeGeneration } from '@/lib/field-sync/device/today-store';
 
 declare global {
   interface Window {

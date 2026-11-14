@@ -1,4 +1,5 @@
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import type { SiteContactRole } from '@/lib/clients/site-roles';
 import type { Database } from '@/lib/supabase/database.types';
 
 // ============================================
@@ -21,6 +22,9 @@ export type ClientContact = {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  /** The Objekt of the customer the contact lives at or opens, with that role. */
+  siteId: string | null;
+  siteRole: SiteContactRole | null;
   isPrimary: boolean;
   isActive: boolean;
   createdBy: string | null;
@@ -36,6 +40,8 @@ export type ClientSite = {
   street: string | null;
   postalCode: string | null;
   city: string | null;
+  /** The number the previous system gave the Objekt. */
+  sourceNumber: string | null;
   accessNotes: string | null;
   notes: string | null;
   primaryContactId: string | null;
@@ -112,7 +118,9 @@ export type ClientLinkKind =
   | 'equipment'
   | 'maintenance'
   | 'documents'
-  | 'follow_ups';
+  | 'follow_ups'
+  | 'site_roles'
+  | 'billing_parties';
 export type ClientLinks = { [Kind in ClientLinkKind]?: number | undefined };
 
 /** Archiving or restoring answers the customer's archive mark: null while it is active. */
@@ -133,44 +141,6 @@ export function toClientMatch(row: ClientMatchRow): ClientMatch {
     clientId: row.client_id,
     clientName: row.client_name,
     matchedOn: row.matched_on.filter(isClientMatchReason),
-  };
-}
-
-export function toClientContact(row: ClientContactRow): ClientContact {
-  return {
-    id: row.id,
-    organizationId: row.organization_id,
-    clientId: row.client_id,
-    name: row.name,
-    role: row.role,
-    email: row.email,
-    phone: row.phone,
-    notes: row.notes,
-    isPrimary: row.is_primary,
-    isActive: row.is_active,
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-export function toClientSite(row: ClientSiteRow): ClientSite {
-  return {
-    id: row.id,
-    organizationId: row.organization_id,
-    clientId: row.client_id,
-    name: row.name,
-    street: row.street,
-    postalCode: row.postal_code,
-    city: row.city,
-    accessNotes: row.access_notes,
-    notes: row.notes,
-    primaryContactId: row.primary_contact_id,
-    isPrimary: row.is_primary,
-    isActive: row.is_active,
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
   };
 }
 

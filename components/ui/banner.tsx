@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -145,8 +146,13 @@ type ShowBannerInput = {
   autoDismissMs?: number | null;
 };
 
+/** One shown banner: `dispose` removes it, `dropAction` keeps its message without its action. */
+type BannerHandle = { dispose: () => void; dropAction: () => void };
+
 type BannerContextValue = {
   showBanner: (banner: ShowBannerInput) => () => void;
+  /** `showBanner` for a wrapper that later drops the action of the banner it showed. */
+  showBannerHandle: (banner: ShowBannerInput) => BannerHandle;
   dismissBanner: () => void;
 };
 
@@ -179,8 +185,8 @@ export function BannerProvider({ children }: { children: ReactNode }) {
     }, EXIT_ANIMATION_MS);
   }, []);
 
-  const showBanner = useCallback(
-    ({ autoDismissMs, ...input }: ShowBannerInput) => {
+  const showBannerHandle = useCallback(
+    ({ autoDismissMs, ...input }: ShowBannerInput): BannerHandle => {
       clearTimers();
       setIsExiting(false);
       setOutgoing(currentRef.current);
@@ -193,9 +199,17 @@ export function BannerProvider({ children }: { children: ReactNode }) {
       if (dismissAfter !== null) {
         autoDismissRef.current = setTimeout(dismissBanner, dismissAfter);
       }
-      // Disposal belongs to this message, never to a newer caller's feedback.
-      return () => {
-        if (currentRef.current?.id === next.id) dismissBanner();
+      // Both belong to this message, never to a newer caller's feedback.
+      return {
+        dispose: () => {
+          if (currentRef.current?.id === next.id) dismissBanner();
+        },
+        dropAction: () => {
+          if (currentRef.current?.id !== next.id) return;
+          const withoutAction: BannerState = { id: next.id, variant: next.variant, message: next.message };
+          currentRef.current = withoutAction;
+          setBanner(withoutAction);
+        },
       };
     },
     [clearTimers, dismissBanner],
@@ -203,7 +217,14 @@ export function BannerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => clearTimers, [clearTimers]);
 
-  const value = useMemo(() => ({ showBanner, dismissBanner }), [showBanner, dismissBanner]);
+  const value = useMemo(
+    () => ({
+      showBanner: (banner: ShowBannerInput) => showBannerHandle(banner).dispose,
+      showBannerHandle,
+      dismissBanner,
+    }),
+    [showBannerHandle, dismissBanner],
+  );
 
   return (
     <BannerContext.Provider value={value}>
@@ -212,6 +233,66 @@ export function BannerProvider({ children }: { children: ReactNode }) {
       {banner && <Banner key={banner.id} banner={banner} onDismiss={dismissBanner} isExiting={isExiting} />}
     </BannerContext.Provider>
   );
+}
+
+const ignoredBanner: BannerHandle = { dispose: () => {}, dropAction: () => {} };
+
+/**
+ * Banners for the subtree that stays mounted. Confirmation its code shows after
+ * the subtree unmounted, such as a save that answers after an organization
+ * switch replaced the page, belongs to a page nobody sees any more and is
+ * dropped. A failure still shows, without its action: a retry would run the
+ * former page's write in the scope that replaced it. For the same reason a
+ * failure the subtree showed before it unmounted loses its action and keeps
+ * its message. A progress banner the subtree showed leaves with it.
+ *
+ * The scope ends in the commit that removes it, not in passive cleanup: a save
+ * answering between that commit and its passive effects already counts as late.
+ */
+export function BannerScope({ children }: { children: ReactNode }) {
+  const outer = useBanner();
+  const mountedRef = useRef(true);
+  /** What the scope's end does to each banner it forwarded: dispose a progress, drop a retry. */
+  const endingsRef = useRef(new Set<() => void>());
+  useLayoutEffect(() => {
+    mountedRef.current = true;
+    const endings = endingsRef.current;
+    return () => {
+      mountedRef.current = false;
+      // Each ending checks its message id, so a newer banner stays.
+      for (const end of endings) end();
+      endings.clear();
+    };
+  }, []);
+  const value = useMemo<BannerContextValue>(() => {
+    const showBannerHandle = (banner: ShowBannerInput): BannerHandle => {
+      if (!mountedRef.current) {
+        if (banner.variant !== 'error') return ignoredBanner;
+        return outer.showBannerHandle({ variant: banner.variant, message: banner.message });
+      }
+      const handle = outer.showBannerHandle(banner);
+      const end =
+        banner.variant === 'progress' ? handle.dispose : banner.onAction ? handle.dropAction : undefined;
+      if (!end) return handle;
+      const endings = endingsRef.current;
+      endings.add(end);
+      return {
+        dispose: () => {
+          endings.delete(end);
+          handle.dispose();
+        },
+        dropAction: handle.dropAction,
+      };
+    };
+    return {
+      showBanner: (banner) => showBannerHandle(banner).dispose,
+      showBannerHandle,
+      dismissBanner: () => {
+        if (mountedRef.current) outer.dismissBanner();
+      },
+    };
+  }, [outer]);
+  return <BannerContext.Provider value={value}>{children}</BannerContext.Provider>;
 }
 
 export function useBanner(): BannerContextValue {

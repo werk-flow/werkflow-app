@@ -40,7 +40,9 @@ function ZeiterfassungTodayTargetNote({
         <p className="mt-1 text-sm text-muted-foreground">
           {todayTarget.absence.type === 'sickness'
             ? 'Krankmeldung – heute keine Sollarbeitszeit.'
-            : 'Urlaub genehmigt – heute keine Sollarbeitszeit.'}
+            : todayTarget.absence.type === 'school'
+              ? 'Berufsschule – dein Tagesziel gilt heute als erfüllt.'
+              : 'Urlaub genehmigt – heute keine Sollarbeitszeit.'}
         </p>
       ) : todayTarget?.absence?.portion === 'half_day' ? (
         <p className="mt-1 text-sm text-muted-foreground">
@@ -158,7 +160,7 @@ export function ZeiterfassungDashboardHero({
 
       <p className={cn('mt-6 text-lg font-medium', ACTIVITY_TONE_TEXT[activity.tone])}>{activity.sentence}</p>
 
-      {effectiveState.breakMode === 'automatic' ? (
+      {effectiveState.breakPolicy.breakMode === 'automatic' ? (
         <p className="mt-1 text-sm text-muted-foreground">
           Pausen werden in dieser Organisation automatisch abgezogen.
         </p>

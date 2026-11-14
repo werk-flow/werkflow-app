@@ -42,6 +42,8 @@ Trap: a spinner or a generic skeleton as the loading state. The layout jumps whe
 6. Add the dialog to `lib/testing/selection/dialog-inventory.ts` and its opener to `tests/audit/support/dialog-openers/<area>.ts`.
 7. Run `bun run lint <files>`, `bun run test:unit lib/ui/dialog-contracts.test.ts lib/ui/field-contracts.test.tsx lib/testing/selection/dialog-inventory.test.ts lib/conventions/german-copy.test.ts`, then `bun run test:verify --group audit:layout:<area>`.
 
+A dialog opens with focus on its first control; one that starts on a later control to protect data names it with `startControlId`, which the layout audit checks.
+
 Trap: `autoFocus` on a field, or an `onOpenAutoFocus` that only prevents the default. Focus stays on the page behind the dialog.
 
 ### Add a list or a table
@@ -117,7 +119,8 @@ Trap: a reference rewritten because the comparison failed. A reference records a
 
 - Success closes the dialog and a `Banner` confirms. No inline success flash, no auto-close timer.
 - The root's `pending` blocks Escape, outside clicks and the close controls until the answer lands. A form inside reports its request with `useReportPending`.
-- An `AlertDialogAction` that awaits calls `event.preventDefault()` synchronously first. The primitive closes on activation before `pending` can guard it, so a failure would land in a closed dialog.
+- A confirmation whose action runs a request is `ConfirmActionDialog`. A hand-built one calls `event.preventDefault()` first in its `AlertDialogAction`, passes `pending` to the action and `error` to the footer. The primitive closes on activation, so a failure would land in a closed dialog. `ui/confirm-action-stays-open` enforces this.
+- A confirmation closes at once only when the surface under it shows the step's pending state and its failure, such as an optimistic row that comes back with its error. Mark it with `closesAtOnce` on `ConfirmActionDialog`; its `onConfirm` returns nothing. A confirm that answers `Promise.resolve(null)` after starting work fails `ui/confirm-action-stays-open`.
 - A create dialog closes optimistically only when no correctable server error can follow.
 - Escape returns focus to the control that opened the dialog.
 

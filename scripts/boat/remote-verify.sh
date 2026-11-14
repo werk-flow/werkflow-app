@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # Runs on a Boat machine started from the verification snapshot, for lib/testing/boat/verify-on-boat.ts.
 # Usage: remote-verify.sh <repository path> <HEAD commit> <main|linked> <test:verify arguments...>
-#    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> test:audit:focused <arguments...>
+#    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> <focused script> <arguments...>
+#    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> test:audit:update-references <name> <arguments...>
+#    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> types:generate
 #
 # It rebuilds the workstation's checkout at the same absolute path, so every path in a report or a
 # run manifest is the workstation's, starts the stack and, when the plan runs a browser group, the
 # test server, as CI does, then runs `bun run test:verify` with the same arguments. A leading
-# `test:audit:focused` runs that focused capture instead (lib/testing/boat/capture-on-boat.ts),
-# always with the test server. It packs the evidence the run wrote into ~/results.tgz. Exit 90
-# means setup failed before the run started.
+# `test:audit:focused`, `test:golden:focused` or a fresh-world `test:diagnostic[:audit]` runs that instead
+# (lib/testing/boat/focused-on-boat.ts), always with the test server; `test:audit:update-references`
+# is the audit one with WERKFLOW_UPDATE_VISUAL_REFERENCES=1, and the references it rewrote or wrote
+# join the evidence in the update folder the workstation named (lib/testing/boat/reference-updates.ts). A leading `types:generate` writes the
+# types of this tree's migrations from the fresh stack instead (lib/testing/boat/types-on-boat.ts),
+# without a server. It packs the evidence the run wrote into ~/results.tgz. Exit 90 means setup
+# failed before the run started.
 set -uo pipefail
 
 repo="$1"
@@ -16,10 +22,19 @@ head="$2"
 form="$3"
 shift 3
 script=test:verify
-if [ "${1:-}" = test:audit:focused ]; then
-  script=test:audit:focused
-  shift
-fi
+update=''
+case "${1:-}" in
+  test:audit:focused | test:golden:focused | types:generate | test:diagnostic | test:diagnostic:audit)
+    script="$1"
+    shift
+    ;;
+  test:audit:update-references)
+    script=test:audit:focused
+    update="${2:-}"
+    export WERKFLOW_UPDATE_VISUAL_REFERENCES=1
+    shift 2
+    ;;
+esac
 export PATH="$HOME/.bun/bin:$PATH"
 export PLAYWRIGHT_BROWSERS_PATH="$HOME/.local/share/ms-playwright"
 # Marks this machine as Boat's, so test:verify here never asks Boat again.
@@ -111,6 +126,7 @@ bash .github/actions/local-stack/wait-for-edge-runtime.sh > "$HOME/edge.log" 2>&
 # A focused capture has no plan and always needs the server. A plan is read whole first: grep -q on
 # a pipe would stop the writer, and pipefail would hide the match.
 serve=1
+[ "$script" = types:generate ] && serve=0
 if [ "$script" = test:verify ]; then
   bun run test:plan "$@" > "$HOME/plan.txt" 2> /dev/null || setup_failed "test:plan"
   grep -qE '^RUN +(golden|audit|canary):' "$HOME/plan.txt" || serve=0
@@ -132,15 +148,30 @@ if [ "$serve" = 1 ]; then
 fi
 
 phase "running $script $*"
+[ -z "$update" ] || bun scripts/boat/reference-updates.ts record "$HOME/references-before.json" ||
+  setup_failed "hashing the visual references"
 # The machine's peak memory use, so the run's size can be judged against its 16 GB.
 while :; do free -m | awk '/^Mem:/ { print $3 }'; sleep 5; done > "$HOME/memory.log" &
 sampler=$!
-bun run "$script" "$@"
+if [ "$script" = types:generate ]; then
+  # The file returns with the evidence, from the folder types-on-boat.ts reads.
+  bun run types:generate -- --local && mkdir -p .agent-logs/types/generated &&
+    cp lib/supabase/database.types.ts .agent-logs/types/generated/
+else
+  bun run "$script" "$@"
+fi
 code=$?
 kill "$sampler" 2> /dev/null
 phase "$script exited $code; peak memory in use $(sort -n "$HOME/memory.log" | tail -n 1) MiB"
 
 # The run's own evidence: every report and run folder that did not exist before, and the server log.
+# A failed collection brings no reference back and fails the run, whatever the browser run's exit.
+# A failed run's references come back marked, as evidence the workstation never places.
+if [ -n "$update" ] && ! bun scripts/boat/reference-updates.ts collect "$HOME/references-before.json" \
+  "$update" "$code"; then
+  printf '[boat] collecting the rewritten visual references failed; none come back, and the run fails.\n'
+  code=1
+fi
 find .agent-logs -mindepth 2 -maxdepth 2 -type d | sort > "$HOME/evidence-after.txt"
 comm -13 "$HOME/evidence-before.txt" "$HOME/evidence-after.txt" > "$HOME/evidence-new.txt"
 # A failed browser group's retained world dies with this machine: clean it here, so its manifest

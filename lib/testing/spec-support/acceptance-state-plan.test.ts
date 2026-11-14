@@ -7,6 +7,7 @@ import {
   interceptsRequest,
   isTargetPrefetch,
   navigationStart,
+  standaloneTarget,
   stateCapturePlan,
   stateCaptureId,
   type ObservedRequest,
@@ -65,6 +66,23 @@ test('a loading capture holds the navigation of its target and every client read
   expect(interceptsRequest(plan, request('GET', '/dashboard?_rsc=x', { rsc: '1' }), TARGET)).toBeNull();
   expect(interceptsRequest(plan, request('GET', '/auftraege'), TARGET)).toBeNull();
   expect(interceptsRequest(plan, request('GET', '/api/csp-report'), TARGET)).toBeNull();
+});
+
+test('a standalone loading capture navigates to the address it records, and its held navigation still matches', () => {
+  const target = standaloneTarget('/support', '?status=abgelehnt&einordnung=blocker');
+  expect(target).toEqual({ address: '/support?status=abgelehnt&einordnung=blocker', path: '/support' });
+  expect(standaloneTarget('/support/meldungen/abc?seite=2', undefined)).toEqual({
+    address: '/support/meldungen/abc?seite=2',
+    path: '/support/meldungen/abc',
+  });
+  const filteredNavigation = request('GET', `${target.address}&_rsc=abc`, {
+    rsc: '1',
+    'next-router-state-tree': '[]',
+  });
+  const plan = stateCapturePlan('loading', 'page');
+  expect(interceptsRequest(plan, filteredNavigation, { origin: ORIGIN, path: target.path })).toBe(
+    'navigation',
+  );
 });
 
 test('an error capture fails only client reads of the app', () => {

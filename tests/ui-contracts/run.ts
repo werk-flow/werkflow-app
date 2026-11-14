@@ -58,12 +58,15 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               )
                 return { path: join(repository, 'lib/supabase/client.ts') };
             });
+            builder.onResolve({ filter: /^@\/lib\/billing-parties\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'billing-parties-service-boundaries.ts'),
+            }));
             // The report dialog's contract runs the real launcher, dialog and upload
             // client against stub actions, router, organization and redraw.
             builder.onResolve(
               {
                 filter:
-                  /^(?:@\/lib\/problem-reports\/(?:actions|screenshot\/(?:redraw-screenshot|load-ui-string-catalog))|\.\/file-actions|@\/components\/organization\/organization-context|next\/(?:navigation|link))$/,
+                  /^(?:@\/lib\/problem-reports\/(?:actions|file-actions|screenshot\/(?:redraw-screenshot|load-ui-string-catalog))|@\/components\/organization\/organization-context|next\/(?:navigation|link))$/,
               },
               (args) => {
                 const reportModule =
@@ -72,7 +75,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 if (reportModule) return { path: join(import.meta.dir, 'problem-report-boundaries.tsx') };
               },
             );
-            builder.onResolve({ filter: /^@\/lib\/clients\/actions$/ }, () => ({
+            // Support's report page triages and opens originals through its contract's stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/problem-reports\/support-actions$/ }, () => ({
+              path: join(import.meta.dir, 'support-triage-boundaries.tsx'),
+            }));
+            builder.onResolve({ filter: /^@\/lib\/clients\/(site-role-)?actions$/ }, () => ({
               path: join(import.meta.dir, 'customer-service-boundaries.ts'),
             }));
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
@@ -92,7 +99,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
               if (
                 args.importer.endsWith('use-suggested-record-number.ts') ||
-                args.importer.endsWith('use-request-work-targets.ts')
+                args.importer.endsWith('use-request-work-targets.ts') ||
+                args.importer.endsWith('use-work-billing-parties.ts')
               )
                 return { path: join(import.meta.dir, 'calendar-service-boundaries.tsx') };
             });
@@ -103,13 +111,20 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('use-sickness-report-record-form.ts'))
                 return { path: join(import.meta.dir, 'absence-service-boundaries.ts') };
             });
+            // The CSV import dialog's repeat check, preview and booking answer through its contract's stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/inventory\/import-actions$/ }, () => ({
+              path: join(import.meta.dir, 'inventory-import-boundaries.tsx'),
+            }));
+            builder.onResolve({ filter: /^@\/lib\/members\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'member-role-service-boundaries.ts'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/org\/join-request-actions$/ }, () => ({
               path: join(import.meta.dir, 'join-request-service-boundaries.ts'),
             }));
             builder.onResolve(
               {
                 filter:
-                  /^@\/(components\/organization\/organization-context|lib\/time-tracking\/segment-actions|components\/job-picker-modal)$/,
+                  /^@\/(components\/organization\/organization-context|components\/user\/user-profile-context|lib\/time-tracking\/segment-actions|components\/job-picker-modal)$/,
               },
               (args) => {
                 if (
@@ -122,6 +137,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 }
               },
             );
+            // The correction form is outside the clock's contract; the unsent section only opens it prefilled.
+            builder.onResolve({ filter: /^@\/components\/manual-entry-dialog$/ }, (args) => {
+              if (args.importer.endsWith('clock-unsent-events.tsx'))
+                return { path: join(import.meta.dir, 'clock-unsent-boundaries.tsx') };
+            });
             builder.onResolve({ filter: /^(next\/link|next\/navigation)$/ }, (args) => {
               if (args.importer.endsWith('sidebar-link.tsx'))
                 return { path: join(import.meta.dir, 'sidebar-service-boundaries.tsx') };
@@ -156,7 +176,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (
                 args.importer.endsWith('use-list-navigation.ts') ||
-                args.importer.endsWith('use-document-library-navigation.ts')
+                args.importer.endsWith('use-document-library-navigation.ts') ||
+                args.importer.endsWith('support-filing-form.tsx')
               )
                 return { path: join(import.meta.dir, 'list-navigation-service-boundaries.ts') };
             });
@@ -177,10 +198,44 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/work-artifacts\/(?:customer-decision-)?actions$/ }, () => ({
               path: join(import.meta.dir, 'work-artifact-boundaries.ts'),
             }));
+            // The report drafts on a device: the active organization and the photo upload path.
+            builder.onResolve(
+              {
+                filter: /^@\/(components\/organization\/organization-context|lib\/documents\/upload-client)$/,
+              },
+              (args) => {
+                if (
+                  args.importer.endsWith('device-drafts.tsx') ||
+                  args.importer.endsWith('lib/field-sync/device/draft-sync.ts')
+                )
+                  return { path: join(import.meta.dir, 'device-draft-boundaries.ts') };
+              },
+            );
             // The customer decision's signature upload records the file instead of storing it.
             builder.onResolve({ filter: /^@\/lib\/documents\/upload-client$/ }, (args) => {
               if (args.importer.endsWith('use-work-artifact-customer-actions.ts'))
                 return { path: join(import.meta.dir, 'work-artifact-boundaries.ts') };
+            });
+            // The job edit dialog's save, which its focus contract never reaches,
+            // and the job header's handle on the lazily loaded dialog.
+            builder.onResolve(
+              { filter: /^(@\/lib\/jobs\/actions|\.\/job-detail-content-dialogs)$/ },
+              (args) => {
+                if (
+                  args.importer.endsWith('use-edit-job-submit.ts') ||
+                  args.importer.endsWith('job-detail-header.tsx')
+                )
+                  return { path: join(import.meta.dir, 'edit-job-service-boundaries.ts') };
+              },
+            );
+            // The access proposal's form and office review write through held stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/site-access-proposals\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'site-access-boundaries.tsx'),
+            }));
+            // The handover review saves its draft and previews through these held stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/(work-handover|documents)\/actions$/ }, (args) => {
+              if (args.importer.includes('/components/auftraege/handover/'))
+                return { path: join(import.meta.dir, 'work-handover-service-boundaries.ts') };
             });
             builder.onResolve({ filter: /^@\/lib\/qualifications\/actions$/ }, () => ({
               path: join(import.meta.dir, 'qualification-service-boundaries.ts'),
@@ -188,6 +243,19 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/org-export\/actions$/ }, () => ({
               path: join(import.meta.dir, 'organization-export-service-boundaries.ts'),
             }));
+            builder.onResolve(
+              { filter: /^(?:@\/lib\/company-profile\/actions|\.\/actions|next\/navigation)$/ },
+              (args) => {
+                if (
+                  args.path === '@/lib/company-profile/actions' ||
+                  (args.path === './actions' &&
+                    args.importer.endsWith('lib/company-profile/upload-client.ts')) ||
+                  (args.path === 'next/navigation' &&
+                    args.importer.endsWith('einstellungen-page-skeleton.tsx'))
+                )
+                  return { path: join(import.meta.dir, 'company-profile-service-boundaries.ts') };
+              },
+            );
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (args.importer.endsWith('use-export-builder.ts'))
                 return { path: join(import.meta.dir, 'organization-export-service-boundaries.ts') };
@@ -253,7 +321,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             );
             builder.onResolve(
               {
-                filter: /^@\/lib\/personnel\/(?:lifecycle|onboarding|document-download|handover)-actions$/,
+                filter:
+                  /^@\/lib\/personnel\/(?:lifecycle|onboarding|document-download|handover|school-day)-actions$/,
               },
               (args) => ({
                 path: join(
@@ -291,7 +360,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^(next\/navigation|@\/lib\/(subscription\/actions|settings\/email-change-actions|time-tracking\/(?:clock-state|entry-write|review)-actions|inventory\/actions|supabase\/client))$/,
+                  /^(next\/navigation|@\/lib\/(subscription\/actions|settings\/email-change-actions|time-tracking\/(?:clock-state|entry-write|review)-actions|inventory\/(?:material-use-)?actions|supabase\/client))$/,
               },
               () => ({
                 path: join(import.meta.dir, 'service-boundaries.ts'),

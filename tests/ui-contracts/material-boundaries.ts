@@ -3,6 +3,7 @@
 // write gate; an accepted plan becomes a line of the next route read.
 import type { InventoryLocation, InventoryPickerOption, JobMaterialLine } from '@/lib/inventory/types';
 import { holdWrite } from './held-write-boundary';
+import { ROUTE_REFRESH_EVENT } from './lifecycle-boundaries';
 
 export const materialContractItem: InventoryPickerOption = {
   id: 'contract-item',
@@ -36,7 +37,36 @@ declare global {
   }
 }
 
-window.uiContractMaterial = { lines: [] };
+/** A line whose two pieces a worker took for the job; the use contract starts from it. */
+const takenContractLine: JobMaterialLine = {
+  id: 'contract-taken-line',
+  jobId: 'contract-job',
+  projectId: null,
+  itemId: materialContractItem.id,
+  itemName: materialContractItem.name,
+  itemType: materialContractItem.itemType,
+  unit: materialContractItem.unit,
+  categoryName: null,
+  preferredLocationId: materialContractLocation.id,
+  preferredLocationName: materialContractLocation.name,
+  plannedQuantity: 2,
+  takenQuantity: 2,
+  usedQuantity: 0,
+  returnedQuantity: 0,
+  billableQuantity: 2,
+  isBillable: true,
+  isUnplanned: false,
+  status: 'taken',
+  notes: null,
+  availableQuantity: materialContractItem.availableQuantity,
+};
+
+window.uiContractMaterial = {
+  lines:
+    window.uiContractFixture === 'material-use' || window.uiContractFixture === 'material-use-off-page'
+      ? [takenContractLine]
+      : [],
+};
 
 export function readMaterialLinesContract(): { success: true; lines: JobMaterialLine[] } {
   return { success: true, lines: structuredClone(window.uiContractMaterial.lines) };
@@ -67,6 +97,7 @@ export async function createJobMaterialLineContract(input: {
       preferredLocationName: input.preferredLocationId ? materialContractLocation.name : null,
       plannedQuantity: input.plannedQuantity,
       takenQuantity: 0,
+      usedQuantity: 0,
       returnedQuantity: 0,
       billableQuantity: 0,
       isBillable: true,
@@ -77,6 +108,25 @@ export async function createJobMaterialLineContract(input: {
     },
   ];
   return { success: true, lineId };
+}
+
+export async function recordJobMaterialUseContract(input: {
+  operationId: string;
+  lineId: string;
+  quantity: number;
+  note?: string | null;
+}): Promise<{ success: true; usedQuantity: number } | { success: false; error: string }> {
+  const refusal = await holdWrite('record-job-material-use', input);
+  if (refusal) return { success: false, error: refusal };
+  let usedQuantity = 0;
+  window.uiContractMaterial.lines = window.uiContractMaterial.lines.map((line) => {
+    if (line.id !== input.lineId) return line;
+    usedQuantity = line.usedQuantity + input.quantity;
+    return { ...line, usedQuantity };
+  });
+  // The real action revalidates the Auftrag pages, so its response renders the route.
+  window.dispatchEvent(new Event(ROUTE_REFRESH_EVENT));
+  return { success: true, usedQuantity };
 }
 
 export async function readMaterialPickerContract(): Promise<{

@@ -1,14 +1,15 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { CHANGED_CHECK_BASE, changedCheckPlan } from '../lib/testing/runner/changed-check';
+import { CHANGED_CHECK_BASE, changedCheckPlan, unitTestSourcesOf } from '../lib/testing/runner/changed-check';
 import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 
 // `bun run check:changed`: the fast check an agent runs before it pushes
 // (docs/technical/testing.md, "Run checks while you work"). It formats and
 // lints the files that differ from the merge base, typechecks and looks for
 // unused code across the repository, checks that an added migration sorts
-// after main's newest, and runs the unit tests beside the changed files.
+// after main's newest, brings the shared local stack to main and fails while
+// it holds anything main lacks, and runs the unit tests beside the changed files.
 // Committed, uncommitted and untracked changes all count.
 // It holds one of the machine's heavy slots until it exits (lib/testing/runner/heavy-slot.ts).
 await acquireHeavySlot('check:changed');
@@ -30,7 +31,12 @@ const changed = [
     ...git('ls-files', '--others', '--exclude-standard', '-z'),
   ]),
 ].filter(present);
-const plan = changedCheckPlan(changed, present);
+const unitTestSources = unitTestSourcesOf(
+  git('ls-files', '-z', 'lib/*.test.ts', 'lib/*.test.tsx', 'lib/*.test.mjs'),
+  present,
+  (file) => readFileSync(resolve(repositoryRoot, file), 'utf8'),
+);
+const plan = changedCheckPlan(changed, present, unitTestSources);
 
 type Outcome = { name: string; code: number; seconds: number; output: string };
 
@@ -80,6 +86,8 @@ const outcomes = await Promise.all([
   ]),
   step('unused', [bin('knip'), '--no-progress', '--cache']),
   step('migration order', [process.execPath, 'scripts/check-migration-order.ts']),
+  // The stack every worktree shares is main at some commit (lib/testing/local-stack/stack-sync.ts).
+  step('shared stack', [process.execPath, 'scripts/local-stack.ts', 'sync', '--no-wait']),
   plan.unitTests.length
     ? step('unit', [process.execPath, 'scripts/run-unit-tests.ts', ...plan.unitTests])
     : null,

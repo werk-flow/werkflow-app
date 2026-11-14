@@ -30,6 +30,8 @@ const AUFGABEN_OVERVIEW_TABLES = [
   'organization_capabilities',
   'client_requests',
   'client_follow_ups',
+  // A field worker's access proposal appears, is replaced or is decided.
+  'site_access_proposals',
   'organization_join_requests',
   // An owner who leaves or loses the role hands their overdue callbacks and
   // follow-ups to every manager.

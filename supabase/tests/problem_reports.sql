@@ -8,7 +8,10 @@
 -- report leaves only through the retention run or a cascade, and its
 -- originals change only there. The retention run deletes only due originals,
 -- keeps the scrubbed copy, and queues every file path; 24 months after
--- closing it deletes the report.
+-- closing it deletes the report. The scrub outcome
+-- (20261201100001_keep_the_scrubbed_copy_of_a_problem_report.sql, #332)
+-- writes both parts of the copy with the state in one call, only inside the
+-- report's organization, and never changes a written copy.
 begin;
 
 insert into auth.users (
@@ -43,31 +46,31 @@ insert into public.organization_members (organization_id, user_id, role) values
 -- 26: support filed it for 4, whose account is deleted below.
 insert into public.problem_reports (
   id, organization_id, reporter_id, filed_by_id, created_at, status, closed_at,
-  description, context, originals_deleted_at, scrubbed_description, scrub_state
+  description, context, originals_deleted_at, scrubbed_description, scrubbed_context, scrub_state
 ) values
 ('33100000-0000-0000-0000-000000000020', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
  now() - interval '13 months', 'eingegangen', null, 'Speichern geht nicht', '{"routeTemplate":"/auftraege"}',
- null, 'Speichern geht nicht', 'bereinigt'),
+ null, 'Speichern geht nicht', '{"routeTemplate":"/auftraege"}', 'bereinigt'),
 ('33100000-0000-0000-0000-000000000021', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
- now() - interval '4 months', 'erledigt', now() - interval '91 days', 'Liste leer', '{}', null, null, 'ausstehend'),
+ now() - interval '4 months', 'erledigt', now() - interval '91 days', 'Liste leer', '{}', null, null, null, 'ausstehend'),
 ('33100000-0000-0000-0000-000000000022', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
- now() - interval '4 months', 'abgelehnt', now() - interval '30 days', 'Bitte dunkler', '{}', null, null, 'ausstehend'),
+ now() - interval '4 months', 'abgelehnt', now() - interval '30 days', 'Bitte dunkler', '{}', null, null, null, 'ausstehend'),
 ('33100000-0000-0000-0000-000000000023', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
- now() - interval '6 months', 'in_bearbeitung', null, 'Knopf fehlt', '{}', null, null, 'ausstehend'),
+ now() - interval '6 months', 'in_bearbeitung', null, 'Knopf fehlt', '{}', null, null, null, 'ausstehend'),
 ('33100000-0000-0000-0000-000000000024', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
  now() - interval '26 months', 'erledigt', now() - interval '25 months', null, null,
- now() - interval '22 months', 'Alt', 'bereinigt'),
+ now() - interval '22 months', 'Alt', '{}', 'bereinigt'),
 ('33100000-0000-0000-0000-000000000025', '33100000-0000-0000-0000-000000000011',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
- now(), 'eingegangen', null, 'Andere Firma', '{}', null, null, 'ausstehend'),
+ now(), 'eingegangen', null, 'Andere Firma', '{}', null, null, null, 'ausstehend'),
 ('33100000-0000-0000-0000-000000000026', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000004', '33100000-0000-0000-0000-000000000003',
- now(), 'eingegangen', null, 'Angerufen', '{}', null, null, 'ausstehend');
+ now(), 'eingegangen', null, 'Angerufen', '{}', null, null, null, 'ausstehend');
 
 insert into public.problem_report_files (
   id, organization_id, report_id, kind, storage_path, file_name, mime_type, size_bytes
@@ -121,6 +124,7 @@ begin
         'public.register_problem_report_file(uuid, uuid, uuid, uuid, text, text, text, text, bigint, integer)',
         'EXECUTE')
       or has_function_privilege(v_role, 'public.submit_problem_report(uuid, uuid, uuid, text, jsonb)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.record_problem_report_scrub(uuid, uuid, text, jsonb)', 'EXECUTE')
       or has_function_privilege(v_role,
         'app_private.problem_report_retention_step(timestamptz, timestamptz, timestamptz)', 'EXECUTE')
     then raise exception '% executes a report function', v_role; end if;
@@ -234,20 +238,20 @@ declare
   v_org constant uuid := '33100000-0000-0000-0000-000000000010';
   v_next integer;
 begin
-  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000025') <> 1 then
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000025') is distinct from 1 then
     raise exception 'an organization does not number its reports from 1';
   end if;
   v_next := (select max(number) + 1 from public.problem_reports where organization_id = v_org);
   insert into public.problem_reports (id, organization_id, reporter_id, filed_by_id, description, context)
   values ('33100000-0000-0000-0000-000000000027', v_org, '33100000-0000-0000-0000-000000000002',
     '33100000-0000-0000-0000-000000000002', 'Neu', '{}');
-  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000027') <> v_next then
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000027') is distinct from v_next then
     raise exception 'a new report did not take the next number of its organization';
   end if;
   insert into public.problem_reports (id, organization_id, reporter_id, filed_by_id, description, context, number)
   values ('33100000-0000-0000-0000-000000000028', v_org, '33100000-0000-0000-0000-000000000002',
     '33100000-0000-0000-0000-000000000002', 'Eigene Nummer', '{}', 1);
-  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000028') <> v_next + 1 then
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000028') is distinct from v_next + 1 then
     raise exception 'a report kept a number the writer chose';
   end if;
   begin
@@ -269,9 +273,9 @@ declare
   v_first integer;
 begin
   v_first := public.submit_problem_report(v_report, v_org, v_worker, 'Einmal', '{}');
-  if public.submit_problem_report(v_report, v_org, v_worker, 'Noch einmal', '{}') <> v_first
+  if public.submit_problem_report(v_report, v_org, v_worker, 'Noch einmal', '{}') is distinct from v_first
     or (select count(*) from public.problem_reports where id = v_report) <> 1
-    or (select description from public.problem_reports where id = v_report) <> 'Einmal'
+    or (select description from public.problem_reports where id = v_report) is distinct from 'Einmal'
   then raise exception 'a retried report save did not find its own report'; end if;
   begin
     perform public.submit_problem_report(v_report, v_org, '33100000-0000-0000-0000-000000000001', 'Fremd', '{}');
@@ -434,6 +438,67 @@ $$;
 drop table pg_temp.cascade_probe;
 set local role service_role;
 
+-- The scrub outcome writes both parts of the copy and the state in one call.
+-- No copy is the failed state, and a later scrub may still succeed. A written
+-- copy never changes: not through a failed run beside it, not through a
+-- second copy. A report named under another organization is not found, half
+-- a copy is refused, and the original stays as it was.
+do $$
+declare
+  v_org constant uuid := '33100000-0000-0000-0000-000000000010';
+  v_report constant uuid := '33100000-0000-0000-0000-000000000022';
+begin
+  begin
+    perform public.record_problem_report_scrub('33100000-0000-0000-0000-000000000011', v_report, 'Kopie', '{}');
+    raise exception 'a scrub wrote a report named under another organization';
+  exception when raise_exception then
+    if sqlerrm <> 'report_not_found' then raise; end if;
+  end;
+  begin
+    perform public.record_problem_report_scrub(v_org, v_report, 'Kopie', null);
+    raise exception 'half a scrubbed copy was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'scrubbed_copy_incomplete' then raise; end if;
+  end;
+  if (select scrub_state from public.problem_reports where id = v_report) is distinct from 'ausstehend'
+  then raise exception 'a refused scrub changed the report'; end if;
+
+  if public.record_problem_report_scrub(v_org, v_report, null, null) is distinct from 'nicht_bereinigbar'
+  then raise exception 'a failed scrub did not answer the failed state'; end if;
+  if not exists (
+    select 1 from public.problem_reports
+    where id = v_report and scrub_state = 'nicht_bereinigbar'
+      and scrubbed_description is null and scrubbed_context is null
+  ) then raise exception 'a failed scrub left a copy or the wrong state'; end if;
+  if public.record_problem_report_scrub(v_org, v_report, 'Bitte [Person 1] dunkler', '{"offline":false}')
+    is distinct from 'bereinigt'
+  then raise exception 'a scrub after a failed one was not written'; end if;
+  if public.record_problem_report_scrub(v_org, v_report, null, null) is distinct from 'bereinigt'
+    or public.record_problem_report_scrub(v_org, v_report, 'Andere Kopie', '{}') is distinct from 'bereinigt'
+  then raise exception 'a report with its copy did not answer `bereinigt`'; end if;
+  if not exists (
+    select 1 from public.problem_reports
+    where id = v_report and scrub_state = 'bereinigt' and description = 'Bitte dunkler'
+      and scrubbed_description = 'Bitte [Person 1] dunkler' and scrubbed_context = '{"offline":false}'
+  ) then raise exception 'a written scrubbed copy changed, or the scrub changed the original'; end if;
+
+  -- The state and both parts of the copy agree, whoever writes the row.
+  begin
+    update public.problem_reports set scrub_state = 'bereinigt', scrubbed_description = 'Kopie'
+    where id = '33100000-0000-0000-0000-000000000023';
+    raise exception 'a scrubbed state without the scrubbed context was accepted';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.problem_reports
+    set scrub_state = 'bereinigt', scrubbed_description = 'Kopie', scrubbed_context = '[]'
+    where id = '33100000-0000-0000-0000-000000000023';
+    raise exception 'a scrubbed context that is no object was accepted';
+  exception when check_violation then null;
+  end;
+end;
+$$;
+
 -- Only the due reports are listed, in id order and after the given id.
 do $$
 begin
@@ -455,15 +520,15 @@ declare
   v_org constant uuid := '33100000-0000-0000-0000-000000000010';
 begin
   if public.apply_problem_report_retention('33100000-0000-0000-0000-000000000011', '33100000-0000-0000-0000-000000000020')
-    <> 'not_due'
+    is distinct from 'not_due'
     or (select description from public.problem_reports where id = '33100000-0000-0000-0000-000000000020') is null
   then raise exception 'retention changed a report named under another organization'; end if;
-  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000020') <> 'originals_deleted'
-    or public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000021') <> 'originals_deleted'
+  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000020') is distinct from 'originals_deleted'
+    or public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000021') is distinct from 'originals_deleted'
   then raise exception 'due originals were not deleted'; end if;
-  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000022') <> 'not_due'
-    or public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000023') <> 'not_due'
-    or public.apply_problem_report_retention(v_org, gen_random_uuid()) <> 'not_due'
+  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000022') is distinct from 'not_due'
+    or public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000023') is distinct from 'not_due'
+    or public.apply_problem_report_retention(v_org, gen_random_uuid()) is distinct from 'not_due'
   then raise exception 'a report that is not due was changed'; end if;
 
   if exists (
@@ -473,9 +538,19 @@ begin
   ) then raise exception 'retention kept an original text'; end if;
   if exists (select 1 from public.problem_report_files where report_id = '33100000-0000-0000-0000-000000000020')
   then raise exception 'retention kept a file row'; end if;
-  if (select scrubbed_description from public.problem_reports where id = '33100000-0000-0000-0000-000000000020')
-    is distinct from 'Speichern geht nicht'
-  then raise exception 'retention removed the scrubbed copy'; end if;
+  -- A due report without a scrubbed copy loses its originals on time too: the
+  -- deletion periods bind, and the daily run marks it nicht_bereinigbar.
+  if not exists (
+    select 1 from public.problem_reports
+    where id = '33100000-0000-0000-0000-000000000021' and originals_deleted_at is not null
+      and description is null and context is null
+      and scrubbed_description is null and scrubbed_context is null
+  ) then raise exception 'retention waited for a scrubbed copy'; end if;
+  if not exists (
+    select 1 from public.problem_reports
+    where id = '33100000-0000-0000-0000-000000000020' and scrubbed_description = 'Speichern geht nicht'
+      and scrubbed_context = '{"routeTemplate":"/auftraege"}'
+  ) then raise exception 'retention removed the scrubbed copy'; end if;
   if not exists (select 1 from public.problem_report_events where id = '33100000-0000-0000-0000-000000000040')
   then raise exception 'retention removed the history of a kept report'; end if;
   if (select array_agg(storage_path order by storage_path) from public.storage_purge_queue
@@ -497,7 +572,7 @@ do $$
 declare
   v_org constant uuid := '33100000-0000-0000-0000-000000000010';
 begin
-  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000024') <> 'report_deleted' then
+  if public.apply_problem_report_retention(v_org, '33100000-0000-0000-0000-000000000024') is distinct from 'report_deleted' then
     raise exception 'the due report was not deleted';
   end if;
   if exists (select 1 from public.problem_reports where id = '33100000-0000-0000-0000-000000000024')

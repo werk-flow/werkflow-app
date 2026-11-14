@@ -71,10 +71,10 @@ test('statement boundaries and escape modes count, so different SQL never shares
 
 test('drift compares by name and statements, never by version', () => {
   const tree = [
-    { name: 'close_period', sql: FILE },
-    { name: 'only_here', sql: 'select 1;' },
-    { name: 'edited_after_apply', sql: 'select 2;' },
-    { name: 'repaired', sql: 'select 3;' },
+    { version: '20261108150000', name: 'close_period', sql: FILE },
+    { version: '20261108160000', name: 'only_here', sql: 'select 1;' },
+    { version: '20261107160000', name: 'edited_after_apply', sql: 'select 2;' },
+    { version: '20261107170000', name: 'repaired', sql: 'select 3;' },
   ];
   const drift = migrationDrift(tree, [
     // The same migration under its pre-merge version.
@@ -88,6 +88,9 @@ test('drift compares by name and statements, never by version', () => {
     stackOnly: ['another_branch'],
     treeOnly: ['only_here'],
     changed: ['edited_after_apply'],
+    unverified: ['repaired'],
+    // close_period under its pre-merge version, and the other branch's row.
+    unknownVersions: ['20261107150000', '20261107180000'],
   });
   expect(driftLine(drift)).toBe(
     "The shared stack's migrations drift from this tree's: 1 migrations only on the shared stack (another_branch), 1 only in this tree (only_here), 1 with other statements (edited_after_apply).",
@@ -101,7 +104,15 @@ test('drift compares by name and statements, never by version', () => {
 });
 
 test('the line names at most three migrations per part', () => {
-  expect(driftLine({ stackOnly: ['a', 'b', 'c', 'd'], treeOnly: [], changed: [] })).toBe(
+  expect(
+    driftLine({
+      stackOnly: ['a', 'b', 'c', 'd'],
+      treeOnly: [],
+      changed: [],
+      unverified: [],
+      unknownVersions: [],
+    }),
+  ).toBe(
     "The shared stack's migrations drift from this tree's: 4 migrations only on the shared stack (a, b, c, …), 0 only in this tree.",
   );
 });

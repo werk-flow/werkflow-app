@@ -28,13 +28,18 @@ type ExcludedTable =
   | 'problem_reports'
   | 'problem_report_events'
   | 'problem_report_files'
+  // The reporter's live signal of a changed report: a timestamp, no record.
+  | 'problem_report_signals'
   // The paying account's billing state, not the organization's records.
   | 'subscriptions'
   // The file plan and part state of earlier exports, whose archives are gone
   // after seven days; one row per file would grow every export by the last.
   // Their history stays in `organization_exports` and `organization_export_events`.
   | 'organization_export_files'
-  | 'organization_export_parts';
+  | 'organization_export_parts'
+  // Idempotency keys of report drafts a phone sent; the revision each one
+  // wrote is in `work_artifact_revisions`.
+  | 'work_artifact_draft_operations';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
@@ -62,8 +67,11 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   client_follow_ups: 'Kunden_Wiedervorlagen',
   client_request_events: 'Anfragen_Ereignisse',
   client_requests: 'Anfragen',
+  client_site_roles: 'Kunden_Objektrollen',
   client_sites: 'Kunden_Standorte',
   clients: 'Kunden',
+  company_document_profile_events: 'Firmenangaben_Ereignisse',
+  company_document_profiles: 'Firmenangaben',
   document_audit_events: 'Dokumente_Protokoll',
   document_folders: 'Dokumente_Ordner',
   document_links: 'Dokumente_Verknüpfungen',
@@ -84,6 +92,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   inventory_categories: 'Lager_Kategorien',
   inventory_import_batches: 'Lager_Importe',
   inventory_item_barcodes: 'Lager_Barcodes',
+  inventory_item_prices: 'Lager_Artikelpreise',
+  inventory_item_suppliers: 'Lager_Artikellieferanten',
   inventory_items: 'Lager_Artikel',
   inventory_locations: 'Lager_Lagerorte',
   inventory_movements: 'Lager_Bewegungen',
@@ -98,8 +108,11 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   job_instruction_item_evidence_requirements: 'Aufträge_Arbeitsschritte_Nachweisanforderungen',
   job_instruction_items: 'Aufträge_Arbeitsschritte',
   job_material_lines: 'Aufträge_Material',
+  job_material_use_events: 'Aufträge_Material_Verbrauch',
   job_qualification_assessments: 'Aufträge_Qualifikationsprüfungen',
   jobs: 'Aufträge',
+  leistung_price_versions: 'Leistungen_Preise',
+  leistungen: 'Leistungen',
   maintenance_coverage_events: 'Wartungsverträge_Ereignisse',
   maintenance_coverages: 'Wartungsverträge',
   maintenance_due_evidence_links: 'Wartungen_Nachweisverknüpfungen',
@@ -161,6 +174,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   profiles: 'Personen',
   projects: 'Projekte',
   qualification_events: 'Qualifikationen_Ereignisse',
+  school_days: 'Berufsschultage',
   service_case_equipment_links: 'Servicefälle_Anlagen',
   service_case_events: 'Servicefälle_Ereignisse',
   service_case_evidence_links: 'Servicefälle_Nachweise',
@@ -168,6 +182,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   service_cases: 'Servicefälle',
   sickness_report_events: 'Krankmeldungen_Ereignisse',
   sickness_reports: 'Krankmeldungen',
+  site_access_proposals: 'Kunden_Zugangsvorschläge',
   team_events: 'Teams_Ereignisse',
   team_memberships: 'Teams_Mitglieder',
   teams: 'Teams',
@@ -215,6 +230,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   work_artifact_revisions: 'Arbeitsnachweise_Fassungen',
   work_artifact_signature_uploads: 'Arbeitsnachweise_Unterschriften',
   work_artifacts: 'Arbeitsnachweise',
+  work_billing_parties: 'Arbeit_Auftraggeber_und_Rechnungsempfänger',
   work_blocker_events: 'Arbeit_Hindernisse_Ereignisse',
   work_blockers: 'Arbeit_Hindernisse',
   work_dependencies: 'Arbeit_Abhängigkeiten',
@@ -225,6 +241,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   work_handover_packages: 'Übergaben',
   work_handover_release_items: 'Übergaben_Freigaben_Inhalte',
   work_handover_releases: 'Übergaben_Freigaben',
+  work_leads: 'Projektleitungen',
   work_request_entries: 'Arbeit_Hinzugefügte_Anfragen',
   work_schedules: 'Arbeitszeitmodelle',
   work_template_applications: 'Arbeitsvorlagen_Anwendungen',

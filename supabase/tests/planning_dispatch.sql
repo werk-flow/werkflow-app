@@ -100,7 +100,7 @@ begin
     org, admin_user, main_occurrence, null, null, 'Schlüssel beim Hausmeister.', '{}'::jsonb,
     repeat('a', 64), '77000000-0000-4000-8000-000000000031'
   );
-  if public.acknowledge_planning_dispatch(org, employee_user, main_dispatch, 1) <> 'acknowledged'
+  if public.acknowledge_planning_dispatch(org, employee_user, main_dispatch, 1) is distinct from 'acknowledged'
     then raise exception 'the recipient could not acknowledge the dispatch'; end if;
   if exists (select 1 from public.time_entries where organization_id = org)
      or exists (select 1 from public.planning_customer_commitments where organization_id = org)
@@ -168,8 +168,8 @@ begin
                 join public.planning_dispatches dispatch on dispatch.current_revision_id = acknowledgement.revision_id
                 where dispatch.id = main_dispatch)
     then raise exception 'a moved visit kept a valid acknowledgement'; end if;
-  if (select committed_date from public.planning_customer_commitments where id = commitment_id) <> visit_day
-     or (select status::text from public.planning_customer_commitments where id = commitment_id) <> 'active'
+  if (select committed_date from public.planning_customer_commitments where id = commitment_id) is distinct from visit_day
+     or (select status::text from public.planning_customer_commitments where id = commitment_id) is distinct from 'active'
     then raise exception 'moving the visit changed the customer commitment'; end if;
   if exists (select 1 from public.time_entries where organization_id = org)
     then raise exception 'dispatch, commitment or move created actual time'; end if;

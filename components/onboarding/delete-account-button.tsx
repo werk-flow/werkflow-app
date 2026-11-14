@@ -1,5 +1,6 @@
 'use client';
 
+import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { useState, useMemo } from 'react';
 import { Trash2, AlertTriangle } from 'lucide-react';
 
@@ -21,6 +22,7 @@ import { deleteAccount } from '@/lib/auth/actions';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
@@ -40,21 +42,24 @@ export function DeleteAccountButton() {
 
     await runDelete(async () => {
       try {
-        const result = await deleteAccount();
+        // Before the account goes: afterwards nothing on the device could be sent any more.
+        await endSessionAfterCheck(setError, async () => {
+          const result = await deleteAccount();
 
-        if (!result.success) {
-          setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
-          return;
-        }
+          if (!result.success) {
+            setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
+            return;
+          }
 
-        clearManualEntryBridge();
-        await clearServiceWorkerCaches();
-        await clearTodayOnDevice();
-        // Sign out locally and load the login page fresh — the deleted account's
-        // other sessions are already gone server-side.
-        await supabase.auth.signOut({ scope: 'local' });
-        loadDocument('/login?message=account_deleted');
-        return untilPageLeaves();
+          clearManualEntryBridge();
+          await clearServiceWorkerCaches();
+          await clearTodayOnDevice();
+          // Sign out locally and load the login page fresh — the deleted account's
+          // other sessions are already gone server-side.
+          await supabase.auth.signOut({ scope: 'local' });
+          loadDocument('/login?message=account_deleted');
+          return untilPageLeaves();
+        });
       } catch {
         setError(SHARED_FAILURE_MESSAGES.unexpected_error);
       }
@@ -91,13 +96,15 @@ export function DeleteAccountButton() {
               // handleDelete shows its own failures in the dialog.
               void handleDelete();
             }}
-            disabled={isDeleting}
+            pending={isDeleting}
             variant="destructive"
           >
             {isDeleting ? 'Wird gelöscht…' : 'Konto löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
+      {/* The deletion ends the session, which may ask about unsent work: outside the app shell it renders here. */}
+      <UnsentWorkHost />
     </AlertDialog>
   );
 }

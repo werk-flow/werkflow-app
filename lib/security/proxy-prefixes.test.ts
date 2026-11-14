@@ -4,11 +4,16 @@ import { resolve } from 'node:path';
 
 // Tier 2 guard for SI-012: every authenticated route area must be routed by
 // proxy.ts. The proxy runs on the edge and cannot read the file system, so the
-// literal list is compared here against the app/(app) folders plus the two
-// authenticated areas that live outside the group.
+// literal list is compared here against the app/(app) folders plus the
+// authenticated areas that live outside the group, each with its folder.
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
-const authenticatedAreasOutsideGroup = ['/onboarding', '/upgrade'];
+const areaFoldersOutsideGroup: Readonly<Record<string, string>> = {
+  '/onboarding': 'app/onboarding',
+  '/upgrade': 'app/upgrade',
+  '/support': 'app/(support)/support',
+};
+const authenticatedAreasOutsideGroup = Object.keys(areaFoldersOutsideGroup);
 
 function readProxySource(): string {
   return readFileSync(resolve(repositoryRoot, 'proxy.ts'), 'utf8');
@@ -40,7 +45,7 @@ test('the proxy matcher routes every protected prefix', () => {
   for (const prefix of expectedPrefixes()) {
     // An area with nested pages needs the wildcard, or its subroutes never reach the
     // proxy: Step 3 (2026-09-13) found /zeiterfassung listed bare with four subroutes.
-    const folder = authenticatedAreasOutsideGroup.includes(prefix) ? `app${prefix}` : `app/(app)${prefix}`;
+    const folder = areaFoldersOutsideGroup[prefix] ?? `app/(app)${prefix}`;
     // Route groups and private folders (`(group)`, `_lib`) are not subroutes.
     const nested = readdirSync(resolve(repositoryRoot, folder), { withFileTypes: true }).some(
       (entry) => entry.isDirectory() && !/^[_(]/.test(entry.name),

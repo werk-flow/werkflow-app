@@ -1,0 +1,282 @@
+'use server';
+
+import { randomUUID } from 'node:crypto';
+import { revalidatePath } from 'next/cache';
+
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import { stationeryMarginsFit } from '@/lib/document-rendering/page-geometry';
+import { canEmbedFile } from '@/lib/document-rendering/render';
+import { logError } from '@/lib/logging';
+import { resolveActionContext, resolveActionContextFor, type ActionContext } from '@/lib/org/action-context';
+import {
+  copyStagedUpload,
+  createSignedUploadUrl,
+  discardStorageObjects,
+  uploadStagingPath,
+} from '@/lib/storage/r2';
+import { uploadRuleFailure } from '@/lib/storage/upload-rules';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { isConfirmedWriteRefusal, writeRefusalFor } from '@/lib/supabase/write-refusal';
+
+import {
+  COMPANY_FILE_RULES,
+  companyFileFinalizeInputSchema,
+  companyFileRemoveInputSchema,
+  companyFileTicketInputSchema,
+  saveCompanyProfileInputSchema,
+  type CompanyFileFinalizeInput,
+  type CompanyFileRemoveInput,
+  type CompanyFileTicketInput,
+  type CompanyFileTicketResult,
+  type SaveCompanyProfileInput,
+  type SaveCompanyProfileResult,
+} from './profile';
+import { companyFilePath, readCompanyFile } from './reads';
+
+// The writes of the company document profile (werk-flow/werkflow-planning#378).
+// Admin and Büro of the named organization only, while it is their active
+// one: the settings page shows the active organization's profile, so a form
+// loaded for another one is stale and never writes there. The details save in one
+// database call with their history. Logo and stationery follow the upload
+// flow of docs/technical/document-storage-and-access.md: the ticket signs a
+// PUT for a staging key, the browser moves the bytes, and the finalize copies
+// them to a key of its own, checks that the renderer embeds them, and
+// registers the copy in one database call. No byte passes through an action.
+
+const SETTINGS_PATH = '/einstellungen/dokumente';
+const INVALID_INPUT = { success: false, error: 'invalid_input' } as const;
+const refusal = writeRefusalFor(
+  new Set(['not_authorized', 'profile_changed', 'no_changes', 'stationery_first_missing', 'file_changed']),
+);
+
+async function resolveManagerOfNamedOrganization(
+  organizationId: string,
+): Promise<
+  | { success: true; context: ActionContext }
+  | ActionFailure<
+      'not_authenticated' | 'not_a_member' | 'no_active_org' | 'organization_changed' | 'not_authorized'
+    >
+> {
+  const auth = await resolveActionContextFor(organizationId);
+  if (!auth.success) return auth;
+  const active = await resolveActionContext();
+  if (!active.success) return active;
+  if (active.context.orgId !== auth.context.orgId) return { success: false, error: 'organization_changed' };
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+  return auth;
+}
+
+/** Saves the details and offer defaults; answers the new version. */
+export async function saveCompanyDocumentProfile(
+  rawInput: SaveCompanyProfileInput,
+): Promise<SaveCompanyProfileResult> {
+  const parsed = saveCompanyProfileInputSchema.safeParse(rawInput);
+  if (!parsed.success) return INVALID_INPUT;
+  const input = parsed.data;
+  const auth = await resolveManagerOfNamedOrganization(input.organizationId);
+  if (!auth.success) return auth;
+  const { details } = input;
+  if (
+    !stationeryMarginsFit({
+      firstPage: details.firstPageMargins,
+      followingPages: details.followingPageMargins,
+    })
+  ) {
+    return { success: false, error: 'margins_leave_no_room' };
+  }
+
+  const { data, error } = await createSupabaseAdminClient().rpc(
+    'save_company_document_profile',
+    rpcArgs('save_company_document_profile', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_expected_version: input.expectedVersion,
+      p_values: {
+        company_name: details.companyName,
+        street: details.street,
+        postal_code: details.postalCode,
+        city: details.city,
+        phone: details.phone,
+        email: details.email,
+        website: details.website,
+        register_court: details.registerCourt,
+        register_number: details.registerNumber,
+        managing_directors: details.managingDirectors,
+        tax_number: details.taxNumber,
+        vat_id: details.vatId,
+        bank_name: details.bankName,
+        iban: details.iban,
+        bic: details.bic,
+        offer_opening_text: details.offerOpeningText,
+        offer_closing_text: details.offerClosingText,
+        offer_validity_days: details.offerValidityDays,
+        standard_tax_rate_basis_points: details.standardTaxRateBasisPoints,
+        stationery_first_top_mm: details.firstPageMargins.topMm,
+        stationery_first_right_mm: details.firstPageMargins.rightMm,
+        stationery_first_bottom_mm: details.firstPageMargins.bottomMm,
+        stationery_first_left_mm: details.firstPageMargins.leftMm,
+        stationery_following_top_mm: details.followingPageMargins.topMm,
+        stationery_following_right_mm: details.followingPageMargins.rightMm,
+        stationery_following_bottom_mm: details.followingPageMargins.bottomMm,
+        stationery_following_left_mm: details.followingPageMargins.leftMm,
+      },
+      p_attempt_key: input.attemptKey,
+    }),
+  );
+  if (error || data === null) {
+    return refusal(error, 'save_failed', 'saveCompanyDocumentProfile: save failed');
+  }
+  revalidatePath(SETTINGS_PATH);
+  return { success: true, version: data };
+}
+
+/** Signs the browser's upload of a logo or stationery page. */
+export async function createCompanyDocumentFileUploadTicket(
+  rawInput: CompanyFileTicketInput,
+): Promise<CompanyFileTicketResult> {
+  const parsed = companyFileTicketInputSchema.safeParse(rawInput);
+  if (!parsed.success) return INVALID_INPUT;
+  const input = parsed.data;
+  const auth = await resolveManagerOfNamedOrganization(input.organizationId);
+  if (!auth.success) return auth;
+  const ruleFailure = uploadRuleFailure(COMPANY_FILE_RULES[input.kind], input.mimeType, input.fileSizeBytes);
+  if (ruleFailure) return { success: false, error: ruleFailure };
+
+  const fileId = randomUUID();
+  try {
+    const uploadUrl = await createSignedUploadUrl({
+      organizationId: auth.context.orgId,
+      path: companyFilePath(auth.context, fileId, input.kind),
+      contentType: input.mimeType,
+    });
+    return { success: true, ticket: { fileId, uploadUrl } };
+  } catch (error) {
+    logError('createCompanyDocumentFileUploadTicket: signing failed', error);
+    return { success: false, error: 'ticket_failed' };
+  }
+}
+
+/** Checks the uploaded file and makes it the profile's logo or stationery page in place of the one the caller saw. */
+export async function finalizeCompanyDocumentFileUpload(
+  rawInput: CompanyFileFinalizeInput,
+): Promise<ActionResult> {
+  const parsed = companyFileFinalizeInputSchema.safeParse(rawInput);
+  if (!parsed.success) return INVALID_INPUT;
+  const input = parsed.data;
+  const auth = await resolveManagerOfNamedOrganization(input.organizationId);
+  if (!auth.success) return auth;
+  const organizationId = auth.context.orgId;
+  // The key is recomputed from the session's organization and person, so no
+  // client names an object of another organization or another person's upload.
+  const path = companyFilePath(auth.context, input.fileId, input.kind);
+  // The staged upload stays until the registration's outcome is known, so a
+  // retry under the same file id copies it again (werk-flow/werkflow-planning#420).
+  const stagingPath = uploadStagingPath(organizationId, path);
+  // The upload's file id is its attempt key. A finalize repeated after its
+  // answer was lost answers with the change it registered, without a new copy.
+  const registered = await createSupabaseAdminClient()
+    .from('company_document_profile_events')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('attempt_key', input.fileId)
+    .eq('actor_id', auth.context.userId)
+    .eq('field', input.kind)
+    .limit(1);
+  if (registered.error) {
+    logError('finalizeCompanyDocumentFileUpload: attempt read failed', registered.error);
+    return { success: false, error: 'finalize_failed' };
+  }
+  if (registered.data.length > 0) {
+    // The registration committed after its answer was lost, which kept the
+    // staged upload; only the copy it registered stays.
+    await discardStorageObjects({ organizationId, paths: [stagingPath] });
+    // The first call's refresh never reached this browser either.
+    revalidatePath(SETTINGS_PATH);
+    return { success: true };
+  }
+
+  let copy;
+  try {
+    copy = await copyStagedUpload({ organizationId, path });
+  } catch (error) {
+    logError('finalizeCompanyDocumentFileUpload: promotion failed', error);
+    return { success: false, error: 'upload_failed' };
+  }
+  if (!copy.exists) return { success: false, error: 'file_missing' };
+  const discardUpload = () => discardStorageObjects({ organizationId, paths: [copy.path, stagingPath] });
+  const ruleFailure = uploadRuleFailure(COMPANY_FILE_RULES[input.kind], copy.contentType, copy.sizeBytes);
+  if (ruleFailure || copy.contentType === null || copy.sizeBytes === null) {
+    await discardUpload();
+    return { success: false, error: ruleFailure ?? 'file_type_not_allowed' };
+  }
+  const mimeType = copy.contentType;
+  const sizeBytes = copy.sizeBytes;
+  try {
+    const file = await readCompanyFile(organizationId, { path: copy.path, mimeType });
+    if (!(await canEmbedFile(file, input.kind === 'logo' ? 'image' : 'page'))) {
+      await discardUpload();
+      return { success: false, error: 'file_unreadable' };
+    }
+  } catch (error) {
+    logError('finalizeCompanyDocumentFileUpload: stored copy read failed', error);
+    await discardUpload();
+    return { success: false, error: 'upload_failed' };
+  }
+
+  const { error } = await createSupabaseAdminClient().rpc(
+    'replace_company_document_file',
+    rpcArgs('replace_company_document_file', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: organizationId,
+      p_kind: input.kind,
+      p_expected_storage_path: input.expectedStoragePath,
+      // A replacement leaves the following pages alone.
+      p_expected_following_storage_path: null,
+      p_storage_path: copy.path,
+      p_mime_type: mimeType,
+      p_size_bytes: sizeBytes,
+      p_attempt_key: input.fileId,
+    }),
+  );
+  if (error) {
+    // After an unknown outcome copy and staged upload stay: the registration
+    // may still commit, and if it did not, the retry copies the upload again.
+    if (isConfirmedWriteRefusal(error)) await discardUpload();
+    return refusal(error, 'finalize_failed', 'finalizeCompanyDocumentFileUpload: registration failed');
+  }
+  await discardStorageObjects({ organizationId, paths: [stagingPath] });
+  revalidatePath(SETTINGS_PATH);
+  return { success: true };
+}
+
+/**
+ * Removes the logo or a stationery page the caller saw; removing the first
+ * page's removes the following pages' the caller saw too. Another file in
+ * either place by now is refused as `file_changed`.
+ */
+export async function removeCompanyDocumentFile(rawInput: CompanyFileRemoveInput): Promise<ActionResult> {
+  const parsed = companyFileRemoveInputSchema.safeParse(rawInput);
+  if (!parsed.success) return INVALID_INPUT;
+  const input = parsed.data;
+  const auth = await resolveManagerOfNamedOrganization(input.organizationId);
+  if (!auth.success) return auth;
+
+  const { error } = await createSupabaseAdminClient().rpc(
+    'replace_company_document_file',
+    rpcArgs('replace_company_document_file', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_kind: input.kind,
+      p_expected_storage_path: input.expectedStoragePath,
+      p_expected_following_storage_path: input.expectedFollowingStoragePath,
+      p_storage_path: null,
+      p_mime_type: null,
+      p_size_bytes: null,
+      p_attempt_key: input.attemptKey,
+    }),
+  );
+  if (error) return refusal(error, 'remove_failed', 'removeCompanyDocumentFile: removal failed');
+  revalidatePath(SETTINGS_PATH);
+  return { success: true };
+}

@@ -170,6 +170,7 @@ export function getInventoryActionErrorMessage(error: string): string {
   const messages: Record<string, string> = {
     name_required: 'Bitte gib einen Namen ein.',
     unit_required: 'Bitte wähle eine Einheit aus.',
+    unit_unknown: 'Diese Einheit steht nicht in der Liste. Bitte wähle eine Einheit aus.',
     location_required_for_initial_stock:
       'Bitte wähle zuerst ein Lager aus oder lege direkt in diesem Feld ein neues Lager an.',
     location_required: 'Bitte wähle ein Lager aus.',
@@ -178,6 +179,10 @@ export function getInventoryActionErrorMessage(error: string): string {
     supplier_not_found: 'Der ausgewählte Lieferant wurde nicht gefunden.',
     item_not_found: 'Der Artikel wurde nicht gefunden.',
     barcode_taken: 'Dieser Barcode gehört schon zu einem anderen Artikel.',
+    unit_has_pack_sizes:
+      'Die Einheit lässt sich nicht ändern, solange ein Lieferant den Artikel in Packungen verkauft. Entferne zuerst die Packungsgrößen unter „Lieferanten“.',
+    unit_in_use:
+      'Die Einheit lässt sich nicht mehr ändern, weil der Artikel schon Bestand, Bewegungen oder Material in Aufträgen hat. Leg für die andere Einheit einen neuen Artikel an.',
     quantity_required: 'Bitte gib eine Menge größer als 0 ein.',
     stock_would_go_negative:
       'Der Bestand in diesem Lager reicht nicht aus. Wähle eine kleinere Menge oder ein anderes Lager.',

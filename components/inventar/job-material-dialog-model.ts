@@ -4,10 +4,12 @@ import { formatInventoryQuantity, INVENTORY_ITEM_TYPE_LABELS } from '@/lib/inven
 import { parseDecimalInput } from '@/lib/ui/decimal';
 import { normalizeSearchText } from '@/lib/ui/search';
 
-export type MaterialDialogMode = 'plan' | 'take' | 'return' | 'edit';
+export type MaterialDialogMode = 'plan' | 'take' | 'use' | 'return' | 'edit';
 
 export type MaterialDialogRow = {
   key: string;
+  /** Names this position's take, use or return; every press of one dialog opening sends it, so a retry books once. */
+  operationId: string;
   lineId: string | null;
   itemId: string;
   locationId: string;
@@ -28,14 +30,16 @@ export type MaterialDialogState = {
 
 /**
  * What the dialog shows beside its positions: the catalog, the notice that
- * the item is fixed, or nothing until the worker asks for further material.
- * A return keeps its item, and so does an edit once the position has bookings.
+ * the item is fixed, nothing until the worker asks for further material, or
+ * nothing at all for a use, which books on its line alone. A return keeps its
+ * item, and so does an edit once the position has bookings.
  */
 export function materialDialogCatalog({
   mode,
   rows,
   catalogOpen,
-}: MaterialDialogState): 'catalog' | 'locked' | 'collapsed' {
+}: MaterialDialogState): 'catalog' | 'locked' | 'collapsed' | 'single' {
+  if (mode === 'use') return 'single';
   if (mode === 'return') return 'locked';
   if (mode === 'edit' && rows.some((row) => row.takenQuantity !== 0 || row.returnedQuantity !== 0)) {
     return 'locked';
@@ -62,6 +66,7 @@ function quantityToInput(quantity: number): string {
 const MODE_FAILURE_MESSAGES: Record<MaterialDialogMode, string> = {
   plan: 'Das Material konnte nicht geplant werden.',
   take: 'Die Entnahme konnte nicht gebucht werden.',
+  use: 'Der Verbrauch konnte nicht gebucht werden.',
   return: 'Die Rückgabe konnte nicht gebucht werden.',
   edit: 'Die Materialposition konnte nicht geändert werden.',
 };
@@ -73,16 +78,25 @@ export function getActionErrorMessage(error: string, mode: MaterialDialogMode): 
     location_required: 'Bitte wähle ein Lager mit Bestand aus.',
     stock_would_go_negative:
       'Der Bestand in diesem Lager reicht nicht aus. Wähle eine kleinere Menge oder ein anderes Lager.',
-    return_exceeds_taken: 'Du kannst nicht mehr zurücklegen, als für diese Position entnommen wurde.',
+    return_exceeds_taken:
+      'Du kannst nur zurücklegen, was für diese Position entnommen und noch nicht verbraucht oder zurückgelegt wurde.',
+    material_unit_changed:
+      'Die Einheit des Artikels wurde geändert, nachdem für diese Position schon Verbrauch erfasst wurde. Bitte das Büro, die Position zu prüfen.',
+    use_exceeds_taken:
+      'So viel ist nicht mehr offen. Verbrauchen kannst du nur, was entnommen und noch nicht verbraucht oder zurückgelegt wurde.',
     line_has_movements:
       'Der Artikel kann nicht mehr geändert werden, weil für diese Position bereits Entnahmen oder Rückgaben gebucht wurden.',
     item_not_found: 'Der ausgewählte Artikel wurde nicht gefunden.',
     location_not_found: 'Das ausgewählte Lager wurde nicht gefunden.',
     line_not_found: 'Die Materialposition wurde nicht gefunden.',
     line_changed: 'Die Materialposition wurde inzwischen geändert. Versuche es noch einmal.',
+    material_idempotency_conflict:
+      'Diese Buchung wurde schon mit anderen Angaben gespeichert. Schließe den Dialog und prüfe die Materialposition.',
     create_failed: 'Die Materialposition konnte nicht gespeichert werden.',
     update_failed: 'Die Materialposition konnte nicht aktualisiert werden.',
     delete_failed: 'Die Materialposition konnte nicht entfernt werden.',
+    material_use_recorded:
+      'Für diese Position wurde Material als verbraucht erfasst. Sie bleibt deshalb am Auftrag und kann nicht entfernt werden.',
   };
 
   return describeFailure(error, messages, MODE_FAILURE_MESSAGES[mode]);
@@ -147,6 +161,17 @@ export function getLocationOptions(
   return locations.map((location) => ({ id: location.id, label: location.name }));
 }
 
+/**
+ * Taken and neither used nor returned yet: what a worker can still use or
+ * return, in the stored thousandths, so 0.3 − 0.1 reads 0.2 and not just below.
+ */
+export function openMaterialQuantity(
+  line: Pick<JobMaterialLine, 'takenQuantity' | 'usedQuantity' | 'returnedQuantity'>,
+): number {
+  const open = line.takenQuantity - line.usedQuantity - line.returnedQuantity;
+  return Math.max(0, Math.round(open * 1000) / 1000);
+}
+
 export function buildDialogRow(
   item: InventoryPickerOption,
   locations: InventoryLocation[],
@@ -154,12 +179,17 @@ export function buildDialogRow(
   line?: JobMaterialLine,
 ): MaterialDialogRow {
   const remainingPlanned = line ? Math.max(0, line.plannedQuantity - line.takenQuantity) : 0;
-  const stillOut = line ? Math.max(0, line.takenQuantity - line.returnedQuantity) : 0;
+  const stillOpen = line ? openMaterialQuantity(line) : 0;
   const defaultQuantity =
-    mode === 'return' ? stillOut || 1 : mode === 'take' ? remainingPlanned || 1 : line?.plannedQuantity || 1;
+    mode === 'return' || mode === 'use'
+      ? stillOpen || 1
+      : mode === 'take'
+        ? remainingPlanned || 1
+        : line?.plannedQuantity || 1;
 
   return {
     key: line?.id ?? `${item.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    operationId: crypto.randomUUID(),
     lineId: line?.id ?? null,
     itemId: item.id,
     locationId: getDefaultLocationId(item, locations, mode, line?.preferredLocationId),
@@ -188,28 +218,33 @@ export function itemFromLine(line: JobMaterialLine): InventoryPickerOption {
   };
 }
 
+const MATERIAL_DIALOG_COPY: Record<MaterialDialogMode, { title: string; description: string }> = {
+  plan: {
+    title: 'Material planen',
+    description: 'Geplante Mengen beschreiben den Bedarf. Der Lagerbestand bleibt unverändert.',
+  },
+  take: {
+    title: 'Entnahme buchen',
+    description: 'Diese Buchung zieht die gewählte Menge aus dem ausgewählten Lager ab.',
+  },
+  use: {
+    title: 'Verbrauch buchen',
+    description:
+      'Halte fest, was du beim Auftrag verbaut hast. Der Lagerbestand bleibt gleich, denn das Material ist schon entnommen.',
+  },
+  return: {
+    title: 'Material zurücklegen',
+    description: 'Diese Buchung legt Material zurück und erhöht den Lagerbestand.',
+  },
+  edit: {
+    title: 'Materialposition bearbeiten',
+    description: 'Ändere Artikel, Lager, Menge oder Notiz der geplanten Position.',
+  },
+};
+
 /** The dialog's heading and explanation for a mode. */
-export function getMaterialDialogCopy(mode: MaterialDialogMode): {
-  title: string;
-  description: string;
-} {
-  const title =
-    mode === 'plan'
-      ? 'Material planen'
-      : mode === 'take'
-        ? 'Entnahme buchen'
-        : mode === 'return'
-          ? 'Material zurücklegen'
-          : 'Materialposition bearbeiten';
-  const description =
-    mode === 'plan'
-      ? 'Geplante Mengen beschreiben den Bedarf. Der Lagerbestand bleibt unverändert.'
-      : mode === 'take'
-        ? 'Diese Buchung zieht die gewählte Menge aus dem ausgewählten Lager ab.'
-        : mode === 'return'
-          ? 'Diese Buchung legt Material zurück und erhöht den Lagerbestand.'
-          : 'Ändere Artikel, Lager, Menge oder Notiz der geplanten Position.';
-  return { title, description };
+export function getMaterialDialogCopy(mode: MaterialDialogMode): { title: string; description: string } {
+  return MATERIAL_DIALOG_COPY[mode];
 }
 
 /**

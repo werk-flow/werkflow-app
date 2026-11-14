@@ -101,7 +101,10 @@
     "P1-24a-F10": "3446449d9d7a889ae8b493907e797813b840d29f28aa11ab817dcbc52b7add8e",
     "P1-24a-F15": "77849abb2099354224ca79119aa00ead278009541528b7c6e8cb977d0b7e4986",
     "E6-F01": "dc0d5eea51203011b5c2d5fb0ab420f8baabd9985ffbaaa8e6eabcdea22a82cf",
-    "E6-F02": "84c21f927725510fb45656a55d661dc3bcadb25b23cd84352bf803798ad20a83"
+    "E6-F02": "84c21f927725510fb45656a55d661dc3bcadb25b23cd84352bf803798ad20a83",
+    "E6-F03": "ca263f300e3d784036d0a370059c42eafbc617070b7ff335fff479a7d7e317eb",
+    "E6-F04": "11ba516d8c698e304120fa18358b305b915f3582ce71f5f4d873ce865a72d114",
+    "E7-F01": "dbc4d50a046b26791412f5a5cd4df0e7ee2b539c1a0df4155879e05e3b5b2c45"
   },
   "mappings": [
     {
@@ -3093,6 +3096,95 @@
       "review": {
         "kind": "assertions-reviewed",
         "rationale": "werk-flow/werkflow-planning#334: every clause of both bullets read against the assertion bodies of the listed files."
+      }
+    },
+    {
+      "id": "e6-support-queue",
+      "flowIds": [
+        "E6-F03",
+        "E6-F04"
+      ],
+      "evidence": [
+        {
+          "file": "tests/audit/problem-reports/support-queue.spec.ts",
+          "kind": "browser",
+          "description": "The synthetic support user, a member of no organization, opens the queue and a report's page, reads the scrub state of an unscrubbed report and no original, sets status, bucket, assignee and answer, and the reporter's open „Meine Meldungen“ and a second support person's open report page show it without a reload, within the live target. „Original öffnen“ shows the original and adds a history entry. An admin of the reporting organization gets the not-found page for every address of the area. Support files a report with an attachment for a member, who finds it in „Meine Meldungen“.",
+          "titles": [
+            "E6-F03 support triages a report and answers, and the reporter and a colleague see it live",
+            "E6-F04 support files a report for a caller, who finds it in „Meine Meldungen“"
+          ]
+        },
+        {
+          "file": "tests/ui-contracts/support-triage.spec.ts",
+          "kind": "browser",
+          "description": "A triage save shows its pending state in the first frame, sends only the changed field and confirms only after the server accepted it; a refusal and a failed request keep what was typed and say what happened; an unsaved answer survives the refresh that „Original öffnen“ starts; a failed opening shows nothing of the original. A field set back to its loaded value takes a colleague's later change.",
+          "titles": [
+            "a save shows its pending state in the first frame, sends only the changed field and confirms after the answer",
+            "a refused save keeps what was typed and names the reason",
+            "a save whose request fails keeps what was typed and says so",
+            "an unsaved answer survives „Original öffnen“ and the refresh it starts",
+            "an opening whose request fails says so and shows nothing of the original",
+            "a field set back to its loaded value takes a colleague's later change, and a save of another field leaves it"
+          ]
+        },
+        {
+          "file": "lib/problem-reports/support-action-boundaries.test.ts",
+          "kind": "unit",
+          "description": "The real support actions: a signed-out caller, an admin, a Büro member and an employee of a customer organization are refused on every action, and so is everyone while the allowlist is missing, empty or malformed. The queue holds every organization's reports oldest first with the scrubbed copy and never an original. A triage of an unknown report and an assignee outside the allowlist are refused. An original and an attachment leave only after their opening is in the history; a report filed for a person outside the chosen organization is refused. A support person who is also a member reaches a report support filed only through support's actions, so leaving the allowlist ends their uploads.",
+          "titles": [
+            "only an allowlisted support person reaches a support action, and an original leaves only after its opening is in the history"
+          ]
+        },
+        {
+          "file": "supabase/tests/problem_report_support.sql",
+          "kind": "sql",
+          "description": "A triage writes one history entry per changed field and none for an unchanged one, keeps the answer's text out of the history, and signals only the reporter. A report filed for a caller names the member as reporter and support as filer, and is refused for a person outside the organization.",
+          "titles": [
+            "a triage did not write one history entry per changed field",
+            "an unchanged field wrote a history entry",
+            "the history kept the text of an answer",
+            "a status change did not signal the reporter",
+            "a triage of an unknown report was accepted",
+            "a report filed for a caller did not name reporter and filer, or did not start pending",
+            "a report was filed for a person outside the organization",
+            "the reporter did not read exactly their own signal row"
+          ]
+        }
+      ],
+      "clauses": "F03: every organization's reports oldest first with the scrubbed copy and no original text (boundary fixture; journey on the page of a report whose copy is pending), bucket, status, assignee and answer (journey with the stored row, SQL history), status and answer at once in „Meine Meldungen“ (journey, live target), „Original öffnen“ with original text and attachments and one history entry per opening (journey for the text and its entry, boundary fixture for the attachment), everyone else gets „Seite nicht gefunden“ (journey for an admin, boundary fixture for every role and an unresolvable allowlist). F04: organization and member chosen, description and attachment (journey with the stored row and its file), the member finds it in „Meine Meldungen“ (journey), a person outside the organization is refused (SQL, boundary fixture).",
+      "review": {
+        "kind": "assertions-reviewed",
+        "rationale": "werk-flow/werkflow-planning#335: every clause of both bullets read against the assertion bodies of the listed files."
+      }
+    },
+    {
+      "id": "e7-no-signal-visit",
+      "flowIds": [
+        "E7-F01"
+      ],
+      "evidence": [
+        {
+          "file": "tests/audit/security/offline-visit.spec.ts",
+          "kind": "browser",
+          "description": "At 375 px with the service worker: the start page keeps today's assignment, the signal goes on the job page, the clock starts, a report with two synthetic photos is saved on the device and the work switches onto the job. A reload and a new page without signal show the assignment with its „Stand“, the waiting clock and the kept draft, and end the work. The office changes the instruction and adds a start-blocking delivery prerequisite. With signal the server holds exactly the start's operation and one session with one segment, the device keeps the switch and the end as „Konflikt“ with the office reason, the stored day and the job page show the changed instruction, and the report arrives as one draft revision with two photos and one operation; a later start sends nothing again. A second member's start kept without signal is refused into a closed month and, after the membership is removed, on „Erneut senden“; both stay on the device as „Nicht übertragen“ with their reason, and the server records nothing.",
+          "titles": [
+            "E7-F01 a visit without signal survives a restart, and with signal everything arrives once while the conflict stays shown",
+            "E7-F01 a replay into a closed month and a replay after the membership was removed fail safely and stay on the phone"
+          ]
+        },
+        {
+          "file": "lib/field-sync/operations-http.test.ts",
+          "kind": "unit",
+          "description": "The real operations handler: a foreign organization's id, another person's session, a revoked membership and a closed period are refused, through a cookie and a bearer token alike.",
+          "titles": [
+            "a field sync replay is a fresh request: a foreign organization's id, another person's session, a revoked membership and a closed period are refused, a bearer token and a cookie reach the same result, and the online clock call is unchanged"
+          ]
+        }
+      ],
+      "clauses": "Today's assignment kept with signal, shown without signal and after a restart with „Stand“ (journey: reload and new page). Clock actions without signal marked „Wartet auf Netz“ (journey). A report with two photos kept on the device (journey, device store). Office changes the instruction and blocks the start meanwhile (journey seeds). With signal: one segment per recorded clock action and nothing else (journey, server rows), one revision with both photos and one operation (journey, server rows), the changed instruction on the phone (journey, stored day and job page), the switch kept as „Konflikt“ with its reason (journey). A closed month and a removed membership refuse the replay, it stays „Nicht übertragen“ with its reason, nothing is recorded (journey on the real handler; boundary fixture for cookie and bearer).",
+      "review": {
+        "kind": "assertions-reviewed",
+        "rationale": "werk-flow/werkflow-planning#321: every clause of the bullet read against the assertion bodies of the listed files."
       }
     }
   ]

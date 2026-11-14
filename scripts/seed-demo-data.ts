@@ -31,6 +31,8 @@ import { resolve } from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../lib/supabase/database.types';
+import { rpcArgs } from '../lib/supabase/rpc-args';
+import type { InventoryUnitCode } from '../lib/inventory/units';
 import type { TableInsert } from '../lib/supabase/table-insert';
 import { getPublicHolidaysForYear, type HolidayRegion } from '../lib/personnel/holidays';
 import { resolveBerlinWallTime } from '../lib/date-time/berlin';
@@ -1000,7 +1002,7 @@ const PROJECT_KINDS: ProjectKind[] = [
 
 type ItemSpec = {
   name: string;
-  unit: string;
+  unit: InventoryUnitCode;
   type: 'material' | 'consumable' | 'tool';
   purchase: number;
   sale: number;
@@ -1012,7 +1014,7 @@ type ItemSpec = {
 const ITEMS: ItemSpec[] = [
   {
     name: 'Kupferrohr 15 mm',
-    unit: 'm',
+    unit: 'meter',
     type: 'material',
     purchase: 640,
     sale: 1190,
@@ -1022,7 +1024,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Kupferrohr 28 mm',
-    unit: 'm',
+    unit: 'meter',
     type: 'material',
     purchase: 1290,
     sale: 2290,
@@ -1032,7 +1034,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Pressfitting Kupfer 15 mm',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 210,
     sale: 490,
@@ -1042,7 +1044,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Pressfitting Kupfer 28 mm',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 480,
     sale: 990,
@@ -1052,7 +1054,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'HT-Rohr DN 50',
-    unit: 'm',
+    unit: 'meter',
     type: 'material',
     purchase: 320,
     sale: 690,
@@ -1062,7 +1064,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Eckventil 1/2 Zoll',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 590,
     sale: 1290,
@@ -1072,7 +1074,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Flexschlauch 3/8 Zoll',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 390,
     sale: 890,
@@ -1082,7 +1084,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Einhebelmischer Waschtisch',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 6900,
     sale: 12900,
@@ -1092,7 +1094,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Duscharmatur Aufputz',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 9900,
     sale: 17900,
@@ -1102,7 +1104,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Wand-WC spülrandlos',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 18900,
     sale: 32900,
@@ -1112,7 +1114,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Vorwandelement WC',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 15900,
     sale: 26900,
@@ -1122,7 +1124,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Füllventil Spülkasten',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 1490,
     sale: 3290,
@@ -1132,7 +1134,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Heberglocke',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 1290,
     sale: 2890,
@@ -1142,7 +1144,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Thermostatventil Voreinstellung',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 2190,
     sale: 4490,
@@ -1152,7 +1154,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Thermostatkopf',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 1390,
     sale: 2990,
@@ -1162,7 +1164,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Rücklaufverschraubung',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 1190,
     sale: 2490,
@@ -1172,7 +1174,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Flachheizkörper Typ 22 600x1000',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 11900,
     sale: 21900,
@@ -1182,7 +1184,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Zirkulationspumpe',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 14900,
     sale: 26900,
@@ -1192,7 +1194,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Dreiwegeventil Motor',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 8900,
     sale: 16900,
@@ -1202,7 +1204,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Wartungsset Brennwert',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 4900,
     sale: 8900,
@@ -1212,7 +1214,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Dichtung Brennerflansch',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 890,
     sale: 1990,
@@ -1222,7 +1224,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Filtereinsatz Wärmepumpe',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 2900,
     sale: 5900,
@@ -1232,7 +1234,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Filterelement Hauswasserstation',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 1990,
     sale: 3990,
@@ -1242,7 +1244,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Filterset Lüftung G4/F7',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 3900,
     sale: 6900,
@@ -1252,7 +1254,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Solarflüssigkeit 10 l',
-    unit: 'Kanister',
+    unit: 'piece',
     type: 'material',
     purchase: 5900,
     sale: 9900,
@@ -1262,7 +1264,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Durchlauferhitzer 21 kW',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 32900,
     sale: 52900,
@@ -1272,7 +1274,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Wohnungswasserzähler',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 2490,
     sale: 4990,
@@ -1282,7 +1284,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Gas-Brennwerttherme 19 kW',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 189000,
     sale: 269000,
@@ -1292,7 +1294,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Abgasrohr DN 80 Set',
-    unit: 'Set',
+    unit: 'set',
     type: 'material',
     purchase: 21900,
     sale: 34900,
@@ -1302,7 +1304,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Wärmepumpe Außeneinheit 8 kW',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 690000,
     sale: 890000,
@@ -1312,7 +1314,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Wärmepumpen-Konsole',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 24900,
     sale: 39900,
@@ -1322,7 +1324,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Pufferspeicher 300 l',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 89000,
     sale: 129000,
@@ -1332,7 +1334,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Hauswasserstation',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 21900,
     sale: 36900,
@@ -1342,7 +1344,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Fußbodenheizung Verteiler 5-fach',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'material',
     purchase: 15900,
     sale: 26900,
@@ -1352,7 +1354,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Fußbodenheizungsrohr 16x2 (Rolle 200 m)',
-    unit: 'Rolle',
+    unit: 'roll',
     type: 'material',
     purchase: 14900,
     sale: 24900,
@@ -1362,7 +1364,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Sanitärsilikon',
-    unit: 'Kartusche',
+    unit: 'cartridge',
     type: 'consumable',
     purchase: 490,
     sale: 990,
@@ -1372,7 +1374,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Hanf und Dichtpaste Set',
-    unit: 'Set',
+    unit: 'set',
     type: 'consumable',
     purchase: 690,
     sale: 1290,
@@ -1382,7 +1384,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Lötzinn 250 g',
-    unit: 'Rolle',
+    unit: 'roll',
     type: 'consumable',
     purchase: 1890,
     sale: 2990,
@@ -1392,7 +1394,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Pressmaschine Akku',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'tool',
     purchase: 129000,
     sale: 0,
@@ -1402,7 +1404,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Abgasmessgerät',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'tool',
     purchase: 89000,
     sale: 0,
@@ -1412,7 +1414,7 @@ const ITEMS: ItemSpec[] = [
   },
   {
     name: 'Rohrreinigungsspirale elektrisch',
-    unit: 'Stk',
+    unit: 'piece',
     type: 'tool',
     purchase: 64900,
     sale: 0,
@@ -2693,10 +2695,6 @@ async function seedInventory(
         unit: item.unit,
         category_id: categoryFor(item.category),
         internal_sku: `${company.key.slice(0, 2).toUpperCase()}-${String(index + 1).padStart(4, '0')}`,
-        supplier_id: supplierIds[index % supplierIds.length] ?? null,
-        supplier_article_number: String(random.int(100000, 999999)),
-        purchase_price_cents: item.purchase,
-        sale_price_cents: item.sale > 0 ? item.sale : null,
         currency_code: 'EUR',
         tax_rate_basis_points: 1900,
         is_billable: item.type !== 'tool',
@@ -2709,6 +2707,51 @@ async function seedInventory(
       };
     }),
   );
+
+  // Supplier and prices go through the functions the app uses: they keep the
+  // dated price rows and the article's supplier columns in step.
+  for (const [index, item] of ITEMS.entries()) {
+    const itemId = itemIds.get(item.name);
+    if (!itemId) continue;
+    const supplierId = supplierIds[index % supplierIds.length];
+    if (supplierId) {
+      const { error } = await admin.rpc(
+        'save_inventory_item_supplier',
+        rpcArgs('save_inventory_item_supplier', {
+          p_organization_id: organizationId,
+          p_actor_id: ownerId,
+          p_item_id: itemId,
+          p_unit: item.unit,
+          p_reference_id: null,
+          p_supplier_id: supplierId,
+          p_supplier_name: null,
+          p_supplier_article_number: String(random.int(100000, 999999)),
+          p_purchase_unit: null,
+          p_pack_quantity: 1,
+          p_base_quantity: 1,
+          p_is_preferred: true,
+        }),
+      );
+      if (error) fail(`supplier ${item.name}`, error);
+    }
+    const prices = [
+      { kind: 'purchase', amount: item.purchase },
+      { kind: 'sale', amount: item.sale },
+    ].filter((price) => price.amount > 0);
+    for (const price of prices) {
+      const { error } = await admin.rpc('add_inventory_item_price', {
+        p_organization_id: organizationId,
+        p_actor_id: ownerId,
+        p_item_id: itemId,
+        p_unit: item.unit,
+        p_kind: price.kind,
+        p_amount_cents: price.amount,
+        p_price_quantity: 1,
+        p_valid_from: '2026-08-01',
+      });
+      if (error) fail(`${price.kind} price ${item.name}`, error);
+    }
+  }
 
   for (const item of ITEMS) {
     const itemId = itemIds.get(item.name);

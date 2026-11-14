@@ -78,7 +78,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -119,7 +119,7 @@ begin
   -- The migration's backfill keeps updated_at with the trigger off; it must
   -- leave the trigger on for every later write.
   if (select trigger.tgenabled from pg_trigger trigger
-    where trigger.tgrelid = 'public.documents'::regclass and trigger.tgname = 'documents_set_updated_at') <> 'O'
+    where trigger.tgrelid = 'public.documents'::regclass and trigger.tgname = 'documents_set_updated_at') is distinct from 'O'
   then raise exception 'the backfill left documents_set_updated_at off'; end if;
 end;
 $$;
@@ -179,8 +179,8 @@ begin
   v_document := public.finalize_document_upload(v_admin, v_org, '28300000-0000-0000-0000-000000000050',
     null, v_org || '/d50/rechnung.pdf', 'rechnung.pdf', 'rechnung.pdf', 'invoice', 'application/pdf', 20,
     null, null);
-  if v_document.retention_class is distinct from 'ten_years' or v_document.document_date <> v_today
-    or v_document.retention_ends_on <> make_date(extract(year from v_today)::integer + 10, 12, 31)
+  if v_document.retention_class is distinct from 'ten_years' or v_document.document_date is distinct from v_today
+    or v_document.retention_ends_on is distinct from make_date(extract(year from v_today)::integer + 10, 12, 31)
     or v_document.filed_at is not null
   then raise exception 'an uploaded invoice did not get the ten-year class from its upload day: %', row_to_json(v_document); end if;
   v_document := public.finalize_document_upload(v_admin, v_org, '28300000-0000-0000-0000-000000000051',
@@ -205,12 +205,12 @@ declare
 begin
   v_document := public.update_document_retention(v_office, v_org, '28300000-0000-0000-0000-000000000052',
     '2025-12-31', 'ten_years');
-  if v_document.retention_ends_on <> '2035-12-31' then
+  if v_document.retention_ends_on is distinct from '2035-12-31' then
     raise exception 'a document of 2025-12-31 is kept until %, not 2035-12-31', v_document.retention_ends_on;
   end if;
   v_document := public.update_document_retention(v_office, v_org, '28300000-0000-0000-0000-000000000052',
     '2026-01-01', 'ten_years');
-  if v_document.retention_ends_on <> '2036-12-31' then
+  if v_document.retention_ends_on is distinct from '2036-12-31' then
     raise exception 'a document of 2026-01-01 is kept until %, not 2036-12-31', v_document.retention_ends_on;
   end if;
   -- The office moves a photo into the class and back out, each change audited.
@@ -250,13 +250,13 @@ declare
   v_latest constant date := ((now() at time zone 'Europe/Berlin')::date + interval '1 year')::date;
   v_document public.documents;
 begin
-  if (select document_date from public.documents where id = '28300000-0000-0000-0000-000000000052') <> '2026-01-01'
+  if (select document_date from public.documents where id = '28300000-0000-0000-0000-000000000052') is distinct from '2026-01-01'
   then raise exception 'a refused document date changed the document'; end if;
   v_document := public.update_document_retention(v_office, v_org, '28300000-0000-0000-0000-000000000052',
     '1900-01-01', 'ten_years');
   v_document := public.update_document_retention(v_office, v_org, '28300000-0000-0000-0000-000000000052',
     v_latest, 'ten_years');
-  if v_document.document_date <> v_latest then
+  if v_document.document_date is distinct from v_latest then
     raise exception 'the latest allowed document date % was not saved', v_latest;
   end if;
 end;
@@ -310,7 +310,7 @@ declare
   v_document public.documents;
 begin
   v_document := public.file_document(v_office, v_org, '28300000-0000-0000-0000-000000000050');
-  if v_document.filed_at is null or v_document.filed_by <> v_office
+  if v_document.filed_at is null or v_document.filed_by is distinct from v_office
     or not exists (select 1 from public.document_audit_events
       where document_id = v_document.id and event_type = 'filed' and actor_id = v_office
         and event_payload->>'retentionEndsOn' = v_document.retention_ends_on::text)
@@ -369,9 +369,9 @@ declare
   v_document public.documents;
 begin
   select * into v_document from public.documents where id = '28300000-0000-0000-0000-000000000050';
-  if v_document.display_name <> 'Rechnung 1.pdf' or v_document.category <> 'other'
+  if v_document.display_name is distinct from 'Rechnung 1.pdf' or v_document.category is distinct from 'other'
     or v_document.folder_id is distinct from '28300000-0000-0000-0000-000000000030'
-    or v_document.filed_at is null or v_document.storage_path <> v_document.organization_id || '/d50/rechnung.pdf'
+    or v_document.filed_at is null or v_document.storage_path is distinct from v_document.organization_id || '/d50/rechnung.pdf'
     or (select count(*) from public.document_audit_events where document_id = v_document.id
       and event_type in ('renamed', 'category_changed', 'moved')) <> 3
   then raise exception 'a filed document refused its rename or category label'; end if;

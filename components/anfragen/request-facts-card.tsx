@@ -6,6 +6,10 @@ import { SectionTitle } from '@/components/shared/section-title';
 import { TextLink } from '@/components/ui/text-link';
 import { CallbackOverdueBadge } from './request-badges';
 import { useCallbackOverdue } from './use-callback-overdue';
+// Static: a dynamic chunk would hold the page's hydration, and a press on a
+// header action right after the page opens would get lost.
+import { RequestBillingRows } from './request-billing-rows';
+import type { WorkBillingParties } from '@/lib/billing-parties/types';
 
 interface RequestFactsCardProps {
   request: ClientRequest;
@@ -14,6 +18,10 @@ interface RequestFactsCardProps {
   callbackOverdue: boolean;
   /** The request's Anlage with the number of its detail page. */
   equipment: { label: string; equipmentNumber: string } | null;
+  /** Undefined: the page's read failed, and the rows read after mount. */
+  billingParties: WorkBillingParties | undefined;
+  /** The request is open, so its Auftraggeber and recipient can change. */
+  isEditable: boolean;
 }
 
 export function RequestFactsCard({
@@ -21,6 +29,8 @@ export function RequestFactsCard({
   assigneeName,
   callbackOverdue,
   equipment,
+  billingParties,
+  isEditable,
 }: RequestFactsCardProps) {
   const isOverdue = useCallbackOverdue([request])(request, callbackOverdue);
   return (
@@ -50,6 +60,12 @@ export function RequestFactsCard({
             )}
           </dd>
         </div>
+        <RequestBillingRows
+          requestId={request.id}
+          clientId={request.clientId}
+          initialParties={billingParties}
+          isEditable={isEditable}
+        />
         <div className="flex gap-2">
           <dt className="w-28 shrink-0 text-muted-foreground">Kategorie</dt>
           <dd>{REQUEST_CATEGORY_LABELS[request.category]}</dd>

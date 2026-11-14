@@ -374,7 +374,7 @@ const landmarkSelectors = [
   {
     selector: 'JSXOpeningElement[name.name="main"]',
     message:
-      'The app shell and StandaloneScreen own the one <main> landmark of a screen; render a <div> or <section> inside (werkflow-design skill: Density and layout).',
+      'The app shell, StandaloneScreen and SupportFrame own the one <main> landmark of a screen; render a <div> or <section> inside (werkflow-design skill: Density and layout).',
   },
 ];
 
@@ -796,6 +796,12 @@ const sonnerImportPath = {
   message:
     'Toasts are removed by the UI/UX consolidation — use the Banner primitive (components/ui/banner) per the feedback policy matrix.',
 };
+// Next's bootstrap owns React's DOM renderer (docs/technical/performance.md, "Never").
+const reactDomClientImportPath = {
+  name: 'react-dom/client',
+  message:
+    "Next's bootstrap owns react-dom/client: a second importer cuts React's DOM renderer out of the start-up chunk, one more script on every cold start. Render into a host a layout mounts, as components/shared/unsent-work-host.tsx does.",
+};
 const realtimeHookMessage =
   'Consume Realtime through useLiveView (hooks/use-live-view.ts) or useRealtimeRouterRefresh — they own debounce, generation guards, keep-last-known, dialog suspension, and catch-up (client freshness contract).';
 // Layering: lib/ is the domain and data layer that components build on; a
@@ -828,6 +834,7 @@ function importRestrictions({ realtimeHooks = true, libLayer = false, radixPrimi
     {
       paths: [
         sonnerImportPath,
+        reactDomClientImportPath,
         ...(realtimeHooks
           ? [
               {
@@ -1425,6 +1432,7 @@ const eslintConfig = defineConfig([
       'ui/no-block-in-paragraph': 'error',
       'ui/dialog-pending-while-waiting': 'error',
       'ui/alert-dialog-footer-actions': 'error',
+      'ui/confirm-action-stays-open': 'error',
       'no-restricted-syntax': productRestrictions({ jsx: true }),
     },
   },
@@ -1505,6 +1513,14 @@ const eslintConfig = defineConfig([
   },
   {
     files: ['components/sidebar/app-shell-skeleton.tsx'],
+    rules: {
+      'no-restricted-syntax': productRestrictions({ jsx: true, allow: landmarkSelectors }),
+    },
+  },
+  // WerkFlow support's area mounts no app shell: its frame owns the main
+  // landmark of every support page.
+  {
+    files: ['components/support/support-frame.tsx'],
     rules: {
       'no-restricted-syntax': productRestrictions({ jsx: true, allow: landmarkSelectors }),
     },

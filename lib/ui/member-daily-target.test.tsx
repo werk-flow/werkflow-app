@@ -70,9 +70,12 @@ function renderCard(
   return renderToStaticMarkup(
     <MitarbeiterDetailTimeCards
       liveTime={liveTimeWith(target, overrides)}
-      breakMode="automatic"
-      autoBreakThresholdMinutes={360}
-      autoBreakDurationMinutes={30}
+      breakPolicy={{
+        breakMode: 'automatic',
+        autoBreakThresholdMinutes: 360,
+        autoBreakDurationMinutes: 30,
+        secondStep: null,
+      }}
     />,
   );
 }

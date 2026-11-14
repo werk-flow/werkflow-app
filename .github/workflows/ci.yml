@@ -11,13 +11,23 @@ name: CI
 # engine as a local run. The required check is `Check` at the end of this file.
 # `Midnight wait` holds the browser shards around Berlin midnight, so a run never
 # starts a group inside the window (ciBrowserHoldUntil in lib/testing/runner/group-schedule.ts).
+# A draft pull request runs every job except the browser shards and the wait, and its Check fails
+# while the plan holds browser groups; marking it ready (`ready_for_review`) runs them, with
+# every other job, on the same commit.
+# The merge queue runs this workflow on its own commit: the PR on top of main and of every PR ahead
+# of it in the queue, planned by the diff against the queue's base. A push to main whose tree such a
+# run already passed runs no browser group (`Find the queue's run of this tree`).
 on:
   # No label event starts a run: a relabel on the same commit cancelled the run in progress and
   # left the required `Check` failed or "Expected". The Unit job reads the PR's labels at run
   # time, and list-growth.yml reruns it when the owner's `approved: list growth` label changes.
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    # No `converted_to_draft`: a draft cannot merge, and its next push runs without the browser shards.
+    types: [opened, synchronize, reopened, ready_for_review]
+  # The queue's run is never a draft: every planned browser group runs, and Check reports on it.
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   workflow_call:
@@ -37,9 +47,9 @@ on:
 permissions:
   contents: read
 
-# A new commit's run cancels the PR's older run. A rerun takes a group of its own commit:
-# list-growth.yml may rerun a commit the PR has just left, and that rerun must neither cancel nor
-# replace the new head's run.
+# A new commit's run, or the run that marking a draft ready starts, cancels the PR's older run. A
+# rerun takes a group of its own commit: list-growth.yml may rerun a commit the PR has just left,
+# and that rerun must neither cancel nor replace the new head's run.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -49,6 +59,10 @@ jobs:
     name: Plan
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # Lists the merge queue's runs of this workflow.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       browser: ${{ steps.plan.outputs.browser }}
       shards: ${{ steps.plan.outputs.shards }}
@@ -60,6 +74,23 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
+      # The merge queue squashes a PR onto main exactly as its own run tested it, so main's tree equals
+      # the tree of the queue's run, while the commits differ. A push whose tree a green queue run
+      # passed runs no browser group: that run ran them on this tree. Anything else, an unreadable
+      # list included, plans by diff as before. The nightly and release full runs are no push.
+      - name: Find the queue's run of this tree
+        id: queue
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if tree="$(git rev-parse 'HEAD^{tree}')" \
+            && tested="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=merge_group&status=success&per_page=50" \
+            --jq "[.workflow_runs[] | select(.head_commit.tree_id == \"$tree\")][0].html_url // empty")"; then
+            echo "run=$tested" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Merge queue::The merge queue's runs could not be read, so this push runs its browser groups."
+          fi
       - name: Plan the browser groups
         id: plan
         env:
@@ -70,9 +101,15 @@ jobs:
           # base.sha can predate main's newer commits, which then counted as the PR's own
           # (2026-10-30: #85 ran all 82 groups for #77's heavy-slot.ts). A force push or a new branch has no
           # readable `before`, so the plan fails open to a full run.
-          BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
+          # The queue's commit sits on its base, the main it will land on.
+          BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.before }}
+          QUEUE_RUN: ${{ steps.queue.outputs.run }}
         run: |
           if test -n "$FULL"; then bun scripts/ci-plan.ts --full "$FULL"
+          elif test -n "$QUEUE_RUN"; then
+            echo "::notice title=Merge queue::The merge queue's run $QUEUE_RUN passed on this exact tree, so this push runs no browser group."
+            # Nothing changed since the tree that run tested.
+            bun scripts/ci-plan.ts --base HEAD
           else bun scripts/ci-plan.ts --base "$BASE"; fi
 
   lint:
@@ -132,14 +169,27 @@ jobs:
       - uses: ./.github/actions/setup
       # The owner's approval for a shrink-only list to grow (docs/technical/testing.md, "Grow a
       # shrink-only list"). Read now, not from the event, so a rerun after a label change sees it.
+      # A queue run holds its own PR (named in its branch) and each PR ahead of it, one squash commit
+      # "<title> (#<n>)" each above the queue's base; it diffs all of them against main. Each PR's own
+      # Check already held its growth to its label, so one approval covers the group.
       - name: Read the list growth approval
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          QUEUE_BRANCH: ${{ github.event.merge_group.head_ref }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
         run: |
-          labels="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name')"
-          if grep -qxF 'approved: list growth' <<< "$labels"; then approved=true; else approved=false; fi
+          prs="$PR"
+          if test -n "$QUEUE_BRANCH"; then
+            prs="$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$QUEUE_BRANCH"
+              git log --format=%s "$QUEUE_BASE..HEAD" | sed -nE 's/.*\(#([0-9]+)\)$/\1/p')"
+          fi
+          approved=false
+          for pr in $(sort -u <<< "$prs"); do
+            labels="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr/labels" --jq '.[].name')"
+            if grep -qxF 'approved: list growth' <<< "$labels"; then approved=true; fi
+          done
           echo "SHRINK_ONLY_GROWTH_APPROVED=$approved" >> "$GITHUB_ENV"
           echo "approved: list growth = $approved"
       - run: bun scripts/verify.ts run --group unit:all
@@ -171,14 +221,28 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/local-stack
+        id: stack
         with:
           save-images: 'true'
       - run: bun scripts/verify.ts run --group "${{ needs.plan.outputs.sql }}"
       # The committed types match every committed migration (docs/technical/environments.md, "The migration rule").
+      # It runs after a failed SQL group too, and keeps the file it generated when the committed one
+      # is stale: a workstation without Boat takes its types from that artifact
+      # (docs/technical/boat-verification.md, "Types on Boat"). Never after a failed stack start: a
+      # migration that failed leaves a partial schema, and its types would carry the tree's digest.
       - name: Check the generated types
+        if: ${{ !cancelled() && steps.stack.outcome == 'success' }}
         env:
           SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+          WERKFLOW_TYPES_ARTIFACT: ${{ runner.temp }}/database-types/database.types.ts
         run: bun run types:check -- --local
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: database-types
+          path: ${{ runner.temp }}/database-types/
+          retention-days: 14
+          if-no-files-found: ignore
       # The owner's demo seeder seeds both companies on the stack with every committed migration.
       # The second run starts with the reset (docs/technical/environments.md, "Work on production").
       - name: Seed the demo companies twice
@@ -225,7 +289,7 @@ jobs:
   midnight:
     name: Midnight wait
     needs: plan
-    if: needs.plan.outputs.midnight_until != ''
+    if: needs.plan.outputs.midnight_until != '' && github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     # Above the longest hold, CI_MIDNIGHT_HOLD_MAX_MS; a test keeps the two in step.
     timeout-minutes: 80
@@ -246,7 +310,8 @@ jobs:
     name: Browser ${{ matrix.shard }}
     needs: [plan, midnight]
     # `midnight` is skipped on almost every run, and a skipped need skips this job by default.
-    if: ${{ !cancelled() && needs.plan.outputs.browser == 'true' && contains(fromJSON('["success", "skipped"]'), needs.midnight.result) }}
+    # A draft's groups wait until it is marked ready; Check then fails on the skipped job.
+    if: ${{ !cancelled() && needs.plan.outputs.browser == 'true' && github.event.pull_request.draft != true && contains(fromJSON('["success", "skipped"]'), needs.midnight.result) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     # Reads the Build job's state.
@@ -322,7 +387,8 @@ jobs:
 
   # The one required status check. It fails unless every job passed, or the
   # browser shards were skipped because the plan selected no browser group, or
-  # the midnight wait was skipped because the plan set no hold.
+  # the midnight wait was skipped because the plan set no hold. So a draft
+  # fails it while the plan holds browser groups for the ready run.
   # `always()`, never `!cancelled()`: a cancelled run reports a failed Check,
   # and a skipped Check would count as passed.
   check:
@@ -335,8 +401,13 @@ jobs:
       - name: Require every job to pass
         env:
           RESULTS: ${{ toJSON(needs) }}
+          DRAFT: ${{ github.event.pull_request.draft == true }}
         run: |
           echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          # The rule below fails a draft's skipped browser shards; this says why.
+          if test "$DRAFT" = true && test "$(jq -r .plan.outputs.browser <<< "$RESULTS")" = true; then
+            echo "::error title=Draft::Draft: browser groups not run. Mark the PR ready (gh pr ready) to run them; Check then reports again."
+          fi
           echo "$RESULTS" | jq -e '.plan.outputs as $plan | all(to_entries[];
             .value.result == "success"
             or (.key == "browser" and .value.result == "skipped" and $plan.browser == "false")

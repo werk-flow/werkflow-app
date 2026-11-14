@@ -8,8 +8,8 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 
 - Metadata and bytes target the same environment.
 - `documents.storage_bucket` keeps the logical label `organization-documents`, not the bucket name.
-- The server authorizes a transfer and signs a short-lived URL; the browser moves the bytes. Server-generated files (artifact exports, handover packages, payroll exports) are the one exception: the server writes them with `putStorageObject`.
-- `lib/documents/storage-path.ts` builds an upload's path, `{organizationId}/{documentId}/{sanitizedFileName}`, or for a new version `{organizationId}/{documentId}/versions/{uploadId}/{versionNumber}-…` with a fresh id per version ticket. Finalize registers a copy beside it whose file name starts with a fresh id per attempt. A registered path never changes; rename and move update metadata only.
+- The server authorizes a transfer and signs a short-lived URL; the browser moves the bytes. Two exceptions: the server writes server-generated files (artifact exports, handover packages, payroll exports) with `putStorageObject`, and it reads a report's redrawn screenshot for the [hand-out](problem-report-scrubbing.md#hand-out), because a signed address names the organization.
+- `lib/documents/storage-path.ts` builds a document's path, `{organizationId}/{documentId}/{sanitizedFileName}`, or for a new version `{organizationId}/{documentId}/versions/{uploadId}/{versionNumber}-…` with a fresh id per version ticket. An upload ticket's path adds a folder of the person whose session created the ticket before the file name (`bindUploadPathToCreator`). Finalize registers a copy beside it whose file name starts with a fresh id per attempt. A registered path never changes; rename and move update metadata only.
 - Each attempt that writes a key a row will reference writes a key of its own with a fresh id (as `attemptStoragePath` builds), and deletes it only when it fails before calling the registration, when the database refused its registration (`isConfirmedWriteRefusal`), or when it answered it as a replay. A key two attempts share lets one attempt's cleanup remove the file the other registered.
 - `lib/storage/r2.ts` refuses a key outside the given organization, and a copy, put, delete or list whose keys do not share one organization prefix.
 - A view URL renders inline only for MIME types safe to render; every other type downloads. The viewer fetches a new URL each time it opens.
@@ -18,15 +18,28 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 
 1. `createDocumentUploadTicket` authorizes user, organization, target and folder, and returns a signed PUT URL with the content type pinned. The URL writes a staging key (`<organization>/staging/...`), never the document's key.
 2. The browser PUTs the bytes to R2.
-3. `finalizeDocumentUpload` authorizes again, recomputes the path on the server, and copies the staging object to a key of its own beside it (`promoteUploadedObject`). A HEAD request checks the copy's size and content type. One database function inserts metadata, link and audit events with that key.
+3. `finalizeDocumentUpload` authorizes again, recomputes the path on the server from the session's organization and person, and copies the staging object to a key of its own beside it (`promoteUploadedObject`). A HEAD request checks the copy's size and content type. One database function inserts metadata, link and audit events with that key.
 
 - Only the server writes a key a row references, and only the finalize attempt that registers it. A still-valid signed URL reaches only the staging key after finalize, and a second finalize of the same upload copies to another key, so the bytes of a registered file never change.
 - A new version's finalize recomputes its path from the ticket's upload id. When a version with the ticket's number is already saved, the finalize answers `already_finalized` only when the caller saved it from that upload's folder (`isOwnSavedVersion`), so a retry whose answer got lost reports its own save as saved, also after a filing or a category change. A version another upload saved, of another person or of the same person, stays a `version_conflict`, even with the same number and file name.
+- A staged upload belongs to the person who created its ticket. A finalize of a document or a version recomputes the key with its own session's person, so another member of the same organization who knows the ids finds no staged object (`file_missing`), and never registers, copies or discards the creator's bytes. A member of another organization recomputes a key under their own organization.
+- A finalize may name the person the upload is for (`expectedUploaderId`, as a phone's report draft does). It only refuses: under another person's session it answers `uploader_changed` before any copy, and the staging object stays for that person's next try. Identity stays with the session.
 - A finalize whose registration the database refused deletes its own copy. After an unknown outcome, such as a transport failure, the copy stays, since the registration may still commit. A finalize refused before the copy deletes the staging object.
 - `DOCUMENT_MAX_FILE_SIZE_BYTES` applies at the ticket and again to the copy.
 - Protected personnel uploads (`createPersonnelDocumentUploadTicket`, `finalizePersonnelDocumentUpload`) follow the same steps. A signed cleanup capability binds actor, organization, owner, document, file name, class and operation. The cleanup removes only the staging object, so it never removes a registered copy. A replay of a registered upload touches no storage.
 - An `Arbeitsnachweis` export stores each attempt's HTML under a key of its own. An export the database refused, or answered as a duplicate of a committed export, deletes only its own object; after an unknown outcome the object stays.
 - A handover release renders deterministic customer-safe HTML on the server and stores each attempt under a key of its own; a guarded RPC registers it. A release the database refused, or answered as a replay of a committed release, deletes only its own object; after an unknown outcome the object stays. A replay answers with the registered package.
+
+## Generated documents
+
+`lib/document-rendering/` is the one renderer of generated business documents: offers now, invoices later. A caller maps its records into the module's plain model, with every amount already computed; the module imports no domain or database type.
+
+- It runs inside the app's Node functions with `pdf-lib` and the bundled Geist fonts, embedded as subsets. No browser and no external service sees a document.
+- The same model gives the same bytes: the PDF's dates come from the model, so a preview and a stored copy of the same input are equal.
+- Optional stationery (a PDF page or an image for the first page, another for the following pages) lies under the content, which keeps to the stationery's margins. Without it the module draws a plain letterhead from logo and sender.
+- Every page says „Seite x von y“, the table header repeats on each page, a position keeps its first description line, and a subtotal keeps its section's last position.
+- A generated offer belongs to its offer and customer, never to a job or project, because an assigned employee reads a job's documents.
+- The company document profile's logo and stationery lie under `{organizationId}/briefpapier/{fileId}/{uploaderId}/`, outside the library. They follow the [upload flow](#upload-flow); ticket and finalize bind the key to the session's person (`bindUploadPathToCreator`), so another manager finds nothing to finalize. The finalize also refuses a file the renderer cannot embed, and registers the copy with its stored size and its history entry in one call. It keeps the staging object (`copyStagedUpload`) until the registration commits or is refused, so after an unknown outcome the retry under the same file id copies it again. The [organization export](../features/employee-management.md#current-product-baseline) plans them by that size beside the documents' originals, with no document. A replacement or removal names the file the caller saw, and removing the first page's stationery also names the following pages' file it removes too; either is refused when another file took its place since. A replaced or removed file queues its old object for the [purge](#storage-cleanup): a stored document carries its own bytes and never needs the live file.
 
 ## Links and ownership
 
@@ -96,7 +109,7 @@ A legacy original keeps its source system (`source_system`) and the number that 
 A problem report's screenshot and attachments lie in the same private bucket; [problem reports](../features/problem-reports.md) owns who reads them.
 
 - The key is `{organizationId}/problem-reports/{reportId}/{fileId}/{kind}`, and a check constraint refuses a key outside its report. A key holds no file name, so no name a person chose reaches a key, the purge queue or a log; the row keeps the name.
-- No customer role reads a report file, not even an Admin of the organization.
+- No customer role reads a report file, not even an Admin of the organization. WerkFlow support reads one through a signed address the server issues after it wrote the opening into the report's history. A report thread receives only the redrawn screenshot, through the server, after its hand-out entry; an attachment never leaves.
 - Every deleted file row queues its object for the [purge](#storage-cleanup) in the same transaction, whichever path deleted it: the retention run, an organization deletion or an account deletion.
 
 ## Storage cleanup

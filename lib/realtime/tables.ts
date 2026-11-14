@@ -11,6 +11,7 @@ export const REALTIME_TABLES = [
   'entry_change_requests',
   'time_correction_requests',
   'time_account_policies',
+  'time_account_policy_assignments',
   'time_accounts',
   'time_account_adjustment_requests',
   'time_periods',
@@ -34,6 +35,7 @@ export const REALTIME_TABLES = [
   'organization_closure_days',
   'vacation_requests',
   'sickness_reports',
+  'school_days',
   'teams',
   'team_memberships',
   'organization_capabilities',
@@ -47,6 +49,8 @@ export const REALTIME_TABLES = [
   'clients',
   'client_contacts',
   'client_sites',
+  'client_site_roles',
+  'site_access_proposals',
   'client_requests',
   'client_follow_ups',
   'client_communication_settings',
@@ -72,6 +76,7 @@ export const REALTIME_TABLES = [
   'job_instruction_item_evidence_fulfillments',
   'work_artifacts',
   'work_handover_packages',
+  'work_leads',
   'work_templates',
   'work_template_versions',
   'work_template_applications',
@@ -90,6 +95,7 @@ export const REALTIME_TABLES = [
   'job_material_lines',
   'inventory_movements',
   'inventory_asset_instances',
+  'problem_report_signals',
 ] as const;
 
 export type RealtimeTable = (typeof REALTIME_TABLES)[number];
@@ -103,6 +109,14 @@ export const REALTIME_PUBLISHED_TABLES = [...REALTIME_TABLES, REALTIME_DELETION_
 // (profile data is referenced across organization views); every other
 // subscription carries the server-side organization filter.
 export const UNFILTERED_REALTIME_TABLES: readonly RealtimeTable[] = ['profiles'];
+
+// Published tables whose every row belongs to one person, delivered only to
+// that person by a select-own policy. They carry no deletion notice: a notice
+// reaches every member of the organization (realtime_deletions), so it would
+// tell them of another person's row. Their rows leave only with the person's
+// profile or the organization, which no open view needs to hear of.
+// `bun run realtime:check` fails while a listed table carries the trigger.
+export const OWN_USER_REALTIME_TABLES: readonly RealtimeTable[] = ['problem_report_signals'];
 
 // Published tables whose DEFAULT replica identity is already minimal:
 // organization_settings and organization_qualification_settings
@@ -128,6 +142,7 @@ export const TRANSACTION_STAMPED_TABLES: readonly RealtimeTable[] = [
   'client_contacts',
   'client_follow_ups',
   'client_requests',
+  'client_site_roles',
   'client_sites',
   'clients',
   'document_folders',
@@ -160,6 +175,7 @@ export const TRANSACTION_STAMPED_TABLES: readonly RealtimeTable[] = [
   'planning_series',
   'projects',
   'sickness_reports',
+  'site_access_proposals',
   'team_memberships',
   'teams',
   'time_account_adjustment_requests',
@@ -169,5 +185,6 @@ export const TRANSACTION_STAMPED_TABLES: readonly RealtimeTable[] = [
   'time_entries',
   'time_periods',
   'vacation_requests',
+  'work_leads',
   'work_schedules',
 ];

@@ -315,6 +315,146 @@ end;
 $$;
 rollback to savepoint policy_probe;
 
+-- Every app_private function that reads or writes tenant rows takes the
+-- organization: an argument named for it (p_organization_id, p_org_id), or a
+-- whole tenant row, which carries its organization_id. A helper keyed by an id
+-- alone trusts whichever organization that id belongs to (review of
+-- werk-flow/werkflow-planning#431, class c). A tenant row is one of a public
+-- table or view with an organization_id column; a function reads it when its
+-- body names public.<table>. Trigger functions are out of scope: they read the
+-- organization from the row they guard. Each exemption names one signature, so
+-- a new overload gets no reviewed reason by its name, and carries the reason
+-- review accepted, and a stale exemption fails until removed.
+create function pg_temp.tenant_helper_exemptions() returns table (name text, reason text)
+language sql as $$
+  values
+    ('can_access_document(uuid,uuid)', 'RLS object check: loads the document by id and checks the user within its own organization'),
+    ('can_access_job_inventory(uuid,uuid)', 'RLS object check: loads the job by id and checks the user within its own organization'),
+    ('can_access_personnel_document(uuid,uuid)', 'RLS object check: loads the personnel document by id and checks the user within its own organization'),
+    ('can_access_personnel_document_history(uuid,uuid)', 'RLS object check: loads the personnel document by id and checks the user within its own organization'),
+    ('can_access_personnel_document_version(uuid,integer,uuid)', 'RLS object check: loads the personnel document by id and checks the user within its own organization'),
+    ('can_access_work_artifact(uuid,uuid)', 'RLS object check: loads the artifact by id and checks the user within its own organization'),
+    ('can_read_work_handover_root(uuid,uuid)', 'RLS object check: loads the handover package by id and checks the actor within its own organization'),
+    ('can_review_work_handover_package(uuid,uuid)', 'RLS object check: loads the handover package by id and checks the actor within its own organization'),
+    ('can_view_p1_14_blocker(uuid,uuid)', 'RLS object check: loads the blocker by id and checks the user within its own organization'),
+    ('can_view_p1_14_dependency(uuid,uuid)', 'RLS object check: loads the dependency by id and checks the user within its own organization'),
+    ('is_work_artifact_lead_reviewer(uuid,uuid)', 'Object check: loads the artifact by id and asks for the lead within its own organization'),
+    ('can_view_work_instruction_item(uuid,uuid)', 'RLS object check: loads the instruction item by id and checks the user within its own organization'),
+    ('employee_record_has_effective_access(uuid)', 'RLS object check: reads the employee record by id and its own organization''s access state'),
+    ('p1_24_is_protected_document(uuid)', 'RLS object check: whether a document id is a personnel document; the calling policy checks the organization'),
+    ('get_user_admin_or_manager_org_ids(uuid)', 'RLS helper: the caller''s own organizations; each policy pairs the result with the row''s organization_id'),
+    ('get_user_admin_org_ids(uuid)', 'RLS helper: the caller''s own organizations; each policy pairs the result with the row''s organization_id'),
+    ('get_user_org_ids(uuid)', 'RLS helper: the caller''s own organizations; each policy pairs the result with the row''s organization_id'),
+    ('get_user_assigned_job_ids(uuid)', 'RLS helper: the caller''s own assignments across their organizations; the policy also checks the row''s organization'),
+    ('get_user_assigned_project_ids(uuid)', 'RLS helper: the caller''s own assignments across their organizations; the policy also checks the row''s organization'),
+    ('get_user_capability_ids(uuid)', 'RLS helper: the caller''s own records across their organizations; the policy also checks the row''s organization'),
+    ('get_user_employee_record_ids(uuid)', 'RLS helper: the caller''s own records across their organizations; the policy also checks the row''s organization'),
+    ('get_user_planning_occurrence_ids()', 'RLS helper: the caller''s own assignments, joined within each record''s organization'),
+    ('get_user_team_ids(uuid)', 'RLS helper: the caller''s own teams across their organizations; the policy also checks the row''s organization'),
+    ('get_user_visible_responsibility_configuration_ids(uuid)', 'RLS helper: the caller''s own responsibilities across their organizations; the policy also checks the row''s organization'),
+    ('get_invite_by_code(text)', 'An invite code names its own organization; the caller has none yet'),
+    ('redeem_organization_invite_for_user(text,uuid)', 'An invite code names its own organization; the caller has none yet'),
+    ('prune_realtime_deletions()', 'Maintenance across every organization by age, from no request'),
+    ('sync_begun_inventory_item_prices()', 'Maintenance across every organization from the hourly cron, from no request; it syncs each organization''s prices with that organization''s own rows only'),
+    ('assert_time_correction_sources_current(uuid,bigint)', 'Step of a public write that resolved the organization; reads the request it loaded there'),
+    ('p1_22_revise_time_correction_request_impl(uuid,uuid,uuid,bigint,text,text,text,jsonb,jsonb,jsonb)', 'Step of a public write that resolved the organization; reads the request it loaded there'),
+    ('existing_document_retention_class(uuid)', 'Migration-only backfill across every organization; execution is revoked from every application role'),
+    ('resolve_project_execution_state(uuid)', 'Step of a public write or reader that resolved the organization; reads the project it loaded there'),
+    ('sync_planning_dispatch_for_occurrence(uuid)', 'Step of a planning write that resolved the organization; reads the occurrence it wrote there'),
+    ('validate_submitted_work_artifact_revision(uuid)', 'Step of a public write that resolved the organization; reads the revision it loaded there'),
+    ('validate_work_handover_sources(uuid)', 'Step of a public write that resolved the organization; reads the package it loaded there'),
+    ('work_dependency_is_satisfied(uuid)', 'Step of a public write that resolved the organization; reads the dependency it loaded there'),
+    ('work_template_dependency_has_cycle(uuid)', 'Step of a public write that resolved the organization; reads the template version it loaded there')
+$$;
+
+create function pg_temp.tenant_helpers_without_organization() returns table (name text)
+language sql as $$
+  with tenant as (
+    select c.relname, c.reltype from pg_class c
+    where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'v')
+      and exists (
+        select 1 from pg_attribute a
+        where a.attrelid = c.oid and a.attname = 'organization_id' and not a.attisdropped
+      )
+  )
+  select replace(p.oid::regprocedure::text, 'app_private.', '') from pg_proc p
+  where p.pronamespace = 'app_private'::regnamespace
+    and p.prorettype <> 'trigger'::regtype
+    and pg_get_function_identity_arguments(p.oid) !~ '(organization|org)_id\M'
+    and not exists (select 1 from tenant where tenant.reltype = any (p.proargtypes::oid[]))
+    and exists (select 1 from tenant where p.prosrc ~* ('\mpublic\.' || tenant.relname || '\M'));
+$$;
+
+-- An exemption is stale when its signature is no longer reported: the
+-- function now takes the organization, was replaced by another signature, or
+-- is gone.
+create function pg_temp.stale_tenant_helper_exemptions(p_names text[]) returns text
+language sql as $$
+  select string_agg(exempted.name, ', ' order by exempted.name) from unnest(p_names) exempted (name)
+  where exempted.name not in (select found.name from pg_temp.tenant_helpers_without_organization() found);
+$$;
+
+do $$
+declare offender text;
+declare stale text;
+begin
+  select string_agg('app_private.' || found.name, ', ' order by found.name) into offender
+  from pg_temp.tenant_helpers_without_organization() found
+  where found.name not in (select exemption.name from pg_temp.tenant_helper_exemptions() exemption);
+  if offender is not null then
+    raise exception 'app_private reads tenant rows without taking the organization (add p_organization_id): %', offender;
+  end if;
+  stale := pg_temp.stale_tenant_helper_exemptions(array(select exemption.name from pg_temp.tenant_helper_exemptions() exemption));
+  if stale is not null then
+    raise exception 'Tenant helper exemptions that no longer apply (remove them): %', stale;
+  end if;
+end;
+$$;
+
+-- Probe: the reviewed shape of the finding. A current-version helper keyed by
+-- the work id alone is reported; the same helper taking the organization, or a
+-- whole tenant row, is not, and an unscoped overload of an exempted name is.
+savepoint tenant_helper_probe;
+create function app_private.werkflow_tenant_probe(p_work_id uuid) returns setof public.jobs
+language sql stable as $probe$ select * from public.jobs job where job.id = p_work_id $probe$;
+-- Unquoted identifiers fold to lower case, so an uppercase reference names the same table.
+create function app_private.werkflow_tenant_probe(p_work_id text) returns setof public.jobs
+language sql stable as $probe$ SELECT * FROM PUBLIC.JOBS job WHERE job.id = p_work_id::uuid $probe$;
+create function app_private.werkflow_tenant_probe_scoped(p_organization_id uuid, p_work_id uuid)
+returns setof public.jobs language sql stable as $probe$
+  select * from public.jobs job where job.organization_id = p_organization_id and job.id = p_work_id
+$probe$;
+create function app_private.werkflow_tenant_probe_row(p_job public.jobs) returns setof public.jobs
+language sql stable as $probe$
+  select * from public.jobs job where job.organization_id = p_job.organization_id and job.id = p_job.id
+$probe$;
+-- An unscoped overload of an exempted helper inherits no exemption.
+create function app_private.get_user_org_ids(p_user_id uuid, p_role text) returns setof uuid
+language sql stable as $probe$
+  select member.organization_id from public.organization_members member
+  where member.user_id = p_user_id and member.role::text = p_role
+$probe$;
+do $$
+declare found text;
+begin
+  select string_agg(helper.name, ', ' order by helper.name) into found
+  from pg_temp.tenant_helpers_without_organization() helper
+  where helper.name like 'werkflow_tenant_probe%' or helper.name like 'get_user_org_ids(%'
+    and helper.name not in (select exemption.name from pg_temp.tenant_helper_exemptions() exemption);
+  if found is distinct from 'get_user_org_ids(uuid,text), werkflow_tenant_probe(text), werkflow_tenant_probe(uuid)' then
+    raise exception 'Tenant helper check missed the probe or flagged a scoped one: %', found;
+  end if;
+  -- A helper that gained the organization, and one that is gone, leave stale exemptions.
+  found := pg_temp.stale_tenant_helper_exemptions(
+    array['werkflow_tenant_probe(uuid)', 'werkflow_tenant_probe_scoped(uuid,uuid)', 'werkflow_tenant_probe_gone(uuid)']
+  );
+  if found is distinct from 'werkflow_tenant_probe_gone(uuid), werkflow_tenant_probe_scoped(uuid,uuid)' then
+    raise exception 'Stale exemption check missed a scoped or removed helper: %', found;
+  end if;
+end;
+$$;
+rollback to savepoint tenant_helper_probe;
+
 -- Client roles write no public table directly (migration 20261015100100).
 -- Every client write privilege is in this reviewed inventory with its caller;
 -- a new one fails until it is listed, and a listed one that disappears fails
@@ -410,31 +550,214 @@ end;
 $$;
 drop table public.werkflow_privilege_probe;
 
--- No SECURITY DEFINER function in the exposed schema may be
--- executable by anon or authenticated, and the service-role lookups stay closed.
+-- A public SECURITY DEFINER function is a server-only entry
+-- (docs/technical/security.md, "Add a privileged function"). No role but
+-- service_role executes it, also not through PUBLIC. Unless it is a trigger,
+-- it pins search_path to '', and no role, service_role included, executes a
+-- volatile app_private function it reaches through app_private or public
+-- calls, so no caller skips the entry's recheck of role and organization. A
+-- stable helper writes nothing; the RLS helpers among them have their own
+-- inventory below. A call is found by its schema-qualified name in a body,
+-- in any case, with optional quotes and spaces, or by the dependency a
+-- BEGIN ATOMIC body records; a call through dynamic SQL is not.
+-- legacy_definer_breaches names each breach that predates the rule, as the
+-- line the check reports; lib/testing/publication/shrink-only-lists.ts keeps
+-- it from growing, and a listed breach that is gone fails until it leaves the
+-- list (docs/technical/enforcement-ladder-backlog.md, "Legacy definer entries").
+create function pg_temp.legacy_definer_breaches() returns jsonb language plpgsql as $$
+declare
+  legacy_definer_breaches constant jsonb := jsonb_build_object(
+    'public.generate_job_number(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.generate_personnel_number(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.generate_project_number(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.generate_request_number(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.get_org_members_for_user(uuid, uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.get_user_admin_or_manager_org_ids(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.get_user_org_ids(uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'public.redeem_organization_invite_for_user(text, uuid) does not pin search_path to empty',
+      'older function, pinned to public',
+    'step app_private.assert_installed_equipment_manager(uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.assert_maintenance_equipment_set(uuid, uuid, uuid, uuid, jsonb, text) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.assert_maintenance_manager(uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.assert_p1_23_period_open(uuid, date) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.assert_service_case_manager(uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.get_org_members_for_user(uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.insert_maintenance_revision_equipment(uuid, uuid, uuid, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.is_time_approval_holder(uuid, uuid, uuid) executable by authenticated',
+      'RLS helper declared volatile',
+    'step app_private.lock_maintenance_operation(uuid, text, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.lock_service_case_operation(uuid, text, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.next_installed_equipment_number(uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.next_maintenance_number(uuid, text) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.next_service_case_number(uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.p1_24_assert_replay(uuid, uuid, text) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.p1_24_record_operation(uuid, uuid, text, text, uuid, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.project_plan_onto_job(uuid, uuid, uuid, uuid[]) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_installed_equipment_event(uuid, uuid, installed_equipment_event_type, installed_equipment_state, installed_equipment_state, timestamp with time zone, uuid, text, text, uuid, uuid, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_maintenance_coverage_event(uuid, uuid, maintenance_coverage_event_type, uuid, text, text, uuid, jsonb, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_maintenance_due_event(uuid, uuid, maintenance_due_event_type, uuid, text, text, uuid, jsonb, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_maintenance_plan_event(uuid, uuid, maintenance_plan_event_type, uuid, text, text, uuid, jsonb, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_planning_operation_assessment(uuid, uuid, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.record_service_case_event(uuid, uuid, service_case_event_type, uuid, text, text, uuid, jsonb, jsonb, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.redeem_organization_invite_for_user(text, uuid) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.sync_installed_equipment_identifiers(uuid, uuid, uuid, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.sync_service_case_equipment_links(uuid, uuid, uuid, jsonb) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.transition_work_execution_for_handover(uuid, uuid, text, uuid, bigint, work_execution_state, text, boolean, text) executable by service_role',
+      'older step, granted before the rule',
+    'step app_private.validate_time_segment_input(uuid, uuid, org_role, time_segment_kind, time_allocation_kind, uuid, planning_internal_type, time_travel_route, time_travel_role, time_standby_context) executable by service_role',
+      'older step, granted before the rule'
+  );
+begin
+  return legacy_definer_breaches;
+end;
+$$;
+
+create function pg_temp.definer_entry_breaches() returns text language sql as $$
+  with recursive routine as (
+    select p.oid, p.prosrc, n.nspname, p.proname,
+      n.nspname || '.' || p.proname || '(' || pg_catalog.oidvectortypes(p.proargtypes) || ')' as signature,
+      p.prosecdef, p.prorettype = 'trigger'::regtype as is_trigger, p.provolatile = 'v' as volatile,
+      coalesce(p.proconfig @> array['search_path=""'], false) as pinned
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname in ('public', 'app_private')
+  ), entry as (
+    select * from routine where nspname = 'public' and prosecdef
+  ), reached (oid) as (
+    select entry.oid from entry where not entry.is_trigger
+    union
+    select callee.oid from reached join routine caller on caller.oid = reached.oid
+    join routine callee on exists (
+      -- a parsed body (BEGIN ATOMIC) records its calls; its prosrc is empty
+      select 1 from pg_depend d
+      where d.classid = 'pg_proc'::regclass and d.objid = caller.oid
+        and d.refclassid = 'pg_proc'::regclass and d.refobjid = callee.oid
+    ) or case when strpos(lower(caller.prosrc), lower(callee.proname)) > 0
+      then caller.prosrc ~* ('\m"?' || callee.nspname || '"?\s*\.\s*"?' || callee.proname || '"?\s*\(')
+      else false end
+  ), executor (oid, role_name) as (
+    -- direct grants, and what a client role inherits through membership
+    select p.oid, case when acl.grantee = 0 then 'PUBLIC' else acl.grantee::regrole::text end
+    from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+    where acl.privilege_type = 'EXECUTE' and acl.grantee <> p.proowner
+    union
+    select routine.oid, client.role_name from routine
+    cross join (values ('anon'), ('authenticated')) as client (role_name)
+    where has_function_privilege(client.role_name, routine.oid, 'EXECUTE')
+  ), breach (line) as (
+    select entry.signature || ' executable by ' || executor.role_name
+    from entry join executor on executor.oid = entry.oid where executor.role_name <> 'service_role'
+    union
+    select entry.signature || ' does not pin search_path to empty' from entry
+    where not entry.is_trigger and not entry.pinned
+    union
+    select 'step ' || routine.signature || ' executable by ' || executor.role_name
+    from reached join routine on routine.oid = reached.oid
+    join executor on executor.oid = routine.oid
+    where routine.nspname = 'app_private' and routine.volatile and not routine.is_trigger
+  ), legacy (line) as (
+    select jsonb_object_keys(pg_temp.legacy_definer_breaches())
+  ), finding (line) as (
+    select 'unlisted: ' || line from breach where line not in (select line from legacy)
+    union all
+    select 'listed but gone: ' || line from legacy where line not in (select line from breach)
+  )
+  select string_agg(line, '; ' order by line) from finding;
+$$;
+
+do $$
+declare offender text := pg_temp.definer_entry_breaches();
+begin
+  if offender is not null then
+    raise exception 'SECURITY DEFINER entry rule broken: %', offender;
+  end if;
+end;
+$$;
+
+-- Probe: an inventory entry granted to authenticated, one that lost its
+-- search_path, a step granted to service_role, and a step reached through a
+-- public invoker function with a quoted, spaced call, one called in upper
+-- case, and one reached through a BEGIN ATOMIC body must each be reported.
+savepoint definer_entry_probe;
+grant execute on function public.save_inventory_item(uuid, uuid, uuid, jsonb, text, text, uuid, numeric)
+  to authenticated;
+alter function public.import_inventory_row(uuid, uuid, uuid, jsonb, text, text, text, text, numeric, text)
+  reset search_path;
+grant execute on function app_private.lock_inventory_manager(uuid, uuid) to service_role;
+create function app_private.werkflow_step_probe() returns void language sql volatile as 'select';
+grant execute on function app_private.werkflow_step_probe() to service_role;
+create function app_private.werkflow_upper_step_probe() returns void language sql volatile as 'select';
+grant execute on function app_private.werkflow_upper_step_probe() to service_role;
+create function app_private.werkflow_atomic_step_probe() returns void language sql volatile as 'select';
+grant execute on function app_private.werkflow_atomic_step_probe() to service_role;
+create function public.werkflow_atomic_hop_probe() returns void language sql
+  begin atomic select app_private.werkflow_atomic_step_probe(); end;
+create function public.werkflow_hop_probe() returns void language plpgsql set search_path = '' as
+  $body$ begin perform "app_private" . "werkflow_step_probe" (); end; $body$;
+create function public.werkflow_entry_probe() returns void language plpgsql security definer
+  set search_path = '' as $body$
+  begin
+    perform public.werkflow_hop_probe();
+    perform APP_PRIVATE.WERKFLOW_UPPER_STEP_PROBE();
+    perform public.werkflow_atomic_hop_probe();
+  end;
+  $body$;
+do $$
+begin
+  if pg_temp.definer_entry_breaches() is distinct from concat_ws('; ',
+    'unlisted: public.import_inventory_row(uuid, uuid, uuid, jsonb, text, text, text, text, numeric, text) does not pin search_path to empty',
+    'unlisted: public.save_inventory_item(uuid, uuid, uuid, jsonb, text, text, uuid, numeric) executable by authenticated',
+    'unlisted: step app_private.lock_inventory_manager(uuid, uuid) executable by service_role',
+    'unlisted: step app_private.werkflow_atomic_step_probe() executable by service_role',
+    'unlisted: step app_private.werkflow_step_probe() executable by service_role',
+    'unlisted: step app_private.werkflow_upper_step_probe() executable by service_role'
+  ) then
+    raise exception 'SECURITY DEFINER entry rule missed the probe: %', pg_temp.definer_entry_breaches();
+  end if;
+end;
+$$;
+rollback to savepoint definer_entry_probe;
+
+-- The service-role lookups and the client-facing wrappers stay closed.
 do $$
 declare
   offender text;
 begin
-  select string_agg(p.proname, ', ' order by p.proname) into offender
-  from pg_proc p
-  join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public'
-    and p.prosecdef
-    and (
-      has_function_privilege('anon', p.oid, 'execute')
-      or has_function_privilege('authenticated', p.oid, 'execute')
-    );
-  if offender is not null then
-    raise exception 'security definer functions executable by client roles: %', offender;
-  end if;
-
   foreach offender in array array[
     'public.check_user_exists_by_email(text)',
     'app_private.check_user_exists_by_email(text)',
     'public.get_invite_by_code(text)',
     'app_private.get_invite_by_code(text)',
-    'public.set_job_assignment_organization()',
     'public.guard_automatic_time_entry_timestamps()',
     'public.update_updated_at_column()'
   ] loop
@@ -576,7 +899,7 @@ declare
 begin
   select regexp_count(pg_get_functiondef('public.fulfill_instruction_evidence'::regproc), 'instruction_evidence_requirement_not_found')
     into guard_count;
-  if guard_count <> 2 then
+  if guard_count is distinct from 2 then
     raise exception 'fulfill_instruction_evidence body drifted: % guard occurrences', guard_count;
   end if;
 end;
@@ -664,7 +987,7 @@ declare
 begin
   select quantity_delta into delta from public.inventory_movements
   where id = '51000000-0000-0000-0000-000000000040';
-  if delta <> 5 then raise exception 'ledger row changed despite denial'; end if;
+  if delta is distinct from 5 then raise exception 'ledger row changed despite denial'; end if;
 end;
 $$;
 
@@ -789,9 +1112,9 @@ begin
 
   if (select lifecycle.state from public.personnel_access_lifecycles lifecycle
       join public.employee_records record on record.id = lifecycle.employee_record_id
-      where record.organization_id = v_org and record.user_id = v_suspended) <> 'suspended'
+      where record.organization_id = v_org and record.user_id = v_suspended) is distinct from 'suspended'
      or (select lifecycle.state from public.personnel_access_lifecycles lifecycle
-      where lifecycle.employee_record_id = v_record) <> 'ended'
+      where lifecycle.employee_record_id = v_record) is distinct from 'ended'
   then raise exception 'account deletion fixture did not reach its access states'; end if;
 end;
 $$;
@@ -829,6 +1152,113 @@ do $$
 begin
   if exists (select 1 from auth.users where id = '52000000-0000-0000-0000-000000000002')
   then raise exception 'former member of a deleted organization could not be deleted'; end if;
+end;
+$$;
+
+-- Work billing parties are a ledger (werk-flow/werkflow-planning#327): no API
+-- role may rewrite or delete a version, the history guard refuses even the
+-- owner role, and only a deleted actor's reference-nulling and a deleted
+-- work's cascade clean up.
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('53270000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'billing-ledger-admin@example.test', '', now(), '{}',
+ '{"first_name":"Admin","last_name":"Ledger"}', now(), now()),
+('53270000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'billing-ledger-buero@example.test', '', now(), '{}',
+ '{"first_name":"Büro","last_name":"Ledger"}', now(), now());
+insert into public.organizations (id, name, admin_id, unique_code) values
+('53270000-0000-4000-8000-000000000010', 'Billing ledger SQL',
+ '53270000-0000-4000-8000-000000000001', 'BILLLEDG');
+insert into public.organization_members (organization_id, user_id, role) values
+('53270000-0000-4000-8000-000000000010', '53270000-0000-4000-8000-000000000002', 'buero');
+insert into public.clients (id, organization_id, name, client_type, address) values
+('53270000-0000-4000-8000-000000000020', '53270000-0000-4000-8000-000000000010',
+ 'WEG Ahornweg 1', 'gewerblich', 'Ahornweg 1, 10115 Berlin'),
+('53270000-0000-4000-8000-000000000021', '53270000-0000-4000-8000-000000000010',
+ 'Hausverwaltung Ahorn GmbH', 'gewerblich', 'Hofweg 9, 10117 Berlin');
+-- The job's default version comes with it; the office's choice adds one with its actor.
+insert into public.jobs (id, organization_id, title, job_number, client_id, status, created_by) values
+('53270000-0000-4000-8000-000000000030', '53270000-0000-4000-8000-000000000010', 'Heizung prüfen',
+ 'L-30', '53270000-0000-4000-8000-000000000020', 'nicht_bearbeitet',
+ '53270000-0000-4000-8000-000000000001');
+set local role service_role;
+select public.set_work_billing_parties('53270000-0000-4000-8000-000000000002',
+  '53270000-0000-4000-8000-000000000010', 'job', '53270000-0000-4000-8000-000000000030',
+  '53270000-0000-4000-8000-000000000020', '53270000-0000-4000-8000-000000000021',
+  (select max(version) from public.work_billing_parties
+    where work_id = '53270000-0000-4000-8000-000000000030'));
+
+-- The server role holds no UPDATE or DELETE grant; a browser session holds none at all.
+do $$
+declare
+  v_role text;
+begin
+  foreach v_role in array array['service_role', 'authenticated'] loop
+    execute format('set local role %I', v_role);
+    begin
+      update public.work_billing_parties set recipient_name = 'Andere'
+      where work_id = '53270000-0000-4000-8000-000000000030';
+      raise exception 'billing party update was accepted for %', v_role;
+    exception when insufficient_privilege then
+      null;
+    end;
+    begin
+      delete from public.work_billing_parties where work_id = '53270000-0000-4000-8000-000000000030';
+      raise exception 'billing party delete was accepted for %', v_role;
+    exception when insufficient_privilege then
+      null;
+    end;
+  end loop;
+end;
+$$;
+
+-- The owner role passes the grant and meets the history guard.
+reset role;
+do $$
+begin
+  begin
+    update public.work_billing_parties set recipient_name = 'Andere'
+    where work_id = '53270000-0000-4000-8000-000000000030';
+    raise exception 'privileged billing party update was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  begin
+    delete from public.work_billing_parties where work_id = '53270000-0000-4000-8000-000000000030';
+    raise exception 'privileged billing party delete was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  if (select count(*) from public.work_billing_parties
+      where work_id = '53270000-0000-4000-8000-000000000030') is distinct from 2::bigint
+    or exists (select 1 from public.work_billing_parties
+      where work_id = '53270000-0000-4000-8000-000000000030' and recipient_name = 'Andere')
+  then raise exception 'a refused billing party edit changed the history'; end if;
+end;
+$$;
+
+-- Permitted cleanup: a deleted account leaves its versions without an actor,
+-- and a deleted work takes its versions with it.
+delete from public.organization_members
+where organization_id = '53270000-0000-4000-8000-000000000010'
+  and user_id = '53270000-0000-4000-8000-000000000002';
+delete from auth.users where id = '53270000-0000-4000-8000-000000000002';
+do $$
+begin
+  if (select count(*) from public.work_billing_parties
+      where work_id = '53270000-0000-4000-8000-000000000030' and set_by is null) is distinct from 2::bigint
+  then raise exception 'a deleted account did not leave its billing party versions without an actor'; end if;
+end;
+$$;
+delete from public.jobs where id = '53270000-0000-4000-8000-000000000030';
+do $$
+begin
+  if exists (select 1 from public.work_billing_parties
+    where work_id = '53270000-0000-4000-8000-000000000030')
+  then raise exception 'a deleted job left its billing party versions'; end if;
 end;
 $$;
 

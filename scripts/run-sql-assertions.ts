@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { withStackLock } from '../lib/testing/runner/stack-lock';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 import { executeSqlAssertionFiles } from '../lib/testing/selection/sql-assertion-files';
 
@@ -43,9 +44,11 @@ export async function runSqlAssertionFile(assertionFile: string): Promise<void> 
   console.log(`[test:sql:${basename(assertionFile, '.sql')}] passed — ${assertionFile}`);
 }
 
-await withWorkspaceTestLock(
-  { operation: `SQL assertions ${assertionFiles.map((file) => basename(file)).join(', ')}` },
-  async () => {
-    await executeSqlAssertionFiles(assertionFiles, runSqlAssertionFile);
-  },
+const operation = `SQL assertions ${assertionFiles.map((file) => basename(file)).join(', ')}`;
+// The stack is every worktree's. The shared hold keeps `bun run stack:sync`, which changes its
+// schema under the exclusive hold, from migrating it under a running file (scripts/local-stack.ts).
+await withWorkspaceTestLock({ operation }, () =>
+  withStackLock({ mode: 'shared', operation, repositoryRoot: resolve(import.meta.dir, '..') }, () =>
+    executeSqlAssertionFiles(assertionFiles, runSqlAssertionFile),
+  ),
 );

@@ -10,8 +10,8 @@ import {
   TimeActivityKindPicker,
   TimeActivityQualifierFields,
   TimeActivityRecoveryNotice,
-  TimeActivityStatusNotice,
 } from '@/components/time-activity-fields';
+import { TimeActivityStatusNotice } from '@/components/time-activity-status-notice';
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
 import {
@@ -327,7 +327,7 @@ function TimeActivityDialogFields({
   error: string | null;
 }) {
   const availableOptions = ACTIVITY_OPTIONS.filter(
-    (option) => option.kind !== 'break' || (state?.isClockedIn && state.breakMode === 'manual'),
+    (option) => option.kind !== 'break' || (state?.isClockedIn && state.breakPolicy.breakMode === 'manual'),
   );
   const canLinkJob = draft.kind === 'work' || draft.kind === 'travel' || draft.kind === 'callout';
   const knownJob = [state?.activeJobInfo, state?.resumeJobInfo].find((job) => job && job.id === draft.jobId);

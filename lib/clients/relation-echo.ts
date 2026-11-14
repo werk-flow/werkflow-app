@@ -23,6 +23,8 @@ export function buildContactEcho(
     email: textOrNull(draft.email),
     phone: textOrNull(draft.phone),
     notes: textOrNull(draft.notes),
+    siteId: draft.siteId ?? null,
+    siteRole: draft.siteRole ?? null,
     isPrimary: draft.isPrimary ?? false,
   };
 }
@@ -38,6 +40,7 @@ export function buildSiteEcho(
     street: textOrNull(draft.street),
     postalCode: textOrNull(draft.postalCode),
     city: textOrNull(draft.city),
+    sourceNumber: textOrNull(draft.sourceNumber),
     accessNotes: textOrNull(draft.accessNotes),
     notes: textOrNull(draft.notes),
     primaryContactId: draft.primaryContactId ?? null,

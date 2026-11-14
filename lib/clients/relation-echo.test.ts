@@ -12,6 +12,8 @@ const stored: ClientContact = {
   email: null,
   phone: '030 1234',
   notes: null,
+  siteId: null,
+  siteRole: null,
   isPrimary: true,
   isActive: true,
   createdBy: 'user-1',

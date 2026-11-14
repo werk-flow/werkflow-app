@@ -1,3 +1,4 @@
+import type { InventoryImportMode } from './csv-import';
 import type { InventoryItemType, InventoryLocationType } from './types';
 
 // The parameter shapes of the inventory Server Actions in `./actions` and
@@ -71,6 +72,8 @@ export type UpdateJobMaterialLineInput = {
 };
 
 export type TakeJobMaterialInput = {
+  /** Names the booking; a call under a booked id answers with that booking. */
+  operationId: string;
   jobId: string;
   lineId?: string | null;
   itemId?: string | null;
@@ -80,10 +83,20 @@ export type TakeJobMaterialInput = {
 };
 
 export type ReturnJobMaterialInput = {
+  /** Names the booking; a call under a booked id answers with that booking. */
+  operationId: string;
   lineId: string;
   locationId: string;
   quantity: number;
   reason?: string | null;
+};
+
+export type RecordJobMaterialUseInput = {
+  /** Names the booking; a call under a booked id answers with that booking. */
+  operationId: string;
+  lineId: string;
+  quantity: number;
+  note?: string | null;
 };
 
 export type InventoryImportRow = {
@@ -109,8 +122,14 @@ export type InventoryImportRow = {
 /** The most rows one CSV import takes; the dialog refuses a longer file before it reads its rows. */
 export const INVENTORY_IMPORT_MAX_ROWS = 5000;
 
-export type ImportInventoryRowsInput = {
+export type PreviewInventoryImportInput = {
   fileName: string;
+  contentHash: string;
+  mode: InventoryImportMode;
   columnMapping: Record<string, string>;
   rows: InventoryImportRow[];
 };
+
+export type BookInventoryImportInput = { batchId: string };
+
+export type InventoryImportRepeatInput = { contentHash: string };

@@ -57,6 +57,25 @@ function TextLinesSkeleton({ lines }: { lines: number }): ReactElement {
   );
 }
 
+/** The file row while the Musterangebot renders; the route's loading state shows the same. */
+export function DocumentSampleRowSkeleton(): ReactElement {
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <Skeleton className="size-8" />
+        <div className="space-y-1.5">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-4 w-20" />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Skeleton className="h-9 w-24" />
+        <Skeleton className="h-9 w-36" />
+      </div>
+    </div>
+  );
+}
+
 function CheckboxListSkeleton({ rows }: { rows: number }): ReactElement {
   return (
     <div className="space-y-3 sm:col-span-2">
@@ -121,6 +140,17 @@ const SECTION_SKELETONS = {
       <SettingsCardSkeleton columns={1}>
         <Skeleton className="h-4 w-full max-w-lg" />
         <Skeleton className="h-8 w-full" />
+      </SettingsCardSkeleton>
+    </>
+  ),
+  dokumente: (
+    <>
+      <SettingsCardSkeleton fieldCount={6} footer />
+      <SettingsCardSkeleton columns={1}>
+        <TextLinesSkeleton lines={3} />
+      </SettingsCardSkeleton>
+      <SettingsCardSkeleton columns={1}>
+        <DocumentSampleRowSkeleton />
       </SettingsCardSkeleton>
     </>
   ),

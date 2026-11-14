@@ -10,14 +10,13 @@ import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { getCapabilityKindLabel, type OwnQualificationProfile } from '@/lib/qualifications/types';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 
 type OwnQualificationCardProps = OwnQualificationProfile['capabilities'][number] & {
   today: string;
-  formatDate: (value: string) => string;
 };
 
-function OwnQualificationCard({ definition, record, today, formatDate }: OwnQualificationCardProps) {
+function OwnQualificationCard({ definition, record, today }: OwnQualificationCardProps) {
   const expired = Boolean(record.validUntil && record.validUntil < today);
   const future = record.validFrom > today;
   return (
@@ -32,8 +31,8 @@ function OwnQualificationCard({ definition, record, today, formatDate }: OwnQual
         </Badge>
       </div>
       <p className="text-sm text-muted-foreground">
-        Gültig ab {formatDate(record.validFrom)}
-        {record.validUntil ? ' bis ' + formatDate(record.validUntil) : ''}
+        Gültig ab {formatGermanDate(record.validFrom)}
+        {record.validUntil ? ' bis ' + formatGermanDate(record.validUntil) : ''}
       </p>
       {definition.kind === 'certification' && (
         <div className="flex flex-wrap gap-2 text-xs">
@@ -62,7 +61,6 @@ export function OwnQualificationOverview({ profile }: { profile: OwnQualificatio
     tables: ['teams', 'team_memberships', 'organization_capabilities', 'employee_capabilities'],
   });
   const today = getBusinessTodayIso();
-  const formatDate = (value: string) => formatBerlin(value, 'numericDate');
   if (!profile) {
     return (
       <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
@@ -101,13 +99,7 @@ export function OwnQualificationOverview({ profile }: { profile: OwnQualificatio
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {profile.capabilities.map(({ definition, record }) => (
-              <OwnQualificationCard
-                key={record.id}
-                definition={definition}
-                record={record}
-                today={today}
-                formatDate={formatDate}
-              />
+              <OwnQualificationCard key={record.id} definition={definition} record={record} today={today} />
             ))}
           </div>
         )}

@@ -1,7 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import { INVENTORY_IMPORT_MAX_ROWS } from './action-inputs';
-import { importInventoryRowsSchema } from './action-schemas';
-import { buildImportRows, guessMapping, IMPORT_COLUMNS, importResultBanner, parseCsv } from './csv-import';
+import { previewInventoryImportSchema } from './action-schemas';
+import {
+  buildImportRows,
+  guessMapping,
+  IMPORT_COLUMNS,
+  importReportCsv,
+  importResultMessage,
+  importRowEffect,
+  importRowProblem,
+  importTotals,
+  parseCsv,
+  type ImportRowOutcome,
+} from './csv-import';
 
 // The widest header one import reads; the refusal message names it.
 const MAX_HEADER_COLUMNS = 200;
@@ -15,6 +26,8 @@ describe('parseCsv', () => {
         { Artikel: 'Rohr; 22 mm', Bestand: '4', Notiz: 'sagt "ok"' },
         { Artikel: 'Muffe', Bestand: '2', Notiz: '' },
       ],
+      // The blank line 3 is no row; each row keeps its line in the file.
+      lineNumbers: [2, 4],
     });
   });
 
@@ -23,11 +36,12 @@ describe('parseCsv', () => {
       ok: true,
       headers: ['Name', 'Menge'],
       rows: [{ Name: 'Ventil', Menge: '3' }],
+      lineNumbers: [2],
     });
   });
 
   test('an empty file has no headers and no rows', () => {
-    expect(parseCsv('\n\n')).toEqual({ ok: true, headers: [], rows: [] });
+    expect(parseCsv('\n\n')).toEqual({ ok: true, headers: [], rows: [], lineNumbers: [] });
   });
 
   test('a typical export imports the same rows through the guessed mapping', () => {
@@ -220,40 +234,214 @@ describe('buildImportRows', () => {
   });
 });
 
-describe('importResultBanner', () => {
-  test('a complete import is a success', () => {
-    expect(importResultBanner({ importedCount: 4, missingLocationCount: 0, failedCount: 0 })).toEqual({
-      variant: 'success',
-      message: '4 Artikel importiert.',
+const BASE: ImportRowOutcome = {
+  index: 0,
+  outcome: 'booked',
+  matchedBy: null,
+  itemName: 'Pressfitting 15 mm',
+  unit: 'piece',
+  locationName: 'Hauptlager',
+  locationCreated: false,
+  quantity: 10,
+  quantityAfter: 10,
+  reason: null,
+  itemUnit: null,
+};
+
+// A synthetic file of Großhandel Nordrohr as the preview answers it.
+const OUTCOMES: ImportRowOutcome[] = [
+  BASE,
+  {
+    ...BASE,
+    index: 1,
+    matchedBy: 'internal_sku',
+    itemName: 'Kupferrohr 15 mm',
+    unit: 'meter',
+    quantity: 0.1,
+    quantityAfter: 4.1,
+  },
+  {
+    ...BASE,
+    index: 2,
+    matchedBy: 'barcode',
+    unit: 'meter',
+    quantity: 0.2,
+    locationName: 'Regal Nord',
+    locationCreated: true,
+    quantityAfter: 0.2,
+  },
+  { ...BASE, index: 3, matchedBy: 'internal_sku', unit: 'meter', quantity: 0.2, quantityAfter: 4.3 },
+  {
+    ...BASE,
+    index: 4,
+    outcome: 'rejected',
+    reason: 'unit_mismatch',
+    unit: 'piece',
+    itemUnit: 'meter',
+    quantityAfter: null,
+  },
+  {
+    ...BASE,
+    index: 5,
+    outcome: 'rejected',
+    reason: 'unknown_unit',
+    itemName: null,
+    unit: 'Fass',
+    quantityAfter: null,
+  },
+  { ...BASE, index: 6, outcome: 'missing_location', locationName: null, quantityAfter: null },
+  { ...BASE, index: 7, outcome: 'rejected', reason: 'missing_name', itemName: null, quantityAfter: null },
+];
+
+describe('importTotals', () => {
+  test('every row counts once as new, matched or rejected, and each Lager sums its stock per unit', () => {
+    const totals = importTotals(OUTCOMES);
+    expect(totals.created + totals.matched + totals.rejected).toBe(OUTCOMES.length);
+    expect(totals).toEqual({
+      created: 2,
+      matched: 3,
+      rejected: 3,
+      withoutLocation: 1,
+      locations: [
+        {
+          locationName: 'Hauptlager',
+          isNew: false,
+          // 0,1 m + 0,2 m stays 0,3 m.
+          quantities: [
+            { unit: 'piece', quantity: 10 },
+            { unit: 'meter', quantity: 0.3 },
+          ],
+        },
+        { locationName: 'Regal Nord', isNew: true, quantities: [{ unit: 'meter', quantity: 0.2 }] },
+      ],
     });
   });
 
-  test('rows without a Lager stay visible as an error with their own count', () => {
-    expect(importResultBanner({ importedCount: 2, missingLocationCount: 3, failedCount: 0 })).toEqual({
-      variant: 'error',
-      message:
-        '2 Artikel importiert. 3 Zeilen ohne Lager: Artikel übernommen, kein Bestand gebucht. Prüfe die CSV-Datei.',
-    });
-  });
-
-  test('failed rows and a row without a Lager are named together', () => {
-    expect(importResultBanner({ importedCount: 2, missingLocationCount: 1, failedCount: 1 })).toEqual({
-      variant: 'error',
-      message:
-        '2 Artikel importiert, 1 Zeile konnte nicht übernommen werden. 1 Zeile ohne Lager: Artikel übernommen, kein Bestand gebucht. Prüfe die CSV-Datei.',
+  test('an empty preview has no totals', () => {
+    expect(importTotals([])).toEqual({
+      created: 0,
+      matched: 0,
+      rejected: 0,
+      withoutLocation: 0,
+      locations: [],
     });
   });
 });
 
-describe('importInventoryRowsSchema', () => {
-  const input = { fileName: 'inventar.csv', rows: [{ name: 'Kupferrohr' }] };
+describe('importRowEffect and importRowProblem', () => {
+  test('a quantity keeps the three decimal places the ledger books', () => {
+    expect(importRowEffect({ ...BASE, unit: 'meter', quantity: 0.001, quantityAfter: 4.125 }, 'stock')).toBe(
+      '+0,001 Meter in Hauptlager, danach 4,125 Meter',
+    );
+  });
+
+  test('a matched row says its quantity adds to the stock it already has', () => {
+    expect(importRowEffect(OUTCOMES[1] ?? BASE, 'stock')).toBe(
+      '+0,1 Meter zum vorhandenen Bestand in Hauptlager, danach 4,1 Meter',
+    );
+    expect(importRowEffect(OUTCOMES[2] ?? BASE, 'stock')).toBe(
+      '+0,2 Meter zum vorhandenen Bestand in Regal Nord (neues Lager), danach 0,2 Meter',
+    );
+    expect(importRowEffect({ ...BASE, outcome: 'imported' }, 'master_data')).toBe(
+      'Nur Stammdaten: kein Bestand gebucht',
+    );
+  });
+
+  test('a rejected row names its reason with the unit it carried', () => {
+    expect(importRowProblem(OUTCOMES[4] ?? BASE, 'Stk')).toBe('Einheit weicht ab: Stück statt Meter.');
+    expect(importRowProblem(OUTCOMES[5] ?? BASE, ' Fass ')).toBe('Unbekannte Einheit: „Fass“.');
+    expect(importRowProblem(OUTCOMES[5] ?? BASE, '')).toBe('Keine Einheit angegeben.');
+    expect(importRowProblem(OUTCOMES[6] ?? BASE, 'Stk')).toBe(
+      'Kein Lager angegeben: Artikel übernommen, kein Bestand gebucht.',
+    );
+    expect(importRowProblem({ ...BASE, outcome: 'rejected', reason: 'changed_since_preview' }, 'Stk')).toBe(
+      'Artikel oder Lager haben sich seit der Vorschau geändert. Importiere die Zeile erneut und prüfe die neue Vorschau.',
+    );
+    expect(importRowProblem(BASE, 'Stk')).toBeNull();
+  });
+});
+
+/** The report's text with its byte order mark, as a spreadsheet reads it. */
+function readReport(bytes: Uint8Array | null): string | null {
+  return bytes === null ? null : new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
+}
+
+describe('importReportCsv', () => {
+  const headers = ['Bezeichnung', 'Einheit'];
+  const rows = OUTCOMES.map((_, index) => ({ Bezeichnung: `Artikel; ${index}`, Einheit: 'Stk' }));
+  const lineNumbers = OUTCOMES.map((_, index) => index + 3);
+  const fileUnits = OUTCOMES.map(() => 'Stk');
+
+  test('holds every rejected row and every row without a Lager with its line, cells and reason', () => {
+    const csv = readReport(importReportCsv({ headers, rows, lineNumbers, outcomes: OUTCOMES, fileUnits }));
+    expect(csv?.split('\r\n')).toEqual([
+      '﻿Zeile;Bezeichnung;Einheit;Importhinweis',
+      '7;"Artikel; 4";Stk;Einheit weicht ab: Stück statt Meter.',
+      '8;"Artikel; 5";Stk;Unbekannte Einheit: „Stk“.',
+      '9;"Artikel; 6";Stk;Kein Lager angegeben: Artikel übernommen, kein Bestand gebucht.',
+      '10;"Artikel; 7";Stk;Kein Artikelname.',
+      '',
+    ]);
+  });
+
+  test('a cell or header that starts like a formula reaches the report as text', () => {
+    const formulaRows = OUTCOMES.map(() => ({ '+Bezeichnung': '=HYPERLINK("x")', Einheit: '@Stk' }));
+    const csv = readReport(
+      importReportCsv({
+        headers: ['+Bezeichnung', 'Einheit'],
+        rows: formulaRows,
+        lineNumbers,
+        outcomes: OUTCOMES.slice(4, 5),
+        fileUnits,
+      }),
+    );
+    expect(csv?.split('\r\n')).toEqual([
+      "\uFEFFZeile;'+Bezeichnung;Einheit;Importhinweis",
+      `7;"'=HYPERLINK(""x"")";'@Stk;Einheit weicht ab: Stück statt Meter.`,
+      '',
+    ]);
+  });
+
+  test('a file without a problem row has no report', () => {
+    expect(
+      importReportCsv({ headers, rows, lineNumbers, outcomes: OUTCOMES.slice(0, 4), fileUnits }),
+    ).toBeNull();
+  });
+});
+
+describe('importResultMessage', () => {
+  test('names the new and the matched articles', () => {
+    expect(importResultMessage(importTotals(OUTCOMES.slice(0, 2)))).toBe(
+      'Import gebucht: 1 neuer Artikel, 1 vorhandener Artikel.',
+    );
+  });
+});
+
+describe('previewInventoryImportSchema', () => {
+  const input = {
+    fileName: 'inventar.csv',
+    contentHash: 'a'.repeat(64),
+    mode: 'stock',
+    rows: [{ name: 'Kupferrohr' }],
+  };
 
   test('accepts a mapping of every import column and refuses a key outside them', () => {
     const columnMapping = Object.fromEntries(IMPORT_COLUMNS.map((column) => [column.key, column.label]));
-    expect(importInventoryRowsSchema.safeParse({ ...input, columnMapping }).success).toBe(true);
+    expect(previewInventoryImportSchema.safeParse({ ...input, columnMapping }).success).toBe(true);
     expect(
-      importInventoryRowsSchema.safeParse({ ...input, columnMapping: { ...columnMapping, extra: 'Spalte' } })
-        .success,
+      previewInventoryImportSchema.safeParse({
+        ...input,
+        columnMapping: { ...columnMapping, extra: 'Spalte' },
+      }).success,
+    ).toBe(false);
+  });
+
+  test('refuses a hash that is no SHA-256 and a mode outside the list', () => {
+    expect(
+      previewInventoryImportSchema.safeParse({ ...input, columnMapping: {}, contentHash: 'abc' }).success,
+    ).toBe(false);
+    expect(
+      previewInventoryImportSchema.safeParse({ ...input, columnMapping: {}, mode: 'transfer' }).success,
     ).toBe(false);
   });
 });

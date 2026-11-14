@@ -13,6 +13,7 @@ import type { JobMaterialLine } from '@/lib/inventory/types';
 function dialogRow(patch: Partial<MaterialDialogRow> = {}): MaterialDialogRow {
   return {
     key: 'line-1',
+    operationId: '00000000-0000-4000-8000-000000000001',
     lineId: 'line-1',
     itemId: 'item-1',
     locationId: 'location-1',
@@ -65,6 +66,7 @@ const takenLine: JobMaterialLine = {
   preferredLocationName: 'Hauptlager',
   plannedQuantity: 2,
   takenQuantity: 2,
+  usedQuantity: 0,
   returnedQuantity: 0,
   billableQuantity: 0,
   isBillable: false,
@@ -84,6 +86,7 @@ function renderLine(line: JobMaterialLine): string {
         isBusy={false}
         locations={[]}
         onTake={() => {}}
+        onUse={() => {}}
         onReturn={() => {}}
         onEdit={() => {}}
         onDelete={() => {}}
@@ -102,14 +105,19 @@ describe('a booked material line', () => {
     expect(markup).toContain('2 Stück entnommen');
     expect(markup).not.toContain('-2');
     expect(markup).not.toContain('Noch draußen');
-    expect(markup).not.toContain('Beim Auftrag');
+    expect(markup).not.toContain('noch offen');
   });
 
-  test('after a return the line names what came back and what stays at the job', () => {
-    const markup = renderLine({ ...takenLine, returnedQuantity: 1 });
-    expect(markup).toContain('1 Stück zurückgelegt');
-    expect(markup).toContain('Beim Auftrag: 1 Stück');
+  test('taken, used and returned read as one line of facts with what is still open', () => {
+    const markup = renderLine({ ...takenLine, takenQuantity: 5, usedQuantity: 2, returnedQuantity: 1 });
+    expect(markup).toContain('5 Stück entnommen · 2 Stück verbraucht · 1 Stück zurück · 2 Stück noch offen');
     expect(markup).not.toContain('+1');
+  });
+
+  test('a line with nothing left open names no open quantity', () => {
+    const markup = renderLine({ ...takenLine, usedQuantity: 1, returnedQuantity: 1 });
+    expect(markup).toContain('2 Stück entnommen · 1 Stück verbraucht · 1 Stück zurück');
+    expect(markup).not.toContain('noch offen');
   });
 });
 

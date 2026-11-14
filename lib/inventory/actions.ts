@@ -15,7 +15,6 @@ import type {
   CreateInventoryLocationInput,
   CreateJobMaterialLineInput,
   CreateProjectMaterialLineInput,
-  ImportInventoryRowsInput,
   ReturnJobMaterialInput,
   TakeJobMaterialInput,
   UpdateJobMaterialLineInput,
@@ -30,14 +29,11 @@ import { INVENTORY_PICKER_PAGE_SIZE, toInventoryLocation, toNumber } from './typ
 import { loadInventoryPickerOptions } from './catalog-reads';
 import { getJobContext, getProjectContext } from './job-project-access';
 import { hydrateJobMaterialLines, readProjectMaterialSummary } from './material-line-reads';
-import { insertMaterialLine, materialLineChanges } from './material-line-writes';
+import { materialLineChanges, planMaterialLine } from './material-line-writes';
 import {
   cleanText,
-  completeInventoryImportBatch,
   ensureInventoryDefaults,
   invalidateInventory,
-  inventoryImportItem,
-  inventoryWriteFailure,
   normalizeQuantity,
   resolveInventoryLocation,
   takeUnplannedMaterial,
@@ -49,7 +45,6 @@ import {
   createInventoryLocationSchema,
   createJobMaterialLineSchema,
   createProjectMaterialLineSchema,
-  importInventoryRowsSchema,
   optionalItemIdSchema,
   pickerSearchSchema,
   returnJobMaterialSchema,
@@ -88,6 +83,7 @@ async function recordMovement(
     projectId?: string | null;
     jobMaterialLineId?: string | null;
     reason?: string | null;
+    operationId?: string;
   },
 ): Promise<ActionResult<{ quantityAfter: number }>> {
   const { data, error } = await admin.rpc(
@@ -104,11 +100,14 @@ async function recordMovement(
       p_job_material_line_id: input.jobMaterialLineId ?? null,
       p_import_batch_id: null,
       p_reason: cleanText(input.reason),
+      p_operation_id: input.operationId ?? null,
     }),
   );
 
   if (error) {
     if (error.message === 'return_exceeds_taken') return { success: false, error: 'return_exceeds_taken' };
+    if (error.message === 'material_idempotency_conflict')
+      return { success: false, error: 'material_idempotency_conflict' };
     if (error.message === 'material_line_item_changed') return { success: false, error: 'line_changed' };
     logError('Error recording inventory movement.', { code: error.code ?? 'unknown' });
     if (error.message?.includes('inventory stock cannot go below zero')) {
@@ -279,11 +278,10 @@ export async function createJobMaterialLine(
   const jobContext = await getJobContext(auth.context, input.jobId);
   if (!jobContext.success) return jobContext;
 
-  return insertMaterialLine(admin, auth.context, {
-    owner: { job_id: jobContext.job.id, project_id: jobContext.job.project_id },
+  return planMaterialLine(admin, auth.context, {
+    target: { jobId: jobContext.job.id, projectId: null },
     input,
-    readLabel: 'createJobMaterialLine: inventory_items read failed',
-    failureLabel: 'Error creating job material line:',
+    failureLabel: 'createJobMaterialLine: plan_job_material failed',
   });
 }
 
@@ -300,11 +298,10 @@ export async function createProjectMaterialLine(
   const projectContext = await getProjectContext(admin, auth.context, input.projectId);
   if (!projectContext.success) return projectContext;
 
-  return insertMaterialLine(admin, auth.context, {
-    owner: { job_id: null, project_id: projectContext.project.id },
+  return planMaterialLine(admin, auth.context, {
+    target: { jobId: null, projectId: projectContext.project.id },
     input,
-    readLabel: 'createProjectMaterialLine: inventory_items read failed',
-    failureLabel: 'Error creating project material line:',
+    failureLabel: 'createProjectMaterialLine: plan_job_material failed',
   });
 }
 
@@ -388,8 +385,23 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
   const line = existing;
   if (!line) return { success: false, error: 'line_not_found' };
 
+  // Used material is built in and stays on its line: the line cannot be removed.
+  if (toNumber(line.used_quantity) > 0) return { success: false, error: 'material_use_recorded' };
+  // A fully corrected use nets to 0 but stays history: the event ledger decides too.
+  const { data: useEvents, error: useEventsError } = await loggedRead(
+    'deleteJobMaterialLine: job_material_use_events read failed',
+    admin
+      .from('job_material_use_events')
+      .select('id')
+      .eq('organization_id', auth.context.orgId)
+      .eq('job_material_line_id', lineId)
+      .limit(1),
+  );
+  if (useEventsError) return { success: false, error: 'load_failed' };
+  if ((useEvents ?? []).length > 0) return { success: false, error: 'material_use_recorded' };
+
   // A line with movements is cancelled so its ledger keeps the line; one without
-  // is deleted. The quantity filters refuse a movement booked after the check.
+  // is deleted. The quantity filters refuse a movement or use booked after the check.
   const hasMovement = toNumber(line.taken_quantity) > 0 || toNumber(line.returned_quantity) > 0;
   const result = hasMovement
     ? await admin
@@ -397,6 +409,7 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
         .update({ status: 'cancelled' })
         .eq('id', lineId)
         .eq('organization_id', auth.context.orgId)
+        .eq('used_quantity', 0)
         .or('taken_quantity.gt.0,returned_quantity.gt.0')
         .select('id')
     : await admin
@@ -404,11 +417,15 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
         .delete()
         .eq('id', lineId)
         .eq('organization_id', auth.context.orgId)
+        .eq('used_quantity', 0)
         .eq('taken_quantity', 0)
         .eq('returned_quantity', 0)
         .select('id');
 
   if (result.error) {
+    // A use and its full correction committed after the check above: the line guard refuses.
+    if (result.error.message === 'material_use_recorded')
+      return { success: false, error: 'material_use_recorded' };
     logError('Error deleting job material line:', result.error);
     return { success: false, error: 'delete_failed' };
   }
@@ -520,6 +537,7 @@ export async function takeJobMaterial(
       projectId: jobContext.job.project_id,
       jobMaterialLineId: existingLine.id,
       reason: input.reason || 'Für Auftrag entnommen',
+      operationId: input.operationId,
     });
   } else {
     if (!input.itemId) return { success: false, error: 'item_required' };
@@ -531,6 +549,7 @@ export async function takeJobMaterial(
       quantity,
       reason: input.reason,
       defaultReason: 'Für Auftrag entnommen',
+      operationId: input.operationId,
     });
   }
   if (!result.success) return result;
@@ -581,6 +600,7 @@ export async function takeProjectMaterial(
       projectId: projectContext.project.id,
       jobMaterialLineId: existingLine.id,
       reason: input.reason || 'Für Projekt entnommen',
+      operationId: input.operationId,
     });
   } else {
     if (!input.itemId) return { success: false, error: 'item_required' };
@@ -592,6 +612,7 @@ export async function takeProjectMaterial(
       quantity,
       reason: input.reason,
       defaultReason: 'Für Projekt entnommen',
+      operationId: input.operationId,
     });
   }
   if (!result.success) return result;
@@ -644,11 +665,8 @@ export async function returnJobMaterial(
     return { success: false, error: 'line_not_found' };
   }
 
-  const stillOut = toNumber(line.taken_quantity) - toNumber(line.returned_quantity);
-  if (quantity > stillOut) {
-    return { success: false, error: 'return_exceeds_taken' };
-  }
-
+  // record_inventory_movement refuses a return beyond what is neither used nor
+  // returned; it answers a retry first, which a check here would refuse.
   const result = await recordMovement(admin, auth.context, {
     itemId: line.item_id,
     locationId: input.locationId,
@@ -658,6 +676,7 @@ export async function returnJobMaterial(
     projectId,
     jobMaterialLineId: line.id,
     reason: input.reason || (jobId ? 'Von Auftrag zurückgelegt' : 'Von Projekt zurückgelegt'),
+    operationId: input.operationId,
   });
 
   if (!result.success) return result;
@@ -665,97 +684,4 @@ export async function returnJobMaterial(
   invalidateInventory();
   revalidatePath('/auftraege', 'layout');
   return result;
-}
-
-/**
- * Books CSV rows directly. A matched row adds its quantity as a receipt; a new
- * item's quantity is its first count. A row with a quantity but no Lager keeps
- * its item and books nothing, counted in `missingLocationCount`.
- */
-export async function importInventoryRows(
-  rawInput: ImportInventoryRowsInput,
-): Promise<ActionResult<{ importedCount: number; missingLocationCount: number; failedCount: number }>> {
-  const parsedInput = importInventoryRowsSchema.safeParse(rawInput);
-  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
-  const input = parsedInput.data;
-  const auth = await requireInventoryManager();
-  if (!auth.success) return auth;
-
-  const fileName = cleanText(input.fileName) ?? 'inventar-import.csv';
-  const rows = input.rows.filter((row) => cleanText(row.name));
-  if (rows.length === 0) return { success: false, error: 'no_rows' };
-
-  const admin = createSupabaseAdminClient();
-  await ensureInventoryDefaults(admin, auth.context);
-
-  const { data: batchData, error: batchError } = await admin
-    .from('inventory_import_batches')
-    .insert({
-      organization_id: auth.context.orgId,
-      file_name: fileName,
-      status: 'draft',
-      column_mapping: input.columnMapping,
-      row_count: rows.length,
-      created_by: auth.context.userId,
-    })
-    .select('id')
-    .single();
-
-  const batch = batchData;
-  if (batchError || !batch) {
-    logError('Error creating inventory import batch:', batchError);
-    return { success: false, error: 'batch_failed' };
-  }
-
-  let importedCount = 0;
-  let missingLocationCount = 0;
-  let failedCount = 0;
-
-  for (const row of rows) {
-    try {
-      const name = cleanText(row.name);
-      if (!name) {
-        failedCount++;
-        continue;
-      }
-
-      // One row is one transaction: its item, barcode and stock movement commit
-      // together, and a failed lookup or write fails the row instead of skipping a step.
-      const { data: outcome, error } = await admin.rpc(
-        'import_inventory_row',
-        rpcArgs('import_inventory_row', {
-          p_organization_id: auth.context.orgId,
-          p_actor_id: auth.context.userId,
-          p_import_batch_id: batch.id,
-          p_item: inventoryImportItem(row, name),
-          p_category_name: cleanText(row.categoryName),
-          p_supplier_name: cleanText(row.supplierName),
-          p_location_name: cleanText(row.locationName),
-          p_barcode: cleanText(row.barcode),
-          p_quantity: normalizeQuantity(row.quantity ?? 0),
-          p_reason: `CSV-Import: ${fileName}`,
-        }),
-      );
-      if (error) {
-        inventoryWriteFailure('importInventoryRows: import_inventory_row failed', error, 'save_failed');
-        failedCount++;
-        continue;
-      }
-
-      if (outcome === 'missing_location') missingLocationCount++;
-      else importedCount++;
-    } catch (error) {
-      logError('Unexpected row import error:', error);
-      failedCount++;
-    }
-  }
-
-  await completeInventoryImportBatch(admin, auth.context.orgId, batch.id, {
-    importedCount,
-    missingLocationCount,
-    failedCount,
-  });
-
-  invalidateInventory();
-  return { success: true, importedCount, missingLocationCount, failedCount };
 }

@@ -17,11 +17,21 @@ const clockJobInfoSchema = z.object({
   projectName: nullableText,
   clientName: nullableText,
 });
+/** The clock state as the server answers it; the phone parses what it kept without signal with it too. */
 const clockStateSchema = z.object({
   organizationId: text,
-  breakMode: z.enum(['manual', 'automatic']),
-  autoBreakThresholdMinutes: z.number(),
-  autoBreakDurationMinutes: z.number(),
+  // Inline, not imported from ./settings: that module in the layout's client
+  // bundle grows every route's payload by about 500 bytes (lab counts).
+  breakPolicy: z.object({
+    breakMode: z.enum(['manual', 'automatic']),
+    autoBreakThresholdMinutes: z.number(),
+    autoBreakDurationMinutes: z.number(),
+    // The previous release's server sends none during a deploy: it reads as one step.
+    secondStep: z
+      .object({ thresholdMinutes: z.number(), durationMinutes: z.number() })
+      .nullish()
+      .transform((step) => step ?? null),
+  }),
   status: z.enum(['clocked_out', 'working', 'on_break']),
   isClockedIn: z.boolean(),
   isOnBreak: z.boolean(),

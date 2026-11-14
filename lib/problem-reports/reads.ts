@@ -11,7 +11,8 @@ import { PROBLEM_REPORT_STATUSES, type OwnProblemReport, type ProblemReportFileK
 // or filer, so no member reaches another person's report.
 
 /** The columns a reporter reads of their own report: no scrubbed copy, no context. */
-export const OWN_REPORT_COLUMNS = 'id, number, created_at, status, closed_at, response, description';
+export const OWN_REPORT_COLUMNS =
+  'id, number, created_at, status, closed_at, response, response_by_agent, description';
 
 type OwnReportRow = {
   id: string;
@@ -20,6 +21,7 @@ type OwnReportRow = {
   status: string;
   closed_at: string | null;
   response: string | null;
+  response_by_agent: boolean;
   description: string | null;
 };
 
@@ -31,30 +33,38 @@ export function toOwnProblemReport(row: OwnReportRow): OwnProblemReport {
     status: constrainedValue(PROBLEM_REPORT_STATUSES, row.status, 'problem_reports.status'),
     closedAt: row.closed_at,
     response: row.response,
+    responseByAgent: row.response_by_agent,
     description: row.description,
   };
 }
 
 /**
+ * Who adds a file to a report: a member to the report they sent themselves,
+ * or WerkFlow support to a report it filed for a caller. A support person
+ * who is also a member of the organization reaches a report filed for a
+ * caller only through support's actions, so leaving the allowlist ends it.
+ */
+export type ReportFiler = { orgId: string; userId: string; as: 'reporter' | 'support' };
+
+/**
  * The report the caller filed in the organization, while it still keeps its
  * originals: only then may it take a file. Another person's report, a report
- * of another organization and a missing one read alike as `report_not_found`.
+ * of another organization, a report filed for a caller reached as a member,
+ * and a missing one read alike as `report_not_found`.
  */
 export async function readFilableReport(
   admin: AdminClient,
-  caller: { orgId: string; userId: string },
+  caller: ReportFiler,
   reportId: string,
 ): Promise<ActionResult<object, 'report_not_found' | 'report_originals_deleted' | 'load_failed'>> {
-  const { data, error } = await loggedRead(
-    'readFilableReport: report read failed',
-    admin
-      .from('problem_reports')
-      .select('id, originals_deleted_at')
-      .eq('organization_id', caller.orgId)
-      .eq('filed_by_id', caller.userId)
-      .eq('id', reportId)
-      .maybeSingle(),
-  );
+  let query = admin
+    .from('problem_reports')
+    .select('id, originals_deleted_at')
+    .eq('organization_id', caller.orgId)
+    .eq('filed_by_id', caller.userId)
+    .eq('id', reportId);
+  if (caller.as === 'reporter') query = query.eq('reporter_id', caller.userId);
+  const { data, error } = await loggedRead('readFilableReport: report read failed', query.maybeSingle());
   if (error) return { success: false, error: 'load_failed' };
   if (!data) return { success: false, error: 'report_not_found' };
   if (data.originals_deleted_at !== null) return { success: false, error: 'report_originals_deleted' };

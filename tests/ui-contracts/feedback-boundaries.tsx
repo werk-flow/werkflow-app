@@ -39,6 +39,8 @@ const FEEDBACK_FIXTURES = [
   'time-approvals',
   'entry-details',
   'material-plan',
+  'material-use',
+  'material-use-off-page',
   'request-list',
   'client-relations',
   'team-qualifications',
@@ -68,6 +70,9 @@ function useRouteProps<Props>(read: () => Props): Props {
 
 const readMaterialLines = () => structuredClone(window.uiContractMaterial.lines);
 const readClientRelations = () => structuredClone(window.uiContractClientRelations);
+// Not cloned: a read that returns the same roles keeps their identity, as a
+// refresh with unchanged server props does.
+const readClientSiteRoles = () => window.uiContractClientSiteRoles;
 const readQualifications = () => structuredClone(window.uiContractQualifications);
 const readTimeAccounts = () => structuredClone(window.uiContractTimeAccounts);
 
@@ -139,13 +144,14 @@ function EntryDetailsHost(): React.JSX.Element {
 const MATERIAL_ITEMS = [materialContractItem];
 const MATERIAL_LOCATIONS = [materialContractLocation];
 
-function MaterialPlanHost(): React.JSX.Element {
+/** The material section; `items` is the loaded catalog page, which may lack a line's article. */
+function MaterialPlanHost({ items = MATERIAL_ITEMS }: { items?: typeof MATERIAL_ITEMS }): React.JSX.Element {
   const lines = useRouteProps(readMaterialLines);
   return (
     <JobMaterialsSection
       jobId="contract-job"
       initialLines={lines}
-      inventoryItems={MATERIAL_ITEMS}
+      inventoryItems={items}
       locations={MATERIAL_LOCATIONS}
       isAdminOrManager
     />
@@ -240,6 +246,8 @@ function RequestListHost(): React.JSX.Element {
             assigneeName="Erika Musterfrau"
             callbackOverdue={due.callbackOverdue}
             equipment={null}
+            billingParties={{ hasClient: false, versions: [], site: null, accessContacts: [] }}
+            isEditable={false}
           />
         </section>
       )}
@@ -249,12 +257,14 @@ function RequestListHost(): React.JSX.Element {
 
 function ClientRelationsHost(): React.JSX.Element {
   const relations = useRouteProps(readClientRelations);
+  const siteRoles = useRouteProps(readClientSiteRoles);
   return (
     <ClientRelationsSection
       clientId={clientRelationContractId}
       clientAddress={null}
       contacts={relations.contacts}
       sites={relations.sites}
+      siteRoles={siteRoles}
       isAdminOrManager
       equipment={[]}
       equipmentLoadFailed={false}
@@ -349,7 +359,10 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
     case 'entry-details':
       return <EntryDetailsHost />;
     case 'material-plan':
+    case 'material-use':
       return <MaterialPlanHost />;
+    case 'material-use-off-page':
+      return <MaterialPlanHost items={[]} />;
     case 'request-list':
       return <RequestListHost />;
     case 'client-relations':

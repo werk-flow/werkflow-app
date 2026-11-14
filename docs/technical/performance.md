@@ -32,7 +32,7 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 
 - `regressed` or `budget-exceeded`: more work than the reference or budget allows. Find the cause; never raise the reference.
 - `ratchet-pending`: less work than the floor allows. It fails in every run, CI included, so the change that lowered the count lowers its reference with the command the table names. When CI fails but your own run measures inside the tolerance, `accept` your run's value and name CI's value as the reason.
-- `grew` or `shrank`: bytes above the ceiling or below the floor (a deliberate cut, or missing data). Open the response, then `bun scripts/lab-counts.ts accept --run <run key> --step <id> --target <shape> --reason "<what changed>"`. A framework upgrade can shrink every payload at once: compare `backendByPath` and rows with the last passing run, open one response, and accept each target naming that comparison.
+- `grew` or `shrank`: bytes above the ceiling or below the floor (a deliberate cut, or missing data). A shape's bytes sum its requests, so a shape with another request count than its reference prints them `ungated`: the step's `requests` count judges that change. Open the response, then `bun scripts/lab-counts.ts accept --run <run key> --step <id> --target <shape> --reason "<what changed>"`. A framework upgrade can shrink every payload at once: compare `backendByPath` and rows with the last passing run, open one response, and accept each target naming that comparison.
 - `measurement-missing`: a bounded value was not recorded. It fails like a regression.
 - `shape-added` or `shape-removed`: a new or stopped request. Either is a behavior change that needs its reason.
 
@@ -126,10 +126,11 @@ Tier 3 defaults. Diverge after the owner tried the alternative.
 - Enable viewport prefetch for a sidebar link, or prefetch a route's dynamic data on intent.
 - Report a speedup as a percentage alone.
 - Re-export a library's whole namespace from a module the client imports. A namespace object keeps everything the library exports; name the members, as `lib/zod-members.ts` does.
+- Import `react-dom/client` in product code. Next's bootstrap owns it, and a second importer, even a lazy one, makes the bundler cut React's DOM renderer out of the start-up chunk: one more script on every cold start. Render into a host a layout mounts (`components/shared/unsent-work-host.tsx`).
 - Render a client component inside a server primitive every page uses (`PageShell`, `PageBody`, the page headers). Its client reference and the route's chunk list ride in every route payload. Run page-wide client behavior once in the app shell.
 
 ## Verify your work
 
 1. With `bun run test:server local` running, run `bun run test:verify`: its plan takes both lab groups for any product change. Run a wall-clock group the plan names with `--group audit:performance:<name>` on a quiet machine.
-2. For a page, skeleton or shared control, run `bun run test:verify --group audit:layout` and `--group audit:layout:<area>` for each changed area.
+2. A change plan runs `audit:layout:<area>` for each area whose pages or dialogs render a changed file. For a list page or a shared control that more areas render, run `bun run test:verify --group audit:layout` and `--group audit:layout:<area>` for each area it reaches.
 3. Commit the lowered or accepted references with the change. Record the journey decision, the numbers and the person's verdict in the slice record.

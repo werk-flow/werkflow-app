@@ -12,9 +12,9 @@ Every rule here is hard, even where only review enforces it; virtue 3 in `AGENTS
 4. A table that feeds the period calculation gets the closed-period trigger. A ledger refuses UPDATE and DELETE, and `security_boundaries.sql` asserts the denial.
 5. A table the UI shows live follows [add Realtime data](realtime-and-caching.md#add-realtime-data).
 6. Filter every service-role query on the table by `organization_id`, or add a reviewed `tenant-scope:` comment.
-7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
+7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check -- --local` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
 
-Wrong turn: a policy that checks membership but not the role, so every member reads through the Data API what only managers see.
+Wrong turn: a policy that checks membership but not the role: every member reads managers' rows through the Data API.
 
 ### Add a Server Action or route handler
 
@@ -28,16 +28,17 @@ Wrong turn: a policy that checks membership but not the role, so every member re
 8. Write the boundary test: copy `lib/testing/fixtures/join-request-boundaries.ts`, which runs the real actions on `action-boundary-world.ts`. Expect a refusal for a foreign organization's id and for a lower role.
 9. Run `bun run test:unit lib/security lib/conventions/server-action-input.test.ts` and the new boundary test.
 
-Wrong turn: trusting an id because the UI offers only the caller's own records. Every export is a public POST endpoint that accepts any id.
+Wrong turn: trusting an id because the UI offers only own records. Every export is a public POST endpoint.
 
 ### Add a privileged function
 
-1. Write `SECURITY DEFINER` only when one transaction must cross RLS, such as an approval that creates a membership. A function that writes related rows for a server action runs as `security invoker`.
+1. Write `SECURITY DEFINER` only when one transaction must cross RLS, such as an approval that creates a membership. A Server Action's write function runs as `security invoker`, or as definer when (a) no role, not even `service_role`, executes a volatile `app_private` function it reaches; (b) only `service_role` executes it; (c) it rechecks the actor's role and organization; (d) its `search_path` is `''`. `security_boundaries.sql` checks (a), (b) and (d) on public definer functions; review owns (c).
 2. A public function is executable by `service_role` only. An RLS helper that policies call goes into `app_private`, is granted to `authenticated` only, and joins the definer-execution inventory with the policy that needs it.
-3. Resolve organization and role in the server caller before it calls the function. A service-only list or search function revokes browser execution.
-4. Run `bun run test:verify --group sql:security` and the SQL group that owns the function.
+3. The server caller resolves organization and role first.
+4. An `app_private` function reading tenant rows takes `p_organization_id` or a tenant row, or `security_boundaries.sql` exempts it.
+5. Run `bun run test:verify --group sql:security` and the function's SQL group.
 
-Wrong turn: granting `authenticated` so the browser can call the function, which then bypasses every policy with its owner's rights.
+Wrong turn: granting `authenticated`, so the browser runs the function past every policy with its owner's rights.
 
 ### Add a storage path
 
@@ -49,7 +50,7 @@ Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it ke
 
 ### Profile a customer export
 
-A customer's export stays on the owner's machine, outside every repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing it. Only the profile reaches an agent; fixtures are synthetic, derived from it. Wrong turn: opening a row of the export in an agent session to "check one field".
+A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures derive from it. Wrong turn: opening an export row to "check one field".
 
 ## Trust boundaries
 
@@ -59,11 +60,11 @@ A customer's export stays on the owner's machine, outside every repository. The 
 - **Route handlers.** Each handler or its action authenticates the caller; field sync accepts bearer tokens too. No response or redirect carries an error's message or details.
 - **Auth links.** No browser client reads a URL session (`auth-url-session.spec.ts`). A GET redeems an invite only after a code exchange in that request; a reset hash waits in an httpOnly cookie for the reset page's click (`lib/auth/recovery-link.ts`).
 - **Email in URLs.** No URL carries a provider message or an email address. The next step reads the address from an httpOnly cookie scoped to its page (`lib/auth/address-cookies.ts`), the invite row, or the session.
-- **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; a new authenticated area is routed there. `app/(app)/layout.tsx` checks the session again and is the authority.
+- **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; route a new one there. `app/(app)/layout.tsx` checks the session again and is the authority.
 - **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy passes the request to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
 - **Redirects.** A return destination from a query string goes through `resolveSafeReturnPath` and is a same-origin path. An invite code is a UUID before the app echoes it.
-- **Organization cookie.** The cookie is a hint. The server accepts it only for a current member and refuses to set it for a non-member.
-- **Joining.** Join codes come from the cryptographic random source. A code creates a join request, never a membership. Only an Admin or Büro approval in that organization creates the membership, in one database function. A signed-in user gets limited join attempts per hour.
+- **Organization cookie.** A hint: the server accepts it only for a current member and sets it for no one else.
+- **Joining.** Join codes are cryptographically random. A code creates a join request, never a membership; only an Admin or Büro approval in that organization creates it, in one database function. A signed-in user gets limited join attempts per hour.
 - **Cross-organization writes.** A write that names another record checks that it belongs to the caller's organization and, where it applies, to the same person.
 - **Abuse limits.** Invite mail, invite redemption, join codes, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
 
@@ -71,9 +72,8 @@ A customer's export stays on the owner's machine, outside every repository. The 
 
 - RLS restricts every client read, by role and assignment where the server readers restrict them. `supabase/tests/client_read_boundaries.sql` proves an employee reads only their own jobs, assignments and projects, and a suspended member nothing. Extend it for a new role-limited table.
 - RLS checks effective personnel access wherever a policy or its helper reads `organization_members`, `job_assignments` or `employee_records`.
+- **Project lead.** `app_private.work_lead_scope` alone decides who leads which work. A lead reads Arbeitsnachweise (`authorizeWorkArtifactRead`), writes none.
 - Client roles write no table directly, except a user's own name and avatar.
-- Nothing is granted to `anon` without the owner's approval.
-- A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly the needed operations to the needed roles. Default grants are revoked, so a new object has no Data API access until its migration grants it.
 - Grant the sequence privileges an intended insert needs. The service role bypasses RLS, not SQL privileges.
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
 - **Service-role queries.** A query on organization data passes an organization from the resolved context, or carries a reviewed `tenant-scope` reason.
@@ -84,7 +84,7 @@ A customer's export stays on the owner's machine, outside every repository. The 
 
 ### Realtime
 
-RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE publication is off; deletion notices reach only current members. An event is a signal to read again through an authorized reader. [Realtime and caching](realtime-and-caching.md#realtime-model) owns the transport.
+RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE publication is off; deletion notices reach only current members. An event only signals a new read through an authorized reader. [Realtime and caching](realtime-and-caching.md#realtime-model) owns the transport.
 
 ### Files
 
@@ -96,19 +96,19 @@ The edge functions accept only the project's secret keys and escape every interp
 
 ### Browser
 
-Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code has no HTML string sink or `eval`, and imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
+Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to the unauthenticated `POST /api/csp-report`, which stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
 
-The service worker (`public/sw.js`) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the offline data ([one exception](#known-residual-exposure)), which the server never trusts ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
+The service worker (`/sw.js`, [versioned per build](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-13-the-build-writes-the-shells-version)) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the stored day ([one exception](#known-residual-exposure)); unsent work stays, untrusted ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
 
 ### Server caches
 
-A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure. No permission fact is cached across requests, and no authenticated response is cached at the CDN.
+A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure.
 
 ### Supply chain
 
-Every plan carries an advisory check under 24 hours old. An unknown finding fails. So does an exception on a changed dependency tree, or one that is expired or outgrown, even when it matches nothing. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
+Every plan carries an advisory check under 24 hours old. An unknown finding fails, as does an exception that is expired, outgrown or on a changed dependency tree, matching or not. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
 
-An exception that matches no finding on an unchanged tree means the registry narrowed the advisory: the check passes with a note. Remove the exception.
+On an unchanged tree, an exception matching no finding passes with a note: remove it.
 
 ## Never
 
@@ -123,12 +123,13 @@ An exception that matches no finding on an unchanged tree means the registry nar
 - Cache a permission fact across requests, or an authenticated response at the CDN.
 - Add a retry or a cookie fallback that turns a failed identity check into access.
 - Write to PROD outside the `release` workflow.
-- Read PROD data in an agent session: results reach the model provider (`bun run prod:inspect` returns metadata only). Hooks enforce it for MCP tools and `vercel logs`, against accidental reads, not deliberate evasion; other shell paths are a [backlog](enforcement-ladder-backlog.md) row.
+- Read PROD data in an agent session: results reach the model provider ([which tool reaches what](environments.md#which-tool-reaches-what)).
+- Start a sign-in or run the Vercel CLI as an agent: the owner cannot tell who asked, and the token reaches PROD (`refuse-account-sign-in.ts`). Sign-ins are owner steps: numbered steps (machine, window, command, what the owner sees) under "Owner queue" on your epic or issue, then the question tool; keep working.
 
 ## Verify your work
 
 1. Run `bun run test:unit`.
-2. For a migration, a policy or a privileged function: `bun run test:verify --group sql:security` on the local stack, plus the SQL group that owns the table or function. Then `bun run migrations:check` and `bun run types:check`.
+2. For a migration, a policy or a privileged function: `bun run test:verify --group sql:security`, plus the SQL group that owns the table or function. Then `bun run migrations:check` and `bun run types:check -- --local`.
 3. For a dependency change: `bun run security:dependencies`. A network failure leaves it unverified, not passed.
 4. Before a release, the cloud canary runs `canary:security` against DEV (`bun run test:verify --target cloud`). It checks the live grants and Realtime delivery to foreign and removed receivers.
 5. Record which permission check guards each new operation and why it fits, and every residual exposure with the owner's acceptance, in the slice record or the commit body.
@@ -137,18 +138,19 @@ An exception that matches no finding on an unchanged tree means the registry nar
 
 List each owner-accepted residual exposure until it closes.
 
-- Injected inline scripts are not blocked. The script policy allows `'unsafe-inline'`. A per-request nonce needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
-- No edge rate limit covers every request. The app limits operations that send mail, redeem a capability or activate billing; Supabase Auth limits its own endpoints. Edge limiting is the owner's Vercel plan decision.
+- The script policy allows `'unsafe-inline'`, so injected inline scripts run: a per-request nonce needs per-request rendering, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
+- No edge rate limit covers every request; the app and Supabase Auth limit only their own operations. Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive a deleted row's identity, never its content.
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once (beta; closes with werk-flow/werkflow-planning#248).
 - The code step keeps the address up to one hour in an httpOnly cookie scoped to `/verify`.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
-- Organization deletion removes stored files after the rows. If storage fails, or a lost delete response cannot be rechecked, they stay under its prefix, logged, unreachable through the app.
+- Organization deletion removes stored files after the rows; a file whose delete fails or cannot be rechecked stays under its prefix, logged, unreachable through the app.
 - The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed exception in `lib/security/dependency-exceptions.json`.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
+- Unsent work outlives sign-out, readable to whoever unlocks the phone's browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them, an [unreadable draft](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-stored-records-stay-readable) until its person deletes it.
 
 ## Revocation boundaries
 
@@ -157,8 +159,8 @@ List each owner-accepted residual exposure until it closes.
 | Privileged server reads and actions | Identity, membership, role, object and lifecycle rules load again on each request and render. Scheduled restrictions apply at read time. |
 | Direct database clients | RLS consults current membership and effective personnel access. A valid JWT alone grants no organization access. |
 | Realtime | INSERT and UPDATE use the table's current RLS. Deletion notices use the protected transport. Freshness inside one organization is no evidence of tenant denial. |
-| Signed file URLs already issued | A URL is a bearer capability. Revocation prevents new signing; an issued URL lives until expiry, and a download cannot be recalled. |
-| Auth sessions | [Supabase sign-out](https://supabase.com/docs/guides/auth/signout) lets an issued access token live until expiry. During an incident, suspend operational access and follow the [runbook](recovery-and-incidents.md). |
+| Signed file URLs already issued | A URL is a bearer capability: revocation stops new signing, an issued URL lives until expiry. |
+| Auth sessions | [Supabase sign-out](https://supabase.com/docs/guides/auth/signout) lets an issued access token live until expiry. In an incident, suspend operational access ([runbook](recovery-and-incidents.md)). |
 
 ## Sensitive data and owner decisions
 
@@ -170,7 +172,7 @@ List each owner-accepted residual exposure until it closes.
 | Logs, traces, test artifacts | Diagnosis and test evidence. Fixtures are synthetic. | Limit access and remove secrets from exported evidence. Ignored files are neither encrypted nor purged automatically. |
 | Backups and retained file versions | Recovery. Database backups hold no file bytes. | [The runbook](recovery-and-incidents.md) records coverage and accepted loss. Deleting a live record does not erase a backup. |
 
-Before sensitive client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Product analytics or session replay needs the owner's privacy and cost decision first.
+Before client data is imported, the owner retains the providers' data-processing agreements ([Supabase](https://supabase.com/legal/customer-resources/data-processing-addendum), [Vercel](https://vercel.com/legal/dpa), [Cloudflare](https://www.cloudflare.com/cloudflare-customer-dpa/), [Resend](https://resend.com/legal/dpa)), defines responsibilities and retention, and confirms the setup. EU locations alone do not establish GDPR compliance. Analytics or session replay needs the owner's decision first.
 
 ## Read-request authorization reuse
 

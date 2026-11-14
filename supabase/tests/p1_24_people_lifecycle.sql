@@ -59,7 +59,7 @@ begin
       '24000000-0000-0000-0000-000000000010',
       '24000000-0000-0000-0000-000000000011'
     ]::uuid[];
-    if business_row_count <> 0 then
+    if business_row_count is distinct from 0 then
       raise exception 'deploy-day table % contains % rows', table_name, business_row_count;
     end if;
   end loop;
@@ -94,15 +94,15 @@ begin
     clock_timestamp() + interval '1 day', 'Geplante Sperre',
     '24000000-0000-0000-0000-000000000030', repeat('a', 64)
   );
-  if (select state from public.personnel_access_lifecycles where id = access_id) <> 'active'
-     or (select scheduled_state from public.personnel_access_lifecycles where id = access_id) <> 'suspended'
+  if (select state from public.personnel_access_lifecycles where id = access_id) is distinct from 'active'
+     or (select scheduled_state from public.personnel_access_lifecycles where id = access_id) is distinct from 'suspended'
   then raise exception 'scheduled suspension changed current access early'; end if;
   replayed_access_id := public.set_personnel_access_transition(
     actor_id, test_organization_id, employee_id, 0, 'schedule_suspension',
     clock_timestamp() + interval '2 days', 'Ignored replay payload',
     '24000000-0000-0000-0000-000000000030', repeat('a', 64)
   );
-  if replayed_access_id <> access_id then raise exception 'access replay changed identity'; end if;
+  if replayed_access_id is distinct from access_id then raise exception 'access replay changed identity'; end if;
   begin
     perform public.set_personnel_access_transition(
       actor_id, test_organization_id, employee_id, 1, 'suspend_now',
@@ -144,7 +144,7 @@ begin
     current_date, 'Austritt vorgemerkt', '[]'::jsonb,
     '24000000-0000-0000-0000-000000000034', repeat('f', 64)
   );
-  if (select state from public.personnel_employment_lifecycles where id = employment_id) <> 'notice'
+  if (select state from public.personnel_employment_lifecycles where id = employment_id) is distinct from 'notice'
     then raise exception 'employment notice was not recorded'; end if;
   begin
     perform public.set_personnel_employment_transition(
@@ -171,10 +171,10 @@ begin
     actor_id, test_organization_id, employee_id, 2, 'reactivate',
     clock_timestamp(), 'Zugang wiederhergestellt',
     '24000000-0000-0000-0000-000000000033', repeat('e', 64)
-  ) <> access_id then
+  ) is distinct from access_id then
     raise exception 'access replay was blocked by newer requirements';
   end if;
-  if (select state from public.personnel_onboarding_plans where id = plan_id) <> 'in_progress'
+  if (select state from public.personnel_onboarding_plans where id = plan_id) is distinct from 'in_progress'
     then raise exception 'incomplete plan was presented as ready'; end if;
   begin
     perform public.set_personnel_access_transition(
@@ -190,7 +190,7 @@ begin
   set state = 'scheduled', scheduled_state = 'active',
       scheduled_for = clock_timestamp() - interval '1 minute'
   where id = access_id;
-  if app_private.p1_24_effective_access_state(test_organization_id, employee_user_id) <> 'scheduled'
+  if app_private.p1_24_effective_access_state(test_organization_id, employee_user_id) is distinct from 'scheduled'
      or not app_private.p1_24_has_prestart_access(test_organization_id, employee_user_id)
      or app_private.p1_24_has_effective_access(test_organization_id, employee_user_id)
   then raise exception 'due activation bypassed unresolved access blocker'; end if;
@@ -261,14 +261,14 @@ begin
     '24000000-0000-0000-0000-000000000040', repeat('5', 64)
   );
   if acknowledgement_id is null
-     or (select state from public.personnel_onboarding_requirements where id = requirement_id) <> 'fulfilled'
-     or (select state from public.personnel_onboarding_plans where id = plan_id) <> 'ready'
+     or (select state from public.personnel_onboarding_requirements where id = requirement_id) is distinct from 'fulfilled'
+     or (select state from public.personnel_onboarding_plans where id = plan_id) is distinct from 'ready'
   then raise exception 'acknowledgement did not complete the requirement projection'; end if;
   if public.acknowledge_personnel_item(
     employee_user_id, test_organization_id, 'requirement_completed',
     null, null, requirement_id, 1, 'Gelesen und erledigt.',
     '24000000-0000-0000-0000-000000000040', repeat('5', 64)
-  ) <> acknowledgement_id then
+  ) is distinct from acknowledgement_id then
     raise exception 'acknowledgement replay changed result identity';
   end if;
   begin
@@ -306,7 +306,7 @@ begin
     '[{"requirementType":"manual","title":"Prüfen","isRequired":true,"blocksAccess":false}]'::jsonb,
     '24000000-0000-0000-0000-000000000048',
     repeat('f', 64)
-  ) <> template_id then
+  ) is distinct from template_id then
     raise exception 'template replay was blocked by the archived current state';
   end if;
 
@@ -401,7 +401,7 @@ begin
     execute format(
       'select count(*) from public.%I where organization_id = $1', table_name
     ) into visible_count using '24000000-0000-0000-0000-000000000010'::uuid;
-    if visible_count <> 0 then
+    if visible_count is distinct from 0 then
       raise exception 'outsider can read %', table_name;
     end if;
   end loop;
@@ -576,7 +576,7 @@ begin
     gen_random_uuid(), repeat('7', 64)
   );
   if (select state from public.personnel_onboarding_requirements
-      where id = self_requirement_id) <> 'fulfilled'
+      where id = self_requirement_id) is distinct from 'fulfilled'
     then raise exception 'employee could not confirm an acknowledgement requirement'; end if;
   if exists (
     select 1 from public.personnel_onboarding_requirements
@@ -708,7 +708,7 @@ begin
     execute format(
       'select count(*) from public.%I where organization_id = $1', table_name
     ) into remaining_count using '24000000-0000-0000-0000-000000000010'::uuid;
-    if remaining_count <> 0 then
+    if remaining_count is distinct from 0 then
       raise exception 'organization teardown left rows in %', table_name;
     end if;
   end loop;

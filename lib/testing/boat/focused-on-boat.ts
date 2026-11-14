@@ -1,0 +1,227 @@
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+
+import { type MigrationDrift, driftLine, readMigrationDrift } from '../local-stack/migration-drift';
+import { VISUAL_REFERENCE_UPDATE_ENV } from '../runner/visual-reference-updates';
+import { readBoatKey, withBoatKey, type BoatKeyReading } from './boat-key';
+import { shellQuote } from './boat-machine';
+import {
+  REFERENCE_UPDATES,
+  REPLACED_REFERENCES,
+  applyReferenceUpdates,
+  filesUnder,
+  referenceHashes,
+} from './reference-updates';
+import { type BoatOutcome, runOnBoat, withRunFolder } from './verify-on-boat';
+
+// A focused browser run, `bun run test:audit:focused` or `test:golden:focused`, runs on a Boat
+// machine when this workstation has a Boat key and the run needs the app built at this tree's
+// migrations (docs/technical/boat-verification.md, "Focused runs on Boat"):
+// - a rendered acceptance capture (`--grep "@ACCEPT <set>"`) always, since locally it needs a
+//   production build and its server, one of the largest loads on the shared PC;
+// - a visual reference update (WERKFLOW_UPDATE_VISUAL_REFERENCES=1) always, for the same reason;
+//   the references it rewrote come back into the checkout (reference-updates.ts);
+// - any other focused run, and a fresh-world diagnostic replay (`--fresh-for <run-key>`), when the
+//   tree's migrations differ from the shared stack's, as `test:verify` decides (migration-drift.ts):
+//   the test server refuses that stack here. A replay on a retained world (`--reuse-run`) stays here.
+// The machine serves the build itself, runs the same command on the same tree, and the run folder
+// comes back to the same path. When Boat is unavailable, nothing runs here unless
+// WERKFLOW_VERIFY_LOCAL=1 asks for it.
+
+type Environment = Readonly<Record<string, string | undefined>>;
+
+/** What Boat may run: a capture, a reference update, a fresh-world replay, or another focused run. */
+export type FocusedKind = 'capture' | 'reference-update' | 'replay' | 'focused';
+
+/** A focused run's grep that selects rendered acceptance captures (tests/audit/visual/acceptance-*.spec.ts). */
+const ACCEPTANCE_GREP = /^@ACCEPT(?:\s|$)/;
+
+/** The value of `--name value` or `--name=value` in runner arguments. */
+function option(args: readonly string[], name: string): string | undefined {
+  for (const [index, argument] of args.entries()) {
+    if (argument === name) return args[index + 1];
+    if (argument.startsWith(`${name}=`)) return argument.slice(name.length + 1);
+  }
+  return undefined;
+}
+
+/** The kind of focused run `bun scripts/run-playwright.ts <argv>` is, or undefined for any other run. */
+export function focusedKind(argv: readonly string[], env: Environment): FocusedKind | undefined {
+  const [lane, suite, ...args] = argv;
+  if (suite !== 'audit' && suite !== 'golden') return undefined;
+  // A replay on a retained world needs that world, which lives where its run ran: never on a new machine.
+  if (lane === 'diagnostic') return option(args, '--fresh-for') ? 'replay' : undefined;
+  if (lane !== 'iteration') return undefined;
+  if (suite !== 'audit') return 'focused';
+  if (ACCEPTANCE_GREP.test(option(args, '--grep') ?? '')) return 'capture';
+  return env[VISUAL_REFERENCE_UPDATE_ENV] === '1' ? 'reference-update' : 'focused';
+}
+
+/** The package script that runs a focused run of this kind and suite. */
+function scriptFor(kind: FocusedKind, suite: string | undefined): string {
+  if (kind === 'reference-update') return 'test:audit:update-references';
+  if (kind === 'replay') return suite === 'audit' ? 'test:diagnostic:audit' : 'test:diagnostic';
+  return `test:${suite ?? 'audit'}:focused`;
+}
+
+/**
+ * Why a focused run with these runner arguments runs here: a reason to print, '' for a silent local
+ * run (CI, the Boat machine itself), or undefined when Boat may run it.
+ */
+export function focusedLocalReason(args: readonly string[], env: Environment): string | undefined {
+  if (env.WERKFLOW_BOAT_MACHINE === '1' || env.CI === 'true') return '';
+  if (env.WERKFLOW_VERIFY_LOCAL === '1') return 'WERKFLOW_VERIFY_LOCAL=1 asks for a local run.';
+  if (option(args, '--reuse-run')) return "a retained world lives on this workstation's stack.";
+  if (option(args, '--target') === 'cloud')
+    return 'a cloud run reaches DEV, whose secrets stay on this workstation.';
+  return undefined;
+}
+
+/** The update folders the evidence holds now. */
+function updateFolders(repository: string): Set<string> {
+  const folder = join(repository, REFERENCE_UPDATES);
+  return new Set(existsSync(folder) ? readdirSync(folder) : []);
+}
+
+/**
+ * Places the references a Boat update rewrote, from the folder of the update named `before.update`
+ * when its run on the machine exited 0 (`run.remote`, apart from any refusal here), and prints them with the next steps and where the versions they replaced are
+ * kept. A refused set writes nothing and turns the run's exit code into 1. A failed update run places
+ * nothing: its references, and any other folder that came back, stay evidence and are named. A
+ * reference changed here since `before.references`, taken when the run started, keeps its local
+ * version and is named with Boat's copy. Each of these exits non-zero.
+ */
+export function placeReferenceUpdates(
+  repository: string,
+  before: { folders: ReadonlySet<string>; references: ReadonlyMap<string, string>; update: string },
+  run: { code: number; remote: number | undefined },
+): number {
+  const { code, remote } = run;
+  let placed: string[] = [];
+  let kept: string[] = [];
+  let failed: string[] = [];
+  let other: string[] = [];
+  let recovery: string[] = [];
+  try {
+    for (const name of [...updateFolders(repository)].filter((found) => !before.folders.has(found))) {
+      const folder = join(repository, REFERENCE_UPDATES, name);
+      // The run's exit code decides; the folder's name must agree.
+      if (remote !== 0 || name !== before.update) {
+        const files = filesUnder(folder).map((path) => join(REFERENCE_UPDATES, name, path));
+        if (remote !== 0) failed = [...failed, ...files];
+        else other = [...other, ...files];
+        continue;
+      }
+      const replaced = join(REPLACED_REFERENCES, name);
+      const result = applyReferenceUpdates(repository, folder, {
+        before: before.references,
+        recovery: replaced,
+      });
+      if (existsSync(join(repository, replaced))) recovery = [...recovery, replaced];
+      placed = [...placed, ...result.placed];
+      kept = [
+        ...kept,
+        ...result.kept.map((path) => `${path} (Boat's copy: ${join(REFERENCE_UPDATES, name, path)})`),
+      ];
+    }
+  } catch (error) {
+    console.error(`[verify] ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+  const list = (paths: readonly string[]) => paths.map((path) => `\n  ${path}`).join('');
+  // A reference never comes from a failed run (docs/technical/testing.md).
+  if (failed.length)
+    console.error(
+      `[verify] The update run failed on Boat (exit ${remote ?? 'unknown'}), so none of the ${failed.length} files it returned was placed; they stay with the evidence:${list(failed)}`,
+    );
+  if (other.length)
+    console.error(
+      `[verify] ${other.length} files came back outside this update's folder and were not placed; they stay with the evidence:${list(other)}`,
+    );
+  const unplaced = [...failed, ...other];
+  if (placed.length)
+    console.info(
+      `[verify] The update rewrote or wrote ${placed.length} visual references in this checkout:${list(placed)}${recovery.length ? `\n[verify] The versions they replaced are kept in ${recovery.join(', ')}.` : ''}\n[verify] Next: look at every changed image, restore each one the accepted change does not explain with git checkout -- <file>, then run bun run test:verify --group audit:visual.`,
+    );
+  else if (!unplaced.length) console.info('[verify] The update rewrote no visual reference.');
+  // A reference changed here while the run went keeps this checkout's version: never lost to Boat's.
+  if (kept.length)
+    console.error(
+      `[verify] ${kept.length} references changed in this checkout during the run kept their local version:${list(kept)}`,
+    );
+  return unplaced.length || kept.length ? code || 1 : code;
+}
+
+/**
+ * Runs `bun scripts/run-playwright.ts <argv>` on Boat when its kind and the migration drift call
+ * for it, and answers its exit code, undefined when it runs here, or Boat's unavailability.
+ * `readKey` and `readDrift` are a test's stand-ins.
+ */
+export async function focusedOnBoat(
+  argv: readonly string[],
+  repository: string,
+  env: Environment = process.env,
+  readKey: () => BoatKeyReading = readBoatKey,
+  readDrift: () => MigrationDrift | undefined = () => readMigrationDrift(repository),
+): Promise<BoatOutcome> {
+  const kind = focusedKind(argv, env);
+  const [, suite, ...args] = argv;
+  if (!kind) return undefined;
+  const reason = focusedLocalReason(args, env);
+  if (kind === 'focused' || kind === 'replay') {
+    // An ordinary focused run stays here, silently as ever, unless the shared stack lacks this tree's migrations.
+    if (reason !== undefined) return undefined;
+    const drift = driftLine(readDrift());
+    if (!drift) return undefined;
+    console.info(`[verify] ${drift} Boat runs this focused run on a fresh stack at this tree's migrations.`);
+  }
+  const script = scriptFor(kind, suite);
+  return withBoatKey(reason, readKey, (key, signal) => {
+    const folders = updateFolders(repository);
+    // The references change inside the workspace lock the run holds, so no other test operation
+    // starts between the run and the files it rewrote.
+    return withRunFolder(repository, signal, `focused run on Boat`, async (folder) => {
+      // The update folder this run may place, named here so no other folder that comes back is placed.
+      const before = { folders, references: referenceHashes(repository), update: randomUUID() };
+      const update = kind === 'reference-update' ? [before.update] : [];
+      const remote: { exit?: number } = {};
+      const outcome = await runOnBoat({
+        args: [script, ...update, ...args],
+        repository,
+        folder,
+        key,
+        signal,
+        remoteExit: (exit) => (remote.exit = exit),
+      });
+      return kind === 'reference-update' && typeof outcome === 'number'
+        ? placeReferenceUpdates(repository, before, { code: outcome, remote: remote.exit })
+        : outcome;
+    });
+  });
+}
+
+/**
+ * The notice a focused run prints when Boat is unavailable and it does not run: why, what a local
+ * run costs, and how to run it here deliberately.
+ */
+export function focusedUnavailableNotice(
+  reason: string,
+  argv: readonly string[],
+  env: Environment,
+): string[] {
+  const [, suite, ...args] = argv;
+  const kind = focusedKind(argv, env) ?? 'focused';
+  const update = kind === 'reference-update' ? `${VISUAL_REFERENCE_UPDATE_ENV}=1 ` : '';
+  const rule = '='.repeat(72);
+  return [
+    rule,
+    `BOAT IS UNAVAILABLE: ${reason}`,
+    'The focused run does NOT run here: it needs a production build at up to 2.9 GiB, its server,',
+    "the stack at this tree's migrations and a browser. Nothing was written; this command exits 1.",
+    'Run again later to use Boat, or run it here deliberately, with the server in a second shell:',
+    '  bun run test:server local',
+    `  WERKFLOW_VERIFY_LOCAL=1 ${update}bun run ${kind === 'reference-update' ? scriptFor('focused', suite) : scriptFor(kind, suite)} ${args.map(shellQuote).join(' ')}`,
+    rule,
+  ];
+}

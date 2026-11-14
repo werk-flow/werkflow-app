@@ -31,6 +31,8 @@ const sandboxSchema = z.object({
   state: z.string(),
   /** When Boat stops the machine by itself; a machine without snapshots is then erased. */
   archiveAfter: z.string().nullable().optional(),
+  /** The labels it was created with, as `checkout` and `workstation` (machine-reuse.ts). */
+  labels: z.record(z.string(), z.string()).optional(),
 });
 const createdSchema = z.object({ sandbox: sandboxSchema });
 const sandboxInfoSchema = z.object({ sandbox: sandboxSchema });

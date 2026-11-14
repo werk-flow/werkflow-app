@@ -19,8 +19,9 @@
     "ajv": "6.14.0"
   },
   "scripts": {
-    "test:plan": "bun scripts/verify.ts plan",
-    "test:verify": "bun scripts/verify.ts run",
+    "postinstall": "bun scripts/fetch-wholesaler-reader.ts && bun scripts/stamp-dependencies.ts",
+    "test:plan": "bun --preload ./scripts/require-installed-dependencies.ts scripts/verify.ts plan",
+    "test:verify": "bun --preload ./scripts/require-installed-dependencies.ts scripts/verify.ts run",
     "boat:snapshot": "bun scripts/boat/build-snapshot.ts",
     "test:coverage": "bun scripts/check-test-coverage.ts",
     "dev": "bun scripts/dev-server.ts",
@@ -29,7 +30,7 @@
     "start": "next start",
     "lint": "bun scripts/lint.ts",
     "typecheck": "bun scripts/heavy.ts -- node node_modules/typescript7/bin/tsc --noEmit --incremental false",
-    "check:changed": "bun scripts/check-changed.ts",
+    "check:changed": "bun --preload ./scripts/require-installed-dependencies.ts scripts/check-changed.ts",
     "room": "bun scripts/room.ts",
     "review": "bun scripts/run-coderabbit-review.ts",
     "review:doctor": "bun scripts/run-coderabbit-review.ts --doctor",
@@ -48,6 +49,8 @@
     "test:campaign": "bun scripts/campaign-summary.ts",
     "migrations:check": "bun scripts/check-dev-migration-history.ts",
     "migrations:order": "bun scripts/check-migration-order.ts",
+    "stack:sync": "bun scripts/local-stack.ts sync",
+    "stack:reset": "bun scripts/local-stack.ts reset",
     "types:generate": "bun scripts/generate-supabase-types.ts",
     "types:check": "bun scripts/generate-supabase-types.ts --check",
     "auth:check": "bun scripts/check-supabase-project.ts auth",
@@ -65,6 +68,7 @@
     "@aws-sdk/client-s3": "^3.1102.0",
     "@aws-sdk/s3-request-presigner": "^3.1102.0",
     "@hookform/resolvers": "^5.2.2",
+    "@pdf-lib/fontkit": "1.1.1",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-checkbox": "^1.3.3",
@@ -87,6 +91,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.554.0",
     "next": "16.4.2",
+    "pdf-lib": "1.17.1",
     "react": "19.2.3",
     "react-day-picker": "^9.14.0",
     "react-dom": "19.2.3",
@@ -123,7 +128,8 @@
     "supabase": "2.116.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "typescript7": "npm:typescript@7.0.2"
+    "typescript7": "npm:typescript@7.0.2",
+    "unpdf": "1.9.1"
   },
   "patchedDependencies": {
     "@supabase/ssr@0.7.0": "patches/@supabase%2Fssr@0.7.0.patch"

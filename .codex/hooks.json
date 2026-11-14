@@ -28,9 +28,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "root=\"$(git rev-parse --show-toplevel)\" || { echo \"Refused: the log guard could not find the repository root.\" >&2; exit 2; }; bun \"$root/.claude/hooks/refuse-production-logs.ts\"; code=$?; [ \"$code\" -eq 0 ] || [ \"$code\" -eq 2 ] || echo \"Refused: the log guard failed with exit $code, so it cannot rule out PROD logs.\" >&2; [ \"$code\" -eq 0 ] && exit 0; exit 2",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || { echo \"Refused: the sign-in guard could not find the repository root.\" >&2; exit 2; }; bun \"$root/.claude/hooks/refuse-account-sign-in.ts\"; code=$?; [ \"$code\" -eq 0 ] || [ \"$code\" -eq 2 ] || echo \"Refused: the sign-in guard failed with exit $code, so it cannot rule out a sign-in.\" >&2; [ \"$code\" -eq 0 ] && exit 0; exit 2",
             "timeout": 20,
-            "statusMessage": "Checking that the command reads no production logs"
+            "statusMessage": "Checking that the command starts no sign-in and runs no account CLI"
           }
         ]
       },
@@ -64,6 +64,28 @@
             "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-second-stack.ts\"",
             "timeout": 20,
             "statusMessage": "Checking that the command starts no second Supabase stack"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__t3-code__device_open$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-device-without-room.ts\"",
+            "timeout": 30,
+            "statusMessage": "Checking that this machine has room to boot the device"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-shared-stack-migration.ts\"",
+            "timeout": 20,
+            "statusMessage": "Checking that no branch migration reaches the shared stack"
           }
         ]
       },

@@ -32,9 +32,11 @@ export const SURFACE_GROUPS = [
   'people',
   'personnel',
   'personnel-absence',
+  'personnel-records',
   'settings',
   'documents',
   'inventory',
+  'commercial',
   'service',
   'field',
   'field-time',
@@ -72,6 +74,7 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
   '/mitarbeiter/[userId]': 'personnel',
   '/dokumente': 'documents',
   '/inventar': 'inventory',
+  '/angebote/leistungen': 'commercial',
   '/service/faelle': 'service',
   '/service/anlagen': 'service',
   '/service/wartung': 'service',
@@ -81,6 +84,7 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
   '/einstellungen/zeiterfassung': 'settings',
   '/einstellungen/kunden': 'settings',
   '/einstellungen/datenexport': 'settings',
+  '/einstellungen/dokumente': 'settings',
   '/einstellungen/dashboard': 'settings',
   '/einstellungen/kalender': 'settings',
   '/einstellungen/konto-sicherheit': 'settings',
@@ -98,7 +102,7 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
 const PART_GROUPS: Readonly<Partial<Record<InventoriedRoute, readonly SurfaceGroup[]>>> = {
   '/auftraege/[jobNumber]': ['job', 'job-actions', 'job-lifecycle'],
   '/kalender': ['planning', 'planning-board'],
-  '/mitarbeiter/[userId]': ['personnel', 'personnel-absence'],
+  '/mitarbeiter/[userId]': ['personnel', 'personnel-absence', 'personnel-records'],
 };
 
 /** The field worker's pages by group; every other employee page is in `field`. */

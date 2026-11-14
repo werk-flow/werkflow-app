@@ -38,12 +38,39 @@ export type DialogInventoryEntry =
 
 export const DIALOG_INVENTORY = {
   "components/clock-fab.tsx#ClockFAB|{isClockedIn ? 'Laufende Zeiterfassung' : 'Zeiterfassung starten'}": {
-    audits: [{ route: '/dashboard', role: 'employee', opener: 'field.clock' }],
+    audits: [
+      { route: '/dashboard', role: 'employee', opener: 'field.clock' },
+      // The same sheet while the phone holds a time event the server refused.
+      { route: '/dashboard', role: 'employee', opener: 'field.clock-unsent' },
+    ],
   },
+  'components/clock-unsent-events.tsx#DeleteUnsentDialog|Nicht übertragene Zeiten löschen?': {
+    audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-delete' }],
+  },
+  'components/shared/unsent-work-prompt.tsx#UnsentWorkDialog|Noch nicht übertragen': {
+    audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-work' }],
+  },
+  'components/shared/unsent-work-prompt.tsx#DiscardConfirmation|Nicht Übertragenes verwerfen?': {
+    audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-discard' }],
+  },
+  "components/angebote/leistungen/leistung-dialog.tsx#LeistungDialog|{entry ? 'Leistung bearbeiten' : 'Leistung anlegen'}":
+    {
+      audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung' }],
+    },
+  'components/angebote/leistungen/leistung-price-dialog.tsx#LeistungPriceDialog|Preise von „ {entry.name} “':
+    {
+      audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung-prices' }],
+    },
   'components/problem-reports/problem-report-dialog.tsx#ProblemReportDialog|Problem melden': {
     audits: [
       { route: '/dashboard', role: 'employee', opener: 'reports.field' },
       { route: '/auftraege', role: 'admin', opener: 'reports.office' },
+    ],
+  },
+  'components/problem-reports/screenshot-redaction-view.tsx#ScreenshotRedactionView|Screenshot schwärzen': {
+    audits: [
+      { route: '/dashboard', role: 'employee', opener: 'reports.redaction-field' },
+      { route: '/auftraege', role: 'admin', opener: 'reports.redaction-office' },
     ],
   },
   'components/job-picker-modal.tsx#JobPickerModal|{title}': {
@@ -62,6 +89,10 @@ export const DIALOG_INVENTORY = {
   'components/anfragen/attach-request-dialog.tsx#AttachRequestDialog|Zu bestehender Arbeit hinzufügen': {
     audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.attach-to-work' }],
   },
+  'components/auftraege/shared/work-billing-parties-dialog.tsx#WorkBillingPartiesForm|Auftraggeber und Rechnungsempfänger':
+    {
+      audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.billing-parties' }],
+    },
   'components/anfragen/close-request-dialog.tsx#CloseRequestDialog|Anfrage ohne Auftrag schließen': {
     audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.close' }],
   },
@@ -142,12 +173,36 @@ export const DIALOG_INVENTORY = {
       audits: [{ route: '/dokumente', role: 'admin', opener: 'documents.viewer' }],
     },
   'components/inventar/inventory-import-dialog.tsx#ImportDialog|CSV importieren': {
-    audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.import' }],
+    audits: [
+      { route: '/inventar', role: 'admin', opener: 'inventory.import' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-preview' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-result' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-repeat' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-empty-file' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-read-failure' },
+    ],
   },
   "components/inventar/inventory-item-dialog.tsx#ItemDialog|{form.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}":
     {
-      audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.item' }],
+      audits: [
+        { route: '/inventar', role: 'admin', opener: 'inventory.item' },
+        {
+          route: '/inventar',
+          role: 'admin',
+          opener: 'inventory.item-edit',
+          tabs: ['stammdaten', 'lieferanten', 'preise'],
+        },
+        { route: '/inventar', role: 'admin', opener: 'inventory.item-suppliers' },
+        { route: '/inventar', role: 'admin', opener: 'inventory.item-prices' },
+      ],
     },
+  "components/inventar/article-supplier-dialog.tsx#ArticleSupplierDialog|{reference ? 'Lieferant bearbeiten' : 'Lieferant hinzufügen'}":
+    {
+      audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.article-supplier' }],
+    },
+  'components/inventar/article-suppliers-panel.tsx#RemoveSupplierDialog|Lieferant „ {name} “ entfernen?': {
+    audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.article-supplier-remove' }],
+  },
   'components/inventar/inventory-location-dialog.tsx#LocationDialog|Lager anlegen': {
     audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.location' }],
   },
@@ -225,6 +280,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site' }],
     },
+  'components/kunden/client-site-roles-dialog.tsx#ClientSiteRolesDialog|Rollen am Einsatzort': {
+    audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site-roles' }],
+  },
   'components/kunden/communication-preference-dialog.tsx#CommunicationPreferenceDialog|Kontaktpräferenz festhalten':
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.preference' }],
@@ -267,6 +325,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/mitarbeiter', role: 'admin', opener: 'people.member-remove' }],
     },
+  'components/mitarbeiter/role-escalation-confirm-dialog.tsx#RoleEscalationConfirmDialog|{copy.title}': {
+    audits: [{ route: '/mitarbeiter', role: 'admin', opener: 'people.member-role-escalation' }],
+  },
   'components/mitarbeiter/personnel-invite-dialog.tsx#PersonnelInviteDialog|Zugang für {personName} einladen':
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.personnel-invite' }],
@@ -299,6 +360,15 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/aufgaben', role: 'employee', opener: 'field.evidence-upload' }],
     },
+  'components/mitarbeiter/school-day-dialogs.tsx#AddSchoolDayDialog|Berufsschule erfassen': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-add' }],
+  },
+  'components/mitarbeiter/school-day-dialogs.tsx#EndSchoolDayDialog|Enddatum setzen': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-end' }],
+  },
+  'components/mitarbeiter/school-days-section.tsx#CancelSchoolDayDialog|Berufsschule stornieren?': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-cancel' }],
+  },
   'components/mitarbeiter/sickness-report-correct-dialog.tsx#CorrectSicknessDialog|Krankmeldung korrigieren':
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.sickness-correct' }],
@@ -461,13 +531,22 @@ export const DIALOG_INVENTORY = {
   'components/zeiterfassung/vacation-section-request-dialog.tsx#OwnVacationRequestDialog|Urlaub beantragen': {
     audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.vacation-request' }],
   },
-  "components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
+  'components/auftraege/work-pack/field-site-access-dialog.tsx#SiteAccessProposalDialog|Zugang korrigieren': {
+    audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.site-access' }],
+  },
+  'components/kunden/site-access-review-dialog.tsx#SiteAccessReviewDialog|{title}': {
+    audits: [{ route: '/aufgaben', role: 'admin', opener: 'customers.site-access-review' }],
+  },
+  "components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
     {
       audits: [
         { route: '/auftraege/[jobNumber]', role: 'admin', opener: 'work.artifact' },
         { route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.artifact' },
       ],
     },
+  'components/auftraege/artifacts/device-draft-list.tsx#DeviceDraftDeleteDialog|{deletion?.title}': {
+    audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.artifact-draft-delete' }],
+  },
   'components/auftraege/forms/create-auftrag-project-dialog.tsx#CreateAuftragProjectDialog|Neuen Auftrag oder Projekt erstellen':
     {
       audits: [{ route: '/auftraege', role: 'admin', opener: 'work.create', tabs: ['job', 'project'] }],

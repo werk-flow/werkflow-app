@@ -24,7 +24,7 @@ const CREATE_OR_EDIT_TITLE =
 const FIELD_WORKER_DIALOGS = [
   "components/clock-fab.tsx#ClockFAB|{isClockedIn ? 'Laufende Zeiterfassung' : 'Zeiterfassung starten'}",
   'components/manual-entry-dialog.tsx#ManualEntryDialog|{title}',
-  "components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}",
+  "components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}",
   'components/zeiterfassung/sickness-section-report-dialog.tsx#OwnSicknessReportDialog|Krank melden',
   'components/zeiterfassung/vacation-section-request-dialog.tsx#OwnVacationRequestDialog|Urlaub beantragen',
 ] as const;

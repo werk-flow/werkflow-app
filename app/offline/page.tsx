@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { WifiOff } from 'lucide-react';
 
 import { OfflineToday } from '@/components/auftraege/work-pack/offline-today';
+import { OfflineClock } from '@/components/clock-offline';
 import { StandaloneScreen, StandaloneTitle } from '@/components/shared/standalone-screen';
 import { RetryButton } from './retry-button';
 
@@ -9,15 +10,17 @@ export const metadata: Metadata = {
   title: 'Kein Netz',
 };
 
-// The service worker (public/sw.js) answers a navigation with this page when
+// The service worker (/sw.js) answers a navigation with this page when
 // the network fails, under the address the person opened, so „Erneut
 // versuchen“ reloads exactly that page. It is prerendered and the worker
 // fetches it without cookies: it holds nothing about the person. A field
 // worker's phone shows today's assignments from its own storage instead
-// (components/auftraege/work-pack/offline-today.tsx).
+// (components/auftraege/work-pack/offline-today.tsx), and a phone that holds
+// unsent clock events shows its clock above them (components/clock-offline.tsx).
 export default function OfflinePage() {
   return (
     <StandaloneScreen>
+      <OfflineClock />
       <OfflineToday withoutDay={<NoSignal />} />
     </StandaloneScreen>
   );

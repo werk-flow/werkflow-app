@@ -14,6 +14,12 @@ const foreignProjectId = '90000000-0000-4000-8000-000000000004';
 const foreignItemId = '90000000-0000-4000-8000-000000000005';
 const foreignLineId = '90000000-0000-4000-8000-000000000006';
 const foreignLocationId = '90000000-0000-4000-8000-000000000007';
+const ownItemId = '90000000-0000-4000-8000-000000000008';
+const ownJobLineId = '90000000-0000-4000-8000-000000000009';
+const ownProjectLineId = '90000000-0000-4000-8000-00000000000a';
+const ownUsedLineId = '90000000-0000-4000-8000-00000000000b';
+const ownCorrectedLineId = '90000000-0000-4000-8000-00000000000c';
+const ownLocationId = '90000000-0000-4000-8000-00000000000f';
 
 const world = installActionWorld({
   jobs: [
@@ -25,8 +31,14 @@ const world = installActionWorld({
     { id: foreignProjectId, organization_id: ORGANIZATION_B },
   ],
   job_assignments: [],
-  inventory_items: [{ id: foreignItemId, organization_id: ORGANIZATION_B }],
-  inventory_locations: [{ id: foreignLocationId, organization_id: ORGANIZATION_B }],
+  inventory_items: [
+    { id: foreignItemId, organization_id: ORGANIZATION_B },
+    { id: ownItemId, organization_id: ORGANIZATION_A },
+  ],
+  inventory_locations: [
+    { id: foreignLocationId, organization_id: ORGANIZATION_B },
+    { id: ownLocationId, organization_id: ORGANIZATION_A },
+  ],
   job_material_lines: [
     {
       id: foreignLineId,
@@ -37,11 +49,75 @@ const world = installActionWorld({
       taken_quantity: 2,
       returned_quantity: 0,
     },
+    // Own lines with taken material: one on an unassigned job, one on the project itself.
+    {
+      id: ownJobLineId,
+      organization_id: ORGANIZATION_A,
+      job_id: ownJobId,
+      project_id: null,
+      item_id: ownItemId,
+      taken_quantity: 2,
+      used_quantity: 0,
+      returned_quantity: 0,
+      status: 'taken',
+    },
+    // A use corrected back to 0: the net quantity is 0, the events stay history.
+    {
+      id: ownCorrectedLineId,
+      organization_id: ORGANIZATION_A,
+      job_id: ownJobId,
+      project_id: null,
+      item_id: ownItemId,
+      taken_quantity: 2,
+      used_quantity: 0,
+      returned_quantity: 0,
+      status: 'taken',
+    },
+    {
+      id: ownUsedLineId,
+      organization_id: ORGANIZATION_A,
+      job_id: ownJobId,
+      project_id: null,
+      item_id: ownItemId,
+      taken_quantity: 2,
+      used_quantity: 1,
+      returned_quantity: 0,
+      status: 'taken',
+    },
+    {
+      id: ownProjectLineId,
+      organization_id: ORGANIZATION_A,
+      job_id: null,
+      project_id: ownProjectId,
+      item_id: ownItemId,
+      taken_quantity: 2,
+      used_quantity: 0,
+      returned_quantity: 0,
+      status: 'taken',
+    },
+  ],
+  job_material_use_events: [
+    {
+      id: '90000000-0000-4000-8000-00000000000d',
+      organization_id: ORGANIZATION_A,
+      job_material_line_id: ownCorrectedLineId,
+      quantity: 1,
+    },
+    {
+      id: '90000000-0000-4000-8000-00000000000e',
+      organization_id: ORGANIZATION_A,
+      job_material_line_id: ownCorrectedLineId,
+      quantity: -1,
+      corrects_event_id: '90000000-0000-4000-8000-00000000000d',
+    },
   ],
 });
-const { getInventoryOverview, getInventoryLocationOptions, upsertInventoryItem } = await import(
-  '@/lib/inventory/catalog-actions'
-);
+const {
+  getInventoryOverview,
+  getInventoryMovementHistory,
+  getInventoryLocationOptions,
+  upsertInventoryItem,
+} = await import('@/lib/inventory/catalog-actions');
 const {
   getInventoryPickerPage,
   getInventoryPickerOptionsForJob,
@@ -49,15 +125,19 @@ const {
   adjustInventoryStock,
   createJobMaterialLine,
   createProjectMaterialLine,
+  deleteJobMaterialLine,
   getJobMaterialLines,
   getProjectMaterialSummary,
   takeJobMaterial,
   takeProjectMaterial,
   returnJobMaterial,
-  importInventoryRows,
 } = await import('@/lib/inventory/actions');
+const { recordJobMaterialUse } = await import('@/lib/inventory/material-use-actions');
+const { readJobMaterialConsumption } = await import('@/lib/inventory/material-line-reads');
+const operationId = '90000000-0000-4000-8000-0000000000aa';
+const use = { operationId, quantity: 1, note: null };
 
-const take = { locationId: foreignLocationId, quantity: 1 };
+const take = { operationId, locationId: foreignLocationId, quantity: 1 };
 const upsert = [
   'upsertInventoryItem',
   () =>
@@ -92,11 +172,8 @@ const officeOnly = [
     () =>
       createProjectMaterialLine({ projectId: foreignProjectId, itemId: foreignItemId, plannedQuantity: 2 }),
   ],
-  [
-    'importInventoryRows',
-    () =>
-      importInventoryRows({ fileName: 'inventar.csv', columnMapping: {}, rows: [{ name: 'Kupferrohr' }] }),
-  ],
+  // The movement history names people and job material: office only.
+  ['getInventoryMovementHistory', () => getInventoryMovementHistory({ tab: 'movements' })],
 ] as const;
 
 // Field workers are refused the catalog and its writes before the service-role client exists.
@@ -130,9 +207,32 @@ await assertRefused(
 );
 await assertRefused(
   world,
-  [['returnJobMaterial', () => returnJobMaterial({ ...take, lineId: foreignLineId })]],
+  [
+    ['returnJobMaterial', () => returnJobMaterial({ ...take, lineId: foreignLineId })],
+    ['recordJobMaterialUse', () => recordJobMaterialUse({ ...use, lineId: foreignLineId })],
+  ],
   { success: false, error: 'line_not_found' },
   'reads',
+);
+// Use on an own line: the job needs the worker's assignment, a project's own line stays with the office.
+await assertRefused(
+  world,
+  [
+    ['recordJobMaterialUse', () => recordJobMaterialUse({ ...use, lineId: ownJobLineId })],
+    ['recordJobMaterialUse', () => recordJobMaterialUse({ ...use, lineId: ownProjectLineId })],
+  ],
+  { success: false, error: 'not_authorized' },
+  'reads',
+);
+// The consumption facts carry purchase costs: a field worker is refused before any database access.
+await assertRefused(
+  world,
+  [
+    ['readJobMaterialConsumption', () => readJobMaterialConsumption({ jobId: ownJobId })],
+    ['readJobMaterialConsumption', () => readJobMaterialConsumption({ projectId: ownProjectId })],
+  ],
+  { success: false, error: 'not_authorized' },
+  'none',
 );
 await assertRefused(
   world,
@@ -149,16 +249,25 @@ signInAs(world, 'buero');
 await assertRefused(world, [officeOnly[3]], { success: false, error: 'location_not_found' }, 'reads');
 await assertRefused(world, [officeOnly[6]], { success: false, error: 'job_not_found' }, 'reads');
 await assertRefused(world, [officeOnly[7]], { success: false, error: 'project_not_found' }, 'reads');
+
+// The movement history refuses another organization's Lager before its reader
+// runs, and reads an own Lager's history for the caller's organization only.
 await assertRefused(
   world,
   [
     [
-      'createJobMaterialLine',
-      () => createJobMaterialLine({ jobId: ownJobId, itemId: foreignItemId, plannedQuantity: 2 }),
+      'getInventoryMovementHistory',
+      () => getInventoryMovementHistory({ tab: 'movements', location: foreignLocationId }),
     ],
   ],
-  { success: false, error: 'item_not_found' },
+  { success: false, error: 'location_not_found' },
   'reads',
+);
+world.rpcCalls.length = 0;
+await getInventoryMovementHistory({ tab: 'movements', location: ownLocationId });
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args.p_organization_id]),
+  [['list_inventory_movement_page', ORGANIZATION_A]],
 );
 await assertRefused(
   world,
@@ -169,8 +278,32 @@ await assertRefused(
       () => takeProjectMaterial({ ...take, projectId: ownProjectId, lineId: foreignLineId }),
     ],
     ['returnJobMaterial', () => returnJobMaterial({ ...take, lineId: foreignLineId })],
+    ['recordJobMaterialUse', () => recordJobMaterialUse({ ...use, lineId: foreignLineId })],
   ],
   { success: false, error: 'line_not_found' },
+  'reads',
+);
+await assertRefused(
+  world,
+  [['readJobMaterialConsumption', () => readJobMaterialConsumption({ jobId: foreignJobId })]],
+  { success: false, error: 'job_not_found' },
+  'reads',
+);
+await assertRefused(
+  world,
+  [['readJobMaterialConsumption', () => readJobMaterialConsumption({ projectId: foreignProjectId })]],
+  { success: false, error: 'project_not_found' },
+  'reads',
+);
+
+// A line with recorded use stays on its job: removing it is refused before any write.
+await assertRefused(
+  world,
+  [
+    ['deleteJobMaterialLine', () => deleteJobMaterialLine(ownUsedLineId)],
+    ['deleteJobMaterialLine', () => deleteJobMaterialLine(ownCorrectedLineId)],
+  ],
+  { success: false, error: 'material_use_recorded' },
   'reads',
 );
 
@@ -180,4 +313,21 @@ refuseForeignIds(world, new Map([[foreignItemId, 'item_not_found']]));
 await assertRefused(world, [upsert], { success: false, error: 'item_not_found' }, 'one-call');
 assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);
 await assertRefused(world, [adjust], { success: false, error: 'movement_failed' }, 'one-call');
+assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);
+// plan_job_material checks the article inside the caller's organization.
+await assertRefused(
+  world,
+  [
+    [
+      'createJobMaterialLine',
+      () => createJobMaterialLine({ jobId: ownJobId, itemId: foreignItemId, plannedQuantity: 2 }),
+    ],
+    [
+      'createProjectMaterialLine',
+      () => createProjectMaterialLine({ projectId: ownProjectId, itemId: foreignItemId, plannedQuantity: 2 }),
+    ],
+  ],
+  { success: false, error: 'item_not_found' },
+  'one-call',
+);
 assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);

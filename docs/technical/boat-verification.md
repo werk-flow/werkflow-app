@@ -1,6 +1,6 @@
 # Verify on Boat
 
-On a workstation with a Boat key, `bun run test:verify` and each [rendered acceptance capture](#captures-on-boat) run on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
+On a workstation with a Boat key, `bun run test:verify`, each [focused browser run that needs it](#focused-runs-on-boat) and [a migration's types](#types-on-boat) run on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 
 ## How a run picks Boat
 
@@ -11,9 +11,9 @@ On a workstation with a Boat key, `bun run test:verify` and each [rendered accep
 - `--mode release`, or a group under `audit:performance` without `--untimed`: their medians measure the workstation's wall clock. Every other audit group runs on Boat. Lab counts repeat on any machine, and layout groups check computed boxes. Visual groups render in the pinned Playwright image on `linux/amd64` ([visual references](standards-audit.md#keep-accepted-screens-as-visual-references)), so a Boat machine compares with the same references as the workstation and CI. A new machine pulls the image once, in about 30 s.
 - `--target cloud`: the canary needs DEV's secrets.
 - The plan prints `[verify] refused:` (an unclassified failed run): the run ends there, exit 1, nothing run.
-- The plan runs no group, or only cheap groups, at most one of them not a SQL group. A Boat run's upload and setup cost about 95 s of machine time; here a SQL group takes about 1 s against the shared stack, `unit:all` 60 to 90 s and a static gate up to 35 s. `static:lint` takes 170 to 370 s and 3 to 4 GB, so it goes to Boat even alone, as do `ui:contracts` and the browser groups. A SQL group goes to Boat while the shared stack [drifts](testing.md#recurring-traps).
+- The plan runs no group, or only cheap groups, at most one of them not a SQL group. A Boat run's upload and setup cost more than these groups do here (`CHEAP_HERE`, `verify-on-boat.ts`). `static:lint` goes to Boat even alone, as do `ui:contracts` and the browser groups. A SQL group goes to Boat while the shared stack [drifts](testing.md#recurring-traps).
 
-The whole plan runs there, static gates included: type-aware lint is the largest local load. A Boat run takes no heavy slot, and holds the workspace lock while the machine runs, so the edit guard works as during a local run.
+The whole plan runs there, static gates included. A Boat run takes no heavy slot, and holds the workspace lock while the machine runs, so the edit guard works as during a local run.
 
 The machine starts from the saved snapshot `werkflow-verify` and runs `scripts/boat/remote-verify.sh`. It rebuilds the checkout at the same absolute path and in the same form (main checkout or linked worktree) from `HEAD`, the local commits and the working tree, untracked files included, with the evidence history of `.agent-logs/`. The machine checks out `HEAD` itself, so only the files that differ from it travel: a machine's file host may accept as little as 0.07 MB/s. Before the stack starts, `scripts/boat/check-tree.ts` checks that git reads the rebuilt checkout as changed since `HEAD` in exactly the paths it reads on the workstation, because a plan without a baseline report selects from those paths. A difference fails the setup and names the paths. It starts a fresh stack at this tree's migrations, serves the build when the plan runs a browser group, runs `bun run test:verify` with the same arguments, and returns every report, log, manifest and archive the run wrote, plus a browser run's traces and screenshots when its group did not pass (`lib/testing/boat/result-files.ts`). So selection, proofs, reports and [failure classification](testing.md#failures) work as for a local run.
 
@@ -29,7 +29,7 @@ A proof records its backend by a digest of `.env.local`, which on a workstation 
 
 ### Fallback
 
-When Boat is unavailable, a run never sends its heavy groups to the workstation by default. A heavy local fallback once overloaded the shared PC: one refused connection sent a whole plan there, type-aware lint included, and with the other worktrees' work the lint ran for three hours with swap full.
+When Boat is unavailable, a run never sends its heavy groups to the workstation by default. A heavy local fallback once overloaded the shared PC for hours.
 
 Boat is unavailable when one of these happens before the results are back:
 
@@ -45,46 +45,53 @@ Before a machine exists, a connection that fails on the way to Boat (refused, re
 
 A file transfer retries on a fresh request before it counts as a failure, because the machine still holds the file (`lib/testing/boat/boat-transfer.ts`). Each upload gets one retry after a deadline of 30 s plus 1 s per 256 kB, so a stalled upload does not hold a billed machine for minutes. The results download gets three retries over about 40 s, so a dropped connection never throws away a finished run. The upload and the download each log their size and time.
 
-A failed browser group's world is cleaned on its machine before the machine goes; when that fails, the run says so and names `bun run test:runs cleanup <run-key>` for the workstation. Diagnose the failure from the trace and screenshot that came back, and classify it as usual. The one `environment` retry on unchanged inputs needs a diagnostic replay on the retained world or the same build, which a Boat run does not keep; until a Boat replay exists (werk-flow/werkflow-planning#294), repair through a change of the inputs.
+A failed browser group's world is cleaned on its machine before the machine goes; when that fails, the run says so and names `bun run test:runs cleanup <run-key>` for the workstation. Diagnose the failure from the trace and screenshot that came back, and classify it as usual. Its one `environment` retry follows a [fresh-world replay](testing.md#failures).
 
 ## Machine reuse
 
 Boat counts every create, fork and resume as a start; the plan includes 200 a day, and the wallet pays for more. So a checkout's consecutive runs share one machine (`lib/testing/boat/machine-reuse.ts`):
 
-- **Wipe.** After a run that returned a result, `scripts/boat/wipe-machine.sh` kills every earlier command's cgroup as a unit and checks it is empty, then removes the stack's containers, volumes and network, the checkout and its clones, and every upload, result, log, temporary file and Boat command log. Before its first run, a fresh machine lists every path in the home folder, `/tmp`, `/var/tmp` and `/dev/shm`, copies `~/.supabase` (traces of a run's SQL) and Next.js's `~/.config/nextjs-nodejs`, which builds make, and marks the time. The wipe removes what the run added at the top of the home folder, every path added and file changed since the mark in the temporary folders, and restores both as recorded. It then checks that no path was added and no file changed since the mark in any of those places, outside the Bun package cache, Boat's machine agent, the seed clone and the desktop session's state, and that no container or volume remains. Only the X server's lock and socket folders and root's systemd folders at the top of `/tmp` are left alone. A check that fails or cannot complete deletes the machine.
-- **Agent folders.** When Boat hands out a machine, its machine agent writes a `boat` skill and a small mode-600 config into each coding-agent CLI's folder (`~/.claude.json`, `~/.codex`, `~/.pi`, `~/.config/opencode` and others). None holds a file by a CLI's login name, and no run starts an agent. `record` and every wipe remove them, and the wipe checks they are gone, so a kept machine holds none between runs; Boat may write them again during a run.
-- **Idle deadline.** The wiped machine waits 15 minutes for the next run in the same checkout on the same workstation, which finds it by a record in `~/.cache/werkflow-boat/idle-machines/` and the machine's `checkout` label, a digest of host and path. A detached reaper deletes it once that window passes; as a reaper can die, every run first deletes this workstation's machines whose window passed. Taking a record is a rename, so a run and the reaper never both get it, and the workspace lock keeps two runs of a checkout apart. The next run starts a fresh stack.
-- **Lifetime.** Boat stops a run machine 3 hours after its creation, and a machine without snapshots is erased by that stop, whatever the workstation does. The key may not move that deadline (it has no `sandbox.update`). So a machine takes a run only with an hour of life left.
-- **Deletion.** A run deletes its machine instead of keeping it after a Ctrl-C, when Boat became unavailable during the run, after a failed wipe, or with under an hour of life left. A Boat refusal while a run looks for its kept machine makes Boat unavailable for that run, and the run deletes the kept machines whose records it took. Each run deletes every other machine of its checkout, such as one a killed run left behind.
+- **Wipe.** After a run that returned a result, `scripts/boat/wipe-machine.sh` kills every earlier command's cgroup, then removes the stack's containers, volumes and network, the checkout and its clones, and every upload, result, log, temporary file and Boat command log. Before its first run, a fresh machine lists every path in the home folder, `/tmp`, `/var/tmp` and `/dev/shm`, copies `~/.supabase` and Next.js's `~/.config/nextjs-nodejs`, and marks the time. The wipe removes what the run added at the top of the home folder, every path added and file changed since the mark in the temporary folders, and restores both as recorded. It then checks that no path was added and no file changed since the mark in any of those places, outside the Bun package cache, Boat's machine agent, the seed clone and the desktop session's state, and that no container or volume remains. Only the X server's lock and socket folders and root's systemd folders at the top of `/tmp` are left alone. A check that fails or cannot complete deletes the machine.
+- **Main's script.** Every wipe and record runs `origin/main`'s copy, fetched first, whatever the branch, so it follows the snapshot and Boat's agent (`main-wipe-script.ts`). An unreadable copy refuses the start or deletes the machine.
+- **Agent folders and keyring.** Boat's machine agent writes a `boat` skill and a mode-600 config into each coding-agent CLI's folder (`~/.claude.json`, `~/.codex`, `~/.pi`, `~/.config/opencode` and others), and the desktop session creates an empty keyring (`~/.local/share/keyrings`). No agent file has a CLI's login-file name, and no run starts an agent or uses the keyring. `record` and every wipe remove them and check they are gone.
+- **Idle deadline.** The wiped machine waits 15 minutes for the checkout's next run, which finds it by a record in `~/.cache/werkflow-boat/idle-machines/` and the machine's `checkout` label, a digest of host and path. A detached reaper deletes it once that window passes; as a reaper can die, every run first deletes this workstation's machines whose window passed. Taking a record is a rename, so a run and the reaper never both get it, and the workspace lock keeps two runs of a checkout apart. The next run starts a fresh stack.
+- **Lifetime.** Boat stops and erases a run machine 3 hours after its creation, and the key may not move that deadline. So a machine takes a run only with an hour of life left.
+- **Deletion.** A run deletes its machine after a Ctrl-C, when Boat became unavailable during the run, after a failed wipe, or with under an hour of life left. A Boat refusal while a run looks for its kept machine makes Boat unavailable, and the run deletes the kept machines whose records it took. Each run deletes every other machine of its checkout, such as one a killed run left.
 
-A run that keeps its machine ends `… wiped and kept 15 min for this checkout's next run`; the next opens `… kept from this checkout's last run.`
+A run that keeps its machine ends `… wiped and kept 15 min for this checkout's next run`; the next opens `… kept from this checkout's last run.` One that deletes it ends `… deleted: <reason>`.
 
-Most follow-up runs in a checkout start within 15 minutes of the last one's end, and a longer window catches few more. A full window of an idle `large` machine costs about $0.02, less than one paid start.
+Most follow-up runs start within 15 minutes of the last one's end. A full idle window costs about $0.02, less than one paid start.
 
-Idle machines count toward the 10 machines a member may run at once, and toward the plan's limit. When Boat refuses a start at either limit (`429 member_limit_reached` or `limit_reached`), the run deletes this workstation's idle machines, oldest first, through the reaper's rename, never one a run took, and tries once more. Only a second refusal, or one with no idle machine to delete, makes Boat unavailable. `503 out_of_capacity` and `no_ready_machine` are Boat's own shortage and delete nothing.
+Idle machines count toward the 10 machines a member may run at once, which all workstations share, and toward the plan's limit. When Boat refuses a start at either limit (`429 member_limit_reached` or `limit_reached`), the run deletes this workstation's idle machines, oldest first, through the reaper's rename. Without one, it deletes one machine that another workstation, by its `workstation` label, kept idle for over 10 minutes (`lib/testing/boat/machine-eviction.ts`). A passed wipe leaves `/var/lib/werkflow-pristine/idle` on the machine; the owner's next run and an evicting run each rename it, and only one rename succeeds, so a machine a run uses is never deleted. The run then tries once more. Only a second refusal, or one with nothing to delete, makes Boat unavailable. `503 out_of_capacity` and `no_ready_machine` are Boat's own shortage and delete nothing.
 
-## Captures on Boat
+## Focused runs on Boat
 
-A rendered acceptance capture, `bun run test:audit:focused --grep "@ACCEPT <set>"`, goes to Boat through the same machinery (`lib/testing/boat/capture-on-boat.ts`): the same snapshot, packing, checks and results import. On the workstation it needs a production build and its server beside the stack and a browser, one of the largest loads on the shared PC. The machine builds and serves the app itself and runs the same command on the same tree. The captures come back, so the images land where a local capture writes them, under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. Start no test server for a capture.
+A focused run (`test:audit:focused`, `test:golden:focused`) needs a production build, its server, the stack and a browser, and the server refuses a stack whose migrations differ from the tree's. It goes to Boat (`lib/testing/boat/focused-on-boat.ts`): a rendered acceptance capture (`--grep "@ACCEPT <set>"`) and a [visual reference update](standards-audit.md#keep-accepted-screens-as-visual-references) always, any other focused run or `--fresh-for` replay when the tree's migrations drift from the shared stack's. The machine serves a build at the tree's migrations and runs the same command; the run folder comes back, captures under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. An iteration takes about 2 minutes on a kept machine, 3 on a new one. Start no test server for it.
 
-The images render in the pinned Playwright image on both sides. Measured on one set: a Boat capture and a local capture of the same commit differ only in the world's run id, which every run changes, and in at most 99 other pixels an image, each by 1 of 255. The Boat run took about 3 minutes and 180 s of machine time, and the workstation spent 19 s of processor time and 0.26 GB on it. The local capture spent about 500 s of processor time at up to 3 GB, most of it the build.
+Only a passed update run places what it rewrote or wrote, listed; a failed run's stay in the evidence. Any file but a `.png` or `.txt` directly in an audit snapshot folder, an absolute or `..` path, or a link refuses the whole set (`lib/testing/boat/reference-updates.ts`). A reference changed here meanwhile stays; each replaced one is kept in `.agent-logs/visual-reference-replaced/`.
 
-A capture runs locally, with a `Running locally:` line, under `WERKFLOW_VERIFY_LOCAL=1`, with `--reuse-run` (the retained world lives on the workstation's stack) or with `--target cloud`. CI and the Boat machine run it locally without a line. Other focused runs and reference updates stay on the workstation.
+Both sides render in the pinned Playwright image: a Boat and a local capture of one commit differed only in the run id and by 1 of 255 in at most 99 pixels an image. A Boat capture costs the workstation 19 s of processor time, a local one 500 s at up to 3 GB.
 
-When Boat is [unavailable](#fallback), the capture does not run: a block names the reason, writes no image and exits 1. To capture on the workstation on purpose, start `bun run test:server local` in a second shell, then run `WERKFLOW_VERIFY_LOCAL=1 bun run test:audit:focused --grep "@ACCEPT <set>"`.
+A focused run stays local under `WERKFLOW_VERIFY_LOCAL=1`, with `--reuse-run` (the retained world lives on the workstation's stack) or with `--target cloud`; a capture or update prints why. A `--reuse-run` replay stays local.
+
+When Boat is [unavailable](#fallback), nothing runs: a block names the reason, writes nothing and exits 1. To run here on purpose, start `bun run test:server local` in a second shell, then the same command with `WERKFLOW_VERIFY_LOCAL=1`.
+
+## Types on Boat
+
+`bun run types:generate -- --local` reads the stack on its machine where that stack has the tree's schema: CI, a Boat machine, a shared stack whose ledger matches. Otherwise a Boat machine's fresh stack generates the file, byte for byte what CI's check computes. Without Boat, CI's SQL job uploads it (`database-types`) when the committed types are stale, which the command takes.
 
 ## The key contract
 
 | Setting | Value |
 | --- | --- |
-| Name | `werkflow-pc` on the PC (WSL user), `werkflow-mac` on the Mac |
+| Name | `werkflow-pc` on the PC (WSL user), `werkflow-mac` on the Mac, `werkflow-vm` on the headless Linux host |
 | Organization | `WerkFlow`; it bills the plan's included $20 a month, then a $20 wallet reserve. Auto top-up stays off, so once both are spent a start fails and Boat is unavailable. |
 | Expiry | 90 days |
 | Actions | Custom: exactly `sandbox.create`, `sandbox.read`, `sandbox.stop`, `sandbox.resume`, `sandbox.fork`, `sandbox.delete-own`, `exec`, `file.read`, `file.write`, `snapshot.read`, `snapshot.write`. No environment or sandbox restriction. |
 | File | `~/.config/werkflow/boat-api-key`, mode 600, folder mode 700, one line holding the key |
 | Expiry file | `~/.config/werkflow/boat-api-key.expires`, one ISO date |
 
-The runner reads the key in its own process and calls Boat's REST API with it. It never writes the key elsewhere and needs no Boat CLI and no SSH. A run refuses a key file or folder others can read, and counts Boat as unavailable when an untracked file is a dotfile or looks like a credential.
+The runner reads the key in its own process for Boat's REST API. It never writes the key elsewhere and needs no Boat CLI and no SSH. A run refuses a key file or folder others can read, and counts Boat as unavailable when an untracked file is a dotfile or looks like a credential.
 
 Agents never read the key or the Boat CLI's config, which holds a key in plain text after `boat login`. `.claude/hooks/refuse-boat-key-reads.ts` refuses such a call in Claude Code and Codex, and `permissions.deny` in `.claude/settings.json` covers Claude's file tools. The expiry file stays readable.
 
@@ -95,7 +102,7 @@ Machines get code and the local stack's synthetic data only: no customer data, n
 On the PC inside WSL Ubuntu, on the Mac in Terminal:
 
 1. The owner creates the key under [the key contract](#the-key-contract) in the Boat dashboard and copies it once.
-2. Install it without echo. Paste the key when the cursor waits, then press Enter:
+2. Install it without echo. Paste the key, then press Enter:
 
    ```sh
    sh -c 'umask 077; mkdir -p ~/.config/werkflow; chmod 700 ~/.config/werkflow; stty -echo; IFS= read -r k; stty echo; printf "%s\n" "$k" > ~/.config/werkflow/boat-api-key'
