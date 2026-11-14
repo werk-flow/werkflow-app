@@ -384,7 +384,7 @@ $$;
 
 reset role;
 
--- A change of a job or an instruction in a led project touches the open
+-- A change of a job, an instruction or an Arbeitsnachweis in a led project touches the open
 -- holding, so the lead, who reads no row of a job they are not on, hears of it
 -- through the holding's Realtime event. Work of another project does not.
 do $$
@@ -405,6 +405,12 @@ begin
     'Filter tauschen', '4f200000-0000-4000-8000-000000000001');
   if (select ctid from public.work_leads where id = v_holding) is not distinct from v_before then
     raise exception 'a new instruction in a led project did not touch its holding';
+  end if;
+  v_before := (select ctid from public.work_leads where id = v_holding);
+  perform pg_temp.submit('4f200000-0000-4000-8000-000000000036', '4f200000-0000-4000-8000-000000000001',
+    'site_diary', '4f200000-0000-4000-8000-000000000022', null);
+  if (select ctid from public.work_leads where id = v_holding) is not distinct from v_before then
+    raise exception 'a new Arbeitsnachweis in a led project did not touch its holding';
   end if;
   v_before := (select ctid from public.work_leads where id = v_holding);
   update public.jobs set title = 'Heizung Erdgeschoss' where id = '4f200000-0000-4000-8000-000000000020';
