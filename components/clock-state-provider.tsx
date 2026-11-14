@@ -288,7 +288,8 @@ function useClockServerView(activeOrgId: string | null) {
         readAtRef.current = startedAt;
         return { ok: true, data: { state: result.state, from } };
       }
-      if (!signal.aborted) setFailedFrom(from);
+      // A read that fails without network is no answer: the shown clock keeps waiting (shown-clock-rule.ts).
+      if (!signal.aborted && navigator.onLine) setFailedFrom(from);
       return { ok: false, error: result.error };
     },
     resetKey: activeOrgId,
@@ -367,6 +368,7 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
       keptEcho,
       checkingDevice: outbox.checking,
       online,
+      scope: outboxHolder && `${outboxHolder.userId}:${outboxHolder.organizationId}`,
     },
     readAgain,
   );
@@ -375,7 +377,8 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
   // While unsent actions settle, no action starts from a clock the server has not answered yet.
   const isReady =
     phoneState !== null && !view.isLoading && !shown.settling && (!view.error || standsOnDevice);
-  const statusError = standsOnDevice ? null : (view.error ?? null);
+  // While unsent actions settle, only the read that settles them may show its failure.
+  const statusError = standsOnDevice || shown.settling ? null : (view.error ?? null);
   const execute = useClockTransitionExecute({
     holder: { activeOrgId, userId },
     isReady,

@@ -20,7 +20,10 @@ export type ClockFacts = {
   server: LiveClockState | null;
   /** When the read behind `server` started (`performance.now()`); an online answer counts at its arrival. */
   serverFrom: number;
-  /** When the last failed read started; with network it ends a wait, and the failure shows. */
+  /**
+   * When the last read that failed with network started; it ends a wait, and the failure shows. A
+   * read that fails without network is no answer and never counts here.
+   */
   failedFrom: number;
   /** What the outbox holds unsent for the person, once its code ran. */
   device: ClockDeviceView | null;
@@ -31,6 +34,8 @@ export type ClockFacts = {
   /** The phone may hold unsent work that the outbox has not shown yet. */
   checkingDevice: boolean;
   online: boolean;
+  /** The person and organization the clock is for; another one starts from nothing shown. */
+  scope: string | null;
 };
 
 /** What the clock shows. */
@@ -46,6 +51,7 @@ export type ShownClock = {
 
 /** The last shown clock and what it waits for. */
 export type ShownMemory = {
+  scope: string | null;
   shown: ShownClock;
   /** The phone showed actions the server has not answered. */
   local: boolean;
@@ -55,6 +61,7 @@ export type ShownMemory = {
 
 /** Nothing shown yet: the memory a page starts with. */
 export const NOTHING_SHOWN: ShownMemory = {
+  scope: null,
   shown: { state: null, device: null, marker: null, settling: false },
   local: false,
   settledAt: null,
@@ -75,21 +82,33 @@ function sameShown(left: ShownClock, right: ShownClock): boolean {
  * answers, or fails; then the server's state and a stopped chain show together. Returns `memory`
  * itself when nothing changed.
  */
-export function advanceShownClock(memory: ShownMemory, facts: ClockFacts): ShownMemory {
-  const { server, device, keptEcho, online } = facts;
+export function advanceShownClock(held: ShownMemory, facts: ClockFacts): ShownMemory {
+  const { server, device, keptEcho, online, scope } = facts;
+  // Another person or organization never sees the former one's clock, not even while it waits.
+  const memory = held.scope === scope ? held : { ...NOTHING_SHOWN, scope };
   const local = device?.status === 'pending' || keptEcho !== null;
   let settledAt = local ? null : memory.local ? facts.deviceFrom : memory.settledAt;
-  // Without network a failed read ends nothing: the shown clock keeps waiting for the server.
-  const answered = Math.max(facts.serverFrom, online ? facts.failedFrom : -1);
-  if (settledAt !== null && answered >= settledAt) settledAt = null;
+  if (settledAt !== null && Math.max(facts.serverFrom, facts.failedFrom) >= settledAt) settledAt = null;
   const pending = online ? 'sending' : 'waiting';
   let shown: ShownClock;
-  if (local) shown = { state: device?.state ?? keptEcho ?? server, device, marker: pending, settling: false };
+  // This page's newest kept tap stands on the outbox's events, so it wins until the outbox shows it.
+  if (local) shown = { state: keptEcho ?? device?.state ?? server, device, marker: pending, settling: false };
   else if (settledAt !== null) shown = { ...memory.shown, marker: pending, settling: true };
   else if (facts.checkingDevice) shown = NOTHING_SHOWN.shown;
   // A stopped chain shows the server's clock beside its own badge.
-  else shown = { state: server, device, marker: online || device ? null : 'offline', settling: false };
-  if (sameShown(shown, memory.shown) && local === memory.local && settledAt === memory.settledAt)
-    return memory;
-  return { shown: sameShown(shown, memory.shown) ? memory.shown : shown, local, settledAt };
+  else
+    shown = {
+      state: server,
+      device,
+      marker: online || device || !server ? null : 'offline',
+      settling: false,
+    };
+  if (
+    memory === held &&
+    sameShown(shown, memory.shown) &&
+    local === memory.local &&
+    settledAt === memory.settledAt
+  )
+    return held;
+  return { scope, shown: sameShown(shown, memory.shown) ? memory.shown : shown, local, settledAt };
 }

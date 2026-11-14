@@ -52,6 +52,7 @@ const SETTLED: ClockFacts = {
   keptEcho: null,
   checkingDevice: false,
   online: true,
+  scope: 'worker:company',
 };
 
 /** What the person sees: the clock's state and its marker, or nothing. */
@@ -136,15 +137,47 @@ describe('the shown clock', () => {
     ).toEqual(['eingestempelt · sending', 'nicht eingestempelt · conflict']);
   });
 
-  test('a read that fails after the send shows the failure’s ground with network, and keeps waiting without', () => {
+  test('a read that fails with network after the send shows the failure’s ground; one without network is no answer', () => {
     const settled = { ...SETTLED, device: STOPPED_START, deviceFrom: 40 };
     expect(
       screens([
         { ...SETTLED, device: PENDING_START, deviceFrom: 30 },
-        { ...settled, online: false, failedFrom: 41 },
-        { ...settled, online: true, failedFrom: 42 },
+        // Without network a failed read is never reported (clock-state-provider.tsx).
+        { ...settled, online: false },
+        { ...settled, failedFrom: 42 },
       ]),
     ).toEqual(['eingestempelt · sending', 'eingestempelt · waiting', 'nicht eingestempelt · conflict']);
+  });
+
+  test('the network’s return alone ends no wait: only an answer after it does', () => {
+    const settled = { ...SETTLED, deviceFrom: 40 };
+    let memory = advanceShownClock(NOTHING_SHOWN, { ...SETTLED, device: PENDING_START, deviceFrom: 30 });
+    memory = advanceShownClock(memory, { ...settled, online: false });
+    memory = advanceShownClock(memory, settled);
+    expect(seen(memory)).toBe('eingestempelt · sending');
+    expect(memory.shown.settling).toBe(true);
+  });
+
+  test('a tap kept on top of waiting events shows at once, before the outbox takes it in', () => {
+    const waiting = { ...SETTLED, online: false, device: PENDING_START, deviceFrom: 30 };
+    expect(screens([waiting, { ...waiting, keptEcho: CLOCKED_OUT }])).toEqual([
+      'eingestempelt · waiting',
+      'nicht eingestempelt · waiting',
+    ]);
+  });
+
+  test('another person or organization starts from nothing shown, also while the former clock waits', () => {
+    let memory = advanceShownClock(NOTHING_SHOWN, { ...SETTLED, device: PENDING_START, deviceFrom: 30 });
+    memory = advanceShownClock(memory, { ...SETTLED, deviceFrom: 40 });
+    expect(memory.shown.settling).toBe(true);
+    memory = advanceShownClock(memory, {
+      ...SETTLED,
+      scope: 'worker:other-company',
+      server: null,
+      online: false,
+    });
+    expect(seen(memory)).toBe('nichts');
+    expect(memory.shown.settling).toBe(false);
   });
 
   test('a page whose device may hold unsent work shows nothing until the outbox answered', () => {

@@ -80,6 +80,12 @@ async function startOffline(page: Page, server: Server): Promise<void> {
   await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
   await expect(clockStatus(page)).toHaveText('Arbeit');
+  // The outbox took the tap in, as on a phone that regains its signal long after the tap.
+  await expect
+    .poll(() =>
+      page.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith('werkflow:unsent:clock:'))),
+    )
+    .toBe(false);
 }
 
 /** The screens of a kept start without network, up to its marker. */
@@ -178,4 +184,25 @@ test('a server answer that differs from the phone shows the server’s clock and
     'Arbeit · Wird übertragen',
     'Nicht eingestempelt · Konflikt',
   ]);
+});
+
+test('a catch-up read that failed while the kept clock-in waited never shows its error once the send was recorded', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await recordScreens(page);
+  await startOffline(page, server);
+  const release = await holdSends(page);
+  const sent = page.waitForRequest('**/api/field-sync/v1/operations');
+  await setConnection(page, server, true);
+  await sent;
+  server.stateFails = true;
+  await catchUpRead(page);
+  server.stateFails = false;
+
+  server.state = RECORDED_START;
+  release();
+  await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'in');
+
+  expect(await screens(page)).toEqual([...KEPT_START, 'Arbeit · Wird übertragen', 'Arbeit']);
 });
