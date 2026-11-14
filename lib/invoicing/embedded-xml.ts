@@ -16,7 +16,7 @@ import {
 /** The name ZUGFeRD 2 and Factur-X give the embedded invoice. */
 export const E_INVOICE_FILE_NAME = 'factur-x.xml';
 
-function textOf(value: unknown): string | null {
+function pdfStringText(value: unknown): string | null {
   return value instanceof PDFString || value instanceof PDFHexString ? value.decodeText() : null;
 }
 
@@ -29,7 +29,7 @@ export async function readEmbeddedInvoiceXml(pdfBytes: Uint8Array): Promise<stri
     ?.lookupMaybe(PDFName.of('Names'), PDFArray);
   const entries = files?.asArray() ?? [];
   for (let index = 0; index + 1 < entries.length; index += 2) {
-    if (textOf(entries[index]) !== E_INVOICE_FILE_NAME) continue;
+    if (pdfStringText(entries[index]) !== E_INVOICE_FILE_NAME) continue;
     const spec = pdf.context.lookup(entries[index + 1], PDFDict);
     const stream = spec.lookup(PDFName.of('EF'), PDFDict).lookup(PDFName.of('F'));
     if (!(stream instanceof PDFRawStream)) throw new Error('e_invoice_xml_unreadable');
