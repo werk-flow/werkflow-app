@@ -24,7 +24,7 @@ const ledgerSchema = z.array(
 );
 
 type LedgerRow = z.infer<typeof ledgerSchema>[number];
-type TreeMigration = { readonly name: string; readonly sql: string };
+type TreeMigration = { readonly version: string; readonly name: string; readonly sql: string };
 
 export type MigrationDrift = {
   /** Names the stack applied that no tree migration has. */
@@ -38,6 +38,11 @@ export type MigrationDrift = {
    * plan, but no proof that the stack ran the tree's SQL.
    */
   readonly unverified: readonly string[];
+  /**
+   * Ledger versions no tree file carries, such as a migration applied under its pre-merge version:
+   * no drift for a plan, but the Supabase CLI refuses the next `migration up` while one exists.
+   */
+  readonly unknownVersions: readonly string[];
 };
 
 /** Whether a plan that runs these groups reads the shared local stack. */
@@ -188,7 +193,9 @@ export function migrationDrift(tree: readonly TreeMigration[], ledger: readonly 
       if (unmatched.length || open.length) changed.push(name);
     }
   }
-  return { stackOnly, treeOnly, changed, unverified };
+  const versions = new Set(tree.map((migration) => migration.version));
+  const unknownVersions = ledger.map((row) => row.version).filter((version) => !versions.has(version));
+  return { stackOnly, treeOnly, changed, unverified, unknownVersions };
 }
 
 /** One line naming the drift, or undefined when there is none or it could not be read. */
@@ -210,8 +217,8 @@ export function driftLine(drift: MigrationDrift | undefined): string | undefined
 function treeMigrations(repository: string): TreeMigration[] {
   const folder = resolve(repository, 'supabase/migrations');
   return readdirSync(folder).flatMap((file) => {
-    const name = /^\d{14}_(.+)\.sql$/.exec(file)?.[1];
-    return name ? [{ name, sql: readFileSync(resolve(folder, file), 'utf8') }] : [];
+    const [, version, name] = /^(\d{14})_(.+)\.sql$/.exec(file) ?? [];
+    return version && name ? [{ version, name, sql: readFileSync(resolve(folder, file), 'utf8') }] : [];
   });
 }
 

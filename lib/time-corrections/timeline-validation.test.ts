@@ -409,3 +409,45 @@ test('open time over midnight may last at most 24 hours', () => {
   // The whole 25-hour day of the autumn clock change, as a recorded session's day piece.
   expect(exceedsLongestOpenTime(shift('2026-10-24T22:00:00.000Z', '2026-10-25T23:00:00.000Z'))).toBe(false);
 });
+
+// werk-flow/werkflow-planning#447. The SQL half, an approval after the session
+// ended, is supabase/tests/open_session_past_day_addition.sql.
+test('an addition over a session the person forgot to end is refused on its first and on a later day', () => {
+  // Clocked in on Monday 07:00 Berlin, still open on Wednesday.
+  const forgotten: TimeSegmentFact = {
+    ...createActivitySelection('work'),
+    id: 'forgotten',
+    sessionId: 'session',
+    organizationId: 'org',
+    employeeRecordId: 'person',
+    startedAt: '2026-11-09T06:00:00.000Z',
+    endedAt: null,
+  };
+  const now = new Date('2026-11-11T09:00:00.000Z');
+  for (const [start, end] of [
+    ['2026-11-09T06:00:00.000Z', '2026-11-09T15:00:00.000Z'],
+    ['2026-11-10T06:00:00.000Z', '2026-11-10T15:00:00.000Z'],
+  ] as const) {
+    const addition = applied('addition', [fact('start', 'clock_in', start), fact('end', 'clock_out', end)]);
+    const window = correctionTimelineWindow(addition.snapshot.facts);
+    if (!window) throw new Error('Missing window.');
+    const recorded = applied('recorded', []);
+    const entries = projectTimeSegmentsToLegacyTransitions(
+      [forgotten],
+      new Date(window.from),
+      new Date(window.to),
+      now,
+    ).map((point, index) =>
+      correctionFactToEntry(fact(String(index), point.entryType, point.timestamp), recorded),
+    );
+    expect(
+      validateCorrectionTimeline({
+        organizationId: 'org',
+        affectedDays: window.affectedDays,
+        entries,
+        applications: [],
+        candidates: [addition],
+      }),
+    ).toBe('correction_timeline_conflict');
+  }
+});

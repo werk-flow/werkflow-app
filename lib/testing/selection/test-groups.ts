@@ -355,7 +355,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['work', 'time', 'documents', 'inventory'],
   ],
   ['p1-21', ['p1_21_time_segments.sql', 'clock_job_row_lock.sql'], ['time', 'personnel', 'work']],
-  ['p1-22', ['p1_22_time_corrections.sql'], ['time', 'personnel', 'work']],
+  [
+    'p1-22',
+    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql'],
+    ['time', 'personnel', 'work'],
+  ],
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
   [
     'p1-23',
@@ -388,6 +392,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
   ['client-site-roles', ['client_site_roles.sql'], ['customers', 'service']],
+  ['work-billing-parties', ['work_billing_parties.sql'], ['customers', 'work', 'service']],
   ['site-access-proposals', ['site_access_proposals.sql'], ['customers', 'work', 'attention']],
   [
     'request-callback-and-equipment',
@@ -410,6 +415,8 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'inventory_ledger.sql',
       'inventory_atomic_writes.sql',
       'inventory_import_preview.sql',
+      'inventory_article_prices.sql',
+      'inventory_article_prices_concurrency.sql',
       'job_material_use.sql',
       'job_material_use_concurrency.sql',
       'job_material_planning.sql',
@@ -437,8 +444,14 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
+  ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
+  [
+    'company-document-profiles',
+    ['company_document_profiles.sql', 'company_document_profiles_concurrency.sql'],
+    ['documents'],
+  ],
   [
     'problem-reports',
     ['problem_reports.sql', 'problem_report_support.sql', 'problem_report_handout.sql'],

@@ -11,6 +11,10 @@ import { ContextualDocumentsSection } from '@/components/dokumente/contextual-do
 import { JobMaterialsSection } from '@/components/inventar/job-materials-section';
 import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-template-card';
 import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
+import type { WorkBillingParties } from '@/lib/billing-parties/types';
+// Static here: the office job page is a daily journey, and its own chunk group
+// would cost a request and the section's script on every open (lab.office.job-open).
+import { WorkBillingPartiesSection } from '../shared/work-billing-parties-loaders';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { recordedVisitWindow } from '@/lib/work-artifacts/visit-window';
 import {
@@ -43,6 +47,7 @@ type JobDetailMainColumnProps = {
   documents: OrganizationDocument[] | null;
   timeEntries: TimeEntry[];
   setShowClientDialog: (open: boolean) => void;
+  billingParties: WorkBillingParties | undefined;
   openAssignDialog: () => void;
   isUnassigning: (userId: string) => boolean;
   handleUnassign: (userId: string) => Promise<void>;
@@ -153,6 +158,20 @@ function JobDetailClientCard({ client, isAdminOrManager, setShowClientDialog }: 
   );
 }
 
+/** The office's Auftraggeber and Rechnungsempfänger, with the site and customer the job already holds. */
+function jobBillingSection(liveJob: JobWithDetails, billingParties: WorkBillingParties | undefined) {
+  return (
+    <WorkBillingPartiesSection
+      kind="job"
+      id={liveJob.id}
+      initialParties={billingParties}
+      site={liveJob.site ?? null}
+      workClient={liveJob.client}
+      workClientId={liveJob.client?.id ?? null}
+    />
+  );
+}
+
 /** Left column: details, instructions, work evidence, customer and assigned employees. */
 export function JobDetailMainColumn({
   liveJob,
@@ -166,6 +185,7 @@ export function JobDetailMainColumn({
   documents,
   timeEntries,
   setShowClientDialog,
+  billingParties,
   openAssignDialog,
   isUnassigning,
   handleUnassign,
@@ -219,6 +239,8 @@ export function JobDetailMainColumn({
         isAdminOrManager={isAdminOrManager}
         setShowClientDialog={setShowClientDialog}
       />
+
+      {isAdminOrManager && jobBillingSection(liveJob, billingParties)}
 
       {/* Assigned Employees */}
       <JobDetailAssigneesCard

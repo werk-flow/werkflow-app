@@ -58,6 +58,9 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               )
                 return { path: join(repository, 'lib/supabase/client.ts') };
             });
+            builder.onResolve({ filter: /^@\/lib\/billing-parties\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'billing-parties-service-boundaries.ts'),
+            }));
             // The report dialog's contract runs the real launcher, dialog and upload
             // client against stub actions, router, organization and redraw.
             builder.onResolve(
@@ -96,7 +99,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
               if (
                 args.importer.endsWith('use-suggested-record-number.ts') ||
-                args.importer.endsWith('use-request-work-targets.ts')
+                args.importer.endsWith('use-request-work-targets.ts') ||
+                args.importer.endsWith('use-work-billing-parties.ts')
               )
                 return { path: join(import.meta.dir, 'calendar-service-boundaries.tsx') };
             });
@@ -239,6 +243,19 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/org-export\/actions$/ }, () => ({
               path: join(import.meta.dir, 'organization-export-service-boundaries.ts'),
             }));
+            builder.onResolve(
+              { filter: /^(?:@\/lib\/company-profile\/actions|\.\/actions|next\/navigation)$/ },
+              (args) => {
+                if (
+                  args.path === '@/lib/company-profile/actions' ||
+                  (args.path === './actions' &&
+                    args.importer.endsWith('lib/company-profile/upload-client.ts')) ||
+                  (args.path === 'next/navigation' &&
+                    args.importer.endsWith('einstellungen-page-skeleton.tsx'))
+                )
+                  return { path: join(import.meta.dir, 'company-profile-service-boundaries.ts') };
+              },
+            );
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (args.importer.endsWith('use-export-builder.ts'))
                 return { path: join(import.meta.dir, 'organization-export-service-boundaries.ts') };

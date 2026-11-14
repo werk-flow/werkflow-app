@@ -3,6 +3,9 @@ import { boundedText, nullableBoundedText } from '@/lib/validation/text';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { INVENTORY_IMPORT_MAX_ROWS } from '@/lib/inventory/action-inputs';
 import { INVENTORY_IMPORT_MODES } from '@/lib/inventory/csv-import';
+import { MAX_PRICE_CENTS } from '@/lib/price-catalog/money';
+import { ARTICLE_PRICE_KINDS, PRICE_QUANTITIES } from './article-price-terms';
+import { OFFERED_INVENTORY_UNITS } from './units';
 
 // Boundary schemas of the inventory Server Actions: types, ids and bounds.
 // The value rules inside the actions (names, units, quantities) keep their own
@@ -46,6 +49,45 @@ export const upsertInventoryItemSchema = z.object({
   initialLocationId: optionalId,
   initialQuantity: optionalAmount,
 });
+
+/** A quantity as `numeric(12,3)` holds it. */
+const conversionQuantity = z.number().finite().max(999_999_999);
+
+/** One supplier reference of an article: a supplier of the organization, or a new one by name. */
+export const saveArticleSupplierSchema = z.object({
+  itemId: uuidSchema,
+  // The base unit the dialog showed; a changed article unit refuses the save.
+  unit: boundedText(40),
+  referenceId: uuidSchema.nullable(),
+  supplierId: uuidSchema.nullable(),
+  supplierName: nullableBoundedText(300),
+  supplierArticleNumber: nullableBoundedText(200),
+  // A unit the forms offer; null sells in the article's base unit.
+  purchaseUnit: z
+    .string()
+    .refine((code) => OFFERED_INVENTORY_UNITS.some((unit) => unit.code === code))
+    .nullable(),
+  packQuantity: conversionQuantity,
+  baseQuantity: conversionQuantity,
+  isPreferred: z.boolean(),
+});
+
+export const removeArticleSupplierSchema = z.object({ referenceId: uuidSchema });
+
+/** A price the office enters: cents per price quantity of base units, from a Berlin day on. */
+export const addArticlePriceSchema = z.object({
+  itemId: uuidSchema,
+  // The base unit the dialog showed the amount in; a changed article unit refuses the price.
+  unit: boundedText(40),
+  kind: z.enum(ARTICLE_PRICE_KINDS),
+  amountCents: z.number().int().min(0).max(MAX_PRICE_CENTS),
+  priceQuantity: z.literal(PRICE_QUANTITIES),
+  validFrom: z.iso.date(),
+});
+
+export type SaveArticleSupplierInput = z.input<typeof saveArticleSupplierSchema>;
+export type RemoveArticleSupplierInput = z.input<typeof removeArticleSupplierSchema>;
+export type AddArticlePriceInput = z.input<typeof addArticlePriceSchema>;
 
 export const adjustInventoryStockSchema = z.object({
   itemId: uuidSchema,

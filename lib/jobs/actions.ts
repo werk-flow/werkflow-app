@@ -31,6 +31,7 @@ import {
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import {
+  type Client,
   type JobPriority,
   type JobRow,
   type JobWithDetails,
@@ -44,6 +45,8 @@ import {
   toJobAssignment,
 } from './types';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
+import { JOB_BILLING_PARTIES_EMBED, jobBillingPartiesFrom } from '@/lib/billing-parties/server';
+import type { WorkBillingParties } from '@/lib/billing-parties/types';
 import {
   loadJobDetailRelations,
   readJobAssigneeProfiles,
@@ -415,6 +418,27 @@ export async function updateJobAssignments(
   }
 }
 
+/** The job's customer, null without one; undefined when the read failed. */
+async function readJobClient(
+  admin: AdminClient,
+  orgId: string,
+  clientId: string | null,
+  operation: string,
+): Promise<Client | null | undefined> {
+  if (!clientId) return null;
+  const { data, error } = await admin
+    .from('clients')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('id', clientId)
+    .maybeSingle();
+  if (error) {
+    logReadFailure(`${operation}: client failed`, error);
+    return undefined;
+  }
+  return data ? toClient(data) : null;
+}
+
 /**
  * The shared tail of the job detail readers: an employee reads only a job they
  * are assigned to; the job comes back with its assignees, customer, project,
@@ -424,8 +448,10 @@ async function readJobDetails(input: {
   admin: AdminClient;
   context: { userId: string; orgId: string; isManagerOrAbove: boolean };
   jobData: JobRow;
+  /** The versions the job read embedded; undefined when it embedded none. */
+  billingParties?: unknown;
   operation: string;
-}): Promise<ActionResult<{ job: JobWithDetails }>> {
+}): Promise<ActionResult<{ job: JobWithDetails; billingParties?: WorkBillingParties | undefined }>> {
   const { admin, jobData } = input;
   const { userId, orgId, isManagerOrAbove } = input.context;
 
@@ -465,20 +491,8 @@ async function readJobDetails(input: {
 
   const { data: projectData } = projectResult;
   const effectiveClientId = projectData ? projectData.client_id : jobData.client_id;
-  const { data: clientData, error: clientError } = effectiveClientId
-    ? await admin
-        .from('clients')
-        .select('*')
-        .eq('organization_id', orgId)
-        .eq('id', effectiveClientId)
-        .maybeSingle()
-    : { data: null, error: null };
-  if (clientError) {
-    logReadFailure(`${input.operation}: client failed`, clientError);
-    return { success: false, error: 'fetch_failed' };
-  }
-
-  const client = clientData ? toClient(clientData) : null;
+  const client = await readJobClient(admin, orgId, effectiveClientId, input.operation);
+  if (client === undefined) return { success: false, error: 'fetch_failed' };
   const project = projectData
     ? {
         id: projectData.id,
@@ -487,8 +501,9 @@ async function readJobDetails(input: {
       }
     : null;
 
-  const relations = await loadJobDetailRelations(admin, orgId, jobData);
-  if (!relations) return { success: false, error: 'fetch_failed' };
+  const loadedRelations = await loadJobDetailRelations(admin, orgId, jobData);
+  if (!loadedRelations) return { success: false, error: 'fetch_failed' };
+  const { siteContacts, ...relations } = loadedRelations;
 
   const job: JobWithDetails = {
     ...toJob({ ...jobData, client_id: effectiveClientId }),
@@ -498,7 +513,41 @@ async function readJobDetails(input: {
     ...relations,
   };
 
-  return { success: true, job: isManagerOrAbove ? job : projectFieldJobDetails(job) };
+  if (!isManagerOrAbove) return { success: true, job: projectFieldJobDetails(job) };
+  // The office's billing parties ride on the reads above; a field worker never receives them.
+  return {
+    success: true,
+    job,
+    billingParties: officeBillingParties(input.billingParties, jobData.client_id, client, siteContacts),
+  };
+}
+
+/**
+ * The job read's embedded billing parties for the office, without the site the
+ * job already carries; undefined when it embedded none or a malformed set. The
+ * parties belong to the job's own customer (jobs.client_id), which the
+ * defaults follow; a party is left out only where the read's customer is that
+ * same customer, so a project read with another customer never stands in.
+ */
+function officeBillingParties(
+  embedded: unknown,
+  jobClientId: string | null,
+  client: Client | null,
+  siteContacts: unknown,
+): WorkBillingParties | undefined {
+  if (embedded === undefined) return undefined;
+  const workClient =
+    client && client.id === jobClientId
+      ? { id: client.id, name: client.name, address: client.address }
+      : null;
+  return (
+    jobBillingPartiesFrom({
+      hasClient: jobClientId !== null,
+      workClient,
+      versions: embedded,
+      siteContacts,
+    }) ?? undefined
+  );
 }
 
 /** The job form's reader: the job with its details and its scheduled visits. */
@@ -539,7 +588,9 @@ export async function getJobDetails(
   }
 }
 
-export async function getJobByNumber(rawJobNumber: string): Promise<ActionResult<{ job: JobWithDetails }>> {
+export async function getJobByNumber(
+  rawJobNumber: string,
+): Promise<ActionResult<{ job: JobWithDetails; billingParties?: WorkBillingParties | undefined }>> {
   const parsedJobNumber = jobNumberLookupSchema.safeParse(rawJobNumber);
   if (!parsedJobNumber.success) return { success: false, error: 'job_not_found' };
   const jobNumber = parsedJobNumber.data;
@@ -550,19 +601,28 @@ export async function getJobByNumber(rawJobNumber: string): Promise<ActionResult
 
     const admin = createSupabaseAdminClient();
 
-    const { data: jobData, error: jobError } = await admin
+    const { data: jobRow, error: jobError } = await admin
       .from('jobs')
-      .select('*')
+      .select(`*, ${JOB_BILLING_PARTIES_EMBED}`)
       .eq('organization_id', orgId)
       .eq('job_number', decodeURIComponent(jobNumber))
+      // Newest first, so the current version leads whatever cuts the list.
+      .order('version', { referencedTable: 'work_billing_parties', ascending: false })
       .single();
 
-    if (jobError || !jobData) {
+    if (jobError || !jobRow) {
       logReadErrors('getJobByNumber: read failed', jobError);
       return { success: false, error: 'job_not_found' };
     }
+    const { work_billing_parties: billingParties, ...jobData } = jobRow;
 
-    return await readJobDetails({ admin, context: auth.context, jobData, operation: 'getJobByNumber' });
+    return await readJobDetails({
+      admin,
+      context: auth.context,
+      jobData,
+      billingParties,
+      operation: 'getJobByNumber',
+    });
   } catch (error) {
     logError('Unexpected error in getJobByNumber:', error);
     return { success: false, error: 'unexpected_error' };

@@ -87,16 +87,16 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every PR to `main`, except a label change, and every push to `main`. Its job `Check` is the one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
+`.github/workflows/ci.yml` runs on every PR to `main`, except a label change, each queue entry and every push to `main`. `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's against the previous `main` commit. Every browser group runs on an unreadable diff, in a full run, and on a change to how every group installs, builds or runs (`TOOLING_INPUTS`, `runnerModules`).
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by the change-mode rules: a PR's diff against its merge base, a queue entry's against its base, a push's against the previous `main` commit unless a green queue run passed that tree. Every group runs on an unreadable diff, in a full run, and on a change to how every group installs, builds or runs (`TOOLING_INPUTS`, `runnerModules`).
 - **Drafts.** A draft PR runs no browser shard, and its `Check` fails while browser groups wait. `gh pr ready` runs them on that commit ([babysit a pull request](coderabbit.md#babysit-a-pull-request)).
-- **Full run and release gate.** A full run is `ci.yml` called with `full` from a job named `Full run`, nightly and in the release. `release.yml` ships a commit only after the newest `Full run / Check` of a nightly or release run on `main` at that commit passed, or runs one first.
-- **Shards.** The visual groups share shards of their own. A full selection fills at most `MAX_SHARDS` shards, so other pull requests keep most runners.
+- **Full run and release gate.** A full run is `ci.yml` called with `full` from a `Full run` job, nightly and in the release. `release.yml` ships a commit only after its newest nightly or release `Full run / Check` passed, or runs one first.
+- **Shards.** Visual groups get their own shards. A full selection fills at most `MAX_SHARDS` shards, so other PRs keep most runners.
 - **Queue.** The weekly `CI queue` job of `health.yml` fails when the p90 runner wait exceeds its ceiling (`.github/scripts/ci-queue.sh`).
 - **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
-- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun (`gh run rerun --failed`) follows the retry rules of a local repeat.
+- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun of failed jobs follows a local repeat's retry rules.
 
 ## Commands
 
@@ -183,7 +183,7 @@ A preflight failure that creates no run, or a heavy group held back [without Boa
 
 Check these before classifying.
 
-- **Another worktree's migration.** The shared stack can hold other branches' migrations. `test:verify` names the drift and [sends a cheap plan to Boat](boat-verification.md#how-a-run-picks-boat). A local failure on an object the branch lacks is `environment`.
+- **The tree's own migration.** The shared stack holds only `main`'s migrations. `test:verify` names the drift and [sends a cheap plan to Boat](boat-verification.md#how-a-run-picks-boat). A local failure on an object the stack lacks is `environment`.
 - **Stale fakes.** When a read changes its `select` shape, update every unit-test fake of that table. Embedded relations come back as arrays.
 - **The agent's tool killed the run.** A background limit or session end (SIGTERM, exit 137) is `environment`; [start it notified](#wait-for-a-long-run) next time.
 - **Host network.** `net::ERR_NETWORK_CHANGED`, or a Realtime socket that reconnects every few seconds, is `environment`. Run no heavy load beside a browser or measured group.
@@ -195,7 +195,7 @@ Check these before classifying.
 - **Unstable order.** A list ordered by random UUID reorders between runs.
 - **Long tokens at 375 px.** An email address or generated token is one unbreakable word.
 - **Fixture race.** Read-then-insert fixtures race under two workers.
-- **Slow machine.** When every measured scenario slows at once, replay `HEAD` on that machine before blaming the change.
+- **Slow machine.** When every measured scenario slows at once, replay `HEAD` there before blaming the change.
 
 ## Never
 
@@ -208,10 +208,10 @@ Check these before classifying.
 - Compare `count()` reads taken once. Poll them together with `expect.poll`.
 - Weaken an assertion, or retry until green, a failed CI job included.
 - Derive a reference from a failed run.
-- Raise a timeout or a budget, or rewrite a visual reference, to make a run pass.
-- Treat a review score or an old report as acceptance.
+- Raise a timeout or budget, or rewrite a visual reference, to pass a run.
+- Treat a review score or old report as acceptance.
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock.
-- Add a package script that builds, tests or changes the local stack outside the workspace lock.
+- Add a package script that builds or tests outside the workspace lock, or changes the shared stack's schema outside its exclusive lock.
 - Set a duration assertion in a unit test. Make a slow test cheaper.
 
 ## Verify your work

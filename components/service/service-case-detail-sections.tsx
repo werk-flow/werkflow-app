@@ -14,6 +14,7 @@ import {
 } from '@/lib/service-cases/types';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { Fact } from './fact';
+import { WorkBillingPartiesSection } from '@/components/auftraege/shared/work-billing-parties-loaders';
 
 const EVENT_LABELS: Readonly<Record<ServiceCaseDetail['events'][number]['eventType'], string>> = {
   created: 'Servicefall erfasst',
@@ -242,6 +243,7 @@ export function ServiceCaseDetailSidebar({
         </p>
         {item.contactName && <p className="mt-2 text-sm">Ansprechpartner: {item.contactName}</p>}
       </section>
+      <WorkBillingPartiesSection kind="service_case" id={item.id} workClientId={item.clientId} />
       <ServiceCaseEquipmentCard item={item} />
       <ServiceCaseJobCard item={item} />
       <section className="rounded-lg border p-4 shadow-xs" data-testid="service-case-follow-up">

@@ -4,6 +4,7 @@ import { PresentationFixture } from './presentation-fixture';
 import { CreateClientContractFixture, CustomerContractFixture } from './customer-boundaries';
 import { RequestCaptureContractFixture } from './request-capture-boundaries';
 import { RequestAttachContractFixture } from './request-attach-boundaries';
+import { BillingPartiesContractFixture } from './billing-parties-boundaries';
 import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals';
 import {
   AbsencePickerContractFixture,
@@ -34,6 +35,10 @@ import { OrganizationContractFixture } from './organization-boundaries';
 import { MemberRoleContractFixture } from './member-role-boundaries';
 import { OrganizationExportContractFixture } from './organization-export-boundaries';
 import {
+  CompanyLetterheadContractFixture,
+  CompanyProfileContractFixture,
+} from './company-profile-boundaries';
+import {
   TodayRefreshContractFixture,
   TodayRefreshFallbackContractFixture,
   TodayRefreshProfileContractFixture,
@@ -56,6 +61,7 @@ import {
   InventoryImportContractFixture,
 } from './inventory-import-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
+import { ArticleTermsContractFixture, initializeArticleTermsBoundary } from './article-terms-boundaries';
 import {
   initializeInventoryMovementsBoundary,
   InventoryMovementsContractFixture,
@@ -115,6 +121,7 @@ initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
 initializeProblemReportBoundary();
 initializeInventoryUnitBoundary();
+initializeArticleTermsBoundary();
 initializeInventoryImportBoundary();
 initializeInventoryMovementsBoundary();
 initializeLeistungenBoundary();
@@ -602,6 +609,8 @@ createRoot(root).render(
     <SupportFilingContractFixture />
   ) : window.uiContractFixture === 'inventory-unit' ? (
     <InventoryUnitContractFixture />
+  ) : window.uiContractFixture === 'article-terms' ? (
+    <ArticleTermsContractFixture />
   ) : window.uiContractFixture === 'inventory-import' ? (
     <BannerProvider>
       <InventoryImportContractFixture />
@@ -620,6 +629,8 @@ createRoot(root).render(
     <RequestCaptureContractFixture />
   ) : window.uiContractFixture === 'request-attach' ? (
     <RequestAttachContractFixture />
+  ) : window.uiContractFixture === 'billing-parties' ? (
+    <BillingPartiesContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>
@@ -652,6 +663,10 @@ createRoot(root).render(
     <OrganizationContractFixture />
   ) : window.uiContractFixture === 'organization-export' ? (
     <OrganizationExportContractFixture />
+  ) : window.uiContractFixture === 'company-profile' ? (
+    <CompanyProfileContractFixture />
+  ) : window.uiContractFixture === 'company-letterhead' ? (
+    <CompanyLetterheadContractFixture />
   ) : window.uiContractFixture === 'draft-landing' ? (
     <AuthLayout>
       <h1>Komponentenverträge</h1>

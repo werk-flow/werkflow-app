@@ -278,46 +278,57 @@ export function ItemSupplierFields({
   suppliers: Array<{ id: string; name: string }>;
   numberErrors: NumberFieldErrors;
 }) {
+  // A saved article keeps its suppliers and dated prices in the dialog's own tabs.
+  const isNew = form.id === null;
+  const perUnit = `Netto je ${getInventoryUnitLabel(form.unit)}, gilt ab heute.`;
   return (
     <>
-      <h3 className="border-t pt-4 text-sm font-semibold sm:col-span-2">Lieferant & Preise</h3>
+      <h3 className="border-t pt-4 text-sm font-semibold sm:col-span-2">
+        {isNew ? 'Lieferant & Preise' : 'Hersteller & Abrechnung'}
+      </h3>
       <Field label="Hersteller" htmlFor="inventory-item-manufacturer">
         <Input
           value={form.manufacturer}
           onChange={(event) => setForm({ ...form, manufacturer: event.target.value })}
         />
       </Field>
-      <Field label="Lieferant" htmlFor="inventory-item-supplier">
-        <ItemSupplierSelect form={form} setForm={setForm} suppliers={suppliers} />
-      </Field>
-      <Field label="Lieferanten-Nr." htmlFor="inventory-item-supplier-number">
-        <Input
-          value={form.supplierArticleNumber}
-          onChange={(event) => setForm({ ...form, supplierArticleNumber: event.target.value })}
-        />
-      </Field>
-      <Field
-        label="Einkaufspreis"
-        htmlFor="inventory-item-purchase-price"
-        error={numberErrors['inventory-item-purchase-price']}
-      >
-        <Input
-          inputMode="decimal"
-          value={form.purchasePrice}
-          onChange={(event) => setForm({ ...form, purchasePrice: event.target.value })}
-        />
-      </Field>
-      <Field
-        label="Verkaufspreis"
-        htmlFor="inventory-item-sale-price"
-        error={numberErrors['inventory-item-sale-price']}
-      >
-        <Input
-          inputMode="decimal"
-          value={form.salePrice}
-          onChange={(event) => setForm({ ...form, salePrice: event.target.value })}
-        />
-      </Field>
+      {isNew ? (
+        <>
+          <Field label="Lieferant" htmlFor="inventory-item-supplier">
+            <ItemSupplierSelect form={form} setForm={setForm} suppliers={suppliers} />
+          </Field>
+          <Field label="Lieferanten-Nr." htmlFor="inventory-item-supplier-number">
+            <Input
+              value={form.supplierArticleNumber}
+              onChange={(event) => setForm({ ...form, supplierArticleNumber: event.target.value })}
+            />
+          </Field>
+          <Field
+            label="Einkaufspreis"
+            htmlFor="inventory-item-purchase-price"
+            description={perUnit}
+            error={numberErrors['inventory-item-purchase-price']}
+          >
+            <Input
+              inputMode="decimal"
+              value={form.purchasePrice}
+              onChange={(event) => setForm({ ...form, purchasePrice: event.target.value })}
+            />
+          </Field>
+          <Field
+            label="Verkaufspreis"
+            htmlFor="inventory-item-sale-price"
+            description={perUnit}
+            error={numberErrors['inventory-item-sale-price']}
+          >
+            <Input
+              inputMode="decimal"
+              value={form.salePrice}
+              onChange={(event) => setForm({ ...form, salePrice: event.target.value })}
+            />
+          </Field>
+        </>
+      ) : null}
       <div className="flex items-center gap-2 rounded-md border px-3 py-2">
         <Checkbox
           id="inventory-item-billable"

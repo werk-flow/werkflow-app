@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ItemDialog } from '@/components/inventar/inventory-item-dialog';
+import type { ArticleTermWrites } from '@/components/inventar/use-article-terms';
 import { itemToForm } from '@/components/inventar/inventory-form-state';
 import { InventoryItemCardBody, InventoryItemCells } from '@/components/inventar/inventory-item-row-parts';
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,13 @@ export function initializeInventoryUnitBoundary(): void {
   window.uiContractInventorySaves = [];
 }
 
+// The unit contract saves only the master data; the supplier and price tabs stay unused.
+const noArticleWrites: ArticleTermWrites = {
+  saveSupplier: async () => null,
+  removeSupplier: async () => null,
+  addPrice: async () => null,
+};
+
 export function InventoryUnitContractFixture(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(() => itemToForm(legacyItem));
@@ -93,6 +101,9 @@ export function InventoryUnitContractFixture(): React.JSX.Element {
         categories={[]}
         suppliers={[]}
         locations={[]}
+        savedArticle={legacyItem}
+        articleTerms={{ status: 'loaded', priceDate: '2026-11-13', byItem: {} }}
+        articleWrites={noArticleWrites}
         isSaving={false}
         error={null}
         onSave={() => window.uiContractInventorySaves.push(form.unit)}

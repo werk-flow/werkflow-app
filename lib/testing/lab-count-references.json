@@ -1063,12 +1063,10 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 4, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
-        "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 18, "tolerance": 1 }
+        "backgroundReads": { "reference": 0, "tolerance": 0 }
       },
       "payloads": {
         "action:/dashboard": {
@@ -1212,6 +1210,22 @@
           "to": null,
           "runKeys": ["2026-11-09T222647863Z-a2e761"],
           "reason": "CI read this count as 623 twice (runs 42494386179 on 2026-11-08 and 42706161239 on 2026-11-09, the second on PR #330, which changes no app code, ten minutes after run 42704658540 read 694 on its base 636f5d44) and as 694 to 696 in the 170 other CI readings since 2026-11-05, with requests, routeRenders, actionRoundTrips and backendRequests equal in every run. A fall of 71 renders with identical requests is React batching on a busy runner, beyond the tolerance of 13, so the count does not repeat on this step (performance.md). Boat run 2026-11-09T222647863Z-a2e761 read 694."
+        },
+        {
+          "kind": "ungate",
+          "target": "requests",
+          "from": { "reference": 4, "tolerance": 0 },
+          "to": null,
+          "runKeys": ["2026-11-13T190548549Z-ac6c68"],
+          "reason": "CI read 3 requests and 14 backend requests on this step once (merge-queue run 43483232112, tree d71678a01 = main e1dc6e9be + PR #445) and 4 and 18 in the 46 other CI readings since 2026-11-13 morning, including #445 alone (run 43480952615) and main with #443 (run 43483228169); Boat run 2026-11-13T190548549Z-ac6c68 on the same merged tree read 4 and 18. The clock sheet suspends live reads while open; the clock's own Realtime echo either lands before the explicit refresh after the transition, which clears it (3), or after, which queues one catch-up clock read when the sheet closes (4). Both start their read after the commit, so the count does not repeat on this step (performance.md)."
+        },
+        {
+          "kind": "ungate",
+          "target": "backendRequests",
+          "from": { "reference": 18, "tolerance": 1 },
+          "to": null,
+          "runKeys": ["2026-11-13T190548549Z-ac6c68"],
+          "reason": "CI read 3 requests and 14 backend requests on this step once (merge-queue run 43483232112, tree d71678a01 = main e1dc6e9be + PR #445) and 4 and 18 in the 46 other CI readings since 2026-11-13 morning, including #445 alone (run 43480952615) and main with #443 (run 43483228169); Boat run 2026-11-13T190548549Z-ac6c68 on the same merged tree read 4 and 18. The clock sheet suspends live reads while open; the clock's own Realtime echo either lands before the explicit refresh after the transition, which clears it (3), or after, which queues one catch-up clock read when the sheet closes (4). Both start their read after the commit, so the count does not repeat on this step (performance.md)."
         }
       ]
     },
@@ -1782,7 +1796,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 0, "tolerance": 0 },
-        "componentRenders": { "reference": 803, "tolerance": 15 }
+        "componentRenders": { "reference": 773, "tolerance": 15 }
       },
       "payloads": {},
       "source": {
@@ -1863,6 +1877,14 @@
           "from": { "reference": 827, "tolerance": 15 },
           "to": { "reference": 803, "tolerance": 15 },
           "runKeys": ["2026-11-08T112625699Z-098a70"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 803, "tolerance": 15 },
+          "to": { "reference": 773, "tolerance": 15 },
+          "runKeys": ["2026-11-13T224018778Z-e324f5"],
           "reason": null
         }
       ]

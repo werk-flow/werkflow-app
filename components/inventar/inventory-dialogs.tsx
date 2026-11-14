@@ -6,6 +6,7 @@ import { ItemDialog } from './inventory-item-dialog';
 import { LocationDialog } from './inventory-location-dialog';
 import { StockAdjustmentDialog } from './inventory-stock-adjustment-dialog';
 import type { useInventoryEditing } from './use-inventory-editing';
+import { useArticleTerms } from './use-article-terms';
 
 /** The inventory page's item, Lager, stock and import dialogs. */
 export function InventoryDialogs({
@@ -19,6 +20,7 @@ export function InventoryDialogs({
   importDialogOpen: boolean;
   setImportDialogOpen: (open: boolean) => void;
 }) {
+  const articleWrites = useArticleTerms(overview.articleTerms);
   return (
     <>
       <ItemDialog
@@ -29,6 +31,9 @@ export function InventoryDialogs({
         categories={overview.categories}
         suppliers={overview.suppliers}
         locations={overview.locations}
+        savedArticle={overview.items.find((item) => item.id === editing.item.form.id) ?? null}
+        articleTerms={overview.articleTerms}
+        articleWrites={articleWrites}
         isSaving={editing.item.isSaving}
         error={editing.formError}
         onSave={editing.item.save}

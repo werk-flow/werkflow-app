@@ -31,6 +31,7 @@ import type { InventoryLocation, InventoryPickerOption, ProjectMaterialSummary }
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
 import { ProjectDetailChildJobsCard } from './project-detail-child-jobs-card';
 import { ProjectDetailClientCard } from './project-detail-client-card';
+import { WorkBillingPartiesSection } from '../shared/work-billing-parties-loaders';
 import { ProjectDetailDialogs } from './project-detail-dialogs';
 import { ProjectDetailHeader } from './project-detail-header';
 import { ProjectDetailManagerSections } from './project-detail-manager-sections';
@@ -234,6 +235,11 @@ type ProjectDetailSectionProps = {
   state: ProjectDetailState;
 };
 
+/** The office's Auftraggeber and Rechnungsempfänger of the project; its customer card links the customer already. */
+function projectBillingSection(projectId: string, clientId: string | null) {
+  return <WorkBillingPartiesSection kind="project" id={projectId} workClientId={clientId} />;
+}
+
 export function ProjectDetailContent(content: ProjectDetailContentProps) {
   const {
     project,
@@ -294,6 +300,8 @@ export function ProjectDetailContent(content: ProjectDetailContentProps) {
               liveClient={liveClient}
               onAssignClient={isAdminOrManager ? () => dialogState.setShowClientDialog(true) : undefined}
             />
+
+            {isAdminOrManager && projectBillingSection(liveProject.id, liveClient?.id ?? null)}
           </div>
 
           {/* Right Column: Progress + Jobs + Placeholders */}

@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { DialogOpenerId } from '../../../../lib/testing/selection/dialog-inventory';
 import { randomUUID } from 'node:crypto';
-import { seedBookedImportBatch } from '../../../golden/support/db/inventory';
+import { seedArticleWithTerms, seedBookedImportBatch } from '../../../golden/support/db/inventory';
 import {
   createItemButton,
   createLocationButton,
@@ -19,7 +19,7 @@ import {
   materialPlanButton,
   materialPlanLayer,
 } from '../../../golden/support/steps/inventory';
-import { openMenuItem } from '../../../golden/support/steps/shared';
+import { confirmed, openMenuItem } from '../../../golden/support/steps/shared';
 import { seedLeistung } from '../../../golden/support/db/price-catalog';
 import {
   createLeistungButton,
@@ -85,6 +85,56 @@ async function importWithFile(page: Page, file: ReturnType<typeof importFile>): 
   await expect(dialog).toBeVisible();
   await inventoryImportFileInput(dialog).setInputFiles(file);
   return dialog;
+}
+
+function seededArticleName(context: SurfaceContext): string {
+  return worldName('Mehrschichtverbundrohr 16 mm', context.world.runId);
+}
+
+/** One article with two suppliers and a price history, and the catalog narrowed to it. */
+async function prepareSeededArticle(context: SurfaceContext): Promise<void> {
+  const { world, page } = context;
+  const name = seededArticleName(context);
+  await surfaceFixture(world, 'inventory.article-terms', () =>
+    seedArticleWithTerms({ orgId: world.orgId, actorId: world.users.admin.id, name }),
+  );
+  await page.goto(`/inventar?search=${encodeURIComponent(name)}`);
+}
+
+/** The seeded article's „Artikel bearbeiten“, open. */
+async function openSeededArticle(context: SurfaceContext): Promise<Locator> {
+  const { page } = context;
+  await prepareSeededArticle(context);
+  const editItem = await openMenuItem(
+    seededArticleActionsButton(context),
+    inventoryRowActionItem(page, 'edit'),
+  );
+  await editItem.click();
+  const dialog = editItemLayer(page);
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+function seededArticleActionsButton(context: SurfaceContext): Locator {
+  return inventoryRowActionsButton(inventoryItemRow(context.page, seededArticleName(context)));
+}
+
+function editItemLayer(page: Page): Locator {
+  return inventoryDialogLayer(page, 'editItem');
+}
+
+/** The open article dialog on one of its tabs, for the tab's own capture. */
+async function articleTab(context: SurfaceContext, tab: 'Lieferanten' | 'Preise'): Promise<Locator> {
+  const dialog = await openSeededArticle(context);
+  return dialog.getByRole('tab', { name: tab, exact: true });
+}
+
+/** A button of one supplier's row in the article dialog's „Lieferanten“. */
+function supplierRowButton(dialog: Locator, supplier: string, action: 'Bearbeiten' | 'Entfernen'): Locator {
+  return confirmed(dialog.getByRole('listitem').filter({ hasText: supplier })).getByRole('button', {
+    name: action,
+    exact: true,
+  });
 }
 
 /** Each state of the import dialog opens from the step button that leads to it; Escape returns to „CSV importieren“. */
@@ -164,6 +214,45 @@ export const INVENTORY_OPENERS = {
   'inventory.item': {
     trigger: async ({ page }) => createItemButton(page),
     layer: itemCreateLayer,
+  },
+  'inventory.item-edit': {
+    trigger: async (context) => {
+      await prepareSeededArticle(context);
+      return openMenuItem(seededArticleActionsButton(context), inventoryRowActionItem(context.page, 'edit'));
+    },
+    layer: editItemLayer,
+    returnFocus: seededArticleActionsButton,
+  },
+  // The tab triggers open their tab in the open dialog: the captures of „Lieferanten“ and „Preise“.
+  'inventory.item-suppliers': {
+    trigger: (context) => articleTab(context, 'Lieferanten'),
+    layer: editItemLayer,
+    returnFocus: seededArticleActionsButton,
+  },
+  'inventory.item-prices': {
+    trigger: (context) => articleTab(context, 'Preise'),
+    layer: editItemLayer,
+    returnFocus: seededArticleActionsButton,
+  },
+  'inventory.article-supplier': {
+    trigger: async (context) => {
+      const dialog = await openSeededArticle(context);
+      await dialog.getByRole('tab', { name: 'Lieferanten', exact: true }).click();
+      return supplierRowButton(dialog, 'Großhandel Nordrohr', 'Bearbeiten');
+    },
+    layer: (page) => page.getByRole('dialog', { name: 'Lieferant bearbeiten', exact: true }),
+    returnFocus: ({ page }) => supplierRowButton(editItemLayer(page), 'Großhandel Nordrohr', 'Bearbeiten'),
+    parents: (page) => [editItemLayer(page)],
+  },
+  'inventory.article-supplier-remove': {
+    trigger: async (context) => {
+      const dialog = await openSeededArticle(context);
+      await dialog.getByRole('tab', { name: 'Lieferanten', exact: true }).click();
+      return supplierRowButton(dialog, 'Großhandel Südrohr', 'Entfernen');
+    },
+    layer: (page) => page.getByRole('alertdialog', { name: /^Lieferant „.+“ entfernen\?$/ }),
+    returnFocus: ({ page }) => supplierRowButton(editItemLayer(page), 'Großhandel Südrohr', 'Entfernen'),
+    parents: (page) => [editItemLayer(page)],
   },
   'inventory.job-materials': {
     trigger: async ({ page }) => {

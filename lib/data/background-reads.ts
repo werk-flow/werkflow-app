@@ -40,6 +40,8 @@ import { getWeeklyTargets } from '@/lib/personnel/target-actions';
 import { getNextProjectNumber, getProjectDetails } from '@/lib/projects/actions';
 import { getNextRequestNumber } from '@/lib/requests/actions';
 import { getRequestWorkTargets, getWorkRequestEntries } from '@/lib/requests/work-attach-server';
+import { getWorkBillingParties } from '@/lib/billing-parties/server';
+import { BILLING_WORK_KINDS } from '@/lib/billing-parties/types';
 import { WORK_TARGET_KINDS } from '@/lib/requests/types';
 import { getServiceCaseDetailByNumber, getServiceClientOption } from '@/lib/service-cases/actions';
 import { serviceCaseListQuerySchema } from '@/lib/service-cases/list-page';
@@ -243,6 +245,11 @@ export const BACKGROUND_READS = {
   'work-request-entries': defineRead(
     z.object({ organizationId: uuidSchema, kind: z.enum(WORK_TARGET_KINDS), id: uuidSchema }),
     (input) => getWorkRequestEntries({ kind: input.kind, id: input.id }),
+  ),
+  // The Auftraggeber and Rechnungsempfänger of one request, job, project or Servicefall.
+  'work-billing-parties': defineRead(
+    z.object({ organizationId: uuidSchema, kind: z.enum(BILLING_WORK_KINDS), id: uuidSchema }),
+    (input) => getWorkBillingParties({ kind: input.kind, id: input.id }),
   ),
   'service-case-detail': defineRead(
     z.object({ organizationId: uuidSchema, caseNumber: z.string().trim().min(1).max(100) }),

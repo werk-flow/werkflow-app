@@ -246,6 +246,8 @@ function RequestListHost(): React.JSX.Element {
             assigneeName="Erika Musterfrau"
             callbackOverdue={due.callbackOverdue}
             equipment={null}
+            billingParties={{ hasClient: false, versions: [], site: null, accessContacts: [] }}
+            isEditable={false}
           />
         </section>
       )}

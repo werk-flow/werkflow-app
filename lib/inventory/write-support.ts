@@ -62,6 +62,7 @@ const INVENTORY_WRITE_REFUSALS = new Set([
   'supplier_not_found',
   'location_not_found',
   'barcode_taken',
+  'unit_has_pack_sizes',
   'batch_not_found',
   'job_not_found',
   'project_not_found',
