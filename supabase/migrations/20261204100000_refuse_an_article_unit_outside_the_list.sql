@@ -19,8 +19,11 @@
 --    list may be set once to a unit from the list. save_inventory_item still
 --    refuses a change while a supplier sells the article in packs
 --    (unit_has_pack_sizes, migration 20261203150000) before this rule runs.
---    save_inventory_item locks the article before its update, so a take or a
---    material line another session commits meanwhile counts.
+--    The guard locks the article FOR UPDATE before it reads the history: an
+--    update of the unit alone takes a lock that a movement or material line
+--    another session is still writing does not block, so without it that row
+--    would commit beside the new unit. With it the change waits and counts
+--    the committed row.
 -- 4. A unit code is never renamed or removed here, because offer and order
 --    lines keep it; a unit that is no longer wanted is retired in units.ts and
 --    stays in this list. Adding a unit replaces this function. This migration
@@ -45,26 +48,28 @@ begin
   if not (new.unit = any (v_units)) then
     raise exception 'unit_unknown' using errcode = 'check_violation';
   end if;
-  if tg_op = 'UPDATE' and old.unit = any (v_units) and (
-    exists (
+  if tg_op = 'UPDATE' and old.unit = any (v_units) then
+    perform 1 from public.inventory_items item where item.id = old.id for update;
+    if exists (
       select 1 from public.inventory_movements movement
       where movement.item_id = old.id and movement.organization_id = old.organization_id
     )
-    or exists (
-      select 1 from public.inventory_stock_levels stock
-      where stock.item_id = old.id and stock.organization_id = old.organization_id
-        and stock.quantity_on_hand <> 0
-    )
-    or exists (
-      select 1 from public.job_material_lines line
-      where line.item_id = old.id and line.organization_id = old.organization_id
-    )
-    or exists (
-      select 1 from public.job_material_use_events use_event
-      where use_event.item_id = old.id and use_event.organization_id = old.organization_id
-    )
-  ) then
-    raise exception 'unit_in_use' using errcode = 'check_violation';
+      or exists (
+        select 1 from public.inventory_stock_levels stock
+        where stock.item_id = old.id and stock.organization_id = old.organization_id
+          and stock.quantity_on_hand <> 0
+      )
+      or exists (
+        select 1 from public.job_material_lines line
+        where line.item_id = old.id and line.organization_id = old.organization_id
+      )
+      or exists (
+        select 1 from public.job_material_use_events use_event
+        where use_event.item_id = old.id and use_event.organization_id = old.organization_id
+      )
+    then
+      raise exception 'unit_in_use' using errcode = 'check_violation';
+    end if;
   end if;
   return new;
 end;
