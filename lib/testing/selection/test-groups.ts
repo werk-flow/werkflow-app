@@ -313,6 +313,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
   ['security:offline-clock', 'security/offline-clock.spec.ts', ['standalone', 'time']],
+  // No browser request reaches PostHog while a counted workflow step runs (usage statistics).
+  ['security:usage-statistics', 'security/usage-statistics.spec.ts', ['time']],
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
   // The no-signal visit end to end, and the office's refusals of a replay (decision record 0010).
   [
@@ -409,6 +411,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
+  ['maintenance-missed-visits', ['maintenance_missed_visits.sql'], ['service', 'work']],
   [
     'inventory-ledger',
     [
@@ -421,6 +424,8 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'inventory_item_units_concurrency.sql',
       'job_material_use.sql',
       'job_material_use_concurrency.sql',
+      'job_material_retries.sql',
+      'job_material_retries_concurrency.sql',
       'job_material_planning.sql',
       'job_material_planning_concurrency.sql',
     ],

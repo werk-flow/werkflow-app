@@ -5,6 +5,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 
 import {
   MAINTENANCE_COVERAGE_STATUSES,
+  MAINTENANCE_MISSED_VISIT_REASONS,
   MAINTENANCE_NEXT_DUE_BASES,
   MAINTENANCE_SCOPE_OUTCOMES,
 } from './types';
@@ -139,6 +140,20 @@ export const maintenanceExceptionSchema = z.object({
   reason: z.string().trim().min(3).max(1000),
   idempotencyKey: uuidSchema,
 });
+
+/** „Besuch hat nicht stattgefunden“: a reason code, and a note that „Anderer Grund“ requires. */
+export const maintenanceVisitMissedSchema = z
+  .object({
+    dueWorkId: uuidSchema,
+    expectedVersion: z.number().int().positive(),
+    missedReason: z.enum(MAINTENANCE_MISSED_VISIT_REASONS),
+    note: z.string().trim().max(1000),
+    idempotencyKey: uuidSchema,
+  })
+  .refine((value) => value.note.length >= 3 || (value.note.length === 0 && value.missedReason !== 'other'), {
+    path: ['note'],
+    message: 'Bitte beschreibe den Grund mit mindestens 3 Zeichen.',
+  });
 
 export const maintenanceCompletionSchema = z.object({
   dueWorkId: uuidSchema,
