@@ -97,7 +97,6 @@ const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
   'lib/attention/actions.ts::deriveOwnNotifications::vacation_requests': `${ONE_EMPLOYEE}, inside the 60-day notification window`,
   'lib/dispatch/server.ts::loadEmployeeDispatchCards::planning_dispatches':
     'the active dispatches of one job',
-  'lib/documents/access.ts::getAuthorizedDocument::document_links': 'the links of one document',
   'lib/documents/actions.ts::getDocumentDetails::document_versions': 'the versions of one document',
   'lib/jobs/actions.ts::replaceJobAssignmentsAfterAssessment::job_assignments': ONE_JOB,
   'lib/jobs/actions.ts::readJobDetails::job_assignments': ONE_JOB,

@@ -168,29 +168,16 @@ async function readPredecessorChain({
   return chain;
 }
 
-function fail(label: string, error: { code?: string; message: string }): never {
-  logReadFailure(label, { code: error.code ?? 'unknown', message: error.message });
-  throw new Error('installed_equipment_load_failed');
-}
-
-/** Every row of an id-filtered table read, in batches and complete pages; throws on failure. */
-async function readAllByIds<Row>(
+/** The rows of a complete batched read; logs and throws when a batch failed or overflowed. */
+async function fieldRowsOrThrow<Row>(
   label: string,
-  ids: readonly string[],
-  page: (
-    batch: readonly string[],
-    from: number,
-    to: number,
-  ) => PromiseLike<{
-    data: Row[] | null;
-    error: { code?: string; message: string } | null;
-  }>,
+  read: Promise<{ data: Row[]; error: { code?: string; message: string } | null }>,
 ): Promise<Row[]> {
-  if (ids.length === 0) return [];
-  const { data, error } = await readInBatches(ids, (batch) =>
-    readCompleteRows((from, to) => page(batch, from, to), LIST_ROW_CAP),
-  );
-  if (error) fail(label, error);
+  const { data, error } = await read;
+  if (error) {
+    logReadFailure(label, { code: error.code ?? 'unknown', message: error.message });
+    throw new Error('installed_equipment_load_failed');
+  }
   return data;
 }
 
@@ -277,53 +264,65 @@ async function readHistoryKeys(scope: FieldScope, chain: EquipmentRow[]): Promis
   const { admin, organizationId } = scope;
   const chainIds = chain.map((row) => row.id);
   const [revisionLinks, events] = await Promise.all([
-    readAllByIds(
+    fieldRowsOrThrow(
       'readHistoryKeys: maintenance_plan_revision_equipment read failed',
-      chainIds,
-      (batch, from, to) =>
-        admin
-          .from('maintenance_plan_revision_equipment')
-          .select('id, maintenance_plan_revision_id, equipment_id')
-          .eq('organization_id', organizationId)
-          .in('equipment_id', [...batch])
-          .order('id')
-          .range(from, to),
+      readInBatches(chainIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('maintenance_plan_revision_equipment')
+              .select('id, maintenance_plan_revision_id, equipment_id')
+              .eq('organization_id', organizationId)
+              .in('equipment_id', [...batch])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
     ),
-    readAllByIds('readHistoryKeys: installed_equipment_events read failed', chainIds, (batch, from, to) =>
-      admin
-        .from('installed_equipment_events')
-        .select('id, equipment_id, event_type, effective_at, corrects_event_id')
-        .eq('organization_id', organizationId)
-        .in('equipment_id', [...batch])
-        .in('event_type', ['replaced', 'terminal_action_corrected'])
-        .order('id')
-        .range(from, to),
+    fieldRowsOrThrow(
+      'readHistoryKeys: installed_equipment_events read failed',
+      readInBatches(chainIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('installed_equipment_events')
+              .select('id, equipment_id, event_type, effective_at, corrects_event_id')
+              .eq('organization_id', organizationId)
+              .in('equipment_id', [...batch])
+              .in('event_type', ['replaced', 'terminal_action_corrected'])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
     ),
   ]);
   const revisionEquipment = nearestChainEquipment(chain, revisionLinks);
-  const dueWork = await readAllByIds(
+  const dueWork = await fieldRowsOrThrow(
     'readHistoryKeys: maintenance_due_work read failed',
-    [...revisionEquipment.keys()],
-    (batch, from, to) =>
-      admin
-        .from('maintenance_due_work')
-        .select('id, maintenance_plan_revision_id, completed_on, scope_outcome')
-        .eq('organization_id', organizationId)
-        .eq('status', 'completed')
-        .in('maintenance_plan_revision_id', [...batch])
-        .order('id')
-        .range(from, to),
+    readInBatches([...revisionEquipment.keys()], (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('maintenance_due_work')
+            .select('id, maintenance_plan_revision_id, completed_on, scope_outcome')
+            .eq('organization_id', organizationId)
+            .eq('status', 'completed')
+            .in('maintenance_plan_revision_id', [...batch])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
   );
   const keys = historyKeysOf(dueWork, events, revisionEquipment);
-  return keys.toSorted((left, right) => compareCursor(cursorOf(right), cursorOf(left)));
+  // Newest first: the cursor strings start with the ISO day and compare by code point.
+  return keys.toSorted((left, right) => (cursorOf(left) < cursorOf(right) ? 1 : -1));
 }
 
 function cursorOf(entry: { date: string; key: string }): string {
   return `${entry.date}|${entry.key}`;
-}
-
-function compareCursor(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 /** The evidence revisions a technician may read: customer-facing, of an artifact that is not voided. */
@@ -331,30 +330,38 @@ async function readShownRevisionIds(
   { admin, organizationId }: FieldScope,
   revisionIds: string[],
 ): Promise<string[]> {
-  const revisions = await readAllByIds(
+  const revisions = await fieldRowsOrThrow(
     'readVisitEvidence: work_artifact_revisions read failed',
-    revisionIds,
-    (batch, from, to) =>
-      admin
-        .from('work_artifact_revisions')
-        .select('id, artifact_id, visibility')
-        .eq('organization_id', organizationId)
-        .in('id', [...batch])
-        .order('id')
-        .range(from, to),
+    readInBatches(revisionIds, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('work_artifact_revisions')
+            .select('id, artifact_id, visibility')
+            .eq('organization_id', organizationId)
+            .in('id', [...batch])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
   );
-  const artifacts = await readAllByIds(
+  const artifacts = await fieldRowsOrThrow(
     'readVisitEvidence: work_artifacts read failed',
-    [...new Set(revisions.map((revision) => revision.artifact_id))],
-    (batch, from, to) =>
-      admin
-        .from('work_artifacts')
-        .select('id')
-        .eq('organization_id', organizationId)
-        .is('voided_at', null)
-        .in('id', [...batch])
-        .order('id')
-        .range(from, to),
+    readInBatches([...new Set(revisions.map((revision) => revision.artifact_id))], (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('work_artifacts')
+            .select('id')
+            .eq('organization_id', organizationId)
+            .is('voided_at', null)
+            .in('id', [...batch])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
   );
   const liveArtifacts = new Set(artifacts.map((artifact) => artifact.id));
   return revisions
@@ -365,46 +372,58 @@ async function readShownRevisionIds(
 /** The customer-facing defects and measurements of each visit's evidence. */
 async function readVisitEvidence(scope: FieldScope, dueWorkIds: string[]) {
   const { admin, organizationId } = scope;
-  const evidenceLinks = await readAllByIds(
+  const evidenceLinks = await fieldRowsOrThrow(
     'readVisitEvidence: maintenance_due_evidence_links read failed',
-    dueWorkIds,
-    (batch, from, to) =>
-      admin
-        .from('maintenance_due_evidence_links')
-        .select('id, maintenance_due_work_id, work_artifact_revision_id')
-        .eq('organization_id', organizationId)
-        .in('maintenance_due_work_id', [...batch])
-        .order('id')
-        .range(from, to),
+    readInBatches(dueWorkIds, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('maintenance_due_evidence_links')
+            .select('id, maintenance_due_work_id, work_artifact_revision_id')
+            .eq('organization_id', organizationId)
+            .in('maintenance_due_work_id', [...batch])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
   );
   const shownRevisionIds = await readShownRevisionIds(
     scope,
     evidenceLinks.map((link) => link.work_artifact_revision_id),
   );
   const [defects, measurements] = await Promise.all([
-    readAllByIds(
+    fieldRowsOrThrow(
       'readVisitEvidence: work_artifact_defect_details read failed',
-      shownRevisionIds,
-      (batch, from, to) =>
-        admin
-          .from('work_artifact_defect_details')
-          .select('revision_id, description, location, severity, state')
-          .eq('organization_id', organizationId)
-          .in('revision_id', [...batch])
-          .order('revision_id')
-          .range(from, to),
+      readInBatches(shownRevisionIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('work_artifact_defect_details')
+              .select('revision_id, description, location, severity, state')
+              .eq('organization_id', organizationId)
+              .in('revision_id', [...batch])
+              .order('revision_id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
     ),
-    readAllByIds(
+    fieldRowsOrThrow(
       'readVisitEvidence: work_artifact_measurement_lines read failed',
-      shownRevisionIds,
-      (batch, from, to) =>
-        admin
-          .from('work_artifact_measurement_lines')
-          .select('id, revision_id, line_number, description, quantity, unit, location')
-          .eq('organization_id', organizationId)
-          .in('revision_id', [...batch])
-          .order('id')
-          .range(from, to),
+      readInBatches(shownRevisionIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('work_artifact_measurement_lines')
+              .select('id, revision_id, line_number, description, quantity, unit, location')
+              .eq('organization_id', organizationId)
+              .in('revision_id', [...batch])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
     ),
   ]);
   const revisionsOf = (dueWorkId: string) =>
@@ -430,15 +449,22 @@ async function readVisitEvidence(scope: FieldScope, dueWorkIds: string[]) {
 /** The successor of each replaced Anlage of the chain, voided corrections left out. */
 async function readSuccessors(scope: FieldScope, predecessorIds: string[]): Promise<EquipmentRow[]> {
   const { admin, organizationId } = scope;
-  return readAllByIds('readSuccessors: installed_equipment read failed', predecessorIds, (batch, from, to) =>
-    admin
-      .from('installed_equipment')
-      .select(EQUIPMENT_COLUMNS)
-      .eq('organization_id', organizationId)
-      .is('voided_at', null)
-      .in('predecessor_equipment_id', [...batch])
-      .order('id')
-      .range(from, to),
+  return fieldRowsOrThrow(
+    'readSuccessors: installed_equipment read failed',
+    readInBatches(predecessorIds, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('installed_equipment')
+            .select(EQUIPMENT_COLUMNS)
+            .eq('organization_id', organizationId)
+            .is('voided_at', null)
+            .in('predecessor_equipment_id', [...batch])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
   );
 }
 
@@ -459,7 +485,7 @@ export async function getFieldEquipmentHistory(
   try {
     const chain = await readPredecessorChain(scope);
     const keys = await readHistoryKeys(scope, chain);
-    const older = before === null ? keys : keys.filter((key) => compareCursor(cursorOf(key), before) < 0);
+    const older = before === null ? keys : keys.filter((key) => cursorOf(key) < before);
     const pageKeys = older.slice(0, FIELD_HISTORY_PAGE_SIZE);
     const replacedIds = pageKeys.flatMap((key) => (key.kind === 'replacement' ? [key.predecessorId] : []));
     const [evidenceOf, successors] = await Promise.all([
@@ -529,50 +555,72 @@ export async function getFieldEquipmentDocuments(
   if (!documentContext.success) return documentContext;
   const { admin, organizationId, equipment } = authorized.scope;
   try {
-    const equipmentLinks = await readAllByIds(
+    const equipmentLinks = await fieldRowsOrThrow(
       'getFieldEquipmentDocuments: document_links read failed',
-      [equipment.id],
-      (batch, from, to) =>
-        admin
-          .from('document_links')
-          .select('id, document_id')
-          .eq('organization_id', organizationId)
-          .in('equipment_id', [...batch])
-          .order('id')
-          .range(from, to),
+      readInBatches([equipment.id], (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('document_links')
+              .select('id, document_id')
+              .eq('organization_id', organizationId)
+              .in('equipment_id', [...batch])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
     );
     const documentIds = [...new Set(equipmentLinks.map((link) => link.document_id))];
     const [documents, protectedDocuments, allLinks] = await Promise.all([
-      readAllByIds('getFieldEquipmentDocuments: documents read failed', documentIds, (batch, from, to) =>
-        admin
-          .from('documents')
-          .select('*')
-          .eq('organization_id', organizationId)
-          .is('deleted_at', null)
-          .in('id', [...batch])
-          .order('id')
-          .range(from, to),
+      fieldRowsOrThrow(
+        'getFieldEquipmentDocuments: documents read failed',
+        readInBatches(documentIds, (batch) =>
+          readCompleteRows(
+            (from, to) =>
+              admin
+                .from('documents')
+                .select('*')
+                .eq('organization_id', organizationId)
+                .is('deleted_at', null)
+                .in('id', [...batch])
+                .order('id')
+                .range(from, to),
+            LIST_ROW_CAP,
+          ),
+        ),
       ),
-      readAllByIds(
+      fieldRowsOrThrow(
         'getFieldEquipmentDocuments: personnel_documents read failed',
-        documentIds,
-        (batch, from, to) =>
-          admin
-            .from('personnel_documents')
-            .select('id, document_id')
-            .eq('organization_id', organizationId)
-            .in('document_id', [...batch])
-            .order('id')
-            .range(from, to),
+        readInBatches(documentIds, (batch) =>
+          readCompleteRows(
+            (from, to) =>
+              admin
+                .from('personnel_documents')
+                .select('id, document_id')
+                .eq('organization_id', organizationId)
+                .in('document_id', [...batch])
+                .order('id')
+                .range(from, to),
+            LIST_ROW_CAP,
+          ),
+        ),
       ),
-      readAllByIds('getFieldEquipmentDocuments: document_links read failed', documentIds, (batch, from, to) =>
-        admin
-          .from('document_links')
-          .select('id, document_id, request_id, maintenance_coverage_id, employee_id')
-          .eq('organization_id', organizationId)
-          .in('document_id', [...batch])
-          .order('id')
-          .range(from, to),
+      fieldRowsOrThrow(
+        'getFieldEquipmentDocuments: document_links read failed',
+        readInBatches(documentIds, (batch) =>
+          readCompleteRows(
+            (from, to) =>
+              admin
+                .from('document_links')
+                .select('id, document_id, request_id, maintenance_coverage_id, employee_id')
+                .eq('organization_id', organizationId)
+                .in('document_id', [...batch])
+                .order('id')
+                .range(from, to),
+            LIST_ROW_CAP,
+          ),
+        ),
       ),
     ]);
     const protectedIds = new Set(protectedDocuments.map((row) => row.document_id));
