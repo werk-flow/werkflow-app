@@ -6,6 +6,7 @@ import { useState, type ReactElement } from 'react';
 import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { Button } from '@/components/ui/button';
 import { useHydrated } from '@/hooks/use-hydrated';
+import { FieldEquipmentDocuments } from './field-equipment-documents';
 import type { FieldEquipmentRecordDialogProps } from './field-equipment-record-dialog';
 
 const lazyRecordDialog = lazyDialog<FieldEquipmentRecordDialogProps>(() =>
@@ -39,7 +40,13 @@ export function FieldEquipmentRecordButton({
         Verlauf und Dokumente
       </Button>
       {open && (
-        <lazyRecordDialog.Dialog open={open} onOpenChange={setOpen} jobId={jobId} equipment={equipment} />
+        <lazyRecordDialog.Dialog
+          open={open}
+          onOpenChange={setOpen}
+          jobId={jobId}
+          equipment={equipment}
+          documents={<FieldEquipmentDocuments jobId={jobId} equipment={equipment} />}
+        />
       )}
     </>
   );

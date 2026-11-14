@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 
 import {
   DEFECT_SEVERITY_LABELS,
   DEFECT_STATE_LABELS,
 } from '@/components/auftraege/artifacts/work-artifact-content';
-import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
-import { ContextualDocumentsSkeleton } from '@/components/dokumente/contextual-documents-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,7 +21,6 @@ import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { readInBackground } from '@/lib/data/background-read-client';
-import type { OrganizationDocument } from '@/lib/documents/types';
 import type {
   FieldHistoryEntry,
   FieldHistoryEquipment,
@@ -42,12 +39,14 @@ export type FieldEquipmentRecordDialogProps = {
   onOpenChange: (open: boolean) => void;
   jobId: string;
   equipment: { id: string; equipmentNumber: string; name: string };
+  /**
+   * The Anlage's documents (field-equipment-documents.tsx), rendered by the
+   * opener: the work pack already loads the document section, so this chunk
+   * stays free of it and the chunks every route shares keep their grouping.
+   */
+  documents: ReactNode;
 };
 
-type DocumentsState =
-  | { status: 'loading' }
-  | { status: 'failed' }
-  | { status: 'ready'; documents: OrganizationDocument[] };
 type HistoryState =
   | { status: 'loading' }
   | { status: 'failed' }
@@ -59,6 +58,7 @@ export function FieldEquipmentRecordDialog({
   onOpenChange,
   jobId,
   equipment,
+  documents,
 }: FieldEquipmentRecordDialogProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -70,63 +70,11 @@ export function FieldEquipmentRecordDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-6">
-          <EquipmentDocuments open={open} jobId={jobId} equipment={equipment} />
+          {documents}
           <EquipmentHistory open={open} jobId={jobId} equipmentId={equipment.id} />
         </DialogBody>
       </DialogContent>
     </Dialog>
-  );
-}
-
-const DOCUMENTS_DESCRIPTION =
-  'Bedienungsanleitungen und Unterlagen, die das Büro mit dieser Anlage verknüpft hat.';
-
-function EquipmentDocuments({
-  open,
-  jobId,
-  equipment,
-}: Pick<FieldEquipmentRecordDialogProps, 'open' | 'jobId' | 'equipment'>): ReactElement {
-  const [state, setState] = useState<DocumentsState>({ status: 'loading' });
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    if (!open) return;
-    const controller = new AbortController();
-    void readInBackground(
-      'equipment-field-documents',
-      { jobId, equipmentId: equipment.id },
-      controller.signal,
-    ).then((result) => {
-      if (controller.signal.aborted) return;
-      setState(result.success ? { status: 'ready', documents: result.documents } : { status: 'failed' });
-    });
-    return () => controller.abort();
-  }, [jobId, equipment.id, open, attempt]);
-
-  if (state.status === 'loading') {
-    return <ContextualDocumentsSkeleton title="Dokumente" description={DOCUMENTS_DESCRIPTION} />;
-  }
-  if (state.status === 'failed') {
-    return (
-      <SectionError
-        onRetry={() => {
-          setState({ status: 'loading' });
-          setAttempt((count) => count + 1);
-        }}
-      >
-        Die Dokumente dieser Anlage konnten nicht geladen werden.
-      </SectionError>
-    );
-  }
-  return (
-    <ContextualDocumentsSection
-      title="Dokumente"
-      description={DOCUMENTS_DESCRIPTION}
-      documents={state.documents}
-      documentTarget={{ kind: 'equipment', equipmentId: equipment.id }}
-      contextLabel={equipment.equipmentNumber}
-      canUpload={false}
-      canManage={false}
-    />
   );
 }
 
