@@ -312,6 +312,7 @@ test('a statement with CASCADE is opaque, but a foreign key rule is not', () => 
     // A schema named like a foreign key action (CodeRabbit on #482).
     'drop schema delete cascade;',
     'drop table update cascade;',
+    'drop trigger cleanup on delete cascade;',
   ])
     expect(migrationChanges(cascade).opaque, cascade).toHaveLength(1);
   expect(

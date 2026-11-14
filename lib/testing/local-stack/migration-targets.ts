@@ -604,15 +604,17 @@ const cascades = (words: Token[]): boolean =>
   words.some((token, at) => {
     const action = words[at - 1];
     const on = words[at - 2];
-    // Only `ON DELETE CASCADE` and `ON UPDATE CASCADE` are a foreign key rule: a schema or table
-    // may itself be named `delete` or `update` (`DROP SCHEMA delete CASCADE`).
+    // Only `ON DELETE CASCADE` and `ON UPDATE CASCADE` after a `REFERENCES` are a foreign key rule: a
+    // schema or table may itself be named `delete` or `update` (`DROP SCHEMA delete CASCADE`,
+    // `DROP TRIGGER cleanup ON delete CASCADE`).
     const rule =
       action !== undefined &&
       on !== undefined &&
       !action.quoted &&
       !on.quoted &&
       on.text === 'on' &&
-      ['delete', 'update'].includes(action.text);
+      ['delete', 'update'].includes(action.text) &&
+      words.slice(0, at - 2).some((word) => !word.quoted && !word.string && word.text === 'references');
     return !token.quoted && !token.string && token.text === 'cascade' && !rule;
   });
 
