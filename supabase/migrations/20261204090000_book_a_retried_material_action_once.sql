@@ -15,9 +15,11 @@
 -- 3. Calls under one id run in turn on a transaction advisory lock, taken
 --    before any stock or line row lock, so a concurrent retry finds the first
 --    booking instead of booking again. The unique indexes are the backstop.
--- 4. The repeat check comes after the membership check and before the
---    article, Lager, stock and line checks: the first booking changed what
---    those read. The actions still check the job access before each call.
+-- 4. The repeat check comes after the access checks and before the article,
+--    Lager, stock and line checks: the first booking changed what those read.
+--    A repeat of an unplanned take or a use still needs the caller's role or
+--    job assignment, as decision record 0010 asks of every replay; a movement
+--    checks membership, as before.
 --    It compares what the caller sent: the project of a job's booking is the
 --    server's reading of the job, which a move to another project changes, so
 --    it compares the job alone. An unplanned take's note lives on its line;
@@ -317,7 +319,35 @@ begin
     raise exception 'not_authorized';
   end if;
 
-  -- A repeat finds the take before a second line is created.
+  if p_job_id is not null then
+    select job.project_id into v_project_id from public.jobs job
+    where job.id = p_job_id and job.organization_id = p_organization_id
+    for share;
+    if not found then
+      raise exception 'job_not_found';
+    end if;
+    if v_role not in ('admin', 'buero') then
+      perform 1 from public.job_assignments assignment
+      where assignment.organization_id = p_organization_id and assignment.job_id = p_job_id
+        and assignment.user_id = p_actor_id
+      for share;
+      if not found then
+        raise exception 'not_authorized';
+      end if;
+    end if;
+  else
+    perform 1 from public.projects project
+    where project.id = p_project_id and project.organization_id = p_organization_id
+    for share;
+    if not found then
+      raise exception 'project_not_found';
+    end if;
+    if v_role not in ('admin', 'buero') then
+      raise exception 'not_authorized';
+    end if;
+  end if;
+
+  -- A repeat finds the take before a second line is created, after the access checks.
   if p_operation_id is not null then
     perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
       p_organization_id::text || ':material_operation:' || p_operation_id::text, 0
@@ -348,34 +378,6 @@ begin
       where event.organization_id = p_organization_id and event.operation_id = p_operation_id
     ) then
       raise exception 'material_idempotency_conflict';
-    end if;
-  end if;
-
-  if p_job_id is not null then
-    select job.project_id into v_project_id from public.jobs job
-    where job.id = p_job_id and job.organization_id = p_organization_id
-    for share;
-    if not found then
-      raise exception 'job_not_found';
-    end if;
-    if v_role not in ('admin', 'buero') then
-      perform 1 from public.job_assignments assignment
-      where assignment.organization_id = p_organization_id and assignment.job_id = p_job_id
-        and assignment.user_id = p_actor_id
-      for share;
-      if not found then
-        raise exception 'not_authorized';
-      end if;
-    end if;
-  else
-    perform 1 from public.projects project
-    where project.id = p_project_id and project.organization_id = p_organization_id
-    for share;
-    if not found then
-      raise exception 'project_not_found';
-    end if;
-    if v_role not in ('admin', 'buero') then
-      raise exception 'not_authorized';
     end if;
   end if;
 
@@ -473,9 +475,18 @@ begin
         and v_booked.corrects_event_id is not distinct from p_corrects_event_id
         and v_booked.note is not distinct from v_note
       then
-        select line.used_quantity into v_used from public.job_material_lines line
+        -- A repeat rechecks access as a new use does: an employee needs the line's job assignment.
+        select line.* into v_line from public.job_material_lines line
         where line.id = v_booked.job_material_line_id;
-        return v_used;
+        if v_role not in ('admin', 'buero') and not exists (
+          select 1 from public.job_assignments assignment
+          where assignment.organization_id = p_organization_id
+            and assignment.job_id = v_line.job_id
+            and assignment.user_id = p_actor_id
+        ) then
+          raise exception 'not_authorized';
+        end if;
+        return v_line.used_quantity;
       end if;
       raise exception 'material_idempotency_conflict';
     end if;

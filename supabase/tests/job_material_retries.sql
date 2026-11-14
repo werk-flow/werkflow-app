@@ -19,7 +19,10 @@ insert into auth.users (
  '{}'::jsonb, '{"first_name":"Monteur","last_name":"Sonnenberg"}'::jsonb, now(), now()),
 ('3b000000-0000-4000-8000-000000000003', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'material-retry-foreign@example.test', '', now(),
- '{}'::jsonb, '{"first_name":"Fremd","last_name":"Nordrohr"}'::jsonb, now(), now());
+ '{}'::jsonb, '{"first_name":"Fremd","last_name":"Nordrohr"}'::jsonb, now(), now()),
+('3b000000-0000-4000-8000-000000000004', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'material-retry-buero@example.test', '', now(),
+ '{}'::jsonb, '{"first_name":"Büro","last_name":"Sonnenberg"}'::jsonb, now(), now());
 
 insert into public.organizations (id, name, admin_id, unique_code) values
 ('3b000000-0000-4000-8000-000000000010', 'Haustechnik Sonnenberg GmbH',
@@ -28,7 +31,8 @@ insert into public.organizations (id, name, admin_id, unique_code) values
  '3b000000-0000-4000-8000-000000000003', 'MATRETR2');
 
 insert into public.organization_members (organization_id, user_id, role) values
-('3b000000-0000-4000-8000-000000000010', '3b000000-0000-4000-8000-000000000002', 'employee');
+('3b000000-0000-4000-8000-000000000010', '3b000000-0000-4000-8000-000000000002', 'employee'),
+('3b000000-0000-4000-8000-000000000010', '3b000000-0000-4000-8000-000000000004', 'buero');
 
 insert into public.inventory_items (id, organization_id, name, item_type, unit) values
 ('3b000000-0000-4000-8000-000000000020', '3b000000-0000-4000-8000-000000000010',
@@ -297,6 +301,58 @@ begin
   if v_stock is distinct from 2 then
     raise exception 'a booking without an operation id must book every call, got stock %', v_stock;
   end if;
+
+  -- The office takes for the project, for step 8.
+  perform public.take_unplanned_inventory_material(
+    v_org, '3b000000-0000-4000-8000-000000000004', null, v_project, v_pipe, v_location, 1, null, null,
+    '3b000000-0000-4000-8000-0000000000a7'
+  );
+end $$;
+
+-- 8. A repeat rechecks access, as decision record 0010 asks of every replay:
+--    after the worker left the job and the office member became an employee,
+--    their repeats are refused with not_authorized.
+reset role;
+delete from public.job_assignments
+where job_id = '3b000000-0000-4000-8000-000000000050' and user_id = '3b000000-0000-4000-8000-000000000002';
+update public.organization_members set role = 'employee'
+where organization_id = '3b000000-0000-4000-8000-000000000010' and user_id = '3b000000-0000-4000-8000-000000000004';
+set local role service_role;
+
+do $$
+declare
+  v_org constant uuid := '3b000000-0000-4000-8000-000000000010';
+  v_worker constant uuid := '3b000000-0000-4000-8000-000000000002';
+  v_buero constant uuid := '3b000000-0000-4000-8000-000000000004';
+  v_pipe constant uuid := '3b000000-0000-4000-8000-000000000020';
+  v_location constant uuid := '3b000000-0000-4000-8000-000000000030';
+  v_project constant uuid := '3b000000-0000-4000-8000-000000000040';
+  v_job constant uuid := '3b000000-0000-4000-8000-000000000050';
+  v_line constant uuid := '3b000000-0000-4000-8000-000000000060';
+  v_attempt text;
+begin
+  foreach v_attempt in array array['use after leaving the job', 'unplanned take after leaving the job', 'project take after demotion'] loop
+    begin
+      case v_attempt
+        when 'use after leaving the job' then
+          perform public.record_job_material_use(
+            v_org, v_worker, v_line, 6, 'Bad verrohrt', null, '3b000000-0000-4000-8000-0000000000a4');
+        when 'unplanned take after leaving the job' then
+          perform public.take_unplanned_inventory_material(
+            v_org, v_worker, v_job, null, v_pipe, v_location, 2, 'Nachgekauft', 'Nachgekauft',
+            '3b000000-0000-4000-8000-0000000000a5');
+        when 'project take after demotion' then
+          perform public.take_unplanned_inventory_material(
+            v_org, v_buero, null, v_project, v_pipe, v_location, 1, null, null,
+            '3b000000-0000-4000-8000-0000000000a7');
+      end case;
+      raise exception 'no refusal';
+    exception when others then
+      if sqlerrm is distinct from 'not_authorized' then
+        raise exception 'a repeat (%) without access must be refused with not_authorized, got %', v_attempt, sqlerrm;
+      end if;
+    end;
+  end loop;
 end $$;
 
 rollback;
