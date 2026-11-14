@@ -497,6 +497,9 @@ $$;
 
 -- As before, and a replacement's successor hands its running plans and its
 -- components back to the predecessor before it is voided.
+-- It now runs as security invoker: only service_role executes it, and it
+-- reaches the carry helper, which service_role may execute
+-- (docs/technical/security.md, "Add a privileged function").
 create or replace function public.correct_installed_equipment_terminal_action(
   p_organization_id uuid,
   p_equipment_id uuid,
@@ -508,7 +511,7 @@ create or replace function public.correct_installed_equipment_terminal_action(
   p_idempotency_key uuid
 )
 returns public.installed_equipment
-language plpgsql security definer set search_path = ''
+language plpgsql security invoker set search_path = ''
 as $$
 declare
   v_equipment public.installed_equipment%rowtype;
