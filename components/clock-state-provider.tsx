@@ -17,7 +17,7 @@ import { useUserProfile } from '@/components/user/user-profile-context';
 import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
 import type { ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
-import type { ClockMarker } from '@/lib/field-sync/device/shown-clock-rule';
+import type { ClockMarker, ShownClock } from '@/lib/field-sync/device/shown-clock-rule';
 import { useOnline, useShownClock } from '@/lib/field-sync/device/shown-clock';
 import { keptActionsWait } from '@/lib/field-sync/device/unsent-mark';
 import { applyTransitionEcho } from '@/lib/time-tracking/clock-echo';
@@ -338,6 +338,58 @@ function useKeptEcho(kept: boolean, phoneState: LiveClockState | null) {
   return { keptEcho: kept ? keptEcho : null, keepEcho };
 }
 
+/** What the clock shows (shown-clock.ts), from the provider's server view, outbox and kept echo. */
+function useProviderShownClock(
+  view: ReturnType<typeof useClockServerView>,
+  outbox: ClockOutboxState,
+  keptEcho: LiveClockState | null,
+  holder: { userId: string; organizationId: string } | null,
+): { shown: ShownClock; online: boolean } {
+  const online = useOnline();
+  const { readTimes, refresh } = view;
+  const readAgain = useMemo(() => ({ lastStart: readTimes.lastStart, refresh }), [readTimes, refresh]);
+  const shown = useShownClock(
+    {
+      server: view.serverState,
+      serverFrom: view.serverFrom,
+      failedFrom: view.failedFrom,
+      device: outbox.view,
+      deviceFrom: outbox.answeredAt,
+      keptEcho,
+      checkingDevice: outbox.checking,
+      online,
+      scope: holder && `${holder.userId}:${holder.organizationId}`,
+    },
+    readAgain,
+  );
+  return { shown, online };
+}
+
+/**
+ * Whether a clock action may start, and the read failure the dock shows. Unsent actions carry the
+ * clock (`standsOnDevice`); without network a failed read leaves the last confirmed clock usable.
+ */
+function clockReadiness(input: {
+  phoneState: LiveClockState | null;
+  shown: ShownClock;
+  error: string | null;
+  isLoading: boolean;
+  standsOnDevice: boolean;
+}): { isReady: boolean; statusError: string | null } {
+  const { phoneState, shown, error, isLoading, standsOnDevice } = input;
+  return {
+    // While unsent actions settle, no action starts from a clock the server has not answered yet.
+    isReady: phoneState !== null && !isLoading && !shown.settling && (!error || standsOnDevice),
+    // While they settle, only the read that should settle them shows its failure, also without
+    // network: the server's older clock is never shown in its place.
+    statusError: shown.readFailed
+      ? (error ?? 'time_state_unavailable')
+      : standsOnDevice || shown.settling
+        ? null
+        : error,
+  };
+}
+
 export function ClockStateProvider({ children }: { children: ReactNode }) {
   const { activeOrgId } = useOrganization();
   const userId = useUserProfile().profile?.id ?? null;
@@ -356,29 +408,14 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
   const deviceState = unsent?.state ?? serverState;
   const { keptEcho, keepEcho } = useKeptEcho(outbox.kept, deviceState);
   const phoneState = keptEcho ?? deviceState;
-  const online = useOnline();
-  const readAgain = useMemo(() => ({ lastStart: readTimes.lastStart, refresh }), [readTimes, refresh]);
-  const shown = useShownClock(
-    {
-      server: serverState,
-      serverFrom: view.serverFrom,
-      failedFrom: view.failedFrom,
-      device: unsent,
-      deviceFrom: outbox.answeredAt,
-      keptEcho,
-      checkingDevice: outbox.checking,
-      online,
-      scope: outboxHolder && `${outboxHolder.userId}:${outboxHolder.organizationId}`,
-    },
-    readAgain,
-  );
-  // Unsent actions carry the clock; without network a failed read leaves the last confirmed clock usable.
-  const standsOnDevice = Boolean(unsent?.state) || outbox.kept || (Boolean(view.error) && !online);
-  // While unsent actions settle, no action starts from a clock the server has not answered yet.
-  const isReady =
-    phoneState !== null && !view.isLoading && !shown.settling && (!view.error || standsOnDevice);
-  // While unsent actions settle, only the read that settles them may show its failure.
-  const statusError = standsOnDevice || shown.settling ? null : (view.error ?? null);
+  const { shown, online } = useProviderShownClock(view, outbox, keptEcho, outboxHolder);
+  const { isReady, statusError } = clockReadiness({
+    phoneState,
+    shown,
+    error: view.error,
+    isLoading: view.isLoading,
+    standsOnDevice: Boolean(unsent?.state) || outbox.kept || (Boolean(view.error) && !online),
+  });
   const execute = useClockTransitionExecute({
     holder: { activeOrgId, userId },
     isReady,

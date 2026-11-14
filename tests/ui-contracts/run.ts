@@ -299,6 +299,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/data\/background-read-client$/ }, () => ({
               path: join(import.meta.dir, 'background-read-boundaries.ts'),
             }));
+            // The clock's outbox, as a chunk the network can fail to deliver (clock-connection.spec.ts).
+            builder.onResolve({ filter: /^@\/components\/clock-unsent-events$/ }, (args) => {
+              if (args.importer.endsWith('clock-outbox-state.ts'))
+                return { path: join(import.meta.dir, 'clock-outbox-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/components\/realtime\/realtime-provider$/ }, () => ({
               path: join(repository, 'components/realtime/realtime-provider.tsx'),
             }));

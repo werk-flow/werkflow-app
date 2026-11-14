@@ -47,6 +47,8 @@ export type ShownClock = {
   marker: ClockMarker;
   /** Unsent actions settled, and the server's answer to them has not come yet: no action may start from the shown state. */
   settling: boolean;
+  /** The read that should settle them failed with network: the failure shows until a read succeeds. */
+  readFailed: boolean;
 };
 
 /** The last shown clock and what it waits for. */
@@ -62,7 +64,7 @@ export type ShownMemory = {
 /** Nothing shown yet: the memory a page starts with. */
 export const NOTHING_SHOWN: ShownMemory = {
   scope: null,
-  shown: { state: null, device: null, marker: null, settling: false },
+  shown: { state: null, device: null, marker: null, settling: false, readFailed: false },
   local: false,
   settledAt: null,
 };
@@ -72,14 +74,16 @@ function sameShown(left: ShownClock, right: ShownClock): boolean {
     left.state === right.state &&
     left.device === right.device &&
     left.marker === right.marker &&
-    left.settling === right.settling
+    left.settling === right.settling &&
+    left.readFailed === right.readFailed
   );
 }
 
 /**
  * The next shown clock. The phone's pending actions apply at once. When they settle (sent, or
  * stopped by the server), the shown clock stays until a clock read that started after that moment
- * answers, or fails; then the server's state and a stopped chain show together. Returns `memory`
+ * answers; then the server's state and a stopped chain show together. A read that fails meanwhile
+ * shows its failure beside the chain and never promotes the server's older clock. Returns `memory`
  * itself when nothing changed.
  */
 export function advanceShownClock(held: ShownMemory, facts: ClockFacts): ShownMemory {
@@ -88,12 +92,21 @@ export function advanceShownClock(held: ShownMemory, facts: ClockFacts): ShownMe
   const memory = held.scope === scope ? held : { ...NOTHING_SHOWN, scope };
   const local = device?.status === 'pending' || keptEcho !== null;
   let settledAt = local ? null : memory.local ? facts.deviceFrom : memory.settledAt;
-  if (settledAt !== null && Math.max(facts.serverFrom, facts.failedFrom) >= settledAt) settledAt = null;
+  if (settledAt !== null && facts.serverFrom >= settledAt) settledAt = null;
+  const readFailed = settledAt !== null && facts.failedFrom >= settledAt;
   const pending = online ? 'sending' : 'waiting';
   let shown: ShownClock;
   // This page's newest kept tap stands on the outbox's events, so it wins until the outbox shows it.
-  if (local) shown = { state: keptEcho ?? device?.state ?? server, device, marker: pending, settling: false };
-  else if (settledAt !== null) shown = { ...memory.shown, marker: pending, settling: true };
+  if (local)
+    shown = {
+      state: keptEcho ?? device?.state ?? server,
+      device,
+      marker: pending,
+      settling: false,
+      readFailed: false,
+    };
+  else if (readFailed) shown = { ...memory.shown, device, marker: null, settling: true, readFailed };
+  else if (settledAt !== null) shown = { ...memory.shown, marker: pending, settling: true, readFailed };
   else if (facts.checkingDevice) shown = NOTHING_SHOWN.shown;
   // A stopped chain shows the server's clock beside its own badge.
   else
@@ -102,6 +115,7 @@ export function advanceShownClock(held: ShownMemory, facts: ClockFacts): ShownMe
       device,
       marker: online || device || !server ? null : 'offline',
       settling: false,
+      readFailed: false,
     };
   if (
     memory === held &&

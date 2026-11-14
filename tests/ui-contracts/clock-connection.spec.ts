@@ -206,3 +206,38 @@ test('a catch-up read that failed while the kept clock-in waited never shows its
 
   expect(await screens(page)).toEqual([...KEPT_START, 'Arbeit · Wird übertragen', 'Arbeit']);
 });
+
+test('a clock read that fails after the send keeps the clock-in apart from the server’s older clock, also when the signal goes again', async ({
+  page,
+}) => {
+  const { server, release } = await keptStartBackOnline(page);
+
+  server.state = RECORDED_START;
+  server.stateFails = true;
+  release();
+  await expect(clockDock(page).getByText('Der Zeitstatus konnte nicht sicher geladen werden.')).toBeVisible();
+  await setConnection(page, server, false);
+  await expect(page.getByLabel('Zeitstatus')).toHaveText('Nicht bereit');
+
+  server.stateFails = false;
+  await setConnection(page, server, true);
+  await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'in');
+
+  expect(await screens(page)).toEqual([...KEPT_START, 'Arbeit · Wird übertragen', 'Fehler', 'Arbeit']);
+});
+
+test('a start whose outbox code cannot load shows no clock instead of the server’s clock from before the waiting work', async ({
+  page,
+}) => {
+  await mountClock(page, CLOCKED_OUT_STATE, () => {
+    // An earlier visit left a start on the phone, and the outbox's code does not arrive.
+    localStorage.setItem('werkflow:unsent:time', '1');
+    window.contractOutboxGone = true;
+  });
+  await recordScreens(page);
+  await page.getByRole('button', { name: 'Zeitstatus aktualisieren', exact: true }).click();
+  await expect(clockStatus(page)).toHaveText('');
+  await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'loading');
+
+  expect(await screens(page)).toEqual(['leer']);
+});

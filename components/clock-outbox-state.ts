@@ -94,11 +94,13 @@ function useKeepers(
   return { keep, callKept };
 }
 
-/** Marks the page's first look at the device as open until it answered, failed or found no signal. */
-async function watchCheck(check: Promise<void>, setChecking: (checking: boolean) => void): Promise<void> {
+/** Marks the page's first look at the device as open; only the outbox's answer or a failed device storage ends it. */
+async function watchCheck(
+  check: () => Promise<void>,
+  setChecking: (checking: boolean) => void,
+): Promise<void> {
   setChecking(true);
-  await check;
-  setChecking(false);
+  await check();
 }
 
 export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void>): ClockOutboxState {
@@ -124,6 +126,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
       uncheckedRef.current = holdEnded;
       setAnswer({ view: next, at: performance.now() });
       setKept(false);
+      setChecking(false);
     };
     /** Hands kept actions to the outbox; without signal they stay kept until the next `online`. */
     const attach = async (): Promise<void> => {
@@ -142,6 +145,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
         // The device storage failed (the outbox logged it): never mistaken for no signal, so actions go online.
         uncheckedRef.current = false;
         setDeviceFailed(true);
+        setChecking(false);
       }
     };
     const attachNow = (): void => void attach();
@@ -150,7 +154,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
     // Until the outbox shows what waits, a new action goes behind it, never past it to the server.
     uncheckedRef.current = deviceMayHoldUnsentWork();
     // The clock shows nothing it is not sure of until this first look answered (shown-clock.ts).
-    if (uncheckedRef.current) void watchCheck(attach(), setChecking);
+    if (uncheckedRef.current) void watchCheck(attach, setChecking);
     // Every return of the network asks the outbox: another tab may have sent what this page kept.
     window.addEventListener('online', attachNow);
     // Another tab kept an action: until the outbox shows it, a tap here waits behind it.
@@ -170,6 +174,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
       // The next person or organization never sees these events.
       setAnswer({ view: null, at: performance.now() });
       setKept(false);
+      setChecking(false);
       setDeviceFailed(false);
     };
   }, [holder, refresh]);

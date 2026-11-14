@@ -137,16 +137,19 @@ describe('the shown clock', () => {
     ).toEqual(['eingestempelt · sending', 'nicht eingestempelt · conflict']);
   });
 
-  test('a read that fails with network after the send shows the failure’s ground; one without network is no answer', () => {
+  test('a read that fails after the send keeps the held clock beside the failure, with or without network', () => {
     const settled = { ...SETTLED, device: STOPPED_START, deviceFrom: 40 };
-    expect(
-      screens([
-        { ...SETTLED, device: PENDING_START, deviceFrom: 30 },
-        // Without network a failed read is never reported (clock-state-provider.tsx).
-        { ...settled, online: false },
-        { ...settled, failedFrom: 42 },
-      ]),
-    ).toEqual(['eingestempelt · sending', 'eingestempelt · waiting', 'nicht eingestempelt · conflict']);
+    let memory = advanceShownClock(NOTHING_SHOWN, { ...SETTLED, device: PENDING_START, deviceFrom: 30 });
+    memory = advanceShownClock(memory, { ...settled, failedFrom: 42 });
+    expect(seen(memory)).toBe('eingestempelt · conflict');
+    expect(memory.shown).toMatchObject({ settling: true, readFailed: true });
+    // The signal goes again: the server's older clock never takes the held clock's place.
+    memory = advanceShownClock(memory, { ...settled, failedFrom: 42, online: false });
+    expect(seen(memory)).toBe('eingestempelt · conflict');
+    expect(memory.shown.readFailed).toBe(true);
+    memory = advanceShownClock(memory, { ...settled, failedFrom: 42, serverFrom: 50 });
+    expect(seen(memory)).toBe('nicht eingestempelt · conflict');
+    expect(memory.shown).toMatchObject({ settling: false, readFailed: false });
   });
 
   test('the network’s return alone ends no wait: only an answer after it does', () => {
