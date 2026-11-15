@@ -48,7 +48,8 @@ function loaded(kind: SearchGroup['kind'], source: SearchSource, title: string, 
 
 /**
  * „Lindenhof“ answers customers and fails the documents; the documents'
- * retry answers. „Störung“ fails the whole search. Anything else finds nothing.
+ * retry answers. „Leer“ fails the documents, whose retry finds nothing. „Störung“
+ * fails the whole search. Anything else finds nothing.
  */
 export function readGlobalSearchContract(input: unknown): GlobalSearchResult {
   const query = input && typeof input === 'object' && 'query' in input ? String(input.query) : '';
@@ -58,6 +59,30 @@ export function readGlobalSearchContract(input: unknown): GlobalSearchResult {
       : null;
   window.uiContractSearchReads.push({ query, sources });
   if (query === 'Störung') return { success: false, error: 'load_failed' };
+  if (query === 'Leer')
+    return sources?.includes('dokumente')
+      ? {
+          success: true,
+          query,
+          groups: [
+            {
+              kind: 'dokumente',
+              source: 'dokumente',
+              status: 'loaded',
+              hits: [],
+              total: 0,
+              moreHref: '/dokumente',
+            },
+          ],
+        }
+      : {
+          success: true,
+          query,
+          groups: [
+            { kind: 'kunden', source: 'kunden', status: 'loaded', hits: [], total: 0, moreHref: '/kunden' },
+            { kind: 'dokumente', source: 'dokumente', status: 'failed' },
+          ],
+        };
   if (query !== 'Lindenhof') return { success: true, query, groups: [] };
   if (sources?.includes('dokumente'))
     return {

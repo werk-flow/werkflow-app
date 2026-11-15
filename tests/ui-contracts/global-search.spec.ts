@@ -44,3 +44,12 @@ test('a search without a hit says so', async ({ page }) => {
   await expect(dialog.getByText('Keine Treffer gefunden')).toBeVisible();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
 });
+
+test('a retried kind without a hit leaves „Keine Treffer“ when nothing else matched', async ({ page }) => {
+  const dialog = page.getByRole('dialog', { name: 'Suchen', exact: true });
+  await dialog.getByRole('textbox', { name: 'Suchbegriff', exact: true }).fill('Leer');
+  const failure = dialog.getByRole('alert').filter({ hasText: 'Dokumente' });
+  await failure.getByRole('button', { name: 'Erneut laden', exact: true }).click();
+  await expect(dialog.getByText('Keine Treffer gefunden')).toBeVisible();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+});

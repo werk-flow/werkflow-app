@@ -23,7 +23,6 @@ import { readInBackground } from '@/lib/data/background-read-client';
 import {
   GLOBAL_SEARCH_MIN_LENGTH,
   SEARCH_GROUP_LABELS,
-  SEARCH_SOURCE_GROUPS,
   type SearchGroup,
   type SearchSource,
 } from '@/lib/search/global-search';
@@ -79,48 +78,10 @@ function ResultGroup({ group, onNavigate }: { group: LoadedGroup; onNavigate: ()
 }
 
 /**
- * The groups of one source that failed. Its retry reads that source alone for
- * the same query; the other groups stay as they are.
+ * The groups of one settled query. A failed source shows its failure per kind;
+ * its retry reads the failed sources alone for the same query, and the
+ * answer replaces their groups here, so the empty state counts it too.
  */
-function FailedSource({
-  source,
-  query,
-  organizationId,
-  onNavigate,
-}: {
-  source: SearchSource;
-  query: string;
-  organizationId: string;
-  onNavigate: () => void;
-}) {
-  const [retrying, setRetrying] = useState(false);
-  const retry = useClientRead({
-    read: (signal) => readInBackground('global-search', { organizationId, query, sources: [source] }, signal),
-    deps: [organizationId, query, source],
-    enabled: retrying,
-    failureMessage: SEARCH_FAILED,
-  });
-  const groups = retry.data?.groups;
-  if (groups?.every((group) => group.status === 'loaded'))
-    return (
-      <ResultGroups groups={groups} query={query} organizationId={organizationId} onNavigate={onNavigate} />
-    );
-  return (
-    <>
-      {SEARCH_SOURCE_GROUPS[source].map((kind) => (
-        <SectionError
-          key={kind}
-          title={SEARCH_GROUP_LABELS[kind]}
-          onRetry={retrying ? retry.reload : () => setRetrying(true)}
-          retryPending={retrying && retry.loading}
-        >
-          {SEARCH_FAILED}
-        </SectionError>
-      ))}
-    </>
-  );
-}
-
 function ResultGroups({
   groups,
   query,
@@ -132,25 +93,43 @@ function ResultGroups({
   organizationId: string;
   onNavigate: () => void;
 }) {
-  const failedSources = [
-    ...new Set(groups.flatMap((group) => (group.status === 'failed' ? [group.source] : []))),
-  ];
+  const [retrying, setRetrying] = useState<SearchSource[]>([]);
+  const retry = useClientRead({
+    read: (signal) => readInBackground('global-search', { organizationId, query, sources: retrying }, signal),
+    deps: [organizationId, query, retrying.join(',')],
+    enabled: retrying.length > 0,
+    failureMessage: SEARCH_FAILED,
+    keepPreviousData: true,
+  });
+  const shown = groups.map(
+    (group) => retry.data?.groups.find((answered) => answered.kind === group.kind) ?? group,
+  );
+  if (shown.every((group) => group.status === 'loaded' && group.hits.length === 0))
+    return (
+      <EmptyState
+        icon={SearchX}
+        title="Keine Treffer gefunden"
+        description="Prüfe die Schreibweise oder suche nach einer Nummer, Telefonnummer oder Straße."
+      />
+    );
+  const retryOf = (source: SearchSource) => () =>
+    retrying.includes(source) ? retry.reload() : setRetrying((current) => [...current, source]);
   return (
     <>
-      {groups.map((group) =>
-        group.status === 'loaded' && group.hits.length > 0 ? (
+      {shown.map((group) =>
+        group.status === 'failed' ? (
+          <SectionError
+            key={group.kind}
+            title={SEARCH_GROUP_LABELS[group.kind]}
+            onRetry={retryOf(group.source)}
+            retryPending={retrying.includes(group.source) && retry.loading}
+          >
+            {SEARCH_FAILED}
+          </SectionError>
+        ) : group.hits.length > 0 ? (
           <ResultGroup key={group.kind} group={group} onNavigate={onNavigate} />
         ) : null,
       )}
-      {failedSources.map((source) => (
-        <FailedSource
-          key={`${query}:${source}`}
-          source={source}
-          query={query}
-          organizationId={organizationId}
-          onNavigate={onNavigate}
-        />
-      ))}
     </>
   );
 }
@@ -195,8 +174,6 @@ function GlobalSearchPanel({ onNavigate }: { onNavigate: () => void }) {
   });
   const fieldWorker = activeOrg?.role === 'employee';
   const result = searchable ? read.data : undefined;
-  const nothingFound =
-    result?.groups.every((group) => group.status === 'loaded' && group.hits.length === 0) ?? false;
 
   return (
     <>
@@ -223,12 +200,6 @@ function GlobalSearchPanel({ onNavigate }: { onNavigate: () => void }) {
           <SectionError failure={read.failure} />
         ) : !result ? (
           <ResultsSkeleton />
-        ) : nothingFound ? (
-          <EmptyState
-            icon={SearchX}
-            title="Keine Treffer gefunden"
-            description="Prüfe die Schreibweise oder suche nach einer Nummer, Telefonnummer oder Straße."
-          />
         ) : (
           <ResultGroups
             key={result.query}
@@ -248,6 +219,9 @@ function GlobalSearchPanel({ onNavigate }: { onNavigate: () => void }) {
  * its own page. Full screen on a phone. Closing drops the query.
  */
 export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogProps) {
+  // The shell's dialog sits outside the page's organization scope: a switch
+  // starts the panel afresh, so no hit of the previous organization stays.
+  const { activeOrgId } = useOrganization();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -261,7 +235,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
             Die Treffer erscheinen nach Art gruppiert; ein Treffer öffnet seine Seite.
           </DialogDescription>
         </DialogHeader>
-        <GlobalSearchPanel onNavigate={() => onOpenChange(false)} />
+        <GlobalSearchPanel key={activeOrgId} onNavigate={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );
