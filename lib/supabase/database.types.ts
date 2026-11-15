@@ -12627,8 +12627,8 @@ export type Database = {
           holds_subscription: boolean;
           linked_at: string | null;
           organization_id: string;
+          read_at_by_subscription: Json;
           reserved_by: string | null;
-          state_read_at: string | null;
           status: string | null;
           stripe_customer_id: string;
           stripe_subscription_id: string | null;
@@ -12647,8 +12647,8 @@ export type Database = {
           holds_subscription?: boolean;
           linked_at?: string | null;
           organization_id: string;
+          read_at_by_subscription?: Json;
           reserved_by?: string | null;
-          state_read_at?: string | null;
           status?: string | null;
           stripe_customer_id: string;
           stripe_subscription_id?: string | null;
@@ -12667,8 +12667,8 @@ export type Database = {
           holds_subscription?: boolean;
           linked_at?: string | null;
           organization_id?: string;
+          read_at_by_subscription?: Json;
           reserved_by?: string | null;
-          state_read_at?: string | null;
           status?: string | null;
           stripe_customer_id?: string;
           stripe_subscription_id?: string | null;

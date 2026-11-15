@@ -5,9 +5,9 @@
 -- reservation; an organization has one payable Checkout, which every start
 -- answers while it stays open, and only one start at a time creates the next;
 -- a signal of another customer, or a second subscription while the first
--- holds, is refused; an older read of a subscription never overwrites a newer
--- one, and a holding replacement beats an ended predecessor whatever the read
--- times; a failed payment never ends the subscription; and only the payer creates
+-- holds, is refused; a read no newer than its own subscription's last read
+-- changes nothing, also of a subscription the row does not follow, and a
+-- holding replacement beats an ended predecessor whatever the read times; a failed payment never ends the subscription; and only the payer creates
 -- the reserved organization, with the reserved id, once, while the
 -- subscription holds.
 -- Runs inside one transaction against the local stack and rolls back.
@@ -292,6 +292,24 @@ begin
       '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg')) is distinct from 'subscribed'
   then
     raise exception 'a start while the subscription holds was not answered subscribed';
+  end if;
+
+  -- Each subscription keeps its own read time: once sub_test_4 ended, the
+  -- cancellation of sub_test_5 arrives before its own earlier active read,
+  -- and that stale read never makes the organization look subscribed.
+  perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
+    'sub_test_4', 'canceled', false, '2037-01-01T10:00:40Z', 'cancellation_requested');
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_5', 'canceled', false, '2037-01-01T10:00:50Z', 'cancellation_requested');
+  if v_answer is distinct from 'ignored' then
+    raise exception 'an ended subscription the row does not follow was recorded';
+  end if;
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_5', 'active', false, '2037-01-01T10:00:45Z');
+  if v_answer is distinct from 'ignored' or (select holds_subscription from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000010')
+  then
+    raise exception 'a stale active read brought back a cancelled subscription';
   end if;
 
   -- A reservation stores its customer.

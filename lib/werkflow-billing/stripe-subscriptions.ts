@@ -117,15 +117,17 @@ function subscriptionSnapshotOf(
 async function cancelDuplicate(client: Stripe, subscriptionId: string): Promise<void> {
   const subscription = await client.subscriptions.retrieve(subscriptionId);
   const invoiceId = expandableId(subscription.latest_invoice);
-  const payments = invoiceId
-    ? (await client.invoicePayments.list({ invoice: invoiceId, limit: 10 })).data
-    : [];
-  for (const payment of payments) {
+  // Every page of both lists: a payment left out would stay unrefunded once the subscription is cancelled.
+  for await (const payment of invoiceId
+    ? client.invoicePayments.list({ invoice: invoiceId, limit: 100 })
+    : []) {
     const intentId = expandableId(payment.payment.payment_intent ?? null);
     if (!intentId || payment.status === 'canceled') continue;
-    const refunds = await client.refunds.list({ payment_intent: intentId, limit: 10 });
-    if (refunds.data.some((refund) => refund.status !== 'failed' && refund.status !== 'canceled')) continue;
-    await client.refunds.create({ payment_intent: intentId });
+    let refunded = false;
+    for await (const refund of client.refunds.list({ payment_intent: intentId, limit: 100 })) {
+      if (refund.status !== 'failed' && refund.status !== 'canceled') refunded = true;
+    }
+    if (!refunded) await client.refunds.create({ payment_intent: intentId });
   }
   if (subscription.status !== 'canceled') {
     await client.subscriptions.cancel(subscriptionId, { prorate: false, invoice_now: false });
@@ -136,16 +138,14 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
   return {
     createCustomer: ({ organizationId, email, name }) =>
       call(async () => {
-        const customer = await client.customers.create(
-          {
-            metadata: { [ORGANIZATION_METADATA_KEY]: organizationId },
-            preferred_locales: ['de'],
-            ...(email ? { email } : {}),
-            ...(name ? { name } : {}),
-          },
-          // A retry after a lost answer gets the same customer.
-          { idempotencyKey: `werkflow-customer-${organizationId}` },
-        );
+        // No idempotency key of our own: Stripe would replay a failure for a day. A customer
+        // whose answer was lost stays unused, because begin_werkflow_checkout keeps the first stored one.
+        const customer = await client.customers.create({
+          metadata: { [ORGANIZATION_METADATA_KEY]: organizationId },
+          preferred_locales: ['de'],
+          ...(email ? { email } : {}),
+          ...(name ? { name } : {}),
+        });
         return customer.id;
       }),
     createCheckoutSession: (request) =>
