@@ -36,6 +36,8 @@ type StripeCheckoutRequest = {
   priceId: string;
   successUrl: string;
   cancelUrl: string;
+  /** closeOpenCheckouts' answer: calls that saw the same Checkouts get one session. */
+  attempt: string;
 };
 
 export type StripeSubscriptionGateway = {
@@ -46,10 +48,12 @@ export type StripeSubscriptionGateway = {
     name: string | null;
   }): Promise<string>;
   /**
-   * A Checkout for the monthly subscription by SEPA direct debit or card;
-   * answers its URL. The customer's open Checkouts expire first, so only one
-   * can be paid, and parallel calls get the same session.
+   * Expires every open Checkout of the customer, so none can be paid any
+   * more; a Checkout paid meanwhile refuses to expire and the call fails.
+   * Answers a token naming the Checkouts it saw.
    */
+  closeOpenCheckouts(customerId: string): Promise<string>;
+  /** A Checkout for the monthly subscription by SEPA direct debit or card; answers its URL. */
   createCheckoutSession(input: StripeCheckoutRequest): Promise<string>;
   /** The subscription a completed Checkout started; null for another mode or an open Checkout. */
   readCheckoutSubscriptionId(sessionId: string): Promise<string | null>;
@@ -112,21 +116,20 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
         );
         return customer.id;
       }),
-    createCheckoutSession: (request) =>
+    closeOpenCheckouts: (customerId) =>
       call(async () => {
-        // Two paid Checkouts would start two subscriptions: every open one
-        // expires first. A Checkout paid meanwhile refuses to expire, so the
-        // call fails and the next one re-reads the subscription.
-        const earlier = await client.checkout.sessions.list({ customer: request.customerId, limit: 100 });
+        const earlier = await client.checkout.sessions.list({ customer: customerId, limit: 100 });
         for (const session of earlier.data) {
           if (session.status === 'open') await client.checkout.sessions.expire(session.id);
         }
-        // Calls that saw the same Checkouts get one new session, not one each.
         const seen = earlier.data
           .map((session) => session.id)
           .sort()
           .join(',');
-        const attempt = createHash('sha256').update(seen).digest('hex').slice(0, 32);
+        return createHash('sha256').update(seen).digest('hex').slice(0, 32);
+      }),
+    createCheckoutSession: (request) =>
+      call(async () => {
         const metadata = { [ORGANIZATION_METADATA_KEY]: request.organizationId };
         const session = await client.checkout.sessions.create(
           {
@@ -145,7 +148,7 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
             success_url: request.successUrl,
             cancel_url: request.cancelUrl,
           },
-          { idempotencyKey: `werkflow-checkout-${request.organizationId}-${attempt}` },
+          { idempotencyKey: `werkflow-checkout-${request.organizationId}-${request.attempt}` },
         );
         if (!session.url) throw callFailed();
         return session.url;

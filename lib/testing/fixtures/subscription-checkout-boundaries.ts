@@ -165,14 +165,18 @@ assert.deepEqual(stripe.checkoutRequests[0], {
   priceId: 'price_test_monthly',
   successUrl: 'https://app.example.test/dashboard',
   cancelUrl: 'https://app.example.test/upgrade',
+  attempt: '',
 });
 assert.equal(subscriptionRows()[0]?.linked_at !== null, true);
 
-// A second Checkout reuses the customer; a Checkout that completed before its
-// signal is re-read and recorded, and no third Checkout opens.
+// A second Checkout reuses the customer and leaves the first one unpayable.
+// The Admin then pays the second one in another tab before its signal: the
+// next start expires nothing paid, re-reads the subscription, and opens no
+// third Checkout.
 assert.ok((await startSubscriptionCheckout(ORGANIZATION_A)).success);
 assert.equal(stripe.customers.size, 1);
 assert.deepEqual(stripe.expiredCheckouts, ['cs_test_1'], 'a second Checkout left the first one payable');
+stripe.checkoutSessions.set('cs_test_2', 'sub_test_1');
 stripe.subscriptions.set('sub_test_1', {
   id: 'sub_test_1',
   customerId: 'cus_test_1',
@@ -188,6 +192,7 @@ assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
 });
 assert.equal(subscriptionRows()[0]?.stripe_subscription_id, 'sub_test_1');
 assert.equal(stripe.checkoutRequests.length, 2);
+assert.deepEqual(stripe.expiredCheckouts, ['cs_test_1'], 'a paid Checkout was expired');
 
 // --- Before any organization: the Checkout reserves the organization's id. ---
 

@@ -55,14 +55,20 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
         billing.customers.set(id, input);
         return id;
       }),
+    closeOpenCheckouts: (customerId) =>
+      reach(() => {
+        const seen: string[] = [];
+        billing.checkoutRequests.forEach((earlier, index) => {
+          if (earlier.customerId !== customerId) return;
+          const id = `cs_test_${index + 1}`;
+          seen.push(id);
+          const open = billing.checkoutSessions.get(id) === null && !billing.expiredCheckouts.includes(id);
+          if (open) billing.expiredCheckouts.push(id);
+        });
+        return seen.join(',');
+      }),
     createCheckoutSession: (request) =>
       reach(() => {
-        // Every open Checkout of the customer expires first.
-        billing.checkoutRequests.forEach((earlier, index) => {
-          const id = `cs_test_${index + 1}`;
-          const open = billing.checkoutSessions.get(id) === null && !billing.expiredCheckouts.includes(id);
-          if (earlier.customerId === request.customerId && open) billing.expiredCheckouts.push(id);
-        });
         billing.checkoutRequests.push(request);
         const id = `cs_test_${billing.checkoutRequests.length}`;
         billing.checkoutSessions.set(id, null);
