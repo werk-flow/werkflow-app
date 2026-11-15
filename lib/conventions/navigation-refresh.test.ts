@@ -51,9 +51,15 @@ const leaves = (node: ts.Node): boolean => ts.isReturnStatement(node);
 /**
  * Whether the function leaves on the navigation's path before the end of
  * `statement`: the navigation sits in a `return`, or a `return` follows it in
- * its own statement list or an enclosing one.
+ * its own statement list or an enclosing one, and no `try` encloses it.
  */
 function leavesAfter(navigation: ts.Node, statement: ts.Statement): boolean {
+  // Inside a `try`, a `finally` can cancel the `return` and a `catch` can go on
+  // to the refresh, so no `return` there ends the path.
+  for (let node: ts.Node = navigation; ; node = node.parent) {
+    if (ts.isTryStatement(node)) return false;
+    if (node === statement) break;
+  }
   for (let node = navigation; node !== statement; node = node.parent) {
     if (leaves(node)) return true;
     const { parent } = node;
@@ -199,7 +205,22 @@ test('the check passes a refresh after a branch that navigates and returns, and 
     '    }',
     '    router.refresh();',
     '  };',
-    '  return { onReturned, onReturnedInline, onThrown, onStayed, onNested, onCaught };',
+    '  const onFinally = (parent: string | null) => {',
+    '    if (parent) {',
+    '      try {',
+    '        try {',
+    '          router.push(parent);',
+    '          return;',
+    '        } finally {',
+    "          throw new Error('fehlgeschlagen');",
+    '        }',
+    '      } catch {',
+    '        // weiter',
+    '      }',
+    '    }',
+    '    router.refresh();',
+    '  };',
+    '  return { onReturned, onReturnedInline, onThrown, onStayed, onNested, onCaught, onFinally };',
     '}',
   ].join('\n');
   expect(findNavigationRefreshes(new Map([['hooks/use-leave.ts', source]]))).toEqual([
@@ -207,6 +228,7 @@ test('the check passes a refresh after a branch that navigates and returns, and 
     { file: 'hooks/use-leave.ts', line: 26 },
     { file: 'hooks/use-leave.ts', line: 33 },
     { file: 'hooks/use-leave.ts', line: 44 },
+    { file: 'hooks/use-leave.ts', line: 59 },
   ]);
 });
 
