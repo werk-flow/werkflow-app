@@ -28,6 +28,13 @@ const signalLedgerFieldsSchema = z.object({
   created: z.number().int().positive(),
 });
 
+// The two database answers, parsed once before use (the Supabase boundary).
+const claimSchema = z.discriminatedUnion('result', [
+  z.object({ result: z.literal('claimed'), attempt: z.number().int().positive() }),
+  z.object({ result: z.enum(['settled', 'busy']), attempt: z.number().int().nonnegative() }),
+]);
+const settledSchema = z.boolean();
+
 const FAILURE_CODE = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 /** A thrown error's own stable code, or a generic one; never its message. */
@@ -56,7 +63,12 @@ async function settleSignal(
     logError('receiveSignal: settle_werkflow_billing_signal failed', error);
     return 'unavailable';
   }
-  if (settled) return 'settled';
+  const parsed = settledSchema.safeParse(settled);
+  if (!parsed.success) {
+    logError('receiveSignal: unexpected settle result', 'invalid_result');
+    return 'unavailable';
+  }
+  if (parsed.data) return 'settled';
   logError('receiveSignal: an attempt settled after its claim ended', 'stale_attempt');
   return 'busy';
 }
@@ -67,7 +79,7 @@ export async function receiveSignal(event: Stripe.Event, stripe: StripeGateway):
   const { id, type, created } = fields.data;
 
   const admin = createSupabaseAdminClient();
-  const { data: claim, error } = await admin
+  const { data: claimRow, error } = await admin
     .rpc('claim_werkflow_billing_signal', {
       p_stripe_event_id: id,
       p_event_type: type,
@@ -78,12 +90,13 @@ export async function receiveSignal(event: Stripe.Event, stripe: StripeGateway):
     logError('receiveSignal: claim_werkflow_billing_signal failed', error);
     return 'unavailable';
   }
-  if (claim.result === 'settled' || claim.result === 'busy') return claim.result;
-  if (claim.result !== 'claimed') {
+  const claim = claimSchema.safeParse(claimRow);
+  if (!claim.success) {
     logError('receiveSignal: unexpected claim result', 'invalid_result');
     return 'unavailable';
   }
-  const { attempt } = claim;
+  if (claim.data.result !== 'claimed') return claim.data.result;
+  const { attempt } = claim.data;
 
   const family = signalFamilyFor(type);
   if (!family) return settleSignal(admin, id, attempt, 'ignored');

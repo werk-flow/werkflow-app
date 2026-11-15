@@ -27,6 +27,8 @@ type LedgerRow = {
 const ledger = new Map<string, LedgerRow>();
 const rpcCalls: string[] = [];
 let databaseDown = false;
+// Makes the ledger answer outside its contract, to prove the answers are parsed.
+let malformedAnswer: 'claim' | 'settle' | null = null;
 let paidHandlerRuns = 0;
 let paidHandlerFails = false;
 // Runs inside the paid handler: lets a test hand the event to a newer delivery mid-attempt.
@@ -54,6 +56,7 @@ function ledgerAnswer(name: string, args: Record<string, unknown>) {
   const id = String(args.p_stripe_event_id);
   const row = ledger.get(id);
   if (name === 'claim_werkflow_billing_signal') {
+    if (malformedAnswer === 'claim') return { data: { result: 'claimed', attempt: null }, error: null };
     if (!row) {
       const eventType = String(args.p_event_type);
       ledger.set(id, { eventType, state: 'pending', attempts: 1, claimed: true, lastFailureCode: null });
@@ -66,6 +69,7 @@ function ledgerAnswer(name: string, args: Record<string, unknown>) {
     return { data: { result: 'claimed', attempt: row.attempts }, error: null };
   }
   if (name === 'settle_werkflow_billing_signal') {
+    if (malformedAnswer === 'settle') return { data: 'true', error: null };
     if (!row || row.state !== 'pending' || !row.claimed || row.attempts !== args.p_attempt) {
       return { data: false, error: null };
     }
@@ -243,6 +247,18 @@ databaseDown = true;
 assert.equal(await deliver(outage, await signed(outage)), 503);
 databaseDown = false;
 assert.equal(paidHandlerRuns, 4, 'a handler ran without a recorded claim');
+
+// An answer outside the ledger's contract is an outage: a claim without its
+// attempt runs no handler, and a settle that is no boolean settles nothing.
+const oddClaim = payloadOf('evt_test_odd_claim_1', 'invoice.paid');
+malformedAnswer = 'claim';
+assert.equal(await deliver(oddClaim, await signed(oddClaim)), 503);
+assert.equal(paidHandlerRuns, 4, 'a handler ran on a claim without its attempt');
+const oddSettle = payloadOf('evt_test_odd_settle_1', 'invoice.paid');
+malformedAnswer = 'settle';
+assert.equal(await deliver(oddSettle, await signed(oddSettle)), 503);
+malformedAnswer = null;
+assert.equal(paidHandlerRuns, 5);
 
 // A live key outside production, a test key in production and a missing
 // webhook secret run nothing.
