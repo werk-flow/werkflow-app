@@ -134,6 +134,7 @@ describe('calculateInvoice', () => {
       payee: { iban: 'DE00111111111111111111', bic: null, accountName: 'Erika Musterfrau' },
     });
     expect(() =>
+      // @ts-expect-error -- Tier 1 probe: a draft names a payee or a payment, never both; the guard holds at run time too.
       calculateInvoice({ ...EXEMPT_INVOICE, payment: { kind: 'card', lastFour: '4242' } }),
     ).toThrow(RangeError);
   });

@@ -137,7 +137,7 @@ const SMALL_BUSINESS: InvoiceTax = {
   exemptionReason: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.',
 };
 
-const subscription: InvoiceDraft = {
+const subscription = {
   ...base,
   number: 'MUSTER-0001',
   issueDate: '2026-11-15',
@@ -152,7 +152,7 @@ const subscription: InvoiceDraft = {
   paymentTerms: { dueInDays: 0, discount: null },
   payee: null,
   lines: [line('1', 'WerkFlow Monatsabo', '1', 'C62', 49900, SMALL_BUSINESS)],
-};
+} satisfies InvoiceDraft;
 
 /** A SEPA direct debit under a mandate: code 59, mandate reference and creditor ID. */
 export const DIRECT_DEBIT_INVOICE: InvoiceDraft = {
@@ -161,12 +161,12 @@ export const DIRECT_DEBIT_INVOICE: InvoiceDraft = {
 };
 
 /** A card charge that settled the invoice: code 48, the last four digits and the paid amount. */
-export const CARD_INVOICE: InvoiceDraft = {
+export const CARD_INVOICE = {
   ...subscription,
   number: 'MUSTER-0002',
   payment: { kind: 'card', lastFour: '4242' },
   paidCents: 49900,
-};
+} satisfies InvoiceDraft;
 
 export const REFERENCE_INVOICES = {
   STANDARD_RATE_INVOICE,
