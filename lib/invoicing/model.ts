@@ -26,14 +26,23 @@ export type InvoiceParty = {
   email: string | null;
 };
 
+/**
+ * Seller identifier (BT-29). `scheme` is its ISO 6523 ICD code (BT-29-1), for
+ * example `0088` for a GLN, or null for an identifier without a listed scheme,
+ * such as a SEPA creditor ID: CII accepts only ICD codes as a scheme
+ * (BR-CL-10, BR-CL-11), so `SEPA` is UBL's alone.
+ */
+type SellerIdentifier = { id: string; scheme: string | null };
+
 export type InvoiceSeller = InvoiceParty & {
   /** Steuernummer (BT-32); a seller without USt-IdNr. needs it. */
   taxNumber: string | null;
   /**
-   * Handelsregisternummer (BT-30), for example `HRB 12345`. A seller without
-   * USt-IdNr. needs it to be identified (BR-CO-26).
+   * Handelsregisternummer (BT-30), for example `HRB 12345`. A seller is
+   * identified by it, its USt-IdNr. or its identifier (BR-CO-26).
    */
   legalRegistrationId: string | null;
+  identifier?: SellerIdentifier | null | undefined;
 };
 
 /**

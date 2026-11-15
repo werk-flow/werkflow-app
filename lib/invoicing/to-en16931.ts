@@ -96,7 +96,11 @@ function tradeParty(party: InvoiceParty | InvoiceSeller): XmlNode {
     registrations.push({ 'ram:ID': { '@schemeID': 'FC', '#': party.taxNumber } });
   }
   const registration = 'legalRegistrationId' in party ? party.legalRegistrationId : null;
+  const identifier = 'identifier' in party ? party.identifier : null;
   return {
+    // BT-29: a scheme makes it a global id; CII's schema puts both before the name.
+    ...(identifier && !identifier.scheme ? { 'ram:ID': identifier.id } : {}),
+    ...(identifier?.scheme ? { 'ram:GlobalID': { '@schemeID': identifier.scheme, '#': identifier.id } } : {}),
     'ram:Name': party.name,
     ...(registration ? { 'ram:SpecifiedLegalOrganization': { 'ram:ID': registration } } : {}),
     'ram:PostalTradeAddress': postalAddress(party.address),

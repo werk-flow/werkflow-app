@@ -52,6 +52,14 @@ export const BROKEN_INVOICES: BrokenInvoice[] = [
     expected: { ruleId: 'BR-CO-26', field: 'seller.vatId' },
   },
   {
+    case: 'a seller identifier with the scheme SEPA, which only UBL accepts',
+    draft: {
+      ...CARD_INVOICE,
+      seller: { ...CARD_INVOICE.seller, identifier: { id: 'DE98ZZZ09999999999', scheme: 'SEPA' } },
+    },
+    expected: { ruleId: 'BR-CL-10', field: 'seller.identifier' },
+  },
+  {
     case: 'a buyer without a name',
     draft: { ...MIXED_RATE_INVOICE, buyer: { ...MIXED_RATE_INVOICE.buyer, name: '' } },
     expected: { ruleId: 'BR-07', field: 'buyer.name' },

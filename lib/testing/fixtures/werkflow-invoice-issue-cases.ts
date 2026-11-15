@@ -10,7 +10,6 @@ import {
   STRIPE_INVOICE,
   STRIPE_INVOICE_LINES,
 } from '@/lib/testing/fixtures/stripe-invoices';
-import type { WerkflowSeller } from '@/lib/werkflow-billing/seller';
 
 mock.module('server-only', () => ({}));
 // SaxonJS loads through axios, which fails in Bun once ESLint set
@@ -27,14 +26,14 @@ type IssuedInvoiceRecord = Parameters<IssueDependencies['record']>[0];
 // A finalized Stripe invoice, read through the real gateway from in-memory
 // Stripe answers, becomes one checked original, or nothing and a stable code.
 
-function world(answers: Readonly<Record<string, unknown>>, seller: WerkflowSeller = MADE_UP_SELLER) {
+function world(answers: Readonly<Record<string, unknown>>) {
   const requests: Array<{ method: string; path: string; query: string }> = [];
   const stored = new Map<string, Uint8Array>();
   const records: IssuedInvoiceRecord[] = [];
   const stripe = createFakeStripeGateway('whsec_synthetic0000', answers, requests);
   const dependencies: IssueDependencies = {
     readInvoice: (id) => stripe.readInvoiceForIssue(id),
-    seller: () => seller,
+    seller: () => MADE_UP_SELLER,
     storeOriginal: async (key, pdf) => {
       const existing = stored.get(key);
       if (existing) return { created: false, sizeBytes: existing.byteLength };
@@ -62,7 +61,6 @@ const withInvoice = (answers: Record<string, unknown>, change: Record<string, un
 const refusals: Array<{
   case: string;
   answers: Record<string, unknown>;
-  seller?: WerkflowSeller;
   code: string;
 }> = [
   {
@@ -76,9 +74,10 @@ const refusals: Array<{
     code: 'werkflow_invoice_amount_mismatch',
   },
   {
-    case: 'a seller the EN 16931 rules cannot identify',
-    answers: SEPA_INVOICE_ANSWERS,
-    seller: { ...MADE_UP_SELLER, seller: { ...MADE_UP_SELLER.seller, vatId: null } },
+    case: 'a buyer address without a country, which the EN 16931 rules refuse',
+    answers: withInvoice(SEPA_INVOICE_ANSWERS, {
+      customer_address: { ...STRIPE_INVOICE.customer_address, country: null },
+    }),
     code: 'werkflow_invoice_rules_failed',
   },
   {
@@ -126,6 +125,8 @@ describe('a finalized Stripe invoice becomes WerkFlow original', () => {
     expect(row?.p_file_size_bytes).toBe(pdf.byteLength);
     const xml = await readEmbeddedInvoiceXml(pdf);
     expect(xml).toContain('<ram:ID>MUSTER-0001</ram:ID>');
+    // A seller with a Steuernummer only is identified by its creditor ID (BT-29, BR-CO-26).
+    expect(xml).toMatch(/<ram:SellerTradeParty>\s*<ram:ID>DE98ZZZ09999999999<\/ram:ID>/);
     expect(xml).toContain('<ram:CreditorReferenceID>DE98ZZZ09999999999</ram:CreditorReferenceID>');
     expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0001</ram:DirectDebitMandateID>');
     expect(xml).toContain('<ram:CategoryCode>E</ram:CategoryCode>');
@@ -194,7 +195,7 @@ describe('a settled or credited Stripe invoice', () => {
 describe('a Stripe invoice WerkFlow cannot issue', () => {
   for (const refusal of refusals) {
     test(`${refusal.case} issues nothing and fails with ${refusal.code}`, async () => {
-      const { issue, stored, records } = world(refusal.answers, refusal.seller);
+      const { issue, stored, records } = world(refusal.answers);
       await expect(issue()).rejects.toMatchObject({ code: refusal.code });
       expect(stored.size).toBe(0);
       expect(records).toHaveLength(0);
