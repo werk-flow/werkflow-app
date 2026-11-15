@@ -234,6 +234,9 @@ mock.module('@/lib/work-lifecycle/actions', () => ({
 mock.module('@/lib/installed-equipment/list-page-server', () => ({
   getInstalledEquipmentPage: seam('equipment-page'),
 }));
+mock.module('@/lib/search/global-search-server', () => ({
+  searchEverywhere: seam('global-search'),
+}));
 mock.module('@/lib/service-cases/list-page-server', () => ({
   getServiceCasePage: seam('service-case-page'),
 }));
@@ -489,6 +492,7 @@ const inputs: Record<string, unknown> = {
   'work-artifact-detail': { artifactId: jobId },
   'instruction-items': { targetType: 'project', targetId: jobId },
   'work-predecessor-search': { organizationId, type: 'job', query: '  Heiz ' },
+  'global-search': { organizationId, query: ' 0711 / 123 45 ' },
 };
 // What each reader receives: some take the bare identifier, the rest the validated object.
 const readerArguments: Record<string, unknown> = {
@@ -550,6 +554,8 @@ const readerArguments: Record<string, unknown> = {
   'work-artifact-detail': jobId,
   'instruction-items': jobId,
   'work-predecessor-search': { type: 'job', query: 'Heiz' },
+  // The search checks the organization against the session itself.
+  'global-search': { organizationId, query: '0711 / 123 45' },
 };
 for (const kind of Object.keys(BACKGROUND_READS)) {
   reads = [];
@@ -593,6 +599,7 @@ for (const kind of [
   'vacation-days-preview',
   'work-predecessor-search',
   'time-correction-planned-visits',
+  'global-search',
 ]) {
   assert.ok(organizationNamingKinds.includes(kind), `${kind} names its organization`);
 }

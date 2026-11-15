@@ -28,6 +28,7 @@ import { usePageBodyKeyboardScroll } from '@/components/shared/page-body-keyboar
 import { AttentionCountProvider, useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import { ProblemReportButton } from '@/components/problem-reports/problem-report-button';
 import { ProblemReportLauncher } from '@/components/problem-reports/problem-report-launcher';
+import { GlobalSearchButton } from '@/components/search/global-search-button';
 import type { AttentionCounts } from '@/lib/attention/types';
 import { MobileDrawer } from './mobile-drawer';
 import { OrgSwitchOverlay } from './org-switch-overlay';
@@ -104,7 +105,7 @@ export function useSidebar() {
 }
 
 // Sidebar skeleton shown while providers are hydrating
-function SidebarSkeleton() {
+function SidebarSkeleton({ search }: { search: boolean }) {
   return (
     <>
       <div className="flex items-center justify-center px-4 py-5">
@@ -126,8 +127,9 @@ function SidebarSkeleton() {
         />
       </div>
       <Separator />
-      <div className="p-4">
+      <div className="space-y-2 p-4">
         <Skeleton className="h-9 w-full rounded-md border border-input" />
+        {search && <Skeleton className="h-9 w-full rounded-md border border-input" />}
       </div>
       <Separator />
       <nav aria-label="Hauptnavigation" className="flex-1 p-4">
@@ -183,8 +185,13 @@ function SidebarLogo({ onClick }: { onClick: () => void }) {
 /** What the phone menu does on a navigation and on its report row. */
 type SidebarPresses = { onNavigate?: (() => void) | undefined; onReport?: (() => void) | undefined };
 
-// Sidebar content component (shared between desktop and mobile)
-function SidebarContent({ onNavigate, onReport }: SidebarPresses) {
+// Sidebar content component (shared between desktop and mobile). The phone
+// header carries the search, so only the desktop sidebar shows it.
+function SidebarContent({
+  onNavigate,
+  onReport,
+  search = false,
+}: SidebarPresses & { search?: boolean | undefined }) {
   const pathname = usePathname();
   const { activeOrg } = useOrganization();
   const { actionableCount, approvalsCount, unreadNotificationCount } = useAttentionCounts();
@@ -204,8 +211,9 @@ function SidebarContent({ onNavigate, onReport }: SidebarPresses) {
       <Separator />
 
       {/* Organization Switcher */}
-      <div className="p-4">
+      <div className="space-y-2 p-4">
         <OrganizationSwitcher />
+        {search && <GlobalSearchButton placement="sidebar" />}
       </div>
 
       <Separator />
@@ -274,14 +282,18 @@ function SidebarContent({ onNavigate, onReport }: SidebarPresses) {
 }
 
 // Wraps SidebarContent with a loading check for provider hydration
-function DynamicSidebarContent({ onNavigate, onReport }: SidebarPresses) {
+function DynamicSidebarContent({
+  onNavigate,
+  onReport,
+  search,
+}: SidebarPresses & { search?: boolean | undefined }) {
   const { isLoading } = useOrganization();
 
   if (isLoading) {
-    return <SidebarSkeleton />;
+    return <SidebarSkeleton search={search ?? false} />;
   }
 
-  return <SidebarContent onNavigate={onNavigate} onReport={onReport} />;
+  return <SidebarContent onNavigate={onNavigate} onReport={onReport} search={search} />;
 }
 
 // Desktop sidebar
@@ -291,7 +303,7 @@ function DesktopSidebar() {
       aria-label="Seitenleiste"
       className="hidden md:flex h-full w-64 shrink-0 flex-col border-r bg-card"
     >
-      <DynamicSidebarContent />
+      <DynamicSidebarContent search />
     </aside>
   );
 }
@@ -301,7 +313,7 @@ function MobileHeader() {
   const { isOpen, setIsOpen } = useSidebar();
 
   return (
-    <header className="flex md:hidden items-center justify-between border-b bg-card px-4 py-2 sticky top-0 z-30">
+    <header className="grid grid-cols-[1fr_auto_1fr] md:hidden items-center border-b bg-card px-4 py-2 sticky top-0 z-30">
       <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="-ml-1 size-11">
         <Menu className="h-5 w-5" />
         <span className="sr-only">Menü öffnen</span>
@@ -328,7 +340,10 @@ function MobileHeader() {
         />
       </Link>
 
-      <ProblemReportButton placement="header" />
+      <div className="-mr-1 flex items-center justify-self-end">
+        <GlobalSearchButton placement="header" />
+        <ProblemReportButton placement="header" />
+      </div>
     </header>
   );
 }

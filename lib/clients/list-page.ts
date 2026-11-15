@@ -55,10 +55,23 @@ const matchedSiteSchema = z.object({
 /** An Objekt the search matched, under its own customer or a customer holding a role on it. */
 export type CustomerPageSite = z.infer<typeof matchedSiteSchema>;
 
-// A response without matched Einsatzorte, as a search without one, lists none.
+/** The shown matched contacts of one customer; `matchedContactTotal` counts all. */
+const MATCHED_CONTACT_LIMIT = 3;
+
+/** An active contact the search matched by name, email or phone. */
+const matchedContactSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  role: z.string().nullable(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+});
+// A response without matched Einsatzorte or contacts, as a search without one, lists none.
 const customerPageRowSchema = clientSchema.extend({
   matchedSites: z.array(matchedSiteSchema).max(MATCHED_SITE_LIMIT).default([]),
   matchedSiteTotal: z.number().int().nonnegative().default(0),
+  matchedContacts: z.array(matchedContactSchema).max(MATCHED_CONTACT_LIMIT).default([]),
+  matchedContactTotal: z.number().int().nonnegative().default(0),
 });
 /** A customer of the list; a just created one carries no matched Objekte yet. */
 export type CustomerListItem = Client & {
