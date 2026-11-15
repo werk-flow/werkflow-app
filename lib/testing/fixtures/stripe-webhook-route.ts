@@ -1,0 +1,224 @@
+// The real Stripe webhook route over an in-memory signal ledger
+// (werk-flow/werkflow-planning#250). The ledger answers as the database
+// functions do; supabase/tests/werkflow_billing_signals.sql proves those.
+// A missing, forged or stale signature is refused before any record; a
+// replayed event changes nothing; a throwing handler answers 5xx and the next
+// delivery succeeds; a live key outside production runs nothing. Logs carry
+// no signature, secret or event content.
+import assert from 'node:assert/strict';
+import { mock } from 'bun:test';
+import { randomBytes } from 'node:crypto';
+import Stripe from 'stripe';
+
+type LedgerRow = {
+  eventType: string;
+  state: 'pending' | 'handled' | 'ignored';
+  attempts: number;
+  claimed: boolean;
+  lastFailureCode: string | null;
+};
+
+const ledger = new Map<string, LedgerRow>();
+const rpcCalls: string[] = [];
+let databaseDown = false;
+let paidHandlerRuns = 0;
+let paidHandlerFails = false;
+let finalizedHandlerRuns = 0;
+const logged: string[] = [];
+console.error = (...parts: unknown[]) => {
+  logged.push(parts.map((part) => JSON.stringify(part)).join(' '));
+};
+
+mock.module('server-only', () => ({}));
+mock.module('@/lib/supabase/admin', () => ({
+  createSupabaseAdminClient: () => ({
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      rpcCalls.push(name);
+      if (databaseDown) return { data: null, error: { code: '08006', message: 'connection lost' } };
+      const id = String(args.p_stripe_event_id);
+      const row = ledger.get(id);
+      if (name === 'claim_werkflow_billing_signal') {
+        if (!row) {
+          const eventType = String(args.p_event_type);
+          ledger.set(id, { eventType, state: 'pending', attempts: 1, claimed: true, lastFailureCode: null });
+          return { data: 'claimed', error: null };
+        }
+        if (row.state !== 'pending') return { data: 'settled', error: null };
+        if (row.claimed) return { data: 'busy', error: null };
+        row.attempts += 1;
+        row.claimed = true;
+        return { data: 'claimed', error: null };
+      }
+      if (name === 'settle_werkflow_billing_signal') {
+        if (!row || row.state !== 'pending') return { data: false, error: null };
+        const outcome = args.p_outcome;
+        assert.ok(outcome === 'handled' || outcome === 'ignored' || outcome === 'failed');
+        row.claimed = false;
+        if (outcome === 'failed') row.lastFailureCode = String(args.p_failure_code);
+        else row.state = outcome;
+        return { data: true, error: null };
+      }
+      throw new Error(`unexpected function ${name}`);
+    },
+  }),
+}));
+mock.module('@/lib/werkflow-billing/signals/invoice-paid', () => ({
+  invoicePaidSignals: {
+    eventTypes: ['invoice.paid'],
+    handle: async () => {
+      paidHandlerRuns += 1;
+      if (paidHandlerFails) {
+        throw Object.assign(new Error('Haustechnik Sonnenberg GmbH, in_test_0001'), {
+          code: 'invoice_mismatch',
+        });
+      }
+    },
+  },
+}));
+mock.module('@/lib/werkflow-billing/signals/invoice-finalized', () => ({
+  invoiceFinalizedSignals: {
+    eventTypes: ['invoice.finalized'],
+    handle: async () => {
+      finalizedHandlerRuns += 1;
+    },
+  },
+}));
+
+const { POST } = await import('../../../app/api/stripe/webhook/route');
+
+const secret = `whsec_${randomBytes(24).toString('hex')}`;
+process.env.STRIPE_SECRET_KEY = 'sk_test_synthetic0000';
+process.env.STRIPE_WEBHOOK_SECRET = secret;
+delete process.env.VERCEL_ENV;
+
+const payloadOf = (id: string, type: string): string =>
+  JSON.stringify({
+    id,
+    object: 'event',
+    type,
+    created: Math.floor(Date.now() / 1000),
+    livemode: false,
+    data: { object: { id: 'in_test_0001', customer: 'cus_test_0001' } },
+  });
+const signed = async (payload: string, options: { secret?: string; timestamp?: number } = {}) =>
+  Stripe.webhooks.generateTestHeaderStringAsync({
+    payload,
+    secret: options.secret ?? secret,
+    ...(options.timestamp ? { timestamp: options.timestamp } : {}),
+  });
+const deliver = async (payload: string, signature?: string): Promise<number> => {
+  const response = await POST(
+    new Request('https://app.example.test/api/stripe/webhook', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(signature ? { 'stripe-signature': signature } : {}),
+      },
+      body: payload,
+    }),
+  );
+  assert.equal(await response.text(), '', 'a webhook answer carried a body');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  return response.status;
+};
+
+// A missing, forged or stale signature, or a body altered after signing, is
+// refused before anything is recorded.
+const finalized = payloadOf('evt_test_finalized_1', 'invoice.finalized');
+assert.equal(await deliver(finalized), 400, 'a missing signature was not refused');
+assert.equal(await deliver(finalized, await signed(finalized, { secret: 'whsec_forged' })), 400, 'forged');
+const stale = await signed(finalized, { timestamp: Math.floor(Date.now() / 1000) - 600 });
+assert.equal(await deliver(finalized, stale), 400, 'a stale signature was not refused');
+const altered = finalized.replace('invoice.finalized', 'invoice.paid');
+assert.equal(await deliver(altered, await signed(finalized)), 400, 'an altered body was not refused');
+assert.equal(await deliver(finalized, 't=1,v1=00'), 400, 'a malformed signature was not refused');
+assert.deepEqual(rpcCalls, [], 'a refused signal reached the ledger');
+assert.equal(ledger.size, 0);
+
+// A verified event runs its handler once and settles; a replay answers 200 and changes nothing.
+assert.equal(await deliver(finalized, await signed(finalized)), 200);
+assert.deepEqual(ledger.get('evt_test_finalized_1'), {
+  eventType: 'invoice.finalized',
+  state: 'handled',
+  attempts: 1,
+  claimed: false,
+  lastFailureCode: null,
+});
+const settledRow = structuredClone(ledger.get('evt_test_finalized_1'));
+rpcCalls.length = 0;
+assert.equal(await deliver(finalized, await signed(finalized)), 200, 'a replayed event was not acknowledged');
+assert.deepEqual(ledger.get('evt_test_finalized_1'), settledRow, 'a replayed event changed its record');
+assert.deepEqual(rpcCalls, ['claim_werkflow_billing_signal'], 'a replayed event did more than look it up');
+assert.equal(finalizedHandlerRuns, 1, 'a replayed event ran its handler again');
+
+// A throwing handler answers 5xx and keeps the event open with its code; the next delivery succeeds.
+const paid = payloadOf('evt_test_paid_1', 'invoice.paid');
+paidHandlerFails = true;
+assert.equal(await deliver(paid, await signed(paid)), 500, 'a throwing handler did not answer 5xx');
+assert.deepEqual(ledger.get('evt_test_paid_1'), {
+  eventType: 'invoice.paid',
+  state: 'pending',
+  attempts: 1,
+  claimed: false,
+  lastFailureCode: 'invoice_mismatch',
+});
+paidHandlerFails = false;
+assert.equal(await deliver(paid, await signed(paid)), 200, 'the delivery after a failure did not succeed');
+assert.equal(ledger.get('evt_test_paid_1')?.state, 'handled');
+assert.equal(ledger.get('evt_test_paid_1')?.attempts, 2);
+assert.equal(paidHandlerRuns, 2);
+
+// Another delivery of an event while one holds its claim runs nothing and asks Stripe to retry.
+const busy = payloadOf('evt_test_busy_1', 'invoice.paid');
+ledger.set('evt_test_busy_1', {
+  eventType: 'invoice.paid',
+  state: 'pending',
+  attempts: 1,
+  claimed: true,
+  lastFailureCode: null,
+});
+assert.equal(await deliver(busy, await signed(busy)), 409);
+assert.equal(paidHandlerRuns, 2, 'a busy event ran its handler');
+
+// A type no family takes is recorded and ignored.
+const unknown = payloadOf('evt_test_unknown_1', 'customer.created');
+assert.equal(await deliver(unknown, await signed(unknown)), 200);
+assert.equal(ledger.get('evt_test_unknown_1')?.state, 'ignored');
+
+// A ledger outage answers 503 and runs no handler.
+const outage = payloadOf('evt_test_outage_1', 'invoice.paid');
+databaseDown = true;
+assert.equal(await deliver(outage, await signed(outage)), 503);
+databaseDown = false;
+assert.equal(paidHandlerRuns, 2, 'a handler ran without a recorded claim');
+
+// A live key outside production, a test key in production and a missing
+// webhook secret run nothing.
+rpcCalls.length = 0;
+const configurations: Array<[string, string | undefined, string | undefined]> = [
+  ['sk_live_synthetic0000', undefined, secret],
+  ['sk_live_synthetic0000', 'preview', secret],
+  ['sk_test_synthetic0000', 'production', secret],
+  ['sk_test_synthetic0000', undefined, undefined],
+];
+for (const [key, vercelEnv, webhookSecret] of configurations) {
+  process.env.STRIPE_SECRET_KEY = key;
+  if (vercelEnv) process.env.VERCEL_ENV = vercelEnv;
+  else delete process.env.VERCEL_ENV;
+  if (webhookSecret) process.env.STRIPE_WEBHOOK_SECRET = webhookSecret;
+  else delete process.env.STRIPE_WEBHOOK_SECRET;
+  const fresh = payloadOf('evt_test_refused_key', 'invoice.paid');
+  assert.equal(
+    await deliver(fresh, await signed(fresh)),
+    503,
+    `${key} in ${vercelEnv ?? 'a test'} was accepted`,
+  );
+}
+assert.deepEqual(rpcCalls, [], 'a refused configuration reached the ledger');
+
+// The logs name failures by code only.
+const logText = logged.join('\n');
+for (const leak of [secret, 'Haustechnik Sonnenberg', 'in_test_0001', 'cus_test_0001', 'connection lost']) {
+  assert.ok(!logText.includes(leak), `a log line carried ${leak}`);
+}
+assert.ok(logText.includes('stripe_live_key_outside_production'), 'a refused key was not logged by its code');

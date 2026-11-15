@@ -82,6 +82,10 @@ const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
   complete_storage_purge: 'Removes, by id, only the entries the scheduled purge just claimed and deleted.',
   list_problem_reports_due_for_retention:
     'The scheduled retention run has no caller and spans every organization; each listed report names its organization, which the deletion call passes.',
+  claim_werkflow_billing_signal:
+    'Records a Stripe event id that Stripe signed; the ledger holds no organization data, and a handler finds the organization from the Stripe customer.',
+  settle_werkflow_billing_signal:
+    'Settles, by its Stripe event id, only the signal the same request just claimed.',
 };
 
 const ORGANIZATION_ARGUMENT_NAMES = ['p_organization_id', 'p_org_id', 'organization_id', 'org_id'];

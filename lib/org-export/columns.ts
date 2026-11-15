@@ -39,7 +39,10 @@ type ExcludedTable =
   | 'organization_export_parts'
   // Idempotency keys of report drafts a phone sent; the revision each one
   // wrote is in `work_artifact_revisions`.
-  | 'work_artifact_draft_operations';
+  | 'work_artifact_draft_operations'
+  // Delivery state of Stripe's signals to WerkFlow's own billing: event ids,
+  // no record of the organization.
+  | 'werkflow_billing_signals';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
