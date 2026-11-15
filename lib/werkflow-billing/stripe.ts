@@ -46,6 +46,7 @@ export type StripeGateway = {
   readDispute(disputeId: string): Promise<StripeBillingDispute>;
 };
 
+/** @internal The fake gateway builds it (lib/testing/fixtures/fake-stripe-gateway.ts). */
 export type StripeBillingInvoice = {
   id: string;
   customerId: string | null;
@@ -68,6 +69,7 @@ export type StripeBillingCustomer = {
   name: string | null;
 };
 
+/** @internal The fake gateway builds it (lib/testing/fixtures/fake-stripe-gateway.ts). */
 export type StripeBillingMandate = {
   id: string;
   status: Stripe.Mandate.Status;
@@ -75,6 +77,7 @@ export type StripeBillingMandate = {
   ibanLastFour: string | null;
 };
 
+/** @internal The fake gateway builds it (lib/testing/fixtures/fake-stripe-gateway.ts). */
 export type StripeBillingDispute = {
   id: string;
   customerId: string | null;
@@ -130,6 +133,7 @@ async function read<T>(call: () => Promise<T>): Promise<T> {
  * The payment method type of a payment attempt. A failed intent may have
  * dropped its `payment_method` and kept the declined one only in
  * `last_payment_error`, so that is read too; null when neither names one.
+ * @internal
  */
 export function failedPaymentMethodType(
   intent:
