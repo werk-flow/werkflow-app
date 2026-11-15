@@ -257,8 +257,14 @@ assert.equal(paidHandlerRuns, 4, 'a handler ran on a claim without its attempt')
 const oddSettle = payloadOf('evt_test_odd_settle_1', 'invoice.paid');
 malformedAnswer = 'settle';
 assert.equal(await deliver(oddSettle, await signed(oddSettle)), 503);
-malformedAnswer = null;
 assert.equal(paidHandlerRuns, 5);
+// The same after a failed handler: the ledger did not record the failure.
+const oddFailedSettle = payloadOf('evt_test_odd_settle_2', 'invoice.paid');
+paidHandlerFails = true;
+assert.equal(await deliver(oddFailedSettle, await signed(oddFailedSettle)), 503);
+paidHandlerFails = false;
+malformedAnswer = null;
+assert.equal(paidHandlerRuns, 6);
 
 // A live key outside production, a test key in production and a missing
 // webhook secret run nothing.

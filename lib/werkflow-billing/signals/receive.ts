@@ -105,8 +105,10 @@ export async function receiveSignal(event: Stripe.Event, stripe: StripeGateway):
     await family.handle(event, stripe);
   } catch (handlerError) {
     logError('receiveSignal: signal handler failed', handlerError);
-    await settleSignal(admin, id, attempt, 'failed', handlerFailureCode(handlerError));
-    return 'failed';
+    // A failed attempt answers 500 so Stripe retries, unless the ledger itself
+    // could not record it: that is an outage (503).
+    const settled = await settleSignal(admin, id, attempt, 'failed', handlerFailureCode(handlerError));
+    return settled === 'unavailable' ? 'unavailable' : 'failed';
   }
   return settleSignal(admin, id, attempt, 'handled');
 }
