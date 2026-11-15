@@ -11,6 +11,7 @@ import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 import type { CalculatedInvoice } from '@/lib/invoicing/model';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
 import type { StoredObject } from '@/lib/storage/r2';
+import type { Database } from '@/lib/supabase/database.types';
 import { WerkflowInvoiceFailure } from '@/lib/werkflow-billing/failure';
 import { assertStripeAmounts, werkflowInvoiceDraft } from '@/lib/werkflow-billing/invoice-model';
 import type { WerkflowSeller } from '@/lib/werkflow-billing/seller';
@@ -23,25 +24,16 @@ import type { StripeInvoiceForIssue } from '@/lib/werkflow-billing/stripe-invoic
 // and recorded once. Any failure throws a stable code before the record, so
 // no row is issued and Stripe delivers the signal again.
 
-/** The row `issue_werkflow_invoice` records, in the function's own argument names. */
-type IssuedInvoiceRecord = {
-  p_organization_id: string;
-  p_stripe_invoice_id: string;
-  p_stripe_customer_id: string;
-  p_stripe_event_id: string;
-  p_number: string;
-  p_issue_date: string;
+/**
+ * The row `issue_werkflow_invoice` records, in the function's own argument
+ * names, with the domain types of the buyer snapshot and the payment means.
+ */
+type IssuedInvoiceRecord = Omit<
+  Database['public']['Functions']['issue_werkflow_invoice']['Args'],
+  'p_buyer' | 'p_payment_means'
+> & {
   p_buyer: CalculatedInvoice['buyer'];
   p_payment_means: 'direct-debit' | 'card' | 'none';
-  p_net_cents: number;
-  p_tax_cents: number;
-  p_gross_cents: number;
-  p_paid_cents: number;
-  p_due_cents: number;
-  p_file_key: string;
-  p_file_sha256: string;
-  p_file_size_bytes: number;
-  p_rules_release: string;
 };
 
 export type IssueDependencies = {
