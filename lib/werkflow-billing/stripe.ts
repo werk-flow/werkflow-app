@@ -40,8 +40,9 @@ export type StripeGateway = {
   verifySignal(rawBody: string, signature: string): Promise<Stripe.Event | null>;
   /**
    * A finalized invoice read back from Stripe by id, with its customer, every
-   * line, and the payment means of its charge (stripe-invoice.ts). Throws a
-   * stable code when Stripe's answer cannot be issued yet or at all.
+   * line, its payment method and SEPA mandate (stripe-invoice.ts); no charge
+   * is needed. Throws a stable code when Stripe's answer cannot be issued yet
+   * or at all.
    */
   readInvoiceForIssue(invoiceId: string): Promise<StripeInvoiceForIssue>;
 };
@@ -84,25 +85,68 @@ function paymentIntentIdOf(invoice: Stripe.Invoice): string | null {
   return typeof intent === 'string' ? intent : (intent?.id ?? null);
 }
 
+/** The object of a field Stripe expanded; null for an id or nothing. */
+function expanded<T extends object>(value: string | T | null | undefined): T | null {
+  return typeof value === 'object' ? value : null;
+}
+
+/**
+ * The payment method Stripe debits for the invoice, read without waiting for
+ * a charge: the one its payment intent names, else the invoice's, the
+ * subscription's or the customer's default, in Stripe's own order. A SEPA
+ * renewal is finalized in the same second as its debit starts, and signals of
+ * one second come in no reliable order.
+ */
+async function paymentMethodOf(
+  client: Stripe,
+  invoice: Stripe.Invoice,
+): Promise<Stripe.PaymentMethod | null> {
+  const intentId = paymentIntentIdOf(invoice);
+  const intent = intentId
+    ? await client.paymentIntents.retrieve(intentId, { expand: ['payment_method'] })
+    : null;
+  const customer = expanded(invoice.customer);
+  return (
+    expanded(intent?.payment_method) ??
+    expanded(invoice.default_payment_method) ??
+    expanded(expanded(invoice.parent?.subscription_details?.subscription)?.default_payment_method) ??
+    (customer?.deleted ? null : expanded(customer?.invoice_settings.default_payment_method))
+  );
+}
+
+/** The reference of the SEPA mandate a payment method was set up with (its SetupIntent's mandate). */
+async function mandateReferenceOf(client: Stripe, paymentMethodId: string): Promise<string | null> {
+  const setups = await client.setupIntents.list({
+    payment_method: paymentMethodId,
+    limit: 10,
+    expand: ['data.mandate'],
+  });
+  const references = setups.data.map(
+    (setup) => expanded(setup.mandate)?.payment_method_details.sepa_debit?.reference,
+  );
+  return references.find((reference) => reference !== undefined) ?? null;
+}
+
 function invoiceReader(client: Stripe): StripeGateway['readInvoiceForIssue'] {
   return async (invoiceId) => {
-    const invoice = await client.invoices.retrieve(invoiceId, { expand: ['customer', 'payments'] });
+    const invoice = await client.invoices.retrieve(invoiceId, {
+      expand: [
+        'customer.invoice_settings.default_payment_method',
+        'payments',
+        'default_payment_method',
+        'parent.subscription_details.subscription.default_payment_method',
+      ],
+    });
     const lines = await client.invoices
       .listLineItems(invoiceId, { limit: 100 })
       .autoPagingToArray({ limit: 1000 });
-    const intentId = paymentIntentIdOf(invoice);
-    const intent = intentId
-      ? await client.paymentIntents.retrieve(intentId, { expand: ['latest_charge'] })
-      : null;
-    const charge = typeof intent?.latest_charge === 'object' ? intent.latest_charge : null;
-    const details = charge?.payment_method_details ?? null;
-    const mandateId = details?.type === 'sepa_debit' ? details.sepa_debit?.mandate : null;
-    const mandate = mandateId ? await client.mandates.retrieve(mandateId) : null;
+    const paymentMethod = await paymentMethodOf(client, invoice);
     return stripeInvoiceForIssue({
       invoice,
       lines,
-      paymentDetails: details,
-      mandateReference: mandate?.payment_method_details.sepa_debit?.reference ?? null,
+      paymentMethod,
+      mandateReference:
+        paymentMethod?.type === 'sepa_debit' ? await mandateReferenceOf(client, paymentMethod.id) : null,
     });
   };
 }

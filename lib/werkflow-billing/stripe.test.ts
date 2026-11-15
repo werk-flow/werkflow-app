@@ -107,21 +107,22 @@ describe('the fake gateway verifies a signal as Stripe does', () => {
 describe('the dispatch table', () => {
   test('each stage A family takes its types, returns for a verified event, and an unknown type has none', async () => {
     const fake = createFakeStripeGateway(WEBHOOK_SECRET);
-    // invoice.finalized issues an invoice (issue-invoice.test.ts); an event without one is refused.
-    const finalized = Stripe.webhooks.constructEventWithoutVerification(
-      JSON.stringify({
-        id: 'evt_test_dispatch',
-        object: 'event',
-        type: 'invoice.finalized',
-        created: 1,
-        data: { object: {} },
-      }),
-    );
-    await expect(signalFamilyFor('invoice.finalized')?.handle(finalized, fake)).rejects.toMatchObject({
-      code: 'werkflow_invoice_unreadable',
-    });
+    // invoice.finalized and invoice.paid issue an invoice (issue-invoice.test.ts); an event without one is refused.
+    for (const eventType of ['invoice.finalized', 'invoice.paid'] as const) {
+      const event = Stripe.webhooks.constructEventWithoutVerification(
+        JSON.stringify({
+          id: 'evt_test_dispatch',
+          object: 'event',
+          type: eventType,
+          created: 1,
+          data: { object: {} },
+        }),
+      );
+      await expect(signalFamilyFor(eventType)?.handle(event, fake)).rejects.toMatchObject({
+        code: 'werkflow_invoice_unreadable',
+      });
+    }
     const stageA = [
-      'invoice.paid',
       'invoice.payment_failed',
       'credit_note.created',
       'mandate.updated',
