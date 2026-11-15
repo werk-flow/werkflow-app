@@ -6,7 +6,8 @@ mock.module('server-only', () => ({}));
 // Signing and Stripe's verification both read the clock; a fixed instant keeps them in step.
 beforeAll(() => setSystemTime(new Date('2026-03-02T08:00:00Z')));
 afterAll(() => setSystemTime());
-const { failedPaymentMethodType, resolveStripeGateway } = await import('./stripe');
+const { resolveStripeGateway } = await import('./stripe');
+const { failedPaymentMethodType } = await import('./payment-method');
 const { createFakeStripeGateway } = await import('@/lib/testing/fixtures/fake-stripe-gateway');
 const { signalFamilyFor } = await import('./signals/dispatch');
 

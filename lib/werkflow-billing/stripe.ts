@@ -3,6 +3,7 @@ import 'server-only';
 import Stripe from 'stripe';
 
 import { billingFailure } from '@/lib/werkflow-billing/failure';
+import { failedPaymentMethodType } from '@/lib/werkflow-billing/payment-method';
 
 // The one gateway every call of WerkFlow's own billing to Stripe goes through
 // (werk-flow/werkflow-planning#250, epic #245). Live Stripe is PROD: a live key
@@ -46,8 +47,7 @@ export type StripeGateway = {
   readDispute(disputeId: string): Promise<StripeBillingDispute>;
 };
 
-/** @internal The fake gateway builds it (lib/testing/fixtures/fake-stripe-gateway.ts). */
-export type StripeBillingInvoice = {
+type StripeBillingInvoice = {
   id: string;
   customerId: string | null;
   number: string | null;
@@ -69,16 +69,14 @@ export type StripeBillingCustomer = {
   name: string | null;
 };
 
-/** @internal The fake gateway builds it (lib/testing/fixtures/fake-stripe-gateway.ts). */
-export type StripeBillingMandate = {
+type StripeBillingMandate = {
   id: string;
   status: Stripe.Mandate.Status;
   customerId: string | null;
   ibanLastFour: string | null;
 };
 
-/** @internal The fake gateway builds it (lib/testing/fixtures/fake-stripe-gateway.ts). */
-export type StripeBillingDispute = {
+type StripeBillingDispute = {
   id: string;
   customerId: string | null;
   chargeId: string;
@@ -127,27 +125,6 @@ async function read<T>(call: () => Promise<T>): Promise<T> {
   } catch {
     throw billingFailure('stripe_read_failed');
   }
-}
-
-/**
- * The payment method type of a payment attempt. A failed intent may have
- * dropped its `payment_method` and kept the declined one only in
- * `last_payment_error`, so that is read too; null when neither names one.
- * @internal
- */
-export function failedPaymentMethodType(
-  intent:
-    | string
-    | {
-        payment_method: string | { type: string } | null;
-        last_payment_error: { payment_method?: { type: string } } | null;
-      }
-    | null
-    | undefined,
-): string | null {
-  if (!intent || typeof intent === 'string') return null;
-  const method = typeof intent.payment_method === 'object' ? intent.payment_method : null;
-  return method?.type ?? intent.last_payment_error?.payment_method?.type ?? null;
 }
 
 /** The reads a signal handler makes instead of trusting the event body. */

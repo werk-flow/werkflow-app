@@ -4,6 +4,8 @@
 // table and one optional button. Every interpolated value is escaped here.
 // Mail clients ignore stylesheets, so the colors are inline literals.
 
+import { escapeHtml } from '@/lib/format/html';
+
 export type RenderedMail = { subject: string; html: string; text: string };
 
 export type MailContent = {
@@ -14,15 +16,6 @@ export type MailContent = {
   action?: { label: string; url: string };
   footnote?: string;
 };
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 const euroFormat = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 
