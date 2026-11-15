@@ -95,7 +95,15 @@ export type InvoicePayment =
   | { kind: 'direct-debit'; mandateReference: string; creditorId: string }
   | { kind: 'card'; lastFour: string };
 
-export type InvoiceDraft = {
+/**
+ * How a draft names its payment: a credit-transfer payee as shorthand for a
+ * `payment` of kind `credit-transfer`, or a `payment`, never both.
+ */
+type InvoiceDraftPayment =
+  | { payee?: InvoicePayee | null | undefined; payment?: null | undefined }
+  | { payee?: null | undefined; payment?: InvoicePayment | null | undefined };
+
+export type InvoiceDraft = InvoiceDraftPayment & {
   /** 380 a commercial invoice, 384 a corrected invoice such as a Storno. */
   typeCode: '380' | '384';
   number: string;
@@ -113,12 +121,6 @@ export type InvoiceDraft = {
   /** The invoice a corrected invoice replaces (BG-3). */
   precedingInvoice: { number: string; issueDate: IsoDate } | null;
   paymentTerms: InvoicePaymentTerms;
-  /**
-   * The credit-transfer payee: shorthand for `payment` of kind
-   * `credit-transfer`. A draft names a payee or a payment, never both.
-   */
-  payee?: InvoicePayee | null | undefined;
-  payment?: InvoicePayment | null | undefined;
   /** The amount already paid (BT-113), for example a settled card charge; none when absent. */
   paidCents?: number;
   /** Free texts printed on the invoice (BT-22). */
