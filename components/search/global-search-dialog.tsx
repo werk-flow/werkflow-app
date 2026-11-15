@@ -198,7 +198,7 @@ function GlobalSearchPanel({ onNavigate }: { onNavigate: () => void }) {
     <>
       <SearchInput
         aria-label="Suchbegriff"
-        placeholder={fieldWorker ? 'Auftrag, Projekt oder Nummer' : 'Name, Telefon, Adresse oder Nummer'}
+        placeholder={fieldWorker ? 'Auftrag, Projekt oder Nummer' : 'Name, Telefon, Adresse, Nr.'}
         value={query}
         onValueChange={setQuery}
         pending={searchable && read.loading}
