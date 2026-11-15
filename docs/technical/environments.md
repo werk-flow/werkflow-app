@@ -13,7 +13,7 @@ WerkFlow runs on two cloud backends ([decision 0003](../decisions/0003-dev-prod-
 | Serves | The deployed app and real customers | Local development, the cloud canary, the partner preview, scoped provider checks |
 | Auth site URL | `https://app.werk-flow.app` | `http://localhost:3000` |
 
-Both projects deploy the edge functions from `supabase/functions/`. The production Resend key never leaves production.
+Both projects deploy the edge functions from `supabase/functions/`; each keeps its own Resend key.
 
 Both run Micro compute, whose latency rises steeply with concurrency, accepted while one beta business is the traffic. Cloud canary timings are no capacity proof.
 
@@ -64,11 +64,8 @@ This table is the one home of every deployment and workflow credential. No check
 | `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `POSTHOG_PROJECT_API_KEY`, `POSTHOG_ORGANIZATION_IDS` | Vercel | [Usage statistics](security.md#mail-and-providers) | Never | Rotate in PostHog, redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
-| `RESEND_API_KEY` | Supabase secrets, one key per project; Vercel, one sending key per row | The mail functions; the Next server's transport `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
-| `FROM_EMAIL` | Supabase secrets; Vercel | The sender of the mail functions and of `lib/delivery/send-email.ts` | Never | `supabase secrets set`; set in Vercel, redeploy. |
-| `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO` | Vercel | `lib/werkflow-billing/mail-delivery.ts`: the person who receives billing alarms, and the reply address of billing mails | Never | Set, redeploy. |
-
-`lib/delivery/send-email.ts` sends through Resend only where `VERCEL_ENV` is set; local and CI processes keep each message in an in-memory outbox, so no test reaches Resend. A hosted deployment without the key or sender answers a retryable failure, and its caller keeps the mail `failed` until it is sent.
+| `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key per project, `supabase secrets set --project-ref <ref> RESEND_API_KEY` or Vercel, delete the old one. |
+| `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO` | Vercel | Alarm recipient; reply-to | Never | Set, redeploy. |
 
 The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the owner's local Supabase and R2 admin tokens in the env backups, and `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name.
 
