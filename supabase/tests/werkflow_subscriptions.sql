@@ -147,9 +147,20 @@ begin
     raise exception 'a start while the Checkout is open did not answer it: %', v_begun;
   end if;
 
+end;
+$$;
+
+-- The service role writes no row directly; the test moves the clock of the stored session as the owner.
+reset role;
+update public.werkflow_subscriptions set checkout_expires_at = now() + interval '10 minutes'
+where organization_id = '41248000-0000-0000-0000-000000000010';
+set local role service_role;
+
+do $$
+declare
+  v_begun record;
+begin
   -- Near its expiry the next start claims attempt 2 and names the session to close.
-  update public.werkflow_subscriptions set checkout_expires_at = now() + interval '10 minutes'
-  where organization_id = '41248000-0000-0000-0000-000000000010';
   select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
     '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg');
   if (v_begun.result, v_begun.attempt, v_begun.session_id) is distinct from ('claimed'::text, 2, 'cs_test_1'::text) then
@@ -168,8 +179,18 @@ begin
       'cs_test_2', 'https://checkout.stripe.com/c/pay/cs_test_2', now() + interval '1 day') then
     raise exception 'a stale attempt stored its session';
   end if;
-  update public.werkflow_subscriptions set checkout_claimed_until = now() - interval '1 second'
-  where organization_id = '41248000-0000-0000-0000-000000000010';
+end;
+$$;
+
+reset role;
+update public.werkflow_subscriptions set checkout_claimed_until = now() - interval '1 second'
+where organization_id = '41248000-0000-0000-0000-000000000010';
+set local role service_role;
+
+do $$
+declare
+  v_answer text;
+begin
   if public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 3,
       'cs_test_3', 'https://checkout.stripe.com/c/pay/cs_test_3', now() + interval '1 day') then
     raise exception 'an attempt whose claim lapsed stored its session';
