@@ -60,7 +60,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Vercel | Document storage | As set on the token | Cloudflare R2, Manage API tokens: one token scoped to the bucket; set both, redeploy, delete the old token. |
 | `CRON_SECRET` | Vercel, Production | Vercel Cron: [storage purge](document-storage-and-access.md#storage-cleanup) and [report deletion](../features/problem-reports.md#current-product-baseline) | Never | `openssl rand -hex 32`, then redeploy. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Vercel Preview (sandbox); Production empty until the live switch | `lib/werkflow-billing/` | Never | Roll in Stripe, set, redeploy. |
-| `WERKFLOW_SELLER_NAME`, `_STREET`, `_POSTAL_CODE`, `_CITY`, `_TAX_NUMBER`, `_EMAIL`, `_CREDITOR_ID`; optional `_VAT_ID`, `_REGISTRATION_ID` | Vercel Preview (made-up seller); Production WerkFlow's own before the live switch | Seller block of WerkFlow's own invoices (`lib/werkflow-billing/seller.ts`); the EN 16931 check needs a USt-IdNr. or a register number | Never | Not secret. Set, redeploy. |
+| `WERKFLOW_SELLER_*` | Vercel | `lib/werkflow-billing/seller.ts` | Never | Set, redeploy. |
 | `PROBLEM_REPORT_HANDOUT_SECRET` | Vercel; `~/.config/werkflow/problem-report-handout.env`, mode 600, with `PROBLEM_REPORT_HANDOUT_ORIGIN` and an optional `VERCEL_AUTOMATION_BYPASS_SECRET`, on each machine that runs report threads | The [hand-out](problem-report-scrubbing.md#hand-out): `report-dispatch`, `scripts/report-thread.ts` | Never | `openssl rand -hex 32` on Vercel and in each file, redeploy. |
 | `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `POSTHOG_PROJECT_API_KEY`, `POSTHOG_ORGANIZATION_IDS` | Vercel | [Usage statistics](security.md#mail-and-providers) | Never | Rotate in PostHog, redeploy. |
@@ -81,17 +81,17 @@ The test groups run against the Supabase CLI's Docker composition: Docker Engine
 - PostgREST truncates at its row limit without an error, locally and hosted. Read in pages ([add a list](realtime-and-caching.md#add-a-list)). Never raise the limit to hide the bound.
 - The stack answers on `http://127.0.0.1:54321`. `bun run env:local` writes that origin and this checkout's test-server origin into `.env.local`. Rebuild after a switch: `NEXT_PUBLIC_*` values are baked into the build.
 - A reset or crash stops the edge runtime; the test server and CI wait start it.
-- An edge function imports only relative modules. The runtime fetches a remote one (`jsr:`, `npm:`, `https:`) on its first request, so a stalled registry hangs a fresh stack.
-- A restarted edge-runtime container keeps its old configuration. After you change `[edge_runtime.secrets]`, reload the runtime and verify the capture endpoint before an email browser group.
+- An edge function imports only relative modules: a remote one (`jsr:`, `npm:`, `https:`) is fetched on its first request, and a stalled registry hangs a fresh stack.
+- After a change to `[edge_runtime.secrets]`, reload the edge runtime, which keeps its old configuration, and verify the capture endpoint before an email browser group.
 
 ## Env-file ownership
 
-`.env.local` (gitignored) selects the backend. Three gitignored backups sit beside it: `.env.local-stack-backup`, `.env.dev-backup`, `.env.live-backup`. Next.js loads none of them.
+`.env.local` selects the backend. Next.js loads none of its gitignored backups: `.env.local-stack-backup`, `.env.dev-backup`, `.env.live-backup`.
 
 ```bash
-bun run env:local  # .env.local -> the local Supabase stack (application tests)
-bun run env:dev    # .env.local -> the cloud dev backend (canary, live inspection)
-bun run env:prod   # .env.local -> PRODUCTION (loud warning; no tests)
+bun run env:local  # the local Supabase stack (application tests)
+bun run env:dev    # the cloud dev backend (canary, live inspection)
+bun run env:prod   # PRODUCTION (loud warning; no tests)
 ```
 
 ## Which tool reaches what
