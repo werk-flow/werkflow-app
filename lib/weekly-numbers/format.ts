@@ -42,7 +42,7 @@ const percent = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFracti
 /**
  * A share of a total with its counts; a dash when the week has nothing to share.
  */
-function shareCell(part: number, total: number): WeeklyCell {
+function shareCell({ part, total }: { part: number; total: number }): WeeklyCell {
   if (total === 0) return { value: NONE };
   return { value: percent.format(part / total), detail: `${part} von ${total}` };
 }
@@ -125,7 +125,7 @@ export const WEEKLY_NUMBER_SECTIONS: readonly WeeklyNumberSection[] = [
       {
         id: 'zwei-werktage',
         label: 'Innerhalb von 2 Werktagen',
-        cell: (week) => shareCell(week.handover.withinTwoWorkdays, week.handover.released),
+        cell: (week) => shareCell({ part: week.handover.withinTwoWorkdays, total: week.handover.released }),
       },
     ],
   },
@@ -137,12 +137,12 @@ export const WEEKLY_NUMBER_SECTIONS: readonly WeeklyNumberSection[] = [
       {
         id: 'arbeitsberichte',
         label: 'Abgeschlossene Aufträge mit Arbeitsbericht',
-        cell: (week) => shareCell(week.workReports.withReport, week.workReports.finished),
+        cell: (week) => shareCell({ part: week.workReports.withReport, total: week.workReports.finished }),
       },
       {
         id: 'selbst-erfasst',
         label: 'Zeiten selbst gestempelt',
-        cell: (week) => shareCell(week.timeCapture.byEmployee, week.timeCapture.entries),
+        cell: (week) => shareCell({ part: week.timeCapture.byEmployee, total: week.timeCapture.entries }),
       },
     ],
   },
