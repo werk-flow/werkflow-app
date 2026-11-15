@@ -12,7 +12,7 @@ import { listProductSources, parseProductSource, repositoryRoot } from './produc
 // 43621163292, audit:wave-1:a2-anfragen, after an Anfrage was created).
 // The check reports a refresh statement that follows a statement navigating
 // in the same block, unless the navigation returns at once: it sits in a
-// `return`, or the next statement after it is a `return`. Any other way out
+// `return`, or it is a statement of its own followed by a `return`. Any other way out
 // (`throw`, `break`, `continue`, a later `return`) counts as reaching the
 // refresh, since a `catch` or a jump can carry the path past that `return`.
 
@@ -49,8 +49,9 @@ const REFRESH = new Set(['refresh']);
 
 /**
  * Whether the function returns right at the navigation, inside `statement`:
- * the navigation's own statement is a `return`, or the next statement in its
- * block is one, and no `try` encloses it. Only that next statement counts: a
+ * the navigation's own statement is a `return`, or the navigation is a
+ * statement of its own and the next statement in its block is a `return`, and
+ * no `try` encloses it. Only that next statement counts: a
  * `break`, `continue` or `throw` before a later `return` can jump past it.
  */
 function returnsAt(navigation: ts.Node, statement: ts.Statement): boolean {
@@ -64,6 +65,18 @@ function returnsAt(navigation: ts.Node, statement: ts.Statement): boolean {
   let own: ts.Node = navigation;
   while (!ts.isStatement(own)) own = own.parent;
   if (ts.isReturnStatement(own)) return true;
+  // Only a statement that is the navigation itself (`router.push(x);`, maybe
+  // awaited or voided): in a condition or another compound statement, its own
+  // body can jump past the next `return` (`if ((router.push(x), x)) break;`).
+  let expression: ts.Node | undefined = ts.isExpressionStatement(own) ? own.expression : undefined;
+  while (
+    expression !== undefined &&
+    (ts.isAwaitExpression(expression) ||
+      ts.isVoidExpression(expression) ||
+      ts.isParenthesizedExpression(expression))
+  )
+    expression = expression.expression;
+  if (expression !== navigation) return false;
   const { parent } = own;
   if (!ts.isBlock(parent) && !ts.isCaseOrDefaultClause(parent)) return false;
   const next = parent.statements[parent.statements.findIndex((sibling) => sibling === own) + 1];
@@ -261,13 +274,21 @@ test('the check reports a refresh after a navigation whose return comes after an
     '    }',
     '    router.refresh();',
     '  };',
-    '  return { onLooped, onBroken, onLater };',
+    '  const onCondition = () => {',
+    '    for (const href of hrefs) {',
+    '      if ((router.push(href), href)) break;',
+    '      return;',
+    '    }',
+    '    router.refresh();',
+    '  };',
+    '  return { onLooped, onBroken, onLater, onCondition };',
     '}',
   ].join('\n');
   expect(findNavigationRefreshes(new Map([['hooks/use-jump.ts', source]]))).toEqual([
     { file: 'hooks/use-jump.ts', line: 10 },
     { file: 'hooks/use-jump.ts', line: 18 },
     { file: 'hooks/use-jump.ts', line: 27 },
+    { file: 'hooks/use-jump.ts', line: 34 },
   ]);
 });
 
