@@ -3,6 +3,7 @@ import 'server-only';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { logError } from '@/lib/logging';
+import type { Database } from '@/lib/supabase/database.types';
 
 /**
  * A subscription or membership read that failed. It is never "not subscribed"
@@ -32,12 +33,12 @@ export type OrganizationSubscription = {
 const SUBSCRIPTION_COLUMNS =
   'organization_id, stripe_customer_id, stripe_subscription_id, holds_subscription';
 
-function toSubscription(row: {
-  organization_id: string;
-  stripe_customer_id: string;
-  stripe_subscription_id: string | null;
-  holds_subscription: boolean;
-}): OrganizationSubscription {
+type SubscriptionRow = Pick<
+  Database['public']['Tables']['werkflow_subscriptions']['Row'],
+  'organization_id' | 'stripe_customer_id' | 'stripe_subscription_id' | 'holds_subscription'
+>;
+
+function toSubscription(row: SubscriptionRow): OrganizationSubscription {
   return {
     organizationId: row.organization_id,
     stripeCustomerId: row.stripe_customer_id,

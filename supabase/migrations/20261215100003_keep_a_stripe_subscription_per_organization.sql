@@ -23,8 +23,11 @@
 -- session while it stays open; only otherwise does it claim a new attempt,
 -- whose number keys Stripe's idempotency, so a failed attempt never blocks
 -- the next one. A second subscription that still lands is refused here
--- (`subscription_conflict`), and lib/subscription/record.ts cancels and
--- refunds it at once.
+-- (`subscription_conflict`). Once fresh reads show the first still holds,
+-- the row marks the second as a duplicate under its lock, in the call that
+-- refuses it, and lib/subscription/record.ts refunds and cancels it. A
+-- marked subscription never becomes the organization's subscription, so the
+-- cancellation never hits the one the organization keeps.
 --
 -- No client role reaches the table or the functions. The service role reads
 -- the table and writes it only through the functions below.
@@ -74,6 +77,10 @@ create table public.werkflow_subscriptions (
   checkout_attempt integer not null default 0 check (checkout_attempt >= 0),
   -- While a start creates the session of attempt checkout_attempt, no other start creates one.
   checkout_claimed_until timestamptz,
+  -- Subscriptions refused as a second one while another held: each is refunded and
+  -- cancelled, and none ever becomes the organization's subscription.
+  duplicate_subscription_ids text[] not null default '{}'
+    check (array_to_string(duplicate_subscription_ids, ' ') ~ '^(sub_[A-Za-z0-9_]{1,250}( |$))*$'),
   holds_subscription boolean not null
     generated always as (public.werkflow_subscription_holds(status, cancellation_reason)) stored,
   created_at timestamptz not null default now(),
@@ -227,11 +234,14 @@ $$;
 -- on their own: a read no newer than that subscription's last one changes
 -- nothing, so a slow handler never brings back an older state, also of a
 -- subscription the row does not follow. Every newer read is noted. Another
--- subscription replaces the stored one only when it holds and the stored one
--- does not; while the stored one holds, the call refuses
--- (`subscription_conflict`), and the caller cancels the newcomer. Another
+-- subscription replaces the stored one only when it holds, the stored one
+-- does not, and it is not marked as a duplicate. While the stored one holds,
+-- the call refuses (`subscription_conflict`); with `p_refuse_as_duplicate`,
+-- which the caller passes once fresh reads of both still found them
+-- holding, it marks the newcomer as a duplicate instead. Another
 -- subscription that does not hold changes only its read time. Answers
--- 'recorded' or 'ignored'.
+-- 'recorded', 'ignored', or 'duplicate': the subscription is marked, and
+-- the caller refunds and cancels it.
 create function public.record_werkflow_subscription_state(
   p_organization_id uuid,
   p_stripe_customer_id text,
@@ -240,7 +250,8 @@ create function public.record_werkflow_subscription_state(
   p_cancel_at_period_end boolean,
   p_read_at timestamptz,
   p_cancellation_reason text default null,
-  p_current_period_end timestamptz default null
+  p_current_period_end timestamptz default null,
+  p_refuse_as_duplicate boolean default false
 )
 returns text
 language plpgsql
@@ -252,6 +263,7 @@ declare
 begin
   if p_organization_id is null or p_stripe_customer_id is null or p_stripe_subscription_id is null
     or p_status is null or p_cancel_at_period_end is null or p_read_at is null
+    or p_refuse_as_duplicate is null
   then
     raise exception 'invalid_input';
   end if;
@@ -276,8 +288,18 @@ begin
     if not public.werkflow_subscription_holds(p_status, p_cancellation_reason) then
       return 'ignored';
     end if;
+    if p_stripe_subscription_id = any (v_row.duplicate_subscription_ids) then
+      return 'duplicate';
+    end if;
     if v_row.holds_subscription then
-      raise exception 'subscription_conflict';
+      if not p_refuse_as_duplicate then
+        raise exception 'subscription_conflict';
+      end if;
+      update public.werkflow_subscriptions subscription
+      set duplicate_subscription_ids = subscription.duplicate_subscription_ids || p_stripe_subscription_id,
+          updated_at = now()
+      where subscription.organization_id = p_organization_id;
+      return 'duplicate';
     end if;
   end if;
 
@@ -411,9 +433,9 @@ grant execute on function public.begin_werkflow_checkout(uuid, uuid, boolean, te
 revoke all on function public.finish_werkflow_checkout(uuid, integer, text, text, timestamptz)
   from public, anon, authenticated;
 grant execute on function public.finish_werkflow_checkout(uuid, integer, text, text, timestamptz) to service_role;
-revoke all on function public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz)
+revoke all on function public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz, boolean)
   from public, anon, authenticated;
-grant execute on function public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz)
+grant execute on function public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz, boolean)
   to service_role;
 revoke all on function public.create_organization_from_subscription(uuid, text, text)
   from public, anon, authenticated;

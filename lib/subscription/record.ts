@@ -17,12 +17,16 @@ import { z } from '@/lib/zod';
 // organization's row holds that customer.
 //
 // One subscription per organization: when a second one lands while the
-// first holds, both are re-read from Stripe, and if both still hold, the
-// newcomer is refunded and cancelled at once and the call throws
-// `duplicate_subscription_cancelled`, which the signal ledger keeps
-// (werkflow_billing_signals.last_failure_code) for a person to see. Stripe's
-// next delivery then finds the newcomer cancelled and settles. This is the
-// backstop behind the Checkout lock (begin_werkflow_checkout).
+// first holds, both are re-read from Stripe. If both still hold, the call
+// that records the fresh read of the newcomer marks it a duplicate under the
+// organization's row lock (`p_refuse_as_duplicate`), and the database never
+// lets a marked subscription replace the organization's one. Only a
+// subscription the database answers 'duplicate' is refunded and cancelled,
+// at once, and the call throws `duplicate_subscription_cancelled`, which the
+// signal ledger keeps (werkflow_billing_signals.last_failure_code) for a
+// person to see. Stripe's next delivery then finds the newcomer cancelled and
+// settles. This is the backstop behind the Checkout lock
+// (begin_werkflow_checkout).
 
 /** The database's refusals, kept as the signal's failure code. */
 const REFUSALS = [
@@ -31,7 +35,7 @@ const REFUSALS = [
   'subscription_conflict',
 ] as const;
 
-const recordResultSchema = z.enum(['recorded', 'ignored']);
+const recordResultSchema = z.enum(['recorded', 'ignored', 'duplicate']);
 
 function failure(code: string): Error {
   return Object.assign(new Error(code), { code });
@@ -40,7 +44,8 @@ function failure(code: string): Error {
 async function recordSnapshot(
   organizationId: string,
   snapshot: StripeSubscriptionSnapshot,
-): Promise<'recorded' | 'ignored'> {
+  refuseAsDuplicate = false,
+): Promise<z.infer<typeof recordResultSchema>> {
   const { data, error } = await createSupabaseAdminClient().rpc('record_werkflow_subscription_state', {
     p_organization_id: organizationId,
     p_stripe_customer_id: snapshot.customerId,
@@ -50,6 +55,7 @@ async function recordSnapshot(
     p_read_at: snapshot.readAt,
     ...(snapshot.cancellationReason ? { p_cancellation_reason: snapshot.cancellationReason } : {}),
     ...(snapshot.currentPeriodEnd ? { p_current_period_end: snapshot.currentPeriodEnd } : {}),
+    ...(refuseAsDuplicate ? { p_refuse_as_duplicate: true } : {}),
   });
   if (error) {
     logError('recordSubscription: record_werkflow_subscription_state failed', error);
@@ -63,6 +69,18 @@ async function recordSnapshot(
 const isConflict = (error: unknown) =>
   error instanceof Error && Reflect.get(error, 'code') === 'subscription_conflict';
 
+/** Refunds and cancels a subscription only when the database marked it a duplicate. */
+async function settle(
+  outcome: z.infer<typeof recordResultSchema>,
+  subscriptionId: string,
+  stripe: StripeSubscriptionGateway,
+): Promise<'recorded' | 'ignored'> {
+  if (outcome !== 'duplicate') return outcome;
+  await stripe.cancelDuplicateSubscription(subscriptionId);
+  logError('recordSubscription: a second subscription was refunded and cancelled', 'duplicate_subscription');
+  throw failure('duplicate_subscription_cancelled');
+}
+
 /** Throws a stable code on any failure, so a signal handler's Stripe retry runs it again. */
 export async function recordSubscription(
   snapshot: StripeSubscriptionSnapshot,
@@ -71,7 +89,7 @@ export async function recordSubscription(
   const organizationId = uuidSchema.safeParse(snapshot.organizationId);
   if (!organizationId.success) throw failure('organization_metadata_missing');
   try {
-    return await recordSnapshot(organizationId.data, snapshot);
+    return await settle(await recordSnapshot(organizationId.data, snapshot), snapshot.id, stripe);
   } catch (error) {
     if (!isConflict(error)) throw error;
   }
@@ -81,12 +99,6 @@ export async function recordSubscription(
   if (stored?.stripeSubscriptionId) {
     await recordSnapshot(organizationId.data, await stripe.readSubscription(stored.stripeSubscriptionId));
   }
-  try {
-    return await recordSnapshot(organizationId.data, await stripe.readSubscription(snapshot.id));
-  } catch (error) {
-    if (!isConflict(error)) throw error;
-  }
-  await stripe.cancelDuplicateSubscription(snapshot.id);
-  logError('recordSubscription: a second subscription was refunded and cancelled', 'duplicate_subscription');
-  throw failure('duplicate_subscription_cancelled');
+  const fresh = await stripe.readSubscription(snapshot.id);
+  return settle(await recordSnapshot(organizationId.data, fresh, true), snapshot.id, stripe);
 }
