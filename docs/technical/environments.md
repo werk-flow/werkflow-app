@@ -64,8 +64,11 @@ This table is the one home of every deployment and workflow credential. No check
 | `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `POSTHOG_PROJECT_API_KEY`, `POSTHOG_ORGANIZATION_IDS` | Vercel | [Usage statistics](security.md#mail-and-providers) | Never | Rotate in PostHog, redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
-| `RESEND_API_KEY` | Supabase secrets, one key per project | The mail functions | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
-| `FROM_EMAIL` | Supabase secrets | The mail functions' sender | Never | `supabase secrets set`. |
+| `RESEND_API_KEY` | Supabase secrets, one key per project; Vercel, one sending key per row | The mail functions; the Next server's transport `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
+| `FROM_EMAIL` | Supabase secrets; Vercel | The sender of the mail functions and of `lib/delivery/send-email.ts` | Never | `supabase secrets set`; set in Vercel, redeploy. |
+| `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO` | Vercel | `lib/werkflow-billing/mail-delivery.ts`: the person who receives billing alarms, and the reply address of billing mails | Never | Set, redeploy. |
+
+`lib/delivery/send-email.ts` sends through Resend only where `VERCEL_ENV` is set; local and CI processes keep each message in an in-memory outbox, so no test reaches Resend. A hosted deployment without the key or sender answers a retryable failure, and its caller keeps the mail `failed` until it is sent.
 
 The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the owner's local Supabase and R2 admin tokens in the env backups, and `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name.
 
