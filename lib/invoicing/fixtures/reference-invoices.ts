@@ -117,13 +117,18 @@ export const STORNO_INVOICE: InvoiceDraft = {
   lines: MIXED_RATE_INVOICE.lines.map((entry) => ({ ...entry, quantity: `-${entry.quantity}` })),
 };
 
-/** A software seller under § 19 UStG, billing a month of its subscription. */
+/**
+ * A software seller under § 19 UStG, billing a month of its subscription: a
+ * sole trader with a Steuernummer only, no USt-IdNr. and no register entry,
+ * identified by its SEPA creditor ID (BT-29 without scheme, BR-CO-26).
+ */
 const subscriptionSeller: InvoiceSeller = {
   name: 'Musterfirma Software, Erika Musterfrau',
   address: { lines: ['Musterstraße 1'], postalCode: '01234', city: 'Musterstadt', countryCode: 'DE' },
-  vatId: 'DE123456789',
+  vatId: null,
   taxNumber: '12/345/67890',
   legalRegistrationId: null,
+  identifier: { id: 'DE98ZZZ09999999999', scheme: null },
   email: 'rechnung@musterfirma.example',
 };
 

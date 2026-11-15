@@ -88,7 +88,11 @@ const LINE_RULE_FIELDS: Record<string, string> = {
   'BR-27': 'unitPriceCents',
 };
 
+/** A party's children; the first on the path wins, so a registration's own `ID` stays the registration. */
 const PARTY_FIELDS: Record<string, string> = {
+  ID: 'identifier',
+  GlobalID: 'identifier',
+  SpecifiedLegalOrganization: 'legalRegistrationId',
   Name: 'name',
   PostalTradeAddress: 'address',
   URIUniversalCommunication: 'email',
@@ -140,6 +144,7 @@ const TERM_FIELDS: Record<string, string> = {
   'BT-25': 'precedingInvoice',
   'BG-4': 'seller',
   'BT-27': 'seller.name',
+  'BT-29': 'seller.identifier',
   'BT-30': 'seller.vatId',
   'BT-31': 'seller.vatId',
   'BT-32': 'seller.vatId',

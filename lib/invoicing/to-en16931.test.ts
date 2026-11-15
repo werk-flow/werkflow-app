@@ -97,6 +97,23 @@ describe('toEn16931', () => {
     expect(xml).not.toContain('TotalPrepaidAmount');
   });
 
+  test("a seller identifier (BT-29) comes before the seller's name: its ID without a scheme, its global ID with one", () => {
+    const xml = toEn16931(calculateInvoice(DIRECT_DEBIT_INVOICE));
+    expect(xml).toMatch(/<ram:SellerTradeParty>\s*<ram:ID>DE98ZZZ09999999999<\/ram:ID>\s*<ram:Name>/);
+    expect(xml).toMatch(
+      /<ram:SpecifiedTaxRegistration>\s*<ram:ID schemeID="FC">12\/345\/67890<\/ram:ID>\s*<\/ram:SpecifiedTaxRegistration>\s*<\/ram:SellerTradeParty>/,
+    );
+    const gln = toEn16931(
+      calculateInvoice({
+        ...DIRECT_DEBIT_INVOICE,
+        seller: { ...DIRECT_DEBIT_INVOICE.seller, identifier: { id: '4000001000005', scheme: '0088' } },
+      }),
+    );
+    expect(gln).toMatch(
+      /<ram:SellerTradeParty>\s*<ram:GlobalID schemeID="0088">4000001000005<\/ram:GlobalID>\s*<ram:Name>/,
+    );
+  });
+
   test('a settled card payment is code 48 with the last four digits, paid in full and owing nothing', () => {
     const xml = toEn16931(calculateInvoice(CARD_INVOICE));
     expect(xml).toMatch(

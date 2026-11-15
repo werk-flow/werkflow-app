@@ -110,9 +110,10 @@ export const MADE_UP_SELLER: WerkflowSeller = {
   seller: {
     name: 'Musterfirma Software, Erika Musterfrau',
     address: { lines: ['Musterstraße 1'], postalCode: '01234', city: 'Musterstadt', countryCode: 'DE' },
-    vatId: 'DE123456789',
+    vatId: null,
     taxNumber: '12/345/67890',
     legalRegistrationId: null,
+    identifier: { id: 'DE98ZZZ09999999999', scheme: null },
     email: 'rechnung@musterfirma.example',
   },
   creditorId: 'DE98ZZZ09999999999',

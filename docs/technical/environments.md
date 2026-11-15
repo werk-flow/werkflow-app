@@ -39,7 +39,7 @@ No migration carries auth settings, mail templates, SMTP or rate limits. Both pr
 This table is the one home of every deployment and workflow credential. No check copies a secret to test it.
 
 - `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call where the value lives. A failed run fails the step named after the credential and opens or updates the issue "Weekly health check failed". Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
-- The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only a request with the header `x-health-check-token`. The answer names each check `ok` or `failed`, never a value.
+- The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only a request carrying `x-health-check-token`. The answer names each check `ok` or `failed`, never a value.
 - Agents never read a workstation secret file. `.claude/hooks/refuse-boat-key-reads.ts` refuses a call that would read the Boat key or the hand-out file `~/.config/werkflow/problem-report-handout.env`, which only `bun scripts/report-thread.ts` and the report dispatcher read.
 
 | Credential | Lives in | Used by | Expires | Rotate |
@@ -60,7 +60,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Vercel | Document storage | As set on the token | Cloudflare R2, Manage API tokens: one token scoped to the bucket; set both, redeploy, delete the old token. |
 | `CRON_SECRET` | Vercel, Production | Vercel Cron: [storage purge](document-storage-and-access.md#storage-cleanup) and [report deletion](../features/problem-reports.md#current-product-baseline) | Never | `openssl rand -hex 32`, then redeploy. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Vercel Preview (sandbox); Production empty until the live switch | `lib/werkflow-billing/` | Never | Roll in Stripe, set, redeploy. |
-| `WERKFLOW_SELLER_*` | Vercel | `lib/werkflow-billing/seller.ts` | Never | Set, redeploy. |
+| `WERKFLOW_SELLER_*` | Vercel | `lib/werkflow-billing/seller.ts`; `_VAT_ID` optional | Never | Set, redeploy. |
 | `PROBLEM_REPORT_HANDOUT_SECRET` | Vercel; `~/.config/werkflow/problem-report-handout.env`, mode 600, with `PROBLEM_REPORT_HANDOUT_ORIGIN` and an optional `VERCEL_AUTOMATION_BYPASS_SECRET`, on each machine that runs report threads | The [hand-out](problem-report-scrubbing.md#hand-out): `report-dispatch`, `scripts/report-thread.ts` | Never | `openssl rand -hex 32` on Vercel and in each file, redeploy. |
 | `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `POSTHOG_PROJECT_API_KEY`, `POSTHOG_ORGANIZATION_IDS` | Vercel | [Usage statistics](security.md#mail-and-providers) | Never | Rotate in PostHog, redeploy. |
