@@ -8,6 +8,7 @@ import {
   STANDARD_RATE_INVOICE,
   STORNO_INVOICE,
 } from './fixtures/reference-invoices';
+import type { InvoiceDraft } from './model';
 import { toEn16931 } from './to-en16931';
 
 // What the EN 16931 rules cannot demand but the model says: the CEN rules
@@ -95,6 +96,28 @@ describe('toEn16931', () => {
     expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0001</ram:DirectDebitMandateID>');
     expect(xml).toContain('Der Betrag wird per SEPA-Lastschrift eingezogen.');
     expect(xml).not.toContain('TotalPrepaidAmount');
+  });
+
+  test('a debit names a collection as done only when a payment is recorded', () => {
+    const [line] = DIRECT_DEBIT_INVOICE.lines;
+    if (!line) throw new Error('fixture without lines');
+    const text = (draft: InvoiceDraft) =>
+      /<ram:SpecifiedTradePaymentTerms>\s*<ram:Description>([^<]*)</.exec(
+        toEn16931(calculateInvoice(draft)),
+      )?.[1];
+    expect(text({ ...DIRECT_DEBIT_INVOICE, paidCents: 49900 })).toBe(
+      'Der Betrag wurde per SEPA-Lastschrift eingezogen.\n',
+    );
+    const nothingCollected = 'Es wird nichts per SEPA-Lastschrift eingezogen.\n';
+    expect(text({ ...DIRECT_DEBIT_INVOICE, lines: [{ ...line, unitPriceCents: 0 }] })).toBe(nothingCollected);
+    expect(
+      text({
+        ...DIRECT_DEBIT_INVOICE,
+        typeCode: '384',
+        precedingInvoice: { number: 'MUSTER-0001', issueDate: '2026-11-15' },
+        lines: [{ ...line, quantity: '-1' }],
+      }),
+    ).toBe(nothingCollected);
   });
 
   test("a seller identifier (BT-29) comes before the seller's name: its ID without a scheme, its global ID with one", () => {

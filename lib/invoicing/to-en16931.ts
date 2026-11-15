@@ -5,7 +5,7 @@
 
 import { formatGermanDate } from '@/lib/utils';
 
-import { taxRateBasisPoints } from './calculate';
+import { balanceOf, taxRateBasisPoints } from './calculate';
 import type { CalculatedInvoice, InvoiceParty, InvoiceSeller, InvoiceTax } from './model';
 
 /** The ZUGFeRD and Factur-X profile id of EN 16931 ("COMFORT"). */
@@ -119,9 +119,10 @@ function tradeParty(party: InvoiceParty | InvoiceSeller): XmlNode {
 function paymentTermsText(invoice: CalculatedInvoice): string {
   const { payment } = invoice;
   if (payment?.kind === 'direct-debit') {
-    return invoice.totals.dueCents > 0
-      ? 'Der Betrag wird per SEPA-Lastschrift eingezogen.\n'
-      : 'Der Betrag wurde per SEPA-Lastschrift eingezogen.\n';
+    const balance = balanceOf(invoice.totals);
+    if (balance === 'due') return 'Der Betrag wird per SEPA-Lastschrift eingezogen.\n';
+    if (balance === 'paid') return 'Der Betrag wurde per SEPA-Lastschrift eingezogen.\n';
+    return 'Es wird nichts per SEPA-Lastschrift eingezogen.\n';
   }
   if (payment?.kind === 'card')
     return `Der Betrag wird von der Karte mit der Endung ${payment.lastFour} abgebucht.\n`;
