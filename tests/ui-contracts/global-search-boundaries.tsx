@@ -31,7 +31,7 @@ export default function Link({ onClick, ...props }: ComponentProps<'a'> & { href
 declare global {
   interface Window {
     /** Each `global-search` read the dialog made, in order. */
-    uiContractSearchReads: Array<{ query: string; sources: SearchSource[] | null }>;
+    uiContractSearchReads: Array<{ query: string; sources: string[] | null }>;
   }
 }
 
@@ -54,11 +54,11 @@ function loaded(kind: SearchGroup['kind'], source: SearchSource, title: string, 
  */
 export function readGlobalSearchContract(input: unknown): GlobalSearchResult {
   const query = input && typeof input === 'object' && 'query' in input ? String(input.query) : '';
+  // Every source the read names, recorded whole: a retry that re-read a
+  // recovered source shows in the record and fails the spec's assertion.
   const sources =
     input && typeof input === 'object' && 'sources' in input && Array.isArray(input.sources)
-      ? input.sources
-          .map(String)
-          .filter((source): source is SearchSource => source === 'dokumente' || source === 'kunden')
+      ? input.sources.map(String)
       : null;
   window.uiContractSearchReads.push({ query, sources });
   if (query === 'Störung') return { success: false, error: 'load_failed' };
@@ -70,8 +70,16 @@ export function readGlobalSearchContract(input: unknown): GlobalSearchResult {
       'Wartungsvertrag Lindenhof',
       'Nummer im Altsystem 4711',
     );
-    if (sources?.length === 1)
-      return { success: true, query, groups: [sources[0] === 'kunden' ? kunden : dokumente] };
+    // A retry answers each source it names.
+    if (sources)
+      return {
+        success: true,
+        query,
+        groups: [
+          ...(sources.includes('kunden') ? [kunden] : []),
+          ...(sources.includes('dokumente') ? [dokumente] : []),
+        ],
+      };
     return {
       success: true,
       query,

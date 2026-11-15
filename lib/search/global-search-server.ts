@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { readCustomerPage } from '@/lib/clients/list-page-server';
+import { readCustomerPage, readCustomerSearchMatches } from '@/lib/clients/list-page-server';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { getDocumentLibrary } from '@/lib/documents/library-actions';
 import { DOCUMENT_CATEGORY_LABELS } from '@/lib/documents/types';
@@ -37,43 +37,41 @@ function loaded(
   return { kind, source, status: 'loaded', hits, total, moreHref: searchListHref(source, query) };
 }
 
-/** Kunden, and the Einsatzorte and Ansprechpartner the same customer read matched. */
+/**
+ * Kunden through the customer list reader; Einsatzorte and Ansprechpartner
+ * through the customer domain's own match of them, each limited on its own.
+ */
 async function searchCustomers(context: ActionContext, query: string): Promise<SearchGroup[]> {
-  const page = await readCustomerPage(
-    { organizationId: context.orgId, page: 1, search: query, view: 'aktiv' },
-    GLOBAL_SEARCH_LIMIT,
-  );
-  const sites = new Map<string, SearchHit>();
-  const contacts: SearchHit[] = [];
-  for (const client of page.clients) {
-    for (const site of client.matchedSites) {
-      sites.set(site.id, {
-        id: site.id,
-        title: site.name,
-        detail: hitDetail([formatSiteAddress(site), site.clientName]),
-        href: `/kunden/${site.clientId}`,
-      });
-    }
-    for (const contact of client.matchedContacts) {
-      contacts.push({
-        id: contact.id,
-        title: contact.name,
-        detail: hitDetail([client.name, contact.phone, contact.email]),
-        href: `/kunden/${client.id}`,
-      });
-    }
-  }
+  const [page, matches] = await Promise.all([
+    readCustomerPage(
+      { organizationId: context.orgId, page: 1, search: query, view: 'aktiv' },
+      GLOBAL_SEARCH_LIMIT,
+    ),
+    readCustomerSearchMatches(context.orgId, query, GLOBAL_SEARCH_LIMIT),
+  ]);
   const customers = page.clients.map((client) => ({
     id: client.id,
     title: client.name,
     detail: hitDetail([client.customerNumber, client.phone, client.address]),
     href: `/kunden/${client.id}`,
   }));
+  const sites = matches.sites.map((site) => ({
+    id: site.id,
+    title: site.name,
+    detail: hitDetail([formatSiteAddress(site), site.clientName]),
+    href: `/kunden/${site.clientId}`,
+  }));
+  const contacts = matches.contacts.map((contact) => ({
+    id: contact.id,
+    title: contact.name,
+    detail: hitDetail([contact.clientName, contact.phone, contact.email]),
+    href: `/kunden/${contact.clientId}`,
+  }));
   return [
     loaded('kunden', 'kunden', query, customers, page.total),
-    // The customer read counts customers; its sites and contacts are those of the shown customers.
-    loaded('einsatzorte', 'kunden', query, [...sites.values()].slice(0, GLOBAL_SEARCH_LIMIT), null),
-    loaded('ansprechpartner', 'kunden', query, contacts.slice(0, GLOBAL_SEARCH_LIMIT), null),
+    // The customer list counts customers, not their Objekte or contacts.
+    loaded('einsatzorte', 'kunden', query, sites, null),
+    loaded('ansprechpartner', 'kunden', query, contacts, null),
   ];
 }
 

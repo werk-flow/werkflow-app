@@ -1,13 +1,15 @@
 -- The header search finds a customer, a contact or a request by a phone number
--- typed in any spelling (werk-flow/werkflow-planning#487). Both list readers
--- keep their signatures and every other clause.
+-- typed in any spelling, and an Einsatzort or an Ansprechpartner under any
+-- matching customer (werk-flow/werkflow-planning#487). Both list readers keep
+-- their signatures and every other clause.
 
 -- 1. Whether a stored phone number contains the number a search names. The
 -- search counts as a phone number only when it holds nothing but digits,
--- spaces and the separators + / ( ) . -, so a name or a street with a house
--- number never matches by digits. Both sides go through
--- app_private.normalized_phone, the one owner of the digits rule: separators
--- go, +49 and 0049 become the trunk 0, fewer than six digits is no number.
+-- whitespace (a pasted number may carry no-break or thin spaces) and the
+-- separators + / ( ) . -, so a name or a street with a house number never
+-- matches by digits. Both sides go through app_private.normalized_phone, the
+-- one owner of the digits rule: everything but digits goes, +49 and 0049
+-- become the trunk 0, fewer than six digits is no number.
 create function app_private.phone_matches_search(p_phone text, p_search text)
 returns boolean
 language sql
@@ -16,7 +18,7 @@ parallel safe
 set search_path to ''
 as $$
   select case
-    when coalesce(p_search, '') !~ '^[0-9 +/().-]+$' then false
+    when coalesce(p_search, '') !~ '^[0-9\s\u00a0\u2007\u2009\u202f+/().-]+$' then false
     else coalesce(
       strpos(app_private.normalized_phone(p_phone), app_private.normalized_phone(p_search)) > 0,
       false
@@ -27,17 +29,47 @@ $$;
 revoke all on function app_private.phone_matches_search(text, text) from public, anon, authenticated;
 grant execute on function app_private.phone_matches_search(text, text) to service_role;
 
--- 2. The customer list. A customer also matches by its phone digits, and an
--- active contact by name, email, phone or phone digits. Each customer of the
--- page lists its first three matching contacts and their total, beside the
--- matching Objekte as before.
+-- 2. The one owner of which active Objekte and contacts a customer search
+-- matches, for the customer list and the header search: an Objekt by name,
+-- street, postal code, city or Objekt number; a contact by name, email, phone
+-- or phone digits.
+create function app_private.customer_search_sites(p_organization_id uuid, p_search text)
+returns table (id uuid, client_id uuid)
+language sql
+stable
+set search_path to ''
+as $$
+  select site.id, site.client_id from public.client_sites site
+  where coalesce(p_search, '') <> '' and site.organization_id = p_organization_id and site.is_active
+    and strpos(lower(concat_ws(' ', site.name, site.street, site.postal_code, site.city, site.source_number)), lower(p_search)) > 0;
+$$;
+
+create function app_private.customer_search_contacts(p_organization_id uuid, p_search text)
+returns table (id uuid, client_id uuid)
+language sql
+stable
+set search_path to ''
+as $$
+  select contact.id, contact.client_id from public.client_contacts contact
+  where coalesce(p_search, '') <> '' and contact.organization_id = p_organization_id and contact.is_active
+    and (
+      strpos(lower(concat_ws(' ', contact.name, contact.email, contact.phone)), lower(p_search)) > 0
+      or app_private.phone_matches_search(contact.phone, p_search)
+    );
+$$;
+
+revoke all on function app_private.customer_search_sites(uuid, text) from public, anon, authenticated;
+grant execute on function app_private.customer_search_sites(uuid, text) to service_role;
+revoke all on function app_private.customer_search_contacts(uuid, text) from public, anon, authenticated;
+grant execute on function app_private.customer_search_contacts(uuid, text) to service_role;
+
+-- 3. The customer list. A customer also matches by its phone digits and by an
+-- active contact's name, email, phone or phone digits.
 create or replace function public.list_customer_page(
   p_organization_id uuid, p_search text, p_page integer, p_page_size integer, p_archived boolean
 ) returns jsonb language sql stable security invoker set search_path = '' as $$
   with matched_sites as materialized (
-    select site.id, site.client_id from public.client_sites site
-    where coalesce(p_search, '') <> '' and site.organization_id = p_organization_id and site.is_active
-      and strpos(lower(concat_ws(' ', site.name, site.street, site.postal_code, site.city, site.source_number)), lower(p_search)) > 0
+    select matched.id, matched.client_id from app_private.customer_search_sites(p_organization_id, p_search) matched
   ), site_parties as materialized (
     select matched.id as site_id, matched.client_id from matched_sites matched
     union
@@ -45,20 +77,13 @@ create or replace function public.list_customer_page(
     join matched_sites matched on matched.id = role.site_id
     where role.organization_id = p_organization_id
       and (role.ends_on is null or role.ends_on >= (now() at time zone 'Europe/Berlin')::date)
-  ), matched_contacts as materialized (
-    select contact.id, contact.client_id from public.client_contacts contact
-    where coalesce(p_search, '') <> '' and contact.organization_id = p_organization_id and contact.is_active
-      and (
-        strpos(lower(concat_ws(' ', contact.name, contact.email, contact.phone)), lower(p_search)) > 0
-        or app_private.phone_matches_search(contact.phone, p_search)
-      )
   ), matching as materialized (
     select c.id, c.name from public.clients c
     where c.organization_id = p_organization_id and (c.archived_at is not null) = p_archived and (
       coalesce(p_search, '') = '' or
       strpos(lower(concat_ws(' ', c.name, c.customer_number, c.source_number, c.email, c.phone, c.address)), lower(p_search)) > 0 or
       app_private.phone_matches_search(c.phone, p_search) or
-      exists (select 1 from matched_contacts contact where contact.client_id = c.id) or
+      exists (select 1 from app_private.customer_search_contacts(p_organization_id, p_search) contact where contact.client_id = c.id) or
       exists (select 1 from site_parties party where party.client_id = c.id)
     )
   ), page as (
@@ -73,20 +98,6 @@ create or replace function public.list_customer_page(
         'customerNumber', client.customer_number, 'sourceNumber', client.source_number,
         'email', client.email, 'phone', client.phone, 'address', client.address, 'notes', client.notes,
         'createdAt', client.created_at, 'updatedAt', client.updated_at,
-        'matchedContactTotal', (select count(*) from matched_contacts contact where contact.client_id = page.id),
-        'matchedContacts', coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'id', shown.id, 'name', shown.name, 'role', shown.role, 'email', shown.email, 'phone', shown.phone
-          ) order by shown.name collate "de-DE-x-icu", shown.id)
-          from (
-            select contact.id, contact.name, contact.role, contact.email, contact.phone
-            from matched_contacts matched
-            join public.client_contacts contact on contact.id = matched.id and contact.organization_id = p_organization_id
-            where matched.client_id = page.id
-            order by contact.name collate "de-DE-x-icu", contact.id
-            limit 3
-          ) shown
-        ), '[]'),
         'matchedSiteTotal', (select count(*) from site_parties party where party.client_id = page.id),
         'matchedSites', coalesce((
           select jsonb_agg(shown.site order by shown.name collate "de-DE-x-icu", shown.id)
@@ -139,7 +150,55 @@ create or replace function public.list_customer_page(
   );
 $$;
 
--- 3. The request list. A request also matches by the digits of the caller's phone.
+-- 4. The header search's Einsatzorte and Ansprechpartner: the active Objekte
+-- and contacts of active customers that the customer search matches, each
+-- limited on its own, so a match under any customer is found, not only under
+-- the first page of matching customers.
+create function public.search_customer_sites_and_contacts(
+  p_organization_id uuid, p_search text, p_limit integer
+) returns jsonb language sql stable security invoker set search_path = '' as $$
+  with sites as materialized (
+    select site.id, site.organization_id, site.name, site.street, site.postal_code, site.city,
+      owner.id as client_id, owner.name as client_name
+    from app_private.customer_search_sites(p_organization_id, p_search) matched
+    join public.client_sites site on site.id = matched.id and site.organization_id = p_organization_id
+    join public.clients owner on owner.id = site.client_id and owner.organization_id = p_organization_id
+    where owner.archived_at is null
+    order by site.name collate "de-DE-x-icu", site.id
+    limit least(greatest(p_limit, 1), 100)
+  ), contacts as materialized (
+    select contact.id, contact.organization_id, contact.name, contact.email, contact.phone,
+      client.id as client_id, client.name as client_name
+    from app_private.customer_search_contacts(p_organization_id, p_search) matched
+    join public.client_contacts contact on contact.id = matched.id and contact.organization_id = p_organization_id
+    join public.clients client on client.id = contact.client_id and client.organization_id = p_organization_id
+    where client.archived_at is null
+    order by contact.name collate "de-DE-x-icu", contact.id
+    limit least(greatest(p_limit, 1), 100)
+  ) select jsonb_build_object(
+    'sites', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', site.id, 'organizationId', site.organization_id, 'name', site.name,
+        'street', site.street, 'postalCode', site.postal_code, 'city', site.city,
+        'clientId', site.client_id, 'clientName', site.client_name
+      ) order by site.name collate "de-DE-x-icu", site.id)
+      from sites site
+    ), '[]'),
+    'contacts', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', contact.id, 'organizationId', contact.organization_id, 'name', contact.name,
+        'email', contact.email, 'phone', contact.phone,
+        'clientId', contact.client_id, 'clientName', contact.client_name
+      ) order by contact.name collate "de-DE-x-icu", contact.id)
+      from contacts contact
+    ), '[]')
+  );
+$$;
+
+revoke all on function public.search_customer_sites_and_contacts(uuid, text, integer) from public, anon, authenticated;
+grant execute on function public.search_customer_sites_and_contacts(uuid, text, integer) to service_role;
+
+-- 5. The request list. A request also matches by the digits of the caller's phone.
 create or replace function public.list_request_page(
   p_organization_id uuid,
   p_status text default 'aktiv',

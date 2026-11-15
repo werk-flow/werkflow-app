@@ -6,7 +6,9 @@
 // record of another organization is never a hit; an employee reaches only
 // their assigned jobs and no customer, request, Anlage or document; no role
 // reads a Mitarbeiter, time, absence, sickness, qualification or price table;
-// a failed source fails only its own groups, and a retry reads only it.
+// a failed source fails only its own groups, and a retry reads only it;
+// Ansprechpartner and Einsatzorte are found under any matching customer, not
+// only under the first page of matching customers.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -28,15 +30,22 @@ const ids = {
   foreignJob: '35000000-0000-4000-8000-000000000003',
   request: '36000000-0000-4000-8000-000000000001',
   foreignRequest: '36000000-0000-4000-8000-000000000002',
+  contact: '37000000-0000-4000-8000-000000000001',
+  foreignContact: '37000000-0000-4000-8000-000000000002',
+  site: '38000000-0000-4000-8000-000000000001',
+  foreignSite: '38000000-0000-4000-8000-000000000002',
+  seventhClient: '34000000-0000-4000-8000-000000000017',
+  seventhContact: '37000000-0000-4000-8000-000000000017',
+  foreignMuellerContact: '37000000-0000-4000-8000-000000000018',
 } as const;
-const query = 'Lindenhof';
+let query = 'Lindenhof';
 const createdAt = '2026-11-02T08:00:00.000Z';
 
-function client(id: string, organizationId: string): Row {
+function client(id: string, organizationId: string, name = 'Hausverwaltung Lindenhof GmbH'): Row {
   return {
     id,
     organization_id: organizationId,
-    name: 'Hausverwaltung Lindenhof GmbH',
+    name,
     client_type: 'gewerblich',
     customer_number: 'K-1001',
     email: null,
@@ -48,6 +57,36 @@ function client(id: string, organizationId: string): Row {
     updated_at: createdAt,
   };
 }
+
+function contact(id: string, organizationId: string, clientId: string, name: string, email: string): Row {
+  return {
+    id,
+    organization_id: organizationId,
+    client_id: clientId,
+    name,
+    email,
+    phone: '030 4440777',
+    is_active: true,
+  };
+}
+
+function site(id: string, organizationId: string, clientId: string): Row {
+  return {
+    id,
+    organization_id: organizationId,
+    client_id: clientId,
+    name: 'Wohnanlage Lindenhof',
+    street: 'Lindenstraße 3',
+    postal_code: '70173',
+    city: 'Stuttgart',
+    is_active: true,
+  };
+}
+
+// Six customers „Müller“ fill the customer page of five; a seventh holds the contact „Müller“.
+const muellerClients = [1, 2, 3, 4, 5, 6].map((n) =>
+  client(`34000000-0000-4000-8000-00000000001${n}`, ORGANIZATION_A, `Müller Haustechnik ${n}`),
+);
 
 function job(id: string, organizationId: string, title: string, assignee: string): Row[] {
   return [
@@ -128,7 +167,34 @@ const NEVER_READ = [
 ];
 
 const world = installActionWorld({
-  clients: [client(ids.client, ORGANIZATION_A), client(ids.foreignClient, ORGANIZATION_B)],
+  clients: [
+    client(ids.client, ORGANIZATION_A),
+    client(ids.foreignClient, ORGANIZATION_B),
+    ...muellerClients,
+    client(ids.seventhClient, ORGANIZATION_A, 'Sonnenberg Wohnbau GmbH'),
+  ],
+  client_contacts: [
+    contact(ids.contact, ORGANIZATION_A, ids.client, 'Max Mustermann', 'max@lindenhof.example'),
+    contact(ids.foreignContact, ORGANIZATION_B, ids.foreignClient, 'Max Mustermann', 'max@lindenhof.example'),
+    contact(
+      ids.seventhContact,
+      ORGANIZATION_A,
+      ids.seventhClient,
+      'Erika Müller',
+      'erika@sonnenberg.example',
+    ),
+    contact(
+      ids.foreignMuellerContact,
+      ORGANIZATION_B,
+      ids.foreignClient,
+      'Erika Müller',
+      'erika@sonnenberg.example',
+    ),
+  ],
+  client_sites: [
+    site(ids.site, ORGANIZATION_A, ids.client),
+    site(ids.foreignSite, ORGANIZATION_B, ids.foreignClient),
+  ],
   jobs: [assignedJob, coworkerJob, foreignJob].flatMap((row) => (row ? [row] : [])),
   job_assignments: [assignedLink, coworkerLink, foreignLink].flatMap((row) => (row ? [row] : [])),
   projects: [],
@@ -140,7 +206,8 @@ for (const table of NEVER_READ) world.failingTables.add(table);
 
 const failingFunctions = new Set<string>();
 const matches = (value: unknown): boolean =>
-  typeof value === 'string' && value.toLowerCase().includes(String(query).toLowerCase());
+  typeof value === 'string' && value.toLowerCase().includes(query.toLowerCase());
+const limited = <T>(rows: T[], limit: unknown): T[] => rows.slice(0, Number(limit));
 const inOrganization = (table: string, organizationId: unknown): Row[] =>
   tableRows(world, table).filter((row) => row.organization_id === organizationId);
 
@@ -177,34 +244,50 @@ world.rpc = ({ name, args }) => {
   const search = String(args.p_search ?? '');
   assert.equal(search === '' || search === query, true, `${name} searches the query`);
   if (name === 'list_customer_page') {
-    const clients = inOrganization('clients', args.p_organization_id)
-      .filter((row) => matches(row.name))
-      .map((row) => ({
-        id: row.id,
-        organizationId: row.organization_id,
-        name: row.name,
-        clientType: row.client_type,
-        customerNumber: row.customer_number,
-        email: row.email,
-        phone: row.phone,
-        address: row.address,
-        notes: row.notes,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-        matchedSites: [],
-        matchedSiteTotal: 0,
-        matchedContacts: [
-          {
-            id: '37000000-0000-4000-8000-000000000001',
-            name: 'Max Mustermann',
-            role: null,
-            email: null,
-            phone: '030 4440777',
-          },
-        ],
-        matchedContactTotal: 1,
-      }));
-    return { data: { total: clients.length, clients }, error: null };
+    const matching = inOrganization('clients', args.p_organization_id)
+      .filter(
+        (row) =>
+          matches(row.name) ||
+          tableRows(world, 'client_contacts').some((link) => link.client_id === row.id && matches(link.name)),
+      )
+      .toSorted((left, right) => String(left.name).localeCompare(String(right.name), 'de'));
+    const clients = limited(matching, args.p_page_size).map((row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+      name: row.name,
+      clientType: row.client_type,
+      customerNumber: row.customer_number,
+      email: row.email,
+      phone: row.phone,
+      address: row.address,
+      notes: row.notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      matchedSites: [],
+      matchedSiteTotal: 0,
+    }));
+    return { data: { total: matching.length, clients }, error: null };
+  }
+  if (name === 'search_customer_sites_and_contacts') {
+    const owner = (clientId: unknown) =>
+      inOrganization('clients', args.p_organization_id).find((row) => row.id === clientId);
+    const shape = (row: Row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+      name: row.name,
+      clientId: row.client_id,
+      clientName: owner(row.client_id)?.name,
+    });
+    const sites = inOrganization('client_sites', args.p_organization_id)
+      .filter((row) => matches(row.name) || matches(row.street))
+      .map((row) => ({ ...shape(row), street: row.street, postalCode: row.postal_code, city: row.city }));
+    const contacts = inOrganization('client_contacts', args.p_organization_id)
+      .filter((row) => matches(row.name) || matches(row.email))
+      .map((row) => ({ ...shape(row), email: row.email, phone: row.phone }));
+    return {
+      data: { sites: limited(sites, args.p_limit), contacts: limited(contacts, args.p_limit) },
+      error: null,
+    };
   }
   if (name === 'list_job_entries_page') return { data: jobEntriesPage(args), error: null };
   if (name === 'list_request_page') {
@@ -233,6 +316,7 @@ const { searchEverywhere } = await import('@/lib/search/global-search-server');
 
 const LIST_FUNCTIONS = [
   'list_customer_page',
+  'search_customer_sites_and_contacts',
   'list_job_entries_page',
   'list_request_page',
   'list_equipment_page',
@@ -285,15 +369,15 @@ for (const role of ['admin', 'buero'] as const) {
   const found = hitIds(result);
   assert.deepEqual(
     found.toSorted(),
-    [
-      ids.client,
-      '37000000-0000-4000-8000-000000000001',
-      ids.assignedJob,
-      ids.coworkerJob,
-      ids.request,
-    ].toSorted(),
+    [ids.client, ids.site, ids.contact, ids.assignedJob, ids.coworkerJob, ids.request].toSorted(),
   );
-  for (const foreign of [ids.foreignClient, ids.foreignJob, ids.foreignRequest])
+  for (const foreign of [
+    ids.foreignClient,
+    ids.foreignContact,
+    ids.foreignSite,
+    ids.foreignJob,
+    ids.foreignRequest,
+  ])
     assert.equal(found.includes(foreign), false, `${role} finds no record of another organization`);
   for (const group of result.groups) {
     if (group.status !== 'loaded') continue;
@@ -322,21 +406,24 @@ assert.deepEqual(
 failingFunctions.clear();
 // A customer read that answers another organization's row is a failure, never a hit.
 const foreignAnswer = world.rpc;
-world.rpc = (call) =>
-  call.name === 'list_customer_page'
-    ? foreignAnswer({ ...call, args: { ...call.args, p_organization_id: ORGANIZATION_B } })
-    : foreignAnswer(call);
-const scoped = await search({ sources: ['kunden'] });
-assert.equal(scoped.success, true);
-if (!scoped.success) throw new Error('unreachable');
-assert.deepEqual(
-  scoped.groups.map((group) => [group.kind, group.status]),
-  [
-    ['kunden', 'failed'],
-    ['einsatzorte', 'failed'],
-    ['ansprechpartner', 'failed'],
-  ],
-);
+for (const customerRead of ['list_customer_page', 'search_customer_sites_and_contacts']) {
+  world.rpc = (call) =>
+    call.name === customerRead
+      ? foreignAnswer({ ...call, args: { ...call.args, p_organization_id: ORGANIZATION_B } })
+      : foreignAnswer(call);
+  const scoped = await search({ sources: ['kunden'] });
+  assert.equal(scoped.success, true);
+  if (!scoped.success) throw new Error('unreachable');
+  assert.deepEqual(
+    scoped.groups.map((group) => [group.kind, group.status]),
+    [
+      ['kunden', 'failed'],
+      ['einsatzorte', 'failed'],
+      ['ansprechpartner', 'failed'],
+    ],
+    customerRead,
+  );
+}
 world.rpc = foreignAnswer;
 // The retry reads only the sources it names.
 const retry = await search({ sources: ['dokumente'] });
@@ -345,6 +432,25 @@ assert.deepEqual(
   ['list_document_page'],
 );
 assert.equal(retry.success, true);
+
+// Six customers „Müller“ fill the customer page; the contact „Müller“ under a
+// seventh is still found, the foreign one never.
+query = 'Müller';
+const mueller = await search({ sources: ['kunden'] });
+assert.equal(mueller.success, true);
+if (!mueller.success) throw new Error('unreachable');
+const groupHits = (kind: string) =>
+  mueller.groups.flatMap((group) =>
+    group.kind === kind && group.status === 'loaded' ? group.hits.map((hit) => hit.id) : [],
+  );
+assert.equal(groupHits('kunden').length, 5);
+assert.equal(
+  groupHits('kunden').includes(ids.seventhClient),
+  false,
+  'the seventh customer is beyond the page',
+);
+assert.deepEqual(groupHits('ansprechpartner'), [ids.seventhContact]);
+query = 'Lindenhof';
 
 // An employee: only their assigned jobs, through the job list's employee scope.
 signInAs(world, 'employee');

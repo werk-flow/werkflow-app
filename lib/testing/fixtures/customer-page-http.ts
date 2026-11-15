@@ -174,9 +174,6 @@ const expectedPage = {
       updatedAt: row.updated_at,
       matchedSites: [],
       matchedSiteTotal: 0,
-      // A row without contact matches, as the previous reader answered, lists none.
-      matchedContacts: [],
-      matchedContactTotal: 0,
     },
   ],
   total: 61,
