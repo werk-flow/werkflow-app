@@ -168,6 +168,7 @@ async function recordPaidCheckout(email: string): Promise<void> {
     p_stripe_subscription_id: `sub_test_${suffix}`,
     p_status: 'active',
     p_cancel_at_period_end: false,
+    p_read_at: new Date().toISOString(),
   });
   if (recordError) throw new Error(`Failed to record the subscription for ${email}: ${recordError.message}`);
 }

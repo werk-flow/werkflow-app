@@ -3,9 +3,10 @@
 -- its functions, and the service role writes only through them; only an
 -- organization's Admin stores its customer; a person holds one open
 -- reservation; a signal of another customer, or a second subscription while
--- the first holds, is refused; a failed payment never ends the subscription;
--- and only the payer creates the reserved organization, with the reserved
--- id, once, while the subscription holds.
+-- the first holds, is refused; an older read never overwrites a newer state;
+-- a failed payment never ends the subscription; and only the payer creates
+-- the reserved organization, with the reserved id, once, while the
+-- subscription holds.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 
@@ -60,7 +61,7 @@ begin
     foreach fn in array array[
       'public.werkflow_subscription_holds(text, text)',
       'public.reserve_werkflow_subscription(uuid, uuid, boolean, text)',
-      'public.record_werkflow_subscription_state(uuid, text, text, text, boolean, text, timestamptz)',
+      'public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz)',
       'public.create_organization_with_id(uuid, uuid, text, text)',
       'public.create_organization_from_subscription(uuid, text, text)'
     ] loop
@@ -126,14 +127,23 @@ begin
 
   -- A failed payment keeps the subscription holding, also when Stripe cancels it for that.
   v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
-    'cus_test_sonnenberg', 'sub_test_1', 'past_due', false);
+    'cus_test_sonnenberg', 'sub_test_1', 'past_due', false, '2037-01-01T10:00:01Z');
   if v_answer is distinct from 'recorded' or not (select holds_subscription from public.werkflow_subscriptions
       where organization_id = '41248000-0000-0000-0000-000000000010')
   then
     raise exception 'a past due subscription does not hold';
   end if;
   perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
-    'sub_test_1', 'canceled', false, 'payment_failed', '2037-12-15T10:00:00Z');
+    'sub_test_1', 'canceled', false, '2037-01-01T10:00:02Z', 'payment_failed', '2037-12-15T10:00:00Z');
+
+  -- A slow handler's older read changes nothing.
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_1', 'active', false, '2037-01-01T10:00:01Z');
+  if v_answer is distinct from 'ignored' or (select status from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'canceled'
+  then
+    raise exception 'an older read overwrote a newer state';
+  end if;
   if not (select holds_subscription from public.werkflow_subscriptions
       where organization_id = '41248000-0000-0000-0000-000000000010') then
     raise exception 'a cancellation for a failed payment ended the subscription';
@@ -141,7 +151,7 @@ begin
 
   -- A second subscription while the first holds is refused; a stale one that no longer holds changes nothing.
   v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
-    'cus_test_sonnenberg', 'sub_test_0', 'incomplete_expired', false);
+    'cus_test_sonnenberg', 'sub_test_0', 'incomplete_expired', false, '2037-01-01T10:00:03Z');
   if v_answer is distinct from 'ignored' then
     raise exception 'a stale subscription that no longer holds was recorded';
   end if;
@@ -150,15 +160,15 @@ $$;
 
 select pg_temp.expect_refusal('a second subscription while the first holds', $sql$
   select public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
-    'sub_test_2', 'active', false)
+    'sub_test_2', 'active', false, '2037-01-01T10:00:04Z')
 $sql$, 'subscription_conflict');
 select pg_temp.expect_refusal('a signal of another customer', $sql$
   select public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_other',
-    'sub_test_1', 'active', false)
+    'sub_test_1', 'active', false, '2037-01-01T10:00:05Z')
 $sql$, 'subscription_customer_mismatch');
 select pg_temp.expect_refusal('a signal of an unknown organization', $sql$
   select public.record_werkflow_subscription_state('41248000-0000-0000-0000-0000000000ff', 'cus_test_sonnenberg',
-    'sub_test_1', 'active', false)
+    'sub_test_1', 'active', false, '2037-01-01T10:00:06Z')
 $sql$, 'subscription_row_missing');
 
 do $$
@@ -167,9 +177,9 @@ declare
 begin
   -- A subscription cancelled on request no longer holds; a new one then replaces it.
   perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
-    'sub_test_1', 'canceled', false, 'cancellation_requested');
+    'sub_test_1', 'canceled', false, '2037-01-01T10:00:07Z', 'cancellation_requested');
   v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
-    'cus_test_sonnenberg', 'sub_test_2', 'active', false);
+    'cus_test_sonnenberg', 'sub_test_2', 'active', false, '2037-01-01T10:00:08Z');
   if v_answer is distinct from 'recorded' or (select stripe_subscription_id from public.werkflow_subscriptions
       where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'sub_test_2'
   then
@@ -196,7 +206,7 @@ select pg_temp.expect_refusal('an unpaid reservation', $sql$
     '41248000-0000-0000-0000-000000000003', 'Neue Firma SQL', 'ABOSQL02')
 $sql$, 'subscription_required');
 select public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000020', 'cus_test_neu',
-  'sub_test_3', 'active', false);
+  'sub_test_3', 'active', false, '2037-01-01T10:00:09Z');
 -- Another person, even an Admin with a held subscription of an existing organization, has no reservation.
 select pg_temp.expect_refusal('another person creating an organization', $sql$
   select public.create_organization_from_subscription(

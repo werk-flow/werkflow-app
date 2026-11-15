@@ -172,6 +172,7 @@ assert.equal(subscriptionRows()[0]?.linked_at !== null, true);
 // signal is re-read and recorded, and no third Checkout opens.
 assert.ok((await startSubscriptionCheckout(ORGANIZATION_A)).success);
 assert.equal(stripe.customers.size, 1);
+assert.deepEqual(stripe.expiredCheckouts, ['cs_test_1'], 'a second Checkout left the first one payable');
 stripe.subscriptions.set('sub_test_1', {
   id: 'sub_test_1',
   customerId: 'cus_test_1',

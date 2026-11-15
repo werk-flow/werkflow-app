@@ -54,6 +54,8 @@ create table public.werkflow_subscriptions (
   cancellation_reason text check (cancellation_reason ~ '^[a-z_]{1,60}$'),
   cancel_at_period_end boolean not null default false,
   current_period_end timestamptz,
+  -- When WerkFlow read the recorded state from Stripe: an older read never overwrites it.
+  state_read_at timestamptz,
   holds_subscription boolean not null
     generated always as (public.werkflow_subscription_holds(status, cancellation_reason)) stored,
   created_at timestamptz not null default now(),
@@ -122,7 +124,8 @@ $$;
 
 -- Records the state of a subscription as Stripe reports it on a re-read.
 -- The organization and the customer come from the Stripe customer; a row of
--- another customer refuses. A second subscription of one organization
+-- another customer refuses. A read older than the recorded one changes
+-- nothing, so a slow handler never overwrites a newer state. A second subscription of one organization
 -- replaces the stored one only when the stored one no longer holds; while it
 -- holds, the call refuses, so a double charge reaches a person. A signal of a
 -- subscription the row no longer follows, and that does not hold, changes
@@ -133,6 +136,7 @@ create function public.record_werkflow_subscription_state(
   p_stripe_subscription_id text,
   p_status text,
   p_cancel_at_period_end boolean,
+  p_read_at timestamptz,
   p_cancellation_reason text default null,
   p_current_period_end timestamptz default null
 )
@@ -145,7 +149,7 @@ declare
   v_row public.werkflow_subscriptions;
 begin
   if p_organization_id is null or p_stripe_customer_id is null or p_stripe_subscription_id is null
-    or p_status is null or p_cancel_at_period_end is null
+    or p_status is null or p_cancel_at_period_end is null or p_read_at is null
   then
     raise exception 'invalid_input';
   end if;
@@ -157,6 +161,9 @@ begin
   end if;
   if v_row.stripe_customer_id <> p_stripe_customer_id then
     raise exception 'subscription_customer_mismatch';
+  end if;
+  if v_row.state_read_at is not null and p_read_at <= v_row.state_read_at then
+    return 'ignored';
   end if;
   if v_row.stripe_subscription_id is not null and v_row.stripe_subscription_id <> p_stripe_subscription_id then
     if not public.werkflow_subscription_holds(p_status, p_cancellation_reason) then
@@ -173,6 +180,7 @@ begin
       cancellation_reason = p_cancellation_reason,
       cancel_at_period_end = p_cancel_at_period_end,
       current_period_end = p_current_period_end,
+      state_read_at = p_read_at,
       updated_at = now()
   where subscription.organization_id = p_organization_id;
   return 'recorded';
@@ -294,9 +302,9 @@ $$;
 revoke all on function public.reserve_werkflow_subscription(uuid, uuid, boolean, text)
   from public, anon, authenticated;
 grant execute on function public.reserve_werkflow_subscription(uuid, uuid, boolean, text) to service_role;
-revoke all on function public.record_werkflow_subscription_state(uuid, text, text, text, boolean, text, timestamptz)
+revoke all on function public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz)
   from public, anon, authenticated;
-grant execute on function public.record_werkflow_subscription_state(uuid, text, text, text, boolean, text, timestamptz)
+grant execute on function public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz)
   to service_role;
 revoke all on function public.create_organization_from_subscription(uuid, text, text)
   from public, anon, authenticated;

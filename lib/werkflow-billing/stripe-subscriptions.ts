@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { createHash } from 'node:crypto';
+
 import type Stripe from 'stripe';
 
 // The gateway's subscription calls (werk-flow/werkflow-planning#248): the
@@ -24,6 +26,8 @@ export type StripeSubscriptionSnapshot = {
   cancelAtPeriodEnd: boolean;
   /** When the paid period ends, as ISO time: the earliest end of its items. */
   currentPeriodEnd: string | null;
+  /** When the read started, as ISO time: an older read never overwrites a newer one. */
+  readAt: string;
 };
 
 type StripeCheckoutRequest = {
@@ -41,7 +45,11 @@ export type StripeSubscriptionGateway = {
     email: string | null;
     name: string | null;
   }): Promise<string>;
-  /** A Checkout for the monthly subscription by SEPA direct debit or card; answers its URL. */
+  /**
+   * A Checkout for the monthly subscription by SEPA direct debit or card;
+   * answers its URL. The customer's open Checkouts expire first, so only one
+   * can be paid, and parallel calls get the same session.
+   */
   createCheckoutSession(input: StripeCheckoutRequest): Promise<string>;
   /** The subscription a completed Checkout started; null for another mode or an open Checkout. */
   readCheckoutSubscriptionId(sessionId: string): Promise<string | null>;
@@ -66,7 +74,10 @@ function expandableId(value: string | { id: string } | null): string | null {
   return typeof value === 'string' ? value : (value?.id ?? null);
 }
 
-function subscriptionSnapshotOf(subscription: Stripe.Subscription): StripeSubscriptionSnapshot {
+function subscriptionSnapshotOf(
+  subscription: Stripe.Subscription,
+  readAt: string,
+): StripeSubscriptionSnapshot {
   const customer = subscription.customer;
   const organizationId =
     typeof customer === 'object' && !customer.deleted
@@ -81,6 +92,7 @@ function subscriptionSnapshotOf(subscription: Stripe.Subscription): StripeSubscr
     cancellationReason: subscription.cancellation_details?.reason ?? null,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
     currentPeriodEnd: periodEnds.length > 0 ? new Date(Math.min(...periodEnds) * 1000).toISOString() : null,
+    readAt,
   };
 }
 
@@ -102,23 +114,39 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
       }),
     createCheckoutSession: (request) =>
       call(async () => {
+        // Two paid Checkouts would start two subscriptions: every open one
+        // expires first. A Checkout paid meanwhile refuses to expire, so the
+        // call fails and the next one re-reads the subscription.
+        const earlier = await client.checkout.sessions.list({ customer: request.customerId, limit: 100 });
+        for (const session of earlier.data) {
+          if (session.status === 'open') await client.checkout.sessions.expire(session.id);
+        }
+        // Calls that saw the same Checkouts get one new session, not one each.
+        const seen = earlier.data
+          .map((session) => session.id)
+          .sort()
+          .join(',');
+        const attempt = createHash('sha256').update(seen).digest('hex').slice(0, 32);
         const metadata = { [ORGANIZATION_METADATA_KEY]: request.organizationId };
-        const session = await client.checkout.sessions.create({
-          mode: 'subscription',
-          customer: request.customerId,
-          client_reference_id: request.organizationId,
-          line_items: [{ price: request.priceId, quantity: 1 }],
-          // offer.md: direct debit first, card as the alternative, nothing else.
-          allowed_payment_method_types: ['sepa_debit', 'card'],
-          // The invoice names the buyer's address (EN 16931); Checkout saves it on the customer.
-          billing_address_collection: 'required',
-          customer_update: { address: 'auto', name: 'auto' },
-          locale: 'de',
-          metadata,
-          subscription_data: { metadata },
-          success_url: request.successUrl,
-          cancel_url: request.cancelUrl,
-        });
+        const session = await client.checkout.sessions.create(
+          {
+            mode: 'subscription',
+            customer: request.customerId,
+            client_reference_id: request.organizationId,
+            line_items: [{ price: request.priceId, quantity: 1 }],
+            // offer.md: direct debit first, card as the alternative, nothing else.
+            allowed_payment_method_types: ['sepa_debit', 'card'],
+            // The invoice names the buyer's address (EN 16931); Checkout saves it on the customer.
+            billing_address_collection: 'required',
+            customer_update: { address: 'auto', name: 'auto' },
+            locale: 'de',
+            metadata,
+            subscription_data: { metadata },
+            success_url: request.successUrl,
+            cancel_url: request.cancelUrl,
+          },
+          { idempotencyKey: `werkflow-checkout-${request.organizationId}-${attempt}` },
+        );
         if (!session.url) throw callFailed();
         return session.url;
       }),
@@ -129,11 +157,16 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
         return expandableId(session.subscription);
       }),
     readSubscription: (subscriptionId) =>
-      call(async () =>
-        subscriptionSnapshotOf(await client.subscriptions.retrieve(subscriptionId, { expand: ['customer'] })),
-      ),
+      call(async () => {
+        const readAt = new Date().toISOString();
+        return subscriptionSnapshotOf(
+          await client.subscriptions.retrieve(subscriptionId, { expand: ['customer'] }),
+          readAt,
+        );
+      }),
     readNewestSubscription: (customerId) =>
       call(async () => {
+        const readAt = new Date().toISOString();
         const page = await client.subscriptions.list({
           customer: customerId,
           status: 'all',
@@ -141,7 +174,7 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
           expand: ['data.customer'],
         });
         const newest = page.data[0];
-        return newest ? subscriptionSnapshotOf(newest) : null;
+        return newest ? subscriptionSnapshotOf(newest, readAt) : null;
       }),
   };
 }
