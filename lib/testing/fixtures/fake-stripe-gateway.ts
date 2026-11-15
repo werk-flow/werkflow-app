@@ -86,10 +86,7 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
   return {
     createCustomer: (input) =>
       reach(() => {
-        // Stripe's idempotency key: a second create for one organization answers its customer.
-        for (const [id, customer] of billing.customers) {
-          if (customer.organizationId === input.organizationId) return id;
-        }
+        // No idempotency key: every create is a new customer, as at Stripe.
         const id = `cus_test_${billing.customers.size + 1}`;
         billing.customers.set(id, input);
         return id;

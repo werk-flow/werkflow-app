@@ -62,8 +62,10 @@ create table public.werkflow_subscriptions (
   cancellation_reason text check (cancellation_reason ~ '^[a-z_]{1,60}$'),
   cancel_at_period_end boolean not null default false,
   current_period_end timestamptz,
-  -- When WerkFlow read the recorded subscription from Stripe: an older read of it never overwrites it.
-  state_read_at timestamptz,
+  -- When WerkFlow last read each subscription of the organization from Stripe,
+  -- by subscription id: a read no newer than its subscription's last one changes nothing.
+  read_at_by_subscription jsonb not null default '{}'::jsonb
+    check (jsonb_typeof(read_at_by_subscription) = 'object'),
   -- The organization's one Checkout: its session, while a payer may still open it.
   checkout_session_id text check (checkout_session_id ~ '^cs_[A-Za-z0-9_]{1,250}$'),
   checkout_url text check (checkout_url ~ '^https://[!-~]+$' and length(checkout_url) <= 2000),
@@ -216,14 +218,15 @@ $$;
 
 -- Records the state of a subscription as Stripe reports it on a re-read.
 -- The organization and the customer come from the Stripe customer; a row of
--- another customer refuses. Of the subscription the row follows, a read
--- older than the recorded one changes nothing, so a slow handler never
--- overwrites a newer state. Another subscription of the organization
--- replaces the stored one only when it holds and the stored one does not,
--- whatever the read times; while the stored one holds, the call refuses
+-- another customer refuses. Read times order the reads of each subscription
+-- on their own: a read no newer than that subscription's last one changes
+-- nothing, so a slow handler never brings back an older state, also of a
+-- subscription the row does not follow. Every newer read is noted. Another
+-- subscription replaces the stored one only when it holds and the stored one
+-- does not; while the stored one holds, the call refuses
 -- (`subscription_conflict`), and the caller cancels the newcomer. Another
--- subscription that does not hold changes nothing. Answers 'recorded' or
--- 'ignored'.
+-- subscription that does not hold changes only its read time. Answers
+-- 'recorded' or 'ignored'.
 create function public.record_werkflow_subscription_state(
   p_organization_id uuid,
   p_stripe_customer_id text,
@@ -256,11 +259,15 @@ begin
   if v_row.stripe_customer_id <> p_stripe_customer_id then
     raise exception 'subscription_customer_mismatch';
   end if;
-  if v_row.stripe_subscription_id = p_stripe_subscription_id then
-    if p_read_at <= v_row.state_read_at then
-      return 'ignored';
-    end if;
-  elsif v_row.stripe_subscription_id is not null then
+  if p_read_at <= (v_row.read_at_by_subscription ->> p_stripe_subscription_id)::timestamptz then
+    return 'ignored';
+  end if;
+  update public.werkflow_subscriptions subscription
+  set read_at_by_subscription = subscription.read_at_by_subscription
+        || jsonb_build_object(p_stripe_subscription_id, p_read_at)
+  where subscription.organization_id = p_organization_id;
+
+  if v_row.stripe_subscription_id <> p_stripe_subscription_id then
     if not public.werkflow_subscription_holds(p_status, p_cancellation_reason) then
       return 'ignored';
     end if;
@@ -275,7 +282,6 @@ begin
       cancellation_reason = p_cancellation_reason,
       cancel_at_period_end = p_cancel_at_period_end,
       current_period_end = p_current_period_end,
-      state_read_at = p_read_at,
       updated_at = now()
   where subscription.organization_id = p_organization_id;
   return 'recorded';

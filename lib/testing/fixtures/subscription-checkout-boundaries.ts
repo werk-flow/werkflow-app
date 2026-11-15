@@ -355,3 +355,6 @@ assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
   error: 'checkout_failed',
 });
 assert.deepEqual(subscriptionRows(), []);
+// A failed customer create blocks nothing: the next start creates the customer and the Checkout.
+stripe.down = false;
+assert.equal((await startSubscriptionCheckout(ORGANIZATION_A)).success, true);
