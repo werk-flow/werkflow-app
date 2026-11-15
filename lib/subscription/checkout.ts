@@ -66,8 +66,11 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
 
   try {
     let stored = await readOrganizationSubscription(request.organizationId);
+    let attempt: string | null = null;
     if (stored && !stored.holdsSubscription) {
-      // A Checkout that completed before its signal arrived must not start a second subscription.
+      // Nothing earlier stays payable; then a subscription that a paid
+      // Checkout started is visible here, even before its signal arrives.
+      attempt = await subscriptions.closeOpenCheckouts(stored.stripeCustomerId);
       const newest = await subscriptions.readNewestSubscription(stored.stripeCustomerId);
       if (newest) {
         await recordSubscription(newest);
@@ -103,6 +106,7 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
       priceId,
       successUrl: new URL(request.linked ? '/dashboard' : '/upgrade/bestaetigt', siteUrl).toString(),
       cancelUrl: new URL('/upgrade', siteUrl).toString(),
+      attempt: attempt ?? (await subscriptions.closeOpenCheckouts(heldCustomerId)),
     });
     return { ok: true, url };
   } catch (failure) {

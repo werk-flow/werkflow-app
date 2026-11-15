@@ -206,6 +206,7 @@ async function main(): Promise<void> {
       priceId,
       successUrl: 'https://app.example.test/upgrade/bestaetigt',
       cancelUrl: 'https://app.example.test/upgrade',
+      attempt: await gateway.closeOpenCheckouts(customer),
     });
     say(`${testCase.label}: customer ${customer}, Checkout ${new URL(checkoutUrl).hostname} opened`);
     const paymentMethod = await paymentMethodFor(customer, testCase);
