@@ -11,6 +11,7 @@ const job: JobWithDetails = {
   projectId: null,
   clientId: null,
   jobNumber: 'AUF-2026-155',
+  sourceNumber: null,
   title: 'Heizkörper entlüften',
   description: null,
   status: 'nicht_bearbeitet',

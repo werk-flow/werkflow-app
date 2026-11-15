@@ -12,6 +12,7 @@ import { isTerminalWorkExecutionState, type WorkExecutionState } from '@/lib/wor
 export type FieldWorkPackJob = {
   id: string;
   jobNumber: string | null;
+  sourceNumber: string | null;
   title: string;
   requestedOutcome: string | null;
   priority: JobWithDetails['priority'];
@@ -106,6 +107,7 @@ export function projectFieldJobDetails(job: JobWithDetails): JobWithDetails {
     projectId: job.projectId,
     clientId: job.clientId,
     jobNumber: job.jobNumber,
+    sourceNumber: job.sourceNumber,
     title: job.title,
     description: job.description,
     status: job.status,
@@ -147,6 +149,7 @@ export function projectFieldWorkPackJob(job: JobWithDetails): FieldWorkPackJob {
   return {
     id: job.id,
     jobNumber: job.jobNumber,
+    sourceNumber: job.sourceNumber,
     title: job.title,
     requestedOutcome: job.description,
     priority: job.priority,

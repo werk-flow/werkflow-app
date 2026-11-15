@@ -80,6 +80,7 @@ function job(id: string, projectId: string | null, jobNumber: string | null = `A
     projectId,
     clientId: null,
     jobNumber,
+    sourceNumber: null,
     title: id,
     description: null,
     status: 'nicht_bearbeitet',

@@ -17,6 +17,7 @@ const JOB_RECORD: JobWithDetails = {
   projectId: null,
   clientId: null,
   jobNumber: null,
+  sourceNumber: null,
   title: '',
   description: null,
   status: 'nicht_bearbeitet',
@@ -45,6 +46,7 @@ describe('field work pack projection', () => {
       ...JOB_RECORD,
       id: 'job-1',
       jobNumber: 'A-100',
+      sourceNumber: 'ALT-4711',
       title: 'Therme prüfen',
       description: 'Störung prüfen und Ursache dokumentieren',
       priority: 'hoch',
@@ -116,6 +118,7 @@ describe('field work pack projection', () => {
     expect(projected).toEqual({
       id: 'job-1',
       jobNumber: 'A-100',
+      sourceNumber: 'ALT-4711',
       title: 'Therme prüfen',
       requestedOutcome: 'Störung prüfen und Ursache dokumentieren',
       priority: 'hoch',

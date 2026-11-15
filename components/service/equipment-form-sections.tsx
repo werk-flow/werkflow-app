@@ -120,6 +120,17 @@ export function EquipmentTechnicalFields({
             onChange={(event) => updateField('operatorNumber', event.target.value)}
           />
         </Field>
+        {/* A replacement is a new device: it does not take the predecessor's old number. */}
+        {mode !== 'replace' && (
+          <Field label="Nummer im Altsystem" htmlFor="equipment-source-number">
+            <Input
+              value={form.sourceNumber ?? ''}
+              maxLength={100}
+              onChange={(event) => updateField('sourceNumber', event.target.value)}
+              placeholder="Nummer aus dem bisherigen Programm"
+            />
+          </Field>
+        )}
         <Field label="Technische Hinweise" htmlFor="equipment-notes" className="sm:col-span-2">
           <Textarea
             value={form.technicalNotes ?? ''}

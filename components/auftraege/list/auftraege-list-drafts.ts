@@ -13,6 +13,7 @@ export function buildJobDraft(tempId: string, input: CreateJobInput): Job {
     projectId: input.projectId ?? null,
     clientId: input.clientId ?? null,
     jobNumber: input.jobNumber ?? null,
+    sourceNumber: input.sourceNumber ?? null,
     title: input.title,
     description: input.description ?? null,
     status: 'nicht_bearbeitet',

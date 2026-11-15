@@ -7,6 +7,7 @@ import { toLocalDateString } from '@/lib/utils';
 
 export type EditJobDraft = {
   jobNumber: string;
+  sourceNumber: string;
   title: string;
   description: string;
   clientId: string;
@@ -39,6 +40,7 @@ export function buildEditJobInput(
 ): UpdateJobInput {
   const {
     jobNumber,
+    sourceNumber,
     title,
     description,
     clientId,
@@ -100,6 +102,7 @@ export function buildEditJobInput(
     clientId: clientId && clientId !== 'none' ? clientId : '',
     projectId: projectId && projectId !== 'none' ? projectId : '',
     ...(jobNumber.trim() ? { jobNumber: jobNumber.trim() } : {}),
+    ...(sourceNumber.trim() || job.sourceNumber !== null ? { sourceNumber: sourceNumber.trim() } : {}),
     priority,
     ...schedule,
     ...(plannedWorkingMinutes !== undefined ? { plannedWorkingMinutes } : {}),

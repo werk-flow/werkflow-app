@@ -74,6 +74,8 @@ export type Job = {
   projectId: string | null;
   clientId: string | null;
   jobNumber: string | null;
+  /** The number the previous system gave the job; searchable, not unique. */
+  sourceNumber: string | null;
   title: string;
   description: string | null;
   status: JobStatus;
@@ -359,6 +361,7 @@ export function toJob(row: JobRow): Job {
     projectId: row.project_id,
     clientId: row.client_id,
     jobNumber: row.job_number,
+    sourceNumber: row.source_number,
     title: row.title,
     description: row.description,
     status: row.status,
