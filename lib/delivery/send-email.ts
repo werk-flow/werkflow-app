@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { memoryOutbox } from '@/lib/delivery/memory-outbox';
 import { logError } from '@/lib/logging';
 import { z } from '@/lib/zod';
 
@@ -129,25 +130,6 @@ async function sendThroughResend(
   return { status: 'permanent', code: code ? `email_${code}` : `email_provider_${response.status}` };
 }
 
-/** What the in-memory transport kept, oldest first; local and CI processes only. */
-const memoryOutbox: (EmailMessage & { from: string; messageId: string })[] = [];
-
-function sendToMemory(message: EmailMessage & { from: string }): SendEmailResult {
-  const earlier = memoryOutbox.find((kept) => kept.idempotencyKey === message.idempotencyKey);
-  if (earlier) return { status: 'accepted', messageId: earlier.messageId };
-  const messageId = `memory-${memoryOutbox.length + 1}`;
-  memoryOutbox.push({ ...message, messageId });
-  return { status: 'accepted', messageId };
-}
-
-/**
- * The in-memory outbox, for tests and local runs; it is empty on a hosted deployment.
- * @internal
- */
-export function readMemoryOutbox(): readonly (EmailMessage & { from: string; messageId: string })[] {
-  return memoryOutbox;
-}
-
 /**
  * Sends one message. A message sent again with the same idempotency key is
  * delivered once. Reads `VERCEL_ENV`, `RESEND_API_KEY` and `FROM_EMAIL`
@@ -172,7 +154,7 @@ export async function sendEmail(
   const result =
     hosted && apiKey
       ? await sendThroughResend({ ...message, from }, apiKey, fetchImpl)
-      : sendToMemory({ ...message, from });
+      : memoryOutbox.keep({ ...message, from });
   if (result.status !== 'accepted') logError('sendEmail: mail not accepted', result.code);
   return result;
 }

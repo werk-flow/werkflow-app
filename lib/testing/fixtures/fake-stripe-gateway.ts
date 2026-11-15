@@ -2,18 +2,17 @@ import { billingFailure } from '@/lib/werkflow-billing/failure';
 import {
   resolveStripeGateway,
   type StripeBillingCustomer,
-  type StripeBillingDispute,
-  type StripeBillingInvoice,
-  type StripeBillingMandate,
   type StripeGateway,
 } from '@/lib/werkflow-billing/stripe';
 
+type Answer<Read extends keyof StripeGateway> = Awaited<ReturnType<StripeGateway[Read]>>;
+
 /** What the fake's reads answer, by id; an id it does not hold fails as Stripe's read would. */
 export type FakeStripeObjects = {
-  invoices?: Record<string, StripeBillingInvoice>;
+  invoices?: Record<string, Answer<'readInvoice'>>;
   customers?: Record<string, StripeBillingCustomer | null>;
-  mandates?: Record<string, StripeBillingMandate>;
-  disputes?: Record<string, StripeBillingDispute>;
+  mandates?: Record<string, Answer<'readMandate'>>;
+  disputes?: Record<string, Answer<'readDispute'>>;
 };
 
 async function lookup<T>(objects: Record<string, T> | undefined, id: string): Promise<T> {

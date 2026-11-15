@@ -13,7 +13,8 @@ const consoleError = spyOn(console, 'error').mockImplementation((...parts: unkno
 });
 afterAll(() => consoleError.mockRestore());
 
-const { readMemoryOutbox, sendEmail } = await import('./send-email');
+const { sendEmail } = await import('./send-email');
+const { memoryOutbox } = await import('./memory-outbox');
 
 const HOSTED = {
   VERCEL_ENV: 'preview',
@@ -141,7 +142,9 @@ test('a local or CI process keeps the message in memory, once per key, and never
   expect(first.status).toBe('accepted');
   expect(again).toEqual(first);
   expect(calls).toHaveLength(0);
-  expect(readMemoryOutbox().filter((kept) => kept.idempotencyKey === message.idempotencyKey)).toHaveLength(1);
+  expect(
+    memoryOutbox.messages().filter((kept) => kept.idempotencyKey === message.idempotencyKey),
+  ).toHaveLength(1);
 });
 
 test('logs name the failure by code only', async () => {
