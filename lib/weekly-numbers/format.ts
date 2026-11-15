@@ -39,13 +39,19 @@ const NONE = '–';
 const decimal = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
 const percent = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDigits: 0 });
 
-/** A share of a total with its counts; a dash when the week has nothing to share. */
+/**
+ * A share of a total with its counts; a dash when the week has nothing to share.
+ * @internal
+ */
 export function shareCell(part: number, total: number): WeeklyCell {
   if (total === 0) return { value: NONE };
   return { value: percent.format(part / total), detail: `${part} von ${total}` };
 }
 
-/** Median workdays with one decimal at most; a dash when no handover was released. */
+/**
+ * Median workdays with one decimal at most; a dash when no handover was released.
+ * @internal
+ */
 export function workdaysCell(median: number | null): WeeklyCell {
   return { value: median === null ? NONE : decimal.format(median) };
 }
@@ -153,7 +159,10 @@ function dayMonth(isoDate: string): string {
   return formatGermanDate(isoDate).slice(0, 6);
 }
 
-/** The ISO 8601 week number of a Monday: the week of its Thursday. */
+/**
+ * The ISO 8601 week number of a Monday: the week of its Thursday.
+ * @internal
+ */
 export function isoWeekNumber(weekStart: string): number {
   const thursday = utcDate(weekStart);
   thursday.setUTCDate(thursday.getUTCDate() + 3);
