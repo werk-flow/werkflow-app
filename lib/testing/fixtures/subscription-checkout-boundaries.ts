@@ -194,6 +194,37 @@ assert.equal(subscriptionRows()[0]?.stripe_subscription_id, 'sub_test_1');
 assert.equal(stripe.checkoutRequests.length, 2);
 assert.deepEqual(stripe.expiredCheckouts, ['cs_test_1'], 'a paid Checkout was expired');
 
+// Two overlapping first starts: while the first waits for Stripe's customer,
+// the second opens its Checkout and the Admin pays it. The first then sees
+// the paid subscription and opens no second Checkout.
+world.tables.werkflow_subscriptions = [];
+stripe.subscriptions.clear();
+const requestsBefore = stripe.checkoutRequests.length;
+const overlapping: Array<Awaited<ReturnType<typeof startSubscriptionCheckout>>> = [];
+stripe.beforeNextCall = async () => {
+  overlapping.push(await startSubscriptionCheckout(ORGANIZATION_A));
+  stripe.checkoutSessions.set(`cs_test_${stripe.checkoutRequests.length}`, 'sub_test_9');
+  stripe.subscriptions.set('sub_test_9', {
+    id: 'sub_test_9',
+    customerId: 'cus_test_1',
+    organizationId: ORGANIZATION_A,
+    status: 'active',
+    cancellationReason: null,
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: '2026-12-15T10:00:00.000Z',
+  });
+};
+assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
+  success: false,
+  error: 'already_subscribed',
+});
+assert.equal(overlapping[0]?.success, true);
+assert.equal(
+  stripe.checkoutRequests.length,
+  requestsBefore + 1,
+  'two overlapping starts opened two Checkouts',
+);
+
 // --- Before any organization: the Checkout reserves the organization's id. ---
 
 setMembership(null);
