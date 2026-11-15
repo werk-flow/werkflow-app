@@ -91,7 +91,7 @@ function vatIdOf(taxIds: z.infer<typeof invoiceSchema>['customer_tax_ids']): str
   return taxIds?.find((taxId) => taxId.type === 'eu_vat' && taxId.value)?.value ?? null;
 }
 
-function paymentOf(details: unknown, mandateReference: unknown): StripeInvoicePayment | null {
+function stripePaymentOf(details: unknown, mandateReference: unknown): StripeInvoicePayment | null {
   if (details === null) return null;
   const parsed = paymentDetailsSchema.safeParse(details);
   if (!parsed.success) throw new WerkflowInvoiceFailure('werkflow_invoice_unreadable');
@@ -125,7 +125,7 @@ export function stripeInvoiceForIssue(source: {
   }
   const organizationId = uuidSchema.safeParse(invoice.customer.metadata?.werkflow_organization_id);
   if (!organizationId.success) throw new WerkflowInvoiceFailure('werkflow_invoice_organization_unknown');
-  const payment = paymentOf(source.paymentDetails, source.mandateReference);
+  const payment = stripePaymentOf(source.paymentDetails, source.mandateReference);
   if (!payment && invoice.amount_remaining > 0)
     throw new WerkflowInvoiceFailure('werkflow_invoice_payment_pending');
 

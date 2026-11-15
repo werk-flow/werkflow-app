@@ -25,7 +25,10 @@ function deliveryOf(lines: StripeInvoiceForIssue['lines'], issueDate: string): I
 }
 
 /** A Stripe line as quantity × unit price when the amount divides evenly, otherwise as one unit of its amount. */
-function lineOf(line: StripeInvoiceForIssue['lines'][number], index: number): InvoiceDraft['lines'][number] {
+function stripeLineOf(
+  line: StripeInvoiceForIssue['lines'][number],
+  index: number,
+): InvoiceDraft['lines'][number] {
   const evenly = line.quantity !== null && line.amountCents % line.quantity === 0;
   return {
     id: String(index + 1),
@@ -75,7 +78,7 @@ export function werkflowInvoiceDraft(
         : payment,
     paidCents: stripe.paidCents,
     notes: [],
-    lines: stripe.lines.map(lineOf),
+    lines: stripe.lines.map(stripeLineOf),
   };
 }
 

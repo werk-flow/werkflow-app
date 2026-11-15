@@ -55,7 +55,7 @@ export type IssueDependencies = {
 
 type Letterhead = Pick<BusinessDocument, 'sender' | 'footerColumns' | 'stationery'>;
 
-function letterheadOf({ seller }: WerkflowSeller): Letterhead {
+function werkflowLetterhead({ seller }: WerkflowSeller): Letterhead {
   const address = [...seller.address.lines, `${seller.address.postalCode} ${seller.address.city}`];
   const identifiers = [
     `Steuernummer ${seller.taxNumber ?? ''}`,
@@ -95,7 +95,7 @@ export async function issueWerkflowInvoice(
   const xml = toEn16931(invoice);
   const check = await checkEn16931(xml);
   if (!check.valid) throw new WerkflowInvoiceFailure('werkflow_invoice_rules_failed');
-  const pdf = await renderEInvoicePdf(invoiceDocument(invoice, letterheadOf(seller)), xml);
+  const pdf = await renderEInvoicePdf(invoiceDocument(invoice, werkflowLetterhead(seller)), xml);
   if ((await readEmbeddedInvoiceXml(pdf)) !== xml) {
     throw new WerkflowInvoiceFailure('werkflow_invoice_readback_mismatch');
   }
