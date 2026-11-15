@@ -117,9 +117,57 @@ export const STORNO_INVOICE: InvoiceDraft = {
   lines: MIXED_RATE_INVOICE.lines.map((entry) => ({ ...entry, quantity: `-${entry.quantity}` })),
 };
 
+/** A software seller under § 19 UStG, billing a month of its subscription. */
+const subscriptionSeller: InvoiceSeller = {
+  name: 'Musterfirma Software, Erika Musterfrau',
+  address: { lines: ['Musterstraße 1'], postalCode: '01234', city: 'Musterstadt', countryCode: 'DE' },
+  vatId: 'DE123456789',
+  taxNumber: '12/345/67890',
+  legalRegistrationId: null,
+  email: 'rechnung@musterfirma.example',
+};
+
+const SMALL_BUSINESS: InvoiceTax = {
+  category: 'E',
+  exemptionReason: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.',
+};
+
+const subscription: InvoiceDraft = {
+  ...base,
+  number: 'MUSTER-0001',
+  issueDate: '2026-11-15',
+  seller: subscriptionSeller,
+  buyer: {
+    name: 'Haustechnik Sonnenberg GmbH',
+    address: { lines: ['Sonnenweg 1'], postalCode: '01234', city: 'Sonnenstadt', countryCode: 'DE' },
+    vatId: 'DE987654321',
+    email: 'rechnung@sonnenberg.example',
+  },
+  delivery: { kind: 'period', start: '2026-11-15', end: '2026-12-14' },
+  paymentTerms: { dueInDays: 0, discount: null },
+  payee: null,
+  lines: [line('1', 'WerkFlow Monatsabo', '1', 'C62', 49900, SMALL_BUSINESS)],
+};
+
+/** A SEPA direct debit under a mandate: code 59, mandate reference and creditor ID. */
+export const DIRECT_DEBIT_INVOICE: InvoiceDraft = {
+  ...subscription,
+  payment: { kind: 'direct-debit', mandateReference: 'MUSTERMANDAT0001', creditorId: 'DE98ZZZ09999999999' },
+};
+
+/** A card charge that settled the invoice: code 48, the last four digits and the paid amount. */
+export const CARD_INVOICE: InvoiceDraft = {
+  ...subscription,
+  number: 'MUSTER-0002',
+  payment: { kind: 'card', lastFour: '4242' },
+  paidCents: 49900,
+};
+
 export const REFERENCE_INVOICES = {
   STANDARD_RATE_INVOICE,
   MIXED_RATE_INVOICE,
   EXEMPT_INVOICE,
   STORNO_INVOICE,
+  DIRECT_DEBIT_INVOICE,
+  CARD_INVOICE,
 };

@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 
 import { calculateInvoice } from './calculate';
-import { EXEMPT_INVOICE, STANDARD_RATE_INVOICE, STORNO_INVOICE } from './fixtures/reference-invoices';
+import {
+  CARD_INVOICE,
+  DIRECT_DEBIT_INVOICE,
+  EXEMPT_INVOICE,
+  STANDARD_RATE_INVOICE,
+  STORNO_INVOICE,
+} from './fixtures/reference-invoices';
 import { toEn16931 } from './to-en16931';
 
 // What the EN 16931 rules cannot demand but the model says: the CEN rules
@@ -76,5 +82,29 @@ describe('toEn16931', () => {
     );
     expect(xml).toContain('<ram:CategoryCode>E</ram:CategoryCode>');
     expect(xml).toContain('<ram:RateApplicablePercent>0.00</ram:RateApplicablePercent>');
+  });
+
+  test('a direct debit is code 59 with the creditor ID (BT-90) and the mandate reference (BT-89)', () => {
+    const xml = toEn16931(calculateInvoice(DIRECT_DEBIT_INVOICE));
+    expect(xml).toMatch(
+      /<ram:ApplicableHeaderTradeSettlement>\s*<ram:CreditorReferenceID>DE98ZZZ09999999999</,
+    );
+    expect(xml).toMatch(
+      /<ram:SpecifiedTradeSettlementPaymentMeans>\s*<ram:TypeCode>59<\/ram:TypeCode>\s*<\/ram/,
+    );
+    expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0001</ram:DirectDebitMandateID>');
+    expect(xml).toContain('Der Betrag wird per SEPA-Lastschrift eingezogen.');
+    expect(xml).not.toContain('TotalPrepaidAmount');
+  });
+
+  test('a settled card payment is code 48 with the last four digits, paid in full and owing nothing', () => {
+    const xml = toEn16931(calculateInvoice(CARD_INVOICE));
+    expect(xml).toMatch(
+      /<ram:TypeCode>48<\/ram:TypeCode>\s*<ram:ApplicableTradeSettlementFinancialCard>\s*<ram:ID>4242<\/ram:ID>/,
+    );
+    expect(xml).toContain('<ram:TotalPrepaidAmount>499.00</ram:TotalPrepaidAmount>');
+    expect(xml).toContain('<ram:DuePayableAmount>0.00</ram:DuePayableAmount>');
+    expect(xml).not.toContain('SpecifiedTradePaymentTerms');
+    expect(xml).not.toContain('CreditorReferenceID');
   });
 });

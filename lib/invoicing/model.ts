@@ -75,6 +75,17 @@ type InvoicePaymentTerms = {
 /** Where the payment goes (SEPA credit transfer). */
 type InvoicePayee = { iban: string; bic: string | null; accountName: string | null };
 
+/**
+ * How the buyer pays (BG-16): a SEPA credit transfer to the payee (UNTDID 4461
+ * code 58), a SEPA direct debit under a mandate (59, BT-89 and BT-90), or a
+ * card (48, BT-87). No full IBAN or card number enters the model: a card
+ * carries its last four digits only.
+ */
+export type InvoicePayment =
+  | { kind: 'credit-transfer'; payee: InvoicePayee }
+  | { kind: 'direct-debit'; mandateReference: string; creditorId: string }
+  | { kind: 'card'; lastFour: string };
+
 export type InvoiceDraft = {
   /** 380 a commercial invoice, 384 a corrected invoice such as a Storno. */
   typeCode: '380' | '384';
@@ -93,7 +104,14 @@ export type InvoiceDraft = {
   /** The invoice a corrected invoice replaces (BG-3). */
   precedingInvoice: { number: string; issueDate: IsoDate } | null;
   paymentTerms: InvoicePaymentTerms;
-  payee: InvoicePayee | null;
+  /**
+   * The credit-transfer payee: shorthand for `payment` of kind
+   * `credit-transfer`. A draft names a payee or a payment, never both.
+   */
+  payee?: InvoicePayee | null | undefined;
+  payment?: InvoicePayment | null | undefined;
+  /** The amount already paid (BT-113), for example a settled card charge; none when absent. */
+  paidCents?: number;
   /** Free texts printed on the invoice (BT-22). */
   notes: string[];
   lines: InvoiceLine[];
@@ -106,8 +124,9 @@ export type InvoiceTaxSubtotal = {
   taxCents: number;
 };
 
-/** A draft with every amount computed by `calculateInvoice`. */
-export type CalculatedInvoice = Omit<InvoiceDraft, 'lines'> & {
+/** A draft with every amount computed by `calculateInvoice`; the payee is its credit-transfer payment. */
+export type CalculatedInvoice = Omit<InvoiceDraft, 'lines' | 'payee' | 'payment' | 'paidCents'> & {
+  payment: InvoicePayment | null;
   lines: Array<InvoiceLine & { netCents: number }>;
   dueDate: IsoDate;
   taxSubtotals: InvoiceTaxSubtotal[];
@@ -115,7 +134,11 @@ export type CalculatedInvoice = Omit<InvoiceDraft, 'lines'> & {
     /** BT-106, BT-109: no document allowances or charges, so both are the line sum. */
     lineNetCents: number;
     taxCents: number;
-    /** BT-112 and BT-115: nothing is prepaid. */
+    /** BT-112. */
     grossCents: number;
+    /** BT-113: zero unless the draft names a paid amount. */
+    paidCents: number;
+    /** BT-115 = BT-112 − BT-113 (BR-CO-16); no rounding amount. */
+    dueCents: number;
   };
 };

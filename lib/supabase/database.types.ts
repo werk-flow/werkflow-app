@@ -12613,6 +12613,92 @@ export type Database = {
         };
         Relationships: [];
       };
+      werkflow_invoices: {
+        Row: {
+          buyer: Json;
+          currency: string;
+          due_cents: number;
+          file_key: string;
+          file_sha256: string;
+          file_size_bytes: number;
+          gross_cents: number;
+          id: string;
+          issue_date: string;
+          issued_at: string;
+          net_cents: number;
+          number: string;
+          organization_id: string;
+          paid_cents: number;
+          payment_means: string;
+          retain_until: string;
+          rules_release: string;
+          storno_of_invoice_id: string | null;
+          stripe_customer_id: string;
+          stripe_event_id: string;
+          stripe_invoice_id: string;
+          tax_cents: number;
+          type_code: string;
+        };
+        Insert: {
+          buyer: Json;
+          currency?: string;
+          due_cents: number;
+          file_key: string;
+          file_sha256: string;
+          file_size_bytes: number;
+          gross_cents: number;
+          id?: string;
+          issue_date: string;
+          issued_at?: string;
+          net_cents: number;
+          number: string;
+          organization_id: string;
+          paid_cents: number;
+          payment_means: string;
+          retain_until?: string;
+          rules_release: string;
+          storno_of_invoice_id?: string | null;
+          stripe_customer_id: string;
+          stripe_event_id: string;
+          stripe_invoice_id: string;
+          tax_cents: number;
+          type_code?: string;
+        };
+        Update: {
+          buyer?: Json;
+          currency?: string;
+          due_cents?: number;
+          file_key?: string;
+          file_sha256?: string;
+          file_size_bytes?: number;
+          gross_cents?: number;
+          id?: string;
+          issue_date?: string;
+          issued_at?: string;
+          net_cents?: number;
+          number?: string;
+          organization_id?: string;
+          paid_cents?: number;
+          payment_means?: string;
+          retain_until?: string;
+          rules_release?: string;
+          storno_of_invoice_id?: string | null;
+          stripe_customer_id?: string;
+          stripe_event_id?: string;
+          stripe_invoice_id?: string;
+          tax_cents?: number;
+          type_code?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "werkflow_invoices_storno_of_invoice_id_fkey";
+            columns: ["storno_of_invoice_id"];
+            isOneToOne: false;
+            referencedRelation: "werkflow_invoices";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       work_artifact_actions: {
         Row: {
           action_type: Database["public"]["Enums"]["work_artifact_action_type"];
@@ -17889,6 +17975,28 @@ export type Database = {
           p_readiness_snapshot?: Json;
           p_recipient_employee_record_ids?: string[];
           p_request_id?: string;
+        };
+        Returns: string;
+      };
+      issue_werkflow_invoice: {
+        Args: {
+          p_buyer: Json;
+          p_due_cents: number;
+          p_file_key: string;
+          p_file_sha256: string;
+          p_file_size_bytes: number;
+          p_gross_cents: number;
+          p_issue_date: string;
+          p_net_cents: number;
+          p_number: string;
+          p_organization_id: string;
+          p_paid_cents: number;
+          p_payment_means: string;
+          p_rules_release: string;
+          p_stripe_customer_id: string;
+          p_stripe_event_id: string;
+          p_stripe_invoice_id: string;
+          p_tax_cents: number;
         };
         Returns: string;
       };

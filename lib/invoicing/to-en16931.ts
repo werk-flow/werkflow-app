@@ -11,8 +11,8 @@ import type { CalculatedInvoice, InvoiceParty, InvoiceSeller, InvoiceTax } from 
 /** The ZUGFeRD and Factur-X profile id of EN 16931 ("COMFORT"). */
 const EN16931_PROFILE = 'urn:cen.eu:en16931:2017';
 
-/** SEPA credit transfer (UNTDID 4461). */
-const SEPA_CREDIT_TRANSFER = '58';
+/** Payment means codes (UNTDID 4461). */
+const PAYMENT_MEANS_CODE = { 'credit-transfer': '58', 'direct-debit': '59', card: '48' } as const;
 
 /** An element's content: `@name` keys are attributes, `#` its text, other keys child elements in order. */
 type XmlNode = { [element: string]: string | XmlNode | XmlNode[] };
@@ -108,10 +108,15 @@ function tradeParty(party: InvoiceParty | InvoiceSeller): XmlNode {
 }
 
 /**
- * Zahlungsziel and Skonto as BT-20 text. Skonto also takes the structured
- * line `#SKONTO#TAGE=n#PROZENT=p#` that German receivers read.
+ * Zahlungsziel and Skonto as BT-20 text, or the debit for a direct debit.
+ * Skonto also takes the structured line `#SKONTO#TAGE=n#PROZENT=p#` that
+ * German receivers read.
  */
 function paymentTermsText(invoice: CalculatedInvoice): string {
+  const { payment } = invoice;
+  if (payment?.kind === 'direct-debit') return 'Der Betrag wird per SEPA-Lastschrift eingezogen.\n';
+  if (payment?.kind === 'card')
+    return `Der Betrag wird von der Karte mit der Endung ${payment.lastFour} abgebucht.\n`;
   const lines = [`Zahlbar ohne Abzug bis ${formatGermanDate(invoice.dueDate)}.`];
   const { discount } = invoice.paymentTerms;
   if (discount) {
@@ -146,26 +151,37 @@ function lineItem(line: CalculatedInvoice['lines'][number]): XmlNode {
   };
 }
 
-/** BG-16, BG-23, BG-14, BT-20, BG-22 and BG-3: how much is owed, for what, and how to pay. */
+/** BG-16 with BG-17 (credit transfer), BG-18 (card) or BG-19's debited account side; none without a payment. */
+function paymentMeans(payment: CalculatedInvoice['payment']): XmlNode {
+  if (!payment) return {};
+  const means: XmlNode = { 'ram:TypeCode': PAYMENT_MEANS_CODE[payment.kind] };
+  if (payment.kind === 'card') {
+    means['ram:ApplicableTradeSettlementFinancialCard'] = { 'ram:ID': payment.lastFour };
+  }
+  if (payment.kind === 'credit-transfer') {
+    const { payee } = payment;
+    means['ram:PayeePartyCreditorFinancialAccount'] = {
+      'ram:IBANID': payee.iban,
+      ...(payee.accountName ? { 'ram:AccountName': payee.accountName } : {}),
+    };
+    if (payee.bic) means['ram:PayeeSpecifiedCreditorFinancialInstitution'] = { 'ram:BICID': payee.bic };
+  }
+  return { 'ram:SpecifiedTradeSettlementPaymentMeans': means };
+}
+
+/**
+ * BT-90, BG-16, BG-23, BG-14, BT-20 with BT-89, BG-22 and BG-3: how much is
+ * owed, for what, and how it is paid. Payment means and terms appear only
+ * while an amount is due; a card payment is named also when it settled it.
+ */
 function headerSettlement(invoice: CalculatedInvoice): XmlNode {
-  const { delivery, payee, totals } = invoice;
-  const owed = totals.grossCents > 0;
+  const { delivery, payment, totals } = invoice;
+  const owed = totals.dueCents > 0;
+  const debit = payment?.kind === 'direct-debit' && owed ? payment : null;
   return {
+    ...(debit ? { 'ram:CreditorReferenceID': debit.creditorId } : {}),
     'ram:InvoiceCurrencyCode': invoice.currency,
-    ...(payee && owed
-      ? {
-          'ram:SpecifiedTradeSettlementPaymentMeans': {
-            'ram:TypeCode': SEPA_CREDIT_TRANSFER,
-            'ram:PayeePartyCreditorFinancialAccount': {
-              'ram:IBANID': payee.iban,
-              ...(payee.accountName ? { 'ram:AccountName': payee.accountName } : {}),
-            },
-            ...(payee.bic
-              ? { 'ram:PayeeSpecifiedCreditorFinancialInstitution': { 'ram:BICID': payee.bic } }
-              : {}),
-          },
-        }
-      : {}),
+    ...(owed || payment?.kind === 'card' ? paymentMeans(payment) : {}),
     'ram:ApplicableTradeTax': invoice.taxSubtotals.map((row) => tradeTax(row.tax, row)),
     ...(delivery.kind === 'period'
       ? {
@@ -180,6 +196,7 @@ function headerSettlement(invoice: CalculatedInvoice): XmlNode {
           'ram:SpecifiedTradePaymentTerms': {
             'ram:Description': paymentTermsText(invoice),
             'ram:DueDateDateTime': dateTime(invoice.dueDate),
+            ...(debit ? { 'ram:DirectDebitMandateID': debit.mandateReference } : {}),
           },
         }
       : {}),
@@ -188,7 +205,8 @@ function headerSettlement(invoice: CalculatedInvoice): XmlNode {
       'ram:TaxBasisTotalAmount': amount(totals.lineNetCents),
       'ram:TaxTotalAmount': { '@currencyID': invoice.currency, '#': amount(totals.taxCents) },
       'ram:GrandTotalAmount': amount(totals.grossCents),
-      'ram:DuePayableAmount': amount(totals.grossCents),
+      ...(totals.paidCents ? { 'ram:TotalPrepaidAmount': amount(totals.paidCents) } : {}),
+      'ram:DuePayableAmount': amount(totals.dueCents),
     },
     ...(invoice.precedingInvoice
       ? {

@@ -45,7 +45,10 @@ type ExcludedTable =
   | 'inventory_supplier_catalog_import_lines'
   // Delivery state of Stripe's signals to WerkFlow's own billing: event ids,
   // no record of the organization.
-  | 'werkflow_billing_signals';
+  | 'werkflow_billing_signals'
+  // WerkFlow's own invoices to the organization: WerkFlow's books, which the
+  // Admin downloads on the billing page (werk-flow/werkflow-planning#252).
+  | 'werkflow_invoices';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
