@@ -4,6 +4,9 @@
 -- calls the same rule instead of counting again. Every function counts the
 -- whole organization and never groups by person.
 --
+-- A job finishes on site with a `transitioned` event to `execution_complete`;
+-- a withdrawn handover returns to that state but finishes nothing.
+--
 -- A past week is counted from what the rows hold now. Where a row keeps no
 -- history of a change (a moved due date, a reopened request, a moved review
 -- date), the count uses the current value (docs/features/weekly-numbers.md,
@@ -34,8 +37,9 @@ $$;
 -- * maintenance: owed then and its window ended before p_day; a row closed
 --   without a completion day counts until its last change;
 -- * requests: still open then, more than 3 workdays after they were received;
--- * handovers: a job finished on site, without a reviewed release, more than
---   2 workdays after it was finished;
+-- * handovers: a job back at its finish on site, without a reviewed release
+--   since, more than 2 workdays after its last finish (a withdrawn handover
+--   returns the job to the finish state but is no new finish);
 -- * blocker reviews: a blocker or parking open then whose review date lies
 --   before p_day.
 create function public.count_overdue_items_at(p_organization_id uuid, p_day date)
@@ -58,7 +62,13 @@ returns jsonb language sql stable security invoker set search_path = '' as $$
         ) >= cutoff.at
       )
   ), job_states as (
-    select distinct on (event.job_id) event.job_id, event.to_state, event.created_at
+    select distinct on (event.job_id) event.job_id, event.to_state, event.created_at,
+      coalesce((select max(finish.created_at) from public.work_execution_events finish
+        where finish.organization_id = p_organization_id
+          and finish.job_id = event.job_id
+          and finish.event_type = 'transitioned'
+          and finish.to_state = 'execution_complete'
+          and finish.created_at <= event.created_at), event.created_at) as finished_at
     from public.work_execution_events event, cutoff
     where event.organization_id = p_organization_id
       and event.job_id is not null
@@ -96,7 +106,7 @@ returns jsonb language sql stable security invoker set search_path = '' as $$
     'waitingHandovers', (
       select count(*) from job_states, cutoff
       where job_states.to_state = 'execution_complete'
-        and public.count_berlin_workdays((job_states.created_at at time zone 'Europe/Berlin')::date, p_day) > 2
+        and public.count_berlin_workdays((job_states.finished_at at time zone 'Europe/Berlin')::date, p_day) > 2
         and not exists (
           select 1 from public.work_handover_releases release
           join public.work_handover_packages handover
@@ -127,6 +137,7 @@ returns jsonb language sql stable security invoker set search_path = '' as $$
       (select max(event.created_at) from public.work_execution_events event
         where event.organization_id = p_organization_id
           and event.job_id = handover.job_id
+          and event.event_type = 'transitioned'
           and event.to_state = 'execution_complete'
           and event.created_at <= release.reviewed_at) as finished_at
     from public.work_handover_releases release
@@ -170,6 +181,7 @@ returns jsonb language sql stable security invoker set search_path = '' as $$
     from public.work_execution_events event
     where event.organization_id = p_organization_id
       and event.job_id is not null
+      and event.event_type = 'transitioned'
       and event.to_state = 'execution_complete'
       and event.created_at >= p_from
       and event.created_at < p_to

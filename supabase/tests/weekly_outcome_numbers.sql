@@ -86,7 +86,8 @@ insert into public.work_blockers(id,organization_id,job_id,kind,state,next_revie
 -- J1 finished Monday 02-23, released 02-24; J2 finished 02-16, released 02-26;
 -- J3 finished Wednesday 02-25 and J4 Monday 02-23, both waiting; J5 finished
 -- 02-24 and back in progress 02-26; J6 finished 02-17, released 02-18 and
--- again 02-26; JB foreign, waiting.
+-- again 02-26; J7 finished 02-02, handed over 02-04 and withdrawn 02-24, which
+-- finishes nothing; JB foreign, waiting.
 insert into public.work_execution_events(id,organization_id,job_id,event_type,from_state,to_state,gate_fingerprint,previous_version,resulting_version,created_at) values
 ('27800000-0000-4000-8000-000000000601','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000501','transitioned','in_progress','execution_complete','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,2,'2026-02-23 09:00+00'),
 ('27800000-0000-4000-8000-000000000602','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000502','transitioned','in_progress','execution_complete','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,2,'2026-02-16 09:00+00'),
@@ -95,15 +96,20 @@ insert into public.work_execution_events(id,organization_id,job_id,event_type,fr
 ('27800000-0000-4000-8000-000000000605','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000505','transitioned','in_progress','execution_complete','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,2,'2026-02-24 09:00+00'),
 ('27800000-0000-4000-8000-000000000606','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000505','reopened','execution_complete','in_progress','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',2,3,'2026-02-26 09:00+00'),
 ('27800000-0000-4000-8000-000000000607','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000506','transitioned','in_progress','execution_complete','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,2,'2026-02-17 09:00+00'),
+('27800000-0000-4000-8000-000000000609','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000507','transitioned','in_progress','execution_complete','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,2,'2026-02-02 09:00+00'),
+('27800000-0000-4000-8000-000000000610','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000507','handed_over','execution_complete','handed_over','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',2,3,'2026-02-04 09:00+00'),
+('27800000-0000-4000-8000-000000000611','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000507','handover_withdrawn','handed_over','execution_complete','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',3,4,'2026-02-24 09:00+00'),
 ('27800000-0000-4000-8000-000000000608','27800000-0000-4000-8000-00000000000b','27800000-0000-4000-8000-000000000510','transitioned','in_progress','execution_complete','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',1,2,'2026-02-16 09:00+00');
 insert into public.work_handover_packages(id,organization_id,job_id,state,created_by,updated_by) values
 ('27800000-0000-4000-8000-000000000701','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000501','released','27800000-0000-4000-8000-000000000002','27800000-0000-4000-8000-000000000002'),
 ('27800000-0000-4000-8000-000000000702','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000502','released','27800000-0000-4000-8000-000000000002','27800000-0000-4000-8000-000000000002'),
+('27800000-0000-4000-8000-000000000707','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000507','reopened','27800000-0000-4000-8000-000000000002','27800000-0000-4000-8000-000000000002'),
 ('27800000-0000-4000-8000-000000000706','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000506','released','27800000-0000-4000-8000-000000000002','27800000-0000-4000-8000-000000000002');
 insert into public.work_handover_releases(id,organization_id,package_id,request_id,release_number,commercial_readiness,content_hash,gate_fingerprint,gate_snapshot,package_document_id,renderer_version,responsibility_snapshot,target_snapshot,reviewed_by,reviewed_at) values
 ('27800000-0000-4000-8000-000000000711','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000701','27800000-0000-4000-8000-000000000721',1,'not_ready','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','{}','27800000-0000-4000-8000-000000000731','1','{}','{}','27800000-0000-4000-8000-000000000002','2026-02-24 09:00+00'),
 ('27800000-0000-4000-8000-000000000712','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000702','27800000-0000-4000-8000-000000000722',1,'not_ready','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','{}','27800000-0000-4000-8000-000000000732','1','{}','{}','27800000-0000-4000-8000-000000000002','2026-02-26 09:00+00'),
 ('27800000-0000-4000-8000-000000000716','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000706','27800000-0000-4000-8000-000000000726',1,'not_ready','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','{}','27800000-0000-4000-8000-000000000736','1','{}','{}','27800000-0000-4000-8000-000000000002','2026-02-18 09:00+00'),
+('27800000-0000-4000-8000-000000000718','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000707','27800000-0000-4000-8000-000000000728',1,'not_ready','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','{}','27800000-0000-4000-8000-000000000738','1','{}','{}','27800000-0000-4000-8000-000000000002','2026-02-04 09:00+00'),
 ('27800000-0000-4000-8000-000000000717','27800000-0000-4000-8000-00000000000a','27800000-0000-4000-8000-000000000706','27800000-0000-4000-8000-000000000727',2,'not_ready','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','{}','27800000-0000-4000-8000-000000000737','1','{}','{}','27800000-0000-4000-8000-000000000002','2026-02-26 10:00+00');
 
 -- Work reports: J1 approved, J2 approved, J3 rejected, J4 submitted, J5 draft,
@@ -151,7 +157,7 @@ begin
     raise exception 'K2 does not count the overdue items as they stood at the end of Sunday 02-22: %', v_weeks#>'{1,overdue}';
   end if;
   if v_weeks#>'{2,overdue}' is distinct from
-       '{"followUps": 3, "requestCallbacks": 3, "maintenance": 4, "staleRequests": 1, "waitingHandovers": 1, "blockerReviews": 4}'::jsonb then
+       '{"followUps": 3, "requestCallbacks": 3, "maintenance": 4, "staleRequests": 1, "waitingHandovers": 2, "blockerReviews": 4}'::jsonb then
     raise exception 'K2 does not count the overdue items as they stood at the end of Sunday 03-01: %', v_weeks#>'{2,overdue}';
   end if;
 
