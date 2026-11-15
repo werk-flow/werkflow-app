@@ -189,6 +189,13 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     heading: 'Qualifikationen',
   },
   {
+    id: 'kennzahlen',
+    role: 'admin',
+    covers: ['/kennzahlen'],
+    route: fixed('/kennzahlen'),
+    heading: 'Wochenzahlen',
+  },
+  {
     id: 'meldungen',
     role: 'admin',
     covers: ['/meldungen'],

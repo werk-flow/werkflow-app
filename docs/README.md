@@ -1,6 +1,6 @@
 # WerkFlow docs
 
-Start with `AGENTS.md`, then read only the entries whose condition applies. A task adds the **Current Product Baseline** of the spec it changes, and "How to work" and "Never" in each owner doc of a virtue it touches.
+Start with `AGENTS.md`; read only entries whose condition applies. A task adds the **Current Product Baseline** of the spec it changes, and "How to work" and "Never" in each owner doc of a virtue it touches.
 
 ## Index
 
@@ -39,6 +39,7 @@ Read the spec you change and those it touches. Planned scope lives in `werk-flow
 - [commercial-and-finance.md](features/commercial-and-finance.md): prices, billable quantities, handover readiness.
 - [ai-automations.md](features/ai-automations.md): AI direction and foundations.
 - [problem-reports.md](features/problem-reports.md): reports to WerkFlow support, access, deletion.
+- [weekly-numbers.md](features/weekly-numbers.md): Wochenzahlen.
 
 ### Product (`docs/product/`)
 
@@ -80,12 +81,12 @@ It holds no schema, no list of files, handlers, functions or tests, no count or 
 
 - Add a status line or a review date. Git dates every change.
 - Describe what you built file by file.
-- Stack a new paragraph under the old one instead of rewriting it.
+- Stack a new paragraph under the old one instead of rewriting.
 - Rewrite an accepted decision record.
 
 ### Verify your work
 
-Run `bun run docs:check` after every docs edit. If you changed the checker, also run `bun run test:unit lib/docs`.
+Run `bun run docs:check` after every docs edit. After a checker change, also run `bun run test:unit lib/docs`.
 
 ## Maintenance rules
 

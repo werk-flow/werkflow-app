@@ -31,6 +31,7 @@ export const PROTECTED_PREFIXES = [
   '/support',
   '/onboarding',
   '/upgrade',
+  '/kennzahlen',
 ];
 
 // No route lives here, so a rewrite to it renders the app's own not-found answer.
@@ -162,6 +163,7 @@ export const config = {
     '/support/:path*',
     '/onboarding/:path*',
     '/upgrade',
+    '/kennzahlen',
     '/verify',
     '/forgot-password',
     '/reset-password',

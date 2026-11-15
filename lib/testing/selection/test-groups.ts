@@ -413,6 +413,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
   ['maintenance-missed-visits', ['maintenance_missed_visits.sql'], ['service', 'work']],
+  ['weekly-outcome-numbers', ['weekly_outcome_numbers.sql'], ['customers', 'service', 'work', 'time']],
   [
     'inventory-ledger',
     [

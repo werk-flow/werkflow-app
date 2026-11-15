@@ -27,6 +27,7 @@ import { EinstellungenPageSkeleton } from '@/components/loading-states/einstellu
 import { WorkTemplatesPageSkeleton } from '@/components/loading-states/work-templates-page-skeleton';
 import { EquipmentPageSkeleton } from '@/components/loading-states/equipment-page-skeleton';
 import { ServiceCasesPageSkeleton } from '@/components/loading-states/service-cases-page-skeleton';
+import { KennzahlenPageSkeleton } from '@/components/loading-states/kennzahlen-page-skeleton';
 
 // The skeleton of the page the user lands on after an organization switch.
 // A record's detail page belongs to the organization being left, so it maps to
@@ -105,6 +106,7 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
   ['/arbeitsvorlagen', () => <WorkTemplatesPageSkeleton />],
   ['/einstellungen', () => <EinstellungenPageSkeleton />],
   ['/inventar', () => <InventarPageSkeleton />],
+  ['/kennzahlen', () => <KennzahlenPageSkeleton />],
   [
     '/angebote/leistungen',
     (angebote) => (
