@@ -24,7 +24,7 @@ import type { StripeInvoiceForIssue } from '@/lib/werkflow-billing/stripe-invoic
 // no row is issued and Stripe delivers the signal again.
 
 /** The row `issue_werkflow_invoice` records, in the function's own argument names. */
-export type IssuedInvoiceRecord = {
+type IssuedInvoiceRecord = {
   p_organization_id: string;
   p_stripe_invoice_id: string;
   p_stripe_customer_id: string;

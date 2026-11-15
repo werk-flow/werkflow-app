@@ -20,7 +20,7 @@ const { issueWerkflowInvoice } = await import('./issue-invoice').finally(() => {
 });
 const { createFakeStripeGateway } = await import('@/lib/testing/fixtures/fake-stripe-gateway');
 type IssueDependencies = import('./issue-invoice').IssueDependencies;
-type IssuedInvoiceRecord = import('./issue-invoice').IssuedInvoiceRecord;
+type IssuedInvoiceRecord = Parameters<IssueDependencies['record']>[0];
 
 // A finalized Stripe invoice, read through the real gateway from in-memory
 // Stripe answers, becomes one checked original, or nothing and a stable code.
