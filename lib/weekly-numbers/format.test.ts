@@ -1,13 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 
-import {
-  isoWeekNumber,
-  shareCell,
-  weekLabel,
-  WEEKLY_NUMBER_SECTIONS,
-  workdaysCell,
-  type WeeklyNumbers,
-} from './format';
+import { weekLabel, WEEKLY_NUMBER_SECTIONS, type WeeklyNumbers } from './format';
+
+const rows = WEEKLY_NUMBER_SECTIONS.flatMap((section) => section.rows);
+const cellOf = (id: string, week: WeeklyNumbers) => rows.find((row) => row.id === id)?.cell(week);
 
 const emptyWeek: WeeklyNumbers = {
   weekStart: '2026-02-09',
@@ -33,7 +29,7 @@ describe('weekly numbers', () => {
     ['2028-02-28', 9], // the week of the leap day
     ['2024-12-30', 1], // a Monday in December that belongs to the next year's week 1
   ])('the week starting %s is calendar week %i', (weekStart, expected) => {
-    expect(isoWeekNumber(weekStart)).toBe(expected);
+    expect(weekLabel({ weekStart, lastDay: weekStart }).title).toBe(`KW ${expected}`);
   });
 
   test('a week label names the calendar week and its days across a month end, the running week up to today', () => {
@@ -45,15 +41,19 @@ describe('weekly numbers', () => {
   });
 
   test('a share shows its percent with the counts, and a dash for a week with nothing to share', () => {
-    expect(shareCell(2, 3)).toEqual({ value: '67\u00a0%', detail: '2 von 3' });
-    expect(shareCell(0, 4)).toEqual({ value: '0\u00a0%', detail: '0 von 4' });
-    expect(shareCell(0, 0)).toEqual({ value: '–' });
+    const share = (byEmployee: number, entries: number) =>
+      cellOf('selbst-erfasst', { ...emptyWeek, timeCapture: { entries, byEmployee } });
+    expect(share(2, 3)).toEqual({ value: '67\u00a0%', detail: '2 von 3' });
+    expect(share(0, 4)).toEqual({ value: '0\u00a0%', detail: '0 von 4' });
+    expect(share(0, 0)).toEqual({ value: '–' });
   });
 
   test('the median shows one decimal at most, and a dash without a released handover', () => {
-    expect(workdaysCell(4.5)).toEqual({ value: '4,5' });
-    expect(workdaysCell(1)).toEqual({ value: '1' });
-    expect(workdaysCell(null)).toEqual({ value: '–' });
+    const median = (medianWorkdays: number | null) =>
+      cellOf('median', { ...emptyWeek, handover: { released: 2, medianWorkdays, withinTwoWorkdays: 1 } });
+    expect(median(4.5)).toEqual({ value: '4,5' });
+    expect(median(1)).toEqual({ value: '1' });
+    expect(median(null)).toEqual({ value: '–' });
   });
 
   test('a week with zero jobs shows zero overdue items and dashes for every share and the median', () => {
