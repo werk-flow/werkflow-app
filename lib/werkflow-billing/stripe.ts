@@ -135,6 +135,8 @@ function billingReads(client: Stripe): Omit<StripeGateway, 'verifySignal'> {
         const invoice = await client.invoices.retrieve(invoiceId);
         const payments = await client.invoicePayments.list({
           invoice: invoiceId,
+          // The newest attempt still open is the failed one; a paid part payment may be newer.
+          status: 'open',
           limit: 1,
           expand: ['data.payment.payment_intent.payment_method'],
         });
