@@ -4,7 +4,9 @@
 // body; it maps the subscription to the organization only through the
 // customer's metadata; a Checkout of another mode records nothing; a second
 // subscription that lands while the first holds is refunded and cancelled at
-// once, unless a fresh read shows the first has ended; and every failure
+// once, unless a fresh read shows the first has ended; a subscription the
+// database marked for that cancellation never becomes the organization's
+// one, even when the first ends before the cancellation runs; and every failure
 // throws a stable code, so Stripe delivers the event again.
 import assert from 'node:assert/strict';
 import { mock, setSystemTime } from 'bun:test';
@@ -24,6 +26,8 @@ const row: { stripe_subscription_id: string | null; holds_subscription: boolean 
   stripe_subscription_id: null,
   holds_subscription: false,
 };
+/** The row's duplicate_subscription_ids: marked under the lock, never accepted. */
+const duplicates = new Set<string>();
 const holds = (args: RecordCall) =>
   ['active', 'trialing', 'past_due', 'unpaid', 'paused'].includes(String(args.p_status)) ||
   (args.p_status === 'canceled' && args.p_cancellation_reason === 'payment_failed');
@@ -39,8 +43,14 @@ mock.module('@/lib/supabase/admin', () => ({
         row.stripe_subscription_id !== args.p_stripe_subscription_id
       ) {
         if (!holds(args)) return { data: 'ignored', error: null };
-        if (row.holds_subscription)
-          return { data: null, error: { code: 'P0001', message: 'subscription_conflict' } };
+        const subscriptionId = String(args.p_stripe_subscription_id);
+        if (duplicates.has(subscriptionId)) return { data: 'duplicate', error: null };
+        if (row.holds_subscription) {
+          if (args.p_refuse_as_duplicate !== true)
+            return { data: null, error: { code: 'P0001', message: 'subscription_conflict' } };
+          duplicates.add(subscriptionId);
+          return { data: 'duplicate', error: null };
+        }
       }
       recorded.push(args);
       Object.assign(row, {
@@ -190,6 +200,39 @@ await checkoutSignals.handle(
 );
 assert.equal(row.stripe_subscription_id, 'sub_test_3', 'a replacement of an ended subscription was refused');
 assert.deepEqual(stripe.cancelledDuplicates, ['sub_test_2'], 'a legitimate replacement was cancelled');
+
+// The backstop refused sub_test_5 while sub_test_3 held. Before it cancels
+// sub_test_5, sub_test_3 ends and a second delivery of sub_test_5 re-reads
+// both: sub_test_5 must not become the organization's subscription, because
+// the first delivery's cancellation follows.
+Object.assign(row, { stripe_subscription_id: 'sub_test_3', holds_subscription: true });
+stripe.subscriptions.set('sub_test_3', { ...snapshot, id: 'sub_test_3', status: 'active' });
+stripe.subscriptions.set('sub_test_5', { ...snapshot, id: 'sub_test_5', status: 'active' });
+const raced = await signal('customer.subscription.created', { id: 'sub_test_5', object: 'subscription' });
+const cancelDuplicate = gateway.subscriptions.cancelDuplicateSubscription;
+let concurrent: Promise<unknown> = Promise.resolve();
+gateway.subscriptions.cancelDuplicateSubscription = async (subscriptionId) => {
+  gateway.subscriptions.cancelDuplicateSubscription = cancelDuplicate;
+  stripe.subscriptions.set('sub_test_3', {
+    ...snapshot,
+    id: 'sub_test_3',
+    status: 'canceled',
+    cancellationReason: 'cancellation_requested',
+  });
+  concurrent = subscriptionSignals.handle(raced, gateway).catch((error: unknown) => error);
+  await concurrent;
+  return cancelDuplicate(subscriptionId);
+};
+await assert.rejects(subscriptionSignals.handle(raced, gateway), {
+  code: 'duplicate_subscription_cancelled',
+});
+await concurrent;
+assert.notEqual(
+  row.stripe_subscription_id,
+  'sub_test_5',
+  'a subscription marked for cancellation was accepted',
+);
+assert.equal(stripe.subscriptions.get('sub_test_5')?.status, 'canceled');
 stripe.subscriptions.set('sub_test_1', snapshot);
 Object.assign(row, { stripe_subscription_id: 'sub_test_1', holds_subscription: true });
 recorded.length = 0;

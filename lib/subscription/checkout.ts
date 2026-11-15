@@ -133,6 +133,11 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
             return { ok: false, code: 'already_subscribed' };
           }
           closedSessionId = begun.session_id;
+          break;
+        }
+        default: {
+          const unreachable: never = begun;
+          return unreachable;
         }
       }
     }

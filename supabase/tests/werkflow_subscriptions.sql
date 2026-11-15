@@ -5,7 +5,8 @@
 -- reservation; an organization has one payable Checkout, which every start
 -- answers while it stays open, and only one start at a time creates the next;
 -- a signal of another customer, or a second subscription while the first
--- holds, is refused; a read no newer than its own subscription's last read
+-- holds, is refused, and one refused after fresh reads is marked a duplicate
+-- that never becomes the organization's subscription; a read no newer than its own subscription's last read
 -- changes nothing, also of a subscription the row does not follow, and a
 -- holding replacement beats an ended predecessor whatever the read times; a failed payment never ends the subscription; and only the payer creates
 -- the reserved organization, with the reserved id, once, while the
@@ -65,7 +66,7 @@ begin
       'public.werkflow_subscription_holds(text, text)',
       'public.begin_werkflow_checkout(uuid, uuid, boolean, text, text)',
       'public.finish_werkflow_checkout(uuid, integer, text, text, timestamptz)',
-      'public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz)',
+      'public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz, boolean)',
       'public.create_organization_with_id(uuid, uuid, text, text)',
       'public.create_organization_from_subscription(uuid, text, text)'
     ] loop
@@ -267,9 +268,34 @@ do $$
 declare
   v_answer text;
 begin
+  -- Fresh reads found both holding: the refusal marks the newcomer a duplicate under the row lock.
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_3', 'active', false, '2037-01-01T10:00:06.5Z',
+    p_refuse_as_duplicate => true);
+  if v_answer is distinct from 'duplicate' or (select stripe_subscription_id from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'sub_test_1'
+  then
+    raise exception 'a duplicate refused after fresh reads was not marked, or replaced the holding subscription';
+  end if;
+
   -- A subscription cancelled on request no longer holds; a new one then replaces it.
   perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
     'sub_test_1', 'canceled', false, '2037-01-01T10:00:07Z', 'cancellation_requested');
+
+  -- Before the marked duplicate is cancelled, a fresh read finds the first ended:
+  -- the duplicate still never becomes the subscription the organization keeps.
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_3', 'active', false, '2037-01-01T10:00:07.5Z');
+  if v_answer is distinct from 'duplicate' or (select stripe_subscription_id from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'sub_test_1'
+  then
+    raise exception 'a subscription marked for cancellation became the replacement';
+  end if;
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_3', 'canceled', false, '2037-01-01T10:00:07.6Z', 'cancellation_requested');
+  if v_answer is distinct from 'ignored' then
+    raise exception 'a cancelled duplicate was not settled';
+  end if;
   v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
     'cus_test_sonnenberg', 'sub_test_2', 'active', false, '2037-01-01T10:00:08Z');
   if v_answer is distinct from 'recorded' or (select stripe_subscription_id from public.werkflow_subscriptions

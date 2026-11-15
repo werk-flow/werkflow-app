@@ -45,6 +45,8 @@ type Row = Record<string, unknown>;
 const ledger = new Map<string, { settled: boolean; attempts: number }>();
 const rows = new Map<string, Row>();
 const recordCalls: Row[] = [];
+/** Each row's duplicate_subscription_ids, as `organization subscription`. */
+const duplicates = new Set<string>();
 const holds = (status: unknown, reason: unknown) =>
   ['active', 'trialing', 'past_due', 'unpaid', 'paused'].includes(String(status)) ||
   (status === 'canceled' && reason === 'payment_failed');
@@ -116,7 +118,15 @@ function answer(name: string, args: Row): Answer {
     const incomingHolds = holds(args.p_status, args.p_cancellation_reason);
     if (row.stripe_subscription_id !== null && row.stripe_subscription_id !== args.p_stripe_subscription_id) {
       if (!incomingHolds) return { data: 'ignored', error: null };
-      if (row.holds_subscription) return { data: null, error: { message: 'subscription_conflict' } };
+      const duplicate = `${String(args.p_organization_id)} ${String(args.p_stripe_subscription_id)}`;
+      if (duplicates.has(duplicate)) return { data: 'duplicate', error: null };
+      if (row.holds_subscription) {
+        if (args.p_refuse_as_duplicate !== true) {
+          return { data: null, error: { message: 'subscription_conflict' } };
+        }
+        duplicates.add(duplicate);
+        return { data: 'duplicate', error: null };
+      }
     }
     recordCalls.push(args);
     Object.assign(row, {

@@ -12624,6 +12624,7 @@ export type Database = {
           checkout_url: string | null;
           created_at: string;
           current_period_end: string | null;
+          duplicate_subscription_ids: string[];
           holds_subscription: boolean;
           linked_at: string | null;
           organization_id: string;
@@ -12644,6 +12645,7 @@ export type Database = {
           checkout_url?: string | null;
           created_at?: string;
           current_period_end?: string | null;
+          duplicate_subscription_ids?: string[];
           holds_subscription?: boolean;
           linked_at?: string | null;
           organization_id: string;
@@ -12664,6 +12666,7 @@ export type Database = {
           checkout_url?: string | null;
           created_at?: string;
           current_period_end?: string | null;
+          duplicate_subscription_ids?: string[];
           holds_subscription?: boolean;
           linked_at?: string | null;
           organization_id?: string;
@@ -19102,6 +19105,7 @@ export type Database = {
           p_current_period_end?: string;
           p_organization_id: string;
           p_read_at: string;
+          p_refuse_as_duplicate?: boolean;
           p_status: string;
           p_stripe_customer_id: string;
           p_stripe_subscription_id: string;
