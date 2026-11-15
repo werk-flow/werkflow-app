@@ -3,8 +3,9 @@
 // functions do; supabase/tests/werkflow_billing_signals.sql proves those.
 // A missing, forged or stale signature is refused before any record; a
 // replayed event changes nothing; a throwing handler answers 5xx and the next
-// delivery succeeds; a live key outside production runs nothing. Logs carry
-// no signature, secret or event content.
+// delivery succeeds; an attempt that outlived its claim settles nothing; a
+// live key outside production runs nothing. Logs carry no signature, secret
+// or event content.
 import assert from 'node:assert/strict';
 import { mock, setSystemTime } from 'bun:test';
 import { randomBytes } from 'node:crypto';
@@ -28,6 +29,8 @@ const rpcCalls: string[] = [];
 let databaseDown = false;
 let paidHandlerRuns = 0;
 let paidHandlerFails = false;
+// Runs inside the paid handler: lets a test hand the event to a newer delivery mid-attempt.
+let duringPaidHandler = (): void => {};
 let finalizedHandlerRuns = 0;
 const logged: string[] = [];
 console.error = (...parts: unknown[]) => {
@@ -37,41 +40,51 @@ console.error = (...parts: unknown[]) => {
 mock.module('server-only', () => ({}));
 mock.module('@/lib/supabase/admin', () => ({
   createSupabaseAdminClient: () => ({
-    rpc: async (name: string, args: Record<string, unknown>) => {
-      rpcCalls.push(name);
-      if (databaseDown) return { data: null, error: { code: '08006', message: 'connection lost' } };
-      const id = String(args.p_stripe_event_id);
-      const row = ledger.get(id);
-      if (name === 'claim_werkflow_billing_signal') {
-        if (!row) {
-          const eventType = String(args.p_event_type);
-          ledger.set(id, { eventType, state: 'pending', attempts: 1, claimed: true, lastFailureCode: null });
-          return { data: 'claimed', error: null };
-        }
-        if (row.state !== 'pending') return { data: 'settled', error: null };
-        if (row.claimed) return { data: 'busy', error: null };
-        row.attempts += 1;
-        row.claimed = true;
-        return { data: 'claimed', error: null };
-      }
-      if (name === 'settle_werkflow_billing_signal') {
-        if (!row || row.state !== 'pending') return { data: false, error: null };
-        const outcome = args.p_outcome;
-        assert.ok(outcome === 'handled' || outcome === 'ignored' || outcome === 'failed');
-        row.claimed = false;
-        if (outcome === 'failed') row.lastFailureCode = String(args.p_failure_code);
-        else row.state = outcome;
-        return { data: true, error: null };
-      }
-      throw new Error(`unexpected function ${name}`);
+    rpc: (name: string, args: Record<string, unknown>) => {
+      const answer = Promise.resolve().then(() => ledgerAnswer(name, args));
+      return Object.assign(answer, { single: () => answer });
     },
   }),
 }));
+
+// Answers as the two database functions do (supabase/tests/werkflow_billing_signals.sql).
+function ledgerAnswer(name: string, args: Record<string, unknown>) {
+  rpcCalls.push(name);
+  if (databaseDown) return { data: null, error: { code: '08006', message: 'connection lost' } };
+  const id = String(args.p_stripe_event_id);
+  const row = ledger.get(id);
+  if (name === 'claim_werkflow_billing_signal') {
+    if (!row) {
+      const eventType = String(args.p_event_type);
+      ledger.set(id, { eventType, state: 'pending', attempts: 1, claimed: true, lastFailureCode: null });
+      return { data: { result: 'claimed', attempt: 1 }, error: null };
+    }
+    if (row.state !== 'pending') return { data: { result: 'settled', attempt: row.attempts }, error: null };
+    if (row.claimed) return { data: { result: 'busy', attempt: row.attempts }, error: null };
+    row.attempts += 1;
+    row.claimed = true;
+    return { data: { result: 'claimed', attempt: row.attempts }, error: null };
+  }
+  if (name === 'settle_werkflow_billing_signal') {
+    if (!row || row.state !== 'pending' || !row.claimed || row.attempts !== args.p_attempt) {
+      return { data: false, error: null };
+    }
+    const outcome = args.p_outcome;
+    assert.ok(outcome === 'handled' || outcome === 'ignored' || outcome === 'failed');
+    row.claimed = false;
+    if (outcome === 'failed') row.lastFailureCode = String(args.p_failure_code);
+    else row.state = outcome;
+    return { data: true, error: null };
+  }
+  throw new Error(`unexpected function ${name}`);
+}
+
 mock.module('@/lib/werkflow-billing/signals/invoice-paid', () => ({
   invoicePaidSignals: {
     eventTypes: ['invoice.paid'],
     handle: async () => {
       paidHandlerRuns += 1;
+      duringPaidHandler();
       if (paidHandlerFails) {
         throw Object.assign(new Error('Haustechnik Sonnenberg GmbH, in_test_0001'), {
           code: 'invoice_mismatch',
@@ -185,6 +198,40 @@ ledger.set('evt_test_busy_1', {
 assert.equal(await deliver(busy, await signed(busy)), 409);
 assert.equal(paidHandlerRuns, 2, 'a busy event ran its handler');
 
+// An attempt that outlived its claim, while a newer delivery took the event,
+// settles nothing: handled, it answers 409 so Stripe delivers again; failed,
+// it answers 500. The newer attempt's claim stays, and it settles the event.
+const overtaken = payloadOf('evt_test_overtaken_1', 'invoice.paid');
+const newerDelivery = () => {
+  const row = ledger.get('evt_test_overtaken_1');
+  assert.ok(row);
+  row.attempts += 1;
+};
+const heldByNewer = {
+  eventType: 'invoice.paid',
+  state: 'pending',
+  attempts: 2,
+  claimed: true,
+  lastFailureCode: null,
+};
+duringPaidHandler = newerDelivery;
+assert.equal(await deliver(overtaken, await signed(overtaken)), 409, 'a stale attempt settled its event');
+assert.deepEqual(ledger.get('evt_test_overtaken_1'), heldByNewer, 'a stale attempt changed the newer claim');
+paidHandlerFails = true;
+ledger.delete('evt_test_overtaken_1');
+assert.equal(await deliver(overtaken, await signed(overtaken)), 500);
+assert.deepEqual(ledger.get('evt_test_overtaken_1'), heldByNewer, 'a stale failure released the newer claim');
+paidHandlerFails = false;
+duringPaidHandler = () => {};
+const newer = ledgerAnswer('settle_werkflow_billing_signal', {
+  p_stripe_event_id: 'evt_test_overtaken_1',
+  p_attempt: 2,
+  p_outcome: 'handled',
+});
+assert.equal(newer.data, true, 'the newer attempt could not settle its event');
+assert.equal(ledger.get('evt_test_overtaken_1')?.state, 'handled');
+assert.equal(paidHandlerRuns, 4);
+
 // A type no family takes is recorded and ignored.
 const unknown = payloadOf('evt_test_unknown_1', 'customer.created');
 assert.equal(await deliver(unknown, await signed(unknown)), 200);
@@ -195,7 +242,7 @@ const outage = payloadOf('evt_test_outage_1', 'invoice.paid');
 databaseDown = true;
 assert.equal(await deliver(outage, await signed(outage)), 503);
 databaseDown = false;
-assert.equal(paidHandlerRuns, 2, 'a handler ran without a recorded claim');
+assert.equal(paidHandlerRuns, 4, 'a handler ran without a recorded claim');
 
 // A live key outside production, a test key in production and a missing
 // webhook secret run nothing.
@@ -223,6 +270,7 @@ assert.deepEqual(rpcCalls, [], 'a refused configuration reached the ledger');
 
 // The logs name failures by code only.
 const logText = logged.join('\n');
+assert.ok(logText.includes('stale_attempt'), 'a stale attempt was not logged by its code');
 for (const leak of [secret, 'Haustechnik Sonnenberg', 'in_test_0001', 'cus_test_0001', 'connection lost']) {
   assert.ok(!logText.includes(leak), `a log line carried ${leak}`);
 }

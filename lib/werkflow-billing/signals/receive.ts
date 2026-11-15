@@ -13,6 +13,9 @@ import { z } from '@/lib/zod';
 // another delivery holds runs nothing. The family's handler runs, and its
 // outcome settles the row: handled, ignored for a type no family takes, or
 // failed, which releases the claim so Stripe's next delivery runs it again.
+// Each settle names the attempt the claim returned; an attempt that outlived
+// its claim settles nothing and answers busy, so Stripe delivers again and
+// the attempt that holds the event decides.
 
 /** What the endpoint answers: 200, 400, 409, 500 or 503 (route.ts). */
 export type SignalReceipt = 'settled' | 'malformed' | 'busy' | 'failed' | 'unavailable';
@@ -35,19 +38,27 @@ function handlerFailureCode(error: unknown): string {
 
 type Admin = ReturnType<typeof createSupabaseAdminClient>;
 
+/** The receipt for an attempt that settles its event as handled or ignored. */
 async function settleSignal(
   admin: Admin,
   eventId: string,
+  attempt: number,
   outcome: 'handled' | 'ignored' | 'failed',
   failureCode?: string,
-): Promise<boolean> {
-  const { error } = await admin.rpc('settle_werkflow_billing_signal', {
+): Promise<SignalReceipt> {
+  const { data: settled, error } = await admin.rpc('settle_werkflow_billing_signal', {
     p_stripe_event_id: eventId,
+    p_attempt: attempt,
     p_outcome: outcome,
     ...(failureCode ? { p_failure_code: failureCode } : {}),
   });
-  if (error) logError('receiveSignal: settle_werkflow_billing_signal failed', error);
-  return !error;
+  if (error) {
+    logError('receiveSignal: settle_werkflow_billing_signal failed', error);
+    return 'unavailable';
+  }
+  if (settled) return 'settled';
+  logError('receiveSignal: an attempt settled after its claim ended', 'stale_attempt');
+  return 'busy';
 }
 
 export async function receiveSignal(event: Stripe.Event, stripe: StripeGateway): Promise<SignalReceipt> {
@@ -56,30 +67,33 @@ export async function receiveSignal(event: Stripe.Event, stripe: StripeGateway):
   const { id, type, created } = fields.data;
 
   const admin = createSupabaseAdminClient();
-  const { data: claim, error } = await admin.rpc('claim_werkflow_billing_signal', {
-    p_stripe_event_id: id,
-    p_event_type: type,
-    p_stripe_created_at: new Date(created * 1000).toISOString(),
-  });
+  const { data: claim, error } = await admin
+    .rpc('claim_werkflow_billing_signal', {
+      p_stripe_event_id: id,
+      p_event_type: type,
+      p_stripe_created_at: new Date(created * 1000).toISOString(),
+    })
+    .single();
   if (error) {
     logError('receiveSignal: claim_werkflow_billing_signal failed', error);
     return 'unavailable';
   }
-  if (claim === 'settled' || claim === 'busy') return claim;
-  if (claim !== 'claimed') {
+  if (claim.result === 'settled' || claim.result === 'busy') return claim.result;
+  if (claim.result !== 'claimed') {
     logError('receiveSignal: unexpected claim result', 'invalid_result');
     return 'unavailable';
   }
+  const { attempt } = claim;
 
   const family = signalFamilyFor(type);
-  if (!family) return (await settleSignal(admin, id, 'ignored')) ? 'settled' : 'unavailable';
+  if (!family) return settleSignal(admin, id, attempt, 'ignored');
 
   try {
     await family.handle(event, stripe);
   } catch (handlerError) {
     logError('receiveSignal: signal handler failed', handlerError);
-    await settleSignal(admin, id, 'failed', handlerFailureCode(handlerError));
+    await settleSignal(admin, id, attempt, 'failed', handlerFailureCode(handlerError));
     return 'failed';
   }
-  return (await settleSignal(admin, id, 'handled')) ? 'settled' : 'unavailable';
+  return settleSignal(admin, id, attempt, 'handled');
 }

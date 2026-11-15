@@ -6,7 +6,9 @@
 -- delivery claims it again). A settled event is never claimed again, so a
 -- replayed signal changes nothing. Two deliveries of one event never run their
 -- handler at the same time: a claim holds the row for ten minutes, longer than
--- the route may run.
+-- the route may run. Each claim is one attempt, numbered by `attempts`, and
+-- only that attempt settles the row, while its claim holds: an attempt that
+-- outlived its claim, or whose event a later delivery claimed, settles nothing.
 --
 -- The row holds no payload and no personal data: the event id, its type,
 -- Stripe's creation time and the delivery state. It belongs to no
@@ -39,22 +41,25 @@ revoke all on table public.werkflow_billing_signals from public, anon, authentic
 grant select on table public.werkflow_billing_signals to service_role;
 
 -- Records the event on its first delivery and claims it for one attempt.
--- 'claimed': the caller runs the handler and then settles the row.
+-- 'claimed': the caller runs the handler and then settles the row with the
+-- returned attempt number.
 -- 'settled': handled or ignored before; the caller answers success and does nothing.
 -- 'busy': another delivery holds the claim; the caller answers a retryable failure.
+-- `attempt` is the row's attempt count; only a claim's caller uses it.
 -- A replay of a settled event and a busy one change no column.
 create or replace function public.claim_werkflow_billing_signal(
   p_stripe_event_id text,
   p_event_type text,
   p_stripe_created_at timestamptz
 )
-returns text
+returns table (result text, attempt integer)
 language plpgsql
 security definer
 set search_path to ''
 as $$
 declare
   v_state text;
+  v_attempts integer;
 begin
   insert into public.werkflow_billing_signals as signal (
     stripe_event_id, event_type, stripe_created_at, attempts, claimed_until
@@ -66,26 +71,29 @@ begin
         claimed_until = now() + interval '10 minutes'
     where signal.state = 'pending'
       and (signal.claimed_until is null or signal.claimed_until <= now())
-  returning signal.state into v_state;
+  returning signal.attempts into v_attempts;
 
   if found then
-    return 'claimed';
+    return query select 'claimed'::text, v_attempts;
+    return;
   end if;
 
-  select signal.state into v_state
+  select signal.state, signal.attempts into v_state, v_attempts
   from public.werkflow_billing_signals signal
   where signal.stripe_event_id = p_stripe_event_id;
 
-  return case when v_state = 'pending' then 'busy' else 'settled' end;
+  return query select case when v_state = 'pending' then 'busy' else 'settled' end, v_attempts;
 end;
 $$;
 
 -- Ends the claim of one attempt. 'handled' and 'ignored' settle the row for
 -- good; 'failed' releases the claim and keeps the failure code for the alarm.
--- Settles only a pending row: a late call for a settled event changes nothing
--- and answers false.
+-- Settles only a pending row whose current attempt is p_attempt and whose
+-- claim still holds. A stale call (a settled event, an expired claim, or one a
+-- later delivery took) changes nothing and answers false.
 create or replace function public.settle_werkflow_billing_signal(
   p_stripe_event_id text,
+  p_attempt integer,
   p_outcome text,
   p_failure_code text default null
 )
@@ -108,13 +116,15 @@ begin
       claimed_until = null,
       last_failure_code = case when p_outcome = 'failed' then p_failure_code else signal.last_failure_code end
   where signal.stripe_event_id = p_stripe_event_id
-    and signal.state = 'pending';
+    and signal.state = 'pending'
+    and signal.attempts = p_attempt
+    and signal.claimed_until > now();
 
   return found;
 end;
 $$;
 
 revoke all on function public.claim_werkflow_billing_signal(text, text, timestamptz) from public, anon, authenticated;
-revoke all on function public.settle_werkflow_billing_signal(text, text, text) from public, anon, authenticated;
+revoke all on function public.settle_werkflow_billing_signal(text, integer, text, text) from public, anon, authenticated;
 grant execute on function public.claim_werkflow_billing_signal(text, text, timestamptz) to service_role;
-grant execute on function public.settle_werkflow_billing_signal(text, text, text) to service_role;
+grant execute on function public.settle_werkflow_billing_signal(text, integer, text, text) to service_role;

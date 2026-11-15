@@ -15367,7 +15367,10 @@ export type Database = {
           p_stripe_created_at: string;
           p_stripe_event_id: string;
         };
-        Returns: string;
+        Returns: {
+          attempt: number;
+          result: string;
+        }[];
       };
       clear_project_execution_override: {
         Args: {
@@ -20082,6 +20085,7 @@ export type Database = {
       };
       settle_werkflow_billing_signal: {
         Args: {
+          p_attempt: number;
           p_failure_code?: string;
           p_outcome: string;
           p_stripe_event_id: string;
