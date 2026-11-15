@@ -1,5 +1,5 @@
 import { addLocalDays } from '@/lib/date-time/berlin';
-import { taxRateBasisPoints } from '@/lib/invoicing/calculate';
+import { balanceOf, taxRateBasisPoints } from '@/lib/invoicing/calculate';
 import type { CalculatedInvoice } from '@/lib/invoicing/model';
 import { formatGermanDate, formatGermanDateRange } from '@/lib/utils';
 
@@ -72,13 +72,28 @@ function metaRowsOf(invoice: CalculatedInvoice): BusinessDocument['metaRows'] {
   ];
 }
 
-/** How the amount is paid: Zahlungsziel, Skonto and Bankverbindung, the direct debit or the card. */
+/** A credit names its amount and asks for nothing; it claims no refund and no debit. */
+function creditTextOf({ typeCode, totals }: CalculatedInvoice): string {
+  const amount = formatEuroCents(-totals.dueCents);
+  return typeCode === '384'
+    ? `Storniert werden ${amount}. Es ist nichts zu zahlen.`
+    : `Guthaben: ${amount}. Es ist nichts zu zahlen.`;
+}
+
+/**
+ * How the amount is paid: Zahlungsziel, Skonto and Bankverbindung, the direct
+ * debit or the card. A collection or a card payment is named as done only
+ * when a paid amount is recorded.
+ */
 function paymentTextOf(invoice: CalculatedInvoice): string[] {
   const { payment, paymentTerms, totals } = invoice;
+  const balance = balanceOf(totals);
+  if (balance === 'credit') return [creditTextOf(invoice)];
+  if (balance === 'zero') return ['Es ist nichts zu zahlen.'];
   const paid = totals.paidCents
     ? [`Bereits bezahlt: ${formatEuroCents(totals.paidCents)}. Offen: ${formatEuroCents(totals.dueCents)}.`]
     : [];
-  if (totals.dueCents <= 0) {
+  if (balance === 'paid') {
     if (payment?.kind === 'card')
       return [...paid, `Bezahlt mit der Karte mit der Endung ${payment.lastFour}.`];
     if (payment?.kind === 'direct-debit') {

@@ -19,6 +19,20 @@ export function taxRateBasisPoints(tax: InvoiceTax): number {
   return tax.category === 'S' ? tax.rateBasisPoints : 0;
 }
 
+/**
+ * What an invoice's balance asks of the buyer: an amount `due`, nothing
+ * because a recorded payment settled it (`paid`), nothing at all (`zero`), or
+ * a `credit` such as a Storno. Only `paid` says that a payment was made.
+ */
+export function balanceOf({
+  paidCents,
+  dueCents,
+}: CalculatedInvoice['totals']): 'due' | 'paid' | 'zero' | 'credit' {
+  if (dueCents > 0) return 'due';
+  if (dueCents < 0) return 'credit';
+  return paidCents > 0 ? 'paid' : 'zero';
+}
+
 /** basis × rate ÷ 10 000, rounded half away from zero; the basis may be negative. */
 function taxCentsOf(basisCents: number, rateBasisPoints: number): number {
   const doubled = Math.abs(basisCents) * rateBasisPoints * 2 + 10000;
