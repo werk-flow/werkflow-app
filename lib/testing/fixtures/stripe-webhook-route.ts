@@ -6,9 +6,14 @@
 // delivery succeeds; a live key outside production runs nothing. Logs carry
 // no signature, secret or event content.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import Stripe from 'stripe';
+
+// A fixed instant: signing and Stripe's verification both read the clock.
+const NOW = new Date('2026-03-02T08:00:00Z');
+const NOW_SECONDS = NOW.getTime() / 1000;
+setSystemTime(NOW);
 
 type LedgerRow = {
   eventType: string;
@@ -96,7 +101,7 @@ const payloadOf = (id: string, type: string): string =>
     id,
     object: 'event',
     type,
-    created: Math.floor(Date.now() / 1000),
+    created: NOW_SECONDS - 5,
     livemode: false,
     data: { object: { id: 'in_test_0001', customer: 'cus_test_0001' } },
   });
@@ -127,7 +132,7 @@ const deliver = async (payload: string, signature?: string): Promise<number> => 
 const finalized = payloadOf('evt_test_finalized_1', 'invoice.finalized');
 assert.equal(await deliver(finalized), 400, 'a missing signature was not refused');
 assert.equal(await deliver(finalized, await signed(finalized, { secret: 'whsec_forged' })), 400, 'forged');
-const stale = await signed(finalized, { timestamp: Math.floor(Date.now() / 1000) - 600 });
+const stale = await signed(finalized, { timestamp: NOW_SECONDS - 600 });
 assert.equal(await deliver(finalized, stale), 400, 'a stale signature was not refused');
 const altered = finalized.replace('invoice.finalized', 'invoice.paid');
 assert.equal(await deliver(altered, await signed(finalized)), 400, 'an altered body was not refused');
