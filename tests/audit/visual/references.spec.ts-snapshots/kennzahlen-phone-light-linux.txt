@@ -1,0 +1,6 @@
+Menü öffnen
+Wochenzahlen
+Die Zahlen der ganzen Firma aus den letzten 12 Wochen, nie für einzelne Personen.
+Noch keine Wochenzahlen
+Die Zahlen entstehen aus Anfragen, Aufträgen, Übergaben und Zeiten, sobald dein Team in WerkFlow arbeitet.
+Nicht eingestempelt
