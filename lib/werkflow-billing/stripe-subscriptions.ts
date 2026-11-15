@@ -62,11 +62,11 @@ async function call<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-function idOf(value: string | { id: string } | null): string | null {
+function expandableId(value: string | { id: string } | null): string | null {
   return typeof value === 'string' ? value : (value?.id ?? null);
 }
 
-function snapshotOf(subscription: Stripe.Subscription): StripeSubscriptionSnapshot {
+function subscriptionSnapshotOf(subscription: Stripe.Subscription): StripeSubscriptionSnapshot {
   const customer = subscription.customer;
   const organizationId =
     typeof customer === 'object' && !customer.deleted
@@ -75,7 +75,7 @@ function snapshotOf(subscription: Stripe.Subscription): StripeSubscriptionSnapsh
   const periodEnds = subscription.items.data.map((item) => item.current_period_end);
   return {
     id: subscription.id,
-    customerId: idOf(customer) ?? '',
+    customerId: expandableId(customer) ?? '',
     organizationId,
     status: subscription.status,
     cancellationReason: subscription.cancellation_details?.reason ?? null,
@@ -126,11 +126,11 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
       call(async () => {
         const session = await client.checkout.sessions.retrieve(sessionId);
         if (session.mode !== 'subscription' || session.status !== 'complete') return null;
-        return idOf(session.subscription);
+        return expandableId(session.subscription);
       }),
     readSubscription: (subscriptionId) =>
       call(async () =>
-        snapshotOf(await client.subscriptions.retrieve(subscriptionId, { expand: ['customer'] })),
+        subscriptionSnapshotOf(await client.subscriptions.retrieve(subscriptionId, { expand: ['customer'] })),
       ),
     readNewestSubscription: (customerId) =>
       call(async () => {
@@ -141,7 +141,7 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
           expand: ['data.customer'],
         });
         const newest = page.data[0];
-        return newest ? snapshotOf(newest) : null;
+        return newest ? subscriptionSnapshotOf(newest) : null;
       }),
   };
 }

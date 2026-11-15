@@ -27,7 +27,12 @@ async function subscriptionTarget(userId: string): Promise<{ id: string; name: s
   }
   // An existing organization without a subscription: only its Admin starts one.
   const caller = await resolveActionContext();
-  if (!caller.success || caller.context.role !== 'admin') redirect('/dashboard');
+  if (!caller.success) {
+    // Both codes name an absence (no session, no current membership); a failed read throws into app/error.tsx.
+    if (caller.error === 'not_authenticated' || caller.error === 'no_active_org') redirect('/dashboard');
+    throw new Error(caller.error);
+  }
+  if (caller.context.role !== 'admin') redirect('/dashboard');
   const { orgId } = caller.context;
   if ((await readOrganizationSubscription(orgId))?.holdsSubscription) redirect('/dashboard');
   const membership = (await getCachedMemberships(caller.context.userId)).find(
