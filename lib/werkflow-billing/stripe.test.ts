@@ -6,7 +6,7 @@ mock.module('server-only', () => ({}));
 // Signing and Stripe's verification both read the clock; a fixed instant keeps them in step.
 beforeAll(() => setSystemTime(new Date('2026-03-02T08:00:00Z')));
 afterAll(() => setSystemTime());
-const { resolveStripeGateway } = await import('./stripe');
+const { failedPaymentMethodType, resolveStripeGateway } = await import('./stripe');
 const { createFakeStripeGateway } = await import('@/lib/testing/fixtures/fake-stripe-gateway');
 const { signalFamilyFor } = await import('./signals/dispatch');
 
@@ -122,5 +122,23 @@ describe('the dispatch table', () => {
       expect(family?.eventTypes, eventType).toContain(eventType);
     }
     expect(signalFamilyFor('customer.created')).toBeUndefined();
+  });
+});
+
+describe('the failed payment method', () => {
+  // A failed intent may drop `payment_method` and keep the declined card only in its error.
+  test('comes from the intent, else from its last payment error, else is unknown', () => {
+    expect(
+      failedPaymentMethodType({ payment_method: { type: 'sepa_debit' }, last_payment_error: null }),
+    ).toBe('sepa_debit');
+    expect(
+      failedPaymentMethodType({
+        payment_method: null,
+        last_payment_error: { payment_method: { type: 'card' } },
+      }),
+    ).toBe('card');
+    expect(failedPaymentMethodType({ payment_method: 'pm_test_3', last_payment_error: null })).toBeNull();
+    expect(failedPaymentMethodType('pi_test_0001')).toBeNull();
+    expect(failedPaymentMethodType(undefined)).toBeNull();
   });
 });

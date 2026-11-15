@@ -17,26 +17,41 @@ import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
 //
 // - `invoice.payment_failed`: one mail to the customer's billing contact per
 //   invoice (card declined or direct debit failed, by the newest attempt's
-//   payment method) and one `debit_failed` alarm. Access stays (epic decision 8).
+//   payment method) and one `debit_failed` alarm, while the invoice is still
+//   open with an amount remaining. Access stays (epic decision 8).
 // - `charge.dispute.created`: a returned direct debit or a card chargeback
 //   raises the `debit_reversed` alarm; the customer gets no mail.
 
+// A failure signal can arrive late or again after the invoice was paid another way.
+const OPEN_STATUS = 'open';
+
+const MAIL_BY_METHOD = {
+  card: { kind: 'card_problem', render: renderCardProblemMail },
+  sepa_debit: { kind: 'payment_failed', render: renderDebitFailedMail },
+} as const;
+
 async function handleFailedInvoice(invoiceId: string, stripe: StripeGateway): Promise<void> {
   const invoice = await stripe.readInvoice(invoiceId);
+  if (invoice.status !== OPEN_STATUS || invoice.amountRemainingCents <= 0) return;
   const customer = invoice.customerId ? await stripe.readCustomer(invoice.customerId) : null;
-  const card = invoice.paymentMethodType === 'card';
-  const content = {
-    customerName: customer?.name ?? null,
-    invoiceNumber: invoice.number,
-    amountDueCents: invoice.amountDueCents,
-    payUrl: invoice.payUrl,
-  };
-  const mail = await deliverCustomerBillingMail({
-    kind: card ? 'card_problem' : 'payment_failed',
-    customer,
-    stripeObjectId: invoice.id,
-    mail: card ? renderCardProblemMail(content) : renderDebitFailedMail(content),
-  });
+  const method =
+    invoice.paymentMethodType === 'card' || invoice.paymentMethodType === 'sepa_debit'
+      ? MAIL_BY_METHOD[invoice.paymentMethodType]
+      : null;
+  // An unknown method gets no guessed wording; the alarm tells the person to write.
+  const mail = method
+    ? await deliverCustomerBillingMail({
+        kind: method.kind,
+        customer,
+        stripeObjectId: invoice.id,
+        mail: method.render({
+          customerName: customer?.name ?? null,
+          invoiceNumber: invoice.number,
+          amountRemainingCents: invoice.amountRemainingCents,
+          payUrl: invoice.payUrl,
+        }),
+      })
+    : ({ status: 'not_sent', code: 'payment_method_unknown' } as const);
   await raiseBillingAlarm({
     kind: 'debit_failed',
     stripeObjectId: invoice.id,
@@ -44,7 +59,7 @@ async function handleFailedInvoice(invoiceId: string, stripe: StripeGateway): Pr
       ['Organisation', customer?.organizationId ?? 'unbekannt'],
       ['Stripe-Kunde', invoice.customerId ?? 'unbekannt'],
       ['Rechnung', invoice.number ?? 'ohne Nummer'],
-      ['Offener Betrag', formatEuro(invoice.amountDueCents)],
+      ['Offener Betrag', formatEuro(invoice.amountRemainingCents)],
       ['Zahlungsart', invoice.paymentMethodType ?? 'unbekannt'],
       ['Kundenmail', describeCustomerMail(mail)],
     ],

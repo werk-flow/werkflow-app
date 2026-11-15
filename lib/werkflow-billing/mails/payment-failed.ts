@@ -7,7 +7,7 @@ import { formatEuro, renderMail, type RenderedMail } from '@/lib/werkflow-billin
 export type PaymentFailedMail = {
   customerName: string | null;
   invoiceNumber: string | null;
-  amountDueCents: number;
+  amountRemainingCents: number;
   /** Stripe's page where the invoice can be paid another way. */
   payUrl: string | null;
 };
@@ -18,7 +18,7 @@ function invoiceFacts(mail: PaymentFailedMail): (readonly [string, string])[] {
   return [
     ...(mail.customerName ? [['Kunde', mail.customerName] as const] : []),
     ...(mail.invoiceNumber ? [['Rechnung', mail.invoiceNumber] as const] : []),
-    ['Offener Betrag', formatEuro(mail.amountDueCents)],
+    ['Offener Betrag', formatEuro(mail.amountRemainingCents)],
   ];
 }
 
