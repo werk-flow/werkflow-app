@@ -11,8 +11,8 @@ import { listProductSources, parseProductSource, repositoryRoot } from './produc
 // target on its loading skeletons (werk-flow/werkflow-planning#29: CI run
 // 43621163292, audit:wave-1:a2-anfragen, after an Anfrage was created).
 // The check reports a refresh statement that follows a statement navigating
-// in the same block, unless the navigation's own branch returns or throws
-// first.
+// in the same block, unless the navigation's own branch returns first. A
+// `throw` does not count: a `catch` can carry it on to the refresh.
 
 /** Reviewed navigations followed by a refresh. Shrink-only. */
 const REVIEWED_NAVIGATION_REFRESHES: readonly { file: string; reason: string }[] = [
@@ -45,12 +45,13 @@ function routerCall(node: ts.Node, methods: ReadonlySet<string>): boolean {
 const NAVIGATIONS = new Set(['push', 'replace']);
 const REFRESH = new Set(['refresh']);
 
-const leaves = (node: ts.Node): boolean => ts.isReturnStatement(node) || ts.isThrowStatement(node);
+// Only a `return` leaves for sure: a `throw` can land in a `catch` that goes on to the refresh.
+const leaves = (node: ts.Node): boolean => ts.isReturnStatement(node);
 
 /**
  * Whether the function leaves on the navigation's path before the end of
- * `statement`: the navigation sits in a `return` or `throw`, or a `return` or
- * `throw` follows it in its own statement list or an enclosing one.
+ * `statement`: the navigation sits in a `return`, or a `return` follows it in
+ * its own statement list or an enclosing one.
  */
 function leavesAfter(navigation: ts.Node, statement: ts.Statement): boolean {
   for (let node = navigation; node !== statement; node = node.parent) {
@@ -67,10 +68,10 @@ function leavesAfter(navigation: ts.Node, statement: ts.Statement): boolean {
 /**
  * Whether the statement calls `router.push` or `router.replace` outside a
  * nested function on a path that can reach the statement's end. Strict: only
- * a `return` or `throw` in the navigation's own statement list or an
- * enclosing one ends its path, so a branch that leaves another way (an inner
- * `if` that returns on every path, `break`, `continue`, a call that never
- * returns) still counts as reaching a later refresh.
+ * a `return` in the navigation's own statement list or an enclosing one ends
+ * its path, so a branch that leaves another way (a `throw`, an inner `if` that
+ * returns on every path, `break`, `continue`, a call that never returns) still
+ * counts as reaching a later refresh.
  */
 function navigates(statement: ts.Statement): boolean {
   let found = false;
@@ -151,7 +152,7 @@ test('the check reports a refresh after a navigation and passes a refresh in pla
   ]);
 });
 
-test('the check passes a refresh after a branch that navigates and leaves, and reports one after a branch that stays', () => {
+test('the check passes a refresh after a branch that navigates and returns, and reports one after a branch that stays or throws', () => {
   const source = [
     'export function useLeave(router: { push: (href: string) => void; refresh: () => void }) {',
     '  const onReturned = (parent: string | null) => {',
@@ -187,12 +188,25 @@ test('the check passes a refresh after a branch that navigates and leaves, and r
     '    }',
     '    router.refresh();',
     '  };',
-    '  return { onReturned, onReturnedInline, onThrown, onStayed, onNested };',
+    '  const onCaught = (parent: string | null) => {',
+    '    if (parent) {',
+    '      try {',
+    '        router.push(parent);',
+    "        throw new Error('fehlgeschlagen');",
+    '      } catch {',
+    '        // weiter',
+    '      }',
+    '    }',
+    '    router.refresh();',
+    '  };',
+    '  return { onReturned, onReturnedInline, onThrown, onStayed, onNested, onCaught };',
     '}',
   ].join('\n');
   expect(findNavigationRefreshes(new Map([['hooks/use-leave.ts', source]]))).toEqual([
+    { file: 'hooks/use-leave.ts', line: 18 },
     { file: 'hooks/use-leave.ts', line: 26 },
     { file: 'hooks/use-leave.ts', line: 33 },
+    { file: 'hooks/use-leave.ts', line: 44 },
   ]);
 });
 
