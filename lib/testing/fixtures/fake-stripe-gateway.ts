@@ -10,9 +10,12 @@ import type {
  */
 export type FakeStripeBilling = {
   customers: Map<string, { organizationId: string; email: string | null; name: string | null }>;
-  subscriptions: Map<string, StripeSubscriptionSnapshot>;
+  /** Each subscription as Stripe holds it; a read stamps its own time. */
+  subscriptions: Map<string, Omit<StripeSubscriptionSnapshot, 'readAt'>>;
   /** Each Checkout session by id, with the subscription it started; null while open. */
   checkoutSessions: Map<string, string | null>;
+  /** The Checkouts a later Checkout expired. */
+  expiredCheckouts: string[];
   checkoutRequests: Array<Parameters<StripeSubscriptionGateway['createCheckoutSession']>[0]>;
   /** Every call fails as an unreachable Stripe would. */
   down: boolean;
@@ -23,6 +26,7 @@ export function createFakeStripeBilling(): FakeStripeBilling {
     customers: new Map(),
     subscriptions: new Map(),
     checkoutSessions: new Map(),
+    expiredCheckouts: [],
     checkoutRequests: [],
     down: false,
   };
@@ -30,6 +34,12 @@ export function createFakeStripeBilling(): FakeStripeBilling {
 
 /** The subscription calls of the fake gateway, for a fixture that replaces the gateway module itself. */
 export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscriptionGateway {
+  // Each read is later than the one before, as Stripe's clock runs.
+  let reads = 0;
+  const stamped = (subscription: Omit<StripeSubscriptionSnapshot, 'readAt'>): StripeSubscriptionSnapshot => {
+    reads += 1;
+    return { ...subscription, readAt: new Date(Date.UTC(2026, 10, 15, 10, 0, reads)).toISOString() };
+  };
   const reach = async <T>(answer: () => T): Promise<T> => {
     if (billing.down) throw Object.assign(new Error('stripe_call_failed'), { code: 'stripe_call_failed' });
     return answer();
@@ -47,6 +57,12 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
       }),
     createCheckoutSession: (request) =>
       reach(() => {
+        // Every open Checkout of the customer expires first.
+        billing.checkoutRequests.forEach((earlier, index) => {
+          const id = `cs_test_${index + 1}`;
+          const open = billing.checkoutSessions.get(id) === null && !billing.expiredCheckouts.includes(id);
+          if (earlier.customerId === request.customerId && open) billing.expiredCheckouts.push(id);
+        });
         billing.checkoutRequests.push(request);
         const id = `cs_test_${billing.checkoutRequests.length}`;
         billing.checkoutSessions.set(id, null);
@@ -58,13 +74,15 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
         const subscription = billing.subscriptions.get(subscriptionId);
         if (!subscription)
           throw Object.assign(new Error('stripe_call_failed'), { code: 'stripe_call_failed' });
-        return subscription;
+        return stamped(subscription);
       }),
     readNewestSubscription: (customerId) =>
-      reach(
-        () =>
-          [...billing.subscriptions.values()].findLast((entry) => entry.customerId === customerId) ?? null,
-      ),
+      reach(() => {
+        const newest = [...billing.subscriptions.values()].findLast(
+          (entry) => entry.customerId === customerId,
+        );
+        return newest ? stamped(newest) : null;
+      }),
   };
 }
 

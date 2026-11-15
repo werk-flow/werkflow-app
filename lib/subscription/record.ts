@@ -38,6 +38,7 @@ export async function recordSubscription(
     p_stripe_subscription_id: snapshot.id,
     p_status: snapshot.status,
     p_cancel_at_period_end: snapshot.cancelAtPeriodEnd,
+    p_read_at: snapshot.readAt,
     ...(snapshot.cancellationReason ? { p_cancellation_reason: snapshot.cancellationReason } : {}),
     ...(snapshot.currentPeriodEnd ? { p_current_period_end: snapshot.currentPeriodEnd } : {}),
   });

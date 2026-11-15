@@ -80,6 +80,7 @@ assert.deepEqual(recorded.pop(), {
   p_stripe_subscription_id: 'sub_test_1',
   p_status: 'past_due',
   p_cancel_at_period_end: false,
+  p_read_at: '2026-11-15T10:00:01.000Z',
   p_current_period_end: '2026-12-15T10:00:00.000Z',
 });
 

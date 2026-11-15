@@ -12250,6 +12250,7 @@ export type Database = {
           linked_at: string | null;
           organization_id: string;
           reserved_by: string | null;
+          state_read_at: string | null;
           status: string | null;
           stripe_customer_id: string;
           stripe_subscription_id: string | null;
@@ -12264,6 +12265,7 @@ export type Database = {
           linked_at?: string | null;
           organization_id: string;
           reserved_by?: string | null;
+          state_read_at?: string | null;
           status?: string | null;
           stripe_customer_id: string;
           stripe_subscription_id?: string | null;
@@ -12278,6 +12280,7 @@ export type Database = {
           linked_at?: string | null;
           organization_id?: string;
           reserved_by?: string | null;
+          state_read_at?: string | null;
           status?: string | null;
           stripe_customer_id?: string;
           stripe_subscription_id?: string | null;
@@ -18609,6 +18612,7 @@ export type Database = {
           p_cancellation_reason?: string;
           p_current_period_end?: string;
           p_organization_id: string;
+          p_read_at: string;
           p_status: string;
           p_stripe_customer_id: string;
           p_stripe_subscription_id: string;
