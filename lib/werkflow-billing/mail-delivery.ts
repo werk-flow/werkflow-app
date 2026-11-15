@@ -61,8 +61,9 @@ type CustomerMailOutcome = BillingMailOutcome | { status: 'not_sent'; code: stri
 /**
  * Sends one billing mail to a Stripe customer's billing contact, for the
  * organization in its `werkflow_organization_id` metadata. A permanent refusal
- * raises the `mail_failed` alarm; a retryable one is the caller's to throw
- * after its own alarm went out.
+ * raises the `mail_failed` alarm. A retryable or permanent outcome is the
+ * caller's to throw after its own alarm went out, so the row stays `failed`
+ * and Stripe's next delivery sends it again.
  */
 export async function deliverCustomerBillingMail(
   input: {
@@ -108,16 +109,11 @@ export async function deliverCustomerBillingMail(
   return outcome;
 }
 
-const OUTCOME_LABEL: Record<CustomerMailOutcome['status'], string> = {
-  sent: 'gesendet',
-  already_sent: 'schon gesendet',
-  retryable: 'fehlgeschlagen, wird wiederholt',
-  permanent: 'abgelehnt',
-  not_sent: 'nicht gesendet',
-};
-
-/** The customer mail's outcome as an alarm fact. */
+/**
+ * The customer mail as an alarm fact. It depends only on Stripe's state, never
+ * on how a send went, so an alarm sent again after a lost answer carries the
+ * same content and its idempotency key delivers it once.
+ */
 export function describeCustomerMail(outcome: CustomerMailOutcome): string {
-  const label = OUTCOME_LABEL[outcome.status];
-  return 'code' in outcome ? `${label} (${outcome.code})` : label;
+  return outcome.status === 'not_sent' ? `nicht gesendet (${outcome.code})` : 'an den Rechnungskontakt';
 }

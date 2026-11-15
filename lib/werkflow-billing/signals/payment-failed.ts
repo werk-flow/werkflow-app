@@ -64,7 +64,7 @@ async function handleFailedInvoice(invoiceId: string, stripe: StripeGateway): Pr
       ['Kundenmail', describeCustomerMail(mail)],
     ],
   });
-  if (mail.status === 'retryable') throw billingFailure(mail.code);
+  if (mail.status === 'retryable' || mail.status === 'permanent') throw billingFailure(mail.code);
 }
 
 async function handleDispute(disputeId: string, stripe: StripeGateway): Promise<void> {

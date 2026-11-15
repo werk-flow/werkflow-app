@@ -40,6 +40,6 @@ export const mandateSignals: SignalFamily = {
         ['Kundenmail', describeCustomerMail(mail)],
       ],
     });
-    if (mail.status === 'retryable') throw billingFailure(mail.code);
+    if (mail.status === 'retryable' || mail.status === 'permanent') throw billingFailure(mail.code);
   },
 };

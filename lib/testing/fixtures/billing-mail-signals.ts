@@ -213,7 +213,7 @@ assert.deepEqual(
   ],
 );
 assert.ok(resendBodies[0]?.text.includes('SK5GYCE1-0001'));
-assert.ok(resendBodies[1]?.text.includes('Kundenmail: gesendet'));
+assert.ok(resendBodies[1]?.text.includes('Kundenmail: an den Rechnungskontakt'));
 assert.ok(!resendBodies[1]?.text.includes('Sonnenberg'), 'an alarm carried the customer name');
 assert.equal(mailRow('payment_failed', 'in_test_0001')?.organizationId, ORGANIZATION);
 
@@ -250,14 +250,17 @@ assert.ok(
   'a send had no idempotency key',
 );
 
-// A mail Resend refuses for good raises the mail_failed alarm and is not retried.
+// A mail Resend refuses for good raises the mail_failed alarm, stays failed and
+// is sent again on Stripe's next delivery, once the cause is fixed.
 resendAnswers.push(422);
-assert.equal(await deliver('invoice.payment_failed', 'in_test_0004'), null);
+assert.equal(await deliver('invoice.payment_failed', 'in_test_0004'), 'email_validation_error');
 assert.equal(mailRow('payment_failed', 'in_test_0004')?.failureCode, 'email_validation_error');
 assert.equal(mailRow('alarm.mail_failed', 'in_test_0004')?.state, 'sent');
 assert.ok(
   sentTo('alarm@example.com').some((body) => body.subject === 'WerkFlow-Alarm: Abrechnungsmail abgelehnt'),
 );
+assert.equal(await deliver('invoice.payment_failed', 'in_test_0004'), null);
+assert.equal(mailRow('payment_failed', 'in_test_0004')?.state, 'sent');
 
 // A customer without WerkFlow's organization metadata gets no mail; the alarm still fires and says so.
 assert.equal(await deliver('invoice.payment_failed', 'in_test_0005'), null);
@@ -288,6 +291,11 @@ assert.equal(await deliver('invoice.payment_failed', 'in_test_0010'), 'billing_m
 assert.equal(await deliver('invoice.payment_failed', 'in_test_0010'), null);
 assert.equal(mailRow('alarm.debit_failed', 'in_test_0010')?.state, 'sent');
 assert.equal(mailRow('payment_failed', 'in_test_0010')?.state, 'sent');
+assert.equal(
+  sentTo('alarm@example.com').filter((body) => body.text.includes('in_test_0010')).length,
+  1,
+  'an alarm accepted before a lost settlement was delivered twice',
+);
 
 // A returned debit raises debit_reversed and mails no customer.
 const beforeDispute = sentTo('rechnung@sonnenberg.example').length;
