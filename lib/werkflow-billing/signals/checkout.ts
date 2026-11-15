@@ -1,10 +1,17 @@
+import { recordSubscription } from '@/lib/subscription/record';
 import type { SignalFamily } from '@/lib/werkflow-billing/signals/family';
 
-// A completed Stripe Checkout. Contract (family.ts): the input is the verified event;
-// the handler re-reads its object from Stripe by id, is idempotent, and throws
-// on failure so Stripe delivers again. Until werk-flow/werkflow-planning#248
-// fills it, it only returns, which marks the signal handled.
+// A completed Stripe Checkout (werk-flow/werkflow-planning#248). Contract
+// (family.ts): the handler re-reads the session and the subscription it
+// started from Stripe by id, records the subscription for the organization
+// its customer names, is idempotent, and throws on failure so Stripe delivers
+// again. A Checkout of another mode starts no subscription and changes nothing.
 export const checkoutSignals: SignalFamily = {
   eventTypes: ['checkout.session.completed'],
-  handle: async () => {},
+  handle: async (event, stripe) => {
+    if (event.type !== 'checkout.session.completed') return;
+    const subscriptionId = await stripe.subscriptions.readCheckoutSubscriptionId(event.data.object.id);
+    if (!subscriptionId) return;
+    await recordSubscription(await stripe.subscriptions.readSubscription(subscriptionId));
+  },
 };

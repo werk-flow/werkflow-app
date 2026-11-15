@@ -24,6 +24,8 @@ const REVIEWED_UNLIMITED: Readonly<Record<string, string>> = {};
 
 const LIMITER = 'consumeRateLimit';
 const REDEMPTION_RPCS = new Set(['redeem_organization_invite_for_user']);
+// Storing an organization's Stripe customer before its Checkout opens (lib/subscription/checkout.ts).
+const BILLING_RPCS = new Set(['reserve_werkflow_subscription']);
 const BILLING_TABLES = new Set(['subscriptions']);
 const WRITE_METHODS = new Set(['insert', 'upsert', 'update']);
 
@@ -62,6 +64,7 @@ function limitedKind(call: ts.CallExpression): LimitedKind | null {
   }
   if (method === 'rpc') {
     const name = firstStringArgument(call);
+    if (name !== null && BILLING_RPCS.has(name)) return 'billing activation';
     return name !== null && REDEMPTION_RPCS.has(name) ? 'invite redemption' : null;
   }
   if (WRITE_METHODS.has(method) && writesBillingTable(callee)) return 'billing activation';

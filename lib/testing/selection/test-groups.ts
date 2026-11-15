@@ -458,6 +458,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
+  ['werkflow-subscriptions', ['werkflow_subscriptions.sql'], ['*']],
   ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],

@@ -61,8 +61,10 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
     'Independent housekeeping: the rate-limit attempt must persist when the email change transition refuses.',
   'lib/settings/email-change-actions.ts::verifyNewEmailChangeOtp':
     'Documented recovery around the Auth API: the claim is locked before the Auth update, which cannot join a transaction; a definite rejection abandons the claim, and an unknown outcome stays completion_pending until complete reconciles it.',
-  'lib/subscription/actions.ts::simulatePayment':
-    'Independent housekeeping: the rate-limit attempt must persist when the subscription activation fails.',
+  'lib/subscription/actions.ts::startOrganizationCheckout':
+    'Ordered around Stripe: the rate-limit attempt persists when the Checkout fails; the Stripe customer is created between the limiter and reserve_werkflow_subscription, which no transaction joins, and the function keeps the first customer, so a retry stores nothing twice; a re-read subscription is recorded on its own, as its signal would record it.',
+  'lib/subscription/actions.ts::startSubscriptionCheckout':
+    'Ordered around Stripe: the rate-limit attempt persists when the Checkout fails; the Stripe customer is created between the limiter and reserve_werkflow_subscription, which no transaction joins, and the function keeps the first customer, so a retry stores nothing twice; a re-read subscription is recorded on its own, as its signal would record it.',
   'lib/org-export/actions.ts::buildOrganizationExportPart':
     'Ordered around storage: claim_organization_export_part_build queues the part’s archive for the purge before the archive is stored, and one call records the result after, because a storage write cannot join a transaction; an archive whose result is lost is deleted with the claim’s entry.',
   'lib/problem-reports/actions.ts::submitProblemReport':

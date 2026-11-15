@@ -12613,6 +12613,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      werkflow_subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean;
+          cancellation_reason: string | null;
+          created_at: string;
+          current_period_end: string | null;
+          holds_subscription: boolean;
+          linked_at: string | null;
+          organization_id: string;
+          reserved_by: string | null;
+          status: string | null;
+          stripe_customer_id: string;
+          stripe_subscription_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          cancel_at_period_end?: boolean;
+          cancellation_reason?: string | null;
+          created_at?: string;
+          current_period_end?: string | null;
+          holds_subscription?: boolean;
+          linked_at?: string | null;
+          organization_id: string;
+          reserved_by?: string | null;
+          status?: string | null;
+          stripe_customer_id: string;
+          stripe_subscription_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          cancel_at_period_end?: boolean;
+          cancellation_reason?: string | null;
+          created_at?: string;
+          current_period_end?: string | null;
+          holds_subscription?: boolean;
+          linked_at?: string | null;
+          organization_id?: string;
+          reserved_by?: string | null;
+          status?: string | null;
+          stripe_customer_id?: string;
+          stripe_subscription_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       work_artifact_actions: {
         Row: {
           action_type: Database["public"]["Enums"]["work_artifact_action_type"];
@@ -16743,6 +16788,10 @@ export type Database = {
         };
         Returns: string;
       };
+      create_organization_from_subscription: {
+        Args: { p_admin_id: string; p_name: string; p_unique_code: string };
+        Returns: string;
+      };
       create_organization_invite: {
         Args: {
           p_email: string;
@@ -16758,6 +16807,15 @@ export type Database = {
       };
       create_organization_with_defaults: {
         Args: { p_admin_id: string; p_name: string; p_unique_code: string };
+        Returns: string;
+      };
+      create_organization_with_id: {
+        Args: {
+          p_admin_id: string;
+          p_name: string;
+          p_organization_id: string;
+          p_unique_code: string;
+        };
         Returns: string;
       };
       create_payroll_mapping_version: {
@@ -18999,6 +19057,18 @@ export type Database = {
             };
             Returns: string;
           };
+      record_werkflow_subscription_state: {
+        Args: {
+          p_cancel_at_period_end: boolean;
+          p_cancellation_reason?: string;
+          p_current_period_end?: string;
+          p_organization_id: string;
+          p_status: string;
+          p_stripe_customer_id: string;
+          p_stripe_subscription_id: string;
+        };
+        Returns: string;
+      };
       record_work_artifact_action: {
         Args: {
           p_action_id: string;
@@ -19583,6 +19653,15 @@ export type Database = {
           p_period_id: string;
           p_request_hash: string;
           p_supersedes_export_id: string;
+        };
+        Returns: string;
+      };
+      reserve_werkflow_subscription: {
+        Args: {
+          p_linked: boolean;
+          p_organization_id: string;
+          p_stripe_customer_id: string;
+          p_user_id: string;
         };
         Returns: string;
       };
@@ -21809,6 +21888,10 @@ export type Database = {
           p_reason: string;
         };
         Returns: Json;
+      };
+      werkflow_subscription_holds: {
+        Args: { p_cancellation_reason: string; p_status: string };
+        Returns: boolean;
       };
       withdraw_customer_commitment: {
         Args: {
