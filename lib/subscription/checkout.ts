@@ -65,18 +65,7 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
   const { priceId, siteUrl, subscriptions } = configuration;
 
   try {
-    let stored = await readOrganizationSubscription(request.organizationId);
-    let attempt: string | null = null;
-    if (stored && !stored.holdsSubscription) {
-      // Nothing earlier stays payable; then a subscription that a paid
-      // Checkout started is visible here, even before its signal arrives.
-      attempt = await subscriptions.closeOpenCheckouts(stored.stripeCustomerId);
-      const newest = await subscriptions.readNewestSubscription(stored.stripeCustomerId);
-      if (newest) {
-        await recordSubscription(newest);
-        stored = await readOrganizationSubscription(request.organizationId);
-      }
-    }
+    const stored = await readOrganizationSubscription(request.organizationId);
     if (stored?.holdsSubscription) return { ok: false, code: 'already_subscribed' };
 
     const customerId =
@@ -100,13 +89,25 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
       return { ok: false, code: 'checkout_failed' };
     }
 
+    // Nothing earlier stays payable; then a subscription that a paid Checkout
+    // started, by this or an overlapping call, is visible here even before its
+    // signal arrives, and no second subscription can start.
+    const attempt = await subscriptions.closeOpenCheckouts(heldCustomerId);
+    const newest = await subscriptions.readNewestSubscription(heldCustomerId);
+    if (newest) {
+      await recordSubscription(newest);
+      if ((await readOrganizationSubscription(request.organizationId))?.holdsSubscription) {
+        return { ok: false, code: 'already_subscribed' };
+      }
+    }
+
     const url = await subscriptions.createCheckoutSession({
       customerId: heldCustomerId,
       organizationId: request.organizationId,
       priceId,
       successUrl: new URL(request.linked ? '/dashboard' : '/upgrade/bestaetigt', siteUrl).toString(),
       cancelUrl: new URL('/upgrade', siteUrl).toString(),
-      attempt: attempt ?? (await subscriptions.closeOpenCheckouts(heldCustomerId)),
+      attempt,
     });
     return { ok: true, url };
   } catch (failure) {

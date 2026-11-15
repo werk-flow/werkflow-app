@@ -19,6 +19,8 @@ export type FakeStripeBilling = {
   checkoutRequests: Array<Parameters<StripeSubscriptionGateway['createCheckoutSession']>[0]>;
   /** Every call fails as an unreachable Stripe would. */
   down: boolean;
+  /** Runs once before the next call answers: what happens at Stripe meanwhile. */
+  beforeNextCall: (() => Promise<void>) | null;
 };
 
 export function createFakeStripeBilling(): FakeStripeBilling {
@@ -29,6 +31,7 @@ export function createFakeStripeBilling(): FakeStripeBilling {
     expiredCheckouts: [],
     checkoutRequests: [],
     down: false,
+    beforeNextCall: null,
   };
 }
 
@@ -42,6 +45,9 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
   };
   const reach = async <T>(answer: () => T): Promise<T> => {
     if (billing.down) throw Object.assign(new Error('stripe_call_failed'), { code: 'stripe_call_failed' });
+    const meanwhile = billing.beforeNextCall;
+    billing.beforeNextCall = null;
+    await meanwhile?.();
     return answer();
   };
   return {
