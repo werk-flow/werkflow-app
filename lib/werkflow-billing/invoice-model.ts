@@ -24,19 +24,24 @@ function deliveryOf(lines: StripeInvoiceForIssue['lines'], issueDate: string): I
   return end > start ? { kind: 'period', start, end: addLocalDays(end, -1) } : { kind: 'date', date: start };
 }
 
-/** A Stripe line as quantity × unit price when the amount divides evenly, otherwise as one unit of its amount. */
+/**
+ * A Stripe line as quantity × unit price when the amount divides evenly,
+ * otherwise as one unit of its amount. A credit, such as a proration, keeps a
+ * positive price and a negative quantity, as EN 16931 wants (BR-27).
+ */
 function stripeLineOf(
   line: StripeInvoiceForIssue['lines'][number],
   index: number,
 ): InvoiceDraft['lines'][number] {
-  const evenly = line.quantity !== null && line.amountCents % line.quantity === 0;
+  const units = line.quantity !== null && line.amountCents % line.quantity === 0 ? line.quantity : 1;
+  const sign = line.amountCents < 0 ? '-' : '';
   return {
     id: String(index + 1),
     name: line.description || 'WerkFlow',
     description: '',
-    quantity: evenly ? String(line.quantity) : '1',
+    quantity: `${sign}${units}`,
     unitCode: 'C62',
-    unitPriceCents: evenly && line.quantity !== null ? line.amountCents / line.quantity : line.amountCents,
+    unitPriceCents: Math.abs(line.amountCents) / units,
     priceQuantity: 1,
     tax: SMALL_BUSINESS,
   };

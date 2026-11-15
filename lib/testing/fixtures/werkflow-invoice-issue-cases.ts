@@ -8,6 +8,7 @@ import {
   ORGANIZATION_ID,
   SEPA_INVOICE_ANSWERS,
   STRIPE_INVOICE,
+  STRIPE_INVOICE_LINES,
 } from '@/lib/testing/fixtures/stripe-invoices';
 import type { WerkflowSeller } from '@/lib/werkflow-billing/seller';
 
@@ -148,6 +149,45 @@ describe('a finalized Stripe invoice becomes WerkFlow original', () => {
     const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
     expect(xml).toContain('<ram:TotalPrepaidAmount>499.00</ram:TotalPrepaidAmount>');
     expect(xml).toMatch(/<ram:ApplicableTradeSettlementFinancialCard>\s*<ram:ID>4242</);
+  });
+});
+
+describe('a settled or credited Stripe invoice', () => {
+  test('a SEPA invoice already paid when read keeps its debit: code 59, mandate reference and creditor ID', async () => {
+    const { issue, stored, records } = world(
+      withInvoice(SEPA_INVOICE_ANSWERS, { status: 'paid', amount_paid: 49900, amount_remaining: 0 }),
+    );
+    await issue();
+    expect(records[0]).toMatchObject({
+      p_payment_means: 'direct-debit',
+      p_paid_cents: 49900,
+      p_due_cents: 0,
+    });
+    const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
+    expect(xml).toContain('<ram:CreditorReferenceID>DE98ZZZ09999999999</ram:CreditorReferenceID>');
+    expect(xml).toMatch(/<ram:TypeCode>59<\/ram:TypeCode>/);
+    expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0001</ram:DirectDebitMandateID>');
+  });
+
+  test('a proration credit is a negative quantity at a positive price, and the invoice issues', async () => {
+    const [debit] = STRIPE_INVOICE_LINES.data;
+    if (!debit) throw new Error('fixture without lines');
+    const { issue, stored } = world({
+      ...SEPA_INVOICE_ANSWERS,
+      'GET /v1/invoices/in_test_0001': { ...STRIPE_INVOICE, subtotal: 49900, total: 49900 },
+      'GET /v1/invoices/in_test_0001/lines': {
+        ...STRIPE_INVOICE_LINES,
+        data: [
+          { ...debit, id: 'il_test_0002', description: 'Unbenutzte Zeit', amount: -10000 },
+          { ...debit, amount: 59900 },
+        ],
+      },
+    });
+    expect(await issue()).toBe('issued');
+    const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
+    expect(xml).toMatch(
+      /<ram:ChargeAmount>100.00<\/ram:ChargeAmount>[\s\S]*?<ram:BilledQuantity unitCode="C62">-1</,
+    );
   });
 });
 

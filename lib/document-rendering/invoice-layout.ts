@@ -79,9 +79,15 @@ function paymentTextOf(invoice: CalculatedInvoice): string[] {
     ? [`Bereits bezahlt: ${formatEuroCents(totals.paidCents)}. Offen: ${formatEuroCents(totals.dueCents)}.`]
     : [];
   if (totals.dueCents <= 0) {
-    return payment?.kind === 'card'
-      ? [...paid, `Bezahlt mit der Karte mit der Endung ${payment.lastFour}.`]
-      : paid;
+    if (payment?.kind === 'card')
+      return [...paid, `Bezahlt mit der Karte mit der Endung ${payment.lastFour}.`];
+    if (payment?.kind === 'direct-debit') {
+      return [
+        ...paid,
+        `Per SEPA-Lastschrift eingezogen. Mandatsreferenz ${payment.mandateReference}, Gläubiger-ID ${payment.creditorId}.`,
+      ];
+    }
+    return paid;
   }
   if (payment?.kind === 'direct-debit') {
     return [
