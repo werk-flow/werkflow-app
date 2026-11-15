@@ -100,9 +100,13 @@ export function returnWhenReachable(): Promise<boolean> {
 export function returnsOnStart(): boolean {
   if (!navigator.onLine) return false;
   try {
-    return Date.now() - Number(sessionStorage.getItem(RELOADED_AT_KEY) ?? 0) >= START_PAUSE_MS;
+    const last = sessionStorage.getItem(RELOADED_AT_KEY);
+    // The guard must be writable before the start may reload: rewritten at its full width, it throws
+    // when the storage is full, where the reload's own write would fail and nothing would stop a loop.
+    sessionStorage.setItem(RELOADED_AT_KEY, last ?? '0'.padStart(String(Date.now()).length, '0'));
+    return Date.now() - Number(last ?? 0) >= START_PAUSE_MS;
   } catch {
-    // best-effort: without sessionStorage no loop guard can hold, so the start leaves it to the signal and a tap.
+    // best-effort: without a writable sessionStorage no loop guard can hold, so the start leaves it to the signal and a tap.
     return false;
   }
 }
