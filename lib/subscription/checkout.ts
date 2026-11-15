@@ -142,7 +142,8 @@ type ClaimedCheckoutConfiguration = {
 
 /**
  * Ends the claim of an attempt, storing its session if it has one. Answers
- * whether the attempt still held the claim, so its session may reach a payer.
+ * whether the attempt still held the claim, so its session may reach a payer;
+ * a failed call throws, and openCheckout answers checkout_failed.
  */
 async function finishCheckout(
   organizationId: string,
@@ -156,7 +157,10 @@ async function finishCheckout(
       ? { p_session_id: session.id, p_session_url: session.url, p_expires_at: session.expiresAt }
       : {}),
   });
-  if (error) logError('openCheckout: finish_werkflow_checkout failed', error);
+  if (error) {
+    logError('openCheckout: finish_werkflow_checkout failed', error);
+    throw Object.assign(new Error('checkout_finish_failed'), { code: 'checkout_finish_failed' });
+  }
   return data === true;
 }
 

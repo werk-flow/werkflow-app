@@ -66,7 +66,7 @@ create table public.werkflow_subscriptions (
   state_read_at timestamptz,
   -- The organization's one Checkout: its session, while a payer may still open it.
   checkout_session_id text check (checkout_session_id ~ '^cs_[A-Za-z0-9_]{1,250}$'),
-  checkout_url text check (checkout_url ~ '^https://[!-~]{1,2000}$'),
+  checkout_url text check (checkout_url ~ '^https://[!-~]+$' and length(checkout_url) <= 2000),
   checkout_expires_at timestamptz,
   -- Counts Checkout starts that may create a session; each one's number keys Stripe's idempotency.
   checkout_attempt integer not null default 0 check (checkout_attempt >= 0),
