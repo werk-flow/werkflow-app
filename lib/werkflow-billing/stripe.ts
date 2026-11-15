@@ -2,6 +2,8 @@ import 'server-only';
 
 import Stripe from 'stripe';
 
+import { type StripeInvoiceForIssue, stripeInvoiceForIssue } from '@/lib/werkflow-billing/stripe-invoice';
+
 // The one gateway every call of WerkFlow's own billing to Stripe goes through
 // (werk-flow/werkflow-planning#250, epic #245). Live Stripe is PROD: a live key
 // works only where VERCEL_ENV is `production`, a test key only elsewhere, so a
@@ -36,6 +38,12 @@ export type StripeGateway = {
    * stale or malformed signal. Nothing of the body is trusted before this.
    */
   verifySignal(rawBody: string, signature: string): Promise<Stripe.Event | null>;
+  /**
+   * A finalized invoice read back from Stripe by id, with its customer, every
+   * line, and the payment means of its charge (stripe-invoice.ts). Throws a
+   * stable code when Stripe's answer cannot be issued yet or at all.
+   */
+  readInvoiceForIssue(invoiceId: string): Promise<StripeInvoiceForIssue>;
 };
 
 type StripeGatewayResult =
@@ -68,12 +76,47 @@ function signalVerifier(webhooks: Stripe['webhooks'], webhookSecret: string): St
   };
 }
 
+/** The default payment's PaymentIntent id of an invoice, if a payment exists yet. */
+function paymentIntentIdOf(invoice: Stripe.Invoice): string | null {
+  const payments = invoice.payments?.data ?? [];
+  const payment = payments.find((entry) => entry.is_default) ?? payments[0];
+  const intent = payment?.payment.payment_intent;
+  return typeof intent === 'string' ? intent : (intent?.id ?? null);
+}
+
+function invoiceReader(client: Stripe): StripeGateway['readInvoiceForIssue'] {
+  return async (invoiceId) => {
+    const invoice = await client.invoices.retrieve(invoiceId, { expand: ['customer', 'payments'] });
+    const lines = await client.invoices
+      .listLineItems(invoiceId, { limit: 100 })
+      .autoPagingToArray({ limit: 1000 });
+    const intentId = paymentIntentIdOf(invoice);
+    const intent = intentId
+      ? await client.paymentIntents.retrieve(intentId, { expand: ['latest_charge'] })
+      : null;
+    const charge = typeof intent?.latest_charge === 'object' ? intent.latest_charge : null;
+    const details = charge?.payment_method_details ?? null;
+    const mandateId = details?.type === 'sepa_debit' ? details.sepa_debit?.mandate : null;
+    const mandate = mandateId ? await client.mandates.retrieve(mandateId) : null;
+    return stripeInvoiceForIssue({
+      invoice,
+      lines,
+      paymentDetails: details,
+      mandateReference: mandate?.payment_method_details.sepa_debit?.reference ?? null,
+    });
+  };
+}
+
 /**
  * The gateway for this deployment, or the code of the configuration that
  * refuses it. Reads `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
  * `VERCEL_ENV` (docs/technical/environments.md, "Credentials").
  */
-export function resolveStripeGateway(environment: StripeEnvironment = process.env): StripeGatewayResult {
+export function resolveStripeGateway(
+  environment: StripeEnvironment = process.env,
+  /** Tests answer Stripe's requests in memory (lib/testing/fixtures/fake-stripe-gateway.ts). */
+  httpClient?: Stripe.StripeConfig['httpClient'],
+): StripeGatewayResult {
   const key = environment.STRIPE_SECRET_KEY?.trim();
   if (!key) return { ok: false, code: 'stripe_secret_key_missing' };
   const failure = keyFailure(key, environment.VERCEL_ENV === 'production');
@@ -81,6 +124,12 @@ export function resolveStripeGateway(environment: StripeEnvironment = process.en
   const webhookSecret = environment.STRIPE_WEBHOOK_SECRET?.trim();
   if (!webhookSecret) return { ok: false, code: 'stripe_webhook_secret_missing' };
 
-  const client = new Stripe(key, { apiVersion: STRIPE_API_VERSION });
-  return { ok: true, gateway: { verifySignal: signalVerifier(client.webhooks, webhookSecret) } };
+  const client = new Stripe(key, { apiVersion: STRIPE_API_VERSION, ...(httpClient ? { httpClient } : {}) });
+  return {
+    ok: true,
+    gateway: {
+      verifySignal: signalVerifier(client.webhooks, webhookSecret),
+      readInvoiceForIssue: invoiceReader(client),
+    },
+  };
 }
