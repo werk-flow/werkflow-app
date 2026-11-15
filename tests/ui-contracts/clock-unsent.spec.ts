@@ -313,11 +313,38 @@ test('a late chain without an end on a session the server still holds open offer
   await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Zeit nachtragen', exact: true })).toHaveCount(0);
 });
-/** Lets the clock's pending online call answer, as the server does after a while. */
+/**
+ * Lets the clock's pending online call answer, as the server does after a while. It takes the call's
+ * resolver as it answers, so a second answer waits for the next call instead of answering this one twice.
+ */
 async function answerTransition(page: Page): Promise<void> {
   await page.waitForFunction(() => window.clockContract.resolveTransition !== null);
-  await page.evaluate(() => window.clockContract.resolveTransition?.());
+  await page.evaluate(() => {
+    const answer = window.clockContract.resolveTransition;
+    window.clockContract.resolveTransition = null;
+    answer?.();
+  });
 }
+
+test('a late chain with a Pause before its end keeps the order that shows every captured time: one edit of the end would count the break as work', async ({
+  page,
+}) => {
+  await mountClock(page, RUNNING_SINCE_SEVEN, () => undefined, {
+    outcome: 'conflict',
+    code: 'correction_required',
+  });
+  await keepLateChain(page, RUNNING_SINCE_SEVEN, [
+    ['switch', '2026-11-09T09:00:00.000Z'],
+    ['end', '2026-11-09T15:00:00.000Z'],
+  ]);
+  await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
+  const section = unsentSection(page);
+
+  await expect(section.locator('[data-clock-open-session]')).toContainText('Notiere dir die Zeiten unten.');
+  await expect(section.locator('[data-clock-replacement]')).toHaveCount(0);
+  await expect(section.getByRole('button', { name: 'Korrektur beantragen', exact: true })).toHaveCount(0);
+  await expect(section.getByRole('listitem').filter({ hasText: 'Pause gestartet' })).toContainText('10:00');
+});
 
 test('a late chain of a session the server still holds open is settled by one guided correction: end the session, replace its end with the captured one, and only then let the events go', async ({
   page,
@@ -327,10 +354,7 @@ test('a late chain of a session the server still holds open is settled by one gu
     outcome: 'conflict',
     code: 'correction_required',
   });
-  await keepLateChain(page, running, [
-    ['switch', '2026-11-09T09:00:00.000Z'],
-    ['end', '2026-11-09T15:00:00.000Z'],
-  ]);
+  await keepLateChain(page, running, [['end', '2026-11-09T15:00:00.000Z']]);
   await expect(unsentBadge(clockDock(page))).toHaveText('Korrektur nötig');
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
   const section = unsentSection(page);
@@ -351,7 +375,7 @@ test('a late chain of a session the server still holds open is settled by one gu
   await answerTransition(page);
   await expect(section).toContainText('Die laufende Zeiterfassung konnte nicht beendet werden.');
   await expect(form).toHaveCount(0);
-  expect(await unsentOnDevice(page)).toHaveLength(2);
+  expect(await unsentOnDevice(page)).toHaveLength(1);
   expect(await page.evaluate(() => window.clockContract.transitions)).toMatchObject([
     { action: 'end', expectedSessionId: running.sessionId, expectedVersion: running.sessionVersion },
   ]);
@@ -367,7 +391,7 @@ test('a late chain of a session the server still holds open is settled by one gu
   await expect(section).toContainText('Deine erfassten Zeiten konnten nicht geladen werden.');
   await expect(clockStatus(page)).toHaveText('Nicht eingestempelt');
   await expect(form).toHaveCount(0);
-  expect(await unsentOnDevice(page)).toHaveLength(2);
+  expect(await unsentOnDevice(page)).toHaveLength(1);
 
   // The session no longer runs: the flow goes on with step 2 alone and ends nothing again.
   await expect(section.locator('[data-clock-replacement]')).toContainText(
@@ -378,7 +402,7 @@ test('a late chain of a session the server still holds open is settled by one gu
   });
   await correct.click();
   await expect(section).toContainText('Die Zeiterfassung, die diese Zeiten ersetzen, wurde nicht gefunden.');
-  expect(await unsentOnDevice(page)).toHaveLength(2);
+  expect(await unsentOnDevice(page)).toHaveLength(1);
 
   // The recovered segment: its end, recorded the next day, is what the correction replaces.
   await page.evaluate(
@@ -419,18 +443,19 @@ test('a late chain of a session the server still holds open is settled by one gu
   // Closing the form files nothing: the events stay.
   await form.getByRole('button', { name: 'Formular schließen', exact: true }).click();
   await expect(form).toHaveCount(0);
-  expect(await unsentOnDevice(page)).toHaveLength(2);
+  expect(await unsentOnDevice(page)).toHaveLength(1);
 
   await correct.click();
   await form.getByRole('button', { name: 'Korrektur einreichen', exact: true }).click();
   await expect(section).toHaveCount(0);
   await expect.poll(() => unsentOnDevice(page)).toEqual([]);
-  // Two online ends: the refused one and the one that ended the session. The kept end was never sent.
+  // Two online ends: the refused one and the one that ended the session. The kept end reached the
+  // server once, which answered that it needs a correction, and was never sent again.
   expect(await page.evaluate(() => window.clockContract.transitions.map((call) => call.action))).toEqual([
     'end',
     'end',
   ]);
-  expect(server.sent.map((envelope) => envelope.payload.action)).not.toContain('end');
+  expect(server.sent.map((envelope) => envelope.payload.action)).toEqual(['end']);
 });
 
 test('while the guided correction ends the session, the sheet stays open, so its answer and the next step are not lost', async ({
@@ -441,10 +466,7 @@ test('while the guided correction ends the session, the sheet stays open, so its
     outcome: 'conflict',
     code: 'correction_required',
   });
-  await keepLateChain(page, running, [
-    ['switch', '2026-11-09T09:00:00.000Z'],
-    ['end', '2026-11-09T15:00:00.000Z'],
-  ]);
+  await keepLateChain(page, running, [['end', '2026-11-09T15:00:00.000Z']]);
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
   const sheet = page
     .getByRole('dialog')
@@ -473,15 +495,11 @@ test('a guided correction filed as another kind than an edit leaves the recorded
 }) => {
   const running = RUNNING_SINCE_SEVEN;
   // The session ended meanwhile: the flow goes on with the correction alone.
-  const server = await mountClock(page, running, () => undefined, {
+  await mountClock(page, CLOCKED_OUT_STATE, () => undefined, {
     outcome: 'conflict',
     code: 'correction_required',
   });
-  await keepLateChain(page, running, [
-    ['switch', '2026-11-09T09:00:00.000Z'],
-    ['end', '2026-11-09T15:00:00.000Z'],
-  ]);
-  server.state = CLOCKED_OUT_STATE;
+  await keepLateChain(page, running, [['end', '2026-11-09T15:00:00.000Z']]);
   await page.evaluate(
     ({ userId, organizationId }) => {
       const piece = (entryType: 'clock_in' | 'clock_out', timestamp: string) => ({
@@ -511,14 +529,16 @@ test('a guided correction filed as another kind than an edit leaves the recorded
     },
     { userId: CLOCK_USER_ID, organizationId: CLOCK_ORGANIZATION_ID },
   );
-  await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
+  await expect(unsentBadge(clockDock(page))).toHaveText('Korrektur nötig');
+  await expect(clockStatus(page)).toHaveText('Nicht eingestempelt');
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
   const section = unsentSection(page);
   const form = page.getByRole('dialog', { name: 'Zeit korrigieren', exact: true });
 
   await section.getByRole('button', { name: 'Korrektur beantragen', exact: true }).click();
   await form.getByRole('button', { name: 'Andere Korrektur einreichen', exact: true }).click();
   await expect(section).toContainText('Deine Korrektur ändert nicht das Ende deiner Zeiterfassung');
-  expect(await unsentOnDevice(page)).toHaveLength(2);
+  expect(await unsentOnDevice(page)).toHaveLength(1);
   expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
 });
 
@@ -530,10 +550,7 @@ test('the guided correction replays an end only after a lost answer: a request a
     outcome: 'conflict',
     code: 'correction_required',
   });
-  await keepLateChain(page, running, [
-    ['switch', '2026-11-09T09:00:00.000Z'],
-    ['end', '2026-11-09T15:00:00.000Z'],
-  ]);
+  await keepLateChain(page, running, [['end', '2026-11-09T15:00:00.000Z']]);
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
   const section = unsentSection(page);
   const correct = section.getByRole('button', { name: 'Korrektur beantragen', exact: true });
@@ -575,7 +592,9 @@ test('the guided correction replays an end only after a lost answer: a request a
   await answerTransition(page);
   await answerTransition(page);
   await expect(section).toContainText('Die laufende Zeiterfassung konnte nicht beendet werden.');
-  expect(await unsentOnDevice(page)).toHaveLength(2);
+  expect(await unsentOnDevice(page)).toHaveLength(1);
+  // The clock read the server again after that answer: it holds the session at version 9 now.
+  await expect(page.getByLabel('Zeitstatus', { exact: true })).toHaveText('Bereit: 9');
 
   // The next attempt ends at the version the clock now reads and recovers, both as new operations.
   await page.evaluate((answers) => {

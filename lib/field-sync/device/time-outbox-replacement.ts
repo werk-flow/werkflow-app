@@ -21,9 +21,13 @@ export type SessionReplacement = {
 /**
  * The replacement a late chain offers: its first event came too late to be recorded by itself
  * (`correction_required`), expects a session on the server, and the events one correction covers
- * (correctionScope) end it. Null for any other stop, a chain that starts its own session or holds no
- * end, while the server's clock is unknown, and when the phone does not know which segment ran when
- * the chain began: without it, another session's time could be corrected.
+ * (correctionScope) are that session's end alone. Null for any other stop, a chain that starts its own
+ * session or holds no end, while the server's clock is unknown, and when the phone does not know which
+ * segment ran when the chain began: without it, another session's time could be corrected.
+ *
+ * Null as well when a switch comes before the end: the one edit replaces only the recorded end, so a
+ * break or another activity the switch records would be lost once the events leave the phone. Such a
+ * chain keeps the order that shows the person every captured time.
  */
 export function sessionReplacement(
   view: ClockDeviceView,
@@ -36,8 +40,10 @@ export function sessionReplacement(
   if (view.status !== 'stopped' || first?.status !== 'correction' || !confirmed || !sessionId || !segmentId)
     return null;
   const events = correctionScope(view);
-  const end = events.findLast((event) => event.action === 'end');
-  return end ? { events, sessionId, segmentId, capturedEnd: end.capturedAt } : null;
+  const [end, ...more] = events;
+  return end?.action === 'end' && more.length === 0
+    ? { events, sessionId, segmentId, capturedEnd: end.capturedAt }
+    : null;
 }
 
 /** The window the session's recorded entries are read in: from the Berlin day the chain began until now. */

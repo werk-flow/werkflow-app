@@ -353,3 +353,10 @@ Decided for werk-flow/werkflow-planning#404. It replaces the order of the 2026-1
 - **The order.** (1) A session that still runs ends online with `end`, at the server's time, and the flow says so; a session the server moved to recovery ends with `recover_end`. Nothing of this step is kept on the phone. (2) The phone reads the person's entries and opens „Zeit korrigieren“ on the last end of the segment its kept clock showed running when the chain began, if that segment ran past the captured end, with the captured end prefilled. Never another segment: another device may have ended the session and started another. A chain whose kept clock names no segment keeps the 2026-11-12 order. (3) The events the correction covers leave the phone only when the form reports a filed `edit`. A request of another kind, which the form lets the person choose, leaves the recorded end as it is, so the events stay and the phone says so.
 - **Failures.** A refused or lost end, a failed read, or no matching segment keeps every event and names the step. A session that ended after step 1 goes on at step 2.
 - **Without a captured end** the phone keeps the 2026-11-12 order.
+
+## Amendment 2026-11-15: the guided correction covers only a late end
+
+Decided for werk-flow/werkflow-planning#404. It narrows the amendment of 2026-11-14 "one guided correction for a late chain of a session the server holds".
+
+- **Only the end.** The guided correction covers a chain whose first correction day holds the session's end and nothing before it. Its one `edit` replaces only the recorded end, so a switch before that end, such as a „Pause“ and its return to work, would be dropped, and its break would count as work once the events leave the phone.
+- **Every other chain of such a session** keeps the order of 2026-11-12, where the person sees every captured time and files the correction by hand.
