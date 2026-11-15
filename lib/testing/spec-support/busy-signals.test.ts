@@ -39,11 +39,12 @@ test('the registry primitives set the attributes the selector names', () => {
 });
 
 test('settled and the visual settle wait on the shared selector, never on a class or a local list', () => {
-  const interaction = read('tests/golden/support/steps/interaction.ts');
-  expect(interaction).toContain('selector: BUSY_SIGNAL_SELECTOR');
-  expect(interaction).toContain('routeRefresh: ROUTE_REFRESH_SIGNAL');
-  expect(interaction).toContain('unconfirmedLayer: UNCONFIRMED_LAYER_SIGNAL');
-  expect(interaction).not.toMatch(/'\[aria-busy|"\[aria-busy/);
+  const reader = read('tests/golden/support/busy-elements.ts');
+  expect(reader).toContain('selector: BUSY_SIGNAL_SELECTOR');
+  expect(reader).toContain('routeRefresh: ROUTE_REFRESH_SIGNAL');
+  expect(reader).toContain('unconfirmedLayer: UNCONFIRMED_LAYER_SIGNAL');
+  for (const source of [reader, read('tests/golden/support/steps/interaction.ts')])
+    expect(source).not.toMatch(/'\[aria-busy|"\[aria-busy/);
   const visual = read('tests/audit/support/visual-references.ts');
   expect(visual).toMatch(/export async function settlePage[\s\S]*?await settled\(page\);/);
   expect(visual).not.toMatch(/animate-(pulse|spin)/);
@@ -87,8 +88,4 @@ test('a busy element that matches two signals names both', () => {
   ).toEqual(['aria-busy + unconfirmed <button> "Speichern"']);
 });
 
-test('settled reports the described facts, never a bare tag and role', () => {
-  const interaction = read('tests/golden/support/steps/interaction.ts');
-  expect(interaction).toContain('describeBusyElements(elements)');
-  expect(interaction).toContain('signals: BUSY_SIGNALS.map(');
-});
+// tests/ui-contracts/busy-elements.spec.ts proves what tests/golden/support/busy-elements.ts collects in a page.
