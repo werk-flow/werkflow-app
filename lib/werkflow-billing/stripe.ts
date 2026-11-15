@@ -8,8 +8,8 @@ import Stripe from 'stripe';
 // key in the wrong environment fails closed. A missing or refused key is a
 // typed failure of the caller that asked, never an import-time crash of an
 // unrelated page. Tests never reach Stripe: they use createFakeStripeGateway
-// (stripe-fake.ts). A later child adds each call it needs as a method of
-// StripeGateway, on the client below and on the fake.
+// (lib/testing/fixtures/fake-stripe-gateway.ts). A later child adds each call
+// it needs as a method of StripeGateway, on the client below and on the fake.
 
 /**
  * The API version of every request and every signal this code reads. Typed as
@@ -56,11 +56,8 @@ function keyFailure(key: string, production: boolean): StripeConfigurationFailur
   return null;
 }
 
-/** Verifies a signal with Stripe's own check; shared by the gateway and its fake. */
-export function signalVerifier(
-  webhooks: Stripe['webhooks'],
-  webhookSecret: string,
-): StripeGateway['verifySignal'] {
+/** Verifies a signal with Stripe's own check. */
+function signalVerifier(webhooks: Stripe['webhooks'], webhookSecret: string): StripeGateway['verifySignal'] {
   return async (rawBody, signature) => {
     try {
       return await webhooks.constructEventAsync(rawBody, signature, webhookSecret, SIGNAL_TOLERANCE_SECONDS);

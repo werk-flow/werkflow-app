@@ -4,7 +4,7 @@ import Stripe from 'stripe';
 
 mock.module('server-only', () => ({}));
 const { resolveStripeGateway } = await import('./stripe');
-const { createFakeStripeGateway } = await import('./stripe-fake');
+const { createFakeStripeGateway } = await import('@/lib/testing/fixtures/fake-stripe-gateway');
 const { signalFamilyFor } = await import('./signals/dispatch');
 
 // Synthetic values of the right form; no real key exists in this repository.
