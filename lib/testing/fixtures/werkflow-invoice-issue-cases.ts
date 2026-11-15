@@ -58,6 +58,44 @@ const withInvoice = (answers: Record<string, unknown>, change: Record<string, un
   'GET /v1/invoices/in_test_0001': { ...STRIPE_INVOICE, ...change },
 });
 
+const refusals: Array<{
+  case: string;
+  answers: Record<string, unknown>;
+  seller?: WerkflowSeller;
+  code: string;
+}> = [
+  {
+    case: "a total that is not Stripe's line sum (a discount)",
+    answers: withInvoice(SEPA_INVOICE_ANSWERS, { total: 44900, amount_remaining: 44900 }),
+    code: 'werkflow_invoice_amount_mismatch',
+  },
+  {
+    case: 'a paid amount above the total',
+    answers: withInvoice(CARD_INVOICE_ANSWERS, { amount_paid: 50000, amount_remaining: 0, status: 'paid' }),
+    code: 'werkflow_invoice_amount_mismatch',
+  },
+  {
+    case: 'a seller the EN 16931 rules cannot identify',
+    answers: SEPA_INVOICE_ANSWERS,
+    seller: { ...MADE_UP_SELLER, seller: { ...MADE_UP_SELLER.seller, vatId: null } },
+    code: 'werkflow_invoice_rules_failed',
+  },
+  {
+    case: 'a customer without WerkFlow organization',
+    answers: withInvoice(SEPA_INVOICE_ANSWERS, { customer: { id: 'cus_test_0001', metadata: {} } }),
+    code: 'werkflow_invoice_organization_unknown',
+  },
+  {
+    case: 'an amount due without a charge yet',
+    answers: withInvoice(SEPA_INVOICE_ANSWERS, { payments: { object: 'list', data: [], has_more: false } }),
+    code: 'werkflow_invoice_payment_pending',
+  },
+  {
+    case: 'a draft without a number',
+    answers: withInvoice(SEPA_INVOICE_ANSWERS, { status: 'draft', number: null }),
+    code: 'werkflow_invoice_not_finalized',
+  },
+];
 describe('a finalized Stripe invoice becomes WerkFlow original', () => {
   test("a SEPA invoice is issued once with Stripe's number and amounts, its mandate and creditor ID in the checked XML", async () => {
     const { issue, requests, stored, records } = world(SEPA_INVOICE_ANSWERS);
@@ -111,45 +149,9 @@ describe('a finalized Stripe invoice becomes WerkFlow original', () => {
     expect(xml).toContain('<ram:TotalPrepaidAmount>499.00</ram:TotalPrepaidAmount>');
     expect(xml).toMatch(/<ram:ApplicableTradeSettlementFinancialCard>\s*<ram:ID>4242</);
   });
+});
 
-  const refusals: Array<{
-    case: string;
-    answers: Record<string, unknown>;
-    seller?: WerkflowSeller;
-    code: string;
-  }> = [
-    {
-      case: "a total that is not Stripe's line sum (a discount)",
-      answers: withInvoice(SEPA_INVOICE_ANSWERS, { total: 44900, amount_remaining: 44900 }),
-      code: 'werkflow_invoice_amount_mismatch',
-    },
-    {
-      case: 'a paid amount above the total',
-      answers: withInvoice(CARD_INVOICE_ANSWERS, { amount_paid: 50000, amount_remaining: 0, status: 'paid' }),
-      code: 'werkflow_invoice_amount_mismatch',
-    },
-    {
-      case: 'a seller the EN 16931 rules cannot identify',
-      answers: SEPA_INVOICE_ANSWERS,
-      seller: { ...MADE_UP_SELLER, seller: { ...MADE_UP_SELLER.seller, vatId: null } },
-      code: 'werkflow_invoice_rules_failed',
-    },
-    {
-      case: 'a customer without WerkFlow organization',
-      answers: withInvoice(SEPA_INVOICE_ANSWERS, { customer: { id: 'cus_test_0001', metadata: {} } }),
-      code: 'werkflow_invoice_organization_unknown',
-    },
-    {
-      case: 'an amount due without a charge yet',
-      answers: withInvoice(SEPA_INVOICE_ANSWERS, { payments: { object: 'list', data: [], has_more: false } }),
-      code: 'werkflow_invoice_payment_pending',
-    },
-    {
-      case: 'a draft without a number',
-      answers: withInvoice(SEPA_INVOICE_ANSWERS, { status: 'draft', number: null }),
-      code: 'werkflow_invoice_not_finalized',
-    },
-  ];
+describe('a Stripe invoice WerkFlow cannot issue', () => {
   for (const refusal of refusals) {
     test(`${refusal.case} issues nothing and fails with ${refusal.code}`, async () => {
       const { issue, stored, records } = world(refusal.answers, refusal.seller);
