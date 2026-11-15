@@ -17,6 +17,10 @@ export type FakeStripeBilling = {
   /** The Checkouts a later Checkout expired. */
   expiredCheckouts: string[];
   checkoutRequests: Array<Parameters<StripeSubscriptionGateway['createCheckoutSession']>[0]>;
+  /** The next Checkout create fails, and Stripe keeps that failure for its idempotency key. */
+  failNextCheckout: boolean;
+  /** The subscriptions cancelDuplicateSubscription refunded and cancelled. */
+  cancelledDuplicates: string[];
   /** Every call fails as an unreachable Stripe would. */
   down: boolean;
   /** Runs once before the next call answers: what happens at Stripe meanwhile. */
@@ -30,8 +34,36 @@ export function createFakeStripeBilling(): FakeStripeBilling {
     checkoutSessions: new Map(),
     expiredCheckouts: [],
     checkoutRequests: [],
+    failNextCheckout: false,
+    cancelledDuplicates: [],
     down: false,
     beforeNextCall: null,
+  };
+}
+
+/** Stripe's idempotency key: one session, or one cached failure, per organization and attempt. */
+function checkoutSession(
+  billing: FakeStripeBilling,
+  failedKeys: Set<string>,
+  request: Parameters<StripeSubscriptionGateway['createCheckoutSession']>[0],
+) {
+  const key = `${request.organizationId}-${request.attempt}`;
+  if (billing.failNextCheckout) failedKeys.add(key);
+  billing.failNextCheckout = false;
+  if (failedKeys.has(key))
+    throw Object.assign(new Error('stripe_call_failed'), { code: 'stripe_call_failed' });
+  let index = billing.checkoutRequests.findIndex(
+    (earlier) => `${earlier.organizationId}-${earlier.attempt}` === key,
+  );
+  if (index < 0) {
+    index = billing.checkoutRequests.push(request) - 1;
+    billing.checkoutSessions.set(`cs_test_${index + 1}`, null);
+  }
+  const id = `cs_test_${index + 1}`;
+  return {
+    id,
+    url: `https://checkout.stripe.test/c/pay/${id}`,
+    expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
   };
 }
 
@@ -43,6 +75,7 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
     reads += 1;
     return { ...subscription, readAt: new Date(Date.UTC(2026, 10, 15, 10, 0, reads)).toISOString() };
   };
+  const failedCheckoutKeys = new Set<string>();
   const reach = async <T>(answer: () => T): Promise<T> => {
     if (billing.down) throw Object.assign(new Error('stripe_call_failed'), { code: 'stripe_call_failed' });
     const meanwhile = billing.beforeNextCall;
@@ -61,24 +94,14 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
         billing.customers.set(id, input);
         return id;
       }),
-    closeOpenCheckouts: (customerId) =>
+    createCheckoutSession: (request) => reach(() => checkoutSession(billing, failedCheckoutKeys, request)),
+    closeCheckout: (sessionId) =>
       reach(() => {
-        const seen: string[] = [];
-        billing.checkoutRequests.forEach((earlier, index) => {
-          if (earlier.customerId !== customerId) return;
-          const id = `cs_test_${index + 1}`;
-          seen.push(id);
-          const open = billing.checkoutSessions.get(id) === null && !billing.expiredCheckouts.includes(id);
-          if (open) billing.expiredCheckouts.push(id);
-        });
-        return seen.join(',');
-      }),
-    createCheckoutSession: (request) =>
-      reach(() => {
-        billing.checkoutRequests.push(request);
-        const id = `cs_test_${billing.checkoutRequests.length}`;
-        billing.checkoutSessions.set(id, null);
-        return `https://checkout.stripe.test/c/pay/${id}`;
+        const subscriptionId = billing.checkoutSessions.get(sessionId) ?? null;
+        if (subscriptionId === null && !billing.expiredCheckouts.includes(sessionId)) {
+          billing.expiredCheckouts.push(sessionId);
+        }
+        return subscriptionId;
       }),
     readCheckoutSubscriptionId: (sessionId) => reach(() => billing.checkoutSessions.get(sessionId) ?? null),
     readSubscription: (subscriptionId) =>
@@ -94,6 +117,18 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
           (entry) => entry.customerId === customerId,
         );
         return newest ? stamped(newest) : null;
+      }),
+    cancelDuplicateSubscription: (subscriptionId) =>
+      reach(() => {
+        const subscription = billing.subscriptions.get(subscriptionId);
+        if (!subscription)
+          throw Object.assign(new Error('stripe_call_failed'), { code: 'stripe_call_failed' });
+        billing.cancelledDuplicates.push(subscriptionId);
+        billing.subscriptions.set(subscriptionId, {
+          ...subscription,
+          status: 'canceled',
+          cancellationReason: 'cancellation_requested',
+        });
       }),
   };
 }

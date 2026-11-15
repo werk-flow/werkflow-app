@@ -29,7 +29,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (!reservation.holdsSubscription && stripe.ok) {
     try {
       const newest = await stripe.gateway.subscriptions.readNewestSubscription(reservation.stripeCustomerId);
-      if (newest) await recordSubscription(newest);
+      if (newest) await recordSubscription(newest, stripe.gateway.subscriptions);
     } catch (failure) {
       // best-effort: the signal records the subscription, and the next Checkout re-reads it first.
       logError('upgrade return: subscription re-read failed', failure);

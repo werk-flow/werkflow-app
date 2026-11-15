@@ -155,7 +155,7 @@ async function recordPaidCheckout(email: string): Promise<void> {
   if (profileError) throw new Error(`Signup profile not found for ${email}: ${profileError.message}`);
   const organizationId = randomUUID();
   const suffix = organizationId.replaceAll('-', '');
-  const { error: reserveError } = await admin.rpc('reserve_werkflow_subscription', {
+  const { error: reserveError } = await admin.rpc('begin_werkflow_checkout', {
     p_organization_id: organizationId,
     p_user_id: profile.id,
     p_linked: false,

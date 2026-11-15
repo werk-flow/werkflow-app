@@ -35,12 +35,18 @@ const failure = {
 };
 
 nextResult = {
-  data: { organization_id: organizationId, stripe_customer_id: 'cus_test_1', holds_subscription: true },
+  data: {
+    organization_id: organizationId,
+    stripe_customer_id: 'cus_test_1',
+    stripe_subscription_id: 'sub_test_1',
+    holds_subscription: true,
+  },
   error: null,
 };
 assert.deepEqual(await readOpenReservation(userId), {
   organizationId,
   stripeCustomerId: 'cus_test_1',
+  stripeSubscriptionId: 'sub_test_1',
   holdsSubscription: true,
 });
 nextResult = { data: null, error: null };

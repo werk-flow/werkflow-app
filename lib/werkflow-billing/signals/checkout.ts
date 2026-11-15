@@ -12,6 +12,9 @@ export const checkoutSignals: SignalFamily = {
     if (event.type !== 'checkout.session.completed') return;
     const subscriptionId = await stripe.subscriptions.readCheckoutSubscriptionId(event.data.object.id);
     if (!subscriptionId) return;
-    await recordSubscription(await stripe.subscriptions.readSubscription(subscriptionId));
+    await recordSubscription(
+      await stripe.subscriptions.readSubscription(subscriptionId),
+      stripe.subscriptions,
+    );
   },
 };

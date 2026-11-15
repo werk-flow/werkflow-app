@@ -1,7 +1,5 @@
 import 'server-only';
 
-import { createHash } from 'node:crypto';
-
 import type Stripe from 'stripe';
 
 // The gateway's subscription calls (werk-flow/werkflow-planning#248): the
@@ -36,9 +34,12 @@ type StripeCheckoutRequest = {
   priceId: string;
   successUrl: string;
   cancelUrl: string;
-  /** closeOpenCheckouts' answer: calls that saw the same Checkouts get one session. */
-  attempt: string;
+  /** begin_werkflow_checkout's attempt: a retry of one attempt gets its session, a new attempt a new one. */
+  attempt: number;
 };
+
+/** A Checkout session WerkFlow hands to a payer. */
+export type StripeCheckoutSession = { id: string; url: string; expiresAt: string };
 
 export type StripeSubscriptionGateway = {
   /** Creates the customer of an organization, with its id in the metadata; answers the customer id. */
@@ -47,19 +48,26 @@ export type StripeSubscriptionGateway = {
     email: string | null;
     name: string | null;
   }): Promise<string>;
+  /** A Checkout for the monthly subscription by SEPA direct debit or card. */
+  createCheckoutSession(input: StripeCheckoutRequest): Promise<StripeCheckoutSession>;
   /**
-   * Expires every open Checkout of the customer, so none can be paid any
-   * more; a Checkout paid meanwhile refuses to expire and the call fails.
-   * Answers a token naming the Checkouts it saw.
+   * Leaves a Checkout unpayable: an open one expires. Answers the
+   * subscription a completed one started, else null. A Checkout paid between
+   * the read and the expiry refuses to expire, and the call fails.
    */
-  closeOpenCheckouts(customerId: string): Promise<string>;
-  /** A Checkout for the monthly subscription by SEPA direct debit or card; answers its URL. */
-  createCheckoutSession(input: StripeCheckoutRequest): Promise<string>;
+  closeCheckout(sessionId: string): Promise<string | null>;
   /** The subscription a completed Checkout started; null for another mode or an open Checkout. */
   readCheckoutSubscriptionId(sessionId: string): Promise<string | null>;
   readSubscription(subscriptionId: string): Promise<StripeSubscriptionSnapshot>;
   /** The customer's newest subscription, or null before the first. */
   readNewestSubscription(customerId: string): Promise<StripeSubscriptionSnapshot | null>;
+  /**
+   * Ends a second subscription of an organization at once: refunds every
+   * payment of its latest invoice that has no refund yet (a SEPA debit still
+   * in flight is refunded when it settles), then cancels it without proration.
+   * A rerun after a partial failure finishes the job.
+   */
+  cancelDuplicateSubscription(subscriptionId: string): Promise<void>;
 };
 
 function callFailed(): Error {
@@ -76,6 +84,11 @@ async function call<T>(run: () => Promise<T>): Promise<T> {
 
 function expandableId(value: string | { id: string } | null): string | null {
   return typeof value === 'string' ? value : (value?.id ?? null);
+}
+
+function checkoutSubscriptionId(session: Stripe.Checkout.Session): string | null {
+  if (session.mode !== 'subscription' || session.status !== 'complete') return null;
+  return expandableId(session.subscription);
 }
 
 function subscriptionSnapshotOf(
@@ -100,6 +113,25 @@ function subscriptionSnapshotOf(
   };
 }
 
+/** cancelDuplicateSubscription's steps: each refund and the cancellation run at most once over reruns. */
+async function cancelDuplicate(client: Stripe, subscriptionId: string): Promise<void> {
+  const subscription = await client.subscriptions.retrieve(subscriptionId);
+  const invoiceId = expandableId(subscription.latest_invoice);
+  const payments = invoiceId
+    ? (await client.invoicePayments.list({ invoice: invoiceId, limit: 10 })).data
+    : [];
+  for (const payment of payments) {
+    const intentId = expandableId(payment.payment.payment_intent ?? null);
+    if (!intentId || payment.status === 'canceled') continue;
+    const refunds = await client.refunds.list({ payment_intent: intentId, limit: 10 });
+    if (refunds.data.some((refund) => refund.status !== 'failed' && refund.status !== 'canceled')) continue;
+    await client.refunds.create({ payment_intent: intentId });
+  }
+  if (subscription.status !== 'canceled') {
+    await client.subscriptions.cancel(subscriptionId, { prorate: false, invoice_now: false });
+  }
+}
+
 export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
   return {
     createCustomer: ({ organizationId, email, name }) =>
@@ -115,18 +147,6 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
           { idempotencyKey: `werkflow-customer-${organizationId}` },
         );
         return customer.id;
-      }),
-    closeOpenCheckouts: (customerId) =>
-      call(async () => {
-        const earlier = await client.checkout.sessions.list({ customer: customerId, limit: 100 });
-        for (const session of earlier.data) {
-          if (session.status === 'open') await client.checkout.sessions.expire(session.id);
-        }
-        const seen = earlier.data
-          .map((session) => session.id)
-          .sort()
-          .join(',');
-        return createHash('sha256').update(seen).digest('hex').slice(0, 32);
       }),
     createCheckoutSession: (request) =>
       call(async () => {
@@ -151,14 +171,23 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
           { idempotencyKey: `werkflow-checkout-${request.organizationId}-${request.attempt}` },
         );
         if (!session.url) throw callFailed();
-        return session.url;
+        return {
+          id: session.id,
+          url: session.url,
+          expiresAt: new Date(session.expires_at * 1000).toISOString(),
+        };
       }),
-    readCheckoutSubscriptionId: (sessionId) =>
+    closeCheckout: (sessionId) =>
       call(async () => {
         const session = await client.checkout.sessions.retrieve(sessionId);
-        if (session.mode !== 'subscription' || session.status !== 'complete') return null;
-        return expandableId(session.subscription);
+        if (session.status === 'open') {
+          await client.checkout.sessions.expire(sessionId);
+          return null;
+        }
+        return checkoutSubscriptionId(session);
       }),
+    readCheckoutSubscriptionId: (sessionId) =>
+      call(async () => checkoutSubscriptionId(await client.checkout.sessions.retrieve(sessionId))),
     readSubscription: (subscriptionId) =>
       call(async () => {
         const readAt = new Date().toISOString();
@@ -179,5 +208,6 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
         const newest = page.data[0];
         return newest ? subscriptionSnapshotOf(newest, readAt) : null;
       }),
+    cancelDuplicateSubscription: (subscriptionId) => call(() => cancelDuplicate(client, subscriptionId)),
   };
 }
