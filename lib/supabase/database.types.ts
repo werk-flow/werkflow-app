@@ -12617,6 +12617,11 @@ export type Database = {
         Row: {
           cancel_at_period_end: boolean;
           cancellation_reason: string | null;
+          checkout_attempt: number;
+          checkout_claimed_until: string | null;
+          checkout_expires_at: string | null;
+          checkout_session_id: string | null;
+          checkout_url: string | null;
           created_at: string;
           current_period_end: string | null;
           holds_subscription: boolean;
@@ -12632,6 +12637,11 @@ export type Database = {
         Insert: {
           cancel_at_period_end?: boolean;
           cancellation_reason?: string | null;
+          checkout_attempt?: number;
+          checkout_claimed_until?: string | null;
+          checkout_expires_at?: string | null;
+          checkout_session_id?: string | null;
+          checkout_url?: string | null;
           created_at?: string;
           current_period_end?: string | null;
           holds_subscription?: boolean;
@@ -12647,6 +12657,11 @@ export type Database = {
         Update: {
           cancel_at_period_end?: boolean;
           cancellation_reason?: string | null;
+          checkout_attempt?: number;
+          checkout_claimed_until?: string | null;
+          checkout_expires_at?: string | null;
+          checkout_session_id?: string | null;
+          checkout_url?: string | null;
           created_at?: string;
           current_period_end?: string | null;
           holds_subscription?: boolean;
@@ -15682,6 +15697,15 @@ export type Database = {
         };
         Returns: string[];
       };
+      begin_werkflow_checkout: {
+        Args: {
+          p_linked: boolean;
+          p_organization_id: string;
+          p_stripe_customer_id: string;
+          p_user_id: string;
+        };
+        Returns: Record<string, unknown>;
+      };
       book_inventory_import: {
         Args: {
           p_actor_id: string;
@@ -17749,6 +17773,16 @@ export type Database = {
           matched_on: string[];
         }[];
       };
+      finish_werkflow_checkout: {
+        Args: {
+          p_attempt: number;
+          p_expires_at?: string;
+          p_organization_id: string;
+          p_session_id?: string;
+          p_session_url?: string;
+        };
+        Returns: boolean;
+      };
       fulfill_instruction_evidence: {
         Args: {
           p_actor_id: string;
@@ -19657,15 +19691,6 @@ export type Database = {
           p_period_id: string;
           p_request_hash: string;
           p_supersedes_export_id: string;
-        };
-        Returns: string;
-      };
-      reserve_werkflow_subscription: {
-        Args: {
-          p_linked: boolean;
-          p_organization_id: string;
-          p_stripe_customer_id: string;
-          p_user_id: string;
         };
         Returns: string;
       };

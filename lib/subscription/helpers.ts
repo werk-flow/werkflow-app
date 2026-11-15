@@ -24,19 +24,24 @@ class SubscriptionReadError extends Error {
 export type OrganizationSubscription = {
   organizationId: string;
   stripeCustomerId: string;
+  /** The subscription the row follows; null before the first. */
+  stripeSubscriptionId: string | null;
   holdsSubscription: boolean;
 };
 
-const SUBSCRIPTION_COLUMNS = 'organization_id, stripe_customer_id, holds_subscription';
+const SUBSCRIPTION_COLUMNS =
+  'organization_id, stripe_customer_id, stripe_subscription_id, holds_subscription';
 
 function toSubscription(row: {
   organization_id: string;
   stripe_customer_id: string;
+  stripe_subscription_id: string | null;
   holds_subscription: boolean;
 }): OrganizationSubscription {
   return {
     organizationId: row.organization_id,
     stripeCustomerId: row.stripe_customer_id,
+    stripeSubscriptionId: row.stripe_subscription_id,
     holdsSubscription: row.holds_subscription,
   };
 }

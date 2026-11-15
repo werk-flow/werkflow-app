@@ -24,8 +24,8 @@ const REVIEWED_UNLIMITED: Readonly<Record<string, string>> = {};
 
 const LIMITER = 'consumeRateLimit';
 const REDEMPTION_RPCS = new Set(['redeem_organization_invite_for_user']);
-// Storing an organization's Stripe customer before its Checkout opens (lib/subscription/checkout.ts).
-const BILLING_RPCS = new Set(['reserve_werkflow_subscription']);
+// Storing an organization's Stripe customer and claiming its Checkout (lib/subscription/checkout.ts).
+const BILLING_RPCS = new Set(['begin_werkflow_checkout']);
 const BILLING_TABLES = new Set(['subscriptions']);
 const WRITE_METHODS = new Set(['insert', 'upsert', 'update']);
 

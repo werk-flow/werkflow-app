@@ -21,6 +21,9 @@ export const subscriptionSignals: SignalFamily = {
     ) {
       return;
     }
-    await recordSubscription(await stripe.subscriptions.readSubscription(event.data.object.id));
+    await recordSubscription(
+      await stripe.subscriptions.readSubscription(event.data.object.id),
+      stripe.subscriptions,
+    );
   },
 };

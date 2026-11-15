@@ -12,6 +12,7 @@ import { startOrganizationCheckout, startSubscriptionCheckout } from '@/lib/subs
 const CHECKOUT_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   too_many_attempts: 'Zu viele Versuche. Bitte warte etwas und versuche es dann erneut.',
   checkout_unavailable: 'Die Zahlung ist gerade nicht verfügbar. Bitte versuche es später erneut.',
+  checkout_in_progress: 'Die Zahlung wird gerade schon geöffnet. Versuche es gleich noch einmal.',
   already_subscribed: 'Diese Organisation hat bereits ein Abo.',
   organization_exists: 'Du gehörst schon zu einer Organisation.',
 };

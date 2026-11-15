@@ -20,6 +20,7 @@ const world = installActionWorld(
     organization_invites: [],
     profiles: [{ id: CALLER_ID, first_name: 'Carla', last_name: 'Caller' }],
     email_change_challenges: [],
+    werkflow_subscriptions: [],
   },
   { organization_invites: () => ({ status: 'pending' }) },
 );
@@ -35,11 +36,6 @@ const idleState = {
 };
 mock.module('@/lib/settings/email-change-state', () => ({
   getInitialEmailChangeWizardState: async () => idleState,
-}));
-mock.module('@/lib/subscription/helpers', () => ({
-  userHasOrganizations: async () => false,
-  readOpenReservation: async () => null,
-  readOrganizationSubscription: async () => null,
 }));
 
 /** Which limiter action answers how; every other action allows. */
@@ -135,4 +131,5 @@ assert.deepEqual(await startOrganizationCheckout(), { success: false, error: 'to
 reset({ subscription_activation_per_user: 'fail' });
 assert.deepEqual(await startOrganizationCheckout(), { success: false, error: 'checkout_failed' });
 assert.deepEqual(businessRpcs(), []);
+assert.deepEqual(tableRows(world, 'werkflow_subscriptions'), []);
 assert.deepEqual(limiterActions(), ['subscription_activation_per_user']);

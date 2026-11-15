@@ -3,8 +3,11 @@
 // subscribes it: `buero`, `employee`, a foreign organization's id and a
 // signed-out caller start no Checkout and create no customer. Before any
 // organization exists, a Checkout reserves the organization's id, and only a
-// held reservation creates the organization, with that id. A Checkout that
-// completed before its signal is re-read, so nobody pays twice.
+// held reservation creates the organization, with that id. An organization
+// has one payable Checkout: every start answers it while it stays open,
+// parallel starts create one, a replacement first leaves the stored one
+// unpayable, a Checkout paid before its signal is recorded, a failed attempt
+// never blocks the next, and a session whose claim lapsed never reaches a payer.
 // The database functions answer as supabase/tests/werkflow_subscriptions.sql proves.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
@@ -49,41 +52,88 @@ const holds = (status: string | null, reason: string | null = null) =>
   ['active', 'trialing', 'past_due', 'unpaid', 'paused'].includes(status ?? '') ||
   (status === 'canceled' && reason === 'payment_failed');
 
-// The three database functions, as their SQL test proves them.
+const MINUTE = 60_000;
+const later = (minutes: number) => new Date(Date.now() + minutes * MINUTE).toISOString();
+const before = (time: unknown, minutes = 0) =>
+  typeof time === 'string' && Date.parse(time) > Date.now() + minutes * MINUTE;
+
+/** begin_werkflow_checkout, as its SQL test proves it. */
+function beginCheckout(args: Record<string, unknown>) {
+  const rows = subscriptionRows();
+  const row = rows.find((entry) => entry.organization_id === args.p_organization_id);
+  if (
+    args.p_linked &&
+    !tableRows(world, 'organization_members').some(
+      (member) =>
+        member.organization_id === args.p_organization_id &&
+        member.user_id === args.p_user_id &&
+        member.role === 'admin',
+    )
+  ) {
+    return { data: null, error: { message: 'not_admin' } };
+  }
+  if (
+    !row &&
+    !(
+      !args.p_linked && rows.some((entry) => entry.reserved_by === args.p_user_id && entry.linked_at === null)
+    )
+  ) {
+    rows.push({
+      organization_id: args.p_organization_id,
+      reserved_by: args.p_user_id,
+      linked_at: args.p_linked ? '2026-11-15T10:00:00Z' : null,
+      stripe_customer_id: args.p_stripe_customer_id,
+      stripe_subscription_id: null,
+      status: null,
+      cancellation_reason: null,
+      holds_subscription: false,
+      checkout_session_id: null,
+      checkout_url: null,
+      checkout_expires_at: null,
+      checkout_attempt: 0,
+      checkout_claimed_until: null,
+    });
+  }
+  const held = subscriptionRows().find(
+    (entry) =>
+      entry.organization_id === args.p_organization_id &&
+      (entry.linked_at !== null) === args.p_linked &&
+      (args.p_linked || entry.reserved_by === args.p_user_id),
+  );
+  if (!held) return { data: null, error: { message: 'reservation_refused' } };
+  const answer = (result: string, session: Record<string, unknown> = {}) => ({
+    data: { result, stripe_customer_id: held.stripe_customer_id, attempt: held.checkout_attempt, ...session },
+    error: null,
+  });
+  if (held.holds_subscription) return answer('subscribed');
+  if (before(held.checkout_expires_at, 15)) {
+    return answer('open', { session_id: held.checkout_session_id, session_url: held.checkout_url });
+  }
+  if (before(held.checkout_claimed_until)) return answer('busy');
+  held.checkout_attempt = Number(held.checkout_attempt) + 1;
+  held.checkout_claimed_until = later(2);
+  return answer('claimed', { session_id: held.checkout_session_id, session_url: null });
+}
+
+// The database functions, as their SQL test proves them.
 world.rpc = ({ name, args }) => {
   if (name === 'consume_rate_limit') return { data: true, error: null };
   const rows = subscriptionRows();
   const row = rows.find((entry) => entry.organization_id === args.p_organization_id);
-  if (name === 'reserve_werkflow_subscription') {
-    if (
-      args.p_linked &&
-      !tableRows(world, 'organization_members').some(
-        (member) =>
-          member.organization_id === args.p_organization_id &&
-          member.user_id === args.p_user_id &&
-          member.role === 'admin',
-      )
-    ) {
-      return { data: null, error: { message: 'not_admin' } };
+  if (name === 'begin_werkflow_checkout') return beginCheckout(args);
+  if (name === 'finish_werkflow_checkout') {
+    if (!row || row.checkout_attempt !== args.p_attempt || !before(row.checkout_claimed_until)) {
+      return { data: false, error: null };
     }
-    if (!row) {
-      rows.push({
-        organization_id: args.p_organization_id,
-        reserved_by: args.p_user_id,
-        linked_at: args.p_linked ? '2026-11-15T10:00:00Z' : null,
-        stripe_customer_id: args.p_stripe_customer_id,
-        stripe_subscription_id: null,
-        status: null,
-        cancellation_reason: null,
-        holds_subscription: false,
+    if (typeof args.p_session_id === 'string') {
+      Object.assign(row, {
+        checkout_session_id: args.p_session_id,
+        checkout_url: args.p_session_url,
+        checkout_expires_at: args.p_expires_at,
       });
     }
-    return {
-      data:
-        subscriptionRows().find((entry) => entry.organization_id === args.p_organization_id)
-          ?.stripe_customer_id ?? null,
-      error: null,
-    };
+    row.checkout_claimed_until = null;
+    return { data: true, error: null };
   }
   if (name === 'record_werkflow_subscription_state') {
     if (!row) return { data: null, error: { message: 'subscription_row_missing' } };
@@ -165,18 +215,77 @@ assert.deepEqual(stripe.checkoutRequests[0], {
   priceId: 'price_test_monthly',
   successUrl: 'https://app.example.test/dashboard',
   cancelUrl: 'https://app.example.test/upgrade',
-  attempt: '',
+  attempt: 1,
 });
-assert.equal(subscriptionRows()[0]?.linked_at !== null, true);
+const organizationRow = () => {
+  const row = subscriptionRows().find((entry) => entry.organization_id === ORGANIZATION_A);
+  assert.ok(row);
+  return row;
+};
+assert.notEqual(organizationRow().linked_at, null);
+assert.equal(organizationRow().checkout_session_id, 'cs_test_1');
 
-// A second Checkout reuses the customer and leaves the first one unpayable.
-// The Admin then pays the second one in another tab before its signal: the
-// next start expires nothing paid, re-reads the subscription, and opens no
-// third Checkout.
-assert.ok((await startSubscriptionCheckout(ORGANIZATION_A)).success);
+// While it stays open, every start answers the same Checkout and creates none.
+assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), started);
+assert.equal(stripe.checkoutRequests.length, 1, 'a second start opened a second Checkout');
+
+// Near its expiry, the next start first leaves it unpayable, then opens one more.
+organizationRow().checkout_expires_at = later(10);
+const replaced = await startSubscriptionCheckout(ORGANIZATION_A);
+assert.deepEqual(replaced, { success: true, checkoutUrl: 'https://checkout.stripe.test/c/pay/cs_test_2' });
+assert.deepEqual(stripe.expiredCheckouts, ['cs_test_1'], 'a replacement left the earlier Checkout payable');
 assert.equal(stripe.customers.size, 1);
-assert.deepEqual(stripe.expiredCheckouts, ['cs_test_1'], 'a second Checkout left the first one payable');
-stripe.checkoutSessions.set('cs_test_2', 'sub_test_1');
+
+// A failed attempt, which Stripe keeps for its idempotency key, never blocks the next one.
+organizationRow().checkout_expires_at = later(10);
+stripe.failNextCheckout = true;
+assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
+  success: false,
+  error: 'checkout_failed',
+});
+assert.equal(organizationRow().checkout_claimed_until, null, 'a failed attempt kept its claim');
+assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
+  success: true,
+  checkoutUrl: 'https://checkout.stripe.test/c/pay/cs_test_3',
+});
+assert.deepEqual(
+  stripe.checkoutRequests.map((request) => request.attempt),
+  [1, 2, 4],
+  "a new attempt reused a failed attempt's idempotency key",
+);
+
+// Two parallel starts create one Checkout: the second one waits for the first.
+organizationRow().checkout_expires_at = later(10);
+const parallel = await Promise.all([
+  startSubscriptionCheckout(ORGANIZATION_A),
+  startSubscriptionCheckout(ORGANIZATION_A),
+]);
+assert.deepEqual(parallel, [
+  { success: true, checkoutUrl: 'https://checkout.stripe.test/c/pay/cs_test_4' },
+  { success: false, error: 'checkout_in_progress' },
+]);
+assert.equal(stripe.checkoutRequests.length, 4, 'two parallel starts opened two Checkouts');
+
+// A start whose claim lapsed while Stripe answered hands its session to nobody;
+// the start that claimed after it hands out its own.
+organizationRow().checkout_expires_at = later(10);
+let overtaking: Awaited<ReturnType<typeof startSubscriptionCheckout>> | null = null;
+stripe.beforeNextCall = async () => {
+  stripe.beforeNextCall = async () => {
+    organizationRow().checkout_claimed_until = later(-1);
+    overtaking = await startSubscriptionCheckout(ORGANIZATION_A);
+  };
+};
+assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
+  success: false,
+  error: 'checkout_failed',
+});
+assert.deepEqual(overtaking, { success: true, checkoutUrl: 'https://checkout.stripe.test/c/pay/cs_test_5' });
+assert.equal(organizationRow().checkout_url, 'https://checkout.stripe.test/c/pay/cs_test_5');
+
+// The Admin paid the stored Checkout before its signal: the next start records
+// the subscription and opens no further Checkout.
+stripe.checkoutSessions.set('cs_test_5', 'sub_test_1');
 stripe.subscriptions.set('sub_test_1', {
   id: 'sub_test_1',
   customerId: 'cus_test_1',
@@ -186,44 +295,16 @@ stripe.subscriptions.set('sub_test_1', {
   cancelAtPeriodEnd: false,
   currentPeriodEnd: '2026-12-15T10:00:00.000Z',
 });
-assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
-  success: false,
-  error: 'already_subscribed',
-});
-assert.equal(subscriptionRows()[0]?.stripe_subscription_id, 'sub_test_1');
-assert.equal(stripe.checkoutRequests.length, 2);
-assert.deepEqual(stripe.expiredCheckouts, ['cs_test_1'], 'a paid Checkout was expired');
-
-// Two overlapping first starts: while the first waits for Stripe's customer,
-// the second opens its Checkout and the Admin pays it. The first then sees
-// the paid subscription and opens no second Checkout.
-world.tables.werkflow_subscriptions = [];
-stripe.subscriptions.clear();
+organizationRow().checkout_expires_at = later(10);
 const requestsBefore = stripe.checkoutRequests.length;
-const overlapping: Array<Awaited<ReturnType<typeof startSubscriptionCheckout>>> = [];
-stripe.beforeNextCall = async () => {
-  overlapping.push(await startSubscriptionCheckout(ORGANIZATION_A));
-  stripe.checkoutSessions.set(`cs_test_${stripe.checkoutRequests.length}`, 'sub_test_9');
-  stripe.subscriptions.set('sub_test_9', {
-    id: 'sub_test_9',
-    customerId: 'cus_test_1',
-    organizationId: ORGANIZATION_A,
-    status: 'active',
-    cancellationReason: null,
-    cancelAtPeriodEnd: false,
-    currentPeriodEnd: '2026-12-15T10:00:00.000Z',
-  });
-};
 assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
   success: false,
   error: 'already_subscribed',
 });
-assert.equal(overlapping[0]?.success, true);
-assert.equal(
-  stripe.checkoutRequests.length,
-  requestsBefore + 1,
-  'two overlapping starts opened two Checkouts',
-);
+assert.equal(organizationRow().stripe_subscription_id, 'sub_test_1');
+assert.equal(stripe.checkoutRequests.length, requestsBefore, 'a paid Checkout was followed by another');
+assert.equal(stripe.expiredCheckouts.includes('cs_test_5'), false, 'a paid Checkout was expired');
+assert.equal(organizationRow().checkout_claimed_until, null);
 
 // --- Before any organization: the Checkout reserves the organization's id. ---
 

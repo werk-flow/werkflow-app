@@ -2,9 +2,12 @@
 -- werk-flow/werkflow-planning#248): no client role reads the table or runs
 -- its functions, and the service role writes only through them; only an
 -- organization's Admin stores its customer; a person holds one open
--- reservation; a signal of another customer, or a second subscription while
--- the first holds, is refused; an older read never overwrites a newer state;
--- a failed payment never ends the subscription; and only the payer creates
+-- reservation; an organization has one payable Checkout, which every start
+-- answers while it stays open, and only one start at a time creates the next;
+-- a signal of another customer, or a second subscription while the first
+-- holds, is refused; an older read of a subscription never overwrites a newer
+-- one, and a holding replacement beats an ended predecessor whatever the read
+-- times; a failed payment never ends the subscription; and only the payer creates
 -- the reserved organization, with the reserved id, once, while the
 -- subscription holds.
 -- Runs inside one transaction against the local stack and rolls back.
@@ -60,7 +63,8 @@ begin
     end if;
     foreach fn in array array[
       'public.werkflow_subscription_holds(text, text)',
-      'public.reserve_werkflow_subscription(uuid, uuid, boolean, text)',
+      'public.begin_werkflow_checkout(uuid, uuid, boolean, text)',
+      'public.finish_werkflow_checkout(uuid, integer, text, text, timestamptz)',
       'public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz)',
       'public.create_organization_with_id(uuid, uuid, text, text)',
       'public.create_organization_from_subscription(uuid, text, text)'
@@ -95,11 +99,11 @@ set local role service_role;
 
 -- Only the organization's Admin stores its customer; a reservation never names an existing organization.
 select pg_temp.expect_refusal('a Büro member subscribing', $sql$
-  select public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000010',
+  select public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
     '41248000-0000-0000-0000-000000000002', true, 'cus_test_buero')
 $sql$, 'not_admin');
 select pg_temp.expect_refusal('a reservation of an existing organization', $sql$
-  select public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000010',
+  select public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
     '41248000-0000-0000-0000-000000000003', false, 'cus_test_steal')
 $sql$, 'invalid_input');
 
@@ -107,22 +111,73 @@ $sql$, 'invalid_input');
 do $$
 declare
   v_row public.werkflow_subscriptions;
+  v_begun record;
   v_answer text;
 begin
-  v_answer := public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000010',
+  -- The first start stores the customer and claims attempt 1; a second start
+  -- meanwhile keeps that customer and creates nothing.
+  select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
     '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg');
-  if v_answer is distinct from 'cus_test_sonnenberg' then
-    raise exception 'the first Checkout did not store its customer';
+  if (v_begun.result, v_begun.stripe_customer_id, v_begun.attempt, v_begun.session_id)
+    is distinct from ('claimed'::text, 'cus_test_sonnenberg'::text, 1, null::text)
+  then
+    raise exception 'the first Checkout start did not store its customer and claim attempt 1: %', v_begun;
   end if;
-  v_answer := public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000010',
+  select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
     '41248000-0000-0000-0000-000000000001', true, 'cus_test_second');
-  if v_answer is distinct from 'cus_test_sonnenberg' then
-    raise exception 'a second Checkout did not keep the first customer';
+  if (v_begun.result, v_begun.stripe_customer_id) is distinct from ('busy'::text, 'cus_test_sonnenberg'::text) then
+    raise exception 'a parallel start was not busy, or replaced the customer: %', v_begun;
   end if;
   select * into strict v_row from public.werkflow_subscriptions
   where organization_id = '41248000-0000-0000-0000-000000000010';
   if v_row.linked_at is null or v_row.holds_subscription then
     raise exception 'an existing organization''s row was not linked, or held before any payment';
+  end if;
+
+  -- The attempt stores its session; every later start answers it while it stays open.
+  if not public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 1,
+      'cs_test_1', 'https://checkout.stripe.com/c/pay/cs_test_1', now() + interval '1 day') then
+    raise exception 'the claimed attempt could not store its session';
+  end if;
+  select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
+    '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg');
+  if (v_begun.result, v_begun.session_id, v_begun.session_url)
+    is distinct from ('open'::text, 'cs_test_1'::text, 'https://checkout.stripe.com/c/pay/cs_test_1'::text)
+  then
+    raise exception 'a start while the Checkout is open did not answer it: %', v_begun;
+  end if;
+
+  -- Near its expiry the next start claims attempt 2 and names the session to close.
+  update public.werkflow_subscriptions set checkout_expires_at = now() + interval '10 minutes'
+  where organization_id = '41248000-0000-0000-0000-000000000010';
+  select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
+    '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg');
+  if (v_begun.result, v_begun.attempt, v_begun.session_id) is distinct from ('claimed'::text, 2, 'cs_test_1'::text) then
+    raise exception 'a start near the expiry did not claim attempt 2 with the session to close: %', v_begun;
+  end if;
+  -- A failed attempt ends its claim and keeps the stored session; a stale attempt stores nothing.
+  if not public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 2) then
+    raise exception 'a failed attempt did not end its claim';
+  end if;
+  select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
+    '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg');
+  if (v_begun.result, v_begun.attempt, v_begun.session_id) is distinct from ('claimed'::text, 3, 'cs_test_1'::text) then
+    raise exception 'a start after a failed attempt did not claim a new attempt: %', v_begun;
+  end if;
+  if public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 2,
+      'cs_test_2', 'https://checkout.stripe.com/c/pay/cs_test_2', now() + interval '1 day') then
+    raise exception 'a stale attempt stored its session';
+  end if;
+  update public.werkflow_subscriptions set checkout_claimed_until = now() - interval '1 second'
+  where organization_id = '41248000-0000-0000-0000-000000000010';
+  if public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 3,
+      'cs_test_3', 'https://checkout.stripe.com/c/pay/cs_test_3', now() + interval '1 day') then
+    raise exception 'an attempt whose claim lapsed stored its session';
+  end if;
+  if (select checkout_session_id from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'cs_test_1'
+  then
+    raise exception 'a refused attempt replaced the stored session';
   end if;
 
   -- A failed payment keeps the subscription holding, also when Stripe cancels it for that.
@@ -186,19 +241,52 @@ begin
     raise exception 'a new subscription did not replace one that ended on request';
   end if;
 
-  -- A person holds one open reservation.
-  v_answer := public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000020',
-    '41248000-0000-0000-0000-000000000003', false, 'cus_test_neu');
-  if v_answer is distinct from 'cus_test_neu' then
-    raise exception 'the reservation did not store its customer';
+  -- Read times order the reads of one subscription only: a later re-read of
+  -- the ended sub_test_2 does not hide the replacement sub_test_4 whose read
+  -- started earlier, and an old read of the ended one never comes back.
+  perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
+    'sub_test_2', 'canceled', false, '2037-01-01T10:00:20Z', 'cancellation_requested');
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_4', 'active', false, '2037-01-01T10:00:15Z');
+  if v_answer is distinct from 'recorded' or (select stripe_subscription_id from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'sub_test_4'
+  then
+    raise exception 'a later read of an ended subscription hid its holding replacement';
   end if;
-  v_answer := public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000021',
-    '41248000-0000-0000-0000-000000000003', false, 'cus_test_neu_2');
-  if v_answer is not null then
-    raise exception 'a person held two open reservations';
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_2', 'canceled', false, '2037-01-01T10:00:30Z', 'cancellation_requested');
+  if v_answer is distinct from 'ignored' or (select stripe_subscription_id from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'sub_test_4'
+  then
+    raise exception 'an ended predecessor replaced its holding successor';
+  end if;
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_4', 'past_due', false, '2037-01-01T10:00:14Z');
+  if v_answer is distinct from 'ignored' then
+    raise exception 'an older read of the followed subscription overwrote a newer one';
+  end if;
+
+  -- A holding subscription answers every start with 'subscribed'.
+  if (select result from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
+      '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg')) is distinct from 'subscribed'
+  then
+    raise exception 'a start while the subscription holds was not answered subscribed';
+  end if;
+
+  -- A reservation stores its customer.
+  if (select stripe_customer_id from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000020',
+      '41248000-0000-0000-0000-000000000003', false, 'cus_test_neu')) is distinct from 'cus_test_neu'
+  then
+    raise exception 'the reservation did not store its customer';
   end if;
 end;
 $$;
+
+-- A person holds one open reservation.
+select pg_temp.expect_refusal('a second open reservation', $sql$
+  select public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000021',
+    '41248000-0000-0000-0000-000000000003', false, 'cus_test_neu_2')
+$sql$, 'reservation_refused');
 
 -- Only the payer creates the reserved organization, and only while the subscription holds.
 select pg_temp.expect_refusal('an unpaid reservation', $sql$
