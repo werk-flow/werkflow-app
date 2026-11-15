@@ -77,13 +77,15 @@ create or replace function public.list_customer_page(
     join matched_sites matched on matched.id = role.site_id
     where role.organization_id = p_organization_id
       and (role.ends_on is null or role.ends_on >= (now() at time zone 'Europe/Berlin')::date)
+  ), matched_contacts as materialized (
+    select matched.id, matched.client_id from app_private.customer_search_contacts(p_organization_id, p_search) matched
   ), matching as materialized (
     select c.id, c.name from public.clients c
     where c.organization_id = p_organization_id and (c.archived_at is not null) = p_archived and (
       coalesce(p_search, '') = '' or
       strpos(lower(concat_ws(' ', c.name, c.customer_number, c.source_number, c.email, c.phone, c.address)), lower(p_search)) > 0 or
       app_private.phone_matches_search(c.phone, p_search) or
-      exists (select 1 from app_private.customer_search_contacts(p_organization_id, p_search) contact where contact.client_id = c.id) or
+      exists (select 1 from matched_contacts contact where contact.client_id = c.id) or
       exists (select 1 from site_parties party where party.client_id = c.id)
     )
   ), page as (
