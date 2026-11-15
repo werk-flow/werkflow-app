@@ -3,9 +3,9 @@ import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { GLOBAL_SEARCH_MIN_LENGTH, SEARCH_SOURCES, type GlobalSearchInput } from './global-search';
 
-// The schema stays out of `./global-search`, which the lazy search dialog
-// imports: zod in the dialog's chunk regroups the app shell's shared chunks
-// (two more scripts on every cold start, lab.field.cold-start).
+// The input check of the `global-search` background read. It lives apart from
+// `./global-search`, which the lazy search dialog imports, so the dialog's
+// chunk carries only what it renders.
 
 const GLOBAL_SEARCH_MAX_LENGTH = 120;
 
