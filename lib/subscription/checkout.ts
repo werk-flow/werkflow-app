@@ -23,10 +23,12 @@ import { z } from '@/lib/zod';
 //
 // One payable Checkout per organization, held in the database: every start
 // locks the organization's row (begin_werkflow_checkout) and answers its open
-// session; only a start that claims a new attempt first leaves the stored
-// session unpayable, then creates one session and stores it
-// (finish_werkflow_checkout). A URL reaches a payer only once it is stored,
-// so a session whose answer was lost, or whose claim lapsed, is never paid.
+// session, once Stripe confirms it is still payable; only a start that claims
+// a new attempt first leaves the stored session unpayable, then creates one
+// session and stores it (finish_werkflow_checkout). A URL reaches a payer
+// only once it is stored, so a session whose answer was lost, or whose claim
+// lapsed, is never paid. A stored session paid before its signal arrived
+// records its subscription, wherever a start finds it.
 
 export type CheckoutFailureCode =
   | 'too_many_attempts'
@@ -52,7 +54,11 @@ const PRICE_ID = /^price_[A-Za-z0-9_]{1,250}$/;
 // begin_werkflow_checkout's answer, parsed once at the Supabase boundary.
 const beginSchema = z.discriminatedUnion('result', [
   z.object({ result: z.enum(['subscribed', 'busy']) }),
-  z.object({ result: z.literal('open'), session_url: z.string().startsWith('https://') }),
+  z.object({
+    result: z.literal('open'),
+    session_id: z.string(),
+    session_url: z.string().startsWith('https://'),
+  }),
   z.object({
     result: z.literal('claimed'),
     stripe_customer_id: z.string(),
@@ -101,36 +107,75 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
         email: request.email,
         name: request.name,
       }));
-    const { data, error } = await createSupabaseAdminClient().rpc('begin_werkflow_checkout', {
-      p_organization_id: request.organizationId,
-      p_user_id: request.userId,
-      p_linked: request.linked,
-      p_stripe_customer_id: customerId,
-    });
-    const begun = beginSchema.safeParse(data);
-    if (error || !begun.success) {
-      logError('openCheckout: begin_werkflow_checkout failed', error ?? 'invalid_result');
-      return { ok: false, code: 'checkout_failed' };
+    // A second round only after the stored session was read closed at Stripe:
+    // the start then claims the next attempt, unless another start was faster.
+    let closedSessionId: string | null = null;
+    for (let round = 0; round < 2; round += 1) {
+      const begun = await beginCheckout(request, customerId, closedSessionId);
+      if (!begun) return { ok: false, code: 'checkout_failed' };
+      switch (begun.result) {
+        case 'subscribed':
+          return { ok: false, code: 'already_subscribed' };
+        case 'busy':
+          return { ok: false, code: 'checkout_in_progress' };
+        case 'claimed':
+          return await claimedCheckout(request, begun, {
+            subscriptions,
+            priceId,
+            successUrl: new URL(request.linked ? '/dashboard' : '/upgrade/bestaetigt', siteUrl).toString(),
+            cancelUrl: new URL('/upgrade', siteUrl).toString(),
+          });
+        case 'open': {
+          // Read outside the row lock: one Stripe call per start that finds a stored session.
+          const stored = await subscriptions.readCheckout(begun.session_id);
+          if (stored.open) return { ok: true, url: begun.session_url };
+          if (await recordsHolding(request.organizationId, stored.subscriptionId, subscriptions)) {
+            return { ok: false, code: 'already_subscribed' };
+          }
+          closedSessionId = begun.session_id;
+        }
+      }
     }
-    switch (begun.data.result) {
-      case 'subscribed':
-        return { ok: false, code: 'already_subscribed' };
-      case 'open':
-        return { ok: true, url: begun.data.session_url };
-      case 'busy':
-        return { ok: false, code: 'checkout_in_progress' };
-      case 'claimed':
-        return await claimedCheckout(request, begun.data, {
-          subscriptions,
-          priceId,
-          successUrl: new URL(request.linked ? '/dashboard' : '/upgrade/bestaetigt', siteUrl).toString(),
-          cancelUrl: new URL('/upgrade', siteUrl).toString(),
-        });
-    }
+    logError('openCheckout: the stored Checkout stayed closed', 'checkout_closed');
+    return { ok: false, code: 'checkout_failed' };
   } catch (failure) {
     logError('openCheckout: Checkout failed', failure);
     return { ok: false, code: 'checkout_failed' };
   }
+}
+
+async function beginCheckout(
+  request: CheckoutRequest,
+  customerId: string,
+  closedSessionId: string | null,
+): Promise<z.infer<typeof beginSchema> | null> {
+  const { data, error } = await createSupabaseAdminClient().rpc('begin_werkflow_checkout', {
+    p_organization_id: request.organizationId,
+    p_user_id: request.userId,
+    p_linked: request.linked,
+    p_stripe_customer_id: customerId,
+    ...(closedSessionId ? { p_closed_session_id: closedSessionId } : {}),
+  });
+  const begun = beginSchema.safeParse(data);
+  if (error || !begun.success) {
+    logError('openCheckout: begin_werkflow_checkout failed', error ?? 'invalid_result');
+    return null;
+  }
+  return begun.data;
+}
+
+/**
+ * Records the subscription a paid Checkout started, before its signal
+ * arrives; answers whether the organization now holds a subscription.
+ */
+async function recordsHolding(
+  organizationId: string,
+  subscriptionId: string | null,
+  subscriptions: StripeSubscriptionGateway,
+): Promise<boolean> {
+  if (!subscriptionId) return false;
+  await recordSubscription(await subscriptions.readSubscription(subscriptionId), subscriptions);
+  return (await readOrganizationSubscription(organizationId))?.holdsSubscription === true;
 }
 
 type ClaimedCheckoutConfiguration = {
@@ -177,12 +222,9 @@ async function claimedCheckout(
   let session: StripeCheckoutSession | null = null;
   try {
     const paid = claim.session_id ? await subscriptions.closeCheckout(claim.session_id) : null;
-    if (paid) {
-      await recordSubscription(await subscriptions.readSubscription(paid), subscriptions);
-      if ((await readOrganizationSubscription(request.organizationId))?.holdsSubscription) {
-        await finishCheckout(request.organizationId, claim.attempt, null);
-        return { ok: false, code: 'already_subscribed' };
-      }
+    if (await recordsHolding(request.organizationId, paid, subscriptions)) {
+      await finishCheckout(request.organizationId, claim.attempt, null);
+      return { ok: false, code: 'already_subscribed' };
     }
     session = await subscriptions.createCheckoutSession({
       customerId: claim.stripe_customer_id,

@@ -15,13 +15,13 @@
 //   debit that succeeds, one that fails) and test card, and waits until the
 //   first payment has succeeded or failed;
 // - replays each resulting subscription event, twice, to the real webhook
-//   route behind a local endpoint, signed with a secret it generates, and
-//   checks that each organization ends in Stripe's state, that a failed debit
-//   leaves the subscription past due, never ended, and that a replay changes
-//   nothing;
+//   route behind a local endpoint, signed with a secret it generates; then
+//   re-reads the subscription from Stripe and checks that the recorded status
+//   and cancellation reason are Stripe's, that a failed debit leaves a state
+//   that holds (no lockout), and that a replay changes nothing;
 // - for the successful debit and the card, starts a second subscription of
 //   the same customer and checks that its signal refunds and cancels it at
-//   once and keeps the first.
+//   once and keeps the first, recorded as Stripe holds it.
 // It confirms each SEPA mandate with a return URL, so Stripe sees no
 // incomplete confirmation. It cancels its subscriptions and expires its
 // Checkouts at the end.
@@ -86,7 +86,7 @@ function answer(name: string, args: Row): Answer {
       error: null,
     });
     if (held.holds_subscription) return reply('subscribed');
-    if (after(held.checkout_expires_at, 15)) {
+    if (after(held.checkout_expires_at, 15) && held.checkout_session_id !== args.p_closed_session_id) {
       return reply('open', { session_id: held.checkout_session_id, session_url: held.checkout_url });
     }
     if (after(held.checkout_claimed_until)) return reply('busy');
@@ -309,6 +309,31 @@ async function firstPaymentState(subscriptionId: string): Promise<{ intent: stri
   return { intent: intentId, status: (await client.paymentIntents.retrieve(intentId)).status };
 }
 
+/**
+ * Whether the organization's recorded subscription is the one Stripe holds
+ * now, with Stripe's status and cancellation reason; answers the line to print.
+ */
+async function recordedAsStripe(
+  organizationId: string,
+  subscriptionId: string,
+): Promise<{ same: boolean; status: string; reason: string | null; line: string }> {
+  const stripe = await client.subscriptions.retrieve(subscriptionId);
+  const reason = stripe.cancellation_details?.reason ?? null;
+  const row = rows.get(organizationId);
+  const recordedReason = row?.cancellation_reason ?? null;
+  const same =
+    row?.stripe_subscription_id === subscriptionId &&
+    row.status === stripe.status &&
+    recordedReason === reason;
+  const named = (status: unknown, why: unknown) => `${String(status)}${why ? ` (${String(why)})` : ''}`;
+  return {
+    same,
+    status: stripe.status,
+    reason,
+    line: `recorded ${named(row?.status, recordedReason)}, Stripe ${named(stripe.status, reason)}`,
+  };
+}
+
 /** Waits until a condition holds, checking every five seconds, up to the limit. */
 async function waitFor(seconds: number, done: () => Promise<boolean>): Promise<boolean> {
   for (let waited = 0; waited < seconds; waited += 5) {
@@ -404,14 +429,15 @@ async function checkDuplicate(
   const refunds = payment.intent
     ? (await client.refunds.list({ payment_intent: payment.intent, limit: 10 })).data
     : [];
+  const keptState = await recordedAsStripe(organizationId, String(kept));
   const ok =
     first === 500 &&
     redelivery === 200 &&
     current.status === 'canceled' &&
     refunds.length > 0 &&
-    rows.get(organizationId)?.stripe_subscription_id === kept;
+    keptState.same;
   say(
-    `${label}: second subscription ${second.id} answered ${first}, redelivery ${redelivery}; Stripe ${current.status}, payment ${payment.status}, refund ${refunds.map((refund) => refund.status).join(',') || 'none'}; recorded ${String(rows.get(organizationId)?.stripe_subscription_id)}: ${ok ? 'ok' : 'FAILED'}`,
+    `${label}: second subscription ${second.id} answered ${first}, redelivery ${redelivery}; Stripe ${current.status}, payment ${payment.status}, refund ${refunds.map((refund) => refund.status).join(',') || 'none'}; kept ${String(kept)} ${keptState.line}: ${ok ? 'ok' : 'FAILED'}`,
   );
   return ok;
 }
@@ -449,37 +475,38 @@ async function main(): Promise<void> {
       payment = await firstPaymentState(subscription.id);
       return payment.status === testCase.payment;
     });
-    let current = subscription;
     await waitFor(60, async () => {
-      current = await client.subscriptions.retrieve(subscription.id);
+      const current = await client.subscriptions.retrieve(subscription.id);
       return testCase.expect(current.status, current.cancellation_details?.reason);
     });
-    // Stripe lists an event a few seconds after it happens.
-    let events = await eventsOf(customer, since);
+    // Stripe lists an event a few seconds after it happens. Each event is
+    // delivered once and replayed once; an event Stripe lists later (its state
+    // moved on meanwhile) is delivered too, until the record is Stripe's.
+    const delivered = new Set<string>();
+    let recorded = await recordedAsStripe(organizationId, subscription.id);
     await waitFor(60, async () => {
-      events = await eventsOf(customer, since);
-      return events.some((event) => event.type === 'customer.subscription.created');
+      for (const event of await eventsOf(customer, since)) {
+        if (delivered.has(event.id)) continue;
+        delivered.add(event.id);
+        const first = await deliver(event);
+        const recordedBefore = recordCalls.length;
+        const replay = await deliver(event);
+        const replayChanged = recordCalls.length !== recordedBefore;
+        say(
+          `${testCase.label}: ${event.id} ${event.type} answered ${first}, replay ${replay}${replayChanged ? ' CHANGED' : ''}`,
+        );
+        if (first !== 200 || replay !== 200 || replayChanged) failed = true;
+      }
+      // The final check: Stripe re-read after delivery, compared with the record.
+      recorded = await recordedAsStripe(organizationId, subscription.id);
+      return delivered.size > 0 && recorded.same;
     });
-    for (const event of events) {
-      const first = await deliver(event);
-      const recordedBefore = recordCalls.length;
-      const replay = await deliver(event);
-      const replayChanged = recordCalls.length !== recordedBefore;
-      say(
-        `${testCase.label}: ${event.id} ${event.type} answered ${first}, replay ${replay}${replayChanged ? ' CHANGED' : ''}`,
-      );
-      if (first !== 200 || replay !== 200 || replayChanged) failed = true;
-    }
-    const state = rows.get(organizationId);
-    const status = String(state?.status);
-    const reason = state?.cancellation_reason ?? null;
     const ok =
       payment.status === testCase.payment &&
-      state?.stripe_subscription_id === subscription.id &&
-      testCase.expect(status, reason);
-    say(
-      `${testCase.label}: payment ${payment.status}, recorded ${status}${reason ? ` (${String(reason)})` : ''}, Stripe ${current.status}: ${ok ? 'ok' : 'FAILED'}`,
-    );
+      delivered.size > 0 &&
+      recorded.same &&
+      testCase.expect(recorded.status, recorded.reason);
+    say(`${testCase.label}: payment ${payment.status}, ${recorded.line}: ${ok ? 'ok' : 'FAILED'}`);
     if (!ok) failed = true;
     if (
       testCase.duplicate &&

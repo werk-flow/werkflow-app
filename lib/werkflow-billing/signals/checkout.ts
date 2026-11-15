@@ -10,7 +10,7 @@ export const checkoutSignals: SignalFamily = {
   eventTypes: ['checkout.session.completed'],
   handle: async (event, stripe) => {
     if (event.type !== 'checkout.session.completed') return;
-    const subscriptionId = await stripe.subscriptions.readCheckoutSubscriptionId(event.data.object.id);
+    const { subscriptionId } = await stripe.subscriptions.readCheckout(event.data.object.id);
     if (!subscriptionId) return;
     await recordSubscription(
       await stripe.subscriptions.readSubscription(subscriptionId),

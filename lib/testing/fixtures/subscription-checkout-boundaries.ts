@@ -106,7 +106,7 @@ function beginCheckout(args: Record<string, unknown>) {
     error: null,
   });
   if (held.holds_subscription) return answer('subscribed');
-  if (before(held.checkout_expires_at, 15)) {
+  if (before(held.checkout_expires_at, 15) && held.checkout_session_id !== args.p_closed_session_id) {
     return answer('open', { session_id: held.checkout_session_id, session_url: held.checkout_url });
   }
   if (before(held.checkout_claimed_until)) return answer('busy');
@@ -283,27 +283,66 @@ assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
 assert.deepEqual(overtaking, { success: true, checkoutUrl: 'https://checkout.stripe.test/c/pay/cs_test_5' });
 assert.equal(organizationRow().checkout_url, 'https://checkout.stripe.test/c/pay/cs_test_5');
 
-// The Admin paid the stored Checkout before its signal: the next start records
-// the subscription and opens no further Checkout.
+// The Admin paid the stored Checkout before its signal, with most of its time
+// left: the next start reads it at Stripe, records the subscription, and
+// neither hands out the paid Checkout nor opens another.
+const paidSubscription = (id: string, status: string, cancellationReason: string | null = null) =>
+  stripe.subscriptions.set(id, {
+    id,
+    customerId: 'cus_test_1',
+    organizationId: ORGANIZATION_A,
+    status,
+    cancellationReason,
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: '2026-12-15T10:00:00.000Z',
+  });
+const forgetSubscription = () =>
+  Object.assign(organizationRow(), {
+    stripe_subscription_id: null,
+    status: null,
+    cancellation_reason: null,
+    holds_subscription: false,
+  });
 stripe.checkoutSessions.set('cs_test_5', 'sub_test_1');
-stripe.subscriptions.set('sub_test_1', {
-  id: 'sub_test_1',
-  customerId: 'cus_test_1',
-  organizationId: ORGANIZATION_A,
-  status: 'active',
-  cancellationReason: null,
-  cancelAtPeriodEnd: false,
-  currentPeriodEnd: '2026-12-15T10:00:00.000Z',
+paidSubscription('sub_test_1', 'active');
+assert.ok(
+  before(organizationRow().checkout_expires_at, 60),
+  'the paid Checkout has more than 15 minutes left',
+);
+let requestsBefore = stripe.checkoutRequests.length;
+assert.deepEqual(
+  await startSubscriptionCheckout(ORGANIZATION_A),
+  { success: false, error: 'already_subscribed' },
+  'a start handed out a Checkout already paid',
+);
+assert.equal(organizationRow().stripe_subscription_id, 'sub_test_1');
+assert.equal(stripe.checkoutRequests.length, requestsBefore, 'a paid Checkout was followed by another');
+assert.equal(stripe.expiredCheckouts.includes('cs_test_5'), false, 'a paid Checkout was expired');
+
+// The subscription that Checkout started no longer holds: the paid Checkout
+// is still not handed out, and the start opens the next one.
+paidSubscription('sub_test_1', 'canceled', 'cancellation_requested');
+forgetSubscription();
+assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
+  success: true,
+  checkoutUrl: 'https://checkout.stripe.test/c/pay/cs_test_7',
 });
+assert.equal(organizationRow().status, 'canceled');
+assert.equal(organizationRow().checkout_session_id, 'cs_test_7');
+
+// Near its expiry, a stored Checkout paid before its signal is recorded the
+// same way while the start claims the next attempt; nothing more opens.
+stripe.checkoutSessions.set('cs_test_7', 'sub_test_2');
+paidSubscription('sub_test_2', 'active');
 organizationRow().checkout_expires_at = later(10);
-const requestsBefore = stripe.checkoutRequests.length;
+requestsBefore = stripe.checkoutRequests.length;
 assert.deepEqual(await startSubscriptionCheckout(ORGANIZATION_A), {
   success: false,
   error: 'already_subscribed',
 });
-assert.equal(organizationRow().stripe_subscription_id, 'sub_test_1');
+assert.equal(organizationRow().stripe_subscription_id, 'sub_test_2');
 assert.equal(stripe.checkoutRequests.length, requestsBefore, 'a paid Checkout was followed by another');
-assert.equal(stripe.expiredCheckouts.includes('cs_test_5'), false, 'a paid Checkout was expired');
+assert.equal(stripe.expiredCheckouts.includes('cs_test_7'), false, 'a paid Checkout was expired');
 assert.equal(organizationRow().checkout_claimed_until, null);
 
 // --- Before any organization: the Checkout reserves the organization's id. ---

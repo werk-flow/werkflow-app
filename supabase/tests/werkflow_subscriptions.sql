@@ -63,7 +63,7 @@ begin
     end if;
     foreach fn in array array[
       'public.werkflow_subscription_holds(text, text)',
-      'public.begin_werkflow_checkout(uuid, uuid, boolean, text)',
+      'public.begin_werkflow_checkout(uuid, uuid, boolean, text, text)',
       'public.finish_werkflow_checkout(uuid, integer, text, text, timestamptz)',
       'public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz)',
       'public.create_organization_with_id(uuid, uuid, text, text)',
@@ -147,6 +147,22 @@ begin
     raise exception 'a start while the Checkout is open did not answer it: %', v_begun;
   end if;
 
+  -- A start that read the stored session closed at Stripe claims the next
+  -- attempt and names that session; closing another session changes nothing.
+  select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
+    '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg', 'cs_test_other');
+  if v_begun.result is distinct from 'open' then
+    raise exception 'a start that read another session closed did not answer the stored one: %', v_begun;
+  end if;
+  select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
+    '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg', 'cs_test_1');
+  if (v_begun.result, v_begun.attempt, v_begun.session_id) is distinct from ('claimed'::text, 2, 'cs_test_1'::text) then
+    raise exception 'a start that read the stored session closed did not claim attempt 2 to close it: %', v_begun;
+  end if;
+  if not public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 2) then
+    raise exception 'the attempt after a closed session did not end its claim';
+  end if;
+
 end;
 $$;
 
@@ -163,19 +179,19 @@ begin
   -- Near its expiry the next start claims attempt 2 and names the session to close.
   select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
     '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg');
-  if (v_begun.result, v_begun.attempt, v_begun.session_id) is distinct from ('claimed'::text, 2, 'cs_test_1'::text) then
-    raise exception 'a start near the expiry did not claim attempt 2 with the session to close: %', v_begun;
+  if (v_begun.result, v_begun.attempt, v_begun.session_id) is distinct from ('claimed'::text, 3, 'cs_test_1'::text) then
+    raise exception 'a start near the expiry did not claim attempt 3 with the session to close: %', v_begun;
   end if;
   -- A failed attempt ends its claim and keeps the stored session; a stale attempt stores nothing.
-  if not public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 2) then
+  if not public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 3) then
     raise exception 'a failed attempt did not end its claim';
   end if;
   select * into strict v_begun from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000010',
     '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg');
-  if (v_begun.result, v_begun.attempt, v_begun.session_id) is distinct from ('claimed'::text, 3, 'cs_test_1'::text) then
+  if (v_begun.result, v_begun.attempt, v_begun.session_id) is distinct from ('claimed'::text, 4, 'cs_test_1'::text) then
     raise exception 'a start after a failed attempt did not claim a new attempt: %', v_begun;
   end if;
-  if public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 2,
+  if public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 3,
       'cs_test_2', 'https://checkout.stripe.com/c/pay/cs_test_2', now() + interval '1 day') then
     raise exception 'a stale attempt stored its session';
   end if;
@@ -191,7 +207,7 @@ do $$
 declare
   v_answer text;
 begin
-  if public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 3,
+  if public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000010', 4,
       'cs_test_3', 'https://checkout.stripe.com/c/pay/cs_test_3', now() + interval '1 day') then
     raise exception 'an attempt whose claim lapsed stored its session';
   end if;
