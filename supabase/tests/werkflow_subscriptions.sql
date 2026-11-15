@@ -102,15 +102,20 @@ select pg_temp.expect_refusal('a reservation of an existing organization', $sql$
     '41248000-0000-0000-0000-000000000003', false, 'cus_test_steal')
 $sql$, 'invalid_input');
 
+-- Each call is its own statement: Postgres evaluates the operands of OR in no fixed order.
 do $$
 declare
   v_row public.werkflow_subscriptions;
+  v_answer text;
 begin
-  if public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000010',
-      '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg') is distinct from 'cus_test_sonnenberg'
-    or public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000010',
-      '41248000-0000-0000-0000-000000000001', true, 'cus_test_second') is distinct from 'cus_test_sonnenberg'
-  then
+  v_answer := public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000010',
+    '41248000-0000-0000-0000-000000000001', true, 'cus_test_sonnenberg');
+  if v_answer is distinct from 'cus_test_sonnenberg' then
+    raise exception 'the first Checkout did not store its customer';
+  end if;
+  v_answer := public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000010',
+    '41248000-0000-0000-0000-000000000001', true, 'cus_test_second');
+  if v_answer is distinct from 'cus_test_sonnenberg' then
     raise exception 'a second Checkout did not keep the first customer';
   end if;
   select * into strict v_row from public.werkflow_subscriptions
@@ -120,9 +125,9 @@ begin
   end if;
 
   -- A failed payment keeps the subscription holding, also when Stripe cancels it for that.
-  if public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
-      'sub_test_1', 'past_due', false) is distinct from 'recorded'
-    or not (select holds_subscription from public.werkflow_subscriptions
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_1', 'past_due', false);
+  if v_answer is distinct from 'recorded' or not (select holds_subscription from public.werkflow_subscriptions
       where organization_id = '41248000-0000-0000-0000-000000000010')
   then
     raise exception 'a past due subscription does not hold';
@@ -135,9 +140,9 @@ begin
   end if;
 
   -- A second subscription while the first holds is refused; a stale one that no longer holds changes nothing.
-  if public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
-      'sub_test_0', 'incomplete_expired', false) is distinct from 'ignored'
-  then
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_0', 'incomplete_expired', false);
+  if v_answer is distinct from 'ignored' then
     raise exception 'a stale subscription that no longer holds was recorded';
   end if;
 end;
@@ -157,24 +162,29 @@ select pg_temp.expect_refusal('a signal of an unknown organization', $sql$
 $sql$, 'subscription_row_missing');
 
 do $$
+declare
+  v_answer text;
 begin
   -- A subscription cancelled on request no longer holds; a new one then replaces it.
   perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
     'sub_test_1', 'canceled', false, 'cancellation_requested');
-  if public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
-      'sub_test_2', 'active', false) is distinct from 'recorded'
-    or (select stripe_subscription_id from public.werkflow_subscriptions
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_2', 'active', false);
+  if v_answer is distinct from 'recorded' or (select stripe_subscription_id from public.werkflow_subscriptions
       where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'sub_test_2'
   then
     raise exception 'a new subscription did not replace one that ended on request';
   end if;
 
   -- A person holds one open reservation.
-  if public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000020',
-      '41248000-0000-0000-0000-000000000003', false, 'cus_test_neu') is distinct from 'cus_test_neu'
-    or public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000021',
-      '41248000-0000-0000-0000-000000000003', false, 'cus_test_neu_2') is not null
-  then
+  v_answer := public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000020',
+    '41248000-0000-0000-0000-000000000003', false, 'cus_test_neu');
+  if v_answer is distinct from 'cus_test_neu' then
+    raise exception 'the reservation did not store its customer';
+  end if;
+  v_answer := public.reserve_werkflow_subscription('41248000-0000-0000-0000-000000000021',
+    '41248000-0000-0000-0000-000000000003', false, 'cus_test_neu_2');
+  if v_answer is not null then
     raise exception 'a person held two open reservations';
   end if;
 end;
