@@ -2,21 +2,45 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { CreditCard, Check } from 'lucide-react';
 
-import { getCachedUser } from '@/lib/data/cached';
-import { isUserSubscribed, userHasOrganizations } from '@/lib/subscription/helpers';
+import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
+import { resolveActionContext } from '@/lib/org/action-context';
+import {
+  readOpenReservation,
+  readOrganizationSubscription,
+  userHasOrganizations,
+} from '@/lib/subscription/helpers';
 import { StandaloneScreen, StandaloneTitle } from '@/components/shared/standalone-screen';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 
-import { SimulatePaymentButton } from './simulate-payment-button';
+import { SubscribeButton } from './subscribe-button';
 
 export const metadata: Metadata = {
-  title: 'Upgrade - WerkFlow',
+  title: 'Abo abschließen - WerkFlow',
 };
+
+/** The organization this page subscribes, or null for a new one; redirects whoever has nothing to pay. */
+async function subscriptionTarget(userId: string): Promise<{ id: string; name: string } | null> {
+  if (!(await userHasOrganizations(userId))) {
+    const reservation = await readOpenReservation(userId);
+    if (reservation?.holdsSubscription) redirect('/onboarding/create-organization');
+    return null;
+  }
+  // An existing organization without a subscription: only its Admin starts one.
+  const caller = await resolveActionContext();
+  if (!caller.success || caller.context.role !== 'admin') redirect('/dashboard');
+  const { orgId } = caller.context;
+  if ((await readOrganizationSubscription(orgId))?.holdsSubscription) redirect('/dashboard');
+  const membership = (await getCachedMemberships(caller.context.userId)).find(
+    (entry) => entry.orgId === orgId,
+  );
+  return { id: orgId, name: membership?.name ?? '' };
+}
 
 export default async function UpgradePage() {
   // An unavailable Auth service or a failed subscription read throws into
   // app/error.tsx with its retry: the offer is shown only to a caller whose
-  // subscription was read and is not active.
+  // subscription was read and does not hold. Read per request: an entitlement
+  // is never cached across requests.
   const {
     data: { user },
   } = await getCachedUser();
@@ -25,24 +49,18 @@ export default async function UpgradePage() {
     redirect('/login');
   }
 
-  // If user already has organizations, redirect to dashboard
-  const hasOrgs = await userHasOrganizations(user.id);
-  if (hasOrgs) {
-    redirect('/dashboard');
-  }
-
-  // Read per request: an entitlement is never cached across requests.
-  const subscribed = await isUserSubscribed(user.id);
-  if (subscribed) {
-    redirect('/onboarding/create-organization');
-  }
+  const organization = await subscriptionTarget(user.id);
 
   return (
     <StandaloneScreen>
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
-          <StandaloneTitle>WerkFlow Pro</StandaloneTitle>
-          <p className="text-muted-foreground">Erstelle deine Organisation und starte durch</p>
+          <StandaloneTitle>WerkFlow abonnieren</StandaloneTitle>
+          <p className="text-muted-foreground">
+            {organization
+              ? `Das monatliche Abo für ${organization.name}`
+              : 'Schließ das Abo ab, danach legst du deine Organisation an.'}
+          </p>
         </div>
 
         <Card>
@@ -50,37 +68,22 @@ export default async function UpgradePage() {
             <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
               <CreditCard className="size-6 text-muted-foreground" aria-hidden="true" />
             </div>
-            <h2 className="text-lg font-semibold">Pro Plan</h2>
-            <CardDescription>Alles was du brauchst, um dein Team zu verwalten</CardDescription>
+            <h2 className="text-lg font-semibold">Monatliches Abo</h2>
+            <CardDescription>Du zahlst sicher über Stripe.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <ul className="space-y-3">
-              {[
-                'Unbegrenzte Organisationen',
-                'Unbegrenzte Mitarbeiter',
-                'Vollständige Admin-Kontrolle',
-                'E-Mail-Einladungen',
-                'Prioritäts-Support',
-              ].map((feature) => (
-                <li key={feature} className="flex items-center gap-3">
-                  <Check className="size-4 text-success-text" />
-                  <span className="text-sm">{feature}</span>
+              {['Per SEPA-Lastschrift oder Karte', 'Den Preis siehst du vor dem Abschluss'].map((fact) => (
+                <li key={fact} className="flex items-center gap-3">
+                  <Check className="size-4 text-success-text" aria-hidden="true" />
+                  <span className="text-sm">{fact}</span>
                 </li>
               ))}
             </ul>
 
-            <div className="rounded-lg bg-muted p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">Entwicklungsmodus</p>
-              <p className="text-sm">Klicke unten, um die Zahlung zu simulieren</p>
-            </div>
-
-            <SimulatePaymentButton />
+            <SubscribeButton {...(organization ? { organizationId: organization.id } : {})} />
           </CardContent>
         </Card>
-
-        <p className="text-center text-xs text-muted-foreground">
-          Dies ist eine Entwicklungsumgebung. Keine echte Zahlung erforderlich.
-        </p>
       </div>
     </StandaloneScreen>
   );

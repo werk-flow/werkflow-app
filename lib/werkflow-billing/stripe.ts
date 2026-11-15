@@ -2,6 +2,11 @@ import 'server-only';
 
 import Stripe from 'stripe';
 
+import {
+  subscriptionCalls,
+  type StripeSubscriptionGateway,
+} from '@/lib/werkflow-billing/stripe-subscriptions';
+
 // The one gateway every call of WerkFlow's own billing to Stripe goes through
 // (werk-flow/werkflow-planning#250, epic #245). Live Stripe is PROD: a live key
 // works only where VERCEL_ENV is `production`, a test key only elsewhere, so a
@@ -36,6 +41,8 @@ export type StripeGateway = {
    * stale or malformed signal. Nothing of the body is trusted before this.
    */
   verifySignal(rawBody: string, signature: string): Promise<Stripe.Event | null>;
+  /** An organization's customer, Checkout and subscription (werk-flow/werkflow-planning#248). */
+  subscriptions: StripeSubscriptionGateway;
 };
 
 type StripeGatewayResult =
@@ -82,5 +89,11 @@ export function resolveStripeGateway(environment: StripeEnvironment = process.en
   if (!webhookSecret) return { ok: false, code: 'stripe_webhook_secret_missing' };
 
   const client = new Stripe(key, { apiVersion: STRIPE_API_VERSION });
-  return { ok: true, gateway: { verifySignal: signalVerifier(client.webhooks, webhookSecret) } };
+  return {
+    ok: true,
+    gateway: {
+      verifySignal: signalVerifier(client.webhooks, webhookSecret),
+      subscriptions: subscriptionCalls(client),
+    },
+  };
 }

@@ -162,13 +162,14 @@ export function createSupabaseBrowserClient() {
   };
 }
 
-export async function simulatePayment(): Promise<{
-  success: boolean;
-  error?: string;
-}> {
+export async function startOrganizationCheckout(): Promise<{ success: false; error: string }> {
   const failure = window.uiContractServices.paymentFailure;
   if (failure === 'thrown') throw new Error('Simulated payment connection failure.');
-  return failure === 'returned' ? { success: false, error: 'not_authenticated' } : { success: true };
+  return { success: false, error: 'checkout_failed' };
+}
+
+export async function startSubscriptionCheckout(): Promise<{ success: false; error: string }> {
+  return startOrganizationCheckout();
 }
 
 export async function clearEmailChangeChallengeBeforeSignOut(): Promise<{
