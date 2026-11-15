@@ -41,6 +41,8 @@ type StripeCheckoutRequest = {
 /** A Checkout session WerkFlow hands to a payer. */
 export type StripeCheckoutSession = { id: string; url: string; expiresAt: string };
 
+type StripeCheckoutState = { open: boolean; subscriptionId: string | null };
+
 export type StripeSubscriptionGateway = {
   /** Creates the customer of an organization, with its id in the metadata; answers the customer id. */
   createCustomer(input: {
@@ -56,8 +58,11 @@ export type StripeSubscriptionGateway = {
    * the read and the expiry refuses to expire, and the call fails.
    */
   closeCheckout(sessionId: string): Promise<string | null>;
-  /** The subscription a completed Checkout started; null for another mode or an open Checkout. */
-  readCheckoutSubscriptionId(sessionId: string): Promise<string | null>;
+  /**
+   * A Checkout as Stripe holds it now: whether a payer can still pay it, and
+   * the subscription it started once completed (null for another mode).
+   */
+  readCheckout(sessionId: string): Promise<StripeCheckoutState>;
   readSubscription(subscriptionId: string): Promise<StripeSubscriptionSnapshot>;
   /** The customer's newest subscription, or null before the first. */
   readNewestSubscription(customerId: string): Promise<StripeSubscriptionSnapshot | null>;
@@ -186,8 +191,11 @@ export function subscriptionCalls(client: Stripe): StripeSubscriptionGateway {
         }
         return checkoutSubscriptionId(session);
       }),
-    readCheckoutSubscriptionId: (sessionId) =>
-      call(async () => checkoutSubscriptionId(await client.checkout.sessions.retrieve(sessionId))),
+    readCheckout: (sessionId) =>
+      call(async () => {
+        const session = await client.checkout.sessions.retrieve(sessionId);
+        return { open: session.status === 'open', subscriptionId: checkoutSubscriptionId(session) };
+      }),
     readSubscription: (subscriptionId) =>
       call(async () => {
         const readAt = new Date().toISOString();

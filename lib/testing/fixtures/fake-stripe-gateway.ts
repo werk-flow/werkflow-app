@@ -100,7 +100,14 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
         }
         return subscriptionId;
       }),
-    readCheckoutSubscriptionId: (sessionId) => reach(() => billing.checkoutSessions.get(sessionId) ?? null),
+    readCheckout: (sessionId) =>
+      reach(() => {
+        const subscriptionId = billing.checkoutSessions.get(sessionId) ?? null;
+        return {
+          open: subscriptionId === null && !billing.expiredCheckouts.includes(sessionId),
+          subscriptionId,
+        };
+      }),
     readSubscription: (subscriptionId) =>
       reach(() => {
         const subscription = billing.subscriptions.get(subscriptionId);

@@ -104,7 +104,9 @@ grant select on table public.werkflow_subscriptions to service_role;
 -- later start keeps the first customer. Answers, with the row's customer:
 -- 'subscribed': the subscription holds; no Checkout opens.
 -- 'open': the stored session stays open at least 15 more minutes; every
---   start answers it, so parallel starts share one Checkout.
+--   start answers it, so parallel starts share one Checkout. A caller that
+--   read it closed at Stripe (paid, or expired) names it in
+--   `p_closed_session_id`, and the start goes on as if it were near expiry.
 -- 'busy': another start is creating the session; nothing changes.
 -- 'claimed': the caller makes the stored session, if any, unpayable, creates
 --   the session of `attempt` and hands it to finish_werkflow_checkout within
@@ -114,6 +116,7 @@ create function public.begin_werkflow_checkout(
   p_user_id uuid,
   p_linked boolean,
   p_stripe_customer_id text,
+  p_closed_session_id text default null,
   out result text,
   out stripe_customer_id text,
   out attempt integer,
@@ -159,7 +162,9 @@ begin
   stripe_customer_id := v_row.stripe_customer_id;
   if v_row.holds_subscription then
     result := 'subscribed';
-  elsif v_row.checkout_expires_at > now() + interval '15 minutes' then
+  elsif v_row.checkout_expires_at > now() + interval '15 minutes'
+    and v_row.checkout_session_id is distinct from p_closed_session_id
+  then
     result := 'open';
     session_id := v_row.checkout_session_id;
     session_url := v_row.checkout_url;
@@ -400,9 +405,9 @@ begin
 end;
 $$;
 
-revoke all on function public.begin_werkflow_checkout(uuid, uuid, boolean, text)
+revoke all on function public.begin_werkflow_checkout(uuid, uuid, boolean, text, text)
   from public, anon, authenticated;
-grant execute on function public.begin_werkflow_checkout(uuid, uuid, boolean, text) to service_role;
+grant execute on function public.begin_werkflow_checkout(uuid, uuid, boolean, text, text) to service_role;
 revoke all on function public.finish_werkflow_checkout(uuid, integer, text, text, timestamptz)
   from public, anon, authenticated;
 grant execute on function public.finish_werkflow_checkout(uuid, integer, text, text, timestamptz) to service_role;

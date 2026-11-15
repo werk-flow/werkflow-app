@@ -15310,6 +15310,7 @@ export type Database = {
       };
       begin_werkflow_checkout: {
         Args: {
+          p_closed_session_id?: string;
           p_linked: boolean;
           p_organization_id: string;
           p_stripe_customer_id: string;
