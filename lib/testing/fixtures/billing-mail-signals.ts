@@ -20,6 +20,7 @@ type MailRow = {
 };
 
 const rows = new Map<string, MailRow>();
+let settleFailsFor: string | null = null;
 const logged: string[] = [];
 console.error = (...parts: unknown[]) => {
   logged.push(parts.map((part) => JSON.stringify(part)).join(' '));
@@ -48,6 +49,10 @@ mock.module('@/lib/supabase/admin', () => ({
       }
       if (name === 'settle_werkflow_billing_mail') {
         const row = [...rows.values()].find((candidate) => candidate.id === args.p_mail_id);
+        if (row && row.kind === settleFailsFor) {
+          settleFailsFor = null;
+          return { data: null, error: { code: '08006', message: 'connection lost' } };
+        }
         if (!row || row.state === 'sent') return { data: false, error: null };
         assert.equal(row.organizationId, args.p_organization_id ?? null);
         row.state = args.p_outcome === 'sent' ? 'sent' : 'failed';
@@ -63,9 +68,19 @@ mock.module('@/lib/supabase/admin', () => ({
 const resendAnswers: number[] = [];
 const resendBodies: { to: string; subject: string; text: string; key: string | null }[] = [];
 let resendIds = 0;
+const resendKeys = new Map<string, { payload: string; id: string }>();
 globalThis.fetch = Object.assign(
   async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
     assert.equal(String(url), 'https://api.resend.com/emails');
+    const key = new Headers(init?.headers).get('idempotency-key');
+    const payload = String(init?.body);
+    // Resend's contract: a known key with the same payload answers its first id; another payload is refused.
+    const earlier = key ? resendKeys.get(key) : undefined;
+    if (earlier) {
+      return earlier.payload === payload
+        ? Response.json({ id: earlier.id })
+        : Response.json({ name: 'invalid_idempotent_request' }, { status: 409 });
+    }
     const status = resendAnswers.shift() ?? 200;
     if (status !== 200) {
       return Response.json(
@@ -80,9 +95,10 @@ globalThis.fetch = Object.assign(
       to: Array.isArray(to) ? String(to[0]) : '',
       subject: String(Reflect.get(body, 'subject')),
       text: String(Reflect.get(body, 'text')),
-      key: new Headers(init?.headers).get('idempotency-key'),
+      key,
     });
     resendIds += 1;
+    if (key) resendKeys.set(key, { payload, id: `resend-${resendIds}` });
     return Response.json({ id: `resend-${resendIds}` });
   },
   { preconnect: fetch.preconnect },
@@ -109,7 +125,8 @@ const invoice = (id: string, paymentMethodType: string) => ({
   id,
   customerId: 'cus_test_0001',
   number: `SK5GYCE1-${id.slice(-4)}`,
-  amountDueCents: 4900,
+  status: 'open' as const,
+  amountRemainingCents: 4900,
   payUrl: `https://invoice.stripe.com/i/${id}`,
   paymentMethodType,
 });
@@ -125,6 +142,10 @@ const stripe = createFakeStripeGateway(SECRET, {
     in_test_0003: invoice('in_test_0003', 'sepa_debit'),
     in_test_0004: invoice('in_test_0004', 'sepa_debit'),
     in_test_0005: { ...invoice('in_test_0005', 'sepa_debit'), customerId: 'cus_test_orphan' },
+    in_test_0007: { ...invoice('in_test_0007', 'sepa_debit'), status: 'paid' },
+    in_test_0008: { ...invoice('in_test_0008', 'sepa_debit'), amountRemainingCents: 1900 },
+    in_test_0009: invoice('in_test_0009', 'paypal'),
+    in_test_0010: invoice('in_test_0010', 'sepa_debit'),
   },
   mandates: {
     mandate_test_0001: {
@@ -244,6 +265,29 @@ assert.equal(mailRow('payment_failed', 'in_test_0005'), undefined);
 assert.ok(
   sentTo('alarm@example.com').at(-1)?.text.includes('nicht gesendet (customer_without_organization)'),
 );
+
+// A failure signal for an invoice paid meanwhile mails nobody; a partly paid one names what is still open.
+const beforePaid = resendBodies.length;
+assert.equal(await deliver('invoice.payment_failed', 'in_test_0007'), null);
+assert.equal(resendBodies.length, beforePaid, 'a paid invoice was dunned');
+assert.equal(await deliver('invoice.payment_failed', 'in_test_0008'), null);
+assert.ok(
+  sentTo('rechnung@sonnenberg.example').at(-1)?.text.includes('19,00'),
+  'the open amount was not the remainder',
+);
+
+// An unknown payment method gets no guessed customer mail; the alarm says so.
+assert.equal(await deliver('invoice.payment_failed', 'in_test_0009'), null);
+assert.equal(mailRow('payment_failed', 'in_test_0009'), undefined);
+assert.ok(sentTo('alarm@example.com').at(-1)?.text.includes('nicht gesendet (payment_method_unknown)'));
+
+// Resend accepts the alarm but recording it fails: the retry carries changed
+// facts ("schon gesendet"), so it must not reuse the key Resend would refuse.
+settleFailsFor = 'alarm.debit_failed';
+assert.equal(await deliver('invoice.payment_failed', 'in_test_0010'), 'billing_mail_settle_failed');
+assert.equal(await deliver('invoice.payment_failed', 'in_test_0010'), null);
+assert.equal(mailRow('alarm.debit_failed', 'in_test_0010')?.state, 'sent');
+assert.equal(mailRow('payment_failed', 'in_test_0010')?.state, 'sent');
 
 // A returned debit raises debit_reversed and mails no customer.
 const beforeDispute = sentTo('rechnung@sonnenberg.example').length;

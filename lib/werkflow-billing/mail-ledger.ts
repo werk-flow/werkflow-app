@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { createHash } from 'node:crypto';
+
 import { sendEmail } from '@/lib/delivery/send-email';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
@@ -9,8 +11,10 @@ import type { RenderedMail } from '@/lib/werkflow-billing/mails/layout';
 
 // Sends one WerkFlow billing mail or alarm at most once per kind and Stripe
 // object (werk-flow/werkflow-planning#251). The row in werkflow_billing_mails
-// is claimed first; its id is the transport's idempotency key, so a lost
-// answer sent again delivers once. A sent row is never sent again. A refused
+// is claimed first; its id and a hash of the exact content are the transport's
+// idempotency key, so a lost answer sent again with the same content delivers
+// once, and content that changed between attempts (an alarm's facts, an
+// amount) is a new message instead of one Resend refuses for its reused key. A sent row is never sent again. A refused
 // send (quota, rate limit, outage) stays `failed` with its code and is sent on
 // the next claim, which Stripe's next delivery of the signal makes.
 
@@ -22,6 +26,13 @@ export type BillingMailOutcome =
   | { status: 'retryable' | 'permanent'; code: string };
 
 type Environment = Readonly<Record<string, string | undefined>>;
+
+function contentHash(recipient: string, mail: RenderedMail, replyTo: string | undefined): string {
+  return createHash('sha256')
+    .update(JSON.stringify([recipient, replyTo ?? null, mail.subject, mail.html, mail.text]))
+    .digest('hex')
+    .slice(0, 32);
+}
 
 /** One customer mail (with its organization) or one alarm (with none). */
 export async function deliverBillingMail(
@@ -55,7 +66,7 @@ export async function deliverBillingMail(
       subject: mail.subject,
       html: mail.html,
       text: mail.text,
-      idempotencyKey: `werkflow-billing-mail/${mailId}`,
+      idempotencyKey: `werkflow-billing-mail/${mailId}/${contentHash(recipient, mail, input.replyTo)}`,
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     },
     environment,

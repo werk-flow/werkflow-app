@@ -50,10 +50,13 @@ export type StripeBillingInvoice = {
   id: string;
   customerId: string | null;
   number: string | null;
-  amountDueCents: number;
+  /** Stripe's current state: a failure signal for a paid or voided invoice is stale. */
+  status: Stripe.Invoice.Status | null;
+  /** What is still open, after any partial payment. */
+  amountRemainingCents: number;
   /** Stripe's page where the customer can pay the invoice another way. */
   payUrl: string | null;
-  /** The payment method type of the newest payment attempt, such as `card` or `sepa_debit`. */
+  /** The payment method type of the newest payment attempt, such as `card` or `sepa_debit`; null when unknown. */
   paymentMethodType: string | null;
 };
 
@@ -123,6 +126,26 @@ async function read<T>(call: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * The payment method type of a payment attempt. A failed intent may have
+ * dropped its `payment_method` and kept the declined one only in
+ * `last_payment_error`, so that is read too; null when neither names one.
+ */
+export function failedPaymentMethodType(
+  intent:
+    | string
+    | {
+        payment_method: string | { type: string } | null;
+        last_payment_error: { payment_method?: { type: string } } | null;
+      }
+    | null
+    | undefined,
+): string | null {
+  if (!intent || typeof intent === 'string') return null;
+  const method = typeof intent.payment_method === 'object' ? intent.payment_method : null;
+  return method?.type ?? intent.last_payment_error?.payment_method?.type ?? null;
+}
+
 /** The reads a signal handler makes instead of trusting the event body. */
 function billingReads(client: Stripe): Omit<StripeGateway, 'verifySignal'> {
   return {
@@ -134,15 +157,14 @@ function billingReads(client: Stripe): Omit<StripeGateway, 'verifySignal'> {
           limit: 1,
           expand: ['data.payment.payment_intent.payment_method'],
         });
-        const intent = payments.data[0]?.payment.payment_intent;
-        const method = typeof intent === 'object' && intent ? intent.payment_method : null;
         return {
           id: invoice.id ?? invoiceId,
           customerId: idOf(invoice.customer),
           number: invoice.number,
-          amountDueCents: invoice.amount_due,
+          status: invoice.status,
+          amountRemainingCents: invoice.amount_remaining,
           payUrl: invoice.hosted_invoice_url ?? null,
-          paymentMethodType: typeof method === 'object' && method ? method.type : null,
+          paymentMethodType: failedPaymentMethodType(payments.data[0]?.payment.payment_intent),
         };
       }),
     readCustomer: (customerId) =>

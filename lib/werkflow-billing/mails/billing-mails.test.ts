@@ -11,7 +11,7 @@ import { renderCardProblemMail, renderDebitFailedMail } from './payment-failed';
 const invoice = {
   customerName: 'Haustechnik Sonnenberg GmbH',
   invoiceNumber: 'SK5GYCE1-0001',
-  amountDueCents: 4900,
+  amountRemainingCents: 4900,
   payUrl: 'https://invoice.stripe.com/i/acct_test/in_test_0001',
 };
 
