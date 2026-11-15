@@ -83,7 +83,11 @@ export async function deliverBillingMail(
       ...settled,
     }),
   );
-  // Sent but not recorded: the next claim sends again under the same key, which Resend delivers once.
+  // Sent but not recorded: the next claim sends again under the same key, which
+  // Resend delivers once within its 24-hour key window. A retry later than that,
+  // after an accepted send whose settlement failed, can deliver a second copy:
+  // an accepted residual, since it needs a database failure right after an
+  // accepted send and Stripe's retries usually come within hours.
   if (settleError) throw billingFailure('billing_mail_settle_failed');
   return result.status === 'accepted' ? { status: 'sent' } : { status: result.status, code: result.code };
 }

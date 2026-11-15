@@ -144,7 +144,12 @@ test('a local or CI process keeps the message in memory, once per key, and never
   expect(readMemoryOutbox().filter((kept) => kept.idempotencyKey === message.idempotencyKey)).toHaveLength(1);
 });
 
-test('logs name the failure by code only', () => {
+test('logs name the failure by code only', async () => {
+  const { fetchImpl } = answering(429, {
+    name: 'daily_quota_exceeded',
+    message: 'quota for erika.musterfrau@example.com',
+  });
+  await sendEmail(message, HOSTED, fetchImpl);
   const text = logged.join('\n');
   expect(text).toContain('email_daily_quota_exceeded');
   for (const leak of [
