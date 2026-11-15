@@ -48,6 +48,9 @@ export async function busyElements(scope: Scope): Promise<string[]> {
         }
         return '';
       };
+      // A scan of a scope reads the scope root as well as its descendants.
+      const matchesIn = (scopeRoot: Element, query: string): Element[] =>
+        [scopeRoot, ...scopeRoot.querySelectorAll(query)].filter((element) => element.matches(query));
       const markers: string[] = [];
       const elements: BusyElementFacts[] = [];
       if (document.documentElement.hasAttribute(routeRefresh))
@@ -55,9 +58,7 @@ export async function busyElements(scope: Scope): Promise<string[]> {
       if (document.documentElement.hasAttribute(unconfirmedLayer))
         markers.push('an optimistic list holds an unconfirmed entry');
       for (const scopeRoot of roots) {
-        const candidates = [scopeRoot, ...scopeRoot.querySelectorAll(selector)];
-        for (const candidate of candidates) {
-          if (!candidate.matches(selector)) continue;
+        for (const candidate of matchesIn(scopeRoot, selector)) {
           const box = candidate.getBoundingClientRect();
           // A hidden responsive copy is not what the user waits on.
           if (box.width === 0 && box.height === 0) continue;
@@ -71,7 +72,7 @@ export async function busyElements(scope: Scope): Promise<string[]> {
             region: regionOf(candidate),
           });
         }
-        for (const calendar of scopeRoot.querySelectorAll('[data-calendar-state]')) {
+        for (const calendar of matchesIn(scopeRoot, '[data-calendar-state]')) {
           const state = calendar.getAttribute('data-calendar-state') ?? '';
           if (!settledCalendarStates.includes(state)) markers.push(`calendar in state ${state}`);
         }

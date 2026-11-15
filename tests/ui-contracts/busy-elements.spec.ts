@@ -20,7 +20,7 @@ const PAGE = `<!doctype html><html lang="de" data-route-refresh><body>
     <span data-slot="spinner" style="display:inline-block;width:8px;height:8px"></span>
   </div>
   <div hidden><div data-slot="skeleton" style="height:8px"></div></div>
-  <div data-calendar-state="loading"></div>
+  <div data-calendar-state="loading" data-testid="kalender"></div>
   <div data-calendar-state="ready"></div>
 </main>
 <nav><button aria-busy="true" data-unconfirmed>Speichern</button></nav>
@@ -51,6 +51,14 @@ test('busyElements of a scope reads the scope itself and its contents only', asy
     'route refresh queued or running',
     'aria-busy <div role="status"> "Termine werden geladen" in main',
     'spinner <span> in status "Termine werden geladen"',
+  ]);
+});
+
+test('busyElements of a scope that is a loading calendar reports the calendar', async ({ page }) => {
+  await page.setContent(PAGE);
+  expect(await busyElements(page.getByTestId('kalender'))).toEqual([
+    'route refresh queued or running',
+    'calendar in state loading',
   ]);
 });
 

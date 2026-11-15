@@ -11,8 +11,10 @@ import { listProductSources, parseProductSource, repositoryRoot } from './produc
 // target on its loading skeletons (werk-flow/werkflow-planning#29: CI run
 // 43621163292, audit:wave-1:a2-anfragen, after an Anfrage was created).
 // The check reports a refresh statement that follows a statement navigating
-// in the same block, unless the navigation's own branch returns first. A
-// `throw` does not count: a `catch` can carry it on to the refresh.
+// in the same block, unless the navigation returns at once: it sits in a
+// `return`, or the next statement after it is a `return`. Any other way out
+// (`throw`, `break`, `continue`, a later `return`) counts as reaching the
+// refresh, since a `catch` or a jump can carry the path past that `return`.
 
 /** Reviewed navigations followed by a refresh. Shrink-only. */
 const REVIEWED_NAVIGATION_REFRESHES: readonly { file: string; reason: string }[] = [
@@ -45,45 +47,42 @@ function routerCall(node: ts.Node, methods: ReadonlySet<string>): boolean {
 const NAVIGATIONS = new Set(['push', 'replace']);
 const REFRESH = new Set(['refresh']);
 
-// Only a `return` leaves for sure: a `throw` can land in a `catch` that goes on to the refresh.
-const leaves = (node: ts.Node): boolean => ts.isReturnStatement(node);
-
 /**
- * Whether the function leaves on the navigation's path before the end of
- * `statement`: the navigation sits in a `return`, or a `return` follows it in
- * its own statement list or an enclosing one, and no `try` encloses it.
+ * Whether the function returns right at the navigation, inside `statement`:
+ * the navigation's own statement is a `return`, or the next statement in its
+ * block is one, and no `try` encloses it. Only that next statement counts: a
+ * `break`, `continue` or `throw` before a later `return` can jump past it.
  */
-function leavesAfter(navigation: ts.Node, statement: ts.Statement): boolean {
+function returnsAt(navigation: ts.Node, statement: ts.Statement): boolean {
   // Inside a `try`, a `finally` can cancel the `return` and a `catch` can go on
   // to the refresh, so no `return` there ends the path.
   for (let node: ts.Node = navigation; ; node = node.parent) {
     if (ts.isTryStatement(node)) return false;
     if (node === statement) break;
   }
-  for (let node = navigation; node !== statement; node = node.parent) {
-    if (leaves(node)) return true;
-    const { parent } = node;
-    if (ts.isBlock(parent) || ts.isCaseOrDefaultClause(parent)) {
-      const index = parent.statements.findIndex((sibling) => sibling === node);
-      if (parent.statements.slice(index + 1).some(leaves)) return true;
-    }
-  }
-  return leaves(statement);
+  // Nested functions are skipped, so the nearest statement lies within `statement`.
+  let own: ts.Node = navigation;
+  while (!ts.isStatement(own)) own = own.parent;
+  if (ts.isReturnStatement(own)) return true;
+  const { parent } = own;
+  if (!ts.isBlock(parent) && !ts.isCaseOrDefaultClause(parent)) return false;
+  const next = parent.statements[parent.statements.findIndex((sibling) => sibling === own) + 1];
+  return next !== undefined && ts.isReturnStatement(next);
 }
 
 /**
  * Whether the statement calls `router.push` or `router.replace` outside a
  * nested function on a path that can reach the statement's end. Strict: only
- * a `return` in the navigation's own statement list or an enclosing one ends
- * its path, so a branch that leaves another way (a `throw`, an inner `if` that
- * returns on every path, `break`, `continue`, a call that never returns) still
- * counts as reaching a later refresh.
+ * a `return` at the navigation ends its path, so a branch that leaves another
+ * way (a `throw`, a jump, an inner `if` that returns on every path, a `return`
+ * after another statement, a call that never returns) still counts as
+ * reaching a later refresh.
  */
 function navigates(statement: ts.Statement): boolean {
   let found = false;
   const visit = (node: ts.Node): void => {
     if (found || ts.isFunctionLike(node)) return;
-    if (routerCall(node, NAVIGATIONS)) found = !leavesAfter(node, statement);
+    if (routerCall(node, NAVIGATIONS)) found = !returnsAt(node, statement);
     else ts.forEachChild(node, visit);
   };
   visit(statement);
@@ -229,6 +228,46 @@ test('the check passes a refresh after a branch that navigates and returns, and 
     { file: 'hooks/use-leave.ts', line: 33 },
     { file: 'hooks/use-leave.ts', line: 44 },
     { file: 'hooks/use-leave.ts', line: 59 },
+  ]);
+});
+
+test('the check reports a refresh after a navigation whose return comes after another statement', () => {
+  const source = [
+    'export function useJump(router: { push: (href: string) => void; refresh: () => void }, hrefs: string[]) {',
+    '  const onLooped = () => {',
+    '    for (const href of hrefs) {',
+    '      if (href) {',
+    '        router.push(href);',
+    '        break;',
+    '      }',
+    '      return;',
+    '    }',
+    '    router.refresh();',
+    '  };',
+    '  const onBroken = () => {',
+    '    for (const href of hrefs) {',
+    '      router.push(href);',
+    '      break;',
+    '      return;',
+    '    }',
+    '    router.refresh();',
+    '  };',
+    '  const onLater = (href: string, done: boolean) => {',
+    '    if (href) {',
+    '      router.push(href);',
+    '      if (done) {',
+    '      }',
+    '      return;',
+    '    }',
+    '    router.refresh();',
+    '  };',
+    '  return { onLooped, onBroken, onLater };',
+    '}',
+  ].join('\n');
+  expect(findNavigationRefreshes(new Map([['hooks/use-jump.ts', source]]))).toEqual([
+    { file: 'hooks/use-jump.ts', line: 10 },
+    { file: 'hooks/use-jump.ts', line: 18 },
+    { file: 'hooks/use-jump.ts', line: 27 },
   ]);
 });
 
