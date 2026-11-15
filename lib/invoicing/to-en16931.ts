@@ -114,7 +114,11 @@ function tradeParty(party: InvoiceParty | InvoiceSeller): XmlNode {
  */
 function paymentTermsText(invoice: CalculatedInvoice): string {
   const { payment } = invoice;
-  if (payment?.kind === 'direct-debit') return 'Der Betrag wird per SEPA-Lastschrift eingezogen.\n';
+  if (payment?.kind === 'direct-debit') {
+    return invoice.totals.dueCents > 0
+      ? 'Der Betrag wird per SEPA-Lastschrift eingezogen.\n'
+      : 'Der Betrag wurde per SEPA-Lastschrift eingezogen.\n';
+  }
   if (payment?.kind === 'card')
     return `Der Betrag wird von der Karte mit der Endung ${payment.lastFour} abgebucht.\n`;
   const lines = [`Zahlbar ohne Abzug bis ${formatGermanDate(invoice.dueDate)}.`];
@@ -171,17 +175,19 @@ function paymentMeans(payment: CalculatedInvoice['payment']): XmlNode {
 
 /**
  * BT-90, BG-16, BG-23, BG-14, BT-20 with BT-89, BG-22 and BG-3: how much is
- * owed, for what, and how it is paid. Payment means and terms appear only
- * while an amount is due; a card payment is named also when it settled it.
+ * owed, for what, and how it is paid. A credit transfer and its terms appear
+ * only while an amount is due; a direct debit and a card are named also when
+ * they settled it.
  */
 function headerSettlement(invoice: CalculatedInvoice): XmlNode {
   const { delivery, payment, totals } = invoice;
   const owed = totals.dueCents > 0;
-  const debit = payment?.kind === 'direct-debit' && owed ? payment : null;
+  const debit = payment?.kind === 'direct-debit' ? payment : null;
+  const settledBy = owed || payment?.kind === 'card' || debit;
   return {
     ...(debit ? { 'ram:CreditorReferenceID': debit.creditorId } : {}),
     'ram:InvoiceCurrencyCode': invoice.currency,
-    ...(owed || payment?.kind === 'card' ? paymentMeans(payment) : {}),
+    ...(settledBy ? paymentMeans(payment) : {}),
     'ram:ApplicableTradeTax': invoice.taxSubtotals.map((row) => tradeTax(row.tax, row)),
     ...(delivery.kind === 'period'
       ? {
@@ -191,11 +197,11 @@ function headerSettlement(invoice: CalculatedInvoice): XmlNode {
           },
         }
       : {}),
-    ...(owed
+    ...(owed || debit
       ? {
           'ram:SpecifiedTradePaymentTerms': {
             'ram:Description': paymentTermsText(invoice),
-            'ram:DueDateDateTime': dateTime(invoice.dueDate),
+            ...(owed ? { 'ram:DueDateDateTime': dateTime(invoice.dueDate) } : {}),
             ...(debit ? { 'ram:DirectDebitMandateID': debit.mandateReference } : {}),
           },
         }
