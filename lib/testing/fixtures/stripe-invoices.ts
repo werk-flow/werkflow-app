@@ -20,7 +20,10 @@ export const STRIPE_INVOICE = {
     id: 'cus_test_0001',
     object: 'customer',
     metadata: { werkflow_organization_id: ORGANIZATION_ID },
+    invoice_settings: { default_payment_method: null },
   },
+  default_payment_method: null,
+  parent: null,
   customer_name: 'Haustechnik Sonnenberg GmbH',
   customer_email: 'rechnung@sonnenberg.example',
   customer_address: {
@@ -67,31 +70,53 @@ export const STRIPE_INVOICE_LINES = {
   ],
 };
 
-const paymentIntent = (details: object) => ({
+/** A SEPA payment method; its mandate hangs on the SetupIntent that created it. */
+export const SEPA_PAYMENT_METHOD = {
+  id: 'pm_test_sepa_0001',
+  object: 'payment_method',
+  type: 'sepa_debit',
+  sepa_debit: { last4: '3000', country: 'DE' },
+};
+
+/** A renewal's payment intent at finalization: its debit started, no charge yet. */
+const paymentIntent = (paymentMethod: object) => ({
   id: 'pi_test_0001',
   object: 'payment_intent',
-  latest_charge: { id: 'ch_test_0001', object: 'charge', payment_method_details: details },
+  status: 'processing',
+  payment_method: paymentMethod,
+  latest_charge: null,
 });
 
 /** Stripe's answers for a SEPA direct-debit invoice, keyed as the fake gateway reads them. */
 export const SEPA_INVOICE_ANSWERS = {
   'GET /v1/invoices/in_test_0001': STRIPE_INVOICE,
   'GET /v1/invoices/in_test_0001/lines': STRIPE_INVOICE_LINES,
-  'GET /v1/payment_intents/pi_test_0001': paymentIntent({
-    type: 'sepa_debit',
-    sepa_debit: { last4: '3000', mandate: 'mandate_test_0001' },
-  }),
-  'GET /v1/mandates/mandate_test_0001': {
-    id: 'mandate_test_0001',
-    object: 'mandate',
-    payment_method_details: {
-      type: 'sepa_debit',
-      sepa_debit: { reference: 'MUSTERMANDAT0001', url: 'https://example.test' },
-    },
+  'GET /v1/payment_intents/pi_test_0001': paymentIntent(SEPA_PAYMENT_METHOD),
+  'GET /v1/setup_intents': {
+    object: 'list',
+    url: '/v1/setup_intents',
+    has_more: false,
+    data: [
+      {
+        id: 'seti_test_0001',
+        object: 'setup_intent',
+        status: 'succeeded',
+        payment_method: SEPA_PAYMENT_METHOD.id,
+        mandate: {
+          id: 'mandate_test_0001',
+          object: 'mandate',
+          payment_method: SEPA_PAYMENT_METHOD.id,
+          payment_method_details: {
+            type: 'sepa_debit',
+            sepa_debit: { reference: 'MUSTERMANDAT0001', url: 'https://example.test' },
+          },
+        },
+      },
+    ],
   },
 };
 
-/** Stripe's answers for an invoice a card charge already paid. */
+/** Stripe's answers for an invoice a card already paid. */
 export const CARD_INVOICE_ANSWERS = {
   'GET /v1/invoices/in_test_0001': {
     ...STRIPE_INVOICE,
@@ -100,10 +125,15 @@ export const CARD_INVOICE_ANSWERS = {
     amount_remaining: 0,
   },
   'GET /v1/invoices/in_test_0001/lines': STRIPE_INVOICE_LINES,
-  'GET /v1/payment_intents/pi_test_0001': paymentIntent({
-    type: 'card',
-    card: { last4: '4242', brand: 'visa' },
-  }),
+  'GET /v1/payment_intents/pi_test_0001': {
+    ...paymentIntent({
+      id: 'pm_test_card_0001',
+      object: 'payment_method',
+      type: 'card',
+      card: { last4: '4242', brand: 'visa' },
+    }),
+    status: 'succeeded',
+  },
 };
 
 export const MADE_UP_SELLER: WerkflowSeller = {

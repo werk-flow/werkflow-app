@@ -1,5 +1,6 @@
 // The issue cases; lib/werkflow-billing/issue-invoice.test.ts runs them in their own process.
-import { describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import Stripe from 'stripe';
 
 import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 import {
@@ -7,11 +8,55 @@ import {
   MADE_UP_SELLER,
   ORGANIZATION_ID,
   SEPA_INVOICE_ANSWERS,
+  SEPA_PAYMENT_METHOD,
   STRIPE_INVOICE,
   STRIPE_INVOICE_LINES,
 } from '@/lib/testing/fixtures/stripe-invoices';
 
 mock.module('server-only', () => ({}));
+
+// The signal handlers' database and R2, in memory: the issued rows and the stored originals.
+const issuedRows: Array<{ p_stripe_invoice_id: string; p_stripe_event_id: string }> = [];
+const billingObjects = new Map<string, Uint8Array>();
+mock.module('@/lib/supabase/admin', () => ({
+  createSupabaseAdminClient: () => ({
+    from: () => ({
+      select: () => ({
+        eq: (_column: string, stripeInvoiceId: string) => ({
+          maybeSingle: async () => ({
+            data: issuedRows.some((row) => row.p_stripe_invoice_id === stripeInvoiceId)
+              ? { id: 'row' }
+              : null,
+            error: null,
+          }),
+        }),
+      }),
+    }),
+    rpc: async (_name: string, row: { p_stripe_invoice_id: string; p_stripe_event_id: string }) => {
+      if (issuedRows.some((existing) => existing.p_stripe_invoice_id === row.p_stripe_invoice_id)) {
+        return { data: 'already_issued', error: null };
+      }
+      issuedRows.push(row);
+      return { data: 'issued', error: null };
+    },
+  }),
+}));
+mock.module('@/lib/storage/r2', () => ({
+  putWerkflowBillingObject: async ({ path, body }: { path: string; body: Uint8Array }) => {
+    billingObjects.set(path, body);
+    return { created: true };
+  },
+}));
+const { seller } = MADE_UP_SELLER;
+Object.assign(process.env, {
+  WERKFLOW_SELLER_NAME: seller.name,
+  WERKFLOW_SELLER_STREET: seller.address.lines[0],
+  WERKFLOW_SELLER_POSTAL_CODE: seller.address.postalCode,
+  WERKFLOW_SELLER_CITY: seller.address.city,
+  WERKFLOW_SELLER_TAX_NUMBER: seller.taxNumber,
+  WERKFLOW_SELLER_EMAIL: seller.email,
+  WERKFLOW_SELLER_CREDITOR_ID: MADE_UP_SELLER.creditorId,
+});
 // SaxonJS loads through axios, which fails in Bun once ESLint set
 // Error.prepareStackTrace in the same run (lib/invoicing/check-en16931.test.ts).
 const prepareStackTrace = Error.prepareStackTrace;
@@ -20,6 +65,7 @@ const { issueWerkflowInvoice } = await import('@/lib/werkflow-billing/issue-invo
   Reflect.set(Error, 'prepareStackTrace', prepareStackTrace);
 });
 const { createFakeStripeGateway } = await import('@/lib/testing/fixtures/fake-stripe-gateway');
+const { signalFamilyFor } = await import('@/lib/werkflow-billing/signals/dispatch');
 type IssueDependencies = import('@/lib/werkflow-billing/issue-invoice').IssueDependencies;
 type IssuedInvoiceRecord = Parameters<IssueDependencies['record']>[0];
 
@@ -58,6 +104,8 @@ const withInvoice = (answers: Record<string, unknown>, change: Record<string, un
   'GET /v1/invoices/in_test_0001': { ...STRIPE_INVOICE, ...change },
 });
 
+const NO_PAYMENTS = { object: 'list', data: [], has_more: false };
+
 const refusals: Array<{
   case: string;
   answers: Record<string, unknown>;
@@ -86,9 +134,17 @@ const refusals: Array<{
     code: 'werkflow_invoice_organization_unknown',
   },
   {
-    case: 'an amount due without a charge yet',
-    answers: withInvoice(SEPA_INVOICE_ANSWERS, { payments: { object: 'list', data: [], has_more: false } }),
+    case: 'an amount due without a payment intent or a default payment method',
+    answers: withInvoice(SEPA_INVOICE_ANSWERS, { payments: NO_PAYMENTS }),
     code: 'werkflow_invoice_payment_pending',
+  },
+  {
+    case: 'a SEPA payment method without a mandate',
+    answers: {
+      ...SEPA_INVOICE_ANSWERS,
+      'GET /v1/setup_intents': { object: 'list', data: [], has_more: false },
+    },
+    code: 'werkflow_invoice_unreadable',
   },
   {
     case: 'a draft without a number',
@@ -97,14 +153,17 @@ const refusals: Array<{
   },
 ];
 describe('a finalized Stripe invoice becomes WerkFlow original', () => {
-  test("a SEPA invoice is issued once with Stripe's number and amounts, its mandate and creditor ID in the checked XML", async () => {
+  test("a SEPA invoice finalized as its debit starts, before any charge, is issued once with Stripe's number and amounts, its mandate and creditor ID in the checked XML", async () => {
     const { issue, requests, stored, records } = world(SEPA_INVOICE_ANSWERS);
     expect(await issue()).toBe('issued');
+    // The payment method comes from the payment intent, the mandate from its SetupIntent: no charge is read.
     expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual(
       Object.keys(SEPA_INVOICE_ANSWERS),
     );
-    expect(requests[0]?.query).toContain('expand[0]=customer');
+    expect(requests[0]?.query).toContain('expand[0]=customer.invoice_settings.default_payment_method');
     expect(requests[0]?.query).toContain('expand[1]=payments');
+    expect(requests[2]?.query).toContain('expand[0]=payment_method');
+    expect(requests[3]?.query).toContain(`payment_method=${SEPA_PAYMENT_METHOD.id}`);
 
     expect(records).toHaveLength(1);
     const [row] = records;
@@ -150,6 +209,31 @@ describe('a finalized Stripe invoice becomes WerkFlow original', () => {
     const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
     expect(xml).toContain('<ram:TotalPrepaidAmount>499.00</ram:TotalPrepaidAmount>');
     expect(xml).toMatch(/<ram:ApplicableTradeSettlementFinancialCard>\s*<ram:ID>4242</);
+  });
+});
+
+describe('the payment method before the debit exists', () => {
+  test("an invoice without a payment intent yet is debited from the subscription's default payment method", async () => {
+    const { issue, requests, records } = world({
+      ...SEPA_INVOICE_ANSWERS,
+      'GET /v1/invoices/in_test_0001': {
+        ...STRIPE_INVOICE,
+        payments: NO_PAYMENTS,
+        parent: {
+          type: 'subscription_details',
+          subscription_details: {
+            subscription: {
+              id: 'sub_test_0001',
+              object: 'subscription',
+              default_payment_method: SEPA_PAYMENT_METHOD,
+            },
+          },
+        },
+      },
+    });
+    expect(await issue()).toBe('issued');
+    expect(records[0]).toMatchObject({ p_payment_means: 'direct-debit', p_due_cents: 49900 });
+    expect(requests.some((request) => request.path.startsWith('/v1/payment_intents'))).toBe(false);
   });
 });
 
@@ -201,4 +285,52 @@ describe('a Stripe invoice WerkFlow cannot issue', () => {
       expect(records).toHaveLength(0);
     });
   }
+});
+
+const signalOf = (id: string, type: 'invoice.finalized' | 'invoice.paid') =>
+  Stripe.webhooks.constructEventWithoutVerification(
+    JSON.stringify({ id, object: 'event', type, created: 1, data: { object: { id: 'in_test_0001' } } }),
+  );
+
+async function handle(event: Stripe.Event, answers: Readonly<Record<string, unknown>>) {
+  const requests: Array<{ method: string; path: string; query: string }> = [];
+  await signalFamilyFor(event.type)?.handle(
+    event,
+    createFakeStripeGateway('whsec_synthetic0000', answers, requests),
+  );
+  return requests;
+}
+
+describe('invoice.paid backstops the issue of the original', () => {
+  beforeEach(() => {
+    issuedRows.length = 0;
+    billingObjects.clear();
+  });
+
+  test('an invoice that invoice.finalized could not issue yet is issued by its invoice.paid', async () => {
+    const finalized = handle(
+      signalOf('evt_test_finalized', 'invoice.finalized'),
+      withInvoice(SEPA_INVOICE_ANSWERS, { payments: NO_PAYMENTS }),
+    );
+    await expect(finalized).rejects.toMatchObject({ code: 'werkflow_invoice_payment_pending' });
+    expect(issuedRows).toHaveLength(0);
+
+    await handle(
+      signalOf('evt_test_paid', 'invoice.paid'),
+      withInvoice(SEPA_INVOICE_ANSWERS, { status: 'paid', amount_paid: 49900, amount_remaining: 0 }),
+    );
+    expect(issuedRows).toEqual([
+      expect.objectContaining({ p_stripe_invoice_id: 'in_test_0001', p_stripe_event_id: 'evt_test_paid' }),
+    ]);
+    expect(billingObjects.size).toBe(1);
+  });
+
+  test('invoice.paid of an issued invoice reads nothing from Stripe and issues nothing', async () => {
+    await handle(signalOf('evt_test_finalized', 'invoice.finalized'), SEPA_INVOICE_ANSWERS);
+    expect(issuedRows).toHaveLength(1);
+    const requests = await handle(signalOf('evt_test_paid', 'invoice.paid'), SEPA_INVOICE_ANSWERS);
+    expect(requests).toHaveLength(0);
+    expect(issuedRows).toEqual([expect.objectContaining({ p_stripe_event_id: 'evt_test_finalized' })]);
+    expect(billingObjects.size).toBe(1);
+  });
 });

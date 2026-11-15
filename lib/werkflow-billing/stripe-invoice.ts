@@ -79,7 +79,7 @@ const lineSchema = z.object({
   period: z.object({ start: z.number().int(), end: z.number().int() }),
 });
 
-const paymentDetailsSchema = z.union([
+const paymentMethodSchema = z.union([
   z.object({ type: z.literal('sepa_debit') }),
   z.object({ type: z.literal('card'), card: z.object({ last4: z.string().regex(/^\d{4}$/) }) }),
 ]);
@@ -91,9 +91,9 @@ function vatIdOf(taxIds: z.infer<typeof invoiceSchema>['customer_tax_ids']): str
   return taxIds?.find((taxId) => taxId.type === 'eu_vat' && taxId.value)?.value ?? null;
 }
 
-function stripePaymentOf(details: unknown, mandateReference: unknown): StripeInvoicePayment | null {
-  if (details === null) return null;
-  const parsed = paymentDetailsSchema.safeParse(details);
+function stripePaymentOf(method: unknown, mandateReference: unknown): StripeInvoicePayment | null {
+  if (method === null) return null;
+  const parsed = paymentMethodSchema.safeParse(method);
   if (!parsed.success) throw new WerkflowInvoiceFailure('werkflow_invoice_unreadable');
   if (parsed.data.type === 'card') return { kind: 'card', lastFour: parsed.data.card.last4 };
   const reference = mandateReferenceSchema.safeParse(mandateReference);
@@ -103,16 +103,17 @@ function stripePaymentOf(details: unknown, mandateReference: unknown): StripeInv
 
 /**
  * The finalized invoice as WerkFlow issues it. `invoice` is Stripe's invoice
- * with its customer expanded, `lines` all its line items, `paymentDetails` the
- * charge's `payment_method_details` (null while no charge exists) and
- * `mandateReference` the SEPA mandate's reference. Throws a stable code: an
- * object it cannot read, a draft, a customer without an organization, or an
- * amount due without a charge (Stripe delivers the signal again).
+ * with its customer expanded, `lines` all its line items, `paymentMethod` the
+ * payment method Stripe debits (null while none is known) and
+ * `mandateReference` the reference of its SEPA mandate. Throws a stable code:
+ * an object it cannot read, a draft, a customer without an organization, or an
+ * amount due without a payment method (Stripe delivers the signal again, and
+ * `invoice.paid` issues it too).
  */
 export function stripeInvoiceForIssue(source: {
   invoice: unknown;
   lines: readonly unknown[];
-  paymentDetails: unknown;
+  paymentMethod: unknown;
   mandateReference: unknown;
 }): StripeInvoiceForIssue {
   const parsed = invoiceSchema.safeParse(source.invoice);
@@ -125,7 +126,7 @@ export function stripeInvoiceForIssue(source: {
   }
   const organizationId = uuidSchema.safeParse(invoice.customer.metadata?.werkflow_organization_id);
   if (!organizationId.success) throw new WerkflowInvoiceFailure('werkflow_invoice_organization_unknown');
-  const payment = stripePaymentOf(source.paymentDetails, source.mandateReference);
+  const payment = stripePaymentOf(source.paymentMethod, source.mandateReference);
   if (!payment && invoice.amount_remaining > 0)
     throw new WerkflowInvoiceFailure('werkflow_invoice_payment_pending');
 
