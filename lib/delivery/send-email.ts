@@ -140,7 +140,10 @@ function sendToMemory(message: EmailMessage & { from: string }): SendEmailResult
   return { status: 'accepted', messageId };
 }
 
-/** The in-memory outbox, for tests and local runs; it is empty on a hosted deployment. */
+/**
+ * The in-memory outbox, for tests and local runs; it is empty on a hosted deployment.
+ * @internal
+ */
 export function readMemoryOutbox(): readonly (EmailMessage & { from: string; messageId: string })[] {
   return memoryOutbox;
 }
