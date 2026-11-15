@@ -49,16 +49,38 @@ function loaded(kind: SearchGroup['kind'], source: SearchSource, title: string, 
 /**
  * „Lindenhof“ answers customers and fails the documents; the documents'
  * retry answers. „Leer“ fails the documents, whose retry finds nothing. „Störung“
- * fails the whole search. Anything else finds nothing.
+ * fails the whole search. „Zwei“ fails customers and documents; each retry
+ * answers its own source. Anything else finds nothing.
  */
 export function readGlobalSearchContract(input: unknown): GlobalSearchResult {
   const query = input && typeof input === 'object' && 'query' in input ? String(input.query) : '';
   const sources =
     input && typeof input === 'object' && 'sources' in input && Array.isArray(input.sources)
-      ? input.sources.map(String).filter((source): source is SearchSource => source === 'dokumente')
+      ? input.sources
+          .map(String)
+          .filter((source): source is SearchSource => source === 'dokumente' || source === 'kunden')
       : null;
   window.uiContractSearchReads.push({ query, sources });
   if (query === 'Störung') return { success: false, error: 'load_failed' };
+  if (query === 'Zwei') {
+    const kunden = loaded('kunden', 'kunden', 'Hausverwaltung Lindenhof GmbH', 'K-1001 · 0711 12345');
+    const dokumente = loaded(
+      'dokumente',
+      'dokumente',
+      'Wartungsvertrag Lindenhof',
+      'Nummer im Altsystem 4711',
+    );
+    if (sources?.length === 1)
+      return { success: true, query, groups: [sources[0] === 'kunden' ? kunden : dokumente] };
+    return {
+      success: true,
+      query,
+      groups: [
+        { kind: 'kunden', source: 'kunden', status: 'failed' },
+        { kind: 'dokumente', source: 'dokumente', status: 'failed' },
+      ],
+    };
+  }
   if (query === 'Leer')
     return sources?.includes('dokumente')
       ? {

@@ -53,3 +53,31 @@ test('a retried kind without a hit leaves „Keine Treffer“ when nothing else 
   await expect(dialog.getByText('Keine Treffer gefunden')).toBeVisible();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
 });
+
+test('two failed kinds recover one after the other and each retry reads only its own', async ({ page }) => {
+  const dialog = page.getByRole('dialog', { name: 'Suchen', exact: true });
+  await dialog.getByRole('textbox', { name: 'Suchbegriff', exact: true }).fill('Zwei');
+  const retry = (kind: string) =>
+    dialog
+      .getByRole('alert')
+      .filter({ hasText: kind })
+      .getByRole('button', { name: 'Erneut laden', exact: true });
+  await retry('Kunden').click();
+  const customer = dialog
+    .getByRole('region', { name: 'Kunden', exact: true })
+    .getByRole('link', { name: /Hausverwaltung Lindenhof GmbH/ });
+  await expect(customer).toBeVisible();
+  await retry('Dokumente').click();
+  await expect(
+    dialog
+      .getByRole('region', { name: 'Dokumente', exact: true })
+      .getByRole('link', { name: /Wartungsvertrag Lindenhof/ }),
+  ).toBeVisible();
+  await expect(customer).toBeVisible();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  expect(await page.evaluate(() => window.uiContractSearchReads)).toEqual([
+    { query: 'Zwei', sources: null },
+    { query: 'Zwei', sources: ['kunden'] },
+    { query: 'Zwei', sources: ['dokumente'] },
+  ]);
+});

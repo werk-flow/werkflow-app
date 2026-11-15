@@ -93,16 +93,35 @@ function ResultGroups({
   organizationId: string;
   onNavigate: () => void;
 }) {
-  const [retrying, setRetrying] = useState<SearchSource[]>([]);
+  // The source the person retries now, and the groups earlier retries recovered.
+  const [retrying, setRetrying] = useState<SearchSource | null>(null);
+  const [recovered, setRecovered] = useState<SearchGroup[]>([]);
   const retry = useClientRead({
-    read: (signal) => readInBackground('global-search', { organizationId, query, sources: retrying }, signal),
-    deps: [organizationId, query, retrying.join(',')],
-    enabled: retrying.length > 0,
+    read: (signal) =>
+      readInBackground(
+        'global-search',
+        { organizationId, query, sources: retrying ? [retrying] : undefined },
+        signal,
+      ),
+    deps: [organizationId, query, retrying],
+    enabled: retrying !== null,
     failureMessage: SEARCH_FAILED,
-    keepPreviousData: true,
   });
+  const answered = retry.data?.groups;
+  // A source answers whole: a recovered one leaves the retry, so a later retry
+  // of another source never reads it again. Adopted during render.
+  if (retrying && answered && answered.every((group) => group.status === 'loaded')) {
+    setRecovered((current) => [
+      ...current.filter((group) => !answered.some((next) => next.kind === group.kind)),
+      ...answered,
+    ]);
+    setRetrying(null);
+  }
   const shown = groups.map(
-    (group) => retry.data?.groups.find((answered) => answered.kind === group.kind) ?? group,
+    (group) =>
+      recovered.find((next) => next.kind === group.kind) ??
+      answered?.find((next) => next.kind === group.kind) ??
+      group,
   );
   if (shown.every((group) => group.status === 'loaded' && group.hits.length === 0))
     return (
@@ -113,7 +132,7 @@ function ResultGroups({
       />
     );
   const retryOf = (source: SearchSource) => () =>
-    retrying.includes(source) ? retry.reload() : setRetrying((current) => [...current, source]);
+    retrying === source ? retry.reload() : setRetrying(source);
   return (
     <>
       {shown.map((group) =>
@@ -122,7 +141,7 @@ function ResultGroups({
             key={group.kind}
             title={SEARCH_GROUP_LABELS[group.kind]}
             onRetry={retryOf(group.source)}
-            retryPending={retrying.includes(group.source) && retry.loading}
+            retryPending={retrying === group.source && retry.loading}
           >
             {SEARCH_FAILED}
           </SectionError>
