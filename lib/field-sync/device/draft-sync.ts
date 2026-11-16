@@ -145,6 +145,7 @@ async function untilNetworkReturnsIfLoaded(): Promise<AbortSignal[]> {
     const { untilNetworkReturns } = await import('./sync-runner');
     return [untilNetworkReturns()];
   } catch (error) {
+    // best-effort: without the signal the request still goes and only ends by itself; its answer reaches the person as always.
     logError('draft sync: the sync runner did not load', error);
     return [];
   }
