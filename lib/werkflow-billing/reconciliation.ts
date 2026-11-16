@@ -165,11 +165,13 @@ async function resendFailedMails({ admin, stripe, now, result, alarm }: Run): Pr
   const passed = new Set<string>();
   for (const row of batch) {
     // The attempt is recorded first, so the row moves back even when the resend fails before its claim.
-    const due = await recordMailAttempt(row.id, row.organization_id).catch((attemptError: unknown) => {
-      logError('reconcileWerkflowBilling: recording an attempt failed', attemptError);
-      result.complete = false;
-      return false;
-    });
+    const due = await recordMailAttempt({ mailId: row.id, organizationId: row.organization_id }).catch(
+      (attemptError: unknown) => {
+        logError('reconcileWerkflowBilling: recording an attempt failed', attemptError);
+        result.complete = false;
+        return false;
+      },
+    );
     if (!due) continue;
     tried.push(row.id);
     const outcome = await resend(row, stripe, now).catch((resendError: unknown) => {
