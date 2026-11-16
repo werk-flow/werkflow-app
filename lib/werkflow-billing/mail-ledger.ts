@@ -87,6 +87,15 @@ export async function recordUnsentBillingMail(row: MailRow, code: string): Promi
   if (error) throw billingFailure('billing_mail_settle_failed');
 }
 
+/** Ends a failed debit notice whose renewal has passed, so the daily comparison no longer resends it. */
+export async function expireDebitNotice(mailId: string, organizationId: string): Promise<void> {
+  const { error } = await createSupabaseAdminClient().rpc(
+    'expire_werkflow_billing_mail',
+    rpcArgs('expire_werkflow_billing_mail', { p_mail_id: mailId, p_organization_id: organizationId }),
+  );
+  if (error) throw billingFailure('billing_mail_expire_failed');
+}
+
 /** One customer mail (with its organization) or one alarm (with none). */
 export async function deliverBillingMail(
   input: MailRow & { mail: RenderedMail; replyTo?: string; attachments?: Attachments },

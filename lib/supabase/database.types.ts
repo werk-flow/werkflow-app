@@ -17694,6 +17694,10 @@ export type Database = {
         Args: { p_actor_id: string; p_org_id: string };
         Returns: undefined;
       };
+      expire_werkflow_billing_mail: {
+        Args: { p_mail_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
       export_work_artifact: {
         Args: {
           p_action_id: string;

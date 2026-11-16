@@ -6,6 +6,9 @@
 --    alarms (an invoice without its original or mail, a debit notice with too
 --    little lead time, a mail still undelivered, Stripe signals gone quiet,
 --    a comparison that did not run). The new rule keeps every existing kind.
+--    A debit notice whose renewal has passed is never due again: after its
+--    alarm, the comparison ends it as `expired`, so it leaves the failed
+--    rows it resends each day.
 -- 2. werkflow_billing_reconciliations records each run of the daily
 --    comparison, so the next run sees a missed one. No client role reaches
 --    it; the service role reads it and adds a row per run.
@@ -25,9 +28,43 @@ alter table public.werkflow_billing_mails add constraint werkflow_billing_mails_
   'alarm.reconciliation_missed'
 )) not valid;
 
--- The comparison resends every failed row each day.
+-- @destructive: after release 55088f06f04b: the deployed build never writes werkflow_billing_mails, and the new rule keeps every state the old one took
+alter table public.werkflow_billing_mails drop constraint werkflow_billing_mails_state_check;
+
+-- @destructive: after release 55088f06f04b: the deployed build writes no werkflow_billing_mails row, and the rule takes every state the old one took
+alter table public.werkflow_billing_mails add constraint werkflow_billing_mails_state_check
+  check (state in ('pending', 'sent', 'failed', 'expired')) not valid;
+
+-- Ends a failed debit notice whose renewal has passed. The row keeps no
+-- failure code (the check ties one to `failed`); the comparison's
+-- `mail_undelivered` alarm carried it. Any other row, or one of another
+-- organization, answers false.
+create or replace function public.expire_werkflow_billing_mail(p_mail_id uuid, p_organization_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path to ''
+as $$
+begin
+  update public.werkflow_billing_mails mail
+  set state = 'expired',
+      failure_code = null,
+      updated_at = now()
+  where mail.id = p_mail_id
+    and mail.organization_id = p_organization_id
+    and mail.kind = 'debit_notice'
+    and mail.state = 'failed';
+
+  return found;
+end;
+$$;
+
+revoke all on function public.expire_werkflow_billing_mail(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.expire_werkflow_billing_mail(uuid, uuid) to service_role;
+
+-- The comparison resends the failed rows longest without an attempt first.
 create index werkflow_billing_mails_failed_idx
-  on public.werkflow_billing_mails (updated_at)
+  on public.werkflow_billing_mails (updated_at, id)
   where state = 'failed';
 
 create table public.werkflow_billing_reconciliations (

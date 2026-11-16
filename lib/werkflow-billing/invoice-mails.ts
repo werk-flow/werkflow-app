@@ -182,11 +182,22 @@ export async function sendDebitNotice(
   throwFailure(outcome, [alarm]);
 }
 
-/** Sends a failed debit notice again from its ledger key, only for the renewal the key names. */
-export async function resendDebitNotice(key: string, stripe: StripeGateway): Promise<void> {
+/**
+ * Sends a failed debit notice again from its ledger key, only for the renewal
+ * the key names. Answers `passed`, without asking Stripe, once that renewal
+ * has come: the notice is then never due again.
+ */
+export async function resendDebitNotice(
+  key: string,
+  stripe: StripeGateway,
+  now: Date,
+): Promise<'resent' | 'passed'> {
   const named = /^(\w+)_(\d+)_\d+_[0-9a-f]{16}$/.exec(key);
   if (!named?.[1] || !named[2]) throw billingFailure('debit_notice_key_invalid');
-  await sendDebitNotice(named[1], stripe, { renewsAt: Number(named[2]) });
+  const renewsAt = Number(named[2]);
+  if (renewsAt * 1000 <= now.getTime()) return 'passed';
+  await sendDebitNotice(named[1], stripe, { renewsAt, now });
+  return 'resent';
 }
 
 const issuedInvoiceSchema = z.object({

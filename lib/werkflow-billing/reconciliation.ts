@@ -3,10 +3,11 @@ import 'server-only';
 import { formatBerlinLocalDate, formatBerlinLocalDateTime } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { readInBatches } from '@/lib/supabase/query-batches';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { resendDebitNotice, sendInvoiceMail, sendReceiptMail } from '@/lib/werkflow-billing/invoice-mails';
 import { raiseBillingAlarm } from '@/lib/werkflow-billing/mail-delivery';
+import { expireDebitNotice } from '@/lib/werkflow-billing/mail-ledger';
 import {
   type BillingAlarmFacts,
   type BillingAlarmKind,
@@ -20,8 +21,11 @@ import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
 // The daily comparison with Stripe (werk-flow/werkflow-planning#492), run by
 // Vercel Cron (app/api/werkflow-billing-reconciliation/route.ts). Each run:
 // 1. raises `reconciliation_missed` when the newest recorded run is older than 26 hours;
-// 2. sends every mail row still `failed` again, alarms included, and raises
-//    `mail_undelivered` for each one that fails again;
+// 2. sends the mail rows still `failed` again, longest without an attempt
+//    first, alarms included, and raises `mail_undelivered` for each one that
+//    fails again; a debit notice whose renewal has passed then ends `expired`.
+//    A backlog longer than one run waits for the next and leaves this one
+//    incomplete;
 // 3. compares the invoices Stripe finalized in the last 7 days, older than an
 //    hour, with issued originals and sent invoice mails: an issued invoice
 //    without its mail gets it now, and one still without either raises
@@ -40,7 +44,8 @@ const MISSED_AFTER = 26 * HOUR;
 const SETTLE = HOUR;
 /** Stripe keeps events 30 days and retries a signal for 3. */
 const SIGNAL_DAYS = 3;
-const FAILED_MAILS_CAP = 1000;
+/** Failed rows resent per run; a resend's claim moves its row to the back. */
+const FAILED_MAILS_PER_RUN = 1000;
 
 type Admin = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -52,6 +57,7 @@ export type ReconciliationRun = {
 };
 
 type Resend = (stripeObjectId: string, stripe: StripeGateway) => Promise<void>;
+type FailedMail = { id: string; kind: string; stripe_object_id: string; failure_code: string | null };
 
 const RESEND_CUSTOMER_MAIL: Readonly<Record<string, Resend>> = {
   payment_failed: handleFailedInvoice,
@@ -59,15 +65,12 @@ const RESEND_CUSTOMER_MAIL: Readonly<Record<string, Resend>> = {
   mandate_inactive: handleMandateChange,
   invoice: (id, stripe) => sendInvoiceMail(id, stripe),
   receipt: (id, stripe) => sendReceiptMail(id, stripe),
-  // Only the renewal its key names gets the notice; a passed one stays failed.
-  debit_notice: resendDebitNotice,
 };
 
-/** Sends one failed row again; the ledger then holds its new state. */
-async function resend(
-  row: { kind: string; stripe_object_id: string; failure_code: string | null },
-  stripe: StripeGateway,
-): Promise<void> {
+/** Sends one failed row again; the ledger then holds its new state. A debit notice whose renewal has passed answers `passed`. */
+async function resend(row: FailedMail, stripe: StripeGateway, now: Date): Promise<'resent' | 'passed'> {
+  // Only the renewal its key names gets the notice.
+  if (row.kind === 'debit_notice') return resendDebitNotice(row.stripe_object_id, stripe, now);
   const alarmKind = row.kind.replace(/^alarm\./, '');
   if (row.kind.startsWith('alarm.') && isBillingAlarmKind(alarmKind)) {
     // The first attempt's facts are not kept; the person reads the rest in Stripe.
@@ -79,25 +82,12 @@ async function resend(
         ['Erster Fehler', row.failure_code ?? 'unbekannt'],
       ],
     });
-    return;
+    return 'resent';
   }
   const send = RESEND_CUSTOMER_MAIL[row.kind];
   if (!send) throw billingFailure('billing_mail_kind_unknown');
   await send(row.stripe_object_id, stripe);
-}
-
-function failedMails(admin: Admin) {
-  return readCompleteRows(
-    (from, to) =>
-      // tenant-scope: cross-organization-by-design — the daily comparison resends every organization's failed mails and the alarms.
-      admin
-        .from('werkflow_billing_mails')
-        .select('id, kind, stripe_object_id, failure_code')
-        .eq('state', 'failed')
-        .order('id')
-        .range(from, to),
-    FAILED_MAILS_CAP,
-  );
+  return 'resent';
 }
 
 /** The ids a batched read found; a failed read fails the step. */
@@ -113,8 +103,8 @@ type Run = {
   now: Date;
   nowSeconds: number;
   result: ReconciliationRun;
-  /** Raises one alarm; a failed one leaves the run incomplete and the run goes on. */
-  alarm(kind: BillingAlarmKind, stripeObjectId: string, facts: BillingAlarmFacts): Promise<void>;
+  /** Raises one alarm and answers whether it went; a failed one leaves the run incomplete and the run goes on. */
+  alarm(kind: BillingAlarmKind, stripeObjectId: string, facts: BillingAlarmFacts): Promise<boolean>;
 };
 
 async function alarmMissedRun({ admin, nowSeconds, alarm }: Run): Promise<void> {
@@ -132,31 +122,58 @@ async function alarmMissedRun({ admin, nowSeconds, alarm }: Run): Promise<void> 
   }
 }
 
-async function resendFailedMails({ admin, stripe, result, alarm }: Run): Promise<void> {
-  const failed = await failedMails(admin);
-  if (failed.error) throw billingFailure('reconciliation_read_failed');
-  for (const row of failed.data) {
-    await resend(row, stripe).catch((error: unknown) =>
-      logError('reconcileWerkflowBilling: resend failed', error),
-    );
+async function resendFailedMails({ admin, stripe, now, result, alarm }: Run): Promise<void> {
+  // tenant-scope: cross-organization-by-design — the daily comparison resends every organization's failed mails and the alarms.
+  const { data: failed, error } = await admin
+    .from('werkflow_billing_mails')
+    .select('id, kind, stripe_object_id, failure_code')
+    .eq('state', 'failed')
+    .order('updated_at')
+    .order('id')
+    .limit(FAILED_MAILS_PER_RUN + 1);
+  if (error) throw billingFailure('reconciliation_read_failed');
+  const batch = failed.slice(0, FAILED_MAILS_PER_RUN);
+  const passed = new Set<string>();
+  for (const row of batch) {
+    const outcome = await resend(row, stripe, now).catch((resendError: unknown) => {
+      logError('reconcileWerkflowBilling: resend failed', resendError);
+      return 'resent' as const;
+    });
+    if (outcome === 'passed') passed.add(row.id);
     result.mailsResent += 1;
   }
-  const still = await failedMails(admin);
+  const still = await readInBatches(
+    batch.map((row) => row.id),
+    (ids) =>
+      // tenant-scope: cross-organization-by-design — the rows this run resent, of every organization.
+      admin
+        .from('werkflow_billing_mails')
+        .select('id, kind, organization_id, stripe_object_id, failure_code')
+        .eq('state', 'failed')
+        .in('id', ids)
+        .limit(ids.length),
+  );
   if (still.error) throw billingFailure('reconciliation_read_failed');
-  const resent = new Set(failed.data.map((row) => row.id));
   for (const row of still.data) {
-    if (!resent.has(row.id)) continue;
     // An undelivered-mail alarm that fails itself is resent tomorrow, never chained; the run shows it.
     if (row.kind === 'alarm.mail_undelivered') {
       result.complete = false;
       continue;
     }
-    await alarm('mail_undelivered', `${row.kind.replace('.', '_')}_${row.stripe_object_id}`, [
+    const alarmed = await alarm('mail_undelivered', `${row.kind.replace('.', '_')}_${row.stripe_object_id}`, [
       ['Mail', row.kind],
       ['Stripe-Bezug', row.stripe_object_id],
       ['Grund', row.failure_code ?? 'unbekannt'],
     ]);
+    // A notice whose renewal has passed is never due again: after its alarm it leaves the failed rows.
+    if (alarmed && passed.has(row.id) && row.organization_id) {
+      await expireDebitNotice(row.id, row.organization_id).catch((expireError: unknown) => {
+        logError('reconcileWerkflowBilling: ending a passed notice failed', expireError);
+        result.complete = false;
+      });
+    }
   }
+  if (failed.length > FAILED_MAILS_PER_RUN) throw billingFailure('reconciliation_backlog');
 }
 
 async function compareInvoices({ admin, stripe, nowSeconds, result, alarm }: Run): Promise<void> {
@@ -241,12 +258,14 @@ export async function reconcileWerkflowBilling(
 ): Promise<ReconciliationRun> {
   const admin = createSupabaseAdminClient();
   const result: ReconciliationRun = { complete: true, invoicesCompared: 0, mailsResent: 0, alarmsRaised: 0 };
-  const guarded = async (name: string, work: () => Promise<void>) => {
+  const guarded = async (name: string, work: () => Promise<void>): Promise<boolean> => {
     try {
       await work();
+      return true;
     } catch (error) {
       logError(`reconcileWerkflowBilling: ${name} failed`, error);
       result.complete = false;
+      return false;
     }
   };
   const run: Run = {

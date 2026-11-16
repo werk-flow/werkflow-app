@@ -36,11 +36,18 @@ console.error = (...parts: unknown[]) => {
 function query(table: string) {
   const filters: ((row: Row) => boolean)[] = [];
   let kind: unknown = null;
-  let newestFirst = false;
+  const sorts: { column: string; ascending: boolean }[] = [];
   let window: [number, number] = [0, Number.MAX_SAFE_INTEGER];
   const rows = () => {
     const found = (tables[table] ?? []).filter((row) => filters.every((filter) => filter(row)));
-    if (newestFirst) found.sort((a, b) => String(b.ran_at).localeCompare(String(a.ran_at)));
+    const compare = (a: Row, b: Row) => {
+      for (const { column, ascending } of sorts) {
+        const order = String(a[column] ?? '').localeCompare(String(b[column] ?? ''));
+        if (order !== 0) return ascending ? order : -order;
+      }
+      return 0;
+    };
+    found.sort(compare);
     return { data: found.slice(window[0], window[1] + 1), error: null };
   };
   const builder = {
@@ -50,13 +57,14 @@ function query(table: string) {
       filters.push((row) => row[column] === value);
       return builder;
     },
-    order: (_column: string, options?: { ascending: boolean }) => {
-      newestFirst = options?.ascending === false;
+    order: (column: string, options?: { ascending: boolean }) => {
+      sorts.push({ column, ascending: options?.ascending !== false });
       return builder;
     },
+    // Awaited as it is (the failed mails), or read on with `.maybeSingle`.
     limit: (count: number) => {
       window = [0, count - 1];
-      return builder;
+      return Object.assign(Promise.resolve().then(rows), { maybeSingle: builder.maybeSingle });
     },
     // Awaited as it is, or bounded by `.limit` first.
     in: (column: string, values: readonly unknown[]) => {
@@ -102,11 +110,13 @@ mock.module('@/lib/supabase/admin', () => ({
           row = {
             id: crypto.randomUUID(),
             kind: args.p_kind,
+            organization_id: args.p_organization_id,
             stripe_object_id: args.p_stripe_object_id,
             state: 'pending',
           };
           mails().push(row);
         }
+        if (row.state !== 'sent') row.updated_at = new Date().toISOString();
         return { data: row.state === 'sent' ? null : row.id, error: null };
       }
       if (name === 'settle_werkflow_billing_mail') {
@@ -116,6 +126,17 @@ mock.module('@/lib/supabase/admin', () => ({
         row.failure_code = args.p_failure_code ?? null;
         row.sent_at = args.p_outcome === 'sent' ? new Date().toISOString() : null;
         return { data: true, error: null };
+      }
+      if (name === 'expire_werkflow_billing_mail') {
+        const row = mails().find(
+          (mail) =>
+            mail.id === args.p_mail_id &&
+            mail.organization_id === args.p_organization_id &&
+            mail.kind === 'debit_notice' &&
+            mail.state === 'failed',
+        );
+        if (row) Object.assign(row, { state: 'expired', failure_code: null });
+        return { data: Boolean(row), error: null };
       }
       throw new Error(`unexpected function ${name}`);
     },
@@ -198,6 +219,7 @@ const DAY = 86_400;
 const NOW = Math.floor(Date.now() / 1000);
 const dayIn = (days: number) => formatBerlinLocalDate(new Date((NOW + days * DAY) * 1000));
 const CUSTOMER = 'rechnung@sonnenberg.example';
+const ORGANIZATION = '49200000-0000-4000-8000-000000000010';
 const ALARM = 'alarm@example.com';
 const SEPA = { kind: 'sepa_debit', ibanLastFour: '3000', mandateReference: 'MUSTERMANDAT0001' } as const;
 /** The account and mandate a customer switched to. */
@@ -271,7 +293,7 @@ const objects = {
   customers: {
     cus_test_0001: {
       id: 'cus_test_0001',
-      organizationId: crypto.randomUUID(),
+      organizationId: ORGANIZATION,
       email: CUSTOMER,
       name: 'Haustechnik Sonnenberg GmbH',
     },
@@ -547,6 +569,7 @@ mails().push(
   {
     id: crypto.randomUUID(),
     kind: 'debit_notice',
+    organization_id: ORGANIZATION,
     stripe_object_id: `sub_test_next_${NOW - 23 * DAY}_4900_${'0'.repeat(16)}`,
     state: 'failed',
     failure_code: 'email_daily_quota_exceeded',
@@ -573,6 +596,12 @@ assert.deepEqual([run.complete, run.invoicesCompared, run.mailsResent], [true, 3
 assert.equal(notices(), noticesBefore, 'a passed renewal got the next renewal notice');
 assert.ok(
   alarms('Abrechnungsmail weiter nicht zugestellt').some((mail) => mail.text.includes('sub_test_next_')),
+);
+// After its alarm, the passed notice leaves the failed rows for good.
+assert.equal(
+  mails().find((mail) => String(mail.stripe_object_id).startsWith('sub_test_next_'))?.state,
+  'expired',
+  'a debit notice whose renewal has passed stayed failed',
 );
 assert.ok(sentAt('invoice', 'in_test_quota'), 'the refused invoice mail was not resent');
 assert.ok(alarms('Zahlung fehlgeschlagen')[0]?.text.includes('vom täglichen Abgleich'));
@@ -624,6 +653,39 @@ mails().push({
 refuseSubject = 'Abrechnungsmail weiter nicht zugestellt';
 assert.equal((await reconcileWerkflowBilling(stripe)).complete, false);
 refuseSubject = null;
+
+// A failed backlog longer than one run: 1,000 notices whose renewals passed months ago fill the
+// first run, which ends them and reports the backlog; the alarm behind them goes in the next run.
+const backlogNotice = (index: number) =>
+  `sub_test_backlog${String(index)}_${NOW - 60 * DAY}_4900_${'0'.repeat(16)}`;
+for (let index = 0; index < 1000; index += 1) {
+  mails().push({
+    id: crypto.randomUUID(),
+    kind: 'debit_notice',
+    organization_id: ORGANIZATION,
+    stripe_object_id: backlogNotice(index),
+    state: 'failed',
+    failure_code: 'email_daily_quota_exceeded',
+    updated_at: new Date((NOW - 60 * DAY) * 1000).toISOString(),
+  });
+}
+mails().push({
+  id: crypto.randomUUID(),
+  kind: 'alarm.debit_failed',
+  stripe_object_id: 'in_test_backlog',
+  state: 'failed',
+  failure_code: 'email_daily_quota_exceeded',
+  updated_at: new Date().toISOString(),
+});
+const backlogAlarm = () => mails().find((mail) => mail.stripe_object_id === 'in_test_backlog');
+assert.equal((await reconcileWerkflowBilling(stripe)).complete, false, 'a backlog left the run complete');
+assert.equal(backlogAlarm()?.state, 'failed', 'the run resent more than its batch');
+assert.equal((await reconcileWerkflowBilling(stripe)).complete, true);
+assert.equal(backlogAlarm()?.state, 'sent', 'the failed backlog held back the retry');
+for (let index = 0; index < 1000; index += 1) {
+  const notice = mails().find((mail) => mail.stripe_object_id === backlogNotice(index));
+  assert.equal(notice?.state, 'expired', `the passed notice ${String(index)} stayed failed`);
+}
 
 // The route runs nothing without the cron secret, a wrong one, or a Stripe key.
 const call = (authorization?: string) =>
