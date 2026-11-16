@@ -78,17 +78,22 @@ async function changeCancellation(
     await recordRead(admin.context.orgId, current);
     return { success: false, error: refusal };
   }
-  let changed: StripeSubscriptionSnapshot;
   try {
     await gateway.subscriptions.setCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd);
-    // A read after the change, stamped when it began: if another session changed the
-    // subscription meanwhile, the newer of the two reads wins, not the later answer.
-    changed = await gateway.subscriptions.readSubscription(subscriptionId);
   } catch (error) {
     logError('changeCancellation: Stripe refused the change', error);
     return { success: false, error: 'stripe_unavailable' };
   }
-  return { success: true, shown: await recordRead(admin.context.orgId, changed) };
+  // A read after the change, stamped when it began: if another session changed the
+  // subscription meanwhile, the newer of the two reads wins, not the later answer.
+  // Stripe holds the change either way, so a failed read only delays the page.
+  try {
+    const changed = await gateway.subscriptions.readSubscription(subscriptionId);
+    return { success: true, shown: await recordRead(admin.context.orgId, changed) };
+  } catch (error) {
+    logError('changeCancellation: the read after the change failed', error);
+    return { success: true, shown: false };
+  }
 }
 
 /** Ends the organization's subscription at the end of the paid period. */

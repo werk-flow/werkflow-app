@@ -304,6 +304,20 @@ assert.equal(
 
 // --- A change Stripe holds but WerkFlow failed to record is said so, and the next step judges Stripe. ---
 
+// Stripe applies the change, then becomes unreachable for the read after it: still a success, shown later.
+for (const [change, cancelled] of [
+  [cancelWerkflowSubscription, true],
+  [resumeWerkflowSubscription, false],
+] as const) {
+  afterNextChange = async () => {
+    stripe.down = true;
+  };
+  assert.deepEqual(await change(ORGANIZATION_A), { success: true, shown: false });
+  stripe.down = false;
+  assert.equal(stripe.subscriptions.get('sub_test_a')?.cancelAtPeriodEnd, cancelled);
+}
+assert.equal(rowOf(ORGANIZATION_A)?.cancel_at_period_end, false);
+
 recordFails = true;
 assert.deepEqual(await cancelWerkflowSubscription(ORGANIZATION_A), { success: true, shown: false });
 assert.equal(stripe.subscriptions.get('sub_test_a')?.cancelAtPeriodEnd, true);
