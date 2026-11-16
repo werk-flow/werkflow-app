@@ -38,8 +38,16 @@ function noticeLeavesLeadTime(sentAt: Date, debitDate: string | null): boolean {
   return debitDate !== null && addLocalDays(formatBerlinLocalDate(sentAt), NOTICE_LEAD_DAYS) <= debitDate;
 }
 
-/** The debit notice's ledger key: one per subscription and renewal. */
-const renewalKey = (subscriptionId: string, renewsAt: number) => `${subscriptionId}_${renewsAt}`;
+/**
+ * The debit notice's ledger key: one per subscription, renewal and amount, so
+ * an invoice finds only a notice that announced its own amount, and a changed
+ * amount gets its own notice with its invoice (LQ-60).
+ */
+const renewalKey = (subscriptionId: string, renewsAt: number, amountCents: number) =>
+  `${subscriptionId}_${renewsAt}_${amountCents}`;
+
+/** The debit date a debit notice announces: the renewal's Berlin day. */
+const announcedDebitDate = (renewsAt: number) => formatBerlinLocalDate(new Date(renewsAt * 1000));
 
 /** When the mail of `kind` for the Stripe object went out; null while it has not. */
 async function sentAt(kind: CustomerMailKind, stripeObjectId: string): Promise<string | null> {
@@ -88,11 +96,13 @@ export async function sendDebitNotice(
   if (renewsAt !== undefined && renewsAt !== upcoming.renewsAt) return;
   // A notice that arrives after the renewal is no notice; the invoice mail then is one.
   if (upcoming.renewsAt * 1000 <= now.getTime()) return;
-  const key = renewalKey(subscriptionId, upcoming.renewsAt);
+  const key = renewalKey(subscriptionId, upcoming.renewsAt, upcoming.amountCents);
+  // A replay close to the renewal finds the notice sent days before and checks nothing again.
+  if (await sentAt('debit_notice', key)) return;
   const { creditorId, contact } = sellerContact();
   const debit: SepaDebit = {
     kind: 'sepa_debit',
-    debitDate: formatBerlinLocalDate(new Date(upcoming.renewsAt * 1000)),
+    debitDate: announcedDebitDate(upcoming.renewsAt),
     ibanLastFour: upcoming.method.ibanLastFour,
     mandateReference: upcoming.method.mandateReference,
     creditorId,
@@ -145,11 +155,14 @@ export async function sendInvoiceMail(
   if (sepa && !debitDate && !paid) throw billingFailure('werkflow_debit_date_pending');
   // Checked before each send attempt, so the attempt that sends was checked:
   // a sent invoice mail is never checked again. A mail first sent after the
-  // debit, as by the paid backstop, is late too.
+  // debit, as by the paid backstop, is late too. A debit notice counts only
+  // for its own amount and for a debit no earlier than the day it announced.
   if (sepa) {
-    const notice = debit.subscriptionId
-      ? await sentAt('debit_notice', renewalKey(debit.subscriptionId, debit.renewsAt))
+    const sentNotice = debit.subscriptionId
+      ? await sentAt('debit_notice', renewalKey(debit.subscriptionId, debit.renewsAt, invoice.gross_cents))
       : null;
+    const notice =
+      sentNotice && debitDate && debitDate >= announcedDebitDate(debit.renewsAt) ? sentNotice : null;
     if (!noticeLeavesLeadTime(notice ? new Date(notice) : now, debitDate)) {
       await lateNoticeAlarm(stripeInvoiceId, debitDate, notice ? 'Lastschriftankündigung' : 'Rechnungsmail');
     }

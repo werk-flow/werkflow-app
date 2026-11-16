@@ -59,11 +59,11 @@ const RESEND_CUSTOMER_MAIL: Readonly<Record<string, Resend>> = {
   mandate_inactive: handleMandateChange,
   invoice: (id, stripe) => sendInvoiceMail(id, stripe),
   receipt: (id, stripe) => sendReceiptMail(id, stripe),
-  // The key is `<subscription>_<renewal>`: only that renewal's notice goes; a passed one stays failed.
-  debit_notice: (key, stripe) =>
-    sendDebitNotice(key.slice(0, key.lastIndexOf('_')), stripe, {
-      renewsAt: Number(key.slice(key.lastIndexOf('_') + 1)),
-    }),
+  // The key is `<subscription>_<renewal>_<amount>`: only that renewal's notice goes; a passed one stays failed.
+  debit_notice: (key, stripe) => {
+    const [subscriptionId, renewsAt] = [key.replace(/_\d+_\d+$/, ''), key.split('_').at(-2)];
+    return sendDebitNotice(subscriptionId, stripe, { renewsAt: Number(renewsAt) });
+  },
 };
 
 /** Sends one failed row again; the ledger then holds its new state. */
@@ -153,8 +153,12 @@ async function resendFailedMails({ admin, stripe, result, alarm }: Run): Promise
   if (still.error) throw billingFailure('reconciliation_read_failed');
   const resent = new Set(failed.data.map((row) => row.id));
   for (const row of still.data) {
-    // An undelivered-mail alarm that fails itself is resent tomorrow, never chained.
-    if (!resent.has(row.id) || row.kind === 'alarm.mail_undelivered') continue;
+    if (!resent.has(row.id)) continue;
+    // An undelivered-mail alarm that fails itself is resent tomorrow, never chained; the run shows it.
+    if (row.kind === 'alarm.mail_undelivered') {
+      result.complete = false;
+      continue;
+    }
     await alarm('mail_undelivered', `${row.kind.replace('.', '_')}_${row.stripe_object_id}`, [
       ['Mail', row.kind],
       ['Stripe-Bezug', row.stripe_object_id],
