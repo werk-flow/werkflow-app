@@ -66,10 +66,10 @@ describe('ending subscriptions at Stripe', () => {
     expect(requests.some((request) => request.key.includes('refunds'))).toBe(false);
   });
 
-  test('a duplicate whose refund was cancelled is refunded again under a new key, and one with a refund is not', async () => {
-    const answers = {
+  test('a cleanup cut short reuses its refund key, a cancelled refund gets a new one, and the duplicate ends only after a live refund', async () => {
+    const answers: Record<string, unknown> = {
       'GET /v1/subscriptions/sub_test_dup': {
-        ...subscription('sub_test_dup', 'canceled'),
+        ...subscription('sub_test_dup', 'active'),
         latest_invoice: 'in_test_1',
       },
       'GET /v1/invoice_payments': list([
@@ -80,20 +80,58 @@ describe('ending subscriptions at Stripe', () => {
           payment: { payment_intent: 'pi_test_1' },
         },
       ]),
-      'GET /v1/refunds': list([{ id: 're_test_1', object: 'refund', status: 'canceled' }]),
-      'POST /v1/refunds': { id: 're_test_2', object: 'refund', status: 'pending' },
+      'GET /v1/refunds': list([]),
+      'POST /v1/refunds': { id: 're_test_1', object: 'refund', status: 'pending' },
+      // No answer for the cancellation yet: Stripe refuses it, and the cleanup fails after its refund.
     };
-    const cancelledOnce = gatewayAnswering(answers);
-    await cancelledOnce.calls.cancelDuplicateSubscription('sub_test_dup');
-    const created = cancelledOnce.requests.find((request) => request.key === 'POST /v1/refunds');
-    expect(created?.idempotencyKey).toBe('werkflow-duplicate-refund-pi_test_1-1');
-    expect(created?.body).toContain('metadata[werkflow_duplicate_subscription_id]=sub_test_dup');
+    const { calls, requests } = gatewayAnswering(answers);
+    const refundKeys = () =>
+      requests
+        .filter((request) => request.key === 'POST /v1/refunds')
+        .map((request) => request.idempotencyKey);
+    const cancellations = () =>
+      requests.filter((request) => request.key === 'DELETE /v1/subscriptions/sub_test_dup');
 
-    const pending = gatewayAnswering({
-      ...answers,
-      'GET /v1/refunds': list([{ id: 're_test_2', object: 'refund', status: 'failed' }]),
-    });
-    await pending.calls.cancelDuplicateSubscription('sub_test_dup');
-    expect(pending.requests.some((request) => request.key === 'POST /v1/refunds')).toBe(false);
+    // The first attempt issues its refund, then the cancellation fails.
+    await expect(calls.cancelDuplicateSubscription('sub_test_dup')).rejects.toThrow('stripe_call_failed');
+    expect(refundKeys()).toEqual(['werkflow-duplicate-refund-pi_test_1-0']);
+    expect(requests.find((request) => request.key === 'POST /v1/refunds')?.body).toContain(
+      'metadata[werkflow_duplicate_subscription_id]=sub_test_dup',
+    );
+
+    // A retry whose create answer was lost reuses the attempt's key, so Stripe replays one refund.
+    await expect(calls.cancelDuplicateSubscription('sub_test_dup')).rejects.toThrow('stripe_call_failed');
+    expect(refundKeys()).toEqual([
+      'werkflow-duplicate-refund-pi_test_1-0',
+      'werkflow-duplicate-refund-pi_test_1-0',
+    ]);
+
+    // Stripe lists the refund as pending: the retry issues none, and the cancellation still fails.
+    answers['GET /v1/refunds'] = list([{ id: 're_test_1', object: 'refund', status: 'pending' }]);
+    await expect(calls.cancelDuplicateSubscription('sub_test_dup')).rejects.toThrow('stripe_call_failed');
+    expect(refundKeys()).toHaveLength(2);
+
+    // The refund was cancelled meanwhile: the next attempt issues a new one under a new key, then ends the duplicate.
+    answers['GET /v1/refunds'] = list([{ id: 're_test_1', object: 'refund', status: 'canceled' }]);
+    answers['POST /v1/refunds'] = { id: 're_test_2', object: 'refund', status: 'pending' };
+    answers['DELETE /v1/subscriptions/sub_test_dup'] = subscription('sub_test_dup', 'canceled');
+    await calls.cancelDuplicateSubscription('sub_test_dup');
+    expect(refundKeys().at(-1)).toBe('werkflow-duplicate-refund-pi_test_1-1');
+    expect(cancellations()).toHaveLength(4);
+    const lastRefund = requests.findLastIndex((request) => request.key === 'POST /v1/refunds');
+    const lastCancellation = requests.findLastIndex(
+      (request) => request.key === 'DELETE /v1/subscriptions/sub_test_dup',
+    );
+    expect(lastRefund).toBeLessThan(lastCancellation);
+
+    // A refund Stripe reported failed is a person's to repeat: no new refund.
+    answers['GET /v1/refunds'] = list([{ id: 're_test_2', object: 'refund', status: 'failed' }]);
+    answers['GET /v1/subscriptions/sub_test_dup'] = {
+      ...subscription('sub_test_dup', 'canceled'),
+      latest_invoice: 'in_test_1',
+    };
+    const before = refundKeys().length;
+    await calls.cancelDuplicateSubscription('sub_test_dup');
+    expect(refundKeys()).toHaveLength(before);
   });
 });
