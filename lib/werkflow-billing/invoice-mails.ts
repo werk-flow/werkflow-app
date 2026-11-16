@@ -1,9 +1,12 @@
 import 'server-only';
 
+import { createHash } from 'node:crypto';
+
 import { addLocalDays, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
 import { readWerkflowBillingObject } from '@/lib/storage/r2';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { Tables } from '@/lib/supabase/database.types';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
 import type { CustomerMailKind } from '@/lib/werkflow-billing/mail-ledger';
 import {
@@ -19,6 +22,7 @@ import {
 } from '@/lib/werkflow-billing/mails/invoice';
 import { readWerkflowSeller } from '@/lib/werkflow-billing/seller';
 import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
+import { z } from '@/lib/zod';
 
 // The debit notice, the invoice mail and the receipt (werk-flow/werkflow-planning#492).
 // Each goes once per Stripe object through the mail ledger, and a refused send
@@ -38,16 +42,34 @@ function noticeLeavesLeadTime(sentAt: Date, debitDate: string | null): boolean {
   return debitDate !== null && addLocalDays(formatBerlinLocalDate(sentAt), NOTICE_LEAD_DAYS) <= debitDate;
 }
 
+type SepaPayment = Pick<SepaDebit, 'mandateReference' | 'ibanLastFour'>;
+
 /**
- * The debit notice's ledger key: one per subscription, renewal and amount, so
- * an invoice finds only a notice that announced its own amount, and a changed
- * amount gets its own notice with its invoice (LQ-60).
+ * The debit notice's ledger key: one per subscription, renewal, amount and
+ * payment (mandate reference and account ending), so an invoice finds only a
+ * notice that announced its own amount from its own account, and a changed
+ * amount or mandate gets its own notice (LQ-60). The payment is hashed: the key
+ * names the row in alarms and logs, which carry no personal data.
  */
-const renewalKey = (subscriptionId: string, renewsAt: number, amountCents: number) =>
-  `${subscriptionId}_${renewsAt}_${amountCents}`;
+function debitNoticeKey(
+  subscriptionId: string,
+  renewsAt: number,
+  amountCents: number,
+  payment: SepaPayment,
+): string {
+  const identity = createHash('sha256')
+    .update(JSON.stringify([payment.mandateReference, payment.ibanLastFour]))
+    .digest('hex')
+    .slice(0, 16);
+  return `${subscriptionId}_${renewsAt}_${amountCents}_${identity}`;
+}
 
 /** The debit date a debit notice announces: the renewal's Berlin day. */
 const announcedDebitDate = (renewsAt: number) => formatBerlinLocalDate(new Date(renewsAt * 1000));
+
+const sentMailSchema = z.object({
+  sent_at: z.iso.datetime({ offset: true }).nullable(),
+}) satisfies z.ZodType<Pick<Tables<'werkflow_billing_mails'>, 'sent_at'>>;
 
 /** When the mail of `kind` for the Stripe object went out; null while it has not. */
 async function sentAt(kind: CustomerMailKind, stripeObjectId: string): Promise<string | null> {
@@ -58,15 +80,29 @@ async function sentAt(kind: CustomerMailKind, stripeObjectId: string): Promise<s
     .eq('kind', kind)
     .eq('stripe_object_id', stripeObjectId)
     .maybeSingle();
-  if (error) {
-    logError('invoiceMails: werkflow_billing_mails read failed', error);
+  const row = sentMailSchema.nullable().safeParse(data);
+  if (error || !row.success) {
+    logError('invoiceMails: werkflow_billing_mails read failed', error ?? row.error);
     throw billingFailure('billing_mail_read_failed');
   }
-  return data?.sent_at ?? null;
+  return row.data?.sent_at ?? null;
 }
 
-async function lateNoticeAlarm(stripeObjectId: string, debitDate: string | null, notice: string) {
-  await raiseBillingAlarm({
+/**
+ * Raises an alarm beside a customer mail and answers its failure instead of
+ * throwing it, so a missing alarm address or a refused alarm never holds back
+ * the customer's mail. The alarm row stays `failed` and the daily comparison
+ * sends it again; the caller throws the failure after the customer mail.
+ */
+async function alarmBeside(alarm: Parameters<typeof raiseBillingAlarm>[0]): Promise<Error | null> {
+  return raiseBillingAlarm(alarm).then(
+    () => null,
+    (error: unknown) => (error instanceof Error ? error : billingFailure('billing_alarm_failed')),
+  );
+}
+
+function lateNoticeAlarm(stripeObjectId: string, debitDate: string | null, notice: string) {
+  return alarmBeside({
     kind: 'debit_notice_late',
     stripeObjectId,
     facts: [
@@ -74,6 +110,16 @@ async function lateNoticeAlarm(stripeObjectId: string, debitDate: string | null,
       ['Ankündigung', notice],
     ],
   });
+}
+
+/** Throws the customer mail's failure first, then an alarm's, so Stripe delivers the signal again. */
+function throwFailure(
+  outcome: Awaited<ReturnType<typeof deliverCustomerBillingMail>>,
+  alarmFailures: (Error | null)[],
+) {
+  if (outcome.status === 'retryable' || outcome.status === 'permanent') throw billingFailure(outcome.code);
+  const alarmFailure = alarmFailures.find((failure) => failure !== null);
+  if (alarmFailure) throw alarmFailure;
 }
 
 function sellerContact() {
@@ -96,7 +142,7 @@ export async function sendDebitNotice(
   if (renewsAt !== undefined && renewsAt !== upcoming.renewsAt) return;
   // A notice that arrives after the renewal is no notice; the invoice mail then is one.
   if (upcoming.renewsAt * 1000 <= now.getTime()) return;
-  const key = renewalKey(subscriptionId, upcoming.renewsAt, upcoming.amountCents);
+  const key = debitNoticeKey(subscriptionId, upcoming.renewsAt, upcoming.amountCents, upcoming.method);
   // A replay close to the renewal finds the notice sent days before and checks nothing again.
   if (await sentAt('debit_notice', key)) return;
   const { creditorId, contact } = sellerContact();
@@ -108,33 +154,57 @@ export async function sendDebitNotice(
     creditorId,
   };
   // Checked before each send attempt: a sent notice is never checked again.
-  if (!noticeLeavesLeadTime(now, debit.debitDate)) {
-    await lateNoticeAlarm(key, debit.debitDate, 'Lastschriftankündigung');
-  }
+  const lateAlarm = noticeLeavesLeadTime(now, debit.debitDate)
+    ? null
+    : await lateNoticeAlarm(key, debit.debitDate, 'Lastschriftankündigung');
   const outcome = await deliverCustomerBillingMail({
     kind: 'debit_notice',
     customer: await stripe.readCustomer(upcoming.customerId),
     stripeObjectId: key,
     mail: renderDebitNoticeMail({ amountCents: upcoming.amountCents, debit, contact }),
   });
-  if (outcome.status === 'not_sent') {
-    await lateNoticeAlarm(key, debit.debitDate, describeCustomerMail(outcome));
-  }
-  if (outcome.status === 'retryable' || outcome.status === 'permanent') throw billingFailure(outcome.code);
+  const unsentAlarm =
+    outcome.status === 'not_sent'
+      ? await lateNoticeAlarm(key, debit.debitDate, describeCustomerMail(outcome))
+      : null;
+  throwFailure(outcome, [lateAlarm, unsentAlarm]);
 }
 
-async function issuedInvoice(stripeInvoiceId: string) {
+/** Sends a failed debit notice again from its ledger key, only for the renewal the key names. */
+export async function resendDebitNotice(key: string, stripe: StripeGateway): Promise<void> {
+  const named = /^(\w+)_(\d+)_\d+_[0-9a-f]{16}$/.exec(key);
+  if (!named?.[1] || !named[2]) throw billingFailure('debit_notice_key_invalid');
+  await sendDebitNotice(named[1], stripe, { renewsAt: Number(named[2]) });
+}
+
+const issuedInvoiceSchema = z.object({
+  number: z.string().min(1),
+  issue_date: z.iso.date(),
+  gross_cents: z.number().int().nonnegative(),
+  due_cents: z.number().int().nonnegative(),
+  file_key: z.string().min(1),
+  stripe_customer_id: z.string().min(1),
+}) satisfies z.ZodType<
+  Pick<
+    Tables<'werkflow_invoices'>,
+    'number' | 'issue_date' | 'gross_cents' | 'due_cents' | 'file_key' | 'stripe_customer_id'
+  >
+>;
+
+async function issuedInvoice(stripeInvoiceId: string): Promise<z.infer<typeof issuedInvoiceSchema>> {
   // tenant-scope: cross-organization-by-design — the Stripe invoice id is unique across organizations; the mail goes to the customer Stripe names.
   const { data, error } = await createSupabaseAdminClient()
     .from('werkflow_invoices')
     .select('number, issue_date, gross_cents, due_cents, file_key, stripe_customer_id')
     .eq('stripe_invoice_id', stripeInvoiceId)
     .maybeSingle();
-  if (error || !data) {
-    if (error) logError('invoiceMails: werkflow_invoices read failed', error);
-    throw billingFailure(error ? 'werkflow_invoice_record_failed' : 'werkflow_invoice_not_issued');
+  const row = issuedInvoiceSchema.nullable().safeParse(data);
+  if (error || !row.success) {
+    logError('invoiceMails: werkflow_invoices read failed', error ?? row.error);
+    throw billingFailure('werkflow_invoice_record_failed');
   }
-  return data;
+  if (!row.data) throw billingFailure('werkflow_invoice_not_issued');
+  return row.data;
 }
 
 /** The invoice mail with its original, once per issued invoice; called after the issue step. */
@@ -156,15 +226,23 @@ export async function sendInvoiceMail(
   // Checked before each send attempt, so the attempt that sends was checked:
   // a sent invoice mail is never checked again. A mail first sent after the
   // debit, as by the paid backstop, is late too. A debit notice counts only
-  // for its own amount and for a debit no earlier than the day it announced.
+  // for its own amount and account, and for a debit no earlier than the day it announced.
+  let lateAlarm: Error | null = null;
   if (sepa) {
     const sentNotice = debit.subscriptionId
-      ? await sentAt('debit_notice', renewalKey(debit.subscriptionId, debit.renewsAt, invoice.gross_cents))
+      ? await sentAt(
+          'debit_notice',
+          debitNoticeKey(debit.subscriptionId, debit.renewsAt, invoice.gross_cents, sepa),
+        )
       : null;
     const notice =
       sentNotice && debitDate && debitDate >= announcedDebitDate(debit.renewsAt) ? sentNotice : null;
     if (!noticeLeavesLeadTime(notice ? new Date(notice) : now, debitDate)) {
-      await lateNoticeAlarm(stripeInvoiceId, debitDate, notice ? 'Lastschriftankündigung' : 'Rechnungsmail');
+      lateAlarm = await lateNoticeAlarm(
+        stripeInvoiceId,
+        debitDate,
+        notice ? 'Lastschriftankündigung' : 'Rechnungsmail',
+      );
     }
   }
   const payment =
@@ -195,14 +273,15 @@ export async function sendInvoiceMail(
       },
     ],
   });
-  if (outcome.status === 'not_sent') {
-    await raiseBillingAlarm({
-      kind: 'invoice_undelivered',
-      stripeObjectId: stripeInvoiceId,
-      facts: [['Rechnungsmail', describeCustomerMail(outcome)]],
-    });
-  }
-  if (outcome.status === 'retryable' || outcome.status === 'permanent') throw billingFailure(outcome.code);
+  const unsentAlarm =
+    outcome.status === 'not_sent'
+      ? await alarmBeside({
+          kind: 'invoice_undelivered',
+          stripeObjectId: stripeInvoiceId,
+          facts: [['Rechnungsmail', describeCustomerMail(outcome)]],
+        })
+      : null;
+  throwFailure(outcome, [lateAlarm, unsentAlarm]);
 }
 
 /** The receipt once Stripe reports the invoice paid; an invoice with nothing paid gets none. */

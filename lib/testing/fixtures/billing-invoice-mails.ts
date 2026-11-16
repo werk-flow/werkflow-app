@@ -127,7 +127,8 @@ mock.module('@/lib/storage/r2', () => ({
 
 // A fake Resend: answers each request with the next queued status, then 200; a known key answers its first id.
 const resendAnswers: number[] = [];
-const sent: { to: string; subject: string; text: string; attachments: unknown }[] = [];
+/** Each accepted mail, with the ledger row its idempotency key names. */
+const sent: { mailId: string; to: string; subject: string; text: string; attachments: unknown }[] = [];
 const resendKeys = new Map<string, string>();
 /** Resend refuses every mail whose subject contains this, as an exhausted quota would. */
 let refuseSubject: string | null = null;
@@ -146,6 +147,7 @@ globalThis.fetch = Object.assign(
     if (status !== 200) return Response.json({ name: 'daily_quota_exceeded' }, { status });
     const to: unknown = Reflect.get(body, 'to');
     sent.push({
+      mailId: key.split('/')[1] ?? '',
       to: Array.isArray(to) ? String(to[0]) : '',
       subject: String(Reflect.get(body, 'subject')),
       text: String(Reflect.get(body, 'text')),
@@ -188,11 +190,10 @@ const dayIn = (days: number) => formatBerlinLocalDate(new Date((NOW + days * DAY
 const CUSTOMER = 'rechnung@sonnenberg.example';
 const ALARM = 'alarm@example.com';
 const SEPA = { kind: 'sepa_debit', ibanLastFour: '3000', mandateReference: 'MUSTERMANDAT0001' } as const;
-const upcoming = (
-  subscriptionId: string,
-  days: number,
-  method: typeof SEPA | { kind: 'card'; lastFour: string },
-) => ({
+/** The account and mandate a customer switched to. */
+const SEPA_NEW = { kind: 'sepa_debit', ibanLastFour: '4000', mandateReference: 'MUSTERMANDAT0002' } as const;
+type DebitMethod = Awaited<ReturnType<StripeGateway['readUpcomingDebit']>>['method'];
+const upcoming = (subscriptionId: string, days: number, method: DebitMethod) => ({
   subscriptionId,
   customerId: 'cus_test_0001',
   amountCents: 4900,
@@ -231,6 +232,14 @@ const invoiceDebits = {
     ...invoiceDebit('in_test_changed', dayIn(7), 'sub_test_renew'),
     renewsAt: NOW + 7 * DAY,
   },
+  // The renewal of a customer who switched mandate and account a day before it.
+  in_test_switch: {
+    ...invoiceDebit('in_test_switch', dayIn(7), 'sub_test_switch'),
+    renewsAt: NOW + 7 * DAY,
+    method: SEPA_NEW,
+  },
+  // Debited today; its late-notice alarm is refused.
+  in_test_alarmrefused: invoiceDebit('in_test_alarmrefused', dayIn(0)),
 };
 for (const id of Object.keys(invoiceDebits)) {
   tables.werkflow_invoices?.push({
@@ -257,6 +266,8 @@ const objects = {
     sub_test_renew: upcoming('sub_test_renew', 7, SEPA),
     sub_test_short: upcoming('sub_test_short', 1, SEPA),
     sub_test_next: upcoming('sub_test_next', 7, SEPA),
+    sub_test_switch: upcoming('sub_test_switch', 7, SEPA),
+    sub_test_noaddress: upcoming('sub_test_noaddress', 1, SEPA),
     sub_test_card: upcoming('sub_test_card', 7, { kind: 'card', lastFour: '4242' }),
   },
   invoiceDebits,
@@ -313,6 +324,7 @@ assert.equal(alarms(LATE).length, 1);
 const beforeCard = sent.length;
 assert.equal(await deliver('invoice.upcoming', renewal('sub_test_card')), null);
 assert.equal(sent.length, beforeCard, 'a card renewal got a debit notice');
+assert.equal(await deliver('invoice.upcoming', renewal('sub_test_switch')), null);
 
 // The first invoice: its original issued, the mail goes once with the PDF and announces the debit.
 assert.equal(await deliver('invoice.finalized', { id: 'in_test_first' }), null);
@@ -362,24 +374,57 @@ assert.equal(await deliver('invoice.finalized', { id: 'in_test_quota' }), 'email
 setSystemTime(new Date((NOW + 6 * DAY) * 1000));
 assert.equal(await deliver('invoice.upcoming', renewal('sub_test_renew')), null);
 assert.equal(alarms(LATE).length, 3);
-// At the renewal its invoice counts the notice of 7 days ago; an invoice of another amount does not.
+// A customer who switches mandate and account before the renewal gets a new
+// notice naming them; one day ahead, it raises the alarm.
+objects.upcomingDebits.sub_test_switch = upcoming('sub_test_switch', 7, SEPA_NEW);
+assert.equal(await deliver('invoice.upcoming', renewal('sub_test_switch')), null);
+assert.equal(
+  sent.filter((mail) => mail.subject.startsWith('Ankündigung') && mail.text.includes('MUSTERMANDAT0002'))
+    .length,
+  1,
+  'a changed mandate got no notice of its own',
+);
+assert.equal(alarms(LATE).length, 4);
+// At the renewal its invoice counts the notice of 7 days ago; an invoice of
+// another amount does not, nor one whose mandate the old notice did not name.
 setSystemTime(new Date((NOW + 7 * DAY + 3600) * 1000));
 assert.equal(await deliver('invoice.finalized', { id: 'in_test_renewal' }), null);
 assert.equal(await deliver('invoice.finalized', { id: 'in_test_changed' }), null);
-assert.equal(alarms(LATE).length, 4);
+assert.equal(alarms(LATE).length, 5);
 assert.ok(alarms(LATE).at(-1)?.text.includes('in_test_changed'));
+assert.equal(await deliver('invoice.finalized', { id: 'in_test_switch' }), null);
+assert.equal(alarms(LATE).length, 6);
+assert.ok(alarms(LATE).at(-1)?.text.includes('in_test_switch'));
 setSystemTime(new Date(NOW * 1000));
 
 // The rule: every SEPA debit had a notice at least 2 days ahead, or an alarm for it went out.
 const sentAt = (kind: string, id: string) =>
   mails().find((mail) => mail.kind === kind && mail.stripe_object_id === id && mail.state === 'sent')
     ?.sent_at;
+// The invoice whose alarm is refused is checked after the comparison resends it.
 for (const debit of Object.values(invoiceDebits)) {
-  if (!debit.expectedDebitDate || debit.id === 'in_test_quota') continue;
+  if (!debit.expectedDebitDate || debit.id === 'in_test_quota' || debit.id === 'in_test_alarmrefused')
+    continue;
   const gross = tables.werkflow_invoices?.find((row) => row.stripe_invoice_id === debit.id)?.gross_cents;
-  const noticeAt =
-    sentAt('debit_notice', `${debit.subscriptionId}_${debit.renewsAt}_${String(gross)}`) ??
-    sentAt('invoice', debit.id);
+  const method: DebitMethod = debit.method;
+  const sepa = method?.kind === 'sepa_debit' ? method : null;
+  // A notice counts for this renewal and amount only if its mail named this debit's mandate and account.
+  const notice = mails().find(
+    (row) =>
+      sepa &&
+      row.kind === 'debit_notice' &&
+      row.state === 'sent' &&
+      String(row.stripe_object_id).startsWith(
+        `${debit.subscriptionId}_${debit.renewsAt}_${String(gross)}_`,
+      ) &&
+      sent.some(
+        (mail) =>
+          mail.mailId === row.id &&
+          mail.text.includes(String(sepa.mandateReference)) &&
+          mail.text.includes(String(sepa.ibanLastFour)),
+      ),
+  );
+  const noticeAt = notice?.sent_at ?? sentAt('invoice', debit.id);
   assert.ok(noticeAt, `${debit.id} was debited without a notice`);
   const early =
     formatBerlinLocalDate(new Date(Date.parse(String(noticeAt)) + 2 * DAY * 1000)) <= debit.expectedDebitDate;
@@ -399,6 +444,40 @@ assert.equal(
 );
 assert.equal(sent.filter((mail) => mail.subject === 'Deine WerkFlow-Rechnung MUSTER-first').length, 1);
 
+// An alarm that cannot go out never holds back the customer's mail: the mail
+// goes, the signal fails with the alarm's code, and the alarm row stays failed.
+const failedAlarm = (id: string) =>
+  mails().find(
+    (mail) => mail.kind === 'alarm.debit_notice_late' && String(mail.stripe_object_id).includes(id),
+  );
+delete process.env.WERKFLOW_ALARM_EMAIL;
+assert.equal(
+  await deliver('invoice.upcoming', renewal('sub_test_noaddress')),
+  'billing_alarm_address_missing',
+);
+process.env.WERKFLOW_ALARM_EMAIL = ALARM;
+assert.equal(
+  sent.filter(
+    (mail) =>
+      mail.to === CUSTOMER &&
+      mail.subject === `Ankündigung: Lastschrift für WerkFlow am ${dayIn(1).split('-').reverse().join('.')}`,
+  ).length,
+  2,
+  'the notice without an alarm address did not go',
+);
+assert.deepEqual(
+  [failedAlarm('sub_test_noaddress')?.state, failedAlarm('sub_test_noaddress')?.failure_code],
+  ['failed', 'billing_alarm_address_missing'],
+);
+refuseSubject = LATE;
+assert.equal(
+  await deliver('invoice.finalized', { id: 'in_test_alarmrefused' }),
+  'email_daily_quota_exceeded',
+);
+refuseSubject = null;
+assert.ok(sentAt('invoice', 'in_test_alarmrefused'), 'a refused alarm held back the invoice mail');
+assert.equal(failedAlarm('in_test_alarmrefused')?.state, 'failed');
+
 // The daily comparison. A run 30 hours ago means one was missed; a refused alarm and a
 // receipt whose invoice Stripe no longer answers are still failed.
 tables.werkflow_billing_reconciliations?.push({
@@ -410,7 +489,7 @@ mails().push(
   {
     id: crypto.randomUUID(),
     kind: 'debit_notice',
-    stripe_object_id: `sub_test_next_${NOW - 23 * DAY}`,
+    stripe_object_id: `sub_test_next_${NOW - 23 * DAY}_4900_${'0'.repeat(16)}`,
     state: 'failed',
     failure_code: 'email_daily_quota_exceeded',
   },
@@ -432,13 +511,25 @@ mails().push(
 const notices = () => sent.filter((mail) => mail.subject.startsWith('Ankündigung')).length;
 const noticesBefore = notices();
 const run = await reconcileWerkflowBilling(stripe);
-assert.deepEqual([run.complete, run.invoicesCompared, run.mailsResent], [true, 3, 4]);
+assert.deepEqual([run.complete, run.invoicesCompared, run.mailsResent], [true, 3, 6]);
 assert.equal(notices(), noticesBefore, 'a passed renewal got the next renewal notice');
 assert.ok(
   alarms('Abrechnungsmail weiter nicht zugestellt').some((mail) => mail.text.includes('sub_test_next_')),
 );
 assert.ok(sentAt('invoice', 'in_test_quota'), 'the refused invoice mail was not resent');
 assert.ok(alarms('Zahlung fehlgeschlagen')[0]?.text.includes('vom täglichen Abgleich'));
+// Both alarms that could not go out before go now, naming their first failure.
+for (const [id, code] of [
+  ['sub_test_noaddress', 'billing_alarm_address_missing'],
+  ['in_test_alarmrefused', 'email_daily_quota_exceeded'],
+]) {
+  assert.ok(
+    alarms(LATE).some(
+      (mail) => mail.text.includes(String(id)) && mail.text.includes(`Erster Fehler: ${String(code)}`),
+    ),
+    `the alarm for ${String(id)} was not resent`,
+  );
+}
 assert.equal(alarms('Täglicher Abgleich ausgefallen').length, 1);
 assert.ok(
   alarms('Abrechnungsmail weiter nicht zugestellt').some((mail) => mail.text.includes('in_test_gone')),
@@ -482,6 +573,9 @@ const call = (authorization?: string) =>
     }),
   );
 const runs = tables.werkflow_billing_reconciliations?.length;
+// Neither secret comes from the environment the tests run in.
+delete process.env.CRON_SECRET;
+delete process.env.STRIPE_SECRET_KEY;
 assert.equal((await call()).status, 503);
 process.env.CRON_SECRET = 'synthetic-cron-secret-0123456789abcdef';
 assert.equal((await call('Bearer wrong')).status, 404);

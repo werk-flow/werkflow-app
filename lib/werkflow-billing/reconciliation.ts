@@ -5,7 +5,7 @@ import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
-import { sendDebitNotice, sendInvoiceMail, sendReceiptMail } from '@/lib/werkflow-billing/invoice-mails';
+import { resendDebitNotice, sendInvoiceMail, sendReceiptMail } from '@/lib/werkflow-billing/invoice-mails';
 import { raiseBillingAlarm } from '@/lib/werkflow-billing/mail-delivery';
 import {
   type BillingAlarmFacts,
@@ -59,11 +59,8 @@ const RESEND_CUSTOMER_MAIL: Readonly<Record<string, Resend>> = {
   mandate_inactive: handleMandateChange,
   invoice: (id, stripe) => sendInvoiceMail(id, stripe),
   receipt: (id, stripe) => sendReceiptMail(id, stripe),
-  // The key is `<subscription>_<renewal>_<amount>`: only that renewal's notice goes; a passed one stays failed.
-  debit_notice: (key, stripe) => {
-    const [subscriptionId, renewsAt] = [key.replace(/_\d+_\d+$/, ''), key.split('_').at(-2)];
-    return sendDebitNotice(subscriptionId, stripe, { renewsAt: Number(renewsAt) });
-  },
+  // Only the renewal its key names gets the notice; a passed one stays failed.
+  debit_notice: resendDebitNotice,
 };
 
 /** Sends one failed row again; the ledger then holds its new state. */

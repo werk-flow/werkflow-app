@@ -48,31 +48,53 @@ function contentHash(
   return hash.digest('hex').slice(0, 32);
 }
 
-/** One customer mail (with its organization) or one alarm (with none). */
-export async function deliverBillingMail(
-  input: {
-    kind: MailKind;
-    organizationId: string | null;
-    recipient: string;
-    stripeObjectId: string;
-    mail: RenderedMail;
-    replyTo?: string;
-    attachments?: Attachments;
-  },
-  environment: Environment = process.env,
-): Promise<BillingMailOutcome> {
-  const { kind, organizationId, recipient, stripeObjectId, mail } = input;
-  const admin = createSupabaseAdminClient();
-  const { data: mailId, error: claimError } = await admin.rpc(
+type Admin = ReturnType<typeof createSupabaseAdminClient>;
+type MailRow = { kind: MailKind; organizationId: string | null; recipient: string; stripeObjectId: string };
+
+/** The row's id to send under, or null when it was sent before. */
+async function claim(admin: Admin, row: MailRow): Promise<string | null> {
+  const { data: mailId, error } = await admin.rpc(
     'claim_werkflow_billing_mail',
     rpcArgs('claim_werkflow_billing_mail', {
-      p_kind: kind,
-      p_organization_id: organizationId,
-      p_recipient: recipient,
-      p_stripe_object_id: stripeObjectId,
+      p_kind: row.kind,
+      p_organization_id: row.organizationId,
+      p_recipient: row.recipient,
+      p_stripe_object_id: row.stripeObjectId,
     }),
   );
-  if (claimError) throw billingFailure('billing_mail_claim_failed');
+  if (error) throw billingFailure('billing_mail_claim_failed');
+  return mailId;
+}
+
+/**
+ * Records a mail that cannot go out at all, such as an alarm without its
+ * address, as `failed` with `code`, so the daily comparison sends it once it can.
+ */
+export async function recordUnsentBillingMail(row: MailRow, code: string): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  const mailId = await claim(admin, row);
+  if (!mailId) return;
+  const { error } = await admin.rpc(
+    'settle_werkflow_billing_mail',
+    rpcArgs('settle_werkflow_billing_mail', {
+      p_mail_id: mailId,
+      p_organization_id: row.organizationId,
+      p_outcome: 'failed',
+      p_provider_message_id: null,
+      p_failure_code: code,
+    }),
+  );
+  if (error) throw billingFailure('billing_mail_settle_failed');
+}
+
+/** One customer mail (with its organization) or one alarm (with none). */
+export async function deliverBillingMail(
+  input: MailRow & { mail: RenderedMail; replyTo?: string; attachments?: Attachments },
+  environment: Environment = process.env,
+): Promise<BillingMailOutcome> {
+  const { organizationId, recipient, mail } = input;
+  const admin = createSupabaseAdminClient();
+  const mailId = await claim(admin, input);
   if (!mailId) return { status: 'already_sent' };
 
   const result = await sendEmail(

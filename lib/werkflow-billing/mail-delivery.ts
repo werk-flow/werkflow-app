@@ -4,6 +4,7 @@ import { billingFailure } from '@/lib/werkflow-billing/failure';
 import type { EmailMessage } from '@/lib/delivery/send-email';
 import {
   deliverBillingMail,
+  recordUnsentBillingMail,
   type BillingMailOutcome,
   type CustomerMailKind,
 } from '@/lib/werkflow-billing/mail-ledger';
@@ -27,6 +28,8 @@ type Environment = Readonly<Record<string, string | undefined>>;
 // Local and CI processes send to the in-memory outbox only (lib/delivery/send-email.ts).
 const LOCAL_ALARM_ADDRESS = 'alarm@werkflow.test';
 const LOCAL_REPLY_TO = 'abrechnung@werkflow.test';
+/** The recipient an alarm row records while WERKFLOW_ALARM_EMAIL is missing; nothing is sent to it. */
+const MISSING_ALARM_ADDRESS = 'alarm-address-missing@werk-flow.invalid';
 
 function configured(environment: Environment, name: string, localValue: string): string | null {
   return environment[name]?.trim() || (environment.VERCEL_ENV ? null : localValue);
@@ -36,14 +39,26 @@ function configured(environment: Environment, name: string, localValue: string):
  * Raises one alarm to WerkFlow's alarm address, at most once per kind and
  * Stripe object. `facts` name ids and codes only, never personal data. Throws
  * when the alarm did not reach the transport, so the caller's signal is
- * delivered again; the error's `code` says why.
+ * delivered again; the error's `code` says why. Its row then stays `failed`,
+ * also without an alarm address, and the daily comparison sends it again.
  */
 export async function raiseBillingAlarm(
   alarm: { kind: BillingAlarmKind; stripeObjectId: string; facts?: BillingAlarmFacts },
   environment: Environment = process.env,
 ): Promise<void> {
   const recipient = configured(environment, 'WERKFLOW_ALARM_EMAIL', LOCAL_ALARM_ADDRESS);
-  if (!recipient) throw billingFailure('billing_alarm_address_missing');
+  if (!recipient) {
+    await recordUnsentBillingMail(
+      {
+        kind: `alarm.${alarm.kind}`,
+        organizationId: null,
+        recipient: MISSING_ALARM_ADDRESS,
+        stripeObjectId: alarm.stripeObjectId,
+      },
+      'billing_alarm_address_missing',
+    );
+    throw billingFailure('billing_alarm_address_missing');
+  }
   const outcome = await deliverBillingMail(
     {
       kind: `alarm.${alarm.kind}`,

@@ -28,9 +28,15 @@ begin
       raise exception '% holds a privilege on werkflow_billing_reconciliations', api_role;
     end if;
   end loop;
-  if has_table_privilege('service_role', 'public.werkflow_billing_reconciliations', 'UPDATE,DELETE,TRUNCATE')
-    or not has_table_privilege('service_role', 'public.werkflow_billing_reconciliations', 'SELECT,INSERT') then
-    raise exception 'service_role must only read and add comparison runs';
+  -- A list of privileges is true when any one is held, so each required one is checked alone.
+  if has_table_privilege('service_role', 'public.werkflow_billing_reconciliations', 'UPDATE,DELETE,TRUNCATE') then
+    raise exception 'service_role must never change or delete comparison runs';
+  end if;
+  if not has_table_privilege('service_role', 'public.werkflow_billing_reconciliations', 'SELECT') then
+    raise exception 'service_role must read comparison runs';
+  end if;
+  if not has_table_privilege('service_role', 'public.werkflow_billing_reconciliations', 'INSERT') then
+    raise exception 'service_role must add comparison runs';
   end if;
   if not (select relrowsecurity from pg_class where oid = 'public.werkflow_billing_reconciliations'::regclass)
     or exists (select 1 from pg_policy where polrelid = 'public.werkflow_billing_reconciliations'::regclass) then
