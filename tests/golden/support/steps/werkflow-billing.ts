@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 
 // The billing page's controls (werk-flow/werkflow-planning#252), by their German names.
 
-export const BILLING_COPY = {
+const BILLING_COPY = {
   cancel: 'Abo kündigen',
   cancelConfirmation: 'Abo kündigen?',
 } as const;
