@@ -1,9 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { ROLE_LABELS } from '../../../../lib/roles';
 import { createAdminClient, getOrganizationByName, type PersistedOrganization } from '../db/shared';
+import { seedPaidReservation } from '../db/werkflow-billing';
 import { confirmTestUserEmail } from '../seed';
-import { hydratedAndSettled, settledBeforeTimeout } from './interaction';
+import type { TestUser } from '../world';
+import { hydratedAndSettled, pressKey, settledBeforeTimeout } from './interaction';
 import { openMemberDetailFromList } from './personnel';
 import { listEntry, openDialogWithRetry, openMenuItem, pendingRow, SHARED_COPY, visibleText } from './shared';
 
@@ -138,47 +139,21 @@ export async function signUpViaUi(page: Page, account: SignupAccount): Promise<v
 }
 
 /**
- * Records a paid Checkout for a signed-up test account, as Stripe's signals
- * would (werk-flow/werkflow-planning#248): a reservation whose subscription
- * is active. Browser journeys never reach Stripe.
+ * A paid Checkout for the account, recorded as Stripe's signals would; the
+ * upgrade page then sends the payer on to the organization form. Browser
+ * journeys never reach Stripe.
  */
-async function recordPaidCheckout(email: string): Promise<void> {
+export async function payForNewOrganization(page: Page, email: string): Promise<void> {
   if (!email.endsWith('@werkflow-golden.test')) {
     throw new Error(`Refusing to pay for non-test address: ${email}`);
   }
-  const admin = createAdminClient();
-  const { data: profile, error: profileError } = await admin
+  const { data: profile, error } = await createAdminClient()
     .from('profiles')
     .select('id')
     .eq('email', email)
     .single();
-  if (profileError) throw new Error(`Signup profile not found for ${email}: ${profileError.message}`);
-  const organizationId = randomUUID();
-  const suffix = organizationId.replaceAll('-', '');
-  const { error: reserveError } = await admin.rpc('begin_werkflow_checkout', {
-    p_organization_id: organizationId,
-    p_user_id: profile.id,
-    p_linked: false,
-    p_stripe_customer_id: `cus_test_${suffix}`,
-  });
-  if (reserveError) throw new Error(`Failed to reserve for ${email}: ${reserveError.message}`);
-  const { error: recordError } = await admin.rpc('record_werkflow_subscription_state', {
-    p_organization_id: organizationId,
-    p_stripe_customer_id: `cus_test_${suffix}`,
-    p_stripe_subscription_id: `sub_test_${suffix}`,
-    p_status: 'active',
-    p_cancel_at_period_end: false,
-    p_read_at: new Date().toISOString(),
-  });
-  if (recordError) throw new Error(`Failed to record the subscription for ${email}: ${recordError.message}`);
-}
-
-/**
- * A paid Checkout for the account, recorded as Stripe's signals would; the
- * upgrade page then sends the payer on to the organization form.
- */
-export async function payForNewOrganization(page: Page, email: string): Promise<void> {
-  await recordPaidCheckout(email);
+  if (error) throw new Error(`Signup profile not found for ${email}: ${error.message}`);
+  await seedPaidReservation(profile.id);
   await page.goto('/upgrade');
   await expect(page).toHaveURL(/\/onboarding\/create-organization/);
 }
@@ -212,21 +187,21 @@ export async function createOrganizationInOnboarding(
 }
 
 /**
- * Creates a further organization through the switcher's dialog and lands on
- * its dashboard. A further organization needs its own paid Checkout
- * (werk-flow/werkflow-planning#248), so the step records one for the signed-in
- * Admin first, as Stripe's signals would.
+ * Creates a further organization as its Admin does after paying for it
+ * (werk-flow/werkflow-planning#495): the switcher's dialog opens Stripe
+ * Checkout, which the journey never reaches, so the paid Checkout is seeded.
+ * Stripe's return then sends the Admin to name the organization, and the
+ * Admin lands on its dashboard.
  */
 export async function createAdditionalOrganization(
   page: Page,
+  admin: Pick<TestUser, 'id'>,
   organizationName: string,
-  adminEmail: string,
 ): Promise<PersistedOrganization> {
-  await recordPaidCheckout(adminEmail);
-  await page.getByRole('button', { name: ORGANIZATION_COPY.createOrganization }).click();
-  await page.getByLabel(ORGANIZATION_COPY.organizationName).fill(organizationName);
-  await page.getByRole('button', { name: SHARED_COPY.action.create, exact: true }).click();
-  return expectOrganizationCreated(page, organizationName);
+  await seedPaidReservation(admin.id);
+  await page.goto('/upgrade/bestaetigt');
+  await expect(page).toHaveURL(/\/onboarding\/create-organization/);
+  return createOrganizationInOnboarding(page, organizationName);
 }
 
 /** The organization switcher while it shows this organization. */
