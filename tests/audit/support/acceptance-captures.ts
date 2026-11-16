@@ -219,6 +219,8 @@ export type CaptureSources = {
   openers: Partial<Record<DialogOpenerId, DialogOpener>>;
   /** Opens a record the set seeds instead of the route's layout record (acceptance-sets/). */
   destination?: ((world: TestWorld) => Promise<SurfaceDestination>) | undefined;
+  /** Drives the opened view into the state the capture shows, such as a refused submit (acceptance-sets/). */
+  act?: ((scope: Locator, world: TestWorld) => Promise<void>) | undefined;
 };
 
 function openedView(capture: CaptureSpec, openers: CaptureSources['openers']): OpenedView {
@@ -275,6 +277,7 @@ export async function captureAcceptance(
           await expect(tab).toHaveAttribute('data-state', 'active');
         }
       }
+      if (sources.act) await sources.act(scope, world);
       if (capture.reveal) {
         await scope
           .getByText(capture.reveal, { exact: true })
