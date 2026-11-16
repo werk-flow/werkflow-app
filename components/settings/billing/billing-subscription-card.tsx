@@ -21,15 +21,17 @@ import type { SubscriptionState, SubscriptionView } from '@/lib/werkflow-billing
 import { formatGermanDate } from '@/lib/utils';
 
 const FAILED = 'Das hat nicht geklappt. Versuche es erneut.';
+/** Stripe holds the change, but this page shows it only once its signal is recorded. */
+const LATER = ' Diese Seite zeigt es in wenigen Minuten an.';
 
-const dateOf = (value: string | null) => formatGermanDate(value, { empty: 'Ende des bezahlten Monats' });
+const endDateText = (value: string | null) => formatGermanDate(value, { empty: 'Ende des bezahlten Monats' });
 
-function stateBadge(state: SubscriptionState): ReactNode {
+function subscriptionBadge(state: SubscriptionState): ReactNode {
   switch (state.kind) {
     case 'active':
       return <Badge variant="success">Aktiv</Badge>;
     case 'ending':
-      return <Badge>Gekündigt zum {dateOf(state.endsAt)}</Badge>;
+      return <Badge>Gekündigt zum {endDateText(state.endsAt)}</Badge>;
     case 'payment_open':
       return <Badge variant="warning">Zahlung offen</Badge>;
     case 'ended':
@@ -44,7 +46,7 @@ function stateText(state: SubscriptionState): string {
     case 'active':
       return 'Dein Abo verlängert sich jeden Monat. Du kannst jederzeit kündigen, die Kündigung gilt zum Ende des bezahlten Monats.';
     case 'ending':
-      return `Du hast gekündigt. Dein Zugang läuft bis zum ${dateOf(state.endsAt)}, bis dahin kannst du die Kündigung zurücknehmen.`;
+      return `Du hast gekündigt. Dein Zugang läuft bis zum ${endDateText(state.endsAt)}, bis dahin kannst du die Kündigung zurücknehmen.`;
     case 'payment_open':
       return 'Die letzte Zahlung ist nicht eingegangen. Du hast dazu eine E-Mail mit dem nächsten Schritt bekommen.';
     case 'ended':
@@ -57,7 +59,7 @@ function stateText(state: SubscriptionState): string {
 }
 
 /** When the paid period ends, for the cancel confirmation. */
-function periodEndOf(state: SubscriptionState): string | null {
+function paidUntil(state: SubscriptionState): string | null {
   return state.kind === 'active' ? state.renewsAt : null;
 }
 
@@ -67,13 +69,13 @@ function useCancellationChange(organizationId: string) {
   const { refresh } = useRouterRefresh();
   const cancel = useServerAction(() => cancelWerkflowSubscription(organizationId));
   const resume = useServerAction(() => resumeWerkflowSubscription(organizationId));
-  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumeRefusal, setResumeRefusal] = useState<string | null>(null);
 
   const confirmCancel = async (): Promise<string | null> => {
     const result = await cancel.run();
     if (!result.success) return describeFailure(result.error, WERKFLOW_BILLING_MESSAGES, FAILED);
     showBanner({
-      message: 'Dein Abo ist gekündigt. Es läuft bis zum Ende des bezahlten Monats.',
+      message: `Dein Abo ist gekündigt. Es läuft bis zum Ende des bezahlten Monats.${result.shown ? '' : LATER}`,
       variant: 'success',
     });
     refresh();
@@ -81,17 +83,20 @@ function useCancellationChange(organizationId: string) {
   };
 
   const takeBack = async () => {
-    setResumeError(null);
+    setResumeRefusal(null);
     const result = await resume.run().catch(() => ({ success: false, error: 'unexpected_error' }) as const);
     if (!result.success) {
-      setResumeError(describeFailure(result.error, WERKFLOW_BILLING_MESSAGES, FAILED));
+      setResumeRefusal(describeFailure(result.error, WERKFLOW_BILLING_MESSAGES, FAILED));
       return;
     }
-    showBanner({ message: 'Deine Kündigung ist zurückgenommen. Dein Abo läuft weiter.', variant: 'success' });
+    showBanner({
+      message: `Deine Kündigung ist zurückgenommen. Dein Abo läuft weiter.${result.shown ? '' : LATER}`,
+      variant: 'success',
+    });
     refresh();
   };
 
-  return { confirmCancel, takeBack, resumePending: resume.isPending, resumeError };
+  return { confirmCancel, takeBack, resumePending: resume.isPending, resumeRefusal };
 }
 
 /** The organization's subscription: its state in plain German, and cancelling or taking a cancellation back. */
@@ -104,7 +109,7 @@ export function BillingSubscriptionCard({
 }) {
   const { state, canCancel, canResume } = subscription;
   const change = useCancellationChange(organizationId);
-  const periodEnd = dateOf(periodEndOf(state));
+  const periodEnd = endDateText(paidUntil(state));
 
   return (
     <Card>
@@ -112,7 +117,7 @@ export function BillingSubscriptionCard({
         {/* The badge wraps under the title on a phone instead of narrowing the text beside it. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <CardTitle>Dein WerkFlow-Abo</CardTitle>
-          {stateBadge(state)}
+          {subscriptionBadge(state)}
         </div>
         <CardDescription>{stateText(state)}</CardDescription>
       </CardHeader>
@@ -147,7 +152,7 @@ export function BillingSubscriptionCard({
               <Button type="button" pending={change.resumePending} onClick={() => void change.takeBack()}>
                 Kündigung zurücknehmen
               </Button>
-              <ErrorText>{change.resumeError}</ErrorText>
+              <ErrorText>{change.resumeRefusal}</ErrorText>
             </>
           )}
           {state.kind === 'ended' && (

@@ -4,6 +4,7 @@ import { BillingInvoicesCard } from '@/components/settings/billing/billing-invoi
 import { BillingNoSubscription } from '@/components/settings/billing/billing-no-subscription';
 import { BillingOutlookCard } from '@/components/settings/billing/billing-outlook-card';
 import { BillingSubscriptionCard } from '@/components/settings/billing/billing-subscription-card';
+import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { BillingOutlookSkeleton } from '@/components/loading-states/einstellungen-page-skeleton';
 import { readSettingsSectionMembership } from '@/lib/settings/section-access';
@@ -27,6 +28,8 @@ export default async function BillingSettingsPage() {
   const { subscription, invoices } = result.billing;
   return (
     <div className="space-y-6">
+      {/* A cancellation from another session or Stripe's signals reaches this page. */}
+      <LiveRouteRefresh tables={['werkflow_billing_page_signals']} />
       {subscription ? (
         <>
           <BillingSubscriptionCard organizationId={membership.orgId} subscription={subscription} />

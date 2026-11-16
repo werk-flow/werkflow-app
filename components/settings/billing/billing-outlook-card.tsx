@@ -31,7 +31,7 @@ function paymentMethodText(method: StripePaymentMethodSummary | null): string {
   }
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+function OutlookFact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid gap-1">
       <dt className="text-sm text-muted-foreground">{label}</dt>
@@ -61,14 +61,14 @@ export async function BillingOutlookCard({ organizationId }: { organizationId: s
         <dl className="grid gap-4 sm:grid-cols-2">
           {outlook.upcoming ? (
             <>
-              <Fact label="Fällig am">{formatGermanDate(outlook.upcoming.dueAt)}</Fact>
-              <Fact label="Betrag">{formatEuroCents(outlook.upcoming.amountCents)}</Fact>
+              <OutlookFact label="Fällig am">{formatGermanDate(outlook.upcoming.dueAt)}</OutlookFact>
+              <OutlookFact label="Betrag">{formatEuroCents(outlook.upcoming.amountCents)}</OutlookFact>
             </>
           ) : (
             // A cancelled or ended subscription renews no more.
-            <Fact label="Fällig am">Entfällt, WerkFlow bucht nichts mehr ab</Fact>
+            <OutlookFact label="Fällig am">Entfällt, WerkFlow bucht nichts mehr ab</OutlookFact>
           )}
-          <Fact label="Zahlungsart">{paymentMethodText(outlook.paymentMethod)}</Fact>
+          <OutlookFact label="Zahlungsart">{paymentMethodText(outlook.paymentMethod)}</OutlookFact>
         </dl>
       </CardContent>
     </Card>

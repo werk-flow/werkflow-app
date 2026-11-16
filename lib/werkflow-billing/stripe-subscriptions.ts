@@ -172,9 +172,9 @@ async function billingOutlook(client: Stripe, subscriptionId: string): Promise<S
   });
   const customer = subscription.customer;
   const method =
-    expandedObject(subscription.default_payment_method) ??
+    expanded(subscription.default_payment_method) ??
     (typeof customer === 'object' && !customer.deleted
-      ? expandedObject(customer.invoice_settings.default_payment_method)
+      ? expanded(customer.invoice_settings.default_payment_method)
       : null);
   const dueAt = periodEndOf(subscription);
   const preview =
@@ -187,7 +187,8 @@ async function billingOutlook(client: Stripe, subscriptionId: string): Promise<S
   };
 }
 
-function expandedObject<T extends object>(value: string | T | null | undefined): T | null {
+/** The object of a field Stripe expanded; null for an id or nothing. */
+export function expanded<T extends object>(value: string | T | null | undefined): T | null {
   return typeof value === 'object' ? value : null;
 }
 

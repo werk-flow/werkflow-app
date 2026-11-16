@@ -1,4 +1,5 @@
 import type { Database } from '@/lib/supabase/database.types';
+import type { StripeSubscriptionSnapshot } from '@/lib/werkflow-billing/stripe-subscriptions';
 
 // What the Admin's billing page shows of WerkFlow's own subscription and
 // invoices (werk-flow/werkflow-planning#252), from WerkFlow's records. The
@@ -84,6 +85,17 @@ export function subscriptionViewOf(row: SubscriptionRow | null, now: Date): Subs
     state: stateOf(row),
     canCancel: changeable && !row.cancel_at_period_end,
     canResume: changeable && row.cancel_at_period_end && periodRuns,
+  };
+}
+
+/** Stripe's read of a subscription in the record's terms, for the same rules. */
+export function subscriptionRowOf(snapshot: StripeSubscriptionSnapshot): SubscriptionRow {
+  return {
+    stripe_subscription_id: snapshot.id,
+    status: snapshot.status,
+    cancellation_reason: snapshot.cancellationReason,
+    cancel_at_period_end: snapshot.cancelAtPeriodEnd,
+    current_period_end: snapshot.currentPeriodEnd,
   };
 }
 

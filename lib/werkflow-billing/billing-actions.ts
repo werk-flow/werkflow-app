@@ -12,74 +12,97 @@ import {
   resolveBillingAdmin,
 } from '@/lib/werkflow-billing/billing-page';
 import type { WerkflowBillingFailureCode } from '@/lib/werkflow-billing/billing-messages';
-import { subscriptionViewOf } from '@/lib/werkflow-billing/billing-view';
+import { subscriptionRowOf, subscriptionViewOf } from '@/lib/werkflow-billing/billing-view';
+import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
 import type { StripeSubscriptionSnapshot } from '@/lib/werkflow-billing/stripe-subscriptions';
 
 // The billing page's actions (werk-flow/werkflow-planning#252). Only the
 // organization's Admin cancels the subscription, takes the cancellation back
 // or opens an invoice; every action resolves the caller on the server first.
 // The subscription comes from WerkFlow's record of the organization, never
-// from the client. A cancellation takes effect at the end of the paid period
+// from the client; whether it may change is judged on Stripe's current state. A cancellation takes effect at the end of the paid period
 // (owner, 2026-11-15): Stripe's `cancel_at_period_end`, no partial refund.
 
 type BillingActionResult<Data = object> = ActionResult<Data, WerkflowBillingFailureCode>;
 
+/**
+ * A changed cancellation. `shown` is false when Stripe holds the change but
+ * WerkFlow's record of it failed: the page shows it once the subscription
+ * signal records it, and the next change judges Stripe's state, not the record.
+ */
+type CancellationResult = BillingActionResult<{ shown: boolean }>;
+
+/** Records Stripe's read of the subscription as its signal would; false when the record failed. */
+async function recordRead(snapshot: StripeSubscriptionSnapshot, gateway: StripeGateway): Promise<boolean> {
+  try {
+    await recordSubscription(snapshot, gateway.subscriptions);
+    return true;
+  } catch (error) {
+    logError('changeCancellation: recording the subscription failed', error);
+    return false;
+  }
+}
+
 async function changeCancellation(
-  organizationId: unknown,
+  organizationId: string,
   cancelAtPeriodEnd: boolean,
-): Promise<BillingActionResult> {
+): Promise<CancellationResult> {
   const admin = await resolveBillingAdmin(organizationId);
   if (!admin.success) return admin;
   const refusal = cancelAtPeriodEnd ? 'subscription_not_cancellable' : 'subscription_not_resumable';
 
-  let subscriptionId: string;
+  let subscriptionId: string | null;
   try {
-    const row = await readSubscriptionRow(admin.context.orgId);
-    const view = subscriptionViewOf(row, new Date());
-    const allowed = cancelAtPeriodEnd ? view?.canCancel : view?.canResume;
-    if (!allowed || !row?.stripe_subscription_id) return { success: false, error: refusal };
-    subscriptionId = row.stripe_subscription_id;
+    subscriptionId = (await readSubscriptionRow(admin.context.orgId))?.stripe_subscription_id ?? null;
   } catch (error) {
     logError('changeCancellation: subscription read failed', error);
     return { success: false, error: 'load_failed' };
   }
+  if (!subscriptionId) return { success: false, error: refusal };
 
   const gateway = billingGateway();
   if (!gateway) return { success: false, error: 'stripe_unavailable' };
-  let snapshot: StripeSubscriptionSnapshot;
+  let changed: StripeSubscriptionSnapshot;
   try {
-    snapshot = await gateway.subscriptions.setCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd);
+    // Judged on Stripe's current state: WerkFlow's record lags behind a change whose record failed.
+    const current = await gateway.subscriptions.readSubscription(subscriptionId);
+    const view = subscriptionViewOf(subscriptionRowOf(current), new Date());
+    if (!(cancelAtPeriodEnd ? view?.canCancel : view?.canResume)) {
+      // The refusal brings the record up to Stripe, so the reloaded page offers the right step.
+      await recordRead(current, gateway);
+      return { success: false, error: refusal };
+    }
+    changed = await gateway.subscriptions.setCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd);
   } catch (error) {
-    logError('changeCancellation: Stripe refused the change', error);
+    logError('changeCancellation: Stripe refused the read or the change', error);
     return { success: false, error: 'stripe_unavailable' };
   }
-  try {
-    await recordSubscription(snapshot, gateway.subscriptions);
-  } catch (error) {
-    // best-effort: Stripe holds the change, and its subscription signal records it on delivery.
-    logError('changeCancellation: recording the changed subscription failed', error);
-  }
-  return { success: true };
+  return { success: true, shown: await recordRead(changed, gateway) };
 }
 
 /** Ends the organization's subscription at the end of the paid period. */
-export async function cancelWerkflowSubscription(organizationId: unknown): Promise<BillingActionResult> {
-  return changeCancellation(organizationId, true);
+export async function cancelWerkflowSubscription(rawOrganizationId: unknown): Promise<CancellationResult> {
+  const organizationId = uuidSchema.safeParse(rawOrganizationId);
+  if (!organizationId.success) return { success: false, error: 'invalid_input' };
+  return changeCancellation(organizationId.data, true);
 }
 
 /** Takes a cancellation back while the paid period runs. */
-export async function resumeWerkflowSubscription(organizationId: unknown): Promise<BillingActionResult> {
-  return changeCancellation(organizationId, false);
+export async function resumeWerkflowSubscription(rawOrganizationId: unknown): Promise<CancellationResult> {
+  const organizationId = uuidSchema.safeParse(rawOrganizationId);
+  if (!organizationId.success) return { success: false, error: 'invalid_input' };
+  return changeCancellation(organizationId.data, false);
 }
 
 /** A short-lived download URL of one of the organization's invoice originals. */
 export async function openWerkflowInvoice(
-  organizationId: unknown,
+  rawOrganizationId: unknown,
   rawInvoiceId: unknown,
 ): Promise<BillingActionResult<{ url: string }>> {
+  const organizationId = uuidSchema.safeParse(rawOrganizationId);
   const invoiceId = uuidSchema.safeParse(rawInvoiceId);
-  if (!invoiceId.success) return { success: false, error: 'invalid_input' };
-  const admin = await resolveBillingAdmin(organizationId);
+  if (!organizationId.success || !invoiceId.success) return { success: false, error: 'invalid_input' };
+  const admin = await resolveBillingAdmin(organizationId.data);
   if (!admin.success) return admin;
   try {
     // The invoice must be the organization's: another organization's id answers like an unknown one.

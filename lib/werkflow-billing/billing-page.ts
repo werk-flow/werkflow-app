@@ -6,7 +6,6 @@ import { resolveActionContextFor, type ActionContext } from '@/lib/org/action-co
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { uuidSchema } from '@/lib/validation/uuid';
 import {
   invoiceViewOf,
   subscriptionViewOf,
@@ -34,11 +33,9 @@ const INVOICE_COLUMNS =
 
 /** The caller as the Admin of the organization asked for, or the refusal. */
 export async function resolveBillingAdmin(
-  rawOrganizationId: unknown,
+  organizationId: string,
 ): Promise<BillingResult<{ context: ActionContext }>> {
-  const organizationId = uuidSchema.safeParse(rawOrganizationId);
-  if (!organizationId.success) return { success: false, error: 'invalid_input' };
-  const caller = await resolveActionContextFor(organizationId.data);
+  const caller = await resolveActionContextFor(organizationId);
   if (!caller.success) return caller;
   if (caller.context.role !== 'admin') return { success: false, error: 'not_authorized' };
   return caller;
@@ -82,7 +79,7 @@ export type WerkflowBilling = {
 
 /** The subscription and every invoice of the organization, from WerkFlow's records. */
 export async function readWerkflowBilling(
-  organizationId: unknown,
+  organizationId: string,
 ): Promise<BillingResult<{ billing: WerkflowBilling }>> {
   const admin = await resolveBillingAdmin(organizationId);
   if (!admin.success) return admin;
@@ -106,7 +103,7 @@ export function billingGateway(): StripeGateway | null {
 
 /** Stripe's next renewal and the payment method; null without a subscription. */
 export async function readWerkflowBillingOutlook(
-  organizationId: unknown,
+  organizationId: string,
 ): Promise<BillingResult<{ outlook: StripeBillingOutlook | null }>> {
   const admin = await resolveBillingAdmin(organizationId);
   if (!admin.success) return admin;

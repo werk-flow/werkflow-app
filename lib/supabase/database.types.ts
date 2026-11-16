@@ -12960,6 +12960,32 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_page_signals: {
+        Row: {
+          id: string;
+          organization_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "werkflow_billing_page_signals_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: true;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       werkflow_billing_signals: {
         Row: {
           attempts: number;

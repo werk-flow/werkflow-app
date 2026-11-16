@@ -64,8 +64,10 @@ const world = installActionWorld({
 });
 
 // record_werkflow_subscription_state, as its SQL test proves it, for the fields the page reads.
+let recordFails = false;
 world.rpc = ({ name, args }) => {
   if (name !== 'record_werkflow_subscription_state') throw new Error(`unexpected rpc ${name}`);
+  if (recordFails) return { data: null, error: { message: 'connection failure' } };
   const row = tableRows(world, 'werkflow_subscriptions').find(
     (entry) => entry.organization_id === args.p_organization_id,
   );
@@ -129,6 +131,10 @@ gateway = {
   readDispute: noRead,
   subscriptions: {
     ...calls,
+    readSubscription: (id) => {
+      stripeCalls.push(`readSubscription ${id}`);
+      return calls.readSubscription(id);
+    },
     readBillingOutlook: (id) => {
       stripeCalls.push(`readBillingOutlook ${id}`);
       return calls.readBillingOutlook(id);
@@ -182,7 +188,7 @@ signInAs(world, 'admin', ORGANIZATION_B);
 world.activeOrganizationCookie = ORGANIZATION_A;
 await assertRefusedEverywhere(ORGANIZATION_A, 'not_a_member', 'a foreign Admin');
 signInAs(world, 'admin', ORGANIZATION_A);
-assert.deepEqual(await readWerkflowBilling('not-an-id'), { success: false, error: 'invalid_input' });
+assert.deepEqual(await cancelWerkflowSubscription('not-an-id'), { success: false, error: 'invalid_input' });
 assert.deepEqual(await openWerkflowInvoice(ORGANIZATION_A, 'not-an-id'), {
   success: false,
   error: 'invalid_input',
@@ -238,10 +244,15 @@ assert.deepEqual(await resumeWerkflowSubscription(ORGANIZATION_A), {
   success: false,
   error: 'subscription_not_resumable',
 });
-assert.deepEqual(stripeCalls, [], 'a running subscription has no cancellation to take back');
+assert.deepEqual(
+  stripeCalls,
+  ['readSubscription sub_test_a'],
+  'a running subscription has no cancellation to take back',
+);
 
-assert.deepEqual(await cancelWerkflowSubscription(ORGANIZATION_A), { success: true });
-assert.deepEqual(stripeCalls, ['setCancelAtPeriodEnd sub_test_a true']);
+stripeCalls.length = 0;
+assert.deepEqual(await cancelWerkflowSubscription(ORGANIZATION_A), { success: true, shown: true });
+assert.deepEqual(stripeCalls, ['readSubscription sub_test_a', 'setCancelAtPeriodEnd sub_test_a true']);
 assert.equal(stripe.subscriptions.get('sub_test_a')?.cancelAtPeriodEnd, true);
 assert.equal(stripe.subscriptions.get('sub_test_a')?.status, 'active', 'access runs until the period ends');
 const ending = await readWerkflowBilling(ORGANIZATION_A);
@@ -260,12 +271,32 @@ assert.deepEqual(await cancelWerkflowSubscription(ORGANIZATION_A), {
   error: 'subscription_not_cancellable',
 });
 
-assert.deepEqual(await resumeWerkflowSubscription(ORGANIZATION_A), { success: true });
+assert.deepEqual(await resumeWerkflowSubscription(ORGANIZATION_A), { success: true, shown: true });
 assert.equal(stripe.subscriptions.get('sub_test_a')?.cancelAtPeriodEnd, false);
 assert.equal(rowOf(ORGANIZATION_A)?.cancel_at_period_end, false);
 // The other organization's subscription never moved.
 assert.equal(stripe.subscriptions.get('sub_test_b')?.cancelAtPeriodEnd, false);
 assert.equal(rowOf(ORGANIZATION_B)?.cancel_at_period_end, false);
+
+// --- A change Stripe holds but WerkFlow failed to record is said so, and the next step judges Stripe. ---
+
+recordFails = true;
+assert.deepEqual(await cancelWerkflowSubscription(ORGANIZATION_A), { success: true, shown: false });
+assert.equal(stripe.subscriptions.get('sub_test_a')?.cancelAtPeriodEnd, true);
+assert.equal(rowOf(ORGANIZATION_A)?.cancel_at_period_end, false, 'the record lags behind Stripe');
+// The stale record still says running; taking the cancellation back works on Stripe's state.
+assert.deepEqual(await resumeWerkflowSubscription(ORGANIZATION_A), { success: true, shown: false });
+assert.equal(stripe.subscriptions.get('sub_test_a')?.cancelAtPeriodEnd, false);
+assert.deepEqual(await cancelWerkflowSubscription(ORGANIZATION_A), { success: true, shown: false });
+recordFails = false;
+// A refused second cancel brings the record up to Stripe, so the reloaded page offers the right step.
+assert.deepEqual(await cancelWerkflowSubscription(ORGANIZATION_A), {
+  success: false,
+  error: 'subscription_not_cancellable',
+});
+assert.equal(rowOf(ORGANIZATION_A)?.cancel_at_period_end, true);
+assert.deepEqual(await resumeWerkflowSubscription(ORGANIZATION_A), { success: true, shown: true });
+assert.equal(rowOf(ORGANIZATION_A)?.cancel_at_period_end, false);
 
 // --- An unreachable Stripe fails the outlook and the change, never the invoices. ---
 
@@ -291,6 +322,14 @@ world.failingTables.delete('werkflow_subscriptions');
 // --- An ended subscription offers no change; a pilot organization has none. ---
 
 Object.assign(rowOf(ORGANIZATION_A) ?? {}, { status: 'canceled', cancel_at_period_end: true });
+const stripeSubscription = stripe.subscriptions.get('sub_test_a');
+if (stripeSubscription) {
+  stripe.subscriptions.set('sub_test_a', {
+    ...stripeSubscription,
+    status: 'canceled',
+    cancelAtPeriodEnd: true,
+  });
+}
 const ended = await readWerkflowBilling(ORGANIZATION_A);
 assert.ok(ended.success);
 assert.deepEqual(ended.billing.subscription, {
@@ -303,8 +342,9 @@ assert.deepEqual(await resumeWerkflowSubscription(ORGANIZATION_A), {
   success: false,
   error: 'subscription_not_resumable',
 });
-assert.deepEqual(stripeCalls, []);
+assert.deepEqual(stripeCalls, ['readSubscription sub_test_a'], 'an ended subscription is never changed');
 
+stripeCalls.length = 0;
 world.tables.werkflow_subscriptions = tableRows(world, 'werkflow_subscriptions').filter(
   (row) => row.organization_id !== ORGANIZATION_A,
 );

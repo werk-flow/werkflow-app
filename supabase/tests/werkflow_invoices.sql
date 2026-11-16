@@ -76,9 +76,9 @@ begin
     $sql$select pg_temp.issue('24900000-0000-0000-0000-000000000010', 'in_test_0003', 'MUSTER-0001')$sql$,
     'werkflow_invoices_number_key');
   -- The row says what the invoice was for (werk-flow/werkflow-planning#252).
-  if (select (line_names, service_start, service_end) from public.werkflow_invoices
-      where stripe_invoice_id = 'in_test_0001')
-    is distinct from (array['WerkFlow-Abo'], date '2037-11-15', date '2037-12-14') then
+  if not exists (select 1 from public.werkflow_invoices
+      where stripe_invoice_id = 'in_test_0001' and line_names = array['WerkFlow-Abo']
+        and service_start = date '2037-11-15' and service_end = date '2037-12-14') then
     raise exception 'the issued row lost its line names or service period';
   end if;
   -- A call of the previous build, without the three newer arguments, still issues.
@@ -87,8 +87,9 @@ begin
     date '2037-11-15', '{"name":"Haustechnik Sonnenberg GmbH"}'::jsonb, 'card', 49900, 0, 49900, 49900, 0,
     'werkflow-billing/invoices/in_test_0004/' || repeat('b', 64) || '.pdf', repeat('b', 64), 1024, '1.3.17'
   ) is distinct from 'issued'
-    or (select (line_names, service_start) from public.werkflow_invoices where stripe_invoice_id = 'in_test_0004')
-      is distinct from ('{}'::text[], null::date) then
+    or not exists (select 1 from public.werkflow_invoices
+      where stripe_invoice_id = 'in_test_0004' and cardinality(line_names) = 0
+        and service_start is null and service_end is null) then
     raise exception 'a call without line names or service period was not issued with empty ones';
   end if;
   perform pg_temp.expect_refusal('a service period that ends before it starts',
