@@ -342,6 +342,8 @@ const refund = {
 stripe.refunds.set('re_test_1', refund);
 stripe.refunds.set('re_test_2', { ...refund, id: 're_test_2', status: 'succeeded' });
 stripe.refunds.set('re_test_3', { ...refund, id: 're_test_3', duplicateSubscriptionId: null });
+// Pending when the cleanup settled, cancelled afterwards: it paid nothing either.
+stripe.refunds.set('re_test_4', { ...refund, id: 're_test_4', status: 'canceled' });
 assert.equal(signalFamilyFor('refund.failed'), refundSignals);
 assert.equal(signalFamilyFor('charge.refund.updated'), refundSignals);
 alarms.length = 0;
@@ -360,6 +362,10 @@ await refundSignals.handle(
   await signal('charge.refund.updated', { id: 're_test_3', object: 'refund' }),
   gateway,
 );
+await refundSignals.handle(
+  await signal('charge.refund.updated', { id: 're_test_4', object: 'refund' }),
+  gateway,
+);
 assert.deepEqual(refundFailures[0], {
   p_organization_id: ORGANIZATION,
   p_stripe_subscription_id: 'sub_test_2',
@@ -368,12 +374,18 @@ assert.deepEqual(refundFailures[0], {
 });
 assert.equal(
   refundFailures.length,
-  2,
+  3,
   'the database was not asked again on a redelivery, or for another refund',
+);
+assert.equal(
+  refundFailures[2]?.p_stripe_refund_id,
+  're_test_4',
+  'a refund cancelled after the cleanup was not recorded',
 );
 assert.deepEqual(alarms, [
   { kind: 'refund_failed', stripeObjectId: 're_test_1' },
   { kind: 'refund_failed', stripeObjectId: 're_test_3' },
+  { kind: 'refund_failed', stripeObjectId: 're_test_4' },
 ]);
 
 stripe.subscriptions.set('sub_test_1', snapshot);
