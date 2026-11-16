@@ -13,7 +13,7 @@ Choose the level from the diff before you open the PR, and state it in the PR's 
 | Level | The diff | Reviews before ready |
 | --- | --- | --- |
 | 0 | No behavior effect: docs, comments, copy typos, agent instructions, formatting | Your own read of the diff |
-| 1 | Changes behavior: product code, tests, CI logic, scripts. The default | `sol-loop` until Sol approves or its budget of 3 rounds ends |
+| 1 | Changes behavior: product code, tests, CI logic, scripts. The default | `sol-loop` until Sol approves or its budget of 3 rounds (5 for a billing PR) ends |
 | 2 | Touches security, authentication, permissions and RLS, a migration, personal data, data deletion, the Zeitkonto, or time and payroll logic (for example `supabase/`, `lib/auth/`, `lib/org/`, `lib/security/`, `lib/storage/`, `lib/time-tracking/`, `lib/time-accounts/`, `lib/time-corrections/`) | `sol-loop`, then one CodeRabbit app review per PR |
 
 - Every level also needs `Check` green on the latest commit.
