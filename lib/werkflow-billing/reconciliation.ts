@@ -3,7 +3,7 @@ import 'server-only';
 import { formatBerlinLocalDate, formatBerlinLocalDateTime } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { readInBatches } from '@/lib/supabase/query-batches';
+import { ROW_PAGE_SIZE, readInBatches } from '@/lib/supabase/query-batches';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { resendDebitNotice, sendInvoiceMail, sendReceiptMail } from '@/lib/werkflow-billing/invoice-mails';
 import { raiseBillingAlarm } from '@/lib/werkflow-billing/mail-delivery';
@@ -44,8 +44,11 @@ const MISSED_AFTER = 26 * HOUR;
 const SETTLE = HOUR;
 /** Stripe keeps events 30 days and retries a signal for 3. */
 const SIGNAL_DAYS = 3;
-/** Failed rows resent per run; a resend's claim moves its row to the back. */
-const FAILED_MAILS_PER_RUN = 1000;
+/**
+ * Failed rows resent per run; a resend's claim moves its row to the back. One
+ * response under PostgREST's row cap holds them and the row that shows a backlog.
+ */
+const FAILED_MAILS_PER_RUN = ROW_PAGE_SIZE - 1;
 
 type Admin = ReturnType<typeof createSupabaseAdminClient>;
 

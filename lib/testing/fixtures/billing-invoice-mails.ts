@@ -61,9 +61,10 @@ function query(table: string) {
       sorts.push({ column, ascending: options?.ascending !== false });
       return builder;
     },
-    // Awaited as it is (the failed mails), or read on with `.maybeSingle`.
+    // Awaited as it is (the failed mails), or read on with `.maybeSingle`. PostgREST answers
+    // at most its row cap (supabase/config.toml `max_rows`) without an error.
     limit: (count: number) => {
-      window = [0, count - 1];
+      window = [0, Math.min(count, 1000) - 1];
       return Object.assign(Promise.resolve().then(rows), { maybeSingle: builder.maybeSingle });
     },
     // Awaited as it is, or bounded by `.limit` first.
@@ -655,7 +656,7 @@ assert.equal((await reconcileWerkflowBilling(stripe)).complete, false);
 refuseSubject = null;
 
 // A failed backlog longer than one run: 1,000 notices whose renewals passed months ago fill the
-// first run, which ends them and reports the backlog; the alarm behind them goes in the next run.
+// first run, which ends them and reports the backlog; the rest, and the alarm behind them, go in the next run.
 const backlogNotice = (index: number) =>
   `sub_test_backlog${String(index)}_${NOW - 60 * DAY}_4900_${'0'.repeat(16)}`;
 for (let index = 0; index < 1000; index += 1) {
