@@ -136,15 +136,15 @@ function subscriptionSnapshotOf(
     status: subscription.status,
     cancellationReason: subscription.cancellation_details?.reason ?? null,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    currentPeriodEnd: periodEndOf(subscription),
+    currentPeriodEnd: nullableIsoOf(periodEndOf(subscription)),
     readAt,
   };
 }
 
 /** The earliest end of a subscription's items: when its paid period ends. */
-function periodEndOf(subscription: Stripe.Subscription): string | null {
+function periodEndOf(subscription: Stripe.Subscription): number | null {
   const periodEnds = subscription.items.data.map((item) => item.current_period_end);
-  return periodEnds.length > 0 ? new Date(Math.min(...periodEnds) * 1000).toISOString() : null;
+  return periodEnds.length > 0 ? Math.min(...periodEnds) : null;
 }
 
 function paymentMethodSummaryOf(method: Stripe.PaymentMethod | null): StripePaymentMethodSummary | null {
@@ -156,11 +156,15 @@ function paymentMethodSummaryOf(method: Stripe.PaymentMethod | null): StripePaym
   return { kind: 'other' };
 }
 
-/** A subscription whose renewal Stripe will not invoice: it ends, or has ended, at its period end. */
-function renews(subscription: Stripe.Subscription): boolean {
+/**
+ * Whether Stripe invoices a renewal at the end of the current period: not
+ * when the subscription ended, ends at its period end, or is set to cancel
+ * by then. A cancellation set for a later date leaves the renewals before it.
+ */
+function renewsAt(subscription: Stripe.Subscription, periodEnd: number): boolean {
   return (
     !subscription.cancel_at_period_end &&
-    subscription.cancel_at === null &&
+    (subscription.cancel_at === null || subscription.cancel_at > periodEnd) &&
     !['canceled', 'incomplete_expired'].includes(subscription.status)
   );
 }
@@ -176,15 +180,23 @@ async function billingOutlook(client: Stripe, subscriptionId: string): Promise<S
     (typeof customer === 'object' && !customer.deleted
       ? expanded(customer.invoice_settings.default_payment_method)
       : null);
-  const dueAt = periodEndOf(subscription);
+  const periodEnd = periodEndOf(subscription);
   const preview =
-    renews(subscription) && dueAt
+    periodEnd !== null && renewsAt(subscription, periodEnd)
       ? await client.invoices.createPreview({ subscription: subscriptionId })
       : null;
+  // The preview's own payment date, so amount and date describe one invoice even
+  // when the subscription renewed between the two reads.
+  const dueAt = nullableIsoOf(preview?.next_payment_attempt ?? periodEnd);
   return {
     upcoming: preview && dueAt ? { amountCents: preview.amount_due, dueAt } : null,
     paymentMethod: paymentMethodSummaryOf(method),
   };
+}
+
+/** Stripe's seconds since the epoch as ISO time. */
+function nullableIsoOf(seconds: number | null): string | null {
+  return seconds === null ? null : new Date(seconds * 1000).toISOString();
 }
 
 /** The object of a field Stripe expanded; null for an id or nothing. */
@@ -198,12 +210,13 @@ async function setCancellation(
   subscriptionId: string,
   cancelAtPeriodEnd: boolean,
 ): Promise<StripeSubscriptionSnapshot> {
-  const readAt = new Date().toISOString();
   const subscription = await client.subscriptions.update(subscriptionId, {
     cancel_at_period_end: cancelAtPeriodEnd,
     expand: ['customer'],
   });
-  return subscriptionSnapshotOf(subscription, readAt);
+  // Stamped after Stripe answered: the answer holds the change, so a read that
+  // began before it never counts as newer than this one.
+  return subscriptionSnapshotOf(subscription, new Date().toISOString());
 }
 
 /** cancelDuplicateSubscription's steps: each refund and the cancellation run at most once over reruns. */

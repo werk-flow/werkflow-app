@@ -17,19 +17,23 @@ export default async function BillingSettingsPage() {
   const { membership } = await readSettingsSectionMembership('abonnement-abrechnung');
   const result = await readWerkflowBilling(membership.orgId);
 
+  // A cancellation from another session or Stripe's signals reaches this page, also after a failed read.
+  const live = <LiveRouteRefresh tables={['werkflow_billing_page_signals']} />;
   if (!result.success) {
     return (
-      <RegionLoadError title="Abo und Rechnungen konnten nicht geladen werden">
-        Deine Abrechnung ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
-      </RegionLoadError>
+      <>
+        {live}
+        <RegionLoadError title="Abo und Rechnungen konnten nicht geladen werden">
+          Deine Abrechnung ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+        </RegionLoadError>
+      </>
     );
   }
 
   const { subscription, invoices } = result.billing;
   return (
     <div className="space-y-6">
-      {/* A cancellation from another session or Stripe's signals reaches this page. */}
-      <LiveRouteRefresh tables={['werkflow_billing_page_signals']} />
+      {live}
       {subscription ? (
         <>
           <BillingSubscriptionCard organizationId={membership.orgId} subscription={subscription} />

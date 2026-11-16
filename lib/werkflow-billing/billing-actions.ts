@@ -3,7 +3,7 @@
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import { createWerkflowBillingDownloadUrl } from '@/lib/storage/r2';
-import { recordSubscription } from '@/lib/subscription/record';
+import { recordSnapshot } from '@/lib/subscription/record';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { uuidSchema } from '@/lib/validation/uuid';
 import {
@@ -13,7 +13,6 @@ import {
 } from '@/lib/werkflow-billing/billing-page';
 import type { WerkflowBillingFailureCode } from '@/lib/werkflow-billing/billing-messages';
 import { subscriptionRowOf, subscriptionViewOf } from '@/lib/werkflow-billing/billing-view';
-import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
 import type { StripeSubscriptionSnapshot } from '@/lib/werkflow-billing/stripe-subscriptions';
 
 // The billing page's actions (werk-flow/werkflow-planning#252). Only the
@@ -32,10 +31,13 @@ type BillingActionResult<Data = object> = ActionResult<Data, WerkflowBillingFail
  */
 type CancellationResult = BillingActionResult<{ shown: boolean }>;
 
-/** Records Stripe's read of the subscription as its signal would; false when the record failed. */
-async function recordRead(snapshot: StripeSubscriptionSnapshot, gateway: StripeGateway): Promise<boolean> {
+/**
+ * Records Stripe's read of the organization's own subscription; false when
+ * the record failed. A read no newer than the stored one changes nothing.
+ */
+async function recordRead(organizationId: string, snapshot: StripeSubscriptionSnapshot): Promise<boolean> {
   try {
-    await recordSubscription(snapshot, gateway.subscriptions);
+    await recordSnapshot(organizationId, snapshot);
     return true;
   } catch (error) {
     logError('changeCancellation: recording the subscription failed', error);
@@ -62,22 +64,28 @@ async function changeCancellation(
 
   const gateway = billingGateway();
   if (!gateway) return { success: false, error: 'stripe_unavailable' };
-  let changed: StripeSubscriptionSnapshot;
+  let current: StripeSubscriptionSnapshot;
   try {
-    // Judged on Stripe's current state: WerkFlow's record lags behind a change whose record failed.
-    const current = await gateway.subscriptions.readSubscription(subscriptionId);
-    const view = subscriptionViewOf(subscriptionRowOf(current), new Date());
-    if (!(cancelAtPeriodEnd ? view?.canCancel : view?.canResume)) {
-      // The refusal brings the record up to Stripe, so the reloaded page offers the right step.
-      await recordRead(current, gateway);
-      return { success: false, error: refusal };
-    }
-    changed = await gateway.subscriptions.setCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd);
+    current = await gateway.subscriptions.readSubscription(subscriptionId);
   } catch (error) {
-    logError('changeCancellation: Stripe refused the read or the change', error);
+    logError('changeCancellation: Stripe refused the read', error);
     return { success: false, error: 'stripe_unavailable' };
   }
-  return { success: true, shown: await recordRead(changed, gateway) };
+  // Judged on Stripe's current state: WerkFlow's record lags behind a change whose record failed.
+  const view = subscriptionViewOf(subscriptionRowOf(current), new Date());
+  if (!(cancelAtPeriodEnd ? view?.canCancel : view?.canResume)) {
+    // The refusal brings the record up to Stripe, so the reloaded page offers the right step.
+    await recordRead(admin.context.orgId, current);
+    return { success: false, error: refusal };
+  }
+  let changed: StripeSubscriptionSnapshot;
+  try {
+    changed = await gateway.subscriptions.setCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd);
+  } catch (error) {
+    logError('changeCancellation: Stripe refused the change', error);
+    return { success: false, error: 'stripe_unavailable' };
+  }
+  return { success: true, shown: await recordRead(admin.context.orgId, changed) };
 }
 
 /** Ends the organization's subscription at the end of the paid period. */

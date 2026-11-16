@@ -8,7 +8,7 @@
 // then; the page offers only what the actions accept. The database functions
 // answer as supabase/tests/werkflow_subscriptions.sql and werkflow_invoices.sql prove.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -20,6 +20,8 @@ import {
 import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
 
 console.error = () => {};
+// The paid period ends after this instant, so taking a cancellation back stays possible on any run date.
+setSystemTime(new Date('2026-11-20T08:00:00Z'));
 
 const INVOICE_A_OLD = '40000000-0000-4000-8000-0000000000a1';
 const INVOICE_A_NEW = '40000000-0000-4000-8000-0000000000a2';

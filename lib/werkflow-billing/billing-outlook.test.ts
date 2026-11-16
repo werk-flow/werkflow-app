@@ -80,6 +80,31 @@ describe("the billing page's Stripe calls", () => {
     expect(requests.map((request) => request.key)).toEqual(['GET /v1/subscriptions/sub_test_0001']);
   });
 
+  test('a cancellation set for a later date leaves the renewal before it, dated by the preview itself', async () => {
+    // The subscription renewed between the two reads: the preview names its own, later payment date.
+    const nextAttempt = PERIOD_END + 31 * 86_400;
+    const { calls } = gatewayAnswering({
+      'GET /v1/subscriptions/sub_test_0001': subscription({ cancel_at: PERIOD_END + 62 * 86_400 }),
+      'POST /v1/invoices/create_preview': {
+        object: 'invoice',
+        amount_due: 49900,
+        next_payment_attempt: nextAttempt,
+      },
+    });
+    expect((await calls.readBillingOutlook('sub_test_0001')).upcoming).toEqual({
+      amountCents: 49900,
+      dueAt: new Date(nextAttempt * 1000).toISOString(),
+    });
+  });
+
+  test('a cancellation set for the end of the current period previews no renewal', async () => {
+    const { calls, requests } = gatewayAnswering({
+      'GET /v1/subscriptions/sub_test_0001': subscription({ cancel_at: PERIOD_END }),
+    });
+    expect((await calls.readBillingOutlook('sub_test_0001')).upcoming).toBeNull();
+    expect(requests.map((request) => request.key)).toEqual(['GET /v1/subscriptions/sub_test_0001']);
+  });
+
   test("Stripe's refusal leaves the call as a stable code, without Stripe's message", async () => {
     const { calls } = gatewayAnswering({});
     await expect(calls.readBillingOutlook('sub_test_0001')).rejects.toMatchObject({

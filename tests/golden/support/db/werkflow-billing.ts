@@ -6,8 +6,17 @@ import { createAdminClient } from './shared';
 // are written through the functions Stripe's signals call; no test reaches
 // Stripe. The ids and numbers are made up, of Stripe's test form.
 
-const CUSTOMER_ID = 'cus_test_billing_page';
-const SUBSCRIPTION_ID = 'sub_test_billing_page';
+/** Made-up Stripe ids of the test form, one set per world, so worlds sharing a database never collide. */
+function stripeIdsOf(world: TestWorld) {
+  const key = world.orgId.replaceAll('-', '');
+  return {
+    customer: `cus_test_${key}`,
+    subscription: `sub_test_${key}`,
+    invoice: (index: number) => `in_test_${key}_${index}`,
+    event: (index: number) => `evt_test_${key}_${index}`,
+    number: (index: number) => `MUSTER-${key.slice(0, 8)}-${String(index + 10).padStart(4, '0')}`,
+  };
+}
 
 /** The calendar day `months` months after `date` (negative for before), as `YYYY-MM-DD`. */
 function monthsFrom(date: string, months: number, days = 0): string {
@@ -20,16 +29,17 @@ function monthsFrom(date: string, months: number, days = 0): string {
 /** Two monthly invoices, the newest issued today. */
 async function issueInvoices(world: TestWorld, today: string): Promise<void> {
   const admin = createAdminClient();
+  const ids = stripeIdsOf(world);
   for (const index of [0, 1]) {
     const issueDate = monthsFrom(today, -index);
     const hash = String(index + 1).repeat(64);
-    const stripeInvoiceId = `in_test_billing_page_${index + 1}`;
+    const stripeInvoiceId = ids.invoice(index + 1);
     const { error } = await admin.rpc('issue_werkflow_invoice', {
       p_organization_id: world.orgId,
       p_stripe_invoice_id: stripeInvoiceId,
-      p_stripe_customer_id: CUSTOMER_ID,
-      p_stripe_event_id: `evt_test_billing_page_${index + 1}`,
-      p_number: `MUSTER-${String(index + 11).padStart(4, '0')}`,
+      p_stripe_customer_id: ids.customer,
+      p_stripe_event_id: ids.event(index + 1),
+      p_number: ids.number(index + 1),
       p_issue_date: issueDate,
       p_buyer: { name: world.orgName },
       p_payment_means: 'direct-debit',
@@ -63,11 +73,12 @@ export async function seedWerkflowSubscription(
   // The server judges the period against its own clock, so the seed does too.
   const today = new Date().toISOString().slice(0, 10);
   const admin = createAdminClient();
+  const ids = stripeIdsOf(world);
   const begun = await admin.rpc('begin_werkflow_checkout', {
     p_organization_id: world.orgId,
     p_user_id: world.users.admin.id,
     p_linked: true,
-    p_stripe_customer_id: CUSTOMER_ID,
+    p_stripe_customer_id: ids.customer,
   });
   if (begun.error) throw new Error(`subscription seed failed: ${begun.error.message}`);
   const { data: row, error: readError } = await admin
@@ -79,7 +90,7 @@ export async function seedWerkflowSubscription(
   const { error } = await admin.rpc('record_werkflow_subscription_state', {
     p_organization_id: world.orgId,
     p_stripe_customer_id: row.stripe_customer_id,
-    p_stripe_subscription_id: SUBSCRIPTION_ID,
+    p_stripe_subscription_id: ids.subscription,
     p_status: 'active',
     p_cancel_at_period_end: cancelAtPeriodEnd,
     p_current_period_end: `${monthsFrom(today, 1)}T09:00:00.000Z`,

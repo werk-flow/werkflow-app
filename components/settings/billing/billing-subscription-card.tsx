@@ -38,6 +38,10 @@ function subscriptionBadge(state: SubscriptionState): ReactNode {
       return <Badge variant="outline">Beendet</Badge>;
     case 'unknown':
       return <Badge variant="outline">Wird aktualisiert</Badge>;
+    default: {
+      const _exhaustive: never = state;
+      return _exhaustive;
+    }
   }
 }
 
@@ -55,6 +59,10 @@ function stateText(state: SubscriptionState): string {
         : 'Dein Abo ist ausgelaufen.';
     case 'unknown':
       return 'Wir gleichen den Stand deines Abos gerade mit dem Zahlungsdienst ab. Schau später noch einmal vorbei.';
+    default: {
+      const _exhaustive: never = state;
+      return _exhaustive;
+    }
   }
 }
 

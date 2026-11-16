@@ -63,10 +63,6 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
     'Documented recovery around the Auth API: the claim is locked before the Auth update, which cannot join a transaction; a definite rejection abandons the claim, and an unknown outcome stays completion_pending until complete reconciles it.',
   'lib/subscription/actions.ts::startOrganizationCheckout':
     'Ordered around Stripe: the rate-limit attempt persists when the Checkout fails; the Stripe customer is created before begin_werkflow_checkout, which keeps the first customer and claims the attempt under a row lock, and finish_werkflow_checkout stores the session Stripe created in between, since no transaction joins Stripe; a re-read subscription is recorded on its own, as its signal would record it.',
-  'lib/werkflow-billing/billing-actions.ts::cancelWerkflowSubscription':
-    'One write and its record: Stripe holds the cancellation, and recordSubscription records the re-read subscription as its signal would, re-reading both subscriptions under the organization lock on a conflict (lib/subscription/record.ts); no transaction joins Stripe.',
-  'lib/werkflow-billing/billing-actions.ts::resumeWerkflowSubscription':
-    'One write and its record: Stripe holds the taken-back cancellation, and recordSubscription records the re-read subscription as its signal would, re-reading both subscriptions under the organization lock on a conflict (lib/subscription/record.ts); no transaction joins Stripe.',
   'lib/subscription/actions.ts::startSubscriptionCheckout':
     'Ordered around Stripe: the rate-limit attempt persists when the Checkout fails; the Stripe customer is created before begin_werkflow_checkout, which keeps the first customer and claims the attempt under a row lock, and finish_werkflow_checkout stores the session Stripe created in between, since no transaction joins Stripe; a re-read subscription is recorded on its own, as its signal would record it.',
   'lib/org-export/actions.ts::buildOrganizationExportPart':

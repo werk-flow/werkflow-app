@@ -28,6 +28,10 @@ function paymentMethodText(method: StripePaymentMethodSummary | null): string {
       return `${CARD_BRANDS[method.brand] ?? 'Karte'}${ending(method.lastFour)}`;
     case 'other':
       return 'Andere Zahlungsart';
+    default: {
+      const _exhaustive: never = method;
+      return _exhaustive;
+    }
   }
 }
 
