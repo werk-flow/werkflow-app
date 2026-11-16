@@ -8,6 +8,7 @@ import { boardArrowTarget } from '@/lib/calendar/board-row-filters';
 import type { CalendarPreferences } from '@/lib/calendar/preferences';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrganizationHolidayCalendar } from '@/lib/personnel/targets';
+import type { SchoolCalendarEntry } from '@/lib/calendar/board-model';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
@@ -35,6 +36,7 @@ export type PlantafelProps = {
   entries: TimeEntry[];
   vacation: VacationCalendarEntry[];
   sickness: SicknessCalendarEntry[];
+  school: SchoolCalendarEntry[];
   holidays: OrganizationHolidayCalendar;
   mutations: CalendarMutations;
   parkingContexts: ReadonlyMap<string, JobParkingContext> | null;
@@ -92,7 +94,7 @@ function moveCellFocus(event: React.KeyboardEvent<HTMLDivElement>, root: HTMLEle
 type BoardRowShared = Omit<BoardRowProps, 'model' | 'rowIndex' | 'jobs'>;
 
 function sharedRowProps(
-  { vacation, sickness, preferences, actions }: PlantafelProps,
+  { vacation, sickness, school, preferences, actions }: PlantafelProps,
   model: PlantafelModel,
   view: Pick<BoardRowShared, 'nowMs' | 'startDrag' | 'hoveredOccurrenceId' | 'onHoverLink' | 'isolate'>,
 ): BoardRowShared {
@@ -101,6 +103,7 @@ function sharedRowProps(
     columns: model.columns,
     vacation,
     sickness,
+    school,
     days: model.days,
     planned: model.planned,
     workDays: model.workDays,
@@ -228,6 +231,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
         jobsByRow={jobsByRow}
         vacation={props.vacation}
         sickness={props.sickness}
+        school={props.school}
         dispatch={model.dispatch}
         materialDemandJobIds={model.materialDemandJobIds}
         actions={actions}

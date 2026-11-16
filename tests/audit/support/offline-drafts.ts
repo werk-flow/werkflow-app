@@ -2,6 +2,11 @@ import { expect, type Locator, type Page, type Request } from '@playwright/test'
 
 import { createAdminClient } from '../../golden/support/db/shared';
 import { getJobIdByNumber } from '../../golden/support/db/work';
+import {
+  accountMenuButton,
+  showOrganizationSwitcher,
+  signOutMenuItem,
+} from '../../golden/support/steps/organization';
 import { confirmed } from '../../golden/support/steps/shared';
 import {
   closeWorkArtifactDialog,
@@ -23,6 +28,13 @@ const DRAFT_DATABASE = 'werkflow-drafts';
 
 const DRAFT_COPY = {
   onDevice: 'Entwurf auf dem Gerät',
+  sendNow: 'Jetzt senden',
+  /** The phone header's menu sheet, where the account menu and its sign-out sit. */
+  closePhoneMenu: 'Menü schließen',
+  /** The line of the session-end question that names each unsent report draft. */
+  questionDrafts: 'Berichtsentwürfe',
+  /** How the question describes a work report with one photo. */
+  questionOnePhotoReport: 'Arbeitsbericht · 1 Foto',
   savedOnDevice: /Gerade kein Netz\. Der Entwurf ist auf diesem Gerät gespeichert/,
   photos: 'Fotos',
   delete: 'Löschen',
@@ -54,6 +66,45 @@ export async function takeSyntheticPhoto(dialog: Locator, position: number): Pro
 /** The banner that says the draft stayed on the device because there is no signal. */
 export function savedOnDeviceBanner(page: Page): Locator {
   return page.getByRole('alert').filter({ hasText: DRAFT_COPY.savedOnDevice });
+}
+
+/** „Jetzt senden“ of one draft in the section's list, by its title. */
+export function deviceDraftSendButton(page: Page, title: string): Locator {
+  return confirmed(deviceDrafts(page).getByRole('listitem').filter({ hasText: title })).getByRole('button', {
+    name: DRAFT_COPY.sendNow,
+    exact: true,
+  });
+}
+
+/**
+ * Waits until the session-end question names the draft, a work report with one photo, by its title,
+ * and checks that it shows none of the draft's text.
+ */
+export async function expectDraftNamedInQuestion(
+  question: Locator,
+  title: string,
+  text: string,
+): Promise<void> {
+  const drafts = question.getByRole('list', { name: DRAFT_COPY.questionDrafts, exact: true });
+  await expect(confirmed(drafts.getByRole('listitem').filter({ hasText: title }))).toContainText(
+    DRAFT_COPY.questionOnePhotoReport,
+  );
+  await expect(question).not.toContainText(text);
+}
+
+/** Starts a sign-out from the account menu, which on a phone sits in the menu sheet. */
+export async function startSignOut(page: Page): Promise<void> {
+  await showOrganizationSwitcher(page);
+  await accountMenuButton(page).click();
+  await signOutMenuItem(page).click();
+}
+
+/** Closes the phone's menu sheet a cancelled sign-out leaves open; from the tablet width there is none. */
+export async function closePhoneMenu(page: Page): Promise<void> {
+  const close = page.getByRole('button', { name: DRAFT_COPY.closePhoneMenu, exact: true });
+  if (!(await close.isVisible())) return;
+  await close.click();
+  await expect(close).toBeHidden();
 }
 
 /** The section's list of drafts on this device. */
@@ -177,13 +228,19 @@ export async function expectAttachedReports(
   world: TestWorld,
   title: string,
   expected: readonly AttachedReport[],
+  /** The job the reports belong to; today's job of the world unless a test seeded its own. */
+  jobNumber: string = todayJobNumber(world),
 ): Promise<void> {
-  expect(await readAttachedReports(world, title)).toEqual(expected);
+  expect(await readAttachedReports(world, title, jobNumber)).toEqual(expected);
 }
 
-async function readAttachedReports(world: TestWorld, title: string): Promise<AttachedReport[]> {
+async function readAttachedReports(
+  world: TestWorld,
+  title: string,
+  jobNumber: string,
+): Promise<AttachedReport[]> {
   const admin = createAdminClient();
-  const jobId = await getJobIdByNumber(world.orgId, todayJobNumber(world));
+  const jobId = await getJobIdByNumber(world.orgId, jobNumber);
   const { data: revisions } = await admin
     .from('work_artifact_revisions')
     .select('id, artifact_id, performed_work, revision_number')

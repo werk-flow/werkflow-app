@@ -7,7 +7,7 @@ import {
   type BoardLaneItem,
   type BoardSpanItem,
 } from '@/lib/calendar/board-layout';
-import { absenceItems } from '@/lib/calendar/board-model';
+import { absenceItems, type SchoolCalendarEntry } from '@/lib/calendar/board-model';
 import { isMultiDay, type MonthCellItem } from '@/lib/calendar/month-cell-items';
 import { monthRowTemplate } from '@/lib/calendar/month-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
@@ -29,6 +29,7 @@ type MonthWeekProps = {
   labels: ReadonlyMap<string, string>;
   vacation: VacationCalendarEntry[];
   sickness: SicknessCalendarEntry[];
+  school: SchoolCalendarEntry[];
   jobs: CalendarJob[];
   itemsByDate: ReadonlyMap<string, MonthCellItem[]>;
   itemFor: (item: MonthCellItem, full: boolean) => React.JSX.Element;
@@ -42,11 +43,11 @@ type MonthWeekProps = {
 
 /** The week's absences and multi-day visits, packed into lanes. */
 function monthWeekBars(
-  { vacation, sickness, jobs }: Pick<MonthWeekProps, 'vacation' | 'sickness' | 'jobs'>,
+  { vacation, sickness, school, jobs }: Pick<MonthWeekProps, 'vacation' | 'sickness' | 'school' | 'jobs'>,
   columns: BoardColumn[],
 ) {
   const items: MonthBar[] = [
-    ...absenceItems({ vacation, sickness, employeeRecordId: null }).map(
+    ...absenceItems({ vacation, sickness, school, employeeRecordId: null }).map(
       (absence): MonthBar => ({
         kind: 'absence',
         key: absence.key,
@@ -120,6 +121,7 @@ export function MonthWeek(props: MonthWeekProps): React.JSX.Element {
     labels,
     vacation,
     sickness,
+    school,
     jobs,
     itemsByDate,
     itemFor,
@@ -141,8 +143,8 @@ export function MonthWeek(props: MonthWeekProps): React.JSX.Element {
     [week],
   );
   const bars = useMemo(
-    () => monthWeekBars({ vacation, sickness, jobs }, columns),
-    [columns, jobs, sickness, vacation],
+    () => monthWeekBars({ vacation, sickness, school, jobs }, columns),
+    [columns, jobs, school, sickness, vacation],
   );
   return (
     <div

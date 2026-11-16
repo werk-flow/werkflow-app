@@ -33,6 +33,14 @@ type NestedJobDetailReadScope = {
   userId: string;
 };
 
+/** Starts a read of the job once it arrived; null when the job read failed. */
+function afterJob<T>(
+  jobResultPromise: ReturnType<typeof getJobByNumber>,
+  read: (jobId: string) => Promise<T>,
+): Promise<T | null> {
+  return jobResultPromise.then((result) => (result.success ? read(result.job.id) : null));
+}
+
 async function loadNestedJobDetailReads({
   projectNumber,
   jobNumber,
@@ -40,15 +48,9 @@ async function loadNestedJobDetailReads({
   userId,
 }: NestedJobDetailReadScope) {
   const jobResultPromise = getJobByNumber(decodeURIComponent(jobNumber));
-  const instructionItemsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobInstructionItems(result.job.id) : null,
-  );
-  const documentsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobDocuments(result.job.id) : null,
-  );
-  const materialLinesResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobMaterialLines(result.job.id) : null,
-  );
+  const instructionItemsResultPromise = afterJob(jobResultPromise, getJobInstructionItems);
+  const documentsResultPromise = afterJob(jobResultPromise, getJobDocuments);
+  const materialLinesResultPromise = afterJob(jobResultPromise, getJobMaterialLines);
   const inventoryOptionsResultPromise = getInventoryPickerPage();
   const lifecycleResultPromise = jobResultPromise.then((result) =>
     result.success ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id }) : null,
@@ -65,8 +67,8 @@ async function loadNestedJobDetailReads({
     result.success ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id }) : null,
   );
   // The attached requests arrive with the page, so the section opens without a read of its own.
-  const requestEntriesPromise = jobResultPromise.then((result) =>
-    result.success ? getWorkRequestEntries({ kind: 'job', id: result.job.id }) : null,
+  const requestEntriesPromise = afterJob(jobResultPromise, (id) =>
+    getWorkRequestEntries({ kind: 'job', id }),
   );
 
   const [
@@ -242,6 +244,7 @@ async function NestedJobDetailData({
       }}
       isAdminOrManager={isAdminOrManager}
       currentUserId={user.id}
+      billingParties={jobResult.billingParties}
       {...regions}
     />
   );

@@ -1,4 +1,4 @@
-import type { CalendarBoardDay } from './board';
+import { ABSENCE_LABELS, type CalendarBoardDay } from './board';
 import { isManagerRole, isOrgRole, type OrgRole } from '@/lib/roles';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import { canApproveEntries } from '@/lib/time-tracking/helpers';
@@ -13,6 +13,7 @@ import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-trackin
 /** The short note beside a person's name: absence first, then holiday or closure, then a day off. */
 export function dayRowLabel(boardDay: CalendarBoardDay | undefined): string | null {
   if (!boardDay) return null;
+  if (boardDay.absence?.type === 'school') return ABSENCE_LABELS.school;
   if (boardDay.absence)
     return boardDay.absence.type === 'vacation'
       ? boardDay.absence.portion === 'half_day'

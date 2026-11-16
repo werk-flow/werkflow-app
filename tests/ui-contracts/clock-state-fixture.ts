@@ -9,6 +9,7 @@ export const RUNNING_CLOCK_STATE: LiveClockState = {
     breakMode: 'manual',
     autoBreakThresholdMinutes: 360,
     autoBreakDurationMinutes: 30,
+    secondStep: null,
   },
   status: 'working',
   isClockedIn: true,

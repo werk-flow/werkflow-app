@@ -154,7 +154,7 @@ declare
   v_attempt record;
 begin
   -- Open work: the assigned employee ticks an item.
-  if public.set_instruction_item_completion(v_org, v_employee, v_ticked, 0, true) <> 1 then
+  if public.set_instruction_item_completion(v_org, v_employee, v_ticked, 0, true) is distinct from 1 then
     raise exception 'the assigned employee could not tick an item of open work';
   end if;
 
@@ -186,7 +186,7 @@ begin
   -- An older job still in progress keeps its checklist open to the employee.
   if public.set_instruction_item_completion(
     v_org, v_employee, '14170000-0000-0000-0000-000000000080', 0, true
-  ) <> 1 then
+  ) is distinct from 1 then
     raise exception 'the assigned employee could not tick an item of an open legacy job';
   end if;
 
@@ -210,18 +210,18 @@ begin
       if sqlerrm <> 'instruction_item_not_authorized' then raise; end if;
     end;
   end loop;
-  if (select count(*) from public.job_instruction_item_events where organization_id = v_org) <> v_events
+  if (select count(*) from public.job_instruction_item_events where organization_id = v_org) is distinct from v_events
     or (select is_completed from public.job_instruction_items where id = v_ticked) is not true
     or (select is_completed from public.job_instruction_items where id = v_open) is not false
   then raise exception 'a refused checklist change on finished work left a trace'; end if;
 
   -- Admin and Büro keep correcting the checklist of finished work.
-  if public.set_instruction_item_completion(v_org, v_admin, v_open, 0, true) <> 1 then
+  if public.set_instruction_item_completion(v_org, v_admin, v_open, 0, true) is distinct from 1 then
     raise exception 'the admin could not tick an item of finished work';
   end if;
   if public.set_instruction_item_completion(
     v_org, '14170000-0000-0000-0000-000000000006', v_open, 1, false
-  ) <> 2 then
+  ) is distinct from 2 then
     raise exception 'Büro could not untick an item of finished work';
   end if;
 end;
@@ -247,7 +247,7 @@ begin
     p_organization_id => v_org, p_target_type => 'job', p_target_id => v_job,
     p_to_state => 'in_progress', p_expected_version => 0, p_actor_id => v_admin
   );
-  if v_transition.execution_state <> 'in_progress' or v_transition.execution_version <> 1
+  if v_transition.execution_state is distinct from 'in_progress' or v_transition.execution_version is distinct from 1
   then raise exception 'the manual start did not move the job to version 1 in progress'; end if;
 
   -- The client offers only getAllowedWorkTransitions (lib/ui/action-prechecks.ts):
@@ -289,7 +289,7 @@ begin
     p_responsible_employee_record_id => v_employee_record,
     p_next_review_date => (now() at time zone 'Europe/Berlin')::date, p_actor_id => v_employee
   );
-  if v_blocker.blocker_version <> 1 then raise exception 'the own blocker was not created at version 1'; end if;
+  if v_blocker.blocker_version is distinct from 1 then raise exception 'the own blocker was not created at version 1'; end if;
 
   if exists (select 1 from public.inventory_movements where job_id = v_job)
     or exists (select 1 from public.time_entries where job_id = v_job)
@@ -297,7 +297,7 @@ begin
     or exists (select 1 from public.planning_occurrences where job_id = v_job)
   then raise exception 'a lifecycle mutation wrote stock, time or schedule facts'; end if;
   if (select array_agg(to_state::text) from public.work_execution_events where job_id = v_job)
-     <> array['in_progress']
+     is distinct from array['in_progress']
   then raise exception 'the lifecycle ledger does not hold exactly the start event'; end if;
 
   -- P1-15: the assigned employee submits a work report for review.
@@ -326,7 +326,7 @@ begin
         p_corrects_revision_id => null, p_expected_version => null, p_submit => true,
         p_submit_action_id => '14170000-0000-0000-0000-000000000032', p_actor_id => v_actor
       );
-      if v_actor <> v_employee then raise exception 'an unassigned colleague replayed the revision'; end if;
+      if v_actor is distinct from v_employee then raise exception 'an unassigned colleague replayed the revision'; end if;
       if not (v_result ->> 'duplicate')::boolean then raise exception 'the author''s retry was no replay'; end if;
     exception when others then
       if v_actor = v_employee or sqlerrm <> 'work_artifact_not_authorized' then raise; end if;
@@ -340,7 +340,7 @@ begin
         p_action_type => 'review_requested', p_reason => null, p_comment => null,
         p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
       );
-      if v_actor <> v_employee then raise exception 'an unassigned colleague replayed the action'; end if;
+      if v_actor is distinct from v_employee then raise exception 'an unassigned colleague replayed the action'; end if;
       if not (v_result ->> 'duplicate')::boolean then raise exception 'the author''s retry was no replay'; end if;
     exception when others then
       if v_actor = v_employee or sqlerrm <> 'work_artifact_not_authorized' then raise; end if;
@@ -459,7 +459,7 @@ begin
       );
       raise exception 'a release on a stale version was recorded';
     exception when others then
-      if sqlerrm <> v_case[2] then
+      if sqlerrm is distinct from v_case[2] then
         raise exception 'release key %: expected %, got %', v_path, v_case[2], sqlerrm;
       end if;
     end;
@@ -486,12 +486,12 @@ begin
       p_storage_path => v_path, p_file_name => 'uebergabe.html', p_size_bytes => 1,
       p_renderer_version => 'sql-test-v1', p_content_hash => repeat('b', 64)
     );
-    if (v_result ->> 'documentId')::uuid <> v_document
-      or (v_result ->> 'duplicate')::boolean <> (v_path = v_replay_path)
+    if (v_result ->> 'documentId')::uuid is distinct from v_document
+      or (v_result ->> 'duplicate')::boolean is distinct from (v_path = v_replay_path)
     then raise exception 'release with key % answered %', v_path, v_result; end if;
   end loop;
   if (select array_agg(storage_path) from public.documents
-      where organization_id = v_org and storage_path like v_folder || '%') <> array[v_attempt_path]
+      where organization_id = v_org and storage_path like v_folder || '%') is distinct from array[v_attempt_path]
   then raise exception 'the release did not register exactly its own attempt''s key'; end if;
 end;
 $$;
@@ -608,7 +608,7 @@ begin
     p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
     p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
   );
-  if v_result ->> 'status' <> 'submitted' then
+  if v_result ->> 'status' is distinct from 'submitted' then
     raise exception 'the author could not send the own internal draft to review';
   end if;
   v_result := public.record_work_artifact_action(
@@ -617,7 +617,7 @@ begin
     p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
     p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
   );
-  if v_result ->> 'status' <> 'submitted' then
+  if v_result ->> 'status' is distinct from 'submitted' then
     raise exception 'a manager could not send a field worker''s internal draft to review';
   end if;
   -- Büro is a manager too.
@@ -627,7 +627,7 @@ begin
     p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
     p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
   );
-  if v_result ->> 'status' <> 'submitted' then
+  if v_result ->> 'status' is distinct from 'submitted' then
     raise exception 'Büro could not send a field worker''s internal draft to review';
   end if;
   -- A manager may write the next revision of a field worker's internal draft.
@@ -640,7 +640,7 @@ begin
     p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
     p_expected_version => 1, p_submit => false, p_submit_action_id => null, p_actor_id => v_admin
   );
-  if (v_result ->> 'version')::bigint <> 2 then
+  if (v_result ->> 'version')::bigint is distinct from 2 then
     raise exception 'a manager could not write a revision over a field worker''s internal draft';
   end if;
 end;
@@ -661,7 +661,7 @@ begin
   ] loop
     execute format('select count(*) from public.%I where organization_id = $1', v_table)
       into v_count using '14170000-0000-0000-0000-000000000010'::uuid;
-    if v_count <> 0 then raise exception 'another organization reads % rows', v_table; end if;
+    if v_count is distinct from 0 then raise exception 'another organization reads % rows', v_table; end if;
   end loop;
 end;
 $$;
@@ -697,7 +697,7 @@ begin
   v_snapshot := public.get_work_lifecycle_snapshot(
     v_org, '14170000-0000-0000-0000-000000000003', 'project', v_project
   );
-  if v_snapshot ->> 'targetId' <> v_project::text then
+  if v_snapshot ->> 'targetId' is distinct from v_project::text then
     raise exception 'the assigned employee did not read the project work state';
   end if;
   foreach v_actor in array array[

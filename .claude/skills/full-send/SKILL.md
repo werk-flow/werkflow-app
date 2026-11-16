@@ -12,7 +12,7 @@ The owner is not watching. Take the work from its current state to a merged PR o
 ## The grant
 
 - Commit, push and open the PR for this task's branch.
-- Merge with `gh pr merge --squash` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes.
+- Merge with `gh pr merge <n> --squash --auto` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. The merge queue lands it.
 - Run the app, drive a browser and take screenshots without asking.
 
 It never covers PROD, a release, real personal data, payments, deleting data outside the local stack, another branch, or a harness approval prompt.
@@ -22,9 +22,9 @@ It never covers PROD, a release, real personal data, payments, deleting data out
 1. Finish the change in the task's worktree and branch, never `main`. Fix the case that happened, not every case that could.
 2. Prove it (below).
 3. Choose the [review level](../../../docs/technical/coderabbit.md#choose-the-review-level). For level 1 and 2, run `sol-loop`.
-4. File the PR with `file-pr`. Merge `origin/main` first if it moved.
+4. File the PR with `file-pr`. Merge `origin/main` first only if the branch conflicts with it.
 5. Call `watch_pull_request` and babysit the PR ([pull-request reviews](../../../docs/technical/coderabbit.md)). Prove each fix before you push it. A behavior fix after Sol approved gets another `sol-loop` round while budget lasts.
-6. Merge when the gate passes on the latest commit.
+6. Merge when the gate passes on the latest commit, and watch until the queue has landed it.
 7. Report (below).
 
 Never end your turn while checks or bots are pending without a watcher: nobody prompts you again. Call `unwatch_pull_request` before you stop short of the merge or ask a question.

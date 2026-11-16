@@ -537,3 +537,82 @@ describe('resolveDailyTarget — sickness absence (P1-08)', () => {
     expect(resolveDailyTarget({ dateIso: '2026-08-06', ...base, absences: [span] }).targetMinutes).toBe(480);
   });
 });
+
+describe('resolveDailyTarget — Berufsschule day (werk-flow/werkflow-planning#165)', () => {
+  // 2026-08-04 is a Tuesday with a 480-minute schedule target.
+  const base = {
+    schedules: [makeSchedule('2026-01-01', FULL_TIME)],
+    conditions: [],
+    calendar: EMPTY_HOLIDAY_CALENDAR,
+    employment: OPEN_EMPLOYMENT,
+  };
+  const schoolDay = {
+    type: 'school',
+    startDate: '2026-08-04',
+    endDate: '2026-08-04',
+    dayPortion: 'full',
+  } as const;
+
+  test('a school day owes nothing more: its normal target is credited', () => {
+    const target = resolveDailyTarget({ dateIso: '2026-08-04', ...base, absences: [schoolDay] });
+    expect(target.targetMinutes).toBe(0);
+    expect(target.baseTargetMinutes).toBe(480);
+    expect(target.absence).toEqual({ type: 'school', portion: 'full' });
+    expect(getNoTargetReason(target)).toBe('Berufsschule');
+  });
+
+  test('a school day is no sickness: a sickness on the same day keeps the sickness', () => {
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      absences: [
+        schoolDay,
+        { type: 'sickness', startDate: '2026-08-04', endDate: '2026-08-04', dayPortion: 'full' },
+      ],
+    });
+    expect(target.absence).toEqual({ type: 'sickness', portion: 'full' });
+  });
+
+  test('a vacation on a school day keeps the vacation', () => {
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      absences: [
+        schoolDay,
+        { type: 'vacation', startDate: '2026-08-04', endDate: '2026-08-04', dayPortion: 'full' },
+      ],
+    });
+    expect(target.targetMinutes).toBe(0);
+    expect(target.absence).toEqual({ type: 'vacation', portion: 'full' });
+  });
+
+  test('a half-day vacation never halves a school day', () => {
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      absences: [
+        { type: 'vacation', startDate: '2026-08-04', endDate: '2026-08-04', dayPortion: 'half_day' },
+        schoolDay,
+      ],
+    });
+    expect(target.targetMinutes).toBe(0);
+    expect(target.absence).toEqual({ type: 'school', portion: 'full' });
+  });
+
+  test('a Blockunterricht over a weekend leaves the weekend a free day, not a school day', () => {
+    // 2026-08-08 is a Saturday without a schedule target.
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-08',
+      ...base,
+      absences: [{ type: 'school', startDate: '2026-08-03', endDate: '2026-08-14', dayPortion: 'full' }],
+    });
+    expect(target.absence).toBeNull();
+    expect(getNoTargetReason(target)).toBe('Kein Arbeitstag laut Wochenplan');
+  });
+
+  test('the day after a school day has its normal target', () => {
+    const target = resolveDailyTarget({ dateIso: '2026-08-05', ...base, absences: [schoolDay] });
+    expect(target.targetMinutes).toBe(480);
+    expect(target.absence).toBeNull();
+  });
+});

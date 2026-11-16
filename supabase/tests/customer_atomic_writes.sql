@@ -68,7 +68,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -98,7 +98,7 @@ begin
   insert into public.client_contacts (id, organization_id, client_id, name, is_primary)
     values (v_second, v_org, v_client, 'Zweite', true);
   if (select array_agg(id order by id) from public.client_contacts where client_id = v_client and is_primary)
-    <> array[v_second]
+    is distinct from array[v_second]
   then raise exception 'a new primary contact did not replace the previous one'; end if;
   if not (select is_primary from public.client_contacts where id = v_other) then
     raise exception 'a primary contact of another customer was cleared';
@@ -106,7 +106,7 @@ begin
 
   update public.client_contacts set is_primary = true where id = v_first;
   if (select array_agg(id order by id) from public.client_contacts where client_id = v_client and is_primary)
-    <> array[v_first]
+    is distinct from array[v_first]
   then raise exception 'marking a contact primary did not replace the previous one'; end if;
 
   -- The same statement refused later (a missing name): the previous primary stays.
@@ -117,7 +117,7 @@ begin
   exception when not_null_violation then null;
   end;
   if (select array_agg(id order by id) from public.client_contacts where client_id = v_client and is_primary)
-    <> array[v_first]
+    is distinct from array[v_first]
   then raise exception 'a refused primary contact cleared the previous primary'; end if;
 
   insert into public.client_sites (id, organization_id, client_id, name, is_primary) values
@@ -125,7 +125,7 @@ begin
   insert into public.client_sites (id, organization_id, client_id, name, is_primary) values
     (v_second_site, v_org, v_client, 'Dachboden', true);
   if (select array_agg(id order by id) from public.client_sites where client_id = v_client and is_primary)
-    <> array[v_second_site]
+    is distinct from array[v_second_site]
   then raise exception 'a new primary site did not replace the previous one'; end if;
 
   begin
@@ -134,12 +134,12 @@ begin
   exception when not_null_violation then null;
   end;
   if (select array_agg(id order by id) from public.client_sites where client_id = v_client and is_primary)
-    <> array[v_second_site]
+    is distinct from array[v_second_site]
   then raise exception 'a refused primary site cleared the previous primary'; end if;
 
   update public.client_sites set is_primary = true where id = v_first_site;
   if (select array_agg(id order by id) from public.client_sites where client_id = v_client and is_primary)
-    <> array[v_first_site]
+    is distinct from array[v_first_site]
   then raise exception 'marking a site primary did not replace the previous one'; end if;
 end;
 $$;
@@ -245,30 +245,30 @@ begin
     '41530000-0000-0000-0000-000000000010', '41530000-0000-0000-0000-000000000040', '  ', 'gewerblich');
   select * into v_client from public.clients where id = v_request.client_id;
   if v_client.id is null
-    or v_client.organization_id <> '41530000-0000-0000-0000-000000000010'
-    or v_client.name <> 'Erika Muster'
-    or v_client.client_type <> 'gewerblich'
-    or v_client.email <> 'erika@example.test'
-    or v_client.phone <> '0301234567'
-    or v_client.address <> 'Hauptstraße 1, 10115 Berlin'
+    or v_client.organization_id is distinct from '41530000-0000-0000-0000-000000000010'
+    or v_client.name is distinct from 'Erika Muster'
+    or v_client.client_type is distinct from 'gewerblich'
+    or v_client.email is distinct from 'erika@example.test'
+    or v_client.phone is distinct from '0301234567'
+    or v_client.address is distinct from 'Hauptstraße 1, 10115 Berlin'
   then raise exception 'a promotion did not create the customer from the caller fields: %', to_jsonb(v_client); end if;
-  if (select client_id from public.client_requests where id = '41530000-0000-0000-0000-000000000040') <> v_client.id
+  if (select client_id from public.client_requests where id = '41530000-0000-0000-0000-000000000040') is distinct from v_client.id
   then raise exception 'a promotion did not link the customer'; end if;
   select * into v_contact from public.client_contacts where client_id = v_client.id;
   if v_contact.id is null
-    or v_contact.organization_id <> '41530000-0000-0000-0000-000000000010'
-    or v_contact.name <> 'Erika Muster'
-    or v_contact.phone <> '0301234567'
-    or v_contact.email <> 'erika@example.test'
+    or v_contact.organization_id is distinct from '41530000-0000-0000-0000-000000000010'
+    or v_contact.name is distinct from 'Erika Muster'
+    or v_contact.phone is distinct from '0301234567'
+    or v_contact.email is distinct from 'erika@example.test'
     or not v_contact.is_primary
   then raise exception 'a promotion did not make the caller the primary contact: %', to_jsonb(v_contact); end if;
   select * into v_site from public.client_sites where client_id = v_client.id;
   if v_site.id is null
-    or v_site.organization_id <> '41530000-0000-0000-0000-000000000010'
-    or v_site.name <> 'Hauptstandort'
-    or v_site.street <> 'Hauptstraße 1'
-    or v_site.postal_code <> '10115'
-    or v_site.city <> 'Berlin'
+    or v_site.organization_id is distinct from '41530000-0000-0000-0000-000000000010'
+    or v_site.name is distinct from 'Hauptstandort'
+    or v_site.street is distinct from 'Hauptstraße 1'
+    or v_site.postal_code is distinct from '10115'
+    or v_site.city is distinct from 'Berlin'
     or v_site.primary_contact_id is distinct from v_contact.id
     or not v_site.is_primary
   then raise exception 'a promotion did not make the captured address the first work site: %', to_jsonb(v_site); end if;
@@ -281,9 +281,9 @@ begin
   select * into v_site from public.client_sites where id = v_request.site_id;
   select * into v_contact from public.client_contacts where id = v_request.contact_id;
   if v_site.client_id is distinct from v_request.client_id
-    or v_site.street <> 'Hinterhof links' or v_site.postal_code is not null or v_site.city is not null
+    or v_site.street is distinct from 'Hinterhof links' or v_site.postal_code is not null or v_site.city is not null
     or v_contact.client_id is distinct from v_request.client_id
-    or v_contact.name <> 'Max Hof' or v_contact.phone <> '0171 2345678' or v_contact.email is not null
+    or v_contact.name is distinct from 'Max Hof' or v_contact.phone is distinct from '0171 2345678' or v_contact.email is not null
   then raise exception 'a free-text address or a phone-only caller was not kept: %, %', to_jsonb(v_site), to_jsonb(v_contact); end if;
   -- Text that is not one email address stays on the request, never on the contact.
   if v_request.caller_email is distinct from 'keine'
@@ -292,14 +292,14 @@ begin
     select array_agg(event_type || ':' || (event_payload ->> 'clientId') || ':' || (event_payload ->> 'clientName')
       || ':' || created_by::text)
     from public.client_request_events where request_id = '41530000-0000-0000-0000-000000000040'
-  ) <> array['promoted:' || v_client.id::text || ':Erika Muster:41530000-0000-0000-0000-000000000002']
+  ) is distinct from array['promoted:' || v_client.id::text || ':Erika Muster:41530000-0000-0000-0000-000000000002']
   then raise exception 'a promotion did not record its history row'; end if;
 
   -- The typed name wins over the captured caller name.
   v_request := public.promote_client_request_caller('41530000-0000-0000-0000-000000000001',
     '41530000-0000-0000-0000-000000000010', '41530000-0000-0000-0000-000000000041', ' Neue Kundin ', null);
   if (select name || ':' || client_type::text from public.clients where id = v_request.client_id)
-    <> 'Neue Kundin:privat'
+    is distinct from 'Neue Kundin:privat'
   then raise exception 'a promotion ignored the typed name or the default type'; end if;
   -- Without an address the customer gets no site; the typed name is its contact.
   if v_request.site_id is not null

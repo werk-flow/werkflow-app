@@ -11,6 +11,7 @@ Anfragen
 Aufträge
 Dokumente
 Inventar
+Angebote
 Service
 Arbeitsvorlagen
 Mitarbeiter

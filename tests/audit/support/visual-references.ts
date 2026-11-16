@@ -1,4 +1,6 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { settled } from '../../golden/support/steps/interaction';
 import { clockInLauncher } from '../../golden/support/steps/time-tracking';
 
@@ -216,10 +218,29 @@ async function expectGeistTypography(page: Page): Promise<void> {
 }
 
 /**
+ * Prepares the reference image `name` for an update run. It removes the image when its text
+ * reference is missing or differs from `text`, so the screenshot writes it anew: an update rewrites
+ * an image only past its pixel tolerance, and a changed word alone can stay under it. It returns
+ * the step that puts the image back as it was, so a failed capture leaves no reference of its own.
+ */
+function prepareImageUpdate(name: string, text: string): () => void {
+  const info = test.info();
+  const textReference = info.snapshotPath(`${name}.txt`, { kind: 'snapshot' });
+  const image = info.snapshotPath(`${name}.png`, { kind: 'screenshot' });
+  const original = existsSync(image) ? readFileSync(image) : undefined;
+  if (!existsSync(textReference) || readFileSync(textReference, 'utf8') !== text)
+    rmSync(image, { force: true });
+  return () => {
+    if (original === undefined) rmSync(image, { force: true });
+    else writeFileSync(image, original);
+  };
+}
+
+/**
  * Compares the viewport with its reference image and its visible text with the
  * text reference beside it. The pixel tolerance only absorbs anti-aliasing; a
  * moved, recoloured or missing element exceeds it, and a changed word fails
- * the exact text comparison.
+ * the exact text comparison. An update writes the image anew whenever its text changed.
  */
 export async function expectReference(
   page: Page,
@@ -229,12 +250,27 @@ export async function expectReference(
 ): Promise<void> {
   await expectGeistTypography(page);
   await normalizeText(page, replacements, options.calendarWeek ?? false);
-  await expect(page).toHaveScreenshot(`${name}.png`, {
-    animations: 'disabled',
-    caret: 'hide',
-    scale: 'css',
-    mask: [...(options.mask ?? [])],
-    maxDiffPixelRatio: 0.002,
-  });
-  expect(await viewportText(page)).toMatchSnapshot(`${name}.txt`);
+  // Only an update run writes references; every other run compares as before.
+  const update = test.info().config.updateSnapshots !== 'none';
+  const before = update ? await viewportText(page) : undefined;
+  const restoreImage = before === undefined ? () => {} : prepareImageUpdate(name, before);
+  let text: string;
+  try {
+    await expect(page).toHaveScreenshot(`${name}.png`, {
+      animations: 'disabled',
+      caret: 'hide',
+      scale: 'css',
+      mask: [...(options.mask ?? [])],
+      maxDiffPixelRatio: 0.002,
+    });
+    text = await viewportText(page);
+    // The image was kept or dropped for the text read before it: text that changed during the
+    // capture could pair an old image with a new text reference, so the update fails instead.
+    if (before !== undefined) expect(text, `${name}: the text held still during the capture`).toBe(before);
+  } catch (error) {
+    // Never derive a reference from a failed run: the image goes back as it was.
+    restoreImage();
+    throw error;
+  }
+  expect(text).toMatchSnapshot(`${name}.txt`);
 }

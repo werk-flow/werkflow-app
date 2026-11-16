@@ -86,6 +86,13 @@ export function calculateBuildInputs(
   return { sourceDigest: source.digest('hex'), environmentDigest: settings.digest('hex') };
 }
 
+/** The recorded build's input digests, or null without a recorded build. */
+export function recordedBuildInputs(repositoryRoot: string): BuildInputs | null {
+  if (!existsSync(resolve(repositoryRoot, '.next/werkflow-build-receipt.json'))) return null;
+  const { sourceDigest, environmentDigest } = readBuildReceipt(repositoryRoot);
+  return { sourceDigest, environmentDigest };
+}
+
 export function readBuildReceipt(repositoryRoot: string): BuildReceipt {
   const path = resolve(repositoryRoot, '.next/werkflow-build-receipt.json');
   if (!existsSync(path))

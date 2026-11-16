@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Download, ExternalLink, FileText } from 'lucide-react';
+import { Download, ExternalLink, FileCode, FileText } from 'lucide-react';
 
 import { DocumentSampleRowSkeleton } from '@/components/loading-states/einstellungen-page-skeleton';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,9 @@ import type { ActionFailure } from '@/lib/action-result';
 
 /** The route handler that renders the Musterangebot for Admin and Büro. */
 const SAMPLE_OFFER_PATH = '/api/musterangebot';
+
+/** The route handler that builds the checked Muster-E-Rechnung (ZUGFeRD PDF with EN 16931 XML) for Admin and Büro. */
+const SAMPLE_INVOICE_PATH = '/api/musterrechnung';
 
 type SampleOfferRead = { success: true; url: string } | ActionFailure<'load_failed'>;
 
@@ -27,11 +30,25 @@ async function readSampleOffer(signal: AbortSignal): Promise<SampleOfferRead> {
   }
 }
 
-/** The Musterangebot as the PDF a customer receives, to open or download. */
-export function DocumentSamplePreview() {
+type PreviewProps = {
+  /** The organization whose profile the sample shows. */
+  organizationId: string;
+  profileUpdatedAt: string | null;
+};
+
+/**
+ * The Musterangebot as the PDF a customer receives, to open or download. A
+ * saved change of the company profile renders it anew; another organization
+ * mounts a new preview, so no sample of the one before stays on screen.
+ */
+export function DocumentSamplePreview(props: PreviewProps) {
+  return <SamplePreview key={props.organizationId} profileUpdatedAt={props.profileUpdatedAt} />;
+}
+
+function SamplePreview({ profileUpdatedAt }: Pick<PreviewProps, 'profileUpdatedAt'>) {
   const sample = useClientRead({
     read: readSampleOffer,
-    deps: [],
+    deps: [profileUpdatedAt],
     failureMessage: 'Das Musterangebot konnte nicht erstellt werden.',
   });
   const url = sample.data?.url;
@@ -42,11 +59,11 @@ export function DocumentSamplePreview() {
       <CardHeader>
         <CardTitle>Musterangebot</CardTitle>
         <CardDescription>
-          So kommt ein Angebot als PDF bei deinen Kunden an: dein Firmenname als Absender, ein erfundener
-          Kunde und erfundene Preise.
+          So kommt ein Angebot als PDF bei deinen Kunden an: mit deinen Firmenangaben, deinem Logo oder
+          Briefpapier, einem erfundenen Kunden und erfundenen Preisen.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-4">
         {sample.failure ? (
           <SectionError failure={sample.failure} />
         ) : sample.data ? (
@@ -79,6 +96,14 @@ export function DocumentSamplePreview() {
             <DocumentSampleRowSkeleton />
           </div>
         )}
+        <div>
+          <Button variant="link" className="h-auto px-0" asChild>
+            <a href={SAMPLE_INVOICE_PATH} target="_blank" rel="noreferrer">
+              <FileCode className="size-4" />
+              Muster-E-Rechnung (ZUGFeRD-PDF)
+            </a>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

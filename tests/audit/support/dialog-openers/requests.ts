@@ -4,6 +4,8 @@ import { seedRequest } from '../../../golden/support/db/requests';
 import { seedPublishedWorkTemplate } from '../../../golden/support/db/work';
 import { dismissDialog } from '../../../golden/support/steps/interaction';
 import {
+  billingPartiesDialog,
+  requestBillingPartiesButton,
   requestAttachToWorkButton,
   requestAttachToWorkDialog,
   requestCaptureButton,
@@ -104,6 +106,11 @@ export const REQUESTS_OPENERS = {
     // The layout request has a customer, so adding it to that customer's work is offered.
     trigger: async ({ page }) => requestAttachToWorkButton(page),
     layer: requestAttachToWorkDialog,
+  },
+  'requests.billing-parties': {
+    // The layout request is open and has a customer, so its Auftraggeber and recipient can change.
+    trigger: async ({ page }) => requestBillingPartiesButton(page),
+    layer: billingPartiesDialog,
   },
   'requests.assign-customer': {
     // Only a request without a customer offers the match, so the opener opens its own.

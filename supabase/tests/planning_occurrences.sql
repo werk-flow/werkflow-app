@@ -98,7 +98,7 @@ begin
         'employeeRecordId', employee_record)) from generate_series(0, 4) day),
     '76000000-0000-4000-8000-000000000030', '{}'::jsonb, 'capacity', '{}'::jsonb, 'qualification'
   );
-  if cardinality(occurrence_ids) <> 5
+  if cardinality(occurrence_ids) is distinct from 5
      or (select count(distinct original_start_local) from public.planning_occurrences
          where id = any(occurrence_ids)) <> 5
      or (select count(distinct series_id) from public.planning_occurrences
@@ -136,9 +136,9 @@ begin
     '{}'::jsonb, 'capacity', '{}'::jsonb, 'qualification'
   );
   select start_at into exception_start from public.planning_occurrences where id = second_id;
-  if next_version <> 2
+  if next_version is distinct from 2
      or not (select is_exception from public.planning_occurrences where id = second_id)
-     or pg_temp.berlin_time(exception_start) <> '11:00'
+     or pg_temp.berlin_time(exception_start) is distinct from '11:00'
      or not exists (select 1 from public.planning_events where occurrence_id = second_id and event_type = 'edited')
     then raise exception 'a single-visit edit did not become a traceable exception'; end if;
 
@@ -157,7 +157,7 @@ begin
          from public.planning_occurrences where series_lineage_id = lineage) is distinct from identities_before
      or (select series_id from public.planning_occurrences where id = third_id)
         = (select series_id from public.planning_occurrences where id = second_id)
-     or pg_temp.berlin_time((select start_at from public.planning_occurrences where id = fifth_id)) <> '12:00'
+     or pg_temp.berlin_time((select start_at from public.planning_occurrences where id = fifth_id)) is distinct from '12:00'
      or not exists (select 1 from public.planning_events where occurrence_id = third_id and event_type = 'series_split')
     then raise exception 'a this-and-future edit lost an identity or did not split the series'; end if;
 
@@ -171,7 +171,7 @@ begin
     jsonb_build_array(jsonb_build_object('employeeRecordId', employee_record)),
     '{}'::jsonb, 'capacity', '{}'::jsonb, 'qualification'
   );
-  if (select start_at from public.planning_occurrences where id = second_id) <> exception_start
+  if (select start_at from public.planning_occurrences where id = second_id) is distinct from exception_start
      or exists (select 1 from public.planning_occurrences
                 where series_lineage_id = lineage and id <> second_id
                   and pg_temp.berlin_time(start_at) <> '13:00')
@@ -192,7 +192,7 @@ begin
   perform public.set_planning_occurrence_status(
     org, admin_user, fifth_id, next_version, 'skipped', 'Wird betrieblich nicht benötigt.'
   );
-  if (select status::text from public.planning_occurrences where id = fifth_id) <> 'skipped'
+  if (select status::text from public.planning_occurrences where id = fifth_id) is distinct from 'skipped'
      or not (select is_exception from public.planning_occurrences where id = fifth_id)
      or not exists (select 1 from public.planning_events where occurrence_id = fifth_id and event_type = 'skipped')
     then raise exception 'a skipped visit vanished or lost its history'; end if;
@@ -250,8 +250,8 @@ begin
        order by day) from unnest(array[0, 2, 4]) day),
     '[]'::jsonb, '{}'::jsonb, 'capacity', '{}'::jsonb, 'qualification'
   );
-  if (select start_at from public.planning_occurrences where id = past_id) <> past_start
-     or (select status::text from public.planning_occurrences where id = past_id) <> 'scheduled'
+  if (select start_at from public.planning_occurrences where id = past_id) is distinct from past_start
+     or (select status::text from public.planning_occurrences where id = past_id) is distinct from 'scheduled'
      or exists (select 1 from public.planning_occurrences
                 where id = any(occurrence_ids) and id <> past_id
                   and pg_temp.berlin_time(start_at) <> '10:00')

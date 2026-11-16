@@ -102,7 +102,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -144,7 +144,7 @@ begin
      union all
      select 'assignment', to_jsonb(assignment) - 'assigned_at' from public.job_assignments assignment
      where assignment.organization_id = '26104150-0000-0000-0000-000000000010')
-  ) or (select count(*) from work_before) <> (
+  ) or (select count(*) from work_before) is distinct from (
     (select count(*) from public.projects where organization_id = '26104150-0000-0000-0000-000000000010')
     + (select count(*) from public.jobs where organization_id = '26104150-0000-0000-0000-000000000010')
     + (select count(*) from public.job_instruction_items
@@ -289,7 +289,7 @@ begin
   v_project := public.update_project_with_jobs('26104150-0000-0000-0000-000000000010',
     '26104150-0000-0000-0000-000000000040',
     '{"client_id": "26104150-0000-0000-0000-000000000021", "site_id": null, "contact_id": null}');
-  if v_project.client_id <> '26104150-0000-0000-0000-000000000021' or v_project.site_id is not null then
+  if v_project.client_id is distinct from '26104150-0000-0000-0000-000000000021' or v_project.site_id is not null then
     raise exception 'the project customer change did not apply';
   end if;
   if exists (
@@ -305,7 +305,7 @@ begin
     '{"title": "Wartung neu", "planned_date": "2026-11-02"}', true,
     array['26104150-0000-0000-0000-000000000002'::uuid], '2026-11-02', '{}', '[]', '{}', 'fingerprint',
     null, null, true);
-  if v_job.title <> 'Wartung neu' or v_job.planned_date <> '2026-11-02' then
+  if v_job.title is distinct from 'Wartung neu' or v_job.planned_date is distinct from '2026-11-02' then
     raise exception 'the job edit did not apply';
   end if;
   if not exists (
@@ -337,12 +337,12 @@ begin
   if (
     select array_agg(item.id order by item.sort_order) from public.job_instruction_items item
     where item.job_id = '26104150-0000-0000-0000-000000000051'
-  ) <> array['26104150-0000-0000-0000-000000000062'::uuid, v_item_id,
+  ) is distinct from array['26104150-0000-0000-0000-000000000062'::uuid, v_item_id,
       '26104150-0000-0000-0000-000000000061'::uuid]
     or (
       select array_agg(item.sort_order order by item.sort_order) from public.job_instruction_items item
       where item.job_id = '26104150-0000-0000-0000-000000000051'
-    ) <> array[0, 1, 2]
+    ) is distinct from array[0, 1, 2]
   then
     raise exception 'the list changes did not leave a numbered list in the expected order';
   end if;
@@ -358,10 +358,10 @@ begin
       '26104150-0000-0000-0000-000000000064', '26104150-0000-0000-0000-000000000063']::uuid[]);
   if (
     select sort_order from public.job_instruction_items where id = '26104150-0000-0000-0000-000000000064'
-  ) <> 0 then
+  ) is distinct from 0 then
     raise exception 'the project list was not reordered';
   end if;
-  if (select sort_order from public.job_instruction_items where id = '26104150-0000-0000-0000-000000000069') <> 0
+  if (select sort_order from public.job_instruction_items where id = '26104150-0000-0000-0000-000000000069') is distinct from 0
   then
     raise exception 'a list change reached another organization';
   end if;

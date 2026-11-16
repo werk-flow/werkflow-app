@@ -106,10 +106,10 @@ begin
     p_responsibility_snapshot => pg_temp.timeline_fence()
   );
   v_request_id := (v_result->>'requestId')::uuid;
-  if v_result->>'status' <> 'submitted' then
+  if v_result->>'status' is distinct from 'submitted' then
     raise exception 'employee correction was not submitted';
   end if;
-  if (select status from public.time_entries where id = '22000000-0000-0000-0000-000000000020') <> 'approved'
+  if (select status from public.time_entries where id = '22000000-0000-0000-0000-000000000020') is distinct from 'approved'
   then raise exception 'pending proposal mutated its source'; end if;
   if exists (select 1 from public.time_correction_applications where request_id = v_request_id)
   then raise exception 'a submitted proposal created an application before any decision'; end if;
@@ -131,7 +131,7 @@ begin
     p_responsibility_snapshot => pg_temp.timeline_fence()
   );
   if (v_result->>'replayed')::boolean is not true
-    or (v_result->>'requestId')::uuid <> v_request_id
+    or (v_result->>'requestId')::uuid is distinct from v_request_id
   then raise exception 'submission replay failed'; end if;
 
   begin
@@ -151,7 +151,7 @@ begin
   );
   if (select count(*) from public.time_correction_request_revisions where request_id = v_request_id) <> 1
   then raise exception 'clarification changed immutable revision'; end if;
-  if (select status from public.time_correction_requests where id = v_request_id) <> 'clarification_required'
+  if (select status from public.time_correction_requests where id = v_request_id) is distinct from 'clarification_required'
   then raise exception 'clarification did not return the request to its requester'; end if;
 
   v_result := public.revise_time_correction_request(
@@ -163,15 +163,15 @@ begin
       'version', v_source_version
     ))
   );
-  if (v_result->>'revision')::bigint <> 2
+  if (v_result->>'revision')::bigint is distinct from 2
     or (select count(*) from public.time_correction_request_revisions where request_id = v_request_id) <> 2
   then raise exception 'clarification revision was not appended'; end if;
   if (
     select reason from public.time_correction_request_revisions
     where request_id = v_request_id and revision = 1
-  ) <> 'Doppelter Eintrag'
+  ) is distinct from 'Doppelter Eintrag'
   then raise exception 'the answer rewrote the original revision'; end if;
-  if (select status from public.time_correction_requests where id = v_request_id) <> 'submitted'
+  if (select status from public.time_correction_requests where id = v_request_id) is distinct from 'submitted'
     or not exists (
       select 1 from public.time_correction_events
       where request_id = v_request_id and revision = 1 and event_type = 'submitted'
@@ -260,7 +260,7 @@ begin
     '[]', ('{"mode":"role_default","role":"buero"}')::jsonb || pg_temp.timeline_fence()
   );
   v_direct_request_id := (v_result->>'requestId')::uuid;
-  if v_result->>'status' <> 'approved' or not exists (
+  if v_result->>'status' is distinct from 'approved' or not exists (
     select 1 from public.time_correction_applications where request_id = v_direct_request_id
   ) then raise exception 'authorized correction for another subject was not atomic'; end if;
 
@@ -537,7 +537,7 @@ begin
     '22000000-0000-0000-0000-000000000010', v_recipient_employee,
     '22000000-0000-0000-0000-000000000002', gen_random_uuid(), 'edit', 'Recipient corrects own time',
     repeat('6', 64), repeat('5', 64), v_snapshot, v_snapshot, v_sources, pg_temp.timeline_fence());
-  if v_request->>'status' <> 'submitted' then raise exception 'recipient approved their own correction'; end if;
+  if v_request->>'status' is distinct from 'submitted' then raise exception 'recipient approved their own correction'; end if;
   if not exists (select 1 from public.read_time_correction_applications(
     '22000000-0000-0000-0000-000000000010', array['22000000-0000-0000-0000-000000000002'::uuid]) where id = v_application)
   then raise exception 'recipient projection omitted reassigned time'; end if;
@@ -562,7 +562,7 @@ begin
     '[]', ('{"mode":"role_default","role":"admin"}')::jsonb || pg_temp.timeline_fence()
   );
   v_request_id := (v_result->>'requestId')::uuid;
-  if v_result->>'status' <> 'submitted' then raise exception 'a holder applied their own correction'; end if;
+  if v_result->>'status' is distinct from 'submitted' then raise exception 'a holder applied their own correction'; end if;
   begin
     perform public.decide_time_correction(
       v_request_id, '22000000-0000-0000-0000-000000000001', gen_random_uuid(), 1, 'approve', null,
@@ -572,7 +572,7 @@ begin
   exception when others then
     if sqlerrm not like '%time_correction_self_approval_forbidden%' then raise; end if;
   end;
-  if (select status from public.time_correction_requests where id = v_request_id) <> 'submitted'
+  if (select status from public.time_correction_requests where id = v_request_id) is distinct from 'submitted'
     or exists (select 1 from public.time_correction_applications where request_id = v_request_id)
   then raise exception 'a refused self approval changed the request'; end if;
 end;

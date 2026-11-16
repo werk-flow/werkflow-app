@@ -15,7 +15,14 @@ function targets(source: DailyTargetInput['source']): Map<string, DailyTargetInp
   return new Map(
     DATES.map((date) => [
       date,
-      { localDate: date, targetMinutes: 510, source, vacationMinutes: 0, sicknessMinutes: 0 },
+      {
+        localDate: date,
+        targetMinutes: 510,
+        source,
+        vacationMinutes: 0,
+        sicknessMinutes: 0,
+        schoolMinutes: 0,
+      },
     ]),
   );
 }

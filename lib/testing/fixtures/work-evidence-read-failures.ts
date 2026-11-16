@@ -40,6 +40,7 @@ const world = installActionWorld({
 /** A table whose reads fail; every other table reads the in-memory rows. */
 let failingReadTable: string | null = null;
 const rpcCalls: string[] = [];
+let leadRuleFails = false;
 mock.module('@/lib/supabase/admin', () => ({
   createSupabaseAdminClient: () => {
     const admin = createInMemoryAdmin(world.tables);
@@ -57,6 +58,12 @@ mock.module('@/lib/supabase/admin', () => ({
         return query;
       },
       rpc: async (name: string) => {
+        // The lead rule: nobody leads, or the rule cannot be read.
+        if (name === 'read_work_lead_scope') {
+          return leadRuleFails
+            ? { data: null, error: { code: '08006', message: 'read failed' } }
+            : { data: { projectIds: [], jobIds: [] }, error: null };
+        }
         rpcCalls.push(name);
         return { data: null, error: { message: `${name} is outside this fixture` } };
       },
@@ -95,6 +102,10 @@ for (const table of ['jobs', 'job_assignments']) {
 }
 failingReadTable = null;
 assert.deepEqual(await getWorkArtifacts(jobTarget), { success: false, error: 'not_authorized' });
+// The lead rule that admits a „Projektleitung“: a failed read is a load failure too.
+leadRuleFails = true;
+assert.deepEqual(await getWorkArtifacts(jobTarget), loadFailed, 'read_work_lead_scope');
+leadRuleFails = false;
 
 // The correction review: a failed request or subject read is a load failure;
 // a missing request or subject keeps its own code. No decision is written.

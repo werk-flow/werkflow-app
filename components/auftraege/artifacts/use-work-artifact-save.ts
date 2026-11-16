@@ -6,6 +6,7 @@ import { useBanner } from '@/components/ui/banner';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 import { recordWorkArtifactAction, saveWorkArtifact } from '@/lib/work-artifacts/actions';
 import { workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
+import { DRAFT_SEND_BUSY, whileNoDraftSend } from '@/lib/field-sync/device/draft-sync';
 import type { DeviceDraftHandle } from './use-device-drafts';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
@@ -24,6 +25,8 @@ const SAVED_MESSAGE = 'Arbeitsnachweis wurde gespeichert.';
 const SUBMITTED_MESSAGE = 'Arbeitsnachweis wurde zur Prüfung eingereicht.';
 const SEALED_ELSEWHERE_MESSAGE =
   'Dieser Entwurf wird gerade aus einem anderen Fenster gesendet. Deine Änderungen hier sind noch nicht gespeichert und bleiben im Formular.';
+const TRANSFER_RUNNING_MESSAGE =
+  'Der Entwurf konnte gerade nicht gespeichert werden, weil noch eine Übertragung läuft. Deine Eingaben bleiben im Formular. Versuch es gleich noch einmal.';
 
 /** Shows the draft the device just sent; a submit asks for its review now that the server holds it. */
 function useSentDraft(editor: WorkArtifactEditor, newArtifactId: string) {
@@ -50,6 +53,38 @@ function useSentDraft(editor: WorkArtifactEditor, newArtifactId: string) {
         'Der Entwurf ist gespeichert, wurde aber nicht zur Prüfung eingereicht. Reiche ihn hier noch einmal ein.',
       );
   };
+}
+
+type DraftSavePlan = Awaited<ReturnType<DeviceDraftHandle['prepareSave']>>;
+/** What the server answers a save of an Arbeitsnachweis. */
+type ServerSave = Awaited<ReturnType<typeof saveWorkArtifact>>;
+
+/**
+ * The draft's save through the device, in the drafts' send turn from its seal to its cleanup: a
+ * session end's discard in any tab waits for all of it, and can never fall between the seal and the
+ * online save (decision record 0010, the amendment "report drafts at a session end after review").
+ * Only a sealed text-only draft saves online here; every other plan answers `no_answer`, and its
+ * device send runs after the turn, which it takes itself. A refusal unseals the draft, which the
+ * server holds nothing of; `keptForm` when another tab changed it meanwhile. A success removes the
+ * device's copy: a refused delete never rejects (the keeper shows it), and the kept copy's later
+ * send carries this revision id, which the server replays. DRAFT_SEND_BUSY when another send held
+ * the turn past its bound: then nothing was sealed or saved, and nothing of this save runs later.
+ */
+function saveThroughDevice(
+  onDevice: DeviceDraftHandle,
+  save: (fromDraft: { revisionId: string; changedAt: string }) => Promise<ServerSave | 'no_answer'>,
+): Promise<
+  { plan: DraftSavePlan; result: ServerSave | 'no_answer'; keptForm: boolean } | typeof DRAFT_SEND_BUSY
+> {
+  return whileNoDraftSend(async () => {
+    const plan = await onDevice.prepareSave();
+    if (plan?.kind !== 'online') return { plan, result: 'no_answer', keptForm: false };
+    const result = await save(plan);
+    if (result === 'no_answer') return { plan, result, keptForm: false };
+    if (!result.success) return { plan, result, keptForm: !(await onDevice.unseal(plan.changedAt)) };
+    await onDevice.discard();
+    return { plan, result, keptForm: false };
+  });
 }
 
 /**
@@ -100,19 +135,20 @@ export function useWorkArtifactSave({
 
   async function runSave(submit: boolean): Promise<void> {
     const onDevice = deviceDraft.current;
-    const plan = onDevice ? await onDevice.prepareSave() : null;
+    // Photos reach the server only with the draft the device holds. A draft without photos is sealed
+    // for its online save: if it lands and the answer is lost, nothing changes the draft until the
+    // device's send of the same revision is answered.
+    const saved = onDevice
+      ? await saveThroughDevice(onDevice, (fromDraft) => saveOnServer(submit, fromDraft))
+      : { plan: null, result: await saveOnServer(submit, null), keptForm: false };
+    // A send in a dead spot holds the drafts' turn: nothing was saved, and the form keeps its text.
+    if (saved === DRAFT_SEND_BUSY) return editor.setError(TRANSFER_RUNNING_MESSAGE);
+    const { plan, result, keptForm } = saved;
     // The device could not say whether the draft has photos: a text-only save could lose them.
     if (onDevice && plan === null) return;
     // Another tab's save is on its way with the draft as it was: this form keeps what changed since.
     if (plan?.kind === 'sealed_elsewhere')
       return void showBanner({ variant: 'error', message: SEALED_ELSEWHERE_MESSAGE });
-    // Photos reach the server only with the draft the device holds. A draft without photos is now
-    // sealed: if its online save lands and the answer is lost, nothing changes the draft until the
-    // device's send of the same revision is answered.
-    const result =
-      plan?.kind === 'device'
-        ? 'no_answer'
-        : await saveOnServer(submit, plan?.kind === 'online' ? plan : null);
     if (result === 'no_answer') {
       // The device sends the draft in the state this save decided on, or keeps the form when it changed.
       const sent = plan && onDevice ? await onDevice.save(submit, plan.changedAt) : null;
@@ -120,9 +156,8 @@ export function useWorkArtifactSave({
       return;
     }
     if (!result.success) {
-      // The server refused the save and holds nothing of it: the draft can change again, unless
-      // another tab changed it meanwhile; the keeper then says so and the form keeps its text.
-      if (onDevice && plan?.kind === 'online' && !(await onDevice.unseal(plan.changedAt))) return;
+      // Another tab changed the draft while the seal held it: the keeper said so and the form keeps its text.
+      if (keptForm) return;
       await editor.handleMutationFailure(
         result,
         'Der Arbeitsnachweis konnte nicht gespeichert werden.',
@@ -130,9 +165,6 @@ export function useWorkArtifactSave({
       );
       return;
     }
-    // The server holds it now: the copy on the device goes. A refused delete never rejects (the keeper
-    // shows it); the kept copy's later send carries this revision id, and the server replays it.
-    await onDevice?.discard();
     // The save returns the stored detail; only a failed read after the write needs a second round trip.
     if (result.artifact) editor.applyDetail(result.artifact);
     else await editor.load(result.artifactId);

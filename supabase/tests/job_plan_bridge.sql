@@ -128,9 +128,9 @@ create function pg_temp.assessment_counts() returns bigint[]
 language sql
 as $$
   select array[
-    (select count(*) from public.planning_operation_assessments),
-    (select count(*) from public.planning_occurrence_assessments),
-    (select count(*) from public.job_qualification_assessments)
+    (select count(*) from public.planning_operation_assessments where organization_id = 'b1d9e000-0000-4000-8000-000000000010'),
+    (select count(*) from public.planning_occurrence_assessments where organization_id = 'b1d9e000-0000-4000-8000-000000000010'),
+    (select count(*) from public.job_qualification_assessments where organization_id = 'b1d9e000-0000-4000-8000-000000000010')
   ];
 $$;
 
@@ -206,7 +206,7 @@ begin
     pg_temp.day(10), '{}', '[]', '{}', 'fingerprint', null, null, false, null, false);
   insert into bridge_ids values ('job 1', v_job.id), ('job 1 legacy visit', pg_temp.legacy_visit(v_job.id));
   if pg_temp.crew(pg_temp.bridge_id('job 1 legacy visit'))
-     <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+     is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
   then raise exception 'creating a planned job did not plan its visit for the selected team'; end if;
   perform pg_temp.assert_bridge('creating a planned job');
 end;
@@ -233,7 +233,7 @@ begin
     raise exception 'planning a visit for Cem did not put Cem on the job''s team';
   end if;
   if pg_temp.crew(pg_temp.bridge_id('job 1 legacy visit'))
-     <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+     is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
   then raise exception 'planning the second visit changed the people on the legacy visit'; end if;
   perform pg_temp.assert_bridge('planning a second visit');
 end;
@@ -253,14 +253,14 @@ begin
     pg_temp.version_of(v_visit), v_item,
     jsonb_build_array(jsonb_build_object('employeeRecordId', pg_temp.record_of('b1d9e000-0000-4000-8000-000000000001'))),
     '{}', 'capacity', '{}', 'qualification');
-  if pg_temp.crew(v_visit) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001') then
+  if pg_temp.crew(v_visit) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001') then
     raise exception 'the moved visit is not planned for Anna alone';
   end if;
   if not 'b1d9e000-0000-4000-8000-000000000002'::uuid = any (pg_temp.team(pg_temp.bridge_id('job 1'))) then
     raise exception 'a calendar move took Bea off the job''s team';
   end if;
   select * into v_job from public.jobs where id = pg_temp.bridge_id('job 1');
-  if v_job.planned_date <> pg_temp.day(11) or v_job.planned_time <> '10:00' or v_job.estimated_duration_minutes <> 90 then
+  if v_job.planned_date is distinct from pg_temp.day(11) or v_job.planned_time is distinct from '10:00' or v_job.estimated_duration_minutes is distinct from 90 then
     raise exception 'the job''s schedule did not follow the moved visit';
   end if;
   perform pg_temp.assert_bridge('moving the legacy visit');
@@ -294,12 +294,12 @@ begin
   perform public.park_work_target('b1d9e000-0000-4000-8000-000000000010',
     'b1d9e000-0000-4000-8000-000000000001', 'job', v_job.id, 0, 'material', null,
     v_responsible, pg_temp.day(20));
-  if (select status from public.planning_occurrences where id = v_visit) <> 'cancelled' then
+  if (select status from public.planning_occurrences where id = v_visit) is distinct from 'cancelled' then
     raise exception 'parking did not cancel the visit';
   end if;
-  if pg_temp.crew(v_visit) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+  if pg_temp.crew(v_visit) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
      or pg_temp.team(v_job.id)
-       <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+       is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
   then raise exception 'parking changed the team or the people of the cancelled visit'; end if;
   perform pg_temp.assert_bridge('parking the job');
 
@@ -308,9 +308,9 @@ begin
     jsonb_build_object('planned_date', pg_temp.day(15), 'planned_time', '09:00'), true,
     pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
     pg_temp.day(15), '{}', '[]', '{}', 'fingerprint', null, null, false);
-  if (select status from public.planning_occurrences where id = v_visit) <> 'scheduled'
+  if (select status from public.planning_occurrences where id = v_visit) is distinct from 'scheduled'
      or pg_temp.crew(v_visit)
-       <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+       is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
   then raise exception 'the unparked visit is not planned for the whole selection'; end if;
   perform pg_temp.assert_bridge('unparking into the schedule');
 end;
@@ -336,7 +336,7 @@ begin
     jsonb_build_object('planned_date', pg_temp.day(16)), false,
     null, null, null, null, null, null, null, null, null);
   if (select (start_at at time zone 'Europe/Berlin')::date from public.planning_occurrences where id = v_visit)
-     <> pg_temp.day(16)
+     is distinct from pg_temp.day(16)
   then raise exception 'a job edit after a projection in the same transaction did not reach the visit'; end if;
   perform pg_temp.assert_bridge('a job edit after a projection');
 end;
@@ -354,7 +354,7 @@ begin
     '{}', true,
     pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
     pg_temp.day(11), '{}', '[]', '{}', 'fingerprint', null, null, false);
-  if pg_temp.crew(pg_temp.bridge_id('job 1 second visit')) <> array[null::uuid] then
+  if pg_temp.crew(pg_temp.bridge_id('job 1 second visit')) is distinct from array[null::uuid] then
     raise exception 'taking Cem off the team did not take Cem off the calendar-planned visit';
   end if;
   perform pg_temp.assert_bridge('taking a person off the team');
@@ -366,8 +366,8 @@ begin
     'b1d9e000-0000-4000-8000-000000000001', pg_temp.day(11), '{}', '[]', '{}', 'fingerprint',
     null, null, false);
   if pg_temp.crew(pg_temp.bridge_id('job 1 legacy visit'))
-       <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000003')
-     or pg_temp.crew(pg_temp.bridge_id('job 1 second visit')) <> array[null::uuid]
+       is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000003')
+     or pg_temp.crew(pg_temp.bridge_id('job 1 second visit')) is distinct from array[null::uuid]
   then raise exception 'adding Cem to the team did not reach exactly the legacy visit'; end if;
   perform pg_temp.assert_bridge('adding a person to the team');
 end;
@@ -384,11 +384,11 @@ begin
     'b1d9e000-0000-4000-8000-000000000010', 'b1d9e000-0000-4000-8000-000000000001', v_visit,
     pg_temp.version_of(v_visit), 'cancelled', 'Kunde hat abgesagt');
   select * into v_job from public.jobs where id = pg_temp.bridge_id('job 1');
-  if v_job.planned_date <> pg_temp.day(12) or v_job.planned_time <> '09:00' or v_job.estimated_duration_minutes <> 60 then
+  if v_job.planned_date is distinct from pg_temp.day(12) or v_job.planned_time is distinct from '09:00' or v_job.estimated_duration_minutes is distinct from 60 then
     raise exception 'cancelling the first visit did not hand the schedule and duration to the next visit';
   end if;
   if pg_temp.crew(v_visit)
-     <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000003')
+     is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000003')
   then raise exception 'cancelling a visit changed its people'; end if;
   perform pg_temp.assert_bridge('cancelling a visit');
 end;
@@ -409,7 +409,7 @@ begin
       'endAt', (pg_temp.day(13) + time '16:00') at time zone 'Europe/Berlin')),
     '{}', 'capacity', '{}', 'qualification');
   select * into v_job from public.jobs where id = pg_temp.bridge_id('job 1');
-  if v_job.planned_date <> pg_temp.day(13) or v_job.planned_time <> '14:00' or v_job.estimated_duration_minutes <> 120 then
+  if v_job.planned_date is distinct from pg_temp.day(13) or v_job.planned_time is distinct from '14:00' or v_job.estimated_duration_minutes is distinct from 120 then
     raise exception 'the job''s schedule did not follow the batch move';
   end if;
   perform pg_temp.assert_bridge('a batch move');
@@ -448,7 +448,7 @@ begin
     (select jsonb_agg(pg_temp.assignment(item, 'b1d9e000-0000-4000-8000-000000000002'))
      from jsonb_array_elements(v_items) item),
     gen_random_uuid(), '{}', 'capacity', '{}', 'qualification');
-  if pg_temp.team(v_job.id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000002') then
+  if pg_temp.team(v_job.id) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000002') then
     raise exception 'creating a series did not put Bea on the job''s team';
   end if;
   perform pg_temp.assert_bridge('creating a series');
@@ -463,7 +463,7 @@ begin
      from jsonb_array_elements(v_new) item),
     '{}', 'capacity', '{}', 'qualification');
   if pg_temp.team(v_job.id)
-     <> pg_temp.users('b1d9e000-0000-4000-8000-000000000002', 'b1d9e000-0000-4000-8000-000000000003')
+     is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000002', 'b1d9e000-0000-4000-8000-000000000003')
   then raise exception 'extending a series did not put Cem on the job''s team'; end if;
   perform pg_temp.assert_bridge('extending a series');
 
@@ -477,7 +477,7 @@ begin
        order by day) from generate_series(20, 24) day),
     jsonb_build_array(jsonb_build_object('employeeRecordId', pg_temp.record_of('b1d9e000-0000-4000-8000-000000000001'))),
     '{}', 'capacity', '{}', 'qualification');
-  if pg_temp.team(v_job.id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001',
+  if pg_temp.team(v_job.id) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001',
        'b1d9e000-0000-4000-8000-000000000002', 'b1d9e000-0000-4000-8000-000000000003')
   then raise exception 'changing the series did not add Anna or took someone off the team'; end if;
   if exists (
@@ -485,7 +485,7 @@ begin
     where occurrence.job_id = v_job.id and occurrence.status = 'scheduled'
       and pg_temp.crew(occurrence.id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
   ) then raise exception 'the changed series is not planned for Anna on every occurrence'; end if;
-  if (select planned_time from public.jobs where id = v_job.id) <> '11:00' then
+  if (select planned_time from public.jobs where id = v_job.id) is distinct from '11:00' then
     raise exception 'the job''s schedule did not follow the changed series';
   end if;
   perform pg_temp.assert_bridge('changing a whole series');
@@ -504,7 +504,7 @@ begin
     'b1d9e000-0000-4000-8000-000000000001', pg_temp.day(0), '{}', '[]', '{}', 'fingerprint',
     null, null, false);
   if pg_temp.crew(v_visit)
-     <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+     is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
   then raise exception 'a team edit rewrote the people of a started visit'; end if;
   perform pg_temp.assert_bridge('a team edit after the visit started');
 end;
@@ -518,9 +518,9 @@ begin
   perform app_private.project_plan_onto_job(
     'b1d9e000-0000-4000-8000-000000000011', pg_temp.bridge_id('job 2'),
     'b1d9e000-0000-4000-8000-000000000004', array[pg_temp.record_of('b1d9e000-0000-4000-8000-000000000003')]);
-  if (select to_jsonb(job) from public.jobs job where id = pg_temp.bridge_id('job 2')) <> v_before
+  if (select to_jsonb(job) from public.jobs job where id = pg_temp.bridge_id('job 2')) is distinct from v_before
      or pg_temp.team(pg_temp.bridge_id('job 2'))
-       <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+       is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
   then raise exception 'the projection wrote a job of another organization'; end if;
   perform pg_temp.assert_bridge('a projection for another organization');
 end;
@@ -618,10 +618,10 @@ begin
   exception when others then
     if sqlerrm <> 'stale_job_assignments' then raise; end if;
   end;
-  if pg_temp.team(v_job.id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
-     or pg_temp.crew(v_visit) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+  if pg_temp.team(v_job.id) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+     or pg_temp.crew(v_visit) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
      or exists (select 1 from public.planning_occurrence_assessments where occurrence_id = v_visit)
-     or pg_temp.assessment_counts() <> v_written
+     or pg_temp.assessment_counts() is distinct from v_written
   then raise exception 'a refused team change changed the team, the visit or its history'; end if;
 
   perform public.replace_job_assignments_with_visit_assessment(
@@ -632,9 +632,9 @@ begin
     v_visit, v_version, '{"conflicts":[]}', 'capacity', '{"evaluations":[]}', 'qualification',
     '  Mit dem Kunden abgestimmt  ');
   if pg_temp.team(v_job.id)
-       <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+       is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
      or pg_temp.crew(v_visit)
-       <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+       is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
   then raise exception 'a confirmed team change did not reach the team and its legacy visit'; end if;
   if not exists (
     select 1
@@ -663,8 +663,8 @@ begin
     null, null, false,
     pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
     null, null, null, null, null, null, null);
-  if pg_temp.team(v_job.id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
-     or (select count(*) from public.planning_occurrence_assessments where occurrence_id = v_visit) <> v_assessments
+  if pg_temp.team(v_job.id) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+     or (select count(*) from public.planning_occurrence_assessments where occurrence_id = v_visit) is distinct from v_assessments
   then raise exception 'a team change without a visit assessment recorded one or missed the team'; end if;
   perform pg_temp.assert_bridge('a team change without a visit assessment');
 
@@ -684,9 +684,9 @@ begin
   exception when others then
     if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
   end;
-  if pg_temp.team(v_job.id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
-     or pg_temp.crew(pg_temp.legacy_visit(v_job.id)) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
-     or pg_temp.assessment_counts() <> v_written
+  if pg_temp.team(v_job.id) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+     or pg_temp.crew(pg_temp.legacy_visit(v_job.id)) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+     or pg_temp.assessment_counts() is distinct from v_written
   then raise exception 'a refused unassessed addition changed the team, the visit or its history'; end if;
   perform pg_temp.assert_bridge('an unassessed addition to a visit scheduled meanwhile');
 end;
@@ -763,8 +763,8 @@ begin
   exception when others then
     if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
   end;
-  if exists (select 1 from public.jobs where job_number = 'BRIDGE-13-A')
-     or pg_temp.assessment_counts() <> v_written
+  if exists (select 1 from public.jobs where organization_id = 'b1d9e000-0000-4000-8000-000000000010' and job_number = 'BRIDGE-13-A')
+     or pg_temp.assessment_counts() is distinct from v_written
   then raise exception 'a refused job creation left the job, its visit or its history'; end if;
 
   -- With the assessment of exactly its visit, the job, the visit and the
@@ -772,7 +772,7 @@ begin
   v_job := pg_temp.create_job('BRIDGE-13-A', v_planned, pg_temp.users(v_anna::text, v_bea::text),
     pg_temp.visit_assessment(pg_temp.day(14), '08:00', 60, pg_temp.users(v_anna::text, v_bea::text),
       '  Urlaub mit Bea abgestimmt  '));
-  if pg_temp.crew(pg_temp.legacy_visit(v_job.id)) <> pg_temp.users(v_anna::text, v_bea::text)
+  if pg_temp.crew(pg_temp.legacy_visit(v_job.id)) is distinct from pg_temp.users(v_anna::text, v_bea::text)
      or not exists (
        select 1
        from public.planning_occurrence_assessments assessment
@@ -835,10 +835,10 @@ begin
     if sqlerrm <> 'job_not_found' then raise; end if;
   end;
   select * into v_job from public.jobs where id = v_job.id;
-  if v_job.planned_date <> pg_temp.day(14)
-     or pg_temp.team(v_job.id) <> pg_temp.users(v_anna::text, v_bea::text)
-     or pg_temp.crew(pg_temp.legacy_visit(v_job.id)) <> pg_temp.users(v_anna::text, v_bea::text)
-     or pg_temp.assessment_counts() <> v_written
+  if v_job.planned_date is distinct from pg_temp.day(14)
+     or pg_temp.team(v_job.id) is distinct from pg_temp.users(v_anna::text, v_bea::text)
+     or pg_temp.crew(pg_temp.legacy_visit(v_job.id)) is distinct from pg_temp.users(v_anna::text, v_bea::text)
+     or pg_temp.assessment_counts() is distinct from v_written
   then raise exception 'a refused job edit changed the job, its visit or its history'; end if;
 
   -- The confirmed move records the moved visit's assessment.
@@ -846,7 +846,7 @@ begin
     jsonb_build_object('planned_date', pg_temp.day(15)), null,
     pg_temp.visit_assessment(pg_temp.day(15), '08:00', 60, pg_temp.users(v_anna::text, v_bea::text),
       'Kunde verschiebt'));
-  if pg_temp.visit_assessments(v_job.id) <> 2
+  if pg_temp.visit_assessments(v_job.id) is distinct from 2
      or not exists (
        select 1 from public.planning_occurrence_assessments
        where occurrence_id = pg_temp.legacy_visit(v_job.id) and override_reason = 'Kunde verschiebt'
@@ -859,8 +859,8 @@ begin
     jsonb_build_object('title', 'Heizungstausch Keller'), null, null);
   perform pg_temp.edit_job('b1d9e000-0000-4000-8000-000000000010', v_job.id, '{}',
     pg_temp.users(v_anna::text), null);
-  if pg_temp.crew(pg_temp.legacy_visit(v_job.id)) <> pg_temp.users(v_anna::text)
-     or pg_temp.visit_assessments(v_job.id) <> 2
+  if pg_temp.crew(pg_temp.legacy_visit(v_job.id)) is distinct from pg_temp.users(v_anna::text)
+     or pg_temp.visit_assessments(v_job.id) is distinct from 2
   then raise exception 'a job edit that adds nobody to the visit recorded an assessment or missed the change'; end if;
   perform pg_temp.assert_bridge('a job edit that adds nobody to the visit');
 end;
@@ -934,18 +934,18 @@ begin
   exception when others then
     if sqlerrm <> 'request_not_found' then raise; end if;
   end;
-  if exists (select 1 from public.jobs where job_number = 'BRIDGE-14-A')
+  if exists (select 1 from public.jobs where organization_id = 'b1d9e000-0000-4000-8000-000000000010' and job_number = 'BRIDGE-14-A')
      or (select status from public.client_requests where id = 'b1d9e000-0000-4000-8000-000000000062')
        = 'umgewandelt'
-     or pg_temp.assessment_counts() <> v_written
+     or pg_temp.assessment_counts() is distinct from v_written
   then raise exception 'a refused conversion left the job, converted the request or wrote history'; end if;
 
   -- With the assessment of exactly its visit, the conversion records it with the reason.
   v_job := pg_temp.convert_request('b1d9e000-0000-4000-8000-000000000010', v_crew,
     pg_temp.visit_assessment(pg_temp.day(21), '08:00', 60, v_crew, '  Bea kommt vor dem Urlaub  '));
-  if pg_temp.crew(pg_temp.legacy_visit(v_job.id)) <> v_crew
+  if pg_temp.crew(pg_temp.legacy_visit(v_job.id)) is distinct from v_crew
      or (select status from public.client_requests where id = 'b1d9e000-0000-4000-8000-000000000062')
-       <> 'umgewandelt'
+       is distinct from 'umgewandelt'
      or not exists (
        select 1 from public.planning_occurrence_assessments
        where occurrence_id = pg_temp.legacy_visit(v_job.id)
@@ -994,17 +994,17 @@ begin
     if sqlerrm <> 'job_not_found' then raise; end if;
   end;
   select * into v_job from public.jobs where id = v_job.id;
-  if v_job.status <> 'geparkt'
+  if v_job.status is distinct from 'geparkt'
      or v_job.planned_date is not null
-     or (select status from public.planning_occurrences where id = v_visit) <> 'cancelled'
-     or pg_temp.assessment_counts() <> v_written
+     or (select status from public.planning_occurrences where id = v_visit) is distinct from 'cancelled'
+     or pg_temp.assessment_counts() is distinct from v_written
   then raise exception 'a refused unpark planned the job, revived its visit or wrote history'; end if;
 
   -- The confirmed unpark plans the visit for the whole team and records its assessment.
   perform pg_temp.unpark('b1d9e000-0000-4000-8000-000000000010', v_job.id, v_crew,
     pg_temp.visit_assessment(pg_temp.day(22), '09:00', 60, v_crew, 'Material ist da'));
-  if (select status from public.planning_occurrences where id = v_visit) <> 'scheduled'
-     or pg_temp.crew(v_visit) <> v_crew
+  if (select status from public.planning_occurrences where id = v_visit) is distinct from 'scheduled'
+     or pg_temp.crew(v_visit) is distinct from v_crew
      or not exists (
        select 1 from public.planning_occurrence_assessments
        where occurrence_id = v_visit and override_reason = 'Material ist da'
@@ -1029,8 +1029,8 @@ begin
   exception when others then
     if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
   end;
-  if pg_temp.assessment_counts() <> v_written
-     or (select status from public.jobs where id = v_job.id) <> 'geparkt'
+  if pg_temp.assessment_counts() is distinct from v_written
+     or (select status from public.jobs where id = v_job.id) is distinct from 'geparkt'
   then raise exception 'a refused unpark for today planned the job or wrote history'; end if;
   perform public.unpark_job_into_schedule_with_visit_assessment(
     'b1d9e000-0000-4000-8000-000000000010', v_anna, v_job.id, v_blocker_version, 'Heute eingeplant',
@@ -1039,7 +1039,7 @@ begin
     pg_temp.visit_assessment(pg_temp.day(0), '00:00', 0, v_crew, 'Heute dringend')
       || jsonb_build_object('start_at', null, 'end_at', null,
         'start_date', pg_temp.day(0), 'end_date_exclusive', pg_temp.day(1)));
-  if pg_temp.crew(v_visit) <> v_crew
+  if pg_temp.crew(v_visit) is distinct from v_crew
      or not exists (
        select 1 from public.planning_occurrence_assessments
        where occurrence_id = v_visit and override_reason = 'Heute dringend'
@@ -1065,8 +1065,9 @@ create function pg_temp.handover_state() returns text language sql as $$
      from public.planning_occurrences occurrence
      join public.planning_occurrence_assignments assignment on assignment.occurrence_id = occurrence.id
      where occurrence.job_id = pg_temp.bridge_id('handover job')),
-    (select count(*)::text from public.planning_events where event_type = 'reassigned'),
-    (select count(*)::text from public.employee_record_events where event_type = 'work_handed_over'),
+    (select count(*)::text from public.planning_events where organization_id = 'b1d9e000-0000-4000-8000-000000000010' and event_type = 'reassigned'),
+    (select count(*)::text from public.employee_record_events
+     where organization_id = 'b1d9e000-0000-4000-8000-000000000010' and event_type = 'work_handed_over'),
     array_to_string(pg_temp.assessment_counts(), ',')
   );
 $$;
@@ -1224,7 +1225,7 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'target_without_login' then raise; end if;
   end;
-  if pg_temp.handover_state() <> v_before then
+  if pg_temp.handover_state() is distinct from v_before then
     raise exception 'a refused handover changed rows: % became %', v_before, pg_temp.handover_state();
   end if;
 
@@ -1234,17 +1235,17 @@ begin
       jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_cem),
       jsonb_build_object('jobId', v_parked, 'targetEmployeeRecordId', v_cem)),
     v_assessed, 'Übergabe vor dem Austritt');
-  if v_handed <> 2 then raise exception 'the handover reported % jobs, not 2', v_handed; end if;
-  if pg_temp.crew(v_late_id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000003') then
+  if v_handed is distinct from 2 then raise exception 'the handover reported % jobs, not 2', v_handed; end if;
+  if pg_temp.crew(v_late_id) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000003') then
     raise exception 'the visit after the handover date did not go to Cem';
   end if;
-  if pg_temp.crew(pg_temp.bridge_id('handover early visit')) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000002') then
+  if pg_temp.crew(pg_temp.bridge_id('handover early visit')) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000002') then
     raise exception 'the visit before the handover date left Bea';
   end if;
-  if pg_temp.team(v_job) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000002', 'b1d9e000-0000-4000-8000-000000000003') then
+  if pg_temp.team(v_job) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000002', 'b1d9e000-0000-4000-8000-000000000003') then
     raise exception 'the job''s team is not Bea, who keeps an earlier visit, and Cem';
   end if;
-  if pg_temp.team(v_parked) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000003') then
+  if pg_temp.team(v_parked) is distinct from pg_temp.users('b1d9e000-0000-4000-8000-000000000003') then
     raise exception 'the parked job''s team did not go from Bea to Cem';
   end if;
   if not exists (
@@ -1312,25 +1313,25 @@ begin
   from public.vacation_requests request
   where request.organization_id = 'b1d9e000-0000-4000-8000-000000000010'
     and (request.status = 'pending' or (request.status = 'approved' and request.end_date >= pg_temp.day(0)));
-  if v_result->'vacations' <> v_expected
+  if v_result->'vacations' is distinct from v_expected
      or (select array_agg(value->>'id') from jsonb_array_elements(v_result->'vacations'))
-       <> array['b1d9e000-0000-4000-8000-0000000000a2', 'b1d9e000-0000-4000-8000-0000000000a1'] then
+       is distinct from array['b1d9e000-0000-4000-8000-0000000000a2', 'b1d9e000-0000-4000-8000-0000000000a1'] then
     raise exception 'the open vacations differ from the rows the table read returned: %', v_result->'vacations';
   end if;
   if v_result->'leaverWindows'
-     <> jsonb_build_array(jsonb_build_object('employeeRecordId', v_cem, 'from', pg_temp.day(5))) then
+     is distinct from jsonb_build_array(jsonb_build_object('employeeRecordId', v_cem, 'from', pg_temp.day(5))) then
     raise exception 'the leaver windows are not Cem from the day after the exit: %', v_result->'leaverWindows';
   end if;
   -- An exit long past still counts from today.
   update public.employee_records set entry_date = pg_temp.day(-60), exit_date = pg_temp.day(-30) where id = v_cem;
   if public.read_open_absences('b1d9e000-0000-4000-8000-000000000010', pg_temp.day(0))->'leaverWindows'
-     <> jsonb_build_array(jsonb_build_object('employeeRecordId', v_cem, 'from', pg_temp.day(0))) then
+     is distinct from jsonb_build_array(jsonb_build_object('employeeRecordId', v_cem, 'from', pg_temp.day(0))) then
     raise exception 'a past exit did not count from today';
   end if;
   v_result := public.read_open_absences('b1d9e000-0000-4000-8000-000000000011', pg_temp.day(0));
   if (select array_agg(value->>'id') from jsonb_array_elements(v_result->'vacations'))
-       <> array['b1d9e000-0000-4000-8000-0000000000a5']
-     or v_result->'leaverWindows' <> '[]'::jsonb then
+       is distinct from array['b1d9e000-0000-4000-8000-0000000000a5']
+     or v_result->'leaverWindows' is distinct from '[]'::jsonb then
     raise exception 'another organization''s absences came back: %', v_result;
   end if;
 end;

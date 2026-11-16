@@ -1,3 +1,4 @@
+import type { OfferLetterhead } from '@/lib/company-profile/letterhead';
 import { addLocalDays } from '@/lib/date-time/berlin';
 import { formatGermanDate } from '@/lib/utils';
 
@@ -22,25 +23,31 @@ const position = (
   kind: details.kind ?? 'standard',
 });
 
+const DEFAULT_OPENING_TEXT =
+  'Sehr geehrte Damen und Herren,\nvielen Dank für die Anfrage. Gerne bieten wir die folgenden Leistungen an.';
+const DEFAULT_CLOSING_TEXT =
+  'Wir freuen uns auf den Auftrag und stehen für Fragen jederzeit zur Verfügung.\n\nMit freundlichen Grüßen';
+
 /**
  * The fixed Musterangebot the settings show: a heating replacement for a made-up
- * customer, sent by the viewer's organization and dated the day it is shown.
+ * customer, sent with the organization's letterhead and dated the day it is
+ * shown. Without texts of its own the office gets the sample's texts.
  * Bedarfs- and Alternativposition stay out of the subtotal.
  */
-export function sampleOffer(organizationName: string, issuedOn: string): BusinessDocument {
+export function sampleOffer(letterhead: OfferLetterhead, issuedOn: string): BusinessDocument {
+  const { sender, footerColumns, stationery } = letterhead;
   return {
     issuedOn,
-    sender: { name: organizationName, addressLines: [], logo: null },
+    sender,
     recipientLines: ['Hausverwaltung Ahornhof GmbH', 'Ahornweg 7', '09876 Ahornstadt'],
     title: 'Angebot: Austausch der Gasheizung',
     metaRows: [
       { label: 'Angebot', value: 'Muster' },
       { label: 'Datum', value: formatGermanDate(issuedOn) },
-      { label: 'Gültig bis', value: formatGermanDate(addLocalDays(issuedOn, 30)) },
+      { label: 'Gültig bis', value: formatGermanDate(addLocalDays(issuedOn, letterhead.validityDays)) },
       { label: 'Objekt', value: 'Ahornweg 7, 09876 Ahornstadt' },
     ],
-    openingText:
-      'Sehr geehrte Damen und Herren,\nvielen Dank für die Anfrage. Gerne bieten wir die folgenden Leistungen an.',
+    openingText: letterhead.openingText || DEFAULT_OPENING_TEXT,
     sections: [
       {
         number: '1',
@@ -87,8 +94,8 @@ export function sampleOffer(organizationName: string, issuedOn: string): Busines
       vatCents: 123842,
       grossCents: 775642,
     },
-    closingText: `Wir freuen uns auf den Auftrag und stehen für Fragen jederzeit zur Verfügung.\n\nMit freundlichen Grüßen\n${organizationName}`,
-    footerColumns: [],
-    stationery: null,
+    closingText: letterhead.closingText || `${DEFAULT_CLOSING_TEXT}\n${sender.name}`,
+    footerColumns,
+    stationery,
   };
 }

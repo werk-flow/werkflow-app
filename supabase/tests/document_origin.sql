@@ -84,7 +84,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -125,24 +125,24 @@ declare
 begin
   v_page := public.list_document_page(v_org, jsonb_build_object(
     'view', 'all', 'sort', 'name', 'searchQuery', 'RE-2019', 'page', 2, 'pageSize', 2));
-  if v_page->'ids' <> '["28400000-0000-0000-0000-000000000042"]'::jsonb or (v_page->>'total')::integer <> 3 then
+  if v_page->'ids' is distinct from '["28400000-0000-0000-0000-000000000042"]'::jsonb or (v_page->>'total')::integer is distinct from 3 then
     raise exception 'the library search missed a legacy original by its old number on a later page: %', v_page;
   end if;
   v_page := public.list_document_page(v_org, jsonb_build_object(
     'view', 'all', 'sort', 'name', 'searchQuery', 're-2019-0042', 'page', 1, 'pageSize', 50));
-  if v_page->'ids' <> '["28400000-0000-0000-0000-000000000042"]'::jsonb or (v_page->>'total')::integer <> 1 then
+  if v_page->'ids' is distinct from '["28400000-0000-0000-0000-000000000042"]'::jsonb or (v_page->>'total')::integer is distinct from 1 then
     raise exception 'the library search did not find exactly the one document of the old number: %', v_page;
   end if;
   -- A number that only contains the text is no match: a short number would flood the list.
   v_page := public.list_document_page(v_org, jsonb_build_object(
     'view', 'all', 'sort', 'name', 'searchQuery', '2019-0042', 'page', 1, 'pageSize', 50));
-  if (v_page->>'total')::integer <> 0 then
+  if (v_page->>'total')::integer is distinct from 0 then
     raise exception 'the library search matched an old number in its middle: %', v_page;
   end if;
   -- The name search still works beside it.
   v_page := public.list_document_page(v_org, jsonb_build_object(
     'view', 'all', 'sort', 'name', 'searchQuery', 'notiz', 'page', 1, 'pageSize', 50));
-  if v_page->'ids' <> '["28400000-0000-0000-0000-000000000044"]'::jsonb then
+  if v_page->'ids' is distinct from '["28400000-0000-0000-0000-000000000044"]'::jsonb then
     raise exception 'the library search lost the name match: %', v_page;
   end if;
 end;
@@ -154,7 +154,7 @@ declare
   v_page jsonb := public.list_document_page('28400000-0000-0000-0000-000000000011', jsonb_build_object(
     'view', 'all', 'sort', 'name', 'searchQuery', 'RE-2019-0042', 'page', 1, 'pageSize', 50));
 begin
-  if v_page->'ids' <> '["28400000-0000-0000-0000-000000000045"]'::jsonb then
+  if v_page->'ids' is distinct from '["28400000-0000-0000-0000-000000000045"]'::jsonb then
     raise exception 'the library search crossed the organization boundary on an old number: %', v_page;
   end if;
 end;
@@ -176,8 +176,8 @@ begin
   then raise exception 'the origin was not stored trimmed: %', row_to_json(v_document); end if;
   select * into strict v_event from public.document_audit_events event
   where event.document_id = v_document_id and event.event_type = 'origin_changed';
-  if v_event.actor_id <> v_admin or v_event.organization_id <> v_org
-    or v_event.event_payload <> jsonb_build_object(
+  if v_event.actor_id is distinct from v_admin or v_event.organization_id is distinct from v_org
+    or v_event.event_payload is distinct from jsonb_build_object(
       'fromSourceSystem', null, 'toSourceSystem', 'Sykasoft',
       'fromSourceReference', null, 'toSourceReference', 'RE-2017-0815')
   then raise exception 'the origin change was not audited: %', row_to_json(v_event); end if;

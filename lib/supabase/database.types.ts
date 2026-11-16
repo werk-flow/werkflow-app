@@ -1053,6 +1053,187 @@ export type Database = {
           },
         ];
       };
+      company_document_profile_events: {
+        Row: {
+          actor_id: string | null;
+          attempt_key: string;
+          created_at: string;
+          field: string;
+          id: string;
+          new_value: string | null;
+          old_value: string | null;
+          organization_id: string;
+          profile_version: number | null;
+        };
+        Insert: {
+          actor_id?: string | null;
+          attempt_key: string;
+          created_at?: string;
+          field: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+          organization_id: string;
+          profile_version?: number | null;
+        };
+        Update: {
+          actor_id?: string | null;
+          attempt_key?: string;
+          created_at?: string;
+          field?: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+          organization_id?: string;
+          profile_version?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "company_document_profile_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      company_document_profiles: {
+        Row: {
+          bank_name: string;
+          bic: string;
+          city: string;
+          company_name: string;
+          email: string;
+          iban: string;
+          logo_mime_type: string | null;
+          logo_size_bytes: number | null;
+          logo_storage_path: string | null;
+          managing_directors: string;
+          offer_closing_text: string;
+          offer_opening_text: string;
+          offer_validity_days: number;
+          organization_id: string;
+          phone: string;
+          postal_code: string;
+          register_court: string;
+          register_number: string;
+          standard_tax_rate_basis_points: number;
+          stationery_first_bottom_mm: number;
+          stationery_first_left_mm: number;
+          stationery_first_mime_type: string | null;
+          stationery_first_right_mm: number;
+          stationery_first_size_bytes: number | null;
+          stationery_first_storage_path: string | null;
+          stationery_first_top_mm: number;
+          stationery_following_bottom_mm: number;
+          stationery_following_left_mm: number;
+          stationery_following_mime_type: string | null;
+          stationery_following_right_mm: number;
+          stationery_following_size_bytes: number | null;
+          stationery_following_storage_path: string | null;
+          stationery_following_top_mm: number;
+          street: string;
+          tax_number: string;
+          updated_at: string;
+          updated_by: string | null;
+          vat_id: string;
+          version: number;
+          website: string;
+        };
+        Insert: {
+          bank_name?: string;
+          bic?: string;
+          city?: string;
+          company_name?: string;
+          email?: string;
+          iban?: string;
+          logo_mime_type?: string | null;
+          logo_size_bytes?: number | null;
+          logo_storage_path?: string | null;
+          managing_directors?: string;
+          offer_closing_text?: string;
+          offer_opening_text?: string;
+          offer_validity_days?: number;
+          organization_id: string;
+          phone?: string;
+          postal_code?: string;
+          register_court?: string;
+          register_number?: string;
+          standard_tax_rate_basis_points?: number;
+          stationery_first_bottom_mm?: number;
+          stationery_first_left_mm?: number;
+          stationery_first_mime_type?: string | null;
+          stationery_first_right_mm?: number;
+          stationery_first_size_bytes?: number | null;
+          stationery_first_storage_path?: string | null;
+          stationery_first_top_mm?: number;
+          stationery_following_bottom_mm?: number;
+          stationery_following_left_mm?: number;
+          stationery_following_mime_type?: string | null;
+          stationery_following_right_mm?: number;
+          stationery_following_size_bytes?: number | null;
+          stationery_following_storage_path?: string | null;
+          stationery_following_top_mm?: number;
+          street?: string;
+          tax_number?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          vat_id?: string;
+          version?: number;
+          website?: string;
+        };
+        Update: {
+          bank_name?: string;
+          bic?: string;
+          city?: string;
+          company_name?: string;
+          email?: string;
+          iban?: string;
+          logo_mime_type?: string | null;
+          logo_size_bytes?: number | null;
+          logo_storage_path?: string | null;
+          managing_directors?: string;
+          offer_closing_text?: string;
+          offer_opening_text?: string;
+          offer_validity_days?: number;
+          organization_id?: string;
+          phone?: string;
+          postal_code?: string;
+          register_court?: string;
+          register_number?: string;
+          standard_tax_rate_basis_points?: number;
+          stationery_first_bottom_mm?: number;
+          stationery_first_left_mm?: number;
+          stationery_first_mime_type?: string | null;
+          stationery_first_right_mm?: number;
+          stationery_first_size_bytes?: number | null;
+          stationery_first_storage_path?: string | null;
+          stationery_first_top_mm?: number;
+          stationery_following_bottom_mm?: number;
+          stationery_following_left_mm?: number;
+          stationery_following_mime_type?: string | null;
+          stationery_following_right_mm?: number;
+          stationery_following_size_bytes?: number | null;
+          stationery_following_storage_path?: string | null;
+          stationery_following_top_mm?: number;
+          street?: string;
+          tax_number?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          vat_id?: string;
+          version?: number;
+          website?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "company_document_profiles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: true;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       document_audit_events: {
         Row: {
           actor_id: string | null;
@@ -2606,45 +2787,67 @@ export type Database = {
       };
       inventory_import_batches: {
         Row: {
+          booked_by: string | null;
           column_mapping: Json;
           completed_at: string | null;
+          content_hash: string | null;
           created_at: string;
           created_by: string | null;
           failed_count: number;
           file_name: string;
           id: string;
           imported_count: number;
+          mode: string;
           organization_id: string;
+          result_payload: Json | null;
           row_count: number;
+          staged_rows: Json | null;
           status: string;
         };
         Insert: {
+          booked_by?: string | null;
           column_mapping?: Json;
           completed_at?: string | null;
+          content_hash?: string | null;
           created_at?: string;
           created_by?: string | null;
           failed_count?: number;
           file_name: string;
           id?: string;
           imported_count?: number;
+          mode?: string;
           organization_id: string;
+          result_payload?: Json | null;
           row_count?: number;
+          staged_rows?: Json | null;
           status?: string;
         };
         Update: {
+          booked_by?: string | null;
           column_mapping?: Json;
           completed_at?: string | null;
+          content_hash?: string | null;
           created_at?: string;
           created_by?: string | null;
           failed_count?: number;
           file_name?: string;
           id?: string;
           imported_count?: number;
+          mode?: string;
           organization_id?: string;
+          result_payload?: Json | null;
           row_count?: number;
+          staged_rows?: Json | null;
           status?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "inventory_import_batches_booked_by_fkey";
+            columns: ["booked_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "inventory_import_batches_created_by_fkey";
             columns: ["created_by"];
@@ -2703,6 +2906,131 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      inventory_item_prices: {
+        Row: {
+          amount_cents: number;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          item_id: string;
+          kind: string;
+          organization_id: string;
+          price_quantity: number;
+          source: string;
+          unit: string;
+          valid_from: string;
+        };
+        Insert: {
+          amount_cents: number;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          item_id: string;
+          kind: string;
+          organization_id: string;
+          price_quantity: number;
+          source: string;
+          unit: string;
+          valid_from: string;
+        };
+        Update: {
+          amount_cents?: number;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          item_id?: string;
+          kind?: string;
+          organization_id?: string;
+          price_quantity?: number;
+          source?: string;
+          unit?: string;
+          valid_from?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_item_prices_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_item_prices_item_fk";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_item_prices_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inventory_item_suppliers: {
+        Row: {
+          base_quantity: number;
+          created_at: string;
+          id: string;
+          is_preferred: boolean;
+          item_id: string;
+          organization_id: string;
+          pack_quantity: number;
+          purchase_unit: string | null;
+          supplier_article_number: string | null;
+          supplier_id: string;
+        };
+        Insert: {
+          base_quantity?: number;
+          created_at?: string;
+          id?: string;
+          is_preferred?: boolean;
+          item_id: string;
+          organization_id: string;
+          pack_quantity?: number;
+          purchase_unit?: string | null;
+          supplier_article_number?: string | null;
+          supplier_id: string;
+        };
+        Update: {
+          base_quantity?: number;
+          created_at?: string;
+          id?: string;
+          is_preferred?: boolean;
+          item_id?: string;
+          organization_id?: string;
+          pack_quantity?: number;
+          purchase_unit?: string | null;
+          supplier_article_number?: string | null;
+          supplier_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_item_suppliers_item_fk";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_item_suppliers_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_item_suppliers_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
           },
         ];
       };
@@ -2894,6 +3222,7 @@ export type Database = {
           job_material_line_id: string | null;
           location_id: string;
           movement_type: string;
+          operation_id: string | null;
           organization_id: string;
           project_id: string | null;
           quantity_after: number;
@@ -2911,6 +3240,7 @@ export type Database = {
           job_material_line_id?: string | null;
           location_id: string;
           movement_type: string;
+          operation_id?: string | null;
           organization_id: string;
           project_id?: string | null;
           quantity_after: number;
@@ -2928,6 +3258,7 @@ export type Database = {
           job_material_line_id?: string | null;
           location_id?: string;
           movement_type?: string;
+          operation_id?: string | null;
           organization_id?: string;
           project_id?: string | null;
           quantity_after?: number;
@@ -3674,6 +4005,8 @@ export type Database = {
           preferred_location_id: string | null;
           project_id: string | null;
           returned_quantity: number;
+          source_id: string | null;
+          source_kind: string | null;
           source_work_template_material_line_id: string | null;
           status: string;
           taken_quantity: number;
@@ -3696,6 +4029,8 @@ export type Database = {
           preferred_location_id?: string | null;
           project_id?: string | null;
           returned_quantity?: number;
+          source_id?: string | null;
+          source_kind?: string | null;
           source_work_template_material_line_id?: string | null;
           status?: string;
           taken_quantity?: number;
@@ -3718,6 +4053,8 @@ export type Database = {
           preferred_location_id?: string | null;
           project_id?: string | null;
           returned_quantity?: number;
+          source_id?: string | null;
+          source_kind?: string | null;
           source_work_template_material_line_id?: string | null;
           status?: string;
           taken_quantity?: number;
@@ -3796,6 +4133,7 @@ export type Database = {
           job_id: string | null;
           job_material_line_id: string;
           note: string | null;
+          operation_id: string | null;
           organization_id: string;
           project_id: string | null;
           quantity: number;
@@ -3812,6 +4150,7 @@ export type Database = {
           job_id?: string | null;
           job_material_line_id: string;
           note?: string | null;
+          operation_id?: string | null;
           organization_id: string;
           project_id?: string | null;
           quantity: number;
@@ -3828,6 +4167,7 @@ export type Database = {
           job_id?: string | null;
           job_material_line_id?: string;
           note?: string | null;
+          operation_id?: string | null;
           organization_id?: string;
           project_id?: string | null;
           quantity?: number;
@@ -4075,6 +4415,110 @@ export type Database = {
             columns: ["site_id"];
             isOneToOne: false;
             referencedRelation: "client_sites";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      leistung_price_versions: {
+        Row: {
+          cost_rate_cents: number | null;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          leistung_id: string;
+          organization_id: string;
+          sale_price_cents: number;
+          valid_from: string;
+        };
+        Insert: {
+          cost_rate_cents?: number | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          leistung_id: string;
+          organization_id: string;
+          sale_price_cents: number;
+          valid_from: string;
+        };
+        Update: {
+          cost_rate_cents?: number | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          leistung_id?: string;
+          organization_id?: string;
+          sale_price_cents?: number;
+          valid_from?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "leistung_price_versions_leistung_fk";
+            columns: ["leistung_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "leistungen";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "leistung_price_versions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      leistungen: {
+        Row: {
+          archived_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          description: string;
+          id: string;
+          kind: string;
+          leistung_number: string;
+          name: string;
+          organization_id: string;
+          tax_rate_basis_points: number;
+          unit: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          archived_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string;
+          id?: string;
+          kind: string;
+          leistung_number: string;
+          name: string;
+          organization_id: string;
+          tax_rate_basis_points: number;
+          unit: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          archived_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string;
+          id?: string;
+          kind?: string;
+          leistung_number?: string;
+          name?: string;
+          organization_id?: string;
+          tax_rate_basis_points?: number;
+          unit?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "leistungen_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
         ];
@@ -4396,6 +4840,10 @@ export type Database = {
           id: string;
           idempotency_key: string;
           maintenance_due_work_id: string;
+          missed_job_id: string | null;
+          missed_reason:
+            | Database["public"]["Enums"]["maintenance_missed_visit_reason"]
+            | null;
           organization_id: string;
           reason: string | null;
           recorded_at: string;
@@ -4410,6 +4858,10 @@ export type Database = {
           id?: string;
           idempotency_key: string;
           maintenance_due_work_id: string;
+          missed_job_id?: string | null;
+          missed_reason?:
+            | Database["public"]["Enums"]["maintenance_missed_visit_reason"]
+            | null;
           organization_id: string;
           reason?: string | null;
           recorded_at?: string;
@@ -4424,6 +4876,10 @@ export type Database = {
           id?: string;
           idempotency_key?: string;
           maintenance_due_work_id?: string;
+          missed_job_id?: string | null;
+          missed_reason?:
+            | Database["public"]["Enums"]["maintenance_missed_visit_reason"]
+            | null;
           organization_id?: string;
           reason?: string | null;
           recorded_at?: string;
@@ -4436,6 +4892,13 @@ export type Database = {
             columns: ["maintenance_due_work_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_events_missed_job_fkey";
+            columns: ["missed_job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -4793,6 +5256,192 @@ export type Database = {
           },
         ];
       };
+      offer_events: {
+        Row: {
+          actor_id: string | null;
+          attempt_key: string;
+          created_at: string;
+          event_type: string;
+          id: string;
+          offer_id: string;
+          organization_id: string;
+          payload: Json;
+          status: string;
+          version: number;
+        };
+        Insert: {
+          actor_id?: string | null;
+          attempt_key: string;
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          offer_id: string;
+          organization_id: string;
+          payload?: Json;
+          status: string;
+          version: number;
+        };
+        Update: {
+          actor_id?: string | null;
+          attempt_key?: string;
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          offer_id?: string;
+          organization_id?: string;
+          payload?: Json;
+          status?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offer_events_offer_fk";
+            columns: ["offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offers";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      offers: {
+        Row: {
+          client_id: string;
+          closing_text: string;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          job_id: string | null;
+          offer_number: string;
+          opening_text: string;
+          organization_id: string;
+          owner_user_id: string | null;
+          project_id: string | null;
+          recipient_client_id: string;
+          recipient_is_default: boolean;
+          request_id: string | null;
+          site_id: string | null;
+          status: string;
+          title: string;
+          updated_at: string;
+          updated_by: string | null;
+          valid_until: string;
+          version: number;
+        };
+        Insert: {
+          client_id: string;
+          closing_text?: string;
+          contact_id?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          offer_number: string;
+          opening_text?: string;
+          organization_id: string;
+          owner_user_id?: string | null;
+          project_id?: string | null;
+          recipient_client_id: string;
+          recipient_is_default?: boolean;
+          request_id?: string | null;
+          site_id?: string | null;
+          status?: string;
+          title: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          valid_until: string;
+          version?: number;
+        };
+        Update: {
+          client_id?: string;
+          closing_text?: string;
+          contact_id?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          offer_number?: string;
+          opening_text?: string;
+          organization_id?: string;
+          owner_user_id?: string | null;
+          project_id?: string | null;
+          recipient_client_id?: string;
+          recipient_is_default?: boolean;
+          request_id?: string | null;
+          site_id?: string | null;
+          status?: string;
+          title?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          valid_until?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offers_client_fk";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_contact_fk";
+            columns: ["contact_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_contacts";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offers_project_fk";
+            columns: ["project_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_recipient_fk";
+            columns: ["recipient_client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_request_fk";
+            columns: ["request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_site_fk";
+            columns: ["site_id", "client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id", "client_id", "organization_id"];
+          },
+        ];
+      };
       organization_capabilities: {
         Row: {
           created_at: string;
@@ -4929,7 +5578,7 @@ export type Database = {
       organization_export_files: {
         Row: {
           archive_name: string;
-          document_id: string;
+          document_id: string | null;
           export_id: string;
           file_bytes: number;
           id: string;
@@ -4940,7 +5589,7 @@ export type Database = {
         };
         Insert: {
           archive_name: string;
-          document_id: string;
+          document_id?: string | null;
           export_id: string;
           file_bytes: number;
           id?: string;
@@ -4951,7 +5600,7 @@ export type Database = {
         };
         Update: {
           archive_name?: string;
-          document_id?: string;
+          document_id?: string | null;
           export_id?: string;
           file_bytes?: number;
           id?: string;
@@ -5496,6 +6145,8 @@ export type Database = {
       organization_settings: {
         Row: {
           auto_break_duration_minutes: number;
+          auto_break_second_duration_minutes: number | null;
+          auto_break_second_threshold_minutes: number | null;
           auto_break_threshold_minutes: number;
           break_mode: Database["public"]["Enums"]["time_tracking_break_mode"];
           break_policy_history: Json;
@@ -5507,6 +6158,8 @@ export type Database = {
         };
         Insert: {
           auto_break_duration_minutes?: number;
+          auto_break_second_duration_minutes?: number | null;
+          auto_break_second_threshold_minutes?: number | null;
           auto_break_threshold_minutes?: number;
           break_mode?: Database["public"]["Enums"]["time_tracking_break_mode"];
           break_policy_history?: Json;
@@ -5518,6 +6171,8 @@ export type Database = {
         };
         Update: {
           auto_break_duration_minutes?: number;
+          auto_break_second_duration_minutes?: number | null;
+          auto_break_second_threshold_minutes?: number | null;
           auto_break_threshold_minutes?: number;
           break_mode?: Database["public"]["Enums"]["time_tracking_break_mode"];
           break_policy_history?: Json;
@@ -8387,6 +9042,69 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "realtime_deletions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      school_days: {
+        Row: {
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          created_by: string;
+          employee_record_id: string;
+          end_date: string | null;
+          ended_at: string | null;
+          ended_by: string | null;
+          id: string;
+          kind: string;
+          organization_id: string;
+          start_date: string;
+          weekday: number | null;
+        };
+        Insert: {
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          created_by: string;
+          employee_record_id: string;
+          end_date?: string | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          kind: string;
+          organization_id: string;
+          start_date: string;
+          weekday?: number | null;
+        };
+        Update: {
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          created_by?: string;
+          employee_record_id?: string;
+          end_date?: string | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          kind?: string;
+          organization_id?: string;
+          start_date?: string;
+          weekday?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "school_days_employee_record_id_fkey";
+            columns: ["employee_record_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "school_days_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -12223,6 +12941,110 @@ export type Database = {
           },
         ];
       };
+      work_billing_parties: {
+        Row: {
+          client_id: string;
+          created_at: string;
+          id: string;
+          job_id: string | null;
+          organization_id: string;
+          project_id: string | null;
+          recipient_address: string | null;
+          recipient_client_id: string;
+          recipient_name: string;
+          request_id: string | null;
+          service_case_id: string | null;
+          set_by: string | null;
+          source: string;
+          version: number;
+          work_id: string;
+        };
+        Insert: {
+          client_id: string;
+          created_at?: string;
+          id?: string;
+          job_id?: string | null;
+          organization_id: string;
+          project_id?: string | null;
+          recipient_address?: string | null;
+          recipient_client_id: string;
+          recipient_name: string;
+          request_id?: string | null;
+          service_case_id?: string | null;
+          set_by?: string | null;
+          source: string;
+          version: number;
+          work_id: string;
+        };
+        Update: {
+          client_id?: string;
+          created_at?: string;
+          id?: string;
+          job_id?: string | null;
+          organization_id?: string;
+          project_id?: string | null;
+          recipient_address?: string | null;
+          recipient_client_id?: string;
+          recipient_name?: string;
+          request_id?: string | null;
+          service_case_id?: string | null;
+          set_by?: string | null;
+          source?: string;
+          version?: number;
+          work_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_billing_parties_client_fk";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_project_fk";
+            columns: ["project_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_recipient_fk";
+            columns: ["recipient_client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_request_fk";
+            columns: ["request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_service_case_fk";
+            columns: ["service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       work_blocker_events: {
         Row: {
           after_state: Json | null;
@@ -13099,6 +13921,77 @@ export type Database = {
             columns: ["previous_release_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "work_handover_releases";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      work_leads: {
+        Row: {
+          created_at: string;
+          employee_record_id: string;
+          ended_at: string | null;
+          ended_by: string | null;
+          id: string;
+          job_id: string | null;
+          organization_id: string;
+          project_id: string | null;
+          started_at: string;
+          started_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          employee_record_id: string;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          organization_id: string;
+          project_id?: string | null;
+          started_at?: string;
+          started_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          employee_record_id?: string;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          organization_id?: string;
+          project_id?: string | null;
+          started_at?: string;
+          started_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_leads_employee_fk";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_leads_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_leads_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_leads_project_fk";
+            columns: ["project_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
             referencedColumns: ["id", "organization_id"];
           },
         ];
@@ -14097,6 +14990,30 @@ export type Database = {
         };
         Returns: string;
       };
+      add_inventory_item_price: {
+        Args: {
+          p_actor_id: string;
+          p_amount_cents: number;
+          p_item_id: string;
+          p_kind: string;
+          p_organization_id: string;
+          p_price_quantity: number;
+          p_unit: string;
+          p_valid_from: string;
+        };
+        Returns: string;
+      };
+      add_leistung_price: {
+        Args: {
+          p_actor_id: string;
+          p_cost_rate_cents: number;
+          p_leistung_id: string;
+          p_organization_id: string;
+          p_sale_price_cents: number;
+          p_valid_from: string;
+        };
+        Returns: string;
+      };
       add_team_membership: {
         Args: {
           p_actor_id: string;
@@ -14291,6 +15208,14 @@ export type Database = {
           p_request_id: string;
         };
         Returns: string[];
+      };
+      book_inventory_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_batch_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
       };
       cancel_approved_vacation_request: {
         Args: {
@@ -15172,6 +16097,22 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_leistung: {
+        Args: {
+          p_actor_id: string;
+          p_cost_rate_cents: number;
+          p_description: string;
+          p_kind: string;
+          p_leistung_number: string;
+          p_name: string;
+          p_organization_id: string;
+          p_sale_price_cents: number;
+          p_tax_rate_basis_points: number;
+          p_unit: string;
+          p_valid_from: string;
+        };
+        Returns: string;
+      };
       create_maintenance_coverage: {
         Args: {
           p_actor_id: string;
@@ -15330,6 +16271,20 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      create_offer: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_client_id: string;
+          p_contact_id: string;
+          p_organization_id: string;
+          p_site_id: string;
+          p_title: string;
+          p_work_id: string;
+          p_work_kind: string;
+        };
+        Returns: string;
       };
       create_organization_invite: {
         Args: {
@@ -15946,6 +16901,16 @@ export type Database = {
         };
         Returns: undefined;
       };
+      end_work_lead: {
+        Args: {
+          p_actor_id: string;
+          p_expected_lead_id: string;
+          p_job_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: Json;
+      };
       ensure_inventory_defaults: {
         Args: { p_actor_id: string; p_org_id: string };
         Returns: undefined;
@@ -16356,6 +17321,10 @@ export type Database = {
           status: Database["public"]["Enums"]["invite_status"];
         }[];
       };
+      get_offer: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_org_members_for_user: {
         Args: { p_org_id: string; p_user_id: string };
         Returns: {
@@ -16385,6 +17354,10 @@ export type Database = {
         Returns: string[];
       };
       get_user_org_ids: { Args: { p_user_id: string }; Returns: string[] };
+      get_work_billing_parties: {
+        Args: { p_kind: string; p_organization_id: string; p_work_id: string };
+        Returns: Json;
+      };
       get_work_handover_gate_snapshot: {
         Args: {
           p_actor_id: string;
@@ -16461,6 +17434,22 @@ export type Database = {
           p_request_id?: string;
         };
         Returns: string;
+      };
+      leistung_prices_on_day: {
+        Args: {
+          p_leistung_ids: string[];
+          p_on_date: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          cost_rate_cents: number;
+          leistung_id: string;
+          price_version_id: string;
+          sale_price_cents: number;
+          tax_rate_basis_points: number;
+          unit: string;
+          valid_from: string;
+        }[];
       };
       link_installed_equipment_source: {
         Args: {
@@ -16783,6 +17772,61 @@ export type Database = {
           project_id: string;
         }[];
       };
+      list_installed_equipment_predecessor_events: {
+        Args: {
+          p_equipment_id: string;
+          p_limit: number;
+          p_offset: number;
+          p_organization_id: string;
+        };
+        Returns: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot: Json | null;
+          corrects_event_id: string | null;
+          effective_at: string;
+          equipment_id: string;
+          event_type: Database["public"]["Enums"]["installed_equipment_event_type"];
+          from_state:
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
+          id: string;
+          idempotency_key: string;
+          organization_id: string;
+          reason: string | null;
+          recorded_at: string;
+          request_operation: string;
+          site_snapshot: Json;
+          to_state:
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "installed_equipment_events";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      list_installed_equipment_replacement_plans: {
+        Args: {
+          p_equipment_id: string;
+          p_limit: number;
+          p_organization_id: string;
+        };
+        Returns: {
+          next_due_date: string;
+          plan_id: string;
+          plan_number: string;
+          plan_status: Database["public"]["Enums"]["maintenance_plan_status"];
+          plan_version: number;
+          template_name: string;
+        }[];
+      };
+      list_inventory_movement_page: {
+        Args: { p_organization_id: string; p_query?: Json };
+        Returns: Json;
+      };
       list_inventory_page: {
         Args: { p_organization_id: string; p_query?: Json };
         Returns: Json;
@@ -16796,6 +17840,17 @@ export type Database = {
         };
         Returns: Json;
       };
+      list_leistung_page: {
+        Args: {
+          p_on_date: string;
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+          p_view?: string;
+        };
+        Returns: Json;
+      };
       list_maintenance_workspace_page: {
         Args: {
           p_coverage_page?: number;
@@ -16805,6 +17860,17 @@ export type Database = {
           p_page_size?: number;
           p_plan_page?: number;
           p_search?: string;
+        };
+        Returns: Json;
+      };
+      list_offer_page: {
+        Args: {
+          p_client_id?: string;
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+          p_status?: string;
         };
         Returns: Json;
       };
@@ -16961,6 +18027,17 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      name_work_lead: {
+        Args: {
+          p_actor_id: string;
+          p_expected_lead_id: string;
+          p_job_id: string;
+          p_lead_user_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: Json;
+      };
       open_time_account: {
         Args: {
           p_actor_id: string;
@@ -17007,6 +18084,21 @@ export type Database = {
         };
         Returns: string[];
       };
+      plan_job_material: {
+        Args: {
+          p_actor_id: string;
+          p_item_id: string;
+          p_job_id: string;
+          p_notes?: string;
+          p_organization_id: string;
+          p_planned_quantity: number;
+          p_preferred_location_id?: string;
+          p_project_id: string;
+          p_source_id?: string;
+          p_source_kind?: string;
+        };
+        Returns: string;
+      };
       prepare_time_period: {
         Args: {
           p_actor_id: string;
@@ -17038,6 +18130,18 @@ export type Database = {
           p_sources: Json;
         };
         Returns: string;
+      };
+      preview_inventory_import: {
+        Args: {
+          p_actor_id: string;
+          p_column_mapping: Json;
+          p_content_hash: string;
+          p_file_name: string;
+          p_mode: string;
+          p_organization_id: string;
+          p_rows: Json;
+        };
+        Returns: Json;
       };
       promote_client_request_caller: {
         Args: {
@@ -17171,6 +18275,42 @@ export type Database = {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
       };
+      read_inventory_item_prices_on_day: {
+        Args: {
+          p_item_ids: string[];
+          p_on_date: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          item_id: string;
+          purchase_amount_cents: number;
+          purchase_price_id: string;
+          purchase_price_quantity: number;
+          purchase_source: string;
+          purchase_valid_from: string;
+          sale_amount_cents: number;
+          sale_price_id: string;
+          sale_price_quantity: number;
+          sale_source: string;
+          sale_valid_from: string;
+          tax_rate_basis_points: number;
+          unit: string;
+        }[];
+      };
+      read_maintenance_workspace_page: {
+        Args: {
+          p_coverage_page: number;
+          p_due_page: number;
+          p_due_through: string;
+          p_organization_id: string;
+          p_overdue_only: boolean;
+          p_page_size: number;
+          p_plan_page: number;
+          p_search: string;
+          p_today: string;
+        };
+        Returns: Json;
+      };
       read_manager_attention_sets: {
         Args: { p_limit: number; p_organization_id: string };
         Returns: Json;
@@ -17216,6 +18356,10 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      read_work_lead_scope: {
+        Args: { p_organization_id: string; p_user_id: string };
+        Returns: Json;
+      };
       record_client_communication_exception: {
         Args: {
           p_actor_id: string;
@@ -17251,6 +18395,7 @@ export type Database = {
           p_job_material_line_id?: string;
           p_location_id: string;
           p_movement_type: string;
+          p_operation_id?: string;
           p_organization_id: string;
           p_project_id?: string;
           p_quantity_delta: number;
@@ -17268,10 +18413,52 @@ export type Database = {
           p_corrects_event_id?: string;
           p_job_material_line_id: string;
           p_note?: string;
+          p_operation_id?: string;
           p_organization_id: string;
           p_quantity: number;
         };
         Returns: number;
+      };
+      record_maintenance_visit_missed: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_missed_reason: Database["public"]["Enums"]["maintenance_missed_visit_reason"];
+          p_note: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       record_organization_export_download: {
         Args: {
@@ -17508,6 +18695,14 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      remove_inventory_item_supplier: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_reference_id: string;
+        };
+        Returns: undefined;
+      };
       remove_member_with_time_capture: {
         Args: {
           p_actor_id: string;
@@ -17668,61 +18863,132 @@ export type Database = {
         };
         Returns: undefined;
       };
-      replace_installed_equipment: {
+      replace_company_document_file: {
         Args: {
           p_actor_id: string;
-          p_effective_at: string;
-          p_expected_version: number;
-          p_idempotency_key: string;
+          p_attempt_key: string;
+          p_expected_following_storage_path: string;
+          p_expected_storage_path: string;
+          p_kind: string;
+          p_mime_type: string;
           p_organization_id: string;
-          p_predecessor_id: string;
-          p_reason: string;
-          p_successor_id: string;
-          p_successor_payload: Json;
+          p_size_bytes: number;
+          p_storage_path: string;
         };
-        Returns: {
-          archive_reason: string | null;
-          archived_at: string | null;
-          archived_by: string | null;
-          category: Database["public"]["Enums"]["installed_equipment_category"];
-          client_id: string;
-          commissioning_date: string | null;
-          created_at: string;
-          created_by: string;
-          equipment_number: string;
-          id: string;
-          installation_date: string | null;
-          location_detail: string | null;
-          manufacturer: string | null;
-          model: string | null;
-          name: string;
-          organization_id: string;
-          parent_equipment_id: string | null;
-          predecessor_equipment_id: string | null;
-          site_id: string;
-          state: Database["public"]["Enums"]["installed_equipment_state"];
-          subtype:
-            | Database["public"]["Enums"]["installed_equipment_subtype"]
-            | null;
-          technical_notes: string | null;
-          updated_at: string;
-          updated_by: string;
-          version: number;
-          void_reason: string | null;
-          voided_at: string | null;
-          voided_by: string | null;
-          warranty_basis: string | null;
-          warranty_end_date: string | null;
-          warranty_provider: string | null;
-          warranty_start_date: string | null;
-        };
-        SetofOptions: {
-          from: "*";
-          to: "installed_equipment";
-          isOneToOne: true;
-          isSetofReturn: false;
-        };
+        Returns: undefined;
       };
+      replace_installed_equipment:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_effective_at: string;
+              p_expected_version: number;
+              p_idempotency_key: string;
+              p_organization_id: string;
+              p_predecessor_id: string;
+              p_reason: string;
+              p_successor_id: string;
+              p_successor_payload: Json;
+            };
+            Returns: {
+              archive_reason: string | null;
+              archived_at: string | null;
+              archived_by: string | null;
+              category: Database["public"]["Enums"]["installed_equipment_category"];
+              client_id: string;
+              commissioning_date: string | null;
+              created_at: string;
+              created_by: string;
+              equipment_number: string;
+              id: string;
+              installation_date: string | null;
+              location_detail: string | null;
+              manufacturer: string | null;
+              model: string | null;
+              name: string;
+              organization_id: string;
+              parent_equipment_id: string | null;
+              predecessor_equipment_id: string | null;
+              site_id: string;
+              state: Database["public"]["Enums"]["installed_equipment_state"];
+              subtype:
+                | Database["public"]["Enums"]["installed_equipment_subtype"]
+                | null;
+              technical_notes: string | null;
+              updated_at: string;
+              updated_by: string;
+              version: number;
+              void_reason: string | null;
+              voided_at: string | null;
+              voided_by: string | null;
+              warranty_basis: string | null;
+              warranty_end_date: string | null;
+              warranty_provider: string | null;
+              warranty_start_date: string | null;
+            };
+            SetofOptions: {
+              from: "*";
+              to: "installed_equipment";
+              isOneToOne: true;
+              isSetofReturn: false;
+            };
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_carry_over: Json;
+              p_effective_at: string;
+              p_expected_version: number;
+              p_idempotency_key: string;
+              p_organization_id: string;
+              p_predecessor_id: string;
+              p_reason: string;
+              p_successor_id: string;
+              p_successor_payload: Json;
+            };
+            Returns: {
+              archive_reason: string | null;
+              archived_at: string | null;
+              archived_by: string | null;
+              category: Database["public"]["Enums"]["installed_equipment_category"];
+              client_id: string;
+              commissioning_date: string | null;
+              created_at: string;
+              created_by: string;
+              equipment_number: string;
+              id: string;
+              installation_date: string | null;
+              location_detail: string | null;
+              manufacturer: string | null;
+              model: string | null;
+              name: string;
+              organization_id: string;
+              parent_equipment_id: string | null;
+              predecessor_equipment_id: string | null;
+              site_id: string;
+              state: Database["public"]["Enums"]["installed_equipment_state"];
+              subtype:
+                | Database["public"]["Enums"]["installed_equipment_subtype"]
+                | null;
+              technical_notes: string | null;
+              updated_at: string;
+              updated_by: string;
+              version: number;
+              void_reason: string | null;
+              voided_at: string | null;
+              voided_by: string | null;
+              warranty_basis: string | null;
+              warranty_end_date: string | null;
+              warranty_provider: string | null;
+              warranty_start_date: string | null;
+            };
+            SetofOptions: {
+              from: "*";
+              to: "installed_equipment";
+              isOneToOne: true;
+              isSetofReturn: false;
+            };
+          };
       replace_job_assignments_with_assessment: {
         Args: {
           p_actor_id: string;
@@ -18012,6 +19278,16 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      save_company_document_profile: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_version: number;
+          p_organization_id: string;
+          p_values: Json;
+        };
+        Returns: number;
+      };
       save_inventory_item: {
         Args: {
           p_actor_id: string;
@@ -18056,6 +19332,23 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      save_inventory_item_supplier: {
+        Args: {
+          p_actor_id: string;
+          p_base_quantity: number;
+          p_is_preferred: boolean;
+          p_item_id: string;
+          p_organization_id: string;
+          p_pack_quantity: number;
+          p_purchase_unit: string;
+          p_reference_id: string;
+          p_supplier_article_number: string;
+          p_supplier_id: string;
+          p_supplier_name: string;
+          p_unit: string;
+        };
+        Returns: string;
       };
       save_personnel_onboarding_requirement: {
         Args: {
@@ -18685,6 +19978,40 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      set_work_billing_parties: {
+        Args: {
+          p_actor_id: string;
+          p_client_id: string;
+          p_expected_version: number;
+          p_kind: string;
+          p_organization_id: string;
+          p_recipient_client_id: string;
+          p_work_id: string;
+        };
+        Returns: {
+          client_id: string;
+          created_at: string;
+          id: string;
+          job_id: string | null;
+          organization_id: string;
+          project_id: string | null;
+          recipient_address: string | null;
+          recipient_client_id: string;
+          recipient_name: string;
+          request_id: string | null;
+          service_case_id: string | null;
+          set_by: string | null;
+          source: string;
+          version: number;
+          work_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "work_billing_parties";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       set_work_blocker_state: {
         Args: {
           p_actor_id: string;
@@ -18749,6 +20076,7 @@ export type Database = {
           p_job_id: string;
           p_location_id: string;
           p_notes: string;
+          p_operation_id?: string;
           p_organization_id: string;
           p_project_id: string;
           p_quantity: number;
@@ -19831,19 +21159,35 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      update_time_tracking_settings: {
-        Args: {
-          p_actor_id: string;
-          p_auto_break_duration_minutes: number;
-          p_auto_break_threshold_minutes: number;
-          p_break_ends: Json;
-          p_break_mode: string;
-          p_break_policy_history: Json;
-          p_expected_settings: Json;
-          p_organization_id: string;
-        };
-        Returns: undefined;
-      };
+      update_time_tracking_settings:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_auto_break_duration_minutes: number;
+              p_auto_break_second_duration_minutes: number;
+              p_auto_break_second_threshold_minutes: number;
+              p_auto_break_threshold_minutes: number;
+              p_break_ends: Json;
+              p_break_mode: string;
+              p_break_policy_history: Json;
+              p_expected_settings: Json;
+              p_organization_id: string;
+            };
+            Returns: undefined;
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_auto_break_duration_minutes: number;
+              p_auto_break_threshold_minutes: number;
+              p_break_ends: Json;
+              p_break_mode: string;
+              p_break_policy_history: Json;
+              p_expected_settings: Json;
+              p_organization_id: string;
+            };
+            Returns: undefined;
+          };
       update_work_schedule: {
         Args: {
           p_actor_id: string;
@@ -20084,7 +21428,11 @@ export type Database = {
         | "work_unlinked"
         | "source_linked"
         | "document_linked"
-        | "document_unlinked";
+        | "document_unlinked"
+        | "maintenance_plan_carried_over"
+        | "maintenance_plan_left"
+        | "component_carried_over"
+        | "parent_replaced";
       installed_equipment_identifier_type:
         | "serial_number"
         | "manufacturer_product_number"
@@ -20147,7 +21495,9 @@ export type Database = {
         | "skipped"
         | "cancelled"
         | "superseded"
-        | "service_case_linked";
+        | "service_case_linked"
+        | "visit_missed"
+        | "equipment_replaced";
       maintenance_due_status:
         | "open"
         | "visit_created"
@@ -20155,6 +21505,12 @@ export type Database = {
         | "skipped"
         | "cancelled"
         | "superseded";
+      maintenance_missed_visit_reason:
+        | "customer_absent"
+        | "customer_cancelled"
+        | "postponed"
+        | "other"
+        | "job_cancelled";
       maintenance_next_due_basis: "planned_due_date" | "actual_completion_date";
       maintenance_plan_event_type:
         | "created"
@@ -20730,6 +22086,10 @@ export const Constants = {
         "source_linked",
         "document_linked",
         "document_unlinked",
+        "maintenance_plan_carried_over",
+        "maintenance_plan_left",
+        "component_carried_over",
+        "parent_replaced",
       ],
       installed_equipment_identifier_type: [
         "serial_number",
@@ -20798,6 +22158,8 @@ export const Constants = {
         "cancelled",
         "superseded",
         "service_case_linked",
+        "visit_missed",
+        "equipment_replaced",
       ],
       maintenance_due_status: [
         "open",
@@ -20806,6 +22168,13 @@ export const Constants = {
         "skipped",
         "cancelled",
         "superseded",
+      ],
+      maintenance_missed_visit_reason: [
+        "customer_absent",
+        "customer_cancelled",
+        "postponed",
+        "other",
+        "job_cancelled",
       ],
       maintenance_next_due_basis: [
         "planned_due_date",

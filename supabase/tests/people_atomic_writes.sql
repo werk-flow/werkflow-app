@@ -57,7 +57,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -129,8 +129,8 @@ begin
   end if;
   select * into strict v_event from public.employee_record_events
   where employee_record_id = v_record.id and event_type = 'membership_removed';
-  if v_event.created_by <> '41004000-0000-0000-0000-000000000001'
-    or v_event.event_payload <> jsonb_build_object('exit_date', v_today, 'auto_clocked_out', false)
+  if v_event.created_by is distinct from '41004000-0000-0000-0000-000000000001'
+    or v_event.event_payload is distinct from jsonb_build_object('exit_date', v_today, 'auto_clocked_out', false)
   then raise exception 'the removal recorded % by %', v_event.event_payload, v_event.created_by; end if;
 end;
 $$;
@@ -176,10 +176,10 @@ begin
         and name = 'Neue Firma SQL' and unique_code = 'ATOMNEW1')
   then raise exception 'the creation did not write the organization'; end if;
   select * into strict v_settings from public.organization_settings where organization_id = v_organization_id;
-  if v_settings.break_mode <> 'manual' or v_settings.auto_break_threshold_minutes <> 360
-    or v_settings.auto_break_duration_minutes <> 30
-    or jsonb_array_length(v_settings.break_policy_history) <> 1
-    or v_settings.break_policy_history -> 0 ->> 'breakMode' <> 'manual'
+  if v_settings.break_mode is distinct from 'manual' or v_settings.auto_break_threshold_minutes is distinct from 360
+    or v_settings.auto_break_duration_minutes is distinct from 30
+    or jsonb_array_length(v_settings.break_policy_history) is distinct from 1
+    or v_settings.break_policy_history -> 0 ->> 'breakMode' is distinct from 'manual'
     or (v_settings.break_policy_history -> 0 ->> 'effectiveFrom') !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
   then raise exception 'the creation wrote settings %', row_to_json(v_settings); end if;
   if not exists (select 1 from public.organization_members
@@ -203,7 +203,7 @@ select pg_temp.expect_refusal('record invite to an address with a pending invite
 $sql$, 'invite_already_pending');
 do $$
 begin
-  if (select status from public.organization_invites where id = '41004000-0000-0000-0000-000000000030') <> 'pending'
+  if (select status from public.organization_invites where id = '41004000-0000-0000-0000-000000000030') is distinct from 'pending'
     or (select invite_id from public.employee_records where id = '41004000-0000-0000-0000-000000000020')
       is distinct from '41004000-0000-0000-0000-000000000030'
     or (select count(*) from public.organization_invites
@@ -246,10 +246,10 @@ begin
     '41004000-0000-0000-0000-000000000010', 'rita-old@example.test', gen_random_uuid()::text,
     'buero', '41004000-0000-0000-0000-000000000020');
   if v_created.replaced_invite_id is distinct from '41004000-0000-0000-0000-000000000030'
-    or (select status from public.organization_invites where id = '41004000-0000-0000-0000-000000000030') <> 'cancelled'
+    or (select status from public.organization_invites where id = '41004000-0000-0000-0000-000000000030') is distinct from 'cancelled'
     or (select invite_id from public.employee_records where id = '41004000-0000-0000-0000-000000000020')
       is distinct from v_created.invite_id
-    or (select invited_role from public.organization_invites where id = v_created.invite_id) <> 'buero'
+    or (select invited_role from public.organization_invites where id = v_created.invite_id) is distinct from 'buero'
   then raise exception 'the record invite did not replace the earlier one'; end if;
 
   -- Another organization cannot withdraw it.
@@ -263,7 +263,7 @@ begin
     '41004000-0000-0000-0000-000000000010', v_created.invite_id, v_created.replaced_invite_id
   ) then raise exception 'the unsent invite was not withdrawn'; end if;
   if exists (select 1 from public.organization_invites where id = v_created.invite_id)
-    or (select status from public.organization_invites where id = '41004000-0000-0000-0000-000000000030') <> 'pending'
+    or (select status from public.organization_invites where id = '41004000-0000-0000-0000-000000000030') is distinct from 'pending'
     or (select invite_id from public.employee_records where id = '41004000-0000-0000-0000-000000000020')
       is distinct from '41004000-0000-0000-0000-000000000030'
   then raise exception 'the withdrawal did not restore the earlier invite'; end if;
@@ -279,7 +279,7 @@ begin
     '41004000-0000-0000-0000-000000000010', 'neu@example.test', gen_random_uuid()::text,
     'employee', null);
   if v_created.replaced_invite_id is not null
-    or (select status from public.organization_invites where id = v_created.invite_id) <> 'pending'
+    or (select status from public.organization_invites where id = v_created.invite_id) is distinct from 'pending'
   then raise exception 'the organization invite was not created pending'; end if;
   if not public.discard_unsent_organization_invite(
     '41004000-0000-0000-0000-000000000010', v_created.invite_id, null
@@ -369,7 +369,7 @@ do $$
 begin
   if exists (select 1 from public.organization_members
              where user_id = '41004000-0000-0000-0000-000000000005')
-    or (select status from public.organization_invites where id = '41004000-0000-0000-0000-000000000032') <> 'pending'
+    or (select status from public.organization_invites where id = '41004000-0000-0000-0000-000000000032') is distinct from 'pending'
   then raise exception 'a refused redemption left a membership or changed the invite'; end if;
 end;
 $$;

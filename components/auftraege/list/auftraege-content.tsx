@@ -2,11 +2,12 @@
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import type { JobListPagination } from '@/lib/jobs/list-page';
 
-import { useState, type ComponentProps } from 'react';
+import { useRef, useState, type ComponentProps } from 'react';
 import { RefreshButton } from '@/components/ui/refresh-button';
 
 import { usePageAction, usePageActionLoader } from '@/components/shared/page-action';
 import { lazyDialog } from '@/components/shared/lazy-dialog';
+import { downloadWorkBillingPartiesSection } from '@/components/auftraege/shared/work-billing-parties-download';
 import { UsableContent } from '@/components/shared/usable-content';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import type { UnifiedListEntry } from '@/lib/jobs/unified-list';
@@ -223,6 +224,23 @@ function useAuftraegeContentState({
   };
 }
 
+/**
+ * The office opens jobs from here, and their billing section waits in its own
+ * chunk. The first pointer movement or focus inside the list downloads it, so
+ * a job opens without waiting for it, while neither the cold start nor the
+ * field worker loads it.
+ */
+function useBillingSectionWarmup(isAdminOrManager: boolean) {
+  const warmed = useRef(false);
+  if (!isAdminOrManager) return undefined;
+  return () => {
+    if (warmed.current) return;
+    warmed.current = true;
+    // eslint-disable-next-line no-restricted-syntax -- an early download that fails costs nothing yet: the section downloads again when it renders and reports the failure there
+    void downloadWorkBillingPartiesSection().catch(() => undefined);
+  };
+}
+
 export function AuftraegeContent(props: AuftraegeContentProps) {
   const { clientMap, members, isAdminOrManager, visibleColumns, pagination } = props;
   const state = useAuftraegeContentState(props);
@@ -232,6 +250,7 @@ export function AuftraegeContent(props: AuftraegeContentProps) {
     isAdminOrManager ? lazyCreateDialogs.preload : null,
     lazyCreateDialogs.useWaiting(state.createDialogOpen),
   );
+  const warmBillingSection = useBillingSectionWarmup(isAdminOrManager);
 
   const sectionTableProps: AuftraegeSectionTableSharedProps = {
     pagination,
@@ -252,7 +271,7 @@ export function AuftraegeContent(props: AuftraegeContentProps) {
 
   return (
     <UsableContent name="auftraege" count={state.jobs.length}>
-      <div className="space-y-6">
+      <div className="space-y-6" onPointerMove={warmBillingSection} onFocus={warmBillingSection}>
         <AuftraegeActiveSection
           activeStatusFilter={state.activeStatusFilter}
           onStatusFilterChange={(status) => {

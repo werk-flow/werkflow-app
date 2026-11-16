@@ -50,13 +50,18 @@ export async function readArtifactForDetail(
   );
   if (artifactError) return { success: false, error: 'work_artifact_load_failed' };
   if (!artifact) return { success: false, error: 'work_artifact_not_found' };
-  const target: WorkArtifactTarget | null = artifact.job_id
-    ? { targetType: 'job', targetId: artifact.job_id }
-    : artifact.project_id
-      ? { targetType: 'project', targetId: artifact.project_id }
-      : null;
+  const target = artifactTargetOf(artifact);
   if (!target) return { success: false, error: 'work_artifact_not_found' };
   return { success: true, artifact, target };
+}
+
+/** The job or project an artifact belongs to. */
+export function artifactTargetOf(
+  artifact: Pick<WorkArtifactRow, 'job_id' | 'project_id'>,
+): WorkArtifactTarget | null {
+  if (artifact.job_id) return { targetType: 'job', targetId: artifact.job_id };
+  if (artifact.project_id) return { targetType: 'project', targetId: artifact.project_id };
+  return null;
 }
 
 /** Refuses a field worker a coworker's internal draft; a failed read is never a refusal. */
@@ -110,7 +115,7 @@ export function toVisibleArtifactDetail(
     documents: Array<WorkArtifactDetail['documents'][number] & RevisionJoin>;
     sources: Array<WorkArtifactDetail['sources'][number] & RevisionJoin>;
   },
-): WorkArtifactDetail {
+): Omit<WorkArtifactDetail, 'canLeadReview' | 'leadReadOnly'> {
   const disclosedRevisionIds = new Set(
     rows.actions
       .filter((action) => FIELD_DISCLOSING_ARTIFACT_ACTIONS.has(action.action_type))

@@ -96,7 +96,7 @@ export function DeleteAccountButton() {
               // handleDelete shows its own failures in the dialog.
               void handleDelete();
             }}
-            disabled={isDeleting}
+            pending={isDeleting}
             variant="destructive"
           >
             {isDeleting ? 'Wird gelöscht…' : 'Konto löschen'}

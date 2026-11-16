@@ -78,7 +78,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -189,7 +189,7 @@ begin
   if (select string_agg(part.part_number || ':' || part.kind || ':' || part.state || ':' || part.file_count
         || ':' || part.file_bytes, ',' order by part.part_number)
       from public.organization_export_parts part where part.export_id = v_export)
-    <> '1:data:pending:0:0,2:files:pending:2:30,3:files:pending:2:55' then
+    is distinct from '1:data:pending:0:0,2:files:pending:2:30,3:files:pending:2:55' then
     raise exception 'the export parts are wrong';
   end if;
   if (select count(*) from public.organization_export_files file where file.export_id = v_export) <> 4
@@ -197,20 +197,20 @@ begin
     or exists (select 1 from public.organization_export_files file
       where file.export_id = v_export and file.document_id = '28700000-0000-0000-0000-000000000043')
     or (select version_number from public.organization_export_files file
-      where file.export_id = v_export and file.source_path = '28700000-0000-0000-0000-000000000010/d42/vertrag.pdf') <> 1
+      where file.export_id = v_export and file.source_path = '28700000-0000-0000-0000-000000000010/d42/vertrag.pdf') is distinct from 1
   then
     raise exception 'the export does not hold every file exactly once';
   end if;
-  if (select file_count || ':' || file_bytes from public.organization_exports where id = v_export) <> '4:85'
-    or (select string_agg(event_type, ',') from public.organization_export_events where export_id = v_export) <> 'started'
+  if (select file_count || ':' || file_bytes from public.organization_exports where id = v_export) is distinct from '4:85'
+    or (select string_agg(event_type, ',') from public.organization_export_events where export_id = v_export) is distinct from 'started'
   then
     raise exception 'the export totals or its start event are wrong';
   end if;
   if (select file_count || ':' || file_bytes from public.organization_exports where id = v_export)
-      <> (select count(*) || ':' || coalesce(sum(file_bytes), 0) from public.organization_export_files
+      is distinct from (select count(*) || ':' || coalesce(sum(file_bytes), 0) from public.organization_export_files
         where export_id = v_export)
     or (select file_count || ':' || file_bytes from public.organization_exports where id = v_export)
-      <> (select sum(file_count) || ':' || sum(file_bytes) from public.organization_export_parts
+      is distinct from (select sum(file_count) || ':' || sum(file_bytes) from public.organization_export_parts
         where export_id = v_export) then
     raise exception 'the export totals differ from its file rows or its part totals';
   end if;
@@ -273,11 +273,11 @@ begin
   v_claimed := public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',
     '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 3));
   select * into v_part from public.organization_export_parts where id = (select id from export_parts where part_number = 3);
-  if v_claimed <> jsonb_build_object('exportId', v_part.export_id, 'kind', 'files',
+  if v_claimed is distinct from jsonb_build_object('exportId', v_part.export_id, 'kind', 'files',
       'archivePath', v_part.archive_path, 'partCount', 3) then
     raise exception 'the claim answered %', v_claimed;
   end if;
-  if v_part.state <> 'pending' or v_part.build_started_at <> now() or v_part.expires_at is not null
+  if v_part.state is distinct from 'pending' or v_part.build_started_at is distinct from now() or v_part.expires_at is not null
     or (select purge_after from public.storage_purge_queue where storage_path = v_part.archive_path)
       is distinct from now() + interval '7 days' then
     raise exception 'an archive whose completion is never recorded has no purge entry seven days after its build started';
@@ -299,7 +299,7 @@ begin
   if (select purge_after from public.storage_purge_queue where storage_path = v_archive)
       is distinct from now() + interval '15 minutes'
     or (select purge_after from public.storage_purge_queue
-      where storage_path = '28700000-0000-0000-0000-000000000010/d40/rechnung.pdf') <> now() + interval '8 days' then
+      where storage_path = '28700000-0000-0000-0000-000000000010/d40/rechnung.pdf') is distinct from now() + interval '8 days' then
     raise exception 'queueing again did not make an archive due at the end of its build window, or shortened a document file';
   end if;
 end;
@@ -319,12 +319,13 @@ begin
     '28700000-0000-0000-0000-000000000010', v_part, 'storage_object_missing');
   if (select string_agg(part.part_number || ':' || part.state, ',' order by part.part_number)
       from public.organization_export_parts part where part.export_id = (select export_id from started))
-    <> '1:pending,2:failed,3:pending' then
+    is distinct from '1:pending,2:failed,3:pending' then
     raise exception 'a failed part changed another part';
   end if;
   -- The failed build's archive, had it stored one, is still queued; the retry claims the part again.
-  if not exists (select 1 from public.storage_purge_queue where storage_path =
-      (select archive_path from public.organization_export_parts where id = v_part)) then
+  if not exists (select 1 from public.storage_purge_queue
+      where organization_id = '28700000-0000-0000-0000-000000000010'
+        and storage_path = (select archive_path from public.organization_export_parts where id = v_part)) then
     raise exception 'a failed build left its archive unqueued';
   end if;
   perform public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',
@@ -350,7 +351,7 @@ begin
     '28700000-0000-0000-0000-000000000010', v_part, 100);
   if (select string_agg(part.part_number || ':' || part.state, ',' order by part.part_number)
       from public.organization_export_parts part where part.export_id = (select export_id from started))
-    <> '1:pending,2:ready,3:pending' then
+    is distinct from '1:pending,2:ready,3:pending' then
     raise exception 'the retried part did not complete alone';
   end if;
   perform pg_temp.expect_refusal('claim of a ready part', format(
@@ -373,9 +374,9 @@ declare
   v_part public.organization_export_parts;
 begin
   select * into v_part from public.organization_export_parts where id = (select id from export_parts where part_number = 2);
-  if v_part.state <> 'ready' or v_part.failure_reason is not null or v_part.archive_bytes <> 100
-    or v_part.built_at <> now() or v_part.build_started_at <> now() - interval '1 hour'
-    or v_part.expires_at <> v_part.build_started_at + interval '7 days' then
+  if v_part.state is distinct from 'ready' or v_part.failure_reason is not null or v_part.archive_bytes is distinct from 100
+    or v_part.built_at is distinct from now() or v_part.build_started_at is distinct from now() - interval '1 hour'
+    or v_part.expires_at is distinct from v_part.build_started_at + interval '7 days' then
     raise exception 'the ready part is wrong';
   end if;
   if (select purge_after from public.storage_purge_queue where storage_path = v_part.archive_path)
@@ -440,13 +441,13 @@ declare
 begin
   v_download := public.record_organization_export_download('28700000-0000-0000-0000-000000000001',
     '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 2));
-  if (v_download ->> 'partNumber')::integer <> 2 or (v_download ->> 'partCount')::integer <> 3
+  if (v_download ->> 'partNumber')::integer is distinct from 2 or (v_download ->> 'partCount')::integer is distinct from 3
     or v_download ->> 'archivePath' not like '%/teil-2.zip' then
     raise exception 'the download answer is wrong: %', v_download;
   end if;
   if (select string_agg(event_type, ',' order by occurred_at, event_type)
       from public.organization_export_events where export_id = (select export_id from started))
-    <> 'downloaded,part_failed,part_ready,started' then
+    is distinct from 'downloaded,part_failed,part_ready,started' then
     raise exception 'the ledger misses an event: %', (select string_agg(event_type, ',')
       from public.organization_export_events where export_id = (select export_id from started));
   end if;
@@ -495,12 +496,12 @@ declare
 begin
   v_first := public.read_organization_export_page('28700000-0000-0000-0000-000000000010', 'documents', null, 2) -> 'rows';
   v_second := public.read_organization_export_page('28700000-0000-0000-0000-000000000010', 'documents', v_first -> 1, 2) -> 'rows';
-  if (public.read_organization_export_page('28700000-0000-0000-0000-000000000010', 'documents', null, 1) -> 'columns' ->> 0) <> 'id' then
+  if (public.read_organization_export_page('28700000-0000-0000-0000-000000000010', 'documents', null, 1) -> 'columns' ->> 0) is distinct from 'id' then
     raise exception 'the page reader lost the column order';
   end if;
-  if jsonb_array_length(v_first) <> 2 or jsonb_array_length(v_second) <> 1
-    or (v_first -> 0 ->> 'id') <> '28700000-0000-0000-0000-000000000040'
-    or (v_second -> 0 ->> 'id') <> '28700000-0000-0000-0000-000000000042'
+  if jsonb_array_length(v_first) is distinct from 2 or jsonb_array_length(v_second) is distinct from 1
+    or (v_first -> 0 ->> 'id') is distinct from '28700000-0000-0000-0000-000000000040'
+    or (v_second -> 0 ->> 'id') is distinct from '28700000-0000-0000-0000-000000000042'
     or exists (select 1 from jsonb_array_elements(v_first || v_second) row_value
       where row_value ->> 'organization_id' <> '28700000-0000-0000-0000-000000000010') then
     raise exception 'the page reader returned the wrong rows';
@@ -526,10 +527,10 @@ end;
 $$;
 do $$
 begin
-  if pg_temp.visible_exports('28700000-0000-0000-0000-000000000001') <> 1
-    or pg_temp.visible_exports('28700000-0000-0000-0000-000000000002') <> 0
-    or pg_temp.visible_exports('28700000-0000-0000-0000-000000000003') <> 0
-    or pg_temp.visible_exports('28700000-0000-0000-0000-000000000004') <> 0 then
+  if pg_temp.visible_exports('28700000-0000-0000-0000-000000000001') is distinct from 1
+    or pg_temp.visible_exports('28700000-0000-0000-0000-000000000002') is distinct from 0
+    or pg_temp.visible_exports('28700000-0000-0000-0000-000000000003') is distinct from 0
+    or pg_temp.visible_exports('28700000-0000-0000-0000-000000000004') is distinct from 0 then
     raise exception 'an export row reached someone other than the Admin';
   end if;
   if has_table_privilege('authenticated', 'public.organization_export_parts', 'SELECT')
@@ -592,7 +593,7 @@ begin
       where export_id = '28700000-0000-0000-0000-000000000090') <> 1
     or (select count(*) from public.organization_export_parts where export_id = (select export_id from started)) <> 3
     or (select count(*) from public.organization_export_events
-      where organization_id = '28700000-0000-0000-0000-000000000010') <> (select events from ledger_before) + 2 then
+      where organization_id = '28700000-0000-0000-0000-000000000010') is distinct from (select events from ledger_before) + 2 then
     raise exception 'a start removed more than the expired plan';
   end if;
 end;
@@ -648,11 +649,11 @@ do $$
 declare
   v_export uuid := (select export_id from resized_start);
 begin
-  if (select file_count || ':' || file_bytes from public.organization_exports where id = v_export) <> '4:1085'
-    or (select sum(file_bytes) from public.organization_export_files where export_id = v_export) <> 1085
-    or (select sum(file_bytes) from public.organization_export_parts where export_id = v_export) <> 1085
+  if (select file_count || ':' || file_bytes from public.organization_exports where id = v_export) is distinct from '4:1085'
+    or (select sum(file_bytes) from public.organization_export_files where export_id = v_export) is distinct from 1085
+    or (select sum(file_bytes) from public.organization_export_parts where export_id = v_export) is distinct from 1085
     or (select event_payload ->> 'fileBytes' from public.organization_export_events
-      where export_id = v_export and event_type = 'started') <> '1085' then
+      where export_id = v_export and event_type = 'started') is distinct from '1085' then
     raise exception 'the export totals differ from the file rows of a file that changed during the start';
   end if;
 end;
@@ -708,7 +709,7 @@ begin
   perform public.complete_organization_export_part('28700000-0000-0000-0000-000000000001',
     '28700000-0000-0000-0000-000000000010', (select id from resized_parts where part_number = 1), 100);
   select * into v_part from public.organization_export_parts where id = (select id from resized_parts where part_number = 1);
-  if v_part.build_started_at <> now() + interval '1 minute'
+  if v_part.build_started_at is distinct from now() + interval '1 minute'
     or (select purge_after from public.storage_purge_queue where storage_path = v_part.archive_path)
       is distinct from v_part.expires_at then
     raise exception 'an earlier claim moved the part''s build start back, apart from its archive''s purge';

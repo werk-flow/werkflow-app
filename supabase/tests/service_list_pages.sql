@@ -74,60 +74,60 @@ begin
 
   -- Equipment: the default scope hides archived and voided rows and counts before the page boundary.
   result := public.list_equipment_page(org_id,'','all',false,1,50);
-  if (result->>'total')::int<>1046 or jsonb_array_length(result->'ids')<>50 or not (result->>'hasAny')::boolean then raise exception 'equipment first page or total wrong: %',result->>'total'; end if;
+  if (result->>'total')::int is distinct from 1046 or jsonb_array_length(result->'ids') is distinct from 50 or not (result->>'hasAny')::boolean then raise exception 'equipment first page or total wrong: %',result->>'total'; end if;
   if exists(select 1 from jsonb_array_elements_text(result->'ids') with ordinality listed(id,position) where id<>md5('list-equipment-'||(position+5))::uuid::text) then raise exception 'equipment page is not ordered by number'; end if;
   next_result := public.list_equipment_page(org_id,'','all',false,2,50);
   if exists(select 1 from jsonb_array_elements(result->'ids') a join jsonb_array_elements(next_result->'ids') b on a=b) then raise exception 'equipment pages overlap'; end if;
   result := public.list_equipment_page(org_id,'','all',false,21,50);
-  if jsonb_array_length(result->'ids')<>46 or result->'ids'->>45<>md5('list-equipment-1051')::uuid::text then raise exception 'equipment tail beyond 1,000 rows unreachable'; end if;
-  if (public.list_equipment_page(org_id,'','all',true,1,50)->>'total')::int<>1051 then raise exception 'archived equipment missing from the archived scope'; end if;
-  if (public.list_equipment_page(org_id,'EQ-VOID','all',true,1,50)->>'total')::int<>0 then raise exception 'a voided successor is listed'; end if;
+  if jsonb_array_length(result->'ids') is distinct from 46 or result->'ids'->>45 is distinct from md5('list-equipment-1051')::uuid::text then raise exception 'equipment tail beyond 1,000 rows unreachable'; end if;
+  if (public.list_equipment_page(org_id,'','all',true,1,50)->>'total')::int is distinct from 1051 then raise exception 'archived equipment missing from the archived scope'; end if;
+  if (public.list_equipment_page(org_id,'EQ-VOID','all',true,1,50)->>'total')::int is distinct from 0 then raise exception 'a voided successor is listed'; end if;
   result := public.list_equipment_page(org_id,'','ventilation',false,1,50);
-  if (result->>'total')::int<>1 or result->'ids'<>jsonb_build_array(md5('list-equipment-7')::uuid) then raise exception 'equipment category filter wrong'; end if;
+  if (result->>'total')::int is distinct from 1 or result->'ids' is distinct from jsonb_build_array(md5('list-equipment-7')::uuid) then raise exception 'equipment category filter wrong'; end if;
   -- Search: identifier values match literally, customer and site names match.
   result := public.list_equipment_page(org_id,'50%_','all',false,1,50);
-  if (result->>'total')::int<>1 or result->'ids'<>jsonb_build_array(md5('list-equipment-1051')::uuid) then raise exception 'literal identifier search missed the tail'; end if;
-  if public.list_equipment_page(org_id,'suchkunde nord','all',false,1,50)->'ids'<>jsonb_build_array(md5('list-equipment-1049')::uuid)
-    or public.list_equipment_page(org_id,'werkstatt ost','all',false,1,50)->'ids'<>jsonb_build_array(md5('list-equipment-1049')::uuid) then raise exception 'equipment customer or site search wrong'; end if;
-  if (public.list_equipment_page(org_id,'anlage 0003','all',false,1,50)->>'total')::int<>0 or (public.list_equipment_page(org_id,'anlage 0003','all',true,1,50)->>'total')::int<>1 then raise exception 'equipment search ignores the archived scope'; end if;
+  if (result->>'total')::int is distinct from 1 or result->'ids' is distinct from jsonb_build_array(md5('list-equipment-1051')::uuid) then raise exception 'literal identifier search missed the tail'; end if;
+  if public.list_equipment_page(org_id,'suchkunde nord','all',false,1,50)->'ids' is distinct from jsonb_build_array(md5('list-equipment-1049')::uuid)
+    or public.list_equipment_page(org_id,'werkstatt ost','all',false,1,50)->'ids' is distinct from jsonb_build_array(md5('list-equipment-1049')::uuid) then raise exception 'equipment customer or site search wrong'; end if;
+  if (public.list_equipment_page(org_id,'anlage 0003','all',false,1,50)->>'total')::int is distinct from 0 or (public.list_equipment_page(org_id,'anlage 0003','all',true,1,50)->>'total')::int is distinct from 1 then raise exception 'equipment search ignores the archived scope'; end if;
   -- Bounds: at most 100 rows, at least one row, never a page before the first, empty past the end.
-  if jsonb_array_length(public.list_equipment_page(org_id,'','all',false,1,100000)->'ids')<>100 then raise exception 'equipment page size is not capped at 100'; end if;
-  if jsonb_array_length(public.list_equipment_page(org_id,'','all',false,1,0)->'ids')<>1 then raise exception 'equipment page size has no lower bound'; end if;
-  if public.list_equipment_page(org_id,'','all',false,-3,50)->'ids'->>0<>md5('list-equipment-6')::uuid::text then raise exception 'equipment page number has no lower bound'; end if;
+  if jsonb_array_length(public.list_equipment_page(org_id,'','all',false,1,100000)->'ids') is distinct from 100 then raise exception 'equipment page size is not capped at 100'; end if;
+  if jsonb_array_length(public.list_equipment_page(org_id,'','all',false,1,0)->'ids') is distinct from 1 then raise exception 'equipment page size has no lower bound'; end if;
+  if public.list_equipment_page(org_id,'','all',false,-3,50)->'ids'->>0 is distinct from md5('list-equipment-6')::uuid::text then raise exception 'equipment page number has no lower bound'; end if;
   result := public.list_equipment_page(org_id,'','all',false,2147483647,100);
-  if (result->>'total')::int<>1046 or result->'ids'<>'[]'::jsonb then raise exception 'equipment page past the end is not empty'; end if;
+  if (result->>'total')::int is distinct from 1046 or result->'ids' is distinct from '[]'::jsonb then raise exception 'equipment page past the end is not empty'; end if;
   -- Tenant isolation and an organization without equipment.
-  if (public.list_equipment_page(org_id,'Fremdanlage','all',true,1,50)->>'total')::int<>0 then raise exception 'equipment tenant leaked'; end if;
+  if (public.list_equipment_page(org_id,'Fremdanlage','all',true,1,50)->>'total')::int is distinct from 0 then raise exception 'equipment tenant leaked'; end if;
   result := public.list_equipment_page('75000000-0000-4000-8000-000000000011','','all',false,1,50);
-  if (result->>'total')::int<>1 or result->'ids'<>jsonb_build_array('75000000-0000-4000-8000-000000000041'::uuid) then raise exception 'foreign organization equipment page wrong'; end if;
+  if (result->>'total')::int is distinct from 1 or result->'ids' is distinct from jsonb_build_array('75000000-0000-4000-8000-000000000041'::uuid) then raise exception 'foreign organization equipment page wrong'; end if;
   result := public.list_equipment_page('75000000-0000-4000-8000-000000000012','','all',true,1,50);
-  if (result->>'total')::int<>0 or (result->>'hasAny')::boolean or result->'ids'<>'[]'::jsonb then raise exception 'empty organization reports equipment'; end if;
+  if (result->>'total')::int is distinct from 0 or (result->>'hasAny')::boolean or result->'ids' is distinct from '[]'::jsonb then raise exception 'empty organization reports equipment'; end if;
 
   -- Service cases: open scope, newest change first, complete count before the page boundary.
   result := public.list_service_case_page(org_id,'open','',1,50);
-  if (result->>'total')::int<>1041 or jsonb_array_length(result->'ids')<>50 or not (result->>'hasAny')::boolean then raise exception 'service case first page or total wrong: %',result->>'total'; end if;
+  if (result->>'total')::int is distinct from 1041 or jsonb_array_length(result->'ids') is distinct from 50 or not (result->>'hasAny')::boolean then raise exception 'service case first page or total wrong: %',result->>'total'; end if;
   if exists(select 1 from jsonb_array_elements_text(result->'ids') with ordinality listed(id,position) where id<>md5('list-case-'||(1052-position))::uuid::text) then raise exception 'service case page is not newest first'; end if;
   result := public.list_service_case_page(org_id,'all','',22,50);
-  if (result->>'total')::int<>1051 or result->'ids'<>jsonb_build_array(md5('list-case-1')::uuid) then raise exception 'service case tail beyond 1,000 rows unreachable'; end if;
-  if (public.list_service_case_page(org_id,'resolved','',1,50)->>'total')::int<>10 or (public.list_service_case_page(org_id,'visit_required','',1,50)->>'total')::int<>5 or (public.list_service_case_page(org_id,'duplicate','',1,50)->>'total')::int<>0 then raise exception 'service case status scope wrong'; end if;
+  if (result->>'total')::int is distinct from 1051 or result->'ids' is distinct from jsonb_build_array(md5('list-case-1')::uuid) then raise exception 'service case tail beyond 1,000 rows unreachable'; end if;
+  if (public.list_service_case_page(org_id,'resolved','',1,50)->>'total')::int is distinct from 10 or (public.list_service_case_page(org_id,'visit_required','',1,50)->>'total')::int is distinct from 5 or (public.list_service_case_page(org_id,'duplicate','',1,50)->>'total')::int is distinct from 0 then raise exception 'service case status scope wrong'; end if;
   -- Search: linked equipment, customer and site names match; the status scope still applies.
   result := public.list_service_case_page(org_id,'all','eq-1048',1,50);
-  if (result->>'total')::int<>1 or result->'ids'<>jsonb_build_array(md5('list-case-20')::uuid) then raise exception 'service case equipment search wrong'; end if;
-  if public.list_service_case_page(org_id,'open','suchkunde',1,50)->'ids'<>jsonb_build_array(md5('list-case-30')::uuid)
-    or public.list_service_case_page(org_id,'open','werkstatt ost',1,50)->'ids'<>jsonb_build_array(md5('list-case-30')::uuid) then raise exception 'service case customer or site search wrong'; end if;
-  if (public.list_service_case_page(org_id,'open','störung 0001',1,50)->>'total')::int<>0 or (public.list_service_case_page(org_id,'all','störung 0001',1,50)->>'total')::int<>1 then raise exception 'service case search ignores the status scope'; end if;
+  if (result->>'total')::int is distinct from 1 or result->'ids' is distinct from jsonb_build_array(md5('list-case-20')::uuid) then raise exception 'service case equipment search wrong'; end if;
+  if public.list_service_case_page(org_id,'open','suchkunde',1,50)->'ids' is distinct from jsonb_build_array(md5('list-case-30')::uuid)
+    or public.list_service_case_page(org_id,'open','werkstatt ost',1,50)->'ids' is distinct from jsonb_build_array(md5('list-case-30')::uuid) then raise exception 'service case customer or site search wrong'; end if;
+  if (public.list_service_case_page(org_id,'open','störung 0001',1,50)->>'total')::int is distinct from 0 or (public.list_service_case_page(org_id,'all','störung 0001',1,50)->>'total')::int is distinct from 1 then raise exception 'service case search ignores the status scope'; end if;
   -- Bounds.
-  if jsonb_array_length(public.list_service_case_page(org_id,'all','',1,100000)->'ids')<>100 then raise exception 'service case page size is not capped at 100'; end if;
-  if jsonb_array_length(public.list_service_case_page(org_id,'all','',1,0)->'ids')<>1 then raise exception 'service case page size has no lower bound'; end if;
-  if public.list_service_case_page(org_id,'all','',-3,50)->'ids'->>0<>md5('list-case-1051')::uuid::text then raise exception 'service case page number has no lower bound'; end if;
+  if jsonb_array_length(public.list_service_case_page(org_id,'all','',1,100000)->'ids') is distinct from 100 then raise exception 'service case page size is not capped at 100'; end if;
+  if jsonb_array_length(public.list_service_case_page(org_id,'all','',1,0)->'ids') is distinct from 1 then raise exception 'service case page size has no lower bound'; end if;
+  if public.list_service_case_page(org_id,'all','',-3,50)->'ids'->>0 is distinct from md5('list-case-1051')::uuid::text then raise exception 'service case page number has no lower bound'; end if;
   result := public.list_service_case_page(org_id,'all','',2147483647,100);
-  if (result->>'total')::int<>1051 or result->'ids'<>'[]'::jsonb then raise exception 'service case page past the end is not empty'; end if;
+  if (result->>'total')::int is distinct from 1051 or result->'ids' is distinct from '[]'::jsonb then raise exception 'service case page past the end is not empty'; end if;
   -- Tenant isolation and an organization without cases.
-  if (public.list_service_case_page(org_id,'all','Fremde',1,50)->>'total')::int<>0 then raise exception 'service case tenant leaked'; end if;
+  if (public.list_service_case_page(org_id,'all','Fremde',1,50)->>'total')::int is distinct from 0 then raise exception 'service case tenant leaked'; end if;
   result := public.list_service_case_page('75000000-0000-4000-8000-000000000011','all','',1,50);
-  if (result->>'total')::int<>1 or result->'ids'<>jsonb_build_array('75000000-0000-4000-8000-000000000050'::uuid) then raise exception 'foreign organization service case page wrong'; end if;
+  if (result->>'total')::int is distinct from 1 or result->'ids' is distinct from jsonb_build_array('75000000-0000-4000-8000-000000000050'::uuid) then raise exception 'foreign organization service case page wrong'; end if;
   result := public.list_service_case_page('75000000-0000-4000-8000-000000000012','all','',1,50);
-  if (result->>'total')::int<>0 or (result->>'hasAny')::boolean or result->'ids'<>'[]'::jsonb then raise exception 'empty organization reports service cases'; end if;
+  if (result->>'total')::int is distinct from 0 or (result->>'hasAny')::boolean or result->'ids' is distinct from '[]'::jsonb then raise exception 'empty organization reports service cases'; end if;
 end $$;
 
 -- Identical change timestamps keep a deterministic identity order.
@@ -141,9 +141,9 @@ set local role service_role;
 do $$ declare result jsonb;
 begin
   result := public.list_service_case_page('75000000-0000-4000-8000-000000000010','open','gleichzeitig',1,1);
-  if (result->>'total')::int<>2 or result->'ids'<>jsonb_build_array('75000000-0000-4000-8000-000000000081'::uuid) then raise exception 'identical change timestamps lost the id order on page 1'; end if;
+  if (result->>'total')::int is distinct from 2 or result->'ids' is distinct from jsonb_build_array('75000000-0000-4000-8000-000000000081'::uuid) then raise exception 'identical change timestamps lost the id order on page 1'; end if;
   result := public.list_service_case_page('75000000-0000-4000-8000-000000000010','open','gleichzeitig',2,1);
-  if result->'ids'<>jsonb_build_array('75000000-0000-4000-8000-000000000082'::uuid) then raise exception 'identical change timestamps lost the id order on page 2'; end if;
+  if result->'ids' is distinct from jsonb_build_array('75000000-0000-4000-8000-000000000082'::uuid) then raise exception 'identical change timestamps lost the id order on page 2'; end if;
 end $$;
 
 -- Equipment numbers sort by year, then by the numeric sequence, across the
@@ -168,7 +168,7 @@ do $$ declare
 begin
   for page_number in 1..3 loop
     result := public.list_equipment_page('75000000-0000-4000-8000-000000000013','','all',false,page_number,2);
-    if result->'ids'<>jsonb_build_array(md5('natural-equipment-'||expected[page_number*2-1])::uuid,md5('natural-equipment-'||expected[page_number*2])::uuid) then
+    if result->'ids' is distinct from jsonb_build_array(md5('natural-equipment-'||expected[page_number*2-1])::uuid,md5('natural-equipment-'||expected[page_number*2])::uuid) then
       raise exception 'equipment numbers do not sort naturally on page %',page_number;
     end if;
   end loop;

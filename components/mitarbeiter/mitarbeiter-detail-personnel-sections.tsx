@@ -4,6 +4,7 @@ import { PersonalienSection } from './personalien-section';
 import { EmploymentConditionsSection } from './employment-conditions-section';
 import { WorkScheduleSection } from './work-schedule-section';
 import { SicknessReportsSection } from './sickness-reports-section';
+import { SchoolDaysSection } from './school-days-section';
 import { PersonnelHistorySection } from './personnel-history-section';
 import {
   PersonnelQualificationSummary,
@@ -69,6 +70,7 @@ export function MitarbeiterDetailPersonnelSections({
       {personnel && isAdminOrManager && (
         <>
           <SicknessReportsSection recordId={personnel.record.id} />
+          <SchoolDaysSection recordId={personnel.record.id} conditions={personnel.conditions} />
           <PersonnelQualificationSummary data={qualificationSummary} />
         </>
       )}

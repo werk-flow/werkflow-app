@@ -53,10 +53,27 @@ export const DIALOG_INVENTORY = {
   'components/shared/unsent-work-prompt.tsx#DiscardConfirmation|Nicht Übertragenes verwerfen?': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-discard' }],
   },
+  'components/angebote/create-offer-dialog.tsx#CreateOfferDialog|Angebot anlegen': {
+    audits: [{ route: '/angebote', role: 'admin', opener: 'commercial.offer' }],
+  },
+  "components/angebote/leistungen/leistung-dialog.tsx#LeistungDialog|{entry ? 'Leistung bearbeiten' : 'Leistung anlegen'}":
+    {
+      audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung' }],
+    },
+  'components/angebote/leistungen/leistung-price-dialog.tsx#LeistungPriceDialog|Preise von „ {entry.name} “':
+    {
+      audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung-prices' }],
+    },
   'components/problem-reports/problem-report-dialog.tsx#ProblemReportDialog|Problem melden': {
     audits: [
       { route: '/dashboard', role: 'employee', opener: 'reports.field' },
       { route: '/auftraege', role: 'admin', opener: 'reports.office' },
+    ],
+  },
+  'components/problem-reports/screenshot-redaction-view.tsx#ScreenshotRedactionView|Screenshot schwärzen': {
+    audits: [
+      { route: '/dashboard', role: 'employee', opener: 'reports.redaction-field' },
+      { route: '/auftraege', role: 'admin', opener: 'reports.redaction-office' },
     ],
   },
   'components/job-picker-modal.tsx#JobPickerModal|{title}': {
@@ -75,6 +92,10 @@ export const DIALOG_INVENTORY = {
   'components/anfragen/attach-request-dialog.tsx#AttachRequestDialog|Zu bestehender Arbeit hinzufügen': {
     audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.attach-to-work' }],
   },
+  'components/auftraege/shared/work-billing-parties-dialog.tsx#WorkBillingPartiesForm|Auftraggeber und Rechnungsempfänger':
+    {
+      audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.billing-parties' }],
+    },
   'components/anfragen/close-request-dialog.tsx#CloseRequestDialog|Anfrage ohne Auftrag schließen': {
     audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.close' }],
   },
@@ -155,12 +176,36 @@ export const DIALOG_INVENTORY = {
       audits: [{ route: '/dokumente', role: 'admin', opener: 'documents.viewer' }],
     },
   'components/inventar/inventory-import-dialog.tsx#ImportDialog|CSV importieren': {
-    audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.import' }],
+    audits: [
+      { route: '/inventar', role: 'admin', opener: 'inventory.import' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-preview' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-result' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-repeat' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-empty-file' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-read-failure' },
+    ],
   },
   "components/inventar/inventory-item-dialog.tsx#ItemDialog|{form.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}":
     {
-      audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.item' }],
+      audits: [
+        { route: '/inventar', role: 'admin', opener: 'inventory.item' },
+        {
+          route: '/inventar',
+          role: 'admin',
+          opener: 'inventory.item-edit',
+          tabs: ['stammdaten', 'lieferanten', 'preise'],
+        },
+        { route: '/inventar', role: 'admin', opener: 'inventory.item-suppliers' },
+        { route: '/inventar', role: 'admin', opener: 'inventory.item-prices' },
+      ],
     },
+  "components/inventar/article-supplier-dialog.tsx#ArticleSupplierDialog|{reference ? 'Lieferant bearbeiten' : 'Lieferant hinzufügen'}":
+    {
+      audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.article-supplier' }],
+    },
+  'components/inventar/article-suppliers-panel.tsx#RemoveSupplierDialog|Lieferant „ {name} “ entfernen?': {
+    audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.article-supplier-remove' }],
+  },
   'components/inventar/inventory-location-dialog.tsx#LocationDialog|Lager anlegen': {
     audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.location' }],
   },
@@ -318,6 +363,15 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/aufgaben', role: 'employee', opener: 'field.evidence-upload' }],
     },
+  'components/mitarbeiter/school-day-dialogs.tsx#AddSchoolDayDialog|Berufsschule erfassen': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-add' }],
+  },
+  'components/mitarbeiter/school-day-dialogs.tsx#EndSchoolDayDialog|Enddatum setzen': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-end' }],
+  },
+  'components/mitarbeiter/school-days-section.tsx#CancelSchoolDayDialog|Berufsschule stornieren?': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-cancel' }],
+  },
   'components/mitarbeiter/sickness-report-correct-dialog.tsx#CorrectSicknessDialog|Krankmeldung korrigieren':
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.sickness-correct' }],
@@ -567,6 +621,10 @@ export const DIALOG_INVENTORY = {
   'components/auftraege/project-detail/project-jobs-assignment-dialog.tsx#ProjectJobsAssignmentDialog|{title}':
     {
       audits: [{ route: '/auftraege/projekt/[projectNumber]', role: 'admin', opener: 'work.project-jobs' }],
+    },
+  "components/auftraege/project-detail/work-lead-section.tsx#WorkLeadDialog|{current ? 'Projektleitung ändern' : 'Projektleitung benennen'}":
+    {
+      audits: [{ route: '/auftraege/projekt/[projectNumber]', role: 'admin', opener: 'work.name-work-lead' }],
     },
   'components/auftraege/shared/client-assignment-dialog.tsx#ClientAssignmentDialog|{title}': {
     audits: [{ route: '/auftraege/[jobNumber]', role: 'admin', opener: 'work.assign-client' }],

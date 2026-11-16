@@ -8,6 +8,7 @@ import {
   validateDiagnosticProvenance,
   validateExecutedSelection,
 } from '../lib/testing/evidence/test-evidence';
+import { recordedBuildInputs } from '../lib/testing/evidence/build-identity';
 import { calculateCandidateFingerprint } from '../lib/testing/evidence/candidate-identity';
 import { runSessionCommand, withTestSession } from '../lib/testing/local-stack/test-session';
 import { resolveBusinessDate } from '../lib/testing/runner/business-date';
@@ -196,21 +197,16 @@ async function main(signal: AbortSignal): Promise<number> {
   )
     throw new Error('Group discovery did not match its registered files.');
   if (freshSource) {
-    const failedTestIds = (freshSource.outcomes ?? [])
-      .filter((outcome) => !['passed', 'skipped'].includes(outcome.status))
-      .map((outcome) => outcome.id);
-    const resultsDirectory = browserRunPaths(repositoryRoot, freshSource.runKey).results;
     const problem = freshDiagnosisProblem({
       source: freshSource,
       servedBuildId: servedBuildId(),
+      servedBuildInputs: recordedBuildInputs(repositoryRoot),
       runs: listRunManifests(),
-      failedTestStages: failedTestIds.map((testId) =>
-        retainedTestStages({ resultsDirectory, testId, failedTestIds }),
-      ),
+      failedTestStages: failedTestStages(repositoryRoot, freshSource),
     });
     if (problem) throw new Error(`Fresh-world diagnostic refused: ${problem}`);
     console.log(
-      `[werkflow-test] Fresh-world diagnostic of ${freshSource.groupId ?? 'its group'} for ${freshSource.runKey}: its failed test wrote to its world, so it runs the whole group on a new world on the same build. A pass qualifies one retry of the group after the cleanup.`,
+      `[werkflow-test] Fresh-world diagnostic of ${freshSource.groupId ?? 'its group'} for ${freshSource.runKey}: ${freshSource.ranOnBoat ? 'its world died with its Boat machine' : 'its failed test wrote to its world'}, so it runs the whole group on a new world on the same build or one of equal inputs. A pass qualifies one retry of the group after the cleanup.`,
     );
   }
   if (lane === 'diagnostic' && retainedSource && reuseRunKey) {
@@ -408,6 +404,38 @@ async function main(signal: AbortSignal): Promise<number> {
   return ['passed', 'diagnostic_passed'].includes(manifest.status) ? exitCode : 1;
 }
 
+/** Where each failed test of a run stopped, from its traces; null where no trace is readable. */
+function failedTestStages(
+  repositoryRoot: string,
+  run: { runKey: string; outcomes?: readonly { id: string; status: string }[] | undefined },
+) {
+  const failedTestIds = (run.outcomes ?? [])
+    .filter((outcome) => !['passed', 'skipped'].includes(outcome.status))
+    .map((outcome) => outcome.id);
+  const resultsDirectory = browserRunPaths(repositoryRoot, run.runKey).results;
+  return failedTestIds.map((testId) => retainedTestStages({ resultsDirectory, testId, failedTestIds }));
+}
+
+/**
+ * A fresh-world replay is checked here before Boat may run it: the machine gets the run's manifest
+ * but not its traces, which decide whether a local run's failed test wrote to its world. The build
+ * is the one check left to the machine, which builds the tree and compares its inputs itself.
+ */
+function freshReplayProblemHere(argv: readonly string[], repositoryRoot: string): string | undefined {
+  const [lane, , ...args] = argv;
+  if (lane !== 'diagnostic') return undefined;
+  const freshFor = parseRunnerArguments(lane, args)['--fresh-for'];
+  if (!freshFor) return undefined;
+  const source = readRunManifest(freshFor);
+  return freshDiagnosisProblem({
+    source,
+    servedBuildId: source.buildId,
+    servedBuildInputs: source.buildInputs ?? null,
+    runs: listRunManifests(),
+    failedTestStages: failedTestStages(repositoryRoot, source),
+  });
+}
+
 /** The build the test server serves: .next/BUILD_ID of the recorded build. */
 function servedBuildId(): string | null {
   const buildIdPath = resolve(import.meta.dir, '../.next/BUILD_ID');
@@ -447,6 +475,11 @@ function recordRunnerFailure(error: unknown): void {
 // reference update always, any other focused run under migration drift
 // (lib/testing/boat/focused-on-boat.ts). An unavailable Boat never turns it into a local build.
 {
+  const replayProblem = freshReplayProblemHere(process.argv.slice(2), resolve(import.meta.dir, '..'));
+  if (replayProblem) {
+    console.error(`Fresh-world diagnostic refused: ${replayProblem}`);
+    process.exit(1);
+  }
   const boat = await focusedOnBoat(process.argv.slice(2), resolve(import.meta.dir, '..'));
   if (typeof boat === 'number') process.exit(boat);
   if (boat) {

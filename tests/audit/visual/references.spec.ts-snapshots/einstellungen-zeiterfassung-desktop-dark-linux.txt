@@ -11,6 +11,7 @@ Anfragen
 Aufträge
 Dokumente
 Inventar
+Angebote
 Service
 Arbeitsvorlagen
 Mitarbeiter
@@ -63,13 +64,16 @@ Pflichtfeld
 Ab dieser gesamten Anwesenheitszeit wird die automatische Pause berücksichtigt.
 Automatische Pausendauer (Minuten)
 Diese Minuten werden automatisch abgezogen, sobald die Schwelle erreicht ist.
+Zweite Stufe für lange Tage
+Ab der zweiten Schwelle gilt die längere Gesamtpause. Vorgabe nach ArbZG § 4: ab 9 Stunden insgesamt 45 Minuten.
+Sie gilt ab dem Speichern, frühere Tage behalten ihre Pause.
+Zweite Schwelle (Minuten)
+Ab dieser gesamten Anwesenheitszeit gilt die längere Pause.
+Pause gesamt ab der zweiten Schwelle (Minuten)
+Die gesamte Pause des Tages, nicht zusätzlich zur ersten Stufe.
+Die automatische Pause ist eine Rechenhilfe, kein Nachweis, dass die Pausen nach dem Arbeitszeitgesetz eingehalten wurden.
 Neue Regeln gelten sofort für offene und kommende Zeiterfassungen. Bereits abgeschlossene Historie wird nicht rückwirkend umgeschrieben.
 Zeiterfassung speichern
 Feiertagskalender
 Wähle das Bundesland, dessen gesetzliche Feiertage für die Sollarbeitszeit gelten. An Feiertagen ist die Sollzeit 0.
-Bundesland
-Kein Feiertagskalender
-Die Auswahl gilt ab jetzt; frühere Zeiträume werden nicht rückwirkend geändert. WerkFlow zeigt die Wirkung des gewählten Kalenders, ersetzt aber keine rechtliche Prüfung.
-Änderungen gelten ab dem Zeitpunkt der Speicherung.
-Feiertagskalender speichern
 Nicht eingestempelt

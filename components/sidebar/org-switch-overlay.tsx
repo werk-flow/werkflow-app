@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { useOrganization } from '@/components/organization/organization-context';
@@ -33,7 +33,9 @@ import { ServiceCasesPageSkeleton } from '@/components/loading-states/service-ca
 // its list (the switch navigates there); an area subpage keeps its own content
 // skeleton inside the area header. The first matching prefix wins, so a
 // subpage sits above its area.
-const ORG_SWITCH_SKELETONS: ReadonlyArray<readonly [prefix: string, skeleton: () => ReactElement]> = [
+const ORG_SWITCH_SKELETONS: ReadonlyArray<
+  readonly [prefix: string, skeleton: (angebote: AngeboteSkeletons | null) => ReactElement]
+> = [
   ['/mitarbeiter', () => <MitarbeiterPageSkeleton />],
   ['/aufgaben', () => <AufgabenPageSkeleton />],
   ['/dashboard', () => <DashboardPageSkeleton />],
@@ -103,6 +105,22 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<readonly [prefix: string, skeleton: ()
   ['/arbeitsvorlagen', () => <WorkTemplatesPageSkeleton />],
   ['/einstellungen', () => <EinstellungenPageSkeleton />],
   ['/inventar', () => <InventarPageSkeleton />],
+  [
+    '/angebote/leistungen',
+    (angebote) => (
+      <AreaPageSkeleton title="Angebote" tabCount={2}>
+        {angebote && <angebote.LeistungenPageSkeleton />}
+      </AreaPageSkeleton>
+    ),
+  ],
+  [
+    '/angebote',
+    (angebote) => (
+      <AreaPageSkeleton title="Angebote" tabCount={2}>
+        {angebote && <angebote.OffersPageSkeleton />}
+      </AreaPageSkeleton>
+    ),
+  ],
 ];
 
 function ZeiterfassungAreaSkeleton({ children }: { children: ReactNode }) {
@@ -121,19 +139,45 @@ function ServiceAreaSkeleton({ children }: { children: ReactNode }) {
   );
 }
 
-function orgSwitchSkeleton(pathname: string): ReactElement | null {
-  const match = ORG_SWITCH_SKELETONS.find(
-    ([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-  return match ? match[1]() : null;
+function inArea(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+function orgSwitchSkeleton(pathname: string, angebote: AngeboteSkeletons | null): ReactElement | null {
+  const match = ORG_SWITCH_SKELETONS.find(([prefix]) => inArea(pathname, prefix));
+  return match ? match[1](angebote) : null;
+}
+
+type AngeboteSkeletons = typeof import('@/components/angebote/area-skeletons');
+
+// Only the office opens Angebote, so the area's content skeletons load once the user is in it
+// and no field worker's start-up carries them. Until they arrive, or when the load failed (as
+// without signal), a switch shows the area's title and tabs; each switch start tries again.
+function useAngeboteSkeletons(inAngebote: boolean, isSwitchingOrg: boolean): AngeboteSkeletons | null {
+  const [skeletons, setSkeletons] = useState<AngeboteSkeletons | null>(null);
+  useEffect(() => {
+    if (!inAngebote || skeletons) return;
+    let current = true;
+    import('@/components/angebote/area-skeletons').then(
+      (loaded) => {
+        if (current) setSkeletons(loaded);
+      },
+      () => {},
+    );
+    return () => {
+      current = false;
+    };
+  }, [inAngebote, isSwitchingOrg, skeletons]);
+  return skeletons;
 }
 
 // Org-switching skeleton overlay (isolated so AppShell stays data-free)
 export function OrgSwitchOverlay() {
   const { isSwitchingOrg } = useOrganization();
   const pathname = usePathname();
+  const angebote = useAngeboteSkeletons(inArea(pathname, '/angebote'), isSwitchingOrg);
 
-  const currentSkeleton = useMemo(() => orgSwitchSkeleton(pathname), [pathname]);
+  const currentSkeleton = useMemo(() => orgSwitchSkeleton(pathname, angebote), [pathname, angebote]);
 
   if (!isSwitchingOrg || !currentSkeleton) return null;
 

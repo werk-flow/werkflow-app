@@ -94,15 +94,15 @@ begin
   perform public.update_time_entry(v_admin, v_org, '28100000-0000-0000-0000-000000000021',
     jsonb_build_object('timestamp', v_new));
   select * into strict v_event from public.time_entry_audit_events where organization_id = v_org;
-  if v_event.action <> 'edit' or v_event.actor_id <> v_admin
-    or v_event.entry_id <> '28100000-0000-0000-0000-000000000021'
-    or v_event.entry_timestamp <> v_old
-    or (v_event.before_entry ->> 'timestamp')::timestamptz <> v_old
-    or (v_event.after_entry ->> 'timestamp')::timestamptz <> v_new
-    or v_event.before_entry ->> 'entry_type' <> 'clock_in'
-    or v_event.after_entry ->> 'entry_type' <> 'clock_in'
+  if v_event.action is distinct from 'edit' or v_event.actor_id is distinct from v_admin
+    or v_event.entry_id is distinct from '28100000-0000-0000-0000-000000000021'
+    or v_event.entry_timestamp is distinct from v_old
+    or (v_event.before_entry ->> 'timestamp')::timestamptz is distinct from v_old
+    or (v_event.after_entry ->> 'timestamp')::timestamptz is distinct from v_new
+    or v_event.before_entry ->> 'entry_type' is distinct from 'clock_in'
+    or v_event.after_entry ->> 'entry_type' is distinct from 'clock_in'
   then raise exception 'an Admin''s own edit was not recorded as it happened: %', row_to_json(v_event); end if;
-  if (select timestamp from public.time_entries where id = '28100000-0000-0000-0000-000000000021') <> v_new
+  if (select timestamp from public.time_entries where id = '28100000-0000-0000-0000-000000000021') is distinct from v_new
   then raise exception 'an Admin''s own edit did not apply'; end if;
 
   -- An edit that changes nothing, and an edit of another person's entry, record nothing.
@@ -114,20 +114,20 @@ begin
     '28100000-0000-0000-0000-000000000024', jsonb_build_object('timestamp', v_new));
   if (select count(*) from public.time_entry_audit_events where organization_id = v_org) <> 1
   then raise exception 'an unchanged or foreign-person edit was recorded'; end if;
-  if (select timestamp from public.time_entries where id = '28100000-0000-0000-0000-000000000024') <> v_new
+  if (select timestamp from public.time_entries where id = '28100000-0000-0000-0000-000000000024') is distinct from v_new
   then raise exception 'a Büro edit of an employee entry did not apply'; end if;
 
   -- An Admin's own deletion, together with another person's entry, records
   -- the own entry only, with its state before.
   if public.delete_time_entries(v_admin, v_org,
     array['28100000-0000-0000-0000-000000000022', '28100000-0000-0000-0000-000000000024']::uuid[],
-    array[v_admin, '28100000-0000-0000-0000-000000000003']::uuid[]) <> 2
+    array[v_admin, '28100000-0000-0000-0000-000000000003']::uuid[]) is distinct from 2
   then raise exception 'the deletion did not apply'; end if;
   select * into strict v_event from public.time_entry_audit_events
   where organization_id = v_org and action = 'delete';
-  if v_event.actor_id <> v_admin or v_event.entry_id <> '28100000-0000-0000-0000-000000000022'
-    or v_event.after_entry is not null or v_event.before_entry ->> 'entry_type' <> 'clock_out'
-    or v_event.before_entry ->> 'status' <> 'approved'
+  if v_event.actor_id is distinct from v_admin or v_event.entry_id is distinct from '28100000-0000-0000-0000-000000000022'
+    or v_event.after_entry is not null or v_event.before_entry ->> 'entry_type' is distinct from 'clock_out'
+    or v_event.before_entry ->> 'status' is distinct from 'approved'
   then raise exception 'an Admin''s own deletion was not recorded as it happened: %', row_to_json(v_event); end if;
 
   -- The record is append-only, also for the service role.

@@ -14,7 +14,7 @@
 //   The remaining fallbacks have no cross-origin user: no <video>/<audio>, and
 //   the Realtime client in lib/supabase/client.ts runs without its worker option.
 // - worker-src 'self', manifest-src 'self': the one worker is the service
-//   worker public/sw.js, which components/sidebar/app-shell.tsx registers
+//   worker /sw.js (app/sw.js/route.ts), which components/sidebar/app-shell.tsx registers
 //   from this origin, and the web manifest is app/manifest.ts.
 // - style-src 'self' 'unsafe-inline': the Tailwind CSS is a same-origin
 //   stylesheet; next/font and Radix write inline style tags and attributes.

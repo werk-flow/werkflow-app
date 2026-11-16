@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { cpus, homedir, loadavg } from 'node:os';
 import { join } from 'node:path';
 
-// Admission by measured memory (owner decision 19, werk-flow/werkflow-planning#294).
+// Admission by measured memory, and for a thread also by load (owner decision 19,
+// werk-flow/werkflow-planning#294).
 // No fixed number of threads or commands guards a workstation. Each start asks
 // how much memory the machine can still hand over and is refused or delayed
 // when its cost does not fit. On 2026-11-11 the PC reached load 68 because no
@@ -13,8 +14,9 @@ import { join } from 'node:path';
 // Two owners, no copied threshold. The load watch (`ops/workstation-load.py
 // --room` in werk-flow/werkflow-planning) owns the machine's state: what is
 // available, the floor that must stay available, and whether the machine takes
-// no start at all. This module owns what a start costs. The alert reads the
-// same watch, so the alert and these gates cannot disagree.
+// no start at all, and its normal load line. This module owns what a start
+// costs. The alert reads the same watch, so the alert and these gates cannot
+// disagree.
 //
 // Only Node built-ins: scripts/setup-worktree.ts imports this before the install.
 
@@ -29,21 +31,39 @@ const GIB = 1024 ** 3;
  *   blocked machine or one at its floor, hardly ever for memory of its own.
  * - thread: one agent process with its MCP helpers. 18 on the PC held 4.4 GiB;
  *   8 `claude` processes on the Mac held 187 to 353 MB each.
+ * - device: booting an iOS Simulator or Android Emulator and opening the web app in it. On the
+ *   18 GB Mac on 2026-11-13 (werk-flow/werkflow-app#418) a boot and a sign-in took available
+ *   memory from 3.1 to 2.4 GB and swap from 5.0 to 7.9 GB, and the load to 122.
  */
-export const START_COST = { heavy: 4 * GIB, setup: 0.1 * GIB, thread: 0.5 * GIB } as const;
+export const START_COST = { heavy: 4 * GIB, setup: 0.1 * GIB, thread: 0.5 * GIB, device: 3.5 * GIB } as const;
 export type StartKind = keyof typeof START_COST;
 export const isStartKind = (value: unknown): value is StartKind =>
   typeof value === 'string' && Object.hasOwn(START_COST, value);
 
-/** The watch's answer for this machine at this moment, in bytes. */
-type MachineRoom = {
+/** The watch's `--room` answer for this machine at this moment, in bytes. */
+type WatchAnswer = {
   readonly available: number;
   /** What must stay available after a start. The watch raises it while its alert is open or swap fills. */
   readonly floor: number;
   /** Why the machine takes no start of any kind, or null. */
   readonly blocked: string | null;
   readonly alerted: boolean;
+  /** Whether the watch's timer wrote a sample in the last 5 minutes. */
+  readonly watching: boolean;
 };
+type MachineRoom = Omit<WatchAnswer, 'watching'> & {
+  /** The 15-minute load and the logical cores, measured as the watch measures them. */
+  readonly load: number;
+  readonly cores: number;
+  /**
+   * The load watch's normal line for this machine: its alert counts a 15-minute load under it as
+   * normal. Null when the watch's script names none: its memory answer still holds, and only a
+   * thread, which needs the line, is refused.
+   */
+  readonly normalLoad: number | null;
+};
+/** The 15-minute load and the logical cores: the kernel numbers the load watch reads. */
+export type MachineLoad = { readonly load: number; readonly cores: number };
 /** A machine without a running watch has no room to read: `unwatched` says why and `fix` how to install it. */
 export type RoomReading =
   | { readonly room: MachineRoom }
@@ -57,7 +77,7 @@ export type Admission = {
   readonly reason: string;
 };
 
-type Environment = Readonly<Record<string, string | undefined>>;
+export type Environment = Readonly<Record<string, string | undefined>>;
 type CommandResult = { readonly status: number | null; readonly stdout: string; readonly stderr: string };
 type ProcessRow = { readonly pid: number; readonly parent: number; readonly resident: number };
 
@@ -86,7 +106,7 @@ function runCommand(command: string, args: readonly string[]): CommandResult {
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
-function parsedRoom(text: string): (MachineRoom & { readonly watching: boolean }) | undefined {
+function parsedRoom(text: string): WatchAnswer | undefined {
   let answer: unknown;
   try {
     answer = JSON.parse(text);
@@ -105,11 +125,33 @@ function parsedRoom(text: string): (MachineRoom & { readonly watching: boolean }
   return { available, floor, blocked, alerted, watching };
 }
 
+// A load that cannot be read counts as above every line.
+const kernelLoad = (): MachineLoad => ({
+  load: loadavg().at(2) ?? Number.POSITIVE_INFINITY,
+  cores: cpus().length,
+});
+
+/**
+ * The load watch's normal line per core, read from the watch itself (its
+ * CLEAR_LOAD_PER_CORE), or undefined when the script names none.
+ */
+function normalLoadPerCore(script: string): number | undefined {
+  let text: string;
+  try {
+    text = readFileSync(script, 'utf8');
+  } catch {
+    return undefined;
+  }
+  const perCore = /^CLEAR_LOAD_PER_CORE = (\d+(?:\.\d+)?)\s*(?:#.*)?$/m.exec(text)?.[1];
+  return perCore === undefined ? undefined : Number(perCore);
+}
+
 /** Asks the load watch for this machine's room. Any answer but a complete one from a running watch is "unwatched". */
 export function readMachineRoom(
   environment: Environment = process.env,
   run: (command: string, args: readonly string[]) => CommandResult = runCommand,
   platform: NodeJS.Platform = process.platform,
+  measureLoad: () => MachineLoad = kernelLoad,
 ): RoomReading {
   const script = watchScript(environment);
   const fix = watchFix(platform);
@@ -125,9 +167,11 @@ export function readMachineRoom(
   }
   if (!room.watching)
     return { unwatched: 'the load watch has the script but its timer wrote no sample in 5 minutes', fix };
-  return {
-    room: { available: room.available, floor: room.floor, blocked: room.blocked, alerted: room.alerted },
-  };
+  const perCore = normalLoadPerCore(script);
+  const { load, cores } = measureLoad();
+  const { available, floor, blocked, alerted } = room;
+  const normalLoad = perCore === undefined ? null : perCore * cores;
+  return { room: { available, floor, blocked, alerted, load, cores, normalLoad } };
 }
 
 /** Every process as pid, parent and resident bytes, from one `ps` call (the columns are the same on Linux and macOS). */
@@ -174,10 +218,22 @@ export function runningHeavyCommands(directory: string, processes: readonly Proc
   return use;
 }
 
+const START_NOUN = { heavy: 'command', setup: 'setup', device: 'device' } as const;
+
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 /**
+ * The watch blocks every start on a macOS memory pressure of warn (its
+ * `blocked`). Warn alone is no refusal here: on 2026-11-13 the Mac read warn
+ * with one agent, load 2.8 on 11 cores and 3.1 GB available, the owner's
+ * browsers holding the memory (werk-flow/werkflow-app#454). The measured
+ * memory decides instead. Critical and every load block still refuse.
+ */
+const PRESSURE_WARN = 'macOS reports memory pressure: warn';
+
+/**
  * Whether a start fits this machine now, with the numbers.
+ * A macOS memory pressure of warn alone refuses nothing (PRESSURE_WARN).
  *
  * `heavy` is the resident bytes of each running heavy command. A heavy command
  * reserves its whole cost from the moment it starts, so the room for anything
@@ -185,19 +241,28 @@ const plural = (count: number, noun: string): string => `${count} ${noun}${count
  * - heavy: the first one runs whenever the machine is not blocked, so a machine
  *   full of idle agents still verifies, one command at a time. Each further one
  *   needs its cost in room above the floor.
- * - setup: its cost in room above the floor.
+ * - setup and device: their cost in room above the floor.
  * - thread: the machine, heavy commands aside, must still fit one heavy command
  *   after the thread, because every implementation thread ends in `check:changed`.
- *   A thread that leaves no room for it only adds a waiter.
- * A machine without the watch admits a heavy command and a setup, which keep
- * their own limits, and refuses a thread.
+ *   A thread that leaves no room for it only adds a waiter. `threads` started in one call
+ *   each cost an agent and share that one heavy command, since heavy commands take turns.
+ *   Its 15-minute load must also be under the watch's normal line: on 2026-11-14 the VM ran
+ *   at 29 to 55 on 16 cores with memory to spare, and a setup there waited an hour.
+ * A machine without the watch admits a heavy command, a setup and a device,
+ * and refuses a thread.
  */
-export function admission(start: StartKind, reading: RoomReading, heavy: readonly number[]): Admission {
+export function admission(
+  start: StartKind,
+  reading: RoomReading,
+  heavy: readonly number[],
+  threads = 1,
+): Admission {
   if ('unwatched' in reading) {
     const reason = `This machine's memory is not measured: ${reading.unwatched}. ${reading.fix}`;
     return { admitted: start !== 'thread', measured: false, unwatched: true, reason };
   }
-  const { available, floor, blocked } = reading.room;
+  const { available, floor, load, cores, normalLoad } = reading.room;
+  const blocked = reading.room.blocked === PRESSURE_WARN ? null : reading.room.blocked;
   if (blocked)
     return {
       admitted: false,
@@ -209,18 +274,29 @@ export function admission(start: StartKind, reading: RoomReading, heavy: readonl
   const running =
     heavy.length === 0 ? 'no heavy command runs' : `${plural(heavy.length, 'heavy command')} running`;
   if (start === 'thread') {
+    // A watch without its normal line still answers for memory, so every other start keeps its
+    // measurement; a thread needs the line, and waiting does not add it.
+    if (normalLoad === null)
+      return {
+        admitted: false,
+        measured: false,
+        unwatched: true,
+        reason:
+          "This machine's load is not measured: its load watch names no normal load line (CLEAR_LOAD_PER_CORE). Update werkflow-planning (git -C ~/code/werkflow-planning pull) so the watch has it.",
+      };
     const held = heavy.reduce((sum, use) => sum + use, 0);
-    const fits = available + held >= floor + START_COST.heavy + cost;
+    const needed = floor + START_COST.heavy + cost * threads;
+    const fits = available + held >= needed && load < normalLoad;
     return {
       admitted: fits,
       measured: fits,
       unwatched: false,
-      reason: `${gib(available)} GiB available plus ${gib(held)} held by heavy commands (${running}); a thread needs ${gib(floor + START_COST.heavy + cost)}: the floor of ${gib(floor)}, ${gib(START_COST.heavy)} for its own check:changed and ${gib(cost)} for its agent.`,
+      reason: `${gib(available)} GiB available plus ${gib(held)} held by heavy commands (${running}); ${threads === 1 ? 'a thread needs' : `${threads} threads need`} ${gib(needed)}: the floor of ${gib(floor)}, ${gib(START_COST.heavy)} for a check:changed and ${gib(cost)} for each agent. The 15-minute load is ${load.toFixed(1)} on ${plural(cores, 'core')}; a thread needs it under ${normalLoad.toFixed(1)}, the load watch's normal line.`,
     };
   }
   const reserved = heavy.reduce((sum, use) => sum + Math.max(0, START_COST.heavy - use), 0);
   const room = available - reserved;
-  const numbers = `${gib(room)} GiB of room (${gib(available)} available, ${gib(reserved)} still reserved, ${running}); it needs ${gib(floor + cost)}: the floor of ${gib(floor)} and ${gib(cost)} for the ${start === 'heavy' ? 'command' : 'setup'}.`;
+  const numbers = `${gib(room)} GiB of room (${gib(available)} available, ${gib(reserved)} still reserved, ${running}); it needs ${gib(floor + cost)}: the floor of ${gib(floor)} and ${gib(cost)} for the ${START_NOUN[start]}.`;
   const measured = room >= floor + cost;
   if (start === 'heavy' && heavy.length === 0 && !measured)
     return {
@@ -232,10 +308,32 @@ export function admission(start: StartKind, reading: RoomReading, heavy: readonl
   return { admitted: measured, measured, unwatched: false, reason: numbers };
 }
 
+/**
+ * Measures until the start is admitted, and returns that verdict, or the first
+ * unwatched one, where waiting changes nothing. `waiting` hears the first
+ * refusal; `pause` runs between two measurements.
+ */
+export async function waitForAdmission(
+  measure: () => Admission,
+  waiting: (verdict: Admission) => void,
+  pause: () => Promise<void>,
+): Promise<Admission> {
+  for (let first = true; ; first = false) {
+    const verdict = measure();
+    if (verdict.admitted || verdict.unwatched) return verdict;
+    if (first) waiting(verdict);
+    await pause();
+  }
+}
+
 /** The admission of a start on this machine, measured now. */
-export function measuredAdmission(start: StartKind, environment: Environment = process.env): Admission {
+export function measuredAdmission(
+  start: StartKind,
+  environment: Environment = process.env,
+  threads = 1,
+): Admission {
   const reading = readMachineRoom(environment);
   const heavy =
     'room' in reading ? runningHeavyCommands(heavySlotDirectory(environment), processTable()) : [];
-  return admission(start, reading, heavy);
+  return admission(start, reading, heavy, threads);
 }

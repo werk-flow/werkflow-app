@@ -18,9 +18,6 @@ type ReportActions = typeof import('@/lib/problem-reports/actions');
 type FileActions = typeof import('@/lib/problem-reports/file-actions');
 
 export const PROBLEM_REPORT_CONTRACT_ORGANIZATION = '33400000-0000-4000-8000-000000000001';
-/** The width and height of the stub screenshot: white, so a burned box shows as black. */
-export const STUB_SCREENSHOT_SIZE = { width: 400, height: 300 } as const;
-
 type ProblemReportBoundaryState = {
   submissions: SubmitProblemReportInput[];
   /** The kind of each issued upload ticket. */
@@ -45,6 +42,8 @@ type ProblemReportBoundaryState = {
   finalizeMissingOnce: string[];
   /** The refusal the next ticket of a file kind answers, such as `file_too_large`. */
   refuseTicketOnce: Record<string, string>;
+  /** The colour the stub screenshot fills its page with; a probe colour shows whether a cover lets it through. */
+  pageColor: string;
 };
 
 declare global {
@@ -64,6 +63,7 @@ export function initializeProblemReportBoundary(): void {
     loseFinalizeAnswer: [],
     finalizeMissingOnce: [],
     refuseTicketOnce: {},
+    pageColor: 'white',
   };
 }
 
@@ -126,17 +126,18 @@ export const finalizeProblemReportFileUpload: FileActions['finalizeProblemReport
 };
 
 /**
- * `@/lib/problem-reports/screenshot/redraw-screenshot`: a white page, so the
- * test reads burned boxes exactly. Like the real redraw, it draws the page as
- * it is at the call: each `aside` on the page shows as a black box.
+ * `@/lib/problem-reports/screenshot/redraw-screenshot`: a page in one colour,
+ * white unless the spec sets a probe colour, so the test reads covered boxes
+ * exactly. Like the real redraw, it draws the window at one image pixel per
+ * CSS pixel and the page as it is at the call: each `aside` shows as a black box.
  */
 export async function redrawScreenshot(): Promise<Blob> {
   const canvas = document.createElement('canvas');
-  canvas.width = STUB_SCREENSHOT_SIZE.width;
-  canvas.height = STUB_SCREENSHOT_SIZE.height;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('The contract browser cannot draw.');
-  context.fillStyle = 'white';
+  context.fillStyle = window.uiContractProblemReport.pageColor;
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = 'black';
   for (const aside of document.querySelectorAll('aside')) {

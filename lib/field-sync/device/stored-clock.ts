@@ -28,6 +28,11 @@ const storedClockFactsSchema = z.object({
     breakMode: z.enum(['manual', 'automatic']),
     autoBreakThresholdMinutes: minutes,
     autoBreakDurationMinutes: minutes,
+    // A clock stored before the nine-hour step has none: it reads as one step.
+    secondStep: z
+      .object({ thresholdMinutes: minutes, durationMinutes: minutes })
+      .nullish()
+      .transform((step) => step ?? null),
   }),
   status: z.enum(['clocked_out', 'working', 'on_break']),
   isClockedIn: z.boolean(),

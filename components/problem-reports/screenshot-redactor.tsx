@@ -17,13 +17,30 @@ type ScreenshotRedactorProps = {
   onBoxesChange: (boxes: RedactionBox[]) => void;
   /** While sending, and once the image left the device, no box can be drawn. */
   disabled: boolean;
+  /** The accessible name, which tells the dialog's preview from the large view. */
+  label: string;
+  /**
+   * The drawn size in CSS pixels, with the image's proportions; without it the
+   * preview fits the dialog's width and at most 60 % of the window's height.
+   */
+  size?: { width: number; height: number };
 };
 
 /**
  * The screenshot preview, on which a drag with the finger or the mouse draws
- * a black box. The preview shows exactly what the upload will hold.
+ * a covered box. The canvas holds the image at its full size and the browser
+ * only scales it for display; a pointer is read as a fraction of the canvas's
+ * drawn box, so a box lands on the same area of the image at any display size.
+ * The preview shows exactly what the upload will hold.
  */
-export function ScreenshotRedactor({ image, boxes, onBoxesChange, disabled }: ScreenshotRedactorProps) {
+export function ScreenshotRedactor({
+  image,
+  boxes,
+  onBoxesChange,
+  disabled,
+  label,
+  size,
+}: ScreenshotRedactorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragStart = useRef<ImagePoint | null>(null);
   const [draft, setDraft] = useState<RedactionBox | null>(null);
@@ -32,8 +49,20 @@ export function ScreenshotRedactor({ image, boxes, onBoxesChange, disabled }: Sc
     if (canvasRef.current) drawRedacted(canvasRef.current, image, draft ? [...boxes, draft] : boxes);
   }, [image, boxes, draft]);
 
-  const pointOf = (event: PointerEvent<HTMLCanvasElement>): ImagePoint =>
-    imagePoint({ x: event.clientX, y: event.clientY }, event.currentTarget.getBoundingClientRect());
+  // The image fills the canvas's content box, inside its border.
+  const pointOf = (event: PointerEvent<HTMLCanvasElement>): ImagePoint => {
+    const canvas = event.currentTarget;
+    const box = canvas.getBoundingClientRect();
+    return imagePoint(
+      { x: event.clientX, y: event.clientY },
+      {
+        left: box.left + canvas.clientLeft,
+        top: box.top + canvas.clientTop,
+        width: box.width - 2 * canvas.clientLeft,
+        height: box.height - 2 * canvas.clientTop,
+      },
+    );
+  };
 
   const endDrag = (event: PointerEvent<HTMLCanvasElement>): void => {
     const start = dragStart.current;
@@ -48,9 +77,11 @@ export function ScreenshotRedactor({ image, boxes, onBoxesChange, disabled }: Sc
     <canvas
       ref={canvasRef}
       role="img"
-      aria-label="Vorschau des Screenshots mit deinen Schwärzungen"
+      aria-label={label}
+      style={size}
       className={cn(
-        'mx-auto block h-auto max-h-[60dvh] w-auto max-w-full touch-none rounded-md border',
+        'block touch-none rounded-md border',
+        !size && 'mx-auto h-auto max-h-[60dvh] w-auto max-w-full',
         disabled ? 'opacity-70' : 'cursor-crosshair',
       )}
       onPointerDown={(event) => {

@@ -6,10 +6,11 @@ How to make a workstation or a headless Linux host ready for agent work, and whi
 
 1. Install Bun, Node 22 or later, git, the GitHub CLI, Docker and the Supabase CLI. On Windows, clone and work inside WSL Ubuntu.
    On an Apple Silicon Mac, run `softwareupdate --install-rosetta` and `brew install colima docker flock`, then `colima start --cpu 4 --memory 6 --disk 40 --vm-type vz --vz-rosetta --mount-type virtiofs` ([why Rosetta](standards-audit.md#keep-accepted-screens-as-visual-references)). Run the repository's pinned CLI with `bunx supabase`. Grow the VM only for a measured need. On AC power, `caffeinate -s` keeps the Mac awake for agents.
+   After that first start, the launchd agent `app.werk-flow.colima` from `ops/install-mac.py` starts Colima and the local stack at login, without Terminal. Check it with `colima status` and `launchctl print gui/$(id -u)/app.werk-flow.colima | grep state`.
 2. Export the owner's Supabase personal access token as `SUPABASE_ACCESS_TOKEN`, with a copy in every env backup (a switch overwrites `.env.local`). Never commit or print it.
 3. Get the DEV `.env.local` from the owner's password manager and copy it to `.env.dev-backup`. Add `.env.live-backup` only for production sessions.
-4. Add the DEV MCP server `supabase` ([which tool reaches what](environments.md#which-tool-reaches-what)) to Claude Code (`claude mcp add --scope user --transport http supabase "<url>"`) and Codex (`[mcp_servers.supabase]` in `~/.codex/config.toml`). The owner signs in once per tool. Never add a server for PROD. The Vercel CLI, signed in as the owner, serves both.
-5. Run `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from `supabase status`, then run `bun run env:local`.
+4. Add the DEV MCP server `supabase` ([which tool reaches what](environments.md#which-tool-reaches-what)) to Claude Code (`claude mcp add --scope user --transport http supabase "<url>"`) and Codex (`[mcp_servers.supabase]` in `~/.codex/config.toml`). The owner signs in once per tool. Never add a server for PROD. Agents reach Vercel only through the Vercel MCP connector: install no Vercel CLI, since a signed-in CLI acts for the whole account, PROD included.
+5. On `main`, run `bunx supabase start` and `bun run stack:sync`. Create `.env.local-stack-backup` from `supabase status`, then run `bun run env:local`.
 6. Run `bunx playwright install --with-deps chromium` once.
 7. CodeRabbit: `curl -fsSL https://cli.coderabbit.ai/install.sh | sh`. The owner signs in once with `coderabbit auth login`. `bun run review:doctor` confirms both. Agents install CodeRabbit only here.
 8. Install the [background jobs](#background-jobs); `bun run room` prints numbers.
@@ -28,10 +29,23 @@ The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-pl
 
 | Job | Runs on |
 | --- | --- |
-| `worktree-cleanup`, load watch | Each machine, for itself |
+| `worktree-cleanup`, load watch, [notifier](#keep-the-agents-moving) | Each machine, for itself |
 | [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | The PC and the Mac; only the lease holder acts. A further machine runs only its own `worktree-cleanup` and load watch |
 | [Production watcher](recovery-and-incidents.md#monitoring) | Where its [token](environments.md#credentials) is |
 | [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The PC, beside the stack |
 | `report-dispatch`: starts one report thread per waiting [problem report](../features/problem-reports.md#current-product-baseline), blockers first; does nothing while the hand-out is off | The lease holder among the machines with the hand-out [file](environments.md#credentials) |
 
-A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses.
+A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses. A lease is read with `git fetch` and swapped with `git push --force-with-lease`, so it costs no GitHub API call.
+
+## Keep the agents moving
+
+T3 Code wakes a thread when something it watches changes: a check or comment on a pull request it watches, an answered question, a finished child. It fails in known ways. A merge ends the watch without a wake. A watch stops after 10 comment-only wakes. A child's hand-back after its own review round never reaches its lead.
+
+The notifier, `ops/notifier.py`, closes those gaps. It runs every 2 minutes on every machine and uses no AI. It reads the T3 state of its own machine read-only, and one GitHub snapshot that one machine reads for all of them every 10 minutes. Every message it sends starts with `[notifier]`.
+
+1. **It repairs what T3 dropped.** A thread hears once that a pull request it links merged, or that an issue or pull request it left a `Waiting: <threadId>` comment on closed. A child's hand-back that T3 never delivered reaches the lead with the child's final message.
+2. **Every 10 minutes it checks the outcome.** Every open pull request and every lead that is not settled must be moving or have a reason to wait that T3 or GitHub shows. Moving means a thread of the lead's tree ran in the last 20 minutes, not started by the notifier. A reason is a question to the owner still open, the thread snoozed, a `Waiting:` comment on an open item, an Actions run in progress, the pull request in the merge queue, or an unanswered CodeRabbit request. A snooze, a `Waiting:` comment, the merge queue or a CodeRabbit request stops counting once its item has not moved for 4 hours; an open owner question and a running Actions job count as long as they last. If nothing holds, the lead gets one message with the facts and "Nothing is moving this. Act now, or record a real reason." The same item wakes at most once an hour. At the third stall in a row, the lead asks the owner through the question tool.
+3. **It raises one alert instead of many wakes.** When GitHub Actions has run nothing for 15 minutes while work waits for it, an alert issue goes to the CI lead, and that alert counts as every lead's reason to wait. An open pull request whose threads are all settled wakes their lead, or goes to an alert issue when no lead is left.
+4. **It makes sure the owner's decisions reach the owner.** A lead whose "Owner queue" comment has no question open in T3 is told to ask through the question tool.
+
+A lead that waits on purpose records it where T3 sees it: a question through the question tool, a snooze until a set time, or a `Waiting:` comment. The machine that reads GitHub posts one line a day on the coordination issue: wakes, repeat stalls, open owner questions with the oldest's age, and each machine's last pass. `tail ~/.local/state/notifier.log` shows each pass.

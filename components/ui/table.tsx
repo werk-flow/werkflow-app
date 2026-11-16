@@ -1,17 +1,28 @@
 import * as React from 'react';
 
-import { scrollRegion } from '@/components/ui/scroll-region';
+import { ScrollRegion } from '@/components/ui/scroll-region';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { cn } from '@/lib/utils';
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
-    // A table scrolls sideways inside its own region from the tablet breakpoint; phones render ListRow cards.
-    <div {...scrollRegion('table')} className="relative w-full overflow-x-auto">
-      <table ref={ref} className={cn('w-full caption-bottom text-sm wrap-normal', className)} {...props} />
-    </div>
-  ),
-);
+type TableProps = React.HTMLAttributes<HTMLTableElement> & {
+  /**
+   * The German name of the table's scroll region. A table whose rows hold no
+   * focusable control passes it, so a keyboard user can reach and scroll a
+   * table wider than its region (WCAG 2.1.1, axe `scrollable-region-focusable`).
+   */
+  scrollLabel?: string;
+};
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(({ className, scrollLabel, ...props }, ref) => (
+  // A table scrolls sideways inside its own region from the tablet breakpoint; phones render ListRow cards.
+  <ScrollRegion
+    name="table"
+    className="relative w-full"
+    {...(scrollLabel ? { focusable: { label: scrollLabel } } : {})}
+  >
+    <table ref={ref} className={cn('w-full caption-bottom text-sm wrap-normal', className)} {...props} />
+  </ScrollRegion>
+));
 Table.displayName = 'Table';
 
 const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(

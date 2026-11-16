@@ -66,7 +66,7 @@ function needsIosInstallHint(): boolean {
  * The installable app shell's page side, run after the load event so it adds
  * nothing to the first paint. It registers the service worker (production
  * only: development files change on every edit) and asks it to refill its
- * cookie-free shell: signing in navigates on the client, so a shell a sign-out
+ * static shell: signing in navigates on the client, so a shell a sign-out
  * deleted comes back here. Every cold start needs this much; the iOS hint runs
  * only sometimes and loads lazily, since a chunk loaded after the load event
  * still costs the cold start a request. The cache clear is the exception: a

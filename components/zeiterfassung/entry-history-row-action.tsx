@@ -2,17 +2,7 @@
 
 import { Clock, Lock, Pencil, Undo2 } from 'lucide-react';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
@@ -108,8 +98,8 @@ function WithdrawSubmissionButton({
 }) {
   const day = formatBerlin(entry.timestamp, 'weekdayDate');
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
+    <ConfirmActionDialog
+      trigger={
         <Button
           variant="outline"
           size="sm"
@@ -118,22 +108,15 @@ function WithdrawSubmissionButton({
         >
           <Undo2 className="mr-1.5 size-4" /> Zurückziehen
         </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Nachtrag zurückziehen?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Alle Einträge deines Nachtrags vom {day} werden zurückgezogen und nicht mehr geprüft. Du kannst
-            die Zeit danach neu nachtragen.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => withdraw(entry)}>
-            Zurückziehen
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      }
+      title="Nachtrag zurückziehen?"
+      description={`Alle Einträge deines Nachtrags vom ${day} werden zurückgezogen und nicht mehr geprüft. Du kannst die Zeit danach neu nachtragen.`}
+      confirmLabel="Zurückziehen"
+      variant="destructive"
+      // The running withdrawal replaces this row, the dialog with it: the row shows the spinner, and a
+      // failure shows above the list after it reads again.
+      closesAtOnce
+      onConfirm={() => withdraw(entry)}
+    />
   );
 }

@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { burnRedactions } from '@/lib/problem-reports/redaction';
 import type { loadUiStringCatalog } from '@/lib/problem-reports/screenshot/load-ui-string-catalog';
 import type { redrawPage } from '@/lib/problem-reports/screenshot/redraw-page';
-import type { pageToSvg } from '@/lib/problem-reports/screenshot/rasterize';
+import type { pageToSvg, rasterizeSvg } from '@/lib/problem-reports/screenshot/rasterize';
 import type { redrawScreenshot } from '@/lib/problem-reports/screenshot/redraw-screenshot';
 import { buildRedrawForBrowserTest } from '@/lib/problem-reports/screenshot/browser-test-bundle';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
@@ -10,6 +11,8 @@ type RedrawPageModule = { redrawPage: typeof redrawPage };
 type CatalogModule = { loadUiStringCatalog: typeof loadUiStringCatalog };
 type ScreenshotModule = { redrawScreenshot: typeof redrawScreenshot };
 type RasterizeModule = { pageToSvg: typeof pageToSvg };
+type RasterizeSvgModule = { rasterizeSvg: typeof rasterizeSvg };
+type RedactionModule = { burnRedactions: typeof burnRedactions };
 
 // Rule tests of the screenshot redraw (docs/technical/problem-report-scrubbing.md),
 // one per rule, on a synthetic page of a made-up company. Each test reads the
@@ -81,6 +84,7 @@ body{font-family:sans-serif;margin:0;padding:16px} .block{width:40px;height:30px
 <div class="scroller" style="height:40px;width:200px;overflow:auto"><div class="scroll-child" style="height:200px;width:2000px">Abbrechen</div><div class="scroll-moved" style="translate:5px 6px;height:10px">x</div></div>
 <div class="spacer" style="height:2000px"></div>
 <div class="pixel-probe" style="position:fixed;left:0;top:0;width:24px;height:24px;background-color:rgb(10, 200, 30)"></div>
+<div class="theme-probe" style="position:fixed;left:32px;top:0;width:24px;height:24px"></div>
 </main></body></html>`;
 
 // A build asset keeps its CSS verbatim; a sheet outside the build gets the style rule.
@@ -88,7 +92,14 @@ const SERVED: Record<string, { contentType: string; body: string }> = {
   '/redraw-page': { contentType: 'text/html', body: PAGE },
   '/_next/static/css/app.css': {
     contentType: 'text/css',
-    body: '@import url("/_next/static/css/print.css") print;\n.brand{font-family:"Geist Probe"}',
+    // The app's theme: tokens on the root, flipped for dark mode by a media rule, as app/globals.css does.
+    // The probe's own variant nests its media rule in a style rule, as a compiled `dark:` class may.
+    body:
+      '@import url("/_next/static/css/print.css") print;\n.brand{font-family:"Geist Probe"}\n' +
+      ':root{--theme-surface:rgb(240, 240, 240)}\n' +
+      '@media (prefers-color-scheme: dark){:root{--theme-surface:rgb(20, 20, 30)}}\n' +
+      'body{background-color:var(--theme-surface)}\n' +
+      '.theme-probe{background-color:rgb(240, 240, 240);@media (prefers-color-scheme: dark){background-color:rgb(20, 20, 30)}}',
   },
   '/_next/static/css/print.css': { contentType: 'text/css', body: '.imported-print{color:rgb(6, 5, 4)}' },
   '/dynamic/record.css': {
@@ -362,3 +373,150 @@ test('the redraw draws a PNG of the viewport and loads nothing', async ({ page }
   const loaded = requests.slice(loadedBefore).filter((path) => !path.startsWith('/redraw/'));
   expect(loaded, 'the redraw fetches no seeded source').toEqual([]);
 });
+
+/** Redraws the page into its PNG and reads the colour at each point, given in CSS pixels. */
+async function redrawnPixels(page: Page, points: readonly [number, number][]): Promise<number[][]> {
+  return page.evaluate(async (points) => {
+    const isScreenshotModule = (value: unknown): value is ScreenshotModule =>
+      typeof value === 'object' && value !== null && 'redrawScreenshot' in value;
+    const path = '/redraw/redraw-screenshot.js';
+    const screenshotModule: unknown = await import(path);
+    if (!isScreenshotModule(screenshotModule)) throw new Error('The redraw bundle is incomplete.');
+    const bitmap = await createImageBitmap(await screenshotModule.redrawScreenshot());
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('The test cannot read the image.');
+    context.drawImage(bitmap, 0, 0);
+    return points.map(([x, y]) =>
+      Array.from(context.getImageData(x * devicePixelRatio, y * devicePixelRatio, 1, 1).data),
+    );
+  }, points);
+}
+
+const SURFACE = { light: [240, 240, 240, 255], dark: [20, 20, 30, 255] } as const;
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`theme rule: a page in ${colorScheme} mode is redrawn in ${colorScheme} mode, and loads nothing`, async ({
+    page,
+  }) => {
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+    await page.emulateMedia({ colorScheme });
+    await openSyntheticPage(page);
+    const loadedBefore = requests.length;
+    // The theme probe is a fixed 24 px block beside the pixel probe; sample its centre.
+    const [probe] = await redrawnPixels(page, [[44, 12]]);
+    expect(probe, `the redraw paints the page's ${colorScheme} tokens`).toEqual([...SURFACE[colorScheme]]);
+    const loaded = requests.slice(loadedBefore).filter((path) => !path.startsWith('/redraw/'));
+    expect(loaded, 'the redraw fetches no seeded source in this theme').toEqual([]);
+    const { markup } = await redraw(page);
+    for (const value of Object.values(SEEDED)) expect(markup, value).not.toContain(value);
+  });
+}
+
+/** The page's SVG as the redraw builds it, with the page's size. */
+async function redrawnSvg(page: Page): Promise<{ svg: string; width: number; height: number }> {
+  return page.evaluate(async () => {
+    const isPageModule = (value: unknown): value is RedrawPageModule =>
+      typeof value === 'object' && value !== null && 'redrawPage' in value;
+    const isCatalogModule = (value: unknown): value is CatalogModule =>
+      typeof value === 'object' && value !== null && 'loadUiStringCatalog' in value;
+    const isRasterizeModule = (value: unknown): value is RasterizeModule =>
+      typeof value === 'object' && value !== null && 'pageToSvg' in value;
+    const paths = ['/redraw/redraw-page.js', '/redraw/load-ui-string-catalog.js', '/redraw/rasterize.js'];
+    const loaded: unknown[] = await Promise.all(paths.map((path) => import(path)));
+    const [pageModule, catalogModule, rasterizeModule] = loaded;
+    if (!isPageModule(pageModule) || !isCatalogModule(catalogModule) || !isRasterizeModule(rasterizeModule))
+      throw new Error('The redraw bundle is incomplete.');
+    const redrawn = pageModule.redrawPage(document, catalogModule.loadUiStringCatalog(), Math.random);
+    return {
+      svg: await rasterizeModule.pageToSvg(redrawn, document),
+      width: redrawn.width,
+      height: redrawn.height,
+    };
+  });
+}
+
+test('theme rule: the image shows the page’s theme even where the image itself would answer light', async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openSyntheticPage(page);
+  const { svg, width, height } = await redrawnSvg(page);
+  // An SVG image is a document of its own. A browser may answer its media queries otherwise than
+  // the page, as one that draws it light on a page in dark mode: drawn here under a light answer.
+  await page.emulateMedia({ colorScheme: 'light' });
+  const probe = await page.evaluate(
+    async ({ svg, width, height }) => {
+      const isRasterizeModule = (value: unknown): value is RasterizeSvgModule =>
+        typeof value === 'object' && value !== null && 'rasterizeSvg' in value;
+      const path = '/redraw/rasterize.js';
+      const rasterizeModule: unknown = await import(path);
+      if (!isRasterizeModule(rasterizeModule)) throw new Error('The redraw bundle is incomplete.');
+      const blob = await rasterizeModule.rasterizeSvg(
+        svg,
+        { root: document.documentElement, width, height },
+        document,
+      );
+      const bitmap = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('The test cannot read the image.');
+      context.drawImage(bitmap, 0, 0);
+      return Array.from(context.getImageData(44 * devicePixelRatio, 12 * devicePixelRatio, 1, 1).data);
+    },
+    { svg, width, height },
+  );
+  expect(probe, 'the dark tokens the page used reach the image').toEqual([...SURFACE.dark]);
+  expect(svg, 'no media rule is left for the image to answer').not.toContain('prefers-color-scheme');
+});
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`a reporter's box is burned opaque into the redrawn image, and stands out from the page, in ${colorScheme} mode`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await openSyntheticPage(page);
+    const result = await page.evaluate(async () => {
+      const isScreenshotModule = (value: unknown): value is ScreenshotModule =>
+        typeof value === 'object' && value !== null && 'redrawScreenshot' in value;
+      const isRedactionModule = (value: unknown): value is RedactionModule =>
+        typeof value === 'object' && value !== null && 'burnRedactions' in value;
+      const paths = ['/redraw/redraw-screenshot.js', '/redraw/redaction.js'];
+      const loaded: unknown[] = await Promise.all(paths.map((path) => import(path)));
+      const [screenshotModule, redactionModule] = loaded;
+      if (!isScreenshotModule(screenshotModule) || !isRedactionModule(redactionModule))
+        throw new Error('The redraw bundle is incomplete.');
+      const redrawn = await createImageBitmap(await screenshotModule.redrawScreenshot());
+      // The same box over a plain image of the same size: an opaque cover gives the same pixels.
+      const plain = new OffscreenCanvas(redrawn.width, redrawn.height);
+      const plainContext = plain.getContext('2d');
+      if (!plainContext) throw new Error('The test cannot draw.');
+      plainContext.fillStyle = 'lime';
+      plainContext.fillRect(0, 0, plain.width, plain.height);
+      // Over the theme probe, from its left edge to well past it.
+      const box = { x: 32 / 900, y: 0, width: 120 / 900, height: 60 / 900 };
+      const read = async (source: ImageBitmap | OffscreenCanvas) => {
+        const bitmap = await createImageBitmap(await redactionModule.burnRedactions(source, [box]));
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('The test cannot read the image.');
+        context.drawImage(bitmap, 0, 0);
+        const ratio = devicePixelRatio;
+        return {
+          box: Array.from(context.getImageData(34 * ratio, 2 * ratio, 110 * ratio, 50 * ratio).data),
+          // In the body's top padding, beside the box: the page's own surface.
+          page: Array.from(context.getImageData(600 * ratio, 8 * ratio, 1, 1).data),
+          size: [bitmap.width, bitmap.height],
+        };
+      };
+      const burned = await read(redrawn);
+      const reference = await read(plain);
+      return { burned, reference, redrawnSize: [redrawn.width, redrawn.height] };
+    });
+    expect(result.burned.size, 'the upload keeps the redraw’s full size').toEqual(result.redrawnSize);
+    expect(result.burned.box, 'nothing of the page shows inside the box').toEqual(result.reference.box);
+    expect(result.burned.page, 'the page keeps its theme around the box').toEqual([...SURFACE[colorScheme]]);
+    expect(result.burned.box.slice(0, 4), 'the box stands out from the page').not.toEqual(result.burned.page);
+  });
+}

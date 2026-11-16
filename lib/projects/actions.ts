@@ -197,6 +197,11 @@ export async function deleteProject(rawProjectId: string): Promise<DeleteProject
     if (error) {
       // A take booked after the check: the ledger keeps it, so the delete is refused.
       if (isMaterialHistoryRefusal(error)) return { success: false, error: MATERIAL_HISTORY_EXISTS };
+      // Lifecycle events, blockers, dependencies, Arbeitsnachweise, requests or a Projektleitung
+      // (app_private.prevent_historic_work_delete): the history stays, so the project does.
+      if (error.message === 'work_with_history_cannot_be_deleted') {
+        return { success: false, error: 'work_history_exists' };
+      }
       logError('Error deleting project:', error);
       return { success: false, error: 'delete_failed' };
     }

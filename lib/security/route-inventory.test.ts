@@ -25,6 +25,19 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no bytes; renders a fixed sample with the organization name and no stored record; private no-store responses',
     mustCall: ['resolveActionContext', 'getCachedMemberships', 'renderBusinessDocument'],
   },
+  'app/api/musterrechnung/route.ts': {
+    authorization:
+      'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no PDF; builds a fixed sample with the organization profile and letterhead and no stored record, sends the ZUGFeRD PDF only when the EN 16931 rules pass its XML; private no-store responses',
+    mustCall: [
+      'withReadRequest',
+      'resolveActionContext',
+      'getCachedMemberships',
+      'readCompanyProfile',
+      'readOfferLetterhead',
+      'checkEn16931',
+      'renderEInvoicePdf',
+    ],
+  },
   'app/api/time-tracking-state/route.ts': {
     authorization:
       'verified cookie identity and matching active organization before delegating to existing self-clock and membership-checked active-job readers; validated kind/UUID, private no-store responses',
@@ -75,6 +88,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
     authorization:
       "verified identity from an Authorization bearer token or, after the same-origin JSON guard, the cookie session; an identity check that cannot complete answers retry; the active organization from the current memberships, an organization hint naming another refused; reads only the caller's own scheduled visits on the Berlin day of jobs the caller is assigned to, with named field columns, every read scoped to that organization; private no-store responses",
     mustCall: ['identifyFieldSyncCaller', 'resolveActiveContextForUser', 'readFieldSyncToday'],
+  },
+  'app/sw.js/route.ts': {
+    authorization:
+      'unauthenticated by design: serves the service worker script the build composed, the same bytes for everyone; reads no request, cookie or session, writes nothing, and proxy.ts does not run on it',
+    mustCall: [],
   },
   'app/api/problem-reports/v1/reports/route.ts': {
     authorization:

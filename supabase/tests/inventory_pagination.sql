@@ -20,15 +20,15 @@ declare first_page jsonb; last_page jsonb; searched jsonb; locations jsonb;
 begin
  first_page:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{}');
  last_page:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"page":23}');
- if (first_page->>'total')::int<>1105 or jsonb_array_length(first_page->'ids')<>50 or jsonb_array_length(last_page->'ids')<>5 then raise exception 'global inventory count or page completeness failed'; end if;
+ if (first_page->>'total')::int is distinct from 1105 or jsonb_array_length(first_page->'ids') is distinct from 50 or jsonb_array_length(last_page->'ids') is distinct from 5 then raise exception 'global inventory count or page completeness failed'; end if;
  if exists(select 1 from jsonb_array_elements_text(first_page->'ids') a join jsonb_array_elements_text(last_page->'ids') b on a.value=b.value) then raise exception 'inventory pages overlap'; end if;
- if (first_page->'summary'->>'totalOnHand')::numeric<>2210 or (first_page->'summary'->>'stockedItems')::int<>1105 then raise exception 'inventory summaries were derived from current page'; end if;
+ if (first_page->'summary'->>'totalOnHand')::numeric is distinct from 2210 or (first_page->'summary'->>'stockedItems')::int is distinct from 1105 then raise exception 'inventory summaries were derived from current page'; end if;
  searched:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"search":"literal %_"}');
- if (searched->>'total')::int<>1 then raise exception 'global literal barcode search failed'; end if;
+ if (searched->>'total')::int is distinct from 1 then raise exception 'global literal barcode search failed'; end if;
  searched:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"search":"Foreign only"}');
- if (searched->>'total')::int<>0 then raise exception 'foreign inventory exposed'; end if;
+ if (searched->>'total')::int is distinct from 0 then raise exception 'foreign inventory exposed'; end if;
  locations:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"tab":"locations","page":2}');
- if jsonb_array_length(locations->'locationIds')<>1 then raise exception 'location paging failed'; end if;
+ if jsonb_array_length(locations->'locationIds') is distinct from 1 then raise exception 'location paging failed'; end if;
  if has_function_privilege('anon','public.list_inventory_page(uuid,jsonb)','execute') or has_function_privilege('authenticated','public.list_inventory_page(uuid,jsonb)','execute') then raise exception 'inventory reader has direct client grant'; end if;
  if not has_function_privilege('service_role','public.list_inventory_page(uuid,jsonb)','execute') then raise exception 'inventory server reader grant missing'; end if;
 end $$;
@@ -42,17 +42,86 @@ insert into public.job_material_lines(organization_id,job_id,item_id,planned_qua
 select organization_id,'97000000-0000-4000-8000-000000000010',id,4,0,'97000000-0000-4000-8000-000000000001' from public.inventory_items where organization_id='97000000-0000-4000-8000-000000000002' and name='Item 1056';
 do $$ declare result jsonb; target_location uuid; begin
  result:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"type":"tool","stock":"low_stock"}');
- if (result->>'total')::int<>1 or (result#>>'{summary,lowStockItems}')::int<>1 then raise exception 'type/stock filters or global low-stock count failed'; end if;
+ if (result->>'total')::int is distinct from 1 or (result#>>'{summary,lowStockItems}')::int is distinct from 1 then raise exception 'type/stock filters or global low-stock count failed'; end if;
  result:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"stock":"shortfall"}');
- if (result->>'total')::int<>1 or (result#>>'{summary,shortfallItems}')::int<>1 then raise exception 'planned demand above stock lacks its own status or summary count'; end if;
- if (result->'ids'->>0)::uuid<>(select id from public.inventory_items where organization_id='97000000-0000-4000-8000-000000000002' and name='Item 1056') then raise exception 'the shortfall filter listed the wrong item'; end if;
+ if (result->>'total')::int is distinct from 1 or (result#>>'{summary,shortfallItems}')::int is distinct from 1 then raise exception 'planned demand above stock lacks its own status or summary count'; end if;
+ if (result->'ids'->>0)::uuid is distinct from(select id from public.inventory_items where organization_id='97000000-0000-4000-8000-000000000002' and name='Item 1056') then raise exception 'the shortfall filter listed the wrong item'; end if;
  result:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"tab":"planned"}');
- if (result->>'total')::int<>2 or (result#>>'{summary,plannedQuantity}')::numeric<>5 then raise exception 'remaining planned material or planned filter failed'; end if;
+ if (result->>'total')::int is distinct from 2 or (result#>>'{summary,plannedQuantity}')::numeric is distinct from 5 then raise exception 'remaining planned material or planned filter failed'; end if;
  select id into target_location from public.inventory_locations where organization_id='97000000-0000-4000-8000-000000000002' and name='Location 02';
  result:=public.list_inventory_page('97000000-0000-4000-8000-000000000002',jsonb_build_object('location',target_location));
- if (result->>'total')::int<>0 or (result#>>'{summary,totalItems}')::int<>1105 then raise exception 'location filter lost global summary'; end if;
+ if (result->>'total')::int is distinct from 0 or (result#>>'{summary,totalItems}')::int is distinct from 1105 then raise exception 'location filter lost global summary'; end if;
  result:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"stock":"out_of_stock"}');
- if (result->>'total')::int<>0 then raise exception 'out-of-stock filter ignored'; end if;
+ if (result->>'total')::int is distinct from 0 then raise exception 'out-of-stock filter ignored'; end if;
+end $$;
+
+-- The movement history (werk-flow/werkflow-planning#374): 120 stock movements
+-- share one timestamp, 23:30 UTC on 10 March, which is 11 March in Berlin. A
+-- use and its correction on the job line join them; another organization's
+-- movement must never appear.
+insert into public.inventory_locations(id,organization_id,name,location_type,created_by) values
+('97000000-0000-4000-8000-000000000020','97000000-0000-4000-8000-000000000003','Foreign Lager','storage','97000000-0000-4000-8000-000000000001');
+insert into public.inventory_movements(organization_id,item_id,location_id,movement_type,quantity_delta,quantity_before,quantity_after,actor_id,reason,created_at)
+select item.organization_id,item.id,location.id,'stock_in',1,number-1,number,'97000000-0000-4000-8000-000000000001','Zugang '||number,'2026-03-10 23:30:00+00'
+from generate_series(1,120) number
+join public.inventory_items item on item.organization_id='97000000-0000-4000-8000-000000000002' and item.name='Item 0001'
+join public.inventory_locations location on location.organization_id=item.organization_id and location.name='Location 01';
+insert into public.inventory_movements(organization_id,item_id,location_id,movement_type,quantity_delta,quantity_before,quantity_after,created_at)
+select item.organization_id,item.id,'97000000-0000-4000-8000-000000000020','stock_in',1,0,1,'2026-03-10 23:30:00+00'
+from public.inventory_items item where item.organization_id='97000000-0000-4000-8000-000000000003';
+insert into public.job_material_use_events(id,organization_id,job_id,job_material_line_id,item_id,unit,quantity,cost_amount_cents,cost_price_quantity,actor_id,created_at)
+select '97000000-0000-4000-8000-000000000021',line.organization_id,line.job_id,line.id,line.item_id,'piece',2,412,1,'97000000-0000-4000-8000-000000000001','2026-03-12 09:00:00+00'
+from public.job_material_lines line join public.inventory_items item on item.id=line.item_id where item.name='Item 1055' and line.organization_id='97000000-0000-4000-8000-000000000002';
+insert into public.job_material_use_events(organization_id,job_id,job_material_line_id,item_id,unit,quantity,cost_amount_cents,cost_price_quantity,corrects_event_id,note,actor_id,created_at)
+select organization_id,job_id,job_material_line_id,item_id,unit,-1,cost_amount_cents,cost_price_quantity,id,'Zu viel gebucht',actor_id,'2026-03-12 10:00:00+00'
+from public.job_material_use_events where id='97000000-0000-4000-8000-000000000021';
+do $$
+declare
+ v_org constant uuid:='97000000-0000-4000-8000-000000000002';
+ pages jsonb[]; result jsonb; seen int; location_one uuid;
+begin
+ pages:=array[public.list_inventory_movement_page(v_org,'{}'),public.list_inventory_movement_page(v_org,'{"page":2}'),public.list_inventory_movement_page(v_org,'{"page":3}')];
+ if (pages[1]->>'total')::int is distinct from 122 then raise exception 'the movement total does not cover the whole organization, or counts a foreign movement'; end if;
+ if jsonb_array_length(pages[1]->'rows') is distinct from 50 or jsonb_array_length(pages[2]->'rows') is distinct from 50 or jsonb_array_length(pages[3]->'rows') is distinct from 22 then raise exception 'a movement page is incomplete'; end if;
+ select count(distinct row->>'id') into seen from unnest(pages) page, jsonb_array_elements(page->'rows') row;
+ if seen is distinct from 122 then raise exception 'movement pages overlap or skip a row under equal timestamps'; end if;
+ if (pages[1]->'rows'->0->>'kind') is distinct from 'job_use_correction' or (pages[1]->'rows'->1->>'kind') is distinct from 'job_use' then raise exception 'the history is not newest first, or a use event lacks its kind'; end if;
+ if (pages[1]->'rows'->0->>'correctsEventId') is distinct from '97000000-0000-4000-8000-000000000021' then raise exception 'a correction does not name the event it corrects'; end if;
+ if (pages[1]->'rows'->1->>'locationId') is not null or (pages[1]->'rows'->1->>'quantityBefore') is not null or (pages[1]->'rows'->1->>'unit') is distinct from 'piece' then raise exception 'a use event shows a stock effect or loses its unit'; end if;
+ if exists(select 1 from unnest(pages) page, jsonb_array_elements(page->'rows') row, jsonb_object_keys(row) key where key ilike '%cost%') then raise exception 'the movement history carries a cost'; end if;
+ if exists(select 1 from unnest(pages) page, jsonb_array_elements(page->'rows') row where row->>'itemName'='Foreign only') then raise exception 'a foreign movement appears in the history'; end if;
+ if (pages[1]->>'hasAny')::boolean is not true or jsonb_array_length(pages[1]->'people') is distinct from 1 or (pages[1]->'people'->0->>'id') is distinct from '97000000-0000-4000-8000-000000000001' then raise exception 'the people who booked are not listed once each'; end if;
+
+ select id into location_one from public.inventory_locations where organization_id=v_org and name='Location 01';
+ result:=public.list_inventory_movement_page(v_org,jsonb_build_object('location',location_one));
+ if (result->>'total')::int is distinct from 120 then raise exception 'the Lager filter keeps a use event or loses a movement'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"location":"97000000-0000-4000-8000-000000000020"}');
+ if (result->>'total')::int is distinct from 0 then raise exception 'a foreign Lager shows its movements'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"kind":"job_use"}');
+ if (result->>'total')::int is distinct from 1 then raise exception 'the kind filter does not separate a use from its correction'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"kind":"stock_in"}');
+ if (result->>'total')::int is distinct from 120 then raise exception 'the kind filter lost a stock movement'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"person":"97000000-0000-4000-8000-000000000001"}');
+ if (result->>'total')::int is distinct from 122 then raise exception 'the person filter lost a booking'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"person":"97000000-0000-4000-8000-0000000000ff"}');
+ if (result->>'total')::int is distinct from 0 then raise exception 'the person filter ignored the person'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"from":"2026-03-11","to":"2026-03-11"}');
+ if (result->>'total')::int is distinct from 120 then raise exception 'the date range does not use the Berlin day'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"to":"2026-03-10"}');
+ if (result->>'total')::int is distinct from 0 then raise exception 'the date range end includes the next Berlin day'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"from":"2026-03-12"}');
+ if (result->>'total')::int is distinct from 2 then raise exception 'the date range start lost a later booking'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"search":"literal %_"}');
+ if (result->>'total')::int is distinct from 2 then raise exception 'the article search does not match a barcode literally'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"search":"item 0001"}');
+ if (result->>'total')::int is distinct from 120 then raise exception 'the article search does not match the article name'; end if;
+ result:=public.list_inventory_movement_page(v_org,'{"search":"Foreign only"}');
+ if (result->>'total')::int is distinct from 0 or (result->>'hasAny')::boolean is not true then raise exception 'an empty filter result is not told apart from an empty history'; end if;
+ result:=public.list_inventory_movement_page('97000000-0000-4000-8000-000000000003','{"search":"Item"}');
+ if (result->>'total')::int is distinct from 0 then raise exception 'another organization reads this organization''s movements'; end if;
+
+ if has_function_privilege('anon','public.list_inventory_movement_page(uuid,jsonb)','execute') or has_function_privilege('authenticated','public.list_inventory_movement_page(uuid,jsonb)','execute') then raise exception 'movement reader has direct client grant'; end if;
+ if not has_function_privilege('service_role','public.list_inventory_movement_page(uuid,jsonb)','execute') then raise exception 'movement server reader grant missing'; end if;
 end $$;
 
 rollback;

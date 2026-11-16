@@ -14,6 +14,7 @@ const layoutDetails = {
   nestedJobNumber: 'AUF-1-1',
   equipmentNumber: 'ANL-1',
   caseNumber: 'SF-1',
+  offerId: '00000000-0000-4000-8000-000000000009',
 };
 
 const directories: string[] = [];

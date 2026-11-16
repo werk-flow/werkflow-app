@@ -62,7 +62,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -241,7 +241,7 @@ alter table public.sickness_report_events disable trigger refuse_sickness_event;
 
 do $$
 begin
-  if pg_temp.sickness_state() <> (select state from sickness_state_before) then
+  if pg_temp.sickness_state() is distinct from (select state from sickness_state_before) then
     raise exception 'a refused sickness write changed reports or history';
   end if;
 end;
@@ -262,42 +262,42 @@ declare
 begin
   v_report := public.create_sickness_report(v_worker, v_org, (select id from public.employee_records where user_id = 'c2000000-0000-0000-0000-000000000003'),
     'krankheit', '2026-10-01', null, 'full', false, true);
-  if v_report.organization_id <> v_org or v_report.status <> 'reported' or v_report.end_date is not null
-    or v_report.evidence_required or v_report.evidence_status <> 'not_required' or v_report.reported_by <> v_worker
+  if v_report.organization_id is distinct from v_org or v_report.status is distinct from 'reported' or v_report.end_date is not null
+    or v_report.evidence_required or v_report.evidence_status is distinct from 'not_required' or v_report.reported_by is distinct from v_worker
   then raise exception 'a self-report stored the wrong report: %', to_jsonb(v_report); end if;
   select * into strict v_event from public.sickness_report_events where sickness_report_id = v_report.id;
-  if v_event.event_type <> 'reported' or v_event.created_by <> v_worker
-    or v_event.employee_record_id <> (select id from public.employee_records where user_id = 'c2000000-0000-0000-0000-000000000003')
-    or v_event.event_payload <> '{"absence_type": "krankheit", "start_date": "2026-10-01", "end_date": null,
+  if v_event.event_type is distinct from 'reported' or v_event.created_by is distinct from v_worker
+    or v_event.employee_record_id is distinct from (select id from public.employee_records where user_id = 'c2000000-0000-0000-0000-000000000003')
+    or v_event.event_payload is distinct from '{"absence_type": "krankheit", "start_date": "2026-10-01", "end_date": null,
       "day_portion": "full", "evidence_required": false, "self_reported": true}'::jsonb
   then raise exception 'a self-report recorded the wrong history: %', to_jsonb(v_event); end if;
 
   v_report := public.create_sickness_report(v_buero, v_org, 'c2000000-0000-0000-0000-000000000022',
     'kind_krank', '2026-10-02', '2026-10-02', 'half_day', true, false);
-  if v_report.evidence_status <> 'pending' or v_report.reported_by <> v_buero then
+  if v_report.evidence_status is distinct from 'pending' or v_report.reported_by is distinct from v_buero then
     raise exception 'an office entry stored the wrong report: %', to_jsonb(v_report);
   end if;
   select * into strict v_event from public.sickness_report_events where sickness_report_id = v_report.id;
-  if v_event.event_type <> 'reported' or v_event.created_by <> v_buero
-    or v_event.event_payload <> '{"absence_type": "kind_krank", "start_date": "2026-10-02",
+  if v_event.event_type is distinct from 'reported' or v_event.created_by is distinct from v_buero
+    or v_event.event_payload is distinct from '{"absence_type": "kind_krank", "start_date": "2026-10-02",
       "end_date": "2026-10-02", "day_portion": "half_day", "evidence_required": true, "self_reported": false}'::jsonb
   then raise exception 'an office entry recorded the wrong history: %', to_jsonb(v_event); end if;
 
   v_report := public.end_sickness_report(v_worker, v_org, v_own_report, '2026-09-05');
-  if v_report.end_date <> '2026-09-05' then raise exception 'ending did not save the end date'; end if;
+  if v_report.end_date is distinct from '2026-09-05' then raise exception 'ending did not save the end date'; end if;
 
   v_report := public.correct_sickness_report(v_buero, v_org, v_colleague_report,
     'sonstige', '2026-09-02', '2026-09-04', 'full', '  Anruf  ');
-  if v_report.absence_type <> 'sonstige' or v_report.start_date <> '2026-09-02' or v_report.end_date <> '2026-09-04'
+  if v_report.absence_type is distinct from 'sonstige' or v_report.start_date is distinct from '2026-09-02' or v_report.end_date is distinct from '2026-09-04'
   then raise exception 'a correction stored the wrong report: %', to_jsonb(v_report); end if;
 
   v_report := public.set_sickness_evidence(v_buero, v_org, v_colleague_report, true, 'received');
-  if not v_report.evidence_required or v_report.evidence_status <> 'received' then
+  if not v_report.evidence_required or v_report.evidence_status is distinct from 'received' then
     raise exception 'evidence was not saved: %', to_jsonb(v_report);
   end if;
 
   v_report := public.cancel_sickness_report(v_worker, v_org, v_own_report, null);
-  if v_report.status <> 'cancelled' or v_report.cancelled_by <> v_worker or v_report.cancelled_at is null
+  if v_report.status is distinct from 'cancelled' or v_report.cancelled_by is distinct from v_worker or v_report.cancelled_at is null
     or v_report.cancellation_reason is not null
   then raise exception 'a cancellation stored the wrong report: %', to_jsonb(v_report); end if;
 
@@ -305,7 +305,7 @@ begin
     select jsonb_agg(jsonb_build_object('type', event_type, 'payload', event_payload, 'by', created_by)
       order by event_type)
     from public.sickness_report_events where sickness_report_id = v_own_report
-  ) <> jsonb_build_array(
+  ) is distinct from jsonb_build_array(
     jsonb_build_object('type', 'cancelled', 'by', v_worker, 'payload',
       '{"start_date": "2026-09-01", "end_date": "2026-09-05", "reason": null}'::jsonb),
     jsonb_build_object('type', 'ended', 'by', v_worker, 'payload',
@@ -316,7 +316,7 @@ begin
     select jsonb_agg(jsonb_build_object('type', event_type, 'payload', event_payload, 'by', created_by)
       order by event_type)
     from public.sickness_report_events where sickness_report_id = v_colleague_report
-  ) <> jsonb_build_array(
+  ) is distinct from jsonb_build_array(
     jsonb_build_object('type', 'corrected', 'by', v_buero, 'payload', '{
       "before": {"absence_type": "krankheit", "start_date": "2026-09-01", "end_date": null, "day_portion": "full"},
       "after": {"absence_type": "sonstige", "start_date": "2026-09-02", "end_date": "2026-09-04", "day_portion": "full"},

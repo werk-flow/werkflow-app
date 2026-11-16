@@ -10,9 +10,18 @@ import type {
   DocumentImage,
   DocumentPosition,
   DocumentSection,
-  PageMargins,
   StationeryFile,
 } from './model';
+import {
+  INFO_BLOCK_LEFT_MM,
+  INFO_LABEL_WIDTH_MM,
+  MM,
+  PAGE_HEIGHT,
+  PAGE_WIDTH,
+  PLAIN_MARGINS,
+  pageGeometry,
+  type Box,
+} from './page-geometry';
 
 // The one renderer of generated business documents
 // (docs/technical/document-storage-and-access.md). It lays out the plain
@@ -20,23 +29,8 @@ import type {
 // external service. The same model gives the same bytes: fonts, images and
 // the PDF's dates all come from the input and the bundled files.
 
-const MM = 72 / 25.4;
-const PAGE_WIDTH = 210 * MM;
-const PAGE_HEIGHT = 297 * MM;
-
-/** The plain letter's margins; the first page's address field and info block sit where DIN 5008 (form B) puts them. */
-const PLAIN_MARGINS: PageMargins = { topMm: 20, rightMm: 20, bottomMm: 15, leftMm: 25 };
 const PLAIN_FOOTER_HEIGHT_MM = 17;
-const FIRST_PAGE_CONTENT_TOP_MM = 100;
 const RETURN_ADDRESS_TOP_MM = 47;
-/** Where form B's address field starts; a stationery top margin below it moves the field down. */
-const ADDRESS_FIELD_TOP_MM = 45;
-/** The narrowest content a page may leave: the table and the info block's values need this much. */
-const MINIMUM_CONTENT_WIDTH_MM = 120;
-const MINIMUM_INFO_VALUE_WIDTH_MM = 25;
-const MINIMUM_CONTENT_HEIGHT_MM = 120;
-const INFO_BLOCK_LEFT_MM = 125;
-const PAGE_NUMBER_SPACE = 8 * MM;
 const LOGO_MAX_WIDTH_MM = 55;
 
 const INK = rgb(0.11, 0.11, 0.13);
@@ -52,7 +46,6 @@ const SMALL_LEADING = 9;
 
 type Fonts = { regular: PDFFont; bold: PDFFont };
 /** A page's content area in points, measured from the top left corner. */
-type Box = { left: number; right: number; top: number; bottom: number };
 
 /** One unbreakable slice of the flow. `keepWithNext` keeps it on the page of the item after it. */
 type FlowItem = {
@@ -214,10 +207,14 @@ function positionFlow(
       drawLeft(page, firstLine, columns.textLeft, line, fonts.regular, BODY_SIZE);
       const quantity = `${formatQuantity(position.quantity)} ${position.unitLabel}`;
       drawRight(page, quantity, columns.quantityRight, line, fonts.regular, BODY_SIZE);
-      const unitPrice = formatEuroCents(position.unitPriceCents);
+      const per = position.priceQuantity && position.priceQuantity !== 1 ? `/${position.priceQuantity}` : '';
+      const unitPrice = `${formatEuroCents(position.unitPriceCents)}${per}`;
       drawRight(page, unitPrice, columns.priceRight, line, fonts.regular, BODY_SIZE);
+      // A Bedarfs- or Alternativposition is not in the sum: its amount stands in
+      // parentheses, so a reader adding up the column gets the subtotal.
       const amount = formatEuroCents(position.amountCents);
-      drawRight(page, amount, columns.amountRight, line, fonts.regular, BODY_SIZE);
+      const shownAmount = position.kind === 'standard' ? amount : `(${amount})`;
+      drawRight(page, shownAmount, columns.amountRight, line, fonts.regular, BODY_SIZE);
     }),
     ...moreLines.map((text) =>
       tableLine(BODY_LEADING, (page, top, box) =>
@@ -272,7 +269,7 @@ function sectionFlow(section: DocumentSection, fonts: Fonts, textWidth: number):
       drawRule(page, columns.textLeft, columns.amountRight, top + 4);
       drawLeft(
         page,
-        `Summe ${section.number} ${section.title}`,
+        ['Summe', section.number, section.title].filter(Boolean).join(' '),
         columns.textLeft,
         top + 9,
         fonts.bold,
@@ -326,7 +323,7 @@ function totalsFlow(document: BusinessDocument, fonts: Fonts): FlowItem[] {
     { cells: ['USt.-Satz', 'Netto', 'USt.', 'Brutto'], font: fonts.bold, size: 8 },
     ...totals.byRate.map((rate) => ({
       cells: [
-        formatTaxRate(rate.rateBasisPoints),
+        rate.label ?? formatTaxRate(rate.rateBasisPoints),
         formatEuroCents(rate.netCents),
         formatEuroCents(rate.vatCents),
         formatEuroCents(rate.grossCents),
@@ -426,15 +423,6 @@ function placeItems(items: FlowItem[], top: number): PlacedPage {
   return page;
 }
 
-function boxFromMargins(margins: PageMargins, minimumTopMm: number): Box {
-  return {
-    left: margins.leftMm * MM,
-    right: PAGE_WIDTH - margins.rightMm * MM,
-    top: Math.max(margins.topMm, minimumTopMm) * MM,
-    bottom: PAGE_HEIGHT - margins.bottomMm * MM - PAGE_NUMBER_SPACE,
-  };
-}
-
 type Underlay = { kind: 'page'; page: PDFEmbeddedPage } | { kind: 'image'; image: PDFImage };
 
 async function embedImage(pdf: PDFDocument, image: DocumentImage): Promise<PDFImage> {
@@ -497,8 +485,8 @@ function drawAddressAndInfo(
     drawLeft(page, line, box.left, 55 * MM + shift + index * BODY_LEADING, fonts.regular, BODY_SIZE),
   );
   const labelLeft = INFO_BLOCK_LEFT_MM * MM;
-  const valueLeft = labelLeft + 30 * MM;
-  let top = 50 * MM + shift;
+  const valueLeft = labelLeft + INFO_LABEL_WIDTH_MM * MM;
+  let top = INFO_BLOCK_TOP_MM * MM + shift;
   for (const row of document.metaRows) {
     drawLeft(page, row.label, labelLeft, top, fonts.regular, 8, MUTED);
     const lines = wrap(row.value, fonts.regular, 8, box.right - valueLeft);
@@ -507,23 +495,93 @@ function drawAddressAndInfo(
   }
 }
 
-function drawFooter(page: PDFPage, columns: string[][], fonts: Fonts, box: Box) {
-  const width = (box.right - box.left) / Math.max(columns.length, 1);
-  const top = PAGE_HEIGHT - (PLAIN_MARGINS.bottomMm + PLAIN_FOOTER_HEIGHT_MM) * MM + 4;
-  drawRule(page, box.left, box.right, top - 4);
-  columns.forEach((lines, column) =>
-    lines.forEach((line, index) =>
-      drawLeft(
-        page,
-        line,
-        box.left + column * width,
-        top + index * SMALL_LEADING,
-        fonts.regular,
-        SMALL_SIZE,
-        MUTED,
-      ),
-    ),
+const INFO_BLOCK_TOP_MM = 50;
+/** The least space between the address field or info block and the first page's content. */
+const HEAD_GAP_MM = 6;
+
+/**
+ * Where the first page's address field and info block end. Many or long info
+ * rows, as an invoice may have, reach further down than the usual content top;
+ * the content then starts below them instead of under them.
+ */
+/** The least room the first page keeps below the head for the title and first lines. */
+const MIN_FIRST_PAGE_CONTENT_MM = 40;
+
+function headBottom(document: BusinessDocument, fonts: Fonts, box: Box, shift: number): number {
+  const valueWidth = box.right - (INFO_BLOCK_LEFT_MM + INFO_LABEL_WIDTH_MM) * MM;
+  const infoBottom = document.metaRows.reduce(
+    (top, row) => top + wrap(row.value, fonts.regular, 8, valueWidth).length * 11 + 2,
+    INFO_BLOCK_TOP_MM * MM + shift,
   );
+  const recipientBottom = 55 * MM + shift + document.recipientLines.length * BODY_LEADING;
+  return Math.max(infoBottom, recipientBottom) + HEAD_GAP_MM * MM;
+}
+
+/** The plain footer: each column's left edge and wrapped lines, and the height they take in millimetres. */
+type FooterLayout = { columns: Array<{ left: number; lines: string[] }>; heightMm: number };
+
+const FOOTER_COLUMN_GAP = 10;
+/** Small enough that four usual columns (address, contact, register, bank) fit side by side. */
+const FOOTER_SIZE = 6.5;
+const FOOTER_LEADING = 8.5;
+
+/** The widest a column may be so that all fit: only columns wider than it wrap. */
+function footerColumnCap(natural: number[], usable: number): number {
+  let remaining = usable;
+  const ascending = natural.toSorted((a, b) => a - b);
+  for (const [index, width] of ascending.entries()) {
+    const left = ascending.length - index;
+    if (width * left > remaining) return remaining / left;
+    remaining -= width;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Each column as wide as its longest line, the room left shared out. When the
+ * columns do not fit side by side, only the widest ones narrow and wrap, so a
+ * short column, an email address or an IBAN usually stays whole.
+ */
+function footerLayout(columns: string[][], fonts: Fonts): FooterLayout {
+  if (columns.length === 0) return { columns: [], heightMm: 0 };
+  const left = PLAIN_MARGINS.leftMm * MM;
+  const room = PAGE_WIDTH - (PLAIN_MARGINS.leftMm + PLAIN_MARGINS.rightMm) * MM;
+  const usable = room - FOOTER_COLUMN_GAP * (columns.length - 1);
+  const natural = columns.map((lines) =>
+    Math.max(0, ...lines.map((line) => fonts.regular.widthOfTextAtSize(line, FOOTER_SIZE))),
+  );
+  const total = natural.reduce((sum, width) => sum + width, 0);
+  const cap = footerColumnCap(natural, usable);
+  const widths =
+    total <= usable
+      ? natural.map((width) => width + (usable - total) / columns.length)
+      : natural.map((width) => Math.min(width, cap));
+  let cursor = left;
+  const laidOut = columns.map((lines, index) => {
+    const width = widths[index] ?? usable;
+    const column = {
+      left: cursor,
+      lines: lines.flatMap((line) => wrap(line, fonts.regular, FOOTER_SIZE, width)),
+    };
+    cursor += width + FOOTER_COLUMN_GAP;
+    return column;
+  });
+  const tallest = Math.max(...laidOut.map((column) => column.lines.length));
+  // The rule, a gap and the lines; never lower than the footer K1 laid out.
+  return {
+    columns: laidOut,
+    heightMm: Math.max(PLAIN_FOOTER_HEIGHT_MM, (8 + tallest * FOOTER_LEADING) / MM),
+  };
+}
+
+function drawFooter(page: PDFPage, footer: FooterLayout, fonts: Fonts, box: Box) {
+  const top = PAGE_HEIGHT - (PLAIN_MARGINS.bottomMm + footer.heightMm) * MM + 4;
+  drawRule(page, box.left, box.right, top - 4);
+  for (const column of footer.columns) {
+    column.lines.forEach((line, index) =>
+      drawLeft(page, line, column.left, top + index * FOOTER_LEADING, fonts.regular, FOOTER_SIZE, MUTED),
+    );
+  }
 }
 
 // Glyphs without kerning, ligatures or contextual forms: shaping each string
@@ -538,26 +596,23 @@ const PLAIN_GLYPHS = {
   mkmk: false,
 };
 
-/** The content boxes of the first and the following pages, and how far the address field moves down. */
-function pageGeometry(document: BusinessDocument) {
-  const { stationery } = document;
-  const plainBottomMm = PLAIN_MARGINS.bottomMm + (document.footerColumns.length ? PLAIN_FOOTER_HEIGHT_MM : 0);
-  const plainMargins = { ...PLAIN_MARGINS, bottomMm: plainBottomMm };
-  const addressShift = Math.max(0, (stationery?.firstPage.margins.topMm ?? 0) - ADDRESS_FIELD_TOP_MM) * MM;
-  const firstBox = boxFromMargins(
-    stationery?.firstPage.margins ?? plainMargins,
-    FIRST_PAGE_CONTENT_TOP_MM + addressShift / MM,
-  );
-  const followingBox = boxFromMargins(stationery?.followingPages?.margins ?? plainMargins, 0);
-  const tooNarrow = [firstBox, followingBox].some(
-    (box) =>
-      box.right - box.left < MINIMUM_CONTENT_WIDTH_MM * MM ||
-      box.bottom - box.top < MINIMUM_CONTENT_HEIGHT_MM * MM,
-  );
-  if (tooNarrow || firstBox.right - (INFO_BLOCK_LEFT_MM + 30) * MM < MINIMUM_INFO_VALUE_WIDTH_MM * MM) {
-    throw new Error('document_margins_leave_no_room');
+/**
+ * Whether the renderer can draw the file as a logo (`image`) or as stationery
+ * (`page`). pdf-lib embeds lazily, so the check draws the file on a page and
+ * saves, as a render does.
+ */
+export async function canEmbedFile(file: StationeryFile, use: 'image' | 'page'): Promise<boolean> {
+  if (file.format === 'pdf' && use === 'image') return false;
+  try {
+    const pdf = await PDFDocument.create({ updateMetadata: false });
+    const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    drawUnderlay(page, await embedStationery(pdf, file));
+    await pdf.save();
+    return true;
+  } catch {
+    // A damaged, encrypted, empty or mislabelled file cannot be drawn; the upload refuses it.
+    return false;
   }
-  return { firstBox, followingBox, addressShift };
 }
 
 /** Title, opening text, sections, totals and closing text as one flow. */
@@ -597,14 +652,40 @@ async function embedFonts(pdf: PDFDocument): Promise<Fonts> {
 
 /** Renders a business document to PDF bytes. */
 export async function renderBusinessDocument(document: BusinessDocument): Promise<Uint8Array> {
+  return (await drawBusinessDocument(document)).save();
+}
+
+/**
+ * The drawn document before it is saved, so the e-invoice output
+ * (`e-invoice.ts`) adds its PDF/A-3 parts to the same pages.
+ */
+export async function drawBusinessDocument(document: BusinessDocument): Promise<PDFDocument> {
   const date = new Date(`${document.issuedOn}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) throw new Error('document_date_invalid');
-  const { firstBox, followingBox, addressShift } = pageGeometry(document);
-  const boxOf = (pageIndex: number) => (pageIndex === 0 ? firstBox : followingBox);
-
+  const { stationery } = document;
   const pdf = await PDFDocument.create({ updateMetadata: false });
   const fonts = await embedFonts(pdf);
-  const { stationery } = document;
+  // Stationery carries its own footer, so the plain one exists only without it.
+  const footer = footerLayout(stationery ? [] : document.footerColumns, fonts);
+  const {
+    firstBox: plannedFirstBox,
+    followingBox,
+    addressShift,
+  } = pageGeometry(
+    stationery && {
+      firstPage: stationery.firstPage.margins,
+      followingPages: stationery.followingPages?.margins ?? null,
+    },
+    footer.heightMm,
+  );
+  const firstBox = {
+    ...plannedFirstBox,
+    top: Math.max(plannedFirstBox.top, headBottom(document, fonts, plannedFirstBox, addressShift)),
+  };
+  // The head is drawn on the first page only; one that leaves too little room is refused, never clipped.
+  if (firstBox.bottom - firstBox.top < MIN_FIRST_PAGE_CONTENT_MM * MM)
+    throw new RangeError('The document head leaves no room for its content.');
+  const boxOf = (pageIndex: number) => (pageIndex === 0 ? firstBox : followingBox);
   const firstUnderlay = stationery ? await embedStationery(pdf, stationery.firstPage.file) : null;
   const followingUnderlay = stationery?.followingPages
     ? await embedStationery(pdf, stationery.followingPages.file)
@@ -623,9 +704,10 @@ export async function renderBusinessDocument(document: BusinessDocument): Promis
     }
     if (placed.header !== null) drawTableHeader(page, placed.header, box, fonts);
     for (const { item, top } of placed.items) item.draw(page, top, box);
-    if (!stationery && document.footerColumns.length) drawFooter(page, document.footerColumns, fonts, box);
+    if (footer.columns.length) drawFooter(page, footer, fonts, box);
+    // At the top of the space below the content, clear of the footer's rule.
     const pageNumber = `Seite ${pageIndex + 1} von ${pages.length}`;
-    drawRight(page, pageNumber, box.right, box.bottom + PAGE_NUMBER_SPACE - 9, fonts.regular, 8);
+    drawRight(page, pageNumber, box.right, box.bottom + 4, fonts.regular, 8);
   });
 
   pdf.setTitle(document.title);
@@ -635,5 +717,5 @@ export async function renderBusinessDocument(document: BusinessDocument): Promis
   pdf.setCreator('WerkFlow');
   pdf.setCreationDate(date);
   pdf.setModificationDate(date);
-  return pdf.save();
+  return pdf;
 }

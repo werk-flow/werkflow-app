@@ -130,8 +130,17 @@ mock.module('@/lib/requests/work-attach-server', () => ({
   getRequestWorkTargets: seam('request-work-targets'),
   getWorkRequestEntries: seam('work-request-entries'),
 }));
+mock.module('@/lib/billing-parties/server', () => ({
+  getWorkBillingParties: seam('work-billing-parties'),
+  JOB_BILLING_PARTIES_EMBED: '',
+  SITE_CONTACTS_EMBED: '',
+  jobBillingPartiesFrom: () => null,
+}));
 mock.module('@/lib/personnel/record-read-actions', () => ({
   suggestPersonnelNumber: seam('next-personnel-number'),
+}));
+mock.module('@/lib/personnel/school-day-actions', () => ({
+  getSchoolDaysForRecord: seam('school-days-for-record'),
 }));
 mock.module('@/lib/sickness/actions', () => ({
   getOwnSicknessReports: seam('own-sickness-reports'),
@@ -430,15 +439,24 @@ const inputs: Record<string, unknown> = {
   'service-client-option': { organizationId, clientId: jobId },
   'request-work-targets': { organizationId, requestId: jobId, query: ' Heiz ' },
   'work-request-entries': { organizationId, kind: 'service_case', id: jobId },
+  'work-billing-parties': { organizationId, kind: 'request', id: jobId },
   'personnel-lifecycle': { employeeRecordId: jobId },
   'sickness-reports-for-record': { employeeRecordId: jobId },
+  'school-days-for-record': { employeeRecordId: jobId },
   'job-picker-jobs': { organizationId, query: 'Heizung', limit: 100, selectedJobId: jobId },
   'dispatch-overview': { from: '2026-10-02', to: '2026-10-16' },
   'work-template-detail': { templateId: jobId },
   'project-job-time-entries': { projectId: jobId },
   'equipment-detail': { organizationId, equipmentNumber: 'AN-1' },
   'equipment-sources': { organizationId, equipmentId: jobId, work: { type: 'project', id: jobId } },
-  'maintenance-workspace': { organizationId, search: 'kessel', duePage: 1, planPage: 2, coveragePage: 3 },
+  'maintenance-workspace': {
+    organizationId,
+    search: 'kessel',
+    overdueOnly: true,
+    duePage: 1,
+    planPage: 2,
+    coveragePage: 3,
+  },
   'published-work-templates': { targetType: 'project' },
   'work-template-preview': { versionId: jobId, targetType: 'job', jobId },
   'approved-artifact-actions': { targetType: 'job', targetId: jobId },
@@ -497,10 +515,12 @@ const readerArguments: Record<string, unknown> = {
   // The readers never receive the organization: they take it from the session.
   'request-work-targets': { requestId: jobId, query: 'Heiz' },
   'work-request-entries': { kind: 'service_case', id: jobId },
+  'work-billing-parties': { kind: 'request', id: jobId },
   'attention-overview': undefined,
   'own-personnel-actions': undefined,
   'personnel-lifecycle': jobId,
   'sickness-reports-for-record': jobId,
+  'school-days-for-record': jobId,
   'dispatch-overview': ['2026-10-02', '2026-10-16'],
   'work-templates': undefined,
   'work-template-detail': jobId,

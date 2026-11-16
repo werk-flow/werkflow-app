@@ -139,6 +139,25 @@ describe('period page live tables', () => {
     expect(TIME_PERIOD_DETAIL_LIVE_TABLES).toContain('time_sessions');
   });
 
+  test('the detail re-reads its Berufsschule minutes when any of their sources changes', () => {
+    // A school day, a vacation or sickness over it, a schedule, a condition,
+    // the holiday region, a closure day, an entry or exit date, the absence
+    // policy and its assignment each change the minutes (werk-flow/werkflow-planning#165).
+    for (const table of [
+      'school_days',
+      'vacation_requests',
+      'sickness_reports',
+      'work_schedules',
+      'employment_conditions',
+      'employee_records',
+      'organization_settings',
+      'organization_closure_days',
+      'time_account_policies',
+      'time_account_policy_assignments',
+    ] as const)
+      expect(TIME_PERIOD_DETAIL_LIVE_TABLES).toContain(table);
+  });
+
   test('every table is published', () => {
     for (const table of TIME_PERIOD_DETAIL_LIVE_TABLES) expect(REALTIME_TABLES).toContain(table);
   });

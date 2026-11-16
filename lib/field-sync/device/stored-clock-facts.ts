@@ -17,6 +17,12 @@ export function storedClockFacts(live: LiveClockState): StoredClockFacts {
       breakMode: live.breakPolicy.breakMode,
       autoBreakThresholdMinutes: live.breakPolicy.autoBreakThresholdMinutes,
       autoBreakDurationMinutes: live.breakPolicy.autoBreakDurationMinutes,
+      secondStep: live.breakPolicy.secondStep
+        ? {
+            thresholdMinutes: live.breakPolicy.secondStep.thresholdMinutes,
+            durationMinutes: live.breakPolicy.secondStep.durationMinutes,
+          }
+        : null,
     },
     status: live.status,
     isClockedIn: live.isClockedIn,

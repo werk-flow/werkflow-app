@@ -78,8 +78,17 @@ mock.module(resolve(root, 'lib/jobs/auth.ts'), () => ({
     context: { orgId: 'owned-org', userId: 'actor', isManagerOrAbove: manager },
   }),
 }));
+// plan_job_material: one write in the caller's organization that returns the line id.
+async function rpc(name: string, args: { p_organization_id: string }) {
+  expect(name).toBe('plan_job_material');
+  expect(args.p_organization_id).toBe('owned-org');
+  if (writeFailure) return { data: null, error: { message: 'Write rejected' } };
+  committed = true;
+  writes += 1;
+  return { data: '00000000-0000-4000-8000-0000000000a1', error: null };
+}
 mock.module(resolve(root, 'lib/supabase/admin.ts'), () => ({
-  createSupabaseAdminClient: () => ({ from: (table: string) => new Query(table) }),
+  createSupabaseAdminClient: () => ({ from: (table: string) => new Query(table), rpc }),
 }));
 const { createJobMaterialLine, createProjectMaterialLine, updateJobMaterialLine } = await import(
   '../../inventory/actions'

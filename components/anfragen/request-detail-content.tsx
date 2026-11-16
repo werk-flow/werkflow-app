@@ -26,6 +26,7 @@ import { ConvertRequestDialog } from './convert-request-dialog';
 import { EditRequestDialog } from './edit-request-dialog';
 import { RequestCustomerCard } from './request-customer-card';
 import { RequestFactsCard } from './request-facts-card';
+import type { WorkBillingParties } from '@/lib/billing-parties/types';
 import { RequestHeaderActions } from './request-header-actions';
 import { RequestHistoryCard } from './request-history-card';
 import { RequestMatchFields } from './request-match-fields';
@@ -59,6 +60,8 @@ export type RequestDetailData = {
   documents: OrganizationDocument[] | null;
   /** Customers the unmatched caller may already be; null when the lookup failed. */
   callerMatches: CallerMatchList | null;
+  /** Auftraggeber and Rechnungsempfänger; undefined when the read failed, and the card reads them. */
+  billingParties: WorkBillingParties | undefined;
   /** Null when the read failed, so the region shows the failure instead of "none". */
   events: RequestEventEntry[] | null;
   assignees: Array<{ userId: string; name: string }>;
@@ -97,6 +100,8 @@ function RequestDetailSections({ data, isEditable, ...customerProps }: RequestDe
           assigneeName={data.assigneeName}
           callbackOverdue={data.callbackOverdue}
           equipment={data.equipment}
+          billingParties={data.billingParties}
+          isEditable={isEditable}
         />
       </DetailColumns>
 

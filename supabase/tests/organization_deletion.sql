@@ -111,10 +111,10 @@ begin
   begin
     perform public.delete_organization(p_organization_id, p_actor_id, p_name);
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
-    if p_refusal <> 'org_not_found'
+    if p_refusal is distinct from 'org_not_found'
       and not exists (select 1 from public.organizations where id = p_organization_id)
     then raise exception '% removed the organization', p_label; end if;
     return;
@@ -143,23 +143,23 @@ declare
   v_scope jsonb;
 begin
   v_scope := public.get_organization_deletion_scope('27900000-0000-0000-0000-000000000010');
-  if v_scope->>'members' <> '2' or v_scope->>'clients' <> '1' or v_scope->>'employee_records' <> '2'
-    or v_scope->>'time_tracked_people' <> '0' or v_scope->>'closed_periods' <> '0'
+  if v_scope->>'members' is distinct from '2' or v_scope->>'clients' is distinct from '1' or v_scope->>'employee_records' is distinct from '2'
+    or v_scope->>'time_tracked_people' is distinct from '0' or v_scope->>'closed_periods' is distinct from '0'
   then raise exception 'deletion scope miscounts an organization without time: %', v_scope; end if;
   v_scope := public.get_organization_deletion_scope('27900000-0000-0000-0000-000000000011');
-  if v_scope->>'time_tracked_people' <> '1' then
+  if v_scope->>'time_tracked_people' is distinct from '1' then
     raise exception 'deletion scope misses a rejected time entry: %', v_scope;
   end if;
   v_scope := public.get_organization_deletion_scope('27900000-0000-0000-0000-000000000013');
-  if v_scope->>'closed_periods' <> '1' then
+  if v_scope->>'closed_periods' is distinct from '1' then
     raise exception 'deletion scope misses a reopened closed period: %', v_scope;
   end if;
   v_scope := public.get_organization_deletion_scope('27900000-0000-0000-0000-000000000016');
-  if v_scope->>'retained_documents' <> '1' then
+  if v_scope->>'retained_documents' is distinct from '1' then
     raise exception 'deletion scope misses a trashed document inside its period: %', v_scope;
   end if;
   v_scope := public.get_organization_deletion_scope('27900000-0000-0000-0000-000000000017');
-  if v_scope->>'retained_documents' <> '0' or v_scope->>'documents' <> '1' then
+  if v_scope->>'retained_documents' is distinct from '0' or v_scope->>'documents' is distinct from '1' then
     raise exception 'deletion scope retains a document whose period ended: %', v_scope;
   end if;
 end;

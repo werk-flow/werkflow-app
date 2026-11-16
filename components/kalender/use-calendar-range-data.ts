@@ -528,6 +528,7 @@ const CALENDAR_TABLES = [
   'team_memberships',
   'vacation_requests',
   'sickness_reports',
+  'school_days',
 ] as const;
 
 /**

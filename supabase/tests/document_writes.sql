@@ -84,7 +84,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -125,11 +125,11 @@ begin
   v_document := public.finalize_document_upload(v_admin, v_org, '26140000-0000-0000-0000-000000000050',
     null, v_org || '/d50/bericht.pdf', 'bericht.pdf', ' bericht.pdf ', 'report', 'application/pdf', 20,
     'job', '26140000-0000-0000-0000-000000000022');
-  if v_document.display_name <> 'bericht.pdf'
+  if v_document.display_name is distinct from 'bericht.pdf'
     or not exists (select 1 from public.document_links where document_id = v_document.id
       and job_id = '26140000-0000-0000-0000-000000000022')
     or (select array_agg(event_type order by event_type) from public.document_audit_events
-      where document_id = v_document.id) <> array['linked', 'uploaded']
+      where document_id = v_document.id) is distinct from array['linked', 'uploaded']
   then raise exception 'the upload did not write the document, its link and both audit events'; end if;
 
   -- The field worker uploads to the assigned job, never to the project or a folder.
@@ -200,7 +200,7 @@ begin
   v_document := public.finalize_document_version_upload(v_admin, v_org,
     '26140000-0000-0000-0000-000000000040', 1, v_org || '/d40/versions/2-plan.pdf', 'plan.pdf',
     'application/pdf', 30);
-  if v_document.current_version_number <> 2 or v_document.storage_path <> v_org || '/d40/versions/2-plan.pdf'
+  if v_document.current_version_number is distinct from 2 or v_document.storage_path is distinct from v_org || '/d40/versions/2-plan.pdf'
     or not exists (select 1 from public.document_versions
       where document_id = v_document.id and version_number = 1 and storage_path = v_org || '/d40/plan.pdf')
     or not exists (select 1 from public.document_audit_events
@@ -236,7 +236,7 @@ delete from pg_temp.refused_last_step;
 set local role service_role;
 do $$
 begin
-  if (select current_version_number from public.documents where id = '26140000-0000-0000-0000-000000000040') <> 2
+  if (select current_version_number from public.documents where id = '26140000-0000-0000-0000-000000000040') is distinct from 2
     or exists (select 1 from public.document_versions
       where document_id = '26140000-0000-0000-0000-000000000040' and version_number = 2)
   then raise exception 'a refused version upload archived or replaced the file'; end if;
@@ -273,17 +273,17 @@ begin
     '26140000-0000-0000-0000-000000000042', array[v_client_link],
     array['26140000-0000-0000-0000-000000000022']::uuid[], array['26140000-0000-0000-0000-000000000020']::uuid[],
     null, null, null, null, null);
-  if v_counts.added_count <> 2 or v_counts.removed_count <> 1
+  if v_counts.added_count is distinct from 2 or v_counts.removed_count is distinct from 1
     or exists (select 1 from public.document_links where id = v_client_link)
     or (select count(*) from public.document_links where document_id = '26140000-0000-0000-0000-000000000042') <> 2
     or (select array_agg(event_type order by event_type) from public.document_audit_events
-      where document_id = '26140000-0000-0000-0000-000000000042') <> array['linked', 'linked', 'unlinked']
+      where document_id = '26140000-0000-0000-0000-000000000042') is distinct from array['linked', 'linked', 'unlinked']
   then raise exception 'the link change did not apply with its audit events'; end if;
   -- An existing link counts as added without a second event.
   select * into v_counts from public.update_document_links(v_admin, v_org,
     '26140000-0000-0000-0000-000000000042', null, array['26140000-0000-0000-0000-000000000022']::uuid[],
     null, null, null, null, null, null);
-  if v_counts.added_count <> 1 or (select count(*) from public.document_audit_events
+  if v_counts.added_count is distinct from 1 or (select count(*) from public.document_audit_events
       where document_id = '26140000-0000-0000-0000-000000000042') <> 3
   then raise exception 'an existing link was linked twice'; end if;
 end;
@@ -317,18 +317,18 @@ begin
   perform public.restore_document(v_admin, v_org, '26140000-0000-0000-0000-000000000053', 'Kopie von Angebot.pdf');
   perform public.trash_document(v_admin, v_org, '26140000-0000-0000-0000-000000000053');
   v_paths := public.permanently_delete_document(v_admin, v_org, '26140000-0000-0000-0000-000000000053');
-  if v_paths <> array[v_org || '/d53/angebot.pdf']
+  if v_paths is distinct from array[v_org || '/d53/angebot.pdf']
     or exists (select 1 from public.documents where id = '26140000-0000-0000-0000-000000000053')
   then raise exception 'the permanent deletion did not return the object paths'; end if;
   select * into v_document from public.documents where id = '26140000-0000-0000-0000-000000000042';
-  if v_document.display_name <> 'Angebot.pdf' or v_document.category <> 'invoice'
-    or v_document.folder_id <> '26140000-0000-0000-0000-000000000030'
+  if v_document.display_name is distinct from 'Angebot.pdf' or v_document.category is distinct from 'invoice'
+    or v_document.folder_id is distinct from '26140000-0000-0000-0000-000000000030'
     or (select count(*) from public.document_audit_events where document_id = v_document.id
       and event_type in ('renamed', 'category_changed', 'moved')) <> 3
     or (select array_agg(event_type order by created_at, event_type) from public.document_audit_events
       where event_payload->>'documentId' = '26140000-0000-0000-0000-000000000053'
         or event_payload->>'copiedFromDocumentId' = v_document.id::text)
-      <> array['copied', 'permanently_deleted']
+      is distinct from array['copied', 'permanently_deleted']
   then raise exception 'a document change was not recorded with its audit event'; end if;
 end;
 $$;
@@ -472,9 +472,9 @@ begin
     'application/pdf', 10);
   perform public.rename_document(v_office, v_org, '26140000-0000-0000-0000-000000000092', 'vertrag-2026.pdf');
   if (select display_name || '/' || current_version_number from public.documents
-      where id = '26140000-0000-0000-0000-000000000093') <> 'abmahnung-2026.pdf/2'
+      where id = '26140000-0000-0000-0000-000000000093') is distinct from 'abmahnung-2026.pdf/2'
     or (select display_name from public.documents where id = '26140000-0000-0000-0000-000000000092')
-      <> 'vertrag-2026.pdf'
+      is distinct from 'vertrag-2026.pdf'
   then raise exception 'the Admin write of an Admin-only or the office write of a standard personnel document failed'; end if;
 end;
 $$;
@@ -508,7 +508,7 @@ delete from pg_temp.refused_last_step;
 set local role service_role;
 do $$
 begin
-  if (select display_name from public.documents where id = '26140000-0000-0000-0000-000000000042') <> 'Angebot.pdf'
+  if (select display_name from public.documents where id = '26140000-0000-0000-0000-000000000042') is distinct from 'Angebot.pdf'
     or (select deleted_at from public.documents where id = '26140000-0000-0000-0000-000000000042') is not null
   then raise exception 'a refused change kept its row change'; end if;
 end;
@@ -556,9 +556,9 @@ begin
     '[{"id":"26140000-0000-0000-0000-000000000061","sourceDocumentId":"26140000-0000-0000-0000-000000000041",
        "folderId":"26140000-0000-0000-0000-000000000062",
        "storagePath":"26140000-0000-0000-0000-000000000010/d61/foto.jpg","displayName":"Kopie von foto.jpg"}]');
-  if v_folder.id <> '26140000-0000-0000-0000-000000000060'
+  if v_folder.id is distinct from '26140000-0000-0000-0000-000000000060'
     or (select folder_id from public.documents where id = '26140000-0000-0000-0000-000000000061')
-      <> '26140000-0000-0000-0000-000000000062'
+      is distinct from '26140000-0000-0000-0000-000000000062'
     or (select count(*) from public.document_audit_events where event_type = 'copied'
       and (folder_id = '26140000-0000-0000-0000-000000000060'
         or document_id = '26140000-0000-0000-0000-000000000061')) <> 2
@@ -591,7 +591,7 @@ begin
   $sql$, '26140000-0000-0000-0000-000000000003', '26140000-0000-0000-0000-000000000011'), 'folder_not_found');
   v_trashed := public.delete_document_folder('26140000-0000-0000-0000-000000000001', v_org,
     '26140000-0000-0000-0000-000000000030');
-  if v_trashed <> 3
+  if v_trashed is distinct from 3
     or exists (select 1 from public.document_folders where id in (
       '26140000-0000-0000-0000-000000000030', '26140000-0000-0000-0000-000000000031') and deleted_at is null)
     or (select count(*) from public.document_audit_events where event_type = 'deleted'
@@ -692,7 +692,7 @@ begin
     (select version from public.work_artifacts where id = '26140000-0000-0000-0000-000000000070'),
     '26140000-0000-0000-0000-000000000076', v_org || '/work-artifact-exports/71/v1-a.html', 'bericht.html',
     10, 'v1', repeat('a', 64));
-  if (v_result->>'documentId')::uuid <> '26140000-0000-0000-0000-000000000076'
+  if (v_result->>'documentId')::uuid is distinct from '26140000-0000-0000-0000-000000000076'
     or (v_result->>'duplicate')::boolean
     or not exists (select 1 from public.document_links where document_id = '26140000-0000-0000-0000-000000000076'
       and project_id = '26140000-0000-0000-0000-000000000020')
@@ -709,7 +709,7 @@ begin
     '26140000-0000-0000-0000-000000000078', 0, '26140000-0000-0000-0000-000000000079',
     v_org || '/work-artifact-exports/71/v1-a.html', 'bericht.html', 10, 'v1', repeat('a', 64));
   if not (v_result->>'duplicate')::boolean
-    or (v_result->>'documentId')::uuid <> '26140000-0000-0000-0000-000000000076'
+    or (v_result->>'documentId')::uuid is distinct from '26140000-0000-0000-0000-000000000076'
     or exists (select 1 from public.documents where id = '26140000-0000-0000-0000-000000000079')
   then raise exception 'a repeated export wrote a second document'; end if;
 
@@ -823,7 +823,7 @@ begin
       if (v_role = 'public' and exists (
           select 1 from pg_proc proc, aclexplode(coalesce(proc.proacl, acldefault('f', proc.proowner))) acl
           where proc.oid = v_function::regprocedure and acl.grantee = 0 and acl.privilege_type = 'EXECUTE'))
-        or (v_role <> 'public' and has_function_privilege(v_role, v_function, 'execute'))
+        or (v_role is distinct from 'public' and has_function_privilege(v_role, v_function, 'execute'))
       then
         raise exception '% is executable by %', v_function, v_role;
       end if;
@@ -831,7 +831,7 @@ begin
   end loop;
   foreach v_role in array array['anon', 'authenticated', 'service_role'] loop
     if has_table_privilege(v_role, 'public.work_artifact_signature_uploads', 'insert, update, delete')
-      or (v_role <> 'service_role'
+      or (v_role is distinct from 'service_role'
         and has_table_privilege(v_role, 'public.work_artifact_signature_uploads', 'select'))
     then raise exception 'the signature upload reservations are reachable by %', v_role; end if;
   end loop;

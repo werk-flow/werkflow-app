@@ -13,6 +13,8 @@ const PROBLEM_REPORT_COPY = {
   description: 'Was ist passiert?',
   includeScreenshot: 'Screenshot mitsenden',
   screenshot: 'Vorschau des Screenshots mit deinen Schwärzungen',
+  enlarge: 'Vergrößern',
+  redactionView: 'Screenshot schwärzen',
   send: 'Senden',
   receipt: /Danke! Deine Meldung Nr\. \d+ ist eingegangen\./,
   ownReports: 'Meine Meldungen',
@@ -33,6 +35,15 @@ export async function openProblemReport(page: Page): Promise<Locator> {
   const dialog = problemReportDialog(page);
   await expect(problemReportScreenshot(dialog)).toBeVisible();
   return dialog;
+}
+
+/** The „Vergrößern“ button under the dialog's preview, which opens the large redaction view. */
+export function enlargeScreenshotButton(dialog: Locator): Locator {
+  return dialog.getByRole('button', { name: PROBLEM_REPORT_COPY.enlarge, exact: true });
+}
+
+export function screenshotRedactionView(page: Page): Locator {
+  return page.getByRole('dialog', { name: PROBLEM_REPORT_COPY.redactionView, exact: true });
 }
 
 function problemReportScreenshot(dialog: Locator): Locator {

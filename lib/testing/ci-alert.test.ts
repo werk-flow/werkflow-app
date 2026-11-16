@@ -370,8 +370,10 @@ function revParse(cwd: string, ref: string) {
   return spawnSync('git', ['rev-parse', ref], { cwd, encoding: 'utf8' }).stdout.trim();
 }
 
+const NIGHTLY_RUN = { id: 3, head_branch: 'main', path: '.github/workflows/nightly.yml', event: 'schedule' };
+
 /** Runs the release decision on a repository whose main is `ahead` of production. */
-function decide(mode: string, ahead: boolean, fullRunConclusion: string) {
+function decide(mode: string, ahead: boolean, fullRunConclusion: string, run: object = NIGHTLY_RUN) {
   const repository = join(stub, 'repository');
   expect(spawnSync('git', ['init', '-qb', 'main', repository]).status).toBe(0);
   commit(repository, 'shipped');
@@ -380,9 +382,7 @@ function decide(mode: string, ahead: boolean, fullRunConclusion: string) {
   writeFileSync(
     join(stub, 'runs.json'),
     JSON.stringify({
-      workflow_runs: [
-        { id: 3, head_branch: 'main', path: '.github/workflows/nightly.yml', event: 'schedule' },
-      ],
+      workflow_runs: [run],
     }),
   );
   writeJobs([
@@ -447,4 +447,31 @@ test('the skip output changes no decision: a green or manual release still goes 
   expect(manual).toContain('release=true');
   expect(manual).toContain('verified=false');
   expect(manual.join('\n')).not.toContain('skip');
+});
+
+test('a green full run on main from main-full-run.yml counts for the release', () => {
+  const fullRun = (path: string, branch = 'main', event = 'workflow_dispatch') => {
+    writeFileSync(join(stub, 'output'), '');
+    rmSync(join(stub, 'repository'), { recursive: true, force: true });
+    return decide('scheduled', true, 'success', { id: 3, head_branch: branch, path, event }).outputs;
+  };
+  expect(fullRun('.github/workflows/main-full-run.yml')).toContain('verified=true');
+  expect(fullRun('.github/workflows/ci.yml')).toContain('verified=false');
+  expect(fullRun('.github/workflows/main-full-run.yml', 'main', 'pull_request')).toContain('verified=false');
+  expect(fullRun('.github/workflows/main-full-run.yml', 'feature')).toContain('verified=false');
+});
+
+test("a red run report ends with the caller's detail", () => {
+  writeJobs([
+    {
+      name: 'Full run / Browser 4',
+      conclusion: 'failure',
+      steps: [{ name: 'Run browser groups', conclusion: 'failure' }],
+    },
+  ]);
+  const detail = 'Failed groups:\n\n- `audit:layout:job`';
+  const [create] = issueWrites(['run', TITLE, 'failure'], { ALERT_DETAIL: detail });
+  expect(create).toContain(
+    `The run failed. Failed jobs:\n\n- Full run / Browser 4: Run browser groups\n\n${detail}\n\nRun: ${RUN_URL}`,
+  );
 });

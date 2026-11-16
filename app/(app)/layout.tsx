@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { OrganizationProvider } from '@/components/organization/organization-context';
+import { OrganizationPageScope } from '@/components/organization/organization-page-scope';
 import { OrganizationRealtimeBridge } from '@/components/organization/organization-realtime-bridge';
 import { UserProfileProvider } from '@/components/user/user-profile-context';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
@@ -67,7 +68,11 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
                     {/* The bottom reserve: the clock dock publishes its height, and the page column ends above it.
                         The fallback is the dock's one-row height (button, padding, border), so the first paint
                         already leaves it free and hydration moves nothing. */}
-                    <div className="h-full pb-[var(--clock-dock-height,calc(4.5rem_+_1px))]">{children}</div>
+                    <OrganizationPageScope organizationId={activeOrgId}>
+                      <div className="h-full pb-[var(--clock-dock-height,calc(4.5rem_+_1px))]">
+                        {children}
+                      </div>
+                    </OrganizationPageScope>
                   </AppShell>
                   <ClockFAB />
                 </ClockStateProvider>

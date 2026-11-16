@@ -21,10 +21,23 @@ for (const set of acceptanceSets()) {
     for (const capture of set.captures)
       test(`@ACCEPT ${set.id} ${capture.id}`, async ({ rolePage, world, businessDate }, testInfo) => {
         const page = await rolePage(capture.role);
-        await captureAcceptance({ page, world, businessDate, testInfo }, set.id, capture, {
-          openers: DIALOG_OPENERS,
-          destination: capture.destination,
-        });
+        const input = { page, world, businessDate, testInfo };
+        const sources = { openers: DIALOG_OPENERS, destination: capture.destination };
+        if (!capture.openInEachScheme) {
+          await captureAcceptance(input, set.id, capture, sources);
+          return;
+        }
+        // Each width and scheme opens the dialog anew, already in that scheme.
+        for (const width of capture.widths)
+          for (const scheme of capture.schemes) {
+            await page.emulateMedia({ colorScheme: scheme });
+            await captureAcceptance(
+              input,
+              set.id,
+              { ...capture, widths: [width], schemes: [scheme] },
+              sources,
+            );
+          }
       });
     for (const capture of set.standalone)
       test(`@ACCEPT ${set.id} ${capture.id}`, async ({ browser, baseURL, world }, testInfo) => {

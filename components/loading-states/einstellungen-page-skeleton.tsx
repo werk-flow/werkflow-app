@@ -144,9 +144,15 @@ const SECTION_SKELETONS = {
     </>
   ),
   dokumente: (
-    <SettingsCardSkeleton columns={1}>
-      <DocumentSampleRowSkeleton />
-    </SettingsCardSkeleton>
+    <>
+      <SettingsCardSkeleton fieldCount={6} footer />
+      <SettingsCardSkeleton columns={1}>
+        <TextLinesSkeleton lines={3} />
+      </SettingsCardSkeleton>
+      <SettingsCardSkeleton columns={1}>
+        <DocumentSampleRowSkeleton />
+      </SettingsCardSkeleton>
+    </>
   ),
   mitarbeiter: (
     <>

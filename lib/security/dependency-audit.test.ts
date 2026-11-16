@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 const repositoryRoot = resolve(import.meta.dir, '../..');
 import { dependencyDigest, inspectDependencyAudit } from '../testing/publication/dependency-audit';
 import { z } from '@/lib/zod';
@@ -229,11 +229,13 @@ test('reviewed vulnerable glob and YAML toolchains cannot be imported into appli
   };
   const violations: string[] = [];
   for (const directory of ['app', 'components', 'hooks', 'lib', 'supabase/functions']) {
-    for (const file of readdirSync(resolve(repositoryRoot, directory), {
+    // Files only: a route folder can carry a script name (app/sw.js/route.ts).
+    for (const entry of readdirSync(resolve(repositoryRoot, directory), {
       recursive: true,
-      encoding: 'utf8',
+      withFileTypes: true,
     })) {
-      const path = `${directory}/${file.replaceAll('\\', '/')}`;
+      if (!entry.isFile()) continue;
+      const path = relative(repositoryRoot, resolve(entry.parentPath, entry.name)).replaceAll('\\', '/');
       if (
         !/\.[cm]?[jt]sx?$/.test(path) ||
         /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) ||

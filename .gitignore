@@ -60,3 +60,6 @@ tests/canary/.report/
 # T3 Code worktree setup markers (scripts/setup-worktree.ts)
 .t3/
 .coderabbit-*.jsonl
+
+# The wholesaler-file reader or its stand-in, written by `bun install` (scripts/fetch-wholesaler-reader.ts)
+/vendor/

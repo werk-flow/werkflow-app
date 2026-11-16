@@ -59,7 +59,7 @@ begin
       where organization_id = v_org and purge_after = now() + interval '8 days')
     is distinct from array[v_org || '/d20/foto.jpg', v_org || '/d20/versions/1-foto.jpg']
   then raise exception 'the permanent deletion did not queue every object eight days ahead'; end if;
-  if v_paths <> array[v_org || '/d20/foto.jpg', v_org || '/d20/versions/1-foto.jpg'] then
+  if v_paths is distinct from array[v_org || '/d20/foto.jpg', v_org || '/d20/versions/1-foto.jpg'] then
     raise exception 'the permanent deletion no longer returns its paths to the previous release';
   end if;
 end;
@@ -122,7 +122,7 @@ begin
   where storage_path = v_org || '/d20/foto.jpg';
   perform public.queue_storage_purge(v_org, array[v_org || '/d20/foto.jpg', v_org || '/staging/upload.jpg']);
   if (select purge_after from public.storage_purge_queue where storage_path = v_org || '/d20/foto.jpg')
-    <> now() + interval '20 days'
+    is distinct from now() + interval '20 days'
   then raise exception 'queueing a path again shortened its delay'; end if;
   if not exists (select 1 from public.storage_purge_queue
     where storage_path = v_org || '/staging/upload.jpg' and purge_after = now() + interval '8 days')
@@ -176,7 +176,7 @@ begin
   if exists (select 1 from public.storage_purge_queue where storage_path in (
     v_org || '/due/wiederhergestellt.pdf', v_org || '/due/version.pdf', v_org || '/due/anderswo.pdf'
   )) then raise exception 'a path a row references again stayed queued'; end if;
-  if (select attempts from public.storage_purge_queue where storage_path = v_org || '/due/zukunft.pdf') <> 0 then
+  if (select attempts from public.storage_purge_queue where storage_path = v_org || '/due/zukunft.pdf') is distinct from 0 then
     raise exception 'the purge touched an entry before its date';
   end if;
 
@@ -197,7 +197,7 @@ begin
   from public.claim_storage_purge(100) claimed where claimed.organization_id = v_org;
   if v_claimed is distinct from array[v_org || '/d20/versions/1-foto.jpg']
     or (select attempts from public.storage_purge_queue
-      where storage_path = v_org || '/d20/versions/1-foto.jpg') <> 2
+      where storage_path = v_org || '/d20/versions/1-foto.jpg') is distinct from 2
   then raise exception 'a failed purge did not stay queued for the next run'; end if;
 end;
 $$;

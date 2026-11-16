@@ -7,6 +7,7 @@ import { loggedRead } from '@/lib/data/read-request-cache';
 import type { AuthContext } from '@/lib/jobs/auth';
 import { logError } from '@/lib/logging';
 import type { AdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { z } from '@/lib/zod';
 import type { updateJobMaterialLineSchema } from './action-schemas';
 import type { JobMaterialLineRow } from './types';
@@ -17,64 +18,63 @@ import { cleanText, invalidateInventory, normalizeQuantity, resolveInventoryLoca
 // in `./actions`. The callers authorize the caller and the job or project
 // first.
 
-// The shared write of a planned material line for a job or a project whose
-// access the calling action has already checked.
-export async function insertMaterialLine(
+// plan_job_material raises these refusals; the action passes them on.
+const PLAN_REFUSALS = new Set([
+  'not_authorized',
+  'quantity_required',
+  'job_not_found',
+  'project_not_found',
+  'item_not_found',
+  'location_not_found',
+]);
+
+/**
+ * Plans an article on a job or a project whose access the calling action has
+ * already checked, through plan_job_material: one call checks the article and
+ * the Lager inside the caller's organization and inserts the line. A database
+ * function that plans material inside its own transaction calls
+ * plan_job_material directly.
+ */
+export async function planMaterialLine(
   admin: AdminClient,
   context: AuthContext,
   {
-    owner,
+    target,
     input,
-    readLabel,
     failureLabel,
   }: {
-    owner: { job_id: string | null; project_id: string | null };
+    target: { jobId: string; projectId: null } | { jobId: null; projectId: string };
     input: {
       itemId: string;
       preferredLocationId?: string | null | undefined;
       plannedQuantity: number;
       notes?: string | null | undefined;
     };
-    readLabel: string;
     failureLabel: string;
   },
 ): Promise<ActionResult<{ lineId: string }>> {
   const plannedQuantity = normalizeQuantity(input.plannedQuantity);
   if (plannedQuantity <= 0) return { success: false, error: 'quantity_required' };
 
-  const { data: itemRow, error: itemRowError } = await loggedRead(
-    readLabel,
-    admin
-      .from('inventory_items')
-      .select('*')
-      .eq('id', input.itemId)
-      .eq('organization_id', context.orgId)
-      .maybeSingle(),
+  const { data, error } = await admin.rpc(
+    'plan_job_material',
+    rpcArgs('plan_job_material', {
+      p_organization_id: context.orgId,
+      p_actor_id: context.userId,
+      p_job_id: target.jobId,
+      p_project_id: target.projectId,
+      p_item_id: input.itemId,
+      p_planned_quantity: plannedQuantity,
+      p_preferred_location_id: cleanText(input.preferredLocationId),
+      p_notes: cleanText(input.notes),
+      p_source_kind: null,
+      p_source_id: null,
+    }),
   );
-  if (itemRowError) return { success: false, error: 'load_failed' };
-
-  const item = itemRow ? toInventoryItem(itemRow) : null;
-  if (!item) return { success: false, error: 'item_not_found' };
-
-  const locationReference = await resolveInventoryLocation(admin, context.orgId, input.preferredLocationId);
-  if (!locationReference.success) return locationReference;
-
-  const { data, error } = await admin
-    .from('job_material_lines')
-    .insert({
-      organization_id: context.orgId,
-      ...owner,
-      item_id: item.id,
-      preferred_location_id: locationReference.referenceId,
-      planned_quantity: plannedQuantity,
-      is_billable: item.isBillable,
-      notes: cleanText(input.notes),
-      created_by: context.userId,
-    })
-    .select()
-    .single();
 
   if (error || !data) {
+    const message = error?.message ?? '';
+    if (PLAN_REFUSALS.has(message)) return { success: false, error: message };
     logError(failureLabel, error);
     return { success: false, error: 'create_failed' };
   }
@@ -84,7 +84,7 @@ export async function insertMaterialLine(
 
   // The write already committed. Refreshing labels/stock belongs to the reader;
   // a failed read must never tell the caller to repeat this mutation.
-  return { success: true, lineId: data.id };
+  return { success: true, lineId: data };
 }
 
 /**

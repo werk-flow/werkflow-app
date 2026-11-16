@@ -15,50 +15,38 @@ import { getEffectiveTimeEntries } from '@/lib/time-tracking/effective-entries';
 import { deriveCurrentClockState } from '@/lib/time-tracking/helpers';
 import {
   appendBreakPolicyHistory,
+  breakStepOf,
   buildBreakPolicyHistoryEntry,
   getDefaultTimeTrackingSettings,
   normalizeTimeTrackingSettings,
   parseBreakPolicyHistory,
-  timeTrackingSettingsSchema,
+  sameBreakPolicy,
+  type BreakPolicyValues,
   type OrganizationTimeTrackingSettings,
-  type TimeTrackingSettingsValues,
 } from '@/lib/time-tracking/settings';
+import {
+  breakPolicyValuesOf,
+  timeTrackingSettingsSchema,
+  type TimeTrackingSettingsValues,
+} from '@/lib/time-tracking/break-rule-form';
 import { toTimeEntries, type TimeEntry } from '@/lib/time-tracking/types';
 
 export type UpdateTimeTrackingSettingsResult = ActionResult<
-  {
-    breakMode: 'manual' | 'automatic';
-    autoBreakThresholdMinutes: number;
-    autoBreakDurationMinutes: number;
-  },
+  { policy: BreakPolicyValues },
   'not_authenticated' | 'org_not_found' | 'not_authorized' | 'invalid_input' | 'no_changes' | 'update_failed'
 >;
 
-function getJobIdBeforeCurrentBreak(entries: TimeEntry[]): string | null {
-  const effectiveEntries = getEffectiveTimeEntries(entries);
-  let activeJobId: string | null = null;
-  let jobIdBeforeCurrentBreak: string | null = null;
-
-  for (const entry of effectiveEntries) {
-    switch (entry.entryType) {
-      case 'clock_in':
-      case 'break_end':
-        activeJobId = entry.jobId ?? null;
-        break;
-      case 'break_start':
-        jobIdBeforeCurrentBreak = activeJobId;
-        activeJobId = null;
-        break;
-      case 'clock_out':
-        activeJobId = null;
-        break;
-    }
-  }
-
-  return jobIdBeforeCurrentBreak;
+/** The open break's start entry, the latest break start among the effective entries. */
+function currentBreakStartId(entries: TimeEntry[]): string | null {
+  return getEffectiveTimeEntries(entries).findLast((entry) => entry.entryType === 'break_start')?.id ?? null;
 }
 
-type OpenBreakEnd = { user_id: string; job_id: string | null };
+/**
+ * A break to end: the function ends it only while its start is still the
+ * person's latest entry, so a transition that ended it in between wins, and
+ * reads the job it resumes itself, under lock.
+ */
+type OpenBreakEnd = { user_id: string; break_start_id: string | null };
 
 /** The break end of every member on a break today, with the job the break resumes. */
 async function readOpenBreakEnds(organizationId: string): Promise<OpenBreakEnd[]> {
@@ -123,7 +111,7 @@ async function readOpenBreakEnds(organizationId: string): Promise<OpenBreakEnd[]
 
   return [...entriesByUser.entries()]
     .filter(([, entries]) => deriveCurrentClockState(entries).status === 'on_break')
-    .map(([userId, entries]) => ({ user_id: userId, job_id: getJobIdBeforeCurrentBreak(entries) }));
+    .map(([userId, entries]) => ({ user_id: userId, break_start_id: currentBreakStartId(entries) }));
 }
 
 /** The action failure of a refused or failed update_time_tracking_settings call. */
@@ -143,7 +131,12 @@ function settingsWriteFailure(error: { message: string }): UpdateTimeTrackingSet
 
 type StoredSettingsRow = Pick<
   Tables<'organization_settings'>,
-  'break_mode' | 'auto_break_threshold_minutes' | 'auto_break_duration_minutes' | 'break_policy_history'
+  | 'break_mode'
+  | 'auto_break_threshold_minutes'
+  | 'auto_break_duration_minutes'
+  | 'auto_break_second_threshold_minutes'
+  | 'auto_break_second_duration_minutes'
+  | 'break_policy_history'
 >;
 
 /** The organization's stored settings, or the defaults when it has no settings row yet. */
@@ -157,20 +150,13 @@ function storedTimeTrackingSettings(
         breakMode: row.break_mode,
         autoBreakThresholdMinutes: row.auto_break_threshold_minutes,
         autoBreakDurationMinutes: row.auto_break_duration_minutes,
+        secondStep: breakStepOf(
+          row.auto_break_second_threshold_minutes,
+          row.auto_break_second_duration_minutes,
+        ),
         breakPolicyHistory: parseBreakPolicyHistory(row.break_policy_history),
       })
     : getDefaultTimeTrackingSettings(organizationId);
-}
-
-function changesBreakPolicy(
-  current: OrganizationTimeTrackingSettings,
-  next: TimeTrackingSettingsValues,
-): boolean {
-  return (
-    current.breakMode !== next.breakMode ||
-    current.autoBreakThresholdMinutes !== next.autoBreakThresholdMinutes ||
-    current.autoBreakDurationMinutes !== next.autoBreakDurationMinutes
-  );
 }
 
 export async function updateTimeTrackingSettings(
@@ -207,7 +193,9 @@ export async function updateTimeTrackingSettings(
   // written back, so a stale or failed read would drop recorded policy changes.
   const { data: currentRow, error: currentError } = await admin
     .from('organization_settings')
-    .select('break_mode, auto_break_threshold_minutes, auto_break_duration_minutes, break_policy_history')
+    .select(
+      'break_mode, auto_break_threshold_minutes, auto_break_duration_minutes, auto_break_second_threshold_minutes, auto_break_second_duration_minutes, break_policy_history',
+    )
     .eq('organization_id', activeOrgId)
     .maybeSingle();
   if (currentError) {
@@ -215,23 +203,16 @@ export async function updateTimeTrackingSettings(
     return { success: false, error: 'update_failed' };
   }
   const currentSettings = storedTimeTrackingSettings(activeOrgId, currentRow);
-  const nextValues = parsed.data;
+  const nextValues = breakPolicyValuesOf(parsed.data);
 
-  if (!changesBreakPolicy(currentSettings, nextValues)) {
+  if (sameBreakPolicy(currentSettings, nextValues)) {
     return { success: false, error: 'no_changes' };
   }
 
   try {
     const breakEnds = await readOpenBreakEnds(activeOrgId);
 
-    const nextHistory = appendBreakPolicyHistory(
-      currentSettings,
-      buildBreakPolicyHistoryEntry({
-        breakMode: nextValues.breakMode,
-        autoBreakThresholdMinutes: nextValues.autoBreakThresholdMinutes,
-        autoBreakDurationMinutes: nextValues.autoBreakDurationMinutes,
-      }),
-    );
+    const nextHistory = appendBreakPolicyHistory(currentSettings, buildBreakPolicyHistoryEntry(nextValues));
 
     // One transaction: the function re-checks the admin and the settings it
     // was read from under lock, then writes the settings and ends every open
@@ -245,6 +226,8 @@ export async function updateTimeTrackingSettings(
         p_break_mode: nextValues.breakMode,
         p_auto_break_threshold_minutes: nextValues.autoBreakThresholdMinutes,
         p_auto_break_duration_minutes: nextValues.autoBreakDurationMinutes,
+        p_auto_break_second_threshold_minutes: nextValues.secondStep?.thresholdMinutes ?? null,
+        p_auto_break_second_duration_minutes: nextValues.secondStep?.durationMinutes ?? null,
         p_break_policy_history: nextHistory,
         p_break_ends: breakEnds,
       }),
@@ -257,12 +240,7 @@ export async function updateTimeTrackingSettings(
     // The one cached reader of these columns; break computations read it.
     updateTag(CACHE_TAGS.organizationSettings(activeOrgId));
 
-    return {
-      success: true,
-      breakMode: nextValues.breakMode,
-      autoBreakThresholdMinutes: nextValues.autoBreakThresholdMinutes,
-      autoBreakDurationMinutes: nextValues.autoBreakDurationMinutes,
-    };
+    return { success: true, policy: nextValues };
   } catch (error) {
     logError('Unexpected error updating time tracking settings:', error);
     return { success: false, error: 'update_failed' };

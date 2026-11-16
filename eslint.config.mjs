@@ -1432,6 +1432,7 @@ const eslintConfig = defineConfig([
       'ui/no-block-in-paragraph': 'error',
       'ui/dialog-pending-while-waiting': 'error',
       'ui/alert-dialog-footer-actions': 'error',
+      'ui/confirm-action-stays-open': 'error',
       'no-restricted-syntax': productRestrictions({ jsx: true }),
     },
   },

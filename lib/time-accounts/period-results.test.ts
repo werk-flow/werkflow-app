@@ -45,14 +45,18 @@ describe('toPeriodResultRows', () => {
         { employee_record_id: BERND, finding_kind: 'positive_overtime' },
       ],
       NAMES,
+      new Map([[BERND, 480]]),
     );
     expect(rows[0]).toEqual({
       employeeRecordId: ANNA,
       employeeName: 'Anna Ärger',
       authoritativeTargets: true,
+      schoolMinutes: 0,
       outcome: { computed: false, causes: ['missing_policy', 'missing_opening_balance'] },
     });
     expect(rows[0]?.outcome).not.toHaveProperty('creditedMinutes');
+    // A Berufsschule day explains a lower Soll (werk-flow/werkflow-planning#165).
+    expect(rows[1]?.schoolMinutes).toBe(480);
     expect(rows[1]?.outcome).toEqual({
       computed: true,
       targetMinutes: 10_620,
@@ -64,7 +68,7 @@ describe('toPeriodResultRows', () => {
 
   test('sorts by name, then by person, whatever order the rows arrive in', () => {
     const order = (results: ReturnType<typeof stored>[]) =>
-      toPeriodResultRows(results, [], NAMES).map((row) => row.employeeRecordId);
+      toPeriodResultRows(results, [], NAMES, new Map()).map((row) => row.employeeRecordId);
     const expected = [ANNA, BERND, BERND_TWIN];
     expect(order([stored(BERND_TWIN, 1), stored(BERND, 1), stored(ANNA, 1)])).toEqual(expected);
     expect(order([stored(BERND, 1), stored(ANNA, 1), stored(BERND_TWIN, 1)])).toEqual(expected);

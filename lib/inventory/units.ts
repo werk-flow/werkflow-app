@@ -1,5 +1,7 @@
 // The one list of units. An article's unit is its base unit: stock, job
-// material, prices and offers count in it.
+// material, prices and offers count in it. The database refuses an article
+// unit outside this list; the list in its newest migration equals this one
+// (units.test.ts), so a new unit comes with a migration that replaces it.
 //
 // A code is stable: offer and order lines keep code and label as a snapshot.
 // A unit that is no longer wanted is retired (kept here, no longer offered in
@@ -35,6 +37,8 @@ export const INVENTORY_UNITS = [
   { code: 'cartridge', label: 'Kartusche', shortLabel: 'Kart', retired: false },
   { code: 'bundle', label: 'Bund', shortLabel: 'Bd', retired: false },
   { code: 'pallet', label: 'Palette', shortLabel: 'Pal', retired: false },
+  { code: 'rod', label: 'Stange', shortLabel: 'Stg', retired: false },
+  { code: 'coil', label: 'Ring', shortLabel: 'Ring', retired: false },
 ] as const satisfies readonly InventoryUnitDefinition[];
 
 export type InventoryUnitCode = (typeof INVENTORY_UNITS)[number]['code'];
@@ -106,6 +110,13 @@ const UNIT_ALIASES: Record<string, InventoryUnitCode> = {
   bundle: 'bundle',
   palette: 'pallet',
   pallet: 'pallet',
+  stange: 'rod',
+  stangen: 'rod',
+  stg: 'rod',
+  rod: 'rod',
+  ring: 'coil',
+  ringe: 'coil',
+  coil: 'coil',
 };
 
 /**

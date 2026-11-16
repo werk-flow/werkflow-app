@@ -92,11 +92,11 @@ Owner: [the docs index](docs/README.md#how-to-work), with the `writing-for-agent
 
 ## Ways to hurt yourself
 
-1. **PROD.** Never push to `main` or `production`, migrate PROD by hand, or run tests or bulk scripts against it. Never read its data ([work on production](docs/technical/environments.md#work-on-production)).
+1. **PROD.** Never push to `main` or `production`, migrate PROD by hand, or run tests or bulk scripts against it. Never read its data ([work on production](docs/technical/environments.md#work-on-production)). Live Stripe is PROD.
 2. **The shared local stack.** Every worktree uses one Supabase stack. On Windows it runs in WSL Ubuntu; run every command inside Linux or macOS. `supabase db reset` and `supabase stop` hit all worktrees ([work in a worktree](docs/technical/environments.md#work-in-a-worktree)).
 3. **Money and time records.** Recorded time, the Zeitkonto, Perioden, payroll exports and prices are money, so their logic is review level 2. Change recorded time only through an audited correction. Never erase history or write into a closed period.
 4. **The public repo.** `werkflow-app` is public. Never commit a secret, customer or personal data, or content from `werkflow-planning` or `werkflow-business`. Cite a planning issue as `werk-flow/werkflow-planning#<n>`.
-5. **Unresolvable deletes.** Delete with an explicit absolute path, or inside a fresh `mktemp -d` folder. Never `rm` a variable or a relative wildcard (`rm -f logs/*`): `.claude/hooks/refuse-unresolvable-delete.ts` refuses it, even in full access.
+5. **Unresolvable deletes.** Delete with an explicit absolute path, or inside a fresh `mktemp -d` folder. Never `rm` a variable or a relative wildcard (`rm -f logs/*`): `.claude/hooks/refuse-unresolvable-delete.ts` refuses it.
 
 ## Hit every surface
 
@@ -131,10 +131,10 @@ A task is a worktree, a branch and one small PR per problem ([decision 0009](doc
 - Level 1, behavior, the default: `sol-loop`.
 - Level 2, security, auth, RLS, a migration, personal data, deletion, time or payroll: `sol-loop`, then one CodeRabbit review.
 
-1. Run `bun run check:changed`, then the level's `sol-loop`.
-2. Push, and open the PR with the `file-pr` skill.
-3. Call `watch_pull_request`, end your turn, and babysit until [the merge gate](docs/technical/coderabbit.md#the-merge-gate) holds.
-4. Its own thread then squash-merges it, unless the merge is the owner's.
+1. Run `bun run check:changed`, then open a draft with the `file-pr` skill.
+2. Run the level's `sol-loop`, then `gh pr ready`.
+3. Call `watch_pull_request` and babysit until [the merge gate](docs/technical/coderabbit.md#the-merge-gate) holds.
+4. Its thread then squash-merges it, unless the merge is the owner's.
 
 ## Language
 

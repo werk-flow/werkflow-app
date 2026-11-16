@@ -45,30 +45,16 @@ jobs:
     name: Deploy staging
     needs: migrate
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # The deploy waits up to 20 minutes for Vercel to accept it (rate limits, vercel-api.sh), then
+    # up to 20 minutes for the build.
+    timeout-minutes: 45
     steps:
-      # A Git-source deployment of this commit, not of the branch head: a newer commit on main
-      # waits for its own run's migrations. Vercel builds it as a preview with the pre-production
-      # (DEV) variables and moves the branch alias of main, the stable staging URL, when it is ready.
+      # Only the scripts are read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
       - name: Deploy this commit to staging
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          api() { curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
-          team="teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN"
-          body="$(jq -n --arg sha "$GITHUB_SHA" --argjson repo "$GITHUB_REPOSITORY_ID" '{name: "werkflow-app",
-            project: "prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R",
-            gitSource: {type: "github", repoId: $repo, ref: "main", sha: $sha}}')"
-          id="$(api -X POST -H "Content-Type: application/json" --data "$body" \
-            "https://api.vercel.com/v13/deployments?${team}" | jq -r .id)"
-          echo "Staging deployment ${id} of ${GITHUB_SHA}."
-          deadline=$((SECONDS + 1200))
-          while :; do
-            state="$(api "https://api.vercel.com/v13/deployments/${id}?${team}" | jq -r .readyState)"
-            case "$state" in
-              READY) echo "Staging serves ${GITHUB_SHA}."; exit 0 ;;
-              ERROR | CANCELED) echo "::error::The staging build ${id} ended ${state}."; exit 1 ;;
-            esac
-            test $SECONDS -lt $deadline || { echo "::error::Staging build ${id} not ready after 20 minutes."; exit 1; }
-            sleep 15
-          done
+        run: bash .github/scripts/staging-deploy.sh "$GITHUB_SHA"

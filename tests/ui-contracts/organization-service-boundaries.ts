@@ -11,6 +11,14 @@ declare global {
       writes: string[];
       navigations: string[];
       reads: Array<{ organizationId: string; cookie: string }>;
+      /** The page's saves waiting for their answer, oldest first. */
+      pendingSaves: Array<(saved: boolean) => void>;
+      /** Saves whose code ran after their answer, shown or not. */
+      answeredSaves: number;
+      /** Answers for the held saves, given in the commit of the next server props, before passive effects. */
+      answersOnCommit: boolean[];
+      /** Each banner text that rendered while the spec recorded them. */
+      shownBanners: string[];
       finishCookie: (success: boolean) => void;
     };
   }
@@ -21,6 +29,10 @@ window.organizationContract = {
   writes: [],
   navigations: [],
   reads: [],
+  pendingSaves: [],
+  answeredSaves: 0,
+  answersOnCommit: [],
+  shownBanners: [],
   finishCookie(success): void {
     const write = pending;
     if (!write) throw new Error('No pending organization cookie write.');
@@ -54,4 +66,9 @@ export function useRouter(): typeof router {
 }
 export function usePathname(): string {
   return '/dashboard';
+}
+
+/** Counts a save whose code ran after its answer, shown or not. */
+export function recordAnsweredSave(): void {
+  window.organizationContract.answeredSaves += 1;
 }

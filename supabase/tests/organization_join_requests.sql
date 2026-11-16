@@ -182,7 +182,7 @@ begin
     if sqlerrm <> 'not_authorized' then raise; end if;
   end;
   if exists (select 1 from public.organization_members where user_id = requester)
-    or (select status from public.organization_join_requests where id = request) <> 'pending' then
+    or (select status from public.organization_join_requests where id = request) is distinct from 'pending' then
     raise exception 'a refused approval changed state';
   end if;
 end;
@@ -198,7 +198,7 @@ declare
   approver constant uuid := '3a000000-0000-0000-0000-000000000002';
   closed record;
 begin
-  if public.approve_organization_join_request(request, org, approver) <> requester then
+  if public.approve_organization_join_request(request, org, approver) is distinct from requester then
     raise exception 'the approval did not return the requester';
   end if;
   if (select role from public.organization_members where organization_id = org and user_id = requester)
@@ -209,7 +209,7 @@ begin
     raise exception 'the approval did not create the personnel record';
   end if;
   select status, decided_by, decided_at into closed from public.organization_join_requests where id = request;
-  if closed.status <> 'approved' or closed.decided_by <> approver or closed.decided_at is null then
+  if closed.status is distinct from 'approved' or closed.decided_by is distinct from approver or closed.decided_at is null then
     raise exception 'the approval did not close the request with its decision';
   end if;
   begin
@@ -267,7 +267,7 @@ begin
     if sqlerrm <> 'admin_mismatch' then raise; end if;
   end;
   update public.organization_join_requests set status = 'withdrawn', decided_at = now() where id = request;
-  if (select status from public.organization_join_requests where id = request) <> 'withdrawn' then
+  if (select status from public.organization_join_requests where id = request) is distinct from 'withdrawn' then
     raise exception 'the requester could not withdraw an open request';
   end if;
 end;

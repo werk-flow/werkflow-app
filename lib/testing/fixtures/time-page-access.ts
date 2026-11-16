@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { CALLER_ID, ORGANIZATION_A, ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
 import { field, installPageWorld, refusal, renderTree } from './page-render';
-import type { TimeTrackingSettingsValues } from '@/lib/time-tracking/settings';
+import type { TimeTrackingSettingsValues } from '@/lib/time-tracking/break-rule-form';
 
 const otherOwnerId = '6c000000-0000-4000-8000-000000000001';
 const closureDayId = '6c000000-0000-4000-8000-000000000002';
@@ -57,6 +57,9 @@ const automaticBreak: TimeTrackingSettingsValues = {
   breakMode: 'automatic',
   autoBreakThresholdMinutes: 360,
   autoBreakDurationMinutes: 30,
+  secondStepEnabled: false,
+  secondStepThresholdMinutes: 540,
+  secondStepDurationMinutes: 45,
 };
 const unchangedRows = (table: string) => JSON.stringify(tableRows(world, table));
 

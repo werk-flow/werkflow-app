@@ -63,39 +63,39 @@ begin
 
   -- Admin and Büro: the whole history, newest first, counted before the page boundary.
   result := public.list_time_correction_history_page(org_id,'77000000-0000-4000-8000-000000000002','all');
-  if (result->>'total')::int<>1057 or jsonb_array_length(result->'ids')<>50 then raise exception 'full history first page or total wrong: %',result->>'total'; end if;
+  if (result->>'total')::int is distinct from 1057 or jsonb_array_length(result->'ids') is distinct from 50 then raise exception 'full history first page or total wrong: %',result->>'total'; end if;
   if exists(select 1 from jsonb_array_elements_text(result->'ids') with ordinality listed(id,position) where id<>md5('tc-'||(1058-position))::uuid::text) then raise exception 'history page is not newest first'; end if;
   next_result := public.list_time_correction_history_page(org_id,'77000000-0000-4000-8000-000000000002','all',2);
   if exists(select 1 from jsonb_array_elements(result->'ids') a join jsonb_array_elements(next_result->'ids') b on a=b) then raise exception 'history pages overlap'; end if;
   result := public.list_time_correction_history_page(org_id,'77000000-0000-4000-8000-000000000002','all',22);
-  if jsonb_array_length(result->'ids')<>7 or result->'ids'->>6<>md5('tc-1')::uuid::text then raise exception 'history tail beyond 1,000 rows unreachable'; end if;
+  if jsonb_array_length(result->'ids') is distinct from 7 or result->'ids'->>6 is distinct from md5('tc-1')::uuid::text then raise exception 'history tail beyond 1,000 rows unreachable'; end if;
 
   -- An employee who reviews nobody: only the requests they filed or are the subject of.
   result := public.list_time_correction_history_page(org_id,caller,'own');
-  if (result->>'total')::int<>2 or result->'ids'<>jsonb_build_array(md5('tc-1056')::uuid,md5('tc-1055')::uuid) then raise exception 'own history wrong: %',result; end if;
+  if (result->>'total')::int is distinct from 2 or result->'ids' is distinct from jsonb_build_array(md5('tc-1056')::uuid,md5('tc-1055')::uuid) then raise exception 'own history wrong: %',result; end if;
   -- An employee approving through a Büro source: their own and every employee subject, never a Büro or former subject.
   result := public.list_time_correction_history_page(org_id,caller,'own_and_employee_subjects');
-  if (result->>'total')::int<>1053 or result->'ids'->>0<>md5('tc-1056')::uuid::text or result->'ids'->>2<>md5('tc-1051')::uuid::text then raise exception 'delegated employee history wrong: %',result->>'total'; end if;
-  if public.list_time_correction_history_page(org_id,caller,'own_and_employee_subjects',22)->'ids'<>jsonb_build_array(md5('tc-3')::uuid,md5('tc-2')::uuid,md5('tc-1')::uuid) then raise exception 'delegated employee tail unreachable'; end if;
+  if (result->>'total')::int is distinct from 1053 or result->'ids'->>0 is distinct from md5('tc-1056')::uuid::text or result->'ids'->>2 is distinct from md5('tc-1051')::uuid::text then raise exception 'delegated employee history wrong: %',result->>'total'; end if;
+  if public.list_time_correction_history_page(org_id,caller,'own_and_employee_subjects',22)->'ids' is distinct from jsonb_build_array(md5('tc-3')::uuid,md5('tc-2')::uuid,md5('tc-1')::uuid) then raise exception 'delegated employee tail unreachable'; end if;
   -- A Büro member who only sees their own (the rule follows the passed visibility, not the role).
-  if (public.list_time_correction_history_page(org_id,'77000000-0000-4000-8000-000000000002','own')->>'total')::int<>3 then raise exception 'own history of a Büro subject wrong'; end if;
+  if (public.list_time_correction_history_page(org_id,'77000000-0000-4000-8000-000000000002','own')->>'total')::int is distinct from 3 then raise exception 'own history of a Büro subject wrong'; end if;
   -- An unknown visibility lists nothing.
   result := public.list_time_correction_history_page(org_id,caller,'everything');
-  if (result->>'total')::int<>0 or result->'ids'<>'[]'::jsonb then raise exception 'an unknown visibility lists requests'; end if;
+  if (result->>'total')::int is distinct from 0 or result->'ids' is distinct from '[]'::jsonb then raise exception 'an unknown visibility lists requests'; end if;
 
   -- Bounds: at most 100 rows, at least one row, never a page before the first, empty past the end.
-  if jsonb_array_length(public.list_time_correction_history_page(org_id,caller,'all',1,100000)->'ids')<>100 then raise exception 'history page size is not capped at 100'; end if;
-  if jsonb_array_length(public.list_time_correction_history_page(org_id,caller,'all',1,0)->'ids')<>1 then raise exception 'history page size has no lower bound'; end if;
-  if public.list_time_correction_history_page(org_id,caller,'all',-3)->'ids'->>0<>md5('tc-1057')::uuid::text then raise exception 'history page number has no lower bound'; end if;
+  if jsonb_array_length(public.list_time_correction_history_page(org_id,caller,'all',1,100000)->'ids') is distinct from 100 then raise exception 'history page size is not capped at 100'; end if;
+  if jsonb_array_length(public.list_time_correction_history_page(org_id,caller,'all',1,0)->'ids') is distinct from 1 then raise exception 'history page size has no lower bound'; end if;
+  if public.list_time_correction_history_page(org_id,caller,'all',-3)->'ids'->>0 is distinct from md5('tc-1057')::uuid::text then raise exception 'history page number has no lower bound'; end if;
   result := public.list_time_correction_history_page(org_id,caller,'all',2147483647,100);
-  if (result->>'total')::int<>1057 or result->'ids'<>'[]'::jsonb then raise exception 'history page past the end is not empty'; end if;
+  if (result->>'total')::int is distinct from 1057 or result->'ids' is distinct from '[]'::jsonb then raise exception 'history page past the end is not empty'; end if;
 
   -- Tenant isolation: the caller's own request in the other organization never lists here, and vice versa.
   if exists(select 1 from jsonb_array_elements_text(public.list_time_correction_history_page(org_id,caller,'own')->'ids') listed(id) where id='77000000-0000-4000-8000-000000000090') then raise exception 'history tenant leaked'; end if;
   result := public.list_time_correction_history_page('77000000-0000-4000-8000-000000000011',caller,'all');
-  if (result->>'total')::int<>1 or result->'ids'<>jsonb_build_array('77000000-0000-4000-8000-000000000090'::uuid) then raise exception 'foreign organization history wrong'; end if;
+  if (result->>'total')::int is distinct from 1 or result->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000090'::uuid) then raise exception 'foreign organization history wrong'; end if;
   result := public.list_time_correction_history_page('77000000-0000-4000-8000-000000000012',caller,'all');
-  if (result->>'total')::int<>0 or result->'ids'<>'[]'::jsonb then raise exception 'empty organization reports history'; end if;
+  if (result->>'total')::int is distinct from 0 or result->'ids' is distinct from '[]'::jsonb then raise exception 'empty organization reports history'; end if;
 end $$;
 
 -- Identical filing times keep a deterministic identity order across the page boundary.
@@ -107,8 +107,8 @@ insert into public.time_correction_requests(id,organization_id,subject_employee_
 set local session_replication_role = origin;
 set local role service_role;
 do $$ begin
-  if public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','own',1,1)->'ids'<>jsonb_build_array('77000000-0000-4000-8000-000000000081'::uuid)
-    or public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','own',2,1)->'ids'<>jsonb_build_array('77000000-0000-4000-8000-000000000082'::uuid) then
+  if public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','own',1,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000081'::uuid)
+    or public.list_time_correction_history_page('77000000-0000-4000-8000-000000000010','77000000-0000-4000-8000-000000000005','own',2,1)->'ids' is distinct from jsonb_build_array('77000000-0000-4000-8000-000000000082'::uuid) then
     raise exception 'identical filing times lost the id order';
   end if;
 end $$;

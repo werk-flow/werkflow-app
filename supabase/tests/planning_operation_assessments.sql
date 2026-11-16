@@ -79,20 +79,20 @@ begin
   from public.planning_operation_assessments operation
   where operation.organization_id = '7a000000-0000-4000-8000-000000000010'
     and operation.id not in (select id from seen_operations);
-  if cardinality(v_operation_ids) <> 1 then
+  if cardinality(v_operation_ids) is distinct from 1 then
     raise exception '%: stored % operation assessments instead of one', p_label, cardinality(v_operation_ids);
   end if;
   if (select capacity_snapshot from public.planning_operation_assessments where id = v_operation_ids[1])
-       <> pg_temp.capacity(p_label)
+       is distinct from pg_temp.capacity(p_label)
      or (select qualification_snapshot from public.planning_operation_assessments where id = v_operation_ids[1])
-       <> pg_temp.qualification(p_label)
+       is distinct from pg_temp.qualification(p_label)
   then raise exception '%: the operation assessment does not hold the call''s snapshots', p_label; end if;
 
   select count(*) into v_new_assessments
   from public.planning_occurrence_assessments assessment
   where assessment.organization_id = '7a000000-0000-4000-8000-000000000010'
     and assessment.id not in (select id from seen_occurrence_assessments);
-  if v_new_assessments <> p_occurrences then
+  if v_new_assessments is distinct from p_occurrences then
     raise exception '%: wrote % occurrence assessments instead of %', p_label, v_new_assessments, p_occurrences;
   end if;
   if exists (

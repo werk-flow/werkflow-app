@@ -3,7 +3,7 @@ import type { DialogOpener } from './dialog-opener';
 import { CALENDAR_OPENERS } from './dialog-openers/calendar';
 import { CUSTOMERS_OPENERS } from './dialog-openers/customers';
 import { DOCUMENTS_OPENERS } from './dialog-openers/documents';
-import { INVENTORY_OPENERS } from './dialog-openers/inventory';
+import { COMMERCIAL_OPENERS, INVENTORY_OPENERS } from './dialog-openers/inventory';
 import { PEOPLE_OPENERS } from './dialog-openers/people';
 import { REQUESTS_OPENERS } from './dialog-openers/requests';
 import { SERVICE_OPENERS } from './dialog-openers/service';
@@ -18,6 +18,7 @@ import { WORK_OPENERS } from './dialog-openers/work';
  */
 export const DIALOG_OPENERS: Readonly<Record<DialogOpenerId, DialogOpener>> = {
   ...CALENDAR_OPENERS,
+  ...COMMERCIAL_OPENERS,
   ...CUSTOMERS_OPENERS,
   ...DOCUMENTS_OPENERS,
   ...INVENTORY_OPENERS,

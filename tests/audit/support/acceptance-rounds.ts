@@ -151,6 +151,9 @@ type OpenerPrefix = DialogOpenerId extends `${infer Prefix}.${string}` ? Prefix 
  */
 const OPENER_MODULES = {
   calendar: 'calendar',
+  // The Angebote dialogs share the inventory group: a group of their own would
+  // deal the visual groups into a third CI shard.
+  commercial: 'inventory',
   customers: 'customers',
   shared: 'customers',
   documents: 'documents',

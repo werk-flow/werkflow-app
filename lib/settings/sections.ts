@@ -124,7 +124,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     slug: 'dokumente',
     label: 'Dokumente & Briefpapier',
     shortDescription: 'Angebote als PDF',
-    description: 'Zeigt am Musterangebot, wie deine Angebote als PDF bei deinen Kunden ankommen.',
+    description: 'Firmenangaben, Logo und Briefpapier für deine Angebote, dazu ein Musterangebot als PDF.',
     icon: FileText,
     group: 'organization',
     scope: 'organization',

@@ -11,6 +11,7 @@ Anfragen
 Aufträge
 Dokumente
 Inventar
+Angebote
 Service
 Arbeitsvorlagen
 Mitarbeiter
@@ -44,6 +45,15 @@ Rückruf bis
 —
 Anlage
 —
+Auftraggeber
+Familie Hoffmann
+Rechnung an
+Familie Hoffmann
+Lindenstraße 4, 71032 Böblingen
+Wie Auftraggeber
+·
+01.01.2026, 08:00
+Ändern
 Kategorie
 Sonstiges
 Eingang über

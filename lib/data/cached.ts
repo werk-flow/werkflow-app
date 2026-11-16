@@ -16,6 +16,7 @@ import { Constants, type Database, type Json } from '@/lib/supabase/database.typ
 import { getAuftraegePreferencesFromJson, type AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import {
   getDefaultTimeTrackingSettings,
+  breakStepOf,
   normalizeTimeTrackingSettings,
   parseBreakPolicyHistory,
   type OrganizationTimeTrackingSettings,
@@ -261,7 +262,7 @@ export const getCachedOrganizationSettings = cache(
         const { data, error } = await admin
           .from('organization_settings')
           .select(
-            'organization_id, break_mode, auto_break_threshold_minutes, auto_break_duration_minutes, break_policy_history',
+            'organization_id, break_mode, auto_break_threshold_minutes, auto_break_duration_minutes, auto_break_second_threshold_minutes, auto_break_second_duration_minutes, break_policy_history',
           )
           .eq('organization_id', oid)
           .maybeSingle();
@@ -277,10 +278,15 @@ export const getCachedOrganizationSettings = cache(
           breakMode: data.break_mode,
           autoBreakThresholdMinutes: data.auto_break_threshold_minutes,
           autoBreakDurationMinutes: data.auto_break_duration_minutes,
+          secondStep: breakStepOf(
+            data.auto_break_second_threshold_minutes,
+            data.auto_break_second_duration_minutes,
+          ),
           breakPolicyHistory: parseBreakPolicyHistory(data.break_policy_history),
         });
       },
-      [`organization-settings-${orgId}`],
+      // The key names the value's shape: a value cached before the second step existed lacks it.
+      [`organization-settings-with-second-step-${orgId}`],
       {
         tags: [CACHE_TAGS.organizationSettings(orgId)],
         revalidate: REVALIDATE_SECONDS,

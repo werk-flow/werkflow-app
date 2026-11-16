@@ -133,6 +133,8 @@ const clientDeletionSchema = z.object({
     documents: linkCount,
     follow_ups: linkCount,
     site_roles: linkCount,
+    billing_parties: linkCount,
+    offers: linkCount,
   }),
 });
 

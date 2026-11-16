@@ -9,7 +9,9 @@ import { useHydrated } from '@/hooks/use-hydrated';
 // A page's primary action button sits in the static PageHeader, while the
 // dialog it opens lives in the suspended content because it needs the loaded
 // data. This pair shares the open flag across that Suspense boundary so the
-// header paints before the data arrives (/auftraege, /arbeitsvorlagen).
+// header paints before the data arrives (/auftraege, /arbeitsvorlagen). A
+// region whose read failed never mounts that dialog, so it renders
+// `PageActionUnavailable` and the button hides until the region loads.
 
 /** A dialog that loads on demand (`lazyDialog`): its download and whether an open waits for it. */
 type PageActionLoader = { preload: () => void; waiting: boolean };
@@ -18,6 +20,8 @@ interface PageActionState {
   open: boolean;
   setOpen: (open: boolean) => void;
   setLoader: (loader: PageActionLoader | null) => void;
+  unavailable: boolean;
+  setUnavailable: (unavailable: boolean) => void;
 }
 
 const PageActionContext = createContext<PageActionState | null>(null);
@@ -27,7 +31,11 @@ const PageActionLoaderContext = createContext<PageActionLoader | null>(null);
 export function PageActionProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [loader, setLoader] = useState<PageActionLoader | null>(null);
-  const value = useMemo<PageActionState>(() => ({ open, setOpen, setLoader }), [open]);
+  const [unavailable, setUnavailable] = useState(false);
+  const value = useMemo<PageActionState>(
+    () => ({ open, setOpen, setLoader, unavailable, setUnavailable }),
+    [open, unavailable],
+  );
   return (
     <PageActionContext.Provider value={value}>
       <PageActionLoaderContext.Provider value={loader}>{children}</PageActionLoaderContext.Provider>
@@ -55,12 +63,27 @@ export function usePageActionLoader(preload: (() => void) | null, waiting: boole
   }, [setLoader, preload, waiting]);
 }
 
-/** The header button that opens the page's primary dialog. */
+/**
+ * Rendered by a region whose read failed in place of its content: the dialog
+ * the header button opens lives in that content, so the button hides until the
+ * region loads again.
+ */
+export function PageActionUnavailable(): null {
+  const { setUnavailable } = usePageAction();
+  useLayoutEffect(() => {
+    setUnavailable(true);
+    return () => setUnavailable(false);
+  }, [setUnavailable]);
+  return null;
+}
+
+/** The header button that opens the page's primary dialog; hidden while no dialog can mount. */
 export function PageActionButton({ className, children }: { className?: string; children: ReactNode }) {
-  const { setOpen } = usePageAction();
+  const { setOpen, unavailable } = usePageAction();
   const loader = useContext(PageActionLoaderContext);
   const hydrated = useHydrated();
   const preload = loader?.preload;
+  if (unavailable) return null;
   return (
     <Button
       className={className}

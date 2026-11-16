@@ -1,0 +1,110 @@
+name: E-invoice checks
+
+# The reference invoices of the invoice core (lib/invoicing/fixtures/), rendered
+# as ZUGFeRD PDFs by the one renderer, checked by the two reference checkers the
+# app cannot run itself (no Java at run time): Mustang validates each PDF with
+# its embedded EN 16931 XML, veraPDF checks PDF/A-3b; two of them carry an
+# image stationery and a non-PDF/A stationery PDF. The same job proves the
+# checkers refuse a broken copy: XML changed after embedding (Mustang) and a
+# missing output intent (veraPDF). Tool versions are pinned; Mustang's jar is
+# checked against its SHA-256 and each image is pulled by digest.
+# A separate workflow while ci.yml is held elsewhere (werk-flow/werkflow-planning#455).
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'lib/invoicing/**'
+      - 'lib/document-rendering/**'
+      - '.github/workflows/e-invoice-checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'lib/invoicing/**'
+      - 'lib/document-rendering/**'
+      - '.github/workflows/e-invoice-checks.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e-invoice-checks-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MUSTANG_VERSION: 2.26.0
+  MUSTANG_SHA256: 42d7868cb68264874a7b8cab4c3587b03b23ccc7cd72373da917f66758bb9736
+  JAVA_IMAGE: eclipse-temurin:21.0.13_9-jre-noble@sha256:0d57a8e90c2bb844c5a8e1b2b71e11eff06dad7edcfd803cd21ed4ae203b2515
+  VERAPDF_IMAGE: verapdf/cli:v1.30.3@sha256:d74b7026c18a0f171e73c153b617fe6520e1511feb24ca98a348b2bb897669fb
+
+jobs:
+  check:
+    name: Mustang and veraPDF
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/setup
+
+      - name: Render the reference invoices and their broken copies
+        run: bun --conditions=react-server lib/document-rendering/fixtures/write-reference-e-invoices.ts "$RUNNER_TEMP/e-invoices"
+
+      - name: Download Mustang and verify its checksum
+        run: |
+          jar="$RUNNER_TEMP/mustang/Mustang-CLI-$MUSTANG_VERSION.jar"
+          mkdir -p "$RUNNER_TEMP/mustang"
+          curl --fail --silent --show-error --location --output "$jar" \
+            "https://repo1.maven.org/maven2/org/mustangproject/Mustang-CLI/$MUSTANG_VERSION/Mustang-CLI-$MUSTANG_VERSION.jar"
+          echo "$MUSTANG_SHA256  $jar" | sha256sum --check --strict
+
+      - name: Pull the pinned images
+        run: |
+          docker pull --quiet "$JAVA_IMAGE"
+          docker pull --quiet "$VERAPDF_IMAGE"
+
+      - name: Check every reference invoice, and that each broken copy is refused
+        run: |
+          pdfs="$RUNNER_TEMP/e-invoices"
+          chmod -R a+rX "$pdfs" "$RUNNER_TEMP/mustang"
+          # Mustang exits 0 and reports an overall "valid" when only its PDF/A part fails,
+          # so any invalid part of its report counts too.
+          mustang() {
+            local report
+            report="$pdfs/$(basename "$1" .pdf).mustang.xml"
+            docker run --rm -v "$pdfs":/data:ro -v "$RUNNER_TEMP/mustang":/mustang:ro -w /tmp "$JAVA_IMAGE" \
+              java -jar "/mustang/Mustang-CLI-$MUSTANG_VERSION.jar" --no-notices --action validate --source "/data/$1" \
+              > "$report" 2>&1 || return 1
+            ! grep -q 'status="invalid"' "$report" && grep -q '<summary status="valid"/>' "$report"
+          }
+          verapdf() {
+            docker run --rm -v "$pdfs":/data:ro "$VERAPDF_IMAGE" --flavour 3b --format text "/data/$1"
+          }
+          failed=0
+          for file in "$pdfs"/valid/*.pdf; do
+            name="valid/$(basename "$file")"
+            if mustang "$name"; then echo "Mustang accepts $name"; else
+              echo "::error::Mustang refuses $name"; grep -E '<error|status=' "$pdfs/$(basename "$file" .pdf).mustang.xml" | cut -c1-400 || true; failed=1; fi
+            if verapdf "$name"; then echo "veraPDF accepts $name"; else
+              echo "::error::veraPDF refuses $name as PDF/A-3b"; failed=1; fi
+          done
+          # A refusal counts only as a validation result, never as a checker that could not run or read the file.
+          mustang broken/xml-changed-after-embedding.pdf || true
+          if grep -q '<xml>' "$pdfs/xml-changed-after-embedding.mustang.xml" &&
+            grep -q 'BR-CO-15' "$pdfs/xml-changed-after-embedding.mustang.xml"; then
+            echo "Mustang refuses broken/xml-changed-after-embedding.pdf with BR-CO-15, as it must"
+          else echo "::error::Mustang did not refuse the invoice whose XML was changed after embedding"; failed=1; fi
+          verapdf_status=0
+          verapdf_output=$(verapdf broken/without-output-intent.pdf) || verapdf_status=$?
+          echo "$verapdf_output"
+          if [ "$verapdf_status" -eq 1 ] && grep -q '^FAIL /data/broken/without-output-intent.pdf' <<<"$verapdf_output"; then
+            echo "veraPDF refuses broken/without-output-intent.pdf, as it must"
+          else echo "::error::veraPDF did not refuse the PDF without output intent (exit $verapdf_status)"; failed=1; fi
+          exit "$failed"
+
+      - name: Keep the checked PDFs and Mustang's reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e-invoice-checks
+          path: ${{ runner.temp }}/e-invoices
+          retention-days: 14

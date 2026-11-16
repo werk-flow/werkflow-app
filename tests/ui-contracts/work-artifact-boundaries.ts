@@ -88,6 +88,8 @@ function savedDetail(input: SaveWorkArtifactInput): WorkArtifactDetail {
     void_reason: null,
     voided_at: null,
     voided_by: null,
+    canLeadReview: false,
+    leadReadOnly: false,
     revisions: [
       {
         id: input.revisionId,

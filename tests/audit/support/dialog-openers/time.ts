@@ -22,7 +22,14 @@ import {
   deviceDraftDeleteConfirmation,
   leaveDraftOnDevice,
 } from '../offline-drafts';
-import { problemReportButton, problemReportDialog } from '../../../golden/support/steps/problem-reports';
+import {
+  enlargeScreenshotButton,
+  openProblemReport,
+  problemReportButton,
+  problemReportDialog,
+  redactScreenshotMiddle,
+  screenshotRedactionView,
+} from '../../../golden/support/steps/problem-reports';
 import { ownEvidenceUploadButton, ownEvidenceUploadDialog } from '../../../golden/support/steps/personnel';
 import {
   ownSicknessCancelButton,
@@ -191,6 +198,13 @@ async function ownSicknessRange({ page, world, businessDate }: SurfaceContext): 
   return formatSicknessRange(report);
 }
 
+/** The report dialog with one box drawn across its preview's middle. */
+async function openRedactedReport(page: Page): Promise<Locator> {
+  const dialog = await openProblemReport(page);
+  await redactScreenshotMiddle(dialog);
+  return dialog;
+}
+
 export const TIME_OPENERS = {
   'time.manual-entry': {
     trigger: async ({ page }) => manualEntryHeaderButton(page),
@@ -230,6 +244,18 @@ export const TIME_OPENERS = {
   // worker's and the office's.
   'reports.field': { trigger: async ({ page }) => problemReportButton(page), layer: problemReportDialog },
   'reports.office': { trigger: async ({ page }) => problemReportButton(page), layer: problemReportDialog },
+  // The large redaction view over the report dialog, from its „Vergrößern“. One box is drawn
+  // first, so the view shows the cover as it reaches the upload.
+  'reports.redaction-field': {
+    trigger: async ({ page }) => enlargeScreenshotButton(await openRedactedReport(page)),
+    layer: screenshotRedactionView,
+    parents: (page) => [problemReportDialog(page)],
+  },
+  'reports.redaction-office': {
+    trigger: async ({ page }) => enlargeScreenshotButton(await openRedactedReport(page)),
+    layer: screenshotRedactionView,
+    parents: (page) => [problemReportDialog(page)],
+  },
   'field.clock': {
     trigger: async ({ page }) => enabled(clockInLauncher(page)),
     layer: clockStartSheet,

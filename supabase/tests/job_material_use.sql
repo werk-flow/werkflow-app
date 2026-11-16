@@ -28,11 +28,17 @@ insert into public.organizations (id, name, admin_id, unique_code) values
 insert into public.organization_members (organization_id, user_id, role) values
 ('37000000-0000-4000-8000-000000000010', '37000000-0000-4000-8000-000000000002', 'employee');
 
-insert into public.inventory_items (id, organization_id, name, item_type, unit, purchase_price_cents) values
+insert into public.inventory_items (id, organization_id, name, item_type, unit) values
 ('37000000-0000-4000-8000-000000000020', '37000000-0000-4000-8000-000000000010',
- 'Kupferrohr 15 mm', 'material', 'meter', 412),
+ 'Kupferrohr 15 mm', 'material', 'meter'),
 ('37000000-0000-4000-8000-000000000021', '37000000-0000-4000-8000-000000000010',
- 'Pressfitting 15 mm', 'material', 'piece', null);
+ 'Pressfitting 15 mm', 'material', 'piece');
+
+-- The pipe's dated purchase price; the fitting has none. inventory_article_prices.sql
+-- owns the choice of the price on a day and a price quantity above 1.
+insert into public.inventory_item_prices (organization_id, item_id, kind, unit, amount_cents, price_quantity, valid_from, source) values
+('37000000-0000-4000-8000-000000000010', '37000000-0000-4000-8000-000000000020',
+ 'purchase', 'meter', 412, 1, (now() at time zone 'Europe/Berlin')::date - 30, 'manual');
 
 insert into public.inventory_locations (id, organization_id, name, location_type) values
 ('37000000-0000-4000-8000-000000000030', '37000000-0000-4000-8000-000000000010', 'Hauptlager', 'storage');
@@ -80,15 +86,15 @@ begin
   select * into v_event from public.job_material_use_events where id = v_event_id;
   select quantity_on_hand into v_stock from public.inventory_stock_levels
   where organization_id = v_org and item_id = v_pipe and location_id = v_location;
-  if v_used <> 3 or v_line_row.used_quantity <> 3 then
+  if v_used is distinct from 3 or v_line_row.used_quantity is distinct from 3 then
     raise exception 'a use must raise the line''s used quantity by its quantity';
   end if;
-  if v_stock <> 7 then
+  if v_stock is distinct from 7 then
     raise exception 'a use must leave the stock level as the take left it';
   end if;
-  if v_event.job_material_line_id <> v_line or v_event.project_id <> v_project or v_event.item_id <> v_pipe
-    or v_event.unit <> 'meter' or v_event.quantity <> 3 or v_event.actor_id <> v_actor
-    or v_event.organization_id <> v_org or v_event.created_at is null
+  if v_event.job_material_line_id is distinct from v_line or v_event.project_id is distinct from v_project or v_event.item_id is distinct from v_pipe
+    or v_event.unit is distinct from 'meter' or v_event.quantity is distinct from 3 or v_event.actor_id is distinct from v_actor
+    or v_event.organization_id is distinct from v_org or v_event.created_at is null
   then
     raise exception 'a use event must carry its project, line, article, base unit, quantity, actor and time';
   end if;
@@ -129,7 +135,7 @@ begin
   select count(*) into v_count from public.job_material_use_events where job_material_line_id = v_line;
   select quantity_on_hand into v_stock from public.inventory_stock_levels
   where organization_id = v_org and item_id = v_pipe and location_id = v_location;
-  if v_line_row.used_quantity <> 3 or v_line_row.returned_quantity <> 2 or v_count <> 1 or v_stock <> 7 then
+  if v_line_row.used_quantity is distinct from 3 or v_line_row.returned_quantity is distinct from 2 or v_count is distinct from 1 or v_stock is distinct from 7 then
     raise exception 'a refused use or return must leave the line, the events and the stock unchanged';
   end if;
 
@@ -183,16 +189,22 @@ begin
     raise exception 'a negative use that names no event must be refused, got %', v_refusal;
   end if;
 
-  -- The office changes the article's unit after the use; the correction still counts in meters.
+  -- The article's unit changed after the use, as it could before the database
+  -- kept the unit of an article with history (migration 20261204100000); the
+  -- seed bypasses that guard. The correction still counts in meters.
+  reset role;
+  set local session_replication_role = replica;
   update public.inventory_items set unit = 'piece' where id = '37000000-0000-4000-8000-000000000020';
+  set local session_replication_role = origin;
+  set local role service_role;
   v_used := public.record_job_material_use(v_org, v_actor, v_line, -2, 'Falsch gezählt', v_original);
   select id into v_event_id from public.job_material_use_events
   where job_material_line_id = v_line and corrects_event_id is not null;
   select * into v_event from public.job_material_use_events where id = v_event_id;
-  if v_event.unit <> 'meter' then
+  if v_event.unit is distinct from 'meter' then
     raise exception 'a correction must keep the unit of the event it corrects, also after the article''s unit changed';
   end if;
-  if v_used <> 1 or v_event.corrects_event_id <> v_original or v_event.quantity <> -2
+  if v_used is distinct from 1 or v_event.corrects_event_id is distinct from v_original or v_event.quantity is distinct from -2
     or v_event.cost_amount_cents is distinct from 412 or v_event.cost_price_quantity is distinct from 1
   then
     raise exception 'a correction must lower the used quantity, name its event and carry that event''s cost';
@@ -285,7 +297,7 @@ begin
     raise exception 'a line with use events must not be deleted, got %', v_refusal;
   end if;
   select * into v_line_row from public.job_material_lines where id = v_fitting_line;
-  if v_line_row.used_quantity <> 0 or v_line_row.status = 'cancelled' then
+  if v_line_row.used_quantity is distinct from 0 or v_line_row.status = 'cancelled' then
     raise exception 'a refused cancel or delete must leave the line as it was';
   end if;
 end $$;
@@ -380,8 +392,8 @@ begin
   then
     raise exception 'a client role can read or write material use events';
   end if;
-  if has_function_privilege('authenticated', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid)', 'execute')
-    or has_function_privilege('anon', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid)', 'execute')
+  if has_function_privilege('authenticated', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid, uuid)', 'execute')
+    or has_function_privilege('anon', 'public.record_job_material_use(uuid, uuid, uuid, numeric, text, uuid, uuid)', 'execute')
   then
     raise exception 'a client role can record material use';
   end if;

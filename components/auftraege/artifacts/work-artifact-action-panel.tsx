@@ -224,8 +224,23 @@ export function WorkArtifactActionPanel({
   const canVoid =
     isManager ||
     (detail.status === 'draft' && detail.created_by === currentUserId && detail.actions.length === 0);
+  // A holder of the approval, or the work's „Projektleitung“ on a Regie- oder Änderungsnachweis.
   const canReview =
-    detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId;
+    detail.status === 'submitted' &&
+    (canApprove || detail.canLeadReview) &&
+    currentRevision.created_by !== currentUserId;
+  // The lead who is not on the work reviews and does nothing else; the server refuses every other step.
+  if (detail.leadReadOnly) {
+    if (!canReview) return null;
+    return (
+      <div className="space-y-4 border-t pt-4">
+        <div className="flex flex-wrap gap-2">
+          <WorkArtifactApprovalButtons editor={editor} review={review} />
+        </div>
+        <WorkArtifactReviewReason editor={editor} review={review} canReview canVoid={false} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-4 border-t pt-4">
       <WorkArtifactReviewButtons

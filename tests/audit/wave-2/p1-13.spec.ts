@@ -20,7 +20,7 @@ import {
   calendarNewEntryButton,
   entryDialogTab,
 } from '../../golden/support/steps/calendar';
-import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
+import { dismissDialog, hydratedAndSettled, pressKey } from '../../golden/support/steps/interaction';
 import { materialRowNotes, materialRowQuantity } from '../../golden/support/steps/inventory';
 import { openSeededCustomerDetail } from '../../golden/support/steps/customers';
 import {
@@ -496,6 +496,8 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     const applySubmit = applyDialog.getByRole('button', { name: apply.submit, exact: true });
     await bueroPage.goto(`/auftraege/${jobNumber}`);
     await adminPage.goto(`/auftraege/${jobNumber}`);
+    // A press before the page hydrated is lost; the dialog would never open.
+    await hydratedAndSettled(adminPage);
     await adminPage.getByRole('button', { name: apply.open }).click();
     await selectFromSearchable(adminPage, applyDialog.getByRole('combobox'), templateName);
     await expect(applyDialog.getByText(apply.preview)).toBeVisible();
@@ -720,6 +722,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
 
     const applyDialog = applyTemplateDialog(adminPage);
     await adminPage.goto(`/auftraege/${jobNumber}`);
+    await hydratedAndSettled(adminPage);
     await adminPage.getByRole('button', { name: apply.open }).click();
     await selectFromSearchable(adminPage, applyDialog.getByRole('combobox'), referencedTemplate);
     await applyDialog.getByRole('button', { name: apply.submit, exact: true }).click();

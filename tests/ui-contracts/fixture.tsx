@@ -4,6 +4,7 @@ import { PresentationFixture } from './presentation-fixture';
 import { CreateClientContractFixture, CustomerContractFixture } from './customer-boundaries';
 import { RequestCaptureContractFixture } from './request-capture-boundaries';
 import { RequestAttachContractFixture } from './request-attach-boundaries';
+import { BillingPartiesContractFixture } from './billing-parties-boundaries';
 import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals';
 import {
   AbsencePickerContractFixture,
@@ -34,6 +35,10 @@ import { OrganizationContractFixture } from './organization-boundaries';
 import { MemberRoleContractFixture } from './member-role-boundaries';
 import { OrganizationExportContractFixture } from './organization-export-boundaries';
 import {
+  CompanyLetterheadContractFixture,
+  CompanyProfileContractFixture,
+} from './company-profile-boundaries';
+import {
   TodayRefreshContractFixture,
   TodayRefreshFallbackContractFixture,
   TodayRefreshProfileContractFixture,
@@ -51,7 +56,18 @@ import { mountHydrationFixture } from './hydration-boundaries';
 import { initializeProblemReportBoundary, ProblemReportContractFixture } from './problem-report-boundaries';
 import { SupportFilingContractFixture } from './support-filing-boundaries';
 import { SupportTriageContractFixture } from './support-triage-boundaries';
+import {
+  initializeInventoryImportBoundary,
+  InventoryImportContractFixture,
+} from './inventory-import-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
+import { ArticleTermsContractFixture, initializeArticleTermsBoundary } from './article-terms-boundaries';
+import {
+  initializeInventoryMovementsBoundary,
+  InventoryMovementsContractFixture,
+} from './inventory-movements-boundaries';
+import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
+import { OffersContractFixture } from './offers-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -106,6 +122,10 @@ initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
 initializeProblemReportBoundary();
 initializeInventoryUnitBoundary();
+initializeArticleTermsBoundary();
+initializeInventoryImportBoundary();
+initializeInventoryMovementsBoundary();
+initializeLeistungenBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 /** The card as a manager's job page shows it, or with `fieldMode` as the assigned worker's work pack does. */
@@ -590,6 +610,16 @@ createRoot(root).render(
     <SupportFilingContractFixture />
   ) : window.uiContractFixture === 'inventory-unit' ? (
     <InventoryUnitContractFixture />
+  ) : window.uiContractFixture === 'article-terms' ? (
+    <ArticleTermsContractFixture />
+  ) : window.uiContractFixture === 'inventory-import' ? (
+    <BannerProvider>
+      <InventoryImportContractFixture />
+    </BannerProvider>
+  ) : window.uiContractFixture === 'inventory-movements' ? (
+    <InventoryMovementsContractFixture />
+  ) : window.uiContractFixture === 'leistungen' ? (
+    <LeistungenContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (
@@ -600,6 +630,10 @@ createRoot(root).render(
     <RequestCaptureContractFixture />
   ) : window.uiContractFixture === 'request-attach' ? (
     <RequestAttachContractFixture />
+  ) : window.uiContractFixture === 'billing-parties' ? (
+    <BillingPartiesContractFixture />
+  ) : window.uiContractFixture === 'offers' ? (
+    <OffersContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>
@@ -632,6 +666,10 @@ createRoot(root).render(
     <OrganizationContractFixture />
   ) : window.uiContractFixture === 'organization-export' ? (
     <OrganizationExportContractFixture />
+  ) : window.uiContractFixture === 'company-profile' ? (
+    <CompanyProfileContractFixture />
+  ) : window.uiContractFixture === 'company-letterhead' ? (
+    <CompanyLetterheadContractFixture />
   ) : window.uiContractFixture === 'draft-landing' ? (
     <AuthLayout>
       <h1>Komponentenverträge</h1>
