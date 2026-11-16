@@ -17,7 +17,7 @@
   "tests/golden/support/steps/dispatch.ts": 4,
   "tests/golden/support/steps/documents.ts": 4,
   "tests/golden/support/steps/inventory.ts": 5,
-  "tests/golden/support/steps/organization.ts": 12,
+  "tests/golden/support/steps/organization.ts": 11,
   "tests/golden/support/steps/personnel.ts": 9,
   "tests/golden/support/steps/qualifications.ts": 17,
   "tests/golden/support/steps/requests.ts": 17,
