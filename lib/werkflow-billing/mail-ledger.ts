@@ -101,7 +101,13 @@ export async function expireDebitNotice(mailId: string, organizationId: string):
  * comparison resends it, so a resend that fails before its claim still gives
  * the next row its turn. False when the row is no longer failed.
  */
-export async function recordMailAttempt(mailId: string, organizationId: string | null): Promise<boolean> {
+export async function recordMailAttempt({
+  mailId,
+  organizationId,
+}: {
+  mailId: string;
+  organizationId: string | null;
+}): Promise<boolean> {
   const { data, error } = await createSupabaseAdminClient().rpc(
     'record_werkflow_billing_mail_attempt',
     rpcArgs('record_werkflow_billing_mail_attempt', { p_mail_id: mailId, p_organization_id: organizationId }),

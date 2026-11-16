@@ -743,6 +743,8 @@ const malformed = {
   failure_code: 'x',
   stripe_object_id: 'in_test_malformed',
   id: 'not-a-uuid',
+  // Older than every other failed row, so the run's first read includes it.
+  updated_at: new Date((NOW - 365 * DAY) * 1000).toISOString(),
 };
 mails().push(malformed);
 const beforeMalformed = sent.length;
