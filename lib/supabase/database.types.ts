@@ -13008,6 +13008,7 @@ export type Database = {
           id: string;
           issue_date: string;
           issued_at: string;
+          line_names: string[];
           net_cents: number;
           number: string;
           organization_id: string;
@@ -13015,6 +13016,8 @@ export type Database = {
           payment_means: string;
           retain_until: string;
           rules_release: string;
+          service_end: string | null;
+          service_start: string | null;
           storno_of_invoice_id: string | null;
           stripe_customer_id: string;
           stripe_event_id: string;
@@ -13033,6 +13036,7 @@ export type Database = {
           id?: string;
           issue_date: string;
           issued_at?: string;
+          line_names?: string[];
           net_cents: number;
           number: string;
           organization_id: string;
@@ -13040,6 +13044,8 @@ export type Database = {
           payment_means: string;
           retain_until?: string;
           rules_release: string;
+          service_end?: string | null;
+          service_start?: string | null;
           storno_of_invoice_id?: string | null;
           stripe_customer_id: string;
           stripe_event_id: string;
@@ -13058,6 +13064,7 @@ export type Database = {
           id?: string;
           issue_date?: string;
           issued_at?: string;
+          line_names?: string[];
           net_cents?: number;
           number?: string;
           organization_id?: string;
@@ -13065,6 +13072,8 @@ export type Database = {
           payment_means?: string;
           retain_until?: string;
           rules_release?: string;
+          service_end?: string | null;
+          service_start?: string | null;
           storno_of_invoice_id?: string | null;
           stripe_customer_id?: string;
           stripe_event_id?: string;
@@ -18561,12 +18570,15 @@ export type Database = {
           p_file_size_bytes: number;
           p_gross_cents: number;
           p_issue_date: string;
+          p_line_names?: string[];
           p_net_cents: number;
           p_number: string;
           p_organization_id: string;
           p_paid_cents: number;
           p_payment_means: string;
           p_rules_release: string;
+          p_service_end?: string;
+          p_service_start?: string;
           p_stripe_customer_id: string;
           p_stripe_event_id: string;
           p_stripe_invoice_id: string;

@@ -504,6 +504,11 @@ export const DIALOG_INVENTORY = {
         { route: '/einstellungen/mitarbeiter', role: 'admin', opener: 'settings.onboarding-template' },
       ],
     },
+  'components/settings/billing/billing-subscription-card.tsx#BillingSubscriptionCard|Abo kündigen?': {
+    audits: [
+      { route: '/einstellungen/abonnement-abrechnung', role: 'admin', opener: 'settings.billing-cancel' },
+    ],
+  },
   'components/settings/profile-avatar-section.tsx#ProfileAvatarSection|Profilbild anpassen': {
     audits: [{ route: '/einstellungen/profil', role: 'admin', opener: 'settings.avatar' }],
   },

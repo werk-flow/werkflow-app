@@ -21,7 +21,13 @@ import {
   responsibilityChangeDialog,
   responsibilityDelegationDialog,
 } from '../../../golden/support/steps/personnel';
+import { seedWerkflowSubscription } from '../../../golden/support/db/werkflow-billing';
+import {
+  cancelSubscriptionButton,
+  cancelSubscriptionConfirmation,
+} from '../../../golden/support/steps/werkflow-billing';
 import type { DialogOpener } from '../dialog-opener';
+import { openSurface } from '../surface-routes';
 
 /** The responsibility whose card the settings openers use; every card has both dialogs. */
 const RESPONSIBILITY = 'time_approval';
@@ -71,6 +77,15 @@ export const SETTINGS_OPENERS = {
   'settings.responsibility': {
     trigger: async ({ page }) => changeResponsibilityButton(responsibilityCard(page, RESPONSIBILITY)),
     layer: (page) => responsibilityChangeDialog(page, RESPONSIBILITY),
+  },
+  // The confirmation needs a running subscription: the page offers no cancel without one.
+  'settings.billing-cancel': {
+    trigger: async ({ page, world, route }) => {
+      await seedWerkflowSubscription(world, { cancelAtPeriodEnd: false });
+      await openSurface(page, { route });
+      return cancelSubscriptionButton(page);
+    },
+    layer: cancelSubscriptionConfirmation,
   },
   'settings.delegation': {
     trigger: async ({ page }) => addDelegationButton(responsibilityCard(page, RESPONSIBILITY)),

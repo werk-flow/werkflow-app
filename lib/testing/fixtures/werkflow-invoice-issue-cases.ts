@@ -177,6 +177,10 @@ describe('a finalized Stripe invoice becomes WerkFlow original', () => {
       p_gross_cents: 49900,
       p_paid_cents: 0,
       p_due_cents: 49900,
+      // What the billing page lists the invoice for: its lines and the period the XML states.
+      p_line_names: ['WerkFlow Monatsabo'],
+      p_service_start: '2026-11-15',
+      p_service_end: '2026-12-14',
     });
     const pdf = stored.get(row?.p_file_key ?? '');
     if (!pdf) throw new Error('no original stored under the recorded key');

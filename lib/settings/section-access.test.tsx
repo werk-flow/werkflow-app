@@ -93,10 +93,15 @@ async function runFixture(): Promise<void> {
   assert.deepEqual(await renderedBlocks(), ['OnboardingTemplates', 'Responsibilities']);
   assert.equal(templateReads, 1);
   assert.equal(await redirectOf(() => readSettingsSectionMembership('organisation')), null);
-  // Only Admin opens the organization export (werk-flow/werkflow-planning#287).
-  assert.equal(await redirectOf(() => readSettingsSectionMembership('datenexport')), '/einstellungen/profil');
+  // Only Admin opens the organization export (werk-flow/werkflow-planning#287) and
+  // WerkFlow's own billing (werk-flow/werkflow-planning#252).
+  for (const slug of ['datenexport', 'abonnement-abrechnung'] as const) {
+    assert.equal(await redirectOf(() => readSettingsSectionMembership(slug)), '/einstellungen/profil', slug);
+  }
   role = 'admin';
-  assert.equal(await redirectOf(() => readSettingsSectionMembership('datenexport')), null);
+  for (const slug of ['datenexport', 'abonnement-abrechnung'] as const) {
+    assert.equal(await redirectOf(() => readSettingsSectionMembership(slug)), null, slug);
+  }
 }
 
 if (process.env[FIXTURE_FLAG] === '1') {

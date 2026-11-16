@@ -121,5 +121,9 @@ export async function issueWerkflowInvoice(
     p_file_sha256: sha256,
     p_file_size_bytes: pdf.byteLength,
     p_rules_release: check.rulesRelease,
+    // What the invoice was for, as the billing page lists it (werk-flow/werkflow-planning#252).
+    p_line_names: invoice.lines.map((line) => line.name),
+    p_service_start: invoice.delivery.kind === 'period' ? invoice.delivery.start : invoice.delivery.date,
+    p_service_end: invoice.delivery.kind === 'period' ? invoice.delivery.end : invoice.delivery.date,
   });
 }
