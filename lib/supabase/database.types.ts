@@ -12776,6 +12776,7 @@ export type Database = {
           retain_until: string;
           rules_release: string;
           storno_of_invoice_id: string | null;
+          stripe_credit_note_id: string | null;
           stripe_customer_id: string;
           stripe_event_id: string;
           stripe_invoice_id: string;
@@ -12801,6 +12802,7 @@ export type Database = {
           retain_until?: string;
           rules_release: string;
           storno_of_invoice_id?: string | null;
+          stripe_credit_note_id: string | null;
           stripe_customer_id: string;
           stripe_event_id: string;
           stripe_invoice_id: string;
@@ -12826,6 +12828,7 @@ export type Database = {
           retain_until?: string;
           rules_release?: string;
           storno_of_invoice_id?: string | null;
+          stripe_credit_note_id?: string | null;
           stripe_customer_id?: string;
           stripe_event_id?: string;
           stripe_invoice_id?: string;
@@ -18207,6 +18210,17 @@ export type Database = {
           p_stripe_event_id: string;
           p_stripe_invoice_id: string;
           p_tax_cents: number;
+        };
+        Returns: string;
+      };
+      issue_werkflow_storno: {
+        Args: {
+          p_cancels_invoice_id: string;
+          p_organization_id: string;
+          p_replacement: Json;
+          p_storno: Json;
+          p_stripe_credit_note_id: string;
+          p_stripe_event_id: string;
         };
         Returns: string;
       };

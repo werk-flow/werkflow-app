@@ -136,6 +136,34 @@ export const CARD_INVOICE_ANSWERS = {
   },
 };
 
+/** 2026-11-20 10:00 Berlin, five days after the invoice. */
+const REFUNDED_AT = FINALIZED_AT + 5 * 86_400;
+
+/** A refund of in_test_0001 as Stripe's credit note: `post_payment`, numbered after the invoice. */
+export function stripeCreditNote(sequence: number, totalCents: number, change: Record<string, unknown> = {}) {
+  const suffix = String(sequence).padStart(2, '0');
+  return {
+    id: `cn_test_00${suffix}`,
+    object: 'credit_note',
+    number: `MUSTER-0001-CN-${suffix}`,
+    invoice: 'in_test_0001',
+    type: 'post_payment',
+    status: 'issued',
+    created: REFUNDED_AT + sequence * 3_600,
+    subtotal: totalCents,
+    total: totalCents,
+    ...change,
+  };
+}
+
+/** Stripe's answers for the credit notes of in_test_0001, read by `target`'s id. */
+export function creditNoteAnswers(target: { id: string }, all: readonly object[]) {
+  return {
+    [`GET /v1/credit_notes/${target.id}`]: target,
+    'GET /v1/credit_notes': { object: 'list', url: '/v1/credit_notes', has_more: false, data: all },
+  };
+}
+
 export const MADE_UP_SELLER: WerkflowSeller = {
   seller: {
     name: 'Musterfirma Software, Erika Musterfrau',
