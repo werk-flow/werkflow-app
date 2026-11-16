@@ -207,7 +207,8 @@ function positionFlow(
       drawLeft(page, firstLine, columns.textLeft, line, fonts.regular, BODY_SIZE);
       const quantity = `${formatQuantity(position.quantity)} ${position.unitLabel}`;
       drawRight(page, quantity, columns.quantityRight, line, fonts.regular, BODY_SIZE);
-      const unitPrice = formatEuroCents(position.unitPriceCents);
+      const per = position.priceQuantity && position.priceQuantity !== 1 ? `/${position.priceQuantity}` : '';
+      const unitPrice = `${formatEuroCents(position.unitPriceCents)}${per}`;
       drawRight(page, unitPrice, columns.priceRight, line, fonts.regular, BODY_SIZE);
       // A Bedarfs- or Alternativposition is not in the sum: its amount stands in
       // parentheses, so a reader adding up the column gets the subtotal.
@@ -268,7 +269,7 @@ function sectionFlow(section: DocumentSection, fonts: Fonts, textWidth: number):
       drawRule(page, columns.textLeft, columns.amountRight, top + 4);
       drawLeft(
         page,
-        `Summe ${section.number} ${section.title}`,
+        ['Summe', section.number, section.title].filter(Boolean).join(' '),
         columns.textLeft,
         top + 9,
         fonts.bold,
@@ -322,7 +323,7 @@ function totalsFlow(document: BusinessDocument, fonts: Fonts): FlowItem[] {
     { cells: ['USt.-Satz', 'Netto', 'USt.', 'Brutto'], font: fonts.bold, size: 8 },
     ...totals.byRate.map((rate) => ({
       cells: [
-        formatTaxRate(rate.rateBasisPoints),
+        rate.label ?? formatTaxRate(rate.rateBasisPoints),
         formatEuroCents(rate.netCents),
         formatEuroCents(rate.vatCents),
         formatEuroCents(rate.grossCents),
@@ -485,13 +486,35 @@ function drawAddressAndInfo(
   );
   const labelLeft = INFO_BLOCK_LEFT_MM * MM;
   const valueLeft = labelLeft + INFO_LABEL_WIDTH_MM * MM;
-  let top = 50 * MM + shift;
+  let top = INFO_BLOCK_TOP_MM * MM + shift;
   for (const row of document.metaRows) {
     drawLeft(page, row.label, labelLeft, top, fonts.regular, 8, MUTED);
     const lines = wrap(row.value, fonts.regular, 8, box.right - valueLeft);
     lines.forEach((line, index) => drawLeft(page, line, valueLeft, top + index * 11, fonts.regular, 8));
     top += lines.length * 11 + 2;
   }
+}
+
+const INFO_BLOCK_TOP_MM = 50;
+/** The least space between the address field or info block and the first page's content. */
+const HEAD_GAP_MM = 6;
+
+/**
+ * Where the first page's address field and info block end. Many or long info
+ * rows, as an invoice may have, reach further down than the usual content top;
+ * the content then starts below them instead of under them.
+ */
+/** The least room the first page keeps below the head for the title and first lines. */
+const MIN_FIRST_PAGE_CONTENT_MM = 40;
+
+function headBottom(document: BusinessDocument, fonts: Fonts, box: Box, shift: number): number {
+  const valueWidth = box.right - (INFO_BLOCK_LEFT_MM + INFO_LABEL_WIDTH_MM) * MM;
+  const infoBottom = document.metaRows.reduce(
+    (top, row) => top + wrap(row.value, fonts.regular, 8, valueWidth).length * 11 + 2,
+    INFO_BLOCK_TOP_MM * MM + shift,
+  );
+  const recipientBottom = 55 * MM + shift + document.recipientLines.length * BODY_LEADING;
+  return Math.max(infoBottom, recipientBottom) + HEAD_GAP_MM * MM;
 }
 
 /** The plain footer: each column's left edge and wrapped lines, and the height they take in millimetres. */
@@ -629,6 +652,14 @@ async function embedFonts(pdf: PDFDocument): Promise<Fonts> {
 
 /** Renders a business document to PDF bytes. */
 export async function renderBusinessDocument(document: BusinessDocument): Promise<Uint8Array> {
+  return (await drawBusinessDocument(document)).save();
+}
+
+/**
+ * The drawn document before it is saved, so the e-invoice output
+ * (`e-invoice.ts`) adds its PDF/A-3 parts to the same pages.
+ */
+export async function drawBusinessDocument(document: BusinessDocument): Promise<PDFDocument> {
   const date = new Date(`${document.issuedOn}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) throw new Error('document_date_invalid');
   const { stationery } = document;
@@ -636,13 +667,24 @@ export async function renderBusinessDocument(document: BusinessDocument): Promis
   const fonts = await embedFonts(pdf);
   // Stationery carries its own footer, so the plain one exists only without it.
   const footer = footerLayout(stationery ? [] : document.footerColumns, fonts);
-  const { firstBox, followingBox, addressShift } = pageGeometry(
+  const {
+    firstBox: plannedFirstBox,
+    followingBox,
+    addressShift,
+  } = pageGeometry(
     stationery && {
       firstPage: stationery.firstPage.margins,
       followingPages: stationery.followingPages?.margins ?? null,
     },
     footer.heightMm,
   );
+  const firstBox = {
+    ...plannedFirstBox,
+    top: Math.max(plannedFirstBox.top, headBottom(document, fonts, plannedFirstBox, addressShift)),
+  };
+  // The head is drawn on the first page only; one that leaves too little room is refused, never clipped.
+  if (firstBox.bottom - firstBox.top < MIN_FIRST_PAGE_CONTENT_MM * MM)
+    throw new RangeError('The document head leaves no room for its content.');
   const boxOf = (pageIndex: number) => (pageIndex === 0 ? firstBox : followingBox);
   const firstUnderlay = stationery ? await embedStationery(pdf, stationery.firstPage.file) : null;
   const followingUnderlay = stationery?.followingPages
@@ -675,5 +717,5 @@ export async function renderBusinessDocument(document: BusinessDocument): Promis
   pdf.setCreator('WerkFlow');
   pdf.setCreationDate(date);
   pdf.setModificationDate(date);
-  return pdf.save();
+  return pdf;
 }

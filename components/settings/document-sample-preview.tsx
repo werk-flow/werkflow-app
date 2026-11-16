@@ -13,7 +13,7 @@ import type { ActionFailure } from '@/lib/action-result';
 /** The route handler that renders the Musterangebot for Admin and Büro. */
 const SAMPLE_OFFER_PATH = '/api/musterangebot';
 
-/** The route handler that builds the checked Muster-E-Rechnung (EN 16931 XML) for Admin and Büro. */
+/** The route handler that builds the checked Muster-E-Rechnung (ZUGFeRD PDF with EN 16931 XML) for Admin and Büro. */
 const SAMPLE_INVOICE_PATH = '/api/musterrechnung';
 
 type SampleOfferRead = { success: true; url: string } | ActionFailure<'load_failed'>;
@@ -100,7 +100,7 @@ function SamplePreview({ profileUpdatedAt }: Pick<PreviewProps, 'profileUpdatedA
           <Button variant="link" className="h-auto px-0" asChild>
             <a href={SAMPLE_INVOICE_PATH} target="_blank" rel="noreferrer">
               <FileCode className="size-4" />
-              Muster-E-Rechnung (XML)
+              Muster-E-Rechnung (ZUGFeRD-PDF)
             </a>
           </Button>
         </div>
