@@ -7,7 +7,7 @@ import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { Badge } from '@/components/ui/badge';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
 import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { useServerAction } from '@/hooks/use-server-action';
@@ -109,9 +109,12 @@ export function BillingSubscriptionCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Dein WerkFlow-Abo</CardTitle>
+        {/* The badge wraps under the title on a phone instead of narrowing the text beside it. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <CardTitle>Dein WerkFlow-Abo</CardTitle>
+          {stateBadge(state)}
+        </div>
         <CardDescription>{stateText(state)}</CardDescription>
-        <CardAction>{stateBadge(state)}</CardAction>
       </CardHeader>
       {(canCancel || canResume || state.kind === 'ended') && (
         <CardContent className="space-y-2">
