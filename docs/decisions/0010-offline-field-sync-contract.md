@@ -345,6 +345,14 @@ Decided for werk-flow/werkflow-planning#22 after the real iPhone run (OQ-5, step
 - **The worker refuses a personal answer.** A redirect, a status outside 200 to 299, or an offline page marked `private` or `no-store`, as Next.js marks a page rendered for one request, fails the fill; the cache keeps nothing of it.
 - **Rejected: a Vercel setting.** Turning Vercel Authentication off for staging exposes a preview of unreleased work; a bypass secret in the worker is public in its script.
 
+## Amendment 2026-11-14: the network's return ends a send that hangs
+
+Decided for werk-flow/werkflow-planning#407. A time event's send that left in a dead spot, where the phone reports a connection that carries nothing, can go minutes without an answer. One pass of the sync runner sends at a time, so every later trigger, `online` included, waited behind it, and the clock showed „Wird übertragen“ with nothing leaving.
+
+- **The return ends it.** Every `online` ends the time event sends still in flight on the page, and the pass after them sends the chain's first event again, unchanged. The server records an envelope once, so a request that arrived before it ended is answered `replayed`. The next event still goes only after the server's answer for the one before it.
+- **A deletion** waits for the ended send as for any other. A request that reached the server before it ended is a send whose answer was lost: the server's record wins and shows on the next refresh.
+- **Open: report drafts.** A draft's attach request and its photo uploads do not end on `online` yet. One that hangs still holds the pass, and the time events behind it.
+
 ## Amendment 2026-11-14: the offline page loads every file from the shell
 
 Decided for werk-flow/werkflow-planning#22 after the iPhone re-test of the cold start: the installed app opened WerkFlow's offline page, but showed „Gerade kein Netz“ instead of the stored day, a broken logo, and an „Erneut versuchen“ that did nothing. The worker answered a page's files from its shell only when it remembered answering that page with the fallback, or when the device reported no network. A cold start can leave it neither: iOS may stop the worker between the navigation and the page's file requests, and the phone may still report a network. The files then went to the dead network and the page's script never ran. Vercel also names each image of `public/` with the deployment's query (`?dpl=…`), which the shell stores without it, so the logo missed the shell in any case.
