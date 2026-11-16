@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { billingFailure } from '@/lib/werkflow-billing/failure';
+import type { EmailMessage } from '@/lib/delivery/send-email';
 import {
   deliverBillingMail,
   type BillingMailOutcome,
@@ -71,6 +72,7 @@ export async function deliverCustomerBillingMail(
     customer: StripeBillingCustomer | null;
     stripeObjectId: string;
     mail: RenderedMail;
+    attachments?: EmailMessage['attachments'];
   },
   environment: Environment = process.env,
 ): Promise<CustomerMailOutcome> {
@@ -89,6 +91,7 @@ export async function deliverCustomerBillingMail(
       stripeObjectId: input.stripeObjectId,
       mail: input.mail,
       replyTo,
+      ...(input.attachments ? { attachments: input.attachments } : {}),
     },
     environment,
   );

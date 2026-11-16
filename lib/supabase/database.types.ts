@@ -12720,6 +12720,33 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_reconciliations: {
+        Row: {
+          alarms_raised: number;
+          complete: boolean;
+          id: string;
+          invoices_compared: number;
+          mails_resent: number;
+          ran_at: string;
+        };
+        Insert: {
+          alarms_raised: number;
+          complete: boolean;
+          id?: string;
+          invoices_compared: number;
+          mails_resent: number;
+          ran_at?: string;
+        };
+        Update: {
+          alarms_raised?: number;
+          complete?: boolean;
+          id?: string;
+          invoices_compared?: number;
+          mails_resent?: number;
+          ran_at?: string;
+        };
+        Relationships: [];
+      };
       werkflow_billing_signals: {
         Row: {
           attempts: number;

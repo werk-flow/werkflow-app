@@ -53,6 +53,42 @@ export type StripeGateway = {
   readCustomer(customerId: string): Promise<StripeBillingCustomer | null>;
   readMandate(mandateId: string): Promise<StripeBillingMandate>;
   readDispute(disputeId: string): Promise<StripeBillingDispute>;
+  /** The renewal Stripe will collect next for a subscription, from its preview (werk-flow/werkflow-planning#492). */
+  readUpcomingDebit(subscriptionId: string): Promise<StripeUpcomingDebit>;
+  /** How a finalized invoice is collected, and when the SEPA debit lands once Stripe created it. */
+  readInvoiceDebit(invoiceId: string): Promise<StripeInvoiceDebit>;
+  /** The invoices created since `since` (seconds) that Stripe finalized; throws `stripe_list_overflow` above the cap. */
+  listFinalizedInvoices(since: number): Promise<Array<{ id: string; finalizedAt: number }>>;
+  /** The ids of the events of `types` Stripe created between `since` and `until` (seconds); same cap. */
+  listEventIds(since: number, until: number, types: readonly Stripe.Event.Type[]): Promise<string[]>;
+};
+
+/** How Stripe collects an invoice or a renewal. */
+type StripeDebitMethod =
+  | { kind: 'sepa_debit'; ibanLastFour: string | null; mandateReference: string | null }
+  | { kind: 'card'; lastFour: string | null };
+
+type StripeUpcomingDebit = {
+  subscriptionId: string;
+  customerId: string;
+  amountCents: number;
+  /** The renewal moment in seconds: the end of the current period. */
+  renewsAt: number;
+  method: StripeDebitMethod | null;
+};
+
+type StripeInvoiceDebit = {
+  id: string;
+  subscriptionId: string | null;
+  /** The renewal this invoice collects, as `renewsAt` of its preview named it: the end of the period before. */
+  renewsAt: number;
+  status: Stripe.Invoice.Status | null;
+  amountPaidCents: number;
+  /** Seconds; null until paid. */
+  paidAt: number | null;
+  method: StripeDebitMethod | null;
+  /** The SEPA charge's `expected_debit_date` (YYYY-MM-DD); null until Stripe created the charge. */
+  expectedDebitDate: string | null;
 };
 
 type StripeBillingInvoice = {
@@ -136,7 +172,9 @@ async function read<T>(call: () => Promise<T>): Promise<T> {
 }
 
 /** The reads a signal handler makes instead of trusting the event body. */
-function billingReads(client: Stripe): Omit<StripeGateway, 'verifySignal' | 'readInvoiceForIssue'> {
+function billingReads(
+  client: Stripe,
+): Pick<StripeGateway, 'readInvoice' | 'readCustomer' | 'readMandate' | 'readDispute'> {
   return {
     readInvoice: (invoiceId) =>
       read(async () => {
@@ -245,6 +283,103 @@ async function mandateReferenceOf(client: Stripe, paymentMethodId: string): Prom
   return references.find((reference) => reference !== undefined) ?? null;
 }
 
+async function debitMethodOf(
+  client: Stripe,
+  method: Stripe.PaymentMethod | null,
+): Promise<StripeDebitMethod | null> {
+  if (method?.type === 'card') return { kind: 'card', lastFour: method.card?.last4 ?? null };
+  if (method?.type !== 'sepa_debit') return null;
+  return {
+    kind: 'sepa_debit',
+    ibanLastFour: method.sepa_debit?.last4 ?? null,
+    mandateReference: await mandateReferenceOf(client, method.id),
+  };
+}
+
+// The daily comparison's lists from Stripe; more than this in a few days is not WerkFlow's volume.
+const LIST_CAP = 1000;
+
+async function capped<T>(items: Promise<T[]>): Promise<T[]> {
+  const all = await items;
+  if (all.length > LIST_CAP) throw billingFailure('stripe_list_overflow');
+  return all;
+}
+
+/** The reads of the debit notice, the invoice and receipt mails, and the daily comparison. */
+function debitReads(
+  client: Stripe,
+): Pick<StripeGateway, 'readUpcomingDebit' | 'readInvoiceDebit' | 'listFinalizedInvoices' | 'listEventIds'> {
+  return {
+    readUpcomingDebit: (subscriptionId) =>
+      read(async () => {
+        const subscription = await client.subscriptions.retrieve(subscriptionId, {
+          expand: ['default_payment_method', 'customer.invoice_settings.default_payment_method'],
+        });
+        const preview = await client.invoices.createPreview({ subscription: subscriptionId });
+        const customer = expanded(subscription.customer);
+        const method =
+          expanded(subscription.default_payment_method) ??
+          (customer?.deleted ? null : expanded(customer?.invoice_settings.default_payment_method));
+        return {
+          subscriptionId,
+          customerId: idOf(subscription.customer) ?? '',
+          amountCents: preview.amount_due,
+          renewsAt: preview.period_end,
+          method: await debitMethodOf(client, method),
+        };
+      }),
+    readInvoiceDebit: (invoiceId) =>
+      read(async () => {
+        const invoice = await client.invoices.retrieve(invoiceId, {
+          expand: [
+            'customer.invoice_settings.default_payment_method',
+            'payments',
+            'default_payment_method',
+            'parent.subscription_details.subscription.default_payment_method',
+          ],
+        });
+        const intentId = paymentIntentIdOf(invoice);
+        const intent = intentId
+          ? await client.paymentIntents.retrieve(intentId, { expand: ['latest_charge'] })
+          : null;
+        return {
+          id: invoice.id ?? invoiceId,
+          subscriptionId: idOf(invoice.parent?.subscription_details?.subscription),
+          renewsAt: invoice.period_end,
+          status: invoice.status,
+          amountPaidCents: invoice.amount_paid,
+          paidAt: invoice.status_transitions.paid_at ?? null,
+          method: await debitMethodOf(client, await paymentMethodOf(client, invoice)),
+          expectedDebitDate:
+            expanded(intent?.latest_charge)?.payment_method_details?.sepa_debit?.expected_debit_date ?? null,
+        };
+      }),
+    listFinalizedInvoices: async (since) => {
+      const invoices = await capped(
+        read(() =>
+          client.invoices
+            .list({ created: { gte: since }, limit: 100 })
+            .autoPagingToArray({ limit: LIST_CAP + 1 }),
+        ),
+      );
+      return invoices.flatMap((invoice) => {
+        const finalizedAt = invoice.status_transitions.finalized_at;
+        return invoice.id && finalizedAt ? [{ id: invoice.id, finalizedAt }] : [];
+      });
+    },
+    listEventIds: async (since, until, types) => {
+      const events = await capped(
+        read(() =>
+          client.events
+            .list({ created: { gte: since, lte: until }, types: [...types], limit: 100 })
+            .autoPagingToArray({ limit: LIST_CAP + 1 }),
+        ),
+      );
+      return events.map((event) => event.id);
+    },
+  };
+}
+
 function invoiceReader(client: Stripe): StripeGateway['readInvoiceForIssue'] {
   return async (invoiceId) => {
     const invoice = await client.invoices.retrieve(invoiceId, {
@@ -292,6 +427,7 @@ export function resolveStripeGateway(
     gateway: {
       verifySignal: signalVerifier(client.webhooks, webhookSecret),
       ...billingReads(client),
+      ...debitReads(client),
       readInvoiceForIssue: invoiceReader(client),
     },
   };

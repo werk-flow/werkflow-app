@@ -399,6 +399,15 @@ export async function putStorageObject({
  */
 const WERKFLOW_BILLING_KEY = /^werkflow-billing\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
 
+function assertWerkflowBillingKey(path: string): void {
+  if (
+    !WERKFLOW_BILLING_KEY.test(path) ||
+    path.split('/').some((segment) => segment === '..' || segment === '.')
+  ) {
+    throw new Error('storage_key_outside_werkflow_billing');
+  }
+}
+
 /** Stores a WerkFlow billing original once: a taken key keeps its first object, whose size it reports. */
 export async function putWerkflowBillingObject({
   path,
@@ -409,12 +418,7 @@ export async function putWerkflowBillingObject({
   body: Uint8Array;
   contentType: string;
 }): Promise<StoredObject> {
-  if (
-    !WERKFLOW_BILLING_KEY.test(path) ||
-    path.split('/').some((segment) => segment === '..' || segment === '.')
-  ) {
-    throw new Error('storage_key_outside_werkflow_billing');
-  }
+  assertWerkflowBillingKey(path);
   try {
     await putObject(path, body, contentType, true);
     return { created: true };
@@ -426,6 +430,14 @@ export async function putWerkflowBillingObject({
       sizeBytes: typeof result.ContentLength === 'number' ? result.ContentLength : null,
     };
   }
+}
+
+/** The bytes of one WerkFlow billing original, for the invoice mail. A missing object throws `storage_object_missing`. */
+export async function readWerkflowBillingObject(path: string): Promise<Uint8Array> {
+  assertWerkflowBillingKey(path);
+  const result = await getR2Client().send(new GetObjectCommand({ Bucket: getR2BucketName(), Key: path }));
+  if (!result.Body) throw new Error('storage_object_missing');
+  return result.Body.transformToByteArray();
 }
 
 /**
