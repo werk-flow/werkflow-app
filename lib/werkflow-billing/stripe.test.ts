@@ -7,6 +7,7 @@ mock.module('server-only', () => ({}));
 beforeAll(() => setSystemTime(new Date('2026-03-02T08:00:00Z')));
 afterAll(() => setSystemTime());
 const { resolveStripeGateway } = await import('./stripe');
+const { failedPaymentMethodType } = await import('./payment-method');
 const { createFakeStripeGateway } = await import('@/lib/testing/fixtures/fake-stripe-gateway');
 const { signalFamilyFor } = await import('./signals/dispatch');
 
@@ -105,12 +106,13 @@ describe('the fake gateway verifies a signal as Stripe does', () => {
 });
 
 describe('the dispatch table', () => {
-  test('each stage A family takes its types, returns for a verified event, and an unknown type has none', async () => {
-    const fake = createFakeStripeGateway(WEBHOOK_SECRET);
+  // Each family's own test proves its handler (billing-mails.test.ts for payment and mandate signals).
+  test('each stage A family takes its types, and an unknown type has none', () => {
     const stageA = [
       'invoice.finalized',
       'invoice.paid',
       'invoice.payment_failed',
+      'charge.dispute.created',
       'credit_note.created',
       'mandate.updated',
       'checkout.session.completed',
@@ -119,17 +121,25 @@ describe('the dispatch table', () => {
     for (const eventType of stageA) {
       const family = signalFamilyFor(eventType);
       expect(family?.eventTypes, eventType).toContain(eventType);
-      const event = Stripe.webhooks.constructEventWithoutVerification(
-        JSON.stringify({
-          id: 'evt_test_dispatch',
-          object: 'event',
-          type: eventType,
-          created: 1,
-          data: { object: {} },
-        }),
-      );
-      await family?.handle(event, fake);
     }
     expect(signalFamilyFor('customer.created')).toBeUndefined();
+  });
+});
+
+describe('the failed payment method', () => {
+  // A failed intent may drop `payment_method` and keep the declined card only in its error.
+  test('comes from the intent, else from its last payment error, else is unknown', () => {
+    expect(
+      failedPaymentMethodType({ payment_method: { type: 'sepa_debit' }, last_payment_error: null }),
+    ).toBe('sepa_debit');
+    expect(
+      failedPaymentMethodType({
+        payment_method: null,
+        last_payment_error: { payment_method: { type: 'card' } },
+      }),
+    ).toBe('card');
+    expect(failedPaymentMethodType({ payment_method: 'pm_test_3', last_payment_error: null })).toBeNull();
+    expect(failedPaymentMethodType('pi_test_0001')).toBeNull();
+    expect(failedPaymentMethodType(undefined)).toBeNull();
   });
 });
