@@ -35,6 +35,33 @@ function configured(environment: Environment, name: string, localValue: string):
   return environment[name]?.trim() || (environment.VERCEL_ENV ? null : localValue);
 }
 
+type Alarm = { kind: BillingAlarmKind; stripeObjectId: string; facts?: BillingAlarmFacts };
+
+function alarmRow(alarm: Alarm, recipient: string | null): Parameters<typeof recordUnsentBillingMail>[0] {
+  return {
+    kind: `alarm.${alarm.kind}`,
+    organizationId: null,
+    recipient: recipient ?? MISSING_ALARM_ADDRESS,
+    stripeObjectId: alarm.stripeObjectId,
+  };
+}
+
+/**
+ * Records an alarm's row as `failed` (`billing_alarm_unsent`) before the
+ * customer mail beside it goes out. Whatever follows, a refused alarm, a
+ * missing address or a lost process, leaves the row for the daily comparison,
+ * since Stripe's next delivery finds the customer mail sent and stops. Throws
+ * when the row cannot be recorded, so the caller sends nothing and Stripe
+ * delivers the signal again.
+ */
+export async function recordBillingAlarm(
+  alarm: Alarm,
+  environment: Environment = process.env,
+): Promise<void> {
+  const recipient = configured(environment, 'WERKFLOW_ALARM_EMAIL', LOCAL_ALARM_ADDRESS);
+  await recordUnsentBillingMail(alarmRow(alarm, recipient), 'billing_alarm_unsent');
+}
+
 /**
  * Raises one alarm to WerkFlow's alarm address, at most once per kind and
  * Stripe object. `facts` name ids and codes only, never personal data. Throws
@@ -42,29 +69,15 @@ function configured(environment: Environment, name: string, localValue: string):
  * delivered again; the error's `code` says why. Its row then stays `failed`,
  * also without an alarm address, and the daily comparison sends it again.
  */
-export async function raiseBillingAlarm(
-  alarm: { kind: BillingAlarmKind; stripeObjectId: string; facts?: BillingAlarmFacts },
-  environment: Environment = process.env,
-): Promise<void> {
+export async function raiseBillingAlarm(alarm: Alarm, environment: Environment = process.env): Promise<void> {
   const recipient = configured(environment, 'WERKFLOW_ALARM_EMAIL', LOCAL_ALARM_ADDRESS);
   if (!recipient) {
-    await recordUnsentBillingMail(
-      {
-        kind: `alarm.${alarm.kind}`,
-        organizationId: null,
-        recipient: MISSING_ALARM_ADDRESS,
-        stripeObjectId: alarm.stripeObjectId,
-      },
-      'billing_alarm_address_missing',
-    );
+    await recordUnsentBillingMail(alarmRow(alarm, null), 'billing_alarm_address_missing');
     throw billingFailure('billing_alarm_address_missing');
   }
   const outcome = await deliverBillingMail(
     {
-      kind: `alarm.${alarm.kind}`,
-      organizationId: null,
-      recipient,
-      stripeObjectId: alarm.stripeObjectId,
+      ...alarmRow(alarm, recipient),
       mail: renderAlarmMail(alarm.kind, [['Stripe-Objekt', alarm.stripeObjectId], ...(alarm.facts ?? [])]),
     },
     environment,

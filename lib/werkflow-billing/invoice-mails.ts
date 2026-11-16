@@ -13,6 +13,7 @@ import {
   deliverCustomerBillingMail,
   describeCustomerMail,
   raiseBillingAlarm,
+  recordBillingAlarm,
 } from '@/lib/werkflow-billing/mail-delivery';
 import {
   renderDebitNoticeMail,
@@ -89,10 +90,17 @@ async function sentAt(kind: CustomerMailKind, stripeObjectId: string): Promise<s
 }
 
 /**
- * Raises an alarm beside a customer mail and answers its failure instead of
- * throwing it, so a missing alarm address or a refused alarm never holds back
- * the customer's mail. The alarm row stays `failed` and the daily comparison
- * sends it again; the caller throws the failure after the customer mail.
+ * Sends an alarm after the customer mail beside it and answers its failure
+ * instead of throwing it; the caller throws it after the customer outcome.
+ *
+ * The order, wherever a customer mail and an alarm go out together:
+ * 1. decide whether the alarm is due;
+ * 2. record the alarm's row (`recordBillingAlarm`) and claim the customer
+ *    mail's; either failing throws before anything is sent, and Stripe
+ *    delivers again;
+ * 3. send the customer mail, so a last free-tier slot is the customer's;
+ * 4. send the alarm. One refused, without its address or never reached stays
+ *    `failed`, and the daily comparison sends it.
  */
 async function alarmBeside(alarm: Parameters<typeof raiseBillingAlarm>[0]): Promise<Error | null> {
   return raiseBillingAlarm(alarm).then(
@@ -154,20 +162,24 @@ export async function sendDebitNotice(
     creditorId,
   };
   // Checked before each send attempt: a sent notice is never checked again.
-  const lateAlarm = noticeLeavesLeadTime(now, debit.debitDate)
-    ? null
-    : await lateNoticeAlarm(key, debit.debitDate, 'Lastschriftankündigung');
+  const late = !noticeLeavesLeadTime(now, debit.debitDate);
+  if (late) await recordBillingAlarm({ kind: 'debit_notice_late', stripeObjectId: key });
   const outcome = await deliverCustomerBillingMail({
     kind: 'debit_notice',
     customer: await stripe.readCustomer(upcoming.customerId),
     stripeObjectId: key,
     mail: renderDebitNoticeMail({ amountCents: upcoming.amountCents, debit, contact }),
   });
-  const unsentAlarm =
-    outcome.status === 'not_sent'
-      ? await lateNoticeAlarm(key, debit.debitDate, describeCustomerMail(outcome))
+  // A notice that did not go is no notice either; it then names why.
+  const alarm =
+    late || outcome.status === 'not_sent'
+      ? await lateNoticeAlarm(
+          key,
+          debit.debitDate,
+          outcome.status === 'not_sent' ? describeCustomerMail(outcome) : 'Lastschriftankündigung',
+        )
       : null;
-  throwFailure(outcome, [lateAlarm, unsentAlarm]);
+  throwFailure(outcome, [alarm]);
 }
 
 /** Sends a failed debit notice again from its ledger key, only for the renewal the key names. */
@@ -227,7 +239,7 @@ export async function sendInvoiceMail(
   // a sent invoice mail is never checked again. A mail first sent after the
   // debit, as by the paid backstop, is late too. A debit notice counts only
   // for its own amount and account, and for a debit no earlier than the day it announced.
-  let lateAlarm: Error | null = null;
+  let lateNotice: string | null = null;
   if (sepa) {
     const sentNotice = debit.subscriptionId
       ? await sentAt(
@@ -238,13 +250,10 @@ export async function sendInvoiceMail(
     const notice =
       sentNotice && debitDate && debitDate >= announcedDebitDate(debit.renewsAt) ? sentNotice : null;
     if (!noticeLeavesLeadTime(notice ? new Date(notice) : now, debitDate)) {
-      lateAlarm = await lateNoticeAlarm(
-        stripeInvoiceId,
-        debitDate,
-        notice ? 'Lastschriftankündigung' : 'Rechnungsmail',
-      );
+      lateNotice = notice ? 'Lastschriftankündigung' : 'Rechnungsmail';
     }
   }
+  if (lateNotice) await recordBillingAlarm({ kind: 'debit_notice_late', stripeObjectId: stripeInvoiceId });
   const payment =
     sepa && debitDate
       ? { ...sepa, debitDate, creditorId }
@@ -273,6 +282,7 @@ export async function sendInvoiceMail(
       },
     ],
   });
+  const lateAlarm = lateNotice ? await lateNoticeAlarm(stripeInvoiceId, debitDate, lateNotice) : null;
   const unsentAlarm =
     outcome.status === 'not_sent'
       ? await alarmBeside({

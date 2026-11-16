@@ -18,6 +18,8 @@ setSystemTime(new Date('2026-11-20T09:00:00Z'));
 type Row = Record<string, unknown>;
 /** The next read of a sent debit notice fails, as a lost database connection would. */
 let failNoticeRead = false;
+/** The next claim of an alarm's row fails, as a lost database connection would. */
+let failAlarmClaim = false;
 const tables: Record<string, Row[]> = {
   werkflow_billing_mails: [],
   werkflow_invoices: [],
@@ -89,6 +91,10 @@ mock.module('@/lib/supabase/admin', () => ({
     from: query,
     rpc: async (name: string, args: Row) => {
       if (name === 'claim_werkflow_billing_mail') {
+        if (failAlarmClaim && String(args.p_kind).startsWith('alarm.')) {
+          failAlarmClaim = false;
+          return { data: null, error: { code: '08006', message: 'connection lost' } };
+        }
         let row = mails().find(
           (mail) => mail.kind === args.p_kind && mail.stripe_object_id === args.p_stripe_object_id,
         );
@@ -134,6 +140,8 @@ const resendKeys = new Map<string, string>();
 let refuseSubject: string | null = null;
 /** Resend accepts the next mail, but its answer is lost on the way back. */
 let loseNextAnswer = false;
+/** Resend accepts this many more new mails, then refuses each as an exhausted quota would; null is no limit. */
+let quotaLeft: number | null = null;
 globalThis.fetch = Object.assign(
   async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
     assert.equal(String(url), 'https://api.resend.com/emails');
@@ -143,7 +151,9 @@ globalThis.fetch = Object.assign(
     const body: unknown = JSON.parse(String(init?.body));
     assert.ok(typeof body === 'object' && body !== null);
     const refused = refuseSubject !== null && String(Reflect.get(body, 'subject')).includes(refuseSubject);
-    const status = refused ? 429 : (resendAnswers.shift() ?? 200);
+    const overQuota = quotaLeft === 0;
+    if (quotaLeft !== null && !overQuota) quotaLeft -= 1;
+    const status = refused || overQuota ? 429 : (resendAnswers.shift() ?? 200);
     if (status !== 200) return Response.json({ name: 'daily_quota_exceeded' }, { status });
     const to: unknown = Reflect.get(body, 'to');
     sent.push({
@@ -240,6 +250,10 @@ const invoiceDebits = {
   },
   // Debited today; its late-notice alarm is refused.
   in_test_alarmrefused: invoiceDebit('in_test_alarmrefused', dayIn(0)),
+  // Debited today; its alarm's row cannot be recorded at first.
+  in_test_claimfail: invoiceDebit('in_test_claimfail', dayIn(0)),
+  // Debited today, with one mail left in the day's quota.
+  in_test_lastslot: invoiceDebit('in_test_lastslot', dayIn(0)),
 };
 for (const id of Object.keys(invoiceDebits)) {
   tables.werkflow_invoices?.push({
@@ -268,6 +282,8 @@ const objects = {
     sub_test_next: upcoming('sub_test_next', 7, SEPA),
     sub_test_switch: upcoming('sub_test_switch', 7, SEPA),
     sub_test_noaddress: upcoming('sub_test_noaddress', 1, SEPA),
+    sub_test_claimfail: upcoming('sub_test_claimfail', 1, SEPA),
+    sub_test_lastslot: upcoming('sub_test_lastslot', 1, SEPA),
     sub_test_card: upcoming('sub_test_card', 7, { kind: 'card', lastFour: '4242' }),
   },
   invoiceDebits,
@@ -401,9 +417,12 @@ setSystemTime(new Date(NOW * 1000));
 const sentAt = (kind: string, id: string) =>
   mails().find((mail) => mail.kind === kind && mail.stripe_object_id === id && mail.state === 'sent')
     ?.sent_at;
-// The invoice whose alarm is refused is checked after the comparison resends it.
+// The invoices of the alarm cases below are checked there, or after the comparison resends their alarms.
 for (const debit of Object.values(invoiceDebits)) {
-  if (!debit.expectedDebitDate || debit.id === 'in_test_quota' || debit.id === 'in_test_alarmrefused')
+  if (
+    !debit.expectedDebitDate ||
+    ['in_test_quota', 'in_test_alarmrefused', 'in_test_claimfail', 'in_test_lastslot'].includes(debit.id)
+  )
     continue;
   const gross = tables.werkflow_invoices?.find((row) => row.stripe_invoice_id === debit.id)?.gross_cents;
   const method: DebitMethod = debit.method;
@@ -478,6 +497,45 @@ refuseSubject = null;
 assert.ok(sentAt('invoice', 'in_test_alarmrefused'), 'a refused alarm held back the invoice mail');
 assert.equal(failedAlarm('in_test_alarmrefused')?.state, 'failed');
 
+// The debit notice and the invoice mail, each with its late alarm.
+const lateCases = (id: string) =>
+  [
+    ['invoice.upcoming', renewal(`sub_test_${id}`), `sub_test_${id}_`],
+    ['invoice.finalized', { id: `in_test_${id}` }, `in_test_${id}`],
+  ] as const;
+/** The customer mails sent under a ledger row whose Stripe object starts with `prefix`. */
+const customerMails = (prefix: string) =>
+  sent.filter(
+    (mail) =>
+      mail.to === CUSTOMER &&
+      mails().some((row) => row.id === mail.mailId && String(row.stripe_object_id).startsWith(prefix)),
+  );
+// An alarm whose row cannot be recorded sends nothing, not even the customer
+// mail, so Stripe's next delivery sends both, once each.
+for (const [type, object, prefix] of lateCases('claimfail')) {
+  failAlarmClaim = true;
+  assert.equal(await deliver(type, object), 'billing_mail_claim_failed');
+  assert.equal(customerMails(prefix).length, 0, `${prefix}: a mail went before its alarm's row was recorded`);
+  assert.equal(await deliver(type, object), null);
+  assert.equal(customerMails(prefix).length, 1, `${prefix}: the customer mail did not go once`);
+  assert.equal(
+    alarms(LATE).filter((mail) => mail.text.includes(prefix)).length,
+    1,
+    `${prefix}: the alarm was lost after a failed claim`,
+  );
+}
+// With one mail left in the quota, the customer mail gets it and the alarm stays failed.
+for (const [type, object, prefix] of lateCases('lastslot')) {
+  quotaLeft = 1;
+  assert.equal(await deliver(type, object), 'email_daily_quota_exceeded');
+  quotaLeft = null;
+  assert.equal(customerMails(prefix).length, 1, `${prefix}: the alarm took the customer's last slot`);
+  assert.deepEqual(
+    [failedAlarm(prefix)?.state, failedAlarm(prefix)?.failure_code],
+    ['failed', 'email_daily_quota_exceeded'],
+  );
+}
+
 // The daily comparison. A run 30 hours ago means one was missed; a refused alarm and a
 // receipt whose invoice Stripe no longer answers are still failed.
 tables.werkflow_billing_reconciliations?.push({
@@ -511,7 +569,7 @@ mails().push(
 const notices = () => sent.filter((mail) => mail.subject.startsWith('Ankündigung')).length;
 const noticesBefore = notices();
 const run = await reconcileWerkflowBilling(stripe);
-assert.deepEqual([run.complete, run.invoicesCompared, run.mailsResent], [true, 3, 6]);
+assert.deepEqual([run.complete, run.invoicesCompared, run.mailsResent], [true, 3, 8]);
 assert.equal(notices(), noticesBefore, 'a passed renewal got the next renewal notice');
 assert.ok(
   alarms('Abrechnungsmail weiter nicht zugestellt').some((mail) => mail.text.includes('sub_test_next_')),
@@ -522,6 +580,8 @@ assert.ok(alarms('Zahlung fehlgeschlagen')[0]?.text.includes('vom täglichen Abg
 for (const [id, code] of [
   ['sub_test_noaddress', 'billing_alarm_address_missing'],
   ['in_test_alarmrefused', 'email_daily_quota_exceeded'],
+  ['sub_test_lastslot_', 'email_daily_quota_exceeded'],
+  ['in_test_lastslot', 'email_daily_quota_exceeded'],
 ]) {
   assert.ok(
     alarms(LATE).some(
