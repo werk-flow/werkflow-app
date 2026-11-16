@@ -74,11 +74,31 @@ export function runSync(): Promise<void> {
   return pass;
 }
 
+/** Aborted when the network returns, then replaced: the requests that left before it. */
+let connection = new AbortController();
+
+/**
+ * The signal a sender's request carries. A request that left before the network returned may hang
+ * on the connection that was lost, as in a dead spot, and would hold the pass that should send now.
+ * The return ends it, and the pass after it sends anew: a resent envelope is recorded once.
+ */
+export function untilNetworkReturns(): AbortSignal {
+  return connection.signal;
+}
+
+function networkReturned(): void {
+  const lost = connection;
+  connection = new AbortController();
+  // Asked for before the old requests end, so a pass that ends with them still runs once more.
+  void runSync();
+  lost.abort();
+}
+
 /** Sends now, the app start, and again on every `online`. Later calls only send now. */
 export function startSyncRunner(): Promise<void> {
   if (!listening) {
     listening = true;
-    window.addEventListener('online', () => void runSync());
+    window.addEventListener('online', networkReturned);
   }
   return runSync();
 }
