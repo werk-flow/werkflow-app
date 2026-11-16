@@ -137,8 +137,8 @@ export function keepDraftOpen(draftId: string): () => void {
 /**
  * The sync runner's signal of the network's return (sync-runner.ts): a request that hangs in a dead
  * spot ends with it. Loaded lazily, since the runner is offline code a job page never carries at
- * start; only a started runner aborts it, and that one is loaded already. A chunk that cannot load
- * only loses the early end: the request still goes.
+ * start, nor loads on open: a job open's requests are a lab count that only falls. Only a started
+ * runner aborts it. A chunk that cannot load only loses the early end: the request still goes.
  */
 async function untilNetworkReturnsIfLoaded(): Promise<AbortSignal[]> {
   try {
@@ -552,8 +552,6 @@ export function startDraftSync(next: DraftHolder): { send: () => Promise<void> }
     activeTransfer?.abort();
   holder = next;
   holderGeneration = todayWipeGeneration();
-  // Loaded while the page has network: a first load in a dead spot would hang the send itself.
-  void untilNetworkReturnsIfLoaded();
   if (!listening) {
     listening = true;
     window.addEventListener('online', () => void sendDrafts());
