@@ -132,42 +132,44 @@ const invoice = (id: string, paymentMethodType: string) => ({
 });
 const SECRET = 'whsec_test_billing_mail_signals';
 const stripe = createFakeStripeGateway(SECRET, {
-  customers: {
-    cus_test_0001: customer,
-    cus_test_orphan: { ...customer, id: 'cus_test_orphan', organizationId: null },
-  },
-  invoices: {
-    in_test_0001: invoice('in_test_0001', 'sepa_debit'),
-    in_test_0002: invoice('in_test_0002', 'card'),
-    in_test_0003: invoice('in_test_0003', 'sepa_debit'),
-    in_test_0004: invoice('in_test_0004', 'sepa_debit'),
-    in_test_0005: { ...invoice('in_test_0005', 'sepa_debit'), customerId: 'cus_test_orphan' },
-    in_test_0007: { ...invoice('in_test_0007', 'sepa_debit'), status: 'paid' },
-    in_test_0008: { ...invoice('in_test_0008', 'sepa_debit'), amountRemainingCents: 1900 },
-    in_test_0009: invoice('in_test_0009', 'paypal'),
-    in_test_0010: invoice('in_test_0010', 'sepa_debit'),
-  },
-  mandates: {
-    mandate_test_0001: {
-      id: 'mandate_test_0001',
-      status: 'inactive',
-      customerId: 'cus_test_0001',
-      ibanLastFour: '3000',
+  objects: {
+    customers: {
+      cus_test_0001: customer,
+      cus_test_orphan: { ...customer, id: 'cus_test_orphan', organizationId: null },
     },
-    mandate_test_0002: {
-      id: 'mandate_test_0002',
-      status: 'active',
-      customerId: 'cus_test_0001',
-      ibanLastFour: '3000',
+    invoices: {
+      in_test_0001: invoice('in_test_0001', 'sepa_debit'),
+      in_test_0002: invoice('in_test_0002', 'card'),
+      in_test_0003: invoice('in_test_0003', 'sepa_debit'),
+      in_test_0004: invoice('in_test_0004', 'sepa_debit'),
+      in_test_0005: { ...invoice('in_test_0005', 'sepa_debit'), customerId: 'cus_test_orphan' },
+      in_test_0007: { ...invoice('in_test_0007', 'sepa_debit'), status: 'paid' },
+      in_test_0008: { ...invoice('in_test_0008', 'sepa_debit'), amountRemainingCents: 1900 },
+      in_test_0009: invoice('in_test_0009', 'paypal'),
+      in_test_0010: invoice('in_test_0010', 'sepa_debit'),
     },
-  },
-  disputes: {
-    dp_test_0001: {
-      id: 'dp_test_0001',
-      customerId: 'cus_test_0001',
-      chargeId: 'py_test_0001',
-      amountCents: 4900,
-      reason: 'debit_not_authorized',
+    mandates: {
+      mandate_test_0001: {
+        id: 'mandate_test_0001',
+        status: 'inactive',
+        customerId: 'cus_test_0001',
+        ibanLastFour: '3000',
+      },
+      mandate_test_0002: {
+        id: 'mandate_test_0002',
+        status: 'active',
+        customerId: 'cus_test_0001',
+        ibanLastFour: '3000',
+      },
+    },
+    disputes: {
+      dp_test_0001: {
+        id: 'dp_test_0001',
+        customerId: 'cus_test_0001',
+        chargeId: 'py_test_0001',
+        amountCents: 4900,
+        reason: 'debit_not_authorized',
+      },
     },
   },
 });
