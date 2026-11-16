@@ -131,6 +131,8 @@ const sent: { to: string; subject: string; text: string; attachments: unknown }[
 const resendKeys = new Map<string, string>();
 /** Resend refuses every mail whose subject contains this, as an exhausted quota would. */
 let refuseSubject: string | null = null;
+/** Resend accepts the next mail, but its answer is lost on the way back. */
+let loseNextAnswer = false;
 globalThis.fetch = Object.assign(
   async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
     assert.equal(String(url), 'https://api.resend.com/emails');
@@ -150,6 +152,10 @@ globalThis.fetch = Object.assign(
       attachments: Reflect.get(body, 'attachments'),
     });
     resendKeys.set(key, `resend-${sent.length}`);
+    if (loseNextAnswer) {
+      loseNextAnswer = false;
+      throw new TypeError('fetch failed');
+    }
     return Response.json({ id: `resend-${sent.length}` });
   },
   { preconnect: fetch.preconnect },
@@ -213,6 +219,7 @@ const invoiceDebits = {
   in_test_pending: invoiceDebit('in_test_pending', null),
   in_test_quota: invoiceDebit('in_test_quota', dayIn(5)),
   in_test_readfail: invoiceDebit('in_test_readfail', dayIn(5)),
+  in_test_lost: invoiceDebit('in_test_lost', dayIn(5)),
   // Debited yesterday and paid; its invoice mail first goes out through the paid backstop.
   in_test_backstop: { ...invoiceDebit('in_test_backstop', dayIn(-1)), status: 'paid', amountPaidCents: 4900 },
   // The renewal noticed 7 days ahead, and one whose amount changed after its notice.
@@ -332,6 +339,17 @@ assert.equal(await deliver('invoice.finalized', { id: 'in_test_readfail' }), 'bi
 assert.equal(sent.filter((mail) => mail.subject.endsWith('MUSTER-readfail')).length, 0);
 assert.equal(await deliver('invoice.finalized', { id: 'in_test_readfail' }), null);
 assert.equal(sent.filter((mail) => mail.subject.endsWith('MUSTER-readfail')).length, 1);
+// Resend accepted the invoice mail but the answer was lost; the retry after the
+// payment renders the same mail, so Resend delivers it once.
+loseNextAnswer = true;
+assert.equal(await deliver('invoice.finalized', { id: 'in_test_lost' }), 'email_provider_unreachable');
+invoiceDebits.in_test_lost = { ...invoiceDebits.in_test_lost, status: 'paid', amountPaidCents: 4900 };
+assert.equal(await deliver('invoice.paid', { id: 'in_test_lost' }), null);
+assert.equal(
+  sent.filter((mail) => mail.subject === 'Deine WerkFlow-Rechnung MUSTER-lost').length,
+  1,
+  'a second copy went out',
+);
 // An invoice mail first sent after its debit, by the paid backstop, is late.
 assert.equal(await deliver('invoice.paid', { id: 'in_test_backstop' }), null);
 assert.equal(alarms(LATE).length, 3);

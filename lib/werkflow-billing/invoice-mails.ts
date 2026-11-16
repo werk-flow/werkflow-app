@@ -181,7 +181,9 @@ export async function sendInvoiceMail(
       invoiceNumber: invoice.number,
       issueDate: invoice.issue_date,
       grossCents: invoice.gross_cents,
-      dueCents: paid ? 0 : invoice.due_cents,
+      // The issued row never changes, so a retry after a lost answer renders the
+      // same mail and Resend's idempotency key delivers it once.
+      dueCents: invoice.due_cents,
       payment,
       contact,
     }),
