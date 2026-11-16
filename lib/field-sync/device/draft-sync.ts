@@ -17,7 +17,6 @@ import {
   type StoredDraft,
 } from './draft-store';
 import { TODAY_WIPE_KEY, todayWipeGeneration } from './today-wipe';
-import { untilNetworkReturns } from './sync-runner';
 import { createListeners } from '@/lib/listeners';
 
 // Sends the report drafts a phone keeps (decision record 0010, the report
@@ -135,11 +134,30 @@ export function keepDraftOpen(draftId: string): () => void {
   };
 }
 
+/**
+ * The sync runner's signal of the network's return (sync-runner.ts): a request that hangs in a dead
+ * spot ends with it. Loaded lazily, since the runner is offline code a job page never carries at
+ * start; only a started runner aborts it, and that one is loaded already. A chunk that cannot load
+ * only loses the early end: the request still goes.
+ */
+async function untilNetworkReturnsIfLoaded(): Promise<AbortSignal[]> {
+  try {
+    const { untilNetworkReturns } = await import('./sync-runner');
+    return [untilNetworkReturns()];
+  } catch (error) {
+    logError('draft sync: the sync runner did not load', error);
+    return [];
+  }
+}
+
 const verdictSchema = z.object({ outcome: z.string(), code: z.string() });
 const answerSchema = z.union([z.object({ results: z.array(verdictSchema).length(1) }), verdictSchema]);
 
 /** The server's verdict on the one operation sent, or null when no readable answer came. */
-async function attach(draft: StoredDraft): Promise<{ outcome: string; code: string; status: number } | null> {
+async function attach(
+  draft: StoredDraft,
+  signal: AbortSignal,
+): Promise<{ outcome: string; code: string; status: number } | null> {
   try {
     const response = await fetch(OPERATIONS_PATH, {
       method: 'POST',
@@ -148,7 +166,7 @@ async function attach(draft: StoredDraft): Promise<{ outcome: string; code: stri
       headers: { 'content-type': 'application/json' },
       // A request that hangs in a dead spot ends when the network returns: it counts as no answer, and
       // the sealed draft goes again, unchanged; the server records an operation id once.
-      signal: untilNetworkReturns(),
+      signal,
       body: JSON.stringify({
         operations: [
           {
@@ -224,13 +242,14 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
     window.addEventListener('storage', abortOnWipe);
     progress = { draftId: draft.id, uploaded, total: draft.photos.length };
     notify();
+    const signal = AbortSignal.any([transfer.signal, ...(await untilNetworkReturnsIfLoaded())]);
     const result = await uploadDocumentDirect({
       file: new File([photo.blob], photo.name, { type: photo.blob.type }),
       target: { kind: 'job', jobId: draft.jobId },
       category: 'photo',
       transferred: photo.transferred,
       // The network's return ends a transfer that hangs in a dead spot, as an interruption: the draft waits.
-      signal: AbortSignal.any([transfer.signal, untilNetworkReturns()]),
+      signal,
       expectedUploaderId: owner.userId,
     }).finally(() => {
       window.removeEventListener('storage', abortOnWipe);
@@ -361,9 +380,10 @@ async function sendOne(
   }
   if (typeof prepared === 'string') return prepared;
   const { sealed, sealedHere } = prepared;
+  const signal = AbortSignal.any(await untilNetworkReturnsIfLoaded());
   // The seal's transaction can outlast a sign-in elsewhere: the claim is checked again right before the request.
   if (!stillHolder(claim)) return 'waiting';
-  const verdict = await attach(sealed);
+  const verdict = await attach(sealed, signal);
   if (verdict === null) return 'waiting';
   if (verdict.outcome === 'accepted' || verdict.outcome === 'replayed') {
     await changeDraftOnDevice(owner, draftId, () => null);
@@ -530,6 +550,8 @@ export function startDraftSync(next: DraftHolder): { send: () => Promise<void> }
     activeTransfer?.abort();
   holder = next;
   holderGeneration = todayWipeGeneration();
+  // Loaded while the page has network: a first load in a dead spot would hang the send itself.
+  void untilNetworkReturnsIfLoaded();
   if (!listening) {
     listening = true;
     window.addEventListener('online', () => void sendDrafts());
