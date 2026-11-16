@@ -12,12 +12,30 @@ import {
   unsentOnDevice,
   unsentSection,
   withoutSentAt,
+  type Envelope,
+  type Server,
 } from './clock-unsent-support';
 
 // The clock's states for time events a phone holds unsent, and the choices a
 // sign-out offers over them (werk-flow/werkflow-planning#319; decision record
 // 0010, the amendment "the time outbox"). The server is the route in
 // clock-unsent-support.ts: every envelope it received and the answer it gives.
+
+/**
+ * What the server recorded: each operation id once, as it first arrived. A send in flight when
+ * `online` fires is ended and sent again (decision record 0010, "the network's return ends a send
+ * that hangs"); one that had reached the server arrives twice and is recorded once. A second
+ * arrival must be the same envelope.
+ */
+function recorded(server: Server): Envelope[] {
+  const first = new Map<string, Envelope>();
+  for (const envelope of server.sent) {
+    const earlier = first.get(envelope.operationId);
+    if (earlier) expect(withoutSentAt(envelope)).toEqual(withoutSentAt(earlier));
+    else first.set(envelope.operationId, envelope);
+  }
+  return [...first.values()];
+}
 
 test('a page whose device holds nothing unsent never runs the outbox code at its start', async ({ page }) => {
   await mountClock(page, CLOCKED_OUT_STATE);
@@ -48,9 +66,9 @@ test('a clock action without network is kept on the phone, shows the running clo
   server.state = { ...RUNNING_CLOCK_STATE, sessionId: ACCEPTED.state?.sessionId ?? null, sessionVersion: 1 };
   await setNetwork(page, server, true);
 
-  await expect.poll(() => server.sent.length).toBe(1);
-  expect(server.authorization).toEqual(['Bearer contract-access-token']);
-  const [envelope] = server.sent;
+  await expect.poll(() => recorded(server).length).toBe(1);
+  expect(new Set(server.authorization)).toEqual(new Set(['Bearer contract-access-token']));
+  const [envelope] = recorded(server);
   expect(envelope).toMatchObject({
     operationId: kept?.operationId,
     kind: 'time.transition',
@@ -64,9 +82,10 @@ test('a clock action without network is kept on the phone, shows the running clo
   await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'in');
   await expect.poll(() => unsentOnDevice(page)).toEqual([]);
   // A second `online` sends nothing again.
+  const requests = server.sent.length;
   await setNetwork(page, server, true);
   await expect(page.getByLabel('Zeitstatus')).toHaveText('Bereit: 1');
-  expect(server.sent).toHaveLength(1);
+  expect(server.sent).toHaveLength(requests);
 });
 
 test('actions kept one after the other are sent in that order, each naming the session the one before it left', async ({
@@ -82,14 +101,17 @@ test('actions kept one after the other are sent in that order, each naming the s
 
   await setNetwork(page, server, true);
 
-  await expect.poll(() => server.sent.length).toBe(2);
-  expect(server.sent.map((envelope) => envelope.payload)).toMatchObject([
+  await expect.poll(() => recorded(server).length).toBe(2);
+  const [start, pause] = recorded(server);
+  expect([start?.payload, pause?.payload]).toMatchObject([
     { action: 'start', expectedSessionId: null, expectedVersion: null },
     { action: 'switch', expectedSessionId: ACCEPTED.state?.sessionId, expectedVersion: 1 },
   ]);
-  expect(Date.parse(server.sent[0]?.capturedAt ?? '')).toBeLessThanOrEqual(
-    Date.parse(server.sent[1]?.capturedAt ?? ''),
+  // The pause left only after the start was recorded: no request of it before the start's last.
+  expect(server.sent.findIndex((envelope) => envelope.operationId === pause?.operationId)).toBeGreaterThan(
+    server.sent.findLastIndex((envelope) => envelope.operationId === start?.operationId),
   );
+  expect(Date.parse(start?.capturedAt ?? '')).toBeLessThanOrEqual(Date.parse(pause?.capturedAt ?? ''));
 });
 
 test('a refused event whose clock read then fails shows the server’s confirmed clock, never the phone’s kept one', async ({
@@ -123,9 +145,12 @@ test('a refused event shows „Nicht übertragen“ with its reason, is sent aga
   await expect(section).toContainText('Der Monat dieser Zeiten ist bereits abgeschlossen.');
   await expect(section.getByRole('listitem')).toHaveText(/^Arbeit gestartet/);
 
+  // The refusal settled every send: only the person's request sends it again.
+  expect(recorded(server)).toHaveLength(1);
+  const requests = server.sent.length;
   await section.getByRole('button', { name: 'Erneut senden', exact: true }).click();
-  await expect.poll(() => server.sent.length).toBe(2);
-  expect(withoutSentAt(server.sent[1])).toEqual(withoutSentAt(server.sent[0]));
+  await expect.poll(() => server.sent.length).toBe(requests + 1);
+  expect(withoutSentAt(server.sent.at(-1))).toEqual(withoutSentAt(server.sent[0]));
   await expect(section.getByRole('button', { name: 'Erneut senden', exact: true })).toBeEnabled();
 
   await section.getByRole('button', { name: 'Löschen', exact: true }).click();
@@ -141,7 +166,7 @@ test('a refused event shows „Nicht übertragen“ with its reason, is sent aga
   await expect(section).toHaveCount(0);
   await expect(unsentBadge(page)).toHaveCount(0);
   expect(await unsentOnDevice(page)).toEqual([]);
-  expect(server.sent).toHaveLength(2);
+  expect(server.sent).toHaveLength(requests + 1);
 });
 
 test('while refused events wait for the person, a clock action without network is refused instead of kept behind them', async ({
@@ -238,7 +263,7 @@ test('a late event shows „Korrektur nötig“, opens the correction with its c
   await correction.getByRole('button', { name: 'Korrektur einreichen', exact: true }).click();
   await expect(section).toHaveCount(0);
   expect(await unsentOnDevice(page)).toEqual([]);
-  expect(server.sent).toHaveLength(1);
+  expect(recorded(server)).toHaveLength(1);
 });
 
 test('a late chain of a session the server still holds open offers no correction: the person keeps the times, deletes them, ends the session, then corrects', async ({
@@ -399,9 +424,10 @@ test('a conflict shows what changed and the server’s clock, never the phone’
   await expect(unsentBadge(clockDock(page))).toHaveText('Konflikt');
   // The server still runs the session: the phone's end changed nothing.
   await expect(clockStatus(page)).toHaveText('Arbeit');
-  expect(server.sent.map((envelope) => envelope.payload)).toMatchObject([
+  expect(recorded(server).map((envelope) => envelope.payload)).toMatchObject([
     { action: 'end', expectedSessionId: RUNNING_CLOCK_STATE.sessionId, expectedVersion: 7 },
   ]);
+  const requests = server.sent.length;
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
   const section = unsentSection(page);
   await expect(section).toContainText('Deine Zeiterfassung wurde inzwischen geändert');
@@ -414,7 +440,7 @@ test('a conflict shows what changed and the server’s clock, never the phone’
   await expect(section.locator('[data-clock-open-session]')).toBeVisible();
   await setNetwork(page, server, true);
   await expect(section).toBeVisible();
-  expect(server.sent).toHaveLength(1);
+  expect(server.sent).toHaveLength(requests);
 });
 
 test('an online clock call that fails late is kept at the time of the tap, under its operation id, and never cleared on a guess', async ({
@@ -631,7 +657,7 @@ test('„Verwerfen“ asks once more, then deletes the unsent events for good an
   await confirmation.getByRole('button', { name: 'Endgültig verwerfen', exact: true }).click();
   await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung darf enden');
   expect(await unsentOnDevice(page)).toEqual([]);
-  expect(server.sent).toHaveLength(1);
+  expect(recorded(server)).toHaveLength(1);
 });
 
 test('„Verwerfen“ deletes only what the person was shown: an action kept since the question stays and is asked about', async ({
