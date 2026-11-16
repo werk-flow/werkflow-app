@@ -15,11 +15,12 @@ const cancelled = (world: TestWorld) => subscribed(world, true);
 
 /**
  * werk-flow/werkflow-planning#252 of 2026-11-16: the Admin's „Abonnement &
- * Abrechnung“ with a running subscription and two invoices, loading and with
- * a failed read, cancelled to the end of the period, and the cancel
- * confirmation; Büro's settings no longer list the section. The test server
- * holds no Stripe key, so „Nächste Zahlung“ shows its retry. The pilot
- * state without a subscription is the page's visual reference.
+ * Abrechnung“ with a running subscription and two invoices, loading, and
+ * running or cancelled to the end of the period; Büro's settings no longer
+ * list the section. The served test app holds no Stripe key, so „Nächste
+ * Zahlung“ fails with its retry and the subscribed screens are `-error`
+ * captures. The pilot state without a subscription is the page's visual
+ * reference, and audit:layout:settings opens the cancel confirmation.
  */
 function werkflowBillingCaptures(): OpenSet {
   const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
@@ -27,7 +28,6 @@ function werkflowBillingCaptures(): OpenSet {
   return {
     id: 'werkflow-billing-2026-11-16',
     captures: [
-      { id: 'admin-abo-aktiv', role: 'admin', route: ROUTE, view: page, destination: running, ...both },
       {
         id: stateCaptureId('admin-abo-aktiv', 'loading'),
         role: 'admin',
@@ -47,18 +47,12 @@ function werkflowBillingCaptures(): OpenSet {
         ...both,
       },
       {
-        id: 'admin-abo-kuendigen',
-        role: 'admin',
-        route: ROUTE,
-        view: { kind: 'dialog', opener: 'settings.billing-cancel' },
-        ...both,
-      },
-      {
-        id: 'admin-abo-gekuendigt',
+        id: stateCaptureId('admin-abo-gekuendigt', 'error'),
         role: 'admin',
         route: ROUTE,
         view: page,
         destination: cancelled,
+        state: 'error',
         ...both,
       },
       {
