@@ -11,10 +11,8 @@ import {
   installTabLocks,
   keptIds,
   resetDevice,
-  storage,
 } from '@/lib/testing/fixtures/time-outbox';
 import type { StoredDraft } from './draft-store';
-import { TODAY_WIPE_KEY } from './today-wipe';
 
 // The network's return and a report draft's send in flight (decision record 0010, the amendment
 // "the network's return ends a send that hangs", werk-flow/werkflow-planning#407): a draft's attach
@@ -113,22 +111,10 @@ async function isolatedTests(): Promise<void> {
     },
   }));
 
-  /** Runs while a send takes the network's signal: a wipe there lands after the claim's last check before it. */
-  let whileSignalLoads = (): void => undefined;
-  /** The real runner, copied before the stand-in replaces it; the stand-in only adds the hook. */
-  const syncRunner = { ...(await import('./sync-runner')) };
-  void mock.module('./sync-runner', () => ({
-    ...syncRunner,
-    untilNetworkReturns: () => {
-      whileSignalLoads();
-      return syncRunner.untilNetworkReturns();
-    },
-  }));
-
   const { sendOwnTimeEvents } = await import('./clock-device');
   const { changeDraftOnDevice, listDraftsOnDevice } = await import('./draft-store');
-  const { sendDraft, sendDrafts, startDraftSync } = await import('./draft-sync');
-  const { registerSender, startSyncRunner } = syncRunner;
+  const { sendDrafts, startDraftSync } = await import('./draft-sync');
+  const { registerSender, startSyncRunner } = await import('./sync-runner');
 
   const DRAFT_OPERATION_ID = '60000000-0000-4000-8000-000000000012';
   const PHOTO_DOCUMENT_ID = '60000000-0000-4000-8000-000000000040';
@@ -171,7 +157,6 @@ async function isolatedTests(): Promise<void> {
     await resetDevice();
     await deleteDatabase('werkflow-drafts');
     sent.length = 0;
-    whileSignalLoads = () => undefined;
     passAtDrafts = false;
     uploadsBegun = 0;
     uploadsAborted.length = 0;
@@ -237,26 +222,5 @@ async function isolatedTests(): Promise<void> {
     expect(uploadsAborted).toEqual([true, false]);
     expect(sentOf('work_artifact.draft')).toEqual([DRAFT_OPERATION_ID]);
     expect(await listDraftsOnDevice(WORKER)).toEqual([]);
-  });
-
-  /** Sends `photos`' draft, named under the current wipe signal, while a wipe lands as it takes the network signal. */
-  async function sendWipedWhileSignalLoads(photos: StoredDraft['photos']): Promise<string> {
-    whileSignalLoads = () => undefined;
-    await changeDraftOnDevice(WORKER, draft.id, () => null);
-    // The page names the holder under the device's current wipe signal before the draft is on the phone.
-    await startDraftSync(WORKER).send();
-    await changeDraftOnDevice(WORKER, draft.id, () => ({ ...draft, photos }));
-    whileSignalLoads = () => storage.set(TODAY_WIPE_KEY, `sign-in-${String(storage.size)}`);
-    return sendDraft(WORKER, draft.id);
-  }
-
-  test('a sign-out or sign-in in this tab while a send takes the network signal stops it before the upload and the attach', async () => {
-    deadSpot = false;
-
-    expect(await sendWipedWhileSignalLoads([photo])).toBe('waiting');
-    expect(uploadsBegun).toBe(0);
-
-    expect(await sendWipedWhileSignalLoads([{ ...photo, documentId: PHOTO_DOCUMENT_ID }])).toBe('waiting');
-    expect(sent).toEqual([]);
   });
 }

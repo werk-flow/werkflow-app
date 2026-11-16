@@ -96,6 +96,12 @@ export function pageHolder(): DraftHolder | null {
 
 /** The photo transfer running now: a page that names another person aborts it. */
 let activeTransfer: AbortController | null = null;
+/**
+ * Ended by every `online`, then replaced: the draft requests that left before the network returned.
+ * One that hangs on the lost connection, as in a dead spot, would hold every later send of the
+ * phone, the time events of the sync runner's pass included.
+ */
+let connection = new AbortController();
 let progress: DraftSendProgress | null = null;
 let listening = false;
 /** One send at a time: two triggers never upload the same photo twice. */
@@ -134,40 +140,20 @@ export function keepDraftOpen(draftId: string): () => void {
   };
 }
 
-/**
- * The sync runner's signal of the network's return (sync-runner.ts): a request that hangs in a dead
- * spot ends with it. Loaded lazily, since the runner is offline code a job page never carries at
- * start, nor loads on open: a job open's requests are a lab count that only falls. Only a started
- * runner aborts it. A chunk that cannot load only loses the early end: the request still goes.
- */
-async function untilNetworkReturnsIfLoaded(): Promise<AbortSignal[]> {
-  try {
-    const { untilNetworkReturns } = await import('./sync-runner');
-    return [untilNetworkReturns()];
-  } catch (error) {
-    // best-effort: without the signal the request still goes and only ends by itself; its answer reaches the person as always.
-    logError('draft sync: the sync runner did not load', error);
-    return [];
-  }
-}
-
 const verdictSchema = z.object({ outcome: z.string(), code: z.string() });
 const answerSchema = z.union([z.object({ results: z.array(verdictSchema).length(1) }), verdictSchema]);
 
 /** The server's verdict on the one operation sent, or null when no readable answer came. */
-async function attach(
-  draft: StoredDraft,
-  signal: AbortSignal,
-): Promise<{ outcome: string; code: string; status: number } | null> {
+async function attach(draft: StoredDraft): Promise<{ outcome: string; code: string; status: number } | null> {
   try {
     const response = await fetch(OPERATIONS_PATH, {
       method: 'POST',
       cache: 'no-store',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
-      // A request that hangs in a dead spot ends when the network returns: it counts as no answer, and
-      // the sealed draft goes again, unchanged; the server records an operation id once.
-      signal,
+      // Ended by the network's return, it is no answer: the sealed draft goes again, unchanged, and
+      // the server records an operation id once.
+      signal: connection.signal,
       body: JSON.stringify({
         operations: [
           {
@@ -197,7 +183,7 @@ async function attach(
     const verdict = 'results' in answer.data ? answer.data.results[0] : answer.data;
     return verdict ? { ...verdict, status: response.status } : null;
   } catch {
-    // best-effort: without signal, ended by the network's return, or with a page that is no answer, the draft waits for the next send.
+    // best-effort: without signal, or with a page that is no answer, the draft waits for the next send.
     return null;
   }
 }
@@ -232,8 +218,6 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
   let uploaded = draft.photos.filter((photo) => photo.documentId !== null).length;
   for (const photo of draft.photos) {
     if (photo.documentId !== null) continue;
-    // Taken before the claim's check: no wait may sit between that check and the upload.
-    const networkReturn = await untilNetworkReturnsIfLoaded();
     if (!stillHolder(claim)) return 'waiting';
     // A sign-out or a sign-in page in another tab during the transfer aborts it: the photo must not
     // be registered with the next person's session.
@@ -250,8 +234,8 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
       target: { kind: 'job', jobId: draft.jobId },
       category: 'photo',
       transferred: photo.transferred,
-      // The network's return ends a transfer that hangs in a dead spot, as an interruption: the draft waits.
-      signal: AbortSignal.any([transfer.signal, ...networkReturn]),
+      // Ended by the network's return, it is an interruption: the draft waits.
+      signal: AbortSignal.any([transfer.signal, connection.signal]),
       expectedUploaderId: owner.userId,
     }).finally(() => {
       window.removeEventListener('storage', abortOnWipe);
@@ -382,10 +366,9 @@ async function sendOne(
   }
   if (typeof prepared === 'string') return prepared;
   const { sealed, sealedHere } = prepared;
-  const signal = AbortSignal.any(await untilNetworkReturnsIfLoaded());
   // The seal's transaction can outlast a sign-in elsewhere: the claim is checked again right before the request.
   if (!stillHolder(claim)) return 'waiting';
-  const verdict = await attach(sealed, signal);
+  const verdict = await attach(sealed);
   if (verdict === null) return 'waiting';
   if (verdict.outcome === 'accepted' || verdict.outcome === 'replayed') {
     await changeDraftOnDevice(owner, draftId, () => null);
@@ -554,7 +537,12 @@ export function startDraftSync(next: DraftHolder): { send: () => Promise<void> }
   holderGeneration = todayWipeGeneration();
   if (!listening) {
     listening = true;
-    window.addEventListener('online', () => void sendDrafts());
+    window.addEventListener('online', () => {
+      const lost = connection;
+      connection = new AbortController();
+      lost.abort();
+      void sendDrafts();
+    });
   }
   void sendDrafts();
   return { send: sendDrafts };
