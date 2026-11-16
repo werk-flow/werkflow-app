@@ -49,7 +49,8 @@ begin
 end;
 $$;
 
-delete from public.werkflow_billing_page_signals;
+-- A later change touches the same row again: its time moves forward.
+update public.werkflow_billing_page_signals set updated_at = now() - interval '1 hour';
 set local role service_role;
 select public.record_werkflow_subscription_state(
   '25200000-0000-0000-0000-000000000010', 'cus_test_page_0001', 'sub_test_page_0001', 'active', true,
@@ -60,6 +61,11 @@ do $$
 begin
   if pg_temp.signals('25200000-0000-0000-0000-000000000010') is distinct from 1 then
     raise exception 'a recorded cancellation did not signal the billing page';
+  end if;
+  if exists (select 1 from public.werkflow_billing_page_signals
+             where organization_id = '25200000-0000-0000-0000-000000000010'
+               and updated_at < now()) then
+    raise exception 'a recorded cancellation did not touch the existing signal row';
   end if;
 end;
 $$;
