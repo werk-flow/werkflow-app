@@ -15,7 +15,9 @@ export type BillingAlarmKind =
   | 'mail_undelivered'
   | 'signals_quiet'
   | 'reconciliation_missed'
-  | 'mail_bounced';
+  | 'mail_bounced'
+  | 'duplicate_subscription_cancelled'
+  | 'refund_failed';
 
 export type BillingAlarmFacts = readonly (readonly [label: string, value: string])[];
 
@@ -74,6 +76,16 @@ const ALARM_COPY: Record<BillingAlarmKind, { title: string; what: string; next: 
     title: 'Abrechnungsmail kam nicht an',
     what: 'Eine Abrechnungsmail an einen Kunden kam als unzustellbar zurück, oder der Empfänger hat sie als Spam gemeldet.',
     next: 'Prüfe die E-Mail-Adresse des Kunden in Stripe und informiere ihn auf einem anderen Weg.',
+  },
+  duplicate_subscription_cancelled: {
+    title: 'Zweites Abo erstattet und gekündigt',
+    what: 'Für eine Organisation lief ein zweites Abo, oder ein Abo für eine gelöschte Organisation oder ein gelöschtes Konto. WerkFlow hat die Zahlungen seiner letzten Rechnung erstattet und es sofort gekündigt.',
+    next: 'Prüfe in Stripe, ob die Erstattung durchgeht. Scheitert sie, kommt ein eigener Alarm.',
+  },
+  refund_failed: {
+    title: 'Erstattung fehlgeschlagen',
+    what: 'Stripe konnte eine Erstattung nicht ausführen. Das Geld ist noch nicht beim Kunden.',
+    next: 'Erstatte den Betrag von Hand, zum Beispiel per Überweisung, und vermerke es in Stripe.',
   },
 };
 

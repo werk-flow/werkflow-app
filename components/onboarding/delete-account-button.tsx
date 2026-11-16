@@ -29,6 +29,8 @@ import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   has_memberships: 'Du kannst dein Konto nicht löschen, da du Mitglied einer Organisation bist.',
   delete_failed: 'Das Löschen des Kontos ist fehlgeschlagen. Bitte versuche es erneut.',
+  subscription_end_failed:
+    'Dein WerkFlow-Abo konnte gerade nicht beendet werden. Dein Konto ist nicht gelöscht. Versuche es erneut.',
 };
 
 export function DeleteAccountButton() {

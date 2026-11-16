@@ -22,16 +22,11 @@ export default async function CreateOrganizationPage() {
     redirect('/login');
   }
 
-  // If user already has organizations, redirect to dashboard
-  const hasOrgs = await userHasOrganizations(user.id);
-  if (hasOrgs) {
-    redirect('/dashboard');
-  }
-
-  // Only a paid Checkout's reservation creates an organization.
+  // Only a paid Checkout's reservation creates an organization, the first or
+  // a further one; without it a member goes to the dashboard, anyone else pays first.
   const reservation = await readOpenReservation(user.id);
   if (!reservation?.holdsSubscription) {
-    redirect('/upgrade');
+    redirect((await userHasOrganizations(user.id)) ? '/dashboard' : '/upgrade');
   }
 
   return (

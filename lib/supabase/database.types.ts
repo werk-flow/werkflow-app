@@ -13472,11 +13472,14 @@ export type Database = {
           created_at: string;
           current_period_end: string | null;
           duplicate_subscription_ids: string[];
+          failed_duplicate_refunds: Json;
           holds_subscription: boolean;
           linked_at: string | null;
           organization_id: string;
           read_at_by_subscription: Json;
           reserved_by: string | null;
+          runs_subscription: boolean;
+          settled_duplicate_subscription_ids: string[];
           status: string | null;
           stripe_customer_id: string;
           stripe_subscription_id: string | null;
@@ -13493,11 +13496,14 @@ export type Database = {
           created_at?: string;
           current_period_end?: string | null;
           duplicate_subscription_ids?: string[];
+          failed_duplicate_refunds?: Json;
           holds_subscription?: boolean;
           linked_at?: string | null;
           organization_id: string;
           read_at_by_subscription?: Json;
           reserved_by?: string | null;
+          runs_subscription?: boolean;
+          settled_duplicate_subscription_ids?: string[];
           status?: string | null;
           stripe_customer_id: string;
           stripe_subscription_id?: string | null;
@@ -13514,11 +13520,14 @@ export type Database = {
           created_at?: string;
           current_period_end?: string | null;
           duplicate_subscription_ids?: string[];
+          failed_duplicate_refunds?: Json;
           holds_subscription?: boolean;
           linked_at?: string | null;
           organization_id?: string;
           read_at_by_subscription?: Json;
           reserved_by?: string | null;
+          runs_subscription?: boolean;
+          settled_duplicate_subscription_ids?: string[];
           status?: string | null;
           stripe_customer_id?: string;
           stripe_subscription_id?: string | null;
@@ -20243,6 +20252,15 @@ export type Database = {
         Args: { p_mail_id: string; p_organization_id: string };
         Returns: boolean;
       };
+      record_werkflow_refund_failure: {
+        Args: {
+          p_organization_id: string;
+          p_stripe_payment_intent_id: string;
+          p_stripe_refund_id: string;
+          p_stripe_subscription_id: string;
+        };
+        Returns: boolean;
+      };
       record_werkflow_subscription_state: {
         Args: {
           p_cancel_at_period_end: boolean;
@@ -21862,6 +21880,10 @@ export type Database = {
         };
         Returns: boolean;
       };
+      settle_werkflow_duplicate_subscription: {
+        Args: { p_organization_id: string; p_stripe_subscription_id: string };
+        Returns: undefined;
+      };
       stage_supplier_catalog_import_lines: {
         Args: {
           p_actor_id: string;
@@ -23139,6 +23161,10 @@ export type Database = {
       };
       werkflow_subscription_holds: {
         Args: { p_cancellation_reason: string; p_status: string };
+        Returns: boolean;
+      };
+      werkflow_subscription_runs: {
+        Args: { p_status: string };
         Returns: boolean;
       };
       withdraw_customer_commitment: {
