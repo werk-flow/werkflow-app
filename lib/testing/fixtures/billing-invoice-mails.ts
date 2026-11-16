@@ -137,6 +137,16 @@ mock.module('@/lib/supabase/admin', () => ({
         row.sent_at = args.p_outcome === 'sent' ? new Date().toISOString() : null;
         return { data: true, error: null };
       }
+      if (name === 'record_werkflow_billing_mail_attempt') {
+        const row = mails().find(
+          (mail) =>
+            mail.id === args.p_mail_id &&
+            mail.organization_id === args.p_organization_id &&
+            mail.state === 'failed',
+        );
+        if (row) row.updated_at = new Date().toISOString();
+        return { data: Boolean(row), error: null };
+      }
       if (name === 'expire_werkflow_billing_mail') {
         const row = mails().find(
           (mail) =>
@@ -599,6 +609,7 @@ mails().push(
   {
     id: crypto.randomUUID(),
     kind: 'alarm.debit_failed',
+    organization_id: null,
     stripe_object_id: 'in_test_alarm',
     state: 'failed',
     failure_code: 'email_daily_quota_exceeded',
@@ -606,6 +617,7 @@ mails().push(
   {
     id: crypto.randomUUID(),
     kind: 'receipt',
+    organization_id: ORGANIZATION,
     stripe_object_id: 'in_test_gone',
     state: 'failed',
     failure_code: 'email_daily_quota_exceeded',
@@ -668,6 +680,7 @@ assert.equal(sent.length, beforeSecond, 'a second run sent a mail or an alarm ag
 mails().push({
   id: crypto.randomUUID(),
   kind: 'alarm.mail_undelivered',
+  organization_id: null,
   stripe_object_id: 'receipt_in_test_lost',
   state: 'failed',
   failure_code: 'email_daily_quota_exceeded',
@@ -694,6 +707,7 @@ for (let index = 0; index < 1000; index += 1) {
 mails().push({
   id: crypto.randomUUID(),
   kind: 'alarm.debit_failed',
+  organization_id: null,
   stripe_object_id: 'in_test_backlog',
   state: 'failed',
   failure_code: 'email_daily_quota_exceeded',
@@ -708,6 +722,54 @@ for (let index = 0; index < 1000; index += 1) {
   const notice = mails().find((mail) => mail.stripe_object_id === backlogNotice(index));
   assert.equal(notice?.state, 'expired', `the passed notice ${String(index)} stayed failed`);
 }
+
+// Rows whose resend fails before its claim still give a newer failed mail its turn
+// (werk-flow/werkflow-planning#498): one run's batch of 999 failed-mail notices whose
+// invoice Stripe no longer answers, all older than a failed alarm, holds the alarm back
+// for one run only, since each attempt moves its row back before it resends.
+for (let index = 0; index < 999; index += 1) {
+  mails().push({
+    id: crypto.randomUUID(),
+    kind: 'payment_failed',
+    organization_id: ORGANIZATION,
+    stripe_object_id: `in_test_unreadable${String(index)}`,
+    state: 'failed',
+    failure_code: 'email_daily_quota_exceeded',
+    updated_at: new Date((NOW - 30 * DAY) * 1000).toISOString(),
+  });
+}
+mails().push({
+  id: crypto.randomUUID(),
+  kind: 'alarm.debit_failed',
+  organization_id: null,
+  stripe_object_id: 'in_test_starved',
+  state: 'failed',
+  failure_code: 'email_daily_quota_exceeded',
+  updated_at: new Date((NOW - DAY) * 1000).toISOString(),
+});
+const starvedAlarm = () => mails().find((mail) => mail.stripe_object_id === 'in_test_starved');
+assert.equal((await reconcileWerkflowBilling(stripe)).complete, false, 'a backlog left the run complete');
+assert.equal(starvedAlarm()?.state, 'failed', 'the run resent a row behind its batch of older rows');
+await reconcileWerkflowBilling(stripe);
+assert.equal(
+  starvedAlarm()?.state,
+  'sent',
+  'rows whose resend failed before its claim held back a newer failed mail',
+);
+
+// A failed-mail row the database answers in another shape fails the step, and nothing is resent.
+const malformed = {
+  ...starvedAlarm(),
+  state: 'failed',
+  failure_code: 'x',
+  stripe_object_id: 'in_test_malformed',
+  id: 'not-a-uuid',
+};
+mails().push(malformed);
+const beforeMalformed = sent.length;
+assert.equal((await reconcileWerkflowBilling(stripe)).complete, false, 'an invalid failed-mail row passed');
+assert.equal(sent.length, beforeMalformed, 'a run resent mails from a read with an invalid row');
+mails().splice(mails().indexOf(malformed), 1);
 
 // The route runs nothing without the cron secret, a wrong one, or a Stripe key.
 const call = (authorization?: string) =>
