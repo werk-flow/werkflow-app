@@ -249,13 +249,16 @@ async function cancelDuplicate(client: Stripe, subscriptionId: string): Promise<
     const intentId = expandableId(payment.payment.payment_intent ?? null);
     if (!intentId || payment.status === 'canceled') continue;
     let refunded = false;
+    let cancelled = 0;
     for await (const refund of client.refunds.list({ payment_intent: intentId, limit: 100 })) {
-      if (refund.status !== 'canceled') refunded = true;
+      if (refund.status === 'canceled') cancelled += 1;
+      else refunded = true;
     }
     if (!refunded) {
+      // Each cancelled refund starts a new attempt: Stripe would replay the cancelled one for its key.
       await client.refunds.create(
         { payment_intent: intentId, metadata: { [DUPLICATE_METADATA_KEY]: subscriptionId } },
-        { idempotencyKey: `werkflow-duplicate-refund-${intentId}` },
+        { idempotencyKey: `werkflow-duplicate-refund-${intentId}-${cancelled}` },
       );
     }
   }
