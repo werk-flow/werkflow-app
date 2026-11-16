@@ -19351,6 +19351,10 @@ export type Database = {
             };
             Returns: string;
           };
+      record_werkflow_billing_mail_attempt: {
+        Args: { p_mail_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
       record_work_artifact_action: {
         Args: {
           p_action_id: string;

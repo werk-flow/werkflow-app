@@ -4,7 +4,10 @@
 -- the invoice, the receipt and the five new alarms, and still refuses an
 -- unknown kind; only a failed debit notice can end as `expired`; no client
 -- role reads or writes the comparison's runs or ends a mail, and the service
--- role only reads the runs and adds one.
+-- role only reads the runs and adds one. Recording a resend attempt moves only
+-- a failed row of its own organization to the back of the resend order
+-- (20261215100008_retry_every_failed_billing_mail_in_turn.sql,
+-- werk-flow/werkflow-planning#498).
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 
@@ -30,6 +33,9 @@ begin
     end if;
     if has_function_privilege(api_role, 'public.expire_werkflow_billing_mail(uuid, uuid)', 'execute') then
       raise exception '% may end a billing mail', api_role;
+    end if;
+    if has_function_privilege(api_role, 'public.record_werkflow_billing_mail_attempt(uuid, uuid)', 'execute') then
+      raise exception '% may move a billing mail in the resend order', api_role;
     end if;
   end loop;
   -- A list of privileges is true when any one is held, so each required one is checked alone.
@@ -113,6 +119,54 @@ begin
     raise exception 'service_role changed a recorded run';
   exception when insufficient_privilege then null;
   end;
+end;
+$$;
+reset role;
+
+-- Rows that failed a month ago, as the comparison finds them.
+insert into public.werkflow_billing_mails (id, kind, organization_id, recipient, stripe_object_id, state, failure_code, updated_at)
+values
+  ('b1a20000-0000-4000-8000-000000000021', 'payment_failed', 'b1a20000-0000-4000-8000-000000000010',
+    'rechnung@sonnenberg.example', 'in_test_run_0021', 'failed', 'stripe_read_failed', now() - interval '30 days'),
+  ('b1a20000-0000-4000-8000-000000000022', 'alarm.debit_failed', null,
+    'alarm@example.test', 'in_test_run_0022', 'failed', 'email_daily_quota_exceeded', now() - interval '30 days');
+insert into public.werkflow_billing_mails (id, kind, organization_id, recipient, stripe_object_id, state,
+  provider_message_id, sent_at, updated_at)
+values ('b1a20000-0000-4000-8000-000000000023', 'receipt', 'b1a20000-0000-4000-8000-000000000010',
+  'rechnung@sonnenberg.example', 'in_test_run_0023', 'sent', 're_test_run_0023', now() - interval '30 days',
+  now() - interval '30 days');
+
+set local role service_role;
+do $$
+declare
+  v_org constant uuid := 'b1a20000-0000-4000-8000-000000000010';
+  v_mail constant uuid := 'b1a20000-0000-4000-8000-000000000021';
+  v_alarm constant uuid := 'b1a20000-0000-4000-8000-000000000022';
+  v_sent constant uuid := 'b1a20000-0000-4000-8000-000000000023';
+begin
+  if public.record_werkflow_billing_mail_attempt(v_mail, gen_random_uuid()) then
+    raise exception 'an attempt was recorded for another organization';
+  end if;
+  if public.record_werkflow_billing_mail_attempt(v_mail, null) then
+    raise exception 'a customer mail attempt was recorded without its organization';
+  end if;
+  if not exists (select 1 from public.werkflow_billing_mails where id = v_mail and updated_at < now() - interval '1 day') then
+    raise exception 'a refused attempt moved the mail';
+  end if;
+  if not public.record_werkflow_billing_mail_attempt(v_mail, v_org)
+    or not public.record_werkflow_billing_mail_attempt(v_alarm, null) then
+    raise exception 'a failed mail attempt was not recorded';
+  end if;
+  if exists (select 1 from public.werkflow_billing_mails
+      where id in (v_mail, v_alarm) and (updated_at <> now() or state <> 'failed' or attempts <> 0)) then
+    raise exception 'a recorded attempt did not move only the failed row to the back';
+  end if;
+  if public.record_werkflow_billing_mail_attempt(v_sent, v_org) then
+    raise exception 'an attempt was recorded for a sent mail';
+  end if;
+  if not exists (select 1 from public.werkflow_billing_mails where id = v_sent and updated_at < now() - interval '1 day') then
+    raise exception 'a sent mail moved';
+  end if;
 end;
 $$;
 reset role;
