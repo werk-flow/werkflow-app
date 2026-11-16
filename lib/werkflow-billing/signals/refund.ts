@@ -10,14 +10,18 @@ import type { SignalFamily } from '@/lib/werkflow-billing/signals/family';
 // A refund Stripe could not pay out (werk-flow/werkflow-planning#495).
 // Contract (family.ts): the handler re-reads the refund from Stripe by id, is
 // idempotent, and throws on failure so Stripe delivers again. A refund that
-// failed raises the `refund_failed` alarm, so a person refunds by hand; one
+// failed, or was cancelled after it was issued, raises the `refund_failed`
+// alarm, so a person refunds by hand; one
 // the duplicate backstop issued (lib/subscription/record.ts) is also recorded
 // against its duplicate and payment. Any other refund state changes nothing.
+/** A refund in these states pays the customer nothing, and WerkFlow never issues it again by itself. */
+const UNPAID = new Set(['failed', 'canceled']);
+
 export const refundSignals: SignalFamily = {
   eventTypes: ['refund.failed', 'charge.refund.updated'],
   handle: async (event, stripe) => {
     const refund = await stripe.subscriptions.readRefund(signalObjectId(event));
-    if (refund.status !== 'failed') return;
+    if (!UNPAID.has(refund.status)) return;
     const customer = refund.customerId ? await stripe.readCustomer(refund.customerId) : null;
     const organizationId = uuidSchema.safeParse(customer?.organizationId);
     if (organizationId.success && refund.duplicateSubscriptionId && refund.paymentIntentId) {
