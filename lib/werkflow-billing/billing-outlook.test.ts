@@ -115,20 +115,13 @@ describe("the billing page's Stripe calls", () => {
     });
   });
 
-  test('cancelling sets cancel_at_period_end and answers the subscription Stripe now holds', async () => {
+  test('cancelling sets only cancel_at_period_end', async () => {
     const { calls, requests } = gatewayAnswering({
       'POST /v1/subscriptions/sub_test_0001': subscription({ cancel_at_period_end: true }),
     });
-    const snapshot = await calls.setCancelAtPeriodEnd('sub_test_0001', true);
-    expect(snapshot).toMatchObject({
-      id: 'sub_test_0001',
-      organizationId: '20000000-0000-4000-8000-00000000000a',
-      status: 'active',
-      cancelAtPeriodEnd: true,
-      currentPeriodEnd: '2026-12-15T10:00:00.000Z',
-    });
+    await calls.setCancelAtPeriodEnd('sub_test_0001', true);
     // Only the end of the period changes: no immediate cancel, no proration, no refund.
     expect(requests.map((request) => request.key)).toEqual(['POST /v1/subscriptions/sub_test_0001']);
-    expect(requests[0]?.body).toContain('cancel_at_period_end=true');
+    expect(requests[0]?.body).toBe('cancel_at_period_end=true');
   });
 });

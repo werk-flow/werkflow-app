@@ -91,12 +91,10 @@ export type StripeSubscriptionGateway = {
   readBillingOutlook(subscriptionId: string): Promise<StripeBillingOutlook>;
   /**
    * Ends the subscription at the end of its paid period, or takes that back
-   * while the period runs; answers the subscription as Stripe holds it after.
+   * while the period runs. The caller re-reads the subscription to record it:
+   * a read stamps when it began, so a late answer never outranks a newer change.
    */
-  setCancelAtPeriodEnd(
-    subscriptionId: string,
-    cancelAtPeriodEnd: boolean,
-  ): Promise<StripeSubscriptionSnapshot>;
+  setCancelAtPeriodEnd(subscriptionId: string, cancelAtPeriodEnd: boolean): Promise<void>;
 };
 
 function callFailed(): Error {
@@ -209,14 +207,8 @@ async function setCancellation(
   client: Stripe,
   subscriptionId: string,
   cancelAtPeriodEnd: boolean,
-): Promise<StripeSubscriptionSnapshot> {
-  const subscription = await client.subscriptions.update(subscriptionId, {
-    cancel_at_period_end: cancelAtPeriodEnd,
-    expand: ['customer'],
-  });
-  // Stamped after Stripe answered: the answer holds the change, so a read that
-  // began before it never counts as newer than this one.
-  return subscriptionSnapshotOf(subscription, new Date().toISOString());
+): Promise<void> {
+  await client.subscriptions.update(subscriptionId, { cancel_at_period_end: cancelAtPeriodEnd });
 }
 
 /** cancelDuplicateSubscription's steps: each refund and the cancellation run at most once over reruns. */

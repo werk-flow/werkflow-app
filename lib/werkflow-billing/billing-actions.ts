@@ -80,7 +80,10 @@ async function changeCancellation(
   }
   let changed: StripeSubscriptionSnapshot;
   try {
-    changed = await gateway.subscriptions.setCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd);
+    await gateway.subscriptions.setCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd);
+    // A read after the change, stamped when it began: if another session changed the
+    // subscription meanwhile, the newer of the two reads wins, not the later answer.
+    changed = await gateway.subscriptions.readSubscription(subscriptionId);
   } catch (error) {
     logError('changeCancellation: Stripe refused the change', error);
     return { success: false, error: 'stripe_unavailable' };

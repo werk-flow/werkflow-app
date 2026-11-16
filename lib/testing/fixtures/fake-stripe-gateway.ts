@@ -121,7 +121,6 @@ const callFailed = () => Object.assign(new Error('stripe_call_failed'), { code: 
 function fakeBillingPageCalls(
   billing: FakeStripeBilling,
   reach: <T>(answer: () => T) => Promise<T>,
-  stamped: (subscription: Omit<StripeSubscriptionSnapshot, 'readAt'>) => StripeSubscriptionSnapshot,
 ): Pick<StripeSubscriptionGateway, 'readBillingOutlook' | 'setCancelAtPeriodEnd'> {
   return {
     readBillingOutlook: (subscriptionId) =>
@@ -146,9 +145,7 @@ function fakeBillingPageCalls(
         const subscription = billing.subscriptions.get(subscriptionId);
         // Stripe refuses to change a subscription that has ended.
         if (!subscription || subscription.status === 'canceled') throw callFailed();
-        const changed = { ...subscription, cancelAtPeriodEnd };
-        billing.subscriptions.set(subscriptionId, changed);
-        return stamped(changed);
+        billing.subscriptions.set(subscriptionId, { ...subscription, cancelAtPeriodEnd });
       }),
   };
 }
@@ -220,7 +217,7 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
           cancellationReason: 'cancellation_requested',
         });
       }),
-    ...fakeBillingPageCalls(billing, reach, stamped),
+    ...fakeBillingPageCalls(billing, reach),
   };
 }
 

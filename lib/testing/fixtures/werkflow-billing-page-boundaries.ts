@@ -120,6 +120,7 @@ stripe.paymentMethods.set('sub_test_a', { kind: 'sepa_debit', lastFour: '3000' }
 
 // Every Stripe call the page makes, by method.
 const stripeCalls: string[] = [];
+let afterNextChange: (() => Promise<unknown>) | null = null;
 const calls = fakeSubscriptionCalls(stripe);
 const noRead = async (): Promise<never> => {
   throw new Error('The billing page made an unexpected Stripe read.');
@@ -141,9 +142,13 @@ gateway = {
       stripeCalls.push(`readBillingOutlook ${id}`);
       return calls.readBillingOutlook(id);
     },
-    setCancelAtPeriodEnd: (id, cancel) => {
+    setCancelAtPeriodEnd: async (id, cancel) => {
       stripeCalls.push(`setCancelAtPeriodEnd ${id} ${String(cancel)}`);
-      return calls.setCancelAtPeriodEnd(id, cancel);
+      await calls.setCancelAtPeriodEnd(id, cancel);
+      // What another session does after Stripe applied this change and before its answer lands.
+      const meanwhile = afterNextChange;
+      afterNextChange = null;
+      await meanwhile?.();
     },
   },
 };
@@ -254,7 +259,12 @@ assert.deepEqual(
 
 stripeCalls.length = 0;
 assert.deepEqual(await cancelWerkflowSubscription(ORGANIZATION_A), { success: true, shown: true });
-assert.deepEqual(stripeCalls, ['readSubscription sub_test_a', 'setCancelAtPeriodEnd sub_test_a true']);
+// The change is recorded from a read after it, never from the change's own answer.
+assert.deepEqual(stripeCalls, [
+  'readSubscription sub_test_a',
+  'setCancelAtPeriodEnd sub_test_a true',
+  'readSubscription sub_test_a',
+]);
 assert.equal(stripe.subscriptions.get('sub_test_a')?.cancelAtPeriodEnd, true);
 assert.equal(stripe.subscriptions.get('sub_test_a')?.status, 'active', 'access runs until the period ends');
 const ending = await readWerkflowBilling(ORGANIZATION_A);
@@ -279,6 +289,18 @@ assert.equal(rowOf(ORGANIZATION_A)?.cancel_at_period_end, false);
 // The other organization's subscription never moved.
 assert.equal(stripe.subscriptions.get('sub_test_b')?.cancelAtPeriodEnd, false);
 assert.equal(rowOf(ORGANIZATION_B)?.cancel_at_period_end, false);
+
+// --- Two Admins at once: the later answer never overwrites the newer change. ---
+
+// Another Admin takes the cancellation back after Stripe applied it and before this answer lands.
+afterNextChange = () => resumeWerkflowSubscription(ORGANIZATION_A);
+assert.deepEqual(await cancelWerkflowSubscription(ORGANIZATION_A), { success: true, shown: true });
+assert.equal(stripe.subscriptions.get('sub_test_a')?.cancelAtPeriodEnd, false);
+assert.equal(
+  rowOf(ORGANIZATION_A)?.cancel_at_period_end,
+  false,
+  'the record follows Stripe, not the later answer',
+);
 
 // --- A change Stripe holds but WerkFlow failed to record is said so, and the next step judges Stripe. ---
 
