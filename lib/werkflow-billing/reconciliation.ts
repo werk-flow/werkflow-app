@@ -103,15 +103,10 @@ function failedMails(admin: Admin) {
   );
 }
 
-async function stripeIdsIn(
-  read: (
-    batch: readonly string[],
-  ) => PromiseLike<{ data: string[] | null; error: { message: string } | null }>,
-  ids: readonly string[],
-): Promise<Set<string>> {
-  const { data, error } = await readInBatches(ids, read);
-  if (error) throw billingFailure('reconciliation_read_failed');
-  return new Set(data);
+/** The ids a batched read found; a failed read fails the step. */
+function foundIds<Row>(result: { data: Row[]; error: unknown }, idOf: (row: Row) => string): Set<string> {
+  if (result.error) throw billingFailure('reconciliation_read_failed');
+  return new Set(result.data.map(idOf));
 }
 
 /** One run's shared state: what it reads with, and what it counts. */
@@ -173,27 +168,31 @@ async function compareInvoices({ admin, stripe, nowSeconds, result, alarm }: Run
   );
   result.invoicesCompared = finalized.length;
   const ids = finalized.map((invoice) => invoice.id);
-  const issued = await stripeIdsIn(async (batch) => {
-    // tenant-scope: cross-organization-by-design — the Stripe invoice ids span every customer organization.
-    // One row per invoice id, so the batch bounds the read.
-    const { data, error } = await admin
-      .from('werkflow_invoices')
-      .select('stripe_invoice_id')
-      .in('stripe_invoice_id', batch)
-      .limit(batch.length);
-    return { data: data?.map((row) => row.stripe_invoice_id) ?? null, error };
-  }, ids);
-  const mailed = await stripeIdsIn(async (batch) => {
-    // tenant-scope: cross-organization-by-design — the invoice mails of every customer organization.
-    const { data, error } = await admin
-      .from('werkflow_billing_mails')
-      .select('stripe_object_id')
-      .eq('kind', 'invoice')
-      .eq('state', 'sent')
-      .in('stripe_object_id', batch)
-      .limit(batch.length);
-    return { data: data?.map((row) => row.stripe_object_id) ?? null, error };
-  }, ids);
+  // One row per id in each read, so the batch bounds it.
+  const issued = foundIds(
+    await readInBatches(ids, (batch) =>
+      // tenant-scope: cross-organization-by-design — the Stripe invoice ids span every customer organization.
+      admin
+        .from('werkflow_invoices')
+        .select('stripe_invoice_id')
+        .in('stripe_invoice_id', batch)
+        .limit(batch.length),
+    ),
+    (row) => row.stripe_invoice_id,
+  );
+  const mailed = foundIds(
+    await readInBatches(ids, (batch) =>
+      // tenant-scope: cross-organization-by-design — the invoice mails of every customer organization.
+      admin
+        .from('werkflow_billing_mails')
+        .select('stripe_object_id')
+        .eq('kind', 'invoice')
+        .eq('state', 'sent')
+        .in('stripe_object_id', batch)
+        .limit(batch.length),
+    ),
+    (row) => row.stripe_object_id,
+  );
   for (const id of ids) {
     const hasOriginal = issued.has(id);
     // An issued invoice without its mail gets it now; the reason it fails goes into the alarm.
@@ -220,14 +219,16 @@ async function alarmQuietSignals({ admin, stripe, now, nowSeconds, alarm }: Run)
     nowSeconds - SETTLE,
     HANDLED_EVENT_TYPES,
   );
-  const recorded = await stripeIdsIn(async (batch) => {
-    const { data, error } = await admin
-      .from('werkflow_billing_signals')
-      .select('stripe_event_id')
-      .in('stripe_event_id', batch)
-      .limit(batch.length);
-    return { data: data?.map((row) => row.stripe_event_id) ?? null, error };
-  }, eventIds);
+  const recorded = foundIds(
+    await readInBatches(eventIds, (batch) =>
+      admin
+        .from('werkflow_billing_signals')
+        .select('stripe_event_id')
+        .in('stripe_event_id', batch)
+        .limit(batch.length),
+    ),
+    (row) => row.stripe_event_id,
+  );
   const missing = eventIds.filter((id) => !recorded.has(id));
   const oldest = missing.at(-1);
   if (!oldest) return;
