@@ -22,7 +22,7 @@ for (const set of acceptanceSets()) {
       test(`@ACCEPT ${set.id} ${capture.id}`, async ({ rolePage, world, businessDate }, testInfo) => {
         const page = await rolePage(capture.session ?? capture.role);
         const input = { page, world, businessDate, testInfo };
-        const sources = { openers: DIALOG_OPENERS, destination: capture.destination };
+        const sources = { openers: DIALOG_OPENERS, destination: capture.destination, act: capture.act };
         if (!capture.openInEachScheme) {
           await captureAcceptance(input, set.id, capture, sources);
           return;
