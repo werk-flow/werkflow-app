@@ -56,7 +56,7 @@ export async function clockOutBeforeSignOut(): Promise<
     // tenant-scope: cross-organization-by-design — sign-out ends the signed-in user's own open sessions in every organization they belong to.
     const { data: canonicalSessions, error: canonicalSessionsError } = await admin
       .from('time_sessions')
-      .select('id, organization_id, version, status')
+      .select('id, organization_id, version, status, started_at')
       .eq('user_id', user.id)
       .is('ended_at', null);
 
