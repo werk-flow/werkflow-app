@@ -9,7 +9,9 @@ export type BillingAlarmKind =
   | 'debit_reversed'
   | 'mandate_inactive'
   | 'mail_failed'
-  | 'invoice_check_failed';
+  | 'invoice_check_failed'
+  | 'duplicate_subscription_cancelled'
+  | 'refund_failed';
 
 export type BillingAlarmFacts = readonly (readonly [label: string, value: string])[];
 
@@ -38,6 +40,16 @@ const ALARM_COPY: Record<BillingAlarmKind, { title: string; what: string; next: 
     title: 'Rechnungsprüfung fehlgeschlagen',
     what: 'Eine Stripe-Rechnung hat die Prüfung nicht bestanden oder die Prüfung war nicht erreichbar. Sie liegt noch nicht als WerkFlow-Original vor.',
     next: 'Prüfe die Rechnung in Stripe. Stripe stellt das Signal erneut zu, bis die Prüfung klappt.',
+  },
+  duplicate_subscription_cancelled: {
+    title: 'Zweites Abo erstattet und gekündigt',
+    what: 'Für eine Organisation lief ein zweites Abo, oder ein Abo für eine gelöschte Organisation oder ein gelöschtes Konto. WerkFlow hat die Zahlungen seiner letzten Rechnung erstattet und es sofort gekündigt.',
+    next: 'Prüfe in Stripe, ob die Erstattung durchgeht. Scheitert sie, kommt ein eigener Alarm.',
+  },
+  refund_failed: {
+    title: 'Erstattung fehlgeschlagen',
+    what: 'Stripe konnte eine Erstattung nicht ausführen. Das Geld ist noch nicht beim Kunden.',
+    next: 'Erstatte den Betrag von Hand, zum Beispiel per Überweisung, und vermerke es in Stripe.',
   },
 };
 

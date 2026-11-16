@@ -41,6 +41,8 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = {
     'Die Organisation enthält inzwischen Dokumente mit laufender Aufbewahrungsfrist und kann deshalb nicht gelöscht werden.',
   delete_org_failed:
     'Die Organisation konnte nicht gelöscht werden. Es wurde nichts gelöscht. Versuche es erneut.',
+  subscription_end_failed:
+    'Das WerkFlow-Abo der Organisation konnte gerade nicht beendet werden. Es wurde nichts gelöscht. Versuche es erneut.',
 };
 
 interface DeleteOrgDialogProps {
@@ -127,6 +129,9 @@ function DeletionScopeDescription({ scope }: { scope: OrganizationDeletionScope 
         />
         <p className="mt-3">
           Mitglieder, die nur dieser Organisation angehören, werden zur Onboarding-Seite weitergeleitet.
+        </p>
+        <p className="mt-3">
+          Hat die Organisation ein WerkFlow-Abo, endet es sofort. Bezahlte Zeit wird nicht anteilig erstattet.
         </p>
       </div>
     </AlertDialogDescription>

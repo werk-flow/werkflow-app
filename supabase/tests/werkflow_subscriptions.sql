@@ -10,7 +10,13 @@
 -- changes nothing, also of a subscription the row does not follow, and a
 -- holding replacement beats an ended predecessor whatever the read times; a failed payment never ends the subscription; and only the payer creates
 -- the reserved organization, with the reserved id, once, while the
--- subscription holds.
+-- subscription holds. With 20261215100007 (werk-flow/werkflow-planning#495):
+-- one Stripe ended after a failed first debit holds but no longer runs, so a
+-- new Checkout starts and its subscription replaces the ended one; a marked
+-- duplicate answers 'duplicate' until its cleanup is settled, also once
+-- cancelled; a failed refund is recorded once against its duplicate; a
+-- running subscription of a deleted organization or account is marked a
+-- duplicate; and the mail ledger takes the two new alarms.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 
@@ -68,7 +74,10 @@ begin
       'public.finish_werkflow_checkout(uuid, integer, text, text, timestamptz)',
       'public.record_werkflow_subscription_state(uuid, text, text, text, boolean, timestamptz, text, timestamptz, boolean)',
       'public.create_organization_with_id(uuid, uuid, text, text)',
-      'public.create_organization_from_subscription(uuid, text, text)'
+      'public.create_organization_from_subscription(uuid, text, text)',
+      'public.werkflow_subscription_runs(text)',
+      'public.settle_werkflow_duplicate_subscription(uuid, text)',
+      'public.record_werkflow_refund_failure(uuid, text, text, text)'
     ] loop
       if has_function_privilege(api_role, fn, 'execute') then
         raise exception '% may execute %', api_role, fn;
@@ -218,7 +227,7 @@ begin
     raise exception 'a refused attempt replaced the stored session';
   end if;
 
-  -- A failed payment keeps the subscription holding, also when Stripe cancels it for that.
+  -- A failed payment keeps the subscription holding.
   v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
     'cus_test_sonnenberg', 'sub_test_1', 'past_due', false, '2037-01-01T10:00:01Z');
   if v_answer is distinct from 'recorded' or not (select holds_subscription from public.werkflow_subscriptions
@@ -227,19 +236,19 @@ begin
     raise exception 'a past due subscription does not hold';
   end if;
   perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010', 'cus_test_sonnenberg',
-    'sub_test_1', 'canceled', false, '2037-01-01T10:00:02Z', 'payment_failed', '2037-12-15T10:00:00Z');
+    'sub_test_1', 'unpaid', false, '2037-01-01T10:00:02Z', null, '2037-12-15T10:00:00Z');
 
   -- A slow handler's older read changes nothing.
   v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
     'cus_test_sonnenberg', 'sub_test_1', 'active', false, '2037-01-01T10:00:01Z');
   if v_answer is distinct from 'ignored' or (select status from public.werkflow_subscriptions
-      where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'canceled'
+      where organization_id = '41248000-0000-0000-0000-000000000010') is distinct from 'unpaid'
   then
     raise exception 'an older read overwrote a newer state';
   end if;
   if not (select holds_subscription from public.werkflow_subscriptions
       where organization_id = '41248000-0000-0000-0000-000000000010') then
-    raise exception 'a cancellation for a failed payment ended the subscription';
+    raise exception 'an unpaid subscription stopped holding';
   end if;
 
   -- A second subscription while the first holds is refused; a stale one that no longer holds changes nothing.
@@ -291,10 +300,18 @@ begin
   then
     raise exception 'a subscription marked for cancellation became the replacement';
   end if;
+  -- Cancelled, but its cleanup not settled: it still answers 'duplicate', so the cleanup resumes.
   v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
     'cus_test_sonnenberg', 'sub_test_3', 'canceled', false, '2037-01-01T10:00:07.6Z', 'cancellation_requested');
+  if v_answer is distinct from 'duplicate' then
+    raise exception 'a cancelled duplicate with its cleanup outstanding was not answered duplicate: %', v_answer;
+  end if;
+  perform public.settle_werkflow_duplicate_subscription('41248000-0000-0000-0000-000000000010', 'sub_test_3');
+  perform public.settle_werkflow_duplicate_subscription('41248000-0000-0000-0000-000000000010', 'sub_test_3');
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
+    'cus_test_sonnenberg', 'sub_test_3', 'canceled', false, '2037-01-01T10:00:07.7Z', 'cancellation_requested');
   if v_answer is distinct from 'ignored' then
-    raise exception 'a cancelled duplicate was not settled';
+    raise exception 'a settled duplicate was not ignored: %', v_answer;
   end if;
   v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000010',
     'cus_test_sonnenberg', 'sub_test_2', 'active', false, '2037-01-01T10:00:08Z');
@@ -415,6 +432,134 @@ begin
     is null
   then
     raise exception 'create_organization_with_defaults returned no id';
+  end if;
+end;
+$$;
+
+-- werk-flow/werkflow-planning#495: a restart after a failed first debit, the
+-- duplicate cleanup's records, and subscriptions whose owner is gone.
+reset role;
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('41248000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'abo-weg@example.test', '', now(), '{}',
+ '{"first_name":"Willi","last_name":"Weg"}', now(), now());
+insert into public.organizations (id, name, admin_id, unique_code) values
+('41248000-0000-0000-0000-000000000030', 'Heizungsbau Talblick GmbH',
+  '41248000-0000-0000-0000-000000000001', 'ABOSQL07');
+
+set local role service_role;
+do $$
+declare
+  v_answer text;
+begin
+  perform public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000030',
+    '41248000-0000-0000-0000-000000000001', true, 'cus_test_talblick');
+  perform public.finish_werkflow_checkout('41248000-0000-0000-0000-000000000030', 1);
+  perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000030',
+    'cus_test_talblick', 'sub_test_r1', 'active', false, '2037-01-01T11:00:01Z');
+  if not (select runs_subscription from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000030') then
+    raise exception 'an active subscription does not run';
+  end if;
+  -- Stripe ends the subscription after its first debit failed: it holds, no longer runs, and blocks no Checkout.
+  perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000030',
+    'cus_test_talblick', 'sub_test_r1', 'canceled', false, '2037-01-01T11:00:02Z', 'payment_failed');
+  if (select (holds_subscription, runs_subscription) from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000030') is distinct from (true, false)
+  then
+    raise exception 'a subscription ended after a failed first debit did not hold without running';
+  end if;
+  if (select result from public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000030',
+      '41248000-0000-0000-0000-000000000001', true, 'cus_test_talblick')) is distinct from 'claimed'
+  then
+    raise exception 'a start after a failed first debit did not claim a new Checkout';
+  end if;
+  -- Its restart replaces it; a third subscription while the restart runs is refused.
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000030',
+    'cus_test_talblick', 'sub_test_r2', 'active', false, '2037-01-01T11:00:03Z');
+  if v_answer is distinct from 'recorded' or (select stripe_subscription_id from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000030') is distinct from 'sub_test_r2'
+  then
+    raise exception 'the restart after a failed first debit did not replace the ended subscription';
+  end if;
+  begin
+    perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000030',
+      'cus_test_talblick', 'sub_test_r3', 'active', false, '2037-01-01T11:00:04Z');
+    raise exception 'a second subscription while the restart runs was not refused';
+  exception when others then
+    if sqlerrm is distinct from 'subscription_conflict' then raise; end if;
+  end;
+
+  -- A refund of a marked duplicate that failed is recorded once, against the duplicate and its payment.
+  perform public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000030',
+    'cus_test_talblick', 'sub_test_r3', 'active', false, '2037-01-01T11:00:05Z', p_refuse_as_duplicate => true);
+  if not public.record_werkflow_refund_failure('41248000-0000-0000-0000-000000000030',
+      'sub_test_r3', 're_test_1', 'pi_test_1')
+    or public.record_werkflow_refund_failure('41248000-0000-0000-0000-000000000030',
+      'sub_test_r3', 're_test_1', 'pi_test_1')
+  then
+    raise exception 'a failed refund was not recorded exactly once';
+  end if;
+  if (select failed_duplicate_refunds -> 0 ->> 'payment_intent' from public.werkflow_subscriptions
+      where organization_id = '41248000-0000-0000-0000-000000000030') is distinct from 'pi_test_1'
+  then
+    raise exception 'a failed refund was not recorded against its payment';
+  end if;
+end;
+$$;
+
+select pg_temp.expect_refusal('a refund failure of a subscription not marked', $sql$
+  select public.record_werkflow_refund_failure('41248000-0000-0000-0000-000000000030',
+    'sub_test_r2', 're_test_2', 'pi_test_2')
+$sql$, 'duplicate_unknown');
+select pg_temp.expect_refusal('settling a subscription not marked', $sql$
+  select public.settle_werkflow_duplicate_subscription('41248000-0000-0000-0000-000000000030', 'sub_test_r2')
+$sql$, 'duplicate_unknown');
+
+-- The two new alarms reach the mail ledger.
+do $$
+begin
+  if public.claim_werkflow_billing_mail('alarm.duplicate_subscription_cancelled', null,
+      'alarm@example.test', 'sub_test_r3') is null
+    or public.claim_werkflow_billing_mail('alarm.refund_failed', null, 'alarm@example.test', 're_test_1') is null
+  then
+    raise exception 'the mail ledger refused a new alarm kind';
+  end if;
+end;
+$$;
+
+-- The organization and an account with a paid reservation are deleted.
+set local role service_role;
+select public.begin_werkflow_checkout('41248000-0000-0000-0000-000000000040',
+  '41248000-0000-0000-0000-000000000004', false, 'cus_test_weg');
+reset role;
+delete from public.organizations where id = '41248000-0000-0000-0000-000000000030';
+delete from auth.users where id = '41248000-0000-0000-0000-000000000004';
+set local role service_role;
+
+do $$
+declare
+  v_answer text;
+begin
+  -- The stored subscription, cancelled before the deletion, is recorded as usual.
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000030',
+    'cus_test_talblick', 'sub_test_r2', 'canceled', false, '2037-01-01T11:00:06Z', 'cancellation_requested');
+  if v_answer is distinct from 'recorded' then
+    raise exception 'the cancellation before the deletion was not recorded: %', v_answer;
+  end if;
+  -- A subscription that still runs for the deleted organization or account is marked a duplicate.
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000030',
+    'cus_test_talblick', 'sub_test_r4', 'active', false, '2037-01-01T11:00:07Z');
+  if v_answer is distinct from 'duplicate' then
+    raise exception 'a subscription of a deleted organization was not marked a duplicate: %', v_answer;
+  end if;
+  v_answer := public.record_werkflow_subscription_state('41248000-0000-0000-0000-000000000040',
+    'cus_test_weg', 'sub_test_r5', 'active', false, '2037-01-01T11:00:08Z');
+  if v_answer is distinct from 'duplicate' then
+    raise exception 'a subscription of a deleted account''s reservation was not marked a duplicate: %', v_answer;
   end if;
 end;
 $$;

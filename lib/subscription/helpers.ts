@@ -19,8 +19,11 @@ class SubscriptionReadError extends Error {
 
 /**
  * An organization's Stripe subscription as WerkFlow last recorded it
- * (`werkflow_subscriptions`). `holdsSubscription` is the database's one rule:
- * a failed payment never ends it in stage A.
+ * (`werkflow_subscriptions`), by the database's two rules.
+ * `holdsSubscription`: the organization counts as subscribed; a failed
+ * payment never ends it in stage A. `runsSubscription`: Stripe still bills
+ * it, so no second Checkout opens; one Stripe ended after a failed first
+ * debit holds but no longer runs, and the Admin starts a new one.
  */
 export type OrganizationSubscription = {
   organizationId: string;
@@ -28,14 +31,22 @@ export type OrganizationSubscription = {
   /** The subscription the row follows; null before the first. */
   stripeSubscriptionId: string | null;
   holdsSubscription: boolean;
+  runsSubscription: boolean;
+  /** The organization's stored Checkout; null when none was stored. */
+  checkoutSessionId: string | null;
 };
 
 const SUBSCRIPTION_COLUMNS =
-  'organization_id, stripe_customer_id, stripe_subscription_id, holds_subscription';
+  'organization_id, stripe_customer_id, stripe_subscription_id, holds_subscription, runs_subscription, checkout_session_id';
 
 type SubscriptionRow = Pick<
   Database['public']['Tables']['werkflow_subscriptions']['Row'],
-  'organization_id' | 'stripe_customer_id' | 'stripe_subscription_id' | 'holds_subscription'
+  | 'organization_id'
+  | 'stripe_customer_id'
+  | 'stripe_subscription_id'
+  | 'holds_subscription'
+  | 'runs_subscription'
+  | 'checkout_session_id'
 >;
 
 function toSubscription(row: SubscriptionRow): OrganizationSubscription {
@@ -44,6 +55,8 @@ function toSubscription(row: SubscriptionRow): OrganizationSubscription {
     stripeCustomerId: row.stripe_customer_id,
     stripeSubscriptionId: row.stripe_subscription_id,
     holdsSubscription: row.holds_subscription,
+    runsSubscription: row.runs_subscription,
+    checkoutSessionId: row.checkout_session_id,
   };
 }
 

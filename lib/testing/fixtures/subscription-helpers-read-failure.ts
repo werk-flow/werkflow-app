@@ -40,6 +40,8 @@ nextResult = {
     stripe_customer_id: 'cus_test_1',
     stripe_subscription_id: 'sub_test_1',
     holds_subscription: true,
+    runs_subscription: false,
+    checkout_session_id: 'cs_test_1',
   },
   error: null,
 };
@@ -48,6 +50,8 @@ assert.deepEqual(await readOpenReservation(userId), {
   stripeCustomerId: 'cus_test_1',
   stripeSubscriptionId: 'sub_test_1',
   holdsSubscription: true,
+  runsSubscription: false,
+  checkoutSessionId: 'cs_test_1',
 });
 nextResult = { data: null, error: null };
 assert.equal(await readOpenReservation(userId), null, 'a missing row is no reservation');
