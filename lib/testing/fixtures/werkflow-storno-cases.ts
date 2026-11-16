@@ -297,6 +297,17 @@ const refusals: Array<{
     code: 'werkflow_storno_unsupported',
   },
   {
+    // Stripe embeds only the first page of a credit note's lines.
+    case: 'a credit note whose lines run past the first page',
+    answers: (() => {
+      const long = stripeCreditNote(1, 10000, {
+        lines: { object: 'list', has_more: true, data: [{ amount: 10000, taxes: [] }] },
+      });
+      return { ...CARD_INVOICE_ANSWERS, ...creditNoteAnswers(long, [long]) };
+    })(),
+    code: 'werkflow_storno_unsupported',
+  },
+  {
     case: 'a refund before the original was issued',
     answers: { ...CARD_INVOICE_ANSWERS, ...creditNoteAnswers(FULL_REFUND, [FULL_REFUND]) },
     documents: [],

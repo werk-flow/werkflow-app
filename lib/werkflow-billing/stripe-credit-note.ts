@@ -34,7 +34,7 @@ const creditNoteSchema = z.object({
   created: z.number().int().positive(),
   total: z.number().int().positive().safe(),
   total_taxes: taxes,
-  lines: z.object({ data: z.array(z.object({ taxes })) }),
+  lines: z.object({ has_more: z.boolean(), data: z.array(z.object({ taxes })) }),
 });
 
 /** Whether Stripe put any tax on the credit note or one of its lines, inclusive or not. */
@@ -53,6 +53,8 @@ function refundOf(source: unknown): StripeRefund | null {
   if (note.type !== 'post_payment' || note.status !== 'issued')
     throw billingFailure('werkflow_storno_unsupported');
   // Until the VAT switch every document is § 19 UStG: a taxed credit cannot become a tax-exempt Storno.
+  // Stripe embeds only the first page of lines; a tax on an omitted line would go unseen.
+  if (note.lines.has_more) throw billingFailure('werkflow_storno_unsupported');
   if (isTaxed(note)) throw billingFailure('werkflow_storno_unsupported');
   const invoiceId = typeof note.invoice === 'string' ? note.invoice : note.invoice.id;
   if (!/^in_[A-Za-z0-9_]{1,250}$/.test(invoiceId)) throw billingFailure('werkflow_invoice_unreadable');
