@@ -12802,7 +12802,7 @@ export type Database = {
           retain_until?: string;
           rules_release: string;
           storno_of_invoice_id?: string | null;
-          stripe_credit_note_id: string | null;
+          stripe_credit_note_id?: string | null;
           stripe_customer_id: string;
           stripe_event_id: string;
           stripe_invoice_id: string;

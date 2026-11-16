@@ -68,6 +68,8 @@ export type StornoDependencies = Pick<IssueDependencies, 'readInvoice' | 'seller
   /** Every recorded document of the Stripe invoice. */
   documents(stripeInvoiceId: string): Promise<WerkflowDocument[]>;
   record(row: StornoRecord): Promise<'issued' | 'already_issued'>;
+  /** Runs one step for a credit note; a failure a person must see raises the alarm for that credit note. */
+  alarmed<Result>(stripeCreditNoteId: string, step: () => Promise<Result>): Promise<Result>;
 };
 
 function recordedDocument(invoice: CalculatedInvoice, original: CheckedOriginal): StornoDocument {
@@ -163,19 +165,25 @@ export async function issueWerkflowStorno(
 ): Promise<'issued' | 'already_issued'> {
   if (await dependencies.isIssued(stripeCreditNoteId)) return 'already_issued';
 
-  const { refund, refunds } = await dependencies.readRefund(stripeCreditNoteId);
-  if (refund.id !== stripeCreditNoteId) throw billingFailure('werkflow_invoice_unreadable');
-  const stripe = await dependencies.readInvoice(refund.invoiceId);
-  if (stripe.id !== refund.invoiceId) throw billingFailure('werkflow_invoice_unreadable');
-  // A refund of a paid invoice: Stripe collected all of it and keeps it paid.
-  if (stripe.remainingCents !== 0 || stripe.paidCents !== stripe.totalCents) {
-    throw billingFailure('werkflow_storno_unsupported');
-  }
+  const { stripe, refunds } = await dependencies.alarmed(stripeCreditNoteId, async () => {
+    const read = await dependencies.readRefund(stripeCreditNoteId);
+    if (read.refund.id !== stripeCreditNoteId) throw billingFailure('werkflow_invoice_unreadable');
+    const invoice = await dependencies.readInvoice(read.refund.invoiceId);
+    if (invoice.id !== read.refund.invoiceId) throw billingFailure('werkflow_invoice_unreadable');
+    // A refund of a paid invoice: Stripe collected all of it and keeps it paid.
+    if (invoice.remainingCents !== 0 || invoice.paidCents !== invoice.totalCents) {
+      throw billingFailure('werkflow_storno_unsupported');
+    }
+    return { stripe: invoice, refunds: read.refunds };
+  });
 
-  const position = refunds.findIndex((entry) => entry.id === refund.id);
+  const position = refunds.findIndex((entry) => entry.id === stripeCreditNoteId);
   let outcome: 'issued' | 'already_issued' = 'already_issued';
-  for (let index = 0; index <= position; index += 1) {
-    outcome = await issueRefund({ stripe, refunds, index, stripeEventId }, dependencies);
+  // Each refund's failure alarms under its own credit note, so its own signal later adds no second alarm.
+  for (const [index, refund] of refunds.slice(0, position + 1).entries()) {
+    outcome = await dependencies.alarmed(refund.id, () =>
+      issueRefund({ stripe, refunds, index, stripeEventId }, dependencies),
+    );
   }
   return outcome;
 }

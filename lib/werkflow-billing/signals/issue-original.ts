@@ -27,7 +27,7 @@ import { z } from '@/lib/zod';
 const CHECK_FAILURES: ReadonlySet<string> = new Set([
   'werkflow_invoice_rules_failed',
   'werkflow_invoice_check_unavailable',
-  'werkflow_invoice_readback_mismatch',
+  'werkflow_invoice_render_failed',
   'werkflow_invoice_amount_mismatch',
   'werkflow_invoice_unreadable',
   'werkflow_storno_unsupported',

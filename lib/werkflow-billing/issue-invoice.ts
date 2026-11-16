@@ -7,7 +7,6 @@ import { invoiceDocument } from '@/lib/document-rendering/invoice-layout';
 import type { BusinessDocument } from '@/lib/document-rendering/model';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
 import { checkEn16931 } from '@/lib/invoicing/check-en16931';
-import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 import type { CalculatedInvoice, InvoiceDraft } from '@/lib/invoicing/model';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
 import type { StoredObject } from '@/lib/storage/r2';
@@ -89,7 +88,7 @@ export type CheckedOriginal = {
 
 /**
  * Checks one calculated document against EN 16931, renders it as ZUGFeRD
- * PDF/A-3, reads the XML back and stores the bytes under the Stripe invoice's
+ * PDF/A-3 with its XML read back by the renderer, and stores the bytes under the Stripe invoice's
  * prefix. Throws a stable code on every failure, before anything is recorded.
  */
 export async function checkedOriginal(
@@ -110,10 +109,10 @@ export async function checkedOriginal(
     throw billingFailure('werkflow_invoice_check_unavailable');
   });
   if (!check.valid) throw billingFailure('werkflow_invoice_rules_failed');
-  const pdf = await renderEInvoicePdf(invoiceDocument(invoice, werkflowLetterhead(seller)), xml);
-  if ((await readEmbeddedInvoiceXml(pdf)) !== xml) {
-    throw billingFailure('werkflow_invoice_readback_mismatch');
-  }
+  // The renderer reads its embedded XML back and throws unless it is `xml` (e-invoice.ts).
+  const pdf = await renderEInvoicePdf(invoiceDocument(invoice, werkflowLetterhead(seller)), xml).catch(() => {
+    throw billingFailure('werkflow_invoice_render_failed');
+  });
 
   // The key names the bytes' hash, so a retry finds the same object or writes its own.
   const sha256 = createHash('sha256').update(pdf).digest('hex');

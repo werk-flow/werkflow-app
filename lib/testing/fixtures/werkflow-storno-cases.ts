@@ -71,6 +71,13 @@ Reflect.set(Error, 'prepareStackTrace', undefined);
 const { issueWerkflowStorno } = await import('@/lib/werkflow-billing/issue-storno').finally(() => {
   Reflect.set(Error, 'prepareStackTrace', prepareStackTrace);
 });
+// The renderer, which can fail as its own read-back does (e-invoice.ts).
+let renderFails = false;
+const { renderEInvoicePdf } = await import('@/lib/document-rendering/e-invoice');
+mock.module('@/lib/document-rendering/e-invoice', () => ({
+  renderEInvoicePdf: (...input: Parameters<typeof renderEInvoicePdf>) =>
+    renderFails ? Promise.reject(new Error('e_invoice_xml_mismatch')) : renderEInvoicePdf(...input),
+}));
 const { createFakeStripeGateway } = await import('@/lib/testing/fixtures/fake-stripe-gateway');
 const { signalFamilyFor } = await import('@/lib/werkflow-billing/signals/dispatch');
 type StornoDependencies = import('@/lib/werkflow-billing/issue-storno').StornoDependencies;
@@ -119,6 +126,7 @@ function world(
     },
     isIssued: async (id) => rows.some((row) => row.typeCode === '384' && row.stripeCreditNoteId === id),
     documents: async () => rows,
+    alarmed: (_creditNoteId, step) => step(),
     // As issue_werkflow_storno records: the Storno and any replacement together, once per credit note.
     record: async (row) => {
       if (
@@ -324,6 +332,13 @@ async function handle(event: Stripe.Event, answers: Readonly<Record<string, unkn
   );
 }
 
+function resetSignalWorld() {
+  renderFails = false;
+  table.length = 0;
+  rpcCalls.length = 0;
+  alarms.clear();
+}
+
 const ORIGINAL_ROW = {
   id: 'row-original',
   number: 'MUSTER-0001',
@@ -335,11 +350,7 @@ const ORIGINAL_ROW = {
 };
 
 describe('the credit note signal and the check alarm', () => {
-  beforeEach(() => {
-    table.length = 0;
-    rpcCalls.length = 0;
-    alarms.clear();
-  });
+  beforeEach(resetSignalWorld);
 
   test('credit_note.created records the Storno and its replacement in one call, from the issued original', async () => {
     table.push(ORIGINAL_ROW);
@@ -400,5 +411,29 @@ describe('the credit note signal and the check alarm', () => {
     expect([...alarms.keys()]).toEqual([
       'invoice_check_failed|in_test_0001_werkflow_invoice_amount_mismatch',
     ]);
+  });
+});
+
+describe('the check alarm names the document that failed', () => {
+  beforeEach(resetSignalWorld);
+
+  test('a refund issued on behalf of a later credit note alarms under its own credit note', async () => {
+    table.push(ORIGINAL_ROW);
+    const failing =
+      refusals.find((refusal) => refusal.code === 'werkflow_invoice_rules_failed')?.answers ?? {};
+    const answers = { ...failing, ...creditNoteAnswers(SECOND_PART, [SECOND_PART, FIRST_PART]) };
+    const event = signalOf('evt_test_refund', 'credit_note.created', 'cn_test_0002');
+    await expect(handle(event, answers)).rejects.toMatchObject({ code: 'werkflow_invoice_rules_failed' });
+    expect([...alarms.keys()]).toEqual(['invoice_check_failed|cn_test_0001_werkflow_invoice_rules_failed']);
+  });
+
+  test('a document whose rendered XML does not read back is not issued and raises the check alarm', async () => {
+    table.push(ORIGINAL_ROW);
+    renderFails = true;
+    const event = signalOf('evt_test_refund', 'credit_note.created', 'cn_test_0001');
+    const answers = { ...CARD_INVOICE_ANSWERS, ...creditNoteAnswers(FULL_REFUND, [FULL_REFUND]) };
+    await expect(handle(event, answers)).rejects.toMatchObject({ code: 'werkflow_invoice_render_failed' });
+    expect(rpcCalls).toHaveLength(0);
+    expect([...alarms.keys()]).toEqual(['invoice_check_failed|cn_test_0001_werkflow_invoice_render_failed']);
   });
 });

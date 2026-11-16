@@ -77,6 +77,11 @@ function liveStornoDependencies(stripe: StripeGateway): StornoDependencies {
         stripeCreditNoteId: row.stripe_credit_note_id,
       }));
     },
+    alarmed: (creditNoteId, step) =>
+      alarmedIssue(
+        { stripeObjectId: creditNoteId, facts: [['Beleg', 'Stornorechnung zu einer Stripe-Gutschrift']] },
+        step,
+      ),
     record: async (row) => {
       // tenant-scope: cross-organization-by-design — the organization comes from the Stripe customer's metadata that WerkFlow's server set, and the database refuses a cancelled row of another.
       const { data, error } = await admin.rpc('issue_werkflow_storno', row);
@@ -101,14 +106,9 @@ export const creditNoteSignals: SignalFamily = {
   handle: async (event, stripe) => {
     const parsed = creditNoteEventSchema.safeParse(event);
     if (!parsed.success) throw billingFailure('werkflow_invoice_unreadable');
-    const stripeCreditNoteId = parsed.data.data.object.id;
-    await alarmedIssue(
-      { stripeObjectId: stripeCreditNoteId, facts: [['Beleg', 'Stornorechnung zu einer Stripe-Gutschrift']] },
-      () =>
-        issueWerkflowStorno(
-          { stripeCreditNoteId, stripeEventId: parsed.data.id },
-          liveStornoDependencies(stripe),
-        ),
+    await issueWerkflowStorno(
+      { stripeCreditNoteId: parsed.data.data.object.id, stripeEventId: parsed.data.id },
+      liveStornoDependencies(stripe),
     );
   },
 };
