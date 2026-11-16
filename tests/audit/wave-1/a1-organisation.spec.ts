@@ -42,7 +42,7 @@ import {
   requestMemberRemovalFromRow,
   signOutViaUi,
   signUpViaUi,
-  simulatedPaymentButton,
+  payForNewOrganization,
   withdrawJoinRequestButton,
 } from '../../golden/support/steps/organization';
 import {
@@ -87,10 +87,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
       await upgradeChoiceLink(page).click();
       await expect(page).toHaveURL(/\/upgrade/);
     }
-    if (/\/upgrade/.test(page.url())) {
-      await simulatedPaymentButton(page).click();
-      await expect(page).toHaveURL(/\/onboarding\/create-organization/);
-    }
+    await payForNewOrganization(page, email);
 
     await createOrganizationInOnboarding(page, organizationName);
     await expect(visibleText(page, organizationName)).toBeVisible();

@@ -106,7 +106,8 @@ describe('the fake gateway verifies a signal as Stripe does', () => {
 });
 
 describe('the dispatch table', () => {
-  // Each family's own test proves its handler (billing-mails.test.ts for payment and mandate signals).
+  // Each family's own test proves its handler (billing-mails.test.ts for payment and mandate signals,
+  // subscription-signals.test.ts for checkout and subscription signals).
   test('each stage A family takes its types, an invoice signal without an invoice is refused, and an unknown type has none', async () => {
     const fake = createFakeStripeGateway(WEBHOOK_SECRET);
     // invoice.finalized and invoice.paid issue an invoice (issue-invoice.test.ts); an event without one is refused.
