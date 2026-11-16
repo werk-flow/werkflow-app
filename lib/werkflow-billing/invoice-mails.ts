@@ -73,14 +73,19 @@ function sellerContact() {
   return { creditorId, contact: seller.email ?? '' };
 }
 
-/** The debit notice of a subscription's next SEPA renewal, on `invoice.upcoming`. A card renewal needs none. */
+/**
+ * The debit notice of a subscription's next SEPA renewal, on `invoice.upcoming`.
+ * A card renewal needs none. `renewsAt` sends it only for that renewal: the
+ * daily comparison's resend of a notice whose renewal has passed sends nothing.
+ */
 export async function sendDebitNotice(
   subscriptionId: string,
   stripe: StripeGateway,
-  now = new Date(),
+  { renewsAt, now = new Date() }: { renewsAt?: number; now?: Date } = {},
 ): Promise<void> {
   const upcoming = await stripe.readUpcomingDebit(subscriptionId);
   if (upcoming.method?.kind !== 'sepa_debit' || upcoming.amountCents <= 0) return;
+  if (renewsAt !== undefined && renewsAt !== upcoming.renewsAt) return;
   // A notice that arrives after the renewal is no notice; the invoice mail then is one.
   if (upcoming.renewsAt * 1000 <= now.getTime()) return;
   const key = renewalKey(subscriptionId, upcoming.renewsAt);
@@ -92,16 +97,17 @@ export async function sendDebitNotice(
     mandateReference: upcoming.method.mandateReference,
     creditorId,
   };
+  // Checked before each send attempt: a sent notice is never checked again.
+  if (!noticeLeavesLeadTime(now, debit.debitDate)) {
+    await lateNoticeAlarm(key, debit.debitDate, 'Lastschriftankündigung');
+  }
   const outcome = await deliverCustomerBillingMail({
     kind: 'debit_notice',
     customer: await stripe.readCustomer(upcoming.customerId),
     stripeObjectId: key,
     mail: renderDebitNoticeMail({ amountCents: upcoming.amountCents, debit, contact }),
   });
-  if (
-    outcome.status === 'not_sent' ||
-    (outcome.status === 'sent' && !noticeLeavesLeadTime(now, debit.debitDate))
-  ) {
+  if (outcome.status === 'not_sent') {
     await lateNoticeAlarm(key, debit.debitDate, describeCustomerMail(outcome));
   }
   if (outcome.status === 'retryable' || outcome.status === 'permanent') throw billingFailure(outcome.code);
@@ -130,12 +136,24 @@ export async function sendInvoiceMail(
   if (await sentAt('invoice', stripeInvoiceId)) return;
   const invoice = await issuedInvoice(stripeInvoiceId);
   const debit = await stripe.readInvoiceDebit(stripeInvoiceId);
-  const dueCents = debit.status === 'paid' ? 0 : invoice.due_cents;
+  const paid = debit.status === 'paid';
   const { creditorId, contact } = sellerContact();
-  const sepa = dueCents > 0 && debit.method?.kind === 'sepa_debit' ? debit.method : null;
-  // Stripe creates the charge as it submits the debit; until then its date is unknown, and Stripe delivers again.
+  const sepa = invoice.gross_cents > 0 && debit.method?.kind === 'sepa_debit' ? debit.method : null;
   const debitDate = debit.expectedDebitDate;
-  if (sepa && !debitDate) throw billingFailure('werkflow_debit_date_pending');
+  // Stripe creates the charge as it submits the debit; until then its date is
+  // unknown and Stripe delivers again. The daily comparison alarms a mail that stays out.
+  if (sepa && !debitDate && !paid) throw billingFailure('werkflow_debit_date_pending');
+  // Checked before each send attempt, so the attempt that sends was checked:
+  // a sent invoice mail is never checked again. A mail first sent after the
+  // debit, as by the paid backstop, is late too.
+  if (sepa) {
+    const notice = debit.subscriptionId
+      ? await sentAt('debit_notice', renewalKey(debit.subscriptionId, debit.renewsAt))
+      : null;
+    if (!noticeLeavesLeadTime(notice ? new Date(notice) : now, debitDate)) {
+      await lateNoticeAlarm(stripeInvoiceId, debitDate, notice ? 'Lastschriftankündigung' : 'Rechnungsmail');
+    }
+  }
   const payment =
     sepa && debitDate
       ? { ...sepa, debitDate, creditorId }
@@ -150,7 +168,7 @@ export async function sendInvoiceMail(
       invoiceNumber: invoice.number,
       issueDate: invoice.issue_date,
       grossCents: invoice.gross_cents,
-      dueCents,
+      dueCents: paid ? 0 : invoice.due_cents,
       payment,
       contact,
     }),
@@ -169,27 +187,11 @@ export async function sendInvoiceMail(
       facts: [['Rechnungsmail', describeCustomerMail(outcome)]],
     });
   }
-  if (outcome.status === 'sent' && payment?.kind === 'sepa_debit') {
-    const notice = debit.subscriptionId
-      ? await sentAt('debit_notice', renewalKey(debit.subscriptionId, debit.renewsAt))
-      : null;
-    if (!noticeLeavesLeadTime(notice ? new Date(notice) : now, payment.debitDate)) {
-      await lateNoticeAlarm(
-        stripeInvoiceId,
-        payment.debitDate,
-        notice ? 'Lastschriftankündigung' : 'Rechnungsmail',
-      );
-    }
-  }
   if (outcome.status === 'retryable' || outcome.status === 'permanent') throw billingFailure(outcome.code);
 }
 
 /** The receipt once Stripe reports the invoice paid; an invoice with nothing paid gets none. */
-export async function sendReceiptMail(
-  stripeInvoiceId: string,
-  stripe: StripeGateway,
-  now = new Date(),
-): Promise<void> {
+export async function sendReceiptMail(stripeInvoiceId: string, stripe: StripeGateway): Promise<void> {
   if (await sentAt('receipt', stripeInvoiceId)) return;
   const debit = await stripe.readInvoiceDebit(stripeInvoiceId);
   if (debit.status !== 'paid' || debit.amountPaidCents <= 0) return;
@@ -201,7 +203,7 @@ export async function sendReceiptMail(
     mail: renderReceiptMail({
       invoiceNumber: invoice.number,
       amountPaidCents: debit.amountPaidCents,
-      paidOn: formatBerlinLocalDate(debit.paidAt ? new Date(debit.paidAt * 1000) : now),
+      paidOn: formatBerlinLocalDate(debit.paidAt ? new Date(debit.paidAt * 1000) : new Date()),
       method: debit.method,
       contact: sellerContact().contact,
     }),

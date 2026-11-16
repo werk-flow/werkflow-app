@@ -59,8 +59,11 @@ const RESEND_CUSTOMER_MAIL: Readonly<Record<string, Resend>> = {
   mandate_inactive: handleMandateChange,
   invoice: (id, stripe) => sendInvoiceMail(id, stripe),
   receipt: (id, stripe) => sendReceiptMail(id, stripe),
-  // The key is `<subscription>_<renewal>`; a renewal already past gets no late notice and stays failed.
-  debit_notice: (key, stripe) => sendDebitNotice(key.slice(0, key.lastIndexOf('_')), stripe),
+  // The key is `<subscription>_<renewal>`: only that renewal's notice goes; a passed one stays failed.
+  debit_notice: (key, stripe) =>
+    sendDebitNotice(key.slice(0, key.lastIndexOf('_')), stripe, {
+      renewsAt: Number(key.slice(key.lastIndexOf('_') + 1)),
+    }),
 };
 
 /** Sends one failed row again; the ledger then holds its new state. */
@@ -189,17 +192,20 @@ async function compareInvoices({ admin, stripe, nowSeconds, result, alarm }: Run
   }, ids);
   for (const id of ids) {
     const hasOriginal = issued.has(id);
-    const hasMail =
-      mailed.has(id) ||
-      (hasOriginal &&
-        (await sendInvoiceMail(id, stripe).then(
-          () => true,
-          () => false,
-        )));
+    // An issued invoice without its mail gets it now; the reason it fails goes into the alarm.
+    const mailFailure =
+      mailed.has(id) || !hasOriginal
+        ? null
+        : await sendInvoiceMail(id, stripe).then(
+            () => null,
+            (error: unknown) => String((error instanceof Error && Reflect.get(error, 'code')) || 'unbekannt'),
+          );
+    const hasMail = mailed.has(id) || (hasOriginal && mailFailure === null);
     if (hasOriginal && hasMail) continue;
     await alarm('invoice_undelivered', id, [
       ['Original', hasOriginal ? 'ausgestellt' : 'fehlt'],
       ['Rechnungsmail', hasMail ? 'gesendet' : 'fehlt'],
+      ...(mailFailure ? [['Grund', mailFailure] as const] : []),
     ]);
   }
 }

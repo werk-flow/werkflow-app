@@ -6,13 +6,18 @@
 // every SEPA debit has a notice at least 2 days ahead or an alarm says it has
 // not, and no address or mail text reaches a log line.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import * as nextServer from 'next/server';
 import Stripe from 'stripe';
 
 import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
 
+// testing.md: no wall clock in a unit test. A day far from a DST change.
+setSystemTime(new Date('2026-11-20T09:00:00Z'));
+
 type Row = Record<string, unknown>;
+/** The next read of a sent debit notice fails, as a lost database connection would. */
+let failNoticeRead = false;
 const tables: Record<string, Row[]> = {
   werkflow_billing_mails: [],
   werkflow_invoices: [],
@@ -28,6 +33,7 @@ console.error = (...parts: unknown[]) => {
 /** The query chains the code under test builds, over `tables`. */
 function query(table: string) {
   const filters: ((row: Row) => boolean)[] = [];
+  let kind: unknown = null;
   let newestFirst = false;
   let window: [number, number] = [0, Number.MAX_SAFE_INTEGER];
   const rows = () => {
@@ -38,6 +44,7 @@ function query(table: string) {
   const builder = {
     select: () => builder,
     eq: (column: string, value: unknown) => {
+      if (column === 'kind') kind = value;
       filters.push((row) => row[column] === value);
       return builder;
     },
@@ -60,7 +67,13 @@ function query(table: string) {
       window = [from, to];
       return rows();
     },
-    maybeSingle: async () => ({ data: rows().data[0] ?? null, error: null }),
+    maybeSingle: async () => {
+      if (failNoticeRead && kind === 'debit_notice') {
+        failNoticeRead = false;
+        return { data: null, error: { code: '08006', message: 'connection lost' } };
+      }
+      return { data: rows().data[0] ?? null, error: null };
+    },
     insert: async (row: Row) => {
       tables[table]?.push({ id: crypto.randomUUID(), ran_at: new Date().toISOString(), ...row });
       return { error: null };
@@ -196,6 +209,9 @@ const invoiceDebits = {
   in_test_sameday: invoiceDebit('in_test_sameday', dayIn(0)),
   in_test_pending: invoiceDebit('in_test_pending', null),
   in_test_quota: invoiceDebit('in_test_quota', dayIn(5)),
+  in_test_readfail: invoiceDebit('in_test_readfail', dayIn(5)),
+  // Debited yesterday and paid; its invoice mail first goes out through the paid backstop.
+  in_test_backstop: { ...invoiceDebit('in_test_backstop', dayIn(-1)), status: 'paid', amountPaidCents: 4900 },
   in_test_renewal: {
     ...invoiceDebit('in_test_renewal', dayIn(0), 'sub_test_renew'),
     renewsAt: NOW + 7 * DAY,
@@ -225,6 +241,7 @@ const objects = {
   upcomingDebits: {
     sub_test_renew: upcoming('sub_test_renew', 7, SEPA),
     sub_test_short: upcoming('sub_test_short', 1, SEPA),
+    sub_test_next: upcoming('sub_test_next', 7, SEPA),
     sub_test_card: upcoming('sub_test_card', 7, { kind: 'card', lastFour: '4242' }),
   },
   invoiceDebits,
@@ -308,6 +325,16 @@ assert.equal(alarms(LATE).length, 2);
 assert.ok(alarms(LATE).at(-1)?.text.includes('in_test_sameday'));
 // Without Stripe's debit date the mail waits and Stripe delivers again.
 assert.equal(await deliver('invoice.finalized', { id: 'in_test_pending' }), 'werkflow_debit_date_pending');
+// A failed read of the debit notice sends no invoice mail, so the next delivery checks and sends.
+failNoticeRead = true;
+assert.equal(await deliver('invoice.finalized', { id: 'in_test_readfail' }), 'billing_mail_read_failed');
+assert.equal(sent.filter((mail) => mail.subject.endsWith('MUSTER-readfail')).length, 0);
+assert.equal(await deliver('invoice.finalized', { id: 'in_test_readfail' }), null);
+assert.equal(sent.filter((mail) => mail.subject.endsWith('MUSTER-readfail')).length, 1);
+// An invoice mail first sent after its debit, by the paid backstop, is late.
+assert.equal(await deliver('invoice.paid', { id: 'in_test_backstop' }), null);
+assert.equal(alarms(LATE).length, 3);
+assert.ok(alarms(LATE).at(-1)?.text.includes('in_test_backstop'));
 // A refused send stays failed and the signal fails, so Stripe delivers again.
 resendAnswers.push(429);
 assert.equal(await deliver('invoice.finalized', { id: 'in_test_quota' }), 'email_daily_quota_exceeded');
@@ -345,7 +372,15 @@ tables.werkflow_billing_reconciliations?.push({
   id: '49200000-0000-4000-8000-000000000001',
   ran_at: new Date((NOW - 30 * 3600) * 1000).toISOString(),
 });
+// A debit notice for a renewal that has passed is not sent for the next one.
 mails().push(
+  {
+    id: crypto.randomUUID(),
+    kind: 'debit_notice',
+    stripe_object_id: `sub_test_next_${NOW - 23 * DAY}`,
+    state: 'failed',
+    failure_code: 'email_daily_quota_exceeded',
+  },
   {
     id: crypto.randomUUID(),
     kind: 'alarm.debit_failed',
@@ -361,17 +396,30 @@ mails().push(
     failure_code: 'email_daily_quota_exceeded',
   },
 );
+const notices = () => sent.filter((mail) => mail.subject.startsWith('Ankündigung')).length;
+const noticesBefore = notices();
 const run = await reconcileWerkflowBilling(stripe);
-assert.deepEqual([run.complete, run.invoicesCompared, run.mailsResent], [true, 3, 3]);
+assert.deepEqual([run.complete, run.invoicesCompared, run.mailsResent], [true, 3, 4]);
+assert.equal(notices(), noticesBefore, 'a passed renewal got the next renewal notice');
+assert.ok(
+  alarms('Abrechnungsmail weiter nicht zugestellt').some((mail) => mail.text.includes('sub_test_next_')),
+);
 assert.ok(sentAt('invoice', 'in_test_quota'), 'the refused invoice mail was not resent');
 assert.ok(alarms('Zahlung fehlgeschlagen')[0]?.text.includes('vom täglichen Abgleich'));
 assert.equal(alarms('Täglicher Abgleich ausgefallen').length, 1);
-assert.ok(alarms('Abrechnungsmail weiter nicht zugestellt')[0]?.text.includes('in_test_gone'));
+assert.ok(
+  alarms('Abrechnungsmail weiter nicht zugestellt').some((mail) => mail.text.includes('in_test_gone')),
+);
 const undelivered = alarms('Rechnung nicht zugestellt').map((mail) => mail.text);
 assert.equal(undelivered.length, 2, 'the comparison missed a file or a mail, or alarmed a young invoice');
 assert.ok(undelivered.some((text) => text.includes('in_test_unissued') && text.includes('Original: fehlt')));
 assert.ok(
-  undelivered.some((text) => text.includes('in_test_pending') && text.includes('Rechnungsmail: fehlt')),
+  undelivered.some(
+    (text) =>
+      text.includes('in_test_pending') &&
+      text.includes('Rechnungsmail: fehlt') &&
+      text.includes('Grund: werkflow_debit_date_pending'),
+  ),
 );
 assert.ok(alarms('Stripe-Signale bleiben aus')[0]?.text.includes('evt_test_lost'));
 assert.equal(tables.werkflow_billing_reconciliations?.length, 2, 'the run was not recorded');
