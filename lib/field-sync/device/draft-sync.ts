@@ -17,6 +17,7 @@ import {
   type StoredDraft,
 } from './draft-store';
 import { TODAY_WIPE_KEY, todayWipeGeneration } from './today-wipe';
+import { untilNetworkReturns } from './sync-runner';
 import { createListeners } from '@/lib/listeners';
 
 // Sends the report drafts a phone keeps (decision record 0010, the report
@@ -145,6 +146,9 @@ async function attach(draft: StoredDraft): Promise<{ outcome: string; code: stri
       cache: 'no-store',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
+      // A request that hangs in a dead spot ends when the network returns: it counts as no answer, and
+      // the sealed draft goes again, unchanged; the server records an operation id once.
+      signal: untilNetworkReturns(),
       body: JSON.stringify({
         operations: [
           {
@@ -174,7 +178,7 @@ async function attach(draft: StoredDraft): Promise<{ outcome: string; code: stri
     const verdict = 'results' in answer.data ? answer.data.results[0] : answer.data;
     return verdict ? { ...verdict, status: response.status } : null;
   } catch {
-    // best-effort: without signal, or with a page that is no answer, the draft waits for the next send.
+    // best-effort: without signal, ended by the network's return, or with a page that is no answer, the draft waits for the next send.
     return null;
   }
 }
@@ -225,7 +229,8 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
       target: { kind: 'job', jobId: draft.jobId },
       category: 'photo',
       transferred: photo.transferred,
-      signal: transfer.signal,
+      // The network's return ends a transfer that hangs in a dead spot, as an interruption: the draft waits.
+      signal: AbortSignal.any([transfer.signal, untilNetworkReturns()]),
       expectedUploaderId: owner.userId,
     }).finally(() => {
       window.removeEventListener('storage', abortOnWipe);
