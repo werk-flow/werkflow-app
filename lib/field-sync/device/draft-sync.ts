@@ -232,6 +232,8 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
   let uploaded = draft.photos.filter((photo) => photo.documentId !== null).length;
   for (const photo of draft.photos) {
     if (photo.documentId !== null) continue;
+    // Taken before the claim's check: no wait may sit between that check and the upload.
+    const networkReturn = await untilNetworkReturnsIfLoaded();
     if (!stillHolder(claim)) return 'waiting';
     // A sign-out or a sign-in page in another tab during the transfer aborts it: the photo must not
     // be registered with the next person's session.
@@ -243,14 +245,13 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
     window.addEventListener('storage', abortOnWipe);
     progress = { draftId: draft.id, uploaded, total: draft.photos.length };
     notify();
-    const signal = AbortSignal.any([transfer.signal, ...(await untilNetworkReturnsIfLoaded())]);
     const result = await uploadDocumentDirect({
       file: new File([photo.blob], photo.name, { type: photo.blob.type }),
       target: { kind: 'job', jobId: draft.jobId },
       category: 'photo',
       transferred: photo.transferred,
       // The network's return ends a transfer that hangs in a dead spot, as an interruption: the draft waits.
-      signal,
+      signal: AbortSignal.any([transfer.signal, ...networkReturn]),
       expectedUploaderId: owner.userId,
     }).finally(() => {
       window.removeEventListener('storage', abortOnWipe);
