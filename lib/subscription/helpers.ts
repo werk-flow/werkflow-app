@@ -96,6 +96,15 @@ export async function readOpenReservation(userId: string): Promise<OrganizationS
 }
 
 /**
+ * Whether onboarding sends a member to the dashboard: not while they name the
+ * further organization their paid reservation holds (werk-flow/werkflow-planning#495).
+ */
+export async function memberLeavesOnboarding(userId: string): Promise<boolean> {
+  if (!(await userHasOrganizations(userId))) return false;
+  return !(await readOpenReservation(userId))?.holdsSubscription;
+}
+
+/**
  * Checks if a user has any organizations
  */
 export async function userHasOrganizations(userId: string): Promise<boolean> {

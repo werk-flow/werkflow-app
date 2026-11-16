@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedUser } from '@/lib/data/cached';
 import { readOpenReservation, userHasOrganizations } from '@/lib/subscription/helpers';
 import { StandaloneTitle } from '@/components/shared/standalone-screen';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
@@ -13,10 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CreateOrganizationPage() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthenticatedUser();
 
   if (!user) {
     redirect('/login');
