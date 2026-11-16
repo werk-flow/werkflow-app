@@ -275,6 +275,28 @@ const refusals: Array<{
     code: 'werkflow_storno_unsupported',
   },
   {
+    // Stripe's subtotal includes an inclusive tax, so subtotal and total agree here.
+    case: 'a credit note with inclusive tax',
+    answers: (() => {
+      const taxed = stripeCreditNote(1, 10000, {
+        total_taxes: [{ amount: 1597, tax_behavior: 'inclusive' }],
+        lines: { object: 'list', has_more: false, data: [{ amount: 10000, taxes: [{ amount: 1597 }] }] },
+      });
+      return { ...CARD_INVOICE_ANSWERS, ...creditNoteAnswers(taxed, [taxed]) };
+    })(),
+    code: 'werkflow_storno_unsupported',
+  },
+  {
+    case: 'a credit note with a taxed custom line',
+    answers: (() => {
+      const taxed = stripeCreditNote(1, 10000, {
+        lines: { object: 'list', has_more: false, data: [{ amount: 10000, taxes: [{ amount: 1900 }] }] },
+      });
+      return { ...CARD_INVOICE_ANSWERS, ...creditNoteAnswers(taxed, [taxed]) };
+    })(),
+    code: 'werkflow_storno_unsupported',
+  },
+  {
     case: 'a refund before the original was issued',
     answers: { ...CARD_INVOICE_ANSWERS, ...creditNoteAnswers(FULL_REFUND, [FULL_REFUND]) },
     documents: [],

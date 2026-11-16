@@ -97,7 +97,7 @@ $$;
 -- delivery). The cancelled row must belong to the organization the Stripe
 -- customer names; the Stripe ids and buyer come from that row, never from the
 -- caller. The Storno's amounts must be the cancelled document's, negated, and
--- a replacement must lie between nothing and it.
+-- a replacement must lie between nothing and it and be paid in full.
 -- Each document is {number, issue_date, net_cents, tax_cents, gross_cents,
 -- paid_cents, file_key, file_sha256, file_size_bytes, rules_release}; the
 -- replacement adds payment_means.
@@ -135,9 +135,11 @@ begin
     or (p_storno ->> 'paid_cents')::bigint is distinct from 0 then
     raise exception 'werkflow_storno_amount_mismatch' using errcode = '22023';
   end if;
-  if p_replacement is not null and not (
+  if p_replacement is not null and not coalesce(
     (p_replacement ->> 'gross_cents')::bigint > 0
     and (p_replacement ->> 'gross_cents')::bigint < v_cancelled.gross_cents
+    and (p_replacement ->> 'paid_cents')::bigint = (p_replacement ->> 'gross_cents')::bigint,
+    false
   ) then
     raise exception 'werkflow_storno_amount_mismatch' using errcode = '22023';
   end if;

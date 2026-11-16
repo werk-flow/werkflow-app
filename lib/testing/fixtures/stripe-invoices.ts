@@ -152,6 +152,8 @@ export function stripeCreditNote(sequence: number, totalCents: number, change: R
     created: REFUNDED_AT + sequence * 3_600,
     subtotal: totalCents,
     total: totalCents,
+    total_taxes: [],
+    lines: { object: 'list', has_more: false, data: [{ amount: totalCents, taxes: [] }] },
     ...change,
   };
 }

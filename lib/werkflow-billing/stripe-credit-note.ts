@@ -23,6 +23,8 @@ export type StripeRefundForStorno = {
   refunds: StripeRefund[];
 };
 
+const taxes = z.array(z.object({ amount: z.number().int().safe() })).nullable();
+
 const creditNoteSchema = z.object({
   id: z.string().regex(/^cn_[A-Za-z0-9_]{1,250}$/),
   number: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
@@ -30,9 +32,17 @@ const creditNoteSchema = z.object({
   type: z.string(),
   status: z.string(),
   created: z.number().int().positive(),
-  subtotal: z.number().int().safe(),
   total: z.number().int().positive().safe(),
+  total_taxes: taxes,
+  lines: z.object({ data: z.array(z.object({ taxes })) }),
 });
+
+/** Whether Stripe put any tax on the credit note or one of its lines, inclusive or not. */
+function isTaxed(note: z.infer<typeof creditNoteSchema>): boolean {
+  return [note.total_taxes, ...note.lines.data.map((line) => line.taxes)].some((entries) =>
+    (entries ?? []).some((entry) => entry.amount !== 0),
+  );
+}
 
 /** One issued credit note as a refund; throws a stable code for anything else. */
 function refundOf(source: unknown): StripeRefund | null {
@@ -42,8 +52,8 @@ function refundOf(source: unknown): StripeRefund | null {
   if (note.status === 'void') return null;
   if (note.type !== 'post_payment' || note.status !== 'issued')
     throw billingFailure('werkflow_storno_unsupported');
-  // Until the VAT switch nothing carries tax: a taxed credit is not WerkFlow's.
-  if (note.total !== note.subtotal) throw billingFailure('werkflow_invoice_amount_mismatch');
+  // Until the VAT switch every document is § 19 UStG: a taxed credit cannot become a tax-exempt Storno.
+  if (isTaxed(note)) throw billingFailure('werkflow_storno_unsupported');
   const invoiceId = typeof note.invoice === 'string' ? note.invoice : note.invoice.id;
   if (!/^in_[A-Za-z0-9_]{1,250}$/.test(invoiceId)) throw billingFailure('werkflow_invoice_unreadable');
   return { id: note.id, number: note.number, invoiceId, createdAt: note.created, totalCents: note.total };

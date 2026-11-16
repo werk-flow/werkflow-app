@@ -8,7 +8,7 @@
 -- the organization keeps it. A refund's Storno (#491) cancels one document
 -- once, names it, negates its amounts and takes the organization, Stripe ids
 -- and buyer from it; a replacement for the part that stays lies between
--- nothing and the cancelled amount.
+-- nothing and the cancelled amount and is paid in full.
 begin;
 
 insert into auth.users (
@@ -136,6 +136,14 @@ begin
   perform pg_temp.expect_refusal('a replacement that bills the whole original again',
     format($sql$select pg_temp.storno(%L, 'cn_test_0001', 'MUSTER-0001-CN-01', -49900,
       pg_temp.document('MUSTER-0001-KR-01', 49900, 49900))$sql$, v_original),
+    'werkflow_storno_amount_mismatch');
+  perform pg_temp.expect_refusal('a replacement that leaves its amount unpaid',
+    format($sql$select pg_temp.storno(%L, 'cn_test_0001', 'MUSTER-0001-CN-01', -49900,
+      pg_temp.document('MUSTER-0001-KR-01', 39900, 0))$sql$, v_original),
+    'werkflow_storno_amount_mismatch');
+  perform pg_temp.expect_refusal('a replacement without its paid amount',
+    format($sql$select pg_temp.storno(%L, 'cn_test_0001', 'MUSTER-0001-CN-01', -49900,
+      pg_temp.document('MUSTER-0001-KR-01', 39900, null))$sql$, v_original),
     'werkflow_storno_amount_mismatch');
 
   if pg_temp.storno(v_original, 'cn_test_0001', 'MUSTER-0001-CN-01', -49900,
