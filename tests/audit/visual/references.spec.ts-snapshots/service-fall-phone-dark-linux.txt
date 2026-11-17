@@ -11,6 +11,7 @@ Therme zeigt Störung F.28
 Direkt erfasst
 · Aktualisiert
 01.01.2026, 08:00
+Rechnung erstellen
 Bearbeiten
 Ursprüngliche Kundenaussage
 Die Therme geht nach dem Zünden wieder aus und zeigt F.28 an.
