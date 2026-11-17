@@ -146,7 +146,7 @@ List each owner-accepted residual exposure until it closes.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
 - Organization deletion removes stored files after the rows; a file whose delete fails or cannot be rechecked stays under its prefix, logged, unreachable through the app.
-- The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed exception in `lib/security/dependency-exceptions.json`.
+- Dev tools' minimatch (GHSA-g3hv-75wg-m249) and picomatch (GHSA-fc5q-39xc-vjpf) are reviewed exceptions (`lib/security/dependency-exceptions.json`).
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
