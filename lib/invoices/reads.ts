@@ -72,38 +72,35 @@ const lineSchema = z.object({
   netCents: z.number().int(),
 });
 
-const invoiceSchema = z
-  .object({
-    id: uuidSchema,
-    invoiceNumber: z.string().nullable(),
-    status: z.string(),
-    version: z.number().int(),
-    serviceStart: z.iso.date().nullable(),
-    serviceEnd: z.iso.date().nullable(),
-    paymentDueDays: z.number().int(),
-    discountDays: z.number().int().nullable(),
-    discountBasisPoints: z.number().int().nullable(),
-    orderReference: z.string(),
-    buyerReference: z.string(),
-    openingText: z.string(),
-    closingText: z.string(),
-    lineNetCents: z.number().int(),
-    taxCents: z.number().int(),
-    grossCents: z.number().int(),
-    client: z.object({ id: uuidSchema, name: z.string() }),
-    recipient: z.object({ id: uuidSchema, name: z.string(), address: z.string().nullable() }),
-    work: z
-      .object({
-        kind: invoiceWorkKindSchema,
-        id: uuidSchema,
-        number: z.string().nullable(),
-        title: z.string(),
-      })
-      .nullable(),
-    lines: z.array(lineSchema).max(500),
-    // In line order: the Leistung or article each line came from, or null.
-    lineSources: z.array(invoiceLineSourceSchema.nullable()).max(500),
-  })
+const invoiceSchema = z.object({
+  id: uuidSchema,
+  invoiceNumber: z.string().nullable(),
+  status: z.string(),
+  version: z.number().int(),
+  serviceStart: z.iso.date().nullable(),
+  serviceEnd: z.iso.date().nullable(),
+  paymentDueDays: z.number().int(),
+  discountDays: z.number().int().nullable(),
+  discountBasisPoints: z.number().int().nullable(),
+  orderReference: z.string(),
+  buyerReference: z.string(),
+  openingText: z.string(),
+  closingText: z.string(),
+  lineNetCents: z.number().int(),
+  taxCents: z.number().int(),
+  grossCents: z.number().int(),
+  client: z.object({ id: uuidSchema, name: z.string() }),
+  recipient: z.object({ id: uuidSchema, name: z.string(), address: z.string().nullable() }),
+  work: z
+    .object({ kind: invoiceWorkKindSchema, id: uuidSchema, number: z.string().nullable(), title: z.string() })
+    .nullable(),
+  lines: z.array(lineSchema).max(500),
+  // In line order: the Leistung or article each line came from, or null.
+  lineSources: z.array(invoiceLineSourceSchema.nullable()).max(500),
+});
+
+/** The invoice with each line's catalog source beside the line's values. */
+const invoiceWithLineSourcesSchema = invoiceSchema
   .refine((invoice) => invoice.lineSources.length === invoice.lines.length)
   .transform(({ lineSources, lines, ...invoice }) => ({
     ...invoice,
@@ -127,7 +124,7 @@ export async function readInvoice(organizationId: string, invoiceId: string): Pr
   });
   if (selected.error) throw new Error('invoice_read_failed');
   if (selected.data === null) return null;
-  const parsed = invoiceSchema.safeParse(selected.data);
+  const parsed = invoiceWithLineSourcesSchema.safeParse(selected.data);
   if (!parsed.success) throw new Error('invoice_read_failed');
   const { work, ...invoice } = parsed.data;
   return {
