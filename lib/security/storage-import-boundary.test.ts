@@ -94,7 +94,9 @@ test('browser imports cannot reach raw storage through relative, dynamic, or tra
   expect(
     storageBoundaryViolations(
       repositoryRoot,
-      listSources(repositoryRoot, ['app', 'components', 'hooks', 'lib']),
+      // vendor/ holds the wholesaler-file reader the import dialog loads in the browser;
+      // `bun install` writes it, or its stand-in, on every machine.
+      listSources(repositoryRoot, ['app', 'components', 'hooks', 'lib', 'vendor']),
     ),
   ).toEqual([]);
 });
