@@ -220,6 +220,18 @@ for (const call of [
   assert.equal(world.rpcCalls[0]?.args.p_actor_id, CALLER_ID);
 }
 
+// The confirm names the price preview the dialog shows, so it writes only those changes.
+world.rpcCalls.length = 0;
+await imports.confirmWholesalerImport({
+  importId: ownImportId,
+  unitMapping: { Meter: 'meter' },
+  rebates: { CU1: 2500 },
+  priceFingerprint: 'a'.repeat(32),
+});
+assert.equal(world.rpcCalls.length, 1);
+assert.equal(world.rpcCalls[0]?.args.p_price_fingerprint, 'a'.repeat(32));
+assert.deepEqual(world.rpcCalls[0]?.args.p_rebates, { CU1: 2500 });
+
 // Another organization's batch and catalog row are not found by the one call
 // that carries the caller's organization and actor.
 refuseForeignIds(

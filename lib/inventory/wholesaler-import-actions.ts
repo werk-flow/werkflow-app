@@ -198,7 +198,6 @@ export async function previewWholesalerPrices(
       p_actor_id: auth.context.userId,
       p_import_id: parsed.data.importId,
       p_rebates: parsed.data.rebates,
-      p_price_fingerprint: parsed.data.priceFingerprint,
     }),
   );
   // As the other preview steps: a failure says nothing was taken over.
@@ -233,6 +232,7 @@ export async function confirmWholesalerImport(
       p_import_id: parsed.data.importId,
       p_unit_mapping: parsed.data.unitMapping,
       p_rebates: parsed.data.rebates,
+      p_price_fingerprint: parsed.data.priceFingerprint,
     }),
   );
   if (error) return refusal(error, 'save_failed', 'confirmWholesalerImport: confirm failed');
