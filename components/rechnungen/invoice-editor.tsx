@@ -21,6 +21,7 @@ import {
 } from '@/lib/invoices/draft-form';
 import type { InvoiceDetail, InvoiceWorkKind } from '@/lib/invoices/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { InvoiceCatalogLine } from './invoice-catalog-line';
 import { INVOICE_FAILURE_MESSAGES } from './invoice-failure-messages';
 import { InvoiceLinesFields } from './invoice-lines-fields';
 import { InvoiceTermsFields, InvoiceTextFields } from './invoice-terms-fields';
@@ -117,6 +118,10 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
           setNextKey(nextKey + 1);
         }}
         errors={errors}
+        disabled={pending}
+      />
+      <InvoiceCatalogLine
+        onAdd={(line) => setForm({ ...form, lines: [...form.lines, line] })}
         disabled={pending}
       />
       <InvoiceTotals amounts={amounts} />

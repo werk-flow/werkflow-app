@@ -5,6 +5,7 @@ import { useState, type ReactElement } from 'react';
 import { ArrowLeft, Pencil } from 'lucide-react';
 
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
+import { CreateInvoiceButton } from '@/components/rechnungen/create-invoice-button';
 import { useOrganization } from '@/components/organization/organization-context';
 import { WorkRequestEntriesSection } from '@/components/auftraege/shared/work-request-entries-section';
 import { DetailColumns } from '@/components/shared/detail-columns';
@@ -94,6 +95,12 @@ function ServiceCaseDetailHeader({
         </div>
         <span className="flex items-center gap-2">
           <InlinePending active={busy} label="Änderungen werden übernommen" />
+          <CreateInvoiceButton
+            preset={{
+              client: { id: item.clientId, name: item.clientName },
+              work: { kind: 'service_case', id: item.id },
+            }}
+          />
           <Button type="button" onClick={onEdit} disabled={isStale}>
             <Pencil className="size-4" />
             Bearbeiten

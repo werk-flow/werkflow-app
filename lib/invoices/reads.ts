@@ -7,6 +7,7 @@ import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { invoiceLineSourceSchema } from './line-sources';
 import type { InvoiceListQuery, InvoicePage } from './list-page';
 import {
   INVOICE_STATUSES,
@@ -71,30 +72,43 @@ const lineSchema = z.object({
   netCents: z.number().int(),
 });
 
-const invoiceSchema = z.object({
-  id: uuidSchema,
-  invoiceNumber: z.string().nullable(),
-  status: z.string(),
-  version: z.number().int(),
-  serviceStart: z.iso.date().nullable(),
-  serviceEnd: z.iso.date().nullable(),
-  paymentDueDays: z.number().int(),
-  discountDays: z.number().int().nullable(),
-  discountBasisPoints: z.number().int().nullable(),
-  orderReference: z.string(),
-  buyerReference: z.string(),
-  openingText: z.string(),
-  closingText: z.string(),
-  lineNetCents: z.number().int(),
-  taxCents: z.number().int(),
-  grossCents: z.number().int(),
-  client: z.object({ id: uuidSchema, name: z.string() }),
-  recipient: z.object({ id: uuidSchema, name: z.string(), address: z.string().nullable() }),
-  work: z
-    .object({ kind: invoiceWorkKindSchema, id: uuidSchema, number: z.string().nullable(), title: z.string() })
-    .nullable(),
-  lines: z.array(lineSchema).max(500),
-});
+const invoiceSchema = z
+  .object({
+    id: uuidSchema,
+    invoiceNumber: z.string().nullable(),
+    status: z.string(),
+    version: z.number().int(),
+    serviceStart: z.iso.date().nullable(),
+    serviceEnd: z.iso.date().nullable(),
+    paymentDueDays: z.number().int(),
+    discountDays: z.number().int().nullable(),
+    discountBasisPoints: z.number().int().nullable(),
+    orderReference: z.string(),
+    buyerReference: z.string(),
+    openingText: z.string(),
+    closingText: z.string(),
+    lineNetCents: z.number().int(),
+    taxCents: z.number().int(),
+    grossCents: z.number().int(),
+    client: z.object({ id: uuidSchema, name: z.string() }),
+    recipient: z.object({ id: uuidSchema, name: z.string(), address: z.string().nullable() }),
+    work: z
+      .object({
+        kind: invoiceWorkKindSchema,
+        id: uuidSchema,
+        number: z.string().nullable(),
+        title: z.string(),
+      })
+      .nullable(),
+    lines: z.array(lineSchema).max(500),
+    // In line order: the Leistung or article each line came from, or null.
+    lineSources: z.array(invoiceLineSourceSchema.nullable()).max(500),
+  })
+  .refine((invoice) => invoice.lineSources.length === invoice.lines.length)
+  .transform(({ lineSources, lines, ...invoice }) => ({
+    ...invoice,
+    lines: lines.map((line, index) => ({ ...line, source: lineSources[index] ?? null })),
+  }));
 
 type WorkRow = { kind: InvoiceWorkKind; id: string; number: string | null };
 
@@ -107,7 +121,7 @@ function workHref(work: WorkRow): string {
 
 /** One invoice of the organization with its lines; `null` when there is none. */
 export async function readInvoice(organizationId: string, invoiceId: string): Promise<InvoiceDetail | null> {
-  const selected = await createSupabaseAdminClient().rpc('get_invoice', {
+  const selected = await createSupabaseAdminClient().rpc('get_invoice_with_line_sources', {
     p_organization_id: organizationId,
     p_invoice_id: invoiceId,
   });
