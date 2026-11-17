@@ -57,6 +57,7 @@ import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
 import { getOwnSicknessReports, getSicknessReportsForRecord } from '@/lib/sickness/actions';
 import { getSchoolDaysForRecord } from '@/lib/personnel/school-day-actions';
 import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
+import { getCompletedVisitPage } from '@/lib/service-reports/page-actions';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
 import { getAssignmentTeamOptions } from '@/lib/qualifications/actions';
 import {
@@ -292,6 +293,10 @@ export const BACKGROUND_READS = {
   'maintenance-workspace': defineRead(
     maintenanceWorkspaceQuerySchema.extend({ organizationId: uuidSchema }),
     (input) => getMaintenanceWorkspace(input),
+  ),
+  'completed-maintenance-visits': defineRead(
+    z.object({ organizationId: uuidSchema, page: z.number().int().min(1).max(1_000_000) }),
+    (input) => getCompletedVisitPage({ page: input.page }),
   ),
   'work-templates': defineRead(noInput, () => getWorkTemplates()),
   'work-template-detail': defineRead(z.object({ templateId: uuidSchema }), (input) =>

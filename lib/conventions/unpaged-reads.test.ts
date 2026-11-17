@@ -118,6 +118,10 @@ const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
   'lib/planning/actions.ts::updatePlanningCalendarEntry::planning_occurrence_assignments': ONE_OCCURRENCE,
   'lib/planning/actions.ts::resolveSeriesRescheduleAssignments::planning_occurrence_assignments':
     ONE_OCCURRENCE,
+  'lib/service-reports/reads.ts::readVisitEquipment::maintenance_plan_revision_equipment':
+    'the Anlagen of one plan revision',
+  'lib/service-reports/reads.ts::readVisitEvidence::maintenance_due_evidence_links':
+    'the evidence of one visit, at most 50 by complete_maintenance_visit',
   'lib/sickness/server.ts::loadSicknessReportsForRecord::sickness_reports': ONE_EMPLOYEE,
   'lib/time-corrections/actions.ts::resubmitTimeCorrection::time_correction_request_sources':
     'the sources of one revision of one correction request',
