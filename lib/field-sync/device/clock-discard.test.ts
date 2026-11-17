@@ -344,6 +344,34 @@ async function isolatedTests(): Promise<void> {
       expect(keptKeys()).toEqual([stop]);
     });
 
+    test('stays a stop past the grace period while its page still holds the clock call’s lock', async () => {
+      const stop = keyAt('2026-11-11T07:00:00.000Z', 'call-still-open');
+      storage.set(stop, NEWER);
+      await holdClock(WORKER, () => undefined);
+      // The page that tapped still waits for the server's answer, under the call's lock.
+      let answer = (): void => undefined;
+      let granted = (): void => undefined;
+      const lockHeld = new Promise<void>((resolve) => {
+        granted = resolve;
+      });
+      const openCall = navigator.locks.request(
+        'werkflow-clock-call:call-still-open',
+        () =>
+          new Promise<void>((resolve) => {
+            answer = resolve;
+            granted();
+          }),
+      );
+      await lockHeld;
+      try {
+        expect(await setAsideShownStop(stop)).toBe('sending');
+        expect(keptKeys()).toEqual([stop]);
+      } finally {
+        answer();
+        await openCall;
+      }
+    });
+
     test('is named by the session end’s question and deleted by its discard; the wipe leaves it', async () => {
       const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
       storage.set(stop, NEWER);

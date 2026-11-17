@@ -320,6 +320,7 @@ test('a stop this version cannot read can be set aside: the tap behind it is sen
   page,
 }) => {
   const stop = 'werkflow:unsent:clock:000000000000001:1:from-a-newer-version';
+  const aside = 'werkflow:unsent:clock-aside:000000000000001:1:from-a-newer-version';
   const record = '{"operationId":"x","kind":"new"}';
   const server = await mountClock(page, CLOCKED_OUT_STATE);
   await page.evaluate(([key, value]) => localStorage.setItem(key ?? '', value ?? ''), [stop, record]);
@@ -350,9 +351,7 @@ test('a stop this version cannot read can be set aside: the tap behind it is sen
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await setAside.getByRole('button', { name: 'Für den Support kopieren', exact: true }).click();
   await expect(setAside.getByRole('button', { name: 'Kopiert', exact: true })).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-    `werkflow:unsent:clock-aside:000000000000001:1:from-a-newer-version\n${record}`,
-  );
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${aside}\n${record}`);
 
   await setAside.getByRole('button', { name: 'Löschen', exact: true }).click();
   await page
@@ -360,6 +359,8 @@ test('a stop this version cannot read can be set aside: the tap behind it is sen
     .getByRole('button', { name: 'Endgültig löschen', exact: true })
     .click();
   await expect(section).toHaveCount(0);
+  // The record left the phone, not only the view.
+  expect(await page.evaluate((key) => localStorage.getItem(key), aside)).toBeNull();
   expect(server.sent).toHaveLength(2);
 });
 
