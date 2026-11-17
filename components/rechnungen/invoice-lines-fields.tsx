@@ -24,7 +24,7 @@ type LineProps = {
   errors: Record<string, string | undefined>;
   disabled: boolean;
   /** An issued invoice: its lines show without add or remove. */
-  fixed: boolean;
+  issued: boolean;
 };
 
 /** The units a line offers: every unit in use, and a retired one the line already has. */
@@ -42,7 +42,7 @@ export function InvoiceLinesFields({
   onAdd,
   errors,
   disabled,
-  fixed,
+  issued,
 }: {
   lines: DraftLineForm[];
   lineNetCents: Array<number | null>;
@@ -50,13 +50,13 @@ export function InvoiceLinesFields({
   onAdd: () => void;
   errors: Record<string, string | undefined>;
   disabled: boolean;
-  fixed: boolean;
+  issued: boolean;
 }) {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SectionTitle>Positionen</SectionTitle>
-        {!fixed && (
+        {!issued && (
           <Button type="button" variant="outline" size="sm" onClick={onAdd} disabled={disabled}>
             <Plus className="size-4" />
             Position hinzufügen
@@ -81,7 +81,7 @@ export function InvoiceLinesFields({
               onRemove={() => onChange(lines.filter((_line, at) => at !== index))}
               errors={errors}
               disabled={disabled}
-              fixed={fixed}
+              issued={issued}
             />
           ))}
         </ol>
@@ -98,7 +98,7 @@ function InvoiceLineFields({
   onRemove,
   errors,
   disabled,
-  fixed,
+  issued,
 }: LineProps) {
   return (
     <li className="space-y-3 p-4">
@@ -129,7 +129,7 @@ function InvoiceLineFields({
             />
           </Field>
         </div>
-        {!fixed && (
+        {!issued && (
           <Button
             type="button"
             variant="ghost"
@@ -163,7 +163,7 @@ function LineAmountFields({
   onChange,
   errors,
   disabled,
-}: Omit<LineProps, 'onRemove' | 'fixed'>) {
+}: Omit<LineProps, 'onRemove' | 'issued'>) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-end">
       <Field

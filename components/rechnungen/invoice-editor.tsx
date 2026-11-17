@@ -122,7 +122,7 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
         }}
         errors={errors}
         disabled={pending}
-        fixed={invoice.status !== 'entwurf'}
+        issued={invoice.status !== 'entwurf'}
       />
       <InvoiceTotals amounts={amounts} />
       <InvoiceTermsFields form={form} onChange={setForm} errors={errors} disabled={pending} />
