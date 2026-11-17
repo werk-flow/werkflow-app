@@ -22,16 +22,23 @@ describe('the Svix signature of a Resend signal', () => {
     if (!key) return;
     const at = (offsetSeconds: number) => (SVIX_TIMESTAMP + offsetSeconds) * 1000;
     expect(verifyResendSignature(key, headersOf(SVIX_SIGNATURE), SVIX_BODY, at(0))).toBe(SVIX_ID);
-    expect(verifyResendSignature(key, headersOf(`v1,${'A'.repeat(43)}= ${SVIX_SIGNATURE}`), SVIX_BODY, at(300))).toBe(
-      SVIX_ID,
-    );
+    expect(
+      verifyResendSignature(key, headersOf(`v1,${'A'.repeat(43)}= ${SVIX_SIGNATURE}`), SVIX_BODY, at(300)),
+    ).toBe(SVIX_ID);
     expect(verifyResendSignature(key, headersOf(SVIX_SIGNATURE), SVIX_BODY, at(301))).toBeNull();
     expect(verifyResendSignature(key, headersOf(SVIX_SIGNATURE), SVIX_BODY, at(-301))).toBeNull();
     expect(verifyResendSignature(key, headersOf(SVIX_SIGNATURE), `${SVIX_BODY} `, at(0))).toBeNull();
   });
 
   test('a secret without the whsec_ form or with too few bytes counts as unset', () => {
-    for (const value of [undefined, '', '   ', 'MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw', 'whsec_c2hvcnQ=', 'whsec_not base64!']) {
+    for (const value of [
+      undefined,
+      '',
+      '   ',
+      'MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw',
+      'whsec_c2hvcnQ=',
+      'whsec_not base64!',
+    ]) {
       expect(resendWebhookSecret(value)).toBeNull();
     }
   });

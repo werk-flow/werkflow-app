@@ -115,7 +115,12 @@ function rpcAnswer(name: string, args: Record<string, unknown>) {
     let row = mails.find((mail) => mail.kind === kind && mail.stripeObjectId === stripeObjectId);
     if (!row) {
       row = {
-        ...sentMail(`00000000-0000-4000-8000-${String(mails.length + 1).padStart(12, '0')}`, kind, stripeObjectId, ''),
+        ...sentMail(
+          `00000000-0000-4000-8000-${String(mails.length + 1).padStart(12, '0')}`,
+          kind,
+          stripeObjectId,
+          '',
+        ),
         recipient: String(args.p_recipient),
         state: 'pending',
         providerMessageId: null,
@@ -128,7 +133,8 @@ function rpcAnswer(name: string, args: Record<string, unknown>) {
     const row = mails.find((mail) => mail.id === args.p_mail_id);
     if (!row || row.state === 'sent') return { data: false, error: null };
     row.state = args.p_outcome === 'sent' ? 'sent' : 'failed';
-    row.providerMessageId = typeof args.p_provider_message_id === 'string' ? args.p_provider_message_id : null;
+    row.providerMessageId =
+      typeof args.p_provider_message_id === 'string' ? args.p_provider_message_id : null;
     return { data: true, error: null };
   }
   throw new Error(`unexpected function ${name}`);
@@ -144,7 +150,10 @@ function readAnswer(table: string, column: string, value: unknown) {
   }
   assert.equal(table, 'werkflow_billing_mails');
   assert.equal(column, 'provider_message_id');
-  return { data: mails.filter((row) => row.providerMessageId === value).map((row) => ({ id: row.id })), error: null };
+  return {
+    data: mails.filter((row) => row.providerMessageId === value).map((row) => ({ id: row.id })),
+    error: null,
+  };
 }
 
 mock.module('server-only', () => ({}));
@@ -262,8 +271,13 @@ assert.equal(rowOf(PAYMENT_MAIL)?.deliveryProblem, 'bounced');
 assert.equal(events.get(bounceId)?.ledger, 'werkflow_billing_mails');
 assert.equal(alarms().length, 1, 'a bounce did not raise exactly one alarm');
 const [alarm] = alarms();
-assert.ok(alarm?.subject.includes('Abrechnungsmail kam nicht an'));
-assert.ok(alarm.text.includes('payment_failed') && alarm.text.includes('unzustellbar') && alarm.text.includes(ORGANIZATION));
+assert.ok(alarm, 'no alarm was kept');
+assert.ok(alarm.subject.includes('Abrechnungsmail kam nicht an'));
+assert.ok(
+  alarm.text.includes('payment_failed') &&
+    alarm.text.includes('unzustellbar') &&
+    alarm.text.includes(ORGANIZATION),
+);
 assert.ok(!alarm.text.includes(RECIPIENT) && !alarm.html.includes(RECIPIENT), 'the alarm named the address');
 
 // A replay answers 2xx after one lookup and dispatches nothing.
@@ -283,7 +297,10 @@ assert.ok(alarms()[1]?.text.includes('als Spam gemeldet'));
 
 // An unknown message id and a signal without one are recorded and acknowledged, and change nothing else.
 const unknownId = nextSvixId();
-assert.equal(await deliver(payloadOf('email.bounced', '4ef9a417-02e9-4d39-ad75-9611e0fc9999'), { svixId: unknownId }), 200);
+assert.equal(
+  await deliver(payloadOf('email.bounced', '4ef9a417-02e9-4d39-ad75-9611e0fc9999'), { svixId: unknownId }),
+  200,
+);
 assert.deepEqual(events.get(unknownId), {
   eventType: 'email.bounced',
   providerMessageId: '4ef9a417-02e9-4d39-ad75-9611e0fc9999',
@@ -302,7 +319,9 @@ assert.equal(alarms().length, 2, 'a bounced alarm raised an alarm');
 assert.ok(logged.join('\n').includes('billing_alarm_undelivered'));
 
 // A failed step records nothing and answers 5xx; Resend's next delivery succeeds and raises one alarm.
-mails.push(sentMail('00000000-0000-4000-8000-000000000010', 'mandate_inactive', 'mandate_test_0001', 'retry-0001'));
+mails.push(
+  sentMail('00000000-0000-4000-8000-000000000010', 'mandate_inactive', 'mandate_test_0001', 'retry-0001'),
+);
 const retried = payloadOf('email.bounced', 'retry-0001');
 for (const [failing, status] of [
   ['read resend_webhook_events', 503],
@@ -314,7 +333,11 @@ for (const [failing, status] of [
   failNext = failing;
   assert.equal(await deliver(retried, { svixId: id }), status, `a failed ${failing} was acknowledged`);
   assert.equal(events.has(id), false, `a failed ${failing} recorded the signal`);
-  assert.equal(await deliver(retried, { svixId: id }), 200, `the delivery after a failed ${failing} did not succeed`);
+  assert.equal(
+    await deliver(retried, { svixId: id }),
+    200,
+    `the delivery after a failed ${failing} did not succeed`,
+  );
   assert.equal(events.get(id)?.ledger, 'werkflow_billing_mails');
 }
 assert.equal(rowOf('retry-0001')?.deliveryProblem, 'bounced');
@@ -329,7 +352,11 @@ databaseDown = false;
 
 // A signed body that is no Resend signal answers 400 and records nothing.
 const before = events.size;
-for (const body of ['not json', '{}', JSON.stringify({ type: 'Email Bounced', created_at: 'gestern', data: {} })]) {
+for (const body of [
+  'not json',
+  '{}',
+  JSON.stringify({ type: 'Email Bounced', created_at: 'gestern', data: {} }),
+]) {
   assert.equal(await deliver(body), 400, `the body ${body} was accepted`);
 }
 assert.equal(events.size, before);
@@ -337,6 +364,13 @@ assert.equal(events.size, before);
 // The logs name failures by code only.
 const logText = logged.join('\n');
 assert.ok(logText.includes('resend_webhook_secret_missing'), 'a missing secret was not logged by its code');
-for (const leak of [secret, secretBytes.toString('base64'), RECIPIENT, 'connection lost', PAYMENT_MAIL, 'Zahlung']) {
+for (const leak of [
+  secret,
+  secretBytes.toString('base64'),
+  RECIPIENT,
+  'connection lost',
+  PAYMENT_MAIL,
+  'Zahlung',
+]) {
   assert.ok(!logText.includes(leak), `a log line carried ${leak}`);
 }

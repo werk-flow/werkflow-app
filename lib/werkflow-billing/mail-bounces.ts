@@ -32,6 +32,7 @@ const markedRowsSchema = z.array(
 
 async function ownsMessage(messageId: string): Promise<boolean> {
   const { data, error } = await createSupabaseAdminClient()
+    // tenant-scope: cross-organization-by-design — asks only whether WerkFlow sent the message id Resend signed; reads no row content.
     .from('werkflow_billing_mails')
     .select('id')
     .eq('provider_message_id', messageId)

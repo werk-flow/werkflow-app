@@ -21,7 +21,14 @@ export type ResendSignalReceipt = 'settled' | 'malformed' | 'failed' | 'unavaila
 const signalSchema = z.object({
   type: z.string().regex(/^[a-z0-9_.]{1,64}$/),
   created_at: z.iso.datetime({ offset: true }),
-  data: z.object({ email_id: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional() }).optional(),
+  data: z
+    .object({
+      email_id: z
+        .string()
+        .regex(/^[A-Za-z0-9_.:-]{1,128}$/)
+        .optional(),
+    })
+    .optional(),
 });
 
 function parseSignal(body: string): z.infer<typeof signalSchema> | null {

@@ -140,7 +140,7 @@ begin
   from public.mark_werkflow_billing_mail_undelivered('resend-0001', 'bounced') marked
   where marked.kind = 'payment_failed' and marked.organization_id = v_org
     and marked.stripe_object_id = 'in_test_0001' and marked.delivery_problem = 'bounced';
-  if v_count <> 1 then
+  if v_count is distinct from 1 then
     raise exception 'a bounce did not answer its marked mail';
   end if;
   select * into v_row from public.werkflow_billing_mails where id = v_mail;
@@ -155,7 +155,7 @@ begin
   from public.mark_werkflow_billing_mail_undelivered('resend-0001', 'complained') marked
   where marked.delivery_problem = 'bounced';
   select * into v_row from public.werkflow_billing_mails where id = v_mail;
-  if v_count <> 1 or v_row.delivery_problem is distinct from 'bounced'
+  if v_count is distinct from 1 or v_row.delivery_problem is distinct from 'bounced'
     or v_row.delivery_problem_at is distinct from v_first then
     raise exception 'a second signal changed the first problem';
   end if;
@@ -166,7 +166,7 @@ begin
   select count(*) into v_count
   from public.mark_werkflow_billing_mail_undelivered('resend-0003', 'complained') marked
   where marked.organization_id is null and marked.kind = 'alarm.debit_failed';
-  if v_count <> 1 then
+  if v_count is distinct from 1 then
     raise exception 'a complaint did not mark its alarm';
   end if;
 

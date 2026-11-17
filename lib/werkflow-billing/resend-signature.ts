@@ -18,7 +18,9 @@ const TOLERANCE_SECONDS = 5 * 60;
 const MINIMUM_KEY_BYTES = 16;
 
 /** The signing key, or null when RESEND_WEBHOOK_SECRET is unset or malformed. */
-export function resendWebhookSecret(value: string | undefined = process.env.RESEND_WEBHOOK_SECRET): Buffer | null {
+export function resendWebhookSecret(
+  value: string | undefined = process.env.RESEND_WEBHOOK_SECRET,
+): Buffer | null {
   const encoded = SECRET.exec(value?.trim() ?? '')?.[1];
   if (!encoded) return null;
   const key = Buffer.from(encoded, 'base64');
