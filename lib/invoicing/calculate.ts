@@ -22,12 +22,22 @@ function taxCentsOf(basisCents: number, rateBasisPoints: number): number {
   return basisCents < 0 && rounded > 0 ? -rounded : rounded;
 }
 
+/** a + b, refused when the sum leaves the safe integer range, where a cent could be lost. */
+function safeSum(a: number, b: number): number {
+  const sum = a + b;
+  if (!Number.isSafeInteger(sum)) throw new RangeError('An invoice sum exceeds the safe integer range.');
+  return sum;
+}
+
 /** One breakdown row per category and rate; an exemption keeps one reason. */
 function taxKey(tax: InvoiceTax): string {
   return `${tax.category}:${taxRateBasisPoints(tax)}`;
 }
 
-/** Every amount of the draft, computed; a draft without lines or with a bad quantity throws a RangeError. */
+/**
+ * Every amount of the draft, computed. A draft without lines, with a bad
+ * quantity or with a sum beyond the safe integer range throws a RangeError.
+ */
 export function calculateInvoice(draft: InvoiceDraft): CalculatedInvoice {
   if (draft.lines.length === 0) throw new RangeError('An invoice has at least one line.');
   const lines = draft.lines.map((line) => ({
@@ -50,20 +60,20 @@ export function calculateInvoice(draft: InvoiceDraft): CalculatedInvoice {
     ) {
       throw new RangeError('All exempt lines of one invoice share one exemption reason.');
     }
-    row.basisCents += line.netCents;
+    row.basisCents = safeSum(row.basisCents, line.netCents);
   }
   const taxSubtotals = [...subtotals.values()].map((row) => ({
     ...row,
     taxCents: taxCentsOf(row.basisCents, taxRateBasisPoints(row.tax)),
   }));
 
-  const lineNetCents = lines.reduce((sum, line) => sum + line.netCents, 0);
-  const taxCents = taxSubtotals.reduce((sum, row) => sum + row.taxCents, 0);
+  const lineNetCents = lines.reduce((sum, line) => safeSum(sum, line.netCents), 0);
+  const taxCents = taxSubtotals.reduce((sum, row) => safeSum(sum, row.taxCents), 0);
   return {
     ...draft,
     lines,
     dueDate: addLocalDays(draft.issueDate, draft.paymentTerms.dueInDays),
     taxSubtotals,
-    totals: { lineNetCents, taxCents, grossCents: lineNetCents + taxCents },
+    totals: { lineNetCents, taxCents, grossCents: safeSum(lineNetCents, taxCents) },
   };
 }

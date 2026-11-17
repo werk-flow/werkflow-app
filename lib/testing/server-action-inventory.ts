@@ -26,6 +26,7 @@ export const CONTEXT_ROOTS = new Set(Object.keys(ROOT_OWNERS));
 export const CONTEXT_WRAPPERS: Record<string, string> = {
   authenticateAndAuthorize: 'lib/jobs/auth.ts',
   getAuthorizedDocumentContext: 'lib/documents/access.ts',
+  officeCaller: 'lib/invoices/caller.ts',
   requireServiceManager: 'lib/service-cases/manager-context.ts',
   requireAuth: 'lib/time-accounts/access.ts',
   requireManagerAndClient: 'lib/clients/manager-access.ts',

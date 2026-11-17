@@ -4,7 +4,7 @@ import { z } from '@/lib/zod';
 // terms, lines and the totals the server computed
 // (supabase/migrations/20261215100000_keep_invoice_drafts_with_their_lines_and_totals.sql).
 
-/** Every status the database check allows; this release writes only `entwurf`. */
+/** Every status the database check allows; a Storno (`storniert`) is not written yet. */
 export const INVOICE_STATUSES = ['entwurf', 'ausgestellt', 'storniert'] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 export const invoiceStatusSchema = z.enum(INVOICE_STATUSES);
@@ -14,6 +14,12 @@ export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   ausgestellt: 'Ausgestellt',
   storniert: 'Storniert',
 };
+
+/**
+ * The longest Bestellnummer and buyer reference: the invoice head prints both
+ * beside the address, and a head that leaves no room for the lines is refused.
+ */
+export const INVOICE_REFERENCE_MAX_LENGTH = 60;
 
 /** The work a draft can bill. */
 export const INVOICE_WORK_KINDS = ['job', 'project', 'service_case'] as const;
@@ -78,6 +84,10 @@ export type InvoiceDetail = InvoiceTerms &
     invoiceNumber: string | null;
     status: InvoiceStatus;
     version: number;
+    /** The Rechnungsdatum; null while it is a draft. */
+    issueDate: string | null;
+    /** The registered original and whether it is filed; null while none is registered. */
+    original: { documentId: string; filed: boolean } | null;
     client: { id: string; name: string };
     recipient: { id: string; name: string; address: string | null };
     /** The work it bills, with its label and detail route. */

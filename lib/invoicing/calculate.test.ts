@@ -130,6 +130,23 @@ describe('calculateInvoice', () => {
     ).toThrow(RangeError);
   });
 
+  test('a sum that leaves the safe integer range is refused, so no cent is lost between lines', () => {
+    const [first] = MIXED_RATE_INVOICE.lines;
+    if (!first) throw new Error('fixture without lines');
+    // Each line is exact; their sum is not representable as an integer number of cents.
+    // A zero rate owes no tax, so only the sums overflow.
+    const huge = {
+      ...first,
+      quantity: '1',
+      unitPriceCents: Number.MAX_SAFE_INTEGER - 1,
+      priceQuantity: 1 as const,
+      tax: { category: 'Z' as const },
+    };
+    expect(() => calculateInvoice({ ...MIXED_RATE_INVOICE, lines: [huge, { ...huge, id: '2' }] })).toThrow(
+      RangeError,
+    );
+  });
+
   test('an invoice without lines is refused', () => {
     expect(() => calculateInvoice({ ...MIXED_RATE_INVOICE, lines: [] })).toThrow(RangeError);
   });

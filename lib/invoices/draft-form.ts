@@ -57,14 +57,14 @@ function parseQuantity(text: string): string | null {
 }
 
 /** „2“ or „2,5“ percent → basis points; null for anything else. */
-function parsePercentBasisPoints(text: string): number | null {
+export function parsePercentBasisPoints(text: string): number | null {
   const match = /^(\d{1,2})(?:[.,](\d{1,2}))?$/.exec(text.trim());
   if (!match) return null;
   const basisPoints = Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
   return basisPoints >= 1 && basisPoints <= 9999 ? basisPoints : null;
 }
 
-function parseDays(text: string, min: number): number | null {
+export function parseDays(text: string, min: number): number | null {
   const trimmed = text.trim();
   if (!/^\d{1,3}$/.test(trimmed)) return null;
   const days = Number(trimmed);
@@ -72,7 +72,7 @@ function parseDays(text: string, min: number): number | null {
 }
 
 /** „4,5“ from 450 basis points. */
-function percentInput(basisPoints: number | null): string {
+export function percentInput(basisPoints: number | null): string {
   if (basisPoints === null) return '';
   const fraction = String(basisPoints % 100)
     .padStart(2, '0')

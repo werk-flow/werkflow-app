@@ -2,7 +2,6 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
-import { resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
@@ -15,6 +14,7 @@ import {
   type SaveInvoiceDraftInput,
 } from './action-schemas';
 import { draftAmounts, type DraftAmounts } from './amounts';
+import { officeCaller } from './caller';
 import type { InvoiceLineValues } from './types';
 
 // Admin and Büro keep the invoices. Every action resolves the caller's
@@ -35,13 +35,6 @@ const refusal = writeRefusalFor(
     'stale_version',
   ]),
 );
-
-async function officeCaller() {
-  const caller = await resolveActionContext();
-  if (!caller.success) return caller;
-  if (!caller.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
-  return caller;
-}
 
 /** Creates a draft for a customer, optionally for one of its jobs, projects or Servicefälle. */
 export async function createInvoice(

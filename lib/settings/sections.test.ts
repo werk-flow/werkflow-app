@@ -23,6 +23,7 @@ test('Admin and Büro see every settings section, with the personal table view u
     'Dashboard',
     'Organisation',
     'Dokumente & Briefpapier',
+    'Rechnungen',
     'Kalender',
     'Zeiterfassung',
     'Mitarbeiter',

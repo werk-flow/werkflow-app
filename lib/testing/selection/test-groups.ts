@@ -47,8 +47,7 @@ const freshnessFiles = new Set([
   'tests/audit/performance/planning-benchmark.spec.ts',
   'tests/audit/performance/field.spec.ts',
 ]);
-// Audit P1-22 measures opening readiness inside its imported submission helper.
-// This ownership declaration must survive a helper refactor or removal of a timing call.
+// Audit P1-22 times opening readiness in its imported submission helper; keep this through any refactor.
 const readinessSources: Readonly<Record<string, string>> = {
   'tests/golden/p1-22.spec.ts': 'tests/golden/p1-22.spec.ts',
   'tests/golden/p1-11.spec.ts': 'tests/golden/p1-11.spec.ts',
@@ -445,6 +444,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['leistung-prices', ['leistung_prices.sql'], ['commercial']],
   ['offers', ['offers.sql', 'offers_concurrency.sql'], ['commercial', 'customers']],
   ['invoice-drafts', ['invoice_drafts.sql'], ['commercial', 'customers']],
+  ['invoice-issue', ['invoice_issue.sql', 'invoice_issue_concurrency.sql'], ['commercial', 'documents']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],
