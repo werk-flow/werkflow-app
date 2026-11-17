@@ -5,7 +5,7 @@
 --   customer, with its audit event and report number 1.
 -- * A retry of the same report id answers with it; a regenerated report is a
 --   new document and report number 2 that names the first; a report that does
---   not name the latest one is stale.
+--   not name the latest one is stale. Reports of one job never share a name.
 -- * An employee, another organization's admin, another organization's visit
 --   and a visit that is not completed are refused; a storage key outside the
 --   organization is invalid.
@@ -51,10 +51,11 @@ insert into public.maintenance_plan_revisions(id,organization_id,maintenance_pla
 ('47160000-0000-4000-8000-000000000063','47160000-0000-4000-8000-000000000011','47160000-0000-4000-8000-000000000062',1,'47160000-0000-4000-8000-000000000053','2026-01-01','2026-01-10',12,10,10,120,'planned_due_date','Erstanlage','47160000-0000-4000-8000-000000000003');
 insert into public.maintenance_plan_revision_equipment(organization_id,maintenance_plan_revision_id,equipment_id,created_by) values
 ('47160000-0000-4000-8000-000000000010','47160000-0000-4000-8000-000000000061','47160000-0000-4000-8000-000000000035','47160000-0000-4000-8000-000000000001');
--- D1 is completed, D2 still waits for its visit, DB belongs to the other organization.
+-- D1 and D3 are completed on one visit job, D2 still waits for its visit, DB belongs to the other organization.
 insert into public.maintenance_due_work(id,organization_id,maintenance_plan_id,maintenance_plan_revision_id,original_due_date,due_date,window_start_date,window_end_date,status,scope_outcome,completed_on,job_id,version,created_by,updated_by) values
 ('47160000-0000-4000-8000-000000000071','47160000-0000-4000-8000-000000000010','47160000-0000-4000-8000-000000000060','47160000-0000-4000-8000-000000000061','2026-01-10','2026-01-10','2025-12-31','2026-01-20','completed','partial','2026-01-12','47160000-0000-4000-8000-000000000040',2,'47160000-0000-4000-8000-000000000001','47160000-0000-4000-8000-000000000001'),
 ('47160000-0000-4000-8000-000000000072','47160000-0000-4000-8000-000000000010','47160000-0000-4000-8000-000000000060','47160000-0000-4000-8000-000000000061','2026-03-10','2026-03-10','2026-02-28','2026-03-20','visit_created',null,null,'47160000-0000-4000-8000-000000000040',1,'47160000-0000-4000-8000-000000000001','47160000-0000-4000-8000-000000000001'),
+('47160000-0000-4000-8000-000000000073','47160000-0000-4000-8000-000000000010','47160000-0000-4000-8000-000000000060','47160000-0000-4000-8000-000000000061','2026-02-10','2026-02-10','2026-01-31','2026-02-20','completed','complete','2026-01-12','47160000-0000-4000-8000-000000000040',2,'47160000-0000-4000-8000-000000000001','47160000-0000-4000-8000-000000000001'),
 ('47160000-0000-4000-8000-000000000079','47160000-0000-4000-8000-000000000011','47160000-0000-4000-8000-000000000062','47160000-0000-4000-8000-000000000063','2026-01-10','2026-01-10','2025-12-31','2026-01-20','completed','complete','2026-01-12','47160000-0000-4000-8000-000000000049',2,'47160000-0000-4000-8000-000000000003','47160000-0000-4000-8000-000000000003');
 set local session_replication_role = origin;
 
@@ -202,16 +203,33 @@ begin
     '47160000-0000-4000-8000-000000000083', '47160000-0000-4000-8000-000000000071',
     '47160000-0000-4000-8000-000000000081', '47160000-0000-4000-8000-000000000094',
     '47160000-0000-4000-8000-000000000010/service-reports/47160000-0000-4000-8000-000000000071/r2.pdf',
-    'Servicebericht AUF-REPORT-1 (2).pdf', 4096
+    'Servicebericht AUF-REPORT-1.pdf', 4096
   );
   if not exists (
     select 1 from public.maintenance_service_reports
     where id = '47160000-0000-4000-8000-000000000083' and report_number = 2
       and replaces_report_id = '47160000-0000-4000-8000-000000000081'
       and document_id = '47160000-0000-4000-8000-000000000094'
-  ) or (select count(*) from public.maintenance_service_reports
+  ) or (select display_name from public.documents where id = '47160000-0000-4000-8000-000000000094')
+       is distinct from 'Servicebericht AUF-REPORT-1 (1).pdf'
+    or (select count(*) from public.maintenance_service_reports
         where organization_id = '47160000-0000-4000-8000-000000000010') <> 2 then
     raise exception 'the regenerated report is not number 2 beside the first';
+  end if;
+end $$;
+
+-- A second visit item of the same job files its report under the next free name.
+select public.register_maintenance_service_report(
+  '47160000-0000-4000-8000-000000000010', '47160000-0000-4000-8000-000000000001',
+  '47160000-0000-4000-8000-000000000084', '47160000-0000-4000-8000-000000000073', null,
+  '47160000-0000-4000-8000-000000000095',
+  '47160000-0000-4000-8000-000000000010/service-reports/47160000-0000-4000-8000-000000000073/r1.pdf',
+  'Servicebericht AUF-REPORT-1.pdf', 2048
+);
+do $$ begin
+  if (select display_name from public.documents where id = '47160000-0000-4000-8000-000000000095')
+     is distinct from 'Servicebericht AUF-REPORT-1 (2).pdf' then
+    raise exception 'a report of the same job did not take the next free name';
   end if;
 end $$;
 

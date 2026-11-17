@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactElement } from 'react';
+import { useRef, type ReactElement } from 'react';
 import { ClipboardCheck, MapPin } from 'lucide-react';
 
 import { useOrganization } from '@/components/organization/organization-context';
@@ -109,13 +109,19 @@ function VisitRow({ visit, actions }: { visit: CompletedVisit; actions: ReportAc
 function useReportActions(refresh: () => Promise<void>) {
   const busy = useBusyIds();
   const { showBanner } = useBanner();
+  // An attempt whose answer was lost keeps its id, so the retry answers with the report it made.
+  const attempts = useRef(new Map<string, string>());
   const create = (visit: CompletedVisit) =>
     void busy.run(visit.dueWorkId, async () => {
+      const reportId = attempts.current.get(visit.dueWorkId) ?? crypto.randomUUID();
+      attempts.current.set(visit.dueWorkId, reportId);
+      // A lost answer (the request failed in transit) is uncertain, like `unexpected_error`.
       const result = await createServiceReport({
         dueWorkId: visit.dueWorkId,
-        reportId: crypto.randomUUID(),
+        reportId,
         replacesReportId: visit.latestReport?.id ?? null,
-      });
+      }).catch(() => ({ success: false as const, error: 'unexpected_error' }));
+      if (result.success || result.error !== 'unexpected_error') attempts.current.delete(visit.dueWorkId);
       await refresh();
       showBanner(
         result.success
@@ -132,7 +138,7 @@ function useReportActions(refresh: () => Promise<void>) {
     });
   const download = (visit: CompletedVisit, documentId: string) =>
     void busy.run(visit.dueWorkId, async () => {
-      const result = await getDocumentSignedUrl(documentId);
+      const result = await getDocumentSignedUrl(documentId).catch(() => ({ success: false as const }));
       if (result.success) window.location.assign(result.signedUrl);
       else showBanner({ variant: 'error', message: 'Der Servicebericht konnte nicht geladen werden.' });
     });

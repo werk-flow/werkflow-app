@@ -17,6 +17,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
 import { buildServiceReport } from './build';
+import type { ServiceReport } from './model';
 import { readVisitReportFacts } from './reads';
 
 // The office's Servicebericht of a completed maintenance visit
@@ -65,7 +66,7 @@ async function organizationName(context: ServiceManagerContext): Promise<string 
 /** The PDF of the report with the company's letterhead; the renderer loads only here. */
 async function renderReport(
   context: ServiceManagerContext,
-  report: ReturnType<typeof buildServiceReport>,
+  report: ServiceReport,
 ): Promise<Uint8Array | null> {
   const name = await organizationName(context);
   if (name === null) return null;
@@ -82,10 +83,63 @@ async function renderReport(
   return renderBusinessDocument(serviceReportDocument(report, letterhead.letterhead));
 }
 
+/** Stores the PDF, registers it with its links in one call and files it. */
+async function storeAndFile(
+  context: ServiceManagerContext,
+  attempt: z.output<typeof createSchema> & { report: ServiceReport; bytes: Uint8Array },
+): Promise<ActionResult<{ reportId: string; documentId: string }>> {
+  const { dueWorkId, reportId, replacesReportId, report, bytes } = attempt;
+  const storagePath = attemptStoragePath(
+    `${context.organizationId}/service-reports/${dueWorkId}/${reportId}.pdf`,
+  );
+  await putStorageObject({
+    organizationId: context.organizationId,
+    path: storagePath,
+    body: bytes,
+    contentType: 'application/pdf',
+  });
+  // The registration counts up a name the library root already holds.
+  const fileName = `Servicebericht ${report.jobNumber ?? report.visitedOn}.pdf`;
+  const { data, error } = await context.admin.rpc(
+    'register_maintenance_service_report',
+    rpcArgs('register_maintenance_service_report', {
+      p_organization_id: context.organizationId,
+      p_actor_id: context.actorId,
+      p_report_id: reportId,
+      p_maintenance_due_work_id: dueWorkId,
+      p_replaces_report_id: replacesReportId,
+      p_document_id: randomUUID(),
+      p_storage_path: storagePath,
+      p_file_name: fileName,
+      p_size_bytes: bytes.byteLength,
+    }),
+  );
+  const registered = z
+    .object({ reportId: uuidSchema, documentId: uuidSchema, duplicate: z.boolean() })
+    .safeParse(data);
+  if (error || !registered.success) {
+    // A refused registration wrote nothing, so the object is unreferenced; after an unknown outcome it stays.
+    if (isConfirmedWriteRefusal(error)) {
+      await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
+    }
+    if (error) logError('createServiceReport: registration failed', error);
+    const code = REGISTER_FAILURES.find((value) => error?.message.includes(value));
+    return { success: false, error: code ?? 'unexpected_error' };
+  }
+  // A retry of a committed report answers with its document, which owns another object.
+  if (registered.data.duplicate) {
+    await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
+  }
+  const filed = await fileReport(context, registered.data.documentId);
+  if (!filed.success) return filed;
+  return { success: true, reportId: registered.data.reportId, documentId: registered.data.documentId };
+}
+
 /**
  * „Servicebericht erstellen“: a new filed report of a completed visit. Names
  * the latest report the office saw, so a report someone made meanwhile is
- * stale. A latest report whose filing failed is filed instead of made again.
+ * stale. A latest report whose filing failed is filed instead of made again,
+ * and a retry of a committed attempt answers with its report.
  */
 export async function createServiceReport(
   input: z.input<typeof createSchema>,
@@ -99,14 +153,15 @@ export async function createServiceReport(
     const read = await readVisitReportFacts(context, dueWorkId);
     if (!read.success) return read;
     const { jobId, latestReport, ...facts } = read.facts;
+    // The latest report is finished once filed: one whose filing failed is
+    // filed now, and a retry of the attempt that made it answers with it.
+    if (latestReport && (!latestReport.filed || latestReport.id === reportId)) {
+      const filed = latestReport.filed ? null : await fileReport(context, latestReport.documentId);
+      if (filed && !filed.success) return filed;
+      return { success: true, reportId: latestReport.id, documentId: latestReport.documentId };
+    }
     if ((latestReport?.id ?? null) !== replacesReportId)
       return { success: false, error: 'service_report_stale' };
-    if (latestReport && !latestReport.filed) {
-      const filed = await fileReport(context, latestReport.documentId);
-      return filed.success
-        ? { success: true, reportId: latestReport.id, documentId: latestReport.documentId }
-        : filed;
-    }
     const parties = await getWorkBillingParties({ kind: 'job', id: jobId });
     if (!parties.success) return parties;
     const current = parties.parties.versions[0];
@@ -122,49 +177,7 @@ export async function createServiceReport(
     const bytes = await renderReport(context, report);
     if (!bytes) return { success: false, error: 'load_failed' };
 
-    const storagePath = attemptStoragePath(
-      `${context.organizationId}/service-reports/${dueWorkId}/${reportId}.pdf`,
-    );
-    await putStorageObject({
-      organizationId: context.organizationId,
-      path: storagePath,
-      body: bytes,
-      contentType: 'application/pdf',
-    });
-    const fileName = `Servicebericht ${report.jobNumber ?? report.visitedOn}${latestReport ? ` (${latestReport.reportNumber + 1})` : ''}.pdf`;
-    const { data, error } = await context.admin.rpc(
-      'register_maintenance_service_report',
-      rpcArgs('register_maintenance_service_report', {
-        p_organization_id: context.organizationId,
-        p_actor_id: context.actorId,
-        p_report_id: reportId,
-        p_maintenance_due_work_id: dueWorkId,
-        p_replaces_report_id: replacesReportId,
-        p_document_id: randomUUID(),
-        p_storage_path: storagePath,
-        p_file_name: fileName,
-        p_size_bytes: bytes.byteLength,
-      }),
-    );
-    const registered = z
-      .object({ reportId: uuidSchema, documentId: uuidSchema, duplicate: z.boolean() })
-      .safeParse(data);
-    if (error || !registered.success) {
-      // A refused registration wrote nothing, so the object is unreferenced; after an unknown outcome it stays.
-      if (isConfirmedWriteRefusal(error)) {
-        await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
-      }
-      if (error) logError('createServiceReport: registration failed', error);
-      const code = REGISTER_FAILURES.find((value) => error?.message.includes(value));
-      return { success: false, error: code ?? 'unexpected_error' };
-    }
-    // A retry of a committed report answers with its document, which owns another object.
-    if (registered.data.duplicate) {
-      await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
-    }
-    const filed = await fileReport(context, registered.data.documentId);
-    if (!filed.success) return filed;
-    return { success: true, reportId: registered.data.reportId, documentId: registered.data.documentId };
+    return await storeAndFile(context, { dueWorkId, reportId, replacesReportId, report, bytes });
   } catch (error) {
     logError('createServiceReport: unexpected failure', error);
     return { success: false, error: 'unexpected_error' };

@@ -6,7 +6,8 @@
 --   next report number that names the report it replaces, and a new document:
 --   a filed document refuses a new version.
 -- * public.register_maintenance_service_report registers the rendered PDF as
---   a document of category `report` without a retention class, links it to
+--   a document of category `report` without a retention class, under the
+--   first free name in the library root, links it to
 --   the visit job, each Anlage of the visit and the customer, and writes its
 --   audit event and its report row, in one call. The server files it right
 --   after through lib/documents/filing.ts.
@@ -75,6 +76,8 @@ declare
   v_due public.maintenance_due_work%rowtype;
   v_latest public.maintenance_service_reports%rowtype;
   v_client_id uuid;
+  v_name text := btrim(coalesce(p_file_name, ''));
+  v_counter integer := 0;
 begin
   if not app_private.maintenance_actor_is_manager(p_organization_id, p_actor_id) then
     raise exception 'not_authorized';
@@ -82,7 +85,7 @@ begin
   if p_report_id is null or p_document_id is null
      or p_storage_path is null or split_part(p_storage_path, '/', 1) <> p_organization_id::text
      or right(p_storage_path, 4) <> '.pdf'
-     or length(btrim(coalesce(p_file_name, ''))) not between 5 and 255
+     or length(v_name) not between 5 and 240 or right(v_name, 4) <> '.pdf'
      or p_size_bytes is null or p_size_bytes <= 0 then
     raise exception 'invalid_input';
   end if;
@@ -113,13 +116,24 @@ begin
   select plan.client_id into strict v_client_id from public.maintenance_plans plan
   where plan.id = v_due.maintenance_plan_id and plan.organization_id = p_organization_id;
 
+  -- Reports land in the library root, where an active name is unique: the
+  -- first free `name (n).pdf`, as the library names a copy.
+  while exists (
+    select 1 from public.documents document
+    where document.organization_id = p_organization_id and document.folder_id is null
+      and document.deleted_at is null and lower(btrim(document.display_name)) = lower(v_name)
+  ) loop
+    v_counter := v_counter + 1;
+    v_name := left(btrim(p_file_name), -4) || ' (' || v_counter || ').pdf';
+  end loop;
+
   insert into public.documents (
     id, organization_id, folder_id, storage_bucket, storage_path,
     original_file_name, display_name, category, mime_type, size_bytes,
     uploaded_by, metadata
   ) values (
     p_document_id, p_organization_id, null, 'organization-documents', p_storage_path,
-    p_file_name, p_file_name, 'report', 'application/pdf', p_size_bytes,
+    v_name, v_name, 'report', 'application/pdf', p_size_bytes,
     p_actor_id, jsonb_build_object('maintenanceServiceReportId', p_report_id,
       'maintenanceDueWorkId', v_due.id)
   );

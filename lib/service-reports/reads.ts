@@ -4,7 +4,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { loggedRead } from '@/lib/data/read-request-cache';
 import type { MaintenanceScopeOutcome } from '@/lib/maintenance/types';
 import type { ServiceManagerContext } from '@/lib/service-cases/manager-context';
-import { readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 
 import type { ServiceReportSource } from './build';
 import type { CompletedVisit, CompletedVisitPage } from './types';
@@ -25,11 +25,17 @@ async function readLatestReports(
   dueWorkIds: string[],
 ): Promise<Map<string, LatestReport> | null> {
   const reports = await readInBatches(dueWorkIds, (batch) =>
-    context.admin
-      .from('maintenance_service_reports')
-      .select('id, maintenance_due_work_id, document_id, report_number, created_at')
-      .eq('organization_id', context.organizationId)
-      .in('maintenance_due_work_id', batch),
+    readCompleteRows(
+      (from, to) =>
+        context.admin
+          .from('maintenance_service_reports')
+          .select('id, maintenance_due_work_id, document_id, report_number, created_at')
+          .eq('organization_id', context.organizationId)
+          .in('maintenance_due_work_id', batch)
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
   );
   if (reports.error) return null;
   const latest = new Map<string, (typeof reports.data)[number]>();
@@ -244,21 +250,33 @@ async function readVisitEvidence(
         .in('id', batch),
     ),
     readInBatches(revisionIds, (batch) =>
-      context.admin
-        .from('work_artifact_measurement_lines')
-        .select('revision_id, line_number, description, location, quantity, unit')
-        .eq('organization_id', scope)
-        .in('revision_id', batch)
-        .order('line_number'),
+      readCompleteRows(
+        (from, to) =>
+          context.admin
+            .from('work_artifact_measurement_lines')
+            .select('id, revision_id, line_number, description, location, quantity, unit')
+            .eq('organization_id', scope)
+            .in('revision_id', batch)
+            .order('line_number')
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
     ),
     readInBatches(revisionIds, (batch) =>
-      context.admin
-        .from('work_artifact_actions')
-        .select('revision_id, signer_name, created_at')
-        .eq('organization_id', scope)
-        .eq('action_type', 'signature_captured')
-        .in('revision_id', batch)
-        .order('created_at'),
+      readCompleteRows(
+        (from, to) =>
+          context.admin
+            .from('work_artifact_actions')
+            .select('id, revision_id, signer_name, created_at')
+            .eq('organization_id', scope)
+            .eq('action_type', 'signature_captured')
+            .in('revision_id', batch)
+            .order('created_at')
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
     ),
   ]);
   if (revisions.error || readings.error || signatures.error) return null;
