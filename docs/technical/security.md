@@ -12,7 +12,8 @@ Every rule here is hard, even where only review enforces it; virtue 3 in `AGENTS
 4. A table that feeds the period calculation gets the closed-period trigger. A ledger refuses UPDATE and DELETE, and `security_boundaries.sql` asserts the denial.
 5. A table the UI shows live follows [add Realtime data](realtime-and-caching.md#add-realtime-data).
 6. Filter every service-role query on the table by `organization_id`, or add a reviewed `tenant-scope:` comment.
-7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check -- --local` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
+7. Index every foreign key, in its column order; a partial index counts only when its predicate requires nothing but key columns to be not null. Without one, each deleted parent row scans the table, and an organization's deletion outruns the statement timeout. `supabase/tests/foreign_key_indexes.sql` fails on a missing index.
+8. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check -- --local` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
 
 Wrong turn: a policy that checks membership but not the role: every member reads managers' rows through the Data API.
 

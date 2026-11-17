@@ -1415,4 +1415,26 @@ begin
 end;
 $$;
 
+
+-- A deleted visit outside an organization's deletion still projects the
+-- remaining plan onto its job: the delete side of the trigger skips only an
+-- organization being deleted (20261215090000).
+reset role;
+do $$
+declare
+  v_visit uuid;
+begin
+  select occurrence.id into v_visit
+  from public.planning_occurrences occurrence
+  join public.jobs job on job.id = occurrence.job_id
+  where occurrence.organization_id = 'b1d9e000-0000-4000-8000-000000000010'
+    and occurrence.status = 'scheduled' and job.planned_date is not null
+  order by coalesce(occurrence.start_at, occurrence.start_date::timestamptz)
+  limit 1;
+  if v_visit is null then raise exception 'the fixture has no scheduled visit of a planned job'; end if;
+  delete from public.planning_occurrences where id = v_visit;
+  perform pg_temp.assert_bridge('deleting a job''s first visit');
+end;
+$$;
+
 rollback;
