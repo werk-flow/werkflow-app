@@ -9,7 +9,13 @@ import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
-import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
+import {
+  CALLER_ID,
+  ORGANIZATION_A,
+  ORGANIZATION_B,
+  installActionWorld,
+  signInAs,
+} from './action-boundary-world';
 import { companyProfileRow } from './company-profile-rows';
 import { assertRefused } from './operations-boundary-refusals';
 
@@ -96,6 +102,7 @@ await assertRefused(
       'saveInvoiceSettings',
       () =>
         saveInvoiceSettings({
+          organizationId: ORGANIZATION_A,
           expectedVersion: 0,
           settings: {
             numberPrefix: 'RE-',
@@ -125,6 +132,7 @@ await assertRefused(
       'saveInvoiceSettings as Büro',
       () =>
         saveInvoiceSettings({
+          organizationId: ORGANIZATION_A,
           expectedVersion: 0,
           settings: {
             numberPrefix: 'RE-',
@@ -278,12 +286,39 @@ await assert.rejects(readEmbeddedInvoiceXml(previewBytes), 'a preview carries no
 const previewText = await extractText(await getDocumentProxy(previewBytes), { mergePages: true });
 assert.ok(previewText.text.includes('Rechnung Entwurf'), previewText.text);
 
-// An Admin saves the settings for the own organization, as itself.
+// A form loaded for another organization than the active one saves nothing there.
 signInAs(world, 'admin');
+await assertRefused(
+  world,
+  [
+    [
+      'saveInvoiceSettings after an organization switch',
+      () =>
+        saveInvoiceSettings({
+          organizationId: ORGANIZATION_B,
+          expectedVersion: 0,
+          settings: {
+            numberPrefix: 'RG',
+            numberWithYear: false,
+            numberMinDigits: 5,
+            nextNumber: 10234,
+            paymentDueDays: 30,
+            discountDays: null,
+            discountBasisPoints: null,
+          },
+        }),
+    ],
+  ],
+  { success: false, error: 'organization_changed' },
+  'none',
+);
+
+// An Admin saves the settings for the own organization, as itself.
 world.rpc = () => ({ data: 1, error: null });
 world.rpcCalls.length = 0;
 assert.deepEqual(
   await saveInvoiceSettings({
+    organizationId: ORGANIZATION_A,
     expectedVersion: 0,
     settings: {
       numberPrefix: 'RG',

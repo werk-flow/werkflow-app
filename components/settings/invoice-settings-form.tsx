@@ -29,6 +29,8 @@ const FIELD_IDS = {
 } as const;
 
 const MESSAGES: Readonly<Record<string, string>> = {
+  organization_changed:
+    'Du hast inzwischen die Organisation gewechselt. Lade die Seite neu, bevor du Einstellungen speicherst.',
   not_authorized: 'Nur Admins ändern die Rechnungseinstellungen.',
   stale_version: 'Jemand hat die Einstellungen inzwischen geändert. Lade die Seite neu.',
   save_failed: 'Die Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut.',
@@ -254,7 +256,7 @@ function PaymentTermsFields({ form, update, errors, disabled }: FieldProps) {
 }
 
 /** The form's text, its errors, and the save: unchanged answers „nothing to save“. */
-function useSettingsSave(settings: InvoiceSettings) {
+function useSettingsSave(settings: InvoiceSettings, organizationId: string) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const [form, setForm] = useState(() => formOf(settings));
@@ -274,9 +276,11 @@ function useSettingsSave(settings: InvoiceSettings) {
       return;
     }
     setFailure(null);
-    const result = await run({ expectedVersion: settings.version, settings: parsed.values }).catch(
-      () => null,
-    );
+    const result = await run({
+      organizationId,
+      expectedVersion: settings.version,
+      settings: parsed.values,
+    }).catch(() => null);
     if (!result?.success) {
       setFailure(describeFailure(result?.error ?? 'save_failed', MESSAGES, MESSAGES.save_failed ?? ''));
       return;
@@ -299,8 +303,16 @@ function useSettingsSave(settings: InvoiceSettings) {
  * invoice on) and the Zahlungsziel and Skonto a new draft starts with.
  * Admin changes them; Büro reads them.
  */
-export function InvoiceSettingsForm({ settings, canEdit }: { settings: InvoiceSettings; canEdit: boolean }) {
-  const { form, update, errors, failure, isPending, submit } = useSettingsSave(settings);
+export function InvoiceSettingsForm({
+  organizationId,
+  settings,
+  canEdit,
+}: {
+  organizationId: string;
+  settings: InvoiceSettings;
+  canEdit: boolean;
+}) {
+  const { form, update, errors, failure, isPending, submit } = useSettingsSave(settings, organizationId);
   const disabled = !canEdit || isPending;
   return (
     <Card>

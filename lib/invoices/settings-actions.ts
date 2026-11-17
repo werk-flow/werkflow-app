@@ -23,6 +23,9 @@ export async function saveInvoiceSettings(
   try {
     const caller = await resolveActionContext();
     if (!caller.success) return caller;
+    if (caller.context.orgId !== parsed.data.organizationId) {
+      return { success: false, error: 'organization_changed' };
+    }
     if (caller.context.role !== 'admin') return { success: false, error: 'not_authorized' };
     const { data, error } = await createSupabaseAdminClient().rpc('save_invoice_settings', {
       p_actor_id: caller.context.userId,

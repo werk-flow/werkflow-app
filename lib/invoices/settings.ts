@@ -1,3 +1,4 @@
+import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
 // The organization's invoice settings: the number series and the default
@@ -25,6 +26,8 @@ const invoiceSettingsValuesSchema = z
 export type InvoiceSettingsValues = z.output<typeof invoiceSettingsValuesSchema>;
 
 export const saveInvoiceSettingsSchema = z.object({
+  /** The organization whose settings the form shows: a save after a switch to another one is refused. */
+  organizationId: uuidSchema,
   /** 0 while none are saved. */
   expectedVersion: z.number().int().min(0),
   settings: invoiceSettingsValuesSchema,

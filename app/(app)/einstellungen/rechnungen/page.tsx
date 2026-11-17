@@ -22,6 +22,7 @@ export default async function RechnungenSettingsPage() {
   return (
     <InvoiceSettingsForm
       key={`${membership.orgId}:${settings.version}`}
+      organizationId={membership.orgId}
       settings={settings}
       canEdit={membership.role === 'admin'}
     />
