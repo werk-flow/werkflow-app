@@ -1,19 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 
-import { toJobPlanningTasks, type OverdueJobRow, type UnplannedJobRow } from './job-tasks';
-
-const unplanned = (overrides: Partial<UnplannedJobRow> = {}): UnplannedJobRow => ({
-  id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d01',
-  job_number: 'A-1001',
-  title: 'Heizung warten',
-  project_id: null,
-  project_number: null,
-  created_at: '2026-10-31T23:30:00Z',
-  ...overrides,
-});
+import { toOverdueJobTasks, type OverdueJobRow } from './job-tasks';
 
 const overdue = (overrides: Partial<OverdueJobRow> = {}): OverdueJobRow => ({
-  ...unplanned({ id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d02', job_number: 'A-1002', title: 'Bad sanieren' }),
+  id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d02',
+  job_number: 'A-1002',
+  title: 'Bad sanieren',
+  project_id: null,
+  project_number: null,
   last_timed_end: null,
   last_all_day_end: null,
   ...overrides,
@@ -21,7 +15,7 @@ const overdue = (overrides: Partial<OverdueJobRow> = {}): OverdueJobRow => ({
 
 /** The last visit day a job past its visits names, seen long after it. */
 function lastVisitDate(ends: Pick<OverdueJobRow, 'last_timed_end' | 'last_all_day_end'>): string | null {
-  const [task] = toJobPlanningTasks({ unplannedJobs: [], overdueJobs: [overdue(ends)] }, '2099-01-01');
+  const [task] = toOverdueJobTasks([overdue(ends)], '2099-01-01');
   return task?.sourceType === 'job_past_last_visit' ? task.lastVisitDate : null;
 }
 
@@ -68,30 +62,22 @@ describe('the last visit day', () => {
   });
 });
 
-describe('toJobPlanningTasks', () => {
-  test('an open job with no visit and nobody assigned is an unplanned task, created on its Berlin day', () => {
-    expect(toJobPlanningTasks({ unplannedJobs: [unplanned()], overdueJobs: [] }, '2026-11-17')).toEqual([
-      {
-        sourceType: 'job_unplanned',
-        sourceId: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d01',
-        jobLabel: 'A-1001 · Heizung warten',
-        jobHref: '/auftraege/A-1001',
-        createdDate: '2026-11-01',
-      },
-    ]);
-  });
-
+describe('toOverdueJobTasks', () => {
   test("a job of a project links to the job's page inside its project", () => {
-    const [task] = toJobPlanningTasks(
-      {
-        unplannedJobs: [
-          unplanned({ project_id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d09', project_number: 'P-7' }),
-        ],
-        overdueJobs: [],
-      },
+    const [task] = toOverdueJobTasks(
+      [
+        overdue({
+          project_id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d09',
+          project_number: 'P-7',
+          last_timed_end: '2026-11-10T10:00:00Z',
+        }),
+      ],
       '2026-11-17',
     );
-    expect(task).toMatchObject({ jobHref: '/auftraege/projekt/P-7/A-1001' });
+    expect(task).toMatchObject({
+      jobLabel: 'A-1002 · Bad sanieren',
+      jobHref: '/auftraege/projekt/P-7/A-1002',
+    });
   });
 
   // Each row: the last visit's end facts, today in Berlin, and whether the job is past its last visit.
@@ -147,20 +133,15 @@ describe('toJobPlanningTasks', () => {
   ];
   for (const [name, ends, today, isPast] of pastCases) {
     test(`past its last visit: ${name}`, () => {
-      const tasks = toJobPlanningTasks({ unplannedJobs: [], overdueJobs: [overdue(ends)] }, today);
+      const tasks = toOverdueJobTasks([overdue(ends)], today);
       expect(tasks.map((task) => task.sourceType)).toEqual(isPast ? ['job_past_last_visit'] : []);
     });
   }
 
   test('a job past its last visit names the day of that visit', () => {
     expect(
-      toJobPlanningTasks(
-        {
-          unplannedJobs: [],
-          overdueJobs: [
-            overdue({ last_timed_end: '2026-11-30T22:59:00Z', job_number: null, title: 'Therme' }),
-          ],
-        },
+      toOverdueJobTasks(
+        [overdue({ last_timed_end: '2026-11-30T22:59:00Z', job_number: null, title: 'Therme' })],
         '2026-12-01',
       ),
     ).toEqual([
@@ -174,25 +155,17 @@ describe('toJobPlanningTasks', () => {
     ]);
   });
 
-  test('the longest overdue job comes first, the unplanned ones keep their oldest-first order', () => {
-    const tasks = toJobPlanningTasks(
-      {
-        unplannedJobs: [
-          unplanned({ id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d11', job_number: 'U-1' }),
-          unplanned({ id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d12', job_number: 'U-2' }),
-        ],
-        overdueJobs: [
-          overdue({ id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d21', last_timed_end: '2026-11-10T10:00:00Z' }),
-          overdue({ id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d22', last_all_day_end: '2026-11-03' }),
-        ],
-      },
+  test('the longest overdue job comes first', () => {
+    const tasks = toOverdueJobTasks(
+      [
+        overdue({ id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d21', last_timed_end: '2026-11-10T10:00:00Z' }),
+        overdue({ id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d22', last_all_day_end: '2026-11-03' }),
+      ],
       '2026-11-17',
     );
     expect(tasks.map((task) => task.sourceId)).toEqual([
       '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d22',
       '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d21',
-      '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d11',
-      '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d12',
     ]);
   });
 });

@@ -22,13 +22,6 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
     packageState: 'missing',
     stateVersion: 'job:1:0',
   },
-  {
-    sourceType: 'job_unplanned',
-    sourceId: 'job-unplanned-1',
-    jobLabel: 'A-2 · Heizung',
-    jobHref: '/auftraege/A-2',
-    createdDate: '2026-11-02',
-  },
   { sourceType: 'organization_join_request', sourceId: 'join-1', personName: 'Jo Neu', email: null },
   {
     sourceType: 'job_past_last_visit',
@@ -185,7 +178,7 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
 ];
 
 describe('groupAttentionTasks', () => {
-  test('overdue callbacks lead; time approvals, vacation requests, visits to replan, jobs past their last visit and open Anfragen follow; unplanned jobs and handovers last', () => {
+  test('overdue callbacks lead; time approvals, vacation requests, visits to replan, jobs past their last visit and open Anfragen follow; handovers last', () => {
     expect(groupAttentionTasks(TASK_OF_EVERY_KIND).map((section) => section.key)).toEqual([
       'callback',
       'time',
@@ -201,7 +194,6 @@ describe('groupAttentionTasks', () => {
       'followUp',
       'dueDefect',
       'artifact',
-      'unplannedJob',
       'handover',
     ]);
   });

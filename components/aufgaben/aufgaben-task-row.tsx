@@ -34,7 +34,6 @@ type AttentionWorkTask = Extract<
       | 'work_handover_review';
   }
 >;
-type AttentionJobTask = Extract<AttentionTask, { sourceType: 'job_past_last_visit' | 'job_unplanned' }>;
 type AttentionClientTask = Extract<
   AttentionTask,
   { sourceType: 'client_follow_up' | 'client_request_open' | 'client_request_callback_overdue' }
@@ -105,9 +104,20 @@ export function TaskRow({ task }: { task: AttentionTask }) {
           </p>
         </TaskLink>
       );
+    // The job page plans the next visit or completes the work.
     case 'job_past_last_visit':
-    case 'job_unplanned':
-      return <AttentionJobTaskRow task={task} />;
+      return (
+        <TaskLink
+          href={task.jobHref}
+          ariaLabel={`Auftrag ${task.jobLabel} öffnen, letzter Einsatz am ${formatGermanDate(task.lastVisitDate)}`}
+          sourceId={task.sourceId}
+        >
+          <p className="truncate text-sm font-medium">{task.jobLabel}</p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            Letzter Einsatz am {formatGermanDate(task.lastVisitDate)} · noch nicht abgeschlossen
+          </p>
+        </TaskLink>
+      );
   }
 }
 
@@ -276,37 +286,6 @@ function AttentionWorkTaskRow({ task }: { task: AttentionWorkTask }) {
           : task.packageState === 'draft'
             ? 'Entwurf prüfen und freigeben'
             : 'Übergabepaket vorbereiten'}
-      </p>
-    </TaskLink>
-  );
-}
-
-/** The job page plans the next visit, assigns someone or completes the work. */
-function AttentionJobTaskRow({ task }: { task: AttentionJobTask }) {
-  if (task.sourceType === 'job_past_last_visit') {
-    return (
-      <TaskLink
-        href={task.jobHref}
-        ariaLabel={`Auftrag ${task.jobLabel} öffnen, letzter Einsatz am ${formatGermanDate(task.lastVisitDate)}`}
-        sourceId={task.sourceId}
-      >
-        <p className="truncate text-sm font-medium">{task.jobLabel}</p>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          Letzter Einsatz am {formatGermanDate(task.lastVisitDate)} · noch nicht abgeschlossen
-        </p>
-      </TaskLink>
-    );
-  }
-
-  return (
-    <TaskLink
-      href={task.jobHref}
-      ariaLabel={`Auftrag ${task.jobLabel} öffnen und einplanen`}
-      sourceId={task.sourceId}
-    >
-      <p className="truncate text-sm font-medium">{task.jobLabel}</p>
-      <p className="text-xs text-muted-foreground tabular-nums">
-        Ohne Termin, niemand zugewiesen · angelegt am {formatGermanDate(task.createdDate)}
       </p>
     </TaskLink>
   );

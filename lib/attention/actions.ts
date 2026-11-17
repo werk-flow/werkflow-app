@@ -31,7 +31,7 @@ import {
 import { deriveDispatchAcknowledgementTasks, deriveDispatchChallengeTasks } from './dispatch-tasks';
 import { deriveParkingReviewTasks } from './parking-tasks';
 import { deriveVisitReplanTasks } from './replan-tasks';
-import { deriveJobPlanningTasks } from './job-tasks';
+import { deriveOverdueJobTasks } from './job-tasks';
 import { readManagerAttentionSets } from './manager-sets';
 import { deriveSiteAccessProposalTasks } from './site-access-tasks';
 import {
@@ -296,7 +296,7 @@ type DerivedAttention = { tasks: AttentionTask[]; notifications: AttentionNotifi
  */
 async function deriveAttention(context: ActionContext): Promise<DerivedAttention | null> {
   const ownRecord = readOwnEmployeeRecord(context);
-  // One read of the open requests, access proposals and jobs to plan serves three derivations.
+  // One read of the open requests, access proposals and overdue jobs serves three derivations.
   const managerSets = readManagerAttentionSets(context);
   const [taskParts, notificationParts] = await Promise.all([
     Promise.all([
@@ -311,7 +311,7 @@ async function deriveAttention(context: ActionContext): Promise<DerivedAttention
       deriveJoinRequestTasks(context),
       deriveVisitReplanTasks(context),
       deriveSiteAccessProposalTasks(context, managerSets),
-      deriveJobPlanningTasks(context, managerSets),
+      deriveOverdueJobTasks(context, managerSets),
     ]),
     Promise.all([
       deriveOwnNotifications(context, ownRecord),

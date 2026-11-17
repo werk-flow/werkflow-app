@@ -12,8 +12,8 @@ import type { CalendarDispatchState } from '@/lib/calendar/board';
 // Every kind that storage may key on stays in the CHECK constraints of
 // attention_read_states and attention_events (latest in migration
 // 20261201100004); a later slice extends this union plus the CHECK and never
-// adds parallel storage. The job planning kinds take no marker or event, so
-// the CHECK leaves them out until one does.
+// adds parallel storage. The overdue job kind takes no marker or event, so
+// the CHECK leaves it out until one does.
 type AttentionSourceType =
   | 'time_session_approval'
   | 'time_change_request_approval'
@@ -38,7 +38,6 @@ type AttentionSourceType =
   | 'organization_join_request'
   | 'planning_visit_replan'
   | 'site_access_proposal'
-  | 'job_unplanned'
   | 'job_past_last_visit';
 
 export type AttentionItemIdentity = {
@@ -244,18 +243,9 @@ export type AttentionTask =
       proposerName: string;
       proposedAt: string;
     }
-  // An open job with no scheduled visit and nobody assigned: nobody will do it
-  // until the office plans it. Admin and Büro get it; the job is the identity.
-  | {
-      sourceType: 'job_unplanned';
-      sourceId: string;
-      jobLabel: string;
-      jobHref: string;
-      /** Berlin date the job was created. */
-      createdDate: string;
-    }
   // An open job whose last scheduled visit lies before today: the visits are
-  // over and the work is neither complete nor planned again.
+  // over and the work is neither complete nor planned again. Admin and Büro
+  // get it; the job is the identity.
   | {
       sourceType: 'job_past_last_visit';
       sourceId: string;

@@ -18,8 +18,8 @@ type QueryResult = { data: unknown; error: { code: string } | null; count: numbe
 let role: Role = 'admin';
 let failingTable: string | null = null;
 let queries: string[] = [];
-// The open jobs nobody plans that the office's set read returns, and the organizations it was asked for.
-let unplannedJobs: Record<string, unknown>[] = [];
+// The open jobs past their visits that the office's set read returns, and the organizations it was asked for.
+let overdueJobs: Record<string, unknown>[] = [];
 let managerSetOrganizations: unknown[] = [];
 
 // The steady state of a typical member: an own employee record, no pending
@@ -86,11 +86,11 @@ function countingQuery(table: string) {
     // The read functions that answer an object: the open absences, here none.
     if (table === 'rpc read_open_absences')
       return Promise.resolve(resolve({ data: { vacations: [], leaverWindows: [] }, error: null, count: 0 }));
-    // The other one: the open requests, access proposals and jobs to plan of the office, here none.
+    // The other one: the open requests, access proposals and overdue jobs of the office, here none.
     if (table === 'rpc read_manager_attention_sets')
       return Promise.resolve(
         resolve({
-          data: { requests: [], access_proposals: [], unplanned_jobs: unplannedJobs, overdue_jobs: [] },
+          data: { requests: [], access_proposals: [], overdue_jobs: overdueJobs },
           error: null,
           count: 0,
         }),
@@ -246,15 +246,17 @@ if (ISOLATED) {
       ]);
     });
 
-    test("an open job nobody plans is a task of the session organization's Admin and Büro, never of an employee", async () => {
-      unplannedJobs = [
+    test("an open job past its last visit is a task of the session organization's Admin and Büro, never of an employee", async () => {
+      overdueJobs = [
         {
           id: '9e3f5a71-4b2c-4d8e-a1f0-6c7b8d9e0f12',
           job_number: 'A-1001',
           title: 'Heizung warten',
           project_id: null,
           project_number: null,
-          created_at: '2026-11-01T08:00:00Z',
+          created_at: '2025-01-02T08:00:00Z',
+          last_timed_end: '2025-01-10T15:00:00Z',
+          last_all_day_end: null,
         },
       ];
       managerSetOrganizations = [];
@@ -266,7 +268,7 @@ if (ISOLATED) {
         // Only the office viewer's derivation read the set, and only for its own organization.
         expect(managerSetOrganizations).toEqual([ORG]);
       } finally {
-        unplannedJobs = [];
+        overdueJobs = [];
       }
     });
 

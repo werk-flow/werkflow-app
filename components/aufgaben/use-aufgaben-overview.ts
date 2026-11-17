@@ -47,8 +47,6 @@ const AUFGABEN_OVERVIEW_TABLES = [
   'work_blockers',
   'work_artifacts',
   'jobs',
-  // Someone assigned to an unplanned job resolves its task.
-  'job_assignments',
   'projects',
   'work_handover_packages',
   'attention_read_states',

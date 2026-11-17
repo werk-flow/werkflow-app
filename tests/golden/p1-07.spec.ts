@@ -1,7 +1,7 @@
 import { REQUEST_CLOSE_REASON_LABELS } from '../../lib/requests/types';
 import { expectDefined } from '../../lib/testing/spec-support/expect-defined';
 import { expect, test } from './support/fixtures';
-import { countOfficeJobPlanningTasks, getAttentionPatternStateForUser } from './support/db/attention';
+import { countOfficeOverdueJobTasks, getAttentionPatternStateForUser } from './support/db/attention';
 import { getEmployeeRecordStateByUser, setResponsibilityHolders } from './support/db/personnel';
 import { countOpenClientRequests } from './support/db/requests';
 import { getLatestManualTimeEntryState } from './support/db/time-tracking';
@@ -211,10 +211,10 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
       await openAufgaben(bueroPage);
       const bueroVacationTask = vacationRequestTaskLink(bueroPage, employeeName);
       await expect(bueroVacationTask).toHaveCount(1);
-      // Unified badge: the open requests and jobs to plan plus exactly one delegated approval.
+      // Unified badge: the open requests and overdue jobs plus exactly one delegated approval.
       const openRequests = await countOpenClientRequests(world.orgId);
-      const jobsToPlan = await countOfficeJobPlanningTasks(world.orgId);
-      await expect(aufgabenSidebarBadge(bueroPage)).toHaveText(String(openRequests + jobsToPlan + 1));
+      const overdueJobs = await countOfficeOverdueJobTasks(world.orgId);
+      await expect(aufgabenSidebarBadge(bueroPage)).toHaveText(String(openRequests + overdueJobs + 1));
 
       // The substitute decides over the deep link, on the same surface as always.
       await bueroVacationTask.click();

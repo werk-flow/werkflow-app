@@ -4,7 +4,6 @@ import { useEffect, useId, useRef, useState } from 'react';
 import {
   AlarmClock,
   CalendarClock,
-  CalendarPlus,
   CalendarX,
   ClipboardCheck,
   PhoneCall,
@@ -103,12 +102,6 @@ export const SECTION_PRESENTATION: Record<
     icon: <ClipboardCheck className="size-4" />,
     title: 'Arbeitsnachweise',
     testId: 'attention-work-artifact-tasks',
-  },
-  unplannedJob: {
-    icon: <CalendarPlus className="size-4" />,
-    title: 'Aufträge ohne Termin',
-    testId: 'attention-unplanned-job-tasks',
-    previewRows: BACKLOG_PREVIEW_ROWS,
   },
   handover: {
     icon: <ClipboardCheck className="size-4" />,

@@ -1,21 +1,20 @@
--- The office's attention read also returns the open jobs that need planning,
--- so the two new Aufgaben kinds add no backend request (lab.office.cold-start):
---   unplanned_jobs: open jobs with no scheduled visit and nobody assigned,
---     oldest first;
---   overdue_jobs: open jobs whose every scheduled visit has ended, with the
---     end of their last timed and last all-day visit. lib/attention/job-tasks.ts
---     decides from these which jobs are past their last visit on the Berlin day.
+-- The office's attention read also returns the open jobs whose every scheduled
+-- visit has ended (overdue_jobs), with the end of their last timed and last
+-- all-day visit, so the Aufgaben kind „Überfällige Aufträge“ adds no backend
+-- request (lab.office.cold-start). lib/attention/job-tasks.ts decides from
+-- these which jobs are past their last visit on the Berlin day.
 -- Open means the job's status mirrors an open execution state (not started,
--- in progress, interrupted); parked and finished jobs carry another status
--- (jobs_open_organization_created_idx). A cancelled job keeps the status it had
--- (preserve_job_legacy_status_on_cancellation), so its state excludes it. Each open job's assignments, visits and project are
--- probed by its key alone (a visit through the partial job index of its time
--- kind), with the organization checked in the aggregate or the selected value:
--- an organization filter in the probe's WHERE clause lets the planner walk the
--- organization's rows for every job (supabase/tests/hot_read_volume.sql). The requests and access proposals stay as before, and
--- the result only gains keys, so the previous build reads it unchanged. Each
--- array holds at most p_limit + 1 rows, so the caller sees an overflow
--- instead of a cut.
+-- in progress, interrupted); parked and finished jobs carry another status. A
+-- cancelled job keeps the status it had
+-- (preserve_job_legacy_status_on_cancellation), so its state excludes it. Each
+-- open job's visits and project are probed by its key alone (a visit through
+-- the partial job index of its time kind), with the organization checked in
+-- the aggregate or the selected value: an organization filter in the probe's
+-- WHERE clause lets the planner walk the organization's rows for every job
+-- (supabase/tests/hot_read_volume.sql). The requests and access proposals stay
+-- as before, and the result only gains a key, so the previous build reads it
+-- unchanged. The array holds at most p_limit + 1 rows, so the caller sees an
+-- overflow instead of a cut.
 -- The open jobs of an organization in the read's order. Without it the planner
 -- picks between the organization's job indexes by statistics and may walk
 -- every finished job (supabase/tests/hot_read_volume.sql, aufgaben-office-sets).
@@ -64,42 +63,6 @@ as $$
         order by proposal.proposed_at, proposal.id
         limit p_limit + 1
       ) open_proposal
-    ), '[]'::jsonb),
-    'unplanned_jobs', coalesce((
-      select jsonb_agg(to_jsonb(unplanned_job) order by unplanned_job.created_at, unplanned_job.id)
-      from (
-        select
-          job.id, job.job_number, job.title, job.project_id, job.created_at,
-          (
-            select case when project.organization_id = p_organization_id then project.project_number end
-            from public.projects project
-            where project.id = job.project_id
-          ) as project_number
-        from public.jobs job
-        cross join lateral (
-          select count(*) filter (where assignment.organization_id = p_organization_id) as assignments
-          from public.job_assignments assignment
-          where assignment.job_id = job.id
-        ) team
-        cross join lateral (
-          select count(*) filter (where visit.organization_id = p_organization_id) as visits
-          from public.planning_occurrences visit
-          where visit.job_id = job.id and visit.start_at is not null and visit.status = 'scheduled'
-        ) timed
-        cross join lateral (
-          select count(*) filter (where visit.organization_id = p_organization_id) as visits
-          from public.planning_occurrences visit
-          where visit.job_id = job.id and visit.start_date is not null and visit.status = 'scheduled'
-        ) all_day
-        where job.organization_id = p_organization_id
-          and job.status in ('nicht_bearbeitet', 'in_bearbeitung')
-          and job.execution_state is distinct from 'cancelled'
-          and team.assignments = 0
-          and timed.visits = 0
-          and all_day.visits = 0
-        order by job.created_at, job.id
-        limit p_limit + 1
-      ) unplanned_job
     ), '[]'::jsonb),
     'overdue_jobs', coalesce((
       select jsonb_agg(to_jsonb(overdue_job) order by overdue_job.created_at, overdue_job.id)

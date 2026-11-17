@@ -1,11 +1,10 @@
--- The job sets of the office's attention read (migration 20261216090000):
--- read_manager_attention_sets returns as unplanned_jobs exactly the open jobs
--- of the organization with no scheduled visit and nobody assigned, and as
--- overdue_jobs exactly the open jobs whose every scheduled visit has ended,
--- with the end of the last timed and the last all-day visit. Parked, finished,
--- cancelled and another organization's jobs never appear, and each set stops at its
--- limit plus one. lib/attention/job-tasks.test.ts proves the Berlin-day rule
--- the TypeScript applies to overdue_jobs.
+-- The overdue job set of the office's attention read (migration
+-- 20261216090000): read_manager_attention_sets returns as overdue_jobs exactly
+-- the open jobs of the organization whose every scheduled visit has ended, with
+-- the end of the last timed and the last all-day visit. Parked, finished,
+-- cancelled, never-visited and another organization's jobs never appear, and
+-- the set stops at its limit plus one. lib/attention/job-tasks.test.ts proves
+-- the Berlin-day rule the TypeScript applies to overdue_jobs.
 begin;
 
 insert into auth.users (
@@ -77,7 +76,7 @@ insert into public.job_assignments (organization_id, job_id, user_id, assigned_b
  'a7f00000-0000-4000-8000-000000000002', 'a7f00000-0000-4000-8000-000000000001');
 
 insert into public.planning_occurrences (organization_id, job_id, entry_kind, time_kind, status, start_at, end_at) values
--- Only a cancelled visit: the job is still unplanned.
+-- Only a cancelled visit: no scheduled visit, so not overdue.
 ('a7f00000-0000-4000-8000-000000000010', 'a7f00000-0000-4000-8000-000000000023', 'job_visit', 'timed', 'cancelled',
  now() + interval '1 day', now() + interval '1 day 2 hours'),
 -- Every visit over: the last one ended a day ago.
@@ -90,6 +89,9 @@ insert into public.planning_occurrences (organization_id, job_id, entry_kind, ti
  now() - interval '5 days 2 hours', now() - interval '5 days'),
 ('a7f00000-0000-4000-8000-000000000010', 'a7f00000-0000-4000-8000-000000000027', 'job_visit', 'timed', 'scheduled',
  now() + interval '2 days', now() + interval '2 days 2 hours'),
+-- A job of a project whose visit is over.
+('a7f00000-0000-4000-8000-000000000010', 'a7f00000-0000-4000-8000-000000000030', 'job_visit', 'timed', 'scheduled',
+ now() - interval '2 days 2 hours', now() - interval '2 days'),
 -- A cancelled job's past visit.
 ('a7f00000-0000-4000-8000-000000000010', 'a7f00000-0000-4000-8000-000000000035', 'job_visit', 'timed', 'scheduled',
  now() - interval '4 days 2 hours', now() - interval '4 days'),
@@ -110,26 +112,19 @@ set local role service_role;
 do $$
 declare
   sets jsonb := public.read_manager_attention_sets('a7f00000-0000-4000-8000-000000000010', 100);
-  unplanned text[];
   overdue text[];
   last_timed timestamptz;
   last_all_day date;
 begin
-  select array_agg(job.value ->> 'job_number' order by job.ordinality) into unplanned
-  from jsonb_array_elements(sets -> 'unplanned_jobs') with ordinality as job(value, ordinality);
-  if unplanned is distinct from array['JS-01', 'JS-03', 'JS-10'] then
-    raise exception 'unplanned jobs: expected JS-01, JS-03, JS-10, got %', unplanned;
-  end if;
-  if (sets -> 'unplanned_jobs' -> 2 ->> 'project_number') is distinct from 'JS-P-1'
-    or (sets -> 'unplanned_jobs' -> 2 ->> 'project_id') is distinct from 'a7f00000-0000-4000-8000-000000000040'
-    or (sets -> 'unplanned_jobs' -> 0 ->> 'project_id') is not null
-  then raise exception 'an unplanned job names its project wrongly: %', sets -> 'unplanned_jobs'; end if;
-
   select array_agg(job.value ->> 'job_number' order by job.ordinality) into overdue
   from jsonb_array_elements(sets -> 'overdue_jobs') with ordinality as job(value, ordinality);
-  if overdue is distinct from array['JS-06', 'JS-08'] then
-    raise exception 'overdue jobs: expected JS-06, JS-08, got %', overdue;
+  if overdue is distinct from array['JS-06', 'JS-08', 'JS-10'] then
+    raise exception 'overdue jobs: expected JS-06, JS-08, JS-10, got %', overdue;
   end if;
+  if (sets -> 'overdue_jobs' -> 2 ->> 'project_number') is distinct from 'JS-P-1'
+    or (sets -> 'overdue_jobs' -> 2 ->> 'project_id') is distinct from 'a7f00000-0000-4000-8000-000000000040'
+    or (sets -> 'overdue_jobs' -> 0 ->> 'project_id') is not null
+  then raise exception 'an overdue job names its project wrongly: %', sets -> 'overdue_jobs'; end if;
   last_timed := (sets -> 'overdue_jobs' -> 0 ->> 'last_timed_end')::timestamptz;
   if last_timed is null or abs(extract(epoch from (now() - interval '1 day') - last_timed)) > 1
     or (sets -> 'overdue_jobs' -> 0 ->> 'last_all_day_end') is not null
@@ -146,14 +141,11 @@ declare
   other jsonb := public.read_manager_attention_sets('a7f00000-0000-4000-8000-000000000011', 100);
   capped jsonb := public.read_manager_attention_sets('a7f00000-0000-4000-8000-000000000010', 0);
 begin
-  if jsonb_array_length(other -> 'unplanned_jobs') is distinct from 1
-    or (other -> 'unplanned_jobs' -> 0 ->> 'job_number') is distinct from 'JS-12'
-    or jsonb_array_length(other -> 'overdue_jobs') is distinct from 1
+  if jsonb_array_length(other -> 'overdue_jobs') is distinct from 1
     or (other -> 'overdue_jobs' -> 0 ->> 'job_number') is distinct from 'JS-13'
-  then raise exception 'the job sets cross the organization: %', other; end if;
-  if jsonb_array_length(capped -> 'unplanned_jobs') is distinct from 1
-    or jsonb_array_length(capped -> 'overdue_jobs') is distinct from 1
-  then raise exception 'the job sets cut below their limit plus one: %', capped; end if;
+  then raise exception 'the overdue job set crosses the organization: %', other; end if;
+  if jsonb_array_length(capped -> 'overdue_jobs') is distinct from 1
+  then raise exception 'the overdue job set cuts below its limit plus one: %', capped; end if;
 end;
 $$;
 

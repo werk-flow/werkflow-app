@@ -93,7 +93,6 @@ export function AttentionCountProvider({
       'work_blockers',
       'work_artifacts',
       'jobs',
-      'job_assignments',
       'projects',
       'work_handover_packages',
       'attention_read_states',
