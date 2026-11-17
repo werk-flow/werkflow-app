@@ -167,6 +167,8 @@ function pricePreview(rebates: Record<string, number | null>): WholesalerPricePr
     ],
     rebates,
     changes,
+    // A stand's fingerprint per rebate of CU1, as the database answers one per set of changes.
+    fingerprint: (pipeRebate ?? 0).toString(16).padStart(32, '0'),
   };
 }
 

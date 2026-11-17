@@ -284,7 +284,7 @@ test('the preview counts follow the unit choice: an unmapped unit text rejects i
     priceUnmatched: 1,
     removed: 2,
     rejected: 5,
-    prices: { rebateGroups: [], rebates: {}, changes: [] },
+    prices: { rebateGroups: [], rebates: {}, changes: [], fingerprint: '0'.repeat(32) },
   };
   expect(wholesalerPreviewTotals(preview, { Meter: 'meter', XYZ: null })).toEqual({
     created: 1,
@@ -352,7 +352,7 @@ test("an own price changes only in the article's unit: an article line by the of
         priceUnmatched: 0,
         removed: 0,
         rejected: 0,
-        prices: { rebateGroups: [], rebates: {}, changes },
+        prices: { rebateGroups: [], rebates: {}, changes, fingerprint: '0'.repeat(32) },
       },
       { Meter: 'meter' },
     ).ownPricesChanged,

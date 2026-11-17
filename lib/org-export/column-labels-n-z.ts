@@ -109,7 +109,6 @@ export const COLUMN_LABELS_N_TO_Z = {
   previous_version: 'Vorheriger Stand',
   price_cents: 'Preis (Cent)',
   price_kind: 'Preisart',
-  price_preview_hash: 'Prüfwert der Preisvorschau',
   price_quantity: 'Preismenge (Basiseinheiten)',
   prices_previewed: 'Preisänderungen in der Vorschau gezeigt',
   primary_contact_id: 'Hauptansprechpartner (ID)',

@@ -159,7 +159,7 @@ begin
     end loop;
     foreach v_function in array array[
       'public.preview_supplier_catalog_import_prices(uuid,uuid,uuid,jsonb)',
-      'public.confirm_supplier_catalog_import(uuid,uuid,uuid,jsonb,jsonb)',
+      'public.confirm_supplier_catalog_import(uuid,uuid,uuid,jsonb,jsonb,text)',
       'public.confirm_supplier_catalog_import(uuid,uuid,uuid,jsonb)'
     ] loop
       if has_function_privilege(v_role, v_function, 'EXECUTE') then
@@ -313,22 +313,25 @@ declare
   v_result jsonb;
   v_repeat jsonb;
   v_prices record;
+  v_shown text;
 begin
   perform pg_temp.expect_refusal('an employee confirms',
     format($f$select public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
-      '47700000-0000-4000-8000-000000000003', %L, '{}', '{}')$f$, v_import), 'not_authorized');
+      '47700000-0000-4000-8000-000000000003', %L, '{}', '{}', null)$f$, v_import), 'not_authorized');
   perform pg_temp.expect_refusal('a confirm with a rebate over 100 %',
     format($f$select public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
-      '47700000-0000-4000-8000-000000000002', %L, '{}', '{"CU1":-1}')$f$, v_import), 'invalid_input');
+      '47700000-0000-4000-8000-000000000002', %L, '{}', '{"CU1":-1}', null)$f$, v_import), 'invalid_input');
 
-  -- The last price preview priced AR1 at 10 %; a confirm without it would
-  -- write prices the office did not see.
-  perform pg_temp.expect_refusal('a confirm with other rebates than the last price preview',
+  -- The office sees AR1 priced at 10 %; a confirm without it would write
+  -- prices the office did not see.
+  v_shown := public.preview_supplier_catalog_import_prices('47700000-0000-4000-8000-000000000010',
+    '47700000-0000-4000-8000-000000000002', v_import, '{"CU1":2500,"AR1":1000}')->>'fingerprint';
+  perform pg_temp.expect_refusal('a confirm with other rebates than the price preview shown',
     format($f$select public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
       '47700000-0000-4000-8000-000000000002', %L, '{"Meter":"meter","Stück":"piece"}',
-      '{"CU1":2500,"AR1":null}')$f$, v_import), 'prices_changed');
-  perform public.preview_supplier_catalog_import_prices('47700000-0000-4000-8000-000000000010',
-    '47700000-0000-4000-8000-000000000002', v_import, '{"CU1":2500,"AR1":null}');
+      '{"CU1":2500,"AR1":null}', %L)$f$, v_import, v_shown), 'prices_changed');
+  v_shown := public.preview_supplier_catalog_import_prices('47700000-0000-4000-8000-000000000010',
+    '47700000-0000-4000-8000-000000000002', v_import, '{"CU1":2500,"AR1":null}')->>'fingerprint';
   -- Another session gives the fitting Nordrohr as its preferred supplier after
   -- the preview, so the confirm would change a price the preview never listed.
   perform public.save_inventory_item_supplier('47700000-0000-4000-8000-000000000010',
@@ -339,7 +342,15 @@ begin
   perform pg_temp.expect_refusal('a confirm after a reference changed since the price preview',
     format($f$select public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
       '47700000-0000-4000-8000-000000000002', %L, '{"Meter":"meter","Stück":"piece"}',
-      '{"CU1":2500,"AR1":null}')$f$, v_import), 'prices_changed');
+      '{"CU1":2500,"AR1":null}', %L)$f$, v_import, v_shown), 'prices_changed');
+  -- A later price preview runs, but its answer never reaches the dialog,
+  -- which still shows the earlier prices: the confirm still refuses.
+  perform public.preview_supplier_catalog_import_prices('47700000-0000-4000-8000-000000000010',
+    '47700000-0000-4000-8000-000000000002', v_import, '{"CU1":2500,"AR1":null}');
+  perform pg_temp.expect_refusal('a confirm of a preview older than a lost one',
+    format($f$select public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
+      '47700000-0000-4000-8000-000000000002', %L, '{"Meter":"meter","Stück":"piece"}',
+      '{"CU1":2500,"AR1":null}', %L)$f$, v_import, v_shown), 'prices_changed');
   if (select total from pg_temp.price_rows) is distinct from (select total from prices_before) then
     raise exception 'a refused confirm wrote prices';
   end if;
@@ -352,7 +363,7 @@ begin
 
   v_result := public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
     '47700000-0000-4000-8000-000000000002', v_import, '{"Meter":"meter","Stück":"piece"}',
-    '{"CU1":2500,"AR1":null}');
+    '{"CU1":2500,"AR1":null}', v_shown);
   if (v_result->>'own_prices_changed')::integer is distinct from 3 then
     raise exception 'the confirm answered %', v_result;
   end if;
@@ -392,7 +403,7 @@ begin
 
   -- A repeat confirm changes nothing and answers the first result.
   v_repeat := public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
-    '47700000-0000-4000-8000-000000000002', v_import, '{"Meter":"meter","Stück":"piece"}', '{"CU1":100}');
+    '47700000-0000-4000-8000-000000000002', v_import, '{"Meter":"meter","Stück":"piece"}', '{"CU1":100}', null);
   if v_repeat is distinct from (v_result - 'already_confirmed') || '{"already_confirmed":true}'::jsonb
     or (select total from pg_temp.price_rows) is distinct from (select total from prices_before) + 3
     or (select rebate_basis_points from public.inventory_supplier_rebates
@@ -422,7 +433,8 @@ begin
     raise exception 'the same prices again previewed %', v_preview;
   end if;
   v_result := public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
-    '47700000-0000-4000-8000-000000000002', v_import, '{"Meter":"meter","Stück":"piece"}', v_preview->'rebates');
+    '47700000-0000-4000-8000-000000000002', v_import, '{"Meter":"meter","Stück":"piece"}', v_preview->'rebates',
+    v_preview->>'fingerprint');
   if (v_result->>'own_prices_changed')::integer is distinct from 0
     or (select total from pg_temp.price_rows) is distinct from v_before then
     raise exception 'the same prices again wrote %', v_result;
@@ -439,7 +451,7 @@ begin
     raise exception 'a price line previewed %', v_preview;
   end if;
   v_result := public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
-    '47700000-0000-4000-8000-000000000002', v_import, '{}', '{}');
+    '47700000-0000-4000-8000-000000000002', v_import, '{}', '{}', v_preview->>'fingerprint');
   if (v_result->>'own_prices_changed')::integer is distinct from 1 then
     raise exception 'a price line confirmed %', v_result;
   end if;

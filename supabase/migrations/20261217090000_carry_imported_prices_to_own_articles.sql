@@ -23,11 +23,12 @@
 --    article's base unit.
 -- 4. public.preview_supplier_catalog_import_prices answers the rebate groups
 --    of the proposals and the changes, for the rebates the office entered, or
---    at first for the saved ones and else the delivery's own percentages. It
---    keeps a fingerprint of the changes it answered on the batch; the confirm
---    computes the changes again and refuses with prices_changed when they
---    differ, so it never writes a price the office did not see (a reference or
---    a price another session changed in between).
+--    at first for the saved ones and else the delivery's own percentages, with
+--    a fingerprint of the changes. The dialog sends the fingerprint of the
+--    preview it shows with the confirm; the confirm computes the changes again
+--    and refuses with prices_changed when they differ, so it never writes a
+--    price the office did not see (a reference or a price another session
+--    changed in between, or a later preview whose answer never arrived).
 -- 5. public.confirm_supplier_catalog_import gains p_rebates: the confirm saves
 --    the rebates and writes each changed price through the one price write of
 --    werk-flow/werkflow-planning#373, source datanorm, from the delivery's
@@ -82,10 +83,7 @@ grant select on table public.inventory_supplier_rebates to service_role;
 
 -- The rebates the confirm applied, rebate group to hundredths of a percent.
 -- Only the confirm writes it, after app_private.is_supplier_rebate_mapping.
-alter table public.inventory_supplier_catalog_imports
-  add column rebates jsonb,
-  -- md5 of the own articles' price changes the last price preview answered.
-  add column price_preview_hash text;
+alter table public.inventory_supplier_catalog_imports add column rebates jsonb;
 
 -- Whether the batch's preview showed the price changes of matched articles;
 -- only such a batch changes them when it books.
@@ -94,8 +92,6 @@ alter table public.inventory_import_batches
 
 comment on column public.inventory_supplier_catalog_imports.rebates is
   'The rebates the confirm applied to own articles, rebate group to hundredths of a percent.';
-comment on column public.inventory_supplier_catalog_imports.price_preview_hash is
-  'Fingerprint of the own articles'' price changes the last price preview showed; the confirm requires it.';
 comment on column public.inventory_import_batches.prices_previewed is
   'The preview showed the price changes of matched articles, so the booking records them.';
 
@@ -399,8 +395,8 @@ $$;
 
 -- 4. The rebate groups and the own articles' price changes of a previewed
 -- batch, for p_rebates, or with p_rebates null for the saved rebates and else
--- the delivery's percentages. Writes no price and no rebate; keeps the
--- answer's fingerprint on the batch for the confirm.
+-- the delivery's percentages, with the changes' fingerprint for the confirm.
+-- Writes nothing.
 -- Refusals: not_authorized, import_not_found, invalid_input.
 create function public.preview_supplier_catalog_import_prices(
   p_organization_id uuid,
@@ -436,11 +432,11 @@ begin
   from app_private.supplier_catalog_import_rebate_groups(p_organization_id, p_import_id) listed;
 
   v_changes := app_private.supplier_catalog_import_price_changes(p_organization_id, p_import_id, v_rebates);
-  -- The confirm writes only what this answer shows.
-  update public.inventory_supplier_catalog_imports batch set price_preview_hash = md5(v_changes::text)
-  where batch.id = p_import_id and batch.organization_id = p_organization_id;
 
-  return jsonb_build_object('rebate_groups', v_groups, 'rebates', v_rebates, 'changes', v_changes);
+  -- The confirm writes only the changes of the fingerprint it is sent.
+  return jsonb_build_object(
+    'rebate_groups', v_groups, 'rebates', v_rebates, 'changes', v_changes, 'fingerprint', md5(v_changes::text)
+  );
 end;
 $$;
 
@@ -449,13 +445,14 @@ $$;
 -- rebates and records each changed price of an own article whose unit the
 -- mapping keeps. A confirmed batch answers its stored result again.
 -- Refusals: not_authorized, import_not_found, invalid_input, prices_changed
--- (the changes differ from the last price preview's).
+-- (the changes differ from those of p_price_fingerprint, the preview shown).
 create function public.confirm_supplier_catalog_import(
   p_organization_id uuid,
   p_actor_id uuid,
   p_import_id uuid,
   p_unit_mapping jsonb,
-  p_rebates jsonb
+  p_rebates jsonb,
+  p_price_fingerprint text
 )
 returns jsonb
 language plpgsql
@@ -507,10 +504,10 @@ begin
     for no key update of item;
 
     -- Read before the catalog and the staged lines change, and only as the
-    -- last price preview showed it: a reference or a price another session
-    -- changed since then makes the office look again.
+    -- price preview the office sees showed it: a reference or a price another
+    -- session changed since then makes the office look again.
     v_changes := app_private.supplier_catalog_import_price_changes(p_organization_id, p_import_id, p_rebates);
-    if v_import.price_preview_hash is distinct from md5(v_changes::text) then
+    if p_price_fingerprint is distinct from md5(v_changes::text) then
       raise exception 'prices_changed';
     end if;
   end if;
@@ -722,7 +719,9 @@ language sql
 security invoker
 set search_path to ''
 as $$
-  select public.confirm_supplier_catalog_import(p_organization_id, p_actor_id, p_import_id, p_unit_mapping, null::jsonb);
+  select public.confirm_supplier_catalog_import(
+    p_organization_id, p_actor_id, p_import_id, p_unit_mapping, null::jsonb, null::text
+  );
 $$;
 
 -- 6. Turns a catalog row into an own article once, as in 20261214090001; a
@@ -1206,10 +1205,10 @@ grant execute on function public.preview_inventory_import(uuid, uuid, text, json
   to service_role;
 revoke all on function public.preview_supplier_catalog_import_prices(uuid, uuid, uuid, jsonb)
   from public, anon, authenticated;
-revoke all on function public.confirm_supplier_catalog_import(uuid, uuid, uuid, jsonb, jsonb)
+revoke all on function public.confirm_supplier_catalog_import(uuid, uuid, uuid, jsonb, jsonb, text)
   from public, anon, authenticated;
 revoke all on function public.confirm_supplier_catalog_import(uuid, uuid, uuid, jsonb)
   from public, anon, authenticated;
 grant execute on function public.preview_supplier_catalog_import_prices(uuid, uuid, uuid, jsonb) to service_role;
-grant execute on function public.confirm_supplier_catalog_import(uuid, uuid, uuid, jsonb, jsonb) to service_role;
+grant execute on function public.confirm_supplier_catalog_import(uuid, uuid, uuid, jsonb, jsonb, text) to service_role;
 grant execute on function public.confirm_supplier_catalog_import(uuid, uuid, uuid, jsonb) to service_role;

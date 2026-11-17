@@ -104,10 +104,15 @@ const rebatesSchema = z.record(
 );
 export type WholesalerRebates = z.infer<typeof rebatesSchema>;
 
+/** The fingerprint of the own articles' price changes a price preview answered. */
+const priceFingerprintSchema = z.string().regex(/^[0-9a-f]{32}$/);
+
 export const confirmWholesalerImportInputSchema = z.object({
   importId: uuidSchema,
   unitMapping: z.record(boundedText(200), unitCodeSchema.nullable()),
   rebates: rebatesSchema,
+  /** The price preview the dialog shows; the confirm writes only its changes. */
+  priceFingerprint: priceFingerprintSchema,
 });
 export type ConfirmWholesalerImportInput = z.infer<typeof confirmWholesalerImportInputSchema>;
 
@@ -254,6 +259,7 @@ export const pricesAnswerSchema = z
     ),
     rebates: z.record(z.string(), count.nullable()),
     changes: z.array(priceChangeSchema),
+    fingerprint: priceFingerprintSchema,
   })
   .transform((answer) => ({
     rebateGroups: answer.rebate_groups.map((group) => ({
@@ -264,6 +270,7 @@ export const pricesAnswerSchema = z
     })),
     rebates: answer.rebates,
     changes: answer.changes,
+    fingerprint: answer.fingerprint,
   }));
 /** The own articles' price changes of a preview, with the rebate groups and the rebates they were computed for. */
 export type WholesalerPricePreview = z.output<typeof pricesAnswerSchema>;

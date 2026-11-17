@@ -74,6 +74,7 @@ test('an unmapped unit text rejects its articles until the office picks a unit, 
       importId: 'import-1',
       unitMapping: { Meter: 'meter', 'Rolle 50m': 'roll', Stück: 'piece' },
       rebates: { AR1: null, CU1: 3000 },
+      priceFingerprint: (3000).toString(16).padStart(32, '0'),
     },
   ]);
 });
@@ -95,6 +96,7 @@ test('the unit choice is locked while the confirm runs, so the preview never sho
         importId: 'import-1',
         unitMapping: { Meter: 'meter', 'Rolle 50m': null, Stück: 'piece' },
         rebates: { AR1: null, CU1: 3000 },
+        priceFingerprint: (3000).toString(16).padStart(32, '0'),
       },
     ]);
   await expect(unit).toBeDisabled();
@@ -152,9 +154,13 @@ test('a changed rebate prices the own articles again, and the confirm sends that
 
   await dialog.getByRole('button', { name: 'Übernehmen', exact: true }).click();
   await expect(dialog.getByText('Die Lieferung ist im Katalog des Großhändlers.')).toBeVisible();
-  expect((await contract(page)).confirmations.map((confirmation) => confirmation.rebates)).toEqual([
-    { AR1: null, CU1: 2500 },
-  ]);
+  // The confirm names the prices it shows: those of the 25 % pricing.
+  expect(
+    (await contract(page)).confirmations.map(({ rebates, priceFingerprint }) => ({
+      rebates,
+      priceFingerprint,
+    })),
+  ).toEqual([{ rebates: { AR1: null, CU1: 2500 }, priceFingerprint: (2500).toString(16).padStart(32, '0') }]);
 });
 
 test('prices changed since the price preview are shown again before anything is confirmed', async ({

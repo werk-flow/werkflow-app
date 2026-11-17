@@ -110,6 +110,7 @@ const confirm = [
       importId: foreignImportId,
       unitMapping: { Meter: 'meter' },
       rebates: { CU1: 2500, AR1: null },
+      priceFingerprint: '0'.repeat(32),
     }),
 ] as const;
 const abandon = [
@@ -192,7 +193,12 @@ for (const rebates of [{ CU1: 10_001 }, { CU1: 12.5 }, { CU1: -1 }, { ' CU1': 10
     error: 'invalid_input',
   });
   assert.deepEqual(
-    await imports.confirmWholesalerImport({ importId: ownImportId, unitMapping: {}, rebates }),
+    await imports.confirmWholesalerImport({
+      importId: ownImportId,
+      unitMapping: {},
+      rebates,
+      priceFingerprint: '0'.repeat(32),
+    }),
     { success: false, error: 'invalid_input' },
   );
 }

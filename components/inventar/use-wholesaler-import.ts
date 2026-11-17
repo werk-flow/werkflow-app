@@ -328,9 +328,12 @@ async function confirmPreview(
   const unitMapping = Object.fromEntries(
     current.units.map((unit) => [unit.unitText, mapping[unit.unitText] ?? null]),
   );
-  const result = await confirmWholesalerImport({ importId: current.importId, unitMapping, rebates }).catch(
-    () => null,
-  );
+  const result = await confirmWholesalerImport({
+    importId: current.importId,
+    unitMapping,
+    rebates,
+    priceFingerprint: current.prices.fingerprint,
+  }).catch(() => null);
   if (result?.success === false && result.error === 'prices_changed') return 'prices_changed';
   // A confirm sent twice writes once, so trying again is safe.
   if (!result?.success) {
