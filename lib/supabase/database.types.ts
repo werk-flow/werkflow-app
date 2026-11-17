@@ -18328,7 +18328,7 @@ export type Database = {
           p_organization_id: string;
           p_search: string;
         };
-        Returns: string[];
+        Returns: Json;
       };
       move_document: {
         Args: {

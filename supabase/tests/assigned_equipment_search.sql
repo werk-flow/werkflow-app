@@ -50,15 +50,15 @@ begin
   end loop;
 
   -- Only passed, live Anlagen of the organization match; the other job's, the voided and the foreign one never.
-  if public.match_installed_equipment(org_id,passed,'gasbrennwerttherme') is distinct from array['76000000-0000-4000-8000-000000000040']::uuid[] then raise exception 'a search matched an Anlage that was not passed, voided or foreign'; end if;
+  if public.match_installed_equipment(org_id,passed,'gasbrennwerttherme') is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid) then raise exception 'a search matched an Anlage that was not passed, voided or foreign'; end if;
   -- The list's own rule: serial number literally, manufacturer, model, customer and site names, case-insensitive.
-  if public.match_installed_equipment(org_id,passed,'7712-sn-50%_') is distinct from array['76000000-0000-4000-8000-000000000040']::uuid[] then raise exception 'serial number search wrong'; end if;
-  if public.match_installed_equipment(org_id,passed,'VITODENS') is distinct from array['76000000-0000-4000-8000-000000000040']::uuid[] then raise exception 'model search wrong'; end if;
-  if public.match_installed_equipment(org_id,passed,'anl-2026-000') is distinct from array['76000000-0000-4000-8000-000000000040','76000000-0000-4000-8000-000000000044']::uuid[] then raise exception 'number search or archived Anlage wrong'; end if;
-  if public.match_installed_equipment(org_id,passed,'wohnanlage lindenhof') is distinct from array['76000000-0000-4000-8000-000000000040','76000000-0000-4000-8000-000000000044']::uuid[] then raise exception 'site search wrong'; end if;
+  if public.match_installed_equipment(org_id,passed,'7712-sn-50%_') is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid) then raise exception 'serial number search wrong'; end if;
+  if public.match_installed_equipment(org_id,passed,'VITODENS') is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid) then raise exception 'model search wrong'; end if;
+  if public.match_installed_equipment(org_id,passed,'anl-2026-000') is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid,'76000000-0000-4000-8000-000000000044'::uuid) then raise exception 'number search or archived Anlage wrong'; end if;
+  if public.match_installed_equipment(org_id,passed,'wohnanlage lindenhof') is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid,'76000000-0000-4000-8000-000000000044'::uuid) then raise exception 'site search wrong'; end if;
   -- Nothing passed, nothing matched.
-  if public.match_installed_equipment(org_id,array[]::uuid[],'keller') is distinct from array[]::uuid[] or public.match_installed_equipment(org_id,null,'keller') is distinct from array[]::uuid[] then raise exception 'an empty id list matched'; end if;
-  if public.match_installed_equipment(org_id,passed,'Badsanierung') is distinct from array[]::uuid[] then raise exception 'a search without a match returned an Anlage'; end if;
+  if public.match_installed_equipment(org_id,array[]::uuid[],'keller') is distinct from '[]'::jsonb or public.match_installed_equipment(org_id,null,'keller') is distinct from '[]'::jsonb then raise exception 'an empty id list matched'; end if;
+  if public.match_installed_equipment(org_id,passed,'Badsanierung') is distinct from '[]'::jsonb then raise exception 'a search without a match returned an Anlage'; end if;
   -- The office list reads the same rule.
   if public.list_equipment_page(org_id,'7712-sn','all',false,1,50)->'ids' is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid) then raise exception 'the equipment list lost the shared matching rule'; end if;
 end $$;

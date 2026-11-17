@@ -8,11 +8,12 @@
 --    rows it looks at.
 -- 2. list_equipment_page uses it in place of its own search clause; the rest
 --    of its body, its signature, owner, security and grants are unchanged.
--- 3. public.match_installed_equipment(org, ids, search) returns the Anlagen
---    among the given ids that match the search, voided ones never. The server
---    passes the Anlagen a field worker reaches through their assigned jobs
---    (lib/installed-equipment/assigned-equipment-reads.ts); the access rule
---    stays there. Service role only.
+-- 3. public.match_installed_equipment(org, ids, search) returns, as one JSON
+--    array, the Anlagen among the given ids that match the search, voided
+--    ones never. The server passes the Anlagen a field worker reaches
+--    through their assigned jobs (lib/installed-equipment/
+--    assigned-equipment-reads.ts); the access rule stays there. Service role
+--    only.
 --
 -- Proven by supabase/tests/service_list_pages.sql (the office list keeps its
 -- matches) and supabase/tests/assigned_equipment_search.sql.
@@ -86,8 +87,8 @@ create function public.match_installed_equipment(
   p_organization_id uuid,
   p_equipment_ids uuid[],
   p_search text
-) returns uuid[] language sql stable security invoker set search_path = '' as $$
-  select coalesce(array_agg(equipment.id order by equipment.id), '{}')
+) returns jsonb language sql stable security invoker set search_path = '' as $$
+  select coalesce(jsonb_agg(equipment.id order by equipment.id), '[]'::jsonb)
   from public.installed_equipment equipment
   where equipment.organization_id = p_organization_id
     and equipment.voided_at is null
