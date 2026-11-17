@@ -4,12 +4,7 @@
 // a refused report writes nothing. A retry of a committed attempt answers with
 // its report and writes nothing.
 import assert from 'node:assert/strict';
-import {
-  ORGANIZATION_A,
-  ORGANIZATION_B,
-  installActionWorld,
-  signInAs,
-} from './action-boundary-world';
+import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
 
 const foreignDueWorkId = '8f000000-0000-4000-8000-000000000001';
