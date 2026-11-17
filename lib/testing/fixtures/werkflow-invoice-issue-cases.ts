@@ -44,6 +44,8 @@ mock.module('@/lib/supabase/admin', () => ({
     },
   }),
 }));
+// The dispatch reaches the credit note family, whose refund mail has its own cases (werkflow-refund-mails.ts).
+mock.module('@/lib/werkflow-billing/refund-mail', () => ({ sendRefundMail: async () => {} }));
 mock.module('@/lib/storage/r2', () => ({
   putWerkflowBillingObject: async ({ path, body }: { path: string; body: Uint8Array }) => {
     billingObjects.set(path, body);
