@@ -8,6 +8,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import type { ParsedDocumentUploadTarget } from './action-schemas';
+import { opensThroughAssignedEquipment } from './equipment-access';
 import { earlyDeletionRefusal } from './retention';
 import { toDocumentCategory, type DocumentFolderRow, type DocumentLinkRow, type DocumentRow } from './types';
 
@@ -502,25 +503,33 @@ export async function getAuthorizedDocument(
     return { success: true, document: row, protectedAccess: null };
   }
 
-  const { data: links, error: linksError } = await context.admin
-    .from('document_links')
-    .select('job_id, project_id')
-    .eq('document_id', row.id)
-    .eq('organization_id', context.orgId);
+  // Complete, or a failure: the Anlage rule depends on the absence of an office-only link.
+  const { data: links, error: linksError } = await readCompleteRows(
+    (from, to) =>
+      context.admin
+        .from('document_links')
+        .select('job_id, project_id, equipment_id, request_id, maintenance_coverage_id, employee_id')
+        .eq('document_id', row.id)
+        .eq('organization_id', context.orgId)
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
 
-  const assigned = await readAssignedLinkedJobs(context, links ?? []);
+  const assigned = await readAssignedLinkedJobs(context, links);
   const accessError = linksError ?? assigned.error;
   if (accessError) {
     logReadFailure('getAuthorizedDocument: assignment access check failed', accessError);
     return { success: false, error: 'load_failed' };
   }
 
-  // Only job and project links are read here: a customer link alone grants nothing.
-  if (assigned.jobs.length === 0) {
-    return { success: false, error: 'not_authorized' };
-  }
-
-  return { success: true, document: row, protectedAccess: null };
+  // Only job, project and Anlage links are read here: a customer link alone grants nothing.
+  if (assigned.jobs.length > 0) return { success: true, document: row, protectedAccess: null };
+  const throughEquipment = await opensThroughAssignedEquipment(context, row, links);
+  if (throughEquipment === null) return { success: false, error: 'load_failed' };
+  return throughEquipment
+    ? { success: true, document: row, protectedAccess: null }
+    : { success: false, error: 'not_authorized' };
 }
 
 /**
