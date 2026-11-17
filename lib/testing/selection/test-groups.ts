@@ -483,6 +483,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'record_number_options.sql',
       'entity_option_search.sql',
       'global_search_matches.sql',
+      'assigned_equipment_search.sql',
     ],
     ['customers', 'work', 'documents', 'inventory', 'service', 'time'],
   ],

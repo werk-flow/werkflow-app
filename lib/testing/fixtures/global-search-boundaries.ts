@@ -4,7 +4,8 @@
 // (supabase/tests/global_search_matches.sql, operational_list_pages.sql).
 // Proves: identity, organization and role come from the session; a matching
 // record of another organization is never a hit; an employee reaches only
-// their assigned jobs and no customer, request, Anlage or document; no role
+// their assigned jobs and the live Anlagen linked to them, never another
+// job's or organization's Anlage, and no customer, request or document; no role
 // reads a Mitarbeiter, time, absence, sickness, qualification or price table;
 // a failed source fails only its own groups, and a retry reads only it;
 // Ansprechpartner and Einsatzorte are found under any matching customer, not
@@ -37,6 +38,10 @@ const ids = {
   seventhClient: '34000000-0000-4000-8000-000000000017',
   seventhContact: '37000000-0000-4000-8000-000000000017',
   foreignMuellerContact: '37000000-0000-4000-8000-000000000018',
+  ownEquipment: '39000000-0000-4000-8000-000000000001',
+  coworkerEquipment: '39000000-0000-4000-8000-000000000002',
+  foreignEquipment: '39000000-0000-4000-8000-000000000003',
+  voidedEquipment: '39000000-0000-4000-8000-000000000004',
 } as const;
 let query = 'Lindenhof';
 const createdAt = '2026-11-02T08:00:00.000Z';
@@ -147,6 +152,31 @@ function request(id: string, organizationId: string): Row {
   };
 }
 
+function equipment(id: string, organizationId: string, name: string, voidedAt: string | null = null): Row {
+  return {
+    id,
+    organization_id: organizationId,
+    equipment_number: `ANL-2026-000${id.slice(-1)}`,
+    name,
+    category: 'heat_generation',
+    subtype: null,
+    state: 'active',
+    manufacturer: null,
+    model: null,
+    location_detail: null,
+    voided_at: voidedAt,
+  };
+}
+
+function workLink(n: number, organizationId: string, jobId: string, equipmentId: string): Row {
+  return {
+    id: `3a000000-0000-4000-8000-00000000000${n}`,
+    organization_id: organizationId,
+    job_id: jobId,
+    equipment_id: equipmentId,
+  };
+}
+
 const [assignedJob, assignedLink] = job(ids.assignedJob, ORGANIZATION_A, 'Wartung Lindenhof', CALLER_ID);
 const [coworkerJob, coworkerLink] = job(ids.coworkerJob, ORGANIZATION_A, 'Bad Lindenhof', coworkerId);
 const [foreignJob, foreignLink] = job(ids.foreignJob, ORGANIZATION_B, 'Fremd Lindenhof', CALLER_ID);
@@ -199,7 +229,19 @@ const world = installActionWorld({
   job_assignments: [assignedLink, coworkerLink, foreignLink].flatMap((row) => (row ? [row] : [])),
   projects: [],
   client_requests: [request(ids.request, ORGANIZATION_A), request(ids.foreignRequest, ORGANIZATION_B)],
-  installed_equipment: [],
+  // Each Anlage matches the query; only the live one of the caller's own job is theirs.
+  installed_equipment: [
+    equipment(ids.ownEquipment, ORGANIZATION_A, 'Gastherme Lindenhof Keller'),
+    equipment(ids.coworkerEquipment, ORGANIZATION_A, 'Gastherme Lindenhof Dach'),
+    equipment(ids.foreignEquipment, ORGANIZATION_B, 'Gastherme Lindenhof Keller'),
+    equipment(ids.voidedEquipment, ORGANIZATION_A, 'Gastherme Lindenhof Irrtum', createdAt),
+  ],
+  installed_equipment_work_links: [
+    workLink(1, ORGANIZATION_A, ids.assignedJob, ids.ownEquipment),
+    workLink(2, ORGANIZATION_A, ids.coworkerJob, ids.coworkerEquipment),
+    workLink(3, ORGANIZATION_B, ids.foreignJob, ids.foreignEquipment),
+    workLink(4, ORGANIZATION_A, ids.assignedJob, ids.voidedEquipment),
+  ],
   ordinary_documents: [],
 });
 for (const table of NEVER_READ) world.failingTables.add(table);
@@ -308,6 +350,13 @@ world.rpc = ({ name, args }) => {
     return { data: { total: rows.length, hasAny: true, rows }, error: null };
   }
   if (name === 'list_equipment_page') return { data: { total: 0, hasAny: false, ids: [] }, error: null };
+  if (name === 'match_installed_equipment') {
+    const passed = Array.isArray(args.p_equipment_ids) ? args.p_equipment_ids : [];
+    const matched = inOrganization('installed_equipment', args.p_organization_id)
+      .filter((row) => passed.includes(row.id) && row.voided_at === null && matches(row.name))
+      .map((row) => row.id);
+    return { data: matched, error: null };
+  }
   if (name === 'list_document_page') return { data: { total: 0, ids: [] }, error: null };
   throw new Error(`The search called ${name}`);
 };
@@ -452,25 +501,65 @@ assert.equal(
 assert.deepEqual(groupHits('ansprechpartner'), [ids.seventhContact]);
 query = 'Lindenhof';
 
-// An employee: only their assigned jobs, through the job list's employee scope.
+// An employee: only their assigned jobs, through the job list's employee scope,
+// and the live Anlagen linked to them, through the work pack's reach.
 signInAs(world, 'employee');
 const own = await search();
 assert.equal(own.success, true);
 if (!own.success) throw new Error('unreachable');
 assert.deepEqual(
   own.groups.map((group) => group.kind),
-  ['auftraege'],
+  ['auftraege', 'anlagen'],
 );
-assert.deepEqual(hitIds(own), [ids.assignedJob], 'no coworker job, no foreign job');
 assert.deepEqual(
-  world.rpcCalls.map((call) => call.name),
-  ['list_job_entries_page'],
+  hitIds(own),
+  [ids.assignedJob, ids.ownEquipment],
+  'no coworker job or Anlage, no foreign job or Anlage, no voided Anlage',
 );
-assert.equal(world.rpcCalls[0]?.args.p_user_id, CALLER_ID);
-assert.equal(world.rpcCalls[0]?.args.p_is_manager, false);
+assert.deepEqual(world.rpcCalls.map((call) => call.name).toSorted(), [
+  'list_job_entries_page',
+  'match_installed_equipment',
+]);
+const jobListCall = world.rpcCalls.find((call) => call.name === 'list_job_entries_page');
+assert.equal(jobListCall?.args.p_user_id, CALLER_ID);
+assert.equal(jobListCall?.args.p_is_manager, false);
+// The server passes only the Anlagen of the caller's own jobs: the match never sees another.
+const matchCall = world.rpcCalls.find((call) => call.name === 'match_installed_equipment');
+assert.equal(matchCall?.args.p_organization_id, ORGANIZATION_A);
+assert.deepEqual(matchCall?.args.p_equipment_ids, [ids.ownEquipment]);
+const equipmentGroup = own.groups.find((group) => group.kind === 'anlagen');
+assert.deepEqual(equipmentGroup, {
+  kind: 'anlagen',
+  source: 'anlagen',
+  status: 'loaded',
+  hits: [
+    {
+      id: ids.ownEquipment,
+      title: 'Gastherme Lindenhof Keller',
+      detail: 'ANL-2026-0001 · Auftrag A-1',
+      href: `/auftraege/A-1#anlage-${ids.ownEquipment}`,
+    },
+  ],
+  total: 1,
+  // The equipment list is the office's: no „Alle anzeigen“.
+  moreHref: null,
+});
+// A failed read of the Anlagen fails their group alone, never an empty one.
+world.failingTables.add('installed_equipment_work_links');
+const failedEquipment = await search();
+assert.equal(failedEquipment.success, true);
+if (!failedEquipment.success) throw new Error('unreachable');
+assert.deepEqual(
+  failedEquipment.groups.map((group) => [group.kind, group.status]),
+  [
+    ['auftraege', 'loaded'],
+    ['anlagen', 'failed'],
+  ],
+);
+world.failingTables.delete('installed_equipment_work_links');
 // Naming the office sources reads nothing: the role decides, not the client.
-const refused = await search({ sources: ['kunden', 'anfragen', 'anlagen', 'dokumente'] });
+const refused = await search({ sources: ['kunden', 'anfragen', 'dokumente'] });
 assert.deepEqual(refused, { success: true, query, groups: [] });
-assert.equal(world.rpcCalls.length, 0, 'an employee reads no customer, request, Anlage or document');
+assert.equal(world.rpcCalls.length, 0, 'an employee reads no customer, request or document');
 
 console.info('global search boundaries hold');

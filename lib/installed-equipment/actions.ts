@@ -18,6 +18,7 @@ import {
   loadReplacementPlans,
   readEquipmentEventLinkRows,
 } from './history-reads';
+import { readLinkedEquipment } from './assigned-equipment-reads';
 import { loadListItems } from './list-page-server';
 import {
   equipmentArchiveSchema,
@@ -397,38 +398,12 @@ export async function getAssignedEquipmentForJob(
     if (assignmentError) return { success: false, error: 'installed_equipment_load_failed' };
     if (!assignment) return { success: false, error: 'not_authorized' };
   }
-  const { data: links, error: linksError } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('installed_equipment_work_links')
-        .select('equipment_id')
-        .eq('organization_id', auth.context.orgId)
-        .eq('job_id', jobId)
-        .order('id')
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (linksError) {
-    logReadErrors('getAssignedEquipmentForJob: read failed', linksError);
-    return { success: false, error: 'installed_equipment_load_failed' };
-  }
-  const ids = links.map((link) => link.equipment_id);
-  const { data, error } = await readInBatches(ids, (batch) =>
-    admin
-      .from('installed_equipment')
-      .select('id, equipment_number, name, category, subtype, state, manufacturer, model, location_detail')
-      .eq('organization_id', auth.context.orgId)
-      .is('voided_at', null)
-      .in('id', [...batch]),
-  );
-  if (error) {
-    logReadErrors('getAssignedEquipmentForJob: read failed', error);
-    return { success: false, error: 'installed_equipment_load_failed' };
-  }
+  const linked = await readLinkedEquipment(admin, auth.context.orgId, [jobId]);
+  if (!linked) return { success: false, error: 'installed_equipment_load_failed' };
   return {
     success: true,
     // Batched reads carry no order; the list sorts by record number like the others.
-    equipment: data
+    equipment: linked.equipment
       .toSorted((left, right) => compareRecordNumbers(left.equipment_number, right.equipment_number))
       .map((row) => ({
         id: row.id,

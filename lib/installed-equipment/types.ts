@@ -96,6 +96,11 @@ const EQUIPMENT_MUTATION_ERROR_MESSAGES: Record<string, string> = {
   installed_equipment_voided: 'Dieser irrtümlich erfasste Nachfolger kann nicht mehr geändert werden.',
 };
 
+/** The id of an Anlage's card in the field work pack; the header search links to it. */
+export function fieldEquipmentAnchor(equipmentId: string): string {
+  return `anlage-${equipmentId}`;
+}
+
 export function getEquipmentMutationErrorMessage(error: string | undefined, fallback: string): string {
   return error ? describeFailure(error, EQUIPMENT_MUTATION_ERROR_MESSAGES, fallback) : fallback;
 }

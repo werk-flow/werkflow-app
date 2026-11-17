@@ -4,7 +4,9 @@ import { readCustomerPage, readCustomerSearchMatches } from '@/lib/clients/list-
 import { formatSiteAddress } from '@/lib/clients/types';
 import { getDocumentLibrary } from '@/lib/documents/library-actions';
 import { DOCUMENT_CATEGORY_LABELS } from '@/lib/documents/types';
+import { findAssignedEquipment } from '@/lib/installed-equipment/assigned-equipment-reads';
 import { getInstalledEquipmentPage } from '@/lib/installed-equipment/list-page-server';
+import { fieldEquipmentAnchor } from '@/lib/installed-equipment/types';
 import { JOB_LIST_SECTIONS, type JobListQueries, type JobListQuery } from '@/lib/jobs/list-page';
 import { loadJobListPage } from '@/lib/jobs/list-server';
 import { jobDetailHref, projectDetailHref } from '@/lib/jobs/routes';
@@ -33,8 +35,9 @@ function loaded(
   query: string,
   hits: SearchHit[],
   total: number | null,
+  moreHref: string | null = searchListHref(source, query),
 ): LoadedGroup {
-  return { kind, source, status: 'loaded', hits, total, moreHref: searchListHref(source, query) };
+  return { kind, source, status: 'loaded', hits, total, moreHref };
 }
 
 /**
@@ -164,6 +167,30 @@ async function searchEquipment(query: string): Promise<SearchGroup[]> {
   return [loaded('anlagen', 'anlagen', query, hits, result.page.total)];
 }
 
+/**
+ * A field worker's Anlagen: those linked to a job they are assigned to, through
+ * the work pack's reach. A hit opens the job's work pack at the Anlage; the
+ * equipment list is the office's, so there is no „Alle anzeigen“.
+ */
+async function searchAssignedEquipment(context: ActionContext, query: string): Promise<SearchGroup[]> {
+  const { hits, total } = await findAssignedEquipment(context, query, GLOBAL_SEARCH_LIMIT);
+  return [
+    loaded(
+      'anlagen',
+      'anlagen',
+      query,
+      hits.map((hit) => ({
+        id: hit.id,
+        title: hit.name,
+        detail: hitDetail([hit.equipmentNumber, hit.job.jobNumber ? `Auftrag ${hit.job.jobNumber}` : null]),
+        href: `${jobDetailHref(hit.job, hit.job.project)}#${fieldEquipmentAnchor(hit.id)}`,
+      })),
+      total,
+      null,
+    ),
+  ];
+}
+
 async function searchDocuments(query: string): Promise<SearchGroup[]> {
   const result = await getDocumentLibrary({
     view: 'all',
@@ -193,7 +220,7 @@ function readSource(source: SearchSource, context: ActionContext, query: string)
     case 'anfragen':
       return searchRequests(context, query);
     case 'anlagen':
-      return searchEquipment(query);
+      return context.isManagerOrAbove ? searchEquipment(query) : searchAssignedEquipment(context, query);
     case 'dokumente':
       return searchDocuments(query);
   }

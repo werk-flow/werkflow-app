@@ -2,7 +2,11 @@ import { CalendarClock, Siren, Wrench } from 'lucide-react';
 
 import { FieldWorkPackSource } from '@/components/auftraege/work-pack/field-work-pack-source';
 import { FieldEquipmentRecordButton } from './field-equipment-record-button';
-import { EQUIPMENT_STATE_LABELS, EQUIPMENT_SUBTYPE_LABELS } from '@/lib/installed-equipment/types';
+import {
+  EQUIPMENT_STATE_LABELS,
+  EQUIPMENT_SUBTYPE_LABELS,
+  fieldEquipmentAnchor,
+} from '@/lib/installed-equipment/types';
 import type { JobWithDetails } from '@/lib/jobs/types';
 import { SERVICE_CASE_URGENCY_LABELS } from '@/lib/service-cases/types';
 import { formatBerlin } from '@/lib/utils';
@@ -132,7 +136,11 @@ export function FieldWorkPackEquipmentSource({ job, data }: FieldWorkPackContext
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {equipmentResult.equipment.map((item) => (
-              <div key={item.id} className="rounded-md border p-3">
+              <div
+                key={item.id}
+                id={fieldEquipmentAnchor(item.id)}
+                className="scroll-mt-4 rounded-md border p-3"
+              >
                 <p className="font-medium">{item.name}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {item.equipmentNumber} · {EQUIPMENT_STATE_LABELS[item.state]}

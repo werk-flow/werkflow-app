@@ -81,3 +81,16 @@ test('two failed kinds recover one after the other and each retry reads only its
     { query: 'Zwei', sources: ['dokumente'] },
   ]);
 });
+
+test('a kind without a list names how many hits it shows instead of „Alle anzeigen“', async ({ page }) => {
+  const dialog = page.getByRole('dialog', { name: 'Suchen', exact: true });
+  await dialog.getByRole('textbox', { name: 'Suchbegriff', exact: true }).fill('Therme');
+  const equipment = dialog.getByRole('region', { name: 'Anlagen', exact: true });
+  await expect(equipment.getByRole('listitem')).toHaveCount(5);
+  await expect(equipment.getByText('5 von 7', { exact: true })).toBeVisible();
+  await expect(equipment.getByRole('link', { name: /anzeigen/ })).toHaveCount(0);
+  const work = dialog.getByRole('region', { name: 'Aufträge und Projekte', exact: true });
+  await expect(
+    work.getByRole('link', { name: 'Alle anzeigen: Aufträge und Projekte', exact: true }),
+  ).toBeVisible();
+});
