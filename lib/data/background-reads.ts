@@ -20,6 +20,8 @@ import {
   getInventoryPickerPage,
   getJobMaterialLines,
 } from '@/lib/inventory/actions';
+import { searchSupplierCatalog } from '@/lib/inventory/supplier-catalog-search';
+import { supplierCatalogSearchInputSchema } from '@/lib/inventory/wholesaler-import-schemas';
 import { equipmentListQuerySchema } from '@/lib/installed-equipment/list-page';
 import { getInstalledEquipmentDetailByNumber } from '@/lib/installed-equipment/actions';
 import { getInstalledEquipmentPage } from '@/lib/installed-equipment/list-page-server';
@@ -320,6 +322,10 @@ export const BACKGROUND_READS = {
       .object({ search: pickerSearchSchema, exactItemId: uuidSchema.optional() })
       .refine((input) => input.search !== '' || input.exactItemId !== undefined),
     (input) => getInventoryPickerPage(input.search, input.exactItemId),
+  ),
+  // The office's search of the imported wholesaler catalogs; a field worker is refused.
+  'supplier-catalog-search': defineRead(supplierCatalogSearchInputSchema, (input) =>
+    searchSupplierCatalog(input.search),
   ),
   'job-inventory-picker-options': defineRead(
     z.object({ jobId: uuidSchema, search: pickerSearchSchema, exactItemId: uuidSchema.optional() }),
