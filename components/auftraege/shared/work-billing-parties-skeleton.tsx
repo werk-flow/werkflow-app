@@ -8,7 +8,12 @@ import { cn } from '@/lib/utils';
  */
 export function WorkBillingPartiesSkeleton({ className }: { className?: string }) {
   return (
-    <div className={cn('rounded-lg border bg-card p-4 sm:p-5', className)}>
+    <div
+      className={cn('rounded-lg border bg-card p-4 sm:p-5', className)}
+      role="status"
+      aria-label="Auftraggeber und Rechnung werden geladen"
+    >
+      <span className="sr-only">Auftraggeber und Rechnung werden geladen.</span>
       <Skeleton className="h-5 w-48" />
       <div className="mt-4 space-y-3">
         <Skeleton className="h-4 w-full" />
