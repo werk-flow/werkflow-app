@@ -57,10 +57,6 @@ function liveAmounts(form: DraftForm): DraftAmounts | null {
  * shows the same fields, none of them editable.
  */
 export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
-  // The facts show the customer's and recipient's names and the work's label, which other sessions change.
-  useRealtimeRouterRefresh({
-    tables: ['invoices', 'clients', ...(invoice.work ? [WORK_TABLES[invoice.work.kind]] : [])],
-  });
   const router = useRouter();
   const { showBanner } = useBanner();
   const draft = useDraftState(invoice);
@@ -126,6 +122,7 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
         }}
         errors={errors}
         disabled={pending}
+        fixed={invoice.status !== 'entwurf'}
       />
       <InvoiceTotals amounts={amounts} />
       <InvoiceTermsFields form={form} onChange={setForm} errors={errors} disabled={pending} />
@@ -150,6 +147,10 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
  * same press answers with the first save.
  */
 function useDraftState(invoice: InvoiceDetail) {
+  // The facts show the customer's and recipient's names and the work's label, which other sessions change.
+  useRealtimeRouterRefresh({
+    tables: ['invoices', 'clients', ...(invoice.work ? [WORK_TABLES[invoice.work.kind]] : [])],
+  });
   const [form, setFormState] = useState(() => draftFormOf(invoice));
   const [baseVersion, setBaseVersion] = useState(invoice.version);
   const [dirty, setDirty] = useState(false);

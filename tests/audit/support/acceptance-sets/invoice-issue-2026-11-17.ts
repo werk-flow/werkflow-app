@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { EMPTY_COMPANY_PROFILE_DETAILS } from '../../../../lib/company-profile/profile';
 import { rpcArgs } from '../../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../../golden/support/db/shared';
 import type { TestWorld } from '../../../golden/support/world';
@@ -8,10 +9,10 @@ import { surfaceFixture } from '../surface-fixtures';
 
 const CUSTOMER = 'Hausverwaltung Lindenhof GmbH';
 
-/** The snapshot the issue action stores; the page reads only the recipient from it. */
+/** A snapshot of the shape the issue action stores; the page shows its recipient. */
 const SNAPSHOT = {
   organizationName: 'Haustechnik Sonnenberg',
-  profile: {},
+  profile: { ...EMPTY_COMPANY_PROFILE_DETAILS, companyName: 'Haustechnik Sonnenberg GmbH' },
   files: { logo: null, stationery_first: null, stationery_following: null },
   buyer: {
     name: CUSTOMER,

@@ -115,7 +115,7 @@ type FieldProps = {
   disabled: boolean;
 };
 
-/** One text input of the form with its label, hint and error. */
+/** One text input of the form with its label and error. */
 function TextField({
   id,
   label,
@@ -131,20 +131,13 @@ function TextField({
   onChange: (value: string) => void;
   error: string | undefined;
   disabled: boolean;
-  description?: string;
   required?: boolean;
   inputMode?: 'numeric' | 'decimal';
   maxLength?: number;
   placeholder?: string;
 }) {
   return (
-    <Field
-      label={label}
-      htmlFor={id}
-      error={error}
-      {...(input.description ? { description: input.description } : {})}
-      {...(input.required ? { required: true } : {})}
-    >
+    <Field label={label} htmlFor={id} error={error} {...(input.required ? { required: true } : {})}>
       <Input
         inputMode={input.inputMode}
         value={value}
@@ -173,7 +166,7 @@ function NumberSeriesFields({
         <span className="font-medium text-foreground">{settings.nextInvoiceNumber}</span>.
         {settings.numbersFixed
           ? ' Seit der ersten ausgestellten Rechnung ist der Nummernkreis fest, damit keine Nummer fehlt oder doppelt vorkommt.'
-          : ' Präfix, Jahr, Stellen und nächste Nummer legst du einmal vor der ersten Rechnung fest, zum Beispiel um die Nummern deiner bisherigen Software fortzuführen.'}
+          : ' Präfix, Jahr, Stellen und nächste Nummer legst du einmal vor der ersten Rechnung fest, zum Beispiel um die Nummern deiner bisherigen Software fortzuführen. Kürzere Nummern beginnen mit Nullen.'}
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <TextField
@@ -188,7 +181,6 @@ function NumberSeriesFields({
         <TextField
           id={FIELD_IDS.minDigits}
           label="Mindestens Stellen"
-          description="Kürzere Nummern beginnen mit Nullen."
           inputMode="numeric"
           value={form.minDigits}
           onChange={(minDigits) => update({ minDigits })}
@@ -314,13 +306,10 @@ export function InvoiceSettingsForm({ settings, canEdit }: { settings: InvoiceSe
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          Rechnungen
+          Nummernkreis und Zahlungsbedingungen
           <InlinePending active={isPending} label="Rechnungseinstellungen werden gespeichert" />
         </CardTitle>
-        <CardDescription>
-          Nummernkreis deiner Rechnungen und die Zahlungsbedingungen, mit denen ein neuer Entwurf beginnt.
-          {!canEdit && ' Nur Admins ändern diese Einstellungen.'}
-        </CardDescription>
+        {!canEdit && <CardDescription>Nur Admins ändern diese Einstellungen.</CardDescription>}
       </CardHeader>
       <form onSubmit={submit} noValidate>
         <CardContent className="space-y-6">

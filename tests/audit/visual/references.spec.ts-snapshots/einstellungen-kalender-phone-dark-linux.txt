@@ -1,7 +1,7 @@
 Menü öffnen
 Einstellungen
-Organisation
 Dokumente & Briefpapier
+Rechnungen
 Kalender
 Kalender
 Legt fest, wie Termine, Einsätze und Planungsansichten funktionieren.
