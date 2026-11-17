@@ -120,6 +120,22 @@ export async function seedSubscriptionEndedAfterFailedDebit(world: TestWorld): P
 }
 
 /**
+ * Reserves a new organization's id for the user, as an unpaid Checkout's
+ * start does (werk-flow/werkflow-planning#248); returns the reserved id.
+ */
+export async function seedOpenReservation(userId: string): Promise<string> {
+  const organizationId = randomUUID();
+  const { error } = await createAdminClient().rpc('begin_werkflow_checkout', {
+    p_organization_id: organizationId,
+    p_user_id: userId,
+    p_linked: false,
+    p_stripe_customer_id: stripeIdsOf(organizationId).customer,
+  });
+  if (error) throw new Error(`reservation seed failed: ${error.message}`);
+  return organizationId;
+}
+
+/**
  * Records a paid Checkout of a reservation, as Stripe's signals would
  * (werk-flow/werkflow-planning#248): the user reserved a new organization's
  * id and its subscription is active. The user then names the organization on
@@ -127,17 +143,9 @@ export async function seedSubscriptionEndedAfterFailedDebit(world: TestWorld): P
  * an Admin's further one (werk-flow/werkflow-planning#495).
  */
 export async function seedPaidReservation(userId: string): Promise<void> {
-  const admin = createAdminClient();
-  const organizationId = randomUUID();
+  const organizationId = await seedOpenReservation(userId);
   const ids = stripeIdsOf(organizationId);
-  const { error: reserveError } = await admin.rpc('begin_werkflow_checkout', {
-    p_organization_id: organizationId,
-    p_user_id: userId,
-    p_linked: false,
-    p_stripe_customer_id: ids.customer,
-  });
-  if (reserveError) throw new Error(`reservation seed failed: ${reserveError.message}`);
-  const { error: recordError } = await admin.rpc('record_werkflow_subscription_state', {
+  const { error: recordError } = await createAdminClient().rpc('record_werkflow_subscription_state', {
     p_organization_id: organizationId,
     p_stripe_customer_id: ids.customer,
     p_stripe_subscription_id: ids.subscription,

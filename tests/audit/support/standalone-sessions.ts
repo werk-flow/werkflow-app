@@ -11,14 +11,20 @@ import { signInSupportUser } from '../../golden/support/support-session';
 import { goldenTestEmail } from '../../golden/support/seed';
 import { settled } from '../../golden/support/steps/interaction';
 import { openPage } from '../../golden/support/streamed-content';
-import { payForNewOrganization, signUpViaUi } from '../../golden/support/steps/organization';
+import { seedOpenReservation } from '../../golden/support/db/werkflow-billing';
+import {
+  createOrganizationInOnboarding,
+  payForNewOrganization,
+  signUpViaUi,
+} from '../../golden/support/steps/organization';
 import type { TestWorld } from '../../golden/support/world';
 
 // The sessions of the screens outside the app shell
 // (lib/testing/selection/standalone-route-inventory.ts). Each screen opens in
 // its own browser context: an anonymous visitor, an account the real signup
 // page created, or the synthetic support user. The prestart member joins the outsider organization,
-// so the audit world's own organization keeps its people.
+// so the audit world's own organization keeps its people. The further Checkout's Admin
+// creates their own organization, so no other session's reservation meets theirs.
 
 /** The constant name of every account the standalone sessions create. */
 const STANDALONE_ACCOUNT = { firstName: 'Lena', lastName: 'Neumann' } as const;
@@ -95,8 +101,12 @@ async function prepareSession(
     return TEST_SUPPORT_USER.email;
   }
   const { email } = await signUpNewcomer(page, world);
-  if (session === 'subscriber') {
+  if (session === 'subscriber' || session === 'further-checkout') {
     await payForNewOrganization(page, email);
+  }
+  if (session === 'further-checkout') {
+    await createOrganizationInOnboarding(page, 'Haustechnik Neumann');
+    await seedOpenReservation(await userIdOf(email));
   }
   if (session === 'prestart') await makePrestartMember(world, email);
   return email;

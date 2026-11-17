@@ -57,6 +57,7 @@ const entrySchema = z
       'newcomer',
       'subscriber',
       'prestart',
+      'further-checkout',
       'support',
     ]),
     view: z.enum(['page', 'tab', 'dialog', 'standalone']),

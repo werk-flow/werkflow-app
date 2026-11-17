@@ -51,6 +51,14 @@ type CheckoutOutcome = { ok: true; url: string } | { ok: false; code: CheckoutFa
 
 const PRICE_ID = /^price_[A-Za-z0-9_]{1,250}$/;
 
+// A cancelled Checkout returns where it started (werk-flow/werkflow-planning#500):
+// an organization's own from the billing page, through /upgrade; a
+// reservation's to /upgrade/abgebrochen, which sends a first organization's
+// payer back to /upgrade and offers an Admin's further organization again.
+// The session is reused while it stays open, so the return depends only on
+// the Checkout's kind, and the return page decides from its own records.
+const BILLING_PAGE = '/einstellungen/abonnement-abrechnung';
+
 // begin_werkflow_checkout's answer, parsed once at the Supabase boundary.
 const beginSchema = z.discriminatedUnion('result', [
   z.object({ result: z.enum(['subscribed', 'busy']) }),
@@ -124,7 +132,7 @@ export async function openCheckout(request: CheckoutRequest): Promise<CheckoutOu
             subscriptions,
             priceId,
             successUrl: new URL(request.linked ? '/dashboard' : '/upgrade/bestaetigt', siteUrl).toString(),
-            cancelUrl: new URL('/upgrade', siteUrl).toString(),
+            cancelUrl: new URL(request.linked ? BILLING_PAGE : '/upgrade/abgebrochen', siteUrl).toString(),
           });
         case 'open': {
           // Read outside the row lock: one Stripe call per start that finds a stored session.
