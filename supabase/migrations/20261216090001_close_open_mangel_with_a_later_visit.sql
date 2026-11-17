@@ -11,8 +11,10 @@
 --   cover stays open for it. The visit's own finding stays open, so an
 --   unfinished visit's Mängel replace the earlier ones. A replay closes
 --   nothing again. A missed visit completes nothing and closes nothing.
---   Completions on the same Anlage run one after another, so each sees the
+--   Completions on an Anlage or its Vorgänger run one after another, so each sees the
 --   findings the other wrote.
+-- * public.list_installed_equipment_lineage names an Anlage and its Vorgänger
+--   for the reader and for that lock.
 -- * public.list_open_maintenance_visit_findings is the one reader of what is
 --   open: the office equipment detail and the technician's field history read
 --   through it, and the completion closes what it lists as fully covered.
@@ -53,6 +55,30 @@ create trigger maintenance_visit_finding_resolutions_immutable
 before update or delete on public.maintenance_visit_finding_resolutions
 for each row execute function app_private.prevent_maintenance_history_mutation();
 
+-- The given Anlagen of the organization and all their Vorgänger: the scope
+-- of the open findings reader and of the completion's lock.
+create function public.list_installed_equipment_lineage(
+  p_organization_id uuid,
+  p_equipment_ids uuid[]
+)
+returns setof uuid
+language sql stable security invoker set search_path = ''
+as $$
+  with recursive lineage as (
+    select equipment.id as equipment_id, equipment.predecessor_equipment_id, 0 as depth
+    from public.installed_equipment equipment
+    where equipment.organization_id = p_organization_id
+      and equipment.id = any(coalesce(p_equipment_ids, '{}'))
+    union all
+    select equipment.id, equipment.predecessor_equipment_id, lineage.depth + 1
+    from public.installed_equipment equipment
+    join lineage on equipment.id = lineage.predecessor_equipment_id
+    where equipment.organization_id = p_organization_id
+      and lineage.depth < 100
+  )
+  select distinct lineage.equipment_id from lineage;
+$$;
+
 -- The open findings of visits that covered one of the given Anlagen or one of
 -- their Vorgänger, newest visit first. `fully_covered` is true when every
 -- Anlage of the finding's visit is one of them.
@@ -78,17 +104,9 @@ returns table (
 )
 language sql stable security invoker set search_path = ''
 as $$
-  with recursive lineage as (
-    select equipment.id as equipment_id, equipment.predecessor_equipment_id, 0 as depth
-    from public.installed_equipment equipment
-    where equipment.organization_id = p_organization_id
-      and equipment.id = any(coalesce(p_equipment_ids, '{}'))
-    union all
-    select equipment.id, equipment.predecessor_equipment_id, lineage.depth + 1
-    from public.installed_equipment equipment
-    join lineage on equipment.id = lineage.predecessor_equipment_id
-    where equipment.organization_id = p_organization_id
-      and lineage.depth < 100
+  with lineage as (
+    select equipment_id
+    from public.list_installed_equipment_lineage(p_organization_id, p_equipment_ids) as equipment_id
   )
   select finding.id, due_work.id, due_work.completed_on, due_work.scope_outcome,
     plan.id, plan.plan_number, due_work.job_id, finding.defects, finding.next_action,
@@ -185,16 +203,22 @@ begin
   perform app_private.lock_maintenance_operation(p_organization_id, 'due_complete', p_idempotency_key);
   select due_work.status into v_status_before from public.maintenance_due_work due_work
   where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id;
-  -- Two completions on one Anlage would each miss the finding the other writes.
+  -- Two completions on one Anlage or its Vorgänger would each miss the
+  -- finding the other writes: lock the whole lineage the closing reads.
   perform 1 from public.installed_equipment equipment
   where equipment.organization_id = p_organization_id
     and equipment.id in (
-      select link.equipment_id
-      from public.maintenance_due_work due_work
-      join public.maintenance_plan_revision_equipment link
-        on link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
-       and link.organization_id = due_work.organization_id
-      where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id
+      select lineage_id from public.list_installed_equipment_lineage(
+        p_organization_id,
+        array(
+          select link.equipment_id
+          from public.maintenance_due_work due_work
+          join public.maintenance_plan_revision_equipment link
+            on link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+           and link.organization_id = due_work.organization_id
+          where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id
+        )
+      ) as lineage_id
     )
   order by equipment.id
   for no key update;
@@ -218,6 +242,9 @@ $$;
 -- (docs/technical/security.md, "Add a privileged function", condition a).
 revoke all on function app_private.resolve_open_maintenance_visit_findings(uuid, uuid, uuid)
   from public, anon, authenticated, service_role;
+revoke all on function public.list_installed_equipment_lineage(uuid, uuid[])
+  from public, anon, authenticated;
+grant execute on function public.list_installed_equipment_lineage(uuid, uuid[]) to service_role;
 revoke all on function public.list_open_maintenance_visit_findings(uuid, uuid[])
   from public, anon, authenticated;
 grant execute on function public.list_open_maintenance_visit_findings(uuid, uuid[]) to service_role;

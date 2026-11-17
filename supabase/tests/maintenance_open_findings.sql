@@ -121,12 +121,15 @@ do $$ declare
   v_reader constant text := 'public.list_open_maintenance_visit_findings(uuid,uuid[])';
   v_step constant text := 'app_private.resolve_open_maintenance_visit_findings(uuid,uuid,uuid)';
   v_role text;
+  v_function text;
 begin
-  if has_function_privilege('anon', v_reader, 'execute')
-     or has_function_privilege('authenticated', v_reader, 'execute')
-     or not has_function_privilege('service_role', v_reader, 'execute') then
-    raise exception 'only the service role executes the open findings reader';
-  end if;
+  foreach v_function in array array[v_reader, 'public.list_installed_equipment_lineage(uuid,uuid[])'] loop
+    if has_function_privilege('anon', v_function, 'execute')
+       or has_function_privilege('authenticated', v_function, 'execute')
+       or not has_function_privilege('service_role', v_function, 'execute') then
+      raise exception 'only the service role executes %', v_function;
+    end if;
+  end loop;
   foreach v_role in array array['anon', 'authenticated', 'service_role'] loop
     if has_function_privilege(v_role, v_step, 'execute') then
       raise exception 'the closing step is executable by %', v_role;

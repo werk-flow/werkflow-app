@@ -18297,6 +18297,10 @@ export type Database = {
           project_id: string;
         }[];
       };
+      list_installed_equipment_lineage: {
+        Args: { p_equipment_ids: string[]; p_organization_id: string };
+        Returns: string[];
+      };
       list_installed_equipment_predecessor_events: {
         Args: {
           p_equipment_id: string;
