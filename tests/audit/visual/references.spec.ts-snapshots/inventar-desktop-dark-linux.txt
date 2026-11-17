@@ -25,6 +25,7 @@ martin.kraemer@haustechnik-kraemer.de
 Inventar
 1 Artikel · 1 Lager · 0 geplante Artikel
 CSV importieren
+Großhandel importieren
 Lager anlegen
 Artikel anlegen
 Artikel mit Bestand

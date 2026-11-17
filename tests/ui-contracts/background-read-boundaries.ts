@@ -7,6 +7,7 @@ import { getWorkLifecycleSnapshot } from './lifecycle-boundaries';
 import { readApprovalContract } from './approval-service-boundaries';
 import { readTimeApprovalContract } from './time-approval-boundaries';
 import { readMaterialLinesContract, readMaterialPickerContract } from './material-boundaries';
+import { readSupplierCatalogContract } from './supplier-catalog-boundaries';
 import { getOwnPersonnelActions, getPersonnelLifecycle } from './personnel-boundaries';
 import { readAffectedVisitsContract } from './absence-service-boundaries';
 import { readPlannedVisitsContract } from './correction-timeline-boundaries';
@@ -37,6 +38,7 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'job-material-lines') return readMaterialLinesContract();
   if (kind === 'inventory-picker-page' || kind === 'job-inventory-picker-options')
     return readMaterialPickerContract();
+  if (kind === 'supplier-catalog-search') return readSupplierCatalogContract();
   if (kind === 'absence-affected-visits')
     return readAffectedVisitsContract(absenceAffectedVisitsInputSchema.parse(input));
   if (kind === 'time-entries') return readBreakRuleWeekEntries(input);
