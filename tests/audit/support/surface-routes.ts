@@ -117,8 +117,8 @@ export async function detailDestination(
     case '/angebote/[offerId]':
       return { route: `/angebote/${details.offerId}`, heading: names.offer };
     case '/rechnungen/[invoiceId]':
-      // A draft has no number: its customer names it on the page.
-      return { route: `/rechnungen/${details.invoiceId}`, heading: names.client };
+      // A draft has no number: the page names it „Rechnungsentwurf“.
+      return { route: `/rechnungen/${details.invoiceId}`, heading: 'Rechnungsentwurf' };
     case '/auftraege/uebergaben/[targetType]/[targetId]':
       return { route: `/auftraege/uebergaben/auftrag/${details.jobId}`, heading: names.job };
   }
