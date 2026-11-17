@@ -19,7 +19,7 @@ type Props = {
 export function InvoiceTermsFields(props: Props) {
   return (
     <section className="space-y-4">
-      <SectionTitle>Leistung und Zahlung</SectionTitle>
+      <SectionTitle as="h2">Leistung und Zahlung</SectionTitle>
       <div className="grid gap-4 sm:grid-cols-2">
         <ServicePeriodFields {...props} />
         <PaymentFields {...props} />
@@ -149,7 +149,7 @@ function ReferenceFields({ form, onChange, disabled }: Omit<Props, 'errors'>) {
 export function InvoiceTextFields({ form, onChange, disabled }: Omit<Props, 'errors'>) {
   return (
     <section className="space-y-4">
-      <SectionTitle>Texte</SectionTitle>
+      <SectionTitle as="h2">Texte</SectionTitle>
       <Field label="Einleitung" htmlFor="invoice-opening-text">
         <Textarea
           value={form.openingText}
