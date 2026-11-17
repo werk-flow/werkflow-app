@@ -20,8 +20,16 @@ import {
   getInventoryPickerPage,
   getJobMaterialLines,
 } from '@/lib/inventory/actions';
+import { searchSupplierCatalog } from '@/lib/inventory/supplier-catalog-search';
+import { supplierCatalogSearchInputSchema } from '@/lib/inventory/wholesaler-import-schemas';
 import { equipmentListQuerySchema } from '@/lib/installed-equipment/list-page';
 import { getInstalledEquipmentDetailByNumber } from '@/lib/installed-equipment/actions';
+import {
+  fieldDocumentsInputSchema,
+  fieldHistoryInputSchema,
+  getFieldEquipmentDocuments,
+  getFieldEquipmentHistory,
+} from '@/lib/installed-equipment/field-history-reads';
 import { getInstalledEquipmentPage } from '@/lib/installed-equipment/list-page-server';
 import { getEquipmentSourceOptions } from '@/lib/installed-equipment/source-options-server';
 import { getOrgMembersAction, getProfilesByIds } from '@/lib/members/actions';
@@ -324,6 +332,10 @@ export const BACKGROUND_READS = {
       .refine((input) => input.search !== '' || input.exactItemId !== undefined),
     (input) => getInventoryPickerPage(input.search, input.exactItemId),
   ),
+  // The office's search of the imported wholesaler catalogs; a field worker is refused.
+  'supplier-catalog-search': defineRead(supplierCatalogSearchInputSchema, (input) =>
+    searchSupplierCatalog(input.search),
+  ),
   'job-inventory-picker-options': defineRead(
     z.object({ jobId: uuidSchema, search: pickerSearchSchema, exactItemId: uuidSchema.optional() }),
     (input) => getInventoryPickerOptionsForJob(input.jobId, input.search, input.exactItemId),
@@ -337,6 +349,11 @@ export const BACKGROUND_READS = {
     getMaintenanceCoverageDocuments(input.maintenanceCoverageId),
   ),
   'maintenance-evidence-options': defineRead(jobInput, (input) => getMaintenanceEvidenceOptions(input.jobId)),
+  // The work pack's „Verlauf und Dokumente“ of one Anlage of the job.
+  'equipment-field-history': defineRead(fieldHistoryInputSchema, (input) => getFieldEquipmentHistory(input)),
+  'equipment-field-documents': defineRead(fieldDocumentsInputSchema, (input) =>
+    getFieldEquipmentDocuments(input),
+  ),
   // A create dialog suggests the next free number when it opens. Each
   // generator selects the highest number of the organization and writes
   // nothing; the input names the organization, so a switch refuses the stale

@@ -2,6 +2,7 @@
 // transport; the registered readers are replaced by explicit seams.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
+import { z } from '@/lib/zod';
 import {
   AuthApiError,
   AuthRetryableFetchError,
@@ -212,6 +213,9 @@ mock.module('@/lib/inventory/actions', () => ({
   getInventoryPickerPage: seam('inventory-picker-page'),
   getInventoryPickerOptionsForJob: seam('job-inventory-picker-options'),
 }));
+mock.module('@/lib/inventory/supplier-catalog-search', () => ({
+  searchSupplierCatalog: seam('supplier-catalog-search'),
+}));
 mock.module('@/lib/clients/actions', () => ({ getClientRelations: seam('client-relations') }));
 mock.module('@/lib/documents/actions', () => ({
   getAttachableDocuments: seam('attachable-documents'),
@@ -239,6 +243,16 @@ mock.module('@/lib/service-cases/list-page-server', () => ({
 }));
 mock.module('@/lib/installed-equipment/actions', () => ({
   getInstalledEquipmentDetailByNumber: seam('equipment-detail'),
+}));
+mock.module('@/lib/installed-equipment/field-history-reads', () => ({
+  fieldHistoryInputSchema: z.object({
+    jobId: z.string(),
+    equipmentId: z.string(),
+    before: z.string().nullable(),
+  }),
+  fieldDocumentsInputSchema: z.object({ jobId: z.string(), equipmentId: z.string() }),
+  getFieldEquipmentHistory: seam('equipment-field-history'),
+  getFieldEquipmentDocuments: seam('equipment-field-documents'),
 }));
 mock.module('@/lib/installed-equipment/source-options-server', () => ({
   getEquipmentSourceOptions: seam('equipment-sources'),
@@ -466,11 +480,14 @@ const inputs: Record<string, unknown> = {
   'attachable-documents': { targetType: 'job', targetId: jobId, searchQuery: 'Plan', category: 'all' },
   'inventory-picker-page': { search: '', exactItemId: jobId },
   'job-inventory-picker-options': { jobId, search: 'Rohr', exactItemId: jobId },
+  'supplier-catalog-search': { search: 'Kupferrohr' },
   'dispatch-readiness': { occurrenceId: jobId },
   'assignment-availability': { organizationId, localDate: '2026-11-04' },
   'absence-affected-visits': { employeeRecordId: jobId, startDate: '2026-10-30', endDate: null },
   'maintenance-coverage-documents': { maintenanceCoverageId: jobId },
   'maintenance-evidence-options': { jobId },
+  'equipment-field-history': { jobId, equipmentId: jobId, before: '2026-10-01|visit:1' },
+  'equipment-field-documents': { jobId, equipmentId: jobId },
   'next-job-number': { organizationId },
   'next-project-number': { organizationId },
   'next-request-number': { organizationId },
@@ -534,6 +551,7 @@ const readerArguments: Record<string, unknown> = {
   'client-relations': jobId,
   'inventory-picker-page': ['', jobId],
   'job-inventory-picker-options': [jobId, 'Rohr', jobId],
+  'supplier-catalog-search': 'Kupferrohr',
   'parking-responsible-options': undefined,
   'maintenance-coverage-documents': jobId,
   'maintenance-evidence-options': jobId,
