@@ -297,17 +297,30 @@ export function admission(
       reason: `${gib(available)} GiB available plus ${gib(held)} held by heavy commands (${running}); ${threads === 1 ? 'a thread needs' : `${threads} threads need`} ${gib(needed)}: the floor of ${gib(floor)}, ${gib(START_COST.heavy)} for a check:changed and ${gib(cost)} for each agent. The 15-minute load is ${load.toFixed(1)} on ${plural(cores, 'core')}; a thread needs it under ${normalLoad.toFixed(1)}, the load watch's normal line.`,
     };
   }
-  if (start === 'heavy' && heavy.length > 0 && normalLoad !== null && load >= normalLoad)
+  const lineReason =
+    normalLoad !== null && load >= normalLoad
+      ? `The 15-minute load is ${load.toFixed(1)} on ${plural(cores, 'core')}, at or above ${normalLoad.toFixed(1)}, the load watch's normal line, and ${running}`
+      : null;
+  if (start === 'heavy' && heavy.length > 0 && lineReason)
     return {
       admitted: false,
       measured: false,
       unwatched: false,
-      reason: `The 15-minute load is ${load.toFixed(1)} on ${plural(cores, 'core')}, at or above ${normalLoad.toFixed(1)}, the load watch's normal line, and ${running}; a further one waits until the load falls under the line or the running ones end.`,
+      reason: `${lineReason}; a further one waits until the load falls under the line or the running ones end.`,
     };
   const reserved = heavy.reduce((sum, use) => sum + Math.max(0, START_COST.heavy - use), 0);
   const room = available - reserved;
   const numbers = `${gib(room)} GiB of room (${gib(available)} available, ${gib(reserved)} still reserved, ${running}); it needs ${gib(floor + cost)}: the floor of ${gib(floor)} and ${gib(cost)} for the ${START_NOUN[start]}.`;
   const measured = room >= floor + cost;
+  // Above the line the only heavy command runs unmeasured, so it may take slot 0 alone: two that
+  // start together cannot both pass as the only one (offeredHeavySlots).
+  if (start === 'heavy' && heavy.length === 0 && lineReason)
+    return {
+      admitted: true,
+      measured: false,
+      unwatched: false,
+      reason: `${lineReason}; it is the only heavy command, so it runs.`,
+    };
   if (start === 'heavy' && heavy.length === 0 && !measured)
     return {
       admitted: true,

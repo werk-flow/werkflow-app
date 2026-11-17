@@ -158,7 +158,8 @@ test('the overload of 2026-11-17 replayed: above the normal line a further heavy
   expect(admitted('heavy', vm(24), [3])).toBe(false);
   expect(admitted('heavy', vm(23.9), [3])).toBe(true);
   // The only heavy command still runs, so a busy machine keeps verifying one command at a time.
-  expect(admission('heavy', vm(74), [])).toMatchObject({ admitted: true, measured: true });
+  // Unmeasured, it may take slot 0 alone: two that start together cannot both pass as the only one.
+  expect(admission('heavy', vm(74), [])).toMatchObject({ admitted: true, measured: false });
   // A watch without its normal line keeps the memory rule.
   expect(admitted('heavy', watched(26, 3.2, null, { load: 74, cores: 16, normalLoad: null }), [0])).toBe(
     true,
