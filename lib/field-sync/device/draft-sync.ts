@@ -96,6 +96,12 @@ export function pageHolder(): DraftHolder | null {
 
 /** The photo transfer running now: a page that names another person aborts it. */
 let activeTransfer: AbortController | null = null;
+/**
+ * Ended by every `online`, then replaced: the draft requests that left before the network returned.
+ * One that hangs on the lost connection, as in a dead spot, would hold every later send of the
+ * phone, the time events of the sync runner's pass included.
+ */
+let connection = new AbortController();
 let progress: DraftSendProgress | null = null;
 let listening = false;
 /** One send at a time: two triggers never upload the same photo twice. */
@@ -145,6 +151,9 @@ async function attach(draft: StoredDraft): Promise<{ outcome: string; code: stri
       cache: 'no-store',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
+      // Ended by the network's return, it is no answer: the sealed draft goes again, unchanged, and
+      // the server records an operation id once.
+      signal: connection.signal,
       body: JSON.stringify({
         operations: [
           {
@@ -225,7 +234,8 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
       target: { kind: 'job', jobId: draft.jobId },
       category: 'photo',
       transferred: photo.transferred,
-      signal: transfer.signal,
+      // Ended by the network's return, it is an interruption: the draft waits.
+      signal: AbortSignal.any([transfer.signal, connection.signal]),
       expectedUploaderId: owner.userId,
     }).finally(() => {
       window.removeEventListener('storage', abortOnWipe);
@@ -527,7 +537,12 @@ export function startDraftSync(next: DraftHolder): { send: () => Promise<void> }
   holderGeneration = todayWipeGeneration();
   if (!listening) {
     listening = true;
-    window.addEventListener('online', () => void sendDrafts());
+    window.addEventListener('online', () => {
+      const lost = connection;
+      connection = new AbortController();
+      lost.abort();
+      void sendDrafts();
+    });
   }
   void sendDrafts();
   return { send: sendDrafts };
