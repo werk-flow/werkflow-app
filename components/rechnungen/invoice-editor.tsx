@@ -121,7 +121,7 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
         disabled={pending}
       />
       <InvoiceCatalogLine
-        onAdd={(line) => setForm({ ...form, lines: [...form.lines, line] })}
+        onAdd={(line) => setForm((current) => ({ ...current, lines: [...current.lines, line] }))}
         disabled={pending}
       />
       <InvoiceTotals amounts={amounts} />
@@ -159,7 +159,8 @@ function useDraftState(invoice: InvoiceDetail) {
     baseVersion,
     attemptKey,
     newerElsewhere: newer && dirty,
-    setForm: (next: DraftForm) => {
+    /** An update from an answer that arrives later takes the current text, so edits made meanwhile stay. */
+    setForm: (next: DraftForm | ((current: DraftForm) => DraftForm)) => {
       setFormState(next);
       setDirty(true);
       setAttemptKey(crypto.randomUUID());
