@@ -23,6 +23,40 @@
         "Re-reviewed on 2026-11-14 for saxon-js 2.7.0 (with axios) and the dev dependency xslt3 2.7.0 (werk-flow/werkflow-planning#454): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
         "Re-reviewed on 2026-11-16 for next 16.4.5, which closes GHSA-mfr8-8qww-v76h (werk-flow/werkflow-planning#29): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency."
       ]
+    },
+    {
+      "package": "picomatch",
+      "version": "4.0.7",
+      "advisory": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+      "severity": "high",
+      "paths": ["picomatch"],
+      "reviewedOn": "2026-11-17",
+      "expiresOn": "2026-12-01",
+      "rationale": "ReDoS through single-branch repeated extglobs. picomatch 4.0.7 and 2.3.2 are installed only through dev tools: knip, tinyglobby (knip; eslint-import-resolver-typescript under eslint-config-next), fdir's optional peer, and micromatch through fast-glob (@typescript-eslint/typescript-estree, @next/eslint-plugin-next). Every path ends in a dev dependency, none runs in the deployed application, and the only patterns they match come from the repository's configuration. The advisory covers <= 4.0.7 with no patched version. Decided by the CI lead on 2026-11-17 without the owner (no personal or customer data is reachable, AGENTS.md \"Decide or ask\"), because the advisory failed every plan; an agent may renew it for 14 days after a re-review while every path stays in a dev tool (a path into the deployed application needs the owner). Remove it as soon as a patched picomatch is released and the tools accept it.",
+      "evidence": [
+        "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+        "https://github.com/advisories/GHSA-fc5q-39xc-vjpf: updated 2026-11-17 15:56:44Z to picomatch <= 4.0.7, no patched version.",
+        "bun run security:dependencies on 2026-11-17: picomatch@4.0.7 (path picomatch) and picomatch@2.3.2 (path micromatch/picomatch) are the only unreviewed findings.",
+        "bun pm why picomatch@4.0.7 on 2026-11-17: knip 6.35.1; tinyglobby 0.2.17 (knip) and 0.2.15 (eslint-import-resolver-typescript 3.10.1, eslint-config-next 16.3.6); optional peer of fdir 6.5.0. Every path ends in a dev dependency.",
+        "bun pm why picomatch@2.3.2 on 2026-11-17: micromatch 4.0.8 through fast-glob 3.3.3 (@typescript-eslint/typescript-estree 8.47.0) and fast-glob 3.3.1 (@next/eslint-plugin-next 16.3.6). Every path ends in a dev dependency."
+      ]
+    },
+    {
+      "package": "picomatch",
+      "version": "2.3.2",
+      "advisory": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+      "severity": "high",
+      "paths": ["micromatch/picomatch"],
+      "reviewedOn": "2026-11-17",
+      "expiresOn": "2026-12-01",
+      "rationale": "ReDoS through single-branch repeated extglobs. picomatch 4.0.7 and 2.3.2 are installed only through dev tools: knip, tinyglobby (knip; eslint-import-resolver-typescript under eslint-config-next), fdir's optional peer, and micromatch through fast-glob (@typescript-eslint/typescript-estree, @next/eslint-plugin-next). Every path ends in a dev dependency, none runs in the deployed application, and the only patterns they match come from the repository's configuration. The advisory covers <= 4.0.7 with no patched version. Decided by the CI lead on 2026-11-17 without the owner (no personal or customer data is reachable, AGENTS.md \"Decide or ask\"), because the advisory failed every plan; an agent may renew it for 14 days after a re-review while every path stays in a dev tool (a path into the deployed application needs the owner). Remove it as soon as a patched picomatch is released and the tools accept it.",
+      "evidence": [
+        "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+        "https://github.com/advisories/GHSA-fc5q-39xc-vjpf: updated 2026-11-17 15:56:44Z to picomatch <= 4.0.7, no patched version.",
+        "bun run security:dependencies on 2026-11-17: picomatch@4.0.7 (path picomatch) and picomatch@2.3.2 (path micromatch/picomatch) are the only unreviewed findings.",
+        "bun pm why picomatch@4.0.7 on 2026-11-17: knip 6.35.1; tinyglobby 0.2.17 (knip) and 0.2.15 (eslint-import-resolver-typescript 3.10.1, eslint-config-next 16.3.6); optional peer of fdir 6.5.0. Every path ends in a dev dependency.",
+        "bun pm why picomatch@2.3.2 on 2026-11-17: micromatch 4.0.8 through fast-glob 3.3.3 (@typescript-eslint/typescript-estree 8.47.0) and fast-glob 3.3.1 (@next/eslint-plugin-next 16.3.6). Every path ends in a dev dependency."
+      ]
     }
   ]
 }
