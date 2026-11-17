@@ -16,9 +16,16 @@ const lazyCreateInvoiceDialog = lazyDialog(() =>
 /**
  * „Rechnung erstellen“ on a customer, job, project or Servicefall page: the
  * create dialog opens with that customer and work filled in, and the new
- * draft opens on its own page.
+ * draft opens on its own page. Beside an icon menu it is small and shows
+ * only its icon on a phone; beside a full-size button it matches that button.
  */
-export function CreateInvoiceButton({ preset }: { preset: InvoicePreset }) {
+export function CreateInvoiceButton({
+  preset,
+  size = 'sm',
+}: {
+  preset: InvoicePreset;
+  size?: 'sm' | 'default';
+}) {
   const [open, setOpen] = useState(false);
   const waiting = lazyCreateInvoiceDialog.useWaiting(open);
   return (
@@ -26,7 +33,7 @@ export function CreateInvoiceButton({ preset }: { preset: InvoicePreset }) {
       <Button
         type="button"
         variant="outline"
-        size="sm"
+        size={size}
         className="gap-1.5"
         onPointerEnter={lazyCreateInvoiceDialog.preload}
         onFocus={lazyCreateInvoiceDialog.preload}
@@ -34,7 +41,7 @@ export function CreateInvoiceButton({ preset }: { preset: InvoicePreset }) {
         pending={waiting}
       >
         <ReceiptText className="size-4" />
-        <span className="sr-only sm:not-sr-only">Rechnung erstellen</span>
+        <span className={size === 'sm' ? 'sr-only sm:not-sr-only' : undefined}>Rechnung erstellen</span>
       </Button>
       <lazyCreateInvoiceDialog.Dialog open={open} onOpenChange={setOpen} preset={preset} />
     </>

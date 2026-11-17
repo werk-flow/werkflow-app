@@ -96,6 +96,7 @@ function ServiceCaseDetailHeader({
         <span className="flex items-center gap-2">
           <InlinePending active={busy} label="Änderungen werden übernommen" />
           <CreateInvoiceButton
+            size="default"
             preset={{
               client: { id: item.clientId, name: item.clientName },
               work: { kind: 'service_case', id: item.id },
