@@ -24,7 +24,8 @@ import type { TestWorld } from '../../golden/support/world';
 // its own browser context: an anonymous visitor, an account the real signup
 // page created, or the synthetic support user. The prestart member joins the outsider organization,
 // so the audit world's own organization keeps its people. The further Checkout's Admin
-// creates their own organization, so no other session's reservation meets theirs.
+// creates their own organization, so no other session's reservation meets theirs; its
+// name marks it as the world's, so the world's cleanup deletes it.
 
 /** The constant name of every account the standalone sessions create. */
 const STANDALONE_ACCOUNT = { firstName: 'Lena', lastName: 'Neumann' } as const;
@@ -105,7 +106,7 @@ async function prepareSession(
     await payForNewOrganization(page, email);
   }
   if (session === 'further-checkout') {
-    await createOrganizationInOnboarding(page, 'Haustechnik Neumann');
+    await createOrganizationInOnboarding(page, `Golden Test SHK Neumann ${world.runId}`);
     await seedOpenReservation(await userIdOf(email));
   }
   if (session === 'prestart') await makePrestartMember(world, email);
