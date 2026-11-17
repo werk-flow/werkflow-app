@@ -77,8 +77,7 @@ function declaredTiming(files: readonly string[]): GroupTimingRequirements {
 // An entry ending in "/" owns a directory; any other entry owns exactly one file,
 // for a shared file whose feature is obvious (a hook, a skeleton, an API route).
 // Every entry must exist on disk (test-scope-prefixes.test.ts): an entry that names
-// nothing owns nothing (the customer library was listed as lib/customers/
-// while it lives in lib/clients/, 2026-09-14).
+// nothing owns nothing.
 export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   customers: [
     'lib/clients/',
