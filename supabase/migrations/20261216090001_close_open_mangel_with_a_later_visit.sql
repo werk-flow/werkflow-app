@@ -17,6 +17,7 @@
 --   deployed build calls it and closes nothing.
 
 -- A resolution names its finding with the organization.
+-- @destructive: after release 55088f06f04b: that build never writes maintenance_visit_findings, and its primary key already makes each id unique
 alter table public.maintenance_visit_findings
   add constraint maintenance_visit_findings_id_organization_key unique (id, organization_id);
 

@@ -200,7 +200,7 @@ begin
   end if;
   perform pg_temp.complete_visit('48400000-0000-4000-8000-000000000076', 'complete', '2026-06-11', null,
     gen_random_uuid());
-  if pg_temp.open_defects(v_org, '48400000-0000-4000-8000-000000000081') <> '{}'
+  if pg_temp.open_defects(v_org, '48400000-0000-4000-8000-000000000081') is distinct from '{}'::text[]
      or pg_temp.open_defects(v_org, '48400000-0000-4000-8000-000000000082') is distinct from array['Ausdehnungsgefäß ohne Vordruck'] then
     raise exception 'the completed visit did not close exactly its Anlage''s Mängel';
   end if;
@@ -208,8 +208,8 @@ end $$;
 
 -- Another organization reads none of them, nor the organization another's Anlage.
 do $$ begin
-  if pg_temp.open_defects('48400000-0000-4000-8000-000000000011', '48400000-0000-4000-8000-000000000082') <> '{}'
-     or pg_temp.open_defects('48400000-0000-4000-8000-000000000010', '48400000-0000-4000-8000-000000000089') <> '{}' then
+  if pg_temp.open_defects('48400000-0000-4000-8000-000000000011', '48400000-0000-4000-8000-000000000082') is distinct from '{}'::text[]
+     or pg_temp.open_defects('48400000-0000-4000-8000-000000000010', '48400000-0000-4000-8000-000000000089') is distinct from '{}'::text[] then
     raise exception 'open Mängel crossed the organization boundary';
   end if;
 end $$;

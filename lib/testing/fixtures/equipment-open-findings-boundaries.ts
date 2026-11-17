@@ -27,7 +27,13 @@ const world = installActionWorld({
   jobs: [{ id: jobId, organization_id: ORGANIZATION_A, job_number: 'AUF-7', title: 'Wartungsbesuch' }],
   organization_members: [{ organization_id: ORGANIZATION_A, user_id: ownerId, role: 'buero' }],
   profiles: [
-    { id: ownerId, first_name: 'Petra', last_name: 'Beispiel', email: 'petra@example.test', avatar_path: null },
+    {
+      id: ownerId,
+      first_name: 'Petra',
+      last_name: 'Beispiel',
+      email: 'petra@example.test',
+      avatar_path: null,
+    },
   ],
 });
 const finding = {
