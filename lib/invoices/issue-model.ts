@@ -1,3 +1,4 @@
+import type { ActionFailure } from '@/lib/action-result';
 import { saveCompanyProfileInputSchema, type CompanyProfileDetails } from '@/lib/company-profile/profile';
 import type { En16931Finding } from '@/lib/invoicing/check-en16931';
 import type { InvoiceDraft, InvoiceParty } from '@/lib/invoicing/model';
@@ -117,6 +118,9 @@ export function profileFieldLabel(finding: En16931Finding): string | null {
 /** One thing that keeps a draft from being issued, in the office's words, with where to fix it. */
 export type IssueFinding = { label: string; href: string | null };
 
+/** An invoice that fails the check before its number: what is wrong, in the office's words. */
+export type InvoiceCheckFailure = ActionFailure<'invoice_check_failed'> & { findings: IssueFinding[] };
+
 const LINE_FIELD = /^lines\[(\d+)\]/;
 
 /** The rule check's findings in the office's words; a finding repeated on several fields shows once. */
@@ -155,21 +159,26 @@ type IssuedFacts = Pick<
   | 'openingText'
   | 'closingText'
   | 'lines'
+  | 'cancels'
+  | 'cancellationReason'
 >;
 
 /**
- * The invoice as the core's draft, under the given number and date. Null while
- * it has no Leistungsdatum; the issue refuses that before the rule check.
+ * The invoice as the core's draft, under the given number and date. A
+ * Stornorechnung is a corrected invoice (384) naming the invoice it cancels
+ * (BG-3), with its reason as a note. Null while it has no Leistungsdatum; the
+ * issue refuses that before the rule check.
  */
 export function invoiceDraftOf(
   invoice: IssuedFacts,
   snapshot: IssueSnapshot,
   issue: { number: string; issueDate: string },
 ): InvoiceDraft | null {
-  const { serviceStart, serviceEnd, discountDays, discountBasisPoints } = invoice;
+  const { serviceStart, serviceEnd, discountDays, discountBasisPoints, cancels, cancellationReason } =
+    invoice;
   if (!serviceStart || !serviceEnd) return null;
   return {
-    typeCode: '380',
+    typeCode: cancels ? '384' : '380',
     number: issue.number,
     issueDate: issue.issueDate,
     currency: 'EUR',
@@ -182,7 +191,7 @@ export function invoiceDraftOf(
         : { kind: 'period', start: serviceStart, end: serviceEnd },
     buyerReference: invoice.buyerReference || null,
     orderReference: invoice.orderReference || null,
-    precedingInvoice: null,
+    precedingInvoice: cancels ? { number: cancels.invoiceNumber, issueDate: cancels.issueDate } : null,
     paymentTerms: {
       dueInDays: invoice.paymentDueDays,
       discount:
@@ -191,7 +200,11 @@ export function invoiceDraftOf(
           : null,
     },
     payee: payeeOf(snapshot.profile),
-    notes: [invoice.openingText, invoice.closingText].filter(Boolean),
+    notes: [
+      invoice.openingText,
+      invoice.closingText,
+      cancellationReason ? `Grund der Stornierung: ${cancellationReason}` : '',
+    ].filter(Boolean),
     lines: invoice.lines.map((line, index) => ({
       id: String(index + 1),
       name: line.name,

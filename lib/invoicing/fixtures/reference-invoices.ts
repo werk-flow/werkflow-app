@@ -106,7 +106,11 @@ export const EXEMPT_INVOICE: InvoiceDraft = {
   ],
 };
 
-/** A Storno: the corrected invoice (384) with negated lines, naming the invoice it cancels. */
+/**
+ * A Storno as the app issues it (lib/invoices/cancel-model.ts): the corrected
+ * invoice (384) with negated lines, naming the invoice it cancels, nothing
+ * due, and the office's reason as a note.
+ */
 export const STORNO_INVOICE: InvoiceDraft = {
   ...MIXED_RATE_INVOICE,
   typeCode: '384',
@@ -114,6 +118,7 @@ export const STORNO_INVOICE: InvoiceDraft = {
   issueDate: '2026-11-20',
   precedingInvoice: { number: MIXED_RATE_INVOICE.number, issueDate: MIXED_RATE_INVOICE.issueDate },
   paymentTerms: { dueInDays: 0, discount: null },
+  notes: ['Grund der Stornierung: Falscher Rechnungsempfänger'],
   lines: MIXED_RATE_INVOICE.lines.map((entry) => ({ ...entry, quantity: `-${entry.quantity}` })),
 };
 

@@ -33,8 +33,18 @@ import {
 import { worldName } from '../../../../lib/testing/seed-world-plan';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
+import { invoiceChainSeed, parseInvoiceChain } from '../invoice-chain-fixtures';
+import type { TestWorld } from '../../../golden/support/world';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];
+
+/** The world's issued invoice, opened unless it is the page already, and its header action. */
+async function issuedInvoiceButton(page: Page, world: TestWorld, name: 'Stornieren' | 'Korrigieren') {
+  const seed = invoiceChainSeed(world, 'issued');
+  const { originalId } = parseInvoiceChain(await surfaceFixture(world, seed.name, seed.create));
+  if (!page.url().endsWith(`/rechnungen/${originalId}`)) await page.goto(`/rechnungen/${originalId}`);
+  return page.getByRole('main').getByRole('button', { name, exact: true });
+}
 
 function itemCreateLayer(page: Page): Locator {
   return inventoryDialogLayer(page, 'createItem');
@@ -327,6 +337,14 @@ export const COMMERCIAL_OPENERS = {
     trigger: async ({ page }) =>
       page.getByRole('main').getByRole('button', { name: 'Entwurf löschen', exact: true }),
     layer: (page) => page.getByRole('alertdialog', { name: /^Entwurf für „.+“ löschen\?$/ }),
+  },
+  'commercial.invoice-cancel': {
+    trigger: async ({ page, world }) => issuedInvoiceButton(page, world, 'Stornieren'),
+    layer: (page) => page.getByRole('dialog', { name: /^Rechnung .+ stornieren\?$/ }),
+  },
+  'commercial.invoice-correct': {
+    trigger: async ({ page, world }) => issuedInvoiceButton(page, world, 'Korrigieren'),
+    layer: (page) => page.getByRole('dialog', { name: /^Rechnung .+ korrigieren\?$/ }),
   },
   'commercial.invoice-issue': {
     trigger: async ({ page }) =>

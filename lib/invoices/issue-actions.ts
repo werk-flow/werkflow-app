@@ -1,9 +1,6 @@
 'use server';
 
-import type { ActionFailure, ActionResult } from '@/lib/action-result';
-import { getBusinessTodayIso } from '@/lib/date-time/berlin';
-import { checkEn16931 } from '@/lib/invoicing/check-en16931';
-import { toEn16931 } from '@/lib/invoicing/to-en16931';
+import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { toJson } from '@/lib/supabase/json';
@@ -16,9 +13,9 @@ import {
   type IssueInvoiceInput,
 } from './action-schemas';
 import { officeCaller } from './caller';
-import { issueFindingsOf, type IssueFinding, type IssueSnapshot } from './issue-model';
+import type { InvoiceCheckFailure, IssueSnapshot } from './issue-model';
 import { completenessFindings, snapshotOf } from './issue-sources';
-import { calculatedInvoiceOf, fileInvoiceOriginalFor, renderInvoicePdf } from './original';
+import { fileIssuedOriginal, findingsBeforeNumber } from './original';
 import { readIssuedInvoice } from './reads';
 
 // „Ausstellen“ (supabase/migrations/20261216100000_issue_invoices_with_gapless_numbers.sql).
@@ -39,15 +36,6 @@ const refusal = writeRefusalFor(
     'invoice_incomplete',
   ]),
 );
-
-const HEAD_TOO_TALL: IssueFinding = {
-  label:
-    'Der Briefkopf lässt keinen Platz für die Positionen: kürze Bestellnummer oder Referenz, oder verkleinere die Ränder des Briefpapiers',
-  href: '/einstellungen/dokumente',
-};
-
-/** A draft that fails the check: what is wrong, in the office's words. */
-type InvoiceCheckFailure = ActionFailure<'invoice_check_failed'> & { findings: IssueFinding[] };
 
 export type IssueInvoiceResult =
   | ActionResult<{ invoiceNumber: string; originalFiled: boolean }>
@@ -84,29 +72,9 @@ export async function issueInvoice(rawInput: IssueInvoiceInput): Promise<IssueIn
     if (missing.length > 0) return { success: false, error: 'invoice_check_failed', findings: missing };
     const snapshot = await snapshotOf(admin, context, invoice);
     if (!snapshot) return { success: false, error: 'load_failed' };
-    const calculated = calculatedInvoiceOf(invoice, snapshot, {
-      number: 'ENTWURF',
-      issueDate: getBusinessTodayIso(),
-    });
-    if (!calculated) return { success: false, error: 'invoice_incomplete' };
-    const xml = toEn16931(calculated);
-    const check = await checkEn16931(xml);
-    if (!check.valid) {
-      return {
-        success: false,
-        error: 'invoice_check_failed',
-        findings: issueFindingsOf(check.errors, invoice.recipient.id),
-      };
-    }
-    // The original must render too: a head with no room for the lines is refused before the number.
-    const units = invoice.lines.map((line) => line.unit);
-    const rendered = await renderInvoicePdf(context.orgId, { calculated, units, snapshot }, xml).catch(
-      (renderError: unknown) => {
-        if (renderError instanceof RangeError) return null;
-        throw renderError;
-      },
-    );
-    if (!rendered) return { success: false, error: 'invoice_check_failed', findings: [HEAD_TOO_TALL] };
+    const findings = await findingsBeforeNumber(context.orgId, invoice, snapshot);
+    if (!findings) return { success: false, error: 'invoice_incomplete' };
+    if (findings.length > 0) return { success: false, error: 'invoice_check_failed', findings };
 
     return await issueChecked(admin, context, input, snapshot);
   } catch (error) {
@@ -136,29 +104,13 @@ async function issueChecked(
   // Issued from here on: a failure below leaves the original pending, never the answer failed.
   // The original is drawn from the invoice as stored: number, date and snapshot.
   const originalFiled = await readIssuedInvoice(context.orgId, input.invoiceId).then(
-    (stored) => fileOriginal(context, stored),
+    (stored) => fileIssuedOriginal(context, stored),
     (readError: unknown) => {
       logError('issueInvoice: issued invoice not read back', readError);
       return false;
     },
   );
   return { success: true, invoiceNumber: issued.data.invoiceNumber, originalFiled };
-}
-
-type ReadInvoice = Awaited<ReturnType<typeof readIssuedInvoice>>;
-
-/** Files the original of an issued invoice; a failure leaves it pending and is logged. */
-async function fileOriginal(
-  context: { userId: string; orgId: string },
-  issued: ReadInvoice,
-): Promise<boolean> {
-  try {
-    if (!issued?.issue) return false;
-    return await fileInvoiceOriginalFor(createSupabaseAdminClient(), context, { ...issued, ...issued.issue });
-  } catch (error) {
-    logError('issueInvoice: original not filed', error);
-    return false;
-  }
 }
 
 /** „Beleg erstellen“: renders, registers and files the original an issued invoice still lacks. */
@@ -171,7 +123,7 @@ export async function fileInvoiceOriginal(rawInput: FileInvoiceOriginalInput): P
     const invoice = await readIssuedInvoice(caller.context.orgId, parsed.data.invoiceId);
     if (!invoice) return { success: false, error: 'invoice_not_found' };
     if (!invoice.issue) return { success: false, error: 'invoice_not_issued' };
-    return (await fileOriginal(caller.context, invoice))
+    return (await fileIssuedOriginal(caller.context, invoice))
       ? { success: true }
       : { success: false, error: 'original_failed' };
   } catch (error) {

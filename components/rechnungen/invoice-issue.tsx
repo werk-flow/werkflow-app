@@ -85,11 +85,17 @@ export function IssueInvoiceButton({
   );
 }
 
-/** What keeps the draft from being issued, each with where to fix it. */
-export function IssueFindings({ findings }: { findings: readonly IssueFinding[] }) {
+/** What keeps the draft (or a Stornorechnung) from being issued, each with where to fix it. */
+export function IssueFindings({
+  findings,
+  title = 'Die Rechnung besteht die Prüfung nicht und bleibt ein Entwurf. Ergänze:',
+}: {
+  findings: readonly IssueFinding[];
+  title?: string;
+}) {
   if (findings.length === 0) return null;
   return (
-    <SectionError title="Die Rechnung besteht die Prüfung nicht und bleibt ein Entwurf. Ergänze:">
+    <SectionError title={title}>
       <ul className="list-disc space-y-1 pl-5">
         {findings.map((finding) => (
           <li key={finding.label}>

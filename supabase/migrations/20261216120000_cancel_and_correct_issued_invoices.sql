@@ -1,0 +1,437 @@
+-- „Stornieren“ and „Korrigieren“: the office cancels an issued invoice with a
+-- Stornorechnung, or cancels it and opens a new draft prefilled from it; the
+-- original never changes (werk-flow/werkflow-planning#459, E2c R6).
+--
+-- 1. invoices: a Stornorechnung names the invoice it cancels and the reason;
+--    a correction draft names the invoice it corrects. Each invoice has at
+--    most one of each, and a link never changes after insert.
+-- 2. guard_issued_invoice: an issued invoice takes exactly one change, from
+--    Ausgestellt to Storniert, and only once its issued Stornorechnung exists.
+--    Every other column stays refused as before.
+-- 3. cancel_invoice: in one transaction it copies the original into a
+--    Stornorechnung with every line negated, issues it through issue_invoice
+--    (the next number of the same series, under the series' row lock), marks
+--    the original Storniert, optionally opens the correction draft, and
+--    writes the history. The server checks the Stornorechnung with the
+--    EN 16931 rules first and files its original as for any invoice.
+-- 4. get_invoice and list_invoice_page answer the links: the chain of
+--    original, Stornorechnung and correction, each with its number.
+--
+-- The server actions in lib/invoices/ establish identity, role and
+-- organization; cancel_invoice checks the actor again under the access lock.
+--
+-- Expand-only: new nullable columns, a widened event check, a replaced guard,
+-- a new function; get_invoice and list_invoice_page keep their signatures.
+--
+-- Prevention: Tier 1 (the links' checks and unique indexes, the guard),
+-- Tier 2 supabase/tests/invoice_cancel.sql.
+
+-- 1. The links.
+alter table public.invoices
+  add column cancels_invoice_id uuid,
+  add column cancellation_reason text,
+  add column corrects_invoice_id uuid;
+-- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
+alter table public.invoices add constraint invoices_cancellation_check check (
+  (cancels_invoice_id is null) = (cancellation_reason is null)
+  and (cancellation_reason is null
+    or (btrim(cancellation_reason) <> '' and char_length(cancellation_reason) <= 500))
+  and num_nonnulls(cancels_invoice_id, corrects_invoice_id) <= 1
+) not valid;
+-- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
+alter table public.invoices add constraint invoices_cancels_fk foreign key (cancels_invoice_id, organization_id)
+  references public.invoices (id, organization_id);
+-- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
+alter table public.invoices add constraint invoices_corrects_fk foreign key (corrects_invoice_id, organization_id)
+  references public.invoices (id, organization_id);
+-- An invoice is cancelled at most once and corrected by at most one draft.
+-- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
+create unique index invoices_cancels_unique on public.invoices (cancels_invoice_id)
+  where cancels_invoice_id is not null;
+-- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
+create unique index invoices_corrects_unique on public.invoices (corrects_invoice_id)
+  where corrects_invoice_id is not null;
+
+-- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice history yet; the widened rule keeps every type it allowed
+alter table public.invoice_events drop constraint invoice_events_type_check;
+-- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice history yet; the widened rule keeps every type it allowed
+alter table public.invoice_events add constraint invoice_events_type_check
+  check (event_type in ('created', 'saved', 'deleted', 'issued', 'original_registered', 'cancelled')) not valid;
+
+-- 2. As in 20261216100000_issue_invoices_with_gapless_numbers.sql, with two
+-- additions: the links never change after insert, and Ausgestellt becomes
+-- Storniert, with the version, the writer and the time, once an issued
+-- Stornorechnung names the invoice. Nothing else of an issued invoice changes.
+create or replace function app_private.guard_issued_invoice()
+returns trigger
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_free constant text[] := array[
+    'job_id', 'project_id', 'service_case_id', 'created_by', 'updated_by', 'issued_by', 'original_document_id'
+  ];
+  v_cancel_free constant text[] := array['status', 'version', 'updated_by', 'updated_at'];
+begin
+  if tg_op = 'DELETE' then
+    if old.status = 'entwurf' or not exists (
+      select 1 from public.organizations organization where organization.id = old.organization_id
+    ) then
+      return old;
+    end if;
+    raise exception 'invoice_issued';
+  end if;
+  if (new.cancels_invoice_id, new.cancellation_reason, new.corrects_invoice_id)
+    is distinct from (old.cancels_invoice_id, old.cancellation_reason, old.corrects_invoice_id)
+  then
+    raise exception 'invoice_link_fixed';
+  end if;
+  if old.status = 'entwurf' then
+    return new;
+  end if;
+  if old.status = 'ausgestellt' and new.status = 'storniert'
+    and to_jsonb(new) - v_cancel_free = to_jsonb(old) - v_cancel_free
+    and new.version = old.version + 1
+    and exists (
+      select 1 from public.invoices storno
+      where storno.cancels_invoice_id = old.id and storno.organization_id = old.organization_id
+        and storno.status = 'ausgestellt'
+    )
+  then
+    return new;
+  end if;
+  if to_jsonb(new) - v_free is distinct from to_jsonb(old) - v_free
+    or (new.job_id is not null and new.job_id is distinct from old.job_id)
+    or (new.project_id is not null and new.project_id is distinct from old.project_id)
+    or (new.service_case_id is not null and new.service_case_id is distinct from old.service_case_id)
+    or (new.created_by is not null and new.created_by is distinct from old.created_by)
+    or (new.updated_by is not null and new.updated_by is distinct from old.updated_by)
+    or (new.issued_by is not null and new.issued_by is distinct from old.issued_by)
+    or (old.original_document_id is not null
+      and new.original_document_id is distinct from old.original_document_id)
+  then
+    raise exception 'invoice_issued';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app_private.guard_issued_invoice() from public, anon, authenticated, service_role;
+
+-- 3. Cancels an issued invoice with a Stornorechnung: the original's lines
+-- negated, its Leistungszeitraum, references, customer and Rechnungsempfänger,
+-- the snapshot it was issued with, nothing due, and the reason. issue_invoice
+-- gives it the series' next number and today's Rechnungsdatum. The original
+-- becomes Storniert. With p_correct a new draft prefilled from the original
+-- names it as the invoice it corrects. A retry under the same key answers the
+-- first call. Answers stornoId, stornoNumber, issueDate and correctionId.
+-- Refusals: invalid_input, not_authorized, invoice_not_found,
+-- invoice_not_issued, invoice_cancelled, invoice_is_storno.
+create function public.cancel_invoice(
+  p_actor_id uuid,
+  p_organization_id uuid,
+  p_invoice_id uuid,
+  p_attempt_key uuid,
+  p_reason text,
+  p_correct boolean
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_reason text := btrim(p_reason);
+  v_earlier public.invoice_events;
+  v_original public.invoices;
+  v_storno_id uuid;
+  v_issued jsonb;
+  v_correction_id uuid;
+  v_answer jsonb;
+begin
+  if p_actor_id is null or p_organization_id is null or p_invoice_id is null or p_attempt_key is null
+    or p_correct is null or coalesce(v_reason, '') = '' or char_length(v_reason) > 500
+  then
+    raise exception 'invalid_input';
+  end if;
+  perform app_private.lock_office_actor(p_organization_id, p_actor_id);
+  v_earlier := app_private.invoice_attempt(p_organization_id, p_actor_id, p_attempt_key);
+  if v_earlier.id is not null then
+    if v_earlier.event_type <> 'cancelled' or v_earlier.invoice_id <> p_invoice_id then
+      raise exception 'invalid_input';
+    end if;
+    return v_earlier.payload;
+  end if;
+  select * into v_original from public.invoices invoice
+  where invoice.id = p_invoice_id and invoice.organization_id = p_organization_id
+  for update;
+  if not found then raise exception 'invoice_not_found'; end if;
+  if v_original.status = 'entwurf' then raise exception 'invoice_not_issued'; end if;
+  if v_original.status = 'storniert' then raise exception 'invoice_cancelled'; end if;
+  if v_original.cancels_invoice_id is not null then raise exception 'invoice_is_storno'; end if;
+
+  insert into public.invoices (
+    organization_id, client_id, recipient_client_id, job_id, project_id, service_case_id,
+    service_start, service_end, payment_due_days, order_reference, buyer_reference,
+    line_net_cents, tax_cents, gross_cents, cancels_invoice_id, cancellation_reason, created_by, updated_by
+  ) values (
+    p_organization_id, v_original.client_id, v_original.recipient_client_id, v_original.job_id,
+    v_original.project_id, v_original.service_case_id, v_original.service_start, v_original.service_end,
+    0, v_original.order_reference, v_original.buyer_reference,
+    -v_original.line_net_cents, -v_original.tax_cents, -v_original.gross_cents,
+    v_original.id, v_reason, p_actor_id, p_actor_id
+  )
+  returning id into v_storno_id;
+  -- Negating the quantity negates each line amount and each tax sum exactly:
+  -- the line rule rounds half away from zero, symmetric around zero.
+  insert into public.invoice_lines (
+    organization_id, invoice_id, position, name, description, quantity, unit, unit_price_cents,
+    price_quantity, tax_category, tax_rate_basis_points, net_cents
+  )
+  select p_organization_id, v_storno_id, line.position, line.name, line.description, -line.quantity, line.unit,
+    line.unit_price_cents, line.price_quantity, line.tax_category, line.tax_rate_basis_points, -line.net_cents
+  from public.invoice_lines line
+  where line.invoice_id = v_original.id and line.organization_id = p_organization_id;
+  insert into public.invoice_events (
+    organization_id, invoice_id, event_type, status, version, payload, actor_id, attempt_key
+  ) values (
+    p_organization_id, v_storno_id, 'created', 'entwurf', 1,
+    jsonb_build_object('cancelsInvoiceId', v_original.id), p_actor_id, gen_random_uuid()
+  );
+  v_issued := public.issue_invoice(
+    p_actor_id, p_organization_id, v_storno_id, 1, gen_random_uuid(), v_original.issue_snapshot
+  );
+
+  update public.invoices invoice set
+    status = 'storniert',
+    version = invoice.version + 1,
+    updated_by = p_actor_id,
+    updated_at = now()
+  where invoice.id = v_original.id and invoice.organization_id = p_organization_id;
+
+  if p_correct then
+    insert into public.invoices (
+      organization_id, client_id, recipient_client_id, job_id, project_id, service_case_id,
+      service_start, service_end, payment_due_days, discount_days, discount_basis_points,
+      order_reference, buyer_reference, opening_text, closing_text,
+      line_net_cents, tax_cents, gross_cents, corrects_invoice_id, created_by, updated_by
+    ) values (
+      p_organization_id, v_original.client_id, v_original.recipient_client_id, v_original.job_id,
+      v_original.project_id, v_original.service_case_id, v_original.service_start, v_original.service_end,
+      v_original.payment_due_days, v_original.discount_days, v_original.discount_basis_points,
+      v_original.order_reference, v_original.buyer_reference, v_original.opening_text, v_original.closing_text,
+      v_original.line_net_cents, v_original.tax_cents, v_original.gross_cents, v_original.id,
+      p_actor_id, p_actor_id
+    )
+    returning id into v_correction_id;
+    insert into public.invoice_lines (
+      organization_id, invoice_id, position, name, description, quantity, unit, unit_price_cents,
+      price_quantity, tax_category, tax_rate_basis_points, net_cents
+    )
+    select p_organization_id, v_correction_id, line.position, line.name, line.description, line.quantity,
+      line.unit, line.unit_price_cents, line.price_quantity, line.tax_category, line.tax_rate_basis_points,
+      line.net_cents
+    from public.invoice_lines line
+    where line.invoice_id = v_original.id and line.organization_id = p_organization_id;
+    insert into public.invoice_events (
+      organization_id, invoice_id, event_type, status, version, payload, actor_id, attempt_key
+    ) values (
+      p_organization_id, v_correction_id, 'created', 'entwurf', 1,
+      jsonb_build_object('correctsInvoiceId', v_original.id), p_actor_id, gen_random_uuid()
+    );
+  end if;
+
+  v_answer := jsonb_build_object(
+    'stornoId', v_storno_id,
+    'stornoNumber', v_issued ->> 'invoiceNumber',
+    'issueDate', v_issued ->> 'issueDate',
+    'correctionId', v_correction_id
+  );
+  insert into public.invoice_events (
+    organization_id, invoice_id, event_type, status, version, payload, actor_id, attempt_key
+  ) values (
+    p_organization_id, v_original.id, 'cancelled', 'storniert', v_original.version + 1, v_answer,
+    p_actor_id, p_attempt_key
+  );
+  return v_answer;
+end;
+$$;
+revoke all on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean) from public, anon, authenticated;
+grant execute on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean) to service_role;
+
+-- 4. Every invoice linked to p_invoice_id through Stornos and corrections,
+-- from the first original on: generation by generation, each original
+-- before its Stornorechnung before its correction. A lone invoice answers
+-- itself alone.
+create function app_private.invoice_chain(p_organization_id uuid, p_invoice_id uuid)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path to ''
+as $$
+  with recursive ancestors(id, parent_id) as (
+    select invoice.id, coalesce(invoice.cancels_invoice_id, invoice.corrects_invoice_id)
+    from public.invoices invoice
+    where invoice.id = p_invoice_id and invoice.organization_id = p_organization_id
+    union
+    select parent.id, coalesce(parent.cancels_invoice_id, parent.corrects_invoice_id)
+    from public.invoices parent
+    join ancestors on parent.id = ancestors.parent_id
+    where parent.organization_id = p_organization_id
+  ), chain(id, generation, rank) as (
+    select ancestors.id, 0, 0 from ancestors where ancestors.parent_id is null
+    union
+    select child.id, chain.generation + 1, case when child.cancels_invoice_id is not null then 0 else 1 end
+    from public.invoices child
+    join chain on chain.id in (child.cancels_invoice_id, child.corrects_invoice_id)
+    where child.organization_id = p_organization_id
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', invoice.id,
+    'invoiceNumber', invoice.invoice_number,
+    'status', invoice.status,
+    'kind', case
+      when invoice.cancels_invoice_id is not null then 'storno'
+      when invoice.corrects_invoice_id is not null then 'korrektur'
+      else 'rechnung'
+    end,
+    'issueDate', invoice.issue_date
+  ) order by chain.generation, chain.rank), '[]')
+  from chain
+  join public.invoices invoice on invoice.id = chain.id and invoice.organization_id = p_organization_id;
+$$;
+revoke all on function app_private.invoice_chain(uuid, uuid) from public, anon, authenticated;
+grant execute on function app_private.invoice_chain(uuid, uuid) to service_role;
+
+-- The links join the answer: the invoice a Stornorechnung cancels with its
+-- number and Rechnungsdatum, the reason, and the chain. Otherwise as in
+-- 20261216100000_issue_invoices_with_gapless_numbers.sql.
+create or replace function public.get_invoice(p_organization_id uuid, p_invoice_id uuid)
+returns jsonb language sql stable security invoker set search_path = '' as $$
+  select jsonb_build_object(
+    'id', invoice.id,
+    'invoiceNumber', invoice.invoice_number,
+    'status', invoice.status,
+    'version', invoice.version,
+    'serviceStart', invoice.service_start,
+    'serviceEnd', invoice.service_end,
+    'paymentDueDays', invoice.payment_due_days,
+    'discountDays', invoice.discount_days,
+    'discountBasisPoints', invoice.discount_basis_points,
+    'orderReference', invoice.order_reference,
+    'buyerReference', invoice.buyer_reference,
+    'openingText', invoice.opening_text,
+    'closingText', invoice.closing_text,
+    'lineNetCents', invoice.line_net_cents,
+    'taxCents', invoice.tax_cents,
+    'grossCents', invoice.gross_cents,
+    'issueDate', invoice.issue_date,
+    'issueSnapshot', invoice.issue_snapshot,
+    'original', (select jsonb_build_object('documentId', document.id, 'filed', document.filed_at is not null)
+      from public.documents document
+      where document.id = invoice.original_document_id and document.organization_id = p_organization_id),
+    'cancels', (select jsonb_build_object('id', cancelled.id, 'invoiceNumber', cancelled.invoice_number,
+        'issueDate', cancelled.issue_date)
+      from public.invoices cancelled
+      where cancelled.id = invoice.cancels_invoice_id and cancelled.organization_id = p_organization_id),
+    'cancellationReason', invoice.cancellation_reason,
+    'chain', app_private.invoice_chain(p_organization_id, invoice.id),
+    'client', jsonb_build_object('id', client.id, 'name', client.name),
+    'recipient', jsonb_build_object('id', recipient.id, 'name', recipient.name, 'address', recipient.address),
+    'work', coalesce(
+      (select jsonb_build_object('kind', 'job', 'id', job.id, 'number', job.job_number, 'title', job.title)
+        from public.jobs job where job.id = invoice.job_id and job.organization_id = p_organization_id),
+      (select jsonb_build_object('kind', 'project', 'id', project.id, 'number', project.project_number,
+          'title', project.name)
+        from public.projects project
+        where project.id = invoice.project_id and project.organization_id = p_organization_id),
+      (select jsonb_build_object('kind', 'service_case', 'id', service_case.id,
+          'number', service_case.case_number, 'title', service_case.summary)
+        from public.service_cases service_case
+        where service_case.id = invoice.service_case_id and service_case.organization_id = p_organization_id)
+    ),
+    'lines', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'name', line.name,
+        'description', line.description,
+        'quantity', line.quantity::text,
+        'unit', line.unit,
+        'unitPriceCents', line.unit_price_cents,
+        'priceQuantity', line.price_quantity,
+        'taxCategory', line.tax_category,
+        'taxRateBasisPoints', line.tax_rate_basis_points,
+        'netCents', line.net_cents
+      ) order by line.position)
+      from public.invoice_lines line
+      where line.invoice_id = invoice.id and line.organization_id = p_organization_id
+    ), '[]')
+  )
+  from public.invoices invoice
+  join public.clients client on client.id = invoice.client_id and client.organization_id = p_organization_id
+  join public.clients recipient
+    on recipient.id = invoice.recipient_client_id and recipient.organization_id = p_organization_id
+  where invoice.organization_id = p_organization_id and invoice.id = p_invoice_id;
+$$;
+revoke all on function public.get_invoice(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.get_invoice(uuid, uuid) to service_role;
+
+-- A row names the invoice its Stornorechnung or correction refers to, and the
+-- search finds a Stornorechnung and a correction by that number too.
+-- Otherwise as in 20261215100000_keep_invoice_drafts_with_their_lines_and_totals.sql.
+create or replace function public.list_invoice_page(
+  p_organization_id uuid,
+  p_status text default null,
+  p_search text default '',
+  p_page integer default 1,
+  p_page_size integer default 50
+) returns jsonb language sql stable security invoker set search_path = '' as $$
+  with matching as materialized (
+    select invoice.id, invoice.updated_at
+    from public.invoices invoice
+    join public.clients client on client.id = invoice.client_id and client.organization_id = p_organization_id
+    join public.clients recipient
+      on recipient.id = invoice.recipient_client_id and recipient.organization_id = p_organization_id
+    left join public.invoices referred
+      on referred.id = coalesce(invoice.cancels_invoice_id, invoice.corrects_invoice_id)
+      and referred.organization_id = p_organization_id
+    where invoice.organization_id = p_organization_id
+      and (p_status is null or invoice.status = p_status)
+      and (
+        coalesce(p_search, '') = ''
+        or strpos(lower(concat_ws(' ', invoice.invoice_number, client.name, recipient.name,
+          referred.invoice_number)), lower(p_search)) > 0
+      )
+  ), page as (
+    select * from matching order by updated_at desc, id desc
+    limit least(greatest(p_page_size, 1), 100)
+    offset (greatest(p_page, 1)::bigint - 1) * least(greatest(p_page_size, 1), 100)
+  ) select jsonb_build_object(
+    'total', (select count(*) from matching),
+    'hasAny', exists (select 1 from public.invoices invoice where invoice.organization_id = p_organization_id),
+    'rows', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', invoice.id,
+        'invoiceNumber', invoice.invoice_number,
+        'status', invoice.status,
+        'clientName', client.name,
+        'recipientName', case when invoice.recipient_client_id <> invoice.client_id then recipient.name end,
+        'grossCents', invoice.gross_cents,
+        'updatedAt', invoice.updated_at,
+        'refersTo', case when referred.id is not null then jsonb_build_object(
+          'kind', case when invoice.cancels_invoice_id is not null then 'storno' else 'korrektur' end,
+          'invoiceNumber', referred.invoice_number) end
+      ) order by page.updated_at desc, page.id desc)
+      from page
+      join public.invoices invoice on invoice.id = page.id and invoice.organization_id = p_organization_id
+      join public.clients client on client.id = invoice.client_id and client.organization_id = p_organization_id
+      join public.clients recipient
+        on recipient.id = invoice.recipient_client_id and recipient.organization_id = p_organization_id
+      left join public.invoices referred
+        on referred.id = coalesce(invoice.cancels_invoice_id, invoice.corrects_invoice_id)
+        and referred.organization_id = p_organization_id
+    ), '[]')
+  );
+$$;
+revoke all on function public.list_invoice_page(uuid, text, text, integer, integer) from public, anon, authenticated;
+grant execute on function public.list_invoice_page(uuid, text, text, integer, integer) to service_role;

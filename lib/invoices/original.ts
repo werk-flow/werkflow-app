@@ -9,6 +9,7 @@ import { renderEInvoicePdf } from '@/lib/document-rendering/e-invoice';
 import { invoiceDocument } from '@/lib/document-rendering/invoice-layout';
 import type { BusinessDocument } from '@/lib/document-rendering/model';
 import { renderBusinessDocument } from '@/lib/document-rendering/render';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { buildDocumentStoragePath } from '@/lib/documents/storage-path';
 import { unitShortLabelOrStored } from '@/lib/inventory/article-terms-format';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
@@ -17,11 +18,11 @@ import type { CalculatedInvoice } from '@/lib/invoicing/model';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
 import { logError } from '@/lib/logging';
 import { discardStorageObjects, putStorageObject } from '@/lib/storage/r2';
-import type { AdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { isConfirmedWriteRefusal } from '@/lib/supabase/write-refusal';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { invoiceDraftOf, type IssueSnapshot } from './issue-model';
+import { invoiceDraftOf, issueFindingsOf, type IssueFinding, type IssueSnapshot } from './issue-model';
 import type { InvoiceDetail } from './types';
 
 // The original of an issued invoice: the ZUGFeRD PDF/A-3 rendered from the
@@ -96,6 +97,40 @@ export async function renderInvoicePdf(
   return xml === null ? renderBusinessDocument(document) : renderEInvoicePdf(document, xml);
 }
 
+const HEAD_TOO_TALL: IssueFinding = {
+  label:
+    'Der Briefkopf lässt keinen Platz für die Positionen: kürze Bestellnummer oder Referenz, oder verkleinere die Ränder des Briefpapiers',
+  href: '/einstellungen/dokumente',
+};
+
+/**
+ * What keeps an invoice from its number, checked under a placeholder number
+ * and today's date: the EN 16931 rules, then an original whose head leaves
+ * room for the lines. Empty when it passes; null without a Leistungsdatum.
+ */
+export async function findingsBeforeNumber(
+  organizationId: string,
+  invoice: Parameters<typeof calculatedInvoiceOf>[0] & { recipient: { id: string } },
+  snapshot: IssueSnapshot,
+): Promise<IssueFinding[] | null> {
+  const calculated = calculatedInvoiceOf(invoice, snapshot, {
+    number: 'ENTWURF',
+    issueDate: getBusinessTodayIso(),
+  });
+  if (!calculated) return null;
+  const xml = toEn16931(calculated);
+  const check = await checkEn16931(xml);
+  if (!check.valid) return issueFindingsOf(check.errors, invoice.recipient.id);
+  const units = invoice.lines.map((line) => line.unit);
+  const rendered = await renderInvoicePdf(organizationId, { calculated, units, snapshot }, xml).catch(
+    (renderError: unknown) => {
+      if (renderError instanceof RangeError) return null;
+      throw renderError;
+    },
+  );
+  return rendered ? [] : [HEAD_TOO_TALL];
+}
+
 /** The original's bytes: the checked EN 16931 XML inside the PDF/A-3. Throws when the rules refuse it. */
 async function renderOriginal(organizationId: string, invoice: IssuedInvoice): Promise<Uint8Array> {
   const calculated = calculatedInvoiceOf(invoice, invoice.snapshot, {
@@ -116,9 +151,9 @@ const registeredSchema = z.object({
   contentHash: z.string().nullable(),
 });
 
-/** The file name of an invoice's original. */
-function originalFileName(invoiceNumber: string): string {
-  return `Rechnung ${invoiceNumber}.pdf`;
+/** The file name of an invoice's original: a Stornorechnung says so. */
+function originalFileName(invoice: Pick<IssuedInvoice, 'invoiceNumber' | 'cancels'>): string {
+  return `${invoice.cancels ? 'Stornorechnung' : 'Rechnung'} ${invoice.invoiceNumber}.pdf`;
 }
 
 /**
@@ -127,13 +162,32 @@ function originalFileName(invoiceNumber: string): string {
  * filed now. The caller established the actor, the organization and the
  * office role.
  */
-export async function fileInvoiceOriginalFor(
+async function fileInvoiceOriginalFor(
   admin: AdminClient,
   context: { userId: string; orgId: string },
   invoice: IssuedInvoice,
 ): Promise<boolean> {
   if (invoice.original?.filed) return true;
   return (await registerOriginal(admin, context, invoice)) !== null;
+}
+
+/**
+ * Files the original of an invoice as read back after its issue; whether it
+ * is filed now. A failure leaves it pending („Beleg erstellen“) and is logged.
+ */
+export async function fileIssuedOriginal(
+  context: { userId: string; orgId: string },
+  issued:
+    | (InvoiceDetail & { issue: Pick<IssuedInvoice, 'invoiceNumber' | 'issueDate' | 'snapshot'> | null })
+    | null,
+): Promise<boolean> {
+  try {
+    if (!issued?.issue) return false;
+    return await fileInvoiceOriginalFor(createSupabaseAdminClient(), context, { ...issued, ...issued.issue });
+  } catch (error) {
+    logError('fileIssuedOriginal: original not filed', error);
+    return false;
+  }
 }
 
 /** Renders and stores the original and registers and files it once; answers the document, or null. */
@@ -145,7 +199,7 @@ async function registerOriginal(
   const bytes = await renderOriginal(context.orgId, invoice);
   const contentHash = createHash('sha256').update(bytes).digest('hex');
   const ownDocumentId = randomUUID();
-  const fileName = originalFileName(invoice.invoiceNumber);
+  const fileName = originalFileName(invoice);
   const path = buildDocumentStoragePath({
     organizationId: context.orgId,
     documentId: ownDocumentId,
