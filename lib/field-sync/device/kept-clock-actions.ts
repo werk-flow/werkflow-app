@@ -178,6 +178,8 @@ export async function setAsideUnreadableKeptAction(key: string, userId: string):
   const operationId = key.slice(KEPT_CLOCK_ACTION_PREFIX.length).split(':').slice(2).join(':');
   const call = await callState({ operationId, capturedAt: new Date(tapTimeOf(key)).toISOString() });
   if (call.runs) return 'sending';
+  // Another tab may have deleted or rewritten the stop meanwhile; from here on nothing else runs before the move ends.
+  if (localStorage.getItem(key) !== value) return 'gone';
   localStorage.setItem(SET_ASIDE_CLOCK_ACTION_PREFIX + key.slice(KEPT_CLOCK_ACTION_PREFIX.length), value);
   localStorage.removeItem(key);
   return 'set_aside';

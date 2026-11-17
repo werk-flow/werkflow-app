@@ -337,6 +337,16 @@ test('a stop this version cannot read can be set aside: the tap behind it is sen
   await expect(setAside.getByRole('listitem')).toHaveText(/^Nicht lesbare Stempelzeit/);
   await expect(unsentBadge(clockDock(page))).toHaveText('Beiseitegelegt');
 
+  // The set-aside record stops nothing: a tap without signal is kept, and sent once the signal returns.
+  await setNetwork(page, server, false);
+  await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
+  await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
+  await setNetwork(page, server, true);
+  await expect.poll(() => server.sent.map(({ payload }) => payload.action)).toEqual(['start', 'start']);
+  await expect(unsentBadge(clockDock(page))).toHaveText('Beiseitegelegt');
+  if (!(await section.isVisible()))
+    await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await setAside.getByRole('button', { name: 'Für den Support kopieren', exact: true }).click();
   await expect(setAside.getByRole('button', { name: 'Kopiert', exact: true })).toBeVisible();
@@ -350,7 +360,7 @@ test('a stop this version cannot read can be set aside: the tap behind it is sen
     .getByRole('button', { name: 'Endgültig löschen', exact: true })
     .click();
   await expect(section).toHaveCount(0);
-  expect(server.sent).toHaveLength(1);
+  expect(server.sent).toHaveLength(2);
 });
 
 test('a session end that runs longer than ten minutes keeps its barrier fresh, so no tab keeps behind its back', async ({

@@ -265,7 +265,10 @@ async function isolatedTests(): Promise<void> {
       const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
       storage.set(stop, NEWER);
       keepClockAction(start(WORKER, '50000000-0000-4000-8000-0000000000f1', '2026-11-11T07:05:00.000Z'), '');
-      await holdClock(WORKER, () => undefined);
+      let shown: { status: string } | null = null;
+      await holdClock(WORKER, (view) => {
+        shown = view;
+      });
       await sendOwnTimeEvents();
       // Behind the stop, the later tap waits kept and nothing leaves the phone.
       expect(sends).toBe(0);
@@ -281,6 +284,34 @@ async function isolatedTests(): Promise<void> {
       expect(storage.get(aside)).toBe(NEWER);
       await sendOwnTimeEvents();
       expect(sends).toBe(1);
+      // The clock is no stopped chain: a tap without signal is kept again (clock-outbox-state.ts).
+      expect(shown).toEqual(expect.objectContaining({ status: 'set_aside', events: [] }));
+    });
+
+    test('never brings back a stop another tab deleted while the move waited', async () => {
+      const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
+      storage.set(stop, NEWER);
+      await holdClock(WORKER, () => undefined);
+      // Another tab, possibly of an earlier version, deletes the stop while this tab asks whether its call runs.
+      const locks = navigator.locks;
+      const request = locks.request.bind(locks);
+      Object.defineProperty(navigator, 'locks', {
+        configurable: true,
+        value: {
+          ...locks,
+          request: (...args: Parameters<LockManager['request']>) => {
+            if (args[0].startsWith('werkflow-clock-call:')) storage.delete(stop);
+            return request(...args);
+          },
+        },
+      });
+      try {
+        expect(await setAsideShownStop(stop)).toBe('gone');
+      } finally {
+        Object.defineProperty(navigator, 'locks', { configurable: true, value: locks });
+      }
+
+      expect([...storage.keys()].filter((key) => key.startsWith('werkflow:unsent:clock'))).toEqual([]);
     });
 
     test('is never taken in or sent, also by a version that can read it: the person settles it through the correction', async () => {

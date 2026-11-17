@@ -63,8 +63,12 @@ export type UnsentTimeEvent = Pick<
 
 /** What the clock shows of one person's unsent events. */
 export type ClockDeviceView = {
-  /** `stopped`: the first event needs the person's decision, and nothing behind it is sent. */
-  status: 'pending' | 'stopped';
+  /**
+   * `stopped`: the first event needs the person's decision, and nothing behind it is sent.
+   * `set_aside`: no event, only records the person set aside; they hold nothing back, so a tap is
+   * kept or goes online as without them.
+   */
+  status: 'pending' | 'stopped' | 'set_aside';
   /** The clock with every unsent event applied; null for a stopped chain, where the server's state stands. */
   state: LiveClockState | null;
   /**
@@ -75,8 +79,8 @@ export type ClockDeviceView = {
   events: UnsentTimeEvent[];
   /**
    * The records the person set aside (kept-clock-actions.ts), by key and tap time: shown beside the
-   * chain, never part of it. A view of set-aside records alone is `stopped` with no events: the
-   * clock shows the server's state, and a new tap goes online.
+   * chain, never part of it. A view of set-aside records alone is `set_aside` with no events:
+   * the clock shows the server's state.
    */
   setAside: SetAsideClockRecord[];
 };
@@ -191,9 +195,10 @@ export function withUnreadable(
       ? { ...event, status: 'held' as const }
       : event,
   );
-  const stopped = marked[0]?.status !== 'pending';
+  const head = marked[0];
+  const stopped = head !== undefined && head.status !== 'pending';
   return {
-    status: stopped ? 'stopped' : 'pending',
+    status: head === undefined ? 'set_aside' : stopped ? 'stopped' : 'pending',
     state: stopped ? null : (view?.state ?? null),
     chainSegmentId: view?.chainSegmentId ?? null,
     events: marked,
