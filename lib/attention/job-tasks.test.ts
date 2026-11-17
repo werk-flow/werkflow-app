@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { lastVisitDate, toJobPlanningTasks, type OverdueJobRow, type UnplannedJobRow } from './job-tasks';
+import { toJobPlanningTasks, type OverdueJobRow, type UnplannedJobRow } from './job-tasks';
 
 const unplanned = (overrides: Partial<UnplannedJobRow> = {}): UnplannedJobRow => ({
   id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d01',
@@ -19,7 +19,13 @@ const overdue = (overrides: Partial<OverdueJobRow> = {}): OverdueJobRow => ({
   ...overrides,
 });
 
-describe('lastVisitDate', () => {
+/** The last visit day a job past its visits names, seen long after it. */
+function lastVisitDate(ends: Pick<OverdueJobRow, 'last_timed_end' | 'last_all_day_end'>): string | null {
+  const [task] = toJobPlanningTasks({ unplannedJobs: [], overdueJobs: [overdue(ends)] }, '2099-01-01');
+  return task?.sourceType === 'job_past_last_visit' ? task.lastVisitDate : null;
+}
+
+describe('the last visit day', () => {
   // Each row: the last timed end, the last all-day end (exclusive), and the Berlin day the visits end on.
   const cases: [string, string | null, string | null, string][] = [
     ['a timed visit ends on its Berlin day', '2026-11-30T16:00:00Z', null, '2026-11-30'],

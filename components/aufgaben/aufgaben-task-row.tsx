@@ -306,7 +306,7 @@ function AttentionJobTaskRow({ task }: { task: AttentionJobTask }) {
     >
       <p className="truncate text-sm font-medium">{task.jobLabel}</p>
       <p className="text-xs text-muted-foreground tabular-nums">
-        Kein Termin, niemand zugewiesen · angelegt am {formatGermanDate(task.createdDate)}
+        Ohne Termin, niemand zugewiesen · angelegt am {formatGermanDate(task.createdDate)}
       </p>
     </TaskLink>
   );
