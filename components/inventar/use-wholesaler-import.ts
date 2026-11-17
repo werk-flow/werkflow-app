@@ -319,18 +319,19 @@ async function repriced(
   return priced?.success ? { ...current, prices: priced.prices } : null;
 }
 
-/** Confirms a preview with the office's units and rebates: the result step, or the failure's sentence. */
+/** Confirms a preview with the office's units and rebates: the result step, prices changed since the price preview, or the failure's sentence. */
 async function confirmPreview(
   current: WholesalerImportPreview,
   mapping: Readonly<Record<string, InventoryUnitCode | null>>,
   rebates: WholesalerRebates,
-): Promise<WholesalerImportStep | { error: string }> {
+): Promise<WholesalerImportStep | { error: string } | 'prices_changed'> {
   const unitMapping = Object.fromEntries(
     current.units.map((unit) => [unit.unitText, mapping[unit.unitText] ?? null]),
   );
   const result = await confirmWholesalerImport({ importId: current.importId, unitMapping, rebates }).catch(
     () => null,
   );
+  if (result?.success === false && result.error === 'prices_changed') return 'prices_changed';
   // A confirm sent twice writes once, so trying again is safe.
   if (!result?.success) {
     return {
@@ -343,6 +344,30 @@ async function confirmPreview(
     result: result.result,
     alreadyConfirmed: result.alreadyConfirmed,
   };
+}
+
+/**
+ * The confirm writes only prices the office saw: rebates typed since the last
+ * pricing, or a reference or price another session changed since then, price
+ * the articles again and ask the office to check them. Otherwise the confirm's
+ * result step, or the failure's sentence.
+ */
+async function confirmOrReprice(
+  current: WholesalerImportPreview,
+  mapping: Readonly<Record<string, InventoryUnitCode | null>>,
+  rebates: WholesalerRebates,
+): Promise<
+  { step: WholesalerImportStep } | { preview: WholesalerImportPreview; error: string } | { error: string }
+> {
+  let check = 'Die Preise sind mit deinen Rabatten neu berechnet. Prüfe sie und übernimm dann.';
+  if (pricedWith(current.prices, rebates)) {
+    const next = await confirmPreview(current, mapping, rebates);
+    if (next !== 'prices_changed') return 'error' in next ? next : { step: next };
+    check =
+      'Preise oder Lieferanten eigener Artikel haben sich seit der Vorschau geändert. Prüfe die Preise und übernimm dann.';
+  }
+  const preview = await repriced(current, rebates);
+  return preview ? { preview, error: check } : { error: REPRICE_FAILED };
 }
 
 /** The confirm's first line: pricing when the typed rebates differ from the priced ones. */
@@ -415,17 +440,10 @@ export function useWholesalerImport({ onOpenChange }: { onOpenChange: (open: boo
       const rebates = decisions.readyRebates();
       if (!rebates || !decisions.readyToConfirm()) return;
       runStep(rebatesShownOrPricing(current, rebates), async () => {
-        // The confirm writes only prices the office saw: rebates typed since
-        // the last pricing price the articles again first.
-        if (!pricedWith(current.prices, rebates)) {
-          const preview = await repriced(current, rebates);
-          if (!preview) return setError(REPRICE_FAILED);
-          setStep({ kind: 'preview', preview, supplierId });
-          return setError('Die Preise sind mit deinen Rabatten neu berechnet. Prüfe sie und übernimm dann.');
-        }
-        const next = await confirmPreview(current, decisions.unitMapping, rebates);
+        const next = await confirmOrReprice(current, decisions.unitMapping, rebates);
+        if ('preview' in next) setStep({ kind: 'preview', preview: next.preview, supplierId });
         if ('error' in next) return setError(next.error);
-        setStep(next);
+        if ('step' in next) setStep(next.step);
       });
     },
     backToChoose: () => {

@@ -23,7 +23,11 @@
 --    article's base unit.
 -- 4. public.preview_supplier_catalog_import_prices answers the rebate groups
 --    of the proposals and the changes, for the rebates the office entered, or
---    at first for the saved ones and else the delivery's own percentages.
+--    at first for the saved ones and else the delivery's own percentages. It
+--    keeps a fingerprint of the changes it answered on the batch; the confirm
+--    computes the changes again and refuses with prices_changed when they
+--    differ, so it never writes a price the office did not see (a reference or
+--    a price another session changed in between).
 -- 5. public.confirm_supplier_catalog_import gains p_rebates: the confirm saves
 --    the rebates and writes each changed price through the one price write of
 --    werk-flow/werkflow-planning#373, source datanorm, from the delivery's
@@ -33,7 +37,10 @@
 --    price of a list-priced row whose rebate group has a saved rebate.
 -- 7. A reviewed CSV row that matches an own article records its prices from
 --    today, source csv_import, where they differ from today's, and answers each
---    change with the old and the new price.
+--    change with the old and the new price, but only in a batch whose preview
+--    showed price changes (inventory_import_batches.prices_previewed): the new
+--    eight-argument preview_inventory_import marks it. A batch the previous
+--    release previewed, before or after this migration, books as before.
 --
 -- Prices change only through new dated rows (app_private.record_inventory_item_price);
 -- whether a price differs is one rule (app_private.inventory_price_differs).
@@ -72,10 +79,22 @@ grant select on table public.inventory_supplier_rebates to service_role;
 
 -- The rebates the confirm applied, rebate group to hundredths of a percent.
 -- Only the confirm writes it, after app_private.is_supplier_rebate_mapping.
-alter table public.inventory_supplier_catalog_imports add column rebates jsonb;
+alter table public.inventory_supplier_catalog_imports
+  add column rebates jsonb,
+  -- md5 of the own articles' price changes the last price preview answered.
+  add column price_preview_hash text;
+
+-- Whether the batch's preview showed the price changes of matched articles;
+-- only such a batch changes them when it books.
+alter table public.inventory_import_batches
+  add column prices_previewed boolean not null default false;
 
 comment on column public.inventory_supplier_catalog_imports.rebates is
   'The rebates the confirm applied to own articles, rebate group to hundredths of a percent.';
+comment on column public.inventory_supplier_catalog_imports.price_preview_hash is
+  'Fingerprint of the own articles'' price changes the last price preview showed; the confirm requires it.';
+comment on column public.inventory_import_batches.prices_previewed is
+  'The preview showed the price changes of matched articles, so the booking records them.';
 
 -- 2. The net cost of a list price: rounded once, half away from zero.
 create function app_private.supplier_net_cost_cents(p_list_cents integer, p_rebate_basis_points integer)
@@ -293,6 +312,41 @@ as $$
   ) old;
 $$;
 
+-- The changed prices of a batch's proposals for p_rebates, as the preview
+-- answers them and the confirm compares them: one array in a fixed order.
+create function app_private.supplier_catalog_import_price_changes(
+  p_organization_id uuid,
+  p_import_id uuid,
+  p_rebates jsonb
+)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path to ''
+as $$
+  select coalesce(jsonb_agg(
+    jsonb_build_object(
+      'item_id', proposal.item_id,
+      'item_name', proposal.item_name,
+      'item_unit', proposal.item_unit,
+      'article_number', proposal.article_number,
+      'unit_text', proposal.unit_text,
+      'catalog_unit', proposal.catalog_unit,
+      'kind', proposal.kind,
+      'rebate_group', proposal.rebate_group,
+      'rebate_basis_points', proposal.rebate_basis_points,
+      'old_amount_cents', proposal.old_amount_cents,
+      'old_price_quantity', proposal.old_price_quantity,
+      'new_amount_cents', proposal.new_amount_cents,
+      'new_price_quantity', proposal.new_price_quantity,
+      'valid_from', proposal.valid_from
+    ) order by proposal.item_name, proposal.item_id, proposal.kind
+  ), '[]'::jsonb)
+  from app_private.supplier_catalog_import_price_proposals(p_organization_id, p_import_id, p_rebates) proposal
+  where proposal.is_change;
+$$;
+
 -- The rebate groups of a batch's list-priced proposals with their text, the
 -- office's saved rebate and the delivery's own percentage, in group order.
 create function app_private.supplier_catalog_import_rebate_groups(p_organization_id uuid, p_import_id uuid)
@@ -342,7 +396,8 @@ $$;
 
 -- 4. The rebate groups and the own articles' price changes of a previewed
 -- batch, for p_rebates, or with p_rebates null for the saved rebates and else
--- the delivery's percentages. Writes nothing.
+-- the delivery's percentages. Writes no price and no rebate; keeps the
+-- answer's fingerprint on the batch for the confirm.
 -- Refusals: not_authorized, import_not_found, invalid_input.
 create function public.preview_supplier_catalog_import_prices(
   p_organization_id uuid,
@@ -377,27 +432,10 @@ begin
   into v_groups, v_rebates
   from app_private.supplier_catalog_import_rebate_groups(p_organization_id, p_import_id) listed;
 
-  select coalesce(jsonb_agg(
-    jsonb_build_object(
-      'item_id', proposal.item_id,
-      'item_name', proposal.item_name,
-      'item_unit', proposal.item_unit,
-      'article_number', proposal.article_number,
-      'unit_text', proposal.unit_text,
-      'catalog_unit', proposal.catalog_unit,
-      'kind', proposal.kind,
-      'rebate_group', proposal.rebate_group,
-      'rebate_basis_points', proposal.rebate_basis_points,
-      'old_amount_cents', proposal.old_amount_cents,
-      'old_price_quantity', proposal.old_price_quantity,
-      'new_amount_cents', proposal.new_amount_cents,
-      'new_price_quantity', proposal.new_price_quantity,
-      'valid_from', proposal.valid_from
-    ) order by proposal.item_name, proposal.item_id, proposal.kind
-  ), '[]'::jsonb)
-  into v_changes
-  from app_private.supplier_catalog_import_price_proposals(p_organization_id, p_import_id, v_rebates) proposal
-  where proposal.is_change;
+  v_changes := app_private.supplier_catalog_import_price_changes(p_organization_id, p_import_id, v_rebates);
+  -- The confirm writes only what this answer shows.
+  update public.inventory_supplier_catalog_imports batch set price_preview_hash = md5(v_changes::text)
+  where batch.id = p_import_id and batch.organization_id = p_organization_id;
 
   return jsonb_build_object('rebate_groups', v_groups, 'rebates', v_rebates, 'changes', v_changes);
 end;
@@ -407,7 +445,8 @@ $$;
 -- unit mapping, as in 20261214090001, and with p_rebates also saves the
 -- rebates and records each changed price of an own article whose unit the
 -- mapping keeps. A confirmed batch answers its stored result again.
--- Refusals: not_authorized, import_not_found, invalid_input.
+-- Refusals: not_authorized, import_not_found, invalid_input, prices_changed
+-- (the changes differ from the last price preview's).
 create function public.confirm_supplier_catalog_import(
   p_organization_id uuid,
   p_actor_id uuid,
@@ -464,14 +503,13 @@ begin
     order by item.id
     for no key update of item;
 
-    -- Read before the catalog and the staged lines change.
-    select coalesce(jsonb_agg(to_jsonb(proposal) order by proposal.item_id, proposal.kind), '[]'::jsonb)
-    into v_changes
-    from app_private.supplier_catalog_import_price_proposals(p_organization_id, p_import_id, p_rebates) proposal
-    -- An article line's unit is the office's mapping of its text; a price
-    -- line's is the catalog's. A price applies only in the article's unit.
-    where proposal.is_change
-      and proposal.item_unit = coalesce(p_unit_mapping ->> proposal.unit_text, proposal.catalog_unit);
+    -- Read before the catalog and the staged lines change, and only as the
+    -- last price preview showed it: a reference or a price another session
+    -- changed since then makes the office look again.
+    v_changes := app_private.supplier_catalog_import_price_changes(p_organization_id, p_import_id, p_rebates);
+    if v_import.price_preview_hash is distinct from md5(v_changes::text) then
+      raise exception 'prices_changed';
+    end if;
   end if;
 
   select * into v_other from app_private.supplier_catalog_import_other_effects(p_organization_id, p_import_id);
@@ -611,7 +649,13 @@ begin
       updated_at = now()
     where office.rebate_basis_points <> excluded.rebate_basis_points;
 
-    for v_change in select change.value from jsonb_array_elements(v_changes) change loop
+    -- An article line's unit is the office's mapping of its text; a price
+    -- line's is the catalog's. A price applies only in the article's unit.
+    for v_change in
+      select change.value from jsonb_array_elements(v_changes) change
+      where change.value->>'item_unit'
+        = coalesce(p_unit_mapping ->> (change.value->>'unit_text'), change.value->>'catalog_unit')
+    loop
       if app_private.record_imported_inventory_item_price(
         p_organization_id, p_actor_id, (v_change->>'item_id')::uuid, v_change->>'kind',
         (v_change->>'new_amount_cents')::integer, (v_change->>'new_price_quantity')::integer,
@@ -865,13 +909,18 @@ begin
     ) then
       raise exception 'barcode_taken';
     end if;
-    -- The row's prices per one base unit become the matched article's prices from today.
+    -- The row's prices per one base unit become the matched article's prices
+    -- from today, in a batch whose preview showed them.
     for v_price in
       select price.kind, price.amount_cents from (values
         ('purchase', v_fields.purchase_price_cents),
         ('sale', v_fields.sale_price_cents)
       ) as price (kind, amount_cents)
-      where price.amount_cents is not null
+      where price.amount_cents is not null and exists (
+        select 1 from public.inventory_import_batches batch
+        where batch.id = p_import_batch_id and batch.organization_id = p_organization_id
+          and batch.prices_previewed
+      )
     loop
       v_change := app_private.record_imported_inventory_item_price(
         p_organization_id, p_actor_id, v_item.id, v_price.kind, v_price.amount_cents, 1,
@@ -919,6 +968,100 @@ begin
 end;
 $$;
 
+-- 7. The CSV preview as in 20261202120000, with p_with_prices marking the
+-- batch whose preview shows the matched articles' price changes. The
+-- previous release's seven-argument call previews and books as before.
+create function public.preview_inventory_import(
+  p_organization_id uuid,
+  p_actor_id uuid,
+  p_file_name text,
+  p_column_mapping jsonb,
+  p_content_hash text,
+  p_mode text,
+  p_rows jsonb,
+  p_with_prices boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to ''
+as $$
+declare
+  v_batch_id uuid;
+  v_results jsonb;
+begin
+  perform app_private.lock_inventory_manager(p_organization_id, p_actor_id);
+  if p_mode not in ('stock', 'master_data') or jsonb_typeof(p_rows) is distinct from 'array'
+    or jsonb_array_length(p_rows) = 0 or p_with_prices is null
+  then
+    raise exception 'invalid_input';
+  end if;
+
+  insert into public.inventory_import_batches (
+    organization_id, file_name, status, column_mapping, row_count, created_by, content_hash, mode, staged_rows,
+    prices_previewed
+  ) values (
+    p_organization_id, p_file_name, 'draft', coalesce(p_column_mapping, '{}'::jsonb),
+    jsonb_array_length(p_rows), p_actor_id, p_content_hash, p_mode, p_rows, p_with_prices
+  )
+  returning id into v_batch_id;
+
+  begin
+    v_results := app_private.apply_inventory_import_rows(
+      p_organization_id, p_actor_id, v_batch_id, p_rows, p_mode, null
+    );
+    -- Local variables keep their values; every write of the block rolls back.
+    raise exception 'inventory_import_preview_done';
+  exception when others then
+    if sqlerrm <> 'inventory_import_preview_done' then
+      raise;
+    end if;
+  end;
+
+  -- The booking holds to this: each row notes the article and the Lager it
+  -- resolved to, or the rejection it showed. Managers read the staged rows
+  -- through the Data API, so a rejection keeps no SQLSTATE.
+  update public.inventory_import_batches batch set staged_rows = (
+    select jsonb_agg(
+      case
+        when staged.value ? 'rejection' then staged.value
+        when result.value->>'outcome' = 'rejected'
+          then staged.value || jsonb_build_object('previewed_rejection', result.value - 'index' - 'code')
+        else staged.value || jsonb_build_object(
+          'previewed_item', result.value->>'item_ref',
+          'previewed_location', result.value->'location_ref'
+        )
+      end
+      order by staged.ordinality)
+    from jsonb_array_elements(p_rows) with ordinality staged
+    join jsonb_array_elements(v_results) with ordinality result on result.ordinality = staged.ordinality
+  )
+  where batch.id = v_batch_id;
+
+  return jsonb_build_object('batch_id', v_batch_id, 'rows', v_results);
+end;
+$$;
+
+-- The previous release's preview: its batch books no price of a matched article.
+create or replace function public.preview_inventory_import(
+  p_organization_id uuid,
+  p_actor_id uuid,
+  p_file_name text,
+  p_column_mapping jsonb,
+  p_content_hash text,
+  p_mode text,
+  p_rows jsonb
+)
+returns jsonb
+language sql
+security invoker
+set search_path to ''
+as $$
+  select public.preview_inventory_import(
+    p_organization_id, p_actor_id, p_file_name, p_column_mapping, p_content_hash, p_mode, p_rows, false
+  );
+$$;
+
 revoke all on function app_private.supplier_net_cost_cents(integer, integer)
   from public, anon, authenticated, service_role;
 revoke all on function app_private.inventory_price_differs(integer, integer, integer, integer)
@@ -931,6 +1074,16 @@ revoke all on function app_private.supplier_catalog_import_price_proposals(uuid,
   from public, anon, authenticated, service_role;
 revoke all on function app_private.supplier_catalog_import_rebate_groups(uuid, uuid)
   from public, anon, authenticated, service_role;
+revoke all on function app_private.supplier_catalog_import_price_changes(uuid, uuid, jsonb)
+  from public, anon, authenticated, service_role;
+revoke all on function public.preview_inventory_import(uuid, uuid, text, jsonb, text, text, jsonb, boolean)
+  from public, anon, authenticated;
+revoke all on function public.preview_inventory_import(uuid, uuid, text, jsonb, text, text, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.preview_inventory_import(uuid, uuid, text, jsonb, text, text, jsonb, boolean)
+  to service_role;
+grant execute on function public.preview_inventory_import(uuid, uuid, text, jsonb, text, text, jsonb)
+  to service_role;
 revoke all on function public.preview_supplier_catalog_import_prices(uuid, uuid, uuid, jsonb)
   from public, anon, authenticated;
 revoke all on function public.confirm_supplier_catalog_import(uuid, uuid, uuid, jsonb, jsonb)

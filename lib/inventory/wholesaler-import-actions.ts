@@ -46,7 +46,9 @@ import {
 /** The report lines one call answers; the browser asks for parts until none is left. */
 const REPORT_PART_LINES = 20_000;
 
-const refusal = writeRefusalFor(new Set(['not_authorized', 'supplier_not_found', 'import_not_found']));
+const refusal = writeRefusalFor(
+  new Set(['not_authorized', 'supplier_not_found', 'import_not_found', 'prices_changed']),
+);
 
 type ManagerContext = { success: true; context: ActionContext };
 

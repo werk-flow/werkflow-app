@@ -44,6 +44,8 @@ type WholesalerImportContract = {
   pricingError: string | null;
   /** Keeps the confirm waiting after it records its input, so the dialog stays pending. */
   confirmHeld: boolean;
+  /** The refusal the next confirm answers, such as prices_changed. */
+  confirmError: string | null;
   confirmations: ConfirmWholesalerImportInput[];
   abandoned: string[];
 };
@@ -199,6 +201,7 @@ export function initializeWholesalerImportBoundary(): void {
     pricings: [],
     pricingError: null,
     confirmHeld: false,
+    confirmError: null,
     confirmations: [],
     abandoned: [],
   };
@@ -242,10 +245,18 @@ export async function previewWholesalerPrices(
 
 export async function confirmWholesalerImport(
   input: ConfirmWholesalerImportInput,
-): Promise<{ success: true; result: WholesalerImportResult; alreadyConfirmed: boolean }> {
+): Promise<
+  | { success: true; result: WholesalerImportResult; alreadyConfirmed: boolean }
+  | { success: false; error: string }
+> {
   const contract = window.uiContractWholesalerImport;
   contract.confirmations.push(input);
   if (contract.confirmHeld) return new Promise(() => undefined);
+  if (contract.confirmError) {
+    const error = contract.confirmError;
+    contract.confirmError = null;
+    return { success: false, error };
+  }
   return {
     success: true,
     alreadyConfirmed: false,

@@ -321,6 +321,35 @@ begin
     format($f$select public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
       '47700000-0000-4000-8000-000000000002', %L, '{}', '{"CU1":-1}')$f$, v_import), 'invalid_input');
 
+  -- The last price preview priced AR1 at 10 %; a confirm without it would
+  -- write prices the office did not see.
+  perform pg_temp.expect_refusal('a confirm with other rebates than the last price preview',
+    format($f$select public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
+      '47700000-0000-4000-8000-000000000002', %L, '{"Meter":"meter","Stück":"piece"}',
+      '{"CU1":2500,"AR1":null}')$f$, v_import), 'prices_changed');
+  perform public.preview_supplier_catalog_import_prices('47700000-0000-4000-8000-000000000010',
+    '47700000-0000-4000-8000-000000000002', v_import, '{"CU1":2500,"AR1":null}');
+  -- Another session gives the fitting Nordrohr as its preferred supplier after
+  -- the preview, so the confirm would change a price the preview never listed.
+  perform public.save_inventory_item_supplier('47700000-0000-4000-8000-000000000010',
+    '47700000-0000-4000-8000-000000000002', '47700000-0000-4000-8000-000000000022', 'piece',
+    (select id from public.inventory_item_suppliers where item_id = '47700000-0000-4000-8000-000000000022'
+      and supplier_id = '47700000-0000-4000-8000-000000000030'),
+    '47700000-0000-4000-8000-000000000030', null, 'NR-1502', null, 1, 1, true);
+  perform pg_temp.expect_refusal('a confirm after a reference changed since the price preview',
+    format($f$select public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
+      '47700000-0000-4000-8000-000000000002', %L, '{"Meter":"meter","Stück":"piece"}',
+      '{"CU1":2500,"AR1":null}')$f$, v_import), 'prices_changed');
+  if (select total from pg_temp.price_rows) is distinct from (select total from prices_before) then
+    raise exception 'a refused confirm wrote prices';
+  end if;
+  -- Westrohr preferred again, as the price preview showed it.
+  perform public.save_inventory_item_supplier('47700000-0000-4000-8000-000000000010',
+    '47700000-0000-4000-8000-000000000002', '47700000-0000-4000-8000-000000000022', 'piece',
+    (select id from public.inventory_item_suppliers where item_id = '47700000-0000-4000-8000-000000000022'
+      and supplier_id = '47700000-0000-4000-8000-000000000031'),
+    '47700000-0000-4000-8000-000000000031', null, 'WR-1502', null, 1, 1, true);
+
   v_result := public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
     '47700000-0000-4000-8000-000000000002', v_import, '{"Meter":"meter","Stück":"piece"}',
     '{"CU1":2500,"AR1":null}');
@@ -475,8 +504,18 @@ declare
   v_booking jsonb;
   v_repeat jsonb;
 begin
+  -- A batch the previous release previews and books changes no price.
+  v_preview := public.preview_inventory_import(v_org, '47700000-0000-4000-8000-000000000002', 'alt.csv',
+    '{}'::jsonb, repeat('e', 64), 'master_data', v_rows);
+  v_booking := public.book_inventory_import(v_org, '47700000-0000-4000-8000-000000000002',
+    (v_preview->>'batch_id')::uuid);
+  if v_booking->'rows'->0->'price_changes' is distinct from '[]'::jsonb
+    or (select total from pg_temp.price_rows) is distinct from v_before then
+    raise exception 'a batch of the previous release''s preview changed prices: %', v_booking->'rows';
+  end if;
+
   v_preview := public.preview_inventory_import(v_org, '47700000-0000-4000-8000-000000000002', 'preise.csv',
-    '{}'::jsonb, repeat('f', 64), 'master_data', v_rows);
+    '{}'::jsonb, repeat('f', 64), 'master_data', v_rows, true);
   if v_preview->'rows'->0->'price_changes' is distinct from format('[
       {"kind":"purchase","old_amount_cents":300,"old_price_quantity":1,"new_amount_cents":320,"new_price_quantity":1,"valid_from":"%1$s"},
       {"kind":"sale","old_amount_cents":null,"old_price_quantity":null,"new_amount_cents":450,"new_price_quantity":1,"valid_from":"%1$s"}

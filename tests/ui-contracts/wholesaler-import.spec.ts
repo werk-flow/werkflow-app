@@ -157,6 +157,23 @@ test('a changed rebate prices the own articles again, and the confirm sends that
   ]);
 });
 
+test('prices changed since the price preview are shown again before anything is confirmed', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.uiContractWholesalerImport.confirmError = 'prices_changed';
+  });
+  const dialog = await openPreview(page);
+  await dialog.getByRole('button', { name: 'Übernehmen', exact: true }).click();
+  await expect(dialog.getByText(/haben sich seit der Vorschau geändert/)).toBeVisible();
+  await expect(dialog.getByText('Vorschau der Lieferung. Noch ist nichts übernommen.')).toBeVisible();
+  expect((await contract(page)).pricings).toHaveLength(2);
+
+  await dialog.getByRole('button', { name: 'Übernehmen', exact: true }).click();
+  await expect(dialog.getByText('Die Lieferung ist im Katalog des Großhändlers.')).toBeVisible();
+  expect((await contract(page)).confirmations).toHaveLength(2);
+});
+
 test('a cleared rebate drops the purchase price from the list price', async ({ page }) => {
   const dialog = await openPreview(page);
   const rebate = dialog.getByRole('textbox', { name: /Rabatt in % für „CU1“/ });
