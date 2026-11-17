@@ -3,7 +3,14 @@ import 'fake-indexeddb/auto';
 import { expect, setSystemTime, test } from 'bun:test';
 
 import type { ClockDeviceView } from './time-outbox';
-import { WORKER, capture, command, installTabLocks, keptIds, storage } from '@/lib/testing/fixtures/time-outbox';
+import {
+  WORKER,
+  capture,
+  command,
+  installTabLocks,
+  keptIds,
+  storage,
+} from '@/lib/testing/fixtures/time-outbox';
 import { TODAY_WIPE_KEY, sharedWipeGeneration } from './today-wipe';
 
 // A wipe before this tab's clock outbox listens (werk-flow/werkflow-planning#407): another tab's
