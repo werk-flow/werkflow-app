@@ -34,20 +34,29 @@ async function copyForSupport(key: string): Promise<boolean> {
   }
 }
 
-/** Copies a record for support, shows „Kopiert“ at its button for a moment, and a failure under the buttons. */
+/**
+ * Copies a record for support: its button is pending while the clipboard writes, says „Kopiert“ for
+ * a moment after, and a failure shows under the buttons.
+ */
 export function useCopyForSupport() {
+  const [copying, setCopying] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   async function copy(key: string): Promise<void> {
     setError(null);
-    if (!(await copyForSupport(key))) {
-      setError(COPY_FAILED);
-      return;
+    setCopying(key);
+    try {
+      if (!(await copyForSupport(key))) {
+        setError(COPY_FAILED);
+        return;
+      }
+    } finally {
+      setCopying(null);
     }
     setCopied(key);
     setTimeout(() => setCopied((current) => (current === key ? null : current)), 2000);
   }
-  return { copy, copied, error };
+  return { copy, copying, copied, error };
 }
 
 type CopyForSupport = ReturnType<typeof useCopyForSupport>;
@@ -55,7 +64,13 @@ type CopyForSupport = ReturnType<typeof useCopyForSupport>;
 /** „Für den Support kopieren“ for the record under `recordKey`; it says „Kopiert“ for a moment after it copied. */
 function CopyButton({ recordKey, support }: { recordKey: string; support: CopyForSupport }) {
   return (
-    <Button type="button" variant="outline" className="min-h-11" onClick={() => void support.copy(recordKey)}>
+    <Button
+      type="button"
+      variant="outline"
+      className="min-h-11"
+      pending={support.copying === recordKey}
+      onClick={() => void support.copy(recordKey)}
+    >
       {support.copied === recordKey ? 'Kopiert' : 'Für den Support kopieren'}
     </Button>
   );
