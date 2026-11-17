@@ -133,7 +133,7 @@ async function isolatedTests(): Promise<void> {
   describe('a discard after the session end’s question', () => {
     test('waits only for a send of the chain it deletes from, never for another chain’s (F30)', async () => {
       // The person's start in the other organization waits in its outbox, and a tab sends it.
-      await holdClock(OTHER_COMPANY, () => undefined);
+      await holdClock(OTHER_COMPANY, () => undefined, '');
       keepClockAction(
         start(OTHER_COMPANY, '50000000-0000-4000-8000-0000000000e0', '2026-11-11T07:00:00.000Z'),
         '',
@@ -148,7 +148,7 @@ async function isolatedTests(): Promise<void> {
       try {
         expect(await settles(() => sends === 1)).toBe(true);
         // The person switches away from the active organization, whose start waits too.
-        await holdClock(WORKER, () => undefined);
+        await holdClock(WORKER, () => undefined, '');
         keepClockAction(
           start(WORKER, '50000000-0000-4000-8000-0000000000e1', '2026-11-11T07:01:00.000Z'),
           '',
@@ -171,7 +171,7 @@ async function isolatedTests(): Promise<void> {
     });
 
     test('waits for a send of a tab still on the earlier version, which holds the one lock every chain shared (S1)', async () => {
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       keepClockAction(start(WORKER, '50000000-0000-4000-8000-0000000000e6', '2026-11-11T07:00:00.000Z'), '');
       await takeInKept();
       const shown = await timeUnsentSource.summarize('session');
@@ -199,7 +199,7 @@ async function isolatedTests(): Promise<void> {
     });
 
     test('deletes an action kept behind another chain’s open online call without waiting for that call (F30)', async () => {
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       // Another tab of the person, working in the other organization, waits for its online call.
       const other = openCall(
         start(OTHER_COMPANY, '50000000-0000-4000-8000-0000000000e2', '2026-11-11T07:00:00.000Z'),
@@ -223,7 +223,7 @@ async function isolatedTests(): Promise<void> {
     });
 
     test('goes on when a stop appeared after the question opened: the shown work goes, and the stop is asked about anew (F31)', async () => {
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       const own = openCall(start(WORKER, '50000000-0000-4000-8000-0000000000e4', '2026-11-11T07:00:00.000Z'));
       keepClockAction(start(WORKER, '50000000-0000-4000-8000-0000000000e5', '2026-11-11T07:02:00.000Z'), '');
       const shown = await timeUnsentSource.summarize('session');
