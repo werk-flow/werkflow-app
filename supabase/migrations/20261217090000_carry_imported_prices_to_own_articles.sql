@@ -40,7 +40,10 @@
 --    change with the old and the new price, but only in a batch whose preview
 --    showed price changes (inventory_import_batches.prices_previewed): the new
 --    eight-argument preview_inventory_import marks it. A batch the previous
---    release previewed, before or after this migration, books as before.
+--    release previewed, before or after this migration, books as before. Such
+--    a preview notes each row's price changes; a row whose changes differ at
+--    booking (another session recorded a price in between) is refused as
+--    changed_since_preview, like a changed article or Lager.
 --
 -- Prices change only through new dated rows (app_private.record_inventory_item_price);
 -- whether a price differs is one rule (app_private.inventory_price_differs).
@@ -968,6 +971,117 @@ begin
 end;
 $$;
 
+-- A row's price changes as a preview shows them and a booking compares
+-- them: without their first day, so a booking on a later day still matches.
+create function app_private.import_price_changes_shown(p_changes jsonb)
+returns jsonb
+language sql
+immutable
+security invoker
+set search_path to ''
+as $$
+  select coalesce(jsonb_agg(change.value - 'valid_from' order by change.ordinality), '[]'::jsonb)
+  from jsonb_array_elements(coalesce(p_changes, '[]'::jsonb)) with ordinality change;
+$$;
+
+-- Every staged row through the rule, as in 20261202120000; a row of a
+-- price-showing preview must also change the prices that preview showed.
+create or replace function app_private.apply_inventory_import_rows(
+  p_organization_id uuid,
+  p_actor_id uuid,
+  p_import_batch_id uuid,
+  p_rows jsonb,
+  p_mode text,
+  p_reason text
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_row jsonb;
+  v_index bigint;
+  v_outcome jsonb;
+  v_detail text;
+  v_state text;
+  v_reason text;
+  v_ref text;
+  v_location_ref text;
+  v_created uuid[] := '{}';
+  v_results jsonb := '[]'::jsonb;
+begin
+  for v_row, v_index in
+    select staged.value, staged.ordinality - 1 from jsonb_array_elements(p_rows) with ordinality staged
+  loop
+    if v_row ? 'rejection' then
+      v_outcome := jsonb_build_object('outcome', 'rejected', 'reason', v_row->>'rejection');
+    elsif v_row ? 'previewed_rejection' then
+      v_outcome := v_row->'previewed_rejection';
+    else
+      begin
+        v_outcome := app_private.apply_inventory_import_row(
+          p_organization_id, p_actor_id, p_import_batch_id, v_row->'item',
+          v_row->>'category_name', v_row->>'supplier_name', v_row->>'location_name', v_row->>'barcode',
+          (v_row->>'quantity')::numeric, p_reason, p_mode, true
+        );
+        v_ref := case
+          when v_outcome->>'matched_by' is null then 'new'
+          when (v_outcome->>'item_id')::uuid = any (v_created) then 'file'
+          else v_outcome->>'item_id'
+        end;
+        -- A Lager the import creates reads as „new“ on every row that names
+        -- it, in the preview and in the booking alike.
+        v_location_ref := case
+          when (v_outcome->>'location_created')::boolean then 'new'
+          else v_outcome->>'location_id'
+        end;
+        if (v_row ? 'previewed_item' and v_row->>'previewed_item' is distinct from v_ref)
+          or (v_row ? 'previewed_location' and v_row->>'previewed_location' is distinct from v_location_ref)
+          or (v_row ? 'previewed_prices'
+            and v_row->'previewed_prices' is distinct from app_private.import_price_changes_shown(v_outcome->'price_changes'))
+        then
+          raise exception 'changed_since_preview';
+        end if;
+        v_outcome := v_outcome || jsonb_build_object('item_ref', v_ref, 'location_ref', v_location_ref);
+      -- One handler for every row failure: the savepoint must isolate any of
+      -- them so the other rows still book. The named refusals all raise
+      -- SQLSTATE P0001 and differ only by message, so condition names cannot
+      -- tell them apart. Any other failure keeps only its SQLSTATE (`code`),
+      -- never its message or detail, which can quote row values; the action
+      -- logs it. query_canceled is no OTHERS condition and fails the call.
+      -- A deadlock or serialization failure is not the row's fault: it fails
+      -- the whole call, so the batch stays a draft and a repeated confirm
+      -- books it again instead of answering a stored failure.
+      exception
+      when deadlock_detected or serialization_failure then
+        raise;
+      when others then
+        get stacked diagnostics v_detail = pg_exception_detail, v_state = returned_sqlstate;
+        v_reason := case
+          when sqlerrm in ('unit_mismatch', 'barcode_taken', 'invalid_input', 'changed_since_preview') then sqlerrm
+          when sqlerrm = 'inventory item is not available for stock movement' then 'stock_not_tracked'
+          else 'failed'
+        end;
+        v_outcome := jsonb_build_object(
+          'outcome', 'rejected',
+          'reason', v_reason,
+          'unit', v_row->'item'->>'unit',
+          'item_unit', case when v_reason = 'unit_mismatch' then v_detail end
+        ) || case when v_reason = 'failed' then jsonb_build_object('code', v_state) else '{}'::jsonb end;
+      end;
+      -- Kept only once the row's savepoint committed, so a later row of the
+      -- file that matches this new article reads as „file“.
+      if v_outcome->>'item_ref' = 'new' then
+        v_created := v_created || (v_outcome->>'item_id')::uuid;
+      end if;
+    end if;
+    v_results := v_results || jsonb_build_array(v_outcome - 'item_id' - 'location_id' || jsonb_build_object('index', v_index));
+  end loop;
+  return v_results;
+end;
+$$;
+
 -- 7. The CSV preview as in 20261202120000, with p_with_prices marking the
 -- batch whose preview shows the matched articles' price changes. The
 -- previous release's seven-argument call previews and books as before.
@@ -1030,7 +1144,9 @@ begin
         else staged.value || jsonb_build_object(
           'previewed_item', result.value->>'item_ref',
           'previewed_location', result.value->'location_ref'
-        )
+        ) || case when p_with_prices
+          then jsonb_build_object('previewed_prices', app_private.import_price_changes_shown(result.value->'price_changes'))
+          else '{}'::jsonb end
       end
       order by staged.ordinality)
     from jsonb_array_elements(p_rows) with ordinality staged
@@ -1075,6 +1191,10 @@ revoke all on function app_private.supplier_catalog_import_price_proposals(uuid,
 revoke all on function app_private.supplier_catalog_import_rebate_groups(uuid, uuid)
   from public, anon, authenticated, service_role;
 revoke all on function app_private.supplier_catalog_import_price_changes(uuid, uuid, jsonb)
+  from public, anon, authenticated, service_role;
+revoke all on function app_private.import_price_changes_shown(jsonb)
+  from public, anon, authenticated, service_role;
+revoke all on function app_private.apply_inventory_import_rows(uuid, uuid, uuid, jsonb, text, text)
   from public, anon, authenticated, service_role;
 revoke all on function public.preview_inventory_import(uuid, uuid, text, jsonb, text, text, jsonb, boolean)
   from public, anon, authenticated;

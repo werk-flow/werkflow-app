@@ -542,4 +542,37 @@ begin
 end;
 $$;
 
+-- A CSV booking holds to the prices its preview showed: the preview shows no
+-- change of the clamp's 320 cents, another session records 350, and the
+-- booking refuses the row instead of writing 320 over it.
+do $$
+declare
+  v_org constant uuid := '47700000-0000-4000-8000-000000000010';
+  v_today date := (now() at time zone 'Europe/Berlin')::date;
+  v_preview jsonb;
+  v_booking jsonb;
+  v_prices record;
+begin
+  v_preview := public.preview_inventory_import(v_org, '47700000-0000-4000-8000-000000000002', 'nochmal.csv',
+    '{}'::jsonb, repeat('d', 64), 'master_data', jsonb_build_array(
+      jsonb_build_object('item', jsonb_build_object('name', 'Rohrschelle', 'item_type', 'material',
+        'unit', 'piece', 'internal_sku', 'SB-100', 'purchase_price_cents', 320,
+        'is_billable', true, 'global_minimum_stock', 0))), true);
+  if v_preview->'rows'->0->'price_changes' is distinct from '[]'::jsonb then
+    raise exception 'the unchanged price previewed %', v_preview->'rows';
+  end if;
+  perform public.add_inventory_item_price(v_org, '47700000-0000-4000-8000-000000000001',
+    '47700000-0000-4000-8000-000000000026', 'piece', 'purchase', 350, 1, v_today);
+  v_booking := public.book_inventory_import(v_org, '47700000-0000-4000-8000-000000000002',
+    (v_preview->>'batch_id')::uuid);
+  select * into v_prices from public.read_inventory_item_prices_on_day(v_org,
+    array['47700000-0000-4000-8000-000000000026'::uuid], v_today);
+  if v_booking->'rows'->0 @> '{"outcome":"rejected","reason":"changed_since_preview"}' is not true
+    or v_prices.purchase_amount_cents is distinct from 350 then
+    raise exception 'a price changed since the preview was overwritten: % (purchase %)', v_booking->'rows',
+      v_prices.purchase_amount_cents;
+  end if;
+end;
+$$;
+
 rollback;

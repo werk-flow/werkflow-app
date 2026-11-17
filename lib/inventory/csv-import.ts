@@ -372,7 +372,7 @@ export function importRowProblem(row: ImportRowOutcome, fileUnit: string | null)
     case 'stock_not_tracked':
       return 'Für diesen Artikel wird kein Bestand geführt.';
     case 'changed_since_preview':
-      return 'Artikel oder Lager haben sich seit der Vorschau geändert. Importiere die Zeile erneut und prüfe die neue Vorschau.';
+      return 'Artikel, Lager oder Preise haben sich seit der Vorschau geändert. Importiere die Zeile erneut und prüfe die neue Vorschau.';
     case 'failed':
       return 'Die Zeile konnte nicht übernommen werden.';
   }

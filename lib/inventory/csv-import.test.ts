@@ -366,7 +366,7 @@ describe('importRowEffect and importRowProblem', () => {
       'Kein Lager angegeben: Artikel übernommen, kein Bestand gebucht.',
     );
     expect(importRowProblem({ ...BASE, outcome: 'rejected', reason: 'changed_since_preview' }, 'Stk')).toBe(
-      'Artikel oder Lager haben sich seit der Vorschau geändert. Importiere die Zeile erneut und prüfe die neue Vorschau.',
+      'Artikel, Lager oder Preise haben sich seit der Vorschau geändert. Importiere die Zeile erneut und prüfe die neue Vorschau.',
     );
     expect(importRowProblem(BASE, 'Stk')).toBeNull();
   });
