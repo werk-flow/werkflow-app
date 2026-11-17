@@ -29,6 +29,7 @@ import {
   offlineStand,
   seedTodayAssignment,
   waitForTodayOnDevice,
+  wipeTodayFromPage,
 } from '../support/offline-today';
 
 // The installable app shell (werk-flow/werkflow-planning#316): the service
@@ -59,6 +60,10 @@ test('the app shell opens without signal and keeps nothing of the person @AUDIT-
   });
 
   await test.step('a navigation without network shows the fallback, and a tap without signal says so', async () => {
+    // The start page above stored the field worker's day or not, as its refresh raced the next
+    // navigation; with a day the offline page rightly shows it. This step is about a phone that
+    // keeps none, so the day goes as a wipe takes it (the stored day's own test is the cold start).
+    await wipeTodayFromPage(page);
     // Only the worker's cache may serve the fallback's files, so the answer to the tap proves the shell.
     await bypassHttpCache(page);
     await setNetwork(page, 'offline');
