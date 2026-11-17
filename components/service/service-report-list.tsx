@@ -189,32 +189,31 @@ function ServiceReportPage({
   const view = live.data ?? initial;
   const actions = useReportActions(live.refresh);
 
-  if (view.total === 0) {
-    return (
-      <EmptyState
-        icon={ClipboardCheck}
-        title="Noch keine abgeschlossenen Wartungsbesuche"
-        description="Schließe eine Fälligkeit mit ihrem Nachweis ab. Danach erstellst du hier den Servicebericht."
-      />
-    );
-  }
   return (
     <StaleRegion stale={live.isStale} onRetry={live.refresh}>
-      <div className="@container/reports space-y-3">
-        <div className="divide-y overflow-hidden rounded-lg border shadow-xs">
-          {view.items.map((visit) => (
-            <VisitRow key={visit.dueWorkId} visit={visit} actions={actions} />
-          ))}
-        </div>
-        <ListPagination
-          page={view.page}
-          total={view.total}
-          pageSize={view.pageSize}
-          onPageChange={onPageChange}
-          busy={paging}
-          label="Abgeschlossene Wartungsbesuche"
+      {view.total === 0 ? (
+        <EmptyState
+          icon={ClipboardCheck}
+          title="Noch keine abgeschlossenen Wartungsbesuche"
+          description="Schließe eine Fälligkeit mit ihrem Nachweis ab. Danach erstellst du hier den Servicebericht."
         />
-      </div>
+      ) : (
+        <div className="@container/reports space-y-3">
+          <div className="divide-y overflow-hidden rounded-lg border shadow-xs">
+            {view.items.map((visit) => (
+              <VisitRow key={visit.dueWorkId} visit={visit} actions={actions} />
+            ))}
+          </div>
+          <ListPagination
+            page={view.page}
+            total={view.total}
+            pageSize={view.pageSize}
+            onPageChange={onPageChange}
+            busy={paging}
+            label="Abgeschlossene Wartungsbesuche"
+          />
+        </div>
+      )}
     </StaleRegion>
   );
 }

@@ -78,6 +78,7 @@ declare
   v_client_id uuid;
   v_name text := btrim(coalesce(p_file_name, ''));
   v_counter integer := 0;
+  v_constraint text;
 begin
   if not app_private.maintenance_actor_is_manager(p_organization_id, p_actor_id) then
     raise exception 'not_authorized';
@@ -127,16 +128,28 @@ begin
     v_name := left(btrim(p_file_name), -4) || ' (' || v_counter || ').pdf';
   end loop;
 
-  insert into public.documents (
-    id, organization_id, folder_id, storage_bucket, storage_path,
-    original_file_name, display_name, category, mime_type, size_bytes,
-    uploaded_by, metadata
-  ) values (
-    p_document_id, p_organization_id, null, 'organization-documents', p_storage_path,
-    v_name, v_name, 'report', 'application/pdf', p_size_bytes,
-    p_actor_id, jsonb_build_object('maintenanceServiceReportId', p_report_id,
-      'maintenanceDueWorkId', v_due.id)
-  );
+  -- A report of another item of the same job may take the name meanwhile:
+  -- then the next free name, as long as the library refuses only the name.
+  loop
+    begin
+      insert into public.documents (
+        id, organization_id, folder_id, storage_bucket, storage_path,
+        original_file_name, display_name, category, mime_type, size_bytes,
+        uploaded_by, metadata
+      ) values (
+        p_document_id, p_organization_id, null, 'organization-documents', p_storage_path,
+        v_name, v_name, 'report', 'application/pdf', p_size_bytes,
+        p_actor_id, jsonb_build_object('maintenanceServiceReportId', p_report_id,
+          'maintenanceDueWorkId', v_due.id)
+      );
+      exit;
+    exception when unique_violation then
+      get stacked diagnostics v_constraint = constraint_name;
+      if v_constraint is distinct from 'documents_unique_active_folder_name_idx' then raise; end if;
+      v_counter := v_counter + 1;
+      v_name := left(btrim(p_file_name), -4) || ' (' || v_counter || ').pdf';
+    end;
+  end loop;
   insert into public.document_links (organization_id, document_id, job_id, created_by)
   values (p_organization_id, p_document_id, v_due.job_id, p_actor_id);
   insert into public.document_links (organization_id, document_id, equipment_id, created_by)
