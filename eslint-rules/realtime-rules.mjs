@@ -58,10 +58,30 @@ function stateOfSetter(setter, sourceCode) {
   return variableOf(value, sourceCode);
 }
 
+/** Whether `node` lies inside `container`. */
+function within(node, container) {
+  return node.range[0] >= container.range[0] && node.range[1] <= container.range[1];
+}
+
 /**
- * The setter call that makes an effect's timeout an interval: inside a `setTimeout` callback, an
- * updater call (`setValue((previous) => …)`) of a state the effect depends on, so every update
- * starts the next timeout.
+ * Whether a setter's argument derives the new value from the current one: it reads the state
+ * (`setValue(value - 1)`), or it is an updater that reads its parameter (`setValue((previous) => …)`).
+ */
+function derivesFromState(argument, state, sourceCode) {
+  if (state.references.some((reference) => within(reference.identifier, argument))) return true;
+  if (argument.type !== 'ArrowFunctionExpression' && argument.type !== 'FunctionExpression') return false;
+  const [previous] = argument.params;
+  if (previous?.type !== 'Identifier') return false;
+  const parameter = sourceCode
+    .getDeclaredVariables(argument)
+    .find((variable) => variable.name === previous.name && variable.defs.some((def) => def.type === 'Parameter'));
+  return (parameter?.references.length ?? 0) > 0;
+}
+
+/**
+ * The setter call that makes an effect's timeout an interval: inside a `setTimeout` callback, a
+ * call that derives a state the effect depends on from its current value, so every update starts
+ * the next timeout.
  */
 function rearmingUpdate(effect, sourceCode) {
   const { visitorKeys } = sourceCode;
@@ -78,11 +98,10 @@ function rearmingUpdate(effect, sourceCode) {
     if (!onTimeout) continue;
     for (const update of nodesUnder(onTimeout, visitorKeys)) {
       if (update.type !== 'CallExpression' || update.callee.type !== 'Identifier') continue;
-      const [updater] = update.arguments;
-      const isUpdater = updater?.type === 'ArrowFunctionExpression' || updater?.type === 'FunctionExpression';
-      if (!isUpdater) continue;
+      const [argument] = update.arguments;
+      if (!argument) continue;
       const state = stateOfSetter(variableOf(update.callee, sourceCode), sourceCode);
-      if (state && dependsOn.has(state)) return update;
+      if (state && dependsOn.has(state) && derivesFromState(argument, state, sourceCode)) return update;
     }
   }
   return undefined;
