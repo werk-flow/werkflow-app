@@ -71,10 +71,8 @@ revoke all on table public.inventory_supplier_rebates from public, anon, authent
 grant select on table public.inventory_supplier_rebates to service_role;
 
 -- The rebates the confirm applied, rebate group to hundredths of a percent.
+-- Only the confirm writes it, after app_private.is_supplier_rebate_mapping.
 alter table public.inventory_supplier_catalog_imports add column rebates jsonb;
-alter table public.inventory_supplier_catalog_imports
-  add constraint inventory_supplier_catalog_imports_rebates_check
-  check (rebates is null or jsonb_typeof(rebates) = 'object') not valid;
 
 comment on column public.inventory_supplier_catalog_imports.rebates is
   'The rebates the confirm applied to own articles, rebate group to hundredths of a percent.';

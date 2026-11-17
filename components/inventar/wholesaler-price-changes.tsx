@@ -1,5 +1,6 @@
 'use client';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { ListRow } from '@/components/ui/list-row';
@@ -118,7 +119,7 @@ export function WholesalerPriceChanges({
         />
       )}
       {applied.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Kein Preis eines eigenen Artikels ändert sich.</p>
+        <EmptyState size="compact" title="Kein Preis eines eigenen Artikels ändert sich." />
       ) : (
         <RevealedImportRows
           rows={applied}

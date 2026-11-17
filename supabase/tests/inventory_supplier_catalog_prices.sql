@@ -406,7 +406,7 @@ begin
     '47700000-0000-4000-8000-000000000002', v_import, null);
   if not v_preview->'changes' @> '[{"item_name":"Kugelhahn 1/2\"","kind":"purchase","catalog_unit":"piece",
       "unit_text":null,"old_amount_cents":1250,"new_amount_cents":1300}]'::jsonb
-    or jsonb_array_length(v_preview->'changes') <> 1 then
+    or jsonb_array_length(v_preview->'changes') is distinct from 1 then
     raise exception 'a price line previewed %', v_preview;
   end if;
   v_result := public.confirm_supplier_catalog_import('47700000-0000-4000-8000-000000000010',
@@ -431,7 +431,7 @@ begin
   if (v_result->>'own_prices_changed')::integer is distinct from 0
     or (select total from pg_temp.price_rows) is distinct from v_before
     or (select price_cents from public.inventory_supplier_catalog_articles
-      where organization_id = '47700000-0000-4000-8000-000000000010' and article_number = 'NR-1501') <> 64000 then
+      where organization_id = '47700000-0000-4000-8000-000000000010' and article_number = 'NR-1501') is distinct from 64000 then
     raise exception 'the four-argument confirm answered % and changed own prices', v_result;
   end if;
 end;
