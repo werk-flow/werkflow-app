@@ -418,6 +418,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['maintenance_visit_next_actions.sql'],
     ['service', 'work', 'attention'],
   ],
+  ['maintenance-open-findings', ['maintenance_open_findings.sql'], ['service', 'work']],
   [
     'inventory-ledger',
     [
