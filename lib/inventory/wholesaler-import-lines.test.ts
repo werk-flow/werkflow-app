@@ -369,6 +369,8 @@ test('a rebate reads as typed in German, in hundredths of a percent from 0 to 10
   expect(parseRebatePercent('12,345')).toBeUndefined();
   expect(parseRebatePercent('-5')).toBeUndefined();
   expect(parseRebatePercent('dreißig')).toBeUndefined();
+  expect(parseRebatePercent('10%0')).toBeUndefined();
+  expect(parseRebatePercent('%10')).toBeUndefined();
   expect(formatRebatePercent(3250)).toBe('32,5');
   expect(formatRebatePercent(3000)).toBe('30');
 });

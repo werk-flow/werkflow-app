@@ -57,7 +57,8 @@ export function ownPriceChangesForUnits(
  * with at most two decimals.
  */
 export function parseRebatePercent(value: string): number | null | undefined {
-  const percent = parseBoundedDecimalInput(value.replace('%', ''), 2);
+  // A percent sign only at the end: „10%0“ is no percentage.
+  const percent = parseBoundedDecimalInput(value.trim().replace(/\s*%$/, ''), 2);
   if (percent === null || percent === undefined) return percent;
   const basisPoints = Math.round(percent * 100);
   return basisPoints <= REBATE_BASIS_POINTS_MAX ? basisPoints : undefined;

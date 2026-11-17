@@ -241,7 +241,8 @@ export async function confirmWholesalerImport(
     return { success: false, error: 'save_failed' };
   }
   const { alreadyConfirmed, ...result } = answer.data;
-  if (!alreadyConfirmed && result.ownPricesChanged > 0) invalidateInventory();
+  // Also for a repeat: the first answer may have been lost before it refreshed the pages.
+  if (result.ownPricesChanged > 0) invalidateInventory();
   return { success: true, result, alreadyConfirmed };
 }
 
