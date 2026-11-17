@@ -284,6 +284,32 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('offline-today.tsx'))
                 return { path: join(import.meta.dir, 'offline-today-service-boundaries.ts') };
             });
+            // The field worker's start page: its device day, saved signal, clock and counts answer from the spec.
+            builder.onResolve(
+              {
+                filter:
+                  /^@\/(lib\/field-sync\/device\/today-(store|refresh)|components\/clock-state-provider|components\/realtime\/attention-count-provider)$/,
+              },
+              (args) => {
+                if (
+                  args.importer.endsWith('worker-start-day.ts') ||
+                  args.importer.endsWith('worker-start-content.tsx')
+                )
+                  return { path: join(import.meta.dir, 'worker-start-service-boundaries.ts') };
+              },
+            );
+            // E7's refresh of the day has its own contracts (today-refresh.spec.ts); here the spec saves the day.
+            builder.onResolve(
+              { filter: /^@\/components\/auftraege\/work-pack\/today-refresh-on-start$/ },
+              (args) => {
+                if (args.importer.endsWith('worker-start.tsx'))
+                  return { path: join(import.meta.dir, 'worker-start-service-boundaries.ts') };
+              },
+            );
+            builder.onResolve({ filter: /^next\/link$/ }, (args) => {
+              if (args.importer.endsWith('worker-start-sections.tsx'))
+                return { path: join(import.meta.dir, 'sidebar-service-boundaries.tsx') };
+            });
             // The pathname of the `(auth)` layout's landing wipe, moved by the spec.
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (args.importer.endsWith('today-landing-wipe.tsx'))

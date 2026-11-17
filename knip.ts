@@ -64,9 +64,6 @@ const config: KnipConfig = {
     // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
     // the offer calculation imports it. Remove this entry with that import.
     'lib/price-catalog/leistung-prices.ts!',
-    // The E7 ↔ E8 seam (werk-flow/werkflow-planning#22): `onTodaySaved` exists
-    // before E8's worker start imports it. Remove this entry with that import.
-    'lib/field-sync/device/today-refresh.ts!',
     // Recompiles the vendored EN 16931 rules (`bun run rules:en16931`); the
     // package script makes it an entry of the first pass only.
     'lib/invoicing/rules/compile.ts!',
