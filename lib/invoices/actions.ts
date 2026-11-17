@@ -21,7 +21,7 @@ import type { InvoiceLineValues } from './types';
 // organization and manager role on the server and passes only those; the
 // database function checks the actor again, refuses every id outside the
 // organization and writes the history in the same call
-// (supabase/migrations/20261211100000_keep_invoice_drafts_with_their_lines_and_totals.sql).
+// (supabase/migrations/20261215100000_keep_invoice_drafts_with_their_lines_and_totals.sql).
 // The server computes every amount with the invoice core and stores it.
 
 const refusal = writeRefusalFor(

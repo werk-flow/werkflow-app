@@ -1255,6 +1255,229 @@ begin
 end;
 $$;
 
+-- werk-flow/werkflow-planning#22: the clock offers a recovery end for a
+-- session open longer than 24 hours (sessionRecoveryReason) before the
+-- database has marked it. That end is accepted in one call: the session is
+-- marked unusually long, then ended as a recovery, with the events of the two
+-- steps recorded once and the version the clock read. A short session still
+-- ends as before, and refuses a recovery end.
+reset role;
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('21000000-0000-0000-0000-000000000801', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'long-open@example.test', '', now(), '{}',
+ '{"first_name":"Long","last_name":"Open"}', now(), now()),
+('21000000-0000-0000-0000-000000000802', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'short-open@example.test', '', now(), '{}',
+ '{"first_name":"Short","last_name":"Open"}', now(), now()),
+('21000000-0000-0000-0000-000000000803', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'long-marked@example.test', '', now(), '{}',
+ '{"first_name":"Long","last_name":"Marked"}', now(), now());
+insert into public.organization_members (organization_id, user_id, role) values
+('21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000801', 'employee'),
+('21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000802', 'employee'),
+('21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000803', 'employee');
+set local role service_role;
+
+do $$
+declare
+  v_org constant uuid := '21000000-0000-0000-0000-000000000710';
+  v_long constant uuid := '21000000-0000-0000-0000-000000000801';
+  v_short constant uuid := '21000000-0000-0000-0000-000000000802';
+  v_marked constant uuid := '21000000-0000-0000-0000-000000000803';
+  v_end_op constant uuid := '21000000-0000-0000-0000-000000000811';
+  v_result jsonb;
+  v_replay jsonb;
+  v_session_id uuid;
+  v_segment_id uuid;
+  v_version bigint;
+  v_session public.time_sessions%rowtype;
+begin
+  -- An open session that started 30 hours ago, as the clock reads it.
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_long,
+    p_operation_id => '21000000-0000-0000-0000-000000000810',
+    p_request_hash => repeat('a', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated'
+  );
+  v_session_id := (v_result->>'sessionId')::uuid;
+  v_segment_id := (v_result->>'segmentId')::uuid;
+  v_version := (v_result->>'version')::bigint;
+  perform set_config('app.time_capture_write', 'true', true);
+  update public.time_sessions set started_at = clock_timestamp() - interval '30 hours'
+  where id = v_session_id;
+  update public.time_segments set started_at = clock_timestamp() - interval '30 hours'
+  where id = v_segment_id;
+  perform set_config('app.time_capture_write', 'false', true);
+
+  -- The version after the marking is not the one the clock read: refused,
+  -- and the refusal leaves the session open and unmarked.
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => v_org, p_actor_id => v_long,
+      p_operation_id => '21000000-0000-0000-0000-000000000812',
+      p_request_hash => repeat('b', 64), p_action => 'recover_end',
+      p_expected_session_id => v_session_id, p_expected_version => v_version + 1,
+      p_acknowledge_long => true
+    );
+    raise exception 'a recovery end with a version the clock never read was accepted';
+  exception when others then
+    if sqlerrm not like '%time_transition_stale_version%' then raise; end if;
+  end;
+  select * into v_session from public.time_sessions where id = v_session_id;
+  if v_session.status is distinct from 'open' or v_session.version is distinct from v_version
+    or v_session.recovery_reason is not null
+  then raise exception 'a refused recovery end changed the open session'; end if;
+
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_long,
+    p_operation_id => v_end_op,
+    p_request_hash => repeat('c', 64), p_action => 'recover_end',
+    p_expected_session_id => v_session_id, p_expected_version => v_version,
+    p_acknowledge_long => true
+  );
+  if v_result->>'outcome' is distinct from 'ended'
+    or (v_result->>'sessionId')::uuid is distinct from v_session_id
+    or (v_result->>'segmentId')::uuid is distinct from v_segment_id
+    or (v_result->>'version')::bigint is distinct from v_version + 2
+  then raise exception 'a recovery end of an open session older than 24 hours did not end it: %', v_result; end if;
+  select * into v_session from public.time_sessions where id = v_session_id;
+  if v_session.status is distinct from 'closed' or v_session.ended_at is null
+    or v_session.ended_by is distinct from v_long
+  then raise exception 'the recovered long session is not closed by its owner'; end if;
+  if (select end_source from public.time_segments where id = v_segment_id)
+    is distinct from 'system_recovery'
+  then raise exception 'the long session''s segment did not end as a recovery'; end if;
+  if (
+    select count(*) from public.time_segment_events
+    where session_id = v_session_id and operation_id = v_end_op
+      and event_type = 'recovery_required' and source = 'system_recovery'
+      and segment_id = v_segment_id and actor_id is null
+      and event_payload ->> 'reason' = 'unusually_long'
+  ) <> 1 or (
+    select count(*) from public.time_segment_events
+    where session_id = v_session_id and operation_id = v_end_op
+      and event_type = 'segment_ended' and source = 'system_recovery'
+  ) <> 1 or (
+    select count(*) from public.time_segment_events
+    where session_id = v_session_id and operation_id = v_end_op
+      and event_type = 'session_ended' and source = 'system_recovery'
+  ) <> 1 or (
+    select count(*) from public.time_segment_events
+    where session_id = v_session_id and operation_id = v_end_op
+  ) <> 3
+  then raise exception 'the recovery end did not record the marking, the segment end and the session end once each'; end if;
+  if (
+    select count(*) from public.time_operations
+    where id = v_end_op and operation_kind = 'recover_end'
+      and expected_version = v_version and resulting_version = v_version + 2
+  ) <> 1
+  then raise exception 'the recovery end did not record its operation once with the version the clock read'; end if;
+
+  v_replay := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_long,
+    p_operation_id => v_end_op,
+    p_request_hash => repeat('c', 64), p_action => 'recover_end',
+    p_expected_session_id => v_session_id, p_expected_version => v_version,
+    p_acknowledge_long => true
+  );
+  if (v_replay->>'replayed')::boolean is not true
+    or (v_replay - 'replayed') is distinct from (v_result - 'replayed')
+  then raise exception 'a replayed recovery end did not return its first answer'; end if;
+  if (
+    select count(*) from public.time_segment_events
+    where session_id = v_session_id and operation_id = v_end_op
+  ) <> 3 or (select count(*) from public.time_operations where id = v_end_op) <> 1
+  then raise exception 'a replayed recovery end recorded its events again'; end if;
+
+  -- A short session ends as before, and refuses a recovery end.
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_short,
+    p_operation_id => '21000000-0000-0000-0000-000000000820',
+    p_request_hash => repeat('a', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated'
+  );
+  v_session_id := (v_result->>'sessionId')::uuid;
+  v_segment_id := (v_result->>'segmentId')::uuid;
+  v_version := (v_result->>'version')::bigint;
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => v_org, p_actor_id => v_short,
+      p_operation_id => '21000000-0000-0000-0000-000000000821',
+      p_request_hash => repeat('b', 64), p_action => 'recover_end',
+      p_expected_session_id => v_session_id, p_expected_version => v_version,
+      p_acknowledge_long => true
+    );
+    raise exception 'a recovery end of a short open session was accepted';
+  exception when others then
+    if sqlerrm not like '%time_transition_recovery_state_changed%' then raise; end if;
+  end;
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_short,
+    p_operation_id => '21000000-0000-0000-0000-000000000822',
+    p_request_hash => repeat('c', 64), p_action => 'end',
+    p_expected_session_id => v_session_id, p_expected_version => v_version
+  );
+  if v_result->>'outcome' is distinct from 'ended'
+    or (v_result->>'version')::bigint is distinct from v_version + 1
+    or (select status from public.time_sessions where id = v_session_id) is distinct from 'closed'
+    or (select end_source from public.time_segments where id = v_segment_id) is distinct from 'employee'
+    or exists (
+      select 1 from public.time_segment_events
+      where session_id = v_session_id
+        and (event_type = 'recovery_required' or source = 'system_recovery')
+    )
+  then raise exception 'a short session did not end as the person''s own end'; end if;
+
+  -- A session the database marked first ends through recovery as before.
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_marked,
+    p_operation_id => '21000000-0000-0000-0000-000000000830',
+    p_request_hash => repeat('a', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated'
+  );
+  v_session_id := (v_result->>'sessionId')::uuid;
+  v_segment_id := (v_result->>'segmentId')::uuid;
+  perform set_config('app.time_capture_write', 'true', true);
+  update public.time_sessions set started_at = clock_timestamp() - interval '30 hours'
+  where id = v_session_id;
+  update public.time_segments set started_at = clock_timestamp() - interval '30 hours'
+  where id = v_segment_id;
+  perform set_config('app.time_capture_write', 'false', true);
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_marked,
+    p_operation_id => '21000000-0000-0000-0000-000000000831',
+    p_request_hash => repeat('b', 64), p_action => 'switch',
+    p_expected_session_id => v_session_id,
+    p_expected_version => (v_result->>'version')::bigint,
+    p_segment_kind => 'break', p_allocation_kind => 'none'
+  );
+  if v_result->>'outcome' is distinct from 'recovery_required'
+    or v_result->>'recoveryReason' is distinct from 'unusually_long'
+  then raise exception 'a switch on a long session did not ask for recovery'; end if;
+  v_version := (v_result->>'version')::bigint;
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_marked,
+    p_operation_id => '21000000-0000-0000-0000-000000000832',
+    p_request_hash => repeat('c', 64), p_action => 'recover_end',
+    p_expected_session_id => v_session_id, p_expected_version => v_version,
+    p_acknowledge_long => true
+  );
+  if v_result->>'outcome' is distinct from 'ended'
+    or (v_result->>'version')::bigint is distinct from v_version + 1
+    or (select status from public.time_sessions where id = v_session_id) is distinct from 'closed'
+    or (select end_source from public.time_segments where id = v_segment_id)
+      is distinct from 'system_recovery'
+    or (
+      select count(*) from public.time_segment_events
+      where session_id = v_session_id and event_type = 'recovery_required'
+    ) <> 1
+  then raise exception 'a marked session did not end through recovery as before'; end if;
+end;
+$$;
+
 -- P1-21-F48/F50: members read their organization's canonical time rows;
 -- a person outside the organization reads none of them.
 set local role authenticated;

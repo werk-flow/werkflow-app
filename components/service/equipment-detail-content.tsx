@@ -4,6 +4,7 @@ import { useState, type ReactElement } from 'react';
 
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { Button } from '@/components/ui/button';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { StaleRegion } from '@/components/shared/stale-region';
 import { ErrorText } from '@/components/ui/error-text';
 import { DetailColumns } from '@/components/shared/detail-columns';
@@ -35,10 +36,19 @@ import {
 } from './equipment-detail-sections';
 import { EquipmentDetailSidebar } from './equipment-detail-sidebar';
 import { EquipmentFormDialog } from './equipment-form-dialog';
+import { EquipmentPredecessorHistorySection } from './equipment-predecessor-history';
 import { EquipmentArchiveDialog, EquipmentCorrectionDialog } from './equipment-reason-confirm-dialogs';
 import { EquipmentSourceDialog } from './equipment-source-dialog';
 import { EquipmentWorkLinkDialog } from './equipment-work-link-dialog';
 import { useEquipmentDetailActions, type EquipmentDetailActions } from './use-equipment-detail-actions';
+
+// Only managers replace an Anlage, and rarely. The replace form with its
+// carry-over choice downloads on intent or first open, so the Anlage detail's
+// static graph, and the chunks every route shares with it, stay as they were
+// (docs/technical/performance.md).
+const ReplaceDialog = lazyDialog(() =>
+  import('./equipment-carry-over').then((loaded) => loaded.EquipmentReplaceDialog),
+);
 
 type EquipmentStateFormProps = {
   actions: EquipmentDetailActions;
@@ -183,6 +193,33 @@ type EquipmentDetailRegionProps = {
   onChangeState: () => void;
 };
 
+/** The documents linked to the Anlage, or the failure of their read. */
+function EquipmentDocuments({
+  item,
+  documents,
+  loadFailed,
+}: {
+  item: EquipmentDetail;
+  documents: OrganizationDocument[];
+  loadFailed: boolean;
+}): ReactElement {
+  if (loadFailed) {
+    return <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>;
+  }
+  return (
+    <ContextualDocumentsSection
+      title="Dokumente & Bilder"
+      description="Dokumente werden aus der zentralen Dokumentenablage verknüpft. Es entsteht keine Dateikopie."
+      documents={documents}
+      documentTarget={{ kind: 'equipment', equipmentId: item.id }}
+      contextLabel={item.name}
+      canUpload
+      canManage
+      keepUploadedDocumentsVisible
+    />
+  );
+}
+
 /** The record's header, data, documents, history and sidebar, behind the live view's stale state. */
 function EquipmentDetailRegion({
   actions,
@@ -195,6 +232,7 @@ function EquipmentDetailRegion({
 }: EquipmentDetailRegionProps): ReactElement {
   const { busy, live, item, clearReason } = actions;
   const headerBusy = busy.isBusy('state') || busy.isBusy('correction') || busy.isBusy('archive');
+  const replaceWaiting = ReplaceDialog.useWaiting(dialogs.replaceOpen);
   return (
     <StaleRegion stale={live.isStale} onRetry={live.refresh} className="space-y-6">
       <EquipmentDetailHeader
@@ -203,6 +241,8 @@ function EquipmentDetailRegion({
         canChangeState={!(item.archivedAt || item.voidedAt || transitionStates.length === 0)}
         onEdit={() => dialogs.setEditOpen(true)}
         onReplace={() => dialogs.setReplaceOpen(true)}
+        onReplaceIntent={ReplaceDialog.preload}
+        replaceWaiting={replaceWaiting}
         onChangeState={onChangeState}
       />
 
@@ -218,22 +258,16 @@ function EquipmentDetailRegion({
         <div className="min-w-0 space-y-6">
           <EquipmentDataSection item={item} detailsBusy={busy.isBusy('details')} />
 
-          {documentsLoadFailed ? (
-            <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
-          ) : (
-            <ContextualDocumentsSection
-              title="Dokumente & Bilder"
-              description="Dokumente werden aus der zentralen Dokumentenablage verknüpft. Es entsteht keine Dateikopie."
-              documents={documents}
-              documentTarget={{ kind: 'equipment', equipmentId: item.id }}
-              contextLabel={item.name}
-              canUpload
-              canManage
-              keepUploadedDocumentsVisible
-            />
-          )}
+          <EquipmentDocuments item={item} documents={documents} loadFailed={documentsLoadFailed} />
 
           <EquipmentHistorySection events={item.events} sourceBusy={busy.isBusy('source')} />
+          {/* Another Anlage starts the paging over; the section itself drops older
+              pages when its refreshed first page changes. */}
+          <EquipmentPredecessorHistorySection
+            key={item.id}
+            equipmentId={item.id}
+            initial={item.predecessorHistory}
+          />
         </div>
 
         <EquipmentDetailSidebar
@@ -315,9 +349,7 @@ export function EquipmentDetailContent({
           onSaved={() => void busy.run('details', live.refresh)}
         />
       )}
-      {replaceOpen && (
-        <EquipmentFormDialog open onOpenChange={setReplaceOpen} mode="replace" initial={item} />
-      )}
+      {replaceOpen && <ReplaceDialog.Dialog open onOpenChange={setReplaceOpen} initial={item} />}
 
       <Dialog open={statusOpen} onOpenChange={setStatusOpen} pending={busy.isBusy('state')}>
         <DialogContent>
