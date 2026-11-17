@@ -67,6 +67,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
 | `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key per project, `supabase secrets set --project-ref <ref> RESEND_API_KEY` or Vercel, delete the old one. |
 | `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO` | Vercel | Alarm recipient; reply-to | Never | Set, redeploy. |
+| `RESEND_WEBHOOK_SECRET` | Vercel Preview (the staging webhook); Production when billing goes live | `app/api/resend/webhook/route.ts`: the Svix signing secret of Resend's one webhook, for bounces and complaints of every ledger that mails through Resend | Never | Resend, Webhooks, the endpoint: rotate the signing secret, set it, redeploy. |
 
 The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the owner's local Supabase and R2 admin tokens in the env backups, and `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name.
 

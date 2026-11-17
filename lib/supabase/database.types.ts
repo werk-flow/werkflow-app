@@ -9512,6 +9512,33 @@ export type Database = {
           },
         ];
       };
+      resend_webhook_events: {
+        Row: {
+          event_type: string;
+          ledger: string | null;
+          occurred_at: string;
+          provider_message_id: string | null;
+          received_at: string;
+          svix_id: string;
+        };
+        Insert: {
+          event_type: string;
+          ledger?: string | null;
+          occurred_at: string;
+          provider_message_id?: string | null;
+          received_at?: string;
+          svix_id: string;
+        };
+        Update: {
+          event_type?: string;
+          ledger?: string | null;
+          occurred_at?: string;
+          provider_message_id?: string | null;
+          received_at?: string;
+          svix_id?: string;
+        };
+        Relationships: [];
+      };
       school_days: {
         Row: {
           cancelled_at: string | null;
@@ -12671,6 +12698,8 @@ export type Database = {
         Row: {
           attempts: number;
           created_at: string;
+          delivery_problem: string | null;
+          delivery_problem_at: string | null;
           failure_code: string | null;
           id: string;
           kind: string;
@@ -12685,6 +12714,8 @@ export type Database = {
         Insert: {
           attempts?: number;
           created_at?: string;
+          delivery_problem?: string | null;
+          delivery_problem_at?: string | null;
           failure_code?: string | null;
           id?: string;
           kind: string;
@@ -12699,6 +12730,8 @@ export type Database = {
         Update: {
           attempts?: number;
           created_at?: string;
+          delivery_problem?: string | null;
+          delivery_problem_at?: string | null;
           failure_code?: string | null;
           id?: string;
           kind?: string;
@@ -18759,6 +18792,15 @@ export type Database = {
         };
         Returns: undefined;
       };
+      mark_werkflow_billing_mail_undelivered: {
+        Args: { p_problem: string; p_provider_message_id: string };
+        Returns: {
+          delivery_problem: string;
+          kind: string;
+          organization_id: string;
+          stripe_object_id: string;
+        }[];
+      };
       move_document: {
         Args: {
           p_actor_id: string;
@@ -19320,6 +19362,16 @@ export type Database = {
             };
             Returns: string;
           };
+      record_resend_webhook_event: {
+        Args: {
+          p_event_type: string;
+          p_ledger: string;
+          p_occurred_at: string;
+          p_provider_message_id: string;
+          p_svix_id: string;
+        };
+        Returns: boolean;
+      };
       record_work_artifact_action: {
         Args: {
           p_action_id: string;
