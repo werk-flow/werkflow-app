@@ -1,11 +1,14 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { addLocalDays } from '../../../../lib/date-time/berlin';
 import { formatSicknessRange } from '../../../../lib/sickness/types';
+import { rpcArgs } from '../../../../lib/supabase/rpc-args';
 import type { DialogOpenerId } from '../../../../lib/testing/selection/dialog-inventory';
 import {
   getEmployeeRecordStateByUser,
   seedOpenOnboardingRequirement,
 } from '../../../golden/support/db/personnel';
+import { createAdminClient } from '../../../golden/support/db/shared';
 import { seedSicknessReport } from '../../../golden/support/db/sickness';
 import {
   seedApprovedManualInterval,
@@ -205,6 +208,41 @@ async function openRedactedReport(page: Page): Promise<Locator> {
   return dialog;
 }
 
+/**
+ * Links the layout Anlage to the layout job once, as the office does, so the
+ * employee's work pack on that job lists it with „Verlauf und Dokumente“.
+ */
+export function prepareFieldEquipment(world: TestWorld): Promise<string> {
+  return surfaceFixture(world, 'service.field-equipment', async () => {
+    const details = await prepareLayoutDetails(world);
+    const admin = createAdminClient();
+    const { data: equipment } = await admin
+      .from('installed_equipment')
+      .select('id, version')
+      .eq('organization_id', world.orgId)
+      .eq('equipment_number', details.equipmentNumber)
+      .single()
+      .throwOnError();
+    await admin
+      .rpc(
+        'set_installed_equipment_work_link',
+        rpcArgs('set_installed_equipment_work_link', {
+          p_organization_id: world.orgId,
+          p_equipment_id: equipment.id,
+          p_expected_version: equipment.version,
+          p_job_id: details.jobId,
+          p_project_id: null,
+          p_linked: true,
+          p_reason: 'Anlage für den Wartungsbesuch',
+          p_actor_id: world.users.admin.id,
+          p_idempotency_key: randomUUID(),
+        }),
+      )
+      .throwOnError();
+    return equipment.id;
+  });
+}
+
 export const TIME_OPENERS = {
   'time.manual-entry': {
     trigger: async ({ page }) => manualEntryHeaderButton(page),
@@ -354,6 +392,16 @@ export const TIME_OPENERS = {
     layer: ownEvidenceUploadDialog,
   },
   // The field worker's proposal from the pencil on the opened job's Einsatzort, in any proposal state.
+  // The technician's „Verlauf und Dokumente“ of the Anlage the office linked to the opened job.
+  'field.equipment-record': {
+    trigger: async ({ page, world }) => {
+      await prepareFieldEquipment(world);
+      await page.reload();
+      await hydratedAndSettled(page);
+      return page.getByRole('button', { name: /^Verlauf und Dokumente von / });
+    },
+    layer: (page) => page.getByRole('dialog', { name: 'Verlauf und Dokumente' }),
+  },
   'field.site-access': {
     trigger: async ({ page }) => fieldPackSiteAccessButton(page),
     layer: fieldPackSiteAccessDialog,

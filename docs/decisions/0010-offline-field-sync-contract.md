@@ -353,6 +353,16 @@ Decided for werk-flow/werkflow-planning#407. A time event's send that left in a 
 - **A deletion** waits for the ended send as for any other. A request that reached the server before it ended is a send whose answer was lost: the server's record wins and shows on the next refresh.
 - **Open: report drafts.** A draft's attach request and its photo uploads do not end on `online` yet. One that hangs still holds the pass, and the time events behind it.
 
+## Amendment 2026-11-16: a report draft's send ends when the network returns
+
+Decided for werk-flow/werkflow-planning#407. It closes the open point of the amendment of 2026-11-14: a draft send that hung in a dead spot held the sync runner's pass, and with it the time events behind it.
+
+- **The return ends it.** On every `online` the draft sender ends its requests still in flight, the attach request and the photo transfer, and sends again. The runner's pass waits on the draft sender, so the time events behind a hanging draft send leave in the pass after it.
+- **An ended attach is no answer.** The sealed draft waits and goes again under the same operation id. The server records an operation once, so a request that arrived before it ended is answered `replayed`.
+- **An ended photo upload is an interruption.** The draft waits, and the photo goes in the next send.
+- **The sender owns its signal.** It does not use the runner's: a job page carries no runner code at start, and loading it lazily costs the job open a request or bytes it has no margin for.
+- **Open: the upload's ticket and registration.** They are Server Actions, which take no abort signal yet. One that hangs still holds the send until the browser ends it.
+
 ## Amendment 2026-11-14: what the clock shows while the connection changes
 
 Owner requirement (werk-flow/werkflow-planning#22): a connection change never shows an older clock state, not even for a moment on the way to the server's answer. It changes what the clock shows, never what is recorded. `lib/field-sync/device/shown-clock-rule.ts` owns the rule and `shown-clock.ts` holds it across renders; the clock's provider and dock read only from them.
