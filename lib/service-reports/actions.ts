@@ -4,7 +4,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { getWorkBillingParties } from '@/lib/billing-parties/server';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
-import { requireServiceManager } from '@/lib/service-cases/manager-context';
+import { requireServiceManager, type ServiceManagerContext } from '@/lib/service-cases/manager-context';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
@@ -47,7 +47,7 @@ export async function createServiceReport(
     if (!read.success) return read;
     const { jobId, latestReport, ...facts } = read.facts;
     if ((latestReport?.id ?? null) !== replacesReportId)
-      return { success: false, error: 'service_report_stale' };
+      return await staleUnlessCommitted(context, dueWorkId, reportId);
     const parties = await getWorkBillingParties({ kind: 'job', id: jobId });
     if (!parties.success) return parties;
     const current = parties.parties.versions[0];
@@ -62,9 +62,34 @@ export async function createServiceReport(
     });
     const bytes = await renderServiceReport(context, report);
     if (!bytes) return { success: false, error: 'load_failed' };
-    return await storeAndFileServiceReport(context, { dueWorkId, reportId, replacesReportId, report, bytes });
+    const filed = await storeAndFileServiceReport(context, {
+      dueWorkId,
+      reportId,
+      replacesReportId,
+      report,
+      bytes,
+    });
+    if (!filed.success && filed.error === 'service_report_stale')
+      return await staleUnlessCommitted(context, dueWorkId, reportId);
+    return filed;
   } catch (error) {
     logError('createServiceReport: unexpected failure', error);
     return { success: false, error: 'unexpected_error' };
   }
+}
+
+/**
+ * A stale answer, unless this very attempt committed meanwhile: an overlapping
+ * retry of the same report sees its own report as the latest one.
+ */
+async function staleUnlessCommitted(
+  context: ServiceManagerContext,
+  dueWorkId: string,
+  reportId: string,
+): Promise<ActionResult<{ reportId: string; documentId: string }>> {
+  const attempt = await readAttemptReport(context, dueWorkId, reportId);
+  if (!attempt.success) return attempt;
+  if (attempt.report)
+    return { success: true, reportId: attempt.report.id, documentId: attempt.report.documentId };
+  return { success: false, error: 'service_report_stale' };
 }
