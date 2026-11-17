@@ -58,6 +58,18 @@ function stateOfSetter(setter, sourceCode) {
   return variableOf(value, sourceCode);
 }
 
+/**
+ * The function a timeout runs: the argument itself, or for a name (`setTimeout(tick, 1000)`) the
+ * function that name is declared as (`const tick = () => …` or `function tick() {…}`).
+ */
+function timeoutCallback(argument, sourceCode) {
+  if (argument?.type !== 'Identifier') return argument;
+  const definition = variableOf(argument, sourceCode)?.defs[0];
+  if (definition?.type === 'FunctionName') return definition.node;
+  const init = definition?.type === 'Variable' ? definition.node.init : undefined;
+  return init?.type === 'ArrowFunctionExpression' || init?.type === 'FunctionExpression' ? init : argument;
+}
+
 /** Whether `node` lies inside `container`. */
 function within(node, container) {
   return node.range[0] >= container.range[0] && node.range[1] <= container.range[1];
@@ -94,7 +106,7 @@ function rearmingUpdate(effect, sourceCode) {
   );
   for (const timeout of nodesUnder(callback, visitorKeys)) {
     if (timeout.type !== 'CallExpression' || !callsFunctionNamed(timeout, 'setTimeout')) continue;
-    const [onTimeout] = timeout.arguments;
+    const onTimeout = timeoutCallback(timeout.arguments[0], sourceCode);
     if (!onTimeout) continue;
     for (const update of nodesUnder(onTimeout, visitorKeys)) {
       if (update.type !== 'CallExpression' || update.callee.type !== 'Identifier') continue;
