@@ -21,8 +21,6 @@ export type CompletedVisit = {
     documentId: string;
     reportNumber: number;
     createdAt: string;
-    /** False only while a failed filing waits for „Servicebericht erstellen“ to file it. */
-    filed: boolean;
   } | null;
 };
 

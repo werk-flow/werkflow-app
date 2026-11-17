@@ -2,14 +2,13 @@
 // assigned or not, is refused before any database access; Büro neither finds
 // another organization's completed visit nor sees it in the report list, and
 // a refused report writes nothing. A retry of a committed attempt answers with
-// its report, and a report whose filing failed is filed, without a new one.
+// its report and writes nothing.
 import assert from 'node:assert/strict';
 import {
   ORGANIZATION_A,
   ORGANIZATION_B,
   installActionWorld,
   signInAs,
-  tableRows,
 } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
 
@@ -69,7 +68,6 @@ const world = installActionWorld({
       created_at: '2026-11-17T10:00:00Z',
     },
   ],
-  documents: [{ id: committedDocumentId, organization_id: ORGANIZATION_A, filed_at: '2026-11-17T10:00:01Z' }],
   job_assignments: [{ organization_id: ORGANIZATION_B, job_id: foreignJobId, user_id: 'caller' }],
 });
 const { createServiceReport } = await import('@/lib/service-reports/actions');
@@ -107,24 +105,3 @@ assert.deepEqual(
   committed,
 );
 assert.equal(world.rpcCalls.length, 0, 'a retry of a committed attempt wrote again');
-
-// A latest report whose filing failed is filed by the next attempt, not made again.
-const [document] = tableRows(world, 'documents');
-if (document) document.filed_at = null;
-world.rpc = ({ name }) =>
-  name === 'file_document'
-    ? { data: { id: committedDocumentId, organization_id: ORGANIZATION_A }, error: null }
-    : { data: null, error: { code: 'P0001', message: 'unexpected call' } };
-const newAttempt = '8f000000-0000-4000-8000-000000000016';
-assert.deepEqual(
-  await createServiceReport({
-    dueWorkId: ownDueWorkId,
-    reportId: newAttempt,
-    replacesReportId: committedReportId,
-  }),
-  committed,
-);
-assert.deepEqual(
-  world.rpcCalls.map((call) => [call.name, call.args.p_document_id]),
-  [['file_document', committedDocumentId]],
-);

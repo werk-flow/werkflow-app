@@ -45,13 +45,13 @@ export type ServiceReportSource = {
 
 const quantityFormat = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 3 });
 
-const filled = (values: Array<string | null>): string[] =>
+const nonBlank = (values: Array<string | null>): string[] =>
   values.flatMap((value) => (value?.trim() ? [value.trim()] : []));
 
 /** A customer's free-text address as lines: one per line break, else one per comma. */
-function addressLines(address: string | null): string[] {
+function customerAddressLines(address: string | null): string[] {
   const text = address?.trim() ?? '';
-  return filled(text.split(text.includes('\n') ? /\r?\n/ : ','));
+  return nonBlank(text.split(text.includes('\n') ? /\r?\n/ : ','));
 }
 
 /** The next action as the customer reads it; the target date, never its owner or internal reason. */
@@ -78,19 +78,19 @@ export function buildServiceReport(source: ServiceReportSource): ServiceReport {
     issuedOn: source.issuedOn,
     visitedOn: source.completedOn,
     jobNumber: source.jobNumber,
-    recipient: { name: source.recipient.name, addressLines: addressLines(source.recipient.address) },
+    recipient: { name: source.recipient.name, addressLines: customerAddressLines(source.recipient.address) },
     site: site && {
       name: site.name,
-      addressLines: filled([site.street, filled([site.postalCode, site.city]).join(' ')]),
+      addressLines: nonBlank([site.street, nonBlank([site.postalCode, site.city]).join(' ')]),
     },
     equipment: source.equipment.map((item) => ({
       name: item.name,
       equipmentNumber: item.equipmentNumber,
-      makeAndModel: filled([item.manufacturer, item.model]).join(' ') || null,
+      makeAndModel: nonBlank([item.manufacturer, item.model]).join(' ') || null,
       location: item.locationDetail?.trim() || null,
     })),
     outcome: source.scopeOutcome,
-    workDone: filled(shown.map((revision) => revision.performedWork)),
+    workDone: nonBlank(shown.map((revision) => revision.performedWork)),
     readings: shown.flatMap((revision) =>
       revision.readings.map((reading) => ({
         description: reading.description,

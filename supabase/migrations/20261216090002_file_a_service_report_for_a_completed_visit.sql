@@ -7,10 +7,9 @@
 --   a filed document refuses a new version.
 -- * public.register_maintenance_service_report registers the rendered PDF as
 --   a document of category `report` without a retention class, under the
---   first free name in the library root, links it to
---   the visit job, each Anlage of the visit and the customer, and writes its
---   audit event and its report row, in one call. The server files it right
---   after through lib/documents/filing.ts.
+--   first free name in the library root, links it to the visit job, each
+--   Anlage of the visit and the customer, writes its audit event and report
+--   row, and files it through E9's public.file_document, in one call.
 
 create table public.maintenance_service_reports (
   id uuid primary key,
@@ -174,6 +173,8 @@ begin
     p_report_id, p_organization_id, v_due.id, p_document_id,
     coalesce(v_latest.report_number, 0) + 1, v_latest.id, p_actor_id
   );
+  -- Filed in the same call through E9's filing, so no report stands unfiled.
+  perform public.file_document(p_actor_id, p_organization_id, p_document_id);
   return jsonb_build_object('reportId', p_report_id, 'documentId', p_document_id, 'duplicate', false);
 end;
 $$;

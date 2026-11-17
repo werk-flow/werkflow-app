@@ -1,6 +1,6 @@
 -- A completed maintenance visit gives a filed Servicebericht
 -- (migration 20261216090002_file_a_service_report_for_a_completed_visit.sql):
--- * The report registers a PDF document of category report without a
+-- * The report registers a filed PDF document of category report without a
 --   retention class, linked to the visit job, the visit's Anlage and the
 --   customer, with its audit event and report number 1.
 -- * A retry of the same report id answers with it; a regenerated report is a
@@ -155,8 +155,9 @@ begin
   select * into strict v_document from public.documents where id = '47160000-0000-4000-8000-000000000091';
   if v_document.category is distinct from 'report'
      or v_document.mime_type is distinct from 'application/pdf'
-     or v_document.retention_class is not null or v_document.filed_at is not null then
-    raise exception 'the report is not an unfiled PDF report without a retention class: %', row_to_json(v_document);
+     or v_document.retention_class is not null or v_document.filed_at is null
+     or v_document.filed_by is distinct from '47160000-0000-4000-8000-000000000001' then
+    raise exception 'the report is not a filed PDF report without a retention class: %', row_to_json(v_document);
   end if;
   if (select count(*) from public.document_links link
       where link.document_id = v_document.id
@@ -170,8 +171,11 @@ begin
     select 1 from public.document_audit_events event
     where event.document_id = v_document.id and event.event_type = 'uploaded'
       and event.event_payload ->> 'source' = 'maintenance_service_report'
+  ) or not exists (
+    select 1 from public.document_audit_events event
+    where event.document_id = v_document.id and event.event_type = 'filed'
   ) then
-    raise exception 'the report has no audit event';
+    raise exception 'the report lacks its upload or filing audit event';
   end if;
   if (select report_number from public.maintenance_service_reports
       where id = '47160000-0000-4000-8000-000000000081') is distinct from 1 then

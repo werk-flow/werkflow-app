@@ -47,8 +47,6 @@ const REPORT_FAILURES: Readonly<Record<string, string>> = {
   maintenance_due_not_found: 'Den Besuch gibt es nicht mehr. Lade die Seite neu.',
   service_report_recipient_missing:
     'Der Auftrag hat keinen Kunden als Empfänger. Trage im Auftrag einen Auftraggeber ein.',
-  service_report_filing_failed:
-    'Der Servicebericht ist gespeichert, aber noch nicht festgeschrieben. Klicke erneut auf „Servicebericht erstellen“.',
 };
 
 function VisitRow({ visit, actions }: { visit: CompletedVisit; actions: ReportActions }): ReactElement {
@@ -81,7 +79,7 @@ function VisitRow({ visit, actions }: { visit: CompletedVisit; actions: ReportAc
         className="flex min-w-0 flex-wrap items-center gap-2 @3xl/reports:justify-end"
       >
         <InlinePending active={busy} label="Servicebericht wird bearbeitet" />
-        {report?.filed ? (
+        {report ? (
           <>
             <Button
               type="button"

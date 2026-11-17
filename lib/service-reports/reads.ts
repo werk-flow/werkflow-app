@@ -19,7 +19,7 @@ const COMPLETED_VISIT_PAGE_SIZE = 20;
 
 type LatestReport = NonNullable<CompletedVisit['latestReport']>;
 
-/** The newest report of each visit, with whether its document is filed. */
+/** The newest report of each visit. */
 async function readLatestReports(
   context: ServiceManagerContext,
   dueWorkIds: string[],
@@ -44,17 +44,6 @@ async function readLatestReports(
     if (!known || known.report_number < report.report_number)
       latest.set(report.maintenance_due_work_id, report);
   }
-  const documents = await readInBatches(
-    [...latest.values()].map((report) => report.document_id),
-    (batch) =>
-      context.admin
-        .from('documents')
-        .select('id, filed_at')
-        .eq('organization_id', context.organizationId)
-        .in('id', batch),
-  );
-  if (documents.error) return null;
-  const filed = new Set(documents.data.flatMap((document) => (document.filed_at ? [document.id] : [])));
   return new Map(
     [...latest].map(([dueWorkId, report]) => [
       dueWorkId,
@@ -63,7 +52,6 @@ async function readLatestReports(
         documentId: report.document_id,
         reportNumber: report.report_number,
         createdAt: report.created_at,
-        filed: filed.has(report.document_id),
       },
     ]),
   );
@@ -196,15 +184,21 @@ export type VisitReportFacts = Omit<ServiceReportSource, 'issuedOn' | 'recipient
 };
 
 /** The Anlagen of a plan revision, in Anlage number order. */
-async function readVisitEquipment(
+async function readReportEquipment(
   context: ServiceManagerContext,
   revisionId: string,
 ): Promise<ServiceReportSource['equipment'] | null> {
-  const links = await context.admin
-    .from('maintenance_plan_revision_equipment')
-    .select('equipment_id')
-    .eq('organization_id', context.organizationId)
-    .eq('maintenance_plan_revision_id', revisionId);
+  const links = await readCompleteRows(
+    (from, to) =>
+      context.admin
+        .from('maintenance_plan_revision_equipment')
+        .select('id, equipment_id')
+        .eq('organization_id', context.organizationId)
+        .eq('maintenance_plan_revision_id', revisionId)
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
   if (links.error) return null;
   const equipment = await readInBatches(
     links.data.map((link) => link.equipment_id),
@@ -227,18 +221,23 @@ async function readVisitEquipment(
 }
 
 /** The visit's evidence revisions in link order, with their readings and the customer's signature. */
-async function readVisitEvidence(
+async function readReportEvidence(
   context: ServiceManagerContext,
   dueWorkId: string,
 ): Promise<ServiceReportSource['evidence'] | null> {
   const scope = context.organizationId;
-  const links = await context.admin
-    .from('maintenance_due_evidence_links')
-    .select('work_artifact_revision_id, created_at')
-    .eq('organization_id', scope)
-    .eq('maintenance_due_work_id', dueWorkId)
-    .order('created_at')
-    .order('work_artifact_revision_id');
+  const links = await readCompleteRows(
+    (from, to) =>
+      context.admin
+        .from('maintenance_due_evidence_links')
+        .select('work_artifact_revision_id, created_at')
+        .eq('organization_id', scope)
+        .eq('maintenance_due_work_id', dueWorkId)
+        .order('created_at')
+        .order('work_artifact_revision_id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
   if (links.error) return null;
   const revisionIds = links.data.map((link) => link.work_artifact_revision_id);
   const [revisions, readings, signatures] = await Promise.all([
@@ -334,8 +333,8 @@ export async function readVisitReportFacts(
       .eq('organization_id', context.organizationId)
       .eq('id', due.job_id)
       .maybeSingle(),
-    readVisitEquipment(context, due.maintenance_plan_revision_id),
-    readVisitEvidence(context, due.id),
+    readReportEquipment(context, due.maintenance_plan_revision_id),
+    readReportEvidence(context, due.id),
     context.admin
       .from('maintenance_visit_findings')
       .select('defects, next_action, target_date')
