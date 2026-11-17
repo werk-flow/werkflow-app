@@ -24,7 +24,8 @@ export type CustomerMailKind =
   | 'mandate_inactive'
   | 'debit_notice'
   | 'invoice'
-  | 'receipt';
+  | 'receipt'
+  | 'refund';
 type MailKind = CustomerMailKind | `alarm.${BillingAlarmKind}`;
 
 export type BillingMailOutcome =
