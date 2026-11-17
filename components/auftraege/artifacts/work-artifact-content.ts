@@ -18,15 +18,6 @@ export type WorkArtifactContentDraft = {
 };
 
 // One German label per stored value, shared by the editor selects and the read view.
-export const DEFECT_SEVERITY_LABELS: Record<
-  NonNullable<WorkArtifactContentInput['defectSeverity']>,
-  string
-> = { low: 'Niedrig', medium: 'Mittel', high: 'Hoch', critical: 'Kritisch' };
-export const DEFECT_STATE_LABELS: Record<NonNullable<WorkArtifactContentInput['defectState']>, string> = {
-  open: 'Offen',
-  in_progress: 'In Bearbeitung',
-  resolved: 'Behoben',
-};
 export const AUTHORIZATION_STATE_LABELS: Record<
   NonNullable<WorkArtifactContentInput['authorizationState']>,
   string

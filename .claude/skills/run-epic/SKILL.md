@@ -13,7 +13,7 @@ The planning repo `werk-flow/werkflow-planning` is private. Its clone sits besid
 
 1. Read the brief, `AGENTS.md`, [the docs index](../../../docs/README.md), and the feature spec's **Current Product Baseline**.
 2. Split the work into child PRs, one problem each. A child merges within one working day and stays under about 1,500 changed lines: larger PRs pull `main` into their branch again and again. Each child ships the product caller of its code, so slices are vertical and pass the dead-code checks. Give each a [review level](../../../docs/technical/coderabbit.md#choose-the-review-level) and a merge mode: "full send", or "full stop" where the owner must read the diff.
-3. Order the children in stages. A stage runs in parallel and starts after the previous one merged. A child that changes a shared check or helper goes first, alone. Stack a child on an unmerged branch only when their files do not overlap; otherwise it waits a stage. A dependency on another epic is a stage on both epics. A lead that waits on an issue or PR it does not own in `werkflow-app` or `werkflow-planning` comments `Waiting: <its threadId>` on it (`$T3CODE_THREAD_ID`), at plan approval for a cross-epic stage and whenever a blocker turns up; `ops/merge-notice.py` wakes it once when that closes or merges. It searches only those two repositories: check a blocker elsewhere at each wake.
+3. Order the children in stages. A stage runs in parallel and starts after the previous one merged. A child that changes a shared check or helper goes first, alone. Stack a child on an unmerged branch only when their files do not overlap; otherwise it waits a stage. A dependency on another epic is a stage on both epics. A lead that waits on an issue or PR it does not own in `werkflow-app` or `werkflow-planning` comments `Waiting: <its threadId>` on it (`$T3CODE_THREAD_ID`), at plan approval for a cross-epic stage and whenever a blocker turns up; [the notifier](../../../docs/technical/machine-setup.md#keep-the-agents-moving) wakes it once when that closes or merges. It searches only those two repositories: check a blocker elsewhere at each wake.
 4. List every scope question and every kind-1 and kind-3 decision of [Decide or ask](../../../AGENTS.md#decide-or-ask) that the work can reach, each with your recommendation: where each child's code lives (public `werkflow-app` or a private repo) and whether its data is licensed, scope edges, money, new personal data, a design direction with real alternatives, a residual exposure, a Willert question. Read the specs and the code until no child would have to stop for one: a question asked after building leaves a finished PR waiting.
 5. Open the epic issue: goal, targets, a table of children (stage, issue, level, merge mode), the listed decisions, done-when, and the state and the three lists of [section 4](#4-keep-the-three-lists), empty.
 6. Open one issue per child: "Part of <epic>. Stage <s>, level <l>, <merge mode>." Then **Do** (the scope, with file paths) and **Done when** (the commands that must pass, what the PR body reports, the product caller, and under about 1,500 changed lines).
@@ -41,7 +41,7 @@ Start each child of the current stage with `delegate_task` (`isolation: "worktre
 - Never end your turn while a shell run you wait on is going: your turn end is your hand-back ([wait for a long run](../../../docs/technical/testing.md#wait-for-a-long-run)).
 - End with: `PR <full URL>, head <SHA>, checks and reviews <state>.`
 
-End your turn. A child's completion notice wakes you, and so does a PR watch, so do not poll them. A shell run wakes nobody: [start it notified](../../../docs/technical/testing.md#wait-for-a-long-run).
+End your turn. A child's completion notice wakes you, and so does a PR watch, so do not poll them. When T3 drops a child's hand-back, the notifier passes it on. A shell run wakes nobody: [start it notified](../../../docs/technical/testing.md#wait-for-a-long-run).
 
 ## 4. Keep the three lists
 
@@ -50,7 +50,7 @@ The epic issue holds a **State** section and three lists ([Decide or ask](../../
 - **State.** The current stage, and one line per open child: issue, PR, head SHA, where it stands (building, in review, waiting for the owner, ready to merge) and your next step. Update it on every hand-back, merge and stage start, before you end the turn.
 
 - **Decided without the owner.** One line per decision, yours and each child's: what, why, the PR.
-- **Owner queue.** One entry per owner item, posted once: what the owner decides or does, your recommendation first, numbered steps where the owner must act, and what waits for it. Keep every child going that does not depend on it. Use the question tool only when nothing else in the plan can move.
+- **Owner queue.** One entry per owner item, posted once: what the owner decides or does, your recommendation first, numbered steps where the owner must act, and what waits for it. Ask the same item through the question tool, so T3 shows it to the owner; the notifier reminds a lead whose Owner queue entry has no question open in T3. Keep every child going that does not depend on it.
   - A sign-in or account login is always an owner step; no agent starts one ([security](../../../docs/technical/security.md#never)). Its entry names the machine, the window, the exact command and what the owner should see. Ask the owner through the question tool at once, so T3 flags it, and keep working on everything that does not need it.
 - **For the owner to look at.** Captures of the screens and copy you accepted ([rendered design acceptance](../../../docs/technical/standards-audit.md#rendered-design-acceptance)), each lab reference accepted with `lab-counts accept`, and where to try a user-visible speed change. Nothing waits for this list.
 
@@ -65,7 +65,7 @@ For each hand-back:
 1. Call `link_pull_request` and `watch_pull_request` for the PR.
 2. Read the diff against its issue. Then babysit the PR by [Babysit a pull request](../../../docs/technical/coderabbit.md#babysit-a-pull-request): every CI and review wake is yours. Fix small gaps and small findings yourself.
    For a larger fix round, start a fresh `delegate_task` whose prompt names the PR, its head SHA, the branch and each finding to fix, and ends with the same hand-back line. Each review or re-check round is a new `delegate_task`.
-3. Merge a child with `gh pr merge <n> --squash --auto` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", and go on with the children that do not depend on it. When nothing else can move, ask through the question tool and end your turn. T3 ends the watch on the merge without a wake; the merge notice then sends you one message per merged PR your thread links ([the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate)), and you start the next stage. Keep one repeating `schedule_task` of yours, changed in place, that finds a child open and out of the queue and babysits it again; delete it when the epic settles.
+3. Merge a child with `gh pr merge <n> --squash --auto` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", ask it through the question tool in the same turn, and go on with the children that do not depend on it. When nothing else can move, end your turn. T3 ends the watch on the merge without a wake; the notifier then sends you one message per merged PR your thread links ([the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate)), and you start the next stage. Keep no repeating `schedule_task` to babysit: the notifier wakes you when a PR or your epic stops moving.
 4. Bring the new `main` into an open sibling only when GitHub reports it conflicting (`DIRTY`), and keep both sides. The merge queue tests the others on the newest `main`.
 5. Classify every failed job by [Failures](../../../docs/technical/testing.md#failures) before any rerun. Only an `environment` failure gets its one retry; cite its issue.
 6. Once `gh pr view <n> --json state` reports `MERGED`, close the child issue with "Merged in <PR>."
@@ -73,6 +73,16 @@ For each hand-back:
 Start the next stage only after every child of this stage merged.
 
 Trap: relaying CI or review news into a running child with `t3_thread_send`. A delegated child never watches and is not built to take news mid-task. Fix it yourself, or start the next round once it has handed back.
+
+## Wait where T3 sees it
+
+The notifier checks every 10 minutes that your PRs and your epic move: a thread of yours ran in the last 20 minutes, or a reason to wait shows ([keep the agents moving](../../../docs/technical/machine-setup.md#keep-the-agents-moving)). When you wait on purpose, record the reason where it can read it:
+
+- the owner: a question through the question tool;
+- a time: snooze your thread until then with `t3_thread_update` (`snoozedUntil`), and say why in the State;
+- another epic's issue or PR: a `Waiting: <your threadId>` comment on it.
+
+A snooze or a `Waiting:` comment stops counting once its item shows no movement for 4 hours; an open question to the owner counts until it is answered. A message that starts with `[notifier]` lists the facts: act on them, or record a real reason. At the third stall message in a row for the same item, ask the owner through the question tool.
 
 ## Hand over at about 400k
 

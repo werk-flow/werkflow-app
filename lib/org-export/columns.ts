@@ -39,7 +39,10 @@ type ExcludedTable =
   | 'organization_export_parts'
   // Idempotency keys of report drafts a phone sent; the revision each one
   // wrote is in `work_artifact_revisions`.
-  | 'work_artifact_draft_operations';
+  | 'work_artifact_draft_operations'
+  // The staged lines of a wholesaler delivery: a working copy of the files,
+  // dropped once taken over; the catalog holds what was taken over.
+  | 'inventory_supplier_catalog_import_lines';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
@@ -98,6 +101,9 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   inventory_locations: 'Lager_Lagerorte',
   inventory_movements: 'Lager_Bewegungen',
   inventory_stock_levels: 'Lager_Bestände',
+  inventory_supplier_catalog_articles: 'Lager_Großhandelskatalog',
+  inventory_supplier_catalog_imports: 'Lager_Großhandelsimporte',
+  inventory_supplier_rebate_groups: 'Lager_Rabattgruppen',
   inventory_suppliers: 'Lager_Lieferanten',
   job_assignments: 'Aufträge_Zuweisungen',
   job_capability_requirement_origins: 'Aufträge_Qualifikationsanforderungen_Herkunft',

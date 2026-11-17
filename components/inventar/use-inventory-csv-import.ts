@@ -22,6 +22,7 @@ import {
   findInventoryImportRepeat,
   previewInventoryImport,
 } from '@/lib/inventory/import-actions';
+import { downloadImportReport } from './inventory-import-outcomes';
 
 /**
  * The file and the mode a preview was made from. The preview and the result
@@ -159,16 +160,6 @@ function useCsvFile() {
   };
 }
 
-/** Saves the result report, built in the browser from the file's own rows. */
-function downloadReport(fileName: string, csv: Uint8Array) {
-  const url = URL.createObjectURL(new Blob([csv.slice()], { type: 'text/csv;charset=utf-8' }));
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `${fileName.replace(/\.csv$/i, '') || 'inventar-import'}-hinweise.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
 /** The preview and the booking with the step they lead to. A booking with nothing to report closes the dialog. */
 function useImportRun() {
   const [step, setStep] = useState<ImportStep>({ kind: 'choose' });
@@ -300,6 +291,7 @@ export function useInventoryCsvImport({ onOpenChange }: { onOpenChange: (open: b
     },
     report: (outcomes: readonly ImportRowOutcome[], basis: ImportBasis) =>
       importReportCsv({ ...basis, outcomes, fileUnits: basis.importRows.map((row) => row.unit ?? null) }),
-    downloadReport: (csv: Uint8Array, basis: ImportBasis) => downloadReport(basis.fileName, csv),
+    downloadReport: (csv: Uint8Array, basis: ImportBasis) =>
+      downloadImportReport(basis.fileName.replace(/\.csv$/i, '') || 'inventar-import', csv),
   };
 }

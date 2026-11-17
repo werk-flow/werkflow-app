@@ -9,8 +9,12 @@ import { Field, useFieldContext } from '@/components/ui/field';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Constants } from '@/lib/supabase/database.types';
-import { WORK_ARTIFACT_UNIT_LABELS, type MeasurementLineInput } from '@/lib/work-artifacts/types';
-import { DEFECT_SEVERITY_LABELS, DEFECT_STATE_LABELS } from './work-artifact-content';
+import {
+  DEFECT_SEVERITY_LABELS,
+  DEFECT_STATE_LABELS,
+  WORK_ARTIFACT_UNIT_LABELS,
+  type MeasurementLineInput,
+} from '@/lib/work-artifacts/types';
 import { measurementLineDescriptionId, measurementLineQuantityId } from './work-artifact-field-errors';
 import { DateField, TextField, type WorkArtifactContentFieldsProps } from './work-artifact-form-fields';
 
