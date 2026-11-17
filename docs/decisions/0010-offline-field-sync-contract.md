@@ -353,6 +353,16 @@ Decided for werk-flow/werkflow-planning#407. A time event's send that left in a 
 - **A deletion** waits for the ended send as for any other. A request that reached the server before it ended is a send whose answer was lost: the server's record wins and shows on the next refresh.
 - **Open: report drafts.** A draft's attach request and its photo uploads do not end on `online` yet. One that hangs still holds the pass, and the time events behind it.
 
+## Amendment 2026-11-16: a report draft's send ends when the network returns
+
+Decided for werk-flow/werkflow-planning#407. It closes the open point of the amendment of 2026-11-14: a draft send that hung in a dead spot held the sync runner's pass, and with it the time events behind it.
+
+- **The return ends it.** On every `online` the draft sender ends its requests still in flight, the attach request and the photo transfer, and sends again. The runner's pass waits on the draft sender, so the time events behind a hanging draft send leave in the pass after it.
+- **An ended attach is no answer.** The sealed draft waits and goes again under the same operation id. The server records an operation once, so a request that arrived before it ended is answered `replayed`.
+- **An ended photo upload is an interruption.** The draft waits, and the photo goes in the next send.
+- **The sender owns its signal.** It does not use the runner's: a job page carries no runner code at start, and loading it lazily costs the job open a request or bytes it has no margin for.
+- **Open: the upload's ticket and registration.** They are Server Actions, which take no abort signal yet. One that hangs still holds the send until the browser ends it.
+
 ## Amendment 2026-11-14: the offline page loads every file from the shell
 
 Decided for werk-flow/werkflow-planning#22 after the iPhone re-test of the cold start: the installed app opened WerkFlow's offline page, but showed „Gerade kein Netz“ instead of the stored day, a broken logo, and an „Erneut versuchen“ that did nothing. The worker answered a page's files from its shell only when it remembered answering that page with the fallback, or when the device reported no network. A cold start can leave it neither: iOS may stop the worker between the navigation and the page's file requests, and the phone may still report a network. The files then went to the dead network and the page's script never ran. Vercel also names each image of `public/` with the deployment's query (`?dpl=…`), which the shell stores without it, so the logo missed the shell in any case.
