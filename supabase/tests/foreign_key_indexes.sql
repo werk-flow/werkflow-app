@@ -2,7 +2,7 @@
 -- Deleting or re-keying a parent row runs one lookup per referencing key; with
 -- no usable index that lookup scans the whole child table, once per parent
 -- row. An organization's deletion then outran the 8 s statement timeout.
--- Usable: a valid index whose leading columns are exactly the key's columns,
+-- Usable: a valid index whose leading key columns (not INCLUDE columns) are exactly the key's columns,
 -- in any order, and whose predicate, if any, only requires key columns to be
 -- not null (the lookup's `column = $1` implies that).
 begin;
@@ -25,6 +25,7 @@ begin
     if not exists (
       select 1 from pg_index index_row
       where index_row.indrelid = foreign_key.conrelid and index_row.indisvalid
+        and index_row.indnkeyatts >= cardinality(foreign_key.conkey)
         and (index_row.indkey::int2[])[0:cardinality(foreign_key.conkey) - 1] @> foreign_key.conkey
         and (index_row.indkey::int2[])[0:cardinality(foreign_key.conkey) - 1] <@ foreign_key.conkey
         and (

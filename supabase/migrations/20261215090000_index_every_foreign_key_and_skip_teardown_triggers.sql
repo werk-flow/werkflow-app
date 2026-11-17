@@ -130,10 +130,10 @@ create trigger sync_job_status_from_planning_occurrences_on_delete after delete 
 -- 2c. The event-ledger guard lets a cascade remove a ledger row only when a
 -- cascading parent is gone; it found that out by reading the catalog and
 -- querying every such parent, per row. An organization being deleted takes
--- every ledger row it owns, so the guard now allows those rows first, under
--- the rule app_private.prevent_historic_work_delete and
--- app_private.prevent_work_lead_delete already apply: inside a cascade, for an
--- organization app.deleting_organization_ids names.
+-- every ledger row it owns, so the guard now allows those rows first: inside a
+-- cascade, for an organization app.deleting_organization_ids names and whose
+-- row is already gone. The setting alone is no proof, since a session can set
+-- it; the missing organization row is the parent check the loop would make.
 create or replace function app_private.guard_event_ledger_history()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
@@ -144,6 +144,9 @@ declare
 begin
   if tg_op = 'DELETE' and pg_trigger_depth() > 1 and old_payload ->> 'organization_id' = any (
     string_to_array(current_setting('app.deleting_organization_ids', true), ',')
+  ) and not exists (
+    select 1 from public.organizations organization
+    where organization.id = (old_payload ->> 'organization_id')::uuid
   ) then return old; end if;
   if pg_trigger_depth() > 1 then
     if tg_op = 'UPDATE' then new_payload := to_jsonb(new); end if;
