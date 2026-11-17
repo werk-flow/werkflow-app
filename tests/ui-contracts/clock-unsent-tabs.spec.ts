@@ -354,10 +354,11 @@ test('a stop this version cannot read can be set aside: the tap behind it is sen
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${aside}\n${record}`);
 
   await setAside.getByRole('button', { name: 'Löschen', exact: true }).click();
-  await page
-    .getByRole('alertdialog', { name: 'Nicht übertragene Zeiten löschen?' })
-    .getByRole('button', { name: 'Endgültig löschen', exact: true })
-    .click();
+  const question = page.getByRole('alertdialog', { name: 'Nicht übertragene Zeiten löschen?' });
+  await question.getByRole('button', { name: 'Endgültig löschen', exact: true }).click();
+  // The question hides the sheet from the accessibility tree while it is open, and closes only once
+  // the device answered: only then does the section's absence mean the record is gone.
+  await expect(question).toHaveCount(0);
   await expect(section).toHaveCount(0);
   // The record left the phone, not only the view.
   expect(await page.evaluate((key) => localStorage.getItem(key), aside)).toBeNull();
