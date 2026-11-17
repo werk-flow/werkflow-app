@@ -50,9 +50,9 @@ create trigger maintenance_service_reports_immutable
 before update or delete on public.maintenance_service_reports
 for each row execute function app_private.prevent_maintenance_history_mutation();
 
--- „Servicebericht erstellen“: the rendered PDF as the visit's report. Definer
--- like the other maintenance writes: only service_role executes it, and it
--- rechecks the actor's role in the organization first. The
+-- „Servicebericht erstellen“: the rendered PDF as the visit's report. Only
+-- service_role executes it, as invoker (security.md, „Add a privileged
+-- function“), and it checks the actor's Admin or Büro role first. The
 -- caller names the report it replaces (null for the first), so two managers
 -- who regenerate at once do not both pass. A retry of a committed report id
 -- answers with that report.
@@ -68,7 +68,7 @@ create function public.register_maintenance_service_report(
   p_size_bytes bigint
 )
 returns jsonb
-language plpgsql security definer set search_path = ''
+language plpgsql security invoker set search_path = ''
 as $$
 declare
   v_existing public.maintenance_service_reports%rowtype;
