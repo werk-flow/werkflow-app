@@ -7,7 +7,10 @@ import { openContractFixture } from './open-fixture';
 // that each fit one call. A unit text the office leaves unmapped rejects its
 // articles, the counts follow the choice, a delivery taken over before waits
 // for the office's decision, nothing is confirmed before „Übernehmen“, and
-// leaving the preview drops it. Made-up data only.
+// leaving the preview drops it. werk-flow/werkflow-planning#477: the preview
+// lists each own article's price change for the office's unit choice and
+// rebates, and the confirm sends only rebates the shown prices were computed
+// with. Made-up data only.
 
 test.beforeEach(async ({ page }) => {
   await openContractFixture(page, 'wholesaler-import');
@@ -67,7 +70,11 @@ test('an unmapped unit text rejects its articles until the office picks a unit, 
   await dialog.getByRole('button', { name: 'Übernehmen', exact: true }).click();
   await expect(dialog.getByText('Die Lieferung ist im Katalog des Großhändlers.')).toBeVisible();
   expect((await contract(page)).confirmations).toEqual([
-    { importId: 'import-1', unitMapping: { Meter: 'meter', 'Rolle 50m': 'roll', Stück: 'piece' } },
+    {
+      importId: 'import-1',
+      unitMapping: { Meter: 'meter', 'Rolle 50m': 'roll', Stück: 'piece' },
+      rebates: { AR1: null, CU1: 3000 },
+    },
   ]);
 });
 
@@ -83,8 +90,113 @@ test('the unit choice is locked while the confirm runs, so the preview never sho
   await dialog.getByRole('button', { name: 'Übernehmen', exact: true }).click();
   await expect
     .poll(async () => (await contract(page)).confirmations)
-    .toEqual([{ importId: 'import-1', unitMapping: { Meter: 'meter', 'Rolle 50m': null, Stück: 'piece' } }]);
+    .toEqual([
+      {
+        importId: 'import-1',
+        unitMapping: { Meter: 'meter', 'Rolle 50m': null, Stück: 'piece' },
+        rebates: { AR1: null, CU1: 3000 },
+      },
+    ]);
   await expect(unit).toBeDisabled();
+  await expect(dialog.getByRole('textbox', { name: /Rabatt in % für „CU1“/ })).toBeDisabled();
+});
+
+function prices(dialog: Locator): Locator {
+  return dialog.getByRole('region', { name: 'Preise eigener Artikel' });
+}
+
+test('the preview lists each own price change with its old and new price, and the unit choice decides which apply', async ({
+  page,
+}) => {
+  const dialog = await openPreview(page);
+  expect((await contract(page)).pricings).toEqual([{ importId: 'import-1', rebates: null }]);
+  await expect(prices(dialog).getByText('Verkaufspreis: 5,00 € je m → 610,00 € je 100 m')).toBeVisible();
+  await expect(
+    prices(dialog).getByText('Einkaufspreis: 4,00 € je m → 427,00 € je 100 m (Listenpreis minus 30 %)'),
+  ).toBeVisible();
+  await expect(prices(dialog).getByText('Einkaufspreis: 12,50 € je Stk → 13,00 € je Stk')).toBeVisible();
+  await expect(prices(dialog).getByText(/ab 17\.11\.2037/)).toBeVisible();
+  // The roll's article line has a unit text the office has not mapped yet.
+  await expect(prices(dialog).getByText('Mehrschichtverbundrohr 16 mm')).toHaveCount(0);
+  await expect(count(dialog, 'Preise eigener Artikel')).toContainText('3');
+
+  await dialog.getByRole('combobox', { name: /„Rolle 50m“ · 5 Artikel/ }).click();
+  await page.getByRole('option', { name: 'Rolle', exact: true }).click();
+  await expect(prices(dialog).getByText('Verkaufspreis: bisher keiner → 99,00 € je Rolle')).toBeVisible();
+  await expect(count(dialog, 'Preise eigener Artikel')).toContainText('4');
+
+  // Mapped to another unit than the article's, the price is named as not taken.
+  await dialog.getByRole('combobox', { name: /„Meter“ · 120 Artikel/ }).click();
+  await page.getByRole('option', { name: 'Stange', exact: true }).click();
+  await expect(count(dialog, 'Preise eigener Artikel')).toContainText('2');
+  await expect(prices(dialog).getByText(/^2 Preise werden nicht übernommen/)).toBeVisible();
+  expect((await contract(page)).confirmations).toEqual([]);
+});
+
+test('a changed rebate prices the own articles again, and the confirm sends that rebate', async ({
+  page,
+}) => {
+  const dialog = await openPreview(page);
+  const rebate = dialog.getByRole('textbox', { name: /Rabatt in % für „CU1“/ });
+  await expect(rebate).toHaveValue('30');
+  await expect(dialog.getByText('Vorschlag laut Lieferung: 30 %')).toBeVisible();
+  await rebate.fill('25');
+  await rebate.blur();
+  await expect(
+    prices(dialog).getByText('Einkaufspreis: 4,00 € je m → 457,50 € je 100 m (Listenpreis minus 25 %)'),
+  ).toBeVisible();
+  expect((await contract(page)).pricings.at(-1)).toEqual({
+    importId: 'import-1',
+    rebates: { AR1: null, CU1: 2500 },
+  });
+
+  await dialog.getByRole('button', { name: 'Übernehmen', exact: true }).click();
+  await expect(dialog.getByText('Die Lieferung ist im Katalog des Großhändlers.')).toBeVisible();
+  expect((await contract(page)).confirmations.map((confirmation) => confirmation.rebates)).toEqual([
+    { AR1: null, CU1: 2500 },
+  ]);
+});
+
+test('a cleared rebate drops the purchase price from the list price', async ({ page }) => {
+  const dialog = await openPreview(page);
+  const rebate = dialog.getByRole('textbox', { name: /Rabatt in % für „CU1“/ });
+  await rebate.fill('');
+  await rebate.blur();
+  await expect(prices(dialog).getByText(/Listenpreis minus/)).toHaveCount(0);
+  await expect(count(dialog, 'Preise eigener Artikel')).toContainText('2');
+});
+
+test('a rebate that is no percentage marks its field and focuses it, and nothing is confirmed', async ({
+  page,
+}) => {
+  const dialog = await openPreview(page);
+  const rebate = dialog.getByRole('textbox', { name: /Rabatt in % für „AR1“/ });
+  await rebate.fill('120');
+  await dialog.getByRole('button', { name: 'Übernehmen', exact: true }).click();
+  await expect(
+    dialog.getByText('Gib einen Rabatt von 0 bis 100 % mit höchstens zwei Nachkommastellen ein.'),
+  ).toBeVisible();
+  await expect(rebate).toBeFocused();
+  const { confirmations, pricings } = await contract(page);
+  expect({ confirmations, pricings: pricings.length }).toEqual({ confirmations: [], pricings: 1 });
+});
+
+test('a price preview that fails drops the batch and shows no preview', async ({ page }) => {
+  await page.evaluate(() => {
+    window.uiContractWholesalerImport.pricingError = 'save_failed';
+  });
+  const dialog = await openDialog(page);
+  await dialog.getByRole('combobox', { name: /Großhändler/ }).click();
+  await page.getByRole('option', { name: 'Großhandel Nordrohr', exact: true }).click();
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'nordrohr-artikel.dat',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from('synthetisch'),
+  });
+  await dialog.getByRole('button', { name: 'Vorschau anzeigen', exact: true }).click();
+  await expect(dialog.getByText(/Es wurde nichts übernommen/)).toBeVisible();
+  await expect(dialog.getByText('Vorschau der Lieferung. Noch ist nichts übernommen.')).toHaveCount(0);
+  await expect.poll(async () => (await contract(page)).abandoned).toEqual(['import-1']);
 });
 
 test('a submit without supplier or file marks both and focuses the supplier', async ({ page }) => {
@@ -195,6 +307,15 @@ async function failPreview(page: Page): Promise<Locator> {
 const CAPTURES: ReadonlyArray<readonly [string, (page: Page) => Promise<unknown>]> = [
   ['auswahl-leer', openDialog],
   ['vorschau-einheit-abgelehnt', openPreview],
+  [
+    'vorschau-preise',
+    async (page) => {
+      const dialog = await openPreview(page);
+      await dialog.getByRole('combobox', { name: /„Rolle 50m“ · 5 Artikel/ }).click();
+      await page.getByRole('option', { name: 'Rolle', exact: true }).click();
+      await prices(dialog).scrollIntoViewIfNeeded();
+    },
+  ],
   [
     'ergebnis',
     async (page) => {

@@ -2,8 +2,14 @@
 // is recognized again whatever order its files came in, and a unit text names
 // a unit only when the unit list knows it. Synthetic data, no wholesaler file.
 import { expect, test } from 'bun:test';
-import { wholesalerImportReportCsv, wholesalerPreviewTotals } from './wholesaler-import-lines';
-import { WHOLESALER_STAGE_MAX_LINES } from './wholesaler-import-schemas';
+import {
+  formatRebatePercent,
+  ownPriceChangesForUnits,
+  parseRebatePercent,
+  wholesalerImportReportCsv,
+  wholesalerPreviewTotals,
+} from './wholesaler-import-lines';
+import { WHOLESALER_STAGE_MAX_LINES, type WholesalerPriceChange } from './wholesaler-import-schemas';
 import { guessUnitMapping, readDeliveryFiles, stagingParts } from './wholesaler-import-staging';
 import type { WholesalerDelivery } from './wholesaler-reader';
 
@@ -278,6 +284,7 @@ test('the preview counts follow the unit choice: an unmapped unit text rejects i
     priceUnmatched: 1,
     removed: 2,
     rejected: 5,
+    prices: { rebateGroups: [], rebates: {}, changes: [] },
   };
   expect(wholesalerPreviewTotals(preview, { Meter: 'meter', XYZ: null })).toEqual({
     created: 1,
@@ -289,6 +296,7 @@ test('the preview counts follow the unit choice: an unmapped unit text rejects i
     priceUnmatched: 1,
     removed: 2,
     rejected: 5,
+    ownPricesChanged: 0,
   });
   expect(wholesalerPreviewTotals(preview, { Meter: 'meter', XYZ: 'piece' })).toMatchObject({
     created: 3,
@@ -298,4 +306,69 @@ test('the preview counts follow the unit choice: an unmapped unit text rejects i
     changed: 2,
     unchanged: 0,
   });
+});
+
+/** A price change of the pipe, counted in Meter, from an article line with the unit text „Meter“. */
+function pipeChange(overrides: Partial<WholesalerPriceChange>): WholesalerPriceChange {
+  return {
+    itemId: '47700000-0000-4000-8000-000000000021',
+    itemName: 'Kupferrohr 15 mm',
+    itemUnit: 'meter',
+    articleNumber: 'NR-1501',
+    unitText: 'Meter',
+    catalogUnit: null,
+    kind: 'sale',
+    rebateGroup: 'CU1',
+    rebateBasisPoints: null,
+    old: { amountCents: 500, priceQuantity: 1 },
+    new: { amountCents: 61000, priceQuantity: 100 },
+    validFrom: '2026-11-17',
+    ...overrides,
+  };
+}
+
+test("an own price changes only in the article's unit: an article line by the office's mapping, a price line by the catalog's unit", () => {
+  const article = pipeChange({});
+  const priceLine = pipeChange({ unitText: null, catalogUnit: 'meter', kind: 'purchase' });
+  const otherUnitPriceLine = pipeChange({ unitText: null, catalogUnit: 'piece', kind: 'purchase' });
+  const changes = [article, priceLine, otherUnitPriceLine];
+
+  expect(ownPriceChangesForUnits(changes, { Meter: 'meter' })).toEqual({
+    applied: [article, priceLine],
+    otherUnit: [otherUnitPriceLine],
+  });
+  // Mapped to another unit, the article line's price no longer fits the article.
+  expect(ownPriceChangesForUnits(changes, { Meter: 'rod' })).toEqual({
+    applied: [priceLine],
+    otherUnit: [article, otherUnitPriceLine],
+  });
+  // Left unmapped, the article is rejected and changes no price.
+  expect(ownPriceChangesForUnits(changes, { Meter: null }).applied).toEqual([priceLine]);
+  expect(
+    wholesalerPreviewTotals(
+      {
+        units: [],
+        priceUpdates: 0,
+        priceUnmatched: 0,
+        removed: 0,
+        rejected: 0,
+        prices: { rebateGroups: [], rebates: {}, changes },
+      },
+      { Meter: 'meter' },
+    ).ownPricesChanged,
+  ).toBe(2);
+});
+
+test('a rebate reads as typed in German, in hundredths of a percent from 0 to 100', () => {
+  expect(parseRebatePercent('32,5')).toBe(3250);
+  expect(parseRebatePercent(' 32,55 % ')).toBe(3255);
+  expect(parseRebatePercent('0')).toBe(0);
+  expect(parseRebatePercent('100')).toBe(10_000);
+  expect(parseRebatePercent('')).toBeNull();
+  expect(parseRebatePercent('100,01')).toBeUndefined();
+  expect(parseRebatePercent('12,345')).toBeUndefined();
+  expect(parseRebatePercent('-5')).toBeUndefined();
+  expect(parseRebatePercent('dreißig')).toBeUndefined();
+  expect(formatRebatePercent(3250)).toBe('32,5');
+  expect(formatRebatePercent(3000)).toBe('30');
 });

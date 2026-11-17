@@ -1,7 +1,8 @@
 // The wholesaler import and supplier catalog actions over the in-memory
-// database (werk-flow/werkflow-planning#375). A field worker is refused the
-// open, the staging, the preview, the confirm, the abandon, the report, the
-// catalog search and the adopt before any database call. The browser reads a
+// database (werk-flow/werkflow-planning#375, #477). A field worker is refused
+// the open, the staging, the preview, the price preview, the confirm, the
+// abandon, the report, the catalog search and the adopt before any database
+// call; a rebate that is no percentage never reaches the database. The browser reads a
 // delivery, so no action takes a file: each takes parsed lines and carries the
 // caller's organization and actor in its one call, so another organization's
 // wholesaler, batch or catalog row is not found.
@@ -98,9 +99,18 @@ const preview = [
   'previewWholesalerImport',
   () => imports.previewWholesalerImport({ importId: foreignImportId }),
 ] as const;
+const prices = [
+  'previewWholesalerPrices',
+  () => imports.previewWholesalerPrices({ importId: foreignImportId, rebates: { CU1: 2500 } }),
+] as const;
 const confirm = [
   'confirmWholesalerImport',
-  () => imports.confirmWholesalerImport({ importId: foreignImportId, unitMapping: { Meter: 'meter' } }),
+  () =>
+    imports.confirmWholesalerImport({
+      importId: foreignImportId,
+      unitMapping: { Meter: 'meter' },
+      rebates: { CU1: 2500, AR1: null },
+    }),
 ] as const;
 const abandon = [
   'abandonWholesalerImport',
@@ -120,7 +130,7 @@ const search = ['searchSupplierCatalog', () => searchSupplierCatalog('Kupferrohr
 signInAs(world, 'employee');
 await assertRefused(
   world,
-  [open(ownSupplierId), stage, preview, confirm, abandon, report, adopt, search],
+  [open(ownSupplierId), stage, preview, prices, confirm, abandon, report, adopt, search],
   { success: false, error: 'not_authorized' },
   'none',
 );
@@ -174,6 +184,18 @@ assert.deepEqual(
   }),
   { success: false, error: 'invalid_input' },
 );
+// A rebate over 100 %, of a fraction of a hundredth, or of a group with
+// surrounding spaces is refused before the database.
+for (const rebates of [{ CU1: 10_001 }, { CU1: 12.5 }, { CU1: -1 }, { ' CU1': 100 }, { '': 100 }]) {
+  assert.deepEqual(await imports.previewWholesalerPrices({ importId: ownImportId, rebates }), {
+    success: false,
+    error: 'invalid_input',
+  });
+  assert.deepEqual(
+    await imports.confirmWholesalerImport({ importId: ownImportId, unitMapping: {}, rebates }),
+    { success: false, error: 'invalid_input' },
+  );
+}
 assert.equal(world.rpcCalls.length, 0, 'a refused part reached the database');
 
 // The staging and the preview name the batch only together with the caller's
@@ -183,6 +205,7 @@ refuseForeignIds(world, new Map());
 for (const call of [
   () => imports.stageWholesalerImportLines({ importId: ownImportId, lines: [LINE] }),
   () => imports.previewWholesalerImport({ importId: ownImportId }),
+  () => imports.previewWholesalerPrices({ importId: ownImportId, rebates: null }),
 ]) {
   world.rpcCalls.length = 0;
   await call();
@@ -202,7 +225,7 @@ refuseForeignIds(
 );
 await assertRefused(
   world,
-  [stage, preview, confirm, abandon],
+  [stage, preview, prices, confirm, abandon],
   { success: false, error: 'import_not_found' },
   'one-call',
 );

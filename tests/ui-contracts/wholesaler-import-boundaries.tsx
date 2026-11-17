@@ -5,10 +5,13 @@ import type { WholesalerReportLine } from '@/lib/inventory/wholesaler-import-lin
 import type {
   ConfirmWholesalerImportInput,
   OpenWholesalerImportInput,
+  PreviewWholesalerPricesInput,
   StageWholesalerImportLinesInput,
   WholesalerImportPreview,
   WholesalerImportResult,
   WholesalerPreviewEffects,
+  WholesalerPriceChange,
+  WholesalerPricePreview,
 } from '@/lib/inventory/wholesaler-import-schemas';
 
 // The wholesaler import dialog over stand-ins of its actions
@@ -17,7 +20,10 @@ import type {
 // whose reader is the fake in ./wholesaler-reader-boundaries.ts, and sends the
 // parsed lines in parts. The stand answers the database's effects: a made-up
 // delivery of „Großhandel Nordrohr“ whose unit text „Rolle 50m“ names no
-// unit, an optional earlier import, and a preview that can fail.
+// unit, an optional earlier import, and a preview that can fail. Its price
+// preview changes four own articles' prices; the pipe's purchase price is its
+// list price minus the rebate of group „CU1“, which the stand computes for
+// any rebate the dialog sends.
 
 type WholesalerImportContract = {
   /** The file names the fake reader got, and whether it fails or how many „Meter“ articles it reads. */
@@ -33,6 +39,9 @@ type WholesalerImportContract = {
   effects: WholesalerPreviewEffects;
   repeat: WholesalerImportPreview['repeat'];
   previewError: string | null;
+  /** Each price preview's input, in the order they arrived. */
+  pricings: PreviewWholesalerPricesInput[];
+  pricingError: string | null;
   /** Keeps the confirm waiting after it records its input, so the dialog stays pending. */
   confirmHeld: boolean;
   confirmations: ConfirmWholesalerImportInput[];
@@ -81,6 +90,84 @@ const EFFECTS: WholesalerPreviewEffects = {
   rejected: 2,
 };
 
+const TODAY = '2037-11-17';
+
+/** The pipe's purchase price for a rebate of group „CU1“, as the database computes it. */
+function pipePurchase(rebateBasisPoints: number): WholesalerPriceChange {
+  return {
+    itemId: 'item-pipe',
+    itemName: 'Kupferrohr 15 mm',
+    itemUnit: 'meter',
+    articleNumber: 'NR-1501',
+    unitText: 'Meter',
+    catalogUnit: null,
+    kind: 'purchase',
+    rebateGroup: 'CU1',
+    rebateBasisPoints,
+    old: { amountCents: 400, priceQuantity: 1 },
+    new: { amountCents: Math.round((61000 * (10_000 - rebateBasisPoints)) / 10_000), priceQuantity: 100 },
+    validFrom: TODAY,
+  };
+}
+
+/** The own articles' price changes for the rebates; a rebate of CU1 adds the pipe's purchase price. */
+function pricePreview(rebates: Record<string, number | null>): WholesalerPricePreview {
+  const pipeRebate = rebates.CU1 ?? null;
+  const changes: WholesalerPriceChange[] = [
+    {
+      itemId: 'item-valve',
+      itemName: 'Kugelhahn 1/2"',
+      itemUnit: 'piece',
+      articleNumber: 'NR-1503',
+      unitText: null,
+      catalogUnit: 'piece',
+      kind: 'purchase',
+      rebateGroup: null,
+      rebateBasisPoints: null,
+      old: { amountCents: 1250, priceQuantity: 1 },
+      new: { amountCents: 1300, priceQuantity: 1 },
+      validFrom: TODAY,
+    },
+    ...(pipeRebate === null ? [] : [pipePurchase(pipeRebate)]),
+    {
+      itemId: 'item-pipe',
+      itemName: 'Kupferrohr 15 mm',
+      itemUnit: 'meter',
+      articleNumber: 'NR-1501',
+      unitText: 'Meter',
+      catalogUnit: null,
+      kind: 'sale',
+      rebateGroup: 'CU1',
+      rebateBasisPoints: null,
+      old: { amountCents: 500, priceQuantity: 1 },
+      new: { amountCents: 61000, priceQuantity: 100 },
+      validFrom: TODAY,
+    },
+    {
+      itemId: 'item-roll',
+      itemName: 'Mehrschichtverbundrohr 16 mm',
+      itemUnit: 'roll',
+      articleNumber: 'NR-1601',
+      unitText: 'Rolle 50m',
+      catalogUnit: null,
+      kind: 'sale',
+      rebateGroup: 'AR1',
+      rebateBasisPoints: null,
+      old: null,
+      new: { amountCents: 9900, priceQuantity: 1 },
+      validFrom: TODAY,
+    },
+  ];
+  return {
+    rebateGroups: [
+      { rebateGroup: 'AR1', text: 'Armaturen', officeBasisPoints: null, deliveryBasisPoints: null },
+      { rebateGroup: 'CU1', text: 'Kupfer', officeBasisPoints: null, deliveryBasisPoints: 3000 },
+    ],
+    rebates,
+    changes,
+  };
+}
+
 /** The report of the stand's confirmed import. */
 const REPORT: WholesalerReportLine[] = [
   {
@@ -109,6 +196,8 @@ export function initializeWholesalerImportBoundary(): void {
     effects: EFFECTS,
     repeat: null,
     previewError: null,
+    pricings: [],
+    pricingError: null,
     confirmHeld: false,
     confirmations: [],
     abandoned: [],
@@ -141,6 +230,16 @@ export async function previewWholesalerImport(): Promise<
   return { success: true, effects: contract.effects, repeat: contract.repeat };
 }
 
+export async function previewWholesalerPrices(
+  input: PreviewWholesalerPricesInput,
+): Promise<{ success: true; prices: WholesalerPricePreview } | { success: false; error: string }> {
+  const contract = window.uiContractWholesalerImport;
+  contract.pricings.push(input);
+  if (contract.pricingError) return { success: false, error: contract.pricingError };
+  // At first the delivery's 30 % for CU1 and no rebate for AR1.
+  return { success: true, prices: pricePreview(input.rebates ?? { AR1: null, CU1: 3000 }) };
+}
+
 export async function confirmWholesalerImport(
   input: ConfirmWholesalerImportInput,
 ): Promise<{ success: true; result: WholesalerImportResult; alreadyConfirmed: boolean }> {
@@ -160,6 +259,7 @@ export async function confirmWholesalerImport(
       priceUnmatched: 1,
       removed: 2,
       rejected: 2,
+      ownPricesChanged: 3,
     },
   };
 }

@@ -5,6 +5,8 @@ import {
   type InventoryItemType,
 } from '@/lib/inventory/types';
 import { buildCsv } from '@/lib/format/csv-zip';
+import type { ArticlePriceKind } from './article-price-terms';
+import type { PriceQuantity } from './line-amount';
 import { parseDecimalInput } from '@/lib/ui/decimal';
 
 type ImportColumnKey = keyof InventoryImportRow;
@@ -249,6 +251,14 @@ type ImportRejection = (typeof IMPORT_REJECTIONS)[number];
  * position among the file's rows; `unit` is the unit as understood, and
  * `itemUnit` the matched article's unit when it differs.
  */
+/** A matched article's price a row changes, per price quantity, from its first Berlin day. */
+export type ImportPriceChange = {
+  kind: ArticlePriceKind;
+  old: { amountCents: number; priceQuantity: PriceQuantity } | null;
+  new: { amountCents: number; priceQuantity: PriceQuantity };
+  validFrom: string;
+};
+
 export type ImportRowOutcome = {
   index: number;
   outcome: 'booked' | 'imported' | 'missing_location' | 'rejected';
@@ -261,6 +271,8 @@ export type ImportRowOutcome = {
   quantityAfter: number | null;
   reason: ImportRejection | null;
   itemUnit: string | null;
+  /** The matched article's prices the row changes; a new article's prices are its first. */
+  priceChanges: ImportPriceChange[];
 };
 
 type ImportLocationTotal = {
@@ -272,6 +284,8 @@ type ImportLocationTotal = {
 export type ImportTotals = {
   created: number;
   matched: number;
+  /** Prices of matched articles the import changes. */
+  pricesChanged: number;
   rejected: number;
   withoutLocation: number;
   locations: ImportLocationTotal[];
@@ -285,12 +299,20 @@ function addQuantity(left: number, right: number): number {
 /** The totals above the preview and the result: every row counts once as new, matched or rejected. */
 export function importTotals(outcomes: readonly ImportRowOutcome[]): ImportTotals {
   const locations = new Map<string, ImportLocationTotal>();
-  const totals: ImportTotals = { created: 0, matched: 0, rejected: 0, withoutLocation: 0, locations: [] };
+  const totals: ImportTotals = {
+    created: 0,
+    matched: 0,
+    pricesChanged: 0,
+    rejected: 0,
+    withoutLocation: 0,
+    locations: [],
+  };
   for (const row of outcomes) {
     if (row.outcome === 'rejected') {
       totals.rejected += 1;
       continue;
     }
+    totals.pricesChanged += row.priceChanges.length;
     if (row.matchedBy === null) totals.created += 1;
     else totals.matched += 1;
     if (row.outcome === 'missing_location') totals.withoutLocation += 1;

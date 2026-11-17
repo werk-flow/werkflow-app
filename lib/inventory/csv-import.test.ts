@@ -246,6 +246,7 @@ const BASE: ImportRowOutcome = {
   quantityAfter: 10,
   reason: null,
   itemUnit: null,
+  priceChanges: [],
 };
 
 // A synthetic file of Großhandel Nordrohr as the preview answers it.
@@ -259,6 +260,14 @@ const OUTCOMES: ImportRowOutcome[] = [
     unit: 'meter',
     quantity: 0.1,
     quantityAfter: 4.1,
+    priceChanges: [
+      {
+        kind: 'purchase',
+        old: { amountCents: 400, priceQuantity: 1 },
+        new: { amountCents: 450, priceQuantity: 1 },
+        validFrom: '2026-11-17',
+      },
+    ],
   },
   {
     ...BASE,
@@ -294,12 +303,13 @@ const OUTCOMES: ImportRowOutcome[] = [
 ];
 
 describe('importTotals', () => {
-  test('every row counts once as new, matched or rejected, and each Lager sums its stock per unit', () => {
+  test('every row counts once as new, matched or rejected, each changed price of a matched article counts, and each Lager sums its stock per unit', () => {
     const totals = importTotals(OUTCOMES);
     expect(totals.created + totals.matched + totals.rejected).toBe(OUTCOMES.length);
     expect(totals).toEqual({
       created: 2,
       matched: 3,
+      pricesChanged: 1,
       rejected: 3,
       withoutLocation: 1,
       locations: [
@@ -321,6 +331,7 @@ describe('importTotals', () => {
     expect(importTotals([])).toEqual({
       created: 0,
       matched: 0,
+      pricesChanged: 0,
       rejected: 0,
       withoutLocation: 0,
       locations: [],

@@ -1,7 +1,7 @@
 import { z } from '@/lib/zod';
 import { boundedText } from '@/lib/validation/text';
 import { uuidSchema } from '@/lib/validation/uuid';
-import { PRICE_QUANTITIES } from './article-price-terms';
+import { ARTICLE_PRICE_KINDS, PRICE_QUANTITIES } from './article-price-terms';
 import { INVENTORY_UNITS, type InventoryUnitCode } from './units';
 
 // The boundary of the wholesaler import and the supplier catalog: action
@@ -91,11 +91,32 @@ export const stageWholesalerImportLinesInputSchema = z.object({
 });
 export type StageWholesalerImportLinesInput = z.infer<typeof stageWholesalerImportLinesInputSchema>;
 
+/** Hundredths of a percent: 3250 is 32,50 %. */
+export const REBATE_BASIS_POINTS_MAX = 10_000;
+/** The office's rebates of one delivery: rebate group to hundredths of a percent, or null for none. */
+const rebatesSchema = z.record(
+  z
+    .string()
+    .min(1)
+    .max(200)
+    .refine((group) => group === group.trim()),
+  z.number().int().min(0).max(REBATE_BASIS_POINTS_MAX).nullable(),
+);
+export type WholesalerRebates = z.infer<typeof rebatesSchema>;
+
 export const confirmWholesalerImportInputSchema = z.object({
   importId: uuidSchema,
   unitMapping: z.record(boundedText(200), unitCodeSchema.nullable()),
+  rebates: rebatesSchema,
 });
 export type ConfirmWholesalerImportInput = z.infer<typeof confirmWholesalerImportInputSchema>;
+
+/** The own articles' price changes for the office's rebates, or with null for the saved ones. */
+export const previewWholesalerPricesInputSchema = z.object({
+  importId: uuidSchema,
+  rebates: rebatesSchema.nullable(),
+});
+export type PreviewWholesalerPricesInput = z.infer<typeof previewWholesalerPricesInputSchema>;
 
 export const wholesalerImportIdInputSchema = z.object({ importId: uuidSchema });
 export type WholesalerImportIdInput = z.infer<typeof wholesalerImportIdInputSchema>;
@@ -162,6 +183,8 @@ export const confirmAnswerSchema = z
     price_unmatched: count,
     removed: count,
     rejected: count,
+    // A batch confirmed before own prices changed stored no count.
+    own_prices_changed: count.default(0),
     already_confirmed: z.boolean(),
   })
   .transform((answer) => ({
@@ -174,8 +197,76 @@ export const confirmAnswerSchema = z
     priceUnmatched: answer.price_unmatched,
     removed: answer.removed,
     rejected: answer.rejected,
+    ownPricesChanged: answer.own_prices_changed,
     alreadyConfirmed: answer.already_confirmed,
   }));
+
+const priceQuantitySchema = z.literal(PRICE_QUANTITIES);
+
+/** One own article's price the delivery changes, as `preview_supplier_catalog_import_prices` answers it. */
+const priceChangeSchema = z
+  .object({
+    item_id: uuidSchema,
+    item_name: z.string(),
+    item_unit: z.string(),
+    article_number: z.string(),
+    unit_text: z.string().nullable(),
+    catalog_unit: z.string().nullable(),
+    kind: z.enum(ARTICLE_PRICE_KINDS),
+    rebate_group: z.string().nullable(),
+    rebate_basis_points: count.nullable(),
+    old_amount_cents: count.nullable(),
+    old_price_quantity: priceQuantitySchema.nullable(),
+    new_amount_cents: count,
+    new_price_quantity: priceQuantitySchema,
+    valid_from: z.iso.date(),
+  })
+  .transform((change) => ({
+    itemId: change.item_id,
+    itemName: change.item_name,
+    itemUnit: change.item_unit,
+    articleNumber: change.article_number,
+    /** The delivery's unit text of an article line; the office's mapping decides its unit. */
+    unitText: change.unit_text,
+    /** The catalog's unit of a price line, which the delivery does not restate. */
+    catalogUnit: change.catalog_unit,
+    kind: change.kind,
+    rebateGroup: change.rebate_group,
+    rebateBasisPoints: change.rebate_basis_points,
+    old:
+      change.old_amount_cents !== null && change.old_price_quantity !== null
+        ? { amountCents: change.old_amount_cents, priceQuantity: change.old_price_quantity }
+        : null,
+    new: { amountCents: change.new_amount_cents, priceQuantity: change.new_price_quantity },
+    validFrom: change.valid_from,
+  }));
+export type WholesalerPriceChange = z.output<typeof priceChangeSchema>;
+
+export const pricesAnswerSchema = z
+  .object({
+    rebate_groups: z.array(
+      z.object({
+        rebate_group: z.string(),
+        text: z.string(),
+        office_basis_points: count.nullable(),
+        delivery_basis_points: count.nullable(),
+      }),
+    ),
+    rebates: z.record(z.string(), count.nullable()),
+    changes: z.array(priceChangeSchema),
+  })
+  .transform((answer) => ({
+    rebateGroups: answer.rebate_groups.map((group) => ({
+      rebateGroup: group.rebate_group,
+      text: group.text,
+      officeBasisPoints: group.office_basis_points,
+      deliveryBasisPoints: group.delivery_basis_points,
+    })),
+    rebates: answer.rebates,
+    changes: answer.changes,
+  }));
+/** The own articles' price changes of a preview, with the rebate groups and the rebates they were computed for. */
+export type WholesalerPricePreview = z.output<typeof pricesAnswerSchema>;
 
 type WholesalerUnitEffect = z.output<typeof unitEffectSchema>;
 /** The preview's counts as the database answers them, without the earlier import. */
@@ -201,6 +292,8 @@ export type WholesalerImportPreview = {
   /** The lines the reader or the import refused, with file, line and reason. */
   rejections: { fileName: string; lineNumber: number; articleNumber: string | null; reason: string }[];
   rebateGroups: number;
+  /** The own articles' prices the delivery changes, for the rebates in it. */
+  prices: WholesalerPricePreview;
   repeat: { confirmedAt: string; confirmedBy: string } | null;
 };
 
@@ -230,7 +323,7 @@ export const catalogRowSchema = z
     unit: unitCodeSchema,
     price_kind: z.enum(['list', 'net']).nullable(),
     price_cents: z.number().int().nullable(),
-    price_quantity: z.literal(PRICE_QUANTITIES),
+    price_quantity: priceQuantitySchema,
     supplier_name: z.string(),
   })
   .transform(

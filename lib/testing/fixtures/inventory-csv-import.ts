@@ -141,6 +141,7 @@ assert.deepEqual(preview.rows[0], {
   quantityAfter: null,
   reason: null,
   itemUnit: null,
+  priceChanges: [],
 });
 assert.deepEqual(
   preview.rows.map((row) => row.reason),

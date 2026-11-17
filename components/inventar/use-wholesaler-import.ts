@@ -11,10 +11,13 @@ import {
   confirmWholesalerImport,
   openWholesalerImport,
   previewWholesalerImport,
+  previewWholesalerPrices,
   readWholesalerImportReport,
   stageWholesalerImportLines,
 } from '@/lib/inventory/wholesaler-import-actions';
 import {
+  formatRebatePercent,
+  parseRebatePercent,
   wholesalerImportReportCsv,
   type WholesalerReportLine,
 } from '@/lib/inventory/wholesaler-import-lines';
@@ -24,6 +27,8 @@ import {
   WHOLESALER_STAGE_MAX_LINES,
   type WholesalerImportPreview,
   type WholesalerImportResult,
+  type WholesalerPricePreview,
+  type WholesalerRebates,
 } from '@/lib/inventory/wholesaler-import-schemas';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { downloadImportReport } from './inventory-import-outcomes';
@@ -39,6 +44,7 @@ type WholesalerImportStep =
 export type WholesalerImportPhase =
   | { kind: 'reading' }
   | { kind: 'sending'; sent: number; total: number }
+  | { kind: 'pricing' }
   | { kind: 'confirming' };
 
 /** The sentences of the codes this import owns; a shared code keeps its shared sentence. */
@@ -128,6 +134,13 @@ async function readAndPreview(
     void abandonPreview(importId);
     return previewFailure(previewed);
   }
+  // At first the saved rebates price the own articles, else the delivery's own percentages.
+  onPhase({ kind: 'pricing' });
+  const priced = await previewWholesalerPrices({ importId, rebates: null }).catch(() => null);
+  if (!priced?.success) {
+    void abandonPreview(importId);
+    return previewFailure(priced);
+  }
   const { effects, repeat } = previewed;
   return {
     preview: {
@@ -142,6 +155,7 @@ async function readAndPreview(
       suggestedUnits: staging.guessUnitMapping(effects.units.map((unit) => unit.unitText)),
       rejections: staging.rejectedLines(lines),
       rebateGroups: delivery.rebateGroups.length,
+      prices: priced.prices,
       repeat,
     },
   };
@@ -197,16 +211,78 @@ function useDeliveryChoice() {
   };
 }
 
-/** The office's decisions in the preview: a unit per unit text, and whether a repeated delivery goes in. */
+/** The control id of a rebate group's field, by its place in the preview's list. */
+export function rebateFieldId(index: number): string {
+  return `wholesaler-import-rebate-${index}`;
+}
+
+/**
+ * The rebates as typed, per rebate group of the price preview: the map the
+ * prices are computed with, and the error of each field that holds no
+ * percentage, keyed by control id in visual order.
+ */
+function readRebates(
+  prices: WholesalerPricePreview,
+  typed: Readonly<Record<string, string>>,
+): { rebates: WholesalerRebates; errors: Record<string, string | undefined> } {
+  const rebates: WholesalerRebates = {};
+  const errors: Record<string, string | undefined> = {};
+  prices.rebateGroups.forEach((group, index) => {
+    const parsed = parseRebatePercent(typed[group.rebateGroup] ?? '');
+    errors[rebateFieldId(index)] =
+      parsed === undefined
+        ? 'Gib einen Rabatt von 0 bis 100 % mit höchstens zwei Nachkommastellen ein.'
+        : undefined;
+    rebates[group.rebateGroup] = parsed ?? null;
+  });
+  return { rebates, errors };
+}
+
+/** Whether the prices shown were computed with these rebates. */
+function pricedWith(prices: WholesalerPricePreview, rebates: WholesalerRebates): boolean {
+  return prices.rebateGroups.every(
+    (group) => (prices.rebates[group.rebateGroup] ?? null) === (rebates[group.rebateGroup] ?? null),
+  );
+}
+
+/** The rebates as the office sees them typed: the percentages the prices were computed with. */
+function rebateTextsOf(prices: WholesalerPricePreview): Record<string, string> {
+  return Object.fromEntries(
+    prices.rebateGroups.map((group) => {
+      const basisPoints = prices.rebates[group.rebateGroup] ?? null;
+      return [group.rebateGroup, basisPoints === null ? '' : formatRebatePercent(basisPoints)];
+    }),
+  );
+}
+
+/** The office's decisions in the preview: a unit per unit text, a rebate per rebate group, and whether a repeated delivery goes in. */
 function usePreviewDecisions(step: WholesalerImportStep) {
   const [unitMapping, setUnitMapping] = useState<Record<string, InventoryUnitCode | null>>({});
+  const [rebateTexts, setRebateTexts] = useState<Record<string, string>>({});
+  const [rebatesAttempted, setRebatesAttempted] = useState(false);
   const [repeatConfirmed, setRepeatConfirmed] = useState(false);
   const [repeatAttempted, setRepeatAttempted] = useState(false);
   const repeatUndecided = step.kind === 'preview' && step.preview.repeat !== null && !repeatConfirmed;
+  const typed = step.kind === 'preview' ? readRebates(step.preview.prices, rebateTexts) : null;
   return {
     unitMapping,
     setUnit: (unitText: string, unit: InventoryUnitCode | null) =>
       setUnitMapping((current) => ({ ...current, [unitText]: unit })),
+    rebateTexts,
+    setRebateText: (rebateGroup: string, text: string) =>
+      setRebateTexts((current) => ({ ...current, [rebateGroup]: text })),
+    /** Each rebate field's error, after the office left a field or tried to confirm. */
+    rebateErrors: rebatesAttempted && typed ? typed.errors : {},
+    /** The typed rebates when each is a percentage, marking and focusing the first that is not. */
+    readyRebates: (): WholesalerRebates | null => {
+      setRebatesAttempted(true);
+      if (!typed || focusFirstInvalidField(typed.errors)) return null;
+      return typed.rebates;
+    },
+    /** The typed rebates when each is a percentage, without marking or focusing a field. */
+    typedRebates: (): WholesalerRebates | null =>
+      typed && Object.values(typed.errors).every((error) => error === undefined) ? typed.rebates : null,
+    markRebates: () => setRebatesAttempted(true),
     repeatConfirmed,
     confirmRepeat: () => setRepeatConfirmed(true),
     repeatError:
@@ -222,10 +298,59 @@ function usePreviewDecisions(step: WholesalerImportStep) {
     },
     start: (preview: WholesalerImportPreview) => {
       setUnitMapping(preview.suggestedUnits);
+      setRebateTexts(rebateTextsOf(preview.prices));
+      setRebatesAttempted(false);
       setRepeatConfirmed(false);
       setRepeatAttempted(false);
     },
   };
+}
+
+const REPRICE_FAILED =
+  'Die Preise konnten nicht neu berechnet werden. Es wurde nichts übernommen. Versuch es noch einmal.';
+const CONFIRM_FAILED = 'Die Lieferung konnte nicht übernommen werden. Versuch es noch einmal.';
+
+/** The preview with the own articles priced for the rebates, or null when the pricing failed. */
+async function repriced(
+  current: WholesalerImportPreview,
+  rebates: WholesalerRebates,
+): Promise<WholesalerImportPreview | null> {
+  const priced = await previewWholesalerPrices({ importId: current.importId, rebates }).catch(() => null);
+  return priced?.success ? { ...current, prices: priced.prices } : null;
+}
+
+/** Confirms a preview with the office's units and rebates: the result step, or the failure's sentence. */
+async function confirmPreview(
+  current: WholesalerImportPreview,
+  mapping: Readonly<Record<string, InventoryUnitCode | null>>,
+  rebates: WholesalerRebates,
+): Promise<WholesalerImportStep | { error: string }> {
+  const unitMapping = Object.fromEntries(
+    current.units.map((unit) => [unit.unitText, mapping[unit.unitText] ?? null]),
+  );
+  const result = await confirmWholesalerImport({ importId: current.importId, unitMapping, rebates }).catch(
+    () => null,
+  );
+  // A confirm sent twice writes once, so trying again is safe.
+  if (!result?.success) {
+    return {
+      error: result ? describeFailure(result.error, FAILURE_MESSAGES, CONFIRM_FAILED) : CONFIRM_FAILED,
+    };
+  }
+  return {
+    kind: 'result',
+    importId: current.importId,
+    result: result.result,
+    alreadyConfirmed: result.alreadyConfirmed,
+  };
+}
+
+/** The confirm's first line: pricing when the typed rebates differ from the priced ones. */
+function rebatesShownOrPricing(
+  current: WholesalerImportPreview,
+  rebates: WholesalerRebates,
+): WholesalerImportPhase {
+  return pricedWith(current.prices, rebates) ? { kind: 'confirming' } : { kind: 'pricing' };
 }
 
 /** The wholesaler import dialog's state: supplier and files, upload and preview, the unit mapping, the confirm and the report. */
@@ -275,29 +400,32 @@ export function useWholesalerImport({ onOpenChange }: { onOpenChange: (open: boo
         decisions.start(answer.preview);
         setStep({ kind: 'preview', preview: answer.preview, supplierId });
       }),
-    confirm: (current: WholesalerImportPreview) => {
-      if (!decisions.readyToConfirm()) return;
-      runStep({ kind: 'confirming' }, async () => {
-        const unitMapping = Object.fromEntries(
-          current.units.map((unit) => [unit.unitText, decisions.unitMapping[unit.unitText] ?? null]),
-        );
-        const result = await confirmWholesalerImport({ importId: current.importId, unitMapping }).catch(
-          () => null,
-        );
-        // A confirm sent twice writes once, so trying again is safe.
-        if (!result?.success) {
-          return setError(
-            result
-              ? describeFailure(
-                  result.error,
-                  FAILURE_MESSAGES,
-                  'Die Lieferung konnte nicht übernommen werden. Versuch es noch einmal.',
-                )
-              : 'Die Lieferung konnte nicht übernommen werden. Versuch es noch einmal.',
-          );
+    /** Prices the own articles again for the typed rebates, once each is a percentage and one changed. */
+    reprice: (current: WholesalerImportPreview, supplierId: string) => {
+      decisions.markRebates();
+      const rebates = decisions.typedRebates();
+      if (!rebates || pricedWith(current.prices, rebates)) return;
+      runStep({ kind: 'pricing' }, async () => {
+        const preview = await repriced(current, rebates);
+        if (!preview) return setError(REPRICE_FAILED);
+        setStep({ kind: 'preview', preview, supplierId });
+      });
+    },
+    confirm: (current: WholesalerImportPreview, supplierId: string) => {
+      const rebates = decisions.readyRebates();
+      if (!rebates || !decisions.readyToConfirm()) return;
+      runStep(rebatesShownOrPricing(current, rebates), async () => {
+        // The confirm writes only prices the office saw: rebates typed since
+        // the last pricing price the articles again first.
+        if (!pricedWith(current.prices, rebates)) {
+          const preview = await repriced(current, rebates);
+          if (!preview) return setError(REPRICE_FAILED);
+          setStep({ kind: 'preview', preview, supplierId });
+          return setError('Die Preise sind mit deinen Rabatten neu berechnet. Prüfe sie und übernimm dann.');
         }
-        const { alreadyConfirmed } = result;
-        setStep({ kind: 'result', importId: current.importId, result: result.result, alreadyConfirmed });
+        const next = await confirmPreview(current, decisions.unitMapping, rebates);
+        if ('error' in next) return setError(next.error);
+        setStep(next);
       });
     },
     backToChoose: () => {
