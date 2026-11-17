@@ -7,7 +7,8 @@
 --     decides from these which jobs are past their last visit on the Berlin day.
 -- Open means the job's status mirrors an open execution state (not started,
 -- in progress, interrupted); parked and finished jobs carry another status
--- (idx_jobs_status). Each open job's assignments, visits and project are
+-- (jobs_open_organization_created_idx). A cancelled job keeps the status it had
+-- (preserve_job_legacy_status_on_cancellation), so its state excludes it. Each open job's assignments, visits and project are
 -- probed by its key alone (a visit through the partial job index of its time
 -- kind), with the organization checked in the aggregate or the selected value:
 -- an organization filter in the probe's WHERE clause lets the planner walk the
@@ -15,6 +16,13 @@
 -- the result only gains keys, so the previous build reads it unchanged. Each
 -- array holds at most p_limit + 1 rows, so the caller sees an overflow
 -- instead of a cut.
+-- The open jobs of an organization in the read's order. Without it the planner
+-- picks between the organization's job indexes by statistics and may walk
+-- every finished job (supabase/tests/hot_read_volume.sql, aufgaben-office-sets).
+create index jobs_open_organization_created_idx
+  on public.jobs (organization_id, created_at, id)
+  where status in ('nicht_bearbeitet', 'in_bearbeitung');
+
 create or replace function public.read_manager_attention_sets(p_organization_id uuid, p_limit integer)
 returns jsonb
 language sql
@@ -85,6 +93,7 @@ as $$
         ) all_day
         where job.organization_id = p_organization_id
           and job.status in ('nicht_bearbeitet', 'in_bearbeitung')
+          and job.execution_state is distinct from 'cancelled'
           and team.assignments = 0
           and timed.visits = 0
           and all_day.visits = 0
@@ -117,6 +126,7 @@ as $$
         ) all_day
         where job.organization_id = p_organization_id
           and job.status in ('nicht_bearbeitet', 'in_bearbeitung')
+          and job.execution_state is distinct from 'cancelled'
           and (timed.last_timed_end is not null or all_day.last_all_day_end is not null)
           -- No scheduled visit is still running or ahead.
           and coalesce(timed.last_timed_end <= now(), true)

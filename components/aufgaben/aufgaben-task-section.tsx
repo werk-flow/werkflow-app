@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   AlarmClock,
   CalendarClock,
@@ -142,6 +142,13 @@ function TaskGroup({ section }: { section: AttentionTaskSection }) {
   const { icon, title, testId, previewRows } = SECTION_PRESENTATION[section.key];
   const [showAll, setShowAll] = useState(false);
   const restId = useId();
+  const anchor = attentionSectionAnchor(section.key);
+  const groupRef = useRef<HTMLDivElement>(null);
+  // „Alle in Aufgaben“ opens this section: the tasks arrive after the page, so
+  // the browser found no target for the hash. The section scrolls itself into view.
+  useEffect(() => {
+    if (window.location.hash === `#${anchor}`) groupRef.current?.scrollIntoView({ block: 'start' });
+  }, [anchor]);
   const total = section.tasks.length;
   const shown = previewRows ?? total;
   const preview = section.tasks.slice(0, shown);
@@ -150,7 +157,7 @@ function TaskGroup({ section }: { section: AttentionTaskSection }) {
   const rest = section.tasks.slice(shown);
 
   return (
-    <div id={attentionSectionAnchor(section.key)} className="scroll-mt-4 space-y-2" data-testid={testId}>
+    <div id={anchor} ref={groupRef} className="scroll-mt-4 space-y-2" data-testid={testId}>
       <h3 className="flex items-center gap-1.5 px-1 text-sm font-medium text-muted-foreground">
         {icon}
         {title}

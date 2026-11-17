@@ -75,7 +75,12 @@ export function OfficeStart() {
         <h2 id="office-start-heading" className="text-sm font-semibold">
           Was jetzt ansteht
         </h2>
-        <StaleRegion stale={attention.isStale} onRetry={attention.refresh} className="space-y-6">
+        {/* Either read keeps its last data when a refresh fails; the empty state needs both current. */}
+        <StaleRegion
+          stale={attention.isStale || maintenance.isStale}
+          onRetry={() => Promise.all([attention.refresh(), maintenance.refresh()])}
+          className="space-y-6"
+        >
           <OfficeStartSections tasks={attention.data.tasks} overdueMaintenance={maintenance.data ?? null} />
         </StaleRegion>
         {!maintenance.isLoading && maintenance.data === undefined && (

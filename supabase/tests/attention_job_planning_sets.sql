@@ -2,8 +2,8 @@
 -- read_manager_attention_sets returns as unplanned_jobs exactly the open jobs
 -- of the organization with no scheduled visit and nobody assigned, and as
 -- overdue_jobs exactly the open jobs whose every scheduled visit has ended,
--- with the end of the last timed and the last all-day visit. Parked, finished
--- and another organization's jobs never appear, and each set stops at its
+-- with the end of the last timed and the last all-day visit. Parked, finished,
+-- cancelled and another organization's jobs never appear, and each set stops at its
 -- limit plus one. lib/attention/job-tasks.test.ts proves the Berlin-day rule
 -- the TypeScript applies to overdue_jobs.
 begin;
@@ -51,8 +51,26 @@ from (values
   (10, 'a7f00000-0000-4000-8000-000000000030', 'a7f00000-0000-4000-8000-000000000010', 'Im Projekt', 'JS-10', 'nicht_bearbeitet', 'a7f00000-0000-4000-8000-000000000040'),
   (11, 'a7f00000-0000-4000-8000-000000000031', 'a7f00000-0000-4000-8000-000000000010', 'Fertig nach Besuch', 'JS-11', 'fertig', null),
   (12, 'a7f00000-0000-4000-8000-000000000032', 'a7f00000-0000-4000-8000-000000000011', 'Fremd', 'JS-12', 'nicht_bearbeitet', null),
-  (13, 'a7f00000-0000-4000-8000-000000000033', 'a7f00000-0000-4000-8000-000000000011', 'Fremd besucht', 'JS-13', 'nicht_bearbeitet', null)
+  (13, 'a7f00000-0000-4000-8000-000000000033', 'a7f00000-0000-4000-8000-000000000011', 'Fremd besucht', 'JS-13', 'nicht_bearbeitet', null),
+  (14, 'a7f00000-0000-4000-8000-000000000034', 'a7f00000-0000-4000-8000-000000000010', 'Storniert ohne alles', 'JS-14', 'nicht_bearbeitet', null),
+  (15, 'a7f00000-0000-4000-8000-000000000035', 'a7f00000-0000-4000-8000-000000000010', 'Storniert nach Besuch', 'JS-15', 'in_bearbeitung', null)
 ) as job(n, id, organization_id, title, job_number, status, project_id);
+
+-- Cancelling keeps the job's status (preserve_job_legacy_status_on_cancellation): only its state says so.
+-- The execution guard admits one flagged row per statement, as the owning RPCs write.
+select set_config('app.work_execution_write', 'true', true);
+update public.jobs set execution_state = 'cancelled' where id = 'a7f00000-0000-4000-8000-000000000034';
+select set_config('app.work_execution_write', 'true', true);
+update public.jobs set execution_state = 'cancelled' where id = 'a7f00000-0000-4000-8000-000000000035';
+do $$
+begin
+  if exists (
+    select 1 from public.jobs
+    where id in ('a7f00000-0000-4000-8000-000000000034', 'a7f00000-0000-4000-8000-000000000035')
+      and status not in ('nicht_bearbeitet', 'in_bearbeitung')
+  ) then raise exception 'the fixture expects a cancelled job to keep its open status'; end if;
+end;
+$$;
 
 insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
 ('a7f00000-0000-4000-8000-000000000010', 'a7f00000-0000-4000-8000-000000000022',
@@ -72,6 +90,9 @@ insert into public.planning_occurrences (organization_id, job_id, entry_kind, ti
  now() - interval '5 days 2 hours', now() - interval '5 days'),
 ('a7f00000-0000-4000-8000-000000000010', 'a7f00000-0000-4000-8000-000000000027', 'job_visit', 'timed', 'scheduled',
  now() + interval '2 days', now() + interval '2 days 2 hours'),
+-- A cancelled job's past visit.
+('a7f00000-0000-4000-8000-000000000010', 'a7f00000-0000-4000-8000-000000000035', 'job_visit', 'timed', 'scheduled',
+ now() - interval '4 days 2 hours', now() - interval '4 days'),
 -- A finished job's past visit, and another organization's.
 ('a7f00000-0000-4000-8000-000000000010', 'a7f00000-0000-4000-8000-000000000031', 'job_visit', 'timed', 'scheduled',
  now() - interval '4 days 2 hours', now() - interval '4 days'),
