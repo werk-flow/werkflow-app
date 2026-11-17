@@ -316,6 +316,43 @@ test('a kept action this version cannot read is a stop the person sees with what
   await expect.poll(async () => (await unsentOnDevice(page)).length).toBe(0);
 });
 
+test('a stop this version cannot read can be set aside: the tap behind it is sent, and the record stays, to copy for support or delete (werk-flow/werkflow-planning#407 item 3)', async ({
+  page,
+}) => {
+  const stop = 'werkflow:unsent:clock:000000000000001:1:from-a-newer-version';
+  const record = '{"operationId":"x","kind":"new"}';
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await page.evaluate(([key, value]) => localStorage.setItem(key ?? '', value ?? ''), [stop, record]);
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
+  await expect(unsentBadge(clockDock(page))).toHaveText('Nicht lesbar');
+
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  const section = unsentSection(page);
+  await section.getByRole('button', { name: 'Beiseitelegen', exact: true }).click();
+
+  // The tap behind the stop goes as its own chain; the record stays, set aside, and is never sent.
+  await expect.poll(() => server.sent.map(({ payload }) => payload.action)).toEqual(['start']);
+  const setAside = section.getByRole('list', { name: 'Beiseitegelegte Stempelzeiten' });
+  await expect(setAside.getByRole('listitem')).toHaveText(/^Nicht lesbare Stempelzeit/);
+  await expect(unsentBadge(clockDock(page))).toHaveText('Beiseitegelegt');
+
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await setAside.getByRole('button', { name: 'Für den Support kopieren', exact: true }).click();
+  await expect(setAside.getByRole('button', { name: 'Kopiert', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    `werkflow:unsent:clock-aside:000000000000001:1:from-a-newer-version\n${record}`,
+  );
+
+  await setAside.getByRole('button', { name: 'Löschen', exact: true }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Nicht übertragene Zeiten löschen?' })
+    .getByRole('button', { name: 'Endgültig löschen', exact: true })
+    .click();
+  await expect(section).toHaveCount(0);
+  expect(server.sent).toHaveLength(1);
+});
+
 test('a session end that runs longer than ten minutes keeps its barrier fresh, so no tab keeps behind its back', async ({
   page,
 }) => {
@@ -377,3 +414,32 @@ test('an event that waited more than seven days says it is still tried, and that
     'WerkFlow versucht weiter, sie zu senden',
   );
 });
+
+// Captures of the clock sheet with an unreadable stop and with a set-aside record, phone and desktop, light and dark.
+for (const width of [1280, 375]) {
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`captures of an unreadable stop and a set-aside record at ${width} px, ${colorScheme}`, async ({
+      page,
+    }) => {
+      const css = process.env.WERKFLOW_UI_CONTRACT_CSS;
+      if (!css) throw new Error('Run through bun tests/ui-contracts/run.ts.');
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme });
+      await mountClock(page, CLOCKED_OUT_STATE, () =>
+        localStorage.setItem(
+          'werkflow:unsent:clock:001794384000000:1:from-a-newer-version',
+          '{"operationId":"x","kind":"new"}',
+        ),
+      );
+      await page.addStyleTag({ path: css });
+      await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+      const section = unsentSection(page);
+      await expect(section).toContainText('kann hier nicht gelesen werden');
+      await page.screenshot({ path: test.info().outputPath(`unreadable-stop-${width}-${colorScheme}.png`) });
+
+      await section.getByRole('button', { name: 'Beiseitelegen', exact: true }).click();
+      await expect(section.getByRole('list', { name: 'Beiseitegelegte Stempelzeiten' })).toBeVisible();
+      await page.screenshot({ path: test.info().outputPath(`set-aside-${width}-${colorScheme}.png`) });
+    });
+  }
+}

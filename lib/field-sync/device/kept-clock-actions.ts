@@ -4,7 +4,7 @@ import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-select
 import { z } from '@/lib/zod';
 import { captureTimeEvent, isOfflineClockAction } from './time-outbox';
 import { storedClockSchema, storedVersionSchema } from './stored-clock';
-import { KEPT_CLOCK_ACTION_PREFIX, clockCallLock } from './unsent-mark';
+import { KEPT_CLOCK_ACTION_PREFIX, UNSENT_MARK_PREFIX, clockCallLock } from './unsent-mark';
 
 // Takes the clock actions a page kept without signal (unsent-mark.ts) into the
 // time outbox. A page that loses its signal can load no code any more, so it
@@ -44,9 +44,7 @@ export type ClockActionToKeep = Omit<KeptClockAction, 'version' | 'wipeGeneratio
 
 /** The keys of the kept clock actions, in the order of their taps. */
 function keptActionKeys(): string[] {
-  return Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index) ?? '')
-    .filter((key) => key.startsWith(KEPT_CLOCK_ACTION_PREFIX))
-    .toSorted();
+  return keysWith(KEPT_CLOCK_ACTION_PREFIX);
 }
 
 function readKeptAction(key: string): KeptClockAction | null {
@@ -70,7 +68,7 @@ const CALL_LOCK_GRANT_MS = 10 * 1000;
  */
 type CallState = { runs: false } | { runs: true; recheckAt: number | null; lock: string | null };
 
-async function callState(kept: KeptClockAction): Promise<CallState> {
+async function callState(kept: Pick<KeptClockAction, 'operationId' | 'capturedAt'>): Promise<CallState> {
   const capturedAt = Date.parse(kept.capturedAt);
   const age = Date.now() - capturedAt;
   if (typeof navigator.locks?.request !== 'function')
@@ -86,8 +84,25 @@ async function callState(kept: KeptClockAction): Promise<CallState> {
 /** What a take-in left kept: an online call still open and every action behind it, and when to look again. */
 export type DeferredTakeIn = { actions: KeptClockAction[]; recheckAt: number | null; lock: string | null };
 
-/** A kept action this version cannot read: its key, the time of its tap, and its person when that much reads. */
-export type UnreadableKeptAction = { key: string; capturedAt: string; userId: string | null };
+/**
+ * The prefix of the records the person set aside: kept actions this version could not read, moved
+ * out of the kept store so they hold nothing back (decision record 0010, "an unreadable clock record
+ * set aside"). No version takes one in or sends it, because it would reach the server after the taps
+ * that followed it; the person settles its time through the correction. It sits under the unsent
+ * mark, so the app start still loads the code that shows it.
+ */
+const SET_ASIDE_CLOCK_ACTION_PREFIX = `${UNSENT_MARK_PREFIX}clock-aside:`;
+
+/**
+ * A kept action this version cannot read, or one the person set aside: its key, the time of its tap,
+ * and its person when that much reads. A stop holds the person's later taps; a set-aside record does not.
+ */
+export type UnreadableKeptAction = {
+  key: string;
+  capturedAt: string;
+  userId: string | null;
+  setAside: boolean;
+};
 
 /** The person a stored value names, when it is JSON with a string `userId`. */
 function personNamedIn(key: string): string | null {
@@ -101,22 +116,81 @@ function personNamedIn(key: string): string | null {
   }
 }
 
+/** The keys under `prefix`, in the order of their taps. */
+function keysWith(prefix: string): string[] {
+  return Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index) ?? '')
+    .filter((key) => key.startsWith(prefix))
+    .toSorted();
+}
+
 /**
- * The kept actions this version cannot read that may be `userId`'s: theirs, or of a person the
- * value does not name. They stop the take-in, so the clock shows them and the person can delete them.
+ * The kept actions this version cannot read, and the records set aside, that may be `userId`'s:
+ * theirs, or of a person the value does not name. A stop holds the take-in, so the clock shows it and
+ * the person can set it aside or delete it; a set-aside record shows until the person deletes it,
+ * also once a later version could read it.
  */
 export function unreadableKeptActions(userId: string | null): UnreadableKeptAction[] {
-  return keptActionKeys()
-    .filter((key) => readKeptAction(key) === null)
-    .map((key) => ({ key, capturedAt: new Date(tapTimeOf(key)).toISOString(), userId: personNamedIn(key) }))
+  const stops = keptActionKeys().filter((key) => readKeptAction(key) === null);
+  const setAside = keysWith(SET_ASIDE_CLOCK_ACTION_PREFIX);
+  return [...stops, ...setAside]
+    .map((key) => ({
+      key,
+      capturedAt: new Date(tapTimeOf(key)).toISOString(),
+      userId: personNamedIn(key),
+      setAside: key.startsWith(SET_ASIDE_CLOCK_ACTION_PREFIX),
+    }))
     .filter((action) => action.userId === null || action.userId === userId);
 }
 
-/** Deletes the unreadable kept actions among `keys`, the ones the person was shown; one that reads now stays. */
+/**
+ * Deletes the unreadable kept actions and the set-aside records among `keys`, the ones the person
+ * was shown; a kept action that reads now stays.
+ */
 export function removeUnreadableKeptActions(keys: readonly string[]): void {
   for (const key of keys)
-    if (key.startsWith(KEPT_CLOCK_ACTION_PREFIX) && readKeptAction(key) === null)
+    if (
+      key.startsWith(SET_ASIDE_CLOCK_ACTION_PREFIX) ||
+      (key.startsWith(KEPT_CLOCK_ACTION_PREFIX) && readKeptAction(key) === null)
+    )
       localStorage.removeItem(key);
+}
+
+/** What a set-aside answers: done, or why the record stayed a stop. */
+export type SetAsideOutcome = 'set_aside' | 'gone' | 'sending';
+
+/**
+ * Sets aside the unreadable kept action under `key` that `userId` was shown: its record moves, as it
+ * is, out of the kept store, so it holds no later tap and no version sends it. An action whose online
+ * call may still run stays a stop (`sending`): its page may yet record it, or keep it anew. One that
+ * reads now, or is gone, stays as it is (`gone`). The copy is written before the key goes, so a full
+ * storage throws and leaves the stop.
+ */
+export async function setAsideUnreadableKeptAction(key: string, userId: string): Promise<SetAsideOutcome> {
+  const value = localStorage.getItem(key);
+  const owner = personNamedIn(key);
+  if (
+    value === null ||
+    !key.startsWith(KEPT_CLOCK_ACTION_PREFIX) ||
+    readKeptAction(key) !== null ||
+    (owner !== null && owner !== userId)
+  )
+    return 'gone';
+  const operationId = key.slice(KEPT_CLOCK_ACTION_PREFIX.length).split(':').slice(2).join(':');
+  const call = await callState({ operationId, capturedAt: new Date(tapTimeOf(key)).toISOString() });
+  if (call.runs) return 'sending';
+  localStorage.setItem(SET_ASIDE_CLOCK_ACTION_PREFIX + key.slice(KEPT_CLOCK_ACTION_PREFIX.length), value);
+  localStorage.removeItem(key);
+  return 'set_aside';
+}
+
+/**
+ * The record under `key` as stored, for the person to hand to support: an unreadable kept action or a
+ * set-aside record, never another key. Null when it is gone.
+ */
+export function storedClockRecord(key: string): string | null {
+  if (!key.startsWith(KEPT_CLOCK_ACTION_PREFIX) && !key.startsWith(SET_ASIDE_CLOCK_ACTION_PREFIX))
+    return null;
+  return localStorage.getItem(key);
 }
 
 /**
@@ -142,9 +216,12 @@ export function stopFor({ stops }: Pick<KeptTakeIn, 'stops'>, userId: string): n
   return times.length > 0 ? Math.min(...times) : null;
 }
 
-/** The tap time an action's key names (unsent-mark.ts), or 0 for a key that names none: then nothing passes it. */
+/** The tap time a kept or set-aside action's key names (unsent-mark.ts), or 0 for a key that names none: then nothing passes it. */
 function tapTimeOf(key: string): number {
-  const tapped = Number(key.slice(KEPT_CLOCK_ACTION_PREFIX.length).split(':')[0]);
+  const prefix = key.startsWith(SET_ASIDE_CLOCK_ACTION_PREFIX)
+    ? SET_ASIDE_CLOCK_ACTION_PREFIX
+    : KEPT_CLOCK_ACTION_PREFIX;
+  const tapped = Number(key.slice(prefix.length).split(':')[0]);
   return Number.isFinite(tapped) ? tapped : 0;
 }
 

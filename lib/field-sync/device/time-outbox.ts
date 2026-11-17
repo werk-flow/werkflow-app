@@ -73,7 +73,16 @@ export type ClockDeviceView = {
    */
   chainSegmentId: string | null;
   events: UnsentTimeEvent[];
+  /**
+   * The records the person set aside (kept-clock-actions.ts), by key and tap time: shown beside the
+   * chain, never part of it. A view of set-aside records alone is `stopped` with no events: the
+   * clock shows the server's state, and a new tap goes online.
+   */
+  setAside: SetAsideClockRecord[];
 };
+
+/** A record the person set aside: its key, which its deletion and its copy for support name, and its tap time. */
+export type SetAsideClockRecord = { key: string; capturedAt: string };
 
 const NO_SESSION = { sessionId: null, version: null };
 
@@ -137,6 +146,7 @@ export function clockDeviceView(outbox: TimeOutbox, now: Date): ClockDeviceView 
     status: stopped ? 'stopped' : 'pending',
     state: stopped || !clock?.base ? null : outbox.events.reduce(applyUnsentEvent, clock.base),
     chainSegmentId: clock?.base?.currentSegmentId ?? null,
+    setAside: [],
     events: [
       { ...head, ...first },
       ...behind.map((event) => ({
@@ -151,22 +161,27 @@ export function clockDeviceView(outbox: TimeOutbox, now: Date): ClockDeviceView 
 /**
  * The view with the kept actions this version cannot read, each a stop at the time of its tap: an
  * event after it waits, and the clock shows the server's state. Its id is its key, so the person's
- * deletion removes exactly it.
+ * deletion removes exactly it. A record the person set aside stops nothing: it shows beside the chain.
  */
 export function withUnreadable(
   view: ClockDeviceView | null,
-  unreadable: readonly { key: string; capturedAt: string }[],
+  unreadable: readonly { key: string; capturedAt: string; setAside: boolean }[],
 ): ClockDeviceView | null {
   if (unreadable.length === 0) return view;
-  const stops: UnsentTimeEvent[] = unreadable.map(({ key, capturedAt }) => ({
-    operationId: key,
-    capturedAt,
-    action: 'switch',
-    selection: null,
-    expected: null,
-    status: 'unreadable',
-    code: null,
-  }));
+  const setAside = unreadable
+    .filter((record) => record.setAside)
+    .map(({ key, capturedAt }) => ({ key, capturedAt }));
+  const stops: UnsentTimeEvent[] = unreadable
+    .filter((record) => !record.setAside)
+    .map(({ key, capturedAt }) => ({
+      operationId: key,
+      capturedAt,
+      action: 'switch',
+      selection: null,
+      expected: null,
+      status: 'unreadable',
+      code: null,
+    }));
   const events = [...(view?.events ?? []), ...stops].toSorted(
     (left, right) => Date.parse(left.capturedAt) - Date.parse(right.capturedAt),
   );
@@ -182,6 +197,7 @@ export function withUnreadable(
     state: stopped ? null : (view?.state ?? null),
     chainSegmentId: view?.chainSegmentId ?? null,
     events: marked,
+    setAside,
   };
 }
 
@@ -198,10 +214,11 @@ export function chainSessionRuns(view: ClockDeviceView, confirmed: LiveClockStat
  * Whether the person may file a correction for a stopped chain (decision record 0010, "a late chain
  * of a session that still runs"). Not while its session runs on the server: the approved addition and
  * the later end of that session would count the time twice. Not for an unreadable stop, which holds
- * nothing to correct. Not without the server's clock: the device cannot tell whether the session runs.
+ * nothing to correct, nor for set-aside records alone, which form no chain. Not without the server's clock: the device cannot tell whether the session runs.
  */
 export function correctionOffered(view: ClockDeviceView, confirmed: LiveClockState | null): boolean {
-  if (view.status !== 'stopped' || view.events[0]?.status === 'unreadable' || !confirmed) return false;
+  const head = view.events[0];
+  if (view.status !== 'stopped' || !head || head.status === 'unreadable' || !confirmed) return false;
   return !chainSessionRuns(view, confirmed);
 }
 
