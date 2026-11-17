@@ -23,8 +23,8 @@ const SNAPSHOT = {
 /**
  * A draft of „Haustechnik Sonnenberg“ with two lines, written as the office's
  * create and save write them; `issue` issues it through `issue_invoice`, and
- * `filed` registers and files a stand-in original as the issue action does
- * after rendering. Returns the invoice id and the heading of its page.
+ * `filed` registers a stand-in original, which files it, as the issue
+ * action does after rendering. Returns the invoice id and the heading of its page.
  */
 async function seedInvoice(
   world: TestWorld,
@@ -131,9 +131,6 @@ async function seedInvoice(
           p_size_bytes: 4096,
           p_content_hash: 'a'.repeat(64),
         })
-        .throwOnError();
-      await admin
-        .rpc('file_document', { p_actor_id: actor, p_organization_id: orgId, p_document_id: documentId })
         .throwOnError();
     }
     return JSON.stringify({ id: invoiceId, heading: `Rechnung ${number}` });

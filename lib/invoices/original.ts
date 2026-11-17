@@ -9,7 +9,6 @@ import { renderEInvoicePdf } from '@/lib/document-rendering/e-invoice';
 import { invoiceDocument } from '@/lib/document-rendering/invoice-layout';
 import type { BusinessDocument } from '@/lib/document-rendering/model';
 import { renderBusinessDocument } from '@/lib/document-rendering/render';
-import { fileDocumentOriginal } from '@/lib/documents/filing';
 import { buildDocumentStoragePath } from '@/lib/documents/storage-path';
 import { unitShortLabelOrStored } from '@/lib/inventory/article-terms-format';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
@@ -123,9 +122,10 @@ function originalFileName(invoiceNumber: string): string {
 }
 
 /**
- * Renders, stores, registers and files the original of an issued invoice; a
- * registered one is only filed. Returns whether it is filed now. The caller
- * established the actor, the organization and the office role.
+ * Renders, stores, registers and files the original of an issued invoice;
+ * the registration files it in the same transaction. Returns whether it is
+ * filed now. The caller established the actor, the organization and the
+ * office role.
  */
 export async function fileInvoiceOriginalFor(
   admin: AdminClient,
@@ -133,17 +133,10 @@ export async function fileInvoiceOriginalFor(
   invoice: IssuedInvoice,
 ): Promise<boolean> {
   if (invoice.original?.filed) return true;
-  const documentId = invoice.original?.documentId ?? (await registerOriginal(admin, context, invoice));
-  if (!documentId) return false;
-  const filed = await fileDocumentOriginal(admin, {
-    actorId: context.userId,
-    organizationId: context.orgId,
-    documentId,
-  });
-  return filed.success || filed.error === 'document_filed';
+  return (await registerOriginal(admin, context, invoice)) !== null;
 }
 
-/** Renders and stores the original and registers it once; answers the registered document, or null. */
+/** Renders and stores the original and registers and files it once; answers the document, or null. */
 async function registerOriginal(
   admin: AdminClient,
   context: { userId: string; orgId: string },

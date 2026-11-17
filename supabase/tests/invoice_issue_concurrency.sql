@@ -42,8 +42,8 @@ begin
   insert into public.clients (id, organization_id, name, client_type, address) values
   ('38070000-0000-4000-8000-000000000020', '38070000-0000-4000-8000-000000000010',
    'Hausverwaltung Lindenhof GmbH', 'gewerblich', 'Hofweg 1, 10117 Berlin');
-  -- Three complete drafts, 101 to 103.
-  for v_draft in select ('38070000-0000-4000-8000-00000000010' || n)::uuid from generate_series(1, 3) n loop
+  -- Four complete drafts, 101 to 104.
+  for v_draft in select ('38070000-0000-4000-8000-00000000010' || n)::uuid from generate_series(1, 4) n loop
     insert into public.invoices (id, organization_id, client_id, recipient_client_id, service_start, service_end,
       line_net_cents, tax_cents, gross_cents, created_by, updated_by)
     values (v_draft, '38070000-0000-4000-8000-000000000010', '38070000-0000-4000-8000-000000000020',
@@ -123,6 +123,42 @@ begin
     as third(number text);
   if v_number is distinct from 'RE-' || v_year || '-003' then
     raise exception 'an issue after a rolled-back one got %, a number went missing', v_number;
+  end if;
+end $$;
+
+-- A direct line delete that races an issue waits for it and is then refused:
+-- no line of an issued invoice goes, whoever writes.
+select dblink_exec('issue_race_first', 'begin');
+select dblink_exec('issue_race_first', 'set local role service_role');
+select * from dblink('issue_race_first', pg_temp.issue_statement('38070000-0000-4000-8000-000000000104'))
+  as issuing(number text);
+select dblink_send_query('issue_race_second',
+  'delete from public.invoice_lines where invoice_id = ''38070000-0000-4000-8000-000000000104''');
+do $$
+declare
+  v_pid integer := (select pid from issue_race_second_pid);
+  v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
+begin
+  while cardinality(pg_blocking_pids(v_pid)) = 0 loop
+    if clock_timestamp() > v_deadline then
+      raise exception 'a line delete never waited for the issue in flight';
+    end if;
+  end loop;
+end $$;
+select dblink_exec('issue_race_first', 'commit');
+do $$
+declare
+  v_message text;
+  v_lines bigint;
+begin
+  perform * from dblink_get_result('issue_race_second', false) as result(status text);
+  v_message := dblink_error_message('issue_race_second');
+  perform * from dblink_get_result('issue_race_second', false) as result(status text);
+  select lines into v_lines from dblink('issue_race_setup', $read$
+    select count(*) from public.invoice_lines where invoice_id = '38070000-0000-4000-8000-000000000104'
+  $read$) as remaining(lines bigint);
+  if position('invoice_issued' in coalesce(v_message, '')) = 0 or v_lines is distinct from 1::bigint then
+    raise exception 'a line delete that raced the issue answered % and left % lines', v_message, v_lines;
   end if;
 end $$;
 

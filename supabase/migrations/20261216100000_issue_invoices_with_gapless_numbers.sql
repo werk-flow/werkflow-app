@@ -223,23 +223,29 @@ revoke all on function app_private.guard_issued_invoice() from public, anon, aut
 create trigger guard_issued_invoice before update or delete on public.invoices
   for each row execute function app_private.guard_issued_invoice();
 
--- The lines of an issued invoice never change. Organization teardown passes:
--- the invoice row is gone by then.
+-- The lines of an issued invoice never change. The share lock on the invoice
+-- row waits for an issue in flight, so a line write never slips past it.
+-- Organization teardown passes: the invoice row is gone by then.
 create function app_private.guard_issued_invoice_lines()
 returns trigger
 language plpgsql
 security invoker
 set search_path to ''
 as $$
+declare
+  v_status text;
 begin
-  if exists (
-    select 1 from public.invoices invoice
-    where invoice.status <> 'entwurf'
-      and ((tg_op <> 'INSERT' and invoice.id = old.invoice_id and invoice.organization_id = old.organization_id)
-        or (tg_op <> 'DELETE' and invoice.id = new.invoice_id and invoice.organization_id = new.organization_id))
-  ) then
-    raise exception 'invoice_issued';
-  end if;
+  -- An update moves no line between invoices: new.invoice_id is checked too.
+  for v_status in
+    select invoice.status from public.invoices invoice
+    where (tg_op <> 'INSERT' and invoice.id = old.invoice_id and invoice.organization_id = old.organization_id)
+      or (tg_op <> 'DELETE' and invoice.id = new.invoice_id and invoice.organization_id = new.organization_id)
+    for share
+  loop
+    if v_status <> 'entwurf' then
+      raise exception 'invoice_issued';
+    end if;
+  end loop;
   return case when tg_op = 'DELETE' then old else new end;
 end;
 $$;
@@ -350,9 +356,12 @@ grant execute on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, 
 
 -- 4. Registers an issued invoice's rendered original as a document in the
 -- ten-year class, dated the Rechnungsdatum, linked to the customer and never
--- to a work. Once per invoice: a later call answers the registered document
--- (with its content hash) and registers nothing, so the caller discards its
--- own object. Refusals: invalid_input, not_authorized, invoice_not_found,
+-- to a work, and files it in the same transaction through file_document (the
+-- function lib/documents/filing.ts calls), so no moment exists in which the
+-- registered original could take a new version or another class. Once per
+-- invoice: a later call answers the registered document (with its content
+-- hash) and registers nothing, so the caller discards its own object.
+-- Refusals: invalid_input, not_authorized, invoice_not_found,
 -- invoice_not_issued.
 create function public.register_invoice_original(
   p_actor_id uuid,
@@ -410,6 +419,7 @@ begin
     jsonb_build_object('source', 'invoice_issue', 'invoiceId', v_invoice.id, 'storagePath', p_storage_path,
       'contentHash', p_content_hash, 'clientId', v_invoice.client_id)
   );
+  perform public.file_document(p_actor_id, p_organization_id, p_document_id);
   update public.invoices invoice set original_document_id = p_document_id
   where invoice.id = v_invoice.id and invoice.organization_id = p_organization_id;
   insert into public.invoice_events (

@@ -297,7 +297,9 @@ begin
   if (v_first ->> 'replay')::boolean or v_document.category is distinct from 'invoice'
     or v_document.retention_class is distinct from 'ten_years'
     or v_document.document_date is distinct from (now() at time zone 'Europe/Berlin')::date
-    or v_document.mime_type is distinct from 'application/pdf' then
+    or v_document.mime_type is distinct from 'application/pdf'
+    -- Filed in the registration's transaction: no moment for a new version or another class.
+    or v_document.filed_at is null or v_document.filed_by is distinct from '38060000-0000-4000-8000-000000000002' then
     raise exception 'the original registered as %', to_jsonb(v_document);
   end if;
   if (select array_agg(num_nonnulls(job_id, project_id, request_id, service_case_id, employee_id) || ':' || client_id)
@@ -315,9 +317,7 @@ begin
 end;
 $$;
 
--- Filed through E9's path, the original is never deleted or replaced, and the invoice keeps it.
-select public.file_document('38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
-  '38060000-0000-4000-8000-000000000301');
+-- Filed, the original is never deleted or replaced, and the invoice keeps it.
 select pg_temp.expect_refusal(label, statement, refusal)
 from (values
   ('delete the original', 'delete from public.documents where id = ''38060000-0000-4000-8000-000000000301''',

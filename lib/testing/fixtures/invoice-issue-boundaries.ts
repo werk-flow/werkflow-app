@@ -213,7 +213,6 @@ world.rpc = ({ name, args }) => {
   if (name === 'register_invoice_original') {
     return { data: { documentId, replay: false, contentHash: args.p_content_hash }, error: null };
   }
-  if (name === 'file_document') return { data: { id: documentId }, error: null };
   return { data: null, error: null };
 };
 world.rpcCalls.length = 0;
@@ -229,7 +228,6 @@ assert.deepEqual(
     ['issue_invoice', ORGANIZATION_A, CALLER_ID],
     ['get_invoice', ORGANIZATION_A, null],
     ['register_invoice_original', ORGANIZATION_A, CALLER_ID],
-    ['file_document', ORGANIZATION_A, CALLER_ID],
   ],
 );
 const issueArgs = world.rpcCalls[1]?.args;
