@@ -3558,7 +3558,6 @@ export type Database = {
           format_version: string | null;
           id: string;
           organization_id: string;
-          price_preview_hash: string | null;
           rebate_groups: Json;
           rebates: Json | null;
           result: Json | null;
@@ -3580,7 +3579,6 @@ export type Database = {
           format_version?: string | null;
           id?: string;
           organization_id: string;
-          price_preview_hash?: string | null;
           rebate_groups?: Json;
           rebates?: Json | null;
           result?: Json | null;
@@ -3602,7 +3600,6 @@ export type Database = {
           format_version?: string | null;
           id?: string;
           organization_id?: string;
-          price_preview_hash?: string | null;
           rebate_groups?: Json;
           rebates?: Json | null;
           result?: Json | null;
@@ -15887,6 +15884,7 @@ export type Database = {
               p_actor_id: string;
               p_import_id: string;
               p_organization_id: string;
+              p_price_fingerprint: string;
               p_rebates: Json;
               p_unit_mapping: Json;
             };
