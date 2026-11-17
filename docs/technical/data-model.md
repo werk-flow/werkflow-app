@@ -126,5 +126,5 @@ A job's team and the people on its visits are two records of one plan. A job sch
 
 ## Invoices
 
-- An invoice (`invoices`) names its customer, its Rechnungsempfänger and at most one job, project or Servicefall. Its lines (`invoice_lines`) and totals hold what the server computed through `lib/invoicing/`; no SQL computes an amount. A save replaces every line of a draft in one call from the expected version.
+- An invoice (`invoices`) names its customer, its Rechnungsempfänger and at most one job, project or Servicefall. Its lines (`invoice_lines`) and totals hold what the server computed through `lib/invoicing/`; no SQL computes an amount. A save replaces every line of a draft in one call from the expected version. A line may name the Leistung (`leistung_id`) or the article (`item_id`) it was copied from, at most one, of the same organization; the copied values stay the line's own.
 - A draft has no number and may be deleted. Its history (`invoice_events`) keeps no foreign key to it, so the history of a deleted draft stays. Lines and history have no client grant; Admin and Büro select `invoices` only to hear of a change.
