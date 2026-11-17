@@ -33,17 +33,29 @@ function* nodesUnder(node, visitorKeys) {
   }
 }
 
+/** The variable `identifier` names in its scope, or undefined for a global. */
+function variableOf(identifier, sourceCode) {
+  for (let scope = sourceCode.getScope(identifier); scope; scope = scope.upper) {
+    const variable = scope.set.get(identifier.name);
+    if (variable) return variable;
+  }
+  return undefined;
+}
+
 /**
- * The setters of `useState` pairs, `const [value, setValue] = useState(…)`, by name, each with
- * its value's name.
+ * The state variable of a `useState` setter variable, `const [value, setValue] = useState(…)`, or
+ * undefined for any other variable.
  */
-function stateOfSetter(declarator) {
+function stateOfSetter(setter, sourceCode) {
+  const declarator = setter?.defs[0]?.node;
+  if (declarator?.type !== 'VariableDeclarator') return undefined;
   const { id, init } = declarator;
   if (id.type !== 'ArrayPattern' || init?.type !== 'CallExpression') return undefined;
   if (!callsFunctionNamed(init, 'useState')) return undefined;
-  const [value, setter] = id.elements;
-  if (value?.type !== 'Identifier' || setter?.type !== 'Identifier') return undefined;
-  return [setter.name, value.name];
+  const [value, setterName] = id.elements;
+  if (value?.type !== 'Identifier' || setterName?.type !== 'Identifier') return undefined;
+  if (setterName.name !== setter.name) return undefined;
+  return variableOf(value, sourceCode);
 }
 
 /**
@@ -51,11 +63,14 @@ function stateOfSetter(declarator) {
  * updater call (`setValue((previous) => …)`) of a state the effect depends on, so every update
  * starts the next timeout.
  */
-function rearmingUpdate(effect, setters, visitorKeys) {
+function rearmingUpdate(effect, sourceCode) {
+  const { visitorKeys } = sourceCode;
   const [callback, dependencies] = effect.arguments;
   if (!callback || dependencies?.type !== 'ArrayExpression') return undefined;
   const dependsOn = new Set(
-    dependencies.elements.filter((element) => element?.type === 'Identifier').map(({ name }) => name),
+    dependencies.elements
+      .filter((element) => element?.type === 'Identifier')
+      .map((element) => variableOf(element, sourceCode)),
   );
   for (const timeout of nodesUnder(callback, visitorKeys)) {
     if (timeout.type !== 'CallExpression' || !callsFunctionNamed(timeout, 'setTimeout')) continue;
@@ -65,7 +80,9 @@ function rearmingUpdate(effect, setters, visitorKeys) {
       if (update.type !== 'CallExpression' || update.callee.type !== 'Identifier') continue;
       const [updater] = update.arguments;
       const isUpdater = updater?.type === 'ArrowFunctionExpression' || updater?.type === 'FunctionExpression';
-      if (isUpdater && dependsOn.has(setters.get(update.callee.name))) return update;
+      if (!isUpdater) continue;
+      const state = stateOfSetter(variableOf(update.callee, sourceCode), sourceCode);
+      if (state && dependsOn.has(state)) return update;
     }
   }
   return undefined;
@@ -118,15 +135,9 @@ const noIntervalRule = {
   create(context) {
     const file = repositoryPath(context.filename);
     const allowed = (context.options[0]?.allow ?? []).some((entry) => entry.file === file);
-    const { visitorKeys } = context.sourceCode;
     let found = false;
-    const setters = new Map();
     const effects = [];
     return {
-      VariableDeclarator(node) {
-        const pair = stateOfSetter(node);
-        if (pair) setters.set(...pair);
-      },
       CallExpression(node) {
         if (callsFunctionNamed(node, 'useEffect') || callsFunctionNamed(node, 'useLayoutEffect'))
           effects.push(node);
@@ -137,7 +148,7 @@ const noIntervalRule = {
       'Program:exit'(program) {
         if (allowed && !found) context.report({ node: program, messageId: 'staleAllow' });
         for (const effect of effects) {
-          const update = rearmingUpdate(effect, setters, visitorKeys);
+          const update = rearmingUpdate(effect, context.sourceCode);
           if (update) context.report({ node: update, messageId: 'rearmedTimeout' });
         }
       },
