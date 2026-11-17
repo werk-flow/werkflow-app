@@ -40,6 +40,7 @@ export type OverdueJobRow = z.infer<typeof overdueJobRowSchema>;
  * The Berlin day the job's scheduled visits end on: the later of the last
  * timed visit's end day and the last all-day visit's last day. A timed visit
  * that ends exactly at midnight ends on the day before.
+ * @internal Exported for its unit test.
  */
 export function lastVisitDate(
   row: Pick<OverdueJobRow, 'last_timed_end' | 'last_all_day_end'>,
