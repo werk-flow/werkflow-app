@@ -111,7 +111,9 @@ function useReportActions(refresh: () => Promise<void>) {
   const attempts = useRef(new Map<string, string>());
   const create = (visit: CompletedVisit) =>
     void busy.run(visit.dueWorkId, async () => {
-      const reportId = attempts.current.get(visit.dueWorkId) ?? crypto.randomUUID();
+      // A kept attempt the list now shows as the latest report committed: a new click regenerates.
+      const kept = attempts.current.get(visit.dueWorkId);
+      const reportId = kept && kept !== visit.latestReport?.id ? kept : crypto.randomUUID();
       attempts.current.set(visit.dueWorkId, reportId);
       // A lost answer (the request failed in transit) is uncertain, like `unexpected_error`.
       const result = await createServiceReport({

@@ -90,6 +90,12 @@ begin
     raise exception 'invalid_input';
   end if;
 
+  -- The lock orders two reports of one visit, and a retry after its attempt.
+  select * into v_due from public.maintenance_due_work due_work
+  where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id
+  for update;
+  if not found then raise exception 'maintenance_due_not_found'; end if;
+  -- After the lock, so a retry that overlapped the committing attempt finds it.
   select * into v_existing from public.maintenance_service_reports report
   where report.id = p_report_id;
   if found then
@@ -100,11 +106,6 @@ begin
     return jsonb_build_object('reportId', v_existing.id, 'documentId', v_existing.document_id, 'duplicate', true);
   end if;
 
-  -- The lock orders two reports of one visit.
-  select * into v_due from public.maintenance_due_work due_work
-  where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id
-  for update;
-  if not found then raise exception 'maintenance_due_not_found'; end if;
   if v_due.status <> 'completed' or v_due.job_id is null then
     raise exception 'service_report_visit_not_completed';
   end if;

@@ -2,7 +2,7 @@
 // assigned or not, is refused before any database access; Büro neither finds
 // another organization's completed visit nor sees it in the report list, and
 // a refused report writes nothing. A retry of a committed attempt answers with
-// its report and writes nothing.
+// its report, also after a newer one, and writes nothing.
 import assert from 'node:assert/strict';
 import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
@@ -62,6 +62,16 @@ const world = installActionWorld({
       report_number: 1,
       created_at: '2026-11-17T10:00:00Z',
     },
+    // Another manager regenerated it before the first attempt's retry arrived.
+    {
+      id: '8f000000-0000-4000-8000-000000000016',
+      organization_id: ORGANIZATION_A,
+      maintenance_due_work_id: ownDueWorkId,
+      document_id: '8f000000-0000-4000-8000-000000000017',
+      report_number: 2,
+      replaces_report_id: committedReportId,
+      created_at: '2026-11-17T10:05:00Z',
+    },
   ],
   job_assignments: [{ organization_id: ORGANIZATION_B, job_id: foreignJobId, user_id: 'caller' }],
 });
@@ -92,7 +102,7 @@ assert.deepEqual(
 );
 assert.equal(page.page.total, 1);
 
-// The retry of the attempt that made the filed report answers with it and writes nothing.
+// The retry of a committed attempt answers with its report, also after a newer one, and writes nothing.
 const committed = { success: true, reportId: committedReportId, documentId: committedDocumentId };
 world.rpcCalls.length = 0;
 assert.deepEqual(

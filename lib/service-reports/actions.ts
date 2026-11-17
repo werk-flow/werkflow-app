@@ -9,7 +9,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
 import { buildServiceReport } from './build';
-import { readVisitReportFacts } from './reads';
+import { readAttemptReport, readVisitReportFacts } from './reads';
 import { renderServiceReport, storeAndFileServiceReport } from './report-file';
 
 // The office's Servicebericht of a completed maintenance visit
@@ -27,7 +27,7 @@ const createSchema = z.object({
 /**
  * „Servicebericht erstellen“: a new filed report of a completed visit. Names
  * the latest report the office saw, so a report someone made meanwhile is
- * stale; a retry of the attempt that made the latest report answers with it.
+ * stale; a retry of an attempt that committed answers with its report.
  */
 export async function createServiceReport(
   input: z.input<typeof createSchema>,
@@ -38,12 +38,14 @@ export async function createServiceReport(
   if ('success' in context) return context;
   const { dueWorkId, reportId, replacesReportId } = parsed.data;
   try {
+    // A retry of an attempt that committed answers with its report, also after a newer one.
+    const attempt = await readAttemptReport(context, dueWorkId, reportId);
+    if (!attempt.success) return attempt;
+    if (attempt.report)
+      return { success: true, reportId: attempt.report.id, documentId: attempt.report.documentId };
     const read = await readVisitReportFacts(context, dueWorkId);
     if (!read.success) return read;
     const { jobId, latestReport, ...facts } = read.facts;
-    if (latestReport?.id === reportId) {
-      return { success: true, reportId: latestReport.id, documentId: latestReport.documentId };
-    }
     if ((latestReport?.id ?? null) !== replacesReportId)
       return { success: false, error: 'service_report_stale' };
     const parties = await getWorkBillingParties({ kind: 'job', id: jobId });

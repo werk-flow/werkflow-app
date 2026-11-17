@@ -84,11 +84,17 @@ async function readPageLookups(context: ServiceManagerContext, due: DueRow[]) {
         .in('id', batch),
     ),
     readInBatches(uniqueIds(due.map((row) => row.maintenance_plan_revision_id)), (batch) =>
-      context.admin
-        .from('maintenance_plan_revision_equipment')
-        .select('maintenance_plan_revision_id, equipment_id')
-        .eq('organization_id', scope)
-        .in('maintenance_plan_revision_id', batch),
+      readCompleteRows(
+        (from, to) =>
+          context.admin
+            .from('maintenance_plan_revision_equipment')
+            .select('id, maintenance_plan_revision_id, equipment_id')
+            .eq('organization_id', scope)
+            .in('maintenance_plan_revision_id', batch)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
     ),
     readLatestReports(
       context,
@@ -175,6 +181,26 @@ export async function readCompletedVisitPage(
     success: true,
     page: { items, total: dueRead.count ?? items.length, page, pageSize: COMPLETED_VISIT_PAGE_SIZE },
   };
+}
+
+/** The report an attempt registered for this visit, so its retry answers with it; null before it committed. */
+export async function readAttemptReport(
+  context: ServiceManagerContext,
+  dueWorkId: string,
+  reportId: string,
+): Promise<ActionResult<{ report: { id: string; documentId: string } | null }, 'load_failed'>> {
+  const { data, error } = await loggedRead(
+    'readAttemptReport: report read failed',
+    context.admin
+      .from('maintenance_service_reports')
+      .select('id, document_id')
+      .eq('organization_id', context.organizationId)
+      .eq('maintenance_due_work_id', dueWorkId)
+      .eq('id', reportId)
+      .maybeSingle(),
+  );
+  if (error) return { success: false, error: 'load_failed' };
+  return { success: true, report: data && { id: data.id, documentId: data.document_id } };
 }
 
 /** What a report of one completed visit prints, except the recipient, which the job's billing parties name. */
