@@ -60,6 +60,14 @@ import {
   initializeInventoryImportBoundary,
   InventoryImportContractFixture,
 } from './inventory-import-boundaries';
+import {
+  initializeWholesalerImportBoundary,
+  WholesalerImportContractFixture,
+} from './wholesaler-import-boundaries';
+import {
+  initializeSupplierCatalogBoundary,
+  SupplierCatalogContractFixture,
+} from './supplier-catalog-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
 import { ArticleTermsContractFixture, initializeArticleTermsBoundary } from './article-terms-boundaries';
 import {
@@ -67,6 +75,7 @@ import {
   InventoryMovementsContractFixture,
 } from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
+import { OffersContractFixture } from './offers-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -123,6 +132,8 @@ initializeProblemReportBoundary();
 initializeInventoryUnitBoundary();
 initializeArticleTermsBoundary();
 initializeInventoryImportBoundary();
+initializeWholesalerImportBoundary();
+initializeSupplierCatalogBoundary();
 initializeInventoryMovementsBoundary();
 initializeLeistungenBoundary();
 const personnelInitialData = initializePersonnelBoundary();
@@ -615,6 +626,10 @@ createRoot(root).render(
     <BannerProvider>
       <InventoryImportContractFixture />
     </BannerProvider>
+  ) : window.uiContractFixture === 'wholesaler-import' ? (
+    <WholesalerImportContractFixture />
+  ) : window.uiContractFixture === 'supplier-catalog' ? (
+    <SupplierCatalogContractFixture />
   ) : window.uiContractFixture === 'inventory-movements' ? (
     <InventoryMovementsContractFixture />
   ) : window.uiContractFixture === 'leistungen' ? (
@@ -631,6 +646,8 @@ createRoot(root).render(
     <RequestAttachContractFixture />
   ) : window.uiContractFixture === 'billing-parties' ? (
     <BillingPartiesContractFixture />
+  ) : window.uiContractFixture === 'offers' ? (
+    <OffersContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

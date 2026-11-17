@@ -2,6 +2,7 @@ Menü öffnen
 Inventar
 1 Artikel · 1 Lager · 0 geplante Artikel
 CSV importieren
+Großhandel importieren
 Lager anlegen
 Artikel anlegen
 Artikel mit Bestand
@@ -31,7 +32,4 @@ Material
 0 Stück
 Hauptlager 20 Stück
 Aktionen
-1–1
-von
-1
 Nicht eingestempelt

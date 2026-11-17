@@ -53,6 +53,9 @@ export const DIALOG_INVENTORY = {
   'components/shared/unsent-work-prompt.tsx#DiscardConfirmation|Nicht Übertragenes verwerfen?': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-discard' }],
   },
+  'components/angebote/create-offer-dialog.tsx#CreateOfferDialog|Angebot anlegen': {
+    audits: [{ route: '/angebote', role: 'admin', opener: 'commercial.offer' }],
+  },
   "components/angebote/leistungen/leistung-dialog.tsx#LeistungDialog|{entry ? 'Leistung bearbeiten' : 'Leistung anlegen'}":
     {
       audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung' }],
@@ -172,6 +175,11 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/dokumente', role: 'admin', opener: 'documents.viewer' }],
     },
+  // Its preview needs the private reader, which no audit world carries; the
+  // component stand (tests/ui-contracts/wholesaler-import.spec.ts) renders it.
+  'components/inventar/wholesaler-import-dialog.tsx#WholesalerImportDialog|Großhandel importieren': {
+    audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.wholesaler-import' }],
+  },
   'components/inventar/inventory-import-dialog.tsx#ImportDialog|CSV importieren': {
     audits: [
       { route: '/inventar', role: 'admin', opener: 'inventory.import' },

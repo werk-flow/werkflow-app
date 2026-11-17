@@ -71,8 +71,11 @@ declare global {
       | 'inventory-unit'
       | 'article-terms'
       | 'inventory-import'
+      | 'wholesaler-import'
+      | 'supplier-catalog'
       | 'inventory-movements'
       | 'leistungen'
+      | 'offers'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName
