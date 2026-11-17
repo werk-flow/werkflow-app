@@ -64,7 +64,10 @@ function stateOfSetter(setter, sourceCode) {
  */
 function timeoutCallback(argument, sourceCode) {
   if (argument?.type !== 'Identifier') return argument;
-  const definition = variableOf(argument, sourceCode)?.defs[0];
+  const variable = variableOf(argument, sourceCode);
+  // A reassigned name may hold another function by now; only a name that keeps its declaration counts.
+  if (variable?.references.some((reference) => reference.isWrite() && !reference.init)) return argument;
+  const definition = variable?.defs[0];
   if (definition?.type === 'FunctionName') return definition.node;
   const init = definition?.type === 'Variable' ? definition.node.init : undefined;
   return init?.type === 'ArrowFunctionExpression' || init?.type === 'FunctionExpression' ? init : argument;
