@@ -144,17 +144,30 @@ export async function seedSubscriptionEndedAfterFailedDebit(world: TestWorld): P
 
 /**
  * Reserves a new organization's id for the user, as an unpaid Checkout's
- * start does (werk-flow/werkflow-planning#248); returns the reserved id.
+ * start does (werk-flow/werkflow-planning#248), and ends that start's claim,
+ * as a finished start does, so a retry may open the next Checkout at once;
+ * returns the reserved id.
  */
 export async function seedOpenReservation(userId: string): Promise<string> {
   const organizationId = randomUUID();
-  const { error } = await createAdminClient().rpc('begin_werkflow_checkout', {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc('begin_werkflow_checkout', {
     p_organization_id: organizationId,
     p_user_id: userId,
     p_linked: false,
     p_stripe_customer_id: stripeIdsOf(organizationId).customer,
   });
   if (error) throw new Error(`reservation seed failed: ${error.message}`);
+  const attempt: unknown = data?.attempt;
+  if (data?.result !== 'claimed' || typeof attempt !== 'number') {
+    throw new Error('reservation seed failed: the start claimed no attempt');
+  }
+  const { data: finished, error: finishError } = await admin.rpc('finish_werkflow_checkout', {
+    p_organization_id: organizationId,
+    p_attempt: attempt,
+  });
+  if (finishError || finished !== true)
+    throw new Error('reservation seed failed: the start claim did not end');
   return organizationId;
 }
 
