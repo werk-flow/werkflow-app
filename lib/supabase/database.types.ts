@@ -2799,6 +2799,7 @@ export type Database = {
           imported_count: number;
           mode: string;
           organization_id: string;
+          prices_previewed: boolean;
           result_payload: Json | null;
           row_count: number;
           staged_rows: Json | null;
@@ -2817,6 +2818,7 @@ export type Database = {
           imported_count?: number;
           mode?: string;
           organization_id: string;
+          prices_previewed?: boolean;
           result_payload?: Json | null;
           row_count?: number;
           staged_rows?: Json | null;
@@ -2835,6 +2837,7 @@ export type Database = {
           imported_count?: number;
           mode?: string;
           organization_id?: string;
+          prices_previewed?: boolean;
           result_payload?: Json | null;
           row_count?: number;
           staged_rows?: Json | null;
@@ -3555,6 +3558,7 @@ export type Database = {
           format_version: string | null;
           id: string;
           organization_id: string;
+          price_preview_hash: string | null;
           rebate_groups: Json;
           rebates: Json | null;
           result: Json | null;
@@ -3576,6 +3580,7 @@ export type Database = {
           format_version?: string | null;
           id?: string;
           organization_id: string;
+          price_preview_hash?: string | null;
           rebate_groups?: Json;
           rebates?: Json | null;
           result?: Json | null;
@@ -3597,6 +3602,7 @@ export type Database = {
           format_version?: string | null;
           id?: string;
           organization_id?: string;
+          price_preview_hash?: string | null;
           rebate_groups?: Json;
           rebates?: Json | null;
           result?: Json | null;
@@ -18550,18 +18556,32 @@ export type Database = {
         };
         Returns: string;
       };
-      preview_inventory_import: {
-        Args: {
-          p_actor_id: string;
-          p_column_mapping: Json;
-          p_content_hash: string;
-          p_file_name: string;
-          p_mode: string;
-          p_organization_id: string;
-          p_rows: Json;
-        };
-        Returns: Json;
-      };
+      preview_inventory_import:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_column_mapping: Json;
+              p_content_hash: string;
+              p_file_name: string;
+              p_mode: string;
+              p_organization_id: string;
+              p_rows: Json;
+            };
+            Returns: Json;
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_column_mapping: Json;
+              p_content_hash: string;
+              p_file_name: string;
+              p_mode: string;
+              p_organization_id: string;
+              p_rows: Json;
+              p_with_prices: boolean;
+            };
+            Returns: Json;
+          };
       preview_supplier_catalog_import: {
         Args: {
           p_actor_id: string;
