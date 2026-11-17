@@ -18405,6 +18405,7 @@ export type Database = {
           completed_on: string;
           defects: string[];
           finding_id: string;
+          fully_covered: boolean;
           job_id: string;
           maintenance_due_work_id: string;
           maintenance_plan_id: string;

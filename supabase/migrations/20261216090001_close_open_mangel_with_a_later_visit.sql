@@ -5,14 +5,17 @@
 --   names it. A resolution is append-only and names the completed visit that
 --   closed the finding, who completed it and when.
 -- * public.complete_maintenance_visit closes, in the same call, every open
---   finding of the Anlagen the completed visit covers and of their Vorgänger,
---   when that finding's visit was completed on or before this visit's day.
---   The visit's own finding stays open, so an unfinished visit's Mängel
---   replace the earlier ones. A replay closes nothing again. A missed visit
---   completes nothing and closes nothing.
+--   finding whose visit covered only Anlagen the completed visit covers, or
+--   their Vorgänger, when that finding's visit was completed on or before
+--   this visit's day. A finding that also names an Anlage this visit did not
+--   cover stays open for it. The visit's own finding stays open, so an
+--   unfinished visit's Mängel replace the earlier ones. A replay closes
+--   nothing again. A missed visit completes nothing and closes nothing.
+--   Completions on the same Anlage run one after another, so each sees the
+--   findings the other wrote.
 -- * public.list_open_maintenance_visit_findings is the one reader of what is
 --   open: the office equipment detail and the technician's field history read
---   through it, and the completion closes exactly what it lists.
+--   through it, and the completion closes what it lists as fully covered.
 -- * The previous entry public.complete_maintenance_due_work stays as the
 --   deployed build calls it and closes nothing.
 
@@ -51,7 +54,8 @@ before update or delete on public.maintenance_visit_finding_resolutions
 for each row execute function app_private.prevent_maintenance_history_mutation();
 
 -- The open findings of visits that covered one of the given Anlagen or one of
--- their Vorgänger, newest visit first.
+-- their Vorgänger, newest visit first. `fully_covered` is true when every
+-- Anlage of the finding's visit is one of them.
 create function public.list_open_maintenance_visit_findings(
   p_organization_id uuid,
   p_equipment_ids uuid[]
@@ -69,7 +73,8 @@ returns table (
   owner_user_id uuid,
   target_date date,
   note text,
-  recorded_at timestamptz
+  recorded_at timestamptz,
+  fully_covered boolean
 )
 language sql stable security invoker set search_path = ''
 as $$
@@ -87,7 +92,13 @@ as $$
   )
   select finding.id, due_work.id, due_work.completed_on, due_work.scope_outcome,
     plan.id, plan.plan_number, due_work.job_id, finding.defects, finding.next_action,
-    finding.owner_user_id, finding.target_date, finding.note, finding.created_at
+    finding.owner_user_id, finding.target_date, finding.note, finding.created_at,
+    not exists (
+      select 1 from public.maintenance_plan_revision_equipment link
+      where link.organization_id = p_organization_id
+        and link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+        and link.equipment_id not in (select lineage.equipment_id from lineage)
+    )
   from public.maintenance_visit_findings finding
   join public.maintenance_due_work due_work
     on due_work.id = finding.maintenance_due_work_id
@@ -111,9 +122,9 @@ as $$
   order by due_work.completed_on desc, finding.created_at desc, finding.id;
 $$;
 
--- Closes the open findings the completed visit supersedes: those of the
--- Anlagen it covers and their Vorgänger, from visits completed on or before
--- its day, except its own. Runs under the entry's manager check and lock.
+-- Closes the open findings the completed visit supersedes: those whose visit
+-- covered only Anlagen it covers or their Vorgänger, completed on or before
+-- its day, except its own. Runs under the entry's manager check and locks.
 create function app_private.resolve_open_maintenance_visit_findings(
   p_organization_id uuid,
   p_maintenance_due_work_id uuid,
@@ -137,7 +148,8 @@ begin
   )
   select p_organization_id, open_finding.finding_id, v_due_work.id, p_actor_id
   from public.list_open_maintenance_visit_findings(p_organization_id, v_equipment_ids) open_finding
-  where open_finding.maintenance_due_work_id <> v_due_work.id
+  where open_finding.fully_covered
+    and open_finding.maintenance_due_work_id <> v_due_work.id
     and open_finding.completed_on <= v_due_work.completed_on
   -- A concurrent completion that closed the finding first keeps its resolution.
   on conflict (maintenance_visit_finding_id, organization_id) do nothing;
@@ -173,6 +185,19 @@ begin
   perform app_private.lock_maintenance_operation(p_organization_id, 'due_complete', p_idempotency_key);
   select due_work.status into v_status_before from public.maintenance_due_work due_work
   where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id;
+  -- Two completions on one Anlage would each miss the finding the other writes.
+  perform 1 from public.installed_equipment equipment
+  where equipment.organization_id = p_organization_id
+    and equipment.id in (
+      select link.equipment_id
+      from public.maintenance_due_work due_work
+      join public.maintenance_plan_revision_equipment link
+        on link.maintenance_plan_revision_id = due_work.maintenance_plan_revision_id
+       and link.organization_id = due_work.organization_id
+      where due_work.id = p_maintenance_due_work_id and due_work.organization_id = p_organization_id
+    )
+  order by equipment.id
+  for no key update;
   v_after := app_private.complete_maintenance_due_work_with_next_action(
     p_organization_id, p_maintenance_due_work_id, p_expected_version, p_scope_outcome,
     p_completed_on, p_work_artifact_revision_ids, p_reason, p_defects, p_next_action,

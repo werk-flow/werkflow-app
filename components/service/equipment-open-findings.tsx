@@ -45,8 +45,9 @@ export function EquipmentOpenFindingsSection({
     },
   });
   const findings = live.data;
-  if (!findings) {
-    if (!live.isStale) return null;
+  if (!findings && live.isLoading) return null;
+  // A failed first read, or a failed refresh of an empty list, has nothing to keep on screen.
+  if (!findings || (findings.length === 0 && live.isStale)) {
     return (
       <SectionError
         title="Offene Mängel konnten nicht geladen werden"
