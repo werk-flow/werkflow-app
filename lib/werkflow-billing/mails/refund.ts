@@ -26,12 +26,12 @@ export function renderRefundMail(mail: RefundMail): RenderedMail {
         ? `Für den Betrag, der bleibt, findest du im Anhang die neue Rechnung ${replacement.number} über ${formatEuro(replacement.grossCents)}. Sie ist schon bezahlt, du musst nichts tun.`
         : 'Du musst nichts tun.',
       replacement
-        ? 'Leg beide Belege bitte zu deiner Buchhaltung.'
-        : 'Leg die Stornorechnung bitte zu deiner Buchhaltung.',
+        ? 'Bitte nimm beide Belege in deine Buchhaltung auf.'
+        : 'Bitte nimm die Stornorechnung in deine Buchhaltung auf.',
     ],
     facts: [
       ['Stornorechnung', mail.stornoNumber],
-      ['Storniert', `Rechnung ${mail.cancelledNumber}`],
+      ['Storniert', mail.cancelledNumber],
       ['Erstattet', formatEuro(mail.refundedCents)],
       ...(replacement ? [['Neue Rechnung', replacement.number] as const] : []),
     ],
