@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { lastVisitDate, toJobPlanningTasks } from './job-tasks';
-import type { OverdueJobRow, UnplannedJobRow } from './manager-sets';
+import { lastVisitDate, toJobPlanningTasks, type OverdueJobRow, type UnplannedJobRow } from './job-tasks';
 
 const unplanned = (overrides: Partial<UnplannedJobRow> = {}): UnplannedJobRow => ({
   id: '0b8f6a52-1c3e-4a7d-9e21-5f4c3b2a1d01',

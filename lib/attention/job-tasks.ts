@@ -6,8 +6,35 @@
 import { addLocalDays, formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import type { ActionContext } from '@/lib/org/action-context';
-import type { ManagerAttentionSetsRead, OverdueJobRow, UnplannedJobRow } from './manager-sets';
+import { LIST_ROW_CAP } from '@/lib/supabase/query-batches';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
+import type { ManagerAttentionSetsRead } from './manager-sets';
 import type { AttentionTask } from './types';
+
+const unplannedJobRowSchema = z.object({
+  id: uuidSchema,
+  job_number: z.string().nullable(),
+  title: z.string(),
+  project_id: uuidSchema.nullable(),
+  project_number: z.string().nullable(),
+  created_at: z.string(),
+});
+
+// An open job whose every scheduled visit has ended; at least one end is set.
+const overdueJobRowSchema = unplannedJobRowSchema.extend({
+  last_timed_end: z.string().nullable(),
+  last_all_day_end: z.string().nullable(),
+});
+
+/** The job sets of read_manager_attention_sets; each holds at most LIST_ROW_CAP + 1 rows, one more is an overflow. */
+export const jobPlanningSetsSchema = z.object({
+  unplanned_jobs: z.array(unplannedJobRowSchema).max(LIST_ROW_CAP),
+  overdue_jobs: z.array(overdueJobRowSchema).max(LIST_ROW_CAP),
+});
+
+export type UnplannedJobRow = z.infer<typeof unplannedJobRowSchema>;
+export type OverdueJobRow = z.infer<typeof overdueJobRowSchema>;
 
 /**
  * The Berlin day the job's scheduled visits end on: the later of the last

@@ -15,6 +15,7 @@ import { Constants } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { jobPlanningSetsSchema, type OverdueJobRow, type UnplannedJobRow } from './job-tasks';
 
 // Every column is non-null but the number, the owner and the callback.
 const openRequestRowSchema = z.object({
@@ -38,33 +39,14 @@ const openProposalRowSchema = z.object({
   proposed_at: z.string(),
 });
 
-const unplannedJobRowSchema = z.object({
-  id: uuidSchema,
-  job_number: z.string().nullable(),
-  title: z.string(),
-  project_id: uuidSchema.nullable(),
-  project_number: z.string().nullable(),
-  created_at: z.string(),
-});
-
-// An open job whose every scheduled visit has ended; at least one end is set.
-const overdueJobRowSchema = unplannedJobRowSchema.extend({
-  last_timed_end: z.string().nullable(),
-  last_all_day_end: z.string().nullable(),
-});
-
 // Each set holds at most LIST_ROW_CAP + 1 rows; one more than the cap is an overflow.
-const setsSchema = z.object({
+const setsSchema = jobPlanningSetsSchema.extend({
   requests: z.array(openRequestRowSchema).max(LIST_ROW_CAP),
   access_proposals: z.array(openProposalRowSchema).max(LIST_ROW_CAP),
-  unplanned_jobs: z.array(unplannedJobRowSchema).max(LIST_ROW_CAP),
-  overdue_jobs: z.array(overdueJobRowSchema).max(LIST_ROW_CAP),
 });
 
 type OpenRequestRow = z.infer<typeof openRequestRowSchema>;
 export type OpenProposalRow = z.infer<typeof openProposalRowSchema>;
-export type UnplannedJobRow = z.infer<typeof unplannedJobRowSchema>;
-export type OverdueJobRow = z.infer<typeof overdueJobRowSchema>;
 
 /** The sets, none for a viewer who is no manager, or `failed` for a read, shape or overflow failure. */
 export type ManagerAttentionSetsRead = Promise<

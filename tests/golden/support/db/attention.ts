@@ -1,3 +1,6 @@
+import { jobPlanningSetsSchema, toJobPlanningTasks } from '../../../../lib/attention/job-tasks';
+import { getBusinessTodayIso } from '../../../../lib/date-time/berlin';
+import { LIST_ROW_CAP } from '../../../../lib/supabase/query-batches';
 import { createAdminClient } from './shared';
 
 // P1-07: pattern-level attention state — read markers and append-only pattern
@@ -48,4 +51,23 @@ export async function getAttentionPatternStateForUser(
       eventType: row.event_type,
     })),
   };
+}
+
+/**
+ * How many of the office's job planning tasks the organization holds now:
+ * open jobs nobody plans and jobs past their last visit, from the database
+ * read and the rule the badge derives them with. Other specs leave such jobs
+ * in a shared organization, so a badge expectation adds them.
+ */
+export async function countOfficeJobPlanningTasks(orgId: string): Promise<number> {
+  const { data, error } = await createAdminClient().rpc('read_manager_attention_sets', {
+    p_organization_id: orgId,
+    p_limit: LIST_ROW_CAP,
+  });
+  if (error) throw new Error(`Office job planning read failed: ${error.message}`);
+  const sets = jobPlanningSetsSchema.parse(data);
+  return toJobPlanningTasks(
+    { unplannedJobs: sets.unplanned_jobs, overdueJobs: sets.overdue_jobs },
+    getBusinessTodayIso(),
+  ).length;
 }
