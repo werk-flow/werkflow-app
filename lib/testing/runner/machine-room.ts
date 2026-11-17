@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { cpus, homedir, loadavg } from 'node:os';
 import { join } from 'node:path';
 
-// Admission by measured memory, and for a thread also by load (owner decision 19,
+// Admission by measured memory, and for a thread or a further heavy command also by load (owner decision 19,
 // werk-flow/werkflow-planning#294).
 // No fixed number of threads or commands guards a workstation. Each start asks
 // how much memory the machine can still hand over and is refused or delayed
@@ -240,7 +240,10 @@ const PRESSURE_WARN = 'macOS reports memory pressure: warn';
  * new is what is available minus what each has not used yet.
  * - heavy: the first one runs whenever the machine is not blocked, so a machine
  *   full of idle agents still verifies, one command at a time. Each further one
- *   needs its cost in room above the floor.
+ *   needs its cost in room above the floor, and a 15-minute load under the watch's
+ *   normal line: each `check:changed` runs eslint, tsc, knip and unit tests at once,
+ *   and on 2026-11-17 memory let six start on the 32 GB VM, which took it to load 74
+ *   on 16 cores.
  * - setup and device: their cost in room above the floor.
  * - thread: the machine, heavy commands aside, must still fit one heavy command
  *   after the thread, because every implementation thread ends in `check:changed`.
@@ -294,6 +297,13 @@ export function admission(
       reason: `${gib(available)} GiB available plus ${gib(held)} held by heavy commands (${running}); ${threads === 1 ? 'a thread needs' : `${threads} threads need`} ${gib(needed)}: the floor of ${gib(floor)}, ${gib(START_COST.heavy)} for a check:changed and ${gib(cost)} for each agent. The 15-minute load is ${load.toFixed(1)} on ${plural(cores, 'core')}; a thread needs it under ${normalLoad.toFixed(1)}, the load watch's normal line.`,
     };
   }
+  if (start === 'heavy' && heavy.length > 0 && normalLoad !== null && load >= normalLoad)
+    return {
+      admitted: false,
+      measured: false,
+      unwatched: false,
+      reason: `The 15-minute load is ${load.toFixed(1)} on ${plural(cores, 'core')}, at or above ${normalLoad.toFixed(1)}, the load watch's normal line, and ${running}; a further one waits until the load falls under the line or the running ones end.`,
+    };
   const reserved = heavy.reduce((sum, use) => sum + Math.max(0, START_COST.heavy - use), 0);
   const room = available - reserved;
   const numbers = `${gib(room)} GiB of room (${gib(available)} available, ${gib(reserved)} still reserved, ${running}); it needs ${gib(floor + cost)}: the floor of ${gib(floor)} and ${gib(cost)} for the ${START_NOUN[start]}.`;

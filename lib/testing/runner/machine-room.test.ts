@@ -139,11 +139,30 @@ test('a thread waits for a 15-minute load under the normal line, however much me
   );
   expect(admitted('thread', vm(24))).toBe(false);
   expect(admitted('thread', vm(23.9))).toBe(true);
-  // The load line is the thread's alone: a heavy command, a setup and a device keep the memory rule
-  // and the watch's own block above 2.5 per core.
+  // A setup, a device and the only heavy command keep the memory rule and the watch's own block above
+  // 2.5 per core.
   for (const start of ['heavy', 'setup', 'device'] as const) expect(admitted(start, vm(29))).toBe(true);
   // Below the line, memory still decides.
   expect(admitted('thread', watched(7.6, 3.2, null, { load: 10, cores: 16, normalLoad: 24 }))).toBe(false);
+});
+
+test('the overload of 2026-11-17 replayed: above the normal line a further heavy command waits, however much memory is free', () => {
+  // The VM, 32 GiB and 16 cores: memory alone let six check:changed runs start, and the load reached 74.
+  const vm = (load: number): RoomReading => watched(26, 3.2, null, { load, cores: 16, normalLoad: 24 });
+  expect(admitted('heavy', vm(10), [0])).toBe(true);
+  const crowded = admission('heavy', vm(30), [0]);
+  expect(crowded).toMatchObject({ admitted: false, measured: false, unwatched: false });
+  expect(crowded.reason).toBe(
+    "The 15-minute load is 30.0 on 16 cores, at or above 24.0, the load watch's normal line, and 1 heavy command running; a further one waits until the load falls under the line or the running ones end.",
+  );
+  expect(admitted('heavy', vm(24), [3])).toBe(false);
+  expect(admitted('heavy', vm(23.9), [3])).toBe(true);
+  // The only heavy command still runs, so a busy machine keeps verifying one command at a time.
+  expect(admission('heavy', vm(74), [])).toMatchObject({ admitted: true, measured: true });
+  // A watch without its normal line keeps the memory rule.
+  expect(admitted('heavy', watched(26, 3.2, null, { load: 74, cores: 16, normalLoad: null }), [0])).toBe(
+    true,
+  );
 });
 
 test('a macOS memory pressure of warn alone refuses nothing; the measured numbers decide', () => {
