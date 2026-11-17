@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { draftAmounts } from '../../../../lib/invoices/amounts';
+import type { InvoiceLineValues } from '../../../../lib/invoices/types';
 import { rpcArgs } from '../../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../../golden/support/db/shared';
 import type { TestWorld } from '../../../golden/support/world';
@@ -61,6 +63,20 @@ async function seedSourcedDraft(world: TestWorld): Promise<string> {
       )
       .throwOnError();
     // 2 h × 72,50 € and 3 m × 12,34 € per 10 m at 19 %, a free line of 45,00 € at 7 %.
+    const lines = [
+      {
+        ...line('Monteurstunde Geselle', '2', 'hour', 7250, 1, 1900),
+        description: 'Arbeitszeit vor Ort',
+        source: { kind: 'leistung', id: leistungId },
+      },
+      {
+        ...line('Kupferrohr 15 mm', '3', 'meter', 1234, 10, 1900),
+        source: { kind: 'article', id: articleId },
+      },
+      { ...line('Entsorgung Altgerät', '1', 'flat_rate', 4500, 1, 700), source: null },
+    ];
+    // The editor's own calculation, so the stored amounts cannot drift from the lines.
+    const amounts = draftAmounts(lines);
     await admin
       .rpc('save_invoice_draft', {
         p_actor_id: world.users.buero.id,
@@ -79,19 +95,12 @@ async function seedSourcedDraft(world: TestWorld): Promise<string> {
           openingText: '',
           closingText: '',
         },
-        p_lines: [
-          {
-            ...line('Monteurstunde Geselle', '2', 'hour', 7250, 1, 1900, 14500),
-            description: 'Arbeitszeit vor Ort',
-            source: { kind: 'leistung', id: leistungId },
-          },
-          {
-            ...line('Kupferrohr 15 mm', '3', 'meter', 1234, 10, 1900, 370),
-            source: { kind: 'article', id: articleId },
-          },
-          line('Entsorgung Altgerät', '1', 'flat_rate', 4500, 1, 700, 4500),
-        ],
-        p_totals: { lineNetCents: 19370, taxCents: 3135, grossCents: 22505 },
+        p_lines: lines.map((value, index) => ({
+          ...value,
+          taxCategory: 'S',
+          netCents: amounts.lineNetCents[index] ?? 0,
+        })),
+        p_totals: amounts.totals,
       })
       .throwOnError();
     return invoiceId;
@@ -103,21 +112,10 @@ function line(
   quantity: string,
   unit: string,
   unitPriceCents: number,
-  priceQuantity: number,
-  taxRateBasisPoints: number,
-  netCents: number,
-) {
-  return {
-    name,
-    description: '',
-    quantity,
-    unit,
-    unitPriceCents,
-    priceQuantity,
-    taxCategory: 'S',
-    taxRateBasisPoints,
-    netCents,
-  };
+  priceQuantity: InvoiceLineValues['priceQuantity'],
+  taxRateBasisPoints: InvoiceLineValues['taxRateBasisPoints'],
+): InvoiceLineValues {
+  return { name, description: '', quantity, unit, unitPriceCents, priceQuantity, taxRateBasisPoints };
 }
 
 async function sourcedDraft(world: TestWorld): Promise<SurfaceDestination> {

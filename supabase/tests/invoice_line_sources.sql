@@ -220,6 +220,29 @@ $$;
 
 reset role;
 
+-- The Leistung picker orders numbers naturally: L-2 before L-10, a number
+-- without trailing digits last.
+insert into public.leistungen (id, organization_id, leistung_number, name, kind, unit, tax_rate_basis_points)
+values
+('38330000-0000-4000-8000-000000000032', '38330000-0000-4000-8000-000000000010', 'Pauschale', 'Anfahrt',
+ 'anfahrt', 'flat_rate', 1900),
+('38330000-0000-4000-8000-000000000033', '38330000-0000-4000-8000-000000000010', 'L-10', 'Meisterstunde',
+ 'arbeit', 'hour', 1900),
+('38330000-0000-4000-8000-000000000034', '38330000-0000-4000-8000-000000000010', 'L-2', 'Helferstunde',
+ 'arbeit', 'hour', 1900);
+set local role service_role;
+do $$
+declare
+  v_numbers jsonb := jsonb_path_query_array(
+    public.search_leistung_options('38330000-0000-4000-8000-000000000010', '', 0), '$.options[*].number');
+begin
+  if v_numbers is distinct from '["L-2", "L-7", "L-10", "Pauschale"]'::jsonb then
+    raise exception 'the Leistung picker orders the numbers %', v_numbers;
+  end if;
+end;
+$$;
+reset role;
+
 -- The organization's deletion removes its lines with their sources.
 delete from public.organizations where id = '38330000-0000-4000-8000-000000000010';
 do $$

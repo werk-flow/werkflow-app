@@ -211,7 +211,12 @@ export async function loadLeistungOptions(
   ]);
   const parsed = pageSchema(leistungRow).safeParse(page.data);
   if (page.error || selected.error || !parsed.success) {
-    logReadErrors('loadLeistungOptions: read failed', page.error, selected.error);
+    logReadErrors(
+      'loadLeistungOptions: read failed',
+      page.error,
+      selected.error,
+      parsed.success ? null : { code: 'malformed_result' },
+    );
     return FAILED;
   }
   return {

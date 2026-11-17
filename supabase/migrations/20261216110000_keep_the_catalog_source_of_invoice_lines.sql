@@ -175,16 +175,21 @@ revoke all on function public.get_invoice_with_line_sources(uuid, uuid) from pub
 grant execute on function public.get_invoice_with_line_sources(uuid, uuid) to service_role;
 
 -- 4. The Leistung picker: active Leistungen whose number, name or description
--- holds the text literally, one page of 50 from p_offset in number order, and
--- whether more follow. Service-role only: the caller resolves the
--- organization and the manager role first.
+-- holds the text literally, one page of 50 from p_offset in natural number
+-- order, and whether more follow. A Leistung number is free text: the order
+-- splits off its trailing digits and compares them as a number (L-2 before
+-- L-10); a number without trailing digits comes last. Service-role only: the
+-- caller resolves the organization and the manager role first.
 create function public.search_leistung_options(
   p_organization_id uuid,
   p_search text default '',
   p_offset integer default 0
 ) returns jsonb language sql stable security invoker set search_path = '' as $$
   with matching as materialized (
-    select leistung.id, leistung.leistung_number, leistung.name, leistung.unit
+    select leistung.id, leistung.leistung_number, leistung.name, leistung.unit,
+      leistung.leistung_number !~ '[0-9]$' as number_unmatched,
+      substring(leistung.leistung_number from '^(.*?)[0-9]+$') as number_prefix,
+      substring(leistung.leistung_number from '([0-9]+)$')::numeric as number_sequence
     from public.leistungen leistung
     where leistung.organization_id = p_organization_id
       and leistung.archived_at is null
@@ -194,14 +199,16 @@ create function public.search_leistung_options(
           lower(p_search)) > 0
       )
   ), page as (
-    select * from matching order by leistung_number, id
+    select * from matching
+    order by number_unmatched, number_prefix, number_sequence, leistung_number, id
     limit 51 offset greatest(coalesce(p_offset, 0), 0)
   ), choices as (
-    select * from page order by leistung_number, id limit 50
+    select * from page
+    order by number_unmatched, number_prefix, number_sequence, leistung_number, id limit 50
   ) select jsonb_build_object(
     'options', coalesce((select jsonb_agg(
       jsonb_build_object('id', id, 'number', leistung_number, 'name', name, 'unit', unit)
-      order by leistung_number, id) from choices), '[]'),
+      order by number_unmatched, number_prefix, number_sequence, leistung_number, id) from choices), '[]'),
     'hasMore', (select count(*) > 50 from page)
   );
 $$;
