@@ -32,7 +32,7 @@ WerkFlow has offers without positions, invoice drafts and issued invoices, and n
 - A retry of „Beleg erstellen“ renders the same bytes with the same build; a deployment that changed the renderer in between renders other bytes for an original not yet stored.
 - No offer uses the profile's tax rate yet; the Musterangebot keeps its fixed 19 %.
 - A Leistung's price applies per one unit; a VAT rate other than 19, 7 or 0 % cannot be chosen. No offer uses a Leistung yet.
-- Not built: calculation, offer positions and amounts, order confirmation, contract, change order, billable measurement, issued invoice, credit, incoming bill, payment, open item, dunning, bank matching, accounting export, ledger.
+- Not built: calculation, offer positions and amounts, order confirmation, contract, change order, billable measurement, credit, incoming bill, payment, open item, dunning, bank matching, accounting export, ledger.
 - A draft offer names its Rechnungsempfänger as a customer and keeps no copy of its name and address; sending will copy them (werk-flow/werkflow-planning#16).
 - No XRechnung and no § 13b. PDF/A is checked in CI, not at run time; the CII schema itself is not checked at run time. A stationery PDF prints as the plain letterhead on invoices.
 - WerkFlow claims no XRechnung, ZUGFeRD invoicing, Peppol, DATEV, GAEB, REB/VOB, §13b, GoBD archive, double-entry accounting, payroll or tax-filing capability.

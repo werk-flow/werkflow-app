@@ -156,9 +156,12 @@ function useDraftState(invoice: InvoiceDetail) {
   const [dirty, setDirty] = useState(false);
   const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
   const newer = invoice.version > baseVersion;
-  if (newer && !dirty) {
+  // An issue elsewhere replaces own changes too: an issued invoice shows only what it says.
+  const issuedElsewhere = newer && invoice.status !== 'entwurf';
+  if ((newer && !dirty) || issuedElsewhere) {
     setFormState(draftFormOf(invoice));
     setBaseVersion(invoice.version);
+    setDirty(false);
   }
   return {
     form,
