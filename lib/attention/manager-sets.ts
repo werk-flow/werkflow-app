@@ -2,10 +2,11 @@ import 'server-only';
 
 // The pending office sets of a manager's attention derivation, read in one
 // call (read_manager_attention_sets, migration
-// 20261201100004_propose_site_access_corrections.sql): the open requests and
-// the field workers' open access proposals. `./actions` starts the read once
-// per derivation and hands the promise to both derivations, so the access
-// proposal task adds no backend request (lab.office.cold-start).
+// 20261216090000_hold_unplanned_and_overdue_jobs_in_aufgaben.sql): the open
+// requests, the field workers' open access proposals, and the open jobs that
+// need planning. `./actions` starts the read once per derivation and hands the
+// promise to every derivation that needs it, so the access proposal and job
+// planning tasks add no backend request (lab.office.cold-start).
 
 import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
@@ -37,23 +38,49 @@ const openProposalRowSchema = z.object({
   proposed_at: z.string(),
 });
 
+const unplannedJobRowSchema = z.object({
+  id: uuidSchema,
+  job_number: z.string().nullable(),
+  title: z.string(),
+  project_id: uuidSchema.nullable(),
+  project_number: z.string().nullable(),
+  created_at: z.string(),
+});
+
+// An open job whose every scheduled visit has ended; at least one end is set.
+const overdueJobRowSchema = unplannedJobRowSchema.extend({
+  last_timed_end: z.string().nullable(),
+  last_all_day_end: z.string().nullable(),
+});
+
 // Each set holds at most LIST_ROW_CAP + 1 rows; one more than the cap is an overflow.
 const setsSchema = z.object({
   requests: z.array(openRequestRowSchema).max(LIST_ROW_CAP),
   access_proposals: z.array(openProposalRowSchema).max(LIST_ROW_CAP),
+  unplanned_jobs: z.array(unplannedJobRowSchema).max(LIST_ROW_CAP),
+  overdue_jobs: z.array(overdueJobRowSchema).max(LIST_ROW_CAP),
 });
 
 type OpenRequestRow = z.infer<typeof openRequestRowSchema>;
 export type OpenProposalRow = z.infer<typeof openProposalRowSchema>;
+export type UnplannedJobRow = z.infer<typeof unplannedJobRowSchema>;
+export type OverdueJobRow = z.infer<typeof overdueJobRowSchema>;
 
 /** The sets, none for a viewer who is no manager, or `failed` for a read, shape or overflow failure. */
 export type ManagerAttentionSetsRead = Promise<
-  { failed: false; requests: OpenRequestRow[]; accessProposals: OpenProposalRow[] } | { failed: true }
+  | {
+      failed: false;
+      requests: OpenRequestRow[];
+      accessProposals: OpenProposalRow[];
+      unplannedJobs: UnplannedJobRow[];
+      overdueJobs: OverdueJobRow[];
+    }
+  | { failed: true }
 >;
 
 export async function readManagerAttentionSets(context: ActionContext): ManagerAttentionSetsRead {
   if (context.role !== 'admin' && context.role !== 'buero') {
-    return { failed: false, requests: [], accessProposals: [] };
+    return { failed: false, requests: [], accessProposals: [], unplannedJobs: [], overdueJobs: [] };
   }
   const { data, error } = await createSupabaseAdminClient().rpc('read_manager_attention_sets', {
     p_organization_id: context.orgId,
@@ -64,5 +91,11 @@ export async function readManagerAttentionSets(context: ActionContext): ManagerA
     logError('Failed to load the pending office sets', error ?? parsed.error);
     return { failed: true };
   }
-  return { failed: false, requests: parsed.data.requests, accessProposals: parsed.data.access_proposals };
+  return {
+    failed: false,
+    requests: parsed.data.requests,
+    accessProposals: parsed.data.access_proposals,
+    unplannedJobs: parsed.data.unplanned_jobs,
+    overdueJobs: parsed.data.overdue_jobs,
+  };
 }

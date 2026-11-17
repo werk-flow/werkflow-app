@@ -1,0 +1,33 @@
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const SECTION_KEYS = [0, 1] as const;
+const ROW_KEYS = [0, 1, 2] as const;
+
+/** Mirrors the office start: section headings over a card of task rows and the „Alle in Aufgaben“ link. */
+export function OfficeStartSkeleton() {
+  return (
+    <div className="mx-auto max-w-3xl space-y-6" aria-hidden="true">
+      <Skeleton className="h-5 w-40" />
+      {SECTION_KEYS.map((section) => (
+        <div key={section} className="space-y-2">
+          <div className="flex items-center gap-1.5 px-1">
+            <Skeleton className="size-4" />
+            <Skeleton className="h-4 w-36" />
+          </div>
+          <Card className="gap-0 divide-y py-0">
+            {ROW_KEYS.map((row) => (
+              <div key={row} className="space-y-1.5 px-4 py-3">
+                <Skeleton className="h-4 w-48 max-w-full" />
+                <Skeleton className="h-3 w-64 max-w-full" />
+              </div>
+            ))}
+            <div className="flex justify-end px-4 py-2">
+              <Skeleton className="h-8 w-32" />
+            </div>
+          </Card>
+        </div>
+      ))}
+    </div>
+  );
+}

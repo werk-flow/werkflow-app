@@ -378,7 +378,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['people', ['people_boundaries.sql'], ['personnel', 'attention', 'time']],
   ['join-requests', ['organization_join_requests.sql'], ['personnel', 'attention']],
   ['attention-read-writes', ['attention_read_writes.sql'], ['attention', 'personnel']],
-  ['attention-pending-sets', ['attention_pending_sets.sql'], ['attention', 'planning', 'work']],
+  [
+    'attention-pending-sets',
+    ['attention_pending_sets.sql', 'attention_job_planning_sets.sql'],
+    ['attention', 'planning', 'work'],
+  ],
   ['people-atomic-writes', ['people_atomic_writes.sql'], ['personnel']],
   ['qualification-history-writes', ['qualification_history_writes.sql'], ['personnel']],
   ['employee-capability-history-writes', ['employee_capability_history_writes.sql'], ['personnel']],

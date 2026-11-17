@@ -4,6 +4,7 @@ import { OrganizationSettingsForm } from '@/components/settings/organization-set
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { readOrganizationDeletionScope } from '@/lib/org/deletion-scope';
 import { readSettingsSectionMembership } from '@/lib/settings/section-access';
+import { getCachedMemberCount } from '@/lib/data/cached';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { formatBerlin } from '@/lib/utils';
 
@@ -20,6 +21,8 @@ export default async function OrganizationSettingsPage() {
       .single(),
     activeMembership.role === 'admin' ? readOrganizationDeletionScope(activeMembership.orgId) : null,
   ]);
+  // The reader logged a failure and cached nothing; the details show it.
+  const memberCount = await getCachedMemberCount(activeMembership.orgId).catch(() => null);
 
   if (error && error.code !== 'PGRST116') {
     return (
@@ -39,6 +42,7 @@ export default async function OrganizationSettingsPage() {
         uniqueCode: organization.unique_code,
         createdAtLabel,
         role: activeMembership.role,
+        memberCount,
       }}
       deletionScope={deletionScope && (deletionScope.success ? deletionScope.scope : deletionScope.error)}
     />

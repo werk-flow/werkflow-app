@@ -47,6 +47,8 @@ const AUFGABEN_OVERVIEW_TABLES = [
   'work_blockers',
   'work_artifacts',
   'jobs',
+  // Someone assigned to an unplanned job resolves its task.
+  'job_assignments',
   'projects',
   'work_handover_packages',
   'attention_read_states',
@@ -84,11 +86,8 @@ function withClearedNotificationsRestored(
   );
 }
 
-/** The live attention overview and its optimistic mark-as-read actions. */
-export function useAufgabenOverview() {
-  const { showBanner } = useBanner();
-  const busy = useBusyIds();
-
+/** The live attention overview that Aufgaben and the office start show. */
+export function useLiveAttentionOverview() {
   // Keep last-known data on transient failures; only a failed initial
   // load shows the visible failure state.
   const view = useLiveView<AttentionOverview>({
@@ -99,13 +98,23 @@ export function useAufgabenOverview() {
       return result.success ? { ok: true, data: result.overview } : { ok: false };
     },
   });
+  // A new Berlin day moves jobs past their last visit into Aufgaben.
   useBusinessDayRefresh(view.refresh);
   // A promised callback that passes moves its request into „Rückruf überfällig“.
   useDeadlineRefresh(nextCallbackDeadline(view.data?.tasks ?? []), view.refresh);
+  return view;
+}
 
+/** The live attention overview and its optimistic mark-as-read actions. */
+export function useAufgabenOverview() {
+  const { showBanner } = useBanner();
+  const busy = useBusyIds();
+  const view = useLiveAttentionOverview();
   const overview = view.data ?? null;
   // The badges count this overview while the page is open: one derivation
-  // per event instead of two, and a mark-as-read moves them with the dot.
+  // per event instead of two, and a mark-as-read moves them with the dot. The
+  // office start leaves the badges their own reads: a page left right after
+  // its load would otherwise hand the next page the badges' queued catch-up.
   useAttentionCountsFromOverview(overview);
   const refetch = view.refresh;
   const isMarkingAllRead = busy.isBusy(ALL_NOTIFICATIONS_ID);

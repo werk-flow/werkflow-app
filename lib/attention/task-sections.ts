@@ -7,16 +7,17 @@ import type { AttentionTask } from './types';
  * The Aufgaben sections, most urgent first. An overdue callback leads: the
  * promise to the customer is already broken. Time-bound decisions follow: time
  * approvals (MiLoG timeliness), vacation requests, the visits an approved
- * vacation takes a planned person away from, and open Anfragen. A field
- * worker's access proposal follows the join requests: both wait for one
- * office decision. The handover backlog comes last, because it waits without
- * a deadline.
+ * vacation takes a planned person away from, the jobs whose last visit passed
+ * unfinished, and open Anfragen. A field worker's access proposal follows the
+ * join requests: both wait for one office decision. The unplanned jobs and the
+ * handover backlog come last, because they wait without a deadline.
  */
 const ATTENTION_TASK_SECTION_ORDER = [
   'callback',
   'time',
   'vacation',
   'visitReplan',
+  'overdueJob',
   'request',
   'joinRequest',
   'siteAccess',
@@ -26,6 +27,7 @@ const ATTENTION_TASK_SECTION_ORDER = [
   'followUp',
   'dueDefect',
   'artifact',
+  'unplannedJob',
   'handover',
 ] as const;
 
@@ -40,6 +42,8 @@ const SECTION_OF_TASK_KIND = {
   vacation_request_approval: 'vacation',
   planning_visit_replan: 'visitReplan',
   site_access_proposal: 'siteAccess',
+  job_past_last_visit: 'overdueJob',
+  job_unplanned: 'unplannedJob',
   client_request_open: 'request',
   client_request_callback_overdue: 'callback',
   organization_join_request: 'joinRequest',
@@ -85,4 +89,22 @@ export function formatOpenSince(days: number): string {
   if (days <= 0) return 'heute eingegangen';
   if (days === 1) return 'offen seit 1 Tag';
   return `offen seit ${days} Tagen`;
+}
+
+// Time and vacation approvals carry personnel data, which a start page never shows.
+const PERSONNEL_SECTIONS: ReadonlySet<AttentionTaskSectionKey> = new Set(['time', 'vacation']);
+
+/** The sections of the office start: the Aufgaben sections in their order, without the personnel approvals. */
+export function groupOfficeStartTasks(tasks: readonly AttentionTask[]): AttentionTaskSection[] {
+  return groupAttentionTasks(tasks).filter((section) => !PERSONNEL_SECTIONS.has(section.key));
+}
+
+/** The element id of a section on the Aufgaben page. */
+export function attentionSectionAnchor(key: AttentionTaskSectionKey): string {
+  return `aufgaben-${key}`;
+}
+
+/** Aufgaben, scrolled to the section. */
+export function attentionSectionHref(key: AttentionTaskSectionKey): string {
+  return `/aufgaben#${attentionSectionAnchor(key)}`;
 }

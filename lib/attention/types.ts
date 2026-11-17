@@ -9,11 +9,11 @@ import type { CalendarDispatchState } from '@/lib/calendar/board';
 
 // Attention items are derived live from the owning domains; this identity is
 // the only thing pattern-level storage (read markers, pattern events) keys on.
-// Keep in sync with the CHECK constraints in migrations
-// add_attention_pattern_state + extend_attention_taxonomy_sickness. Later
-// slices (qualifications P1-09, follow-ups P1-10, corrections P1-22,
-// procurement P1-29) extend this union plus the database CHECK — they never
-// add parallel storage.
+// Every kind that storage may key on stays in the CHECK constraints of
+// attention_read_states and attention_events (latest in migration
+// 20261201100004); a later slice extends this union plus the CHECK and never
+// adds parallel storage. The job planning kinds take no marker or event, so
+// the CHECK leaves them out until one does.
 type AttentionSourceType =
   | 'time_session_approval'
   | 'time_change_request_approval'
@@ -37,7 +37,9 @@ type AttentionSourceType =
   | 'work_handover_review'
   | 'organization_join_request'
   | 'planning_visit_replan'
-  | 'site_access_proposal';
+  | 'site_access_proposal'
+  | 'job_unplanned'
+  | 'job_past_last_visit';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -241,6 +243,26 @@ export type AttentionTask =
       jobNumber: string | null;
       proposerName: string;
       proposedAt: string;
+    }
+  // An open job with no scheduled visit and nobody assigned: nobody will do it
+  // until the office plans it. Admin and Büro get it; the job is the identity.
+  | {
+      sourceType: 'job_unplanned';
+      sourceId: string;
+      jobLabel: string;
+      jobHref: string;
+      /** Berlin date the job was created. */
+      createdDate: string;
+    }
+  // An open job whose last scheduled visit lies before today: the visits are
+  // over and the work is neither complete nor planned again.
+  | {
+      sourceType: 'job_past_last_visit';
+      sourceId: string;
+      jobLabel: string;
+      jobHref: string;
+      /** Berlin date of the last scheduled visit's last day. */
+      lastVisitDate: string;
     };
 
 // Informational notices, deduplicated per source record: a domain state
