@@ -258,7 +258,7 @@ create trigger guard_issued_invoice_lines before insert or update or delete on p
 -- 3. Issues a draft from p_expected_version with the snapshot the server
 -- checked (p_snapshot: organizationName, profile, files and buyer). The
 -- number is the series' next under its row lock; the Rechnungsdatum is the
--- Berlin day. p_expected_number and p_expected_issue_date are the number and
+-- Berlin day once that lock is held. p_expected_number and p_expected_issue_date are the number and
 -- Rechnungsdatum the server checked and rendered the invoice under; the head
 -- of its original prints both, so the function issues only those and
 -- otherwise refuses invoice_number_moved, and the server checks again. A
@@ -284,8 +284,8 @@ declare
   v_earlier public.invoice_events;
   v_invoice public.invoices;
   v_settings public.invoice_settings;
-  v_issue_date date := (now() at time zone 'Europe/Berlin')::date;
-  v_year integer := extract(year from (now() at time zone 'Europe/Berlin'))::integer;
+  v_issue_date date;
+  v_year integer;
   v_sequence integer;
   v_number text;
 begin
@@ -319,6 +319,10 @@ begin
   select * into v_settings from public.invoice_settings settings
   where settings.organization_id = p_organization_id
   for update;
+  -- The day once the lock is held, not when the transaction began: an issue that waited across
+  -- midnight on New Year's Eve must not write the series back to the old year.
+  v_issue_date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
+  v_year := extract(year from v_issue_date)::integer;
   v_sequence := app_private.next_invoice_sequence(v_settings, v_year);
   v_number := app_private.format_invoice_number(v_settings, v_year, v_sequence);
   if v_sequence >= 999999999 then

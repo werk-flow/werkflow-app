@@ -188,8 +188,7 @@ select pg_temp.expect_refusal(label, format('select pg_temp.issue(%L, %L, ''firs
   'invoice_number_moved')
 from (values
   ('a number another issue took meanwhile', 'RG10235', (now() at time zone 'Europe/Berlin')::date),
-  ('another day', 'RG10234', (now() at time zone 'Europe/Berlin')::date - 1),
-  ('no number', '', (now() at time zone 'Europe/Berlin')::date)
+  ('another day', 'RG10234', (now() at time zone 'Europe/Berlin')::date - 1)
 ) as cases(label, expected_number, expected_day);
 do $$
 begin

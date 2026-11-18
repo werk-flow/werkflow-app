@@ -8,9 +8,8 @@
 // and again under the new number when another issue took that one first.
 // supabase/tests/invoice_issue.sql proves the functions.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import { extractText, getDocumentProxy } from 'unpdf';
-import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 import {
   CALLER_ID,
@@ -44,13 +43,19 @@ mock.module('@/lib/storage/r2', () => ({
   },
 }));
 
-// The invoice number of every XML the EN 16931 check read, in order.
+// The day every issue below happens, in Berlin.
+const today = '2037-11-20';
+setSystemTime(new Date(`${today}T10:00:00.000Z`));
+
+// The invoice number and Rechnungsdatum (CII format 102) of every XML the EN 16931 check read, in order.
 const checkedNumbers: string[] = [];
 // Captured before the mock, which rebinds the module's exports to the wrapper.
 const { checkEn16931 } = await import('@/lib/invoicing/check-en16931');
 mock.module('@/lib/invoicing/check-en16931', () => ({
   checkEn16931: (xml: string) => {
-    checkedNumbers.push(/<rsm:ExchangedDocument>\s*<ram:ID>([^<]*)<\/ram:ID>/.exec(xml)?.[1] ?? '');
+    const number = /<rsm:ExchangedDocument>\s*<ram:ID>([^<]*)<\/ram:ID>/.exec(xml)?.[1] ?? '';
+    const date = /<ram:IssueDateTime>\s*<udt:DateTimeString format="102">(\d{8})</.exec(xml)?.[1] ?? '';
+    checkedNumbers.push(`${number} ${date}`);
     return checkEn16931(xml);
   },
 }));
@@ -221,7 +226,7 @@ assert.deepEqual(
   'a refused draft reached the issue',
 );
 // The rules read the draft under the number it would take, never under a placeholder.
-assert.deepEqual(checkedNumbers, ['RE-2037-001']);
+assert.deepEqual(checkedNumbers, ['RE-2037-001 20371120']);
 
 // A draft without a readable recipient address is refused before the rules.
 world.rpc = ({ name }) =>
@@ -312,12 +317,18 @@ assert.deepEqual(
     .filter((call) => call.name === 'issue_invoice')
     .map((call) => [call.args.p_expected_number, call.args.p_expected_issue_date]),
   [
-    ['RE-2037-001', getBusinessTodayIso()],
-    ['RE-2037-002', getBusinessTodayIso()],
-    ['RE-2037-003', getBusinessTodayIso()],
+    ['RE-2037-001', today],
+    ['RE-2037-002', today],
+    ['RE-2037-003', today],
   ],
 );
-assert.deepEqual(checkedNumbers, ['RE-2037-001', 'RE-2037-002', 'RE-2037-003', 'RE-2037-003']);
+// Each check read the number and Rechnungsdatum its issue_invoice call got; the last is the original's.
+assert.deepEqual(checkedNumbers, [
+  'RE-2037-001 20371120',
+  'RE-2037-002 20371120',
+  'RE-2037-003 20371120',
+  'RE-2037-003 20371120',
+]);
 const issueArgs = world.rpcCalls[6]?.args;
 assert.equal(issueArgs?.p_expected_version, 2);
 assert.equal(issueArgs?.p_attempt_key, attemptKey);
