@@ -15944,6 +15944,8 @@ export type Database = {
           p_actor_id: string;
           p_attempt_key: string;
           p_correct: boolean;
+          p_expected_issue_date: string;
+          p_expected_number: string;
           p_invoice_id: string;
           p_organization_id: string;
           p_reason: string;

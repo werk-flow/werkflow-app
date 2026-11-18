@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { EMPTY_COMPANY_PROFILE_DETAILS } from '../../../lib/company-profile/profile';
+import { getBusinessTodayIso } from '../../../lib/date-time/berlin';
 import { rpcArgs } from '../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../golden/support/db/shared';
 import type { TestWorld } from '../../golden/support/world';
@@ -130,6 +131,10 @@ async function seed(world: TestWorld, state: 'issued' | 'cancelled'): Promise<In
   if (state === 'issued') {
     return { originalId: invoiceId, originalNumber, stornoId: null, stornoNumber: null, correctionId: null };
   }
+  // The Stornorechnung takes the series' next number on the Berlin day, as the action checks it.
+  const { data: series } = await admin
+    .rpc('get_invoice_settings', { p_organization_id: orgId })
+    .throwOnError();
   const { data: cancelled } = await admin
     .rpc('cancel_invoice', {
       p_actor_id: actor,
@@ -138,6 +143,8 @@ async function seed(world: TestWorld, state: 'issued' | 'cancelled'): Promise<In
       p_attempt_key: randomUUID(),
       p_reason: 'Falscher Rechnungsempfänger',
       p_correct: true,
+      p_expected_number: stringField(series, 'nextInvoiceNumber'),
+      p_expected_issue_date: getBusinessTodayIso(),
     })
     .throwOnError();
   const stornoId = stringField(cancelled, 'stornoId');

@@ -106,20 +106,17 @@ const HEAD_TOO_TALL: IssueFinding = {
 /**
  * What keeps an invoice from its number, checked under a placeholder number
  * and today's date: the EN 16931 rules, then an original whose head leaves
- * room for the lines. A placeholder at least as wide as the number it will
- * take keeps the head's height. Empty when it passes; null without a
- * Leistungsdatum.
+ * room for the lines. The number and date default to a placeholder and today;
+ * the head's height depends on the number, so a caller that knows the number
+ * passes it. Empty when it passes; null without a Leistungsdatum.
  */
 export async function findingsBeforeNumber(
   organizationId: string,
   invoice: Parameters<typeof calculatedInvoiceOf>[0] & { recipient: { id: string } },
   snapshot: IssueSnapshot,
-  placeholderNumber = 'ENTWURF',
+  issue: { number: string; issueDate: string } = { number: 'ENTWURF', issueDate: getBusinessTodayIso() },
 ): Promise<IssueFinding[] | null> {
-  const calculated = calculatedInvoiceOf(invoice, snapshot, {
-    number: placeholderNumber,
-    issueDate: getBusinessTodayIso(),
-  });
+  const calculated = calculatedInvoiceOf(invoice, snapshot, issue);
   if (!calculated) return null;
   const xml = toEn16931(calculated);
   const check = await checkEn16931(xml);

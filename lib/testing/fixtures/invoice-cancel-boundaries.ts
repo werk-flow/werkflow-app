@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { EMPTY_COMPANY_PROFILE_DETAILS } from '@/lib/company-profile/profile';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
@@ -214,12 +215,18 @@ assert.deepEqual(
 
 // A checked Stornorechnung: issued under the caller's organization, its original filed as a 384.
 let cancelled = false;
+// How often cancel_invoice answers that another issue took the checked number first.
+let numberMoves = 0;
 world.rpc = ({ name, args }) => {
   if (name === 'get_invoice') {
     if (args.p_invoice_id === stornoId) return { data: storno, error: null };
     return { data: cancelled ? { ...original, status: 'storniert', version: 4 } : original, error: null };
   }
   if (name === 'cancel_invoice') {
+    if (numberMoves > 0) {
+      numberMoves -= 1;
+      return { data: null, error: { message: 'invoice_number_moved' } };
+    }
     cancelled = true;
     return {
       data: {
@@ -258,6 +265,9 @@ assert.equal(cancelArgs?.p_invoice_id, invoiceId);
 assert.equal(cancelArgs?.p_attempt_key, attemptKey);
 assert.equal(cancelArgs?.p_reason, 'Falscher Rechnungsempfänger');
 assert.equal(cancelArgs?.p_correct, false);
+// The function issues exactly the number and day the Stornorechnung was checked under.
+assert.equal(cancelArgs?.p_expected_number, 'RE-2037-002');
+assert.equal(cancelArgs?.p_expected_issue_date, getBusinessTodayIso());
 assert.equal(world.rpcCalls[3]?.args.p_invoice_id, stornoId);
 const [first] = stored;
 if (!first) throw new Error('the cancel stored no original');
@@ -284,11 +294,28 @@ world.rpcCalls.length = 0;
 const retried = await cancelInvoice(input);
 assert.equal(retried.success, true, JSON.stringify(retried));
 assert.deepEqual(
-  world.rpcCalls.slice(0, 2).map((call) => call.name),
-  ['get_invoice', 'cancel_invoice'],
+  world.rpcCalls.slice(0, 3).map((call) => call.name),
+  ['get_invoice', 'get_invoice_settings', 'cancel_invoice'],
 );
+
+// Another issue took the checked number twice: the Stornorechnung is checked again each time, then cancelled.
+cancelled = false;
+numberMoves = 2;
+world.rpcCalls.length = 0;
+const moved = await cancelInvoice({ ...input, attemptKey: crypto.randomUUID() });
+assert.equal(moved.success, true, JSON.stringify(moved));
+assert.equal(world.rpcCalls.filter((call) => call.name === 'get_invoice_settings').length, 3);
+assert.equal(world.rpcCalls.filter((call) => call.name === 'cancel_invoice').length, 3);
+// A third move is answered, not retried for ever.
+cancelled = false;
+numberMoves = 3;
+assert.deepEqual(await cancelInvoice({ ...input, attemptKey: crypto.randomUUID() }), {
+  success: false,
+  error: 'invoice_number_moved',
+});
 
 // „Korrigieren“ answers the new draft.
 cancelled = false;
+numberMoves = 0;
 const corrected = await cancelInvoice({ ...input, attemptKey: crypto.randomUUID(), correct: true });
 assert.ok(corrected.success && corrected.correctionId === correctionId, JSON.stringify(corrected));

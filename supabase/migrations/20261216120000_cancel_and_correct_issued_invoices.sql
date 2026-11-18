@@ -139,17 +139,22 @@ create trigger guard_invoice_links before insert on public.invoices
 -- create_invoice's rule, so a recipient corrected on the work since applies.
 -- An original with a negative total (a credit) is not cancelled: its
 -- Stornorechnung would ask for payment. A retry under the same key answers
--- the first call. Answers stornoId, stornoNumber, issueDate and correctionId.
--- Refusals: invalid_input, not_authorized, invoice_not_found,
--- invoice_not_issued, invoice_cancelled, invoice_is_storno,
--- invoice_not_cancellable.
+-- the first call. p_expected_number and p_expected_issue_date are the number
+-- and Rechnungsdatum the server checked the Stornorechnung under; the head of
+-- its original prints the number, so another number refuses
+-- (invoice_number_moved) and the server checks again. Answers stornoId,
+-- stornoNumber, issueDate and correctionId. Refusals: invalid_input,
+-- not_authorized, invoice_not_found, invoice_not_issued, invoice_cancelled,
+-- invoice_is_storno, invoice_not_cancellable, invoice_number_moved.
 create function public.cancel_invoice(
   p_actor_id uuid,
   p_organization_id uuid,
   p_invoice_id uuid,
   p_attempt_key uuid,
   p_reason text,
-  p_correct boolean
+  p_correct boolean,
+  p_expected_number text,
+  p_expected_issue_date date
 )
 returns jsonb
 language plpgsql
@@ -164,10 +169,13 @@ declare
   v_issued jsonb;
   v_correction_id uuid;
   v_parties public.work_billing_parties;
+  v_settings public.invoice_settings;
+  v_year integer := extract(year from (now() at time zone 'Europe/Berlin'))::integer;
   v_answer jsonb;
 begin
   if p_actor_id is null or p_organization_id is null or p_invoice_id is null or p_attempt_key is null
     or p_correct is null or coalesce(v_reason, '') = '' or char_length(v_reason) > 500
+    or p_expected_number is null or p_expected_issue_date is null
   then
     raise exception 'invalid_input';
   end if;
@@ -187,6 +195,16 @@ begin
   if v_original.status = 'storniert' then raise exception 'invoice_cancelled'; end if;
   if v_original.cancels_invoice_id is not null then raise exception 'invoice_is_storno'; end if;
   if v_original.gross_cents < 0 then raise exception 'invoice_not_cancellable'; end if;
+  -- The series' row lock, which issue_invoice takes again below, holds the number checked here.
+  select * into v_settings from public.invoice_settings settings
+  where settings.organization_id = p_organization_id
+  for update;
+  if (now() at time zone 'Europe/Berlin')::date is distinct from p_expected_issue_date
+    or app_private.format_invoice_number(v_settings, v_year, app_private.next_invoice_sequence(v_settings, v_year))
+      is distinct from p_expected_number
+  then
+    raise exception 'invoice_number_moved';
+  end if;
   perform set_config('app.invoice_cancel', v_original.id::text, true);
 
   insert into public.invoices (
@@ -278,8 +296,8 @@ begin
   return v_answer;
 end;
 $$;
-revoke all on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean) from public, anon, authenticated;
-grant execute on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean) to service_role;
+revoke all on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean, text, date) from public, anon, authenticated;
+grant execute on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean, text, date) to service_role;
 
 -- 4. Every invoice linked to p_invoice_id through Stornos and corrections,
 -- from the first original on: generation by generation, each original

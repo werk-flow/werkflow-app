@@ -16,6 +16,7 @@ export const INVOICE_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   invoice_cancelled: 'Die Rechnung ist bereits storniert.',
   invoice_is_storno: 'Eine Stornorechnung lässt sich nicht stornieren.',
   invoice_not_cancellable: 'Eine Gutschrift mit negativem Betrag lässt sich nicht stornieren.',
+  invoice_number_moved: 'Gerade wurden mehrere andere Rechnungen ausgestellt. Bitte versuche es noch einmal.',
   cancel_failed: 'Die Rechnung konnte nicht storniert werden. Bitte versuche es erneut.',
   original_failed: 'Der Beleg konnte nicht erstellt werden. Bitte versuche es in einem Moment erneut.',
 };

@@ -55,7 +55,7 @@ declare
   v_role text;
 begin
   foreach v_role in array array['anon', 'authenticated'] loop
-    if has_function_privilege(v_role, 'public.cancel_invoice(uuid,uuid,uuid,uuid,text,boolean)', 'EXECUTE')
+    if has_function_privilege(v_role, 'public.cancel_invoice(uuid,uuid,uuid,uuid,text,boolean,text,date)', 'EXECUTE')
       or has_function_privilege(v_role, 'app_private.invoice_chain(uuid,uuid)', 'EXECUTE') then
       raise exception '% reaches the cancel', v_role;
     end if;
@@ -106,11 +106,12 @@ grant select on issued, issued_lines to service_role;
 
 create function pg_temp.cancel(p_actor uuid, p_org uuid, p_name text, p_attempt uuid, p_reason text, p_correct boolean)
 returns jsonb language sql as $$
-  select public.cancel_invoice(p_actor, p_org, pg_temp.id(p_name), p_attempt, p_reason, p_correct)
+  select public.cancel_invoice(p_actor, p_org, pg_temp.id(p_name), p_attempt, p_reason, p_correct,
+    public.get_invoice_settings(p_org) ->> 'nextInvoiceNumber', (now() at time zone 'Europe/Berlin')::date)
 $$;
 
 -- A refused cancel uses no number and changes nothing: a field worker, an
--- outsider, another organization, a draft, an empty reason.
+-- outsider, another organization, a draft, an empty reason, a moved number.
 select pg_temp.expect_refusal(label, format('select pg_temp.cancel(%L, %L, %L, gen_random_uuid(), %L, false)',
   actor, org, invoice, reason), refusal)
 from (values
@@ -127,6 +128,17 @@ from (values
   ('a reason over 500 characters', '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
    'cancelled', repeat('x', 501), 'invalid_input')
 ) as cases(label, actor, org, invoice, reason, refusal);
+-- A Stornorechnung checked under another number or day than the series gives it now is refused, so
+-- the original's head is never rendered under a number nobody checked.
+select pg_temp.expect_refusal(label, format('select public.cancel_invoice(%L, %L, %L, gen_random_uuid(), ''Falsch'',
+  false, %L, %L)', '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
+  pg_temp.id('cancelled'), expected_number, expected_day), 'invoice_number_moved')
+from (values
+  ('a number another issue took', 'RE-' || to_char(now() at time zone 'Europe/Berlin', 'YYYY') || '-003',
+   (now() at time zone 'Europe/Berlin')::date),
+  ('another day', 'RE-' || to_char(now() at time zone 'Europe/Berlin', 'YYYY') || '-004',
+   (now() at time zone 'Europe/Berlin')::date - 1)
+) as cases(label, expected_number, expected_day);
 do $$
 begin
   if (select next_number from public.invoice_settings
