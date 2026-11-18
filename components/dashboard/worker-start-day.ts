@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { useClientRead } from '@/hooks/use-client-read';
+import type { StoredToday } from '@/lib/field-sync/device/today-store';
 import { TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
 
@@ -34,6 +35,53 @@ export function useOnline(): boolean {
   );
 }
 
+/** Reads the device again after each refresh in this tab that saved the day (E7's `onTodaySaved`). */
+function useReadOnSave(reload: () => void): void {
+  useEffect(() => {
+    let active = true;
+    let unsubscribe: (() => void) | null = null;
+    import('@/lib/field-sync/device/today-refresh').then(
+      ({ onTodaySaved }) => {
+        if (!active) return;
+        unsubscribe = onTodaySaved(reload);
+        // A refresh that saved while this code loaded told no one: read once more.
+        reload();
+      },
+      (error: unknown) => {
+        // The start page's refresh fails on the same code and shows its own banner; the first read stands.
+        logError('WorkerStart: refresh signal failed to load', error);
+      },
+    );
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [reload]);
+}
+
+/**
+ * Drops the shown day at once and reads again after a sign-out or organization switch in another tab
+ * (its wipe signal or a change of the device claim), and after a return from the back-forward cache.
+ */
+function useDropOnWipe(dropAndReadAgain: () => void): void {
+  useEffect(() => {
+    const onStorage = (event: StorageEvent): void => {
+      // A wipe removes the claim first; `localStorage.clear()` reports no key.
+      if (event.key === TODAY_WIPE_KEY || event.key === TODAY_HOLDER_KEY || event.key === null)
+        dropAndReadAgain();
+    };
+    const onPageShow = (event: PageTransitionEvent): void => {
+      if (event.persisted) dropAndReadAgain();
+    };
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, [dropAndReadAgain]);
+}
+
 /**
  * The day the start page may show: the device's day, only while it belongs to this tab's person and
  * employee organization. The device claim is browser-wide, so another tab's organization can own
@@ -61,52 +109,30 @@ export function useWorkerStartDay() {
   });
   const { reload } = day;
 
-  useEffect(() => {
-    let active = true;
-    let unsubscribe: (() => void) | null = null;
-    import('@/lib/field-sync/device/today-refresh').then(
-      ({ onTodaySaved }) => {
-        if (!active) return;
-        unsubscribe = onTodaySaved(reload);
-        // A refresh that saved while this code loaded told no one: read once more.
-        reload();
-      },
-      (error: unknown) => {
-        // The start page's refresh fails on the same code and shows its own banner; the first read stands.
-        logError('WorkerStart: refresh signal failed to load', error);
-      },
-    );
-    return () => {
-      active = false;
-      unsubscribe?.();
-    };
-  }, [reload]);
+  useReadOnSave(reload);
+  useDropOnWipe(dropAndReadAgain);
 
-  useEffect(() => {
-    const onStorage = (event: StorageEvent): void => {
-      // A wipe removes the claim first; `localStorage.clear()` reports no key.
-      if (event.key === TODAY_WIPE_KEY || event.key === TODAY_HOLDER_KEY || event.key === null)
-        dropAndReadAgain();
-    };
-    const onPageShow = (event: PageTransitionEvent): void => {
-      if (event.persisted) dropAndReadAgain();
-    };
-    window.addEventListener('storage', onStorage);
-    window.addEventListener('pageshow', onPageShow);
-    return () => {
-      window.removeEventListener('storage', onStorage);
-      window.removeEventListener('pageshow', onPageShow);
-    };
-  }, [dropAndReadAgain]);
-
+  // The day whose end passed: hidden at once, also when the re-read after it fails and keeps the last data.
+  const [expired, setExpired] = useState<StoredToday | null>(null);
   const read = day.data?.stored ?? null;
   const stored =
-    read && read.snapshot.userId === userId && read.snapshot.organizationId === organizationId ? read : null;
+    read &&
+    read !== expired &&
+    read.snapshot.userId === userId &&
+    read.snapshot.organizationId === organizationId
+      ? read
+      : null;
   // Berlin midnight ends the day: the read then deletes it and answers none.
   useEffect(() => {
     if (!stored) return;
     const remaining = Date.parse(stored.snapshot.validUntil) - Date.now();
-    const timer = window.setTimeout(reload, Math.min(Math.max(remaining, 0), MAX_TIMER_MS));
+    const timer = window.setTimeout(
+      () => {
+        setExpired(stored);
+        reload();
+      },
+      Math.min(Math.max(remaining, 0), MAX_TIMER_MS),
+    );
     return () => window.clearTimeout(timer);
   }, [stored, reload]);
 
@@ -118,7 +144,7 @@ export function useWorkerStartDay() {
   return {
     stored,
     settled: day.data !== undefined,
-    ended: !stored && day.data !== undefined && shownFor === scope,
+    ended: !stored && (day.data !== undefined || expired !== null) && shownFor === scope,
     failure: day.failure,
   };
 }

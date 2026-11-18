@@ -148,12 +148,15 @@ export function clockLines(view: WorkerStartClockView): ReactElement {
   let hours: ReactNode;
   if (view.kind === 'ready') {
     status = <span className="truncate font-medium">{view.status}</span>;
-    hours = (
-      <span className="tabular-nums text-muted-foreground">
-        {view.asOf ? `Heute bis ${formatBerlinTime(view.asOf)} Uhr gearbeitet: ` : 'Heute gearbeitet: '}
-        <span className="text-foreground">{formatDuration(view.workingMinutes)}</span>
-      </span>
-    );
+    hours =
+      view.workingMinutes === null ? (
+        <span className="text-muted-foreground">Deine Stunden von heute siehst du in der Zeiterfassung.</span>
+      ) : (
+        <span className="tabular-nums text-muted-foreground">
+          {view.asOf ? `Heute bis ${formatBerlinTime(view.asOf)} Uhr gearbeitet: ` : 'Heute gearbeitet: '}
+          <span className="text-foreground">{formatDuration(view.workingMinutes)}</span>
+        </span>
+      );
   } else if (view.kind === 'loading') {
     status = <Skeleton className="h-4 w-36" />;
     hours = <Skeleton className="h-4 w-44" />;

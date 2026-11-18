@@ -1,4 +1,5 @@
 import { computeZeiterfassungLiveTotals } from '@/components/zeiterfassung/zeiterfassung-dashboard-live-totals';
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { describeClockActivity } from '@/lib/time-tracking/clock-day-summary';
 import { liveMinutes, todayRunningSince } from '@/lib/time-tracking/helpers';
 import type { LiveClockState } from '@/lib/time-tracking/types';
@@ -15,8 +16,11 @@ export type WorkerStartClockView =
       kind: 'ready';
       /** „Du arbeitest gerade. Seit 07:12 Uhr.“ or „Du bist nicht eingestempelt.“ */
       status: string;
-      /** Today's working time, breaks taken off as the Zeiterfassung counts them. */
-      workingMinutes: number;
+      /**
+       * Today's working time, breaks taken off as the Zeiterfassung counts them; null while the
+       * clock state is of an earlier Berlin day (a page left open past midnight).
+       */
+      workingMinutes: number | null;
       /** The instant the minutes count to while the clock runs; null while it stands. */
       asOf: string | null;
     };
@@ -26,11 +30,11 @@ export type WorkerStartClockView =
  * action, or the provider's catch-up when the page becomes visible again. They never tick, so the
  * start page rests while the clock runs; the clock dock shows the running time.
  */
-export function workerStartClockView(clock: {
-  state: LiveClockState | null;
-  isReady: boolean;
-  statusError: string | null;
-}): WorkerStartClockView {
+export function workerStartClockView(
+  clock: { state: LiveClockState | null; isReady: boolean; statusError: string | null },
+  /** Today's Berlin date (`YYYY-MM-DD`). */
+  today: string,
+): WorkerStartClockView {
   const { state } = clock;
   if (!state || !clock.isReady) return clock.statusError ? { kind: 'unavailable' } : { kind: 'loading' };
   const nowMs = Date.parse(state.fetchedAt);
@@ -47,7 +51,10 @@ export function workerStartClockView(clock: {
   return {
     kind: 'ready',
     status: `${describeClockActivity(state).sentence}${since}`,
-    workingMinutes: breakdown.workMinutes + breakdown.overtimeMinutes,
+    workingMinutes:
+      formatBerlinLocalDate(state.fetchedAt) === today
+        ? breakdown.workMinutes + breakdown.overtimeMinutes
+        : null,
     asOf: state.isClockedIn ? state.fetchedAt : null,
   };
 }

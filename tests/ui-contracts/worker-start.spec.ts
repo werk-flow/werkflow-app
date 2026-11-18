@@ -90,6 +90,15 @@ const TWO_EINSAETZE: StoredToday = {
   },
 };
 
+/** Shortly after the fixture clock state's own instant, on its Berlin day. */
+const CLOCK_DAY = '2026-09-12T08:31:00Z';
+
+/** A stored day that ends one minute after the clock the test installs. */
+const ENDING_DAY: StoredToday = {
+  ...TWO_EINSAETZE,
+  snapshot: { ...TWO_EINSAETZE.snapshot, validUntil: '2026-11-17T23:00:00.000Z' },
+};
+
 const STOPPED_CLOCK: LiveClockState = {
   ...RUNNING_CLOCK_STATE,
   status: 'clocked_out',
@@ -118,11 +127,13 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-/** Mounts the start page over a device that answers `device` to its reads. */
+/** Mounts the start page over a device that answers `device` to its reads, at `now` when given. */
 async function openStart(
   page: Page,
   device: { stored: StoredToday | null } | { fails: true },
+  now?: string,
 ): Promise<void> {
+  if (now) await page.clock.install({ time: new Date(now) });
   await page.evaluate((answer) => {
     window.workerStartDevice = answer;
   }, device);
@@ -263,7 +274,7 @@ test('a failed re-read keeps the day it read before beside its failure and retry
 test('a running clock shows what runs since when and today’s working time up to the clock’s state', async ({
   page,
 }) => {
-  await openStart(page, { stored: EMPTY_DAY });
+  await openStart(page, { stored: EMPTY_DAY }, CLOCK_DAY);
   const clock = MAIN(page).getByTestId('worker-start-clock');
   await expect(clock).toHaveAttribute('href', '/zeiterfassung');
   await page.evaluate(
@@ -278,7 +289,7 @@ test('a running clock shows what runs since when and today’s working time up t
 test('a stopped clock shows today’s working time, and an unreachable clock no false hours', async ({
   page,
 }) => {
-  await openStart(page, { stored: EMPTY_DAY });
+  await openStart(page, { stored: EMPTY_DAY }, CLOCK_DAY);
   const clock = MAIN(page).getByTestId('worker-start-clock');
   await page.evaluate(
     (state) => window.workerStartContract.setClock({ state, isReady: true, statusError: null }),
@@ -292,6 +303,32 @@ test('a stopped clock shows today’s working time, and an unreachable clock no 
   );
   await expect(clock).toContainText('Die Uhr ist gerade nicht erreichbar.');
   await expect(clock).not.toContainText('gearbeitet:');
+});
+
+test('a clock state of the day before shows no hours as today’s', async ({ page }) => {
+  // The page stayed open past Berlin midnight and the clock has not read again yet.
+  await openStart(page, { stored: EMPTY_DAY }, '2026-09-13T06:00:00Z');
+  const clock = MAIN(page).getByTestId('worker-start-clock');
+  await page.evaluate(
+    (state) => window.workerStartContract.setClock({ state, isReady: true, statusError: null }),
+    STOPPED_CLOCK,
+  );
+  await expect(clock).toContainText('Deine Stunden von heute siehst du in der Zeiterfassung.');
+  await expect(clock).not.toContainText('gearbeitet:');
+});
+
+test('a day whose end passes leaves the page even when the read after it fails', async ({ page }) => {
+  await openStart(page, { stored: ENDING_DAY }, '2026-11-17T22:59:00Z');
+  await expect(einsaetze(page).getByRole('link')).toHaveCount(2);
+  await page.evaluate(() => {
+    window.workerStartContract.device = { fails: true };
+  });
+  // Berlin midnight: the expiry timer fires and the device cannot be read.
+  await page.clock.runFor(61_000);
+  await expect(einsaetze(page)).toHaveCount(0);
+  await expect(MAIN(page).getByRole('alert')).toContainText(
+    'Deine Einsätze von heute konnten nicht gelesen werden',
+  );
 });
 
 test('the own open Aufgaben show their count and lead to the Aufgaben', async ({ page }) => {

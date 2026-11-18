@@ -1,9 +1,11 @@
 'use client';
 
-import { memo, type ReactElement } from 'react';
+import { memo, useCallback, useState, type ReactElement } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
 import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
+import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { workerStartClockView } from './worker-start-clock';
 import { useOnline, useWorkerStartDay } from './worker-start-day';
 import {
@@ -16,7 +18,10 @@ import {
 
 /** The only component that follows the clock: each clock action changes its state several times. */
 function ClockLines(): ReactElement {
-  return clockLines(workerStartClockView(useClockState()));
+  // Berlin midnight renews „today“: a clock state of the day before then shows no hours as today's.
+  const [today, setToday] = useState(getBusinessTodayIso);
+  useBusinessDayRefresh(useCallback(() => setToday(getBusinessTodayIso()), []));
+  return clockLines(workerStartClockView(useClockState(), today));
 }
 
 /** The only component that follows the attention counts. */
