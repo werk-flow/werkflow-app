@@ -1,6 +1,7 @@
 import { CalendarClock, Siren, Wrench } from 'lucide-react';
 
 import { FieldWorkPackSource } from '@/components/auftraege/work-pack/field-work-pack-source';
+import { FieldEquipmentRecordButton } from './field-equipment-record-button';
 import { EQUIPMENT_STATE_LABELS, EQUIPMENT_SUBTYPE_LABELS } from '@/lib/installed-equipment/types';
 import type { JobWithDetails } from '@/lib/jobs/types';
 import { SERVICE_CASE_URGENCY_LABELS } from '@/lib/service-cases/types';
@@ -147,6 +148,10 @@ export function FieldWorkPackEquipmentSource({ job, data }: FieldWorkPackContext
                       .join(' · ')}
                   </p>
                 )}
+                <FieldEquipmentRecordButton
+                  jobId={job.id}
+                  equipment={{ id: item.id, equipmentNumber: item.equipmentNumber, name: item.name }}
+                />
               </div>
             ))}
           </div>

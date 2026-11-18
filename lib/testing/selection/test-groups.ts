@@ -464,6 +464,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
+  ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
   ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
@@ -498,6 +499,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     [
       'security_boundaries.sql',
       'client_read_boundaries.sql',
+      'equipment_field_documents.sql',
       'email_change_boundaries.sql',
       'event_ledger_boundaries.sql',
       'realtime_deletions.sql',

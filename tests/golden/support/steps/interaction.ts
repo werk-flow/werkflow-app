@@ -1,10 +1,5 @@
 import { errors, expect, type Locator, type Page } from '@playwright/test';
-import {
-  BUSY_SIGNAL_SELECTOR,
-  ROUTE_REFRESH_SIGNAL,
-  SETTLED_CALENDAR_STATES,
-  UNCONFIRMED_LAYER_SIGNAL,
-} from '../../../../lib/testing/spec-support/busy-signals';
+import { busyElements, isPage, type Scope } from '../busy-elements';
 
 /**
  * The one home of settling and key presses in browser tests (testing.md,
@@ -20,58 +15,10 @@ import {
  * one `expect.poll`, never one after another.
  */
 
-type Scope = Page | Locator;
-
 const TEXT_ENTRY_ROLES = new Set(['combobox', 'listbox', 'textbox', 'searchbox', 'spinbutton']);
-
-function isPage(scope: Scope): scope is Page {
-  return 'goto' in scope;
-}
 
 function pageOf(scope: Scope): Page {
   return isPage(scope) ? scope : scope.page();
-}
-
-/** Describes the busy elements inside a scope, the scope itself included; empty when settled. */
-async function busyElements(scope: Scope): Promise<string[]> {
-  const root = isPage(scope) ? scope.locator('body') : scope;
-  return root.evaluateAll(
-    (elements, { selector, routeRefresh, unconfirmedLayer, settledCalendarStates }) => {
-      const describe = (element: Element): string => {
-        const name =
-          element.getAttribute('aria-label') ??
-          element.getAttribute('data-testid') ??
-          element.textContent?.trim().slice(0, 60) ??
-          '';
-        return `<${element.tagName.toLowerCase()} role="${element.getAttribute('role') ?? ''}"> ${name}`;
-      };
-      const busy: string[] = [];
-      if (document.documentElement.hasAttribute(routeRefresh)) busy.push('route refresh queued or running');
-      if (document.documentElement.hasAttribute(unconfirmedLayer))
-        busy.push('an optimistic list holds an unconfirmed entry');
-      for (const element of elements) {
-        const candidates = [element, ...element.querySelectorAll(selector)];
-        for (const candidate of candidates) {
-          if (!candidate.matches(selector)) continue;
-          const box = candidate.getBoundingClientRect();
-          // A hidden responsive copy is not what the user waits on.
-          if (box.width === 0 && box.height === 0) continue;
-          busy.push(describe(candidate));
-        }
-        for (const calendar of element.querySelectorAll('[data-calendar-state]')) {
-          const state = calendar.getAttribute('data-calendar-state') ?? '';
-          if (!settledCalendarStates.includes(state)) busy.push(`calendar in state ${state}`);
-        }
-      }
-      return busy;
-    },
-    {
-      selector: BUSY_SIGNAL_SELECTOR,
-      routeRefresh: ROUTE_REFRESH_SIGNAL,
-      unconfirmedLayer: UNCONFIRMED_LAYER_SIGNAL,
-      settledCalendarStates: [...SETTLED_CALENDAR_STATES],
-    },
-  );
 }
 
 /** Waits until nothing inside the scope is busy; a failure names the busy elements. */
@@ -82,6 +29,35 @@ export async function settled(scope: Scope, options: { timeout?: number } = {}):
         'The scope settles: no aria-busy, pending dialog, skeleton, spinner, unconfirmed content or route refresh, and every calendar ready',
       ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
     })
+    .toEqual([]);
+}
+
+/**
+ * Waits until React hydrated every element of the page. Server HTML is not
+ * the settled page: a client-only control stays disabled until hydration
+ * (`hooks/use-hydrated.ts`), and a Suspense boundary hydrates after the shell,
+ * later still on a slow machine, without any busy signal. React marks each
+ * element it owns with its fiber key, so an element without one is server HTML
+ * React has not reached. Elements that never belong to React are left out:
+ * the scripts and styles Next.js streams, and its route announcer.
+ */
+export async function hydrated(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const unhydrated: string[] = [];
+          for (const element of document.body.querySelectorAll('*')) {
+            if (element.closest('script, style, link, template, noscript, next-route-announcer')) continue;
+            if (Object.keys(element).some((key) => key.startsWith('__reactFiber$'))) continue;
+            unhydrated.push(
+              `<${element.tagName.toLowerCase()}> ${(element.textContent ?? '').trim().slice(0, 60)}`,
+            );
+          }
+          return unhydrated.slice(0, 5);
+        }),
+      { message: 'React hydrated every element of the page' },
+    )
     .toEqual([]);
 }
 
