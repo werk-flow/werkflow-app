@@ -100,6 +100,24 @@ test('the only heavy command without measured room may take slot 0 alone', () =>
   expect(offer.reason).toContain('It is the only heavy command, so it runs without measured room.');
 });
 
+test('above the normal load line the only heavy command takes slot 0 alone, however much memory is free', () => {
+  // 2026-11-17, the VM at load 74: two checks that start together both see no heavy command running.
+  const vm = (load: number): RoomReading => ({
+    room: {
+      available: 26 * GIB,
+      floor: 3.2 * GIB,
+      blocked: null,
+      alerted: false,
+      load,
+      cores: 16,
+      normalLoad: 24,
+    },
+  });
+  expect(offeredHeavySlots(vm(74), [], 6)).toMatchObject({ slots: [0], admitted: true, measured: false });
+  expect(offeredHeavySlots(vm(74), [0], 6)).toMatchObject({ slots: [], admitted: false });
+  expect(offeredHeavySlots(vm(10), [], 6).slots).toEqual([0, 1, 2, 3, 4, 5]);
+});
+
 test('a machine without the load watch keeps the count from total memory as its only limit', () => {
   const unwatched: RoomReading = { unwatched: 'no load watch at /nowhere', fix: 'Install the load watch.' };
   expect(offeredHeavySlots(unwatched, [], 3)).toMatchObject({ slots: [0, 1, 2], unwatched: true });

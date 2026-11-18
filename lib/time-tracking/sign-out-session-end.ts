@@ -3,13 +3,17 @@ import { logError } from '@/lib/logging';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { Tables } from '@/lib/supabase/database.types';
+import { sessionNeedsRecovery } from './canonical-clock-state';
 import { hashTimeTransitionRequest } from './transition-hash';
 
 // The canonical half of clockOutBeforeSignOut (clock-state-actions.ts): ends
 // one open session of the signed-in user, recovering it first when the
 // database asks for that. The caller resolves the user and reads the sessions.
 
-type OpenSession = Pick<Tables<'time_sessions'>, 'id' | 'organization_id' | 'version' | 'status'>;
+type OpenSession = Pick<
+  Tables<'time_sessions'>,
+  'id' | 'organization_id' | 'version' | 'status' | 'started_at'
+>;
 
 function getTransitionOutcome(value: unknown): string | null {
   if (!value || typeof value !== 'object' || !('outcome' in value)) return null;
@@ -28,7 +32,7 @@ export async function endSessionBeforeSignOut(
   session: OpenSession,
 ): Promise<boolean> {
   const operationId = crypto.randomUUID();
-  const action = session.status === 'recovery_required' ? 'recover_end' : 'end';
+  const action = sessionNeedsRecovery(session, new Date()) ? 'recover_end' : 'end';
   const requestHash = hashTimeTransitionRequest({
     organizationId: session.organization_id,
     action,

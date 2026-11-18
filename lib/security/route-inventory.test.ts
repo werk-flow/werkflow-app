@@ -119,6 +119,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'writeBackProblemReport',
     ],
   },
+  'app/api/stripe/webhook/route.ts': {
+    authorization:
+      'no session: Stripe proves itself with the Stripe-Signature header over the raw body and STRIPE_WEBHOOK_SECRET, verified before anything is parsed or stored; a missing, forged or stale signature answers 400 and records nothing; without a key accepted for this environment nothing runs and it answers 503; one database call records and claims the event id, so a replay changes nothing; the body is empty, no-store',
+    mustCall: ['resolveStripeGateway', 'verifySignal', 'receiveSignal'],
+  },
   'app/api/csp-report/route.ts': {
     authorization:
       'unauthenticated by design: receives the browser reports of the enforced script policy, reads and writes nothing, bounds the body, and logs a redacted summary without script samples or query strings',

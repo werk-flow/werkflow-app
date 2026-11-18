@@ -5,15 +5,13 @@ import type { OrganizationDocument } from '@/lib/documents/types';
 import { formatDecimalDe } from '@/lib/ui/decimal';
 import { formatBerlinDateTime as displayDateTime, formatGermanDate } from '@/lib/utils';
 import {
+  DEFECT_SEVERITY_LABELS,
+  DEFECT_STATE_LABELS,
   WORK_ARTIFACT_UNIT_LABELS,
   type WorkArtifactActionType,
   type WorkArtifactDetail,
 } from '@/lib/work-artifacts/types';
-import {
-  AUTHORIZATION_STATE_LABELS,
-  DEFECT_SEVERITY_LABELS,
-  DEFECT_STATE_LABELS,
-} from './work-artifact-content';
+import { AUTHORIZATION_STATE_LABELS } from './work-artifact-content';
 
 const ACTION_LABELS: Readonly<Record<WorkArtifactActionType, string>> = {
   review_requested: 'Zur Prüfung eingereicht',
