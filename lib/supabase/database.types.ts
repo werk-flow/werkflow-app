@@ -18128,6 +18128,8 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_attempt_key: string;
+          p_expected_issue_date: string;
+          p_expected_number: string;
           p_expected_version: number;
           p_invoice_id: string;
           p_organization_id: string;

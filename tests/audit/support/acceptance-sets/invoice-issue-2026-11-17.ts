@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { EMPTY_COMPANY_PROFILE_DETAILS } from '../../../../lib/company-profile/profile';
+import { getBusinessTodayIso } from '../../../../lib/date-time/berlin';
 import { rpcArgs } from '../../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../../golden/support/db/shared';
 import type { TestWorld } from '../../../golden/support/world';
@@ -104,6 +105,14 @@ async function seedInvoice(
       })
       .throwOnError();
     if (state === 'draft') return JSON.stringify({ id: invoiceId, heading: 'Rechnungsentwurf' });
+    // The function issues only the number and day the action checked: the series' next, the Berlin day.
+    const { data: series } = await admin
+      .rpc('get_invoice_settings', { p_organization_id: orgId })
+      .throwOnError();
+    const expectedNumber =
+      typeof series === 'object' && series !== null && 'nextInvoiceNumber' in series
+        ? String(series.nextInvoiceNumber)
+        : '';
     const { data: issued } = await admin
       .rpc('issue_invoice', {
         p_actor_id: actor,
@@ -112,6 +121,8 @@ async function seedInvoice(
         p_expected_version: 2,
         p_attempt_key: randomUUID(),
         p_snapshot: SNAPSHOT,
+        p_expected_number: expectedNumber,
+        p_expected_issue_date: getBusinessTodayIso(),
       })
       .throwOnError();
     const number =

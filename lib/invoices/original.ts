@@ -2,9 +2,11 @@ import 'server-only';
 
 import { createHash, randomUUID } from 'node:crypto';
 
+import type { ActionFailure } from '@/lib/action-result';
 import { offerLetterhead, type LetterheadFiles } from '@/lib/company-profile/letterhead';
 import { COMPANY_FILE_KINDS } from '@/lib/company-profile/profile';
 import { readCompanyFile } from '@/lib/company-profile/reads';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { renderEInvoicePdf } from '@/lib/document-rendering/e-invoice';
 import { invoiceDocument } from '@/lib/document-rendering/invoice-layout';
 import type { BusinessDocument } from '@/lib/document-rendering/model';
@@ -21,7 +23,14 @@ import type { AdminClient } from '@/lib/supabase/admin';
 import { isConfirmedWriteRefusal } from '@/lib/supabase/write-refusal';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { invoiceDraftOf, type IssueSnapshot } from './issue-model';
+import {
+  invoiceDraftOf,
+  issueFindingsOf,
+  type InvoiceCheckFailure,
+  type IssueFinding,
+  type IssueSnapshot,
+} from './issue-model';
+import { readInvoiceSettings } from './settings-reads';
 import type { InvoiceDetail } from './types';
 
 // The original of an issued invoice: the ZUGFeRD PDF/A-3 rendered from the
@@ -94,6 +103,74 @@ export async function renderInvoicePdf(
   const letterhead = await invoiceLetterhead(organizationId, invoice.snapshot);
   const document = invoicePdfDocument(invoice.calculated, invoice.units, letterhead);
   return xml === null ? renderBusinessDocument(document) : renderEInvoicePdf(document, xml);
+}
+
+const HEAD_TOO_TALL: IssueFinding = {
+  label:
+    'Der Briefkopf lässt keinen Platz für die Positionen: kürze Bestellnummer oder Referenz, oder verkleinere die Ränder des Briefpapiers',
+  href: '/einstellungen/dokumente',
+};
+
+/** The number and Rechnungsdatum an invoice is checked under and then takes. */
+export type NextIssue = { number: string; issueDate: string };
+
+/**
+ * What keeps an invoice from its number, checked under that number and date:
+ * the EN 16931 rules, then an original whose head, which prints both, leaves
+ * room for the lines. Empty when it passes; null without a Leistungsdatum.
+ */
+async function findingsBeforeNumber(
+  organizationId: string,
+  invoice: Parameters<typeof calculatedInvoiceOf>[0] & { recipient: { id: string } },
+  snapshot: IssueSnapshot,
+  issue: NextIssue,
+): Promise<IssueFinding[] | null> {
+  const calculated = calculatedInvoiceOf(invoice, snapshot, issue);
+  if (!calculated) return null;
+  const xml = toEn16931(calculated);
+  const check = await checkEn16931(xml);
+  if (!check.valid) return issueFindingsOf(check.errors, invoice.recipient.id);
+  const units = invoice.lines.map((line) => line.unit);
+  const rendered = await renderInvoicePdf(organizationId, { calculated, units, snapshot }, xml).catch(
+    (renderError: unknown) => {
+      if (renderError instanceof RangeError) return null;
+      throw renderError;
+    },
+  );
+  return rendered ? [] : [HEAD_TOO_TALL];
+}
+
+/** An issue whose checked number another issue took meanwhile is checked again, this often at most in all. */
+const ISSUE_ATTEMPTS = 3;
+
+function isMovedNumber(result: { success: boolean }): boolean {
+  return 'error' in result && result.error === 'invoice_number_moved';
+}
+
+/**
+ * Checks `invoice` under the number and Berlin day the series gives the next
+ * invoice now, then hands both to `issue`, whose database function issues
+ * only that number on that day. When it answers `invoice_number_moved`
+ * because another issue took the number first, the invoice is checked again
+ * under the new one, so no original is ever rendered under a number nobody
+ * checked.
+ */
+export async function issueUnderCheckedNumber<Result extends { success: boolean }>(
+  organizationId: string,
+  invoice: Parameters<typeof findingsBeforeNumber>[1],
+  snapshot: IssueSnapshot,
+  issue: (next: NextIssue) => Promise<Result>,
+): Promise<Result | InvoiceCheckFailure | ActionFailure<'invoice_incomplete'>> {
+  for (let attempt = 1; ; attempt += 1) {
+    const issueDate = getBusinessTodayIso();
+    const { nextInvoiceNumber } = await readInvoiceSettings(organizationId);
+    const next = { number: nextInvoiceNumber, issueDate };
+    const findings = await findingsBeforeNumber(organizationId, invoice, snapshot, next);
+    if (!findings) return { success: false, error: 'invoice_incomplete' };
+    if (findings.length > 0) return { success: false, error: 'invoice_check_failed', findings };
+    const result = await issue(next);
+    if (attempt >= ISSUE_ATTEMPTS || !isMovedNumber(result)) return result;
+  }
 }
 
 /** The original's bytes: the checked EN 16931 XML inside the PDF/A-3. Throws when the rules refuse it. */

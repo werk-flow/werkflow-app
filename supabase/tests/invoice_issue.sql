@@ -61,7 +61,7 @@ begin
     if has_table_privilege(v_role, 'public.invoice_settings', 'SELECT')
       or has_table_privilege(v_role, 'public.invoice_settings', 'INSERT')
       or has_table_privilege(v_role, 'public.invoice_settings', 'UPDATE')
-      or has_function_privilege(v_role, 'public.issue_invoice(uuid,uuid,uuid,integer,uuid,jsonb)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.issue_invoice(uuid,uuid,uuid,integer,uuid,jsonb,text,date)', 'EXECUTE')
       or has_function_privilege(v_role,
         'public.register_invoice_original(uuid,uuid,uuid,uuid,text,text,bigint,text)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.save_invoice_settings(uuid,uuid,integer,jsonb)', 'EXECUTE')
@@ -151,18 +151,24 @@ create function pg_temp.fill(p_name text) returns integer language sql as $$
 $$;
 select pg_temp.fill('first'), pg_temp.fill('second');
 
-create function pg_temp.issue(p_actor uuid, p_org uuid, p_name text, p_version integer, p_attempt uuid)
+-- Issues under p_number and p_day: by default the series' next number and the Berlin day, as the server checks it.
+create function pg_temp.issue(p_actor uuid, p_org uuid, p_name text, p_version integer, p_attempt uuid,
+  p_number text default null, p_day date default null)
 returns jsonb language sql as $$
   select public.issue_invoice(p_actor, p_org, pg_temp.id(p_name), p_version, p_attempt,
     '{"organizationName":"Haustechnik Sonnenberg","profile":{"companyName":"Haustechnik Sonnenberg GmbH"},
       "files":{"logo":{"path":"38060000-0000-4000-8000-000000000010/briefpapier/l/u/logo","mimeType":"image/png"},
                "stationery_first":null,"stationery_following":null},
       "buyer":{"name":"Hausverwaltung Lindenhof GmbH","address":{"lines":["Hofweg 1"],"postalCode":"10117",
-               "city":"Berlin","countryCode":"DE"}}}')
+               "city":"Berlin","countryCode":"DE"}}}',
+    coalesce(p_number, public.get_invoice_settings(p_org) ->> 'nextInvoiceNumber'),
+    coalesce(p_day, (now() at time zone 'Europe/Berlin')::date))
 $$;
 
 -- A refused issue uses no number: an incomplete draft, a field worker, an
--- outsider, another organization, an older version.
+-- outsider, another organization, an older version, a number or day other
+-- than the one the series gives it now (the server checked the invoice under
+-- it, and the original's head prints it).
 select pg_temp.expect_refusal(label, format('select pg_temp.issue(%L, %L, %L, %s, gen_random_uuid())',
   actor, org, invoice, version), refusal)
 from (values
@@ -177,6 +183,14 @@ from (values
   ('an older version', '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010', 'first', 1,
    'stale_version')
 ) as cases(label, actor, org, invoice, version, refusal);
+select pg_temp.expect_refusal(label, format('select pg_temp.issue(%L, %L, ''first'', 2, gen_random_uuid(), %L, %L)',
+  '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010', expected_number, expected_day),
+  'invoice_number_moved')
+from (values
+  ('a number another issue took meanwhile', 'RG10235', (now() at time zone 'Europe/Berlin')::date),
+  ('another day', 'RG10234', (now() at time zone 'Europe/Berlin')::date - 1),
+  ('no number', '', (now() at time zone 'Europe/Berlin')::date)
+) as cases(label, expected_number, expected_day);
 do $$
 begin
   if exists (select 1 from public.invoices where organization_id = '38060000-0000-4000-8000-000000000010'

@@ -11,9 +11,10 @@
 --    filed original. A guard refuses every later change and delete of an
 --    issued invoice and its lines, whoever writes.
 -- 3. issue_invoice: in one transaction it checks the draft is complete,
---    takes the next number under the series' row lock, stores the snapshot,
---    sets Ausgestellt with the Rechnungsdatum and writes history. A refusal
---    rolls back everything, so no number is used.
+--    takes the next number under the series' row lock, only when it is the
+--    number and day the server checked, stores the snapshot, sets
+--    Ausgestellt with the Rechnungsdatum and writes history. A refusal rolls
+--    back everything, so no number is used.
 -- 4. register_invoice_original: registers the rendered PDF as a document in
 --    the ten-year class, linked to the customer, once per invoice. The server
 --    files it through lib/documents/filing.ts.
@@ -21,8 +22,9 @@
 --    default terms; get_invoice answers the issue facts.
 --
 -- The server actions in lib/invoices/ establish identity, role and
--- organization, check the draft with the EN 16931 rules first and render the
--- original; each function checks the actor again under the access lock.
+-- organization, check the draft with the EN 16931 rules and the renderer
+-- under the number and day it will take first, and render the original; each
+-- function checks the actor again under the access lock.
 --
 -- Expand-only: a new table, new nullable columns, a widened event check, new
 -- functions; create_invoice and get_invoice keep their signatures.
@@ -256,16 +258,22 @@ create trigger guard_issued_invoice_lines before insert or update or delete on p
 -- 3. Issues a draft from p_expected_version with the snapshot the server
 -- checked (p_snapshot: organizationName, profile, files and buyer). The
 -- number is the series' next under its row lock; the Rechnungsdatum is the
--- Berlin day. A retry under the same key answers the first issue. Refusals:
--- invalid_input, not_authorized, those of lock_invoice_draft,
--- invoice_incomplete (no line or no Leistungsdatum), and a check violation.
+-- Berlin day. p_expected_number and p_expected_issue_date are the number and
+-- Rechnungsdatum the server checked and rendered the invoice under; the head
+-- of its original prints both, so the function issues only those and
+-- otherwise refuses invoice_number_moved, and the server checks again. A
+-- retry under the same key answers the first issue. Refusals: invalid_input,
+-- not_authorized, those of lock_invoice_draft, invoice_incomplete (no line or
+-- no Leistungsdatum), invoice_number_moved, and a check violation.
 create function public.issue_invoice(
   p_actor_id uuid,
   p_organization_id uuid,
   p_invoice_id uuid,
   p_expected_version integer,
   p_attempt_key uuid,
-  p_snapshot jsonb
+  p_snapshot jsonb,
+  p_expected_number text,
+  p_expected_issue_date date
 )
 returns jsonb
 language plpgsql
@@ -286,6 +294,7 @@ begin
     or jsonb_typeof(p_snapshot -> 'profile') is distinct from 'object'
     or jsonb_typeof(p_snapshot -> 'buyer') is distinct from 'object'
     or jsonb_typeof(p_snapshot -> 'files') is distinct from 'object'
+    or p_expected_number is null or p_expected_issue_date is null
   then
     raise exception 'invalid_input';
   end if;
@@ -314,6 +323,9 @@ begin
   v_number := app_private.format_invoice_number(v_settings, v_year, v_sequence);
   if v_sequence >= 999999999 then
     raise exception 'invoice_numbers_exhausted';
+  end if;
+  if v_number is distinct from p_expected_number or v_issue_date is distinct from p_expected_issue_date then
+    raise exception 'invoice_number_moved';
   end if;
   perform set_config('app.invoice_number_write', 'on', true);
   update public.invoice_settings settings set
@@ -351,8 +363,8 @@ begin
     'grossCents', v_invoice.gross_cents, 'version', v_invoice.version + 1);
 end;
 $$;
-revoke all on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, jsonb) from public, anon, authenticated;
-grant execute on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, jsonb) to service_role;
+revoke all on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, jsonb, text, date) from public, anon, authenticated;
+grant execute on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, jsonb, text, date) to service_role;
 
 -- 4. Registers an issued invoice's rendered original as a document in the
 -- ten-year class, dated the Rechnungsdatum, linked to the customer and never

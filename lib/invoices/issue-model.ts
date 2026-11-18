@@ -1,3 +1,4 @@
+import type { ActionFailure } from '@/lib/action-result';
 import { saveCompanyProfileInputSchema, type CompanyProfileDetails } from '@/lib/company-profile/profile';
 import type { En16931Finding } from '@/lib/invoicing/check-en16931';
 import type { InvoiceDraft, InvoiceParty } from '@/lib/invoicing/model';
@@ -116,6 +117,9 @@ export function profileFieldLabel(finding: En16931Finding): string | null {
 
 /** One thing that keeps a draft from being issued, in the office's words, with where to fix it. */
 export type IssueFinding = { label: string; href: string | null };
+
+/** An invoice that fails the check before its number: what is wrong, in the office's words. */
+export type InvoiceCheckFailure = ActionFailure<'invoice_check_failed'> & { findings: IssueFinding[] };
 
 const LINE_FIELD = /^lines\[(\d+)\]/;
 

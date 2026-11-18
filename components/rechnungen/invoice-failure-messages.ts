@@ -13,5 +13,6 @@ export const INVOICE_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   invoice_incomplete: 'Der Rechnung fehlen noch Positionen oder das Leistungsdatum.',
   invoice_not_issued: 'Die Rechnung ist noch ein Entwurf.',
   issue_failed: 'Die Rechnung konnte nicht ausgestellt werden. Bitte versuche es erneut.',
+  invoice_number_moved: 'Gerade wurden mehrere andere Rechnungen ausgestellt. Bitte versuche es noch einmal.',
   original_failed: 'Der Beleg konnte nicht erstellt werden. Bitte versuche es in einem Moment erneut.',
 };
