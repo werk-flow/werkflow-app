@@ -27,13 +27,15 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
   },
   'app/api/musterrechnung/route.ts': {
     authorization:
-      'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no XML; builds a fixed sample with the organization profile and no stored record, sends XML only when the EN 16931 rules pass; private no-store responses',
+      'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no PDF; builds a fixed sample with the organization profile and letterhead and no stored record, sends the ZUGFeRD PDF only when the EN 16931 rules pass its XML; private no-store responses',
     mustCall: [
       'withReadRequest',
       'resolveActionContext',
       'getCachedMemberships',
       'readCompanyProfile',
+      'readOfferLetterhead',
       'checkEn16931',
+      'renderEInvoicePdf',
     ],
   },
   'app/api/time-tracking-state/route.ts': {
@@ -116,6 +118,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'problemReportWriteBackSchema',
       'writeBackProblemReport',
     ],
+  },
+  'app/api/stripe/webhook/route.ts': {
+    authorization:
+      'no session: Stripe proves itself with the Stripe-Signature header over the raw body and STRIPE_WEBHOOK_SECRET, verified before anything is parsed or stored; a missing, forged or stale signature answers 400 and records nothing; without a key accepted for this environment nothing runs and it answers 503; one database call records and claims the event id, so a replay changes nothing; the body is empty, no-store',
+    mustCall: ['resolveStripeGateway', 'verifySignal', 'receiveSignal'],
   },
   'app/api/csp-report/route.ts': {
     authorization:

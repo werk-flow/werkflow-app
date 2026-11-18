@@ -3374,6 +3374,321 @@ export type Database = {
           },
         ];
       };
+      inventory_supplier_catalog_articles: {
+        Row: {
+          article_number: string;
+          delivery_date: string | null;
+          ean: string | null;
+          id: string;
+          import_id: string;
+          main_product_group: string | null;
+          matchcode: string | null;
+          name: string;
+          name_addition: string;
+          organization_id: string;
+          price_cents: number | null;
+          price_kind: string | null;
+          price_quantity: number;
+          product_group: string | null;
+          rebate_group: string | null;
+          search_text: string | null;
+          supplier_id: string;
+          unit: string;
+          unit_text: string;
+          updated_at: string;
+        };
+        Insert: {
+          article_number: string;
+          delivery_date?: string | null;
+          ean?: string | null;
+          id?: string;
+          import_id: string;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name: string;
+          name_addition?: string;
+          organization_id: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity: number;
+          product_group?: string | null;
+          rebate_group?: string | null;
+          search_text?: string | null;
+          supplier_id: string;
+          unit: string;
+          unit_text: string;
+          updated_at?: string;
+        };
+        Update: {
+          article_number?: string;
+          delivery_date?: string | null;
+          ean?: string | null;
+          id?: string;
+          import_id?: string;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name?: string;
+          name_addition?: string;
+          organization_id?: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity?: number;
+          product_group?: string | null;
+          rebate_group?: string | null;
+          search_text?: string | null;
+          supplier_id?: string;
+          unit?: string;
+          unit_text?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_catalog_articles_import_fk";
+            columns: ["import_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_supplier_catalog_imports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_articles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_articles_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_catalog_import_lines: {
+        Row: {
+          article_number: string | null;
+          ean: string | null;
+          file_name: string;
+          import_id: string;
+          kind: string;
+          line_number: number;
+          main_product_group: string | null;
+          matchcode: string | null;
+          name: string | null;
+          name_addition: string | null;
+          ordinal: number;
+          organization_id: string;
+          price_cents: number | null;
+          price_kind: string | null;
+          price_quantity: number | null;
+          product_group: string | null;
+          reason: string | null;
+          reason_code: string | null;
+          rebate_group: string | null;
+          unit_text: string | null;
+        };
+        Insert: {
+          article_number?: string | null;
+          ean?: string | null;
+          file_name: string;
+          import_id: string;
+          kind: string;
+          line_number: number;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name?: string | null;
+          name_addition?: string | null;
+          ordinal: number;
+          organization_id: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity?: number | null;
+          product_group?: string | null;
+          reason?: string | null;
+          reason_code?: string | null;
+          rebate_group?: string | null;
+          unit_text?: string | null;
+        };
+        Update: {
+          article_number?: string | null;
+          ean?: string | null;
+          file_name?: string;
+          import_id?: string;
+          kind?: string;
+          line_number?: number;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name?: string | null;
+          name_addition?: string | null;
+          ordinal?: number;
+          organization_id?: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity?: number | null;
+          product_group?: string | null;
+          reason?: string | null;
+          reason_code?: string | null;
+          rebate_group?: string | null;
+          unit_text?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_catalog_import_lines_import_fk";
+            columns: ["import_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_supplier_catalog_imports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_catalog_imports: {
+        Row: {
+          confirmed_at: string | null;
+          confirmed_by: string | null;
+          content_hash: string;
+          created_at: string;
+          created_by: string | null;
+          currency: string | null;
+          delivery_date: string | null;
+          file_names: string[];
+          format_version: string | null;
+          id: string;
+          organization_id: string;
+          rebate_groups: Json;
+          result: Json | null;
+          skipped: Json;
+          status: string;
+          supplier_id: string;
+          supplier_text: string | null;
+          unit_mapping: Json | null;
+        };
+        Insert: {
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          content_hash: string;
+          created_at?: string;
+          created_by?: string | null;
+          currency?: string | null;
+          delivery_date?: string | null;
+          file_names: string[];
+          format_version?: string | null;
+          id?: string;
+          organization_id: string;
+          rebate_groups?: Json;
+          result?: Json | null;
+          skipped?: Json;
+          status?: string;
+          supplier_id: string;
+          supplier_text?: string | null;
+          unit_mapping?: Json | null;
+        };
+        Update: {
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          content_hash?: string;
+          created_at?: string;
+          created_by?: string | null;
+          currency?: string | null;
+          delivery_date?: string | null;
+          file_names?: string[];
+          format_version?: string | null;
+          id?: string;
+          organization_id?: string;
+          rebate_groups?: Json;
+          result?: Json | null;
+          skipped?: Json;
+          status?: string;
+          supplier_id?: string;
+          supplier_text?: string | null;
+          unit_mapping?: Json | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_confirmed_by_fkey";
+            columns: ["confirmed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_rebate_groups: {
+        Row: {
+          discount: Json;
+          id: string;
+          import_id: string;
+          organization_id: string;
+          rebate_group: string;
+          supplier_id: string;
+          text: string;
+          updated_at: string;
+        };
+        Insert: {
+          discount: Json;
+          id?: string;
+          import_id: string;
+          organization_id: string;
+          rebate_group: string;
+          supplier_id: string;
+          text?: string;
+          updated_at?: string;
+        };
+        Update: {
+          discount?: Json;
+          id?: string;
+          import_id?: string;
+          organization_id?: string;
+          rebate_group?: string;
+          supplier_id?: string;
+          text?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_rebate_groups_import_fk";
+            columns: ["import_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_supplier_catalog_imports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_rebate_groups_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_rebate_groups_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       inventory_suppliers: {
         Row: {
           created_at: string;
@@ -5253,6 +5568,192 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      offer_events: {
+        Row: {
+          actor_id: string | null;
+          attempt_key: string;
+          created_at: string;
+          event_type: string;
+          id: string;
+          offer_id: string;
+          organization_id: string;
+          payload: Json;
+          status: string;
+          version: number;
+        };
+        Insert: {
+          actor_id?: string | null;
+          attempt_key: string;
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          offer_id: string;
+          organization_id: string;
+          payload?: Json;
+          status: string;
+          version: number;
+        };
+        Update: {
+          actor_id?: string | null;
+          attempt_key?: string;
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          offer_id?: string;
+          organization_id?: string;
+          payload?: Json;
+          status?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offer_events_offer_fk";
+            columns: ["offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offers";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      offers: {
+        Row: {
+          client_id: string;
+          closing_text: string;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          job_id: string | null;
+          offer_number: string;
+          opening_text: string;
+          organization_id: string;
+          owner_user_id: string | null;
+          project_id: string | null;
+          recipient_client_id: string;
+          recipient_is_default: boolean;
+          request_id: string | null;
+          site_id: string | null;
+          status: string;
+          title: string;
+          updated_at: string;
+          updated_by: string | null;
+          valid_until: string;
+          version: number;
+        };
+        Insert: {
+          client_id: string;
+          closing_text?: string;
+          contact_id?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          offer_number: string;
+          opening_text?: string;
+          organization_id: string;
+          owner_user_id?: string | null;
+          project_id?: string | null;
+          recipient_client_id: string;
+          recipient_is_default?: boolean;
+          request_id?: string | null;
+          site_id?: string | null;
+          status?: string;
+          title: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          valid_until: string;
+          version?: number;
+        };
+        Update: {
+          client_id?: string;
+          closing_text?: string;
+          contact_id?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          offer_number?: string;
+          opening_text?: string;
+          organization_id?: string;
+          owner_user_id?: string | null;
+          project_id?: string | null;
+          recipient_client_id?: string;
+          recipient_is_default?: boolean;
+          request_id?: string | null;
+          site_id?: string | null;
+          status?: string;
+          title?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          valid_until?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offers_client_fk";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_contact_fk";
+            columns: ["contact_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_contacts";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offers_project_fk";
+            columns: ["project_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_recipient_fk";
+            columns: ["recipient_client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_request_fk";
+            columns: ["request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offers_site_fk";
+            columns: ["site_id", "client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id", "client_id", "organization_id"];
           },
         ];
       };
@@ -12018,6 +12519,42 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_signals: {
+        Row: {
+          attempts: number;
+          claimed_until: string | null;
+          event_type: string;
+          last_failure_code: string | null;
+          received_at: string;
+          settled_at: string | null;
+          state: string;
+          stripe_created_at: string;
+          stripe_event_id: string;
+        };
+        Insert: {
+          attempts?: number;
+          claimed_until?: string | null;
+          event_type: string;
+          last_failure_code?: string | null;
+          received_at?: string;
+          settled_at?: string | null;
+          state?: string;
+          stripe_created_at: string;
+          stripe_event_id: string;
+        };
+        Update: {
+          attempts?: number;
+          claimed_until?: string | null;
+          event_type?: string;
+          last_failure_code?: string | null;
+          received_at?: string;
+          settled_at?: string | null;
+          state?: string;
+          stripe_created_at?: string;
+          stripe_event_id?: string;
+        };
+        Relationships: [];
+      };
       work_artifact_actions: {
         Row: {
           action_type: Database["public"]["Enums"]["work_artifact_action_type"];
@@ -14694,6 +15231,14 @@ export type Database = {
       };
     };
     Functions: {
+      abandon_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_organization_id: string;
+        };
+        Returns: undefined;
+      };
       accept_site_access_proposal: {
         Args: {
           p_actor_id: string;
@@ -14849,6 +15394,14 @@ export type Database = {
           p_valid_from: string;
         };
         Returns: string;
+      };
+      adopt_supplier_catalog_article: {
+        Args: {
+          p_actor_id: string;
+          p_catalog_article_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
       };
       apply_problem_report_retention: {
         Args: { p_organization_id: string; p_report_id: string };
@@ -15139,6 +15692,17 @@ export type Database = {
           storage_path: string;
         }[];
       };
+      claim_werkflow_billing_signal: {
+        Args: {
+          p_event_type: string;
+          p_stripe_created_at: string;
+          p_stripe_event_id: string;
+        };
+        Returns: {
+          attempt: number;
+          result: string;
+        }[];
+      };
       clear_project_execution_override: {
         Args: {
           p_actor_id: string;
@@ -15293,6 +15857,15 @@ export type Database = {
           p_request_hash: string;
         };
         Returns: string;
+      };
+      confirm_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_organization_id: string;
+          p_unit_mapping: Json;
+        };
+        Returns: Json;
       };
       consume_rate_limit: {
         Args: {
@@ -16085,6 +16658,20 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      create_offer: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_client_id: string;
+          p_contact_id: string;
+          p_organization_id: string;
+          p_site_id: string;
+          p_title: string;
+          p_work_id: string;
+          p_work_kind: string;
+        };
+        Returns: string;
       };
       create_organization_invite: {
         Args: {
@@ -17121,6 +17708,10 @@ export type Database = {
           status: Database["public"]["Enums"]["invite_status"];
         }[];
       };
+      get_offer: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_org_members_for_user: {
         Args: { p_org_id: string; p_user_id: string };
         Returns: {
@@ -17568,6 +18159,57 @@ export type Database = {
           project_id: string;
         }[];
       };
+      list_installed_equipment_predecessor_events: {
+        Args: {
+          p_equipment_id: string;
+          p_limit: number;
+          p_offset: number;
+          p_organization_id: string;
+        };
+        Returns: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot: Json | null;
+          corrects_event_id: string | null;
+          effective_at: string;
+          equipment_id: string;
+          event_type: Database["public"]["Enums"]["installed_equipment_event_type"];
+          from_state:
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
+          id: string;
+          idempotency_key: string;
+          organization_id: string;
+          reason: string | null;
+          recorded_at: string;
+          request_operation: string;
+          site_snapshot: Json;
+          to_state:
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "installed_equipment_events";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      list_installed_equipment_replacement_plans: {
+        Args: {
+          p_equipment_id: string;
+          p_limit: number;
+          p_organization_id: string;
+        };
+        Returns: {
+          next_due_date: string;
+          plan_id: string;
+          plan_number: string;
+          plan_status: Database["public"]["Enums"]["maintenance_plan_status"];
+          plan_version: number;
+          template_name: string;
+        }[];
+      };
       list_inventory_movement_page: {
         Args: { p_organization_id: string; p_query?: Json };
         Returns: Json;
@@ -17605,6 +18247,17 @@ export type Database = {
           p_page_size?: number;
           p_plan_page?: number;
           p_search?: string;
+        };
+        Returns: Json;
+      };
+      list_offer_page: {
+        Args: {
+          p_client_id?: string;
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+          p_status?: string;
         };
         Returns: Json;
       };
@@ -17772,6 +18425,19 @@ export type Database = {
         };
         Returns: Json;
       };
+      open_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_content_hash: string;
+          p_file_names: string[];
+          p_header: Json;
+          p_organization_id: string;
+          p_rebate_groups: Json;
+          p_skipped: Json;
+          p_supplier_id: string;
+        };
+        Returns: string;
+      };
       open_time_account: {
         Args: {
           p_actor_id: string;
@@ -17874,6 +18540,14 @@ export type Database = {
           p_mode: string;
           p_organization_id: string;
           p_rows: Json;
+        };
+        Returns: Json;
+      };
+      preview_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_organization_id: string;
         };
         Returns: Json;
       };
@@ -18611,61 +19285,118 @@ export type Database = {
         };
         Returns: undefined;
       };
-      replace_installed_equipment: {
-        Args: {
-          p_actor_id: string;
-          p_effective_at: string;
-          p_expected_version: number;
-          p_idempotency_key: string;
-          p_organization_id: string;
-          p_predecessor_id: string;
-          p_reason: string;
-          p_successor_id: string;
-          p_successor_payload: Json;
-        };
-        Returns: {
-          archive_reason: string | null;
-          archived_at: string | null;
-          archived_by: string | null;
-          category: Database["public"]["Enums"]["installed_equipment_category"];
-          client_id: string;
-          commissioning_date: string | null;
-          created_at: string;
-          created_by: string;
-          equipment_number: string;
-          id: string;
-          installation_date: string | null;
-          location_detail: string | null;
-          manufacturer: string | null;
-          model: string | null;
-          name: string;
-          organization_id: string;
-          parent_equipment_id: string | null;
-          predecessor_equipment_id: string | null;
-          site_id: string;
-          state: Database["public"]["Enums"]["installed_equipment_state"];
-          subtype:
-            | Database["public"]["Enums"]["installed_equipment_subtype"]
-            | null;
-          technical_notes: string | null;
-          updated_at: string;
-          updated_by: string;
-          version: number;
-          void_reason: string | null;
-          voided_at: string | null;
-          voided_by: string | null;
-          warranty_basis: string | null;
-          warranty_end_date: string | null;
-          warranty_provider: string | null;
-          warranty_start_date: string | null;
-        };
-        SetofOptions: {
-          from: "*";
-          to: "installed_equipment";
-          isOneToOne: true;
-          isSetofReturn: false;
-        };
-      };
+      replace_installed_equipment:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_effective_at: string;
+              p_expected_version: number;
+              p_idempotency_key: string;
+              p_organization_id: string;
+              p_predecessor_id: string;
+              p_reason: string;
+              p_successor_id: string;
+              p_successor_payload: Json;
+            };
+            Returns: {
+              archive_reason: string | null;
+              archived_at: string | null;
+              archived_by: string | null;
+              category: Database["public"]["Enums"]["installed_equipment_category"];
+              client_id: string;
+              commissioning_date: string | null;
+              created_at: string;
+              created_by: string;
+              equipment_number: string;
+              id: string;
+              installation_date: string | null;
+              location_detail: string | null;
+              manufacturer: string | null;
+              model: string | null;
+              name: string;
+              organization_id: string;
+              parent_equipment_id: string | null;
+              predecessor_equipment_id: string | null;
+              site_id: string;
+              state: Database["public"]["Enums"]["installed_equipment_state"];
+              subtype:
+                | Database["public"]["Enums"]["installed_equipment_subtype"]
+                | null;
+              technical_notes: string | null;
+              updated_at: string;
+              updated_by: string;
+              version: number;
+              void_reason: string | null;
+              voided_at: string | null;
+              voided_by: string | null;
+              warranty_basis: string | null;
+              warranty_end_date: string | null;
+              warranty_provider: string | null;
+              warranty_start_date: string | null;
+            };
+            SetofOptions: {
+              from: "*";
+              to: "installed_equipment";
+              isOneToOne: true;
+              isSetofReturn: false;
+            };
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_carry_over: Json;
+              p_effective_at: string;
+              p_expected_version: number;
+              p_idempotency_key: string;
+              p_organization_id: string;
+              p_predecessor_id: string;
+              p_reason: string;
+              p_successor_id: string;
+              p_successor_payload: Json;
+            };
+            Returns: {
+              archive_reason: string | null;
+              archived_at: string | null;
+              archived_by: string | null;
+              category: Database["public"]["Enums"]["installed_equipment_category"];
+              client_id: string;
+              commissioning_date: string | null;
+              created_at: string;
+              created_by: string;
+              equipment_number: string;
+              id: string;
+              installation_date: string | null;
+              location_detail: string | null;
+              manufacturer: string | null;
+              model: string | null;
+              name: string;
+              organization_id: string;
+              parent_equipment_id: string | null;
+              predecessor_equipment_id: string | null;
+              site_id: string;
+              state: Database["public"]["Enums"]["installed_equipment_state"];
+              subtype:
+                | Database["public"]["Enums"]["installed_equipment_subtype"]
+                | null;
+              technical_notes: string | null;
+              updated_at: string;
+              updated_by: string;
+              version: number;
+              void_reason: string | null;
+              voided_at: string | null;
+              voided_by: string | null;
+              warranty_basis: string | null;
+              warranty_end_date: string | null;
+              warranty_provider: string | null;
+              warranty_start_date: string | null;
+            };
+            SetofOptions: {
+              from: "*";
+              to: "installed_equipment";
+              isOneToOne: true;
+              isSetofReturn: false;
+            };
+          };
       replace_job_assignments_with_assessment: {
         Args: {
           p_actor_id: string;
@@ -19178,6 +19909,20 @@ export type Database = {
           p_site_id?: string;
         };
         Returns: Json;
+      };
+      search_supplier_catalog_articles: {
+        Args: { p_limit: number; p_organization_id: string; p_search: string };
+        Returns: {
+          article_number: string;
+          id: string;
+          name: string;
+          name_addition: string;
+          price_cents: number;
+          price_kind: string;
+          price_quantity: number;
+          supplier_name: string;
+          unit: string;
+        }[];
       };
       search_work_predecessor_options: {
         Args: {
@@ -19712,6 +20457,24 @@ export type Database = {
           p_template_id: string;
         };
         Returns: undefined;
+      };
+      settle_werkflow_billing_signal: {
+        Args: {
+          p_attempt: number;
+          p_failure_code?: string;
+          p_outcome: string;
+          p_stripe_event_id: string;
+        };
+        Returns: boolean;
+      };
+      stage_supplier_catalog_import_lines: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_lines: Json;
+          p_organization_id: string;
+        };
+        Returns: number;
       };
       start_organization_export: {
         Args: {
@@ -21105,7 +21868,11 @@ export type Database = {
         | "work_unlinked"
         | "source_linked"
         | "document_linked"
-        | "document_unlinked";
+        | "document_unlinked"
+        | "maintenance_plan_carried_over"
+        | "maintenance_plan_left"
+        | "component_carried_over"
+        | "parent_replaced";
       installed_equipment_identifier_type:
         | "serial_number"
         | "manufacturer_product_number"
@@ -21169,7 +21936,8 @@ export type Database = {
         | "cancelled"
         | "superseded"
         | "service_case_linked"
-        | "visit_missed";
+        | "visit_missed"
+        | "equipment_replaced";
       maintenance_due_status:
         | "open"
         | "visit_created"
@@ -21758,6 +22526,10 @@ export const Constants = {
         "source_linked",
         "document_linked",
         "document_unlinked",
+        "maintenance_plan_carried_over",
+        "maintenance_plan_left",
+        "component_carried_over",
+        "parent_replaced",
       ],
       installed_equipment_identifier_type: [
         "serial_number",
@@ -21827,6 +22599,7 @@ export const Constants = {
         "superseded",
         "service_case_linked",
         "visit_missed",
+        "equipment_replaced",
       ],
       maintenance_due_status: [
         "open",

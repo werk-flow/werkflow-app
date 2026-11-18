@@ -18,6 +18,7 @@ import {
   itemDialogPickerCreateAction,
   materialPlanButton,
   materialPlanLayer,
+  wholesalerImportButton,
 } from '../../../golden/support/steps/inventory';
 import { confirmed, openMenuItem } from '../../../golden/support/steps/shared';
 import { seedLeistung } from '../../../golden/support/db/price-catalog';
@@ -152,6 +153,10 @@ export const INVENTORY_OPENERS = {
     layer: (page) => inventoryDialogLayer(page, 'quickCreateSupplier'),
     returnFocus: ({ page }) => itemDialogPicker(itemCreateLayer(page), 'supplier'),
     parents: (page) => [itemCreateLayer(page)],
+  },
+  'inventory.wholesaler-import': {
+    trigger: async ({ page }) => wholesalerImportButton(page),
+    layer: (page) => inventoryDialogLayer(page, 'importWholesaler'),
   },
   'inventory.import': {
     trigger: async ({ page }) => csvImportButton(page),
@@ -308,6 +313,11 @@ function seededRowActionsButton(context: SurfaceContext) {
 
 /** The Angebote openers; their acceptance captures run with the inventory group. */
 export const COMMERCIAL_OPENERS = {
+  'commercial.offer': {
+    trigger: async ({ page }) =>
+      page.getByRole('main').getByRole('button', { name: 'Angebot anlegen', exact: true }),
+    layer: (page) => page.getByRole('dialog', { name: 'Angebot anlegen', exact: true }),
+  },
   'commercial.leistung': {
     trigger: async ({ page }) => createLeistungButton(page),
     layer: (page) => leistungDialogLayer(page, 'create'),

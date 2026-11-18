@@ -61,6 +61,10 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/billing-parties\/actions$/ }, () => ({
               path: join(import.meta.dir, 'billing-parties-service-boundaries.ts'),
             }));
+            builder.onResolve({ filter: /^(?:@\/lib\/offers\/actions|next\/navigation)$/ }, (args) => {
+              if (args.path === '@/lib/offers/actions' || args.importer.endsWith('create-offer-dialog.tsx'))
+                return { path: join(import.meta.dir, 'offers-service-boundaries.ts') };
+            });
             // The report dialog's contract runs the real launcher, dialog and upload
             // client against stub actions, router, organization and redraw.
             builder.onResolve(
@@ -114,6 +118,17 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             // The CSV import dialog's repeat check, preview and booking answer through its contract's stand-ins.
             builder.onResolve({ filter: /^@\/lib\/inventory\/import-actions$/ }, () => ({
               path: join(import.meta.dir, 'inventory-import-boundaries.tsx'),
+            }));
+            // The wholesaler import dialog's actions and the material picker's catalog adopt answer through their contracts.
+            builder.onResolve({ filter: /^@\/lib\/inventory\/wholesaler-import-actions$/ }, () => ({
+              path: join(import.meta.dir, 'wholesaler-import-boundaries.tsx'),
+            }));
+            builder.onResolve({ filter: /^@\/lib\/inventory\/supplier-catalog-actions$/ }, () => ({
+              path: join(import.meta.dir, 'supplier-catalog-boundaries.tsx'),
+            }));
+            // The dialog reads a delivery in the browser through a fake of the private reader.
+            builder.onResolve({ filter: /^@\/vendor\/wholesaler-reader\/src\/index$/ }, () => ({
+              path: join(import.meta.dir, 'wholesaler-reader-boundaries.ts'),
             }));
             builder.onResolve({ filter: /^@\/lib\/members\/actions$/ }, () => ({
               path: join(import.meta.dir, 'member-role-service-boundaries.ts'),

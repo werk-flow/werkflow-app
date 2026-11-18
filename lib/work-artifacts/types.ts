@@ -192,6 +192,18 @@ export const WORK_ARTIFACT_STATUS_LABELS: Record<WorkArtifactStatus, string> = {
   voided: 'Ungültig',
 };
 
+// The defect labels of the editor, the read view and the field history. They sit here, not
+// in the editor's content module, so the field history's chunk shares no editor code.
+export const DEFECT_SEVERITY_LABELS: Record<
+  NonNullable<WorkArtifactContentInput['defectSeverity']>,
+  string
+> = { low: 'Niedrig', medium: 'Mittel', high: 'Hoch', critical: 'Kritisch' };
+export const DEFECT_STATE_LABELS: Record<NonNullable<WorkArtifactContentInput['defectState']>, string> = {
+  open: 'Offen',
+  in_progress: 'In Bearbeitung',
+  resolved: 'Behoben',
+};
+
 export const WORK_ARTIFACT_UNIT_LABELS: Record<WorkArtifactMeasurementUnit, string> = {
   piece: 'Stk.',
   meter: 'm',
