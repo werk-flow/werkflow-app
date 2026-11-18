@@ -70,7 +70,9 @@ async function cancelChecked(
     p_expected_issue_date: checked.issueDate,
   });
   const cancelled = cancelledSchema.safeParse(data);
-  if (error || !cancelled.success) return refusal(error, 'cancel_failed', 'cancelInvoice: cancel_invoice failed');
+  if (error || !cancelled.success) {
+    return refusal(error, 'cancel_failed', 'cancelInvoice: cancel_invoice failed');
+  }
 
   // Cancelled from here on: a failure below leaves the Stornorechnung's original pending.
   const originalFiled = await readIssuedInvoice(context.orgId, cancelled.data.stornoId).then(
