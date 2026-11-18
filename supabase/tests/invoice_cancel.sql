@@ -180,10 +180,9 @@ begin
       from issued_lines line where line.invoice_id = v_original.id) then
     raise exception 'the Stornorechnung''s lines are not the original''s negated';
   end if;
-  -- The original's issued content is untouched: only status, version, writer and time moved.
-  if to_jsonb(v_original) - array['status', 'version', 'updated_by', 'updated_at']
-      is distinct from to_jsonb(v_before) - array['status', 'version', 'updated_by', 'updated_at']
-    or v_original.status is distinct from 'storniert' or v_original.version is distinct from v_before.version + 1
+  -- The original is untouched: only its status moved; the cancel's actor and time are in its history.
+  if to_jsonb(v_original) - 'status' is distinct from to_jsonb(v_before) - 'status'
+    or v_original.status is distinct from 'storniert'
     or (select array_agg(to_jsonb(line) order by line.position) from public.invoice_lines line
         where line.invoice_id = v_original.id)
       is distinct from (select array_agg(to_jsonb(line) order by line.position) from issued_lines line
@@ -191,7 +190,8 @@ begin
     raise exception 'the cancel changed the original: %', to_jsonb(v_original);
   end if;
   if not exists (select 1 from public.invoice_events where invoice_id = v_original.id and event_type = 'cancelled'
-      and status = 'storniert' and payload ->> 'stornoId' = v_storno.id::text)
+      and status = 'storniert' and payload ->> 'stornoId' = v_storno.id::text
+      and actor_id = '38080000-0000-4000-8000-000000000002')
     or not exists (select 1 from public.invoice_events where invoice_id = v_storno.id and event_type = 'issued') then
     raise exception 'the cancel wrote no history';
   end if;
@@ -212,11 +212,22 @@ from (values
     '38080000-0000-4000-8000-000000000001', '38080000-0000-4000-8000-000000000010'), 'invoice_cancelled'),
   ('cancel the Stornorechnung', format('select pg_temp.cancel(%L, %L, ''storno'', gen_random_uuid(), ''Nochmal'', false)',
     '38080000-0000-4000-8000-000000000001', '38080000-0000-4000-8000-000000000010'), 'invoice_is_storno'),
-  ('a second Stornorechnung directly', format($insert$insert into public.invoices (organization_id, client_id,
+  -- Only cancel_invoice writes a link: a Stornorechnung or correction inserted directly is refused.
+  ('a Stornorechnung written directly', format($insert$insert into public.invoices (organization_id, client_id,
     recipient_client_id, cancels_invoice_id, cancellation_reason) values (%L, %L, %L, %L, 'Nochmal')$insert$,
     '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020',
-    '38080000-0000-4000-8000-000000000020', pg_temp.id('cancelled')), '23505'),
-  ('back to Ausgestellt', format('update public.invoices set status = ''ausgestellt'', version = version + 1 where id = %L',
+    '38080000-0000-4000-8000-000000000020', pg_temp.id('kept')), 'invoice_link_fixed'),
+  ('a correction written directly', format($insert$insert into public.invoices (organization_id, client_id,
+    recipient_client_id, corrects_invoice_id) values (%L, %L, %L, %L)$insert$,
+    '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020',
+    '38080000-0000-4000-8000-000000000020', pg_temp.id('kept')), 'invoice_link_fixed'),
+  -- Even inside a cancel of that invoice, a second Stornorechnung is refused by the unique index.
+  ('a second Stornorechnung', format($insert$insert into public.invoices (organization_id, client_id,
+    recipient_client_id, cancels_invoice_id, cancellation_reason)
+    select %1$L, %2$L, %2$L, %3$L, 'Nochmal' where set_config('app.invoice_cancel', %3$L, true) is not null$insert$,
+    '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020', pg_temp.id('cancelled')),
+    '23505'),
+  ('back to Ausgestellt', format('update public.invoices set status = ''ausgestellt'' where id = %L',
     pg_temp.id('cancelled')), 'invoice_issued'),
   ('change the cancelled invoice', format('update public.invoices set order_reference = ''X'' where id = %L',
     pg_temp.id('cancelled')), 'invoice_issued'),
@@ -228,11 +239,12 @@ from (values
     'invoice_issued'),
   ('delete a Storno line', format('delete from public.invoice_lines where invoice_id = %L', pg_temp.id('storno')),
     'invoice_issued'),
-  -- Storniert only through cancel_invoice: without an issued Stornorechnung the status stays.
-  ('mark an invoice Storniert directly', format('update public.invoices set status = ''storniert'', version = version + 1
-    where id = %L', pg_temp.id('kept')), 'invoice_issued'),
-  ('mark it Storniert with another change', format('update public.invoices set status = ''storniert'',
-    version = version + 1, order_reference = ''X'' where id = %L', pg_temp.id('cancelled')), 'invoice_issued')
+  -- Storniert only inside cancel_invoice for that invoice, and only beside its issued Stornorechnung.
+  ('mark an invoice Storniert directly', format('update public.invoices set status = ''storniert'' where id = %L',
+    pg_temp.id('kept')), 'invoice_issued'),
+  ('mark it Storniert under the cancel flag without a Stornorechnung', format('update public.invoices
+    set status = ''storniert'' where id = %1$L and set_config(''app.invoice_cancel'', %1$L, true) is not null',
+    pg_temp.id('kept')), 'invoice_issued')
 ) as cases(label, statement, refusal);
 
 -- „Korrigieren“: the Stornorechnung takes the next number, and a new draft carries the original's
@@ -294,12 +306,13 @@ begin
 end;
 $$;
 
--- The guard's one exception is narrow: beside an issued Stornorechnung (here written without
--- cancel_invoice), an invoice turns Storniert by its status with the next version, writer and time only.
+-- The guard's one exception is narrow. Inside a cancel of „kept“ (the flag cancel_invoice raises), with
+-- its issued Stornorechnung beside it, only its status may change; the bare transition passes.
 do $$
 declare
   v_storno uuid;
 begin
+  perform set_config('app.invoice_cancel', pg_temp.id('kept')::text, true);
   insert into public.invoices (organization_id, client_id, recipient_client_id, service_start, service_end,
     cancels_invoice_id, cancellation_reason)
   values ('38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020',
@@ -315,15 +328,32 @@ $$;
 select pg_temp.expect_refusal(label, format(statement, pg_temp.id('kept')), 'invoice_issued')
 from (values
   ('Storniert with another change',
-    'update public.invoices set status = ''storniert'', version = version + 1, order_reference = ''X'' where id = %L'),
+    'update public.invoices set status = ''storniert'', order_reference = ''X'' where id = %L'),
   ('Storniert with an amount',
-    'update public.invoices set status = ''storniert'', version = version + 1, gross_cents = 0, tax_cents = 0,
-      line_net_cents = 0 where id = %L'),
-  ('Storniert without the next version', 'update public.invoices set status = ''storniert'' where id = %L'),
-  ('back to a draft', 'update public.invoices set status = ''entwurf'', version = version + 1 where id = %L')
+    'update public.invoices set status = ''storniert'', gross_cents = 0, tax_cents = 0, line_net_cents = 0
+      where id = %L'),
+  ('Storniert with a new version', 'update public.invoices set status = ''storniert'', version = version + 1
+    where id = %L'),
+  ('back to a draft', 'update public.invoices set status = ''entwurf'' where id = %L')
 ) as cases(label, statement);
-update public.invoices set status = 'storniert', version = version + 1, updated_at = now()
-where id = pg_temp.id('kept');
+update public.invoices set status = 'storniert' where id = pg_temp.id('kept');
+select set_config('app.invoice_cancel', '', true);
+
+-- A credit (negative total) is not cancelled: its Stornorechnung would ask the customer to pay.
+insert into ids values ('credit', public.create_invoice('38080000-0000-4000-8000-000000000002',
+  '38080000-0000-4000-8000-000000000010', gen_random_uuid(), '38080000-0000-4000-8000-000000000020', null, null));
+select public.save_invoice_draft('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
+  pg_temp.id('credit'), 1, gen_random_uuid(),
+  '{"serviceStart":"2037-11-02","serviceEnd":"2037-11-02","paymentDueDays":14,"discountDays":null,
+    "discountBasisPoints":null,"orderReference":"","buyerReference":"","openingText":"","closingText":""}',
+  '[{"name":"Gutschrift Anfahrt","description":"","quantity":"-1","unit":"flat_rate","unitPriceCents":3500,
+     "priceQuantity":1,"taxCategory":"S","taxRateBasisPoints":1900,"netCents":-3500}]',
+  '{"lineNetCents":-3500,"taxCents":-665,"grossCents":-4165}');
+select public.issue_invoice('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
+  pg_temp.id('credit'), 2, gen_random_uuid(), (select issue_snapshot from issued where id = pg_temp.id('kept')));
+select pg_temp.expect_refusal('cancel a credit', format(
+  'select pg_temp.cancel(%L, %L, ''credit'', gen_random_uuid(), ''Falsch'', false)',
+  '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010'), 'invoice_not_cancellable');
 
 -- The correction is a draft like any: it is edited, and deleted with its link.
 select pg_temp.expect_refusal('move the correction to another invoice',
@@ -347,7 +377,7 @@ end;
 $$;
 do $$
 begin
-  if pg_temp.invoices_seen_by('38080000-0000-4000-8000-000000000002') is distinct from 7::bigint
+  if pg_temp.invoices_seen_by('38080000-0000-4000-8000-000000000002') is distinct from 8::bigint
     or pg_temp.invoices_seen_by('38080000-0000-4000-8000-000000000003') is distinct from 0::bigint
     or pg_temp.invoices_seen_by('38080000-0000-4000-8000-000000000004') is distinct from 0::bigint then
     raise exception 'an invoice read crossed a role or an organization';

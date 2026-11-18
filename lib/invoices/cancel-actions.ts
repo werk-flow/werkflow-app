@@ -28,6 +28,7 @@ const refusal = writeRefusalFor(
     'invoice_not_issued',
     'invoice_cancelled',
     'invoice_is_storno',
+    'invoice_not_cancellable',
   ]),
 );
 
@@ -59,6 +60,8 @@ export async function cancelInvoice(rawInput: CancelInvoiceInput): Promise<Cance
     const original = await readIssuedInvoice(context.orgId, input.invoiceId);
     if (!original) return { success: false, error: 'invoice_not_found' };
     if (original.cancels) return { success: false, error: 'invoice_is_storno' };
+    // A credit's Stornorechnung would ask the customer to pay; the function refuses it too.
+    if (original.grossCents < 0) return { success: false, error: 'invoice_not_cancellable' };
     if (!original.issue) return { success: false, error: 'invoice_not_issued' };
     // Storniert already: the function answers a retry of the same press with its first Storno, else refuses.
     if (original.status === 'ausgestellt') {

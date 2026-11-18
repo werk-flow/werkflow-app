@@ -5,9 +5,10 @@
 -- 1. invoices: a Stornorechnung names the invoice it cancels and the reason;
 --    a correction draft names the invoice it corrects. Each invoice has at
 --    most one of each, and a link never changes after insert.
--- 2. guard_issued_invoice: an issued invoice takes exactly one change, from
---    Ausgestellt to Storniert, and only once its issued Stornorechnung exists.
---    Every other column stays refused as before.
+-- 2. guard_issued_invoice: an issued invoice takes exactly one change, its
+--    status from Ausgestellt to Storniert, only inside cancel_invoice for that
+--    invoice and once its issued Stornorechnung exists. Only cancel_invoice
+--    writes a link. Every other column stays refused as before.
 -- 3. cancel_invoice: in one transaction it copies the original into a
 --    Stornorechnung with every line negated, issues it through issue_invoice
 --    (the next number of the same series, under the series' row lock), marks
@@ -20,8 +21,8 @@
 -- The server actions in lib/invoices/ establish identity, role and
 -- organization; cancel_invoice checks the actor again under the access lock.
 --
--- Expand-only: new nullable columns, a widened event check, a replaced guard,
--- a new function; get_invoice and list_invoice_page keep their signatures.
+-- Expand-only: new nullable columns, a widened event check, a replaced guard
+-- with an insert trigger, a new function; get_invoice and list_invoice_page keep their signatures.
 --
 -- Prevention: Tier 1 (the links' checks and unique indexes, the guard),
 -- Tier 2 supabase/tests/invoice_cancel.sql.
@@ -59,9 +60,12 @@ alter table public.invoice_events add constraint invoice_events_type_check
   check (event_type in ('created', 'saved', 'deleted', 'issued', 'original_registered', 'cancelled')) not valid;
 
 -- 2. As in 20261216100000_issue_invoices_with_gapless_numbers.sql, with two
--- additions: the links never change after insert, and Ausgestellt becomes
--- Storniert, with the version, the writer and the time, once an issued
--- Stornorechnung names the invoice. Nothing else of an issued invoice changes.
+-- additions. A link is inserted only by cancel_invoice, for the invoice it
+-- cancels (it raises app.invoice_cancel to that id for its transaction), and
+-- never changes. Inside that call, and once an issued Stornorechnung names
+-- the invoice, its status alone turns from Ausgestellt to Storniert; the
+-- cancel's actor and time are in its history. Nothing else of an issued
+-- invoice changes.
 create or replace function app_private.guard_issued_invoice()
 returns trigger
 language plpgsql
@@ -72,8 +76,14 @@ declare
   v_free constant text[] := array[
     'job_id', 'project_id', 'service_case_id', 'created_by', 'updated_by', 'issued_by', 'original_document_id'
   ];
-  v_cancel_free constant text[] := array['status', 'version', 'updated_by', 'updated_at'];
+  v_cancelling constant text := coalesce(current_setting('app.invoice_cancel', true), '');
 begin
+  if tg_op = 'INSERT' then
+    if coalesce(new.cancels_invoice_id, new.corrects_invoice_id)::text <> v_cancelling then
+      raise exception 'invoice_link_fixed';
+    end if;
+    return new;
+  end if;
   if tg_op = 'DELETE' then
     if old.status = 'entwurf' or not exists (
       select 1 from public.organizations organization where organization.id = old.organization_id
@@ -90,9 +100,8 @@ begin
   if old.status = 'entwurf' then
     return new;
   end if;
-  if old.status = 'ausgestellt' and new.status = 'storniert'
-    and to_jsonb(new) - v_cancel_free = to_jsonb(old) - v_cancel_free
-    and new.version = old.version + 1
+  if old.status = 'ausgestellt' and new.status = 'storniert' and old.id::text = v_cancelling
+    and to_jsonb(new) - 'status' = to_jsonb(old) - 'status'
     and exists (
       select 1 from public.invoices storno
       where storno.cancels_invoice_id = old.id and storno.organization_id = old.organization_id
@@ -117,16 +126,22 @@ begin
 end;
 $$;
 revoke all on function app_private.guard_issued_invoice() from public, anon, authenticated, service_role;
+create trigger guard_invoice_links before insert on public.invoices
+  for each row execute function app_private.guard_issued_invoice();
 
 -- 3. Cancels an issued invoice with a Stornorechnung: the original's lines
 -- negated, its Leistungszeitraum, references, customer and Rechnungsempfänger,
 -- the snapshot it was issued with, nothing due, and the reason. issue_invoice
 -- gives it the series' next number and today's Rechnungsdatum. The original
 -- becomes Storniert. With p_correct a new draft prefilled from the original
--- names it as the invoice it corrects. A retry under the same key answers the
--- first call. Answers stornoId, stornoNumber, issueDate and correctionId.
+-- names it as the invoice it corrects; its Rechnungsempfänger follows
+-- create_invoice's rule, so a recipient corrected on the work since applies.
+-- An original with a negative total (a credit) is not cancelled: its
+-- Stornorechnung would ask for payment. A retry under the same key answers
+-- the first call. Answers stornoId, stornoNumber, issueDate and correctionId.
 -- Refusals: invalid_input, not_authorized, invoice_not_found,
--- invoice_not_issued, invoice_cancelled, invoice_is_storno.
+-- invoice_not_issued, invoice_cancelled, invoice_is_storno,
+-- invoice_not_cancellable.
 create function public.cancel_invoice(
   p_actor_id uuid,
   p_organization_id uuid,
@@ -147,6 +162,7 @@ declare
   v_storno_id uuid;
   v_issued jsonb;
   v_correction_id uuid;
+  v_parties public.work_billing_parties;
   v_answer jsonb;
 begin
   if p_actor_id is null or p_organization_id is null or p_invoice_id is null or p_attempt_key is null
@@ -169,6 +185,8 @@ begin
   if v_original.status = 'entwurf' then raise exception 'invoice_not_issued'; end if;
   if v_original.status = 'storniert' then raise exception 'invoice_cancelled'; end if;
   if v_original.cancels_invoice_id is not null then raise exception 'invoice_is_storno'; end if;
+  if v_original.gross_cents < 0 then raise exception 'invoice_not_cancellable'; end if;
+  perform set_config('app.invoice_cancel', v_original.id::text, true);
 
   insert into public.invoices (
     organization_id, client_id, recipient_client_id, job_id, project_id, service_case_id,
@@ -202,23 +220,25 @@ begin
     p_actor_id, p_organization_id, v_storno_id, 1, gen_random_uuid(), v_original.issue_snapshot
   );
 
-  update public.invoices invoice set
-    status = 'storniert',
-    version = invoice.version + 1,
-    updated_by = p_actor_id,
-    updated_at = now()
+  update public.invoices invoice set status = 'storniert'
   where invoice.id = v_original.id and invoice.organization_id = p_organization_id;
 
   if p_correct then
+    if coalesce(v_original.job_id, v_original.project_id, v_original.service_case_id) is not null then
+      v_parties := app_private.current_work_billing_parties(p_organization_id,
+        coalesce(v_original.job_id, v_original.project_id, v_original.service_case_id));
+    end if;
     insert into public.invoices (
       organization_id, client_id, recipient_client_id, job_id, project_id, service_case_id,
       service_start, service_end, payment_due_days, discount_days, discount_basis_points,
       order_reference, buyer_reference, opening_text, closing_text,
       line_net_cents, tax_cents, gross_cents, corrects_invoice_id, created_by, updated_by
     ) values (
-      p_organization_id, v_original.client_id, v_original.recipient_client_id, v_original.job_id,
-      v_original.project_id, v_original.service_case_id, v_original.service_start, v_original.service_end,
-      v_original.payment_due_days, v_original.discount_days, v_original.discount_basis_points,
+      p_organization_id, v_original.client_id,
+      case when v_parties.client_id = v_original.client_id then v_parties.recipient_client_id
+        else v_original.client_id end,
+      v_original.job_id, v_original.project_id, v_original.service_case_id, v_original.service_start,
+      v_original.service_end, v_original.payment_due_days, v_original.discount_days, v_original.discount_basis_points,
       v_original.order_reference, v_original.buyer_reference, v_original.opening_text, v_original.closing_text,
       v_original.line_net_cents, v_original.tax_cents, v_original.gross_cents, v_original.id,
       p_actor_id, p_actor_id
@@ -250,9 +270,10 @@ begin
   insert into public.invoice_events (
     organization_id, invoice_id, event_type, status, version, payload, actor_id, attempt_key
   ) values (
-    p_organization_id, v_original.id, 'cancelled', 'storniert', v_original.version + 1, v_answer,
+    p_organization_id, v_original.id, 'cancelled', 'storniert', v_original.version, v_answer,
     p_actor_id, p_attempt_key
   );
+  perform set_config('app.invoice_cancel', '', true);
   return v_answer;
 end;
 $$;

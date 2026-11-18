@@ -78,10 +78,20 @@ function invoiceTitle(invoice: InvoiceDetail): string {
   return `${invoice.cancels ? 'Stornorechnung' : 'Rechnung'} ${invoice.invoiceNumber}`;
 }
 
-/** A draft is deleted; an issued invoice that is no Stornorechnung is cancelled or corrected. */
+/**
+ * A draft is deleted; an issued invoice that is no Stornorechnung and no
+ * credit (cancel_invoice refuses a negative total) is cancelled or corrected.
+ */
 function invoiceActions(invoice: InvoiceDetail): React.ReactNode {
   if (invoice.status === 'entwurf') return <DeleteInvoiceDraftButton invoice={invoice} />;
-  if (invoice.status !== 'ausgestellt' || invoice.cancels || !invoice.invoiceNumber) return undefined;
+  if (
+    invoice.status !== 'ausgestellt' ||
+    invoice.cancels ||
+    invoice.grossCents < 0 ||
+    !invoice.invoiceNumber
+  ) {
+    return undefined;
+  }
   const issued = { id: invoice.id, invoiceNumber: invoice.invoiceNumber };
   return (
     <>

@@ -61,26 +61,15 @@ export function CancelInvoiceButton({
   mode: keyof typeof MODES;
 }) {
   const [open, setOpen] = useState(false);
-  const [opening, setOpening] = useState(0);
   const copy = MODES[mode];
   const Icon = copy.icon;
   return (
     <>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          setOpening((count) => count + 1);
-          setOpen(true);
-        }}
-      >
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
         <Icon className="size-4" />
         {copy.trigger}
       </Button>
-      {open && (
-        <CancelInvoiceDialog key={opening} invoice={invoice} mode={mode} onClose={() => setOpen(false)} />
-      )}
+      {open && <CancelInvoiceDialog invoice={invoice} mode={mode} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -95,7 +84,7 @@ type CancelDialogProps = {
 function useCancelInvoice({ invoice, mode, onClose }: CancelDialogProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
-  // One key per opening: a retried press answers with the first Storno.
+  // The dialog mounts per opening, so one key per opening: a retried press answers with the first Storno.
   const [attemptKey] = useState(() => crypto.randomUUID());
   const [reason, setReason] = useState('');
   const [attempted, setAttempted] = useState(false);
@@ -184,7 +173,7 @@ function CancelInvoiceDialog(props: CancelDialogProps) {
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 maxLength={CANCELLATION_REASON_MAX_LENGTH}
-                placeholder="z. B. falscher Rechnungsempfänger"
+                placeholder="z. B. falsche Menge abgerechnet"
                 required
               />
             </Field>

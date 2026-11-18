@@ -166,6 +166,18 @@ await assertRefused(
   'one-call',
 );
 
+// A credit is not cancelled: its Stornorechnung would ask the customer to pay. The one read, no write.
+world.rpc = ({ name }) =>
+  name === 'get_invoice'
+    ? { data: { ...original, lineNetCents: -7300, taxCents: -1807, grossCents: -9107 }, error: null }
+    : { data: null, error: null };
+await assertRefused(
+  world,
+  [['cancelInvoice a credit', () => cancelInvoice(input)]],
+  { success: false, error: 'invoice_not_cancellable' },
+  'one-call',
+);
+
 // A Stornorechnung the rules refuse is not issued: here the seller in the snapshot lacks every tax id.
 world.rpc = ({ name }) =>
   name === 'get_invoice'
