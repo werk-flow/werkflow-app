@@ -1,6 +1,6 @@
 import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describeLeftovers, withRunTemporaryFolder } from '../lib/testing/runner/run-temporary-folder';
+import { withRunTemporaryFolder } from '../lib/testing/runner/run-temporary-folder';
 import { runWatchedUnitTests } from '../lib/testing/runner/unit-run-watchdog';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 import { UNIT_PROGRESS_DEADLINE_MS, UNIT_RUN_DEADLINE_MS, UNIT_TEST_TIMEOUT_MS } from './unit-test-timeout';
@@ -38,6 +38,9 @@ await withWorkspaceTestLock({ operation: 'unit suite' }, async () => {
     if (stopped !== null) console.error(`[unit-watchdog] Stopped: ${stopped}`);
     return testExit;
   });
-  if (leftovers.length) console.error(describeLeftovers(leftovers));
+  if (leftovers.length)
+    console.error(
+      `[unit-tmp] The run left these in its TMPDIR: ${leftovers.join(', ')}. Make test folders with temporaryDirectory (lib/testing/temporary-directory.ts); code under test removes its own in finally.`,
+    );
   process.exitCode = exitCode;
 });

@@ -29,8 +29,3 @@ export async function withRunTemporaryFolder(run: () => Promise<number>): Promis
     rmSync(folder, { recursive: true, force: true });
   }
 }
-
-/** The failure line for a run that left entries in its TMPDIR. */
-export function describeLeftovers(leftovers: readonly string[]): string {
-  return `[unit-tmp] The run left these in its TMPDIR: ${leftovers.join(', ')}. Make test folders with temporaryDirectory (lib/testing/temporary-directory.ts); code under test removes its own in finally.`;
-}

@@ -1,14 +1,14 @@
 // Rule test: a unit run fails when it leaves anything in its run-scoped TMPDIR.
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { describeLeftovers, withRunTemporaryFolder } from './run-temporary-folder';
+import { withRunTemporaryFolder } from './run-temporary-folder';
 import { temporaryDirectory } from '../temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 
-test('a run that leaves a folder in its TMPDIR fails and names it; the folder is removed either way', async () => {
+test('withRunTemporaryFolder fails a run that leaves an entry, restores TMPDIR and removes its folder', async () => {
   const outer = tmpdir();
   let runFolder = '';
   const result = await withRunTemporaryFolder(async () => {
@@ -18,12 +18,11 @@ test('a run that leaves a folder in its TMPDIR fails and names it; the folder is
   });
   expect(runFolder).not.toBe(outer);
   expect(result).toEqual({ exitCode: 1, leftovers: ['boat-checkout-leak'] });
-  expect(describeLeftovers(result.leftovers)).toContain('boat-checkout-leak');
   expect(existsSync(runFolder)).toBe(false);
   expect(tmpdir()).toBe(outer);
 });
 
-test('a run whose folders were removed keeps its own exit code', async () => {
+test('withRunTemporaryFolder keeps the exit code of a run that removed its folders', async () => {
   const passed = await withRunTemporaryFolder(async () => {
     mkdirSync(join(tmpdir(), 'removed-in-finally'));
     rmSync(join(tmpdir(), 'removed-in-finally'), { recursive: true });
@@ -33,20 +32,34 @@ test('a run whose folders were removed keeps its own exit code', async () => {
   expect(await withRunTemporaryFolder(async () => 3)).toEqual({ exitCode: 3, leftovers: [] });
 });
 
-let madeInEarlierTest = '';
-test('temporaryDirectory makes a fresh folder under TMPDIR', () => {
-  madeInEarlierTest = temporaryDirectory('temporary-directory-');
-  expect(madeInEarlierTest.startsWith(join(tmpdir(), 'temporary-directory-'))).toBe(true);
-  expect(existsSync(madeInEarlierTest)).toBe(true);
-});
-
-test('the preload removed the folder after the test that made it', () => {
-  expect(madeInEarlierTest).not.toBe('');
-  expect(existsSync(madeInEarlierTest)).toBe(false);
-});
-
-test('the unit runner and the preload apply the temporary-folder rule', () => {
-  const read = (path: string) => readFileSync(resolve(repositoryRoot, path), 'utf8');
-  expect(read('scripts/run-unit-tests.ts')).toContain('withRunTemporaryFolder(');
-  expect(read('scripts/unit-test-preload.ts')).toMatch(/^registerTemporaryDirectoryCleanup\(\);$/m);
+// The real runner on a probe file: folders from temporaryDirectory, in a test and at module scope,
+// are removed; a raw mkdtempSync is named and fails the run.
+test('the unit runner removes temporaryDirectory folders and fails on a raw mkdtempSync, naming it', async () => {
+  const probe = join(temporaryDirectory('temporary-probe-'), 'leak.test.ts');
+  const helper = resolve(repositoryRoot, 'lib/testing/temporary-directory.ts');
+  writeFileSync(
+    probe,
+    [
+      "import { test } from 'bun:test';",
+      "import { mkdtempSync } from 'node:fs';",
+      "import { tmpdir } from 'node:os';",
+      "import { join } from 'node:path';",
+      `import { temporaryDirectory } from ${JSON.stringify(helper)};`,
+      "temporaryDirectory('kept-for-the-run-');",
+      "test('makes folders', () => {",
+      "  temporaryDirectory('kept-for-the-test-');",
+      "  mkdtempSync(join(tmpdir(), 'raw-leak-'));",
+      '});',
+      '',
+    ].join('\n'),
+  );
+  const child = Bun.spawn([process.execPath, 'scripts/run-unit-tests.ts', probe], {
+    cwd: repositoryRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [code, errors] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  expect(code).toBe(1);
+  expect(errors).toMatch(/\[unit-tmp\] The run left these in its TMPDIR: raw-leak-\w+\./);
+  expect(errors).not.toContain('kept-for-the-');
 });
