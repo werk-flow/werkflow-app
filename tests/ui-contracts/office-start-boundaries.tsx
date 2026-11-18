@@ -1,4 +1,4 @@
-import { OfficeStartSections } from '@/components/dashboard/office-start-sections';
+import { OfficeStartView, type OfficeStartRead } from '@/components/dashboard/office-start-sections';
 import type { AttentionTask } from '@/lib/attention/types';
 
 /** Five jobs past their last visit, behind a time approval and a vacation request the start page leaves out. */
@@ -32,18 +32,36 @@ const TASKS: AttentionTask[] = [
   ),
 ];
 
+const refresh = () => Promise.resolve();
+
+/** A read in the state the live view reports: current, stale with its last data, still loading, or failed without data. */
+function read<T>(state: 'current' | 'stale' | 'loading' | 'failed', data: T): OfficeStartRead<T> {
+  if (state === 'loading')
+    return { data: undefined, isLoading: true, isRefreshing: true, isStale: false, refresh };
+  if (state === 'failed')
+    return { data: undefined, isLoading: false, isRefreshing: false, isStale: true, refresh };
+  return { data, isLoading: false, isRefreshing: false, isStale: state === 'stale', refresh };
+}
+
+const CASES = [
+  ['filled', read('current', { tasks: TASKS }), read('current', 2)],
+  ['empty', read('current', { tasks: [] }), read('current', 0)],
+  ['maintenance-unknown', read('current', { tasks: [] }), read('loading', 0)],
+  ['attention-failed', read('failed', { tasks: [] }), read('current', 2)],
+  ['attention-loading', read('loading', { tasks: [] }), read('current', 2)],
+  ['maintenance-stale', read('current', { tasks: TASKS }), read('stale', 2)],
+  ['attention-stale-empty', read('stale', { tasks: [] }), read('current', 0)],
+  ['maintenance-stale-empty', read('current', { tasks: [] }), read('stale', 0)],
+] as const;
+
 export function OfficeStartContractFixture() {
   return (
     <>
-      <div data-testid="office-start-filled">
-        <OfficeStartSections tasks={TASKS} overdueMaintenance={2} />
-      </div>
-      <div data-testid="office-start-empty">
-        <OfficeStartSections tasks={[]} overdueMaintenance={0} />
-      </div>
-      <div data-testid="office-start-maintenance-unknown">
-        <OfficeStartSections tasks={[]} overdueMaintenance={null} />
-      </div>
+      {CASES.map(([name, attention, maintenance]) => (
+        <div key={name} data-testid={`office-start-${name}`}>
+          <OfficeStartView attention={attention} maintenance={maintenance} />
+        </div>
+      ))}
     </>
   );
 }

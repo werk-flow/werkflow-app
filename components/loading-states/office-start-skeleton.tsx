@@ -4,11 +4,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 const SECTION_KEYS = [0, 1] as const;
 const ROW_KEYS = [0, 1, 2] as const;
 
-/** Mirrors the office start: section headings over a card of task rows and the „Alle in Aufgaben“ link. */
+/** Mirrors the office start's sections: headings over a card of task rows and the „Alle in Aufgaben“ link. */
 export function OfficeStartSkeleton() {
   return (
-    <div className="mx-auto max-w-3xl space-y-6" aria-hidden="true">
-      <Skeleton className="h-5 w-40" />
+    <div className="space-y-6" aria-hidden="true">
       {SECTION_KEYS.map((section) => (
         <div key={section} className="space-y-2">
           <div className="flex items-center gap-1.5 px-1">

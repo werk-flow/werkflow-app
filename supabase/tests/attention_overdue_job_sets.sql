@@ -1,5 +1,5 @@
 -- The overdue job set of the office's attention read (migration
--- 20261217090001): read_manager_attention_sets returns as overdue_jobs exactly
+-- 20261218090004): read_manager_attention_sets returns as overdue_jobs exactly
 -- the open jobs of the organization whose every scheduled visit has ended, with
 -- the end of the last timed and the last all-day visit. Parked, finished,
 -- cancelled, never-visited and another organization's jobs never appear, and

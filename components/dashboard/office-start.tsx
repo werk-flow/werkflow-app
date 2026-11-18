@@ -1,15 +1,11 @@
 'use client';
 
 import { useLiveAttentionOverview } from '@/components/aufgaben/use-aufgaben-overview';
-import { OfficeStartSkeleton } from '@/components/loading-states/office-start-skeleton';
 import { useOrganization } from '@/components/organization/organization-context';
-import { StaleRegion } from '@/components/shared/stale-region';
-import { UsableContent } from '@/components/shared/usable-content';
-import { SectionError } from '@/components/ui/section-error';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { OfficeStartSections } from './office-start-sections';
+import { OfficeStartView } from './office-start-sections';
 
 /**
  * The count of überfällig maintenance from the Wartung list's own reader,
@@ -52,43 +48,5 @@ function useOverdueMaintenanceCount() {
 export function OfficeStart() {
   const attention = useLiveAttentionOverview();
   const maintenance = useOverdueMaintenanceCount();
-
-  // The maintenance count loads and fails on its own, below the sections.
-  if (attention.isLoading) return <OfficeStartSkeleton />;
-  if (!attention.data) {
-    return (
-      <div className="mx-auto max-w-3xl">
-        <SectionError onRetry={() => void attention.refresh()} retryPending={attention.isRefreshing}>
-          Deine offenen Aufgaben konnten nicht geladen werden. Bitte versuche es erneut.
-        </SectionError>
-      </div>
-    );
-  }
-
-  return (
-    <UsableContent name="office-start" count={attention.data.tasks.length}>
-      <section
-        className="mx-auto max-w-3xl space-y-6"
-        aria-labelledby="office-start-heading"
-        data-testid="office-start"
-      >
-        <h2 id="office-start-heading" className="text-sm font-semibold">
-          Was jetzt ansteht
-        </h2>
-        {/* Either read keeps its last data when a refresh fails; the empty state needs both current. */}
-        <StaleRegion
-          stale={attention.isStale || maintenance.isStale}
-          onRetry={() => Promise.all([attention.refresh(), maintenance.refresh()])}
-          className="space-y-6"
-        >
-          <OfficeStartSections tasks={attention.data.tasks} overdueMaintenance={maintenance.data ?? null} />
-        </StaleRegion>
-        {!maintenance.isLoading && maintenance.data === undefined && (
-          <SectionError onRetry={() => void maintenance.refresh()} retryPending={maintenance.isRefreshing}>
-            Die überfällige Wartung konnte nicht geladen werden. Bitte versuche es erneut.
-          </SectionError>
-        )}
-      </section>
-    </UsableContent>
-  );
+  return <OfficeStartView attention={attention} maintenance={maintenance} />;
 }

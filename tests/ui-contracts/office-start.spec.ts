@@ -45,11 +45,40 @@ test('the office start shows each Aufgaben section with its count, its first thr
   ).toHaveAttribute('href', '/service/wartung?faellig=ueberfaellig');
 });
 
-test('with nothing open the office start says so, but not while the maintenance count is unknown', async ({
+test('with nothing open the office start says so, but only while both reads are current', async ({
   page,
 }) => {
-  await expect(page.getByTestId('office-start-empty')).toHaveText(
-    'Keine offenen Aufgaben. Nichts offen. Neue Aufgaben erscheinen hier sofort.',
-  );
-  await expect(page.getByTestId('office-start-maintenance-unknown')).toBeEmpty();
+  await expect(page.getByTestId('office-start-empty').getByText('Keine offenen Aufgaben.')).toBeVisible();
+  for (const name of ['maintenance-unknown', 'attention-stale-empty', 'maintenance-stale-empty'])
+    await expect(page.getByTestId(`office-start-${name}`).getByText('Keine offenen Aufgaben.')).toHaveCount(
+      0,
+    );
+});
+
+test('a failed or loading Aufgaben read keeps the überfällige Wartung and its link', async ({ page }) => {
+  const failed = page.getByTestId('office-start-attention-failed');
+  await expect(
+    failed.getByText('Deine offenen Aufgaben konnten nicht geladen werden.', { exact: false }),
+  ).toBeVisible();
+  await expect(failed.getByRole('button', { name: 'Erneut laden' })).toHaveCount(1);
+  await expect(
+    failed.getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByTestId('office-start-attention-loading')
+      .getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' }),
+  ).toBeVisible();
+});
+
+test('a stale maintenance count marks only itself stale; the current task links stay usable', async ({
+  page,
+}) => {
+  const region = page.getByTestId('office-start-maintenance-stale');
+  const task = region.getByRole('link', { name: /^Auftrag A-2026-001 / });
+  await expect(task).toBeVisible();
+  expect(await task.evaluate((element) => element.closest('[inert]') === null)).toBe(true);
+  const maintenance = region.getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' });
+  expect(await maintenance.evaluate((element) => element.closest('[data-stale]') !== null)).toBe(true);
+  await expect(region.getByRole('button', { name: 'Erneut laden' })).toHaveCount(1);
 });
