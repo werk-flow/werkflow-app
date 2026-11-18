@@ -12661,6 +12661,42 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_signals: {
+        Row: {
+          attempts: number;
+          claimed_until: string | null;
+          event_type: string;
+          last_failure_code: string | null;
+          received_at: string;
+          settled_at: string | null;
+          state: string;
+          stripe_created_at: string;
+          stripe_event_id: string;
+        };
+        Insert: {
+          attempts?: number;
+          claimed_until?: string | null;
+          event_type: string;
+          last_failure_code?: string | null;
+          received_at?: string;
+          settled_at?: string | null;
+          state?: string;
+          stripe_created_at: string;
+          stripe_event_id: string;
+        };
+        Update: {
+          attempts?: number;
+          claimed_until?: string | null;
+          event_type?: string;
+          last_failure_code?: string | null;
+          received_at?: string;
+          settled_at?: string | null;
+          state?: string;
+          stripe_created_at?: string;
+          stripe_event_id?: string;
+        };
+        Relationships: [];
+      };
       work_artifact_actions: {
         Row: {
           action_type: Database["public"]["Enums"]["work_artifact_action_type"];
@@ -15811,6 +15847,17 @@ export type Database = {
           id: string;
           organization_id: string;
           storage_path: string;
+        }[];
+      };
+      claim_werkflow_billing_signal: {
+        Args: {
+          p_event_type: string;
+          p_stripe_created_at: string;
+          p_stripe_event_id: string;
+        };
+        Returns: {
+          attempt: number;
+          result: string;
         }[];
       };
       clear_project_execution_override: {
@@ -20614,6 +20661,15 @@ export type Database = {
           p_template_id: string;
         };
         Returns: undefined;
+      };
+      settle_werkflow_billing_signal: {
+        Args: {
+          p_attempt: number;
+          p_failure_code?: string;
+          p_outcome: string;
+          p_stripe_event_id: string;
+        };
+        Returns: boolean;
       };
       stage_supplier_catalog_import_lines: {
         Args: {

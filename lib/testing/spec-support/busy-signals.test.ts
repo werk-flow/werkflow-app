@@ -3,7 +3,13 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { BUSY_SIGNAL_SELECTOR, ROUTE_REFRESH_SIGNAL, UNCONFIRMED_LAYER_SIGNAL } from './busy-signals';
+import {
+  BUSY_SIGNAL_SELECTOR,
+  type BusyElementFacts,
+  describeBusyElements,
+  ROUTE_REFRESH_SIGNAL,
+  UNCONFIRMED_LAYER_SIGNAL,
+} from './busy-signals';
 
 const ROOT = join(import.meta.dir, '../../..');
 const read = (path: string): string => readFileSync(join(ROOT, path), 'utf8');
@@ -33,12 +39,53 @@ test('the registry primitives set the attributes the selector names', () => {
 });
 
 test('settled and the visual settle wait on the shared selector, never on a class or a local list', () => {
-  const interaction = read('tests/golden/support/steps/interaction.ts');
-  expect(interaction).toContain('selector: BUSY_SIGNAL_SELECTOR');
-  expect(interaction).toContain('routeRefresh: ROUTE_REFRESH_SIGNAL');
-  expect(interaction).toContain('unconfirmedLayer: UNCONFIRMED_LAYER_SIGNAL');
-  expect(interaction).not.toMatch(/'\[aria-busy|"\[aria-busy/);
+  const reader = read('tests/golden/support/busy-elements.ts');
+  expect(reader).toContain('selector: BUSY_SIGNAL_SELECTOR');
+  expect(reader).toContain('routeRefresh: ROUTE_REFRESH_SIGNAL');
+  expect(reader).toContain('unconfirmedLayer: UNCONFIRMED_LAYER_SIGNAL');
+  for (const source of [reader, read('tests/golden/support/steps/interaction.ts')])
+    expect(source).not.toMatch(/'\[aria-busy|"\[aria-busy/);
   const visual = read('tests/audit/support/visual-references.ts');
   expect(visual).toMatch(/export async function settlePage[\s\S]*?await settled\(page\);/);
   expect(visual).not.toMatch(/animate-(pulse|spin)/);
 });
+
+const bareSkeleton: BusyElementFacts = {
+  tag: 'div',
+  role: '',
+  signals: ['skeleton'],
+  name: '',
+  region: 'main',
+};
+
+test('a failed settle names the signal and region of a bare placeholder and counts repeats once', () => {
+  expect(
+    describeBusyElements([
+      bareSkeleton,
+      {
+        tag: 'div',
+        role: 'status',
+        signals: ['aria-busy'],
+        name: 'Dokumente werden geladen',
+        region: 'main',
+      },
+      bareSkeleton,
+      { ...bareSkeleton, region: 'status "Dokumente werden geladen"' },
+      bareSkeleton,
+    ]),
+  ).toEqual([
+    '3× skeleton <div> in main',
+    'aria-busy <div role="status"> "Dokumente werden geladen" in main',
+    'skeleton <div> in status "Dokumente werden geladen"',
+  ]);
+});
+
+test('a busy element that matches two signals names both', () => {
+  expect(
+    describeBusyElements([
+      { tag: 'button', role: '', signals: ['aria-busy', 'unconfirmed'], name: 'Speichern', region: '' },
+    ]),
+  ).toEqual(['aria-busy + unconfirmed <button> "Speichern"']);
+});
+
+// tests/ui-contracts/busy-elements.spec.ts proves what tests/golden/support/busy-elements.ts collects in a page.
