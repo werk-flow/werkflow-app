@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { ROLE_LABELS } from '../../../../lib/roles';
 import { getOrganizationByName, type PersistedOrganization } from '../db/shared';
 import { confirmTestUserEmail } from '../seed';
-import { hydratedAndSettled, pressKey, settledBeforeTimeout } from './interaction';
+import { hydratedAndSettled, settledBeforeTimeout } from './interaction';
 import { openMemberDetailFromList } from './personnel';
 import { listEntry, openDialogWithRetry, pendingRow, SHARED_COPY, visibleText } from './shared';
 
@@ -493,8 +493,24 @@ export function accountMenuButton(page: Page): Locator {
 }
 
 /** „Abmelden“ in the open account menu. */
-export function signOutMenuItem(page: Page): Locator {
+function signOutMenuItem(page: Page): Locator {
   return page.getByRole('menuitem', { name: ORGANIZATION_COPY.signOut }).filter({ visible: true }).first();
+}
+
+/**
+ * Opens the account menu and returns its „Abmelden“ item; on a phone the menu
+ * sits in the menu sheet. The press waits until the shell hydrated and settled,
+ * so React owns the trigger, and is never repeated: the open menu hides the
+ * rest of the page from assistive technology, its trigger included, so a
+ * second press on a menu that opened late finds no button.
+ */
+export async function openAccountMenu(page: Page): Promise<Locator> {
+  await showOrganizationSwitcher(page);
+  await hydratedAndSettled(page);
+  await accountMenuButton(page).click();
+  const signOut = signOutMenuItem(page);
+  await expect(signOut, 'The account menu opens on the one press').toBeVisible();
+  return signOut;
 }
 
 export async function signOutViaUi(page: Page): Promise<void> {
@@ -503,25 +519,7 @@ export async function signOutViaUi(page: Page): Promise<void> {
   if (await directButton.isVisible()) {
     await directButton.click();
   } else {
-    // The sign-out control sits in the sidebar profile card menu.
-    const menuButton = accountMenuButton(page);
-    await expect(menuButton).toBeVisible();
-    const menuItem = signOutMenuItem(page);
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      await menuButton.click();
-      const menuOpened = await settledBeforeTimeout(menuItem.waitFor({ state: 'visible', timeout: 2_000 }));
-      if (!menuOpened) {
-        await pressKey(page, 'Escape');
-        continue;
-      }
-      const reachedLogin = settledBeforeTimeout(page.waitForURL('**/login', { timeout: 5_000 }));
-      // best-effort: the starting navigation may detach the item mid-click; the login URL
-      // awaited next is the outcome.
-      await menuItem.click({ force: true, timeout: 2_000 }).catch(() => undefined);
-      if (await reachedLogin) return;
-      await pressKey(page, 'Escape');
-    }
-    throw new Error('Sign-out menu did not navigate to login after three attempts.');
+    await (await openAccountMenu(page)).click();
   }
   await page.waitForURL('**/login');
 }
