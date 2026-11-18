@@ -17,7 +17,7 @@ const { checkEn16931 } = await import('@/lib/invoicing/check-en16931').finally((
 
 // The Stornorechnung cancel_invoice stores: every line negated by its
 // quantity. The database negates the stored amounts instead of computing them
-// (supabase/migrations/20261216120000_cancel_and_correct_issued_invoices.sql);
+// (supabase/migrations/20261218130000_cancel_and_correct_issued_invoices.sql);
 // this proves the invoice core, run on the negated lines, computes exactly
 // those amounts, and that the result passes the EN 16931 rules as a 384.
 

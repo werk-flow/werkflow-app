@@ -13,7 +13,7 @@ import { fileIssuedOriginal, findingsBeforeNumber } from './original';
 import { readIssuedInvoice } from './reads';
 
 // „Stornieren“ and „Korrigieren“
-// (supabase/migrations/20261216120000_cancel_and_correct_issued_invoices.sql).
+// (supabase/migrations/20261218130000_cancel_and_correct_issued_invoices.sql).
 // The order of „Ausstellen“: the server checks the Stornorechnung with the
 // EN 16931 rules under a placeholder number first; then cancel_invoice issues
 // it with the series' next number, marks the original Storniert and, for

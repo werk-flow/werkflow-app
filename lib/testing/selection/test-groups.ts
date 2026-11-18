@@ -444,7 +444,6 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['offers', ['offers.sql', 'offers_concurrency.sql'], ['commercial', 'customers']],
   ['invoice-drafts', ['invoice_drafts.sql'], ['commercial', 'customers']],
   ['invoice-issue', ['invoice_issue.sql', 'invoice_issue_concurrency.sql'], ['commercial', 'documents']],
-  ['invoice-cancel', ['invoice_cancel.sql'], ['commercial', 'documents']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],
@@ -671,7 +670,8 @@ export function getGroupTimingRequirements(
     const sourceTiming = readSourceTiming(source);
     requireFreshness ||= sourceTiming.requireFreshness;
     requireReadiness ||= sourceTiming.requireReadiness;
-    // A scenario call and its registration for this file must both exist: neither drifts silently.
+    // A scenario call in source must be registered for this file, and a
+    // registration must still have its call: neither can drift silently.
     const registered = new Set(scenariosForFiles([file]).map((scenario) => scenario.id));
     for (const id of sourceTiming.scenarioIds) {
       if (!registered.has(id))
