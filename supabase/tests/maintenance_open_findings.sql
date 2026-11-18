@@ -1,5 +1,5 @@
 -- Open Mängel of an Anlage stay open until a later completed visit closes
--- them (migration 20261216090001_close_open_mangel_with_a_later_visit.sql):
+-- them (migration 20261218091103_close_open_mangel_with_a_later_visit.sql):
 -- * A missed visit closes nothing; the next completed visit of the Anlage,
 --   or of its Nachfolger, closes every earlier open finding in the same call
 --   and records which visit closed it and who completed it. Its own finding
