@@ -41,6 +41,7 @@ function EinsaetzePart(): ReactElement {
       stored={day.stored}
       settled={day.settled}
       ended={day.ended}
+      waited={day.waited}
       failure={day.failure}
       online={online}
     />

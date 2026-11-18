@@ -8,6 +8,7 @@ import { useClientRead } from '@/hooks/use-client-read';
 import type { StoredToday } from '@/lib/field-sync/device/today-store';
 import { TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
+import { FIRST_REFRESH_WAIT_MS } from './worker-start-timing';
 
 // The field worker's day as the start page shows it: the phone's today
 // snapshot, read through E7's seam only (werk-flow/werkflow-planning#22):
@@ -136,6 +137,15 @@ export function useWorkerStartDay() {
     return () => window.clearTimeout(timer);
   }, [stored, reload]);
 
+  // No day yet: give the first refresh its chance, then stop showing the day as loading.
+  const [waited, setWaited] = useState(false);
+  const hasDay = stored !== null;
+  useEffect(() => {
+    if (hasDay) return;
+    const timer = window.setTimeout(() => setWaited(true), FIRST_REFRESH_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [hasDay]);
+
   // A day this page showed and the device no longer holds: it ended, and only the next start fetches a new one.
   const scope = `${userId}:${organizationId}`;
   const [shownFor, setShownFor] = useState<string | null>(null);
@@ -145,6 +155,8 @@ export function useWorkerStartDay() {
     stored,
     settled: day.data !== undefined,
     ended: !stored && (day.data !== undefined || expired !== null) && shownFor === scope,
+    /** The first refresh had its chance and no day arrived. */
+    waited,
     failure: day.failure,
   };
 }

@@ -33,6 +33,6 @@ Admin and Büro create and steer jobs and projects from request handoff through 
 
 - A request cannot update existing work.
 - A project lead assigned to none of its jobs finds the project in no list; they open it from its link.
-- The field worker's start shows no daily target, no Aufgaben items beside their count and no material for today. Its Einsätze change when the start page opens or the signal returns, not while it stays open, and today's working time counts to the clock's last update without ticking.
+- The field worker's start shows no daily target, no Aufgaben items beside their count and no material for today. Its „Als Nächstes“ is the first open instruction, not the job's lifecycle step. A phone without a stored day cannot tell a refresh that failed on the server from one still running, so the start page waits 15 seconds for the first refresh and then says the day is not on the phone, with „Für offline neu laden“. Its Einsätze change when the start page opens or the signal returns, not while it stays open, and today's working time counts to the clock's last update without ticking.
 - Site evidence is not a handover package, commercial acceptance, invoice basis or qualified electronic signature.
 - Not built: customer delivery of a handover package, a planned-versus-actual or profitability view, offers, contracts, invoices, payments, accounting, offline work beyond reading today's assignments and drafting a new job Arbeitsnachweis, the React Native app.

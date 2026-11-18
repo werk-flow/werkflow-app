@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { StoredToday } from '@/lib/field-sync/device/today-store';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
+import { FIRST_REFRESH_WAIT_MS } from '@/components/dashboard/worker-start-timing';
 import { RUNNING_CLOCK_STATE } from './clock-state-fixture';
 
 // A field worker's start page shows today and nothing else: the Einsätze of
@@ -195,15 +196,22 @@ test('without signal the stored day stays listed under „Offline · Stand“', 
   await expect(MAIN(page).getByText(/Offline · Stand/)).toHaveCount(0);
 });
 
-test('a day the phone did not store shows no list and no empty day, until a refresh saves one', async ({
+test('without a stored day the page waits for the first refresh, then says the day is not on the phone', async ({
   page,
 }) => {
-  await openStart(page, { stored: null });
-  // The start page's refresh shows E7's banner when it cannot store the day; this page keeps no copy.
+  await openStart(page, { stored: null }, '2026-11-17T07:00:00Z');
+  // While the start page's first refresh has its chance, the day loads; this page keeps no copy.
   await expect(MAIN(page).getByTestId('worker-start-einsaetze-loading')).toBeAttached();
   await expect(MAIN(page).getByText('Keine Einsätze heute')).toHaveCount(0);
   await expect(einsaetze(page)).toHaveCount(0);
 
+  // A refresh that ends on a server error saves nothing and tells no one: the wait ends.
+  await page.clock.runFor(FIRST_REFRESH_WAIT_MS);
+  await expect(MAIN(page).getByText('Keine Einsätze auf diesem Gerät')).toBeVisible();
+  await expect(MAIN(page).getByRole('button', { name: 'Für offline neu laden' })).toBeVisible();
+  await expect(MAIN(page).getByTestId('worker-start-einsaetze-loading')).toHaveCount(0);
+
+  // A later refresh that saves the day replaces the note.
   await page.evaluate((day) => window.workerStartContract.save(day), TWO_EINSAETZE);
   await expect(einsaetze(page).getByRole('link')).toHaveCount(2);
 });
