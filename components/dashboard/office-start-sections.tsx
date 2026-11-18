@@ -54,6 +54,7 @@ export function OfficeStartView({
       className="mx-auto max-w-3xl space-y-6"
       aria-labelledby="office-start-heading"
       data-testid="office-start"
+      data-office-start=""
     >
       <h2 id="office-start-heading" className="text-sm font-semibold">
         Was jetzt ansteht

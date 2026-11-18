@@ -7,7 +7,7 @@ import { getCachedUser, getCachedMemberCount, getCachedMemberships } from '@/lib
 import { TodayRefreshOnStart } from '@/components/auftraege/work-pack/today-refresh-on-start';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import { OrgInfoCard } from '@/components/dashboard/org-info-card';
-import { OfficeStart } from '@/components/dashboard/office-start';
+import { OfficeStartHost } from '@/components/dashboard/office-start-host';
 import { DashboardContentSkeleton } from '@/components/loading-states/dashboard-content-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
@@ -76,7 +76,7 @@ export default async function DashboardPage() {
       <PageBody>
         {/* The office start reads in the browser: every clock action renders this page again. */}
         {role && isManagerRole(role) ? (
-          <OfficeStart />
+          <OfficeStartHost />
         ) : (
           <Suspense fallback={<DashboardContentSkeleton />}>
             <DashboardData activeOrgId={activeOrgId} />

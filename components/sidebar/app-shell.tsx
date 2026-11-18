@@ -31,6 +31,7 @@ import { ProblemReportLauncher } from '@/components/problem-reports/problem-repo
 import type { AttentionCounts } from '@/lib/attention/types';
 import { MobileDrawer } from './mobile-drawer';
 import { OrgSwitchOverlay } from './org-switch-overlay';
+import { OfficeStartPortal } from '@/components/aufgaben/aufgaben-content';
 import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { isNavItemActive, navItemsFor } from './sidebar-nav-items';
 
@@ -375,6 +376,7 @@ export function AppShell({
                 {children}
               </main>
               <OrgSwitchOverlay />
+              <OfficeStartPortal page={children} />
               {activeOrg?.role === 'employee' && showIosInstallHint && <IosInstallHint />}
             </div>
           </div>
