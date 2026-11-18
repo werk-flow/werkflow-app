@@ -3,7 +3,14 @@ import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
-import { ciPlan, MAX_SHARDS, runnerModules as runnerModulesOf, type CiGroup } from './ci-plan';
+import {
+  changesOnlyRows,
+  ciPlan,
+  MAX_SHARDS,
+  REGISTRY_ROWS,
+  runnerModules as runnerModulesOf,
+  type CiGroup,
+} from './ci-plan';
 import { CRITICAL_JOURNEYS, type ChangeTrigger } from './change-triggers';
 import { getTestGroups } from './test-groups';
 
@@ -53,7 +60,13 @@ const EVERY_BROWSER_GROUP = [
 ];
 
 test('an unreadable diff and a tooling change run every browser group except the wall-clock ones', () => {
-  const unreadable = ciPlan({ groups, changedFiles: undefined, fullRun: undefined, runnerModules });
+  const unreadable = ciPlan({
+    groups,
+    changedFiles: undefined,
+    fullRun: undefined,
+    runnerModules,
+    rowChanges: [],
+  });
   expect(unreadable.fullReason).toBe('The diff against the base could not be read');
   expect(ids(unreadable)).toEqual(EVERY_BROWSER_GROUP);
   for (const tooling of [
@@ -63,14 +76,14 @@ test('an unreadable diff and a tooling change run every browser group except the
     'lib/testing/runner/app-port.ts',
     'lib/testing/selection/test-groups.ts',
   ])
-    expect(ids(ciPlan({ groups, changedFiles: [tooling], fullRun: undefined, runnerModules }))).toEqual(
-      EVERY_BROWSER_GROUP,
-    );
+    expect(
+      ids(ciPlan({ groups, changedFiles: [tooling], fullRun: undefined, runnerModules, rowChanges: [] })),
+    ).toEqual(EVERY_BROWSER_GROUP);
 });
 
 test("the nightly run and the release gate add each wall-clock group's steps, untimed", () => {
   for (const fullRun of ['Nightly run', 'Release 0123abc']) {
-    const plan = ciPlan({ groups, changedFiles: [], fullRun, runnerModules });
+    const plan = ciPlan({ groups, changedFiles: [], fullRun, runnerModules, rowChanges: [] });
     expect(plan.fullReason).toBe(fullRun);
     expect(ids(plan)).toEqual([...EVERY_BROWSER_GROUP, 'audit:performance:calendar']);
     expect(plan.browser.at(-1)?.reason).toBe(`${fullRun}: its steps, untimed`);
@@ -84,17 +97,29 @@ test('a pull request or a push to main runs the critical journeys and the groups
     changedFiles: ['lib/inventory/stock.ts'],
     fullRun: undefined,
     runnerModules,
+    rowChanges: [],
   });
   expect(plan.fullReason).toBeUndefined();
   expect(ids(plan)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13']);
   expect(
-    ids(ciPlan({ groups, changedFiles: ['tests/golden/p1-04.spec.ts'], fullRun: undefined, runnerModules })),
+    ids(
+      ciPlan({
+        groups,
+        changedFiles: ['tests/golden/p1-04.spec.ts'],
+        fullRun: undefined,
+        runnerModules,
+        rowChanges: [],
+      }),
+    ),
   ).toEqual(['golden:p1-04']);
   expect(
-    ids(ciPlan({ groups, changedFiles: ['docs/README.md'], fullRun: undefined, runnerModules })),
+    ids(
+      ciPlan({ groups, changedFiles: ['docs/README.md'], fullRun: undefined, runnerModules, rowChanges: [] }),
+    ),
   ).toEqual([]);
   expect(
-    ciPlan({ groups, changedFiles: ['docs/README.md'], fullRun: undefined, runnerModules }).shards,
+    ciPlan({ groups, changedFiles: ['docs/README.md'], fullRun: undefined, runnerModules, rowChanges: [] })
+      .shards,
   ).toEqual([]);
 });
 
@@ -117,6 +142,45 @@ test('the runner modules are what the runner entry points import, directly or th
   expect(runnerModulesOf(unresolved)).toContain('lib/testing/selection/coverage-map.ts');
 });
 
+const REGISTRY = 'lib/testing/selection/test-groups.ts';
+const registry = (rows: string, timing: string, extra = ''): string => `// The registry.
+const sqlDefinitions: readonly string[] = [${rows}];
+function declaredTiming(files: readonly string[]): boolean {
+  return files.some((file) => file === ${timing});
+}${extra}
+`;
+
+test("a registry change inside its rows plans by diff, and one in the runner's logic runs every group", () => {
+  const before = registry("'offers'", "'a.spec.ts'");
+  expect(changesOnlyRows(REGISTRY, before, registry("'offers', 'equipment'", "'a.spec.ts'"))).toBe(true);
+  expect(changesOnlyRows(REGISTRY, before, before.replace('// The registry.', '// Rows.'))).toBe(true);
+  expect(changesOnlyRows(REGISTRY, before, registry("'offers'", "'b.spec.ts'"))).toBe(false);
+  expect(changesOnlyRows(REGISTRY, before, registry("'offers'", "'a.spec.ts'", '\nconst more = 1;'))).toBe(
+    false,
+  );
+  expect(
+    changesOnlyRows(REGISTRY, before, before.replace('readonly string[] =', 'readonly number[] =')),
+  ).toBe(false);
+  expect(changesOnlyRows('lib/testing/runner/app-port.ts', before, registry("'x'", "'a.spec.ts'"))).toBe(
+    false,
+  );
+
+  const changedFiles = [REGISTRY, 'lib/inventory/stock.ts'];
+  const rows = ciPlan({ groups, changedFiles, fullRun: undefined, runnerModules, rowChanges: [REGISTRY] });
+  expect(rows.fullReason).toBeUndefined();
+  expect(ids(rows)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13']);
+  const logic = ciPlan({ groups, changedFiles, fullRun: undefined, runnerModules, rowChanges: [] });
+  expect(logic.fullReason).toBe(`Tooling input changed: ${REGISTRY}`);
+});
+
+test('every registry row declaration names a top-level declaration of its module', () => {
+  const root = resolve(import.meta.dir, '../../..');
+  for (const [file, names] of Object.entries(REGISTRY_ROWS)) {
+    const source = readFileSync(join(root, file), 'utf8');
+    for (const name of names) expect(source).toMatch(new RegExp(`^(export )?const ${name}\\b`, 'm'));
+  }
+});
+
 test('files that cannot change how every group installs, builds or runs plan by diff', () => {
   for (const file of [
     'lib/testing/selection/surface-groups.ts',
@@ -129,7 +193,7 @@ test('files that cannot change how every group installs, builds or runs plan by 
     'lib/testing/runner/delete-after-cd.test.ts',
     'lib/testing/selection/coverage-map.json',
   ]) {
-    const plan = ciPlan({ groups, changedFiles: [file], fullRun: undefined, runnerModules });
+    const plan = ciPlan({ groups, changedFiles: [file], fullRun: undefined, runnerModules, rowChanges: [] });
     expect([file, plan.fullReason, ids(plan)]).toEqual([file, undefined, []]);
   }
 });
@@ -146,7 +210,7 @@ test('visual and layout groups run in a pull request only when their own test co
     group('audit:lab:office', 'tests/audit/lab/office.spec.ts', ['work', 'planning'], 'product'),
   ];
   const plan = (changedFiles: string[]): string[] =>
-    ids(ciPlan({ groups: sweeps, changedFiles, fullRun: undefined, runnerModules }));
+    ids(ciPlan({ groups: sweeps, changedFiles, fullRun: undefined, runnerModules, rowChanges: [] }));
   // A work page selects the work journey and the lab group, never the work sweep that shares its scope.
   expect(plan(['app/(app)/auftraege/page.tsx', 'components/ui/button.tsx', 'app/globals.css'])).toEqual([
     'golden:gg-00',
@@ -164,16 +228,13 @@ test('visual and layout groups run in a pull request only when their own test co
       sweeps.filter((entry) => entry.files.includes(spec)).map((entry) => entry.id),
     );
   expect(plan(['tests/audit/performance/calendar.spec.ts'])).toEqual([]);
-  expect(ids(ciPlan({ groups: sweeps, changedFiles: [], fullRun: 'Nightly run', runnerModules }))).toEqual([
-    ...EVERY_BROWSER_GROUP,
-    'audit:layout:work',
-    'audit:lab:office',
-    'audit:performance:calendar',
-  ]);
+  expect(
+    ids(ciPlan({ groups: sweeps, changedFiles: [], fullRun: 'Nightly run', runnerModules, rowChanges: [] })),
+  ).toEqual([...EVERY_BROWSER_GROUP, 'audit:layout:work', 'audit:lab:office', 'audit:performance:calendar']);
 });
 
 test('the visual groups share shards of their own, and the other groups always keep one', () => {
-  const plan = ciPlan({ groups, changedFiles: undefined, fullRun: undefined, runnerModules });
+  const plan = ciPlan({ groups, changedFiles: undefined, fullRun: undefined, runnerModules, rowChanges: [] });
   expect(plan.shards).toEqual([
     { shard: 1, groups: 'audit:visual,audit:visual:acceptance:sets' },
     { shard: 2, groups: 'golden:gg-00,golden:p1-04,audit:wave-2:p1-13' },
@@ -186,6 +247,7 @@ test('the visual groups share shards of their own, and the other groups always k
     changedFiles: undefined,
     fullRun: undefined,
     runnerModules,
+    rowChanges: [],
   }).shards;
   expect(shards.length).toBeGreaterThan(MAX_SHARDS);
   expect(shards.at(-1)?.groups).toBe('golden:gg-00');
@@ -202,6 +264,7 @@ test('a full run of the registered groups fills the job budget, two shards of it
     changedFiles: [],
     fullRun: 'Nightly run',
     runnerModules,
+    rowChanges: [],
   });
   expect(shards).toHaveLength(MAX_SHARDS);
   const visual = shards.filter((shard) => shard.groups.includes('audit:visual'));
@@ -214,11 +277,23 @@ test('shards hold every selected group once and never exceed the job budget', ()
   const many = Array.from({ length: 100 }, (_, index) =>
     group(`audit:many:${index}`, `tests/audit/many/${index}.spec.ts`, ['*']),
   );
-  const plan = ciPlan({ groups: many, changedFiles: undefined, fullRun: undefined, runnerModules });
+  const plan = ciPlan({
+    groups: many,
+    changedFiles: undefined,
+    fullRun: undefined,
+    runnerModules,
+    rowChanges: [],
+  });
   expect(plan.shards).toHaveLength(MAX_SHARDS);
   const dealt = plan.shards.flatMap((shard) => shard.groups.split(','));
   expect(dealt.sort()).toEqual(many.map((entry) => entry.id).sort());
-  const one = ciPlan({ groups, changedFiles: ['lib/inventory/stock.ts'], fullRun: undefined, runnerModules });
+  const one = ciPlan({
+    groups,
+    changedFiles: ['lib/inventory/stock.ts'],
+    fullRun: undefined,
+    runnerModules,
+    rowChanges: [],
+  });
   expect(one.shards).toEqual([{ shard: 1, groups: 'golden:gg-00,audit:wave-2:p1-13' }]);
 });
 
@@ -237,11 +312,12 @@ test('support only a wall-clock group imports still runs the critical journeys, 
     changedFiles: ['tests/audit/support/calendar-live.ts'],
     fullRun: undefined,
     runnerModules,
+    rowChanges: [],
   });
   expect(ids(plan)).toEqual(['golden:gg-00']);
 });
 
-test('the critical journeys and both lab groups of a product change split into three shards', () => {
+test('the critical journeys and both lab groups of a product change share one shard, which pays one setup', () => {
   const critical = Object.keys(CRITICAL_JOURNEYS).map((id) =>
     group(id, `tests/golden/${id.replace('golden:', '')}.spec.ts`, ['*'], 'critical'),
   );
@@ -253,13 +329,14 @@ test('the critical journeys and both lab groups of a product change split into t
     changedFiles: ['lib/jobs/actions.ts'],
     fullRun: undefined,
     runnerModules,
+    rowChanges: [],
   });
   expect(plan.browser.map((entry) => entry.id)).toEqual([
     ...Object.keys(CRITICAL_JOURNEYS),
     'audit:lab:field',
     'audit:lab:office',
   ]);
-  expect(plan.shards.map((shard) => shard.groups.split(',').length)).toEqual([4, 4, 3]);
+  expect(plan.shards.map((shard) => shard.groups.split(',').length)).toEqual([11]);
 });
 
 // A hosted runner has no reviewed wall-clock baseline, so a timed shard fails its wall-clock group on
