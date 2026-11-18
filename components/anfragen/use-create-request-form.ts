@@ -396,8 +396,10 @@ export function useCreateRequestForm(currentUserId: string): CreateRequestForm {
 
       handleOpenChange(false);
       showBanner({ variant: 'success', message: 'Anfrage wurde erfasst.' });
+      // The action rendered the list into its response, and the push renders the new
+      // request fresh. A refresh beside the push would start a second navigation to
+      // the same route that takes over the push.
       router.push(`/anfragen/${result.request.id}`);
-      router.refresh();
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
     }
