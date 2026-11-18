@@ -89,7 +89,9 @@ function derivesFromState(argument, state, sourceCode) {
   if (previous?.type !== 'Identifier') return false;
   const parameter = sourceCode
     .getDeclaredVariables(argument)
-    .find((variable) => variable.name === previous.name && variable.defs.some((def) => def.type === 'Parameter'));
+    .find(
+      (variable) => variable.name === previous.name && variable.defs.some((def) => def.type === 'Parameter'),
+    );
   return (parameter?.references.length ?? 0) > 0;
 }
 

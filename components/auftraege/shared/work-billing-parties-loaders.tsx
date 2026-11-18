@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { memo } from 'react';
 
 import { downloadWorkBillingPartiesSection } from './work-billing-parties-download';
+import { WorkBillingPartiesSkeleton } from './work-billing-parties-skeleton';
 
 // The job, project and Servicefall pages load the office-only section in its
 // own chunk group, in the browser only. A page's entry chunks hold every
@@ -15,5 +16,8 @@ import { downloadWorkBillingPartiesSection } from './work-billing-parties-downlo
 // opens without a read of its own once its chunk is there. The office's job
 // list downloads the chunk on intent (work-billing-parties-download.ts).
 // The section reads and refreshes its own parties, so a render of the page
-// that hands it the same props leaves it alone (lab.office.job-open).
-export const WorkBillingPartiesSection = memo(dynamic(downloadWorkBillingPartiesSection, { ssr: false }));
+// that hands it the same props leaves it alone (lab.office.job-open). Until
+// the chunk is there, its skeleton holds the place and the busy signal.
+export const WorkBillingPartiesSection = memo(
+  dynamic(downloadWorkBillingPartiesSection, { ssr: false, loading: () => <WorkBillingPartiesSkeleton /> }),
+);
