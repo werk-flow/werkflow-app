@@ -288,7 +288,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^@\/(lib\/field-sync\/device\/today-(store|refresh)|components\/clock-state-provider|components\/realtime\/attention-count-provider)$/,
+                  /^@\/(lib\/field-sync\/device\/today-(store|refresh)|components\/clock-state-provider|components\/realtime\/attention-count-provider|components\/organization\/organization-context|components\/user\/user-profile-context)$/,
               },
               (args) => {
                 if (

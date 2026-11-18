@@ -150,14 +150,17 @@ test('a day with two Einsätze shows each one’s time, customer, place and next
   const first = rows.filter({ hasText: 'Heizung tauschen' });
   await expect(first).toContainText('08:00 Uhr');
   await expect(first).toContainText('Heizung tauschen');
-  await expect(first).toContainText('Hausverwaltung Lindenhof GmbH · Lindenstraße 4, 70173 Stuttgart');
+  await expect(first).toContainText('Hausverwaltung Lindenhof GmbH');
+  // The place has its own line that wraps, so a long customer name never hides it.
+  await expect(first.getByText('Lindenstraße 4, 70173 Stuttgart', { exact: true })).toBeVisible();
   // The next step is the first open instruction in the office's order.
   await expect(first).toContainText('Als Nächstes: Neue Therme setzen');
   await expect(first).toHaveAttribute('href', '/auftraege/AUF-2026-21');
 
   const second = rows.filter({ hasText: 'Wartung Gastherme' });
   await expect(second).toContainText('Ganztägig');
-  await expect(second).toContainText('Erika Musterfrau · Wohnung Musterfrau');
+  await expect(second.getByText('Erika Musterfrau', { exact: true })).toBeVisible();
+  await expect(second.getByText('Wohnung Musterfrau', { exact: true })).toBeVisible();
   await expect(second).toContainText('Alle Anweisungen erledigt');
   await expect(second).toHaveAttribute('href', '/auftraege/projekt/PRJ-2026-3/AUF-2026-22');
   // Every clock action refreshes the start page; a prefetch in view would read each work pack again.
@@ -194,6 +197,33 @@ test('a day the phone did not store shows no list and no empty day, until a refr
   await expect(einsaetze(page).getByRole('link')).toHaveCount(2);
 });
 
+test('a day the device holds for another organization of the person is not shown in this tab', async ({
+  page,
+}) => {
+  await openStart(page, { stored: TWO_EINSAETZE });
+  await expect(einsaetze(page).getByRole('link')).toHaveCount(2);
+  // Another tab claimed the device for the person's second organization; this tab still shows the first.
+  await page.evaluate(() =>
+    window.workerStartContract.setScope({
+      userId: '9b000000-0000-4000-8000-000000000001',
+      organizationId: '9b000000-0000-4000-8000-0000000000b2',
+      role: 'employee',
+    }),
+  );
+  await expect(einsaetze(page)).toHaveCount(0);
+  await expect(MAIN(page).getByText('Heizung tauschen')).toHaveCount(0);
+});
+
+test('a day that ended while the page stays open offers a reload instead of a skeleton', async ({ page }) => {
+  await openStart(page, { stored: TWO_EINSAETZE });
+  await expect(einsaetze(page).getByRole('link')).toHaveCount(2);
+  // Berlin midnight: the device's read deletes the ended day and answers none.
+  await page.evaluate(() => window.workerStartContract.save(null));
+  await expect(MAIN(page).getByText('Keine Einsätze mehr auf diesem Gerät')).toBeVisible();
+  await expect(MAIN(page).getByRole('button', { name: 'Neu laden' })).toBeVisible();
+  await expect(MAIN(page).getByTestId('worker-start-einsaetze-loading')).toHaveCount(0);
+});
+
 test('without signal and without a stored day the page says the day is not on the phone', async ({
   page,
 }) => {
@@ -213,6 +243,20 @@ test('a device that cannot be read shows its failure with a retry, never an empt
     window.workerStartContract.device = { stored: day };
   }, TWO_EINSAETZE);
   await failure.getByRole('button', { name: 'Erneut laden' }).click();
+  await expect(einsaetze(page).getByRole('link')).toHaveCount(2);
+});
+
+test('a failed re-read keeps the day it read before beside its failure and retry', async ({ page }) => {
+  await openStart(page, { stored: TWO_EINSAETZE });
+  await expect(einsaetze(page).getByRole('link')).toHaveCount(2);
+  // The next saved signal reads again, and the device fails this time.
+  await page.evaluate(() => {
+    window.workerStartContract.device = { fails: true };
+    window.workerStartContract.notifySaved();
+  });
+  await expect(MAIN(page).getByRole('alert')).toContainText(
+    'Deine Einsätze von heute konnten nicht gelesen werden',
+  );
   await expect(einsaetze(page).getByRole('link')).toHaveCount(2);
 });
 

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
+import { useOrganization } from '@/components/organization/organization-context';
+import { useUserProfile } from '@/components/user/user-profile-context';
 import { useClientRead } from '@/hooks/use-client-read';
 import { TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
@@ -32,7 +34,15 @@ export function useOnline(): boolean {
   );
 }
 
+/**
+ * The day the start page may show: the device's day, only while it belongs to this tab's person and
+ * employee organization. The device claim is browser-wide, so another tab's organization can own
+ * it; a lost membership or role changes the organization context and hides the day at once.
+ */
 export function useWorkerStartDay() {
+  const userId = useUserProfile().profile?.id ?? null;
+  const { activeOrg } = useOrganization();
+  const organizationId = activeOrg?.role === 'employee' ? activeOrg.orgId : null;
   // A sign-out or organization switch in another tab drops the shown day at once (a deps change).
   const [wipes, setWipes] = useState(0);
   const dropAndReadAgain = useCallback(() => setWipes((count) => count + 1), []);
@@ -46,7 +56,7 @@ export function useWorkerStartDay() {
         return { success: false as const, error: 'load_failed' };
       }
     },
-    deps: [wipes],
+    deps: [wipes, userId, organizationId],
     failureMessage: 'Der Speicher deines Geräts hat nicht geantwortet.',
   });
   const { reload } = day;
@@ -89,7 +99,9 @@ export function useWorkerStartDay() {
     };
   }, [dropAndReadAgain]);
 
-  const stored = day.data?.stored ?? null;
+  const read = day.data?.stored ?? null;
+  const stored =
+    read && read.snapshot.userId === userId && read.snapshot.organizationId === organizationId ? read : null;
   // Berlin midnight ends the day: the read then deletes it and answers none.
   useEffect(() => {
     if (!stored) return;
@@ -98,5 +110,15 @@ export function useWorkerStartDay() {
     return () => window.clearTimeout(timer);
   }, [stored, reload]);
 
-  return { stored, settled: day.data !== undefined, failure: day.failure };
+  // A day this page showed and the device no longer holds: it ended, and only the next start fetches a new one.
+  const scope = `${userId}:${organizationId}`;
+  const [shownFor, setShownFor] = useState<string | null>(null);
+  if (stored && shownFor !== scope) setShownFor(scope);
+
+  return {
+    stored,
+    settled: day.data !== undefined,
+    ended: !stored && day.data !== undefined && shownFor === scope,
+    failure: day.failure,
+  };
 }

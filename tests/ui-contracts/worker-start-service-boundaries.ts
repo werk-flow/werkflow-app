@@ -8,6 +8,8 @@ import type { AttentionCounts } from '@/lib/attention/types';
 import type { StoredToday } from '@/lib/field-sync/device/today-store';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 
+type Scope = { userId: string; organizationId: string; role: 'employee' | 'buero' };
+
 type ClockView = { state: LiveClockState | null; isReady: boolean; statusError: string | null };
 
 /** What the next device read answers: a stored day, none, or a failed storage. */
@@ -22,8 +24,12 @@ declare global {
       device: DeviceAnswer;
       /** A refresh of the start page saved a day: every `onTodaySaved` listener hears it. */
       save: (stored: StoredToday | null) => void;
+      /** Tells every `onTodaySaved` listener without changing what the device answers. */
+      notifySaved: () => void;
       setClock: (clock: ClockView) => void;
       setActionableCount: (count: number) => void;
+      /** The person and organization the tab's client contexts hold. */
+      setScope: (scope: Scope) => void;
     };
   }
 }
@@ -31,6 +37,11 @@ declare global {
 const savedListeners = new Set<() => void>();
 const changeListeners = new Set<() => void>();
 let clock: ClockView = { state: null, isReady: false, statusError: null };
+let scope: Scope = {
+  userId: '9b000000-0000-4000-8000-000000000001',
+  organizationId: '9b000000-0000-4000-8000-0000000000a1',
+  role: 'employee',
+};
 let counts: AttentionCounts = { actionableCount: 0, approvalsCount: 0, unreadNotificationCount: 0 };
 
 function changed(): void {
@@ -42,10 +53,17 @@ window.workerStartContract = {
   device: window.workerStartDevice ?? { stored: null },
   save(stored) {
     window.workerStartContract.device = { stored };
+    window.workerStartContract.notifySaved();
+  },
+  notifySaved() {
     for (const listener of savedListeners) listener();
   },
   setClock(next) {
     clock = next;
+    changed();
+  },
+  setScope(next) {
+    scope = next;
     changed();
   },
   setActionableCount(count) {
@@ -88,4 +106,13 @@ export function useAttentionCounts(): AttentionCounts {
 /** E7's refresh of the stored day; the spec saves the day through `window.workerStartContract.save`. */
 export function TodayRefreshOnStart(): null {
   return null;
+}
+
+export function useUserProfile(): { profile: { id: string } } {
+  return { profile: { id: useSyncExternalStore(subscribe, () => scope).userId } };
+}
+
+export function useOrganization(): { activeOrg: { orgId: string; role: Scope['role'] } } {
+  const current = useSyncExternalStore(subscribe, () => scope);
+  return { activeOrg: { orgId: current.organizationId, role: current.role } };
 }

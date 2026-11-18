@@ -4,7 +4,6 @@ import { memo, type ReactElement } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
 import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
-import { UsableContent } from '@/components/shared/usable-content';
 import { workerStartClockView } from './worker-start-clock';
 import { useOnline, useWorkerStartDay } from './worker-start-day';
 import {
@@ -35,9 +34,15 @@ export const WorkerStartContent = memo(function WorkerStartContent(): ReactEleme
   const day = useWorkerStartDay();
   const online = useOnline();
 
-  const sections = (
+  return (
     <div className="mx-auto max-w-3xl space-y-6" data-testid="worker-start">
-      <WorkerStartEinsaetze stored={day.stored} settled={day.settled} failure={day.failure} online={online} />
+      <WorkerStartEinsaetze
+        stored={day.stored}
+        settled={day.settled}
+        ended={day.ended}
+        failure={day.failure}
+        online={online}
+      />
       <WorkerStartClock>
         <ClockLines />
       </WorkerStartClock>
@@ -45,17 +50,5 @@ export const WorkerStartContent = memo(function WorkerStartContent(): ReactEleme
         <TaskCount />
       </WorkerStartTasks>
     </div>
-  );
-  // Usable once the Einsätze show: the day, its failure, or no day without signal.
-  if (day.stored)
-    return (
-      <UsableContent name="worker-start" count={day.stored.snapshot.assignments.length}>
-        {sections}
-      </UsableContent>
-    );
-  return day.failure !== null || (day.settled && !online) ? (
-    <UsableContent name="worker-start">{sections}</UsableContent>
-  ) : (
-    sections
   );
 });

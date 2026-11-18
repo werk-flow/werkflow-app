@@ -4,7 +4,9 @@ import { CalendarClock, ChevronRight, ListTodo, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 import { memo, type ReactElement, type ReactNode } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
+import { FIELD_WORKER_TARGET_CLASS } from '@/components/ui/field-worker-targets';
 import { ListRow } from '@/components/ui/list-row';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -33,14 +35,14 @@ function StartSection({ id, title, children }: { id: string; title: string; chil
 }
 
 function EinsatzRow({ row }: { row: WorkerStartRow }): ReactElement {
-  const facts = [row.customer, row.place].filter(Boolean).join(' · ');
   return (
-    <ListRow asChild interactive rowId={row.jobId}>
+    <ListRow asChild interactive rowId={row.jobId} className={FIELD_WORKER_TARGET_CLASS}>
       <Link href={row.href} prefetch={false}>
         <div className="min-w-0 space-y-0.5">
           <p className="text-sm font-medium tabular-nums">{row.time}</p>
           <p className="text-sm">{row.title}</p>
-          {facts && <p className="truncate text-xs text-muted-foreground">{facts}</p>}
+          {row.customer && <p className="truncate text-xs text-muted-foreground">{row.customer}</p>}
+          {row.place && <p className="text-xs wrap-anywhere text-muted-foreground">{row.place}</p>}
           {row.nextStep ? (
             <p className="text-xs">
               <span className="text-muted-foreground">Als Nächstes:</span> {row.nextStep}
@@ -62,16 +64,19 @@ function EinsatzRow({ row }: { row: WorkerStartRow }): ReactElement {
 export const WorkerStartEinsaetze = memo(function WorkerStartEinsaetze({
   stored,
   settled,
+  ended,
   failure,
   online,
 }: {
   stored: StoredToday | null;
   settled: boolean;
+  /** A day this page showed has ended; only the next start of the app fetches the new one. */
+  ended: boolean;
   failure: ReadFailure | null;
   online: boolean;
 }): ReactElement {
   let content: ReactNode;
-  if (failure)
+  if (failure && !stored)
     content = (
       <SectionError title="Deine Einsätze von heute konnten nicht gelesen werden" failure={failure} />
     );
@@ -93,7 +98,20 @@ export const WorkerStartEinsaetze = memo(function WorkerStartEinsaetze({
           ))}
         </ul>
       );
-  } else if (settled && !online)
+  } else if (ended)
+    content = (
+      <EmptyState
+        icon={CalendarClock}
+        title="Keine Einsätze mehr auf diesem Gerät"
+        description="Der Tag, den dein Gerät gespeichert hatte, ist vorbei. Lade die Seite neu, um deine Einsätze von heute zu holen."
+        action={
+          <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+            Neu laden
+          </Button>
+        }
+      />
+    );
+  else if (settled && !online)
     content = (
       <EmptyState
         icon={WifiOff}
@@ -111,6 +129,10 @@ export const WorkerStartEinsaetze = memo(function WorkerStartEinsaetze({
           <WifiOff className="size-4 shrink-0" aria-hidden="true" />
           Offline · Stand {formatBerlinTime(stored.confirmedAt)}
         </p>
+      )}
+      {/* A failed re-read keeps the day it read before, with the failure and its retry above it. */}
+      {failure && stored && (
+        <SectionError title="Deine Einsätze von heute konnten nicht gelesen werden" failure={failure} />
       )}
       {content}
     </StartSection>
@@ -152,7 +174,7 @@ export function clockLines(view: WorkerStartClockView): ReactElement {
 export function WorkerStartClock({ children }: { children: ReactNode }): ReactElement {
   return (
     <StartSection id="worker-start-clock" title="Zeiterfassung">
-      <ListRow asChild interactive>
+      <ListRow asChild interactive className={FIELD_WORKER_TARGET_CLASS}>
         <Link href="/zeiterfassung" prefetch={false} data-testid="worker-start-clock">
           {children}
           <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -171,7 +193,7 @@ export function taskCount(count: number): ReactElement | null {
 export function WorkerStartTasks({ children }: { children: ReactNode }): ReactElement {
   return (
     <StartSection id="worker-start-tasks" title="Aufgaben">
-      <ListRow asChild interactive>
+      <ListRow asChild interactive className={FIELD_WORKER_TARGET_CLASS}>
         <Link href="/aufgaben" prefetch={false} data-testid="worker-start-tasks">
           <span className="flex min-w-0 items-center gap-2 text-sm">
             <ListTodo className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
