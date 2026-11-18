@@ -33,6 +33,35 @@ export async function settled(scope: Scope, options: { timeout?: number } = {}):
 }
 
 /**
+ * Waits until React hydrated every element of the page. Server HTML is not
+ * the settled page: a client-only control stays disabled until hydration
+ * (`hooks/use-hydrated.ts`), and a Suspense boundary hydrates after the shell,
+ * later still on a slow machine, without any busy signal. React marks each
+ * element it owns with its fiber key, so an element without one is server HTML
+ * React has not reached. Elements that never belong to React are left out:
+ * the scripts and styles Next.js streams, and its route announcer.
+ */
+export async function hydrated(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const unhydrated: string[] = [];
+          for (const element of document.body.querySelectorAll('*')) {
+            if (element.closest('script, style, link, template, noscript, next-route-announcer')) continue;
+            if (Object.keys(element).some((key) => key.startsWith('__reactFiber$'))) continue;
+            unhydrated.push(
+              `<${element.tagName.toLowerCase()}> ${(element.textContent ?? '').trim().slice(0, 60)}`,
+            );
+          }
+          return unhydrated.slice(0, 5);
+        }),
+      { message: 'React hydrated every element of the page' },
+    )
+    .toEqual([]);
+}
+
+/**
  * Waits until the app shell hydrated and settled. The realtime provider marks
  * `<html>` from an effect once its channel joined, so server HTML never
  * carries the mark; after the root hydrated, React replays a click on content
