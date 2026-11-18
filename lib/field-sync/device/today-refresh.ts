@@ -36,6 +36,33 @@ let holder: TodayHolder | null = null;
 let reportFailure: TodayStorageFailure | null = null;
 let running = false;
 let again = false;
+const savedListeners = new Set<() => void>();
+
+/**
+ * Calls `listener` after each refresh in this tab that saved a day for the current claim, a
+ * confirmed one included, since that renews its „Stand“. The listener reads the day again with
+ * `readTodayOnDevice()`. Returns the unsubscribe.
+ */
+export function onTodaySaved(listener: () => void): () => void {
+  // An entry of its own, so the same function subscribed twice is two subscriptions.
+  const entry = (): void => listener();
+  savedListeners.add(entry);
+  return () => {
+    savedListeners.delete(entry);
+  };
+}
+
+function tellTodaySaved(): void {
+  for (const listener of [...savedListeners]) {
+    try {
+      listener();
+    } catch (error: unknown) {
+      // best-effort: the day is saved either way; one reader's fault must not stop the others or
+      // show the storage failure banner, so it goes to the log only.
+      logError('onTodaySaved: listener failed', error);
+    }
+  }
+}
 
 function refreshNow(): void {
   const current = holder;
@@ -48,7 +75,9 @@ function refreshNow(): void {
   running = true;
   void refreshTodayOnDevice(current)
     .then(async (outcome) => {
-      if (outcome === 'saved' || outcome === 'confirmed') await askForPersistence(new Date());
+      if (outcome !== 'saved' && outcome !== 'confirmed') return;
+      tellTodaySaved();
+      await askForPersistence(new Date());
     })
     .catch((error: unknown) => {
       // A full disk (`QuotaExceededError`) or a refused storage: the person must know before the signal goes.

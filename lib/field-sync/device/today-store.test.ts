@@ -1,9 +1,9 @@
 import 'fake-indexeddb/auto';
 
-import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, jest, spyOn, test } from 'bun:test';
 
 import type { FieldSyncToday } from '@/lib/field-sync/today-snapshot';
-import { dropTodayClaim, keepTodayFresh } from './today-refresh';
+import { dropTodayClaim, keepTodayFresh, onTodaySaved } from './today-refresh';
 import { claimToday, refreshTodayOnDevice, type TodayHolder } from './today-sync';
 import { readTodayOnDevice, saveTodayOnDevice } from './today-store';
 import {
@@ -703,5 +703,97 @@ describe('keeping the day fresh while the app is open', () => {
     }
     retries[0]?.();
     await until(async () => (await readTodayOnDevice(MORNING))?.snapshot.version === 'v1');
+  });
+
+  describe('telling the start page that a day was saved (onTodaySaved)', () => {
+    const unsubscribes: Array<() => void> = [];
+    function listen(listener: () => void = () => undefined): { calls: number; stop: () => void } {
+      const seen = { calls: 0, stop: (): void => undefined };
+      seen.stop = onTodaySaved(() => {
+        seen.calls += 1;
+        listener();
+      });
+      unsubscribes.push(seen.stop);
+      return seen;
+    }
+
+    afterEach(() => {
+      for (const unsubscribe of unsubscribes.splice(0)) unsubscribe();
+    });
+
+    test('each refresh that saves a day calls the listener once', async () => {
+      installBrowser(async (organizationId) => Response.json(snapshot({ organizationId })));
+      const seen = listen();
+      keepTodayFresh(holder, () => undefined, todayWipeGeneration());
+      await until(() => seen.calls === 1);
+      keepTodayFresh(holder, () => undefined, todayWipeGeneration());
+      await until(() => seen.calls === 2);
+      await letQueuedWorkRun();
+      expect(seen.calls).toBe(2);
+      expect((await readTodayOnDevice(MORNING))?.snapshot.version).toBe('v1');
+    });
+
+    test('a refresh without signal saves nothing and calls no listener', async () => {
+      installBrowser(() => Promise.reject(new TypeError('Failed to fetch')));
+      const seen = listen();
+      keepTodayFresh(holder, () => undefined, todayWipeGeneration());
+      await until(() => requested.length === 1);
+      await letQueuedWorkRun();
+      expect(seen.calls).toBe(0);
+    });
+
+    test('a refresh whose claim was dropped meanwhile calls no listener', async () => {
+      let release = (): void => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      installBrowser(async (organizationId) => {
+        await held;
+        return Response.json(snapshot({ organizationId }));
+      });
+      const seen = listen();
+      keepTodayFresh(holder, () => undefined, todayWipeGeneration());
+      await until(() => requested.length === 1);
+      dropTodayClaim();
+      release();
+      await letQueuedWorkRun();
+      expect(seen.calls).toBe(0);
+      expect(await readTodayOnDevice(MORNING)).toBeNull();
+    });
+
+    test('an unsubscribed listener is not called again', async () => {
+      installBrowser(async (organizationId) => Response.json(snapshot({ organizationId })));
+      const kept = listen();
+      const seen = listen();
+      keepTodayFresh(holder, () => undefined, todayWipeGeneration());
+      await until(() => seen.calls === 1);
+      seen.stop();
+      keepTodayFresh(holder, () => undefined, todayWipeGeneration());
+      await until(() => kept.calls === 2);
+      await letQueuedWorkRun();
+      expect(seen.calls).toBe(1);
+    });
+
+    test('a listener that throws stops neither the next listener nor the refresh, and is logged, not reported', async () => {
+      installBrowser(async (organizationId) => Response.json(snapshot({ organizationId })));
+      const logged = spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        listen(() => {
+          throw new Error('broken reader');
+        });
+        const next = listen();
+        const failures: unknown[] = [];
+        keepTodayFresh(holder, (retry) => failures.push(retry), todayWipeGeneration());
+        await until(() => next.calls === 1);
+        await letQueuedWorkRun();
+        expect(failures).toEqual([]);
+        expect(logged.mock.calls.map(([label]) => label)).toContain('onTodaySaved: listener failed');
+        // The refresh still runs on: the next trigger saves again and tells every listener.
+        keepTodayFresh(holder, () => undefined, todayWipeGeneration());
+        await until(() => next.calls === 2);
+      } finally {
+        logged.mockRestore();
+      }
+    });
   });
 });
