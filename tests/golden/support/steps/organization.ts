@@ -4,7 +4,7 @@ import { getOrganizationByName, type PersistedOrganization } from '../db/shared'
 import { confirmTestUserEmail } from '../seed';
 import { hydratedAndSettled, settledBeforeTimeout } from './interaction';
 import { openMemberDetailFromList } from './personnel';
-import { listEntry, openDialogWithRetry, pendingRow, SHARED_COPY, visibleText } from './shared';
+import { listEntry, openDialogWithRetry, openMenuItem, pendingRow, SHARED_COPY, visibleText } from './shared';
 
 /** Copy of accounts, organizations, membership and the member list. */
 const ORGANIZATION_COPY = {
@@ -499,18 +499,13 @@ function signOutMenuItem(page: Page): Locator {
 
 /**
  * Opens the account menu and returns its „Abmelden“ item; on a phone the menu
- * sits in the menu sheet. The press waits until the shell hydrated and settled,
- * so React owns the trigger, and is never repeated: the open menu hides the
- * rest of the page from assistive technology, its trigger included, so a
- * second press on a menu that opened late finds no button.
+ * sits in the menu sheet. One press after the shell settled, never a second:
+ * the open menu hides its trigger from assistive technology, so a re-press on
+ * a menu that opened late finds no button.
  */
 export async function openAccountMenu(page: Page): Promise<Locator> {
   await showOrganizationSwitcher(page);
-  await hydratedAndSettled(page);
-  await accountMenuButton(page).click();
-  const signOut = signOutMenuItem(page);
-  await expect(signOut, 'The account menu opens on the one press').toBeVisible();
-  return signOut;
+  return openMenuItem(accountMenuButton(page), signOutMenuItem(page));
 }
 
 export async function signOutViaUi(page: Page): Promise<void> {
