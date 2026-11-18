@@ -43,19 +43,18 @@ test('a filter commit that keeps the query does not overwrite the text typed mea
   await commitRequest(page, 0);
   await expect(searchField(page)).toHaveValue('neu');
   await searchField(page).press('Enter');
-  expect(await page.evaluate(() => window.listNavigationContract.requests)).toEqual([
-    '/dokumente?view=all&q=alt',
-    '/dokumente?view=all&q=neu',
-  ]);
+  await expect
+    .poll(() => page.evaluate(() => window.listNavigationContract.requests))
+    .toEqual(['/dokumente?view=all&q=alt', '/dokumente?view=all&q=neu']);
 });
 
 test('a search submitted while a filter change loads keeps that filter change', async ({ page }) => {
   await chooseAllLinks(page);
   await searchField(page).fill('neu');
   await searchField(page).press('Enter');
-  expect(await page.evaluate(() => window.listNavigationContract.requests[1])).toBe(
-    '/dokumente?view=all&q=neu',
-  );
+  await expect
+    .poll(() => page.evaluate(() => window.listNavigationContract.requests[1]))
+    .toBe('/dokumente?view=all&q=neu');
   await commitRequest(page, 0);
   await commitRequest(page, 1);
   await expect(searchField(page)).toHaveValue('neu');
