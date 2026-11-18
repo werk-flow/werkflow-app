@@ -430,6 +430,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'inventory_article_prices_concurrency.sql',
       'inventory_supplier_catalog.sql',
       'inventory_supplier_catalog_search.sql',
+      'inventory_supplier_catalog_prices.sql',
       'inventory_item_units.sql',
       'inventory_item_units_concurrency.sql',
       'job_material_use.sql',

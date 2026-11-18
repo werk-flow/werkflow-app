@@ -320,6 +320,11 @@ jobs:
       actions: read
     strategy:
       fail-fast: false
+      # A pull request's run holds at most four shards at once, so a few PRs with large selections
+      # cannot take all of the account's runners (67 jobs ran at once on 2026-11-14,
+      # werk-flow/werkflow-planning#294). A larger selection runs in two rounds. The queue's run,
+      # a push to main and a full run start every shard at once: the queue and the release wait on them.
+      max-parallel: ${{ github.event_name == 'pull_request' && 4 || 8 }}
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:

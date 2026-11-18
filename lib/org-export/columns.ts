@@ -107,6 +107,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   inventory_supplier_catalog_articles: 'Lager_Großhandelskatalog',
   inventory_supplier_catalog_imports: 'Lager_Großhandelsimporte',
   inventory_supplier_rebate_groups: 'Lager_Rabattgruppen',
+  inventory_supplier_rebates: 'Lager_Rabatte',
   inventory_suppliers: 'Lager_Lieferanten',
   invoice_events: 'Rechnungen_Verlauf',
   invoice_lines: 'Rechnungen_Positionen',
