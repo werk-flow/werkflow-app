@@ -88,14 +88,28 @@ create function pg_temp.fill(p_name text) returns integer language sql as $$
     '{"lineNetCents":7300,"taxCents":1807,"grossCents":9107}')
 $$;
 select pg_temp.fill(name) from unnest(array['cancelled', 'corrected', 'kept', 'draft']) as name;
-select public.issue_invoice('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
-  pg_temp.id(name), 2, gen_random_uuid(),
-  '{"organizationName":"Haustechnik Sonnenberg","profile":{"companyName":"Haustechnik Sonnenberg GmbH"},
-    "files":{"logo":{"path":"38080000-0000-4000-8000-000000000010/briefpapier/l/u/logo","mimeType":"image/png"},
-             "stationery_first":null,"stationery_following":null},
-    "buyer":{"name":"Hausverwaltung Lindenhof GmbH","address":{"lines":["Hofweg 1"],"postalCode":"10117",
-             "city":"Berlin","countryCode":"DE"}}}')
-from unnest(array['cancelled', 'corrected', 'kept']) as name;
+-- Issues under the series' next number and the Berlin day, as the server checks it.
+create function pg_temp.issue(p_name text, p_version integer, p_snapshot jsonb) returns jsonb language sql as $$
+  select public.issue_invoice('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
+    pg_temp.id(p_name), p_version, gen_random_uuid(), p_snapshot,
+    public.get_invoice_settings('38080000-0000-4000-8000-000000000010') ->> 'nextInvoiceNumber',
+    (now() at time zone 'Europe/Berlin')::date)
+$$;
+-- One statement per issue, so each reads the number the one before left.
+do $$
+declare
+  v_name text;
+begin
+  foreach v_name in array array['cancelled', 'corrected', 'kept'] loop
+    perform pg_temp.issue(v_name, 2,
+      '{"organizationName":"Haustechnik Sonnenberg","profile":{"companyName":"Haustechnik Sonnenberg GmbH"},
+      "files":{"logo":{"path":"38080000-0000-4000-8000-000000000010/briefpapier/l/u/logo","mimeType":"image/png"},
+      "stationery_first":null,"stationery_following":null},
+      "buyer":{"name":"Hausverwaltung Lindenhof GmbH","address":{"lines":["Hofweg 1"],"postalCode":"10117",
+      "city":"Berlin","countryCode":"DE"}}}');
+  end loop;
+end;
+$$;
 
 create temp table issued on commit drop as
 select invoice.* from public.invoices invoice
@@ -335,7 +349,9 @@ begin
     tax_category, tax_rate_basis_points, net_cents)
   values ('38080000-0000-4000-8000-000000000010', v_storno, 1, 'Probe', 1, 'piece', 0, 'S', 1900, 0);
   perform public.issue_invoice('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
-    v_storno, 1, gen_random_uuid(), (select issue_snapshot from issued where id = pg_temp.id('kept')));
+    v_storno, 1, gen_random_uuid(), (select issue_snapshot from issued where id = pg_temp.id('kept')),
+    public.get_invoice_settings('38080000-0000-4000-8000-000000000010') ->> 'nextInvoiceNumber',
+    (now() at time zone 'Europe/Berlin')::date);
   perform set_config('app.invoice_cancel', '', true);
 end;
 $$;
@@ -367,8 +383,7 @@ select public.save_invoice_draft('38080000-0000-4000-8000-000000000002', '380800
   '[{"name":"Gutschrift Anfahrt","description":"","quantity":"-1","unit":"flat_rate","unitPriceCents":3500,
      "priceQuantity":1,"taxCategory":"S","taxRateBasisPoints":1900,"netCents":-3500}]',
   '{"lineNetCents":-3500,"taxCents":-665,"grossCents":-4165}');
-select public.issue_invoice('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
-  pg_temp.id('credit'), 2, gen_random_uuid(), (select issue_snapshot from issued where id = pg_temp.id('kept')));
+select pg_temp.issue('credit', 2, (select issue_snapshot from issued where id = pg_temp.id('kept')));
 select pg_temp.expect_refusal('cancel a credit', format(
   'select pg_temp.cancel(%L, %L, ''credit'', gen_random_uuid(), ''Falsch'', false)',
   '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010'), 'invoice_not_cancellable');

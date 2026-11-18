@@ -116,6 +116,13 @@ async function seed(world: TestWorld, state: 'issued' | 'cancelled'): Promise<In
       p_totals: { lineNetCents: 10800, taxCents: 2052, grossCents: 12852 },
     })
     .throwOnError();
+  // Each function issues only the number and day the action checked: the series' next, the Berlin day.
+  const nextNumber = async () => {
+    const { data: series } = await admin
+      .rpc('get_invoice_settings', { p_organization_id: orgId })
+      .throwOnError();
+    return stringField(series, 'nextInvoiceNumber');
+  };
   const { data: issued } = await admin
     .rpc('issue_invoice', {
       p_actor_id: actor,
@@ -124,6 +131,8 @@ async function seed(world: TestWorld, state: 'issued' | 'cancelled'): Promise<In
       p_expected_version: 2,
       p_attempt_key: randomUUID(),
       p_snapshot: SNAPSHOT,
+      p_expected_number: await nextNumber(),
+      p_expected_issue_date: getBusinessTodayIso(),
     })
     .throwOnError();
   const originalNumber = stringField(issued, 'invoiceNumber');
@@ -131,10 +140,6 @@ async function seed(world: TestWorld, state: 'issued' | 'cancelled'): Promise<In
   if (state === 'issued') {
     return { originalId: invoiceId, originalNumber, stornoId: null, stornoNumber: null, correctionId: null };
   }
-  // The Stornorechnung takes the series' next number on the Berlin day, as the action checks it.
-  const { data: series } = await admin
-    .rpc('get_invoice_settings', { p_organization_id: orgId })
-    .throwOnError();
   const { data: cancelled } = await admin
     .rpc('cancel_invoice', {
       p_actor_id: actor,
@@ -143,7 +148,7 @@ async function seed(world: TestWorld, state: 'issued' | 'cancelled'): Promise<In
       p_attempt_key: randomUUID(),
       p_reason: 'Falscher Rechnungsempfänger',
       p_correct: true,
-      p_expected_number: stringField(series, 'nextInvoiceNumber'),
+      p_expected_number: await nextNumber(),
       p_expected_issue_date: getBusinessTodayIso(),
     })
     .throwOnError();

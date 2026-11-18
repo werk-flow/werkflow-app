@@ -170,7 +170,8 @@ declare
   v_correction_id uuid;
   v_parties public.work_billing_parties;
   v_settings public.invoice_settings;
-  v_year integer := extract(year from (now() at time zone 'Europe/Berlin'))::integer;
+  v_issue_date date;
+  v_year integer;
   v_answer jsonb;
 begin
   if p_actor_id is null or p_organization_id is null or p_invoice_id is null or p_attempt_key is null
@@ -199,7 +200,10 @@ begin
   select * into v_settings from public.invoice_settings settings
   where settings.organization_id = p_organization_id
   for update;
-  if (now() at time zone 'Europe/Berlin')::date is distinct from p_expected_issue_date
+  -- The day once the lock is held, as issue_invoice reads it, not when the transaction began.
+  v_issue_date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
+  v_year := extract(year from v_issue_date)::integer;
+  if v_issue_date is distinct from p_expected_issue_date
     or app_private.format_invoice_number(v_settings, v_year, app_private.next_invoice_sequence(v_settings, v_year))
       is distinct from p_expected_number
   then
@@ -236,7 +240,8 @@ begin
     jsonb_build_object('cancelsInvoiceId', v_original.id), p_actor_id, gen_random_uuid()
   );
   v_issued := public.issue_invoice(
-    p_actor_id, p_organization_id, v_storno_id, 1, gen_random_uuid(), v_original.issue_snapshot
+    p_actor_id, p_organization_id, v_storno_id, 1, gen_random_uuid(), v_original.issue_snapshot,
+    p_expected_number, p_expected_issue_date
   );
 
   update public.invoices invoice set status = 'storniert'

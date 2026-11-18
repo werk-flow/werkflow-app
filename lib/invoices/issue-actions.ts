@@ -15,15 +15,17 @@ import {
 import { officeCaller } from './caller';
 import type { InvoiceCheckFailure, IssueSnapshot } from './issue-model';
 import { completenessFindings, snapshotOf } from './issue-sources';
-import { fileIssuedOriginal, findingsBeforeNumber } from './original';
+import { fileIssuedOriginal, issueUnderCheckedNumber, type NextIssue } from './original';
 import { readIssuedInvoice } from './reads';
 
 // „Ausstellen“ (supabase/migrations/20261216100000_issue_invoices_with_gapless_numbers.sql).
 // Order of work: the server builds the invoice from the draft and one
-// company-profile snapshot and runs the EN 16931 rules under a placeholder
-// number; a refusal answers the fields at fault and the draft stays a draft.
-// Then issue_invoice assigns the number and freezes the invoice in one
-// transaction. Then the original is rendered, stored, registered and filed;
+// company-profile snapshot and runs the EN 16931 rules and the renderer under
+// the series' next number and today's date; a refusal answers the fields at
+// fault and the draft stays a draft. Then issue_invoice assigns exactly that
+// number and date and freezes the invoice in one transaction, or refuses when
+// another issue took the number meanwhile, and the server checks again. Then
+// the original is rendered, stored, registered and filed;
 // if that fails the invoice stays issued with its original pending, and
 // „Beleg erstellen“ renders the same bytes again.
 
@@ -34,6 +36,7 @@ const refusal = writeRefusalFor(
     'invoice_not_draft',
     'stale_version',
     'invoice_incomplete',
+    'invoice_number_moved',
   ]),
 );
 
@@ -64,7 +67,10 @@ export async function issueInvoice(rawInput: IssueInvoiceInput): Promise<IssueIn
     const invoice = await readIssuedInvoice(context.orgId, input.invoiceId);
     if (!invoice) return { success: false, error: 'invoice_not_found' };
     // Issued already: the function answers a retry of the same press with its first issue, else refuses.
-    if (invoice.issue) return await issueChecked(admin, context, input, invoice.issue.snapshot);
+    if (invoice.issue) {
+      const { snapshot, invoiceNumber, issueDate } = invoice.issue;
+      return await issueChecked(admin, context, input, snapshot, { number: invoiceNumber, issueDate });
+    }
     if (invoice.status !== 'entwurf') return { success: false, error: 'invoice_not_draft' };
     if (invoice.version !== input.expectedVersion) return { success: false, error: 'stale_version' };
 
@@ -72,23 +78,22 @@ export async function issueInvoice(rawInput: IssueInvoiceInput): Promise<IssueIn
     if (missing.length > 0) return { success: false, error: 'invoice_check_failed', findings: missing };
     const snapshot = await snapshotOf(admin, context, invoice);
     if (!snapshot) return { success: false, error: 'load_failed' };
-    const findings = await findingsBeforeNumber(context.orgId, invoice, snapshot);
-    if (!findings) return { success: false, error: 'invoice_incomplete' };
-    if (findings.length > 0) return { success: false, error: 'invoice_check_failed', findings };
-
-    return await issueChecked(admin, context, input, snapshot);
+    return await issueUnderCheckedNumber(context.orgId, invoice, snapshot, (next) =>
+      issueChecked(admin, context, input, snapshot, next),
+    );
   } catch (error) {
     logError('issueInvoice: unexpected error', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-/** Assigns the number and freezes the checked draft, then files its original. */
+/** Assigns the checked number and date and freezes the checked draft, then files its original. */
 async function issueChecked(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   context: { userId: string; orgId: string },
   input: { invoiceId: string; expectedVersion: number; attemptKey: string },
   snapshot: IssueSnapshot,
+  checked: NextIssue,
 ): Promise<IssueInvoiceResult> {
   const { data, error } = await admin.rpc('issue_invoice', {
     p_actor_id: context.userId,
@@ -97,6 +102,8 @@ async function issueChecked(
     p_expected_version: input.expectedVersion,
     p_attempt_key: input.attemptKey,
     p_snapshot: toJson(snapshot),
+    p_expected_number: checked.number,
+    p_expected_issue_date: checked.issueDate,
   });
   const issued = issuedSchema.safeParse(data);
   if (error || !issued.success) return refusal(error, 'issue_failed', 'issueInvoice: issue_invoice failed');

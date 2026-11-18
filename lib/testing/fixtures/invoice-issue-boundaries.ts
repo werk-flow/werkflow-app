@@ -4,9 +4,11 @@
 // office reads what to fix; a checked draft is issued under the caller's own
 // organization with the snapshot it was checked with, and its original is
 // rendered, stored, registered and filed, with the same bytes on a retry.
+// The check runs under exactly the number and day the function then issues,
+// and again under the new number when another issue took that one first.
 // supabase/tests/invoice_issue.sql proves the functions.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 import {
@@ -38,6 +40,23 @@ mock.module('@/lib/storage/r2', () => ({
   },
   readStorageObject: async () => {
     throw new Error('storage_object_missing');
+  },
+}));
+
+// The day every issue below happens, in Berlin.
+const today = '2037-11-20';
+setSystemTime(new Date(`${today}T10:00:00.000Z`));
+
+// The invoice number and Rechnungsdatum (CII format 102) of every XML the EN 16931 check read, in order.
+const checkedNumbers: string[] = [];
+// Captured before the mock, which rebinds the module's exports to the wrapper.
+const { checkEn16931 } = await import('@/lib/invoicing/check-en16931');
+mock.module('@/lib/invoicing/check-en16931', () => ({
+  checkEn16931: (xml: string) => {
+    const number = /<rsm:ExchangedDocument>\s*<ram:ID>([^<]*)<\/ram:ID>/.exec(xml)?.[1] ?? '';
+    const date = /<ram:IssueDateTime>\s*<udt:DateTimeString format="102">(\d{8})</.exec(xml)?.[1] ?? '';
+    checkedNumbers.push(`${number} ${date}`);
+    return checkEn16931(xml);
   },
 }));
 
@@ -93,6 +112,23 @@ const draft = {
   ],
 };
 const issueInput = { invoiceId, expectedVersion: 2, attemptKey };
+/** The series as get_invoice_settings answers it for the caller's organization; nextInvoiceNumber moves on each issue. */
+let nextInvoiceNumber = 'RE-2037-001';
+const settingsOf = (organizationId: unknown) =>
+  organizationId === ORGANIZATION_A
+    ? {
+        version: 1,
+        numberPrefix: 'RE-',
+        numberWithYear: true,
+        numberMinDigits: 3,
+        nextNumber: Number(nextInvoiceNumber.slice(-3)),
+        nextInvoiceNumber,
+        numbersFixed: false,
+        paymentDueDays: 14,
+        discountDays: null,
+        discountBasisPoints: null,
+      }
+    : null;
 
 // A field worker reaches nothing.
 signInAs(world, 'employee');
@@ -154,10 +190,14 @@ await assertRefused(
 );
 
 // Another organization's invoice reads as none: the one read, no write.
-world.rpc = ({ name, args }) =>
-  name === 'get_invoice' && args.p_invoice_id === invoiceId && args.p_organization_id === ORGANIZATION_A
+world.rpc = ({ name, args }) => {
+  if (name === 'get_invoice_settings') return { data: settingsOf(args.p_organization_id), error: null };
+  return name === 'get_invoice' &&
+    args.p_invoice_id === invoiceId &&
+    args.p_organization_id === ORGANIZATION_A
     ? { data: draft, error: null }
     : { data: null, error: null };
+};
 await assertRefused(
   world,
   [
@@ -185,9 +225,11 @@ assert.ok(
 );
 assert.deepEqual(
   world.rpcCalls.map((call) => call.name),
-  ['get_invoice'],
+  ['get_invoice', 'get_invoice_settings'],
   'a refused draft reached the issue',
 );
+// The rules read the draft under the number it would take, never under a placeholder.
+assert.deepEqual(checkedNumbers, ['RE-2037-001 20371120']);
 
 // A draft without a readable recipient address is refused before the rules.
 world.rpc = ({ name }) =>
@@ -207,41 +249,90 @@ world.tables.company_document_profiles = [
   }),
 ];
 let issued: Record<string, unknown> | null = null;
+// How often issue_invoice answers that another issue took the checked number first; each move takes it.
+let numberMoves = 0;
 const documentId = '96100000-0000-4000-8000-000000000001';
 world.rpc = ({ name, args }) => {
   if (name === 'get_invoice') return { data: issued ?? draft, error: null };
+  if (name === 'get_invoice_settings') return { data: settingsOf(args.p_organization_id), error: null };
   if (name === 'issue_invoice') {
+    if (issued)
+      return {
+        data: { invoiceNumber: issued.invoiceNumber, issueDate: issued.issueDate, version: 3 },
+        error: null,
+      };
+    if (numberMoves > 0) {
+      numberMoves -= 1;
+      nextInvoiceNumber = `RE-2037-00${Number(nextInvoiceNumber.slice(-1)) + 1}`;
+      return { data: null, error: { message: 'invoice_number_moved' } };
+    }
     issued = {
       ...draft,
       status: 'ausgestellt',
       version: 3,
-      invoiceNumber: 'RE-2037-001',
-      issueDate: '2037-11-20',
+      invoiceNumber: args.p_expected_number,
+      issueDate: args.p_expected_issue_date,
       issueSnapshot: args.p_snapshot,
     };
-    return { data: { invoiceNumber: 'RE-2037-001', issueDate: '2037-11-20', version: 3 }, error: null };
+    return {
+      data: { invoiceNumber: args.p_expected_number, issueDate: args.p_expected_issue_date, version: 3 },
+      error: null,
+    };
   }
   if (name === 'register_invoice_original') {
     return { data: { documentId, replay: false, contentHash: args.p_content_hash }, error: null };
   }
   return { data: null, error: null };
 };
+// Another issue took the checked number three times: the third move is answered, not checked again for ever.
+numberMoves = 3;
 world.rpcCalls.length = 0;
+assert.deepEqual(await issueInvoice(issueInput), { success: false, error: 'invoice_number_moved' });
+assert.equal(world.rpcCalls.filter((call) => call.name === 'issue_invoice').length, 3);
+nextInvoiceNumber = 'RE-2037-001';
+
+// Another issue took the checked number twice: each time the draft is checked again under the new number.
+numberMoves = 2;
+world.rpcCalls.length = 0;
+checkedNumbers.length = 0;
 assert.deepEqual(await issueInvoice(issueInput), {
   success: true,
-  invoiceNumber: 'RE-2037-001',
+  invoiceNumber: 'RE-2037-003',
   originalFiled: true,
 });
 assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_organization_id, call.args.p_actor_id ?? null]),
   [
     ['get_invoice', ORGANIZATION_A, null],
+    ['get_invoice_settings', ORGANIZATION_A, null],
+    ['issue_invoice', ORGANIZATION_A, CALLER_ID],
+    ['get_invoice_settings', ORGANIZATION_A, null],
+    ['issue_invoice', ORGANIZATION_A, CALLER_ID],
+    ['get_invoice_settings', ORGANIZATION_A, null],
     ['issue_invoice', ORGANIZATION_A, CALLER_ID],
     ['get_invoice', ORGANIZATION_A, null],
     ['register_invoice_original', ORGANIZATION_A, CALLER_ID],
   ],
 );
-const issueArgs = world.rpcCalls[1]?.args;
+// The function issues exactly the number and day the draft was checked under; the original reads the same.
+assert.deepEqual(
+  world.rpcCalls
+    .filter((call) => call.name === 'issue_invoice')
+    .map((call) => [call.args.p_expected_number, call.args.p_expected_issue_date]),
+  [
+    ['RE-2037-001', today],
+    ['RE-2037-002', today],
+    ['RE-2037-003', today],
+  ],
+);
+// Each check read the number and Rechnungsdatum its issue_invoice call got; the last is the original's.
+assert.deepEqual(checkedNumbers, [
+  'RE-2037-001 20371120',
+  'RE-2037-002 20371120',
+  'RE-2037-003 20371120',
+  'RE-2037-003 20371120',
+]);
+const issueArgs = world.rpcCalls[6]?.args;
 assert.equal(issueArgs?.p_expected_version, 2);
 assert.equal(issueArgs?.p_attempt_key, attemptKey);
 assert.deepEqual(JSON.parse(JSON.stringify(issueArgs?.p_snapshot)).buyer, {
@@ -250,20 +341,21 @@ assert.deepEqual(JSON.parse(JSON.stringify(issueArgs?.p_snapshot)).buyer, {
 });
 const [first] = stored;
 if (!first) throw new Error('the issue stored no original');
-assert.ok(first.path.startsWith(`${ORGANIZATION_A}/`) && first.path.endsWith('/Rechnung-RE-2037-001.pdf'));
+assert.ok(first.path.startsWith(`${ORGANIZATION_A}/`) && first.path.endsWith('/Rechnung-RE-2037-003.pdf'));
 const xml = await readEmbeddedInvoiceXml(first.body);
-assert.ok(xml.includes('<ram:ID>RE-2037-001</ram:ID>') && xml.includes('DE123456789'), xml);
+assert.ok(xml.includes('<ram:ID>RE-2037-003</ram:ID>') && xml.includes('DE123456789'), xml);
 const { text } = await extractText(await getDocumentProxy(first.body.slice()), { mergePages: true });
-assert.ok(text.includes('Rechnung RE-2037-001') && text.includes('Hofweg 1') && text.includes('Std'), text);
+assert.ok(text.includes('Rechnung RE-2037-003') && text.includes('Hofweg 1') && text.includes('Std'), text);
 
 // A retried press after a lost answer gets the first issue's number from the function.
 world.rpcCalls.length = 0;
 assert.deepEqual(await issueInvoice(issueInput), {
   success: true,
-  invoiceNumber: 'RE-2037-001',
+  invoiceNumber: 'RE-2037-003',
   originalFiled: true,
 });
 assert.equal(world.rpcCalls[1]?.name, 'issue_invoice');
+assert.equal(world.rpcCalls[1]?.args.p_expected_number, 'RE-2037-003');
 
 // „Beleg erstellen“ after a lost registration renders the same bytes again; a filed original is left alone.
 stored.length = 0;

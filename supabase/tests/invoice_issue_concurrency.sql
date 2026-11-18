@@ -1,10 +1,11 @@
--- Two issues that run at the same time get two consecutive numbers, and an
--- issue whose transaction rolls back uses none
+-- Two issues checked under the same number at the same time issue one
+-- invoice under it, and an issue whose transaction rolls back uses no number
 -- (migration 20261216100000_issue_invoices_with_gapless_numbers.sql). The
 -- first session issues a draft and keeps its transaction open; the second
--- session's issue waits for the series' row lock and, once the first
--- commits, takes the next number. A third issue rolls back; the number it
--- took goes to the next issue.
+-- session's issue, checked under the same number, waits for the series' row
+-- lock and, once the first commits, is refused invoice_number_moved without
+-- using a number; checked again under the next number, it takes it. A third
+-- issue rolls back; the number it took goes to the next issue.
 --
 -- The sessions need committed rows, so this file writes one synthetic
 -- organization through dblink connections and deletes it at the start (a run
@@ -56,23 +57,25 @@ begin
 end $$
 $setup$);
 
-create function pg_temp.issue_statement(p_draft text) returns text language sql as $$
+-- An issue of p_draft checked under the p_sequence-th number of this year's series, on the Berlin day.
+create function pg_temp.issue_statement(p_draft text, p_sequence integer) returns text language sql as $$
   select format($issue$select public.issue_invoice('38070000-0000-4000-8000-000000000001',
     '38070000-0000-4000-8000-000000000010', %L, 1, gen_random_uuid(),
-    '{"organizationName":"Haustechnik Sonnenberg","profile":{},"files":{},"buyer":{}}') ->> 'invoiceNumber'$issue$,
-    p_draft);
+    '{"organizationName":"Haustechnik Sonnenberg","profile":{},"files":{},"buyer":{}}', %L,
+    (now() at time zone 'Europe/Berlin')::date) ->> 'invoiceNumber'$issue$,
+    p_draft, 'RE-' || to_char(now() at time zone 'Europe/Berlin', 'YYYY') || '-' || lpad(p_sequence::text, 3, '0'));
 $$;
 
 -- The first issue holds its transaction open with its number taken.
 select dblink_exec('issue_race_first', 'begin');
 select dblink_exec('issue_race_first', 'set local role service_role');
-select * from dblink('issue_race_first', pg_temp.issue_statement('38070000-0000-4000-8000-000000000101'))
+select * from dblink('issue_race_first', pg_temp.issue_statement('38070000-0000-4000-8000-000000000101', 1))
   as first(number text);
 
 create temporary table issue_race_second_pid on commit drop as
 select pid from dblink('issue_race_second', 'select pg_backend_pid()') as second(pid integer);
 select dblink_exec('issue_race_second', 'set role service_role');
-select dblink_send_query('issue_race_second', pg_temp.issue_statement('38070000-0000-4000-8000-000000000102'));
+select dblink_send_query('issue_race_second', pg_temp.issue_statement('38070000-0000-4000-8000-000000000102', 1));
 
 do $$
 declare
@@ -91,11 +94,19 @@ select dblink_exec('issue_race_first', 'commit');
 do $$
 declare
   v_year text := to_char(now() at time zone 'Europe/Berlin', 'YYYY');
+  v_message text;
   v_second text;
   v_numbers text[];
 begin
-  select number into v_second from dblink_get_result('issue_race_second') as second(number text);
-  perform * from dblink_get_result('issue_race_second') as done(number text);
+  perform * from dblink_get_result('issue_race_second', false) as result(number text);
+  v_message := dblink_error_message('issue_race_second');
+  perform * from dblink_get_result('issue_race_second', false) as done(number text);
+  if position('invoice_number_moved' in coalesce(v_message, '')) = 0 then
+    raise exception 'an issue checked under a number another issue took answered %', v_message;
+  end if;
+  select number into v_second
+  from dblink('issue_race_second', pg_temp.issue_statement('38070000-0000-4000-8000-000000000102', 2))
+    as second(number text);
   select array_agg(invoice_number order by invoice_number) into v_numbers
   from dblink('issue_race_setup', $read$
     select invoice_number from public.invoices where organization_id = '38070000-0000-4000-8000-000000000010'
@@ -103,14 +114,14 @@ begin
   $read$) as issued(invoice_number text);
   if v_second is distinct from 'RE-' || v_year || '-002'
     or v_numbers is distinct from array['RE-' || v_year || '-001', 'RE-' || v_year || '-002'] then
-    raise exception 'two concurrent issues got % (second answered %)', v_numbers, v_second;
+    raise exception 'two concurrent issues got % (the second, checked again, answered %)', v_numbers, v_second;
   end if;
 end $$;
 
 -- An issue that rolls back uses no number: the next issue takes it.
 select dblink_exec('issue_race_first', 'begin');
 select dblink_exec('issue_race_first', 'set local role service_role');
-select * from dblink('issue_race_first', pg_temp.issue_statement('38070000-0000-4000-8000-000000000103'))
+select * from dblink('issue_race_first', pg_temp.issue_statement('38070000-0000-4000-8000-000000000103', 3))
   as rolled_back(number text);
 select dblink_exec('issue_race_first', 'rollback');
 do $$
@@ -119,7 +130,7 @@ declare
   v_number text;
 begin
   select number into v_number
-  from dblink('issue_race_second', pg_temp.issue_statement('38070000-0000-4000-8000-000000000103'))
+  from dblink('issue_race_second', pg_temp.issue_statement('38070000-0000-4000-8000-000000000103', 3))
     as third(number text);
   if v_number is distinct from 'RE-' || v_year || '-003' then
     raise exception 'an issue after a rolled-back one got %, a number went missing', v_number;
@@ -130,7 +141,7 @@ end $$;
 -- no line of an issued invoice goes, whoever writes.
 select dblink_exec('issue_race_first', 'begin');
 select dblink_exec('issue_race_first', 'set local role service_role');
-select * from dblink('issue_race_first', pg_temp.issue_statement('38070000-0000-4000-8000-000000000104'))
+select * from dblink('issue_race_first', pg_temp.issue_statement('38070000-0000-4000-8000-000000000104', 4))
   as issuing(number text);
 select dblink_send_query('issue_race_second',
   'delete from public.invoice_lines where invoice_id = ''38070000-0000-4000-8000-000000000104''');

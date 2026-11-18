@@ -5,10 +5,9 @@
 // original is filed as a corrected invoice (384) naming the cancelled one.
 // supabase/tests/invoice_cancel.sql proves the function.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { EMPTY_COMPANY_PROFILE_DETAILS } from '@/lib/company-profile/profile';
-import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
@@ -34,6 +33,10 @@ mock.module('@/lib/storage/r2', () => ({
     throw new Error('storage_object_missing');
   },
 }));
+
+// The day every cancel below happens, in Berlin.
+const today = '2037-11-20';
+setSystemTime(new Date(`${today}T10:00:00.000Z`));
 
 const world = installActionWorld({});
 const { cancelInvoice } = await import('@/lib/invoices/cancel-actions');
@@ -232,7 +235,7 @@ world.rpc = ({ name, args }) => {
       data: {
         stornoId,
         stornoNumber: 'RE-2037-002',
-        issueDate: '2037-11-20',
+        issueDate: today,
         correctionId: args.p_correct ? correctionId : null,
       },
       error: null,
@@ -267,7 +270,7 @@ assert.equal(cancelArgs?.p_reason, 'Falscher Rechnungsempfänger');
 assert.equal(cancelArgs?.p_correct, false);
 // The function issues exactly the number and day the Stornorechnung was checked under.
 assert.equal(cancelArgs?.p_expected_number, 'RE-2037-002');
-assert.equal(cancelArgs?.p_expected_issue_date, getBusinessTodayIso());
+assert.equal(cancelArgs?.p_expected_issue_date, today);
 assert.equal(world.rpcCalls[3]?.args.p_invoice_id, stornoId);
 const [first] = stored;
 if (!first) throw new Error('the cancel stored no original');
@@ -289,13 +292,14 @@ for (const part of ['Stornorechnung RE-2037-002', 'Storno zu', 'RE-2037-001', 'G
   assert.ok(text.includes(part), `the Stornorechnung's PDF lacks ${part}:\n${text}`);
 }
 
-// A retried press after a lost answer finds the original Storniert and asks the function, which answers the first Storno.
+// A retried press after a lost answer finds the original Storniert and asks the function at once, which answers
+// the first Storno.
 world.rpcCalls.length = 0;
 const retried = await cancelInvoice(input);
 assert.equal(retried.success, true, JSON.stringify(retried));
 assert.deepEqual(
-  world.rpcCalls.slice(0, 3).map((call) => call.name),
-  ['get_invoice', 'get_invoice_settings', 'cancel_invoice'],
+  world.rpcCalls.slice(0, 2).map((call) => call.name),
+  ['get_invoice', 'cancel_invoice'],
 );
 
 // Another issue took the checked number twice: the Stornorechnung is checked again each time, then cancelled.
