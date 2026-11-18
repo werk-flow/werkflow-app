@@ -32,6 +32,7 @@ import type { AttentionCounts } from '@/lib/attention/types';
 import { MobileDrawer } from './mobile-drawer';
 import { OrgSwitchOverlay } from './org-switch-overlay';
 import { OfficeStartPortal } from '@/components/aufgaben/aufgaben-content';
+import { isManagerRole } from '@/lib/roles';
 import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { isNavItemActive, navItemsFor } from './sidebar-nav-items';
 
@@ -347,6 +348,7 @@ export function AppShell({
   const [isOpen, setIsOpen] = useState(false);
   const closeDrawer = useCallback(() => setIsOpen(false), []);
   const { isSwitchingOrg, activeOrg } = useOrganization();
+  const pathname = usePathname();
   const showIosInstallHint = useSyncExternalStore(subscribeNever, needsIosInstallHint, onServer);
   useOfflineShell();
   const mainRef = useRef<HTMLElement>(null);
@@ -376,7 +378,10 @@ export function AppShell({
                 {children}
               </main>
               <OrgSwitchOverlay />
-              <OfficeStartPortal page={children} />
+              {/* The dashboard renders the office start's host for Admin and Büro; elsewhere nothing renders. */}
+              {pathname === '/dashboard' && activeOrg && isManagerRole(activeOrg.role) && (
+                <OfficeStartPortal />
+              )}
               {activeOrg?.role === 'employee' && showIosInstallHint && <IosInstallHint />}
             </div>
           </div>

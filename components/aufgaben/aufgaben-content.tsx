@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { SectionError } from '@/components/ui/section-error';
 
@@ -16,23 +16,28 @@ import { useAufgabenOverview } from './use-aufgaben-overview';
 import { OfficeStart } from '@/components/dashboard/office-start';
 import { OFFICE_START_HOST_ID } from '@/components/dashboard/office-start-host-id';
 
+// The dashboard's page arrives in parts, so its host can appear after the
+// shell mounted: the portal looks for it again whenever the document changes.
+// The shell renders the portal only on the dashboard of Admin and Büro.
+function subscribeToHost(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.body, { childList: true, subtree: true });
+  return () => observer.disconnect();
+}
+const findHost = () => document.getElementById(OFFICE_START_HOST_ID);
+const noHostOnServer = () => null;
+
 /**
- * Renders the office start into the dashboard's host (components/dashboard/office-start-host.tsx)
- * while the page shows one. The app shell renders this, and it lives in this
- * module, because the shell already carries the Aufgaben code through its
- * Aufgaben skeleton: a page or a lazy chunk that imported the office start
- * itself made the bundler regroup the shell's chunks, one to three more
- * scripts on every cold start (audit:lab:office, audit:lab:field), and moving
- * the Aufgaben code out of the shell cost opening Aufgaben a script
- * (lab.admin.tasks-open). `page` is the shell's page content: a new page, a
- * refresh after a clock action or an organization switch may add or remove the host.
+ * Renders the office start into the dashboard's host (components/dashboard/office-start-host.tsx).
+ * The app shell renders this, and it lives in this module, because the shell
+ * already carries the Aufgaben code through its Aufgaben skeleton: a page or a
+ * lazy chunk that imported the office start itself made the bundler regroup
+ * the shell's chunks, one to three more scripts on every cold start
+ * (audit:lab:office, audit:lab:field), and moving the Aufgaben code out of the
+ * shell cost opening Aufgaben a script (lab.admin.tasks-open).
  */
-export function OfficeStartPortal({ page }: { page: ReactNode }) {
-  const [host, setHost] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the host is an element of the page, in the document only once the page committed
-    setHost(document.getElementById(OFFICE_START_HOST_ID));
-  }, [page]);
+export function OfficeStartPortal() {
+  const host = useSyncExternalStore(subscribeToHost, findHost, noHostOnServer);
   return host ? createPortal(<OfficeStart />, host) : null;
 }
 
