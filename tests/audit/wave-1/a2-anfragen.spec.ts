@@ -169,6 +169,13 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
     }
     expect((await getRequestAuditState(world.orgId, requestNumber)).status).toBe('offen');
 
+    // Back leads to the list the request was captured from, which lists it.
+    await bueroPage.goBack();
+    await expect(requestCaptureButton(bueroPage)).toBeVisible();
+    await expect(visibleText(bueroPage, requestNumber)).toBeVisible();
+    await bueroPage.goForward();
+    await bueroPage.waitForURL(/\/anfragen\/[0-9a-f-]{36}/);
+
     await setRequestStatusFromDetail(bueroPage, 'clarify');
     expect((await getRequestAuditState(world.orgId, requestNumber)).status).toBe('in_klaerung');
     await closeRequestViaDialog(bueroPage, REQUEST_CLOSE_REASON_LABELS.kein_bedarf);

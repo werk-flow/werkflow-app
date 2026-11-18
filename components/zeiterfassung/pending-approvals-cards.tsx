@@ -12,7 +12,7 @@ import { formatBerlin, formatBerlinTime, toLocalDateString } from '@/lib/utils';
 
 const EntryDetailsDialog = dynamic(
   () => import('@/components/kalender/entry-details-dialog').then((mod) => mod.EntryDetailsDialog),
-  { ssr: false },
+  { ssr: false, loading: () => null },
 );
 
 function formatWeekdayDate(dateStr: string): string {

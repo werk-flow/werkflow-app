@@ -24,7 +24,7 @@ import {
 import { sendTimeOutbox } from './time-outbox-send';
 import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
 import { TODAY_WIPE_KEY } from './today-wipe';
-import { markUnsentWork } from './sync-runner';
+import { markUnsentWork, untilNetworkReturns } from './sync-runner';
 import { KEPT_CLOCK_ACTION_PREFIX, UNSENT_MARK_PREFIX, keepClockAction } from './unsent-mark';
 import type { UnsentScope, UnsentSource } from './unsent-work';
 
@@ -308,7 +308,7 @@ export async function sendOwnTimeEvents(): Promise<void> {
   for (const holder of await holdersToSend())
     await onChain(holder, () =>
       sendTimeOutbox(holder, {
-        fetch: (url, init) => fetch(url, init),
+        fetch: (url, init) => fetch(url, { ...init, signal: untilNetworkReturns() }),
         now: () => new Date(),
         // Checked before every send: the hold and the session can change between two events.
         holdersToken: async () => {
