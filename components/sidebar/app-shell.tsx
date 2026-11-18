@@ -45,7 +45,7 @@ const OrganizationSwitcher = dynamic(
 
 const IosInstallHint = dynamic(
   () => import('@/components/shared/ios-install-hint').then((mod) => mod.IosInstallHint),
-  { ssr: false },
+  { ssr: false, loading: () => null },
 );
 
 const subscribeNever = (): (() => void) => () => {};

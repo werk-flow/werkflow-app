@@ -18,6 +18,7 @@ import {
 import { formatSiteAddress } from '@/lib/clients/types';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { RecipientFact, partyName } from './work-billing-parties-facts';
+import { WorkBillingPartiesSkeleton } from './work-billing-parties-skeleton';
 import { lazyWorkBillingPartiesDialog } from './work-billing-parties-lazy-dialog';
 import { WORK_BILLING_PARTIES_LOAD_FAILED, useWorkBillingParties } from './use-work-billing-parties';
 
@@ -199,7 +200,9 @@ export function WorkBillingPartiesSection({
     [id, parties, versions, shownSite, workClientId, view.isStale, openEditor],
   );
   if (parties === undefined) {
-    return view.isLoading ? null : (
+    return view.isLoading ? (
+      <WorkBillingPartiesSkeleton className={className} />
+    ) : (
       <SectionError
         className={className}
         onRetry={() => void view.refresh()}
