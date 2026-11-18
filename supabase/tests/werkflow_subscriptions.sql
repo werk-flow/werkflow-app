@@ -1,4 +1,4 @@
--- A Stripe subscription per organization (20261215100003_keep_a_stripe_subscription_per_organization.sql,
+-- A Stripe subscription per organization (20261218100003_keep_a_stripe_subscription_per_organization.sql,
 -- werk-flow/werkflow-planning#248): no client role reads the table or runs
 -- its functions, and the service role writes only through them; only an
 -- organization's Admin stores its customer; a person holds one open
