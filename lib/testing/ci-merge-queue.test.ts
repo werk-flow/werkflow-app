@@ -1,11 +1,11 @@
 // The merge queue runs ci.yml on its own commit, planned against the queue's base, and a push to
 // main whose tree a green queue run passed runs no browser group (.github/workflows/ci.yml).
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readWorkflow } from './ci-workflow';
+import { temporaryDirectory } from './temporary-directory';
 
 const ci = readWorkflow('ci.yml');
 
@@ -52,7 +52,7 @@ function commit(subject: string): string {
 }
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'ci-merge-queue-'));
+  stub = temporaryDirectory('ci-merge-queue-');
   for (const [name, text] of [
     ['gh', GH_STUB],
     ['bun', BUN_STUB],
@@ -67,8 +67,6 @@ beforeEach(() => {
   git('init', '--quiet', '--initial-branch=main');
   commit('Main');
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 const read = (file: string): string =>
   existsSync(join(stub, file)) ? readFileSync(join(stub, file), 'utf8') : '';

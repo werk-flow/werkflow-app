@@ -1,10 +1,10 @@
 // A failed merge queue run comments on its PR, so the PR's watching thread wakes
 // (.github/workflows/merge-queue-notice.yml).
-import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { beforeEach, expect, test } from 'bun:test';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readWorkflow } from './ci-workflow';
+import { temporaryDirectory } from './temporary-directory';
 
 const notice = readWorkflow('merge-queue-notice.yml');
 const RUN_SHA = 'a'.repeat(40);
@@ -33,12 +33,10 @@ esac
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'merge-queue-notice-'));
+  stub = temporaryDirectory('merge-queue-notice-');
   writeFileSync(join(stub, 'gh'), GH_STUB);
   chmodSync(join(stub, 'gh'), 0o755);
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 const read = (file: string): string =>
   existsSync(join(stub, file)) ? readFileSync(join(stub, file), 'utf8') : '';

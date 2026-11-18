@@ -2,8 +2,7 @@
 // and only while Boat would still stop and erase it by itself; every other machine of the checkout
 // is deleted. Prevents a start per run (decision 15, werk-flow/werkflow-planning#294).
 import { afterAll, beforeAll, expect, setSystemTime, test } from 'bun:test';
-import { mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { z } from '../../zod';
@@ -11,6 +10,7 @@ import { z } from '../../zod';
 import { BoatError, boatClient } from './boat-api';
 import { MARK_IDLE, workstationLabel } from './machine-eviction';
 import { acquireMachine, keepMachine, reapIdleMachine, withMachine } from './machine-reuse';
+import { temporaryDirectory } from '../temporary-directory';
 
 const repository = join(import.meta.dir, '../../..');
 /** origin/main's wipe script as mainWipeScript would read it; a unit test fetches nothing. */
@@ -133,7 +133,7 @@ const acquire = (client: ReturnType<typeof boatClient>, records: string) =>
   });
 
 test("a wiped machine serves the checkout's next run, and the run deletes every other machine of the checkout", async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE }, bx_leftover: { lifeMs: 150 * MINUTE } });
   const reapers: string[] = [];
   const kept = await keepMachine(
@@ -162,7 +162,7 @@ test("a wiped machine serves the checkout's next run, and the run deletes every 
 });
 
 test('a kept machine nobody takes is deleted by its reaper', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
   let record = '';
   await keepMachine(
@@ -178,7 +178,7 @@ test('a kept machine nobody takes is deleted by its reaper', async () => {
 });
 
 test('a machine with too little life left for a run, or none Boat would end, is neither kept nor reused', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const boat = fakeBoat({ bx_short001: { lifeMs: 59 * MINUTE } });
   const keep = (id: string) =>
     keepMachine(
@@ -217,7 +217,7 @@ test('a machine with too little life left for a run, or none Boat would end, is 
 });
 
 test('a failed wipe deletes the machine, and the run keeps its result', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } }, 1);
   const lines: string[] = [];
   const machine = { id: 'bx_kept0001', client: boat.client, log: (line: string) => lines.push(line) };
@@ -241,7 +241,7 @@ test('a failed wipe deletes the machine, and the run keeps its result', async ()
 });
 
 test('a wipe script that cannot be read from origin/main deletes the machine, and starts none', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const unreadable = () => {
     throw new Error("origin/main's wipe script cannot be read: fatal: unable to access the remote");
   };
@@ -346,7 +346,7 @@ test('a Ctrl-C or a failed run deletes the machine instead of wiping it', async 
 });
 
 test('a run takes the kept machine with the most life, and deletes one whose reaper died, whatever its checkout', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const machines: Record<string, { lifeMs: number | null }> = {
     bx_young001: { lifeMs: 150 * MINUTE },
     bx_older001: { lifeMs: 70 * MINUTE },
@@ -384,7 +384,7 @@ test('a run takes the kept machine with the most life, and deletes one whose rea
 });
 
 test('a Ctrl-C that arrives as the wipe ends deletes the machine and keeps no record', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const interrupt = new AbortController();
   const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } }, 0, () => interrupt.abort());
   const machine = { id: 'bx_kept0001', client: boat.client, log: () => undefined };
@@ -407,7 +407,7 @@ test('a Ctrl-C that arrives as the wipe ends deletes the machine and keeps no re
 });
 
 test('a Boat refusal while a run looks for its machine falls back instead of starting a new one', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const keepOne = async (boat: ReturnType<typeof fakeBoat>) =>
     keepMachine(
       { id: 'bx_kept0001', client: boat.client, log: () => undefined },
@@ -453,7 +453,7 @@ test('a Boat refusal while a run looks for its machine falls back instead of sta
 test('a start refused at the machine limit evicts idle machines, oldest first, and starts once more', async () => {
   const atLimit = () => Response.json({ error: { code: 'member_limit_reached' } }, { status: 429 });
   const evicting = async (refusals: Response[], idle: Record<string, number>, taken: string[] = []) => {
-    const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+    const records = temporaryDirectory('boat-idle-');
     for (const [id, ageMinutes] of Object.entries(idle)) {
       const path = join(records, `f00dfeedf00dfeed--${id}.json`);
       writeFileSync(path, JSON.stringify({ id }));
@@ -512,7 +512,7 @@ test('a start refused at the machine limit evicts idle machines, oldest first, a
 });
 
 test('a machine whose auto-stop time does not parse is neither wiped nor kept', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const boat = fakeBoat({ bx_garbled1: { lifeMs: 120 * MINUTE, archiveAfter: 'not a date' } });
   const kept = await keepMachine(
     { id: 'bx_garbled1', client: boat.client, log: () => undefined },
@@ -527,7 +527,7 @@ test('a machine whose auto-stop time does not parse is neither wiped nor kept', 
 
 test("at the limit without an idle machine of its own, a run evicts another workstation's long-idle one", async () => {
   const atLimit = Response.json({ error: { code: 'member_limit_reached' } }, { status: 429 });
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const boat = fakeBoat(
     { bx_otherws1: { lifeMs: 120 * MINUTE, workstation: 'f00dfeedf00dfeed', checkout: 'deadbeefdeadbeef' } },
     0,
@@ -547,7 +547,7 @@ test("at the limit without an idle machine of its own, a run evicts another work
 });
 
 test('a kept machine another workstation evicted meanwhile is not reused: the run starts a new one', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const keeping = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
   await keepMachine(
     { id: 'bx_kept0001', client: keeping.client, log: () => undefined },
@@ -574,7 +574,7 @@ test('a kept machine another workstation evicted meanwhile is not reused: the ru
 });
 
 test('a kept machine another workstation deleted between its read and its claim gives way to a new one', async () => {
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   const machines: Record<string, { lifeMs: number | null }> = { bx_kept0001: { lifeMs: 120 * MINUTE } };
   const keeping = fakeBoat(machines);
   await keepMachine(
@@ -600,7 +600,7 @@ test('a kept machine another workstation deleted between its read and its claim 
 
 test('an idle record whose machine another workstation evicted frees nothing, so the run evicts elsewhere', async () => {
   const atLimit = Response.json({ error: { code: 'member_limit_reached' } }, { status: 429 });
-  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const records = temporaryDirectory('boat-idle-');
   // Another checkout's record on this workstation; its machine is already gone.
   writeFileSync(join(records, 'f00dfeedf00dfeed--gone.json'), JSON.stringify({ id: 'bx_gone0001' }));
   const boat = fakeBoat(

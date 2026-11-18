@@ -1,17 +1,13 @@
-import { afterEach, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from '../temporary-directory';
 
 // The CI wait for the local edge runtime (.github/actions/local-stack/wait-for-edge-runtime.sh),
 // run against stand-in docker, curl and sleep commands: a stopped runtime is started once, and a
 // start that fails ends the wait at once with its own error and the evidence.
 const script = resolve(import.meta.dir, '../../../.github/actions/local-stack/wait-for-edge-runtime.sh');
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
 
 /** Runs the wait with stand-ins; `startWorks` decides whether `docker start` succeeds. */
 function runWait(startWorks: boolean): {
@@ -20,8 +16,7 @@ function runWait(startWorks: boolean): {
   started: boolean;
   requests: number;
 } {
-  const bin = mkdtempSync(join(tmpdir(), 'werkflow-edge-wait-'));
-  directories.push(bin);
+  const bin = temporaryDirectory('werkflow-edge-wait-');
   const started = join(bin, 'started');
   const requests = join(bin, 'requests');
   const stub = (name: string, body: string): void => {

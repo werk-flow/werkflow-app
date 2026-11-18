@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const alertScript = join(repositoryRoot, '.github/scripts/alert-issue.sh');
@@ -29,7 +29,7 @@ esac
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'ci-alert-'));
+  stub = temporaryDirectory('ci-alert-');
   writeFileSync(join(stub, 'gh'), GH_STUB);
   chmodSync(join(stub, 'gh'), 0o755);
   writeFileSync(join(stub, 'gh.log'), '');
@@ -37,8 +37,6 @@ beforeEach(() => {
   writeOpenIssues([]);
   writeJobs([]);
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 function writeOpenIssues(issues: { number: number; title: string }[]) {
   writeFileSync(join(stub, 'issues.json'), JSON.stringify(issues));
