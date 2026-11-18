@@ -33,6 +33,25 @@ function* nodesUnder(node, visitorKeys) {
   }
 }
 
+const FUNCTION_TYPES = new Set(['ArrowFunctionExpression', 'FunctionExpression', 'FunctionDeclaration']);
+
+/**
+ * The nodes a call of the function `node` runs: its body, without the bodies of the functions it
+ * only creates (a handler it installs runs later, if ever), but with a function it calls at once.
+ */
+function* executedUnder(node, visitorKeys, root = node) {
+  yield node;
+  for (const key of visitorKeys[node.type] ?? []) {
+    const child = node[key];
+    for (const each of Array.isArray(child) ? child : [child]) {
+      if (!each || typeof each.type !== 'string') continue;
+      const invokedAtOnce = node.type === 'CallExpression' && key === 'callee';
+      if (FUNCTION_TYPES.has(each.type) && each !== root && !invokedAtOnce) continue;
+      yield* executedUnder(each, visitorKeys, root);
+    }
+  }
+}
+
 /** The variable `identifier` names in its scope, or undefined for a global. */
 function variableOf(identifier, sourceCode) {
   for (let scope = sourceCode.getScope(identifier); scope; scope = scope.upper) {
@@ -59,10 +78,11 @@ function stateOfSetter(setter, sourceCode) {
 }
 
 /**
- * The function a timeout runs: the argument itself, or for a name (`setTimeout(tick, 1000)`) the
- * function that name is declared as (`const tick = () => …` or `function tick() {…}`).
+ * The function an effect or a timeout runs: the argument itself, or for a name (`setTimeout(tick,
+ * 1000)`, `useEffect(runCountdown, [left])`) the function that name is declared as
+ * (`const tick = () => …` or `function tick() {…}`).
  */
-function timeoutCallback(argument, sourceCode) {
+function calledFunction(argument, sourceCode) {
   if (argument?.type !== 'Identifier') return argument;
   const variable = variableOf(argument, sourceCode);
   // A reassigned name may hold another function by now; only a name that keeps its declaration counts.
@@ -102,7 +122,9 @@ function derivesFromState(argument, state, sourceCode) {
  */
 function rearmingUpdate(effect, sourceCode) {
   const { visitorKeys } = sourceCode;
-  const [callback, dependencies] = effect.arguments;
+  const [argument, dependencies] = effect.arguments;
+  // A named effect (`useEffect(runCountdown, [left])`) is read like an inline one.
+  const callback = calledFunction(argument, sourceCode);
   if (!callback || dependencies?.type !== 'ArrayExpression') return undefined;
   const dependsOn = new Set(
     dependencies.elements
@@ -111,9 +133,9 @@ function rearmingUpdate(effect, sourceCode) {
   );
   for (const timeout of nodesUnder(callback, visitorKeys)) {
     if (timeout.type !== 'CallExpression' || !callsFunctionNamed(timeout, 'setTimeout')) continue;
-    const onTimeout = timeoutCallback(timeout.arguments[0], sourceCode);
+    const onTimeout = calledFunction(timeout.arguments[0], sourceCode);
     if (!onTimeout) continue;
-    for (const update of nodesUnder(onTimeout, visitorKeys)) {
+    for (const update of executedUnder(onTimeout, visitorKeys)) {
       if (update.type !== 'CallExpression' || update.callee.type !== 'Identifier') continue;
       const [argument] = update.arguments;
       if (!argument) continue;
