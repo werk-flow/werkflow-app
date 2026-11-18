@@ -42,7 +42,10 @@ type ExcludedTable =
   | 'work_artifact_draft_operations'
   // The staged lines of a wholesaler delivery: a working copy of the files,
   // dropped once taken over; the catalog holds what was taken over.
-  | 'inventory_supplier_catalog_import_lines';
+  | 'inventory_supplier_catalog_import_lines'
+  // Delivery state of Stripe's signals to WerkFlow's own billing: event ids,
+  // no record of the organization.
+  | 'werkflow_billing_signals';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
@@ -104,6 +107,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   inventory_supplier_catalog_articles: 'Lager_Großhandelskatalog',
   inventory_supplier_catalog_imports: 'Lager_Großhandelsimporte',
   inventory_supplier_rebate_groups: 'Lager_Rabattgruppen',
+  inventory_supplier_rebates: 'Lager_Rabatte',
   inventory_suppliers: 'Lager_Lieferanten',
   job_assignments: 'Aufträge_Zuweisungen',
   job_capability_requirement_origins: 'Aufträge_Qualifikationsanforderungen_Herkunft',
