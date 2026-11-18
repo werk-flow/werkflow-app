@@ -280,7 +280,8 @@ begin
     raise exception 'the correction is % (answer %)', to_jsonb(v_correction), v_answer;
   end if;
   insert into ids values ('correction', v_correction.id);
-  foreach v_name in array array['corrected', 'correction'] loop
+  insert into ids values ('storno2', (v_answer ->> 'stornoId')::uuid);
+  foreach v_name in array array['corrected', 'storno2', 'correction'] loop
     v_chain := public.get_invoice('38080000-0000-4000-8000-000000000010', pg_temp.id(v_name)) -> 'chain';
     if (select jsonb_agg(entry ->> 'kind' || ':' || coalesce(entry ->> 'invoiceNumber', '-') || ':' || (entry ->> 'status'))
         from jsonb_array_elements(v_chain) entry)
@@ -323,8 +324,13 @@ begin
   values ('38080000-0000-4000-8000-000000000010', v_storno, 1, 'Probe', 1, 'piece', 0, 'S', 1900, 0);
   perform public.issue_invoice('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
     v_storno, 1, gen_random_uuid(), (select issue_snapshot from issued where id = pg_temp.id('kept')));
+  perform set_config('app.invoice_cancel', '', true);
 end;
 $$;
+-- Beside its issued Stornorechnung but outside the cancel, the status stays.
+select pg_temp.expect_refusal('Storniert beside its Stornorechnung without the cancel flag',
+  format('update public.invoices set status = ''storniert'' where id = %L', pg_temp.id('kept')), 'invoice_issued');
+select set_config('app.invoice_cancel', pg_temp.id('kept')::text, true);
 select pg_temp.expect_refusal(label, format(statement, pg_temp.id('kept')), 'invoice_issued')
 from (values
   ('Storniert with another change',

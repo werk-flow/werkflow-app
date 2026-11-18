@@ -87,7 +87,7 @@ export function InvoicesCards({ entries }: { entries: readonly InvoiceListEntry[
         <ListRow key={entry.id} rowId={entry.id} asChild interactive>
           <Link
             href={invoicePath(entry)}
-            aria-label={`Rechnung öffnen: ${entry.clientName}, ${numberLabel(entry)}`}
+            aria-label={`Rechnung öffnen: ${[entry.clientName, numberLabel(entry), refersToLabel(entry)].filter(Boolean).join(', ')}`}
           >
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center justify-between gap-2">

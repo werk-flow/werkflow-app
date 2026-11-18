@@ -18,7 +18,7 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
-import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { cancelInvoice } from '@/lib/invoices/cancel-actions';
 import { CANCELLATION_REASON_MAX_LENGTH } from '@/lib/invoices/cancel-model';
@@ -123,12 +123,10 @@ function useCancelInvoice({ invoice, mode, onClose }: CancelDialogProps) {
         variant: result.originalFiled ? 'success' : 'info',
         message: `Rechnung ${invoice.invoiceNumber} ist storniert. Stornorechnung ${result.stornoNumber} ist ${filed}.`,
       });
-      if (result.correctionId) {
-        router.push(`/rechnungen/${result.correctionId}`);
-        return untilPageLeaves();
-      }
+      // Closed and refreshed first: Back returns to the invoice as Storniert, without a pending dialog.
       onClose();
       router.refresh();
+      if (result.correctionId) router.push(`/rechnungen/${result.correctionId}`);
     });
   };
   return {

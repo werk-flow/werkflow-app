@@ -39,12 +39,13 @@ alter table public.invoices add constraint invoices_cancellation_check check (
     or (btrim(cancellation_reason) <> '' and char_length(cancellation_reason) <= 500))
   and num_nonnulls(cancels_invoice_id, corrects_invoice_id) <= 1
 ) not valid;
+-- Every existing row has no link, so the foreign keys are added without a scan.
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
 alter table public.invoices add constraint invoices_cancels_fk foreign key (cancels_invoice_id, organization_id)
-  references public.invoices (id, organization_id);
+  references public.invoices (id, organization_id) not valid;
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
 alter table public.invoices add constraint invoices_corrects_fk foreign key (corrects_invoice_id, organization_id)
-  references public.invoices (id, organization_id);
+  references public.invoices (id, organization_id) not valid;
 -- An invoice is cancelled at most once and corrected by at most one draft.
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet
 create unique index invoices_cancels_unique on public.invoices (cancels_invoice_id)

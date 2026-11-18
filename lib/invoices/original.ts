@@ -106,15 +106,18 @@ const HEAD_TOO_TALL: IssueFinding = {
 /**
  * What keeps an invoice from its number, checked under a placeholder number
  * and today's date: the EN 16931 rules, then an original whose head leaves
- * room for the lines. Empty when it passes; null without a Leistungsdatum.
+ * room for the lines. A placeholder at least as wide as the number it will
+ * take keeps the head's height. Empty when it passes; null without a
+ * Leistungsdatum.
  */
 export async function findingsBeforeNumber(
   organizationId: string,
   invoice: Parameters<typeof calculatedInvoiceOf>[0] & { recipient: { id: string } },
   snapshot: IssueSnapshot,
+  placeholderNumber = 'ENTWURF',
 ): Promise<IssueFinding[] | null> {
   const calculated = calculatedInvoiceOf(invoice, snapshot, {
-    number: 'ENTWURF',
+    number: placeholderNumber,
     issueDate: getBusinessTodayIso(),
   });
   if (!calculated) return null;

@@ -137,6 +137,19 @@ const storno = {
   ],
 };
 const input = { invoiceId, attemptKey, reason: '  Falscher Rechnungsempfänger ', correct: false };
+/** The series as get_invoice_settings answers it: the check renders the Stornorechnung under its next number. */
+const settings = {
+  version: 2,
+  numberPrefix: 'RE-',
+  numberWithYear: true,
+  numberMinDigits: 3,
+  nextNumber: 2,
+  nextInvoiceNumber: 'RE-2037-002',
+  numbersFixed: true,
+  paymentDueDays: 14,
+  discountDays: null,
+  discountBasisPoints: null,
+};
 
 // A field worker reaches nothing.
 signInAs(world, 'employee');
@@ -179,10 +192,10 @@ await assertRefused(
 );
 
 // A Stornorechnung the rules refuse is not issued: here the seller in the snapshot lacks every tax id.
-world.rpc = ({ name }) =>
-  name === 'get_invoice'
-    ? { data: { ...original, issueSnapshot: snapshot('') }, error: null }
-    : { data: null, error: null };
+world.rpc = ({ name }) => {
+  if (name === 'get_invoice') return { data: { ...original, issueSnapshot: snapshot('') }, error: null };
+  return { data: name === 'get_invoice_settings' ? settings : null, error: null };
+};
 world.rpcCalls.length = 0;
 const refused = await cancelInvoice(input);
 assert.ok(
@@ -195,7 +208,7 @@ assert.ok(
 );
 assert.deepEqual(
   world.rpcCalls.map((call) => call.name),
-  ['get_invoice'],
+  ['get_invoice', 'get_invoice_settings'],
   'a refused Stornorechnung reached the cancel',
 );
 
@@ -221,7 +234,7 @@ world.rpc = ({ name, args }) => {
   if (name === 'register_invoice_original') {
     return { data: { documentId, replay: false, contentHash: args.p_content_hash }, error: null };
   }
-  return { data: null, error: null };
+  return { data: name === 'get_invoice_settings' ? settings : null, error: null };
 };
 world.rpcCalls.length = 0;
 assert.deepEqual(await cancelInvoice(input), {
@@ -234,17 +247,18 @@ assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_organization_id, call.args.p_actor_id ?? null]),
   [
     ['get_invoice', ORGANIZATION_A, null],
+    ['get_invoice_settings', ORGANIZATION_A, null],
     ['cancel_invoice', ORGANIZATION_A, CALLER_ID],
     ['get_invoice', ORGANIZATION_A, null],
     ['register_invoice_original', ORGANIZATION_A, CALLER_ID],
   ],
 );
-const cancelArgs = world.rpcCalls[1]?.args;
+const cancelArgs = world.rpcCalls[2]?.args;
 assert.equal(cancelArgs?.p_invoice_id, invoiceId);
 assert.equal(cancelArgs?.p_attempt_key, attemptKey);
 assert.equal(cancelArgs?.p_reason, 'Falscher Rechnungsempfänger');
 assert.equal(cancelArgs?.p_correct, false);
-assert.equal(world.rpcCalls[2]?.args.p_invoice_id, stornoId);
+assert.equal(world.rpcCalls[3]?.args.p_invoice_id, stornoId);
 const [first] = stored;
 if (!first) throw new Error('the cancel stored no original');
 assert.ok(

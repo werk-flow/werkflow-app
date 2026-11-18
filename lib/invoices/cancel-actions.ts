@@ -11,11 +11,12 @@ import { cancelInvoiceSchema, stornoOf, type CancelInvoiceInput } from './cancel
 import type { InvoiceCheckFailure } from './issue-model';
 import { fileIssuedOriginal, findingsBeforeNumber } from './original';
 import { readIssuedInvoice } from './reads';
+import { readInvoiceSettings } from './settings-reads';
 
 // „Stornieren“ and „Korrigieren“
 // (supabase/migrations/20261216120000_cancel_and_correct_issued_invoices.sql).
 // The order of „Ausstellen“: the server checks the Stornorechnung with the
-// EN 16931 rules under a placeholder number first; then cancel_invoice issues
+// EN 16931 rules under a placeholder as wide as the series' next number first; then cancel_invoice issues
 // it with the series' next number, marks the original Storniert and, for
 // „Korrigieren“, opens the correction draft, in one transaction; then the
 // Stornorechnung's original is rendered and filed like any invoice's, and a
@@ -66,10 +67,14 @@ export async function cancelInvoice(rawInput: CancelInvoiceInput): Promise<Cance
     // Storniert already: the function answers a retry of the same press with its first Storno, else refuses.
     if (original.status === 'ausgestellt') {
       const storno = stornoOf({ ...original, ...original.issue }, input.reason);
+      // The series' next number and one digit more, in case a concurrent issue takes it: the head
+      // prints the number, so the check renders it at least as wide as the one it will take.
+      const { nextInvoiceNumber } = await readInvoiceSettings(context.orgId);
       const findings = await findingsBeforeNumber(
         context.orgId,
         { ...storno, recipient: original.recipient },
         original.issue.snapshot,
+        `${nextInvoiceNumber}0`,
       );
       if (!findings) return { success: false, error: 'invoice_incomplete' };
       if (findings.length > 0) return { success: false, error: 'invoice_check_failed', findings };
