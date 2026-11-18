@@ -344,3 +344,29 @@ Decided for werk-flow/werkflow-planning#22 after the real iPhone run (OQ-5, step
 - **The shell requests send the origin's cookies** (`credentials: 'same-origin'`). The offline page and the build files answer the same bytes for every request: the page is prerendered, and `proxy.ts`, which reads and refreshes the session, never runs on a shell path, so no answer sets a cookie. A rule test pins the proxy's paths (`lib/security/service-worker.test.ts`).
 - **The worker refuses a personal answer.** A redirect, a status outside 200 to 299, or an offline page marked `private` or `no-store`, as Next.js marks a page rendered for one request, fails the fill; the cache keeps nothing of it.
 - **Rejected: a Vercel setting.** Turning Vercel Authentication off for staging exposes a preview of unreleased work; a bypass secret in the worker is public in its script.
+
+## Amendment 2026-11-14: the network's return ends a send that hangs
+
+Decided for werk-flow/werkflow-planning#407. A time event's send that left in a dead spot, where the phone reports a connection that carries nothing, can go minutes without an answer. One pass of the sync runner sends at a time, so every later trigger, `online` included, waited behind it, and the clock showed „Wird übertragen“ with nothing leaving.
+
+- **The return ends it.** Every `online` ends the time event sends still in flight on the page, and the pass after them sends the chain's first event again, unchanged. The server records an envelope once, so a request that arrived before it ended is answered `replayed`. The next event still goes only after the server's answer for the one before it.
+- **A deletion** waits for the ended send as for any other. A request that reached the server before it ended is a send whose answer was lost: the server's record wins and shows on the next refresh.
+- **Open: report drafts.** A draft's attach request and its photo uploads do not end on `online` yet. One that hangs still holds the pass, and the time events behind it.
+
+## Amendment 2026-11-16: a report draft's send ends when the network returns
+
+Decided for werk-flow/werkflow-planning#407. It closes the open point of the amendment of 2026-11-14: a draft send that hung in a dead spot held the sync runner's pass, and with it the time events behind it.
+
+- **The return ends it.** On every `online` the draft sender ends its requests still in flight, the attach request and the photo transfer, and sends again. The runner's pass waits on the draft sender, so the time events behind a hanging draft send leave in the pass after it.
+- **An ended attach is no answer.** The sealed draft waits and goes again under the same operation id. The server records an operation once, so a request that arrived before it ended is answered `replayed`.
+- **An ended photo upload is an interruption.** The draft waits, and the photo goes in the next send.
+- **The sender owns its signal.** It does not use the runner's: a job page carries no runner code at start, and loading it lazily costs the job open a request or bytes it has no margin for.
+- **Open: the upload's ticket and registration.** They are Server Actions, which take no abort signal yet. One that hangs still holds the send until the browser ends it.
+
+## Amendment 2026-11-14: the offline page loads every file from the shell
+
+Decided for werk-flow/werkflow-planning#22 after the iPhone re-test of the cold start: the installed app opened WerkFlow's offline page, but showed „Gerade kein Netz“ instead of the stored day, a broken logo, and an „Erneut versuchen“ that did nothing. The worker answered a page's files from its shell only when it remembered answering that page with the fallback, or when the device reported no network. A cold start can leave it neither: iOS may stop the worker between the navigation and the page's file requests, and the phone may still report a network. The files then went to the dead network and the page's script never ran. Vercel also names each image of `public/` with the deployment's query (`?dpl=…`), which the shell stores without it, so the logo missed the shell in any case.
+
+- **A shell file comes from the shell, for any page.** A request for a build file (`/_next/static/…`, named by its content) or an image of `public/` is answered from the shell when the shell holds it, matched without its query, and from the network otherwise. Every other request goes to the network untouched; the cache still holds only what the worker fetched itself.
+- **„Erneut versuchen“ works without the page's script.** It is a form that reloads the opened address. With the script it shows its spinner at once, asks the server for the manifest with a `HEAD` request the worker never answers, reloads into the app on any answer, and otherwise says in place that there is still no signal. The `online` event runs the same attempt, also while the page shows the stored day, so the app replaces the page once the server answers. A phone reports a network before the network carries requests, so after `online` the page checks again for about 15 seconds while the phone still reports one; the button shows only its own check, so it never blocks a tap. The page's start checks once when the phone already reports a network, because the signal can return before the page listens; after a reload that came back to the offline page, the start waits 30 seconds, so a flaky signal never reloads it in a loop.
+- **Not proven off the phone.** Playwright's WebKit and Chromium hydrate the cold-started page with the earlier worker too; which of the two signs the iPhone lost is not reproducible there. Only a real iPhone confirms the cold start.

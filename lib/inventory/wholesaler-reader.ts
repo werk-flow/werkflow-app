@@ -71,7 +71,7 @@ export type WholesalerDelivery = {
   rejections: WholesalerRejection[];
 };
 
-export type WholesalerReading =
+type WholesalerReading =
   | { installed: true; delivery: WholesalerDelivery }
   | { installed: false; reason: string };
 
@@ -103,11 +103,6 @@ type DeliveryReader = (files: WholesalerFile[]) => ReaderDelivery;
 
 function installedReader(): DeliveryReader | null {
   return readDelivery ?? null;
-}
-
-/** Whether this build carries the reader; without it the wholesaler import is unavailable. */
-export function wholesalerReaderInstalled(): boolean {
-  return installedReader() !== null;
 }
 
 /** Reads one delivery into the app's words, or says that this build has no reader. */
