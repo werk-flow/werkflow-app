@@ -233,7 +233,7 @@ begin
   v_result := public.confirm_supplier_catalog_import('37500000-0000-4000-8000-000000000010',
     '37500000-0000-4000-8000-000000000002', v_import, '{"Meter":"meter","Stück":"piece","XYZ":null}');
   if v_result is distinct from '{"new":2,"changed":0,"unchanged":0,"price_changed":0,"unit_rejected":1,
-    "price_updates":0,"price_unmatched":0,"removed":0,"rejected":1,"already_confirmed":false}'::jsonb then
+    "price_updates":0,"price_unmatched":0,"removed":0,"rejected":1,"own_prices_changed":0,"already_confirmed":false}'::jsonb then
     raise exception 'the confirm answered %', v_result;
   end if;
   if (select array_agg(row(article_number, name, unit, price_kind, price_cents, price_quantity)::text
