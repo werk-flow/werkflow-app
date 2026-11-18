@@ -109,6 +109,14 @@ export function initializeServiceBoundaries(): void {
       ) {
         return browserFetch(input, init);
       }
+      // The offline retry's contract answers its connection check at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'offline-retry' &&
+        input === '/manifest.webmanifest' &&
+        init?.method === 'HEAD'
+      ) {
+        return browserFetch(input, init);
+      }
       if (input !== '/auth/callback') throw new Error('Unexpected request in isolated UI contracts.');
       window.uiContractServices.callbackCalls += 1;
       if (window.uiContractServices.callbackFailure)
