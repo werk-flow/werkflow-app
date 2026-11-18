@@ -27,6 +27,7 @@ import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { ImportCountGrid, RevealedImportRows } from './inventory-import-outcomes';
 import { useWholesalerImport, type WholesalerImportPhase } from './use-wholesaler-import';
+import { WholesalerPriceChanges } from './wholesaler-price-changes';
 
 type WholesalerImport = ReturnType<typeof useWholesalerImport>;
 
@@ -38,8 +39,10 @@ function phaseText(phase: WholesalerImportPhase): string {
       return 'Die Lieferung wird gelesen …';
     case 'sending':
       return `Die Zeilen werden übertragen … ${phase.sent.toLocaleString('de-DE')} von ${phase.total.toLocaleString('de-DE')}`;
+    case 'pricing':
+      return 'Die Preise der eigenen Artikel werden berechnet …';
     case 'confirming':
-      return 'Die Lieferung wird in den Katalog übernommen …';
+      return 'Die Lieferung wird übernommen …';
   }
 }
 
@@ -60,6 +63,7 @@ function WholesalerCounts({ totals }: { totals: WholesalerImportResult }) {
           { label: 'Unverändert', value: totals.unchanged },
           { label: 'Neue Preise', value: totals.priceChanged + totals.priceUpdates },
           { label: 'Entfernte Artikel', value: totals.removed },
+          { label: 'Preise eigener Artikel', value: totals.ownPricesChanged },
           {
             label: 'Abgelehnte Zeilen',
             value: totals.rejected + totals.unitRejected + totals.priceUnmatched,
@@ -235,10 +239,12 @@ function RepeatWarning({
 function PreviewStep({
   wholesalerImport,
   preview,
+  supplierId,
   supplierName,
 }: {
   wholesalerImport: WholesalerImport;
   preview: WholesalerImportPreview;
+  supplierId: string;
   supplierName: string;
 }) {
   return (
@@ -247,14 +253,23 @@ function PreviewStep({
       <RepeatWarning wholesalerImport={wholesalerImport} preview={preview} />
       <WholesalerCounts totals={wholesalerPreviewTotals(preview, wholesalerImport.unitMapping)} />
       <p className="text-sm text-muted-foreground">
-        Die Artikel kommen in den Katalog dieses Großhändlers, nicht ins Inventar. Eigene Artikel, ihre Preise
-        und der Bestand bleiben unverändert.
+        Die Artikel kommen in den Katalog dieses Großhändlers, nicht ins Inventar. Der Bestand bleibt
+        unverändert.
         {preview.rebateGroups > 0 &&
           ` ${preview.rebateGroups} ${preview.rebateGroups === 1 ? 'Rabattgruppe wird' : 'Rabattgruppen werden'} gespeichert.`}
       </p>
       {preview.units.length > 0 && (
         <UnitMappingFields wholesalerImport={wholesalerImport} preview={preview} />
       )}
+      <WholesalerPriceChanges
+        prices={preview.prices}
+        unitMapping={wholesalerImport.unitMapping}
+        rebateTexts={wholesalerImport.rebateTexts}
+        rebateErrors={wholesalerImport.rebateErrors}
+        disabled={wholesalerImport.isPending}
+        onRebateChange={wholesalerImport.setRebateText}
+        onRebateCommit={() => wholesalerImport.reprice(preview, supplierId)}
+      />
       {preview.rejections.length > 0 && (
         <section aria-label="Abgelehnte Zeilen" className="space-y-3">
           <p className="text-sm font-medium">Zeilen, die nicht gelesen werden konnten</p>
@@ -365,7 +380,7 @@ export function WholesalerImportDialog({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            if (step.kind === 'preview') return wholesalerImport.confirm(step.preview);
+            if (step.kind === 'preview') return wholesalerImport.confirm(step.preview, step.supplierId);
             if (step.kind === 'result') return wholesalerImport.handleOpenChange(false);
             wholesalerImport.setAttempted(true);
             if (focusFirstInvalidField(wholesalerImport.errors)) return;
@@ -382,6 +397,7 @@ export function WholesalerImportDialog({
               <PreviewStep
                 wholesalerImport={wholesalerImport}
                 preview={step.preview}
+                supplierId={step.supplierId}
                 supplierName={supplierName}
               />
             )}
