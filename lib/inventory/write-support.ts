@@ -9,6 +9,7 @@ import type { AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { z } from '@/lib/zod';
+import { ARTICLE_PRICE_KINDS, PRICE_QUANTITIES } from './article-price-terms';
 import { IMPORT_REJECTIONS, type ImportRowOutcome } from './csv-import';
 import type { previewInventoryImportSchema } from './action-schemas';
 import { toNumber } from './types';
@@ -226,6 +227,19 @@ const importRowOutcomeSchema = z
     quantity_after: nullableNumber,
     reason: z.enum(IMPORT_REJECTIONS).catch('failed').optional(),
     item_unit: nullableText,
+    // A release before own prices changed answers none.
+    price_changes: z
+      .array(
+        z.object({
+          kind: z.enum(ARTICLE_PRICE_KINDS),
+          old_amount_cents: z.number().int().nonnegative().nullable(),
+          old_price_quantity: z.literal(PRICE_QUANTITIES).nullable(),
+          new_amount_cents: z.number().int().nonnegative(),
+          new_price_quantity: z.literal(PRICE_QUANTITIES),
+          valid_from: z.iso.date(),
+        }),
+      )
+      .optional(),
     code: z
       .string()
       .regex(/^[0-9A-Z]{5}$/)
@@ -245,6 +259,15 @@ const importRowOutcomeSchema = z
       quantityAfter: row.quantity_after,
       reason: row.outcome === 'rejected' ? (row.reason ?? 'failed') : null,
       itemUnit: row.item_unit,
+      priceChanges: (row.price_changes ?? []).map((change) => ({
+        kind: change.kind,
+        old:
+          change.old_amount_cents !== null && change.old_price_quantity !== null
+            ? { amountCents: change.old_amount_cents, priceQuantity: change.old_price_quantity }
+            : null,
+        new: { amountCents: change.new_amount_cents, priceQuantity: change.new_price_quantity },
+        validFrom: change.valid_from,
+      })),
     },
     code: row.outcome === 'rejected' ? (row.code ?? null) : null,
   }));

@@ -7,11 +7,40 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
 import { useFieldContext } from '@/components/ui/field';
 import { cn } from '@/lib/utils';
 
-const Select = SelectPrimitive.Root;
+/** The label of the item the controlled value selects, for `SelectValue` to render. */
+const SelectedItemLabel = React.createContext<React.ReactNode>(undefined);
+
+// Radix writes the selected item's label into the trigger through a portal that
+// only mounts after hydration, so server HTML and a page that has not hydrated yet
+// show an empty trigger without a busy signal. The registry Select reads the
+// label from its own `SelectItem` elements and hands it to `SelectValue`, so the
+// first HTML already shows it. Only a controlled value is known on the server.
+function Select({ children, ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  const label =
+    props.value === undefined
+      ? undefined
+      : selectItems(children).find((item) => item.value === props.value)?.label;
+  return (
+    <SelectedItemLabel.Provider value={label}>
+      <SelectPrimitive.Root {...props}>{children}</SelectPrimitive.Root>
+    </SelectedItemLabel.Provider>
+  );
+}
 
 const SelectGroup = SelectPrimitive.Group;
 
-const SelectValue = SelectPrimitive.Value;
+const SelectValue = React.forwardRef<
+  React.ComponentRef<typeof SelectPrimitive.Value>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Value>
+>(({ children, ...props }, ref) => {
+  const selectedLabel = React.useContext(SelectedItemLabel);
+  return (
+    <SelectPrimitive.Value ref={ref} {...props}>
+      {children ?? selectedLabel}
+    </SelectPrimitive.Value>
+  );
+});
+SelectValue.displayName = SelectPrimitive.Value.displayName;
 
 const SelectTrigger = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Trigger>,
@@ -81,20 +110,26 @@ SelectScrollDownButton.displayName = SelectPrimitive.ScrollDownButton.displayNam
 // fails the page instead of shipping.
 const MAX_RAW_SELECT_OPTIONS = 9;
 
-function assertRawSelectOptionCount(children: React.ReactNode) {
-  if (process.env.NODE_ENV !== 'development') return;
-  let count = 0;
+/** The value and label of every `SelectItem` element written inside `children`, at any depth. */
+function selectItems(children: React.ReactNode): { value: unknown; label: React.ReactNode }[] {
+  const items: { value: unknown; label: React.ReactNode }[] = [];
   const visit = (node: React.ReactNode) => {
     React.Children.forEach(node, (child) => {
-      if (!React.isValidElement<{ children?: React.ReactNode }>(child)) return;
+      if (!React.isValidElement<{ children?: React.ReactNode; value?: unknown }>(child)) return;
       if (child.type === SelectItem) {
-        count += 1;
+        items.push({ value: child.props.value, label: child.props.children });
         return;
       }
       if (child.props.children) visit(child.props.children);
     });
   };
   visit(children);
+  return items;
+}
+
+function assertRawSelectOptionCount(children: React.ReactNode) {
+  if (process.env.NODE_ENV !== 'development') return;
+  const count = selectItems(children).length;
   if (count > MAX_RAW_SELECT_OPTIONS) {
     throw new Error(
       `Raw Select renders ${count} options; the registry caps it at ${MAX_RAW_SELECT_OPTIONS}. Use SearchableSelect or SelectWithCreate (werkflow-design skill, component registry).`,

@@ -47,6 +47,8 @@ import {
 import AuthLayout from '@/app/(auth)/layout';
 import { OfflineClockContractFixture, UnsentTimeLandingContractFixture } from './offline-clock-boundaries';
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
+import { ReturnOnSignal } from '@/app/offline/return-on-signal';
+import { RetryButton } from '@/app/offline/retry-button';
 import { WorkHandoverContractFixture } from './work-handover-boundaries';
 import { EditJobContractFixture } from './edit-job-boundaries';
 import { SiteAccessProposalContractFixture, SiteAccessReviewContractFixture } from './site-access-boundaries';
@@ -699,6 +701,11 @@ createRoot(root).render(
     <TodayRefreshFallbackContractFixture />
   ) : window.uiContractFixture === 'offline-today' ? (
     <OfflineTodayContractFixture />
+  ) : window.uiContractFixture === 'offline-retry' ? (
+    <main>
+      <ReturnOnSignal />
+      <RetryButton />
+    </main>
   ) : window.uiContractFixture === 'offline-clock' ? (
     <OfflineClockContractFixture />
   ) : window.uiContractFixture === 'unsent-time-landing' ? (

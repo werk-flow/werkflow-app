@@ -86,6 +86,11 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
   variable('form focus exceptions', 'lib/conventions/form-validation-focus.test.ts', 'REVIEWED_EXCEPTIONS'),
   variable('double renders', 'lib/conventions/route-render-owner.test.ts', 'REVIEWED_DOUBLE_RENDERS'),
   variable(
+    'navigation refreshes',
+    'lib/conventions/navigation-refresh.test.ts',
+    'REVIEWED_NAVIGATION_REFRESHES',
+  ),
+  variable(
     'Linux-runner-only script dates',
     'lib/conventions/portable-script-dates.test.ts',
     'LINUX_RUNNER_ONLY',

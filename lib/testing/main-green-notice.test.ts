@@ -101,7 +101,10 @@ function notify() {
 }
 
 test('only a successful push run of CI on main starts it', () => {
-  expect(notice.at('on')).toEqual({ workflow_run: { workflows: ['CI'], types: ['completed'] } });
+  // The branch filter keeps every PR and queue run of CI from starting a run that only skips.
+  expect(notice.at('on')).toEqual({
+    workflow_run: { workflows: ['CI'], types: ['completed'], branches: ['main'] },
+  });
   expect(notice.text('jobs', 'notice', 'if').replace(/\s+/g, ' ')).toBe(
     "github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success'",
   );
