@@ -220,7 +220,7 @@ export async function expectSessionsSince(
 }
 
 /**
- * Reads the first event the device holds unsent, which must be a start, lets `reconnect` bring the
+ * Waits until the first event the device holds unsent is a start, reads it, lets `reconnect` bring the
  * signal back, and waits until the server recorded that start once, under the device's operation
  * id, at the time the phone captured it: its operation, its session and that session's first
  * segment, work without a job.
@@ -230,8 +230,13 @@ export async function expectStartRecordedAtCapturedTime(
   world: TestWorld,
   reconnect: () => Promise<void>,
 ): Promise<void> {
+  // The clock shows a kept tap at once (shown-clock-rule.ts); the outbox takes it in a moment later.
+  await expect
+    .poll(async () => (await readTimeEventsOnDevice(page))[0]?.action, {
+      message: 'The device outbox holds the kept start',
+    })
+    .toBe('start');
   const [start] = await readTimeEventsOnDevice(page);
-  expect(start?.action).toBe('start');
   const capturedAt = Date.parse(start?.capturedAt ?? '');
   await reconnect();
   await expect
