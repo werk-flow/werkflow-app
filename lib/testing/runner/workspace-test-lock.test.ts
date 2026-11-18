@@ -82,7 +82,8 @@ describe('workspace test operation ownership', () => {
         cwd: repositoryRoot,
         stdout: 'pipe',
         stderr: 'pipe',
-        env: process.env,
+        // Playwright keeps its transform cache in TMPDIR unless told otherwise; this one is removed after the test.
+        env: { ...process.env, PWTEST_CACHE_DIR: temporaryDirectory('playwright-transform-cache-') },
       },
     );
     const [code, output, errors] = await Promise.all([

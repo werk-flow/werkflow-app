@@ -58,7 +58,8 @@ function writeSecretFile(mode = 0o600): void {
 
 async function helper(args: string[], stdin = ''): Promise<{ code: number; stdout: string; stderr: string }> {
   const child = Bun.spawn(['bun', SCRIPT, ...args], {
-    env: { ...process.env, HOME: home },
+    // The screenshot folder lands in the test's own home, which is removed after the test.
+    env: { ...process.env, HOME: home, TMPDIR: home },
     stdin: new TextEncoder().encode(stdin),
     stdout: 'pipe',
     stderr: 'pipe',
