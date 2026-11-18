@@ -3,7 +3,7 @@ import { logError } from '@/lib/logging';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { Tables } from '@/lib/supabase/database.types';
-import { UNUSUALLY_LONG_SESSION_MS } from './segments';
+import { sessionNeedsRecovery } from './canonical-clock-state';
 import { hashTimeTransitionRequest } from './transition-hash';
 
 // The canonical half of clockOutBeforeSignOut (clock-state-actions.ts): ends
@@ -14,18 +14,6 @@ type OpenSession = Pick<
   Tables<'time_sessions'>,
   'id' | 'organization_id' | 'version' | 'status' | 'started_at'
 >;
-
-/**
- * The clock's rule (sessionRecoveryReason in canonical-clock-state.ts): a
- * session the database flagged, or one open longer than the threshold, ends
- * with the recovery marker the office reviews, never as the person's own end.
- */
-function needsRecoveryEnd(session: OpenSession, now: Date): boolean {
-  return (
-    session.status === 'recovery_required' ||
-    now.getTime() - new Date(session.started_at).getTime() > UNUSUALLY_LONG_SESSION_MS
-  );
-}
 
 function getTransitionOutcome(value: unknown): string | null {
   if (!value || typeof value !== 'object' || !('outcome' in value)) return null;
@@ -44,7 +32,7 @@ export async function endSessionBeforeSignOut(
   session: OpenSession,
 ): Promise<boolean> {
   const operationId = crypto.randomUUID();
-  const action = needsRecoveryEnd(session, new Date()) ? 'recover_end' : 'end';
+  const action = sessionNeedsRecovery(session, new Date()) ? 'recover_end' : 'end';
   const requestHash = hashTimeTransitionRequest({
     organizationId: session.organization_id,
     action,
