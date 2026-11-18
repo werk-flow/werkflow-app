@@ -30,24 +30,33 @@ function TaskCount(): ReactElement | null {
 }
 
 /**
- * A field worker's start page: today's Einsätze from the phone's snapshot, the clock and today's
- * working time, and the own open Aufgaben. Everything comes from what the app already holds;
- * the only reads are the phone's own storage. Memoized without props: a route refresh after a
- * clock action renders the page again and leaves this part as it is.
+ * The only component that follows the device day and the organization and profile contexts, which
+ * a clock action's route refresh renders again; the sections below it compare their props.
  */
-export const WorkerStartContent = memo(function WorkerStartContent(): ReactElement {
+function EinsaetzePart(): ReactElement {
   const day = useWorkerStartDay();
   const online = useOnline();
+  return (
+    <WorkerStartEinsaetze
+      stored={day.stored}
+      settled={day.settled}
+      ended={day.ended}
+      failure={day.failure}
+      online={online}
+    />
+  );
+}
 
+/**
+ * A field worker's start page: today's Einsätze from the phone's snapshot, the clock and today's
+ * working time, and the own open Aufgaben. Everything comes from what the app already holds;
+ * the only reads are the phone's own storage. Memoized without props and reading no context: a
+ * route refresh after a clock action renders the page again and leaves this part as it is.
+ */
+export const WorkerStartContent = memo(function WorkerStartContent(): ReactElement {
   return (
     <div className="mx-auto max-w-3xl space-y-6" data-testid="worker-start">
-      <WorkerStartEinsaetze
-        stored={day.stored}
-        settled={day.settled}
-        ended={day.ended}
-        failure={day.failure}
-        online={online}
-      />
+      <EinsaetzePart />
       <WorkerStartClock>
         <ClockLines />
       </WorkerStartClock>
