@@ -47,8 +47,7 @@ const freshnessFiles = new Set([
   'tests/audit/performance/planning-benchmark.spec.ts',
   'tests/audit/performance/field.spec.ts',
 ]);
-// Audit P1-22 measures opening readiness inside its imported submission helper.
-// This ownership declaration must survive a helper refactor or removal of a timing call.
+// Audit P1-22 measures readiness in its imported submission helper; this survives a helper refactor.
 const readinessSources: Readonly<Record<string, string>> = {
   'tests/golden/p1-22.spec.ts': 'tests/golden/p1-22.spec.ts',
   'tests/golden/p1-11.spec.ts': 'tests/golden/p1-11.spec.ts',
@@ -71,13 +70,10 @@ function declaredTiming(files: readonly string[]): GroupTimingRequirements {
   };
 }
 
-// Prefixes describe ownership, not proof that a change cannot affect another area.
-// A changed file under a prefix selects the browser groups that declare its scope;
-// a product file no prefix owns selects the core set (group-selection.ts).
-// An entry ending in "/" owns a directory; any other entry owns exactly one file,
-// for a shared file whose feature is obvious (a hook, a skeleton, an API route).
-// Every entry must exist on disk (test-scope-prefixes.test.ts): an entry that names
-// nothing owns nothing.
+// Prefixes describe ownership, not proof that a change cannot affect another area. A changed file
+// under a prefix selects the browser groups of its scope; a product file no prefix owns selects the
+// core set (group-selection.ts). An entry ending in "/" owns a directory, any other one obvious shared
+// file (a hook, a skeleton, an API route); every entry exists on disk (test-scope-prefixes.test.ts).
 export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   customers: [
     'lib/clients/',
