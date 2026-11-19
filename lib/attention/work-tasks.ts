@@ -302,14 +302,17 @@ async function readWorkArtifactTaskFacts(
   return { revisions: revisionsResult.data ?? [], targets };
 }
 
+type CompletedProjectRow = Omit<HandoverProjectRow, 'lastChildCompletionDate'>;
+
 /**
  * The projects whose handover is due: the explicitly completed ones plus the
- * derived ones whose child jobs all reached a terminal state. Null when a read fails.
+ * derived ones whose child jobs all reached a terminal state, each with its
+ * last child's completion date. Null when a read fails.
  */
 async function resolveCompleteHandoverProjects(
   admin: AdminClient,
   context: ActionContext,
-  explicitProjects: HandoverProjectRow[],
+  explicitProjects: CompletedProjectRow[],
   terminalChildSignals: Array<{ project_id: string | null }>,
 ): Promise<HandoverProjectRow[] | null> {
   const childProjectIds = [
@@ -345,7 +348,7 @@ async function resolveCompleteHandoverProjects(
       (from, to) =>
         admin
           .from('jobs')
-          .select('project_id, execution_state, status')
+          .select('project_id, execution_state, status, actual_completion_date')
           .eq('organization_id', context.orgId)
           .in('project_id', [...batch])
           .order('id')
@@ -364,19 +367,26 @@ async function resolveCompleteHandoverProjects(
       status: NonNullable<typeof projectJobsResult.data>[number]['status'];
     }>
   >();
+  const lastChildCompletion = new Map<string, string>();
   for (const childJob of projectJobsResult.data ?? []) {
     if (!childJob.project_id) continue;
     const projectJobs = childJobsByProject.get(childJob.project_id) ?? [];
     projectJobs.push({ executionState: childJob.execution_state, status: childJob.status });
     childJobsByProject.set(childJob.project_id, projectJobs);
+    const completedOn = childJob.actual_completion_date;
+    const latest = lastChildCompletion.get(childJob.project_id);
+    if (completedOn !== null && (latest === undefined || completedOn > latest)) {
+      lastChildCompletion.set(childJob.project_id, completedOn);
+    }
   }
-  return possibleProjects.filter(
-    (project) =>
-      resolveProjectHandoverExecutionState(
-        project.execution_state_override,
-        project.status_override,
-        childJobsByProject.get(project.id) ?? [],
-      ) === 'execution_complete',
+  return possibleProjects.flatMap((project) =>
+    resolveProjectHandoverExecutionState(
+      project.execution_state_override,
+      project.status_override,
+      childJobsByProject.get(project.id) ?? [],
+    ) === 'execution_complete'
+      ? [{ ...project, lastChildCompletionDate: lastChildCompletion.get(project.id) ?? null }]
+      : [],
   );
 }
 export async function deriveWorkHandoverTasks(context: ActionContext): Promise<DerivedTasks> {
@@ -392,7 +402,7 @@ export async function deriveWorkHandoverTasks(context: ActionContext): Promise<D
       (from, to) =>
         admin
           .from('jobs')
-          .select('id, job_number, title, execution_version, project_id, updated_at')
+          .select('id, job_number, title, execution_version, project_id, updated_at, actual_completion_date')
           .eq('organization_id', context.orgId)
           .or('execution_state.eq.execution_complete,and(execution_state.is.null,status.eq.fertig)')
           .order('updated_at', { ascending: true })

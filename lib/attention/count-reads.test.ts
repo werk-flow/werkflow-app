@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, setSystemTime, test } from 'bun:test';
 
 // Tier 2 for "attention count reads" (docs/technical/realtime-and-caching.md):
 // the badge counts run on every debounced Realtime event and every catch-up of
@@ -20,11 +20,17 @@ let failingTable: string | null = null;
 let queries: string[] = [];
 // The open jobs past their visits that the office's set read returns, and the organizations it was asked for.
 let overdueJobs: Record<string, unknown>[] = [];
+let openRequests: Record<string, unknown>[] = [];
 let managerSetOrganizations: unknown[] = [];
+// Extra rows a case seeds, by table; the viewer's own employee record can be left out.
+let seededRows: Record<string, Record<string, unknown>[]> = {};
+let withOwnRecord = true;
 
 // The steady state of a typical member: an own employee record, no pending
 // work. Every derivation then stops after its first scarce read.
 function rowsOf(table: string): Record<string, unknown>[] {
+  const seeded = seededRows[table];
+  if (seeded) return seeded;
   if (table === 'organization_members') {
     return [
       {
@@ -37,6 +43,7 @@ function rowsOf(table: string): Record<string, unknown>[] {
     ];
   }
   if (table === 'employee_records') {
+    if (!withOwnRecord) return [];
     return [
       {
         id: OWN_RECORD,
@@ -90,7 +97,7 @@ function countingQuery(table: string) {
     if (table === 'rpc read_manager_attention_sets')
       return Promise.resolve(
         resolve({
-          data: { requests: [], access_proposals: [], overdue_jobs: overdueJobs },
+          data: { requests: openRequests, access_proposals: [], overdue_jobs: overdueJobs },
           error: null,
           count: 0,
         }),
@@ -132,7 +139,7 @@ test.skipIf(ISOLATED)('the attention count read cases pass in an isolated proces
     `${stdout}
 ${stderr}`,
   ).toBe(0);
-  expect(stderr).toContain('5 pass');
+  expect(stderr).toContain('6 pass');
 });
 
 if (ISOLATED) {
@@ -269,6 +276,62 @@ if (ISOLATED) {
         expect(managerSetOrganizations).toEqual([ORG]);
       } finally {
         overdueJobs = [];
+      }
+    });
+
+    test("another manager's overdue callback reaches Admin once it is overdue more than two workdays, never Büro or an employee", async () => {
+      const OTHER_MANAGER = '9f3e6c1b-4a5d-4e8f-a0b1-c2d3e4f5a6b7';
+      const request = (id: string, callbackDueAt: string) => ({
+        id,
+        request_number: null,
+        summary: 'Heizung fällt aus',
+        status: 'offen',
+        urgency: 'normal',
+        assigned_to: OTHER_MANAGER,
+        received_at: '2025-01-02T08:00:00Z',
+        callback_due_at: callbackDueAt,
+        callback_overdue: true,
+        owner_is_manager: true,
+      });
+      // Thursday, 19 November 2026: due last Thursday is five workdays overdue, due yesterday one.
+      setSystemTime(new Date('2026-11-19T10:00:00Z'));
+      const LONG_OVERDUE = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
+      const JUST_OVERDUE = '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e';
+      openRequests = [
+        request(LONG_OVERDUE, '2026-11-12T09:00:00Z'),
+        request(JUST_OVERDUE, '2026-11-18T09:00:00Z'),
+      ];
+      seededRows = {
+        profiles: [{ id: OTHER_MANAGER, first_name: 'Erika', last_name: 'Musterfrau', email: null }],
+      };
+      // Without an own record the own vacation overview succeeds, so the overview shows its tasks.
+      withOwnRecord = false;
+      managerSetOrganizations = [];
+      const kinds = async (viewer: Role) => {
+        const { result } = await readAs(viewer, getAttentionOverview);
+        if (!result.success) throw new Error(`overview failed for ${viewer}`);
+        return result.overview.tasks.map((task) => [task.sourceId, task.sourceType, task]);
+      };
+      try {
+        const admin = await kinds('admin');
+        expect(admin.map(([id, kind]) => [id, kind])).toEqual([
+          [LONG_OVERDUE, 'client_request_callback_overdue'],
+          [JUST_OVERDUE, 'client_request_open'],
+        ]);
+        expect(admin[0]?.[2]).toMatchObject({ ownerName: 'Erika Musterfrau', assignedToMe: false });
+        const buero = await kinds('buero');
+        expect(buero.map(([id, kind]) => [id, kind])).toEqual([
+          [LONG_OVERDUE, 'client_request_open'],
+          [JUST_OVERDUE, 'client_request_open'],
+        ]);
+        expect(await kinds('employee')).toEqual([]);
+        // Only the managers' derivations read the set, each for the session's organization.
+        expect(managerSetOrganizations).toEqual([ORG, ORG]);
+      } finally {
+        setSystemTime();
+        openRequests = [];
+        seededRows = {};
+        withOwnRecord = true;
       }
     });
 

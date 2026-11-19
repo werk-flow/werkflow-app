@@ -1,9 +1,10 @@
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { Tables } from '@/lib/supabase/database.types';
 import type { AttentionTask } from './types';
 
 export type HandoverJobRow = Pick<
   Tables<'jobs'>,
-  'id' | 'job_number' | 'title' | 'execution_version' | 'project_id' | 'updated_at'
+  'id' | 'job_number' | 'title' | 'execution_version' | 'project_id' | 'updated_at' | 'actual_completion_date'
 >;
 export type HandoverProjectRow = Pick<
   Tables<'projects'>,
@@ -14,7 +15,20 @@ export type HandoverProjectRow = Pick<
   | 'execution_state_override'
   | 'status_override'
   | 'updated_at'
->;
+> & {
+  /** The latest completion date among its child jobs; null when none has one. */
+  lastChildCompletionDate: string | null;
+};
+
+/**
+ * The Berlin day a project's execution completed: the later of its last child
+ * job's completion and its own last change, which a completion by hand is.
+ */
+function projectCompletedOn(project: HandoverProjectRow): string {
+  const changedOn = formatBerlinLocalDate(project.updated_at);
+  const childOn = project.lastChildCompletionDate;
+  return childOn !== null && childOn > changedOn ? childOn : changedOn;
+}
 
 /**
  * The handover review tasks of finished jobs and projects whose package is not
@@ -49,6 +63,8 @@ export function toWorkHandoverTasks(
               ? `/auftraege/${encodeURIComponent(job.job_number)}/uebergabe`
               : `/auftraege/uebergaben/auftrag/${job.id}`,
         packageState: handoverPackage?.state ?? 'missing',
+        // A job finished before completion dates were recorded waits since its last change.
+        completedOn: job.actual_completion_date ?? formatBerlinLocalDate(job.updated_at),
         stateVersion: `job:${job.execution_version}:${handoverPackage?.version ?? 0}`,
       },
     });
@@ -67,6 +83,7 @@ export function toWorkHandoverTasks(
           ? `/auftraege/projekt/${encodeURIComponent(project.project_number)}/uebergabe`
           : `/auftraege/uebergaben/projekt/${project.id}`,
         packageState: handoverPackage?.state ?? 'missing',
+        completedOn: projectCompletedOn(project),
         stateVersion: `project:${project.execution_version}:${handoverPackage?.version ?? 0}`,
       },
     });

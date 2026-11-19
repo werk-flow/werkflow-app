@@ -186,6 +186,25 @@ export function getLocalWeekday(localDate: string): number {
   return sundayBased === 0 ? 6 : sundayBased - 1;
 }
 
+/**
+ * The Monday-to-Friday days after `fromDate` up to and including `toDate`;
+ * 0 when `toDate` is not after `fromDate`. Public holidays count as workdays.
+ */
+export function countWorkdaysAfter(fromDate: string, toDate: string): number {
+  const fromWeekday = getLocalWeekday(fromDate);
+  // Refuses an invalid end date as the start date was refused.
+  getLocalWeekday(toDate);
+  const days = Math.round(
+    (Date.parse(`${toDate}T00:00:00.000Z`) - Date.parse(`${fromDate}T00:00:00.000Z`)) / 86_400_000,
+  );
+  if (days <= 0) return 0;
+  let workdays = Math.floor(days / 7) * 5;
+  for (let offset = 1; offset <= days % 7; offset += 1) {
+    if ((fromWeekday + offset) % 7 < 5) workdays += 1;
+  }
+  return workdays;
+}
+
 /** The Berlin midnight that starts a calendar date; midnight is never in a DST gap or overlap. */
 function berlinMidnight(localDate: string): Date {
   const midnight = resolveBerlinWallTime(`${localDate}T00:00`);

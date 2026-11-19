@@ -107,9 +107,11 @@ export type AttentionTask =
       /** When it becomes this viewer's overdue callback; null when it never does. */
       callbackDueAt: string | null;
     }
-  // An open request whose promised callback has passed: its owner's task, and
-  // every manager's while it has no owner who is still a manager. It replaces
-  // the request's client_request_open task for that viewer.
+  // An open request whose promised callback has passed: its owner's task,
+  // every manager's while it has no owner who is still a manager, and every
+  // Admin's once it is overdue past the owner start's threshold
+  // (owner-exceptions.ts). It replaces the request's client_request_open task
+  // for that viewer.
   | {
       sourceType: 'client_request_callback_overdue';
       sourceId: string;
@@ -120,6 +122,7 @@ export type AttentionTask =
       /** Null without an owner. */
       ownerName: string | null;
       ownerUnavailable: boolean;
+      assignedToMe: boolean;
     }
   | {
       sourceType: 'client_follow_up';
@@ -205,6 +208,8 @@ export type AttentionTask =
       packageState:
         | 'missing'
         | Exclude<Database['public']['Enums']['work_handover_package_state'], 'released'>;
+      /** Berlin date the execution completed. */
+      completedOn: string;
       stateVersion: string;
     }
   // Someone entered the organization code and waits for Admin or Büro.

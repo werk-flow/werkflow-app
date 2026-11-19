@@ -28,6 +28,7 @@ declare global {
       | 'own-personnel'
       | 'task-sections'
       | 'office-start'
+      | 'owner-start'
       | 'task-sections-anchor'
       | 'calendar'
       | 'options'

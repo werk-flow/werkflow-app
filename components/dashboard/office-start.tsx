@@ -6,6 +6,7 @@ import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { OfficeStartView } from './office-start-sections';
+import { OwnerStartView } from './owner-start';
 
 /**
  * The count of überfällig maintenance from the Wartung list's own reader,
@@ -42,11 +43,18 @@ function useOverdueMaintenanceCount() {
 /**
  * What needs Büro and Admin now: the Aufgaben sections without personnel
  * approvals, each with its count and first items, and the überfällig
- * maintenance. It reads in the browser, because every clock action renders
+ * maintenance. Admin first sees what needs the owner's decision, from the
+ * same two reads. It reads in the browser, because every clock action renders
  * the dashboard's server component again.
  */
 export function OfficeStart() {
+  const { activeOrg } = useOrganization();
   const attention = useLiveAttentionOverview();
   const maintenance = useOverdueMaintenanceCount();
-  return <OfficeStartView attention={attention} maintenance={maintenance} />;
+  return (
+    <div className="space-y-10">
+      {activeOrg?.role === 'admin' && <OwnerStartView attention={attention} maintenance={maintenance} />}
+      <OfficeStartView attention={attention} maintenance={maintenance} />
+    </div>
+  );
 }
