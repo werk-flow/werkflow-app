@@ -2670,8 +2670,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 38150, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 5, "tolerance": 0 },
+          "encodedBytes": { "reference": 41344, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2945,6 +2945,24 @@
           },
           "runKeys": ["2026-11-19T072721249Z-f21a92"],
           "reason": "Aufgaben loads its own chunk instead of the shell's (owner decision 2026-11-19, werk-flow/werkflow-planning#23)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 38150, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 5, "tolerance": 0 },
+            "encodedBytes": { "reference": 41344, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-19T232617759Z-fde7b4"],
+          "reason": "Owner decision 2026-11-19 (werk-flow/werkflow-planning#23, Owner queue 1): opening Aufgaben loads its own code; these are that script's bytes (lead's reading of the decision)"
         }
       ]
     },
