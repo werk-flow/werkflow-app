@@ -18,6 +18,44 @@ function toDateValue(value: Date | undefined): string {
 
 type EquipmentFormFieldsProps = Pick<EquipmentFormController, 'form' | 'updateField'>;
 
+type EquipmentTextKey =
+  | 'manufacturer'
+  | 'model'
+  | 'serialNumber'
+  | 'productNumber'
+  | 'operatorNumber'
+  | 'sourceNumber'
+  | 'warrantyProvider'
+  | 'warrantyBasis';
+
+/** One free-text field of the dialog. */
+function EquipmentTextField({
+  form,
+  updateField,
+  name,
+  id,
+  label,
+  placeholder,
+  maxLength,
+}: EquipmentFormFieldsProps & {
+  name: EquipmentTextKey;
+  id: string;
+  label: string;
+  placeholder?: string;
+  maxLength?: number;
+}): ReactElement {
+  return (
+    <Field label={label} htmlFor={id}>
+      <Input
+        value={form[name] ?? ''}
+        onChange={(event) => updateField(name, event.target.value)}
+        placeholder={placeholder}
+        maxLength={maxLength}
+      />
+    </Field>
+  );
+}
+
 /** Customer, site and name: the first cells of the dialog's main grid. */
 export function EquipmentAssignmentFields({
   controller,
@@ -90,36 +128,36 @@ export function EquipmentTechnicalFields({
   updateField,
   mode,
 }: EquipmentFormFieldsProps & { mode: EquipmentFormMode }): ReactElement {
+  const fields = { form, updateField };
   return (
     <FormDisclosure label="Technische Angaben und Kennungen" defaultOpen={mode === 'edit'}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Hersteller" htmlFor="equipment-manufacturer">
-          <Input
-            value={form.manufacturer ?? ''}
-            onChange={(event) => updateField('manufacturer', event.target.value)}
+        <EquipmentTextField {...fields} name="manufacturer" id="equipment-manufacturer" label="Hersteller" />
+        <EquipmentTextField {...fields} name="model" id="equipment-model" label="Modell" />
+        <EquipmentTextField {...fields} name="serialNumber" id="equipment-serial" label="Seriennummer" />
+        <EquipmentTextField
+          {...fields}
+          name="productNumber"
+          id="equipment-product"
+          label="Hersteller- oder Artikelnummer"
+        />
+        <EquipmentTextField
+          {...fields}
+          name="operatorNumber"
+          id="equipment-operator"
+          label="Betreiberkennung"
+        />
+        {/* A replacement is a new device: it does not take the predecessor's old number. */}
+        {mode !== 'replace' && (
+          <EquipmentTextField
+            {...fields}
+            name="sourceNumber"
+            id="equipment-source-number"
+            label="Nummer im Altsystem"
+            placeholder="Nummer aus dem bisherigen Programm"
+            maxLength={100}
           />
-        </Field>
-        <Field label="Modell" htmlFor="equipment-model">
-          <Input value={form.model ?? ''} onChange={(event) => updateField('model', event.target.value)} />
-        </Field>
-        <Field label="Seriennummer" htmlFor="equipment-serial">
-          <Input
-            value={form.serialNumber}
-            onChange={(event) => updateField('serialNumber', event.target.value)}
-          />
-        </Field>
-        <Field label="Hersteller- oder Artikelnummer" htmlFor="equipment-product">
-          <Input
-            value={form.productNumber}
-            onChange={(event) => updateField('productNumber', event.target.value)}
-          />
-        </Field>
-        <Field label="Betreiberkennung" htmlFor="equipment-operator">
-          <Input
-            value={form.operatorNumber}
-            onChange={(event) => updateField('operatorNumber', event.target.value)}
-          />
-        </Field>
+        )}
         <Field label="Technische Hinweise" htmlFor="equipment-notes" className="sm:col-span-2">
           <Textarea
             value={form.technicalNotes ?? ''}
@@ -133,6 +171,7 @@ export function EquipmentTechnicalFields({
 }
 
 export function EquipmentWarrantyFields({ form, updateField }: EquipmentFormFieldsProps): ReactElement {
+  const fields = { form, updateField };
   return (
     <FormDisclosure label="Installation, Inbetriebnahme und Gewährleistung">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -148,19 +187,19 @@ export function EquipmentWarrantyFields({ form, updateField }: EquipmentFormFiel
             onChange={(value) => updateField('commissioningDate', toDateValue(value))}
           />
         </Field>
-        <Field label="Gewährleistungsgeber" htmlFor="equipment-warranty-provider">
-          <Input
-            value={form.warrantyProvider ?? ''}
-            onChange={(event) => updateField('warrantyProvider', event.target.value)}
-          />
-        </Field>
-        <Field label="Grundlage" htmlFor="equipment-warranty-basis">
-          <Input
-            value={form.warrantyBasis ?? ''}
-            onChange={(event) => updateField('warrantyBasis', event.target.value)}
-            placeholder="z. B. Vertrag oder Herstellerzusage"
-          />
-        </Field>
+        <EquipmentTextField
+          {...fields}
+          name="warrantyProvider"
+          id="equipment-warranty-provider"
+          label="Gewährleistungsgeber"
+        />
+        <EquipmentTextField
+          {...fields}
+          name="warrantyBasis"
+          id="equipment-warranty-basis"
+          label="Grundlage"
+          placeholder="z. B. Vertrag oder Herstellerzusage"
+        />
         <Field label="Beginn" htmlFor="equipment-warranty-start">
           <DatePicker
             value={parseIsoLocalDate(form.warrantyStartDate ?? '')}

@@ -10,7 +10,14 @@ import {
   type AppFamily,
   type StandaloneFamily,
 } from '../support/visual-families';
-import { DESKTOP, PHONE, expectReference, pageBody, settlePage } from '../support/visual-references';
+import {
+  DESKTOP,
+  PHONE,
+  expectReference,
+  holdWallClock,
+  pageBody,
+  settlePage,
+} from '../support/visual-references';
 import { prepareVisualWorld, standaloneReplacements, visualReplacements } from '../support/visual-fixtures';
 
 // Visual references (release mode only): one reference per page family
@@ -23,7 +30,7 @@ import { prepareVisualWorld, standaloneReplacements, visualReplacements } from '
 
 type Replacements = readonly (readonly [string, string])[];
 
-/** The desktop, then the phone, each opened anew at its width and compared in light and dark. */
+/** The desktop, then the phone, each opened anew at its width on a held wall clock and compared in light and dark. */
 async function expectFamilyReferences(
   page: Page,
   id: string,
@@ -31,6 +38,7 @@ async function expectFamilyReferences(
   replacements: Replacements,
   options: { calendarWeek: boolean },
 ): Promise<void> {
+  await holdWallClock(page);
   for (const [name, viewport] of [
     ['desktop', DESKTOP],
     ['phone', PHONE],

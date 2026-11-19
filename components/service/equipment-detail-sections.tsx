@@ -136,6 +136,7 @@ export function EquipmentDataSection({
         <Fact label="Hersteller" value={item.manufacturer} testId="equipment-fact-manufacturer" />
         <Fact label="Modell" value={item.model} />
         <Fact label="Position" value={item.locationDetail} />
+        {item.sourceNumber && <Fact label="Nummer im Altsystem" value={item.sourceNumber} />}
         <Fact label="Installation" value={formatEquipmentDate(item.installationDate)} />
         <Fact
           label="Inbetriebnahme"
