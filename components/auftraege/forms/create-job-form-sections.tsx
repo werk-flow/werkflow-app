@@ -17,6 +17,7 @@ import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-
 import { EmployeeMultiSelect, type OrgMemberOption } from '../shared/employee-multi-select';
 import { SiteContactFields } from '../shared/site-contact-fields';
 import { JOB_PRIORITY_OPTIONS } from './job-form-options';
+import { JobSourceNumberField } from './job-source-number-field';
 import type { CreateJobForm } from './use-create-job-form';
 
 /** Number, title, description and work template. */
@@ -27,6 +28,8 @@ export function CreateJobBasicsFields({ form }: { form: CreateJobForm }) {
     jobNumberError,
     setJobNumberError,
     showJobNumberError,
+    sourceNumber,
+    setSourceNumber,
     title,
     setTitle,
     description,
@@ -57,6 +60,13 @@ export function CreateJobBasicsFields({ form }: { form: CreateJobForm }) {
           disabled={formDisabled}
         />
       </Field>
+
+      <JobSourceNumberField
+        id="job-source-number"
+        value={sourceNumber}
+        onChange={setSourceNumber}
+        disabled={formDisabled}
+      />
 
       <Field label="Titel" htmlFor="job-title">
         <Input
