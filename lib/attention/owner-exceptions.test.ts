@@ -17,7 +17,7 @@ function callback(sourceId: string, callbackDueAt: string): AttentionTask {
   };
 }
 
-function handover(sourceId: string, completedOn: string): AttentionTask {
+function handover(sourceId: string, completedOn: string | null): AttentionTask {
   return {
     sourceType: 'work_handover_review',
     sourceId,
@@ -82,6 +82,10 @@ describe('the exceptions on the owner start', () => {
         exception ? [['handover', ['job']]] : [],
       );
     }
+  });
+
+  test('an Übergabe with an unknown completion day never becomes an exception by age', () => {
+    expect(exceptionIds([handover('project', null)], '2026-11-19')).toEqual([]);
   });
 
   test('a blocker is an exception once its review date has passed', () => {

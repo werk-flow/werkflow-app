@@ -139,7 +139,7 @@ test.skipIf(ISOLATED)('the attention count read cases pass in an isolated proces
     `${stdout}
 ${stderr}`,
   ).toBe(0);
-  expect(stderr).toContain('7 pass');
+  expect(stderr).toContain('8 pass');
 });
 
 if (ISOLATED) {
@@ -369,6 +369,55 @@ if (ISOLATED) {
             completedOn: '2026-11-12',
           }),
         ]);
+      } finally {
+        setSystemTime();
+        seededRows = {};
+        withOwnRecord = true;
+      }
+    });
+
+    test('a project completed through its child jobs has no completion day while a finished child carries none', async () => {
+      const PROJECT = '4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a';
+      const child = (id: string, actualCompletionDate: string | null) => ({
+        id,
+        job_number: null,
+        title: 'Heizung tauschen',
+        execution_version: 1,
+        project_id: PROJECT,
+        execution_state: null,
+        status: 'fertig',
+        updated_at: '2026-11-02T09:00:00Z',
+        actual_completion_date: actualCompletionDate,
+      });
+      setSystemTime(new Date('2026-11-19T10:00:00Z'));
+      seededRows = {
+        'rpc list_handover_candidate_projects': [{ project_id: PROJECT }],
+        projects: [
+          {
+            id: PROJECT,
+            project_number: 'P-2026-002',
+            name: 'Heizungsanlage erneuern',
+            execution_version: 1,
+            execution_state_override: null,
+            status_override: null,
+            updated_at: '2026-10-01T09:00:00Z',
+            work_execution_events: [],
+          },
+        ],
+        // One child completed on the 10th, one finished before completion dates were recorded.
+        jobs: [
+          child('5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', '2026-11-10'),
+          child('6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c', null),
+        ],
+      };
+      withOwnRecord = false;
+      try {
+        const { result } = await readAs('admin', getAttentionOverview);
+        if (!result.success) throw new Error('overview failed');
+        expect(result.overview.tasks.find((task) => task.sourceId === PROJECT)).toMatchObject({
+          sourceType: 'work_handover_review',
+          completedOn: null,
+        });
       } finally {
         setSystemTime();
         seededRows = {};

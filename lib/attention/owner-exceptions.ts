@@ -51,11 +51,11 @@ function isOwnerException(task: AttentionTask, businessDate: string): boolean {
       return true;
     case 'client_request_callback_overdue':
       return isCallbackPastThreshold(task.callbackDueAt, businessDate);
+    // An unknown completion day never escalates by age; the Übergabe stays an ordinary task.
     case 'work_handover_review':
-      return isPastThreshold(
-        task.completedOn,
-        businessDate,
-        OWNER_EXCEPTION_THRESHOLDS.handoverWaitingWorkdays,
+      return (
+        task.completedOn !== null &&
+        isPastThreshold(task.completedOn, businessDate, OWNER_EXCEPTION_THRESHOLDS.handoverWaitingWorkdays)
       );
     case 'work_blocker_review':
       return task.nextReviewDate < businessDate;

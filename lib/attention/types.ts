@@ -208,8 +208,8 @@ export type AttentionTask =
       packageState:
         | 'missing'
         | Exclude<Database['public']['Enums']['work_handover_package_state'], 'released'>;
-      /** Berlin date the execution completed. */
-      completedOn: string;
+      /** Berlin date the execution completed; null while a finished child job of a project carries none. */
+      completedOn: string | null;
       stateVersion: string;
     }
   // Someone entered the organization code and waits for Admin or Büro.

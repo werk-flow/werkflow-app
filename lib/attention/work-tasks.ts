@@ -19,6 +19,7 @@ import { workTargetHref, workTargetLabel } from './task-labels';
 import type { AttentionTask } from './types';
 import {
   latestHandCompletion,
+  projectCompletedOn,
   toWorkHandoverTasks,
   type HandoverJobRow,
   type HandoverProjectRow,
@@ -307,18 +308,13 @@ async function readWorkArtifactTaskFacts(
   return { revisions: revisionsResult.data ?? [], targets };
 }
 
-type CompletedProjectRow = Omit<HandoverProjectRow, 'recordedCompletionDate'>;
+type CompletedProjectRow = Omit<HandoverProjectRow, 'completedOn'>;
 
-/**
- * The child job states of the candidate projects and the Berlin day each
- * project's completion was recorded: its completion by hand when it has one,
- * else its last child's completion date. Null when a read fails.
- */
-async function readProjectCompletionFacts(
+/** The child jobs of the candidate projects, by project, with their states and completion dates; null when a read fails. */
+async function readProjectChildren(
   admin: AdminClient,
   context: ActionContext,
   possibleProjects: CompletedProjectRow[],
-  handCompletions: ReadonlyMap<string, string>,
 ) {
   const possibleProjectIds = possibleProjects.map((project) => project.id);
   const projectJobsResult = await readInBatches(possibleProjectIds, (batch) =>
@@ -338,31 +334,18 @@ async function readProjectCompletionFacts(
     logError('Failed to load project handover states', projectJobsResult.error);
     return null;
   }
-  const recordedCompletion = new Map(handCompletions);
-  const childJobsByProject = new Map<
-    string,
-    Array<{
-      executionState: NonNullable<typeof projectJobsResult.data>[number]['execution_state'];
-      status: NonNullable<typeof projectJobsResult.data>[number]['status'];
-    }>
-  >();
+  const childJobsByProject = new Map<string, Parameters<typeof projectCompletedOn>[2][number][]>();
   for (const childJob of projectJobsResult.data ?? []) {
     if (!childJob.project_id) continue;
     const projectJobs = childJobsByProject.get(childJob.project_id) ?? [];
-    projectJobs.push({ executionState: childJob.execution_state, status: childJob.status });
+    projectJobs.push({
+      executionState: childJob.execution_state,
+      status: childJob.status,
+      actualCompletionDate: childJob.actual_completion_date,
+    });
     childJobsByProject.set(childJob.project_id, projectJobs);
-    // A project completed by hand keeps its recorded transition.
-    const completedOn = childJob.actual_completion_date;
-    const latest = recordedCompletion.get(childJob.project_id);
-    if (
-      completedOn !== null &&
-      !handCompletions.has(childJob.project_id) &&
-      (latest === undefined || completedOn > latest)
-    ) {
-      recordedCompletion.set(childJob.project_id, completedOn);
-    }
   }
-  return { childJobsByProject, recordedCompletion };
+  return childJobsByProject;
 }
 
 /**
@@ -404,17 +387,18 @@ async function resolveCompleteHandoverProjects(
       ].map((project) => [project.id, project]),
     ).values(),
   ];
-  const facts = await readProjectCompletionFacts(admin, context, possibleProjects, handCompletions);
-  if (!facts) return null;
-  return possibleProjects.flatMap((project) =>
-    resolveProjectHandoverExecutionState(
+  const childJobsByProject = await readProjectChildren(admin, context, possibleProjects);
+  if (!childJobsByProject) return null;
+  return possibleProjects.flatMap((project) => {
+    const children = childJobsByProject.get(project.id) ?? [];
+    return resolveProjectHandoverExecutionState(
       project.execution_state_override,
       project.status_override,
-      facts.childJobsByProject.get(project.id) ?? [],
+      children,
     ) === 'execution_complete'
-      ? [{ ...project, recordedCompletionDate: facts.recordedCompletion.get(project.id) ?? null }]
-      : [],
-  );
+      ? [{ ...project, completedOn: projectCompletedOn(project, handCompletions.get(project.id), children) }]
+      : [];
+  });
 }
 export async function deriveWorkHandoverTasks(context: ActionContext): Promise<DerivedTasks> {
   const holder = await getEffectiveResponsibilityHolderForActor({

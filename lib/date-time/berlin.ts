@@ -187,8 +187,9 @@ export function getLocalWeekday(localDate: string): number {
 }
 
 /**
- * The Monday-to-Friday days after `fromDate` up to and including `toDate`;
- * 0 when `toDate` is not after `fromDate`. Public holidays count as workdays.
+ * The workdays after `fromDate` up to and including `toDate`: Monday to Friday
+ * by the Berlin calendar; 0 when `toDate` is not after `fromDate`. Public
+ * holidays are not excluded: this helper knows no organization's holidays.
  */
 export function countWorkdaysAfter(fromDate: string, toDate: string): number {
   const fromWeekday = getLocalWeekday(fromDate);

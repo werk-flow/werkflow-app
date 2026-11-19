@@ -1,5 +1,7 @@
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
-import type { Tables } from '@/lib/supabase/database.types';
+import type { Database, Tables } from '@/lib/supabase/database.types';
+import { resolveChildState } from '@/lib/work-handover/project-state';
+import type { WorkExecutionState } from '@/lib/work-lifecycle/types';
 import type { AttentionTask } from './types';
 
 export type HandoverJobRow = Pick<
@@ -16,13 +18,40 @@ export type HandoverProjectRow = Pick<
   | 'status_override'
   | 'updated_at'
 > & {
-  /**
-   * The Berlin day its completion was recorded: the latest transition to
-   * `execution_complete` of a project completed by hand, else its last child
-   * job's completion; null when neither is recorded.
-   */
-  recordedCompletionDate: string | null;
+  /** The Berlin day its execution completed (`projectCompletedOn`); null when unknown. */
+  completedOn: string | null;
 };
+
+type ProjectChild = {
+  executionState: WorkExecutionState | null;
+  status: Database['public']['Enums']['job_status'];
+  actualCompletionDate: string | null;
+};
+
+/**
+ * The Berlin day a project's execution completed: its latest completion by
+ * hand, else the latest completion of its finished child jobs, else, with
+ * neither recorded, the Berlin day of its last change. Null while a finished
+ * child carries no completion date: that child may have finished later, so
+ * the day is unknown.
+ */
+export function projectCompletedOn(
+  project: { updated_at: string },
+  handCompletion: string | undefined,
+  children: readonly ProjectChild[],
+): string | null {
+  if (handCompletion !== undefined) return handCompletion;
+  const finished = children.filter((child) => {
+    const state = resolveChildState(child);
+    return state === 'execution_complete' || state === 'handed_over';
+  });
+  const days = finished.map((child) => child.actualCompletionDate);
+  if (days.some((day) => day === null)) return null;
+  const recorded = days.filter((day): day is string => day !== null);
+  return recorded.length > 0
+    ? recorded.reduce((latest, day) => (day > latest ? day : latest))
+    : formatBerlinLocalDate(project.updated_at);
+}
 
 /**
  * The Berlin day of a project's latest completion by hand, from its recorded
@@ -91,8 +120,7 @@ export function toWorkHandoverTasks(
           ? `/auftraege/projekt/${encodeURIComponent(project.project_number)}/uebergabe`
           : `/auftraege/uebergaben/projekt/${project.id}`,
         packageState: handoverPackage?.state ?? 'missing',
-        // Work completed before completion dates were recorded waits since its last change.
-        completedOn: project.recordedCompletionDate ?? formatBerlinLocalDate(project.updated_at),
+        completedOn: project.completedOn,
         stateVersion: `project:${project.execution_version}:${handoverPackage?.version ?? 0}`,
       },
     });
