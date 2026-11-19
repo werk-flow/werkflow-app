@@ -47,6 +47,7 @@ const CASES = [
   ['filled', read('current', { tasks: TASKS }), read('current', 2)],
   ['empty', read('current', { tasks: [] }), read('current', 0)],
   ['maintenance-unknown', read('current', { tasks: [] }), read('loading', 0)],
+  ['maintenance-loading', read('current', { tasks: TASKS }), read('loading', 0)],
   ['attention-failed', read('failed', { tasks: [] }), read('current', 2)],
   ['attention-loading', read('loading', { tasks: [] }), read('current', 2)],
   ['maintenance-stale', read('current', { tasks: TASKS }), read('stale', 2)],

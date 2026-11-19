@@ -3,7 +3,10 @@ import { Wrench } from 'lucide-react';
 
 import { SECTION_PRESENTATION } from '@/components/aufgaben/aufgaben-task-section';
 import { TaskRow } from '@/components/aufgaben/aufgaben-task-row';
-import { OfficeStartSkeleton } from '@/components/loading-states/office-start-skeleton';
+import {
+  OfficeStartSkeleton,
+  OverdueMaintenanceSkeleton,
+} from '@/components/loading-states/office-start-skeleton';
 import { StaleRegion } from '@/components/shared/stale-region';
 import { UsableContent } from '@/components/shared/usable-content';
 import { Button } from '@/components/ui/button';
@@ -54,7 +57,6 @@ export function OfficeStartView({
       className="mx-auto max-w-3xl space-y-6"
       aria-labelledby="office-start-heading"
       data-testid="office-start"
-      data-office-start=""
     >
       <h2 id="office-start-heading" className="text-sm font-semibold">
         Was jetzt ansteht
@@ -101,9 +103,9 @@ function AttentionRegion({
   );
 }
 
-/** The überfällig maintenance below the sections; nothing while it loads or when none is due. */
+/** The überfällig maintenance below the sections, with its own placeholder while it loads; nothing when none is due. */
 function OverdueMaintenanceRegion({ maintenance }: { maintenance: OfficeStartRead<number> }) {
-  if (maintenance.isLoading) return null;
+  if (maintenance.isLoading) return <OverdueMaintenanceSkeleton />;
   if (maintenance.data === undefined) {
     return (
       <SectionError onRetry={() => void maintenance.refresh()} retryPending={maintenance.isRefreshing}>

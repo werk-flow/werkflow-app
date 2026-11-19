@@ -2563,7 +2563,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 8, "tolerance": 0 },
+        "requests": { "reference": 9, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -2573,9 +2573,9 @@
       "payloads": {
         "background:attention-overview": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 2058, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 1028, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": { "reference": 5, "tolerance": 0 }
+          "encodedBytes": { "reference": 28181, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 27144, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 125, "tolerance": 0 }
         },
         "background:own-personnel-actions": {
           "requests": { "reference": 2, "tolerance": 0 },
@@ -2833,6 +2833,32 @@
           },
           "runKeys": ["2026-11-13T120348256Z-ff99fd"],
           "reason": "Berufsschule days (werk-flow/werkflow-planning#165, #431): the prefetched Zeiterfassung chunks carry the apprentice's school-day note. Production builds of 8f304a90 and this branch differ in two chunks only: the weekly hours chart gains WeeklySchoolDays (347 raw bytes) with its call (29) and the week view's school_days live table (14), +154 gzip; the dashboard hero gains its school sentence, +82 raw, +38 gzip. next/dynamic for both measured larger (loader stubs of 134 and about 290 raw bytes, gzip 15 bytes more), so they stay inline. Accepted by the E0 lead under decision 21."
+        },
+        {
+          "kind": "raise",
+          "target": "requests",
+          "from": { "reference": 8, "tolerance": 0 },
+          "to": { "reference": 9, "tolerance": 0 },
+          "runKeys": ["2026-11-19T064235930Z-0d27c4"],
+          "reason": "Owner decision 2026-11-19 (werk-flow/werkflow-planning#23, Owner queue 1): opening Aufgaben loads its own code so every cold start loads one script less"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "background:attention-overview",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 2058, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 1028, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 5, "tolerance": 0 }
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 28181, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 27144, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 125, "tolerance": 0 }
+          },
+          "runKeys": ["2026-11-19T064235930Z-0d27c4"],
+          "reason": "Aufgaben lists overdue jobs (E8 #488); the lab world finishes no job"
         }
       ]
     },

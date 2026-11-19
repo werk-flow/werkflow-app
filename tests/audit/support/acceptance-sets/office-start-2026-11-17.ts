@@ -59,15 +59,31 @@ async function officeWithOpenWork(world: TestWorld): Promise<SurfaceDestination>
   return { route: '/dashboard', heading: 'Dashboard' };
 }
 
+/** The office's start before anything is open: the audit world seeds no office work of its own. */
+function officeWithNothingOpen(): Promise<SurfaceDestination> {
+  return Promise.resolve({ route: '/dashboard', heading: 'Dashboard' });
+}
+
 /**
  * werk-flow/werkflow-planning#488 of 2026-11-17: the start of Admin and Büro
  * shows what needs them now, read from Aufgaben, with the überfällige Wartung
- * below; a failed read shows its retry.
+ * below; it says when nothing is open, shows its skeleton while it loads, and
+ * a failed read shows its retry.
  */
 function officeStartCaptures(): OpenSet {
   return {
     id: 'office-start-2026-11-17',
     captures: [
+      // Empty runs first: the other captures seed the world's open work.
+      {
+        id: 'admin-dashboard-leer',
+        role: 'admin',
+        route: '/dashboard',
+        view: { kind: 'page' },
+        destination: officeWithNothingOpen,
+        widths: [1280, 375],
+        schemes: ['light', 'dark'],
+      },
       {
         id: 'admin-dashboard',
         role: 'admin',
@@ -92,6 +108,16 @@ function officeStartCaptures(): OpenSet {
         route: '/dashboard',
         view: { kind: 'page' },
         state: 'error',
+        widths: [1280, 375],
+        schemes: ['light'],
+      },
+      {
+        id: stateCaptureId('admin-dashboard', 'loading'),
+        role: 'admin',
+        route: '/dashboard',
+        view: { kind: 'page' },
+        destination: officeWithOpenWork,
+        state: 'loading',
         widths: [1280, 375],
         schemes: ['light'],
       },

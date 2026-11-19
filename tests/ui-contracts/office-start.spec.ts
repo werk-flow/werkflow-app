@@ -17,6 +17,10 @@ test.beforeEach(async ({ page }) => {
     window.uiContractFixture = 'office-start';
   });
   await page.addScriptTag({ path: bundle });
+  // The app's stylesheet, so a placeholder's skeletons take their rendered size.
+  const css = process.env.WERKFLOW_UI_CONTRACT_CSS;
+  if (!css) throw new Error('Run through bun tests/ui-contracts/run.ts.');
+  await page.addStyleTag({ path: css });
 });
 
 test('the office start shows each Aufgaben section with its count, its first three items and the way into Aufgaben, never personnel approvals', async ({
@@ -68,6 +72,21 @@ test('a failed or loading Aufgaben read keeps the überfällige Wartung and its 
     page
       .getByTestId('office-start-attention-loading')
       .getByRole('link', { name: '2 Wartungen überfällig: Wartungsliste öffnen' }),
+  ).toBeVisible();
+});
+
+test('a loading maintenance count shows its own placeholder, beside current tasks and with nothing open', async ({
+  page,
+}) => {
+  for (const name of ['maintenance-unknown', 'maintenance-loading']) {
+    const placeholder = page
+      .getByTestId(`office-start-${name}`)
+      .getByTestId('office-start-overdue-maintenance-placeholder');
+    await expect(placeholder).toBeVisible();
+    await expect(placeholder.locator('[data-slot="skeleton"]')).not.toHaveCount(0);
+  }
+  await expect(
+    page.getByTestId('office-start-maintenance-loading').getByRole('link', { name: /^Auftrag A-2026-001 / }),
   ).toBeVisible();
 });
 

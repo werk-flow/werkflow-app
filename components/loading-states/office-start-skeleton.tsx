@@ -30,3 +30,21 @@ export function OfficeStartSkeleton() {
     </div>
   );
 }
+
+/** Mirrors the überfällige Wartung below the sections: a heading over one row. */
+export function OverdueMaintenanceSkeleton() {
+  return (
+    <div className="space-y-2" aria-hidden="true" data-testid="office-start-overdue-maintenance-placeholder">
+      <div className="flex items-center gap-1.5 px-1">
+        <Skeleton className="size-4" />
+        <Skeleton className="h-4 w-24" />
+      </div>
+      <Card className="gap-0 py-0">
+        <div className="space-y-1.5 px-4 py-3">
+          <Skeleton className="h-4 w-40 max-w-full" />
+          <Skeleton className="h-3 w-56 max-w-full" />
+        </div>
+      </Card>
+    </div>
+  );
+}
