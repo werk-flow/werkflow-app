@@ -103,13 +103,37 @@ jobs:
       full: Release ${{ needs.candidate.outputs.sha }}
     secrets: inherit
 
+  dev:
+    name: DEV holds the migrations
+    needs: candidate
+    # PROD receives a migration only after staging.yml applied it to DEV with the same
+    # `db push --include-all`, so DEV proves an out-of-order migration first. Outside the production
+    # environment: the repository's Supabase token, which staging deploys DEV with, reads DEV's
+    # ledger through the read-only query endpoint, and no PROD secret is in this job.
+    if: needs.candidate.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts
+            supabase/migrations
+      - name: Check that DEV holds every migration of the candidate
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          DEV_PROJECT_REF: mbkkzuqjbdvzelqvuzcn
+        run: bash .github/scripts/dev-holds-migrations.sh
+
   release:
     name: Release main
-    needs: [candidate, full]
-    # Ships only when the candidate had a green full run or its own full run passed.
+    needs: [candidate, full, dev]
+    # Ships only when the candidate had a green full run or its own full run passed, and DEV holds its migrations.
     if: >-
       !cancelled() && needs.candidate.result == 'success'
-      && needs.candidate.outputs.release == 'true' && !inputs.dry_run
+      && needs.candidate.outputs.release == 'true' && !inputs.dry_run && needs.dev.result == 'success'
       && (needs.full.result == 'success' || (needs.full.result == 'skipped' && needs.candidate.outputs.verified == 'true'))
     # The PROD secrets live in this environment only, and only main may use it. By the owner's
     # decision it has no approval step: a scheduled or manual run is a release the owner wants.
@@ -132,10 +156,11 @@ jobs:
 
       # Migrations first, so production code never runs ahead of its schema. They are
       # expand-only, so the running production build keeps working against the new schema.
+      # --include-all as on DEV: the job `dev` found every one of them in DEV's ledger.
       - name: Apply pending migrations to PROD
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-        run: supabase db push --db-url "$DATABASE_URL"
+        run: supabase db push --include-all --db-url "$DATABASE_URL"
 
       # --use-api bundles on Supabase's side, so the runner pulls no Docker image and meets no registry rate limit.
       # The functions are named: each checks its own caller (the mail functions a secret key,
@@ -244,7 +269,7 @@ jobs:
 
   alert:
     name: Alert
-    needs: [hold, candidate, full, release, smoke, proof]
+    needs: [hold, candidate, full, dev, release, smoke, proof]
     # Only a real release on main speaks, and a run a person cancelled says nothing. Nothing
     # needs this job, so it runs after the release decision and changes none.
     if: ${{ !cancelled() && !inputs.dry_run && (github.ref == 'refs/heads/main' || inputs.alert_proof) }}

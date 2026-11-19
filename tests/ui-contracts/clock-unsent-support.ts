@@ -11,6 +11,8 @@ import { RUNNING_CLOCK_STATE } from './clock-state-fixture';
 declare global {
   interface Window {
     contractOnline: boolean;
+    /** Lets the device store held back by `holdDeviceStore` answer. */
+    releaseDeviceStore?: () => void;
   }
 }
 
@@ -73,6 +75,8 @@ export async function mountClock(
   initial: LiveClockState,
   prepare: () => void = () => undefined,
   verdict: Verdict = ACCEPTED,
+  /** The clock's readiness once mounted: not ready while what the device holds is unknown. */
+  readiness: RegExp = /^Bereit/,
 ): Promise<Server> {
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
@@ -127,7 +131,7 @@ export async function mountClock(
   // What the device holds before the app starts.
   await page.evaluate(prepare);
   await page.addScriptTag({ path: bundle });
-  await expect(page.getByLabel('Zeitstatus')).toHaveText(/^Bereit/);
+  await expect(page.getByLabel('Zeitstatus')).toHaveText(readiness);
   return server;
 }
 
@@ -193,6 +197,57 @@ export async function startWithoutNetwork(page: Page, server: Server): Promise<v
   await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
   await expect(clockStatus(page)).toHaveText('Arbeit');
+}
+
+/**
+ * Before the app starts: an earlier visit left the hint that the device may hold unsent work (it may
+ * be a report draft or another person's time), and the device store holds every answer back until
+ * `window.releaseDeviceStore()`. Runs in the page.
+ */
+export function holdDeviceStore(): void {
+  localStorage.setItem('werkflow:unsent:time', '1');
+  const factory = indexedDB;
+  let release = (): void => undefined;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  window.releaseDeviceStore = () => release();
+  type Handler = ((event: Event) => void) | null;
+  const open = (name: string, version?: number) => {
+    let answered: IDBOpenDBRequest | null = null;
+    const held: { onupgradeneeded: Handler; onsuccess: Handler; onerror: Handler; onblocked: Handler } & {
+      readonly result: IDBDatabase | undefined;
+      readonly error: DOMException | null | undefined;
+    } = {
+      onupgradeneeded: null,
+      onsuccess: null,
+      onerror: null,
+      onblocked: null,
+      get result() {
+        return answered?.result;
+      },
+      get error() {
+        return answered?.error;
+      },
+    };
+    void released.then(() => {
+      const request = factory.open(name, version);
+      answered = request;
+      request.onupgradeneeded = (event) => held.onupgradeneeded?.(event);
+      request.onsuccess = (event) => held.onsuccess?.(event);
+      request.onerror = (event) => held.onerror?.(event);
+      request.onblocked = (event) => held.onblocked?.(event);
+    });
+    return held;
+  };
+  Object.defineProperty(window, 'indexedDB', {
+    value: {
+      open,
+      databases: () => factory.databases(),
+      deleteDatabase: (name: string) => factory.deleteDatabase(name),
+      cmp: (left: unknown, right: unknown) => factory.cmp(left, right),
+    },
+  });
 }
 
 export function withoutSentAt(envelope: Envelope | undefined): Envelope | undefined {
