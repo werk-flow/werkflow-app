@@ -147,6 +147,11 @@ function FieldWorkPackReferenceSection({ fieldJob }: { fieldJob: FieldWorkPackJo
           <h2 id="field-reference-heading" className="sr-only">
             Weitere Auftragsangaben
           </h2>
+          {fieldJob.sourceNumber && (
+            <p>
+              <span className="text-muted-foreground">Nummer im Altsystem:</span> {fieldJob.sourceNumber}
+            </p>
+          )}
           {fieldJob.project ? (
             <p>
               <span className="text-muted-foreground">Projekt:</span> {fieldJob.project.name} ·{' '}
