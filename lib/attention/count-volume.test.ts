@@ -105,6 +105,8 @@ function workRows(pending: number, history: number): Record<string, Row[]> {
       execution_state_override: override,
       status_override: null,
       updated_at: RECENT,
+      // The transitions to execution_complete the handover read embeds; none recorded here.
+      work_execution_events: [],
     });
   const artifact = (index: number, status: string): Row =>
     scoped({ id: uuid(3, index), job_id: uuid(1, index), project_id: null, status, kind: 'note' });

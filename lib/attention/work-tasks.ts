@@ -17,7 +17,13 @@ import { isHiddenCoworkerDraft } from '@/lib/work-artifacts/field-visibility';
 import { logError } from '@/lib/logging';
 import { workTargetHref, workTargetLabel } from './task-labels';
 import type { AttentionTask } from './types';
-import { toWorkHandoverTasks, type HandoverJobRow, type HandoverProjectRow } from './handover-tasks';
+import {
+  latestHandCompletion,
+  projectCompletedOn,
+  toWorkHandoverTasks,
+  type HandoverJobRow,
+  type HandoverProjectRow,
+} from './handover-tasks';
 
 type DerivedTasks = { tasks: AttentionTask[]; failed: boolean };
 
@@ -302,15 +308,57 @@ async function readWorkArtifactTaskFacts(
   return { revisions: revisionsResult.data ?? [], targets };
 }
 
+type CompletedProjectRow = Omit<HandoverProjectRow, 'completedOn'>;
+
+/** The child jobs of the candidate projects, by project, with their states and completion dates; null when a read fails. */
+async function readProjectChildren(
+  admin: AdminClient,
+  context: ActionContext,
+  possibleProjects: CompletedProjectRow[],
+) {
+  const possibleProjectIds = possibleProjects.map((project) => project.id);
+  const projectJobsResult = await readInBatches(possibleProjectIds, (batch) =>
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('jobs')
+          .select('project_id, execution_state, status, actual_completion_date')
+          .eq('organization_id', context.orgId)
+          .in('project_id', [...batch])
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+  );
+  if (projectJobsResult.error) {
+    logError('Failed to load project handover states', projectJobsResult.error);
+    return null;
+  }
+  const childJobsByProject = new Map<string, Parameters<typeof projectCompletedOn>[2][number][]>();
+  for (const childJob of projectJobsResult.data ?? []) {
+    if (!childJob.project_id) continue;
+    const projectJobs = childJobsByProject.get(childJob.project_id) ?? [];
+    projectJobs.push({
+      executionState: childJob.execution_state,
+      status: childJob.status,
+      actualCompletionDate: childJob.actual_completion_date,
+    });
+    childJobsByProject.set(childJob.project_id, projectJobs);
+  }
+  return childJobsByProject;
+}
+
 /**
  * The projects whose handover is due: the explicitly completed ones plus the
- * derived ones whose child jobs all reached a terminal state. Null when a read fails.
+ * derived ones whose child jobs all reached a terminal state, each with the
+ * Berlin day its completion was recorded. Null when a read fails.
  */
 async function resolveCompleteHandoverProjects(
   admin: AdminClient,
   context: ActionContext,
-  explicitProjects: HandoverProjectRow[],
+  explicitProjects: CompletedProjectRow[],
   terminalChildSignals: Array<{ project_id: string | null }>,
+  handCompletions: ReadonlyMap<string, string>,
 ): Promise<HandoverProjectRow[] | null> {
   const childProjectIds = [
     ...new Set(terminalChildSignals.flatMap((job) => (job.project_id ? [job.project_id] : []))),
@@ -339,45 +387,18 @@ async function resolveCompleteHandoverProjects(
       ].map((project) => [project.id, project]),
     ).values(),
   ];
-  const possibleProjectIds = possibleProjects.map((project) => project.id);
-  const projectJobsResult = await readInBatches(possibleProjectIds, (batch) =>
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('jobs')
-          .select('project_id, execution_state, status')
-          .eq('organization_id', context.orgId)
-          .in('project_id', [...batch])
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-  );
-  if (projectJobsResult.error) {
-    logError('Failed to load project handover states', projectJobsResult.error);
-    return null;
-  }
-  const childJobsByProject = new Map<
-    string,
-    Array<{
-      executionState: NonNullable<typeof projectJobsResult.data>[number]['execution_state'];
-      status: NonNullable<typeof projectJobsResult.data>[number]['status'];
-    }>
-  >();
-  for (const childJob of projectJobsResult.data ?? []) {
-    if (!childJob.project_id) continue;
-    const projectJobs = childJobsByProject.get(childJob.project_id) ?? [];
-    projectJobs.push({ executionState: childJob.execution_state, status: childJob.status });
-    childJobsByProject.set(childJob.project_id, projectJobs);
-  }
-  return possibleProjects.filter(
-    (project) =>
-      resolveProjectHandoverExecutionState(
-        project.execution_state_override,
-        project.status_override,
-        childJobsByProject.get(project.id) ?? [],
-      ) === 'execution_complete',
-  );
+  const childJobsByProject = await readProjectChildren(admin, context, possibleProjects);
+  if (!childJobsByProject) return null;
+  return possibleProjects.flatMap((project) => {
+    const children = childJobsByProject.get(project.id) ?? [];
+    return resolveProjectHandoverExecutionState(
+      project.execution_state_override,
+      project.status_override,
+      children,
+    ) === 'execution_complete'
+      ? [{ ...project, completedOn: projectCompletedOn(project, handCompletions.get(project.id), children) }]
+      : [];
+  });
 }
 export async function deriveWorkHandoverTasks(context: ActionContext): Promise<DerivedTasks> {
   const holder = await getEffectiveResponsibilityHolderForActor({
@@ -392,7 +413,7 @@ export async function deriveWorkHandoverTasks(context: ActionContext): Promise<D
       (from, to) =>
         admin
           .from('jobs')
-          .select('id, job_number, title, execution_version, project_id, updated_at')
+          .select('id, job_number, title, execution_version, project_id, updated_at, actual_completion_date')
           .eq('organization_id', context.orgId)
           .or('execution_state.eq.execution_complete,and(execution_state.is.null,status.eq.fertig)')
           .order('updated_at', { ascending: true })
@@ -407,10 +428,12 @@ export async function deriveWorkHandoverTasks(context: ActionContext): Promise<D
       (from, to) =>
         admin
           .from('projects')
+          // A later edit of the project moves its updated_at, never its recorded transitions.
           .select(
-            'id, project_number, name, execution_version, execution_state_override, status_override, updated_at',
+            'id, project_number, name, execution_version, execution_state_override, status_override, updated_at, work_execution_events(event_type, created_at)',
           )
           .eq('organization_id', context.orgId)
+          .eq('work_execution_events.to_state', 'execution_complete')
           .or(
             'execution_state_override.eq.execution_complete,and(execution_state_override.is.null,status_override.eq.abgeschlossen)',
           )
@@ -428,11 +451,19 @@ export async function deriveWorkHandoverTasks(context: ActionContext): Promise<D
     return { tasks: [], failed: true };
   }
 
+  const explicitProjects = explicitProjectsResult.data ?? [];
+  const handCompletions = new Map(
+    explicitProjects.flatMap((project) => {
+      const completedOn = latestHandCompletion(project.work_execution_events);
+      return completedOn === null ? [] : [[project.id, completedOn] as const];
+    }),
+  );
   const projects = await resolveCompleteHandoverProjects(
     admin,
     context,
-    explicitProjectsResult.data ?? [],
+    explicitProjects,
     terminalChildSignalsResult.data ?? [],
+    handCompletions,
   );
   if (!projects) return { tasks: [], failed: true };
   const packages = await readHandoverPackageStates(admin, context, jobsResult.data ?? [], projects);

@@ -1,5 +1,8 @@
 Menü öffnen
 Dashboard
+Braucht deine Entscheidung
+Keine offenen Entscheidungen.
+Nichts wartet auf dich. Neue Ausnahmen erscheinen hier sofort.
 Was jetzt ansteht
 Offene Anfragen
 (
