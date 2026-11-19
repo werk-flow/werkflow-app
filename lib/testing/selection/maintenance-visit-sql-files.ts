@@ -7,3 +7,6 @@ export const MAINTENANCE_VISIT_SQL_FILES: readonly string[] = [
   'maintenance_visit_next_actions.sql',
   'maintenance_service_reports.sql',
 ];
+
+/** The areas whose changes select the group. */
+export const MAINTENANCE_VISIT_SQL_SCOPES: readonly string[] = ['service', 'work', 'attention', 'documents'];
