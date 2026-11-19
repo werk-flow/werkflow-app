@@ -5,11 +5,13 @@ import type { LiveClockState } from '@/lib/time-tracking/types';
 import {
   removeKeptActions,
   removeUnreadableKeptActions,
+  setAsideUnreadableKeptAction,
   stopFor,
   takeInKeptClockActions,
   unreadableKeptActions,
   untilOwnCallAnswers,
   type DeferredTakeIn,
+  type SetAsideOutcome,
   type KeptClockAction,
   type KeptTakeIn,
 } from './kept-clock-actions';
@@ -193,6 +195,21 @@ export async function removeShownTimeEvents(
     removeUnreadableKeptActions(operationIds);
     return removeTimeEvents(holder, operationIds, resume);
   });
+}
+
+/**
+ * Sets aside the unreadable kept action under `key` that this tab's holder was shown (decision record
+ * 0010, "an unreadable clock record set aside"), then takes in and sends what it held back. Under the
+ * take-in's lock, so no take-in reads the store while the record moves. Throws when the device
+ * storage fails; the stop then stays.
+ */
+export async function setAsideShownStop(key: string): Promise<SetAsideOutcome> {
+  const current = clockHolder();
+  if (!current) return 'gone';
+  const outcome = await exclusively(TAKE_IN_LOCK, () => setAsideUnreadableKeptAction(key, current.userId));
+  if (outcome === 'set_aside') await takeInAndSend();
+  await outboxChanged();
+  return outcome;
 }
 
 /**
@@ -397,8 +414,11 @@ export const timeUnsentSource: UnsentSource = {
       ids.push(...(await readTimeOutbox(holder)).events.map((event) => event.operationId));
     // An online call still open, and what was kept behind it, are unsent too until the call answers.
     ids.push(...(await deferredInScope(deferred, scope ?? 'session')).map((action) => action.operationId));
-    // A kept action this version cannot read that may be the person's: no session ends over it unasked.
-    const unreadable = unreadableKeptActions(await signedInUserId()).map(({ key }) => key);
+    // A kept action this version cannot read, or one the person set aside, that may be the person's:
+    // no session ends over it unasked.
+    const records = unreadableKeptActions(await signedInUserId());
+    const unreadable = records.filter((record) => !record.setAside).map(({ key }) => key);
+    const setAside = records.filter((record) => record.setAside).map(({ key }) => key);
     return [
       { label: 'Stempelzeiten', count: ids.length, ids },
       {
@@ -406,11 +426,12 @@ export const timeUnsentSource: UnsentSource = {
         count: unreadable.length,
         ids: unreadable,
       },
+      { label: 'Beiseitegelegte Stempelzeiten', count: setAside.length, ids: setAside },
     ].filter((item) => item.count > 0);
   },
   flush: sendOwnTimeEvents,
   async discard(scope, ids) {
-    // The shown stops go first: what they held can then be taken in and discarded with them.
+    // The shown stops and set-aside records go first: what the stops held can then be taken in and discarded with them.
     removeUnreadableKeptActions(ids);
     await removeShownKeptActions(scope, ids);
     // The session ends: no server state to go on from, and what stays is asked about again. Only a
