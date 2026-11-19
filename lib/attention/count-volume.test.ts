@@ -655,9 +655,11 @@ function historyProblems(nextRole: Role, growth: Record<string, number>): string
 // werk-flow/werkflow-planning#329 added the open access proposals: they come with the open requests in one
 // read, so without any the requests stay as before; with them, their job and Einsatzort (a row each per
 // proposal) and the proposers' names add three requests.
+// werk-flow/werkflow-planning#490 added the recorded completion of projects completed by hand: one read of
+// their transitions to execution_complete, sent only while such a project waits for its Übergabe.
 const ROW_BUDGET: Readonly<Record<Role, { fixed: number; perPendingItem: number; requests: number }>> = {
-  admin: { fixed: 35, perPendingItem: 36, requests: 78 },
-  buero: { fixed: 34, perPendingItem: 35, requests: 75 },
+  admin: { fixed: 35, perPendingItem: 36, requests: 79 },
+  buero: { fixed: 34, perPendingItem: 35, requests: 76 },
   employee: { fixed: 13, perPendingItem: 17, requests: 31 },
 };
 

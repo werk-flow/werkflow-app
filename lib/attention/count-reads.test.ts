@@ -22,7 +22,7 @@ let queries: string[] = [];
 let overdueJobs: Record<string, unknown>[] = [];
 let openRequests: Record<string, unknown>[] = [];
 let managerSetOrganizations: unknown[] = [];
-// Extra rows a case seeds, by table; the viewer's own employee record can be left out.
+// Extra rows a case seeds, by table; the viewer's own one-row record read can come back empty.
 let seededRows: Record<string, Record<string, unknown>[]> = {};
 let withOwnRecord = true;
 
@@ -43,7 +43,6 @@ function rowsOf(table: string): Record<string, unknown>[] {
     ];
   }
   if (table === 'employee_records') {
-    if (!withOwnRecord) return [];
     return [
       {
         id: OWN_RECORD,
@@ -102,7 +101,8 @@ function countingQuery(table: string) {
           count: 0,
         }),
       );
-    const rows = rowsOf(table);
+    // The viewer's own record is the one-row read; the responsibility holders read the list.
+    const rows = single && table === 'employee_records' && !withOwnRecord ? [] : rowsOf(table);
     return Promise.resolve(
       resolve({ data: single ? (rows[0] ?? null) : rows, error: null, count: rows.length }),
     );
@@ -139,7 +139,7 @@ test.skipIf(ISOLATED)('the attention count read cases pass in an isolated proces
     `${stdout}
 ${stderr}`,
   ).toBe(0);
-  expect(stderr).toContain('6 pass');
+  expect(stderr).toContain('7 pass');
 });
 
 if (ISOLATED) {
@@ -330,6 +330,42 @@ if (ISOLATED) {
       } finally {
         setSystemTime();
         openRequests = [];
+        seededRows = {};
+        withOwnRecord = true;
+      }
+    });
+
+    test('a project completed by hand waits since its recorded completion, whatever later edit moved it', async () => {
+      const PROJECT = '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f';
+      setSystemTime(new Date('2026-11-19T10:00:00Z'));
+      seededRows = {
+        projects: [
+          {
+            id: PROJECT,
+            project_number: 'P-2026-001',
+            name: 'Bad sanieren',
+            execution_version: 2,
+            execution_state_override: 'execution_complete',
+            status_override: 'abgeschlossen',
+            // Edited after the completion.
+            updated_at: '2026-11-18T09:00:00Z',
+          },
+        ],
+        work_execution_events: [{ project_id: PROJECT, created_at: '2026-11-12T09:00:00Z' }],
+      };
+      withOwnRecord = false;
+      try {
+        const { result } = await readAs('admin', getAttentionOverview);
+        if (!result.success) throw new Error('overview failed');
+        expect(result.overview.tasks).toEqual([
+          expect.objectContaining({
+            sourceType: 'work_handover_review',
+            sourceId: PROJECT,
+            completedOn: '2026-11-12',
+          }),
+        ]);
+      } finally {
+        setSystemTime();
         seededRows = {};
         withOwnRecord = true;
       }

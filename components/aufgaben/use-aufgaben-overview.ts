@@ -24,6 +24,8 @@ function notificationKey(notification: AttentionNotification): string {
 const AUFGABEN_OVERVIEW_TABLES = [
   'time_entries',
   'entry_change_requests',
+  // A rejected correction or a question back to its author changes only this row.
+  'time_correction_requests',
   'vacation_requests',
   'sickness_reports',
   'employee_capabilities',

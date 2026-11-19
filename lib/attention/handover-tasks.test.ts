@@ -16,7 +16,7 @@ function job(id: string, updatedAt: string, completedOn: string | null = null): 
 function project(
   id: string,
   updatedAt: string,
-  lastChildCompletionDate: string | null = null,
+  recordedCompletionDate: string | null = null,
 ): HandoverProjectRow {
   return {
     id,
@@ -26,7 +26,7 @@ function project(
     execution_state_override: null,
     status_override: null,
     updated_at: updatedAt,
-    lastChildCompletionDate,
+    recordedCompletionDate,
   };
 }
 
@@ -60,11 +60,11 @@ test('a handover waits since the Berlin day its execution completed', () => {
       job('j-unrecorded', '2026-10-31T23:30:00Z'),
     ],
     [
-      // Completed through its last child job, after the project's own last change.
-      project('p-derived', '2026-02-01T08:00:00Z', '2028-02-29'),
-      // Completed by hand after its children.
-      project('p-explicit', '2026-11-17T22:30:00Z', '2026-11-10'),
-      project('p-childless', '2026-11-12T08:00:00Z'),
+      // A recorded completion wins over a later edit of the project.
+      project('p-edited', '2026-11-18T09:00:00Z', '2026-11-12'),
+      project('p-leap-day', '2026-02-01T08:00:00Z', '2028-02-29'),
+      // Nothing recorded: the Berlin day of the last change.
+      project('p-unrecorded', '2026-11-17T23:30:00Z'),
     ],
     [],
     [],
@@ -79,8 +79,8 @@ test('a handover waits since the Berlin day its execution completed', () => {
   expect(completedOn).toEqual({
     'j-recorded': '2026-11-16',
     'j-unrecorded': '2026-11-01',
-    'p-derived': '2028-02-29',
-    'p-explicit': '2026-11-17',
-    'p-childless': '2026-11-12',
+    'p-edited': '2026-11-12',
+    'p-leap-day': '2028-02-29',
+    'p-unrecorded': '2026-11-18',
   });
 });

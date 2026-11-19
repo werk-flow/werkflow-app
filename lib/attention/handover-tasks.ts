@@ -16,19 +16,13 @@ export type HandoverProjectRow = Pick<
   | 'status_override'
   | 'updated_at'
 > & {
-  /** The latest completion date among its child jobs; null when none has one. */
-  lastChildCompletionDate: string | null;
+  /**
+   * The Berlin day its completion was recorded: the latest transition to
+   * `execution_complete` of a project completed by hand, else its last child
+   * job's completion; null when neither is recorded.
+   */
+  recordedCompletionDate: string | null;
 };
-
-/**
- * The Berlin day a project's execution completed: the later of its last child
- * job's completion and its own last change, which a completion by hand is.
- */
-function projectCompletedOn(project: HandoverProjectRow): string {
-  const changedOn = formatBerlinLocalDate(project.updated_at);
-  const childOn = project.lastChildCompletionDate;
-  return childOn !== null && childOn > changedOn ? childOn : changedOn;
-}
 
 /**
  * The handover review tasks of finished jobs and projects whose package is not
@@ -83,7 +77,8 @@ export function toWorkHandoverTasks(
           ? `/auftraege/projekt/${encodeURIComponent(project.project_number)}/uebergabe`
           : `/auftraege/uebergaben/projekt/${project.id}`,
         packageState: handoverPackage?.state ?? 'missing',
-        completedOn: projectCompletedOn(project),
+        // Work completed before completion dates were recorded waits since its last change.
+        completedOn: project.recordedCompletionDate ?? formatBerlinLocalDate(project.updated_at),
         stateVersion: `project:${project.execution_version}:${handoverPackage?.version ?? 0}`,
       },
     });
