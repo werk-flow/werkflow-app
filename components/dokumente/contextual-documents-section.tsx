@@ -36,7 +36,9 @@ import {
 
 // Every dialog of the section needs signal, and the field worker's job list prefetches the
 // job page's code, so a static import put all four into every field cold start
-// (`lab.field.cold-start`). They download on the first intent inside the section.
+// (`lab.field.cold-start`). They download on the first intent inside the section: a pointer
+// movement, a press or focus. A pointer enter is none: the section appears under the pointer
+// that opened the page (`lab.office.job-open`).
 const lazyUploadDialog = lazyDialog(() =>
   import('./document-upload-dialog').then((mod) => mod.DocumentBatchUploadDialog),
 );
@@ -366,7 +368,8 @@ export function ContextualDocumentsSection({
       onDragOver={section.handleDragOver}
       onDragLeave={() => section.setIsDragActive(false)}
       onDrop={section.handleDrop}
-      onPointerEnter={preloadDocumentDialogs}
+      onPointerMove={preloadDocumentDialogs}
+      onPointerDown={preloadDocumentDialogs}
       onFocusCapture={preloadDocumentDialogs}
     >
       <ContextualDocumentsListing

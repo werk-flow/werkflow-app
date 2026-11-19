@@ -27,7 +27,9 @@ import { WorkLifecycleStatusHeader } from './work-lifecycle-status';
 
 // Every dialog of the card saves through the server, and the field worker's job list prefetches
 // the job page's code, so a static import put them into every field cold start
-// (`lab.field.cold-start`). They download on the first intent inside the card.
+// (`lab.field.cold-start`). They download on the first intent inside the card: a pointer
+// movement, a press or focus. A pointer enter is none: the card appears under the pointer
+// that opened the page (`lab.office.job-open`).
 const lazyCardDialogs = lazyDialog<
   WorkLifecycleCardDialogsProps & { open: boolean; onOpenChange: (open: boolean) => void }
 >(() => import('./work-lifecycle-card-dialogs').then((mod) => mod.WorkLifecycleCardDialogs));
@@ -48,7 +50,8 @@ function useCardDialogsDownload(
 }
 
 const CARD_DIALOG_INTENT = {
-  onPointerEnter: lazyCardDialogs.preload,
+  onPointerMove: lazyCardDialogs.preload,
+  onPointerDown: lazyCardDialogs.preload,
   onFocusCapture: lazyCardDialogs.preload,
 };
 
