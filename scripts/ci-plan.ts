@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { captureInputSnapshot } from '../lib/testing/evidence/group-evidence';
 import { createGroupQualification } from '../lib/testing/evidence/group-qualification';
 import { ciBrowserHoldUntil, midnightProofHoldUntil } from '../lib/testing/runner/group-schedule';
-import { ciPlan, runnerModules } from '../lib/testing/selection/ci-plan';
+import { changesOnlyRows, ciPlan, REGISTRY_ROWS, runnerModules } from '../lib/testing/selection/ci-plan';
 import { renderedSurfaceFiles, surfaceRoots } from '../lib/testing/selection/surface-closure';
 import { getTestGroups } from '../lib/testing/selection/test-groups';
 
@@ -19,33 +19,40 @@ const [flag, value] = process.argv.slice(2);
 if ((flag !== '--base' && flag !== '--full') || !value)
   throw new Error('Usage: bun scripts/ci-plan.ts --base <commit> | --full "<reason>"');
 
-/** The files the change touches since its merge base with the base commit; undefined when git cannot say. */
-function changedSince(base: string): string[] | undefined {
+const git = (...args: string[]): string =>
+  execFileSync('git', args, { cwd: repository, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+
+/**
+ * The files the change touches since its merge base with the base commit, and the changed
+ * registries whose change stays inside their rows; undefined when git cannot say.
+ */
+function changedSince(base: string): { files: string[]; rowChanges: string[] } | undefined {
   try {
-    const mergeBase = execFileSync('git', ['merge-base', base, 'HEAD'], {
-      cwd: repository,
-      encoding: 'utf8',
-    });
-    return execFileSync(
-      'git',
-      ['diff', '--name-only', '--no-renames', '-z', mergeBase.trim(), 'HEAD', '--'],
-      {
-        cwd: repository,
-        encoding: 'utf8',
-        maxBuffer: 16 * 1024 * 1024,
-      },
-    )
+    const mergeBase = git('merge-base', base, 'HEAD').trim();
+    const files = git('diff', '--name-only', '--no-renames', '-z', mergeBase, 'HEAD', '--')
       .split('\0')
       .filter(Boolean);
+    return { files, rowChanges: files.filter((file) => rowsOnly(mergeBase, file)) };
   } catch (error) {
     console.warn(`[ci-plan] Cannot diff against ${base}: ${error instanceof Error ? error.message : error}`);
     return undefined;
   }
 }
 
+/** A registry that is new or gone at either end is no row change. */
+function rowsOnly(mergeBase: string, file: string): boolean {
+  if (!REGISTRY_ROWS[file]) return false;
+  try {
+    return changesOnlyRows(file, git('show', `${mergeBase}:${file}`), git('show', `HEAD:${file}`));
+  } catch {
+    return false;
+  }
+}
+
 const groups = getTestGroups(repository);
 const qualification = createGroupQualification(repository, groups, captureInputSnapshot(repository));
 const rendered = renderedSurfaceFiles(qualification.graph, surfaceRoots(repository));
+const change = flag === '--base' ? changedSince(value) : undefined;
 const plan = ciPlan({
   groups: groups.map((group) => ({
     id: group.id,
@@ -56,7 +63,8 @@ const plan = ciPlan({
     trigger: group.changeTrigger,
     renderedFiles: rendered.get(group.id),
   })),
-  changedFiles: flag === '--base' ? changedSince(value) : [],
+  changedFiles: flag === '--base' ? change?.files : [],
+  rowChanges: change?.rowChanges ?? [],
   fullRun: flag === '--full' ? value : undefined,
   runnerModules: runnerModules(qualification.graph),
 });
