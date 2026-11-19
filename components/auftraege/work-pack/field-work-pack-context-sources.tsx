@@ -139,7 +139,7 @@ export function FieldWorkPackEquipmentSource({ job, data }: FieldWorkPackContext
               <div
                 key={item.id}
                 id={fieldEquipmentAnchor(item.id)}
-                className="scroll-mt-4 rounded-md border p-3"
+                className="scroll-mt-4 rounded-md border p-3 wrap-anywhere"
               >
                 <p className="font-medium">{item.name}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
