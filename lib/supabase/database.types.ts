@@ -15948,6 +15948,11 @@ export type Database = {
           p_expected_number: string;
           p_invoice_id: string;
           p_organization_id: string;
+          p_original_content_hash?: string;
+          p_original_document_id?: string;
+          p_original_file_name?: string;
+          p_original_size_bytes?: number;
+          p_original_storage_path?: string;
           p_reason: string;
         };
         Returns: Json;
@@ -18169,6 +18174,11 @@ export type Database = {
           p_expected_version: number;
           p_invoice_id: string;
           p_organization_id: string;
+          p_original_content_hash?: string;
+          p_original_document_id?: string;
+          p_original_file_name?: string;
+          p_original_size_bytes?: number;
+          p_original_storage_path?: string;
           p_snapshot: Json;
         };
         Returns: Json;

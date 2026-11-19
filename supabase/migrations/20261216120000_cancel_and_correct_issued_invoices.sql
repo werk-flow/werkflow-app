@@ -14,7 +14,8 @@
 --    (the next number of the same series, under the series' row lock), marks
 --    the original Storniert, optionally opens the correction draft, and
 --    writes the history. The server checks the Stornorechnung with the
---    EN 16931 rules first and files its original as for any invoice.
+--    EN 16931 rules first; the Stornorechnung's original it stored is
+--    registered and filed by issue_invoice in the same transaction.
 -- 4. get_invoice and list_invoice_page answer the links: the chain of
 --    original, Stornorechnung and correction, each with its number.
 --
@@ -142,10 +143,16 @@ create trigger guard_invoice_links before insert on public.invoices
 -- the first call. p_expected_number and p_expected_issue_date are the number
 -- and Rechnungsdatum the server checked the Stornorechnung under; the head of
 -- its original prints the number, so another number refuses
--- (invoice_number_moved) and the server checks again. Answers stornoId,
--- stornoNumber, issueDate and correctionId. Refusals: invalid_input,
--- not_authorized, invoice_not_found, invoice_not_issued, invoice_cancelled,
--- invoice_is_storno, invoice_not_cancellable, invoice_number_moved.
+-- (invoice_number_moved) and the server checks again. The p_original_*
+-- arguments name the Stornorechnung's original the server rendered under that
+-- number and day and stored; issue_invoice registers and files it in this
+-- transaction, or leaves it pending without them. Answers stornoId,
+-- stornoNumber, issueDate, correctionId and the Stornorechnung's registered
+-- originalDocumentId; a retry registers nothing and answers the one it has.
+-- Refusals: invalid_input, not_authorized, invoice_not_found,
+-- invoice_not_issued, invoice_cancelled, invoice_is_storno,
+-- invoice_not_cancellable, invoice_number_moved, and those of
+-- register_invoice_original.
 create function public.cancel_invoice(
   p_actor_id uuid,
   p_organization_id uuid,
@@ -154,7 +161,12 @@ create function public.cancel_invoice(
   p_reason text,
   p_correct boolean,
   p_expected_number text,
-  p_expected_issue_date date
+  p_expected_issue_date date,
+  p_original_document_id uuid default null,
+  p_original_storage_path text default null,
+  p_original_file_name text default null,
+  p_original_size_bytes bigint default null,
+  p_original_content_hash text default null
 )
 returns jsonb
 language plpgsql
@@ -186,7 +198,10 @@ begin
     if v_earlier.event_type <> 'cancelled' or v_earlier.invoice_id <> p_invoice_id then
       raise exception 'invalid_input';
     end if;
-    return v_earlier.payload;
+    return v_earlier.payload || jsonb_build_object('originalDocumentId', (
+      select storno.original_document_id from public.invoices storno
+      where storno.id = (v_earlier.payload ->> 'stornoId')::uuid and storno.organization_id = p_organization_id
+    ));
   end if;
   select * into v_original from public.invoices invoice
   where invoice.id = p_invoice_id and invoice.organization_id = p_organization_id
@@ -241,7 +256,8 @@ begin
   );
   v_issued := public.issue_invoice(
     p_actor_id, p_organization_id, v_storno_id, 1, gen_random_uuid(), v_original.issue_snapshot,
-    p_expected_number, p_expected_issue_date
+    p_expected_number, p_expected_issue_date, p_original_document_id, p_original_storage_path,
+    p_original_file_name, p_original_size_bytes, p_original_content_hash
   );
 
   update public.invoices invoice set status = 'storniert'
@@ -298,11 +314,13 @@ begin
     p_actor_id, p_attempt_key
   );
   perform set_config('app.invoice_cancel', '', true);
-  return v_answer;
+  return v_answer || jsonb_build_object('originalDocumentId', v_issued -> 'originalDocumentId');
 end;
 $$;
-revoke all on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean, text, date) from public, anon, authenticated;
-grant execute on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean, text, date) to service_role;
+revoke all on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean, text, date, uuid, text, text, bigint, text)
+  from public, anon, authenticated;
+grant execute on function public.cancel_invoice(uuid, uuid, uuid, uuid, text, boolean, text, date, uuid, text, text, bigint, text)
+  to service_role;
 
 -- 4. Every invoice linked to p_invoice_id through Stornos and corrections,
 -- from the first original on: generation by generation, each original

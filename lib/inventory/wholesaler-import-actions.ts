@@ -1,9 +1,9 @@
 'use server';
 
-import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import { formatProfileName } from '@/lib/members/profile-name';
-import { resolveActionContext, type ActionContext } from '@/lib/org/action-context';
+import { resolveManagerContext } from '@/lib/org/manager-context';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
 import { ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
@@ -41,15 +41,6 @@ const REPORT_PART_LINES = 20_000;
 
 const refusal = writeRefusalFor(new Set(['not_authorized', 'supplier_not_found', 'import_not_found']));
 
-type ManagerContext = { success: true; context: ActionContext };
-
-async function resolveImportManager(): Promise<ManagerContext | ActionFailure> {
-  const auth = await resolveActionContext();
-  if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
-  return auth;
-}
-
 /**
  * Opens the batch of one delivery of a supplier of the caller's organization,
  * with the delivery's header, rebate groups and the kinds of lines the reader
@@ -61,7 +52,7 @@ export async function openWholesalerImport(
   const parsed = openWholesalerImportInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
-  const auth = await resolveImportManager();
+  const auth = await resolveManagerContext();
   if (!auth.success) return auth;
 
   const { data, error } = await createSupabaseAdminClient().rpc(
@@ -96,7 +87,7 @@ export async function stageWholesalerImportLines(
 ): Promise<ActionResult> {
   const parsed = stageWholesalerImportLinesInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const auth = await resolveImportManager();
+  const auth = await resolveManagerContext();
   if (!auth.success) return auth;
 
   const { error } = await createSupabaseAdminClient().rpc(
@@ -143,7 +134,7 @@ export async function previewWholesalerImport(rawInput: WholesalerImportIdInput)
 > {
   const parsed = wholesalerImportIdInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const auth = await resolveImportManager();
+  const auth = await resolveManagerContext();
   if (!auth.success) return auth;
 
   const admin = createSupabaseAdminClient();
@@ -179,7 +170,7 @@ export async function confirmWholesalerImport(
 ): Promise<ActionResult<{ result: WholesalerImportResult; alreadyConfirmed: boolean }>> {
   const parsed = confirmWholesalerImportInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const auth = await resolveImportManager();
+  const auth = await resolveManagerContext();
   if (!auth.success) return auth;
 
   const { data, error } = await createSupabaseAdminClient().rpc(
@@ -205,7 +196,7 @@ export async function confirmWholesalerImport(
 export async function abandonWholesalerImport(rawInput: WholesalerImportIdInput): Promise<ActionResult> {
   const parsed = wholesalerImportIdInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const auth = await resolveImportManager();
+  const auth = await resolveManagerContext();
   if (!auth.success) return auth;
   const { error } = await createSupabaseAdminClient().rpc(
     'abandon_supplier_catalog_import',
@@ -235,7 +226,7 @@ export async function readWholesalerImportReport(
 ): Promise<ActionResult<{ lines: WholesalerReportLine[]; next: number | null }>> {
   const parsed = wholesalerReportPartInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const auth = await resolveImportManager();
+  const auth = await resolveManagerContext();
   if (!auth.success) return auth;
   const admin = createSupabaseAdminClient();
   const batch = await admin

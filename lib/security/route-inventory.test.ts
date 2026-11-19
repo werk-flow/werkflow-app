@@ -28,7 +28,7 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
   'app/api/rechnungen/vorschau/route.ts': {
     authorization:
       "verified cookie identity and the active organization; Admin or Büro only, an employee and a signed-out caller get no PDF; reads only a draft of the caller's organization, renders it marked „Entwurf“ without e-invoice XML and stores nothing; private no-store responses",
-    mustCall: ['withReadRequest', 'officeCaller', 'readInvoice', 'renderInvoicePdf'],
+    mustCall: ['withReadRequest', 'resolveManagerContext', 'readInvoice', 'renderInvoicePdf'],
   },
   'app/api/musterrechnung/route.ts': {
     authorization:

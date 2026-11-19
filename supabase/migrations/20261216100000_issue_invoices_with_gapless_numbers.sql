@@ -13,11 +13,13 @@
 -- 3. issue_invoice: in one transaction it checks the draft is complete,
 --    takes the next number under the series' row lock, only when it is the
 --    number and day the server checked, stores the snapshot, sets
---    Ausgestellt with the Rechnungsdatum and writes history. A refusal rolls
---    back everything, so no number is used.
+--    Ausgestellt with the Rechnungsdatum, writes history, and registers and
+--    files the original the server rendered under that number and day. A
+--    refusal rolls back everything, so no number is used.
 -- 4. register_invoice_original: registers the rendered PDF as a document in
---    the ten-year class, linked to the customer, once per invoice. The server
---    files it through lib/documents/filing.ts.
+--    the ten-year class, linked to the customer, once per invoice, and files
+--    it through file_document in the same transaction. issue_invoice calls
+--    it; „Beleg erstellen“ calls it for an original still pending.
 -- 5. save_invoice_settings, get_invoice_settings; create_invoice takes the
 --    default terms; get_invoice answers the issue facts.
 --
@@ -261,10 +263,18 @@ create trigger guard_issued_invoice_lines before insert or update or delete on p
 -- Berlin day once that lock is held. p_expected_number and p_expected_issue_date are the number and
 -- Rechnungsdatum the server checked and rendered the invoice under; the head
 -- of its original prints both, so the function issues only those and
--- otherwise refuses invoice_number_moved, and the server checks again. A
--- retry under the same key answers the first issue. Refusals: invalid_input,
--- not_authorized, those of lock_invoice_draft, invoice_incomplete (no line or
--- no Leistungsdatum), invoice_number_moved, and a check violation.
+-- otherwise refuses invoice_number_moved, and the server checks again. The
+-- p_original_* arguments name the original the server rendered under that
+-- number and day and stored: the issue registers and files it in its own
+-- transaction (register_invoice_original), so an issue and its original
+-- commit or roll back together. Without them, as when the storage was
+-- unreachable, the invoice is issued with its original pending. A retry under
+-- the same key answers the first issue and registers nothing, since its
+-- original may have been rendered under another number. The answer names the
+-- invoice's registered original, or null; the server discards another.
+-- Refusals: invalid_input, not_authorized, those of lock_invoice_draft,
+-- invoice_incomplete (no line or no Leistungsdatum), invoice_number_moved,
+-- those of register_invoice_original, and a check violation.
 create function public.issue_invoice(
   p_actor_id uuid,
   p_organization_id uuid,
@@ -273,7 +283,12 @@ create function public.issue_invoice(
   p_attempt_key uuid,
   p_snapshot jsonb,
   p_expected_number text,
-  p_expected_issue_date date
+  p_expected_issue_date date,
+  p_original_document_id uuid default null,
+  p_original_storage_path text default null,
+  p_original_file_name text default null,
+  p_original_size_bytes bigint default null,
+  p_original_content_hash text default null
 )
 returns jsonb
 language plpgsql
@@ -304,7 +319,9 @@ begin
     if v_earlier.event_type <> 'issued' or v_earlier.invoice_id <> p_invoice_id then
       raise exception 'invalid_input';
     end if;
-    return v_earlier.payload || jsonb_build_object('version', v_earlier.version);
+    return v_earlier.payload || jsonb_build_object('version', v_earlier.version,
+      'originalDocumentId', (select invoice.original_document_id from public.invoices invoice
+        where invoice.id = p_invoice_id and invoice.organization_id = p_organization_id));
   end if;
   v_invoice := app_private.lock_invoice_draft(p_organization_id, p_invoice_id, p_expected_version);
   if v_invoice.service_start is null or not exists (
@@ -353,7 +370,8 @@ begin
     version = invoice.version + 1,
     updated_by = p_actor_id,
     updated_at = now()
-  where invoice.id = v_invoice.id and invoice.organization_id = p_organization_id;
+  where invoice.id = v_invoice.id and invoice.organization_id = p_organization_id
+    and invoice.version = p_expected_version;
 
   insert into public.invoice_events (
     organization_id, invoice_id, event_type, status, version, payload, actor_id, attempt_key
@@ -363,12 +381,19 @@ begin
       'grossCents', v_invoice.gross_cents),
     p_actor_id, p_attempt_key
   );
+  if p_original_document_id is not null then
+    perform public.register_invoice_original(p_actor_id, p_organization_id, v_invoice.id, p_original_document_id,
+      p_original_storage_path, p_original_file_name, p_original_size_bytes, p_original_content_hash);
+  end if;
   return jsonb_build_object('invoiceNumber', v_number, 'issueDate', v_issue_date,
-    'grossCents', v_invoice.gross_cents, 'version', v_invoice.version + 1);
+    'grossCents', v_invoice.gross_cents, 'version', v_invoice.version + 1,
+    'originalDocumentId', p_original_document_id);
 end;
 $$;
-revoke all on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, jsonb, text, date) from public, anon, authenticated;
-grant execute on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, jsonb, text, date) to service_role;
+revoke all on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, jsonb, text, date, uuid, text, text, bigint, text)
+  from public, anon, authenticated;
+grant execute on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, jsonb, text, date, uuid, text, text, bigint, text)
+  to service_role;
 
 -- 4. Registers an issued invoice's rendered original as a document in the
 -- ten-year class, dated the Rechnungsdatum, linked to the customer and never
@@ -400,7 +425,7 @@ declare
 begin
   if p_actor_id is null or p_organization_id is null or p_invoice_id is null or p_document_id is null
     or p_storage_path is null or p_file_name is null or p_size_bytes is null or p_size_bytes <= 0
-    or p_content_hash !~ '^[0-9a-f]{64}$'
+    or p_content_hash is null or p_content_hash !~ '^[0-9a-f]{64}$'
     or p_storage_path not like p_organization_id::text || '/' || p_document_id::text || '/%'
   then
     raise exception 'invalid_input';

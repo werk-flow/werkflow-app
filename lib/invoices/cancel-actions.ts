@@ -2,26 +2,32 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
+import { resolveManagerContext } from '@/lib/org/manager-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { writeRefusalFor } from '@/lib/supabase/write-refusal';
+import { isConfirmedWriteRefusal, writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { officeCaller } from './caller';
 import { cancelInvoiceSchema, stornoOf, type CancelInvoiceInput } from './cancel-model';
 import type { InvoiceCheckFailure } from './issue-model';
-import { fileIssuedOriginal, issueUnderCheckedNumber, type NextIssue } from './original';
+import {
+  discardInvoiceOriginal,
+  issueUnderCheckedNumber,
+  type NextIssue,
+  type StoredOriginal,
+} from './original';
 import { readIssuedInvoice } from './reads';
 
 // „Stornieren“ and „Korrigieren“
 // (supabase/migrations/20261216120000_cancel_and_correct_issued_invoices.sql).
 // The order of „Ausstellen“, through its issueUnderCheckedNumber: the server
 // checks the Stornorechnung with the EN 16931 rules under the series' next
-// number and today's date first; then cancel_invoice issues it with exactly
-// that number, or refuses when another issue took it meanwhile and the server
-// checks again; marks the original Storniert and, for „Korrigieren“, opens the
-// correction draft, in one transaction; then the Stornorechnung's original is
-// rendered and filed like any invoice's, and a failure there leaves it
-// pending for „Beleg erstellen“.
+// number and today's date first and stores the original rendered under them;
+// then cancel_invoice issues it with exactly that number, registers and files
+// that original, marks the original invoice Storniert and, for „Korrigieren“,
+// opens the correction draft, in one transaction, or refuses when another
+// issue took the number meanwhile and the server checks again. If the
+// original could not be stored the Stornorechnung is issued with its original
+// pending, and „Beleg erstellen“ renders the same bytes again.
 
 const refusal = writeRefusalFor(
   new Set([
@@ -44,6 +50,7 @@ const cancelledSchema = z.object({
   stornoNumber: z.string(),
   issueDate: z.iso.date(),
   correctionId: uuidSchema.nullable(),
+  originalDocumentId: uuidSchema.nullable(),
 });
 
 type CancelContext = { userId: string; orgId: string };
@@ -51,13 +58,16 @@ type CancelInput = { invoiceId: string; attemptKey: string; reason: string; corr
 
 /**
  * Cancels under the number and Berlin day the Stornorechnung was checked
- * under: the function refuses `invoice_number_moved` when another issue took
- * that number first. Then files the Stornorechnung's original.
+ * under, and files the original stored for them in the same call: the
+ * function refuses `invoice_number_moved` when another issue took that number
+ * first. A stored original that is not the Stornorechnung's registered one is
+ * discarded; after an unknown outcome it stays, as the call may commit.
  */
 async function cancelChecked(
   context: CancelContext,
   input: CancelInput,
   checked: NextIssue,
+  stored: StoredOriginal | null,
 ): Promise<CancelInvoiceResult> {
   const { data, error } = await createSupabaseAdminClient().rpc('cancel_invoice', {
     p_actor_id: context.userId,
@@ -68,24 +78,26 @@ async function cancelChecked(
     p_correct: input.correct,
     p_expected_number: checked.number,
     p_expected_issue_date: checked.issueDate,
+    ...(stored && {
+      p_original_document_id: stored.documentId,
+      p_original_storage_path: stored.path,
+      p_original_file_name: stored.fileName,
+      p_original_size_bytes: stored.sizeBytes,
+      p_original_content_hash: stored.contentHash,
+    }),
   });
   const cancelled = cancelledSchema.safeParse(data);
+  const registeredOther = cancelled.success && cancelled.data.originalDocumentId !== stored?.documentId;
+  if (stored && (isConfirmedWriteRefusal(error) || registeredOther)) {
+    await discardInvoiceOriginal(context.orgId, stored);
+  }
   if (error || !cancelled.success) {
     return refusal(error, 'cancel_failed', 'cancelInvoice: cancel_invoice failed');
   }
-
-  // Cancelled from here on: a failure below leaves the Stornorechnung's original pending.
-  const originalFiled = await readIssuedInvoice(context.orgId, cancelled.data.stornoId).then(
-    (storno) => fileIssuedOriginal(context, storno),
-    (readError: unknown) => {
-      logError('cancelInvoice: Stornorechnung not read back', readError);
-      return false;
-    },
-  );
   return {
     success: true,
     stornoNumber: cancelled.data.stornoNumber,
-    originalFiled,
+    originalFiled: cancelled.data.originalDocumentId !== null,
     correctionId: cancelled.data.correctionId,
   };
 }
@@ -101,7 +113,7 @@ export async function cancelInvoice(rawInput: CancelInvoiceInput): Promise<Cance
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
   try {
-    const caller = await officeCaller();
+    const caller = await resolveManagerContext();
     if (!caller.success) return caller;
     const { context } = caller;
     const original = await readIssuedInvoice(context.orgId, input.invoiceId);
@@ -115,14 +127,14 @@ export async function cancelInvoice(rawInput: CancelInvoiceInput): Promise<Cance
     // refuses, both before it compares a number, so the original's own stands in.
     if (original.status !== 'ausgestellt') {
       const { invoiceNumber, issueDate } = original.issue;
-      return await cancelChecked(context, input, { number: invoiceNumber, issueDate });
+      return await cancelChecked(context, input, { number: invoiceNumber, issueDate }, null);
     }
     const storno = stornoOf({ ...original, ...original.issue }, input.reason);
     return await issueUnderCheckedNumber(
       context.orgId,
       { ...storno, recipient: original.recipient },
       original.issue.snapshot,
-      (next) => cancelChecked(context, input, next),
+      (next, stored) => cancelChecked(context, input, next, stored),
     );
   } catch (error) {
     logError('cancelInvoice: unexpected error', error);

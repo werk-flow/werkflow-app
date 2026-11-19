@@ -55,7 +55,7 @@ declare
   v_role text;
 begin
   foreach v_role in array array['anon', 'authenticated'] loop
-    if has_function_privilege(v_role, 'public.cancel_invoice(uuid,uuid,uuid,uuid,text,boolean,text,date)', 'EXECUTE')
+    if has_function_privilege(v_role, 'public.cancel_invoice(uuid,uuid,uuid,uuid,text,boolean,text,date,uuid,text,text,bigint,text)', 'EXECUTE')
       or has_function_privilege(v_role, 'app_private.invoice_chain(uuid,uuid)', 'EXECUTE') then
       raise exception '% reaches the cancel', v_role;
     end if;
@@ -118,10 +118,17 @@ create temp table issued_lines on commit drop as
 select line.* from public.invoice_lines line join issued on issued.id = line.invoice_id;
 grant select on issued, issued_lines to service_role;
 
-create function pg_temp.cancel(p_actor uuid, p_org uuid, p_name text, p_attempt uuid, p_reason text, p_correct boolean)
+-- With p_original, the Stornorechnung's issue registers the original the server stored under that document id.
+create function pg_temp.cancel(p_actor uuid, p_org uuid, p_name text, p_attempt uuid, p_reason text, p_correct boolean,
+  p_original uuid default null)
 returns jsonb language sql as $$
   select public.cancel_invoice(p_actor, p_org, pg_temp.id(p_name), p_attempt, p_reason, p_correct,
-    public.get_invoice_settings(p_org) ->> 'nextInvoiceNumber', (now() at time zone 'Europe/Berlin')::date)
+    public.get_invoice_settings(p_org) ->> 'nextInvoiceNumber', (now() at time zone 'Europe/Berlin')::date,
+    p_original,
+    case when p_original is not null then p_org || '/' || p_original || '/Stornorechnung.pdf' end,
+    case when p_original is not null then 'Stornorechnung.pdf' end,
+    case when p_original is not null then 4096 end,
+    case when p_original is not null then repeat('d', 64) end)
 $$;
 
 -- A refused cancel uses no number and changes nothing: a field worker, an
@@ -194,7 +201,9 @@ begin
       is distinct from (0, null::integer, '', '')
     or v_storno.issue_snapshot is distinct from v_original.issue_snapshot
     or v_storno.logo_storage_path is distinct from v_original.logo_storage_path
-    or v_answer -> 'correctionId' is distinct from 'null'::jsonb then
+    or v_answer -> 'correctionId' is distinct from 'null'::jsonb
+    -- Cancelled without a stored original, as when the storage was unreachable: pending, no document.
+    or v_answer -> 'originalDocumentId' is distinct from 'null'::jsonb or v_storno.original_document_id is not null then
     raise exception 'the Stornorechnung is % (answer %)', to_jsonb(v_storno), v_answer;
   end if;
   if (select array_agg((line.position, line.name, line.description, line.quantity, line.unit, line.unit_price_cents,
@@ -275,16 +284,34 @@ from (values
 
 -- „Korrigieren“: the Stornorechnung takes the next number, and a new draft carries the original's
 -- terms and lines, linked to it; the chain reads original, Stornorechnung, correction from each of them.
+-- The Stornorechnung's stored original is registered and filed in the cancel's own transaction.
 do $$
 declare
   v_year text := to_char(now() at time zone 'Europe/Berlin', 'YYYY');
   v_answer jsonb := pg_temp.cancel('38080000-0000-4000-8000-000000000001', '38080000-0000-4000-8000-000000000010',
-    'corrected', gen_random_uuid(), 'Menge falsch', true);
+    'corrected', '38080000-0000-4000-8000-000000000302', 'Menge falsch', true, '38080000-0000-4000-8000-000000000401');
   v_original public.invoices;
   v_correction public.invoices;
+  v_document public.documents;
   v_chain jsonb;
   v_name text;
 begin
+  select * into v_document from public.documents where id = '38080000-0000-4000-8000-000000000401';
+  if v_answer ->> 'originalDocumentId' is distinct from '38080000-0000-4000-8000-000000000401'
+    or (select original_document_id from public.invoices where id = (v_answer ->> 'stornoId')::uuid)
+      is distinct from '38080000-0000-4000-8000-000000000401'
+    or v_document.category is distinct from 'invoice' or v_document.retention_class is distinct from 'ten_years'
+    or v_document.filed_at is null or v_document.filed_by is distinct from '38080000-0000-4000-8000-000000000001'
+    or v_document.metadata ->> 'invoiceId' is distinct from v_answer ->> 'stornoId' then
+    raise exception 'the cancel answered % with the Stornorechnung''s original %', v_answer, to_jsonb(v_document);
+  end if;
+  -- A retry under the same key registers nothing: it answers the first cancel and its registered original.
+  if pg_temp.cancel('38080000-0000-4000-8000-000000000001', '38080000-0000-4000-8000-000000000010', 'corrected',
+      '38080000-0000-4000-8000-000000000302', 'Menge falsch', true, '38080000-0000-4000-8000-000000000402')
+      is distinct from v_answer
+    or exists (select 1 from public.documents where id = '38080000-0000-4000-8000-000000000402') then
+    raise exception 'a retried cancel registered another original';
+  end if;
   select * into v_original from public.invoices where id = pg_temp.id('corrected');
   select * into v_correction from public.invoices where id = (v_answer ->> 'correctionId')::uuid;
   if v_answer ->> 'stornoNumber' is distinct from 'RE-' || v_year || '-005'

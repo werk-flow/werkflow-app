@@ -2,8 +2,9 @@
 // a field worker reaches nothing; another organization's invoice is refused
 // by the one read; a draft the EN 16931 rules refuse is never issued and the
 // office reads what to fix; a checked draft is issued under the caller's own
-// organization with the snapshot it was checked with, and its original is
-// rendered, stored, registered and filed, with the same bytes on a retry.
+// organization with the snapshot it was checked with, and the original
+// rendered under its number is stored and passed to the one issue call, which
+// registers and files it; „Beleg erstellen“ renders the same bytes again.
 // The check runs under exactly the number and day the function then issues,
 // and again under the new number when another issue took that one first.
 // supabase/tests/invoice_issue.sql proves the functions.
@@ -28,10 +29,13 @@ const clientId = '97100000-0000-4000-8000-000000000001';
 
 const stored: Array<{ path: string; body: Uint8Array }> = [];
 const discarded: string[] = [];
+// While set, the storage refuses every object.
+let storageDown = false;
 const realStorage = await import('@/lib/storage/r2');
 mock.module('@/lib/storage/r2', () => ({
   ...realStorage,
   putStorageObject: async ({ path, body }: { path: string; body: Uint8Array }) => {
+    if (storageDown) throw new Error('storage_unavailable');
     stored.push({ path, body: new Uint8Array(body) });
     return { created: true };
   },
@@ -258,14 +262,20 @@ world.rpc = ({ name, args }) => {
   if (name === 'issue_invoice') {
     if (issued)
       return {
-        data: { invoiceNumber: issued.invoiceNumber, issueDate: issued.issueDate, version: 3 },
+        data: {
+          invoiceNumber: issued.invoiceNumber,
+          issueDate: issued.issueDate,
+          version: 3,
+          originalDocumentId: issued.original ? documentId : null,
+        },
         error: null,
       };
     if (numberMoves > 0) {
       numberMoves -= 1;
       nextInvoiceNumber = `RE-2037-00${Number(nextInvoiceNumber.slice(-1)) + 1}`;
-      return { data: null, error: { message: 'invoice_number_moved' } };
+      return { data: null, error: { code: 'P0001', message: 'invoice_number_moved' } };
     }
+    const original = args.p_original_document_id ?? null;
     issued = {
       ...draft,
       status: 'ausgestellt',
@@ -273,9 +283,15 @@ world.rpc = ({ name, args }) => {
       invoiceNumber: args.p_expected_number,
       issueDate: args.p_expected_issue_date,
       issueSnapshot: args.p_snapshot,
+      ...(original ? { original: { documentId: original, filed: true } } : {}),
     };
     return {
-      data: { invoiceNumber: args.p_expected_number, issueDate: args.p_expected_issue_date, version: 3 },
+      data: {
+        invoiceNumber: args.p_expected_number,
+        issueDate: args.p_expected_issue_date,
+        version: 3,
+        originalDocumentId: original,
+      },
       error: null,
     };
   }
@@ -289,7 +305,14 @@ numberMoves = 3;
 world.rpcCalls.length = 0;
 assert.deepEqual(await issueInvoice(issueInput), { success: false, error: 'invoice_number_moved' });
 assert.equal(world.rpcCalls.filter((call) => call.name === 'issue_invoice').length, 3);
+// Each refused issue discards the original stored for it.
+assert.deepEqual(
+  discarded,
+  stored.map((object) => object.path),
+);
 nextInvoiceNumber = 'RE-2037-001';
+stored.length = 0;
+discarded.length = 0;
 
 // Another issue took the checked number twice: each time the draft is checked again under the new number.
 numberMoves = 2;
@@ -310,8 +333,6 @@ assert.deepEqual(
     ['issue_invoice', ORGANIZATION_A, CALLER_ID],
     ['get_invoice_settings', ORGANIZATION_A, null],
     ['issue_invoice', ORGANIZATION_A, CALLER_ID],
-    ['get_invoice', ORGANIZATION_A, null],
-    ['register_invoice_original', ORGANIZATION_A, CALLER_ID],
   ],
 );
 // The function issues exactly the number and day the draft was checked under; the original reads the same.
@@ -325,13 +346,8 @@ assert.deepEqual(
     ['RE-2037-003', today],
   ],
 );
-// Each check read the number and Rechnungsdatum its issue_invoice call got; the last is the original's.
-assert.deepEqual(checkedNumbers, [
-  'RE-2037-001 20371120',
-  'RE-2037-002 20371120',
-  'RE-2037-003 20371120',
-  'RE-2037-003 20371120',
-]);
+// Each check read the number and Rechnungsdatum its issue_invoice call got.
+assert.deepEqual(checkedNumbers, ['RE-2037-001 20371120', 'RE-2037-002 20371120', 'RE-2037-003 20371120']);
 const issueArgs = world.rpcCalls[6]?.args;
 assert.equal(issueArgs?.p_expected_version, 2);
 assert.equal(issueArgs?.p_attempt_key, attemptKey);
@@ -339,16 +355,22 @@ assert.deepEqual(JSON.parse(JSON.stringify(issueArgs?.p_snapshot)).buyer, {
   name: 'Hausverwaltung Lindenhof GmbH',
   address: { lines: ['Hofweg 1'], postalCode: '10117', city: 'Berlin', countryCode: 'DE' },
 });
-const [first] = stored;
+// The originals of the two moved numbers are discarded; the issue registers the third, which it was passed.
+const first = stored[2];
 if (!first) throw new Error('the issue stored no original');
+assert.deepEqual(discarded, [stored[0]?.path, stored[1]?.path]);
 assert.ok(first.path.startsWith(`${ORGANIZATION_A}/`) && first.path.endsWith('/Rechnung-RE-2037-003.pdf'));
+assert.equal(issueArgs?.p_original_storage_path, first.path);
+assert.equal(first.path.split('/')[1], issueArgs?.p_original_document_id);
+assert.equal(issueArgs?.p_original_size_bytes, first.body.byteLength);
 const xml = await readEmbeddedInvoiceXml(first.body);
 assert.ok(xml.includes('<ram:ID>RE-2037-003</ram:ID>') && xml.includes('DE123456789'), xml);
 const { text } = await extractText(await getDocumentProxy(first.body.slice()), { mergePages: true });
 assert.ok(text.includes('Rechnung RE-2037-003') && text.includes('Hofweg 1') && text.includes('Std'), text);
 
-// A retried press after a lost answer gets the first issue's number from the function.
+// A retried press after a lost answer gets the first issue's number from the function and stores nothing.
 world.rpcCalls.length = 0;
+stored.length = 0;
 assert.deepEqual(await issueInvoice(issueInput), {
   success: true,
   invoiceNumber: 'RE-2037-003',
@@ -356,12 +378,26 @@ assert.deepEqual(await issueInvoice(issueInput), {
 });
 assert.equal(world.rpcCalls[1]?.name, 'issue_invoice');
 assert.equal(world.rpcCalls[1]?.args.p_expected_number, 'RE-2037-003');
+assert.equal(stored.length, 0);
 
-// „Beleg erstellen“ after a lost registration renders the same bytes again; a filed original is left alone.
-stored.length = 0;
+// With the storage down the draft is issued with its original pending, and the call names no original.
+const issuedOriginal = first.body;
+issued = null;
+storageDown = true;
+world.rpcCalls.length = 0;
+assert.deepEqual(await issueInvoice(issueInput), {
+  success: true,
+  invoiceNumber: 'RE-2037-003',
+  originalFiled: false,
+});
+assert.equal(world.rpcCalls.at(-1)?.args.p_original_document_id, undefined);
+storageDown = false;
+
+// „Beleg erstellen“ renders the stored invoice to the bytes its number was checked with; a filed original is left alone.
 const again = await fileInvoiceOriginal({ invoiceId });
 assert.deepEqual(again, { success: true });
-assert.deepEqual(stored[0]?.body, first.body, 'a retry rendered other bytes');
+assert.deepEqual(stored[0]?.body, issuedOriginal, 'a retry rendered other bytes');
+assert.deepEqual(world.rpcCalls.at(-1)?.name, 'register_invoice_original');
 issued = { ...(issued ?? {}), original: { documentId, filed: true } };
 world.rpcCalls.length = 0;
 assert.deepEqual(await fileInvoiceOriginal({ invoiceId }), { success: true });

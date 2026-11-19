@@ -1,8 +1,10 @@
 // The real cancel code over the action world: a field worker reaches nothing;
 // another organization's invoice is refused by the one read; a Stornorechnung
 // is not cancelled; a Stornorechnung the EN 16931 rules refuse is never
-// issued; a checked one is issued under the caller's own organization and its
-// original is filed as a corrected invoice (384) naming the cancelled one.
+// issued; a checked one is issued under the caller's own organization, and
+// its original, rendered as a corrected invoice (384) naming the cancelled
+// one, is stored and passed to the one cancel call, which registers and files
+// it. An original no cancel registered is discarded.
 // supabase/tests/invoice_cancel.sql proves the function.
 import assert from 'node:assert/strict';
 import { mock, setSystemTime } from 'bun:test';
@@ -18,9 +20,9 @@ const correctionId = '98200000-0000-4000-8000-000000000003';
 const foreignInvoiceId = '98200000-0000-4000-8000-000000000009';
 const attemptKey = '99200000-0000-4000-8000-000000000001';
 const clientId = '97200000-0000-4000-8000-000000000001';
-const documentId = '96200000-0000-4000-8000-000000000001';
 
 const stored: Array<{ path: string; body: Uint8Array }> = [];
+const discarded: string[] = [];
 const realStorage = await import('@/lib/storage/r2');
 mock.module('@/lib/storage/r2', () => ({
   ...realStorage,
@@ -28,7 +30,9 @@ mock.module('@/lib/storage/r2', () => ({
     stored.push({ path, body: new Uint8Array(body) });
     return { created: true };
   },
-  discardStorageObjects: async () => undefined,
+  discardStorageObjects: async ({ paths }: { paths: string[] }) => {
+    discarded.push(...paths);
+  },
   readStorageObject: async () => {
     throw new Error('storage_object_missing');
   },
@@ -218,6 +222,7 @@ assert.deepEqual(
 
 // A checked Stornorechnung: issued under the caller's organization, its original filed as a 384.
 let cancelled = false;
+let registeredOriginal: unknown = null;
 // How often cancel_invoice answers that another issue took the checked number first.
 let numberMoves = 0;
 world.rpc = ({ name, args }) => {
@@ -228,8 +233,10 @@ world.rpc = ({ name, args }) => {
   if (name === 'cancel_invoice') {
     if (numberMoves > 0) {
       numberMoves -= 1;
-      return { data: null, error: { message: 'invoice_number_moved' } };
+      return { data: null, error: { code: 'P0001', message: 'invoice_number_moved' } };
     }
+    // A replay registers nothing and answers the original the first cancel registered.
+    if (!cancelled) registeredOriginal = args.p_original_document_id ?? null;
     cancelled = true;
     return {
       data: {
@@ -237,12 +244,10 @@ world.rpc = ({ name, args }) => {
         stornoNumber: 'RE-2037-002',
         issueDate: today,
         correctionId: args.p_correct ? correctionId : null,
+        originalDocumentId: registeredOriginal,
       },
       error: null,
     };
-  }
-  if (name === 'register_invoice_original') {
-    return { data: { documentId, replay: false, contentHash: args.p_content_hash }, error: null };
   }
   return { data: name === 'get_invoice_settings' ? settings : null, error: null };
 };
@@ -259,8 +264,6 @@ assert.deepEqual(
     ['get_invoice', ORGANIZATION_A, null],
     ['get_invoice_settings', ORGANIZATION_A, null],
     ['cancel_invoice', ORGANIZATION_A, CALLER_ID],
-    ['get_invoice', ORGANIZATION_A, null],
-    ['register_invoice_original', ORGANIZATION_A, CALLER_ID],
   ],
 );
 const cancelArgs = world.rpcCalls[2]?.args;
@@ -271,13 +274,17 @@ assert.equal(cancelArgs?.p_correct, false);
 // The function issues exactly the number and day the Stornorechnung was checked under.
 assert.equal(cancelArgs?.p_expected_number, 'RE-2037-002');
 assert.equal(cancelArgs?.p_expected_issue_date, today);
-assert.equal(world.rpcCalls[3]?.args.p_invoice_id, stornoId);
+// The one cancel call registers and files the original stored under the checked number.
 const [first] = stored;
 if (!first) throw new Error('the cancel stored no original');
 assert.ok(
   first.path.startsWith(`${ORGANIZATION_A}/`) && first.path.endsWith('/Stornorechnung-RE-2037-002.pdf'),
   first.path,
 );
+assert.equal(cancelArgs?.p_original_storage_path, first.path);
+assert.equal(first.path.split('/')[1], cancelArgs?.p_original_document_id);
+assert.equal(cancelArgs?.p_original_size_bytes, first.body.byteLength);
+assert.deepEqual(discarded, []);
 const xml = await readEmbeddedInvoiceXml(first.body);
 for (const part of [
   '<ram:TypeCode>384</ram:TypeCode>',
@@ -295,12 +302,19 @@ for (const part of ['Stornorechnung RE-2037-002', 'Storno zu', 'RE-2037-001', 'G
 // A retried press after a lost answer finds the original Storniert and asks the function at once, which answers
 // the first Storno.
 world.rpcCalls.length = 0;
-const retried = await cancelInvoice(input);
-assert.equal(retried.success, true, JSON.stringify(retried));
+stored.length = 0;
+assert.deepEqual(await cancelInvoice(input), {
+  success: true,
+  stornoNumber: 'RE-2037-002',
+  originalFiled: true,
+  correctionId: null,
+});
 assert.deepEqual(
-  world.rpcCalls.slice(0, 2).map((call) => call.name),
+  world.rpcCalls.map((call) => call.name),
   ['get_invoice', 'cancel_invoice'],
 );
+assert.equal(world.rpcCalls[1]?.args.p_original_document_id, undefined);
+assert.equal(stored.length, 0);
 
 // Another issue took the checked number twice: the Stornorechnung is checked again each time, then cancelled.
 cancelled = false;
@@ -310,6 +324,10 @@ const moved = await cancelInvoice({ ...input, attemptKey: crypto.randomUUID() })
 assert.equal(moved.success, true, JSON.stringify(moved));
 assert.equal(world.rpcCalls.filter((call) => call.name === 'get_invoice_settings').length, 3);
 assert.equal(world.rpcCalls.filter((call) => call.name === 'cancel_invoice').length, 3);
+// The originals of the two moved numbers are discarded; the cancel registers the third.
+assert.deepEqual(discarded, [stored[0]?.path, stored[1]?.path]);
+stored.length = 0;
+discarded.length = 0;
 // A third move is answered, not retried for ever.
 cancelled = false;
 numberMoves = 3;
@@ -317,6 +335,10 @@ assert.deepEqual(await cancelInvoice({ ...input, attemptKey: crypto.randomUUID()
   success: false,
   error: 'invoice_number_moved',
 });
+assert.deepEqual(
+  discarded,
+  stored.map((object) => object.path),
+);
 
 // „Korrigieren“ answers the new draft.
 cancelled = false;

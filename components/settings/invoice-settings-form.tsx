@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
@@ -17,6 +16,7 @@ import { parseDays, parsePercentBasisPoints, percentInput } from '@/lib/invoices
 import type { InvoiceSettings, InvoiceSettingsValues } from '@/lib/invoices/settings';
 import { saveInvoiceSettings } from '@/lib/invoices/settings-actions';
 import { NOTHING_TO_SAVE } from '@/lib/settings/save-answers';
+import { parseWholeNumberInput } from '@/lib/ui/decimal';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const FIELD_IDS = {
@@ -58,12 +58,6 @@ function formOf(settings: InvoiceSettings): Form {
   };
 }
 
-function wholeNumber(text: string, min: number, max: number): number | null {
-  if (!/^\d{1,9}$/.test(text.trim())) return null;
-  const value = Number(text.trim());
-  return value >= min && value <= max ? value : null;
-}
-
 /** The typed settings, or the message of each field at fault. */
 function parseForm(
   form: Form,
@@ -72,9 +66,9 @@ function parseForm(
   if (!/^[A-Za-z0-9._/-]{0,20}$/.test(form.prefix.trim())) {
     errors[FIELD_IDS.prefix] = 'Höchstens 20 Zeichen: Buchstaben, Ziffern und . _ / -.';
   }
-  const minDigits = wholeNumber(form.minDigits, 1, 10);
+  const minDigits = parseWholeNumberInput(form.minDigits, 1, 10);
   if (minDigits === null) errors[FIELD_IDS.minDigits] = 'Gib eine Zahl von 1 bis 10 an.';
-  const nextNumber = wholeNumber(form.nextNumber, 1, 999_999_998);
+  const nextNumber = parseWholeNumberInput(form.nextNumber, 1, 999_999_998);
   if (nextNumber === null) errors[FIELD_IDS.nextNumber] = 'Gib eine ganze Zahl ab 1 an.';
   const paymentDueDays = parseDays(form.paymentDueDays, 0);
   if (paymentDueDays === null)
@@ -117,42 +111,6 @@ type FieldProps = {
   disabled: boolean;
 };
 
-/** One text input of the form with its label and error. */
-function TextField({
-  id,
-  label,
-  value,
-  onChange,
-  error,
-  disabled,
-  ...input
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  error: string | undefined;
-  disabled: boolean;
-  required?: boolean;
-  inputMode?: 'numeric' | 'decimal';
-  maxLength?: number;
-  placeholder?: string;
-}) {
-  return (
-    <Field label={label} htmlFor={id} error={error} {...(input.required ? { required: true } : {})}>
-      <Input
-        inputMode={input.inputMode}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        maxLength={input.maxLength}
-        placeholder={input.placeholder}
-        autoComplete="off"
-        disabled={disabled}
-      />
-    </Field>
-  );
-}
-
 function NumberSeriesFields({
   form,
   update,
@@ -171,33 +129,33 @@ function NumberSeriesFields({
           : ' Präfix, Jahr, Stellen und nächste Nummer legst du einmal vor der ersten Rechnung fest, zum Beispiel um die Nummern deiner bisherigen Software fortzuführen. Kürzere Nummern beginnen mit Nullen.'}
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
-        <TextField
-          id={FIELD_IDS.prefix}
-          label="Präfix"
-          value={form.prefix}
-          onChange={(prefix) => update({ prefix })}
-          maxLength={20}
-          error={errors[FIELD_IDS.prefix]}
-          disabled={disabled}
-        />
-        <TextField
-          id={FIELD_IDS.minDigits}
-          label="Mindestens Stellen"
-          inputMode="numeric"
-          value={form.minDigits}
-          onChange={(minDigits) => update({ minDigits })}
-          error={errors[FIELD_IDS.minDigits]}
-          disabled={disabled}
-        />
-        <TextField
-          id={FIELD_IDS.nextNumber}
-          label="Nächste Nummer"
-          inputMode="numeric"
-          value={form.nextNumber}
-          onChange={(nextNumber) => update({ nextNumber })}
-          error={errors[FIELD_IDS.nextNumber]}
-          disabled={disabled}
-        />
+        <Field label="Präfix" htmlFor={FIELD_IDS.prefix} error={errors[FIELD_IDS.prefix]}>
+          <Input
+            value={form.prefix}
+            onChange={(event) => update({ prefix: event.target.value })}
+            maxLength={20}
+            autoComplete="off"
+            disabled={disabled}
+          />
+        </Field>
+        <Field label="Mindestens Stellen" htmlFor={FIELD_IDS.minDigits} error={errors[FIELD_IDS.minDigits]}>
+          <Input
+            inputMode="numeric"
+            value={form.minDigits}
+            onChange={(event) => update({ minDigits: event.target.value })}
+            autoComplete="off"
+            disabled={disabled}
+          />
+        </Field>
+        <Field label="Nächste Nummer" htmlFor={FIELD_IDS.nextNumber} error={errors[FIELD_IDS.nextNumber]}>
+          <Input
+            inputMode="numeric"
+            value={form.nextNumber}
+            onChange={(event) => update({ nextNumber: event.target.value })}
+            autoComplete="off"
+            disabled={disabled}
+          />
+        </Field>
       </div>
       <label className="flex items-start gap-2 text-sm">
         <Checkbox
@@ -221,35 +179,47 @@ function PaymentTermsFields({ form, update, errors, disabled }: FieldProps) {
     <section className="space-y-4">
       <h3 className="text-sm font-semibold">Zahlungsbedingungen für neue Entwürfe</h3>
       <div className="grid gap-4 sm:grid-cols-3">
-        <TextField
-          id={FIELD_IDS.paymentDueDays}
+        <Field
           label="Zahlungsziel in Tagen"
+          htmlFor={FIELD_IDS.paymentDueDays}
           required
-          inputMode="numeric"
-          value={form.paymentDueDays}
-          onChange={(paymentDueDays) => update({ paymentDueDays })}
           error={errors[FIELD_IDS.paymentDueDays]}
-          disabled={disabled}
-        />
-        <TextField
-          id={FIELD_IDS.discountPercent}
+        >
+          <Input
+            inputMode="numeric"
+            value={form.paymentDueDays}
+            onChange={(event) => update({ paymentDueDays: event.target.value })}
+            autoComplete="off"
+            disabled={disabled}
+          />
+        </Field>
+        <Field
           label="Skonto in %"
-          inputMode="decimal"
-          placeholder="Kein Skonto"
-          value={form.discountPercent}
-          onChange={(discountPercent) => update({ discountPercent })}
+          htmlFor={FIELD_IDS.discountPercent}
           error={errors[FIELD_IDS.discountPercent]}
-          disabled={disabled}
-        />
-        <TextField
-          id={FIELD_IDS.discountDays}
+        >
+          <Input
+            inputMode="decimal"
+            value={form.discountPercent}
+            onChange={(event) => update({ discountPercent: event.target.value })}
+            placeholder="Kein Skonto"
+            autoComplete="off"
+            disabled={disabled}
+          />
+        </Field>
+        <Field
           label="innerhalb Tagen"
-          inputMode="numeric"
-          value={form.discountDays}
-          onChange={(discountDays) => update({ discountDays })}
+          htmlFor={FIELD_IDS.discountDays}
           error={errors[FIELD_IDS.discountDays]}
-          disabled={disabled}
-        />
+        >
+          <Input
+            inputMode="numeric"
+            value={form.discountDays}
+            onChange={(event) => update({ discountDays: event.target.value })}
+            autoComplete="off"
+            disabled={disabled}
+          />
+        </Field>
       </div>
     </section>
   );
@@ -257,7 +227,6 @@ function PaymentTermsFields({ form, update, errors, disabled }: FieldProps) {
 
 /** The form's text, its errors, and the save: unchanged answers „nothing to save“. */
 function useSettingsSave(settings: InvoiceSettings, organizationId: string) {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const [form, setForm] = useState(() => formOf(settings));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -286,7 +255,6 @@ function useSettingsSave(settings: InvoiceSettings, organizationId: string) {
       return;
     }
     showBanner({ variant: 'success', message: 'Rechnungseinstellungen gespeichert.' });
-    router.refresh();
   };
   return {
     form,

@@ -27,7 +27,7 @@ export function completenessFindings(invoice: InvoiceDetail): IssueFinding[] {
 }
 
 /** The snapshot the issue stores: one read of the company profile, and the Rechnungsempfänger. */
-export async function snapshotOf(
+export async function readIssueSnapshot(
   admin: AdminClient,
   context: { userId: string; orgId: string; isManagerOrAbove: boolean },
   invoice: InvoiceDetail,
