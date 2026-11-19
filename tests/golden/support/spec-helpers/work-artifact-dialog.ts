@@ -1,14 +1,12 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-import {
-  AUTHORIZATION_STATE_LABELS,
-  DEFECT_SEVERITY_LABELS,
-} from '../../../../components/auftraege/artifacts/work-artifact-content';
+import { AUTHORIZATION_STATE_LABELS } from '../../../../components/auftraege/artifacts/work-artifact-content';
 import {
   CUSTOMER_DECISION_LABELS,
   type CustomerDecisionType,
 } from '../../../../lib/work-artifacts/customer-decision';
 import {
+  DEFECT_SEVERITY_LABELS,
   WORK_ARTIFACT_KIND_LABELS,
   WORK_ARTIFACT_STATUS_LABELS,
   WORK_ARTIFACT_UNIT_LABELS,

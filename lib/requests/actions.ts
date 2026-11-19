@@ -11,7 +11,7 @@ import { PROJECT_CREATION_REFUSALS, projectCreationColumns } from '@/lib/project
 import { jobPlanWriteFailure, workWriteFailure } from '@/lib/jobs/write-refusals';
 import { assessNewJobPlan } from '@/lib/planning/job-team-assessment';
 import { CACHE_TAGS } from '@/lib/data/cached';
-import { updateTag } from 'next/cache';
+import { revalidatePath, updateTag } from 'next/cache';
 import type { ClientType } from '@/lib/jobs/types';
 import {
   type CallerMatchesResult,
@@ -304,7 +304,12 @@ export async function createClientRequest(
       }),
     );
     const created = requestWriteResult(outcome, 'create_failed', 'Error creating client request:');
-    if (created.success) captureUsage(orgId, 'request', 'started');
+    if (created.success) {
+      captureUsage(orgId, 'request', 'started');
+      // The capture dialog lives on the list, and the client navigates to the new
+      // request next: this response renders the list, so Back restores it with the request.
+      revalidatePath('/anfragen');
+    }
     return created;
   } catch (error) {
     logError('Unexpected error in createClientRequest:', error);

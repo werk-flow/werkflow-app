@@ -33,13 +33,9 @@ import {
   ARTICLE_PRICE_STATE_BADGES,
   articlePriceState,
   formatArticlePrice,
+  ARTICLE_PRICE_KIND_LABELS,
   unitShortLabelOrStored,
 } from '@/lib/inventory/article-terms-format';
-
-const KIND_LABELS: Record<ArticlePriceKind, string> = {
-  purchase: 'Einkaufspreis',
-  sale: 'Verkaufspreis',
-};
 
 type PriceForm = { kind: ArticlePriceKind; amount: string; priceQuantity: PriceQuantity; validFrom: string };
 
@@ -161,8 +157,8 @@ function PriceKindField({ form, setForm }: { form: PriceForm; setForm: (form: Pr
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="purchase">{KIND_LABELS.purchase}</SelectItem>
-          <SelectItem value="sale">{KIND_LABELS.sale}</SelectItem>
+          <SelectItem value="purchase">{ARTICLE_PRICE_KIND_LABELS.purchase}</SelectItem>
+          <SelectItem value="sale">{ARTICLE_PRICE_KIND_LABELS.sale}</SelectItem>
         </SelectContent>
       </Select>
     </Field>
@@ -289,7 +285,7 @@ function CurrentPrices({ prices }: { prices: ArticlePriceEntry[] }) {
         const current = prices.find((price) => price.kind === kind && price.isCurrent);
         return (
           <div key={kind} className="space-y-1 rounded-lg border px-3 py-2.5">
-            <h3 className="text-sm text-muted-foreground">{KIND_LABELS[kind]}</h3>
+            <h3 className="text-sm text-muted-foreground">{ARTICLE_PRICE_KIND_LABELS[kind]}</h3>
             {current ? (
               <>
                 <p className="text-base font-semibold tabular-nums">
@@ -328,7 +324,7 @@ function PriceHistory({ prices, priceDate }: { prices: ArticlePriceEntry[]; pric
             {rows.map(({ price, state }) => (
               <li key={price.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
                 <div className="min-w-0 space-y-0.5">
-                  <p className="text-sm font-medium">{KIND_LABELS[price.kind]}</p>
+                  <p className="text-sm font-medium">{ARTICLE_PRICE_KIND_LABELS[price.kind]}</p>
                   <p className="text-sm tabular-nums">
                     {formatArticlePrice(price.amountCents, price.priceQuantity, price.unit)}
                   </p>
@@ -358,7 +354,7 @@ function PriceHistory({ prices, priceDate }: { prices: ArticlePriceEntry[]; pric
               <TableBody>
                 {rows.map(({ price, state }) => (
                   <TableRow key={price.id}>
-                    <TableCell>{KIND_LABELS[price.kind]}</TableCell>
+                    <TableCell>{ARTICLE_PRICE_KIND_LABELS[price.kind]}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatArticlePrice(price.amountCents, price.priceQuantity, price.unit)}
                     </TableCell>
