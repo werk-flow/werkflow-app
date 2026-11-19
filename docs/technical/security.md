@@ -42,7 +42,7 @@ Wrong turn: granting `authenticated`, so the browser runs the function past ever
 
 ### Add a storage path
 
-Start the key with the owning organization id and go through `lib/storage/r2.ts`. Authorize on the server, then sign a short-lived URL; the browser moves the bytes ([document storage](document-storage-and-access.md)). Wrong turn: bytes through a Server Action.
+Start the key with the owning organization id and go through `lib/storage/r2.ts`. Authorize on the server, then sign a short-lived URL; the browser moves the bytes ([document storage](document-storage-and-access.md)).
 
 ### Log a failure
 
@@ -57,7 +57,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 ### Requests
 
 - **Server Actions.** Every exported action has a boundary test for a foreign id or a lower role, unless it is self-scoped and takes no id.
-- **Route handlers.** Each handler or its action authenticates the caller; field sync accepts bearer tokens too. No response or redirect carries an error's message or details.
+- **Route handlers.** Each handler or its action authenticates the caller; field sync accepts bearer tokens too, Stripe's webhook only its signature. No response or redirect carries an error's message or details.
 - **Auth links.** No browser client reads a URL session (`auth-url-session.spec.ts`). A GET redeems an invite only after a code exchange in that request; a reset hash waits in an httpOnly cookie for the reset page's click (`lib/auth/recovery-link.ts`).
 - **Email in URLs.** No URL carries a provider message or an email address. The next step reads the address from an httpOnly cookie scoped to its page (`lib/auth/address-cookies.ts`), the invite row, or the session.
 - **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; route a new one there. `app/(app)/layout.tsx` checks the session again and is the authority.
@@ -146,7 +146,7 @@ List each owner-accepted residual exposure until it closes.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
 - Organization deletion removes stored files after the rows; a file whose delete fails or cannot be rechecked stays under its prefix, logged, unreachable through the app.
-- The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed exception in `lib/security/dependency-exceptions.json`.
+- Dev tools' minimatch (GHSA-g3hv-75wg-m249) and picomatch (GHSA-fc5q-39xc-vjpf) are reviewed exceptions (`lib/security/dependency-exceptions.json`).
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).

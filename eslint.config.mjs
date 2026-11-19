@@ -654,6 +654,15 @@ const busySignalSelectors = [
       'ImportDeclaration[source.value="lucide-react"] > ImportSpecifier[imported.name=/^Loader2(Icon)?$/]',
     message: busySignalMessage,
   },
+  // A browser-only `dynamic` renders its `loading` in server HTML and until its
+  // chunk arrives. Without one, its content drew in later with no busy signal,
+  // under a page that looked settled (the billing section, Servicefall).
+  {
+    selector:
+      'CallExpression[callee.name="dynamic"] > ObjectExpression:has(> Property[key.name="ssr"][value.value=false]):not(:has(> Property[key.name="loading"]))',
+    message:
+      'A browser-only dynamic (`ssr: false`) names its `loading`: a Skeleton where its content will draw, or `() => null` for a dialog or hint that is closed until asked (werkflow-design skill: Loading states).',
+  },
 ];
 
 // Tests settle on the busy attributes, never on an animation class: a class

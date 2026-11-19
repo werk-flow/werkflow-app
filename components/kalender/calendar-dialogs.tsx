@@ -22,7 +22,7 @@ import type { ParkFlowState } from './use-park-flow';
 
 const EntryDetailsDialog = dynamic(
   () => import('./entry-details-dialog').then((mod) => mod.EntryDetailsDialog),
-  { ssr: false },
+  { ssr: false, loading: () => null },
 );
 
 type ShowBanner = ReturnType<typeof useBanner>['showBanner'];
