@@ -19,7 +19,7 @@ type EquipmentTableRow = Database['public']['Tables']['installed_equipment']['Ro
 type JobStatus = Database['public']['Enums']['job_status'];
 
 const LINKED_EQUIPMENT_COLUMNS =
-  'id, equipment_number, name, category, subtype, state, manufacturer, model, location_detail';
+  'id, equipment_number, name, category, subtype, state, manufacturer, model, location_detail, source_number';
 
 type LinkedEquipmentRow = Pick<
   EquipmentTableRow,
@@ -32,6 +32,7 @@ type LinkedEquipmentRow = Pick<
   | 'manufacturer'
   | 'model'
   | 'location_detail'
+  | 'source_number'
 >;
 
 type LinkedEquipment = {

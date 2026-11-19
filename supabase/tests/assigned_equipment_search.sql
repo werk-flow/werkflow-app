@@ -28,6 +28,9 @@ insert into public.installed_equipment(id,organization_id,client_id,site_id,equi
 ('76000000-0000-4000-8000-000000000041','76000000-0000-4000-8000-000000000010','76000000-0000-4000-8000-000000000020','76000000-0000-4000-8000-000000000030','ANL-2026-0002','Gasbrennwerttherme Dach','heat_generation','replaced',null,null,null,null,null,null,null,null,'76000000-0000-4000-8000-000000000001','76000000-0000-4000-8000-000000000001'),
 ('76000000-0000-4000-8000-000000000043','76000000-0000-4000-8000-000000000011','76000000-0000-4000-8000-000000000021','76000000-0000-4000-8000-000000000031','ANL-2026-0001','Gasbrennwerttherme Keller','heat_generation','active',null,null,null,null,null,null,null,null,'76000000-0000-4000-8000-000000000001','76000000-0000-4000-8000-000000000001'),
 ('76000000-0000-4000-8000-000000000044','76000000-0000-4000-8000-000000000010','76000000-0000-4000-8000-000000000020','76000000-0000-4000-8000-000000000030','ANL-2026-0004','Speicher Keller','storage_and_hot_water','decommissioned',null,null,now(),'76000000-0000-4000-8000-000000000001','Stillgelegt',null,null,null,'76000000-0000-4000-8000-000000000001','76000000-0000-4000-8000-000000000001');
+-- The old program's number: on the worker's Anlage and on the other job's.
+update public.installed_equipment set source_number = 'Alt-HZ 4711/B'
+where id in ('76000000-0000-4000-8000-000000000040','76000000-0000-4000-8000-000000000041');
 -- A voided Anlage is always a corrected successor.
 insert into public.installed_equipment(id,organization_id,client_id,site_id,predecessor_equipment_id,equipment_number,name,category,state,voided_at,voided_by,void_reason,created_by,updated_by) values
 ('76000000-0000-4000-8000-000000000042','76000000-0000-4000-8000-000000000010','76000000-0000-4000-8000-000000000020','76000000-0000-4000-8000-000000000030','76000000-0000-4000-8000-000000000041','ANL-2026-0003','Gasbrennwerttherme Irrtum','heat_generation','active',now(),'76000000-0000-4000-8000-000000000001','Irrtum korrigiert','76000000-0000-4000-8000-000000000001','76000000-0000-4000-8000-000000000001');
@@ -56,6 +59,9 @@ begin
   if public.match_installed_equipment(org_id,passed,'VITODENS') is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid) then raise exception 'model search wrong'; end if;
   if public.match_installed_equipment(org_id,passed,'anl-2026-000') is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid,'76000000-0000-4000-8000-000000000044'::uuid) then raise exception 'number search or archived Anlage wrong'; end if;
   if public.match_installed_equipment(org_id,passed,'wohnanlage lindenhof') is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid,'76000000-0000-4000-8000-000000000044'::uuid) then raise exception 'site search wrong'; end if;
+  -- The „Nummer im Altsystem“ finds the passed Anlage, not the other job's, in the field search and the office list.
+  if public.match_installed_equipment(org_id,passed,'alt-hz 4711') is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid) then raise exception 'the field search does not find an Anlage by its source_number'; end if;
+  if public.list_equipment_page(org_id,'ALT-HZ 4711/b','all',false,1,50)->'ids' is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000040'::uuid,'76000000-0000-4000-8000-000000000041'::uuid) then raise exception 'the equipment list lost its source_number match'; end if;
   -- Nothing passed, nothing matched.
   if public.match_installed_equipment(org_id,array[]::uuid[],'keller') is distinct from '[]'::jsonb or public.match_installed_equipment(org_id,null,'keller') is distinct from '[]'::jsonb then raise exception 'an empty id list matched'; end if;
   if public.match_installed_equipment(org_id,passed,'Badsanierung') is distinct from '[]'::jsonb then raise exception 'a search without a match returned an Anlage'; end if;

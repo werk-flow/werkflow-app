@@ -2,12 +2,14 @@
 -- (werk-flow/werkflow-planning#493).
 --
 -- 1. app_private.installed_equipment_search_matches owns which Anlagen of an
---    organization a search matches: number, name, manufacturer, model,
---    customer name, site name and identifier values such as the serial
---    number, case-insensitive and literal. An optional id list narrows the
+--    organization a search matches: number, „Nummer im Altsystem“
+--    (source_number), name, manufacturer, model, customer name, site name and
+--    identifier values such as the serial number, case-insensitive and
+--    literal. An optional id list narrows the
 --    rows it looks at.
 -- 2. list_equipment_page uses it in place of its own search clause; the rest
---    of its body, its signature, owner, security and grants are unchanged.
+--    of its body, its signature, owner, security and grants are unchanged,
+--    and it keeps finding an Anlage by its source_number (20261218090000).
 -- 3. public.match_installed_equipment(org, ids, search) returns, as one JSON
 --    array, the Anlagen among the given ids that match the search, voided
 --    ones never. The server passes the Anlagen a field worker reaches
@@ -15,8 +17,9 @@
 --    assigned-equipment-reads.ts); the access rule stays there. Service role
 --    only.
 --
--- Proven by supabase/tests/service_list_pages.sql (the office list keeps its
--- matches) and supabase/tests/assigned_equipment_search.sql.
+-- Proven by supabase/tests/service_list_pages.sql and
+-- supabase/tests/work_source_numbers.sql (the office list keeps its matches)
+-- and supabase/tests/assigned_equipment_search.sql.
 
 create function app_private.installed_equipment_search_matches(
   p_organization_id uuid,
@@ -28,7 +31,7 @@ create function app_private.installed_equipment_search_matches(
   where equipment.organization_id = p_organization_id
     and (p_equipment_ids is null or equipment.id = any(p_equipment_ids))
     and strpos(lower(concat_ws(' ',
-      equipment.equipment_number, equipment.name, equipment.manufacturer, equipment.model,
+      equipment.equipment_number, equipment.source_number, equipment.name, equipment.manufacturer, equipment.model,
       (select client.name from public.clients client
         where client.organization_id = p_organization_id and client.id = equipment.client_id),
       (select site.name from public.client_sites site

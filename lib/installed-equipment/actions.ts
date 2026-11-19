@@ -416,6 +416,7 @@ export async function getAssignedEquipmentForJob(
         manufacturer: row.manufacturer,
         model: row.model,
         locationDetail: row.location_detail,
+        ...(row.source_number ? { sourceNumber: row.source_number } : {}),
       })),
   };
 }

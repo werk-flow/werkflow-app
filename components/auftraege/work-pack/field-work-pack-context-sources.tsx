@@ -145,6 +145,11 @@ export function FieldWorkPackEquipmentSource({ job, data }: FieldWorkPackContext
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {item.equipmentNumber} · {EQUIPMENT_STATE_LABELS[item.state]}
                 </p>
+                {item.sourceNumber && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Nummer im Altsystem: {item.sourceNumber}
+                  </p>
+                )}
                 <p className="mt-2 text-sm">
                   {[item.manufacturer, item.model].filter(Boolean).join(' · ') ||
                     'Hersteller und Modell nicht erfasst'}

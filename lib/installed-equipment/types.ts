@@ -441,4 +441,7 @@ export type EquipmentFieldProjection = Pick<
   | 'manufacturer'
   | 'model'
   | 'locationDetail'
->;
+> & {
+  /** The „Nummer im Altsystem“, present only when set: a null key on every row costs the work pack bytes. */
+  sourceNumber?: string;
+};

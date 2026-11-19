@@ -44,6 +44,7 @@ const fieldFacts = {
   contact: 'Kim Objektleitung',
   outcome: 'Störung prüfen und Ergebnis dokumentieren.',
   equipment: 'Wärmepumpe Nord',
+  equipmentSourceNumber: 'ALT-WP 0815',
   plan: 'WP-0020',
   instructions: 'Messwerte vollständig erfassen.',
 };
@@ -229,6 +230,7 @@ const world = await installPageWorld({
       manufacturer: 'WerkFlow Testtechnik',
       model: 'WP 18',
       location_detail: 'Keller',
+      source_number: fieldFacts.equipmentSourceNumber,
       warranty_provider: officeOnly.warrantyProvider,
       warranty_basis: null,
       warranty_start_date: null,
@@ -377,6 +379,9 @@ const { default: ProjectJobPage } = await import(
   '@/app/(app)/auftraege/projekt/[projectNumber]/[jobNumber]/page'
 );
 const { JobDetailContent } = await import('@/components/auftraege/job-detail/job-detail-content');
+const { FieldWorkPackEquipmentSource } = await import(
+  '@/components/auftraege/work-pack/field-work-pack-context-sources'
+);
 const { getAssignedEquipmentForJob, getInstalledEquipmentDetailByNumber } = await import(
   '@/lib/installed-equipment/actions'
 );
@@ -470,6 +475,24 @@ for (const [label, page] of Object.entries(pages)) {
 const standalone = (await renderPage(pages.standalone)).values;
 for (const fact of [fieldFacts.equipment, fieldFacts.plan, fieldFacts.instructions, fieldFacts.outcome])
   assertCarries(standalone, fact, 'standalone');
+// The Anlage card shows its „Nummer im Altsystem“ when set, and the read sends no key when it is not.
+const equipmentCard = async () =>
+  renderedValues(await renderTree(pages.standalone, new Set([FieldWorkPackEquipmentSource])));
+const cardWithNumber = await equipmentCard();
+assertCarries(cardWithNumber, 'Nummer im Altsystem: ', 'the Anlage card');
+assertCarries(cardWithNumber, fieldFacts.equipmentSourceNumber, 'the Anlage card');
+const equipmentRow = world.tables.installed_equipment?.find((row) => row.id === equipmentId);
+assert.ok(equipmentRow, 'the world holds the Anlage');
+equipmentRow.source_number = null;
+assert.ok(
+  !Object.hasOwn(Object(field(await getAssignedEquipmentForJob(jobId), 'equipment', '0')), 'sourceNumber'),
+  'the field Anlage read sends a sourceNumber key for an Anlage without one',
+);
+assert.ok(
+  !(await equipmentCard()).includes('Nummer im Altsystem: '),
+  'the Anlage card shows a „Nummer im Altsystem“ the Anlage lacks',
+);
+equipmentRow.source_number = fieldFacts.equipmentSourceNumber;
 // The readers behind the pack withhold the same values themselves.
 const lines = await getJobMaterialLines(jobId);
 assert.equal(field(lines, 'success'), true, 'the field worker reads no material line');
