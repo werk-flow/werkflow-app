@@ -34,10 +34,14 @@ const ClockUnsentEvents = lazy(() =>
  * The phone's unsent clock events at one place of the clock, or nothing while it holds none. A
  * function, not a component: the dock renders with every clock change, and lab counts count components.
  */
-function unsentEvents(unsent: ClockDeviceView | null, place: 'dock' | 'sheet'): ReactNode | undefined {
+function unsentEvents(
+  unsent: ClockDeviceView | null,
+  place: 'dock' | 'sheet',
+  onPendingChange?: (pending: boolean) => void,
+): ReactNode | undefined {
   return unsent ? (
     <Suspense>
-      <ClockUnsentEvents place={place} />
+      <ClockUnsentEvents place={place} onPendingChange={onPendingChange} />
     </Suspense>
   ) : undefined;
 }
@@ -81,6 +85,7 @@ function useClockFabControls(transitionActivity: ReturnType<typeof useClockState
   const { run, isPending: isHotKeyRunning } = usePendingTask();
   const [open, setOpen] = useState(false);
   const [isListRunning, setIsListRunning] = useState(false);
+  const [isUnsentRunning, setIsUnsentRunning] = useState(false);
   const [sheetPickerMode, setSheetPickerMode] = useState<ClockPickerMode | null>(null);
   const [pendingHotKey, setPendingHotKey] = useState<string | null>(null);
 
@@ -121,6 +126,8 @@ function useClockFabControls(transitionActivity: ReturnType<typeof useClockState
     open,
     setOpen,
     isListRunning,
+    isUnsentRunning,
+    setIsUnsentRunning,
     setIsListRunning,
     sheetPickerMode,
     pendingHotKey,
@@ -165,7 +172,7 @@ export function ClockFAB() {
       <Dialog
         open={controls.open}
         onOpenChange={controls.setOpen}
-        pending={isPending || controls.isListRunning}
+        pending={isPending || controls.isListRunning || controls.isUnsentRunning}
       >
         <DialogContent placement="anchored">
           <DialogHeader>
@@ -176,7 +183,7 @@ export function ClockFAB() {
                 : 'Wähle, womit du startest. Alles Weitere lässt sich jederzeit wechseln.'}
             </DialogDescription>
           </DialogHeader>
-          {unsentEvents(unsent, 'sheet')}
+          {unsentEvents(unsent, 'sheet', controls.setIsUnsentRunning)}
           <ClockActionList
             organizationId={activeOrgId}
             initialPickerMode={controls.sheetPickerMode}
