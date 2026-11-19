@@ -20,7 +20,6 @@ import {
   discardInvoiceOriginal,
   fileInvoiceOriginalFor,
   issueUnderCheckedNumber,
-  storeInvoiceOriginal,
   type NextIssue,
   type StoredOriginal,
 } from './original';
@@ -87,8 +86,8 @@ export async function issueInvoice(rawInput: IssueInvoiceInput): Promise<IssueIn
     if (missing.length > 0) return { success: false, error: 'invoice_check_failed', findings: missing };
     const snapshot = await readIssueSnapshot(admin, context, invoice);
     if (!snapshot) return { success: false, error: 'load_failed' };
-    return await issueUnderCheckedNumber(context.orgId, invoice, snapshot, (next, original) =>
-      issueChecked(admin, context, input, snapshot, next, original),
+    return await issueUnderCheckedNumber(context.orgId, invoice, snapshot, (next, stored) =>
+      issueChecked(admin, context, input, snapshot, next, stored),
     );
   } catch (error) {
     logError('issueInvoice: unexpected error', error);
@@ -97,9 +96,8 @@ export async function issueInvoice(rawInput: IssueInvoiceInput): Promise<IssueIn
 }
 
 /**
- * Stores the original rendered under the checked number and date, then
- * assigns both, freezes the checked draft and files the original in one
- * call. A stored original that is not the invoice's registered one is
+ * Assigns the checked number and date, freezes the checked draft and files
+ * the original stored for them in one call. A stored original that is not the invoice's registered one is
  * discarded; after an unknown outcome it stays, as the call may commit.
  */
 async function issueChecked(
@@ -108,9 +106,8 @@ async function issueChecked(
   input: { invoiceId: string; expectedVersion: number; attemptKey: string },
   snapshot: IssueSnapshot,
   checked: NextIssue,
-  original: Uint8Array | null,
+  stored: StoredOriginal | null,
 ): Promise<IssueInvoiceResult> {
-  const stored = original && (await storeOriginal(context.orgId, checked.number, original));
   const { data, error } = await admin.rpc('issue_invoice', {
     p_actor_id: context.userId,
     p_organization_id: context.orgId,
@@ -143,20 +140,6 @@ async function issueChecked(
     invoiceNumber: issued.data.invoiceNumber,
     originalFiled: issued.data.originalDocumentId !== null,
   };
-}
-
-/** Stores the checked original; a storage failure leaves the original pending and is logged. */
-async function storeOriginal(
-  organizationId: string,
-  invoiceNumber: string,
-  bytes: Uint8Array,
-): Promise<StoredOriginal | null> {
-  try {
-    return await storeInvoiceOriginal(organizationId, invoiceNumber, bytes);
-  } catch (error) {
-    logError('issueInvoice: original not stored', error);
-    return null;
-  }
 }
 
 type ReadInvoice = Awaited<ReturnType<typeof readIssuedInvoice>>;

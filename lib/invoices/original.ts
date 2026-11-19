@@ -150,8 +150,9 @@ function isMovedNumber(result: ActionResult): boolean {
 
 /**
  * Checks `invoice` under the number and Berlin day the series gives the next
- * invoice now, then hands both and the original rendered under them to
- * `issue`, whose database function issues only that number on that day. When
+ * invoice now, stores the original rendered under them, and hands both and
+ * the stored original (null when the storage failed) to `issue`, whose
+ * database function issues only that number on that day. When
  * it answers `invoice_number_moved` because another issue took the number
  * first, the invoice is checked again under the new one, so no original is
  * ever rendered under a number nobody checked.
@@ -160,7 +161,7 @@ export async function issueUnderCheckedNumber<Result extends ActionResult>(
   organizationId: string,
   invoice: Parameters<typeof checkedOriginal>[1],
   snapshot: IssueSnapshot,
-  issue: (next: NextIssue, original: Uint8Array) => Promise<Result>,
+  issue: (next: NextIssue, original: StoredOriginal | null) => Promise<Result>,
 ): Promise<Result | InvoiceCheckFailure | ActionFailure<'invoice_incomplete'>> {
   for (let attempt = 1; ; attempt += 1) {
     const issueDate = getBusinessTodayIso();
@@ -169,7 +170,7 @@ export async function issueUnderCheckedNumber<Result extends ActionResult>(
     const original = await checkedOriginal(organizationId, invoice, snapshot, next);
     if (!original) return { success: false, error: 'invoice_incomplete' };
     if (Array.isArray(original)) return { success: false, error: 'invoice_check_failed', findings: original };
-    const result = await issue(next, original);
+    const result = await issue(next, await storeCheckedOriginal(organizationId, next.number, original));
     if (attempt >= ISSUE_ATTEMPTS || !isMovedNumber(result)) return result;
   }
 }
@@ -209,7 +210,7 @@ export type StoredOriginal = {
 };
 
 /** Stores the bytes of the original of invoice `invoiceNumber` under a new document id. */
-export async function storeInvoiceOriginal(
+async function storeInvoiceOriginal(
   organizationId: string,
   invoiceNumber: string,
   bytes: Uint8Array,
@@ -220,6 +221,20 @@ export async function storeInvoiceOriginal(
   await putStorageObject({ organizationId, path, body: bytes, contentType: 'application/pdf' });
   const contentHash = createHash('sha256').update(bytes).digest('hex');
   return { documentId, path, fileName, sizeBytes: bytes.byteLength, contentHash };
+}
+
+/** Stores the checked original; a storage failure leaves the original pending and is logged. */
+async function storeCheckedOriginal(
+  organizationId: string,
+  invoiceNumber: string,
+  bytes: Uint8Array,
+): Promise<StoredOriginal | null> {
+  try {
+    return await storeInvoiceOriginal(organizationId, invoiceNumber, bytes);
+  } catch (error) {
+    logError('issueInvoice: original not stored', error);
+    return null;
+  }
 }
 
 /** Discards a stored original no registration references: refused, or another one registered first. */
