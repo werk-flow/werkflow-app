@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
 
 import { useLiveView } from '@/hooks/use-live-view';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
 import { Card } from '@/components/ui/card';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { SectionError } from '@/components/ui/section-error';
 import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { isFieldWorkPackReadOnly } from '@/lib/jobs/field-work-pack';
@@ -18,11 +19,38 @@ import {
   type WorkExecutionState,
   type WorkLifecycleSnapshot,
 } from '@/lib/work-lifecycle/types';
-import { WorkLifecycleCardDialogs } from './work-lifecycle-card-dialogs';
+import type { WorkLifecycleCardDialogsProps } from './work-lifecycle-card-dialogs';
 import { WorkLifecycleCardSections, WorkLifecycleRemoteUpdateHint } from './work-lifecycle-card-sections';
 import type { WorkLifecycleDialogState, WorkTransitionInput } from './work-lifecycle-dialog-state';
 import { workLifecycleErrorMessage } from './work-lifecycle-messages';
 import { WorkLifecycleStatusHeader } from './work-lifecycle-status';
+
+// Every dialog of the card saves through the server, and the field worker's job list prefetches
+// the job page's code, so a static import put them into every field cold start
+// (`lab.field.cold-start`). They download on the first intent inside the card.
+const lazyCardDialogs = lazyDialog<
+  WorkLifecycleCardDialogsProps & { open: boolean; onOpenChange: (open: boolean) => void }
+>(() => import('./work-lifecycle-card-dialogs').then((mod) => mod.WorkLifecycleCardDialogs));
+
+/** Whether an opened dialog still downloads, and the close handler the lazy dialogs share. */
+function useCardDialogsDownload(
+  dialog: WorkLifecycleDialogState | null,
+  setDialog: (dialog: WorkLifecycleDialogState | null) => void,
+) {
+  const dialogWaiting = lazyCardDialogs.useWaiting(dialog !== null);
+  const handleDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) setDialog(null);
+    },
+    [setDialog],
+  );
+  return { dialogWaiting, dialogOpen: { open: dialog !== null, onOpenChange: handleDialogOpenChange } };
+}
+
+const CARD_DIALOG_INTENT = {
+  onPointerEnter: lazyCardDialogs.preload,
+  onFocusCapture: lazyCardDialogs.preload,
+};
 
 type WorkLifecycleCardProps = {
   initialSnapshot: WorkLifecycleSnapshot;
@@ -222,6 +250,7 @@ export function WorkLifecycleCard({
     [snapshot.ownerOptions],
   );
   const ownOwnerId = isManager ? null : snapshot.ownOwnerId;
+  const { dialogWaiting, dialogOpen } = useCardDialogsDownload(dialog, setDialog);
 
   return (
     <Card
@@ -229,10 +258,12 @@ export function WorkLifecycleCard({
       className="gap-4 p-4"
       data-testid="work-lifecycle-card"
       unconfirmed={pendingState !== null}
+      {...CARD_DIALOG_INTENT}
     >
       <WorkLifecycleStatusHeader
         snapshot={snapshot}
         pendingState={pendingState}
+        dialogWaiting={dialogWaiting}
         nextAction={nextAction}
         canStart={canStart}
         startReadinessKnown={startReadinessKnown}
@@ -267,7 +298,8 @@ export function WorkLifecycleCard({
         setDialog={setDialog}
         completeExecution={() => state.transition({ toState: 'execution_complete', overrideGates: false })}
       />
-      <WorkLifecycleCardDialogs
+      <lazyCardDialogs.Dialog
+        {...dialogOpen}
         dialog={dialog}
         setDialog={setDialog}
         snapshot={snapshot}

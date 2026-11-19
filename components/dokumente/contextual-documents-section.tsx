@@ -8,6 +8,7 @@ import { ChevronRight, FileText } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import {
   DOCUMENT_CATEGORY_LABELS,
   type DocumentContextTarget,
@@ -15,7 +16,6 @@ import {
   type ProjectJobDocumentGroup,
 } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
-import { AttachDocumentDialog } from './attach-document-dialog';
 import { ContextualDocumentsDeleteDialog } from './contextual-documents-delete-dialog';
 import { ContextualDocumentsEmptyState } from './contextual-documents-empty-state';
 import { ContextualDocumentsRenameForm } from './contextual-documents-rename-form';
@@ -27,15 +27,35 @@ import {
   type SharedDocumentRowProps,
 } from './contextual-documents-section-state';
 import { ContextualDocumentsToolbar } from './contextual-documents-toolbar';
-import { DocumentLinkDialog } from './document-link-dialog';
-import { DocumentBatchUploadDialog } from './document-upload-dialog';
-import { DocumentViewerDialog } from './document-viewer-dialog';
 import {
   ContextualDocumentsFrame,
   ContextualDocumentRowFrame,
   CONTEXTUAL_DOCUMENT_LIST_CLASS,
   CONTEXTUAL_DOCUMENTS_EMPHASIZE_UPLOAD,
 } from './contextual-documents-layout';
+
+// Every dialog of the section needs signal, and the field worker's job list prefetches the
+// job page's code, so a static import put all four into every field cold start
+// (`lab.field.cold-start`). They download on the first intent inside the section.
+const lazyUploadDialog = lazyDialog(() =>
+  import('./document-upload-dialog').then((mod) => mod.DocumentBatchUploadDialog),
+);
+const lazyViewerDialog = lazyDialog(() =>
+  import('./document-viewer-dialog').then((mod) => mod.DocumentViewerDialog),
+);
+const lazyLinkDialog = lazyDialog(() =>
+  import('./document-link-dialog').then((mod) => mod.DocumentLinkDialog),
+);
+const lazyAttachDialog = lazyDialog(() =>
+  import('./attach-document-dialog').then((mod) => mod.AttachDocumentDialog),
+);
+
+function preloadDocumentDialogs(): void {
+  lazyUploadDialog.preload();
+  lazyViewerDialog.preload();
+  lazyLinkDialog.preload();
+  lazyAttachDialog.preload();
+}
 
 type ContextualDocumentsSectionProps = {
   title: string;
@@ -171,10 +191,14 @@ function ContextualDocumentsSectionToolbar({
   section,
   emphasizeUpload,
 }: ContextualDocumentsSectionToolbarProps) {
+  const uploadWaiting = lazyUploadDialog.useWaiting(section.uploads.uploadDialogOpen);
+  const attachWaiting = lazyAttachDialog.useWaiting(section.attachDialogOpen);
   return (
     <ContextualDocumentsToolbar
       canAttach={section.attachTarget !== null}
       emphasizeUpload={emphasizeUpload}
+      uploadPending={uploadWaiting}
+      attachPending={attachWaiting}
       fileInputRef={section.uploads.fileInputRef}
       onAttach={() => section.setAttachDialogOpen(true)}
       onFilesSelected={section.uploads.handleUpload}
@@ -195,7 +219,16 @@ function ContextualDocumentsListing({
   canUpload,
   contextLabel,
 }: ContextualDocumentsListingProps): ReactElement {
-  const { context, displayedDocuments, isBusy, rowProps } = section;
+  const { context, displayedDocuments, rowProps } = section;
+  // A row whose viewer or link dialog still downloads shows the row's own pending mark.
+  const viewerWaiting = lazyViewerDialog.useWaiting(!!section.viewerDocument);
+  const linkWaiting = lazyLinkDialog.useWaiting(!!section.linkDialogDocument);
+  const openingId = viewerWaiting
+    ? section.viewerDocument?.id
+    : linkWaiting
+      ? section.linkDialogDocument?.id
+      : undefined;
+  const isBusy = (documentId: string): boolean => documentId === openingId || section.isBusy(documentId);
   if (section.totalDocumentCount === 0) {
     return (
       <ContextualDocumentsEmptyState
@@ -234,7 +267,7 @@ function ContextualDocumentsLeadingDialogs({
   const { uploads, showFeedback } = section;
   return (
     <>
-      <DocumentBatchUploadDialog
+      <lazyUploadDialog.Dialog
         open={uploads.uploadDialogOpen}
         onOpenChange={uploads.setUploadDialogOpen}
         items={uploads.uploadItems}
@@ -247,13 +280,13 @@ function ContextualDocumentsLeadingDialogs({
         }}
       />
 
-      <DocumentViewerDialog
+      <lazyViewerDialog.Dialog
         document={section.viewerDocument}
         open={!!section.viewerDocument}
         onOpenChange={(open) => !open && section.setViewerDocument(null)}
       />
 
-      <DocumentLinkDialog
+      <lazyLinkDialog.Dialog
         key={section.linkDialogDocument?.id ?? 'closed-context-link-dialog'}
         document={section.linkDialogDocument}
         open={!!section.linkDialogDocument}
@@ -284,7 +317,7 @@ function ContextualDocumentsTrailingDialogs({
       />
 
       {attachTarget && (
-        <AttachDocumentDialog
+        <lazyAttachDialog.Dialog
           open={section.attachDialogOpen}
           onOpenChange={section.setAttachDialogOpen}
           targetType={attachTarget.targetType}
@@ -333,6 +366,8 @@ export function ContextualDocumentsSection({
       onDragOver={section.handleDragOver}
       onDragLeave={() => section.setIsDragActive(false)}
       onDrop={section.handleDrop}
+      onPointerEnter={preloadDocumentDialogs}
+      onFocusCapture={preloadDocumentDialogs}
     >
       <ContextualDocumentsListing
         section={section}

@@ -39,6 +39,8 @@ function startReadinessLabel(snapshot: WorkLifecycleSnapshot, canStart: boolean)
 type WorkLifecycleStatusHeaderProps = {
   snapshot: WorkLifecycleSnapshot;
   pendingState: WorkExecutionState | null;
+  /** A dialog the card opened still downloads. */
+  dialogWaiting: boolean;
   nextAction: string;
   canStart: boolean;
   startReadinessKnown: boolean;
@@ -49,6 +51,7 @@ type WorkLifecycleStatusHeaderProps = {
 export function WorkLifecycleStatusHeader({
   snapshot,
   pendingState,
+  dialogWaiting,
   nextAction,
   canStart,
   startReadinessKnown,
@@ -63,6 +66,7 @@ export function WorkLifecycleStatusHeader({
           <StateIcon state={snapshot.executionState} />
           Arbeitsstand
           <InlinePending active={pendingState !== null} label="Arbeitsstand wird gespeichert" />
+          <InlinePending active={dialogWaiting} label="Formular wird geladen" />
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">Nächster Schritt: {nextAction}</p>
       </div>
