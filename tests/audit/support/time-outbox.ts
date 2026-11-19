@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
+import { z } from '@/lib/zod';
+
 import { formatBerlinTime } from '../../../lib/utils';
 import { createAdminClient } from '../../golden/support/db/shared';
 import { timeHistoryPanel } from '../../golden/support/steps/time-tracking';
@@ -113,6 +115,26 @@ async function readTimeEventsOnDevice(page: Page): Promise<DeviceTimeEvent[]> {
   }, TIME_OUTBOX_DATABASE);
 }
 
+const keptActionSchema = z.object({ operationId: z.string(), capturedAt: z.string(), action: z.string() });
+
+/**
+ * The first unsent action the device holds when it is a start, else null: from the outbox, or, while
+ * the outbox's code has not loaded, from the actions the page kept (unsent-mark.ts). A page that
+ * goes offline before it ever loaded the outbox keeps its tap there until the signal returns.
+ */
+async function readUnsentStartOnDevice(page: Page): Promise<DeviceTimeEvent | null> {
+  const [queued] = await readTimeEventsOnDevice(page);
+  if (queued) return queued.action === 'start' ? queued : null;
+  const [kept] = await page.evaluate(() =>
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith('werkflow:unsent:clock:'))
+      .toSorted()
+      .map((key): unknown => JSON.parse(localStorage.getItem(key) ?? 'null')),
+  );
+  const parsed = keptActionSchema.safeParse(kept);
+  return parsed.success && parsed.data.action === 'start' ? parsed.data : null;
+}
+
 /** Waits until the device holds exactly these unsent actions, in this order. */
 export async function expectTimeEventsOnDevice(page: Page, actions: readonly string[]): Promise<void> {
   await expect
@@ -220,8 +242,8 @@ export async function expectSessionsSince(
 }
 
 /**
- * Waits until the first event the device holds unsent is a start, reads it, lets `reconnect` bring the
- * signal back, and waits until the server recorded that start once, under the device's operation
+ * Waits until the first action the device holds unsent is a start, in its outbox or kept by the page,
+ * reads it, lets `reconnect` bring the signal back, and waits until the server recorded that start once, under the device's operation
  * id, at the time the phone captured it: its operation, its session and that session's first
  * segment, work without a job.
  */
@@ -230,13 +252,12 @@ export async function expectStartRecordedAtCapturedTime(
   world: TestWorld,
   reconnect: () => Promise<void>,
 ): Promise<void> {
-  // The clock shows a kept tap at once (shown-clock-rule.ts); the outbox takes it in a moment later.
   await expect
-    .poll(async () => (await readTimeEventsOnDevice(page))[0]?.action, {
-      message: 'The device outbox holds the kept start',
+    .poll(async () => (await readUnsentStartOnDevice(page))?.action, {
+      message: 'The device holds the start, in its outbox or kept by the page',
     })
     .toBe('start');
-  const [start] = await readTimeEventsOnDevice(page);
+  const start = await readUnsentStartOnDevice(page);
   const capturedAt = Date.parse(start?.capturedAt ?? '');
   await reconnect();
   await expect
