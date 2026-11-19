@@ -33,6 +33,12 @@ export type StandaloneScreen = {
   path: string;
   /** A cookie the browser carries before it opens the screen, as the step before the screen leaves it. */
   cookie?: { name: string; value: string };
+  /**
+   * The server does not answer the screen's reachability check, the state the screen shows. The
+   * offline page otherwise reloads itself as soon as it reaches the server (app/offline/return-to-app.ts),
+   * and that reload aborted the next navigation on a slow machine.
+   */
+  unreachable?: true;
 };
 
 export const STANDALONE_SCREENS = [
@@ -48,7 +54,7 @@ export const STANDALONE_SCREENS = [
   },
   { route: '/invite-error', session: 'anonymous', path: '/invite-error?error=invite_expired' },
   { route: '/auth/unavailable', session: 'anonymous', path: '/auth/unavailable' },
-  { route: '/offline', session: 'anonymous', path: '/offline' },
+  { route: '/offline', session: 'anonymous', path: '/offline', unreachable: true },
   { route: 'not-found', session: 'anonymous', path: '/diese-seite-gibt-es-nicht' },
   { route: '/onboarding/start', session: 'newcomer', path: '/onboarding/start' },
   { route: '/onboarding/join-organization', session: 'newcomer', path: '/onboarding/join-organization' },

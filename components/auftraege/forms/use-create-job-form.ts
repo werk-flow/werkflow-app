@@ -17,25 +17,20 @@ export type CreateJobForm = ReturnType<typeof useCreateJobForm>;
 function createJobFormValues(
   fields: Pick<
     CreateJobFormValues,
-    | 'title'
-    | 'description'
-    | 'jobNumber'
-    | 'priority'
-    | 'location'
-    | 'assignmentTeamSourceId'
-    | 'templateVersionId'
+    'title' | 'description' | 'priority' | 'location' | 'assignmentTeamSourceId' | 'templateVersionId'
   >,
+  numbers: ReturnType<typeof useCreateJobNumber>,
   planning: ReturnType<typeof useCreateJobPlanning>,
   projectLink: ReturnType<typeof useCreateJobProjectLink>,
 ): CreateJobFormValues {
-  const { title, description, jobNumber, priority, location, assignmentTeamSourceId, templateVersionId } =
-    fields;
+  const { title, description, priority, location, assignmentTeamSourceId, templateVersionId } = fields;
   return {
     title,
     description,
     clientId: projectLink.clientId,
     projectId: projectLink.projectId,
-    jobNumber,
+    jobNumber: numbers.jobNumber,
+    sourceNumber: numbers.sourceNumber,
     priority,
     plannedDate: planning.plannedDate,
     plannedTime: planning.plannedTime,
@@ -67,7 +62,7 @@ export function useCreateJobForm({
   onSubmitDeferred,
   isActive = true,
 }: Omit<CreateJobFormContentProps, 'members' | 'readOnlyProject'>) {
-  const { jobNumber, setJobNumber } = useCreateJobNumber({ initialJobNumber, isActive });
+  const numbers = useCreateJobNumber({ initialJobNumber, isActive });
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [templateVersionId, setTemplateVersionId] = useState('');
@@ -88,7 +83,8 @@ export function useCreateJobForm({
   const projectDefaultsLoadFailed = projectLink.projectDefaultsFailure !== null;
   const submit = useCreateJobSubmit({
     values: createJobFormValues(
-      { title, description, jobNumber, priority, location, assignmentTeamSourceId, templateVersionId },
+      { title, description, priority, location, assignmentTeamSourceId, templateVersionId },
+      numbers,
       planning,
       projectLink,
     ),
@@ -107,8 +103,7 @@ export function useCreateJobForm({
     ...planning,
     ...projectLink,
     ...submit,
-    jobNumber,
-    setJobNumber,
+    ...numbers,
     title,
     setTitle,
     description,

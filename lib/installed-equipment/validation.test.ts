@@ -36,6 +36,13 @@ describe('equipmentFormSchema', () => {
     if (result.success) expect(result.data.installationDate).toBeNull();
   });
 
+  test('trims the old number and refuses one longer than the database check', () => {
+    const result = equipmentFormSchema.safeParse({ ...base, sourceNumber: '  ANL-ALT-815 ' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.sourceNumber).toBe('ANL-ALT-815');
+    expect(equipmentFormSchema.safeParse({ ...base, sourceNumber: '9'.repeat(101) }).success).toBe(false);
+  });
+
   test('rejects a subtype from another category', () => {
     const result = equipmentFormSchema.safeParse({
       ...base,

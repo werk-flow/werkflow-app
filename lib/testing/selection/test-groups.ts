@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 import { changeTrigger, type ChangeTrigger } from './change-triggers';
+import { MAINTENANCE_VISIT_SQL_FILES } from './maintenance-visit-sql-files';
 
 export interface TestGroup {
   readonly id: string;
@@ -359,7 +360,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['p1-21', ['p1_21_time_segments.sql', 'clock_job_row_lock.sql'], ['time', 'personnel', 'work']],
   [
     'p1-22',
-    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql'],
+    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql', 'late_chain_replacement.sql'],
     ['time', 'personnel', 'work'],
   ],
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
@@ -412,12 +413,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
-  ['maintenance-missed-visits', ['maintenance_missed_visits.sql'], ['service', 'work']],
-  [
-    'maintenance-visit-next-actions',
-    ['maintenance_visit_next_actions.sql', 'maintenance_service_reports.sql'],
-    ['service', 'work', 'attention', 'documents'],
-  ],
+  ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, ['service', 'work', 'attention', 'documents']],
   [
     'inventory-ledger',
     [
@@ -504,6 +500,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ],
     ['*'],
   ],
+  ['work-source-numbers', ['work_source_numbers.sql'], ['work', 'service']],
 ];
 
 /** Measured performance specs judge their deadlines in release mode and on explicit request only. */

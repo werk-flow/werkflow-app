@@ -1,14 +1,26 @@
 import { resolve } from 'node:path';
-import { migrationOrderProblems } from '../lib/testing/local-stack/migration-order';
+import {
+  migrationOrderProblems,
+  openPullRequestMigrations,
+} from '../lib/testing/local-stack/migration-order';
 import { CHANGED_CHECK_BASE } from '../lib/testing/runner/changed-check';
 
 // `bun run migrations:order`: static gate static:migration-order, also a step of `check:changed`.
-const problems = migrationOrderProblems({
-  repositoryRoot: resolve(import.meta.dir, '..'),
-  mainRef: CHANGED_CHECK_BASE,
-  now: new Date(),
-});
+// CI checks out a pull request as its merge commit and a merge-queue entry as its commit on top of
+// the entries ahead of it, so there the first parent is the main the migration lands on.
+const repositoryRoot = resolve(import.meta.dir, '..');
+const mainRef = process.env.GITHUB_ACTIONS === 'true' ? 'HEAD^1' : CHANGED_CHECK_BASE;
+const openPullRequests = openPullRequestMigrations(repositoryRoot);
+// The open pull requests only warn early: main's history, which the merge queue checks, holds the
+// version of every pull request merged or queued before this one.
+if (openPullRequests === null)
+  console.warn(
+    '[migrations:order] GitHub could not be read, so no open pull request was checked for a duplicate version.',
+  );
+const problems = migrationOrderProblems({ repositoryRoot, mainRef, openPullRequests });
 for (const problem of problems) console.error(problem);
 if (!problems.length)
-  console.info(`[migrations:order] Every added migration sorts after ${CHANGED_CHECK_BASE}.`);
+  console.info(
+    `[migrations:order] No added migration repeats a version or changes what a newer migration on ${mainRef} changes.`,
+  );
 process.exitCode = problems.length ? 1 : 0;
