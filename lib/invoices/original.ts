@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { ActionFailure } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { offerLetterhead, type LetterheadFiles } from '@/lib/company-profile/letterhead';
 import { COMPANY_FILE_KINDS } from '@/lib/company-profile/profile';
 import { readCompanyFile } from '@/lib/company-profile/reads';
@@ -115,16 +115,17 @@ const HEAD_TOO_TALL: IssueFinding = {
 export type NextIssue = { number: string; issueDate: string };
 
 /**
- * What keeps an invoice from its number, checked under that number and date:
- * the EN 16931 rules, then an original whose head, which prints both, leaves
- * room for the lines. Empty when it passes; null without a Leistungsdatum.
+ * The original an invoice takes with its number, checked under that number
+ * and date: the EN 16931 rules, then the PDF/A-3 whose head, which prints
+ * both, leaves room for the lines. Its bytes when it passes, else what keeps
+ * the invoice from its number; null without a Leistungsdatum.
  */
-async function findingsBeforeNumber(
+async function checkedOriginal(
   organizationId: string,
   invoice: Parameters<typeof calculatedInvoiceOf>[0] & { recipient: { id: string } },
   snapshot: IssueSnapshot,
   issue: NextIssue,
-): Promise<IssueFinding[] | null> {
+): Promise<Uint8Array | IssueFinding[] | null> {
   const calculated = calculatedInvoiceOf(invoice, snapshot, issue);
   if (!calculated) return null;
   const xml = toEn16931(calculated);
@@ -137,38 +138,38 @@ async function findingsBeforeNumber(
       throw renderError;
     },
   );
-  return rendered ? [] : [HEAD_TOO_TALL];
+  return rendered ?? [HEAD_TOO_TALL];
 }
 
 /** An issue whose checked number another issue took meanwhile is checked again, this often at most in all. */
 const ISSUE_ATTEMPTS = 3;
 
-function isMovedNumber(result: { success: boolean }): boolean {
-  return 'error' in result && result.error === 'invoice_number_moved';
+function isMovedNumber(result: ActionResult): boolean {
+  return !result.success && result.error === 'invoice_number_moved';
 }
 
 /**
  * Checks `invoice` under the number and Berlin day the series gives the next
- * invoice now, then hands both to `issue`, whose database function issues
- * only that number on that day. When it answers `invoice_number_moved`
- * because another issue took the number first, the invoice is checked again
- * under the new one, so no original is ever rendered under a number nobody
- * checked.
+ * invoice now, then hands both and the original rendered under them to
+ * `issue`, whose database function issues only that number on that day. When
+ * it answers `invoice_number_moved` because another issue took the number
+ * first, the invoice is checked again under the new one, so no original is
+ * ever rendered under a number nobody checked.
  */
-export async function issueUnderCheckedNumber<Result extends { success: boolean }>(
+export async function issueUnderCheckedNumber<Result extends ActionResult>(
   organizationId: string,
-  invoice: Parameters<typeof findingsBeforeNumber>[1],
+  invoice: Parameters<typeof checkedOriginal>[1],
   snapshot: IssueSnapshot,
-  issue: (next: NextIssue) => Promise<Result>,
+  issue: (next: NextIssue, original: Uint8Array) => Promise<Result>,
 ): Promise<Result | InvoiceCheckFailure | ActionFailure<'invoice_incomplete'>> {
   for (let attempt = 1; ; attempt += 1) {
     const issueDate = getBusinessTodayIso();
     const { nextInvoiceNumber } = await readInvoiceSettings(organizationId);
     const next = { number: nextInvoiceNumber, issueDate };
-    const findings = await findingsBeforeNumber(organizationId, invoice, snapshot, next);
-    if (!findings) return { success: false, error: 'invoice_incomplete' };
-    if (findings.length > 0) return { success: false, error: 'invoice_check_failed', findings };
-    const result = await issue(next);
+    const original = await checkedOriginal(organizationId, invoice, snapshot, next);
+    if (!original) return { success: false, error: 'invoice_incomplete' };
+    if (Array.isArray(original)) return { success: false, error: 'invoice_check_failed', findings: original };
+    const result = await issue(next, original);
     if (attempt >= ISSUE_ATTEMPTS || !isMovedNumber(result)) return result;
   }
 }
@@ -198,6 +199,34 @@ function originalFileName(invoiceNumber: string): string {
   return `Rechnung ${invoiceNumber}.pdf`;
 }
 
+/** An original stored under its own document id, not yet registered. */
+export type StoredOriginal = {
+  documentId: string;
+  path: string;
+  fileName: string;
+  sizeBytes: number;
+  contentHash: string;
+};
+
+/** Stores the bytes of the original of invoice `invoiceNumber` under a new document id. */
+export async function storeInvoiceOriginal(
+  organizationId: string,
+  invoiceNumber: string,
+  bytes: Uint8Array,
+): Promise<StoredOriginal> {
+  const documentId = randomUUID();
+  const fileName = originalFileName(invoiceNumber);
+  const path = buildDocumentStoragePath({ organizationId, documentId, fileName });
+  await putStorageObject({ organizationId, path, body: bytes, contentType: 'application/pdf' });
+  const contentHash = createHash('sha256').update(bytes).digest('hex');
+  return { documentId, path, fileName, sizeBytes: bytes.byteLength, contentHash };
+}
+
+/** Discards a stored original no registration references: refused, or another one registered first. */
+export async function discardInvoiceOriginal(organizationId: string, stored: StoredOriginal): Promise<void> {
+  await discardStorageObjects({ organizationId, paths: [stored.path] });
+}
+
 /**
  * Renders, stores, registers and files the original of an issued invoice;
  * the registration files it in the same transaction. Returns whether it is
@@ -220,42 +249,27 @@ async function registerOriginal(
   invoice: IssuedInvoice,
 ): Promise<string | null> {
   const bytes = await renderOriginal(context.orgId, invoice);
-  const contentHash = createHash('sha256').update(bytes).digest('hex');
-  const ownDocumentId = randomUUID();
-  const fileName = originalFileName(invoice.invoiceNumber);
-  const path = buildDocumentStoragePath({
-    organizationId: context.orgId,
-    documentId: ownDocumentId,
-    fileName,
-  });
-  await putStorageObject({
-    organizationId: context.orgId,
-    path,
-    body: bytes,
-    contentType: 'application/pdf',
-  });
+  const stored = await storeInvoiceOriginal(context.orgId, invoice.invoiceNumber, bytes);
   const { data, error } = await admin.rpc('register_invoice_original', {
     p_actor_id: context.userId,
     p_organization_id: context.orgId,
     p_invoice_id: invoice.id,
-    p_document_id: ownDocumentId,
-    p_storage_path: path,
-    p_file_name: fileName,
-    p_size_bytes: bytes.byteLength,
-    p_content_hash: contentHash,
+    p_document_id: stored.documentId,
+    p_storage_path: stored.path,
+    p_file_name: stored.fileName,
+    p_size_bytes: stored.sizeBytes,
+    p_content_hash: stored.contentHash,
   });
   const registered = registeredSchema.safeParse(data);
   if (error || !registered.success) {
     // Refused: nothing references the object. Unknown: the registration may still commit.
-    if (isConfirmedWriteRefusal(error)) {
-      await discardStorageObjects({ organizationId: context.orgId, paths: [path] });
-    }
+    if (isConfirmedWriteRefusal(error)) await discardInvoiceOriginal(context.orgId, stored);
     logError('fileInvoiceOriginal: register_invoice_original failed', error);
     return null;
   }
   if (registered.data.replay) {
-    await discardStorageObjects({ organizationId: context.orgId, paths: [path] });
-    if (registered.data.contentHash !== contentHash) {
+    await discardInvoiceOriginal(context.orgId, stored);
+    if (registered.data.contentHash !== stored.contentHash) {
       logError('fileInvoiceOriginal: a second rendering differs from the registered original', null);
     }
   }

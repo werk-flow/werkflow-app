@@ -1,4 +1,5 @@
 import { centsToEuroInput, parseEuroCents } from '@/lib/price-catalog/money';
+import { parseWholeNumberInput } from '@/lib/ui/decimal';
 import type { InvoiceDetail, InvoiceLineValues, InvoiceTaxRate, InvoiceTerms } from './types';
 
 // The draft editor's text state and its parse into the values the save sends.
@@ -65,10 +66,7 @@ export function parsePercentBasisPoints(text: string): number | null {
 }
 
 export function parseDays(text: string, min: number): number | null {
-  const trimmed = text.trim();
-  if (!/^\d{1,3}$/.test(trimmed)) return null;
-  const days = Number(trimmed);
-  return days >= min && days <= 365 ? days : null;
+  return parseWholeNumberInput(text, min, 365);
 }
 
 /** „4,5“ from 450 basis points. */

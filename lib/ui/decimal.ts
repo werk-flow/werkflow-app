@@ -56,6 +56,14 @@ export function parseBoundedDecimalInput(
   return fraction.length <= maxFractionDigits ? Number(trimmed) : undefined;
 }
 
+/** A whole number typed without sign or separator, at most nine digits, from `minimum` to `maximum`; null otherwise. */
+export function parseWholeNumberInput(value: string, minimum: number, maximum: number): number | null {
+  const trimmed = value.trim();
+  if (!/^\d{1,9}$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return parsed >= minimum && parsed <= maximum ? parsed : null;
+}
+
 /** Format for display in a de-DE input: integers bare, decimals with comma. */
 export function formatDecimalDe(value: number, maxFractionDigits = 2): string {
   return Number.isInteger(value)

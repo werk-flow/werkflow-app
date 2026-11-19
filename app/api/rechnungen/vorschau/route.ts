@@ -1,7 +1,7 @@
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { withReadRequest } from '@/lib/data/read-request-cache';
-import { officeCaller } from '@/lib/invoices/caller';
-import { completenessFindings, snapshotOf } from '@/lib/invoices/issue-sources';
+import { resolveManagerContext } from '@/lib/org/manager-context';
+import { completenessFindings, readIssueSnapshot } from '@/lib/invoices/issue-sources';
 import { calculatedInvoiceOf, renderInvoicePdf } from '@/lib/invoices/original';
 import { readInvoice } from '@/lib/invoices/reads';
 import { logError } from '@/lib/logging';
@@ -27,7 +27,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 async function previewResponse(rawInvoiceId: string): Promise<Response> {
-  const caller = await officeCaller();
+  const caller = await resolveManagerContext();
   if (!caller.success) {
     const status = caller.error === 'not_authenticated' ? 401 : 403;
     return Response.json({ error: caller.error }, { status, headers: privateHeaders });
@@ -48,7 +48,7 @@ async function previewResponse(rawInvoiceId: string): Promise<Response> {
     );
   }
   const admin = createSupabaseAdminClient();
-  const snapshot = await snapshotOf(admin, context, invoice);
+  const snapshot = await readIssueSnapshot(admin, context, invoice);
   const calculated =
     snapshot &&
     calculatedInvoiceOf(invoice, snapshot, { number: 'Entwurf', issueDate: getBusinessTodayIso() });

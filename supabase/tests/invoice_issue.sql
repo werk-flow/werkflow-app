@@ -61,7 +61,8 @@ begin
     if has_table_privilege(v_role, 'public.invoice_settings', 'SELECT')
       or has_table_privilege(v_role, 'public.invoice_settings', 'INSERT')
       or has_table_privilege(v_role, 'public.invoice_settings', 'UPDATE')
-      or has_function_privilege(v_role, 'public.issue_invoice(uuid,uuid,uuid,integer,uuid,jsonb,text,date)', 'EXECUTE')
+      or has_function_privilege(v_role,
+        'public.issue_invoice(uuid,uuid,uuid,integer,uuid,jsonb,text,date,uuid,text,text,bigint,text)', 'EXECUTE')
       or has_function_privilege(v_role,
         'public.register_invoice_original(uuid,uuid,uuid,uuid,text,text,bigint,text)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.save_invoice_settings(uuid,uuid,integer,jsonb)', 'EXECUTE')
@@ -152,8 +153,9 @@ $$;
 select pg_temp.fill('first'), pg_temp.fill('second');
 
 -- Issues under p_number and p_day: by default the series' next number and the Berlin day, as the server checks it.
+-- With p_original, the issue registers the original the server stored under that document id.
 create function pg_temp.issue(p_actor uuid, p_org uuid, p_name text, p_version integer, p_attempt uuid,
-  p_number text default null, p_day date default null)
+  p_number text default null, p_day date default null, p_original uuid default null)
 returns jsonb language sql as $$
   select public.issue_invoice(p_actor, p_org, pg_temp.id(p_name), p_version, p_attempt,
     '{"organizationName":"Haustechnik Sonnenberg","profile":{"companyName":"Haustechnik Sonnenberg GmbH"},
@@ -162,7 +164,12 @@ returns jsonb language sql as $$
       "buyer":{"name":"Hausverwaltung Lindenhof GmbH","address":{"lines":["Hofweg 1"],"postalCode":"10117",
                "city":"Berlin","countryCode":"DE"}}}',
     coalesce(p_number, public.get_invoice_settings(p_org) ->> 'nextInvoiceNumber'),
-    coalesce(p_day, (now() at time zone 'Europe/Berlin')::date))
+    coalesce(p_day, (now() at time zone 'Europe/Berlin')::date),
+    p_original,
+    case when p_original is not null then p_org || '/' || p_original || '/Rechnung.pdf' end,
+    case when p_original is not null then 'Rechnung.pdf' end,
+    case when p_original is not null then 4096 end,
+    case when p_original is not null then repeat('c', 64) end)
 $$;
 
 -- A refused issue uses no number: an incomplete draft, a field worker, an
@@ -190,8 +197,16 @@ from (values
   ('a number another issue took meanwhile', 'RG10235', (now() at time zone 'Europe/Berlin')::date),
   ('another day', 'RG10234', (now() at time zone 'Europe/Berlin')::date - 1)
 ) as cases(label, expected_number, expected_day);
+-- A refused issue registers none of the original it was passed.
+select pg_temp.expect_refusal('a moved number with its original', format(
+  'select pg_temp.issue(%L, %L, ''first'', 2, gen_random_uuid(), ''RG10235'', null, %L)',
+  '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
+  '38060000-0000-4000-8000-000000000303'), 'invoice_number_moved');
 do $$
 begin
+  if exists (select 1 from public.documents where id = '38060000-0000-4000-8000-000000000303') then
+    raise exception 'a refused issue registered its original';
+  end if;
   if exists (select 1 from public.invoices where organization_id = '38060000-0000-4000-8000-000000000010'
       and status is distinct from 'entwurf')
     or (select (next_number, first_issued_at is null) from public.invoice_settings
@@ -210,6 +225,8 @@ declare
 begin
   select * into v_invoice from public.invoices where id = pg_temp.id('first');
   if v_issued ->> 'invoiceNumber' is distinct from 'RG10234' or v_invoice.invoice_number is distinct from 'RG10234'
+    -- Issued without an original, as when the storage was unreachable: pending, no document.
+    or v_issued -> 'originalDocumentId' is distinct from 'null'::jsonb or v_invoice.original_document_id is not null
     or v_invoice.status is distinct from 'ausgestellt' or v_invoice.version is distinct from 3
     or v_invoice.issue_date is distinct from (now() at time zone 'Europe/Berlin')::date
     or v_invoice.issued_by is distinct from '38060000-0000-4000-8000-000000000002'
@@ -227,9 +244,25 @@ begin
     or (select count(*) from public.invoice_events where invoice_id = v_invoice.id and event_type = 'issued') is distinct from 1 then
     raise exception 'a retried issue issued again';
   end if;
-  if pg_temp.issue('38060000-0000-4000-8000-000000000001', '38060000-0000-4000-8000-000000000010', 'second', 2,
-      gen_random_uuid()) ->> 'invoiceNumber' is distinct from 'RG10235' then
-    raise exception 'the second issue did not take the next number';
+end;
+$$;
+
+-- An issue passed its original registers and files it in the issue's own transaction.
+do $$
+declare
+  v_issued jsonb := pg_temp.issue('38060000-0000-4000-8000-000000000001', '38060000-0000-4000-8000-000000000010',
+    'second', 2, gen_random_uuid(), null, null, '38060000-0000-4000-8000-000000000304');
+  v_document public.documents;
+begin
+  select * into v_document from public.documents where id = '38060000-0000-4000-8000-000000000304';
+  if v_issued ->> 'invoiceNumber' is distinct from 'RG10235'
+    or v_issued ->> 'originalDocumentId' is distinct from '38060000-0000-4000-8000-000000000304'
+    or (select original_document_id from public.invoices where id = pg_temp.id('second'))
+      is distinct from '38060000-0000-4000-8000-000000000304'
+    or v_document.retention_class is distinct from 'ten_years' or v_document.filed_at is null
+    or v_document.filed_by is distinct from '38060000-0000-4000-8000-000000000001'
+    or v_document.metadata ->> 'invoiceId' is distinct from pg_temp.id('second')::text then
+    raise exception 'the second issue answered % with its original %', v_issued, to_jsonb(v_document);
   end if;
 end;
 $$;

@@ -14,7 +14,7 @@ import {
   type SaveInvoiceDraftInput,
 } from './action-schemas';
 import { draftAmounts, type DraftAmounts } from './amounts';
-import { officeCaller } from './caller';
+import { resolveManagerContext } from '@/lib/org/manager-context';
 import type { InvoiceLineValues } from './types';
 
 // Admin and Büro keep the invoices. Every action resolves the caller's
@@ -44,7 +44,7 @@ export async function createInvoice(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
   try {
-    const caller = await officeCaller();
+    const caller = await resolveManagerContext();
     if (!caller.success) return caller;
     const { orgId, userId } = caller.context;
     const { data, error } = await createSupabaseAdminClient().rpc(
@@ -83,7 +83,7 @@ export async function saveInvoiceDraft(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
   try {
-    const caller = await officeCaller();
+    const caller = await resolveManagerContext();
     if (!caller.success) return caller;
     const { orgId, userId } = caller.context;
     // A line the line rule refuses (an amount beyond the safe range) is the office's input to fix.
@@ -121,7 +121,7 @@ export async function deleteInvoiceDraft(rawInput: DeleteInvoiceDraftInput): Pro
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
   try {
-    const caller = await officeCaller();
+    const caller = await resolveManagerContext();
     if (!caller.success) return caller;
     const { orgId, userId } = caller.context;
     const { error } = await createSupabaseAdminClient().rpc('delete_invoice_draft', {
