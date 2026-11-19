@@ -349,12 +349,13 @@ if (ISOLATED) {
             status_override: 'abgeschlossen',
             // Edited after the completion.
             updated_at: '2026-11-18T09:00:00Z',
+            // Its transitions to execution_complete, embedded in the same read.
+            work_execution_events: [
+              { event_type: 'reopened', created_at: '2026-11-12T09:00:00Z' },
+              // Released and withdrawn again: the work stayed complete since the 12th.
+              { event_type: 'handover_withdrawn', created_at: '2026-11-18T08:00:00Z' },
+            ],
           },
-        ],
-        work_execution_events: [
-          { project_id: PROJECT, event_type: 'reopened', created_at: '2026-11-12T09:00:00Z' },
-          // Released and withdrawn again: the work stayed complete since the 12th.
-          { project_id: PROJECT, event_type: 'handover_withdrawn', created_at: '2026-11-18T08:00:00Z' },
         ],
       };
       withOwnRecord = false;

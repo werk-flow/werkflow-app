@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { toWorkHandoverTasks, type HandoverJobRow, type HandoverProjectRow } from './handover-tasks';
+import {
+  latestHandCompletion,
+  toWorkHandoverTasks,
+  type HandoverJobRow,
+  type HandoverProjectRow,
+} from './handover-tasks';
 
 function job(id: string, updatedAt: string, completedOn: string | null = null): HandoverJobRow {
   return {
@@ -83,4 +88,19 @@ test('a handover waits since the Berlin day its execution completed', () => {
     'p-leap-day': '2028-02-29',
     'p-unrecorded': '2026-11-18',
   });
+});
+
+test("a project's completion by hand is the Berlin day of its latest transition, never a withdrawn release", () => {
+  expect(latestHandCompletion([])).toBeNull();
+  expect(
+    latestHandCompletion([
+      { event_type: 'reopened', created_at: '2026-11-02T09:00:00Z' },
+      // 23:30 UTC on the 11th is the 12th in Berlin.
+      { event_type: 'reopened', created_at: '2026-11-11T23:30:00Z' },
+      { event_type: 'handover_withdrawn', created_at: '2026-11-18T08:00:00Z' },
+    ]),
+  ).toBe('2026-11-12');
+  expect(
+    latestHandCompletion([{ event_type: 'handover_withdrawn', created_at: '2026-11-18T08:00:00Z' }]),
+  ).toBeNull();
 });

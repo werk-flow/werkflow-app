@@ -25,6 +25,20 @@ export type HandoverProjectRow = Pick<
 };
 
 /**
+ * The Berlin day of a project's latest completion by hand, from its recorded
+ * transitions to `execution_complete`; null without one. A withdrawn release
+ * also records that transition, but reopens work that was already complete.
+ */
+export function latestHandCompletion(
+  completions: ReadonlyArray<{ event_type: string; created_at: string }>,
+): string | null {
+  const days = completions
+    .filter((event) => event.event_type !== 'handover_withdrawn')
+    .map((event) => formatBerlinLocalDate(event.created_at));
+  return days.length > 0 ? days.reduce((latest, day) => (day > latest ? day : latest)) : null;
+}
+
+/**
  * The handover review tasks of finished jobs and projects whose package is not
  * released, oldest first across both target types.
  */
