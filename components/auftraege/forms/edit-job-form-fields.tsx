@@ -16,12 +16,15 @@ import { formatSiteAddress } from '@/lib/clients/types';
 import { toLocalDateString } from '@/lib/utils';
 import { JOB_PRIORITY_OPTIONS } from './job-form-options';
 import { EditJobScheduleFields } from './edit-job-schedule';
+import { JobSourceNumberField } from './job-source-number-field';
 import type { EditJobForm } from './use-edit-job-form';
 
 export function EditJobIdentityFields({ form }: { form: EditJobForm }) {
   const {
     jobNumber,
     setJobNumber,
+    sourceNumber,
+    setSourceNumber,
     title,
     setTitle,
     description,
@@ -42,6 +45,13 @@ export function EditJobIdentityFields({ form }: { form: EditJobForm }) {
           disabled={formDisabled}
         />
       </Field>
+
+      <JobSourceNumberField
+        id="edit-job-source-number"
+        value={sourceNumber}
+        onChange={setSourceNumber}
+        disabled={formDisabled}
+      />
 
       <Field label="Titel" htmlFor="edit-job-title">
         <Input
