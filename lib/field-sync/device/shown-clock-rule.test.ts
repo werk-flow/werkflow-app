@@ -24,6 +24,7 @@ const PENDING_START: ClockDeviceView = {
   status: 'pending',
   state: WORKING,
   chainSegmentId: null,
+  setAside: [],
   events: [
     {
       operationId: '50000000-0000-4000-8000-0000000000a1',
@@ -41,6 +42,7 @@ const STOPPED_START: ClockDeviceView = {
   status: 'stopped',
   state: null,
   chainSegmentId: null,
+  setAside: [],
   events: PENDING_START.events.map((event) => ({ ...event, status: 'conflict', code: 'version_conflict' })),
 };
 
