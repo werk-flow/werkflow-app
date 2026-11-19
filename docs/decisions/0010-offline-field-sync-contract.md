@@ -387,6 +387,16 @@ Decided for werk-flow/werkflow-planning#404. It narrows the amendment of 2026-11
 - **Only the end.** The guided correction covers a chain whose first correction day holds the session's end and nothing before it. Its one `edit` replaces only the recorded end, so a switch before that end, such as a „Pause“ and its return to work, would be dropped, and its break would count as work once the events leave the phone.
 - **Every other chain of such a session** keeps the order of 2026-11-12, where the person sees every captured time and files the correction by hand.
 
+## Amendment 2026-11-14: what the clock shows while the connection changes
+
+Owner requirement (werk-flow/werkflow-planning#22): a connection change never shows an older clock state, not even for a moment on the way to the server's answer. It changes what the clock shows, never what is recorded. `lib/field-sync/device/shown-clock-rule.ts` owns the rule and `shown-clock.ts` holds it across renders; the clock's provider and dock read only from them.
+
+- **The person's own tap shows at once.** A kept action's echo stands apart from the server's clock: a clock read while it waits never replaces it.
+- **The server's answer settles.** When the phone's unsent actions settle, sent or stopped, the clock keeps what it showed until a clock read that started after that moment answers. Then the server's state, and a stopped chain's badge, show in one step. A read that fails with signal shows its failure in the clock's place, also once the signal goes again, and never promotes the server's older clock; a read that fails without signal is no answer. The clock reads again when the signal returns. While it waits with signal, which is short, no clock action starts. Without signal, the clock stays usable from the state it shows: a tap goes into the outbox like any offline tap and goes on from what the sent actions left, and a wrong guess stops the chain with its badge and correction path.
+- **One calm marker.** „Wartet auf Netz“ while actions wait without signal, „Wird übertragen“ while they wait with signal or their answer is due, „Ohne Netz“ for a confirmed clock without signal. The phone's own report of its network decides the words, never the state shown.
+- **A start that may hold unsent work** shows no clock until the outbox answered, so the server's clock from before the unsent actions never shows, and no clock action starts before then: an action is built only from a clock the person sees. When the outbox's code cannot load, or the device store does not answer within one bounded wait, the clock's failure shows with a retry that asks the outbox again.
+- **Today's view** has no state of its own that the connection changes: the page without signal reads the stored day once, and the prerendered no-signal page stands until that read answers, because it must work without its script.
+
 ## Amendment 2026-11-17: an unreadable clock record set aside
 
 Decided for werk-flow/werkflow-planning#407. It adds a way on from a kept clock action this version cannot read, besides its deletion. It sharpens the time outbox's invariants 3, 5 and 6.

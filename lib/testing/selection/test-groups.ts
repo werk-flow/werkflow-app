@@ -499,6 +499,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ],
     ['*'],
   ],
+  ['work-source-numbers', ['work_source_numbers.sql'], ['work', 'service']],
 ];
 
 /** Measured performance specs judge their deadlines in release mode and on explicit request only. */
