@@ -26,12 +26,28 @@ export type WorkerStartClockView =
     };
 
 /**
+ * Whether the totals belong to today: the state's own instant is today, and so is the server's last
+ * confirmed state, since an action echoed after midnight moves the instant but carries the
+ * previous day's totals forward until the server answers.
+ */
+function totalsOfToday(state: LiveClockState, confirmed: LiveClockState | null, today: string): boolean {
+  const isToday = (instant: string): boolean => formatBerlinLocalDate(instant) === today;
+  return isToday(state.fetchedAt) && (confirmed === null || isToday(confirmed.fetchedAt));
+}
+
+/**
  * The minutes count to the instant the clock state stands for (`fetchedAt`): the read, an echoed
  * action, or the provider's catch-up when the page becomes visible again. They never tick, so the
  * start page rests while the clock runs; the clock dock shows the running time.
  */
 export function workerStartClockView(
-  clock: { state: LiveClockState | null; isReady: boolean; statusError: string | null },
+  clock: {
+    state: LiveClockState | null;
+    /** The clock as the server last confirmed it: an echoed action carries its totals forward. */
+    confirmed: LiveClockState | null;
+    isReady: boolean;
+    statusError: string | null;
+  },
   /** Today's Berlin date (`YYYY-MM-DD`). */
   today: string,
 ): WorkerStartClockView {
@@ -51,10 +67,9 @@ export function workerStartClockView(
   return {
     kind: 'ready',
     status: `${describeClockActivity(state).sentence}${since}`,
-    workingMinutes:
-      formatBerlinLocalDate(state.fetchedAt) === today
-        ? breakdown.workMinutes + breakdown.overtimeMinutes
-        : null,
+    workingMinutes: totalsOfToday(state, clock.confirmed, today)
+      ? breakdown.workMinutes + breakdown.overtimeMinutes
+      : null,
     asOf: state.isClockedIn ? state.fetchedAt : null,
   };
 }

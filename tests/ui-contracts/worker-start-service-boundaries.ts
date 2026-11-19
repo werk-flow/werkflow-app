@@ -10,7 +10,13 @@ import type { LiveClockState } from '@/lib/time-tracking/types';
 
 type Scope = { userId: string; organizationId: string; role: 'employee' | 'buero' };
 
-type ClockView = { state: LiveClockState | null; isReady: boolean; statusError: string | null };
+type ClockView = {
+  state: LiveClockState | null;
+  /** The server's last confirmed clock; without one, the state itself, as when nothing was echoed. */
+  confirmed?: LiveClockState | null;
+  isReady: boolean;
+  statusError: string | null;
+};
 
 /** What the next device read answers: a stored day, none, or a failed storage. */
 type DeviceAnswer = { stored: StoredToday | null } | { fails: true };
@@ -95,8 +101,9 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-export function useClockState(): ClockView {
-  return useSyncExternalStore(subscribe, () => clock);
+export function useClockState(): ClockView & { confirmed: LiveClockState | null } {
+  const current = useSyncExternalStore(subscribe, () => clock);
+  return { ...current, confirmed: current.confirmed ?? current.state };
 }
 
 export function useAttentionCounts(): AttentionCounts {

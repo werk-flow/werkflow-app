@@ -325,6 +325,26 @@ test('a clock state of the day before shows no hours as today’s', async ({ pag
   await expect(clock).not.toContainText('gearbeitet:');
 });
 
+test('an action echoed after midnight shows no hours until the server confirms today', async ({ page }) => {
+  // Clocked in after midnight: the echo's instant is today, its totals still the day before's.
+  await openStart(page, { stored: EMPTY_DAY }, '2026-09-13T06:00:00Z');
+  const clock = MAIN(page).getByTestId('worker-start-clock');
+  await page.evaluate(
+    ({ echo, confirmed }) =>
+      window.workerStartContract.setClock({ state: echo, confirmed, isReady: true, statusError: null }),
+    {
+      echo: {
+        ...RUNNING_CLOCK_STATE,
+        statusStartedAt: '2026-09-13T05:59:00.000Z',
+        fetchedAt: '2026-09-13T05:59:00.000Z',
+      },
+      confirmed: STOPPED_CLOCK,
+    },
+  );
+  await expect(clock).toContainText('Deine Stunden von heute siehst du in der Zeiterfassung.');
+  await expect(clock).not.toContainText('gearbeitet:');
+});
+
 test('a day whose end passes leaves the page even when the read after it fails', async ({ page }) => {
   await openStart(page, { stored: ENDING_DAY }, '2026-11-17T22:59:00Z');
   await expect(einsaetze(page).getByRole('link')).toHaveCount(2);
