@@ -90,6 +90,7 @@ export async function prepareJobCreation(
     estimated_duration_minutes: input.estimatedDurationMinutes ?? null,
     planned_working_minutes: input.plannedWorkingMinutes ?? null,
     location: input.location?.trim() || null,
+    source_number: input.sourceNumber || null,
     ...(jobNumber !== null ? { job_number: jobNumber.trim() } : {}),
   };
   return {
