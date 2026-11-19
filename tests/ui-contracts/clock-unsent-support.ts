@@ -100,6 +100,15 @@ export async function mountClock(
       ? route.fulfill({ status: 500, json: { success: false, error: 'unavailable' } })
       : route.fulfill({ json: { success: true, state: server.state } }),
   );
+  // The ledger records an operation once: a resend of an accepted one answers its first state (decision record 0010).
+  const accepted = new Map<string, Verdict>();
+  const answerOnce = (operationId: string): Verdict & { operationId: string } => {
+    const first = accepted.get(operationId);
+    if (first) return { ...first, outcome: 'replayed', code: 'replayed', operationId };
+    const verdict = server.verdict;
+    if (verdict.outcome === 'accepted') accepted.set(operationId, verdict);
+    return { ...verdict, operationId };
+  };
   await page.route('**/api/field-sync/v1/operations', async (route) => {
     // Without network a send never arrives, whatever the page believes about its connection.
     if (!server.online) {
@@ -112,12 +121,7 @@ export async function mountClock(
     server.authorization.push(route.request().headers()['authorization'] ?? '');
     await route.fulfill({
       status: server.status,
-      json: {
-        results: body.operations.map((operation) => ({
-          operationId: operation.operationId,
-          ...server.verdict,
-        })),
-      },
+      json: { results: body.operations.map((operation) => answerOnce(operation.operationId)) },
     });
   });
   await page.goto('http://localhost/ui-contracts');
@@ -252,4 +256,20 @@ export function holdDeviceStore(): void {
 
 export function withoutSentAt(envelope: Envelope | undefined): Envelope | undefined {
   return envelope && { ...envelope, sentAt: '' };
+}
+
+/**
+ * What the server recorded: each operation id once, as it first arrived. A send in flight when
+ * `online` fires is ended and sent again (decision record 0010, "the network's return ends a send
+ * that hangs"); one that had reached the server arrives twice and is recorded once. A second
+ * arrival must be the same envelope.
+ */
+export function recorded(server: Server): Envelope[] {
+  const first = new Map<string, Envelope>();
+  for (const envelope of server.sent) {
+    const earlier = first.get(envelope.operationId);
+    if (earlier) expect(withoutSentAt(envelope)).toEqual(withoutSentAt(earlier));
+    else first.set(envelope.operationId, envelope);
+  }
+  return [...first.values()];
 }
