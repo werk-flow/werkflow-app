@@ -153,9 +153,9 @@ $$;
 select pg_temp.fill('first'), pg_temp.fill('second');
 
 -- Issues under p_number and p_day: by default the series' next number and the Berlin day, as the server checks it.
--- With p_original, the issue registers the original the server stored under that document id.
+-- With p_original, the issue registers the original the server stored under that document id (hash p_hash).
 create function pg_temp.issue(p_actor uuid, p_org uuid, p_name text, p_version integer, p_attempt uuid,
-  p_number text default null, p_day date default null, p_original uuid default null)
+  p_number text default null, p_day date default null, p_original uuid default null, p_hash text default null)
 returns jsonb language sql as $$
   select public.issue_invoice(p_actor, p_org, pg_temp.id(p_name), p_version, p_attempt,
     '{"organizationName":"Haustechnik Sonnenberg","profile":{"companyName":"Haustechnik Sonnenberg GmbH"},
@@ -169,7 +169,7 @@ returns jsonb language sql as $$
     case when p_original is not null then p_org || '/' || p_original || '/Rechnung.pdf' end,
     case when p_original is not null then 'Rechnung.pdf' end,
     case when p_original is not null then 4096 end,
-    case when p_original is not null then repeat('c', 64) end)
+    case when p_original is not null then coalesce(p_hash, repeat('c', 64)) end)
 $$;
 
 -- A refused issue uses no number: an incomplete draft, a field worker, an
@@ -197,15 +197,25 @@ from (values
   ('a number another issue took meanwhile', 'RG10235', (now() at time zone 'Europe/Berlin')::date),
   ('another day', 'RG10234', (now() at time zone 'Europe/Berlin')::date - 1)
 ) as cases(label, expected_number, expected_day);
--- A refused issue registers none of the original it was passed.
+-- A refused issue registers none of the original it was passed; a refused
+-- registration, the issue's last step, rolls back the number, status and history.
 select pg_temp.expect_refusal('a moved number with its original', format(
   'select pg_temp.issue(%L, %L, ''first'', 2, gen_random_uuid(), ''RG10235'', null, %L)',
   '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
   '38060000-0000-4000-8000-000000000303'), 'invoice_number_moved');
+select pg_temp.expect_refusal('the checked number with an original the registration refuses', format(
+  'select pg_temp.issue(%L, %L, ''first'', 2, gen_random_uuid(), null, null, %L, ''no-hash'')',
+  '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
+  '38060000-0000-4000-8000-000000000305'), 'invalid_input');
 do $$
 begin
-  if exists (select 1 from public.documents where id = '38060000-0000-4000-8000-000000000303') then
+  if exists (select 1 from public.documents
+      where id in ('38060000-0000-4000-8000-000000000303', '38060000-0000-4000-8000-000000000305')) then
     raise exception 'a refused issue registered its original';
+  end if;
+  if exists (select 1 from public.invoice_events where organization_id = '38060000-0000-4000-8000-000000000010'
+      and event_type in ('issued', 'original_registered')) then
+    raise exception 'a refused issue wrote history';
   end if;
   if exists (select 1 from public.invoices where organization_id = '38060000-0000-4000-8000-000000000010'
       and status is distinct from 'entwurf')
@@ -238,11 +248,15 @@ begin
       and payload ->> 'invoiceNumber' = 'RG10234') then
     raise exception 'the issue wrote no history';
   end if;
-  -- A retry under the same key answers the first issue and uses no number.
-  if pg_temp.issue('38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010', 'first', 2,
-      '38060000-0000-4000-8000-000000000201') ->> 'invoiceNumber' is distinct from 'RG10234'
+  -- A retry under the same key answers the first issue and uses no number. The original it
+  -- passes may carry the next number (it read the series after the first issue), so it registers none.
+  v_issued := pg_temp.issue('38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
+    'first', 2, '38060000-0000-4000-8000-000000000201', 'RG10235', null, '38060000-0000-4000-8000-000000000306');
+  if v_issued ->> 'invoiceNumber' is distinct from 'RG10234'
+    or v_issued -> 'originalDocumentId' is distinct from 'null'::jsonb
+    or exists (select 1 from public.documents where id = '38060000-0000-4000-8000-000000000306')
     or (select count(*) from public.invoice_events where invoice_id = v_invoice.id and event_type = 'issued') is distinct from 1 then
-    raise exception 'a retried issue issued again';
+    raise exception 'a retried issue issued again or registered its original: %', v_issued;
   end if;
 end;
 $$;

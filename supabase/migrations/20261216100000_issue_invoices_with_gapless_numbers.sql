@@ -266,11 +266,12 @@ create trigger guard_issued_invoice_lines before insert or update or delete on p
 -- otherwise refuses invoice_number_moved, and the server checks again. The
 -- p_original_* arguments name the original the server rendered under that
 -- number and day and stored: the issue registers and files it in its own
--- transaction (attach_invoice_original), so an issue and its original commit
--- or roll back together. Without them, as when the storage was unreachable,
--- the invoice is issued with its original pending. A retry under the same key
--- answers the first issue and attaches a passed original the invoice still
--- lacks. The answer names the invoice's registered original, or null.
+-- transaction (register_invoice_original), so an issue and its original
+-- commit or roll back together. Without them, as when the storage was
+-- unreachable, the invoice is issued with its original pending. A retry under
+-- the same key answers the first issue and registers nothing, since its
+-- original may have been rendered under another number. The answer names the
+-- invoice's registered original, or null; the server discards another.
 -- Refusals: invalid_input, not_authorized, those of lock_invoice_draft,
 -- invoice_incomplete (no line or no Leistungsdatum), invoice_number_moved,
 -- those of register_invoice_original, and a check violation.
@@ -319,9 +320,8 @@ begin
       raise exception 'invalid_input';
     end if;
     return v_earlier.payload || jsonb_build_object('version', v_earlier.version,
-      'originalDocumentId', app_private.attach_invoice_original(p_actor_id, p_organization_id, p_invoice_id,
-        p_original_document_id, p_original_storage_path, p_original_file_name, p_original_size_bytes,
-        p_original_content_hash));
+      'originalDocumentId', (select invoice.original_document_id from public.invoices invoice
+        where invoice.id = p_invoice_id and invoice.organization_id = p_organization_id));
   end if;
   v_invoice := app_private.lock_invoice_draft(p_organization_id, p_invoice_id, p_expected_version);
   if v_invoice.service_start is null or not exists (
@@ -381,11 +381,13 @@ begin
       'grossCents', v_invoice.gross_cents),
     p_actor_id, p_attempt_key
   );
+  if p_original_document_id is not null then
+    perform public.register_invoice_original(p_actor_id, p_organization_id, v_invoice.id, p_original_document_id,
+      p_original_storage_path, p_original_file_name, p_original_size_bytes, p_original_content_hash);
+  end if;
   return jsonb_build_object('invoiceNumber', v_number, 'issueDate', v_issue_date,
     'grossCents', v_invoice.gross_cents, 'version', v_invoice.version + 1,
-    'originalDocumentId', app_private.attach_invoice_original(p_actor_id, p_organization_id, v_invoice.id,
-      p_original_document_id, p_original_storage_path, p_original_file_name, p_original_size_bytes,
-      p_original_content_hash));
+    'originalDocumentId', p_original_document_id);
 end;
 $$;
 revoke all on function public.issue_invoice(uuid, uuid, uuid, integer, uuid, jsonb, text, date, uuid, text, text, bigint, text)
@@ -423,7 +425,7 @@ declare
 begin
   if p_actor_id is null or p_organization_id is null or p_invoice_id is null or p_document_id is null
     or p_storage_path is null or p_file_name is null or p_size_bytes is null or p_size_bytes <= 0
-    or p_content_hash !~ '^[0-9a-f]{64}$'
+    or p_content_hash is null or p_content_hash !~ '^[0-9a-f]{64}$'
     or p_storage_path not like p_organization_id::text || '/' || p_document_id::text || '/%'
   then
     raise exception 'invalid_input';
@@ -474,42 +476,6 @@ $$;
 revoke all on function public.register_invoice_original(uuid, uuid, uuid, uuid, text, text, bigint, text)
   from public, anon, authenticated;
 grant execute on function public.register_invoice_original(uuid, uuid, uuid, uuid, text, text, bigint, text)
-  to service_role;
-
--- The original an issue_invoice call registers in its own transaction: with a
--- document id, register_invoice_original's registration and filing (a second
--- call answers the original registered first); without one, the invoice's
--- registered original. Answers that original's id, or null while it is pending.
-create function app_private.attach_invoice_original(
-  p_actor_id uuid,
-  p_organization_id uuid,
-  p_invoice_id uuid,
-  p_document_id uuid,
-  p_storage_path text,
-  p_file_name text,
-  p_size_bytes bigint,
-  p_content_hash text
-)
-returns uuid
-language plpgsql
-security invoker
-set search_path to ''
-as $$
-declare
-  v_original uuid;
-begin
-  if p_document_id is not null then
-    return (public.register_invoice_original(p_actor_id, p_organization_id, p_invoice_id, p_document_id,
-      p_storage_path, p_file_name, p_size_bytes, p_content_hash) ->> 'documentId')::uuid;
-  end if;
-  select invoice.original_document_id into v_original from public.invoices invoice
-  where invoice.id = p_invoice_id and invoice.organization_id = p_organization_id;
-  return v_original;
-end;
-$$;
-revoke all on function app_private.attach_invoice_original(uuid, uuid, uuid, uuid, text, text, bigint, text)
-  from public, anon, authenticated, service_role;
-grant execute on function app_private.attach_invoice_original(uuid, uuid, uuid, uuid, text, text, bigint, text)
   to service_role;
 
 -- 5. The organization's invoice settings with the number the next invoice

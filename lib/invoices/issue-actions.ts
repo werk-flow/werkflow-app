@@ -126,14 +126,10 @@ async function issueChecked(
     }),
   });
   const issued = issuedSchema.safeParse(data);
-  const unused =
-    stored &&
-    (isConfirmedWriteRefusal(error) ||
-      (issued.success && issued.data.originalDocumentId !== stored.documentId));
-  if (unused)
-    await discardInvoiceOriginal(context.orgId, stored).catch((discardError: unknown) =>
-      logError('issueInvoice: unused original not discarded', discardError),
-    );
+  const registeredOther = issued.success && issued.data.originalDocumentId !== stored?.documentId;
+  if (stored && (isConfirmedWriteRefusal(error) || registeredOther)) {
+    await discardInvoiceOriginal(context.orgId, stored);
+  }
   if (error || !issued.success) return refusal(error, 'issue_failed', 'issueInvoice: issue_invoice failed');
   return {
     success: true,
