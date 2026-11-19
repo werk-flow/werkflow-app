@@ -70,7 +70,6 @@ const job: Job = {
   projectId: null,
   clientId: 'client-1',
   jobNumber: 'AUF-1',
-  sourceNumber: null,
   title: 'Heizung warten',
   description: null,
   status: 'nicht_bearbeitet',

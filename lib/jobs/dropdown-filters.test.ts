@@ -10,7 +10,6 @@ function buildFilterTestJob(id: string, clientId: string | null, plannedDate: st
     projectId: null,
     clientId,
     jobNumber: null,
-    sourceNumber: null,
     title: id,
     description: null,
     status: 'nicht_bearbeitet',

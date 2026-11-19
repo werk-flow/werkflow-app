@@ -17,7 +17,6 @@ const JOB_RECORD: JobWithDetails = {
   projectId: null,
   clientId: null,
   jobNumber: null,
-  sourceNumber: null,
   title: '',
   description: null,
   status: 'nicht_bearbeitet',

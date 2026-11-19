@@ -102,7 +102,7 @@ export function buildEditJobInput(
     clientId: clientId && clientId !== 'none' ? clientId : '',
     projectId: projectId && projectId !== 'none' ? projectId : '',
     ...(jobNumber.trim() ? { jobNumber: jobNumber.trim() } : {}),
-    ...(sourceNumber.trim() || job.sourceNumber !== null ? { sourceNumber: sourceNumber.trim() } : {}),
+    ...(sourceNumber.trim() || job.sourceNumber !== undefined ? { sourceNumber: sourceNumber.trim() } : {}),
     priority,
     ...schedule,
     ...(plannedWorkingMinutes !== undefined ? { plannedWorkingMinutes } : {}),
