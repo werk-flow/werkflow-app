@@ -21,7 +21,12 @@ import {
 } from '@/lib/work-lifecycle/types';
 import type { WorkLifecycleCardDialogsProps } from './work-lifecycle-card-dialogs';
 import { WorkLifecycleCardSections, WorkLifecycleRemoteUpdateHint } from './work-lifecycle-card-sections';
-import type { WorkLifecycleDialogState, WorkTransitionInput } from './work-lifecycle-dialog-state';
+import {
+  workLifecycleDialogKey,
+  type WorkLifecycleDialogOpener,
+  type WorkLifecycleDialogState,
+  type WorkTransitionInput,
+} from './work-lifecycle-dialog-state';
 import { workLifecycleErrorMessage } from './work-lifecycle-messages';
 import { WorkLifecycleStatusHeader } from './work-lifecycle-status';
 
@@ -34,19 +39,27 @@ const lazyCardDialogs = lazyDialog<
   WorkLifecycleCardDialogsProps & { open: boolean; onOpenChange: (open: boolean) => void }
 >(() => import('./work-lifecycle-card-dialogs').then((mod) => mod.WorkLifecycleCardDialogs));
 
-/** Whether an opened dialog still downloads, and the close handler the lazy dialogs share. */
+/**
+ * The openers' props, whose button shows pending while its dialog downloads, and the open
+ * state the lazy dialogs share.
+ */
 function useCardDialogsDownload(
   dialog: WorkLifecycleDialogState | null,
   setDialog: (dialog: WorkLifecycleDialogState | null) => void,
 ) {
-  const dialogWaiting = lazyCardDialogs.useWaiting(dialog !== null);
+  const waiting = lazyCardDialogs.useWaiting(dialog !== null);
+  const waitingKey = waiting && dialog ? workLifecycleDialogKey(dialog) : null;
+  const openDialog: WorkLifecycleDialogOpener = (next) => ({
+    onClick: () => setDialog(next),
+    pending: waitingKey === workLifecycleDialogKey(next),
+  });
   const handleDialogOpenChange = useCallback(
     (open: boolean) => {
       if (!open) setDialog(null);
     },
     [setDialog],
   );
-  return { dialogWaiting, dialogOpen: { open: dialog !== null, onOpenChange: handleDialogOpenChange } };
+  return { openDialog, dialogOpen: { open: dialog !== null, onOpenChange: handleDialogOpenChange } };
 }
 
 const CARD_DIALOG_INTENT = {
@@ -87,6 +100,8 @@ function useWorkLifecycleLiveView({
   dialog: WorkLifecycleDialogState | null;
   setRemoteUpdateDialog: (dialog: WorkLifecycleDialogState | null) => void;
 }) {
+  // A dialog that still downloads shows no form yet, so the card stays live until it mounts.
+  const shown = dialog !== null && lazyCardDialogs.useLoaded();
   return useLiveView<WorkLifecycleSnapshot>({
     tables: [
       initialSnapshot.targetType === 'job' ? 'jobs' : 'projects',
@@ -128,9 +143,9 @@ function useWorkLifecycleLiveView({
     resetKey: `${initialSnapshot.targetType}:${initialSnapshot.targetId}`,
     // The card's ReasonDialog flows suspend reads; the in-card hint offers
     // an immediate refresh while typing continues.
-    suspend: dialog !== null,
+    suspend: shown,
     eventFilter: () => {
-      if (dialog !== null) setRemoteUpdateDialog(dialog);
+      if (shown) setRemoteUpdateDialog(dialog);
       return true;
     },
   });
@@ -253,7 +268,7 @@ export function WorkLifecycleCard({
     [snapshot.ownerOptions],
   );
   const ownOwnerId = isManager ? null : snapshot.ownOwnerId;
-  const { dialogWaiting, dialogOpen } = useCardDialogsDownload(dialog, setDialog);
+  const { openDialog, dialogOpen } = useCardDialogsDownload(dialog, setDialog);
 
   return (
     <Card
@@ -266,7 +281,6 @@ export function WorkLifecycleCard({
       <WorkLifecycleStatusHeader
         snapshot={snapshot}
         pendingState={pendingState}
-        dialogWaiting={dialogWaiting}
         nextAction={nextAction}
         canStart={canStart}
         startReadinessKnown={startReadinessKnown}
@@ -298,7 +312,7 @@ export function WorkLifecycleCard({
         ownerNames={ownerNames}
         ownOwnerId={ownOwnerId}
         rowBusy={rowBusy}
-        setDialog={setDialog}
+        openDialog={openDialog}
         completeExecution={() => state.transition({ toState: 'execution_complete', overrideGates: false })}
       />
       <lazyCardDialogs.Dialog

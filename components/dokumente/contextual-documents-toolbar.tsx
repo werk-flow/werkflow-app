@@ -53,7 +53,11 @@ export function ContextualDocumentsToolbar({
         data-testid="document-upload-input"
         multiple
         className="hidden"
-        onChange={(event) => onFilesSelected(event.target.files)}
+        onChange={(event) => {
+          onFilesSelected(event.target.files);
+          // The same files chosen again, after a dialog that failed to download, still open it.
+          event.target.value = '';
+        }}
       />
     </>
   );

@@ -3,7 +3,7 @@
 import { PlainButton } from '@/components/ui/plain-button';
 import { formatGermanDate as formatDate } from '@/lib/utils';
 import { formatFileSize } from '@/lib/documents/format';
-import type { ReactElement } from 'react';
+import { useCallback, type ReactElement } from 'react';
 import { ChevronRight, FileText } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -52,11 +52,19 @@ const lazyAttachDialog = lazyDialog(() =>
   import('./attach-document-dialog').then((mod) => mod.AttachDocumentDialog),
 );
 
-function preloadDocumentDialogs(): void {
-  lazyUploadDialog.preload();
-  lazyViewerDialog.preload();
-  lazyLinkDialog.preload();
-  lazyAttachDialog.preload();
+/** The section's intent handlers, which download only the dialogs this person can open. */
+function documentDialogIntent({
+  canUpload,
+  canManage,
+  canAttach,
+}: Record<'canUpload' | 'canManage' | 'canAttach', boolean>) {
+  const preload = (): void => {
+    lazyViewerDialog.preload();
+    if (canUpload) lazyUploadDialog.preload();
+    if (canManage) lazyLinkDialog.preload();
+    if (canAttach) lazyAttachDialog.preload();
+  };
+  return { onPointerMove: preload, onPointerDown: preload, onFocusCapture: preload };
 }
 
 type ContextualDocumentsSectionProps = {
@@ -266,7 +274,20 @@ function ContextualDocumentsLeadingDialogs({
   section,
   documentTarget,
 }: ContextualDocumentsLeadingDialogsProps) {
-  const { uploads, showFeedback } = section;
+  const { uploads, showFeedback, setViewerDocument, setLinkDialogDocument } = section;
+  // Stable close handlers: a lazy dialog's wait restarts when its handler changes.
+  const closeViewer = useCallback(
+    (open: boolean) => {
+      if (!open) setViewerDocument(null);
+    },
+    [setViewerDocument],
+  );
+  const closeLinks = useCallback(
+    (open: boolean) => {
+      if (!open) setLinkDialogDocument(null);
+    },
+    [setLinkDialogDocument],
+  );
   return (
     <>
       <lazyUploadDialog.Dialog
@@ -285,14 +306,14 @@ function ContextualDocumentsLeadingDialogs({
       <lazyViewerDialog.Dialog
         document={section.viewerDocument}
         open={!!section.viewerDocument}
-        onOpenChange={(open) => !open && section.setViewerDocument(null)}
+        onOpenChange={closeViewer}
       />
 
       <lazyLinkDialog.Dialog
         key={section.linkDialogDocument?.id ?? 'closed-context-link-dialog'}
         document={section.linkDialogDocument}
         open={!!section.linkDialogDocument}
-        onOpenChange={(open) => !open && section.setLinkDialogDocument(null)}
+        onOpenChange={closeLinks}
         onComplete={showFeedback}
       />
     </>
@@ -368,9 +389,7 @@ export function ContextualDocumentsSection({
       onDragOver={section.handleDragOver}
       onDragLeave={() => section.setIsDragActive(false)}
       onDrop={section.handleDrop}
-      onPointerMove={preloadDocumentDialogs}
-      onPointerDown={preloadDocumentDialogs}
-      onFocusCapture={preloadDocumentDialogs}
+      {...documentDialogIntent({ canUpload, canManage, canAttach: section.attachTarget !== null })}
     >
       <ContextualDocumentsListing
         section={section}
