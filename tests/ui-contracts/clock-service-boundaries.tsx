@@ -14,6 +14,8 @@ declare global {
       failTransition?: boolean;
       /** The next transition fails as the server would refuse it. */
       refuse?: boolean;
+      /** The server's next answers, in order, before the default answer applies again. */
+      answers?: TimeTransitionResult[];
     };
   }
 }
@@ -45,6 +47,8 @@ export async function transitionTimeActivity(input: TimeTransitionInput): Promis
   // Fails when the contract releases it, as a connection that drops after a while.
   if (window.clockContract.failTransition) throw new TypeError('Failed to fetch');
   if (window.clockContract.refuse) return { success: false, error: 'time_transition_failed' };
+  const scripted = window.clockContract.answers?.shift();
+  if (scripted) return scripted;
   return {
     success: true,
     outcome: input.action === 'end' ? 'ended' : 'active',

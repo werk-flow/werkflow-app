@@ -31,9 +31,13 @@ import { cn, formatBerlinTime } from '@/lib/utils';
  * outbox's view came with the load that produced them, so it renders in the same frame as the clock.
  * A function, not a component: the dock renders with every clock change, and lab counts count components.
  */
-function unsentEvents(unsent: ClockDeviceView | null, place: 'dock' | 'sheet'): ReactNode | undefined {
+function unsentEvents(
+  unsent: ClockDeviceView | null,
+  place: 'dock' | 'sheet',
+  onPendingChange?: (pending: boolean) => void,
+): ReactNode | undefined {
   const Events = unsent && loadedClockOutbox()?.default;
-  return Events ? <Events place={place} /> : undefined;
+  return Events ? <Events place={place} onPendingChange={onPendingChange} /> : undefined;
 }
 
 /**
@@ -115,6 +119,7 @@ function useClockFabControls(transitionActivity: ReturnType<typeof useClockState
   const { run, isPending: isHotKeyRunning } = usePendingTask();
   const [open, setOpen] = useState(false);
   const [isListRunning, setIsListRunning] = useState(false);
+  const [isUnsentRunning, setIsUnsentRunning] = useState(false);
   const [sheetPickerMode, setSheetPickerMode] = useState<ClockPickerMode | null>(null);
   const [pendingHotKey, setPendingHotKey] = useState<string | null>(null);
 
@@ -155,6 +160,8 @@ function useClockFabControls(transitionActivity: ReturnType<typeof useClockState
     open,
     setOpen,
     isListRunning,
+    isUnsentRunning,
+    setIsUnsentRunning,
     setIsListRunning,
     sheetPickerMode,
     pendingHotKey,
@@ -199,7 +206,7 @@ export function ClockFAB() {
       <Dialog
         open={controls.open}
         onOpenChange={controls.setOpen}
-        pending={isPending || controls.isListRunning}
+        pending={isPending || controls.isListRunning || controls.isUnsentRunning}
       >
         <DialogContent placement="anchored">
           <DialogHeader>
@@ -210,7 +217,7 @@ export function ClockFAB() {
                 : 'Wähle, womit du startest. Alles Weitere lässt sich jederzeit wechseln.'}
             </DialogDescription>
           </DialogHeader>
-          {unsentEvents(unsent, 'sheet')}
+          {unsentEvents(unsent, 'sheet', controls.setIsUnsentRunning)}
           <ClockActionList
             organizationId={activeOrgId}
             initialPickerMode={controls.sheetPickerMode}

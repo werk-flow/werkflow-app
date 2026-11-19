@@ -359,7 +359,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['p1-21', ['p1_21_time_segments.sql', 'clock_job_row_lock.sql'], ['time', 'personnel', 'work']],
   [
     'p1-22',
-    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql'],
+    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql', 'late_chain_replacement.sql'],
     ['time', 'personnel', 'work'],
   ],
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
