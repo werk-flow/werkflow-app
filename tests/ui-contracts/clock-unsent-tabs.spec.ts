@@ -4,6 +4,7 @@ import { CLOCK_ORGANIZATION_ID, CLOCK_USER_ID } from './clock-state-fixture';
 import {
   CLOCKED_OUT_STATE,
   mountClock,
+  recorded,
   setNetwork,
   startWithoutNetwork,
   unsentBadge,
@@ -333,17 +334,18 @@ test('a stop this version cannot read can be set aside: the tap behind it is sen
   await section.getByRole('button', { name: 'Beiseitelegen', exact: true }).click();
 
   // The tap behind the stop goes as its own chain; the record stays, set aside, and is never sent.
-  await expect.poll(() => server.sent.map(({ payload }) => payload.action)).toEqual(['start']);
+  await expect.poll(() => recorded(server).map(({ payload }) => payload.action)).toEqual(['start']);
   const setAside = section.getByRole('list', { name: 'Beiseitegelegte Stempelzeiten' });
   await expect(setAside.getByRole('listitem')).toHaveText(/^Nicht lesbare Stempelzeit/);
   await expect(unsentBadge(clockDock(page))).toHaveText('Beiseitegelegt');
 
   // The set-aside record stops nothing: a tap without signal is kept, and sent once the signal returns.
+  // A send that left before the return may arrive again after it (decision record 0010): the server records it once.
   await setNetwork(page, server, false);
   await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
   await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
   await setNetwork(page, server, true);
-  await expect.poll(() => server.sent.map(({ payload }) => payload.action)).toEqual(['start', 'start']);
+  await expect.poll(() => recorded(server).map(({ payload }) => payload.action)).toEqual(['start', 'start']);
   await expect(unsentBadge(clockDock(page))).toHaveText('Beiseitegelegt');
   if (!(await section.isVisible()))
     await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
@@ -362,7 +364,7 @@ test('a stop this version cannot read can be set aside: the tap behind it is sen
   await expect(section).toHaveCount(0);
   // The record left the phone, not only the view.
   expect(await page.evaluate((key) => localStorage.getItem(key), aside)).toBeNull();
-  expect(server.sent).toHaveLength(2);
+  expect(recorded(server)).toHaveLength(2);
 });
 
 test('a session end that runs longer than ten minutes keeps its barrier fresh, so no tab keeps behind its back', async ({
