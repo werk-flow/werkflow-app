@@ -2597,8 +2597,8 @@
         },
         "route:/aufgaben": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1560, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 4628, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1067, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 3963, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -2859,6 +2859,24 @@
           },
           "runKeys": ["2026-11-19T064235930Z-0d27c4"],
           "reason": "Aufgaben lists overdue jobs (E8 #488); the lab world finishes no job"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/aufgaben",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1560, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 4628, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1067, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 3963, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-19T072721249Z-f21a92"],
+          "reason": "Aufgaben loads its own chunk instead of the shell's (owner decision 2026-11-19, werk-flow/werkflow-planning#23)"
         }
       ]
     },
