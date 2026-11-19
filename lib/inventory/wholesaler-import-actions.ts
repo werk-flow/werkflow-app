@@ -9,22 +9,27 @@ import type { Json } from '@/lib/supabase/database.types';
 import { ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
+import { invalidateInventory } from './write-support';
 import type { WholesalerReportLine } from './wholesaler-import-lines';
 import {
   confirmAnswerSchema,
   confirmWholesalerImportInputSchema,
   openWholesalerImportInputSchema,
   previewAnswerSchema,
+  previewWholesalerPricesInputSchema,
+  pricesAnswerSchema,
   stageWholesalerImportLinesInputSchema,
   wholesalerImportIdInputSchema,
   wholesalerReportPartInputSchema,
   type ConfirmWholesalerImportInput,
   type OpenWholesalerImportInput,
+  type PreviewWholesalerPricesInput,
   type StageWholesalerImportLinesInput,
   type WholesalerImportIdInput,
   type WholesalerImportPreview,
   type WholesalerImportResult,
   type WholesalerPreviewEffects,
+  type WholesalerPricePreview,
   type WholesalerReportPartInput,
 } from './wholesaler-import-schemas';
 
@@ -32,14 +37,18 @@ import {
 // Only Admin and Büro import. The browser reads a delivery's files and sends
 // only the parsed lines: the open names the delivery and its supplier, each
 // stage call adds one part of the lines to the batch, and the preview ends
-// the staging and answers the batch's effects. The confirm writes the
-// catalog from the staged lines in one database call. No file byte passes an
-// action (decision 0001), and no own article or price changes here.
+// the staging and answers the batch's effects, and the price preview answers
+// the own articles' price changes for the office's rebates. The confirm
+// writes the catalog, the rebates and those prices from the staged lines in
+// one database call (werk-flow/werkflow-planning#477). No file byte passes an
+// action (decision 0001).
 
 /** The report lines one call answers; the browser asks for parts until none is left. */
 const REPORT_PART_LINES = 20_000;
 
-const refusal = writeRefusalFor(new Set(['not_authorized', 'supplier_not_found', 'import_not_found']));
+const refusal = writeRefusalFor(
+  new Set(['not_authorized', 'supplier_not_found', 'import_not_found', 'prices_changed']),
+);
 
 type ManagerContext = { success: true; context: ActionContext };
 
@@ -170,9 +179,42 @@ export async function previewWholesalerImport(rawInput: WholesalerImportIdInput)
 }
 
 /**
+ * The own articles' prices a previewed delivery changes, for the office's
+ * rebates per rebate group, or with null for the saved rebates and else the
+ * delivery's own percentages. Writes nothing.
+ */
+export async function previewWholesalerPrices(
+  rawInput: PreviewWholesalerPricesInput,
+): Promise<ActionResult<{ prices: WholesalerPricePreview }>> {
+  const parsed = previewWholesalerPricesInputSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const auth = await resolveImportManager();
+  if (!auth.success) return auth;
+
+  const { data, error } = await createSupabaseAdminClient().rpc(
+    'preview_supplier_catalog_import_prices',
+    rpcArgs('preview_supplier_catalog_import_prices', {
+      p_organization_id: auth.context.orgId,
+      p_actor_id: auth.context.userId,
+      p_import_id: parsed.data.importId,
+      p_rebates: parsed.data.rebates,
+    }),
+  );
+  // As the other preview steps: a failure says nothing was taken over.
+  if (error) return refusal(error, 'save_failed', 'previewWholesalerPrices: price preview failed');
+  const answer = pricesAnswerSchema.safeParse(data);
+  if (!answer.success) {
+    logError('previewWholesalerPrices: unexpected answer shape');
+    return { success: false, error: 'save_failed' };
+  }
+  return { success: true, prices: answer.data };
+}
+
+/**
  * Writes a previewed delivery to the supplier's catalog with the office's unit
- * mapping. The batch is the idempotency key: a confirm sent twice writes once
- * and answers the first result again.
+ * mapping, saves the office's rebates and records each own article's changed
+ * price from the delivery's date or today. The batch is the idempotency key:
+ * a confirm sent twice writes once and answers the first result again.
  */
 export async function confirmWholesalerImport(
   rawInput: ConfirmWholesalerImportInput,
@@ -189,6 +231,8 @@ export async function confirmWholesalerImport(
       p_actor_id: auth.context.userId,
       p_import_id: parsed.data.importId,
       p_unit_mapping: parsed.data.unitMapping,
+      p_rebates: parsed.data.rebates,
+      p_price_fingerprint: parsed.data.priceFingerprint,
     }),
   );
   if (error) return refusal(error, 'save_failed', 'confirmWholesalerImport: confirm failed');
@@ -198,6 +242,8 @@ export async function confirmWholesalerImport(
     return { success: false, error: 'save_failed' };
   }
   const { alreadyConfirmed, ...result } = answer.data;
+  // Also for a repeat: the first answer may have been lost before it refreshed the pages.
+  if (result.ownPricesChanged > 0) invalidateInventory();
   return { success: true, result, alreadyConfirmed };
 }
 

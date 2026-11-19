@@ -89,10 +89,10 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 `.github/workflows/ci.yml` runs on every PR to `main`, except a label change, each queue entry and every push to `main`. `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by the change-mode rules: a PR's diff against its merge base, a queue entry's against its base, a push's against the previous `main` commit unless a green queue run passed that tree. Every group runs on an unreadable diff, in a full run, and on a change to how every group installs, builds or runs (`TOOLING_INPUTS`, `runnerModules`).
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules: a PR's diff against its merge base, a queue entry's against its base, a push's against the previous `main` commit unless a green queue run passed that tree. Every group runs on an unreadable diff, a full run, and a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
 - **Drafts.** A draft PR runs no browser shard, and its `Check` fails while browser groups wait. `gh pr ready` runs them ([babysit a pull request](coderabbit.md#babysit-a-pull-request)).
 - **Full run and release gate.** A full run is `ci.yml` called with `full` from a `Full run` job, nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
-- **Shards.** Visual groups get their own shards; a full selection fills at most `MAX_SHARDS`, so other PRs keep most runners.
+- **Shards.** Visual groups get their own shards; a full selection fills at most `MAX_SHARDS`, a PR's run starts four at once.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails when the p90 runner wait exceeds its ceiling (`.github/scripts/ci-queue.sh`).
 - **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.

@@ -1,3 +1,4 @@
+import ts from 'typescript';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import { groupSelections } from './group-selection';
 import type { ChangeTrigger } from './change-triggers';
@@ -67,18 +68,65 @@ export function runnerModules(graph: ReadonlyMap<string, readonly string[]>): st
   return [...reached].filter((file) => RUNNER_ENTRY_POINTS.includes(file) || RUNNER_FOLDER.test(file));
 }
 
+/**
+ * The declarations of the runner's registries that hold only the rows a feature adds: test groups
+ * and scope prefixes, dialogs, phone routes. A row changes which groups exist or what they open, not
+ * how every group runs, so a change inside these alone plans by diff: a new group's spec selects
+ * it, the runner integration pilots run, and the SQL and static jobs take every registered group.
+ * What a diff misses runs in main's full run within hours. Every other statement of these modules
+ * stays runner logic. As runner logic, rows ran every browser group for 13 of 45 merged PRs
+ * (werk-flow/werkflow-planning#294).
+ */
+export const REGISTRY_ROWS: Readonly<Record<string, readonly string[]>> = {
+  'lib/testing/selection/test-groups.ts': ['TEST_SCOPE_PREFIXES', 'auditDefinitions', 'sqlDefinitions'],
+  'lib/testing/selection/dialog-inventory.ts': ['DIALOG_INVENTORY'],
+  'lib/testing/selection/mobile-route-inventory.ts': [
+    'MANAGER_PHONE_ROUTES',
+    'DYNAMIC_PHONE_ROUTES',
+    'PHONE_REDIRECTS',
+    'EMPLOYEE_PHONE_ROUTES',
+    'EMPLOYEE_WORK_PACKS',
+  ],
+};
+
+/** Whether a registry's two versions differ only inside its `REGISTRY_ROWS`; comments do not count. */
+export function changesOnlyRows(file: string, before: string, after: string): boolean {
+  const rows = REGISTRY_ROWS[file];
+  if (!rows) return false;
+  const logic = (source: string): string[] => {
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest);
+    return tree.statements.map((statement) => {
+      const [declaration, ...more] = ts.isVariableStatement(statement)
+        ? statement.declarationList.declarations
+        : [];
+      return declaration &&
+        !more.length &&
+        ts.isIdentifier(declaration.name) &&
+        rows.includes(declaration.name.text)
+        ? `rows ${declaration.name.text}: ${declaration.type?.getText(tree) ?? ''}`
+        : statement.getText(tree);
+    });
+  };
+  return JSON.stringify(logic(before)) === JSON.stringify(logic(after));
+}
+
 /** The visual groups render in the pinned Playwright image, which a runner pulls first, so they share shards of their own. */
 const VISUAL_GROUP = /^audit:visual(:|$)/;
 /** A visual shard holds about this many visual groups: a full selection's fourteen fill two. */
 const VISUAL_GROUPS_PER_SHARD = 7;
 
-/** A browser shard holds about this many groups; a typical change then finishes in one shard round. */
-const GROUPS_PER_SHARD = 4;
 /**
- * The account runs 40 jobs at once across every run (GitHub Pro), and a shard's setup takes about
- * as long as a typical shard's tests. A full selection fills this many shards, so it leaves the other pull
- * requests' runs most of the runners: six general shards and two visual ones, each with about 14 min
- * of tests (werk-flow/werkflow-planning#291, #294). A diff selection of up to 24 groups is not capped.
+ * A browser shard holds about this many groups. Its setup (disk, install, stack, Playwright) takes
+ * about 5 min, and a diff selection's group about 1 min, so the eleven critical journeys and lab
+ * groups of a product change share one shard: about 15 min, beside the 11 min of `Component
+ * contracts`, where three shards of four paid three setups for 2 to 4 min of tests each
+ * (werk-flow/werkflow-planning#294).
+ */
+const GROUPS_PER_SHARD = 12;
+/**
+ * A full selection fills this many shards: six general shards and two visual ones, each with about
+ * 11 to 31 min of tests (werk-flow/werkflow-planning#291, #294). Fewer would take the slowest shard
+ * past the Browser job's 45 min timeout. A diff selection of up to 72 general groups is not capped.
  */
 export const MAX_SHARDS = 8;
 
@@ -105,6 +153,8 @@ export function ciPlan(input: {
   fullRun: string | undefined;
   /** The output of `runnerModules`. */
   runnerModules: readonly string[];
+  /** The changed registries whose change `changesOnlyRows` holds to their rows. */
+  rowChanges: readonly string[];
 }): CiPlan {
   const browserGroups = input.groups.filter(
     (group) => isBrowser(group) && !group.files.some(isPerformanceSpec),
@@ -116,7 +166,9 @@ export function ciPlan(input: {
           .filter((group) => isBrowser(group) && group.files.some(isPerformanceSpec))
           .map((group) => ({ id: group.id, reason: `${input.fullRun}: its steps, untimed` }));
   const runner = new Set(input.runnerModules);
-  const tooling = input.changedFiles?.find((file) => TOOLING_INPUTS.test(file) || runner.has(file));
+  const tooling = input.changedFiles?.find(
+    (file) => (TOOLING_INPUTS.test(file) || runner.has(file)) && !input.rowChanges.includes(file),
+  );
   const fullReason =
     input.fullRun ??
     (input.changedFiles === undefined
