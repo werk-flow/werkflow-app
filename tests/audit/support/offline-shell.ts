@@ -13,6 +13,7 @@ import { openPage } from '../../golden/support/streamed-content';
 const OFFLINE_COPY = {
   title: 'Gerade kein Netz',
   retry: 'Erneut versuchen',
+  stillNoSignal: 'Immer noch kein Netz. Sobald du wieder Empfang hast, öffnet sich WerkFlow von selbst.',
 } as const;
 
 const REPOSITORY_ROOT = resolve(__dirname, '../../..');
@@ -35,6 +36,16 @@ export function offlineFallback(page: Page): Locator {
 
 export function offlineRetryButton(page: Page): Locator {
   return page.getByRole('button', { name: OFFLINE_COPY.retry });
+}
+
+/**
+ * Taps „Erneut versuchen“ without signal and waits for the page to say so in
+ * place. Only a page whose script runs answers the tap.
+ */
+export async function retryWithoutSignal(page: Page): Promise<void> {
+  await offlineRetryButton(page).click();
+  await expect(page.getByRole('main').getByRole('alert')).toHaveText(OFFLINE_COPY.stillNoSignal);
+  await expect(offlineRetryButton(page)).toBeEnabled();
 }
 
 /**
@@ -184,6 +195,7 @@ async function withProxyOrigin(
   appOrigin: string,
   intercept: Intercept,
   run: (origin: string) => Promise<void>,
+  rewriteHtml?: (html: string) => string,
 ): Promise<void> {
   const app = new URL(appOrigin);
   const server = createServer((incoming, outgoing) => {
@@ -194,11 +206,26 @@ async function withProxyOrigin(
         port: app.port,
         path: incoming.url,
         method: incoming.method,
-        headers: incoming.headers,
+        // A page to rewrite comes back uncompressed.
+        headers: rewriteHtml ? { ...incoming.headers, 'accept-encoding': 'identity' } : incoming.headers,
       },
       (answer) => {
-        outgoing.writeHead(answer.statusCode ?? 502, answer.headers);
-        answer.pipe(outgoing);
+        if (!rewriteHtml || !(answer.headers['content-type'] ?? '').includes('text/html')) {
+          outgoing.writeHead(answer.statusCode ?? 502, answer.headers);
+          answer.pipe(outgoing);
+          return;
+        }
+        const parts: Buffer[] = [];
+        answer.on('data', (part: Buffer) => parts.push(part));
+        answer.once('end', () => {
+          const html = rewriteHtml(Buffer.concat(parts).toString('utf8'));
+          const headers = { ...answer.headers };
+          // The rewritten page has its own length.
+          delete headers['content-length'];
+          delete headers['transfer-encoding'];
+          outgoing.writeHead(answer.statusCode ?? 502, headers);
+          outgoing.end(html);
+        });
       },
     );
     upstream.once('error', () => outgoing.destroy());
@@ -255,11 +282,20 @@ export async function withDeployableOrigin(
 const PROTECTION_COOKIE = '_vercel_jwt';
 
 /**
+ * Vercel serves a page's images of public/ with the deployment's query
+ * (`/logo-text-light.svg?dpl=dpl_…`), where the test server names the plain path.
+ */
+function withDeploymentQuery(html: string): string {
+  return html.replace(/(\ssrc="\/(?:[\w-]+\/)*[\w-]+\.(?:svg|png))"/g, '$1?dpl=dpl_stand_in"');
+}
+
+/**
  * Runs `run` against a stand-in for a deployment behind Vercel Authentication
  * (staging). A request without the protection cookie gets the answer Vercel
  * gives it: a redirect to the sign-in on another host. A request with the
- * cookie reaches the test server unchanged. The page's context holds the
- * cookie, as the installed app does once its person passed the sign-in.
+ * cookie reaches the test server, and its pages name their images as Vercel
+ * does (`withDeploymentQuery`). The page's context holds the cookie, as the
+ * installed app does once its person passed the sign-in.
  */
 export async function withProtectedOrigin(
   page: Page,
@@ -273,10 +309,15 @@ export async function withProtectedOrigin(
     outgoing.end();
     return true;
   };
-  await withProxyOrigin(appOrigin, protection, async (origin) => {
-    await page.context().addCookies([{ name: PROTECTION_COOKIE, value: 'passed', url: origin }]);
-    await run(origin);
-  });
+  await withProxyOrigin(
+    appOrigin,
+    protection,
+    async (origin) => {
+      await page.context().addCookies([{ name: PROTECTION_COOKIE, value: 'passed', url: origin }]);
+      await run(origin);
+    },
+    withDeploymentQuery,
+  );
 }
 
 /**
@@ -284,7 +325,8 @@ export async function withProtectedOrigin(
  * network, closes every page, as swiping the app away does, and stops the
  * service worker, as the phone does once no page of the app runs. Then it
  * opens the manifest's start URL in a new page, so the navigation starts the
- * worker, and hands that page to `inStartedApp`. Chromium only.
+ * worker, asserts that every script, stylesheet, image and font of the page
+ * came from the shell, and hands that page to `inStartedApp`. Chromium only.
  */
 export async function coldStartWithoutSignal(
   page: Page,
@@ -323,9 +365,25 @@ export async function coldStartWithoutSignal(
   await workers.detach();
   // Only the worker's cache may serve the shell, as on a phone whose HTTP cache was cleared.
   await bypassHttpCache(started);
+  const missing: string[] = [];
+  started.on('requestfailed', (request) => {
+    if (PAGE_FILES.has(request.resourceType())) missing.push(new URL(request.url()).pathname);
+  });
   await started.goto(new URL(startUrl, origin).href);
+  expect(missing, 'every file the offline page loads comes from the shell').toEqual([]);
+  expect(
+    await started.evaluate(() =>
+      [...document.images]
+        .filter((image) => !image.complete || image.naturalWidth === 0)
+        .map((image) => image.src),
+    ),
+    'every image of the offline page shows',
+  ).toEqual([]);
   await inStartedApp(started);
 }
+
+/** The files a page loads for itself; the browser's own requests (manifest, favicon) are not the page's. */
+const PAGE_FILES = new Set(['script', 'stylesheet', 'image', 'font']);
 
 /**
  * Runs the update check a phone runs when it opens the app after a

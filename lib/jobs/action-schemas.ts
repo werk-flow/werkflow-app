@@ -44,6 +44,8 @@ const jobFieldsShape = {
   clientId: blankableUuidSchema.nullish(),
   projectId: blankableUuidSchema.nullish(),
   jobNumber: z.string().max(100).nullish(),
+  // jobs_source_number_check: trimmed, at most 100 characters; empty means none.
+  sourceNumber: z.string().trim().max(100).nullish(),
   priority: z.enum(Constants.public.Enums.job_priority).optional(),
   plannedWorkingMinutes: minutesSchema.nullish(),
   location: z.string().max(1000).nullish(),

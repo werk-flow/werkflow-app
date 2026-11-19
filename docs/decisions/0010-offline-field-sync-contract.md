@@ -362,3 +362,46 @@ Decided for werk-flow/werkflow-planning#407. It closes the open point of the ame
 - **An ended photo upload is an interruption.** The draft waits, and the photo goes in the next send.
 - **The sender owns its signal.** It does not use the runner's: a job page carries no runner code at start, and loading it lazily costs the job open a request or bytes it has no margin for.
 - **Open: the upload's ticket and registration.** They are Server Actions, which take no abort signal yet. One that hangs still holds the send until the browser ends it.
+
+## Amendment 2026-11-14: the offline page loads every file from the shell
+
+Decided for werk-flow/werkflow-planning#22 after the iPhone re-test of the cold start: the installed app opened WerkFlow's offline page, but showed „Gerade kein Netz“ instead of the stored day, a broken logo, and an „Erneut versuchen“ that did nothing. The worker answered a page's files from its shell only when it remembered answering that page with the fallback, or when the device reported no network. A cold start can leave it neither: iOS may stop the worker between the navigation and the page's file requests, and the phone may still report a network. The files then went to the dead network and the page's script never ran. Vercel also names each image of `public/` with the deployment's query (`?dpl=…`), which the shell stores without it, so the logo missed the shell in any case.
+
+- **A shell file comes from the shell, for any page.** A request for a build file (`/_next/static/…`, named by its content) or an image of `public/` is answered from the shell when the shell holds it, matched without its query, and from the network otherwise. Every other request goes to the network untouched; the cache still holds only what the worker fetched itself.
+- **„Erneut versuchen“ works without the page's script.** It is a form that reloads the opened address. With the script it shows its spinner at once, asks the server for the manifest with a `HEAD` request the worker never answers, reloads into the app on any answer, and otherwise says in place that there is still no signal. The `online` event runs the same attempt, also while the page shows the stored day, so the app replaces the page once the server answers. A phone reports a network before the network carries requests, so after `online` the page checks again for about 15 seconds while the phone still reports one; the button shows only its own check, so it never blocks a tap. The page's start checks once when the phone already reports a network, because the signal can return before the page listens; after a reload that came back to the offline page, the start waits 30 seconds, so a flaky signal never reloads it in a loop.
+- **Not proven off the phone.** Playwright's WebKit and Chromium hydrate the cold-started page with the earlier worker too; which of the two signs the iPhone lost is not reproducible there. Only a real iPhone confirms the cold start.
+
+## Amendment 2026-11-14: one guided correction for a late chain of a session the server holds
+
+Decided for werk-flow/werkflow-planning#404. It replaces the order of the 2026-11-12 amendment "a late chain of a session that still runs" for a chain whose first correction day holds a captured end.
+
+- **What the correction is.** An `edit` of the session's segment that replaces the end the server recorded with the captured end. It is never an addition, so the span counts once: as the approved edit. An edit of an end on a segment that runs over several days ends it there, and its later days go (`mergeCorrectionProposal`).
+- **The order.** (1) A session that still runs ends online with `end`, at the server's time, and the flow says so; a session the server moved to recovery ends with `recover_end`. Nothing of this step is kept on the phone. (2) The phone reads the person's entries and opens „Zeit korrigieren“ on the last end of the segment its kept clock showed running when the chain began, if that segment ran past the captured end, with the captured end prefilled. Never another segment: another device may have ended the session and started another. A chain whose kept clock names no segment keeps the 2026-11-12 order. (3) The events the correction covers leave the phone only when the form reports a filed `edit`. A request of another kind, which the form lets the person choose, leaves the recorded end as it is, so the events stay and the phone says so.
+- **Failures.** A refused or lost end, a failed read, or no matching segment keeps every event and names the step. A session that ended after step 1 goes on at step 2.
+- **Without a captured end** the phone keeps the 2026-11-12 order.
+
+## Amendment 2026-11-15: the guided correction covers only a late end
+
+Decided for werk-flow/werkflow-planning#404. It narrows the amendment of 2026-11-14 "one guided correction for a late chain of a session the server holds".
+
+- **Only the end.** The guided correction covers a chain whose first correction day holds the session's end and nothing before it. Its one `edit` replaces only the recorded end, so a switch before that end, such as a „Pause“ and its return to work, would be dropped, and its break would count as work once the events leave the phone.
+- **Every other chain of such a session** keeps the order of 2026-11-12, where the person sees every captured time and files the correction by hand.
+
+## Amendment 2026-11-14: what the clock shows while the connection changes
+
+Owner requirement (werk-flow/werkflow-planning#22): a connection change never shows an older clock state, not even for a moment on the way to the server's answer. It changes what the clock shows, never what is recorded. `lib/field-sync/device/shown-clock-rule.ts` owns the rule and `shown-clock.ts` holds it across renders; the clock's provider and dock read only from them.
+
+- **The person's own tap shows at once.** A kept action's echo stands apart from the server's clock: a clock read while it waits never replaces it.
+- **The server's answer settles.** When the phone's unsent actions settle, sent or stopped, the clock keeps what it showed until a clock read that started after that moment answers. Then the server's state, and a stopped chain's badge, show in one step. A read that fails with signal shows its failure in the clock's place, also once the signal goes again, and never promotes the server's older clock; a read that fails without signal is no answer. The clock reads again when the signal returns. While it waits with signal, which is short, no clock action starts. Without signal, the clock stays usable from the state it shows: a tap goes into the outbox like any offline tap and goes on from what the sent actions left, and a wrong guess stops the chain with its badge and correction path.
+- **One calm marker.** „Wartet auf Netz“ while actions wait without signal, „Wird übertragen“ while they wait with signal or their answer is due, „Ohne Netz“ for a confirmed clock without signal. The phone's own report of its network decides the words, never the state shown.
+- **A start that may hold unsent work** shows no clock until the outbox answered, so the server's clock from before the unsent actions never shows, and no clock action starts before then: an action is built only from a clock the person sees. When the outbox's code cannot load, or the device store does not answer within one bounded wait, the clock's failure shows with a retry that asks the outbox again.
+- **Today's view** has no state of its own that the connection changes: the page without signal reads the stored day once, and the prerendered no-signal page stands until that read answers, because it must work without its script.
+
+## Amendment 2026-11-17: an unreadable clock record set aside
+
+Decided for werk-flow/werkflow-planning#407. It adds a way on from a kept clock action this version cannot read, besides its deletion. It sharpens the time outbox's invariants 3, 5 and 6.
+
+- **Set aside.** The clock offers „Beiseitelegen“ on an unreadable stop. The record moves, unchanged, from the kept store to a set-aside key of its own (`kept-clock-actions.ts`), outside the prefix every take-in reads, and stops nothing any more: the person's later taps are taken in and sent as their own chain. An action whose online call may still run stays a stop, because its page may still record it or keep it again.
+- **Never sent.** No version takes a set-aside record in or sends it, also a later one that can read it: it would reach the server after the taps that followed it. Its time counts once: the server's record stands, and the person files the audited correction when time is missing.
+- **Kept and shown.** A set-aside record stays on the phone and shows in the clock with its tap time until its person deletes it. „Für den Support kopieren“ copies its key and stored record, which hold ids and times and no names.
+- **Deletion.** The clock's „Löschen“ and a session end's discard delete exactly the set-aside records they showed. A session end names them, so no session ends over them unasked. The wipe never names them, as it never names the kept store.
