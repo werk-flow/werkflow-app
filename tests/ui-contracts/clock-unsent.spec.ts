@@ -7,36 +7,19 @@ import {
   CLOCKED_OUT_STATE,
   holdDeviceStore,
   mountClock,
+  recorded,
   setNetwork,
   startWithoutNetwork,
   unsentBadge,
   unsentOnDevice,
   unsentSection,
   withoutSentAt,
-  type Envelope,
-  type Server,
 } from './clock-unsent-support';
 
 // The clock's states for time events a phone holds unsent, and the choices a
 // sign-out offers over them (werk-flow/werkflow-planning#319; decision record
 // 0010, the amendment "the time outbox"). The server is the route in
 // clock-unsent-support.ts: every envelope it received and the answer it gives.
-
-/**
- * What the server recorded: each operation id once, as it first arrived. A send in flight when
- * `online` fires is ended and sent again (decision record 0010, "the network's return ends a send
- * that hangs"); one that had reached the server arrives twice and is recorded once. A second
- * arrival must be the same envelope.
- */
-function recorded(server: Server): Envelope[] {
-  const first = new Map<string, Envelope>();
-  for (const envelope of server.sent) {
-    const earlier = first.get(envelope.operationId);
-    if (earlier) expect(withoutSentAt(envelope)).toEqual(withoutSentAt(earlier));
-    else first.set(envelope.operationId, envelope);
-  }
-  return [...first.values()];
-}
 
 test('a page whose device holds nothing unsent never runs the outbox code at its start', async ({ page }) => {
   await mountClock(page, CLOCKED_OUT_STATE);

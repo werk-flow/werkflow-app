@@ -101,9 +101,9 @@ test('history navigation cancels a queued search and new pagination uses that UR
   await page.clock.runFor(251);
   expect(await page.evaluate(() => window.listNavigationContract.requests.length)).toBe(0);
   await page.getByRole('button', { name: 'Zweite Seite laden' }).click();
-  expect(await page.evaluate(() => window.listNavigationContract.requests[0])).toBe(
-    '/ui-contracts?view=folders&page=2',
-  );
+  await expect
+    .poll(() => page.evaluate(() => window.listNavigationContract.requests[0]))
+    .toBe('/ui-contracts?view=folders&page=2');
 });
 
 test('another control replaces an unfinished request and cancels its queued follow-up', async ({ page }) => {
@@ -118,9 +118,9 @@ test('another control replaces an unfinished request and cancels its queued foll
     textInDom(page, 'Die Liste wurde noch nicht aktualisiert. Bitte aktualisiere die Seite.'),
   ).toHaveCount(0);
   await page.getByRole('button', { name: 'Zweite Seite laden' }).click();
-  expect(await page.evaluate(() => window.listNavigationContract.requests[1])).toBe(
-    '/ui-contracts?view=work&page=2',
-  );
+  await expect
+    .poll(() => page.evaluate(() => window.listNavigationContract.requests[1]))
+    .toBe('/ui-contracts?view=work&page=2');
 });
 
 test('pager retains a distinct count announcement and truthful loading feedback while a page is pending', async ({
