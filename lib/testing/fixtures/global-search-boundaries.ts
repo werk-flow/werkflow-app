@@ -19,6 +19,7 @@ import {
   signInAs,
   tableRows,
 } from './action-boundary-world';
+import { ID_BATCH_SIZE } from '@/lib/supabase/query-batches';
 
 type Row = Record<string, unknown>;
 
@@ -104,6 +105,7 @@ function job(id: string, organizationId: string, title: string, assignee: string
       title,
       description: null,
       status: 'nicht_bearbeitet',
+      planned_date: null,
       created_at: createdAt,
       updated_at: createdAt,
     },
@@ -247,6 +249,8 @@ const world = installActionWorld({
 for (const table of NEVER_READ) world.failingTables.add(table);
 
 const failingFunctions = new Set<string>();
+/** The matcher's answer to the batch without the caller's first Anlage: as it is, failed or malformed. */
+let otherMatchBatch: 'answer' | 'error' | 'malformed' = 'answer';
 const matches = (value: unknown): boolean =>
   typeof value === 'string' && value.toLowerCase().includes(query.toLowerCase());
 const limited = <T>(rows: T[], limit: unknown): T[] => rows.slice(0, Number(limit));
@@ -279,6 +283,18 @@ function jobEntriesPage(args: Row) {
     statusCounts: { alle: rows.length, not_started: 0, in_progress: 0, interrupted: 0 },
   });
   return { active: section(entries), parked: section([]), archived: section([]) };
+}
+
+function matchInstalledEquipment(args: Row) {
+  const passed = Array.isArray(args.p_equipment_ids) ? args.p_equipment_ids : [];
+  if (!passed.includes(ids.ownEquipment) && otherMatchBatch === 'error')
+    return { data: null, error: { message: 'private provider detail' } };
+  if (!passed.includes(ids.ownEquipment) && otherMatchBatch === 'malformed')
+    return { data: ['keine-id'], error: null };
+  const matched = inOrganization('installed_equipment', args.p_organization_id)
+    .filter((row) => passed.includes(row.id) && row.voided_at === null && matches(row.name))
+    .map((row) => row.id);
+  return { data: matched, error: null };
 }
 
 world.rpc = ({ name, args }) => {
@@ -350,13 +366,7 @@ world.rpc = ({ name, args }) => {
     return { data: { total: rows.length, hasAny: true, rows }, error: null };
   }
   if (name === 'list_equipment_page') return { data: { total: 0, hasAny: false, ids: [] }, error: null };
-  if (name === 'match_installed_equipment') {
-    const passed = Array.isArray(args.p_equipment_ids) ? args.p_equipment_ids : [];
-    const matched = inOrganization('installed_equipment', args.p_organization_id)
-      .filter((row) => passed.includes(row.id) && row.voided_at === null && matches(row.name))
-      .map((row) => row.id);
-    return { data: matched, error: null };
-  }
+  if (name === 'match_installed_equipment') return matchInstalledEquipment(args);
   if (name === 'list_document_page') return { data: { total: 0, ids: [] }, error: null };
   throw new Error(`The search called ${name}`);
 };
@@ -561,5 +571,46 @@ world.failingTables.delete('installed_equipment_work_links');
 const refused = await search({ sources: ['kunden', 'anfragen', 'dokumente'] });
 assert.deepEqual(refused, { success: true, query, groups: [] });
 assert.equal(world.rpcCalls.length, 0, 'an employee reads no customer, request or document');
+
+// The matcher reads the caller's Anlagen in id batches: every batch counts, and one that fails or
+// answers malformed fails the Anlagen group, never shortens it.
+const batchEquipmentIds = Array.from(
+  { length: ID_BATCH_SIZE },
+  (_, index) => `3b000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+);
+for (const [index, id] of batchEquipmentIds.entries()) {
+  tableRows(world, 'installed_equipment').push(equipment(id, ORGANIZATION_A, `Gastherme Lindenhof ${index}`));
+  tableRows(world, 'installed_equipment_work_links').push({
+    id: `3c000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    organization_id: ORGANIZATION_A,
+    job_id: ids.assignedJob,
+    equipment_id: id,
+  });
+}
+const batched = await search({ sources: ['anlagen'] });
+const batchCalls = world.rpcCalls.filter((call) => call.name === 'match_installed_equipment');
+assert.ok(batchCalls.length > 1, 'the matcher gets every Anlage in one call');
+for (const call of batchCalls)
+  assert.ok(
+    Array.isArray(call.args.p_equipment_ids) && call.args.p_equipment_ids.length <= ID_BATCH_SIZE,
+    'a matcher call carries more ids than one batch',
+  );
+assert.equal(batched.success, true);
+if (!batched.success) throw new Error('unreachable');
+const [batchedGroup] = batched.groups;
+assert.ok(batchedGroup?.status === 'loaded', 'the batched Anlagen search failed');
+assert.equal(batchedGroup.total, ID_BATCH_SIZE + 1, 'a batch of matches went missing');
+for (const answer of ['error', 'malformed'] as const) {
+  otherMatchBatch = answer;
+  const partial = await search({ sources: ['anlagen'] });
+  assert.equal(partial.success, true);
+  if (!partial.success) throw new Error('unreachable');
+  assert.deepEqual(
+    partial.groups.map((group) => [group.kind, group.status]),
+    [['anlagen', 'failed']],
+    `the ${answer} matcher batch left the Anlagen group loaded`,
+  );
+}
+otherMatchBatch = 'answer';
 
 console.info('global search boundaries hold');

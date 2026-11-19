@@ -4,7 +4,7 @@ import { logReadErrors, logReadFailure } from '@/lib/data/read-request-cache';
 import { compareRecordNumbers } from '@/lib/format/record-number';
 import type { ActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/supabase/database.types';
+import { Constants, type Database } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
@@ -16,7 +16,6 @@ import { z } from '@/lib/zod';
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 type EquipmentTableRow = Database['public']['Tables']['installed_equipment']['Row'];
-type JobStatus = Database['public']['Enums']['job_status'];
 
 const LINKED_EQUIPMENT_COLUMNS =
   'id, equipment_number, name, category, subtype, state, manufacturer, model, location_detail, source_number';
@@ -101,13 +100,23 @@ export type AssignedEquipmentHit = {
   job: HitJob;
 };
 
+// The rows this search reads, parsed at the boundary; a malformed one is a load failure.
 const matchedIdsSchema = z.array(uuidSchema);
+const assignmentRowsSchema = z.array(z.object({ job_id: uuidSchema }));
+const hitJobRowsSchema = z.array(
+  z.object({
+    id: uuidSchema,
+    job_number: z.string().nullable(),
+    project_id: uuidSchema.nullable(),
+    status: z.enum(Constants.public.Enums.job_status),
+    planned_date: z.string().nullable(),
+  }),
+);
+type HitJobRow = z.infer<typeof hitJobRowsSchema>[number];
+const hitProjectRowsSchema = z.array(z.object({ id: uuidSchema, project_number: z.string().nullable() }));
 
 /** Open before finished, then the latest planned day, then the number. */
-function jobOrder(
-  left: { status: JobStatus; planned_date: string | null; job_number: string | null },
-  right: { status: JobStatus; planned_date: string | null; job_number: string | null },
-): number {
+function jobOrder(left: HitJobRow, right: HitJobRow): number {
   const finished = Number(left.status === 'fertig') - Number(right.status === 'fertig');
   if (finished !== 0) return finished;
   const planned = (right.planned_date ?? '').localeCompare(left.planned_date ?? '');
@@ -124,11 +133,12 @@ async function readHitJobs(admin: AdminClient, organizationId: string, jobIds: s
       .eq('organization_id', organizationId)
       .in('id', [...batch]),
   );
-  if (jobs.error) {
-    logReadErrors('findAssignedEquipment: jobs read failed', jobs.error);
+  const jobRows = hitJobRowsSchema.safeParse(jobs.data);
+  if (jobs.error || !jobRows.success) {
+    logReadFailure('findAssignedEquipment: jobs read failed', { code: jobs.error?.code ?? 'malformed_jobs' });
     throw new Error('installed_equipment_load_failed');
   }
-  const projectIds = [...new Set(jobs.data.flatMap((job) => (job.project_id ? [job.project_id] : [])))];
+  const projectIds = [...new Set(jobRows.data.flatMap((job) => (job.project_id ? [job.project_id] : [])))];
   const projects = await readInBatches(projectIds, (batch) =>
     admin
       .from('projects')
@@ -136,12 +146,15 @@ async function readHitJobs(admin: AdminClient, organizationId: string, jobIds: s
       .eq('organization_id', organizationId)
       .in('id', [...batch]),
   );
-  if (projects.error) {
-    logReadErrors('findAssignedEquipment: projects read failed', projects.error);
+  const projectRows = hitProjectRowsSchema.safeParse(projects.data);
+  if (projects.error || !projectRows.success) {
+    logReadFailure('findAssignedEquipment: projects read failed', {
+      code: projects.error?.code ?? 'malformed_projects',
+    });
     throw new Error('installed_equipment_load_failed');
   }
-  const projectNumbers = new Map(projects.data.map((project) => [project.id, project.project_number]));
-  return jobs.data.toSorted(jobOrder).map(
+  const projectNumbers = new Map(projectRows.data.map((project) => [project.id, project.project_number]));
+  return jobRows.data.toSorted(jobOrder).map(
     (job): HitJob => ({
       id: job.id,
       jobNumber: job.job_number,
@@ -150,6 +163,38 @@ async function readHitJobs(admin: AdminClient, organizationId: string, jobIds: s
         : null,
     }),
   );
+}
+
+/**
+ * The ids among these Anlagen that match the search, by the Anlagen list's rule
+ * (`public.match_installed_equipment`), one call per id batch. Throws when a
+ * batch fails or answers malformed: a partial match would hide hits.
+ */
+async function matchEquipment(
+  admin: AdminClient,
+  organizationId: string,
+  equipmentIds: readonly string[],
+  query: string,
+): Promise<Set<string>> {
+  const matched = await readInBatches(equipmentIds, async (batch) => {
+    const result = await admin.rpc('match_installed_equipment', {
+      p_organization_id: organizationId,
+      p_equipment_ids: [...batch],
+      p_search: query,
+    });
+    const ids = matchedIdsSchema.safeParse(result.data);
+    if (result.error || !ids.success)
+      return {
+        data: null,
+        error: { message: 'match failed', code: result.error?.code ?? 'malformed_match' },
+      };
+    return { data: ids.data, error: null };
+  });
+  if (matched.error) {
+    logReadFailure('findAssignedEquipment: match failed', { code: matched.error.code });
+    throw new Error('installed_equipment_load_failed');
+  }
+  return new Set(matched.data);
 }
 
 /**
@@ -176,26 +221,24 @@ export async function findAssignedEquipment(
         .range(from, to),
     LIST_ROW_CAP,
   );
-  if (assignments.error) {
-    logReadErrors('findAssignedEquipment: job_assignments read failed', assignments.error);
+  const assignmentRows = assignmentRowsSchema.safeParse(assignments.data);
+  if (assignments.error || !assignmentRows.success) {
+    logReadFailure('findAssignedEquipment: job_assignments read failed', {
+      code: assignments.error?.code ?? 'malformed_assignments',
+    });
     throw new Error('installed_equipment_load_failed');
   }
   const linked = await readLinkedEquipment(admin, organizationId, [
-    ...new Set(assignments.data.map((assignment) => assignment.job_id)),
+    ...new Set(assignmentRows.data.map((assignment) => assignment.job_id)),
   ]);
   if (!linked) throw new Error('installed_equipment_load_failed');
   if (linked.equipment.length === 0) return { hits: [], total: 0 };
-  const matched = await admin.rpc('match_installed_equipment', {
-    p_organization_id: organizationId,
-    p_equipment_ids: linked.equipment.map((row) => row.id),
-    p_search: query,
-  });
-  const matchedIds = matchedIdsSchema.safeParse(matched.data);
-  if (matched.error || !matchedIds.success) {
-    logReadFailure('findAssignedEquipment: match failed', { code: matched.error?.code ?? 'malformed_match' });
-    throw new Error('installed_equipment_load_failed');
-  }
-  const matchedSet = new Set(matchedIds.data);
+  const matchedSet = await matchEquipment(
+    admin,
+    organizationId,
+    linked.equipment.map((row) => row.id),
+    query,
+  );
   const matches = linked.equipment
     .filter((row) => matchedSet.has(row.id))
     .toSorted((left, right) => compareRecordNumbers(left.equipment_number, right.equipment_number));
