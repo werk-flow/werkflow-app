@@ -26,13 +26,14 @@ export type WorkerStartClockView =
     };
 
 /**
- * Whether the totals belong to today: the state's own instant is today, and so is the server's last
- * confirmed state, since an action echoed after midnight moves the instant but carries the
- * previous day's totals forward until the server answers.
+ * Whether the totals belong to today: the state's own instant is today, and the server confirmed a
+ * state of today. An action echoed after midnight moves the instant but carries the previous day's
+ * totals forward; without any confirmed state (a failed first read, an action kept on the phone)
+ * the totals are only the device's projection. Either way no hours show as today's.
  */
 function totalsOfToday(state: LiveClockState, confirmed: LiveClockState | null, today: string): boolean {
   const isToday = (instant: string): boolean => formatBerlinLocalDate(instant) === today;
-  return isToday(state.fetchedAt) && (confirmed === null || isToday(confirmed.fetchedAt));
+  return confirmed !== null && isToday(confirmed.fetchedAt) && isToday(state.fetchedAt);
 }
 
 /**
@@ -43,7 +44,7 @@ function totalsOfToday(state: LiveClockState, confirmed: LiveClockState | null, 
 export function workerStartClockView(
   clock: {
     state: LiveClockState | null;
-    /** The clock as the server last confirmed it: an echoed action carries its totals forward. */
+    /** The clock as the server last confirmed it; null before any read succeeded. */
     confirmed: LiveClockState | null;
     isReady: boolean;
     statusError: string | null;

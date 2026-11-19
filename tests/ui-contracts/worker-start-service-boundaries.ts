@@ -12,8 +12,8 @@ type Scope = { userId: string; organizationId: string; role: 'employee' | 'buero
 
 type ClockView = {
   state: LiveClockState | null;
-  /** The server's last confirmed clock; without one, the state itself, as when nothing was echoed. */
-  confirmed?: LiveClockState | null;
+  /** The clock as the server last confirmed it; null before any read succeeded. */
+  confirmed: LiveClockState | null;
   isReady: boolean;
   statusError: string | null;
 };
@@ -42,7 +42,7 @@ declare global {
 
 const savedListeners = new Set<() => void>();
 const changeListeners = new Set<() => void>();
-let clock: ClockView = { state: null, isReady: false, statusError: null };
+let clock: ClockView = { state: null, confirmed: null, isReady: false, statusError: null };
 let scope: Scope = {
   userId: '9b000000-0000-4000-8000-000000000001',
   organizationId: '9b000000-0000-4000-8000-0000000000a1',
@@ -101,9 +101,8 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-export function useClockState(): ClockView & { confirmed: LiveClockState | null } {
-  const current = useSyncExternalStore(subscribe, () => clock);
-  return { ...current, confirmed: current.confirmed ?? current.state };
+export function useClockState(): ClockView {
+  return useSyncExternalStore(subscribe, () => clock);
 }
 
 export function useAttentionCounts(): AttentionCounts {

@@ -286,7 +286,8 @@ test('a running clock shows what runs since when and today’s working time up t
   const clock = MAIN(page).getByTestId('worker-start-clock');
   await expect(clock).toHaveAttribute('href', '/zeiterfassung');
   await page.evaluate(
-    (state) => window.workerStartContract.setClock({ state, isReady: true, statusError: null }),
+    (state) =>
+      window.workerStartContract.setClock({ state, confirmed: state, isReady: true, statusError: null }),
     RUNNING_CLOCK_STATE,
   );
   // 30 recorded minutes and 30 running ones up to the state's 10:30.
@@ -300,14 +301,20 @@ test('a stopped clock shows today’s working time, and an unreachable clock no 
   await openStart(page, { stored: EMPTY_DAY }, CLOCK_DAY);
   const clock = MAIN(page).getByTestId('worker-start-clock');
   await page.evaluate(
-    (state) => window.workerStartContract.setClock({ state, isReady: true, statusError: null }),
+    (state) =>
+      window.workerStartContract.setClock({ state, confirmed: state, isReady: true, statusError: null }),
     STOPPED_CLOCK,
   );
   await expect(clock).toContainText('Du bist nicht eingestempelt.');
   await expect(clock).toContainText('Heute gearbeitet: 7 Std. 32 Min.');
 
   await page.evaluate(() =>
-    window.workerStartContract.setClock({ state: null, isReady: false, statusError: 'Netzwerkfehler' }),
+    window.workerStartContract.setClock({
+      state: null,
+      confirmed: null,
+      isReady: false,
+      statusError: 'Netzwerkfehler',
+    }),
   );
   await expect(clock).toContainText('Die Uhr ist gerade nicht erreichbar.');
   await expect(clock).not.toContainText('gearbeitet:');
@@ -318,7 +325,8 @@ test('a clock state of the day before shows no hours as today’s', async ({ pag
   await openStart(page, { stored: EMPTY_DAY }, '2026-09-13T06:00:00Z');
   const clock = MAIN(page).getByTestId('worker-start-clock');
   await page.evaluate(
-    (state) => window.workerStartContract.setClock({ state, isReady: true, statusError: null }),
+    (state) =>
+      window.workerStartContract.setClock({ state, confirmed: state, isReady: true, statusError: null }),
     STOPPED_CLOCK,
   );
   await expect(clock).toContainText('Deine Stunden von heute siehst du in der Zeiterfassung.');
@@ -341,6 +349,20 @@ test('an action echoed after midnight shows no hours until the server confirms t
       confirmed: STOPPED_CLOCK,
     },
   );
+  await expect(clock).toContainText('Deine Stunden von heute siehst du in der Zeiterfassung.');
+  await expect(clock).not.toContainText('gearbeitet:');
+});
+
+test('a clock the server never confirmed shows no hours, only its state', async ({ page }) => {
+  // The first read failed, and an action kept on the phone moves the device's projection.
+  await openStart(page, { stored: EMPTY_DAY }, CLOCK_DAY);
+  const clock = MAIN(page).getByTestId('worker-start-clock');
+  await page.evaluate(
+    (state) =>
+      window.workerStartContract.setClock({ state, confirmed: null, isReady: true, statusError: null }),
+    RUNNING_CLOCK_STATE,
+  );
+  await expect(clock).toContainText('Du arbeitest gerade. Seit 10:00 Uhr.');
   await expect(clock).toContainText('Deine Stunden von heute siehst du in der Zeiterfassung.');
   await expect(clock).not.toContainText('gearbeitet:');
 });
