@@ -32,6 +32,7 @@ export type CreateJobFormValues = {
   clientId: string;
   projectId: string;
   jobNumber: string;
+  sourceNumber: string;
   priority: JobPriority;
   plannedDate: Date | undefined;
   plannedTime: string;
@@ -53,6 +54,7 @@ export function buildCreateJobInput(
     clientId,
     projectId,
     jobNumber,
+    sourceNumber,
     priority,
     plannedDate,
     plannedTime,
@@ -75,6 +77,7 @@ export function buildCreateJobInput(
     ...(clientId ? { clientId } : {}),
     ...(projectId ? { projectId } : {}),
     ...(jobNumber.trim() ? { jobNumber: jobNumber.trim() } : {}),
+    ...(sourceNumber.trim() ? { sourceNumber: sourceNumber.trim() } : {}),
     priority,
     ...(plannedDate ? { plannedDate: toLocalDateString(plannedDate) } : {}),
     ...(plannedTime ? { plannedTime } : {}),

@@ -2149,6 +2149,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -2185,6 +2186,7 @@ export type Database = {
           parent_equipment_id?: string | null;
           predecessor_equipment_id?: string | null;
           site_id: string;
+          source_number?: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype?:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -2221,6 +2223,7 @@ export type Database = {
           parent_equipment_id?: string | null;
           predecessor_equipment_id?: string | null;
           site_id?: string;
+          source_number?: string | null;
           state?: Database["public"]["Enums"]["installed_equipment_state"];
           subtype?:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -4691,6 +4694,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -4717,6 +4721,7 @@ export type Database = {
           priority?: Database["public"]["Enums"]["job_priority"];
           project_id?: string | null;
           site_id?: string | null;
+          source_number?: string | null;
           status?: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at?: string;
@@ -4743,6 +4748,7 @@ export type Database = {
           priority?: Database["public"]["Enums"]["job_priority"];
           project_id?: string | null;
           site_id?: string | null;
+          source_number?: string | null;
           status?: Database["public"]["Enums"]["job_status"];
           title?: string;
           updated_at?: string;
@@ -15987,6 +15993,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16040,6 +16047,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16192,6 +16200,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -16420,6 +16429,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -16492,6 +16502,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16543,6 +16554,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16718,6 +16730,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -17938,6 +17951,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -19411,6 +19425,7 @@ export type Database = {
               parent_equipment_id: string | null;
               predecessor_equipment_id: string | null;
               site_id: string;
+              source_number: string | null;
               state: Database["public"]["Enums"]["installed_equipment_state"];
               subtype:
                 | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -19467,6 +19482,7 @@ export type Database = {
               parent_equipment_id: string | null;
               predecessor_equipment_id: string | null;
               site_id: string;
+              source_number: string | null;
               state: Database["public"]["Enums"]["installed_equipment_state"];
               subtype:
                 | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20166,6 +20182,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20221,6 +20238,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20697,6 +20715,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20942,6 +20961,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -20995,6 +21015,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -21419,6 +21440,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -21495,6 +21517,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -21546,6 +21569,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
