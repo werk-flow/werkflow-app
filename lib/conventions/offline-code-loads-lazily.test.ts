@@ -40,6 +40,7 @@ const UNSENT_WORK_MODULES: readonly string[] = [
   'components/clock-unsent-events.tsx',
   'components/clock-unsent-list.tsx',
   'components/clock-unsent-replacement.tsx',
+  'components/clock-unsent-set-aside.tsx',
   'components/shared/unsent-work-prompt.tsx',
   'lib/field-sync/device/clock-device.ts',
   'lib/field-sync/device/clock-outbox.ts',

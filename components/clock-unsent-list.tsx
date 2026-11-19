@@ -47,7 +47,7 @@ const STOPPED_REASONS: Record<StoppedStatus, (code: string | null) => string> = 
   correction: () =>
     'Diese Zeiten sind älter als 24 Stunden und werden nicht mehr automatisch erfasst. Beantrage eine Zeitkorrektur, das Büro prüft sie.',
   unreadable: () =>
-    'Eine Stempelzeit auf diesem Gerät stammt aus einer anderen App-Version und kann hier nicht gelesen werden. Neue Stempelzeiten warten dahinter. Lade die App neu. Bleibt sie stehen, prüfe deine Zeiterfassung und lösche sie hier.',
+    'Eine Stempelzeit auf diesem Gerät stammt aus einer anderen App-Version und kann hier nicht gelesen werden. Neue Stempelzeiten warten dahinter. Lade die App neu. Bleibt sie stehen, lege sie beiseite: Sie bleibt auf dem Gerät, und deine neuen Stempelzeiten werden wieder übertragen.',
 };
 
 const STOPPED_BADGES: Record<StoppedStatus, string> = {
@@ -73,6 +73,13 @@ export function unsentChainReason(view: ClockDeviceView): string {
 
 /** The badge of an unsent chain: it waits for signal, was refused, or needs the person. */
 export function UnsentStatusBadge({ view }: { view: ClockDeviceView }) {
+  // Set-aside records alone wait for nothing: they stay until the person deletes them.
+  if (view.events.length === 0)
+    return (
+      <Badge variant="outline" data-clock-unsent="set_aside">
+        Beiseitegelegt
+      </Badge>
+    );
   const status = unsentChainStatus(view);
   if (status === 'pending')
     return (

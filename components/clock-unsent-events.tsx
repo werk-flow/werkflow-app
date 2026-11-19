@@ -1,9 +1,14 @@
 'use client';
 
-import { useState, type ComponentProps } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
 import ClockUnsentReplacement from '@/components/clock-unsent-replacement';
+import {
+  SetAsideRecords,
+  UnreadableStopActions,
+  useCopyForSupport,
+} from '@/components/clock-unsent-set-aside';
 import { lazyDialog } from '@/components/shared/lazy-dialog';
 import {
   UnsentEventList,
@@ -76,14 +81,16 @@ function useOutboxAction() {
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** Answers whether the action succeeded; a failure stays shown at its action. */
-  async function perform(id: string, task: () => Promise<void>): Promise<boolean> {
+  /** `task` may answer a sentence for the person: then the action did not go through, and it shows. */
+  async function perform(id: string, task: () => Promise<string | void>): Promise<boolean> {
     setError(null);
     setRunning(id);
     let succeeded = false;
     await run(async () => {
       try {
-        await task();
-        succeeded = true;
+        const notice = await task();
+        if (notice) setError(notice);
+        else succeeded = true;
       } catch (failure) {
         logError('clock outbox: action failed', failure);
         setError(STORAGE_FAILED);
@@ -201,6 +208,7 @@ function UnsentActions({
   onResend,
   canCorrect,
   onCorrect,
+  unreadableActions,
   onDelete,
 }: {
   status: ReturnType<typeof unsentChainStatus>;
@@ -211,6 +219,8 @@ function UnsentActions({
   onSend: () => void;
   onResend: () => void;
   onCorrect: () => void;
+  /** The choices of an unreadable stop besides „Löschen“ (clock-unsent-set-aside.tsx). */
+  unreadableActions: ReactNode;
   onDelete: () => void;
 }) {
   if (status === 'pending')
@@ -245,6 +255,7 @@ function UnsentActions({
           Korrektur beantragen
         </Button>
       )}
+      {status === 'unreadable' && unreadableActions}
       <Button
         type="button"
         variant="ghost"
@@ -258,6 +269,56 @@ function UnsentActions({
   );
 }
 
+/** The section's heading with the chain's state. */
+function PanelHeading({ view }: { view: ClockDeviceView }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <h3 id="clock-unsent-heading" className="text-sm font-semibold">
+        Noch nicht übertragen
+      </h3>
+      <UnsentStatusBadge view={view} />
+    </div>
+  );
+}
+
+/** What the chain waits for or why it stopped, the order a running session needs, and its events. */
+function ChainSummary({ view, openSessionSteps }: { view: ClockDeviceView; openSessionSteps: boolean }) {
+  return (
+    <>
+      <p className="text-sm text-muted-foreground">{unsentChainReason(view)}</p>
+      {openSessionSteps && <OpenSessionSteps timesWhere="unten" />}
+      <UnsentEventList view={view} />
+    </>
+  );
+}
+
+/** The correction request for the events `correction` holds, the ones the person chose to correct. */
+function ChainCorrection({
+  correction,
+  onClose,
+  userId,
+  deleteEvents,
+}: {
+  correction: ClockDeviceView['events'] | null;
+  onClose: () => void;
+  userId: string | undefined;
+  deleteEvents: (events: ClockDeviceView['events']) => Promise<boolean>;
+}) {
+  return (
+    <CorrectionDialog.Dialog
+      open={correction !== null}
+      onOpenChange={(open) => !open && onClose()}
+      {...correctionPrefill(correction ?? [])}
+      preselectedUserId={userId}
+      // The request is filed, and the form confirms it: only now do the session's kept events leave the phone,
+      // and only for a request of this person on that day; an Admin or Büro may file one for someone else.
+      onSuccess={async (_entries, filed) => {
+        if (correction && coversSession(filed, userId, correction)) await deleteEvents(correction);
+      }}
+    />
+  );
+}
+
 /** The sheet's section: every unsent event, what happens to it, and the person's choices. */
 type UnsentPanelProps = {
   view: ClockDeviceView;
@@ -268,11 +329,13 @@ type UnsentPanelProps = {
 function UnsentPanel({ view, onPendingChange }: UnsentPanelProps) {
   const { confirmed } = useClockState();
   const { perform, running, isPending, error } = useOutboxAction();
+  const support = useCopyForSupport();
   // What each question saw when it opened: a deletion or a correction acts on exactly that, never on
   // events another tab settled or kept while it was open.
   const [deletion, setDeletion] = useState<ClockDeviceView['events'] | null>(null);
   const [correction, setCorrection] = useState<ClockDeviceView['events'] | null>(null);
   const status = unsentChainStatus(view);
+  const chain = view.events.length > 0;
   const holder = clockHolder();
   const openSession = status !== 'pending' && chainSessionRuns(view, confirmed);
   const replacement = sessionReplacement(view, confirmed);
@@ -291,15 +354,8 @@ function UnsentPanel({ view, onPendingChange }: UnsentPanelProps) {
 
   return (
     <section className="space-y-3 rounded-lg border bg-card p-3" aria-labelledby="clock-unsent-heading">
-      <div className="flex items-center justify-between gap-3">
-        <h3 id="clock-unsent-heading" className="text-sm font-semibold">
-          Noch nicht übertragen
-        </h3>
-        <UnsentStatusBadge view={view} />
-      </div>
-      <p className="text-sm text-muted-foreground">{unsentChainReason(view)}</p>
-      {openSession && !replacement && <OpenSessionSteps timesWhere="unten" />}
-      <UnsentEventList view={view} />
+      <PanelHeading view={view} />
+      {chain && <ChainSummary view={view} openSessionSteps={openSession && !replacement} />}
       {replacement && holder && (
         <ClockUnsentReplacement
           key={replacement.sessionId}
@@ -311,22 +367,32 @@ function UnsentPanel({ view, onPendingChange }: UnsentPanelProps) {
           onPendingChange={onPendingChange}
         />
       )}
-      <UnsentActions
-        status={status}
-        running={running}
-        busy={isPending}
-        canCorrect={!replacement && correctionOffered(view, confirmed)}
-        onSend={() => void perform('send', sendUnsentNow)}
-        onResend={() =>
-          void perform('resend', async () => {
-            if (holder) await resendRefusedTimeEvent(holder);
-          })
-        }
-        // One correction request records one session on one day: the rest stays for its own.
-        onCorrect={() => setCorrection(correctionScope(view))}
-        onDelete={() => setDeletion(view.events)}
-      />
-      <ErrorText>{error}</ErrorText>
+      {chain && (
+        <UnsentActions
+          status={status}
+          running={running}
+          busy={isPending}
+          canCorrect={!replacement && correctionOffered(view, confirmed)}
+          onSend={() => void perform('send', sendUnsentNow)}
+          onResend={() =>
+            void perform('resend', async () => {
+              if (holder) await resendRefusedTimeEvent(holder);
+            })
+          }
+          // One correction request records one session on one day: the rest stays for its own.
+          onCorrect={() => setCorrection(correctionScope(view))}
+          unreadableActions={
+            <UnreadableStopActions
+              stopKey={view.events[0]?.operationId ?? ''}
+              {...{ running, perform, support }}
+              busy={isPending}
+            />
+          }
+          onDelete={() => setDeletion(view.events)}
+        />
+      )}
+      <SetAsideRecords records={view.setAside} busy={isPending} support={support} onDelete={setDeletion} />
+      <ErrorText>{error ?? support.error}</ErrorText>
       <DeleteUnsentDialog
         count={deletion?.length ?? 0}
         shown={openSession && deletion ? { ...view, events: deletion } : null}
@@ -336,16 +402,11 @@ function UnsentPanel({ view, onPendingChange }: UnsentPanelProps) {
         pending={running === 'delete'}
         error={error}
       />
-      <CorrectionDialog.Dialog
-        open={correction !== null}
-        onOpenChange={(open) => !open && setCorrection(null)}
-        {...correctionPrefill(correction ?? [])}
-        preselectedUserId={holder?.userId}
-        // The request is filed, and the form confirms it: only now do the session's kept events leave the phone,
-        // and only for a request of this person on that day; an Admin or Büro may file one for someone else.
-        onSuccess={async (_entries, filed) => {
-          if (correction && coversSession(filed, holder?.userId, correction)) await deleteEvents(correction);
-        }}
+      <ChainCorrection
+        correction={correction}
+        onClose={() => setCorrection(null)}
+        userId={holder?.userId}
+        deleteEvents={deleteEvents}
       />
     </section>
   );

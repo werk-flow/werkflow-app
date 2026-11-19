@@ -396,3 +396,12 @@ Owner requirement (werk-flow/werkflow-planning#22): a connection change never sh
 - **One calm marker.** „Wartet auf Netz“ while actions wait without signal, „Wird übertragen“ while they wait with signal or their answer is due, „Ohne Netz“ for a confirmed clock without signal. The phone's own report of its network decides the words, never the state shown.
 - **A start that may hold unsent work** shows no clock until the outbox answered, so the server's clock from before the unsent actions never shows, and no clock action starts before then: an action is built only from a clock the person sees. When the outbox's code cannot load, or the device store does not answer within one bounded wait, the clock's failure shows with a retry that asks the outbox again.
 - **Today's view** has no state of its own that the connection changes: the page without signal reads the stored day once, and the prerendered no-signal page stands until that read answers, because it must work without its script.
+
+## Amendment 2026-11-17: an unreadable clock record set aside
+
+Decided for werk-flow/werkflow-planning#407. It adds a way on from a kept clock action this version cannot read, besides its deletion. It sharpens the time outbox's invariants 3, 5 and 6.
+
+- **Set aside.** The clock offers „Beiseitelegen“ on an unreadable stop. The record moves, unchanged, from the kept store to a set-aside key of its own (`kept-clock-actions.ts`), outside the prefix every take-in reads, and stops nothing any more: the person's later taps are taken in and sent as their own chain. An action whose online call may still run stays a stop, because its page may still record it or keep it again.
+- **Never sent.** No version takes a set-aside record in or sends it, also a later one that can read it: it would reach the server after the taps that followed it. Its time counts once: the server's record stands, and the person files the audited correction when time is missing.
+- **Kept and shown.** A set-aside record stays on the phone and shows in the clock with its tap time until its person deletes it. „Für den Support kopieren“ copies its key and stored record, which hold ids and times and no names.
+- **Deletion.** The clock's „Löschen“ and a session end's discard delete exactly the set-aside records they showed. A session end names them, so no session ends over them unasked. The wipe never names them, as it never names the kept store.
