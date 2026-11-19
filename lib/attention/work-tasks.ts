@@ -339,7 +339,7 @@ async function readProjectCompletionFacts(
         (from, to) =>
           admin
             .from('work_execution_events')
-            .select('project_id, created_at')
+            .select('project_id, event_type, created_at')
             .eq('organization_id', context.orgId)
             .eq('to_state', 'execution_complete')
             .in('project_id', [...batch])
@@ -361,8 +361,11 @@ async function readProjectCompletionFacts(
     const latest = recordedCompletion.get(projectId);
     if (latest === undefined || completedOn > latest) recordedCompletion.set(projectId, completedOn);
   };
+  // A withdrawn release reopens the Übergabe of work that was already complete.
   for (const event of completionEventsResult.data ?? []) {
-    if (event.project_id) recordLatest(event.project_id, formatBerlinLocalDate(event.created_at));
+    if (event.project_id && event.event_type !== 'handover_withdrawn') {
+      recordLatest(event.project_id, formatBerlinLocalDate(event.created_at));
+    }
   }
   const completedByHand = new Set(recordedCompletion.keys());
   const childJobsByProject = new Map<

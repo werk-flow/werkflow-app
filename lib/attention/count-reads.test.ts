@@ -335,7 +335,7 @@ if (ISOLATED) {
       }
     });
 
-    test('a project completed by hand waits since its recorded completion, whatever later edit moved it', async () => {
+    test('a project completed by hand waits since its recorded completion, whatever later edit or withdrawn release moved it', async () => {
       const PROJECT = '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f';
       setSystemTime(new Date('2026-11-19T10:00:00Z'));
       seededRows = {
@@ -351,7 +351,11 @@ if (ISOLATED) {
             updated_at: '2026-11-18T09:00:00Z',
           },
         ],
-        work_execution_events: [{ project_id: PROJECT, created_at: '2026-11-12T09:00:00Z' }],
+        work_execution_events: [
+          { project_id: PROJECT, event_type: 'reopened', created_at: '2026-11-12T09:00:00Z' },
+          // Released and withdrawn again: the work stayed complete since the 12th.
+          { project_id: PROJECT, event_type: 'handover_withdrawn', created_at: '2026-11-18T08:00:00Z' },
+        ],
       };
       withOwnRecord = false;
       try {
