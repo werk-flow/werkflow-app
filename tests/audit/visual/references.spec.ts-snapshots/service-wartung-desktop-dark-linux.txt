@@ -16,6 +16,7 @@ Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Wochenzahlen
 Problem melden
 F2
 MK

@@ -12,7 +12,7 @@ export const KENNZAHLEN_SUBTITLE =
 
 // Mirrors `WeeklyNumbersView`: week cards on the phone, the table of numbers
 // and weeks from the tablet breakpoint. Nothing in it is clickable, so nothing hovers.
-export function KennzahlenContentSkeleton() {
+function KennzahlenContentSkeleton() {
   return (
     <>
       <SkeletonList count={2} className="space-y-3 md:hidden">

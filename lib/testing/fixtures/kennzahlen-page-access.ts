@@ -2,8 +2,8 @@
 // and a field worker are sent to the dashboard before any database read and
 // find no entry in the navigation, and the reader refuses them on its own;
 // Admin reads the numbers of the organization of its own membership, also
-// when the cookie names another organization; a failed read is a failure,
-// never an empty week.
+// when the cookie names another organization; a failed read throws to the
+// (app) error boundary, never an empty week.
 import assert from 'node:assert/strict';
 import { isValidElement } from 'react';
 import { ORGANIZATION_A, ORGANIZATION_B, signInAs } from './action-boundary-world';
@@ -37,11 +37,8 @@ world.rpc = ({ name }) =>
 const { default: KennzahlenPage } = await import('@/app/(app)/kennzahlen/page');
 const { readWeeklyOutcomeNumbers } = await import('@/lib/weekly-numbers/reads');
 const { WeeklyNumbersView } = await import('@/components/kennzahlen/weekly-numbers-view');
-const { RegionLoadError } = await import('@/components/shared/region-load-error');
 const { navItemsFor } = await import('@/components/sidebar/sidebar-nav-items');
 const page = () => KennzahlenPage();
-const shows = (elements: unknown[], component: unknown) =>
-  elements.some((element) => isValidElement(element) && element.type === component);
 
 for (const role of ['buero', 'employee'] as const) {
   signInAs(world, role);
@@ -73,6 +70,8 @@ assert.deepEqual(field(view, 'props', 'weeks'), [WEEK]);
 assert.ok(navItemsFor('admin').some((item) => item.href === '/kennzahlen'));
 
 readFails = true;
-const failed = await renderTree(page);
-assert.ok(shows(failed, RegionLoadError), 'a failed read did not show the retry');
-assert.ok(!shows(failed, WeeklyNumbersView), 'a failed read showed numbers');
+await assert.rejects(
+  renderTree(page),
+  /^Error: Failed to load weekly numbers: load_failed$/,
+  'a failed read rendered instead of reaching the error boundary',
+);
