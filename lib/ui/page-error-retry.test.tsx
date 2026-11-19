@@ -1,24 +1,16 @@
 import { expect, test } from 'bun:test';
-import { Children, isValidElement, type ReactNode } from 'react';
 
 import AppPageError from '@/app/(app)/error';
 import { SectionError } from '@/components/ui/section-error';
+import { field, renderTree } from '@/lib/testing/fixtures/page-render';
 
 // Rule test: the retry of a failed page reads the route again. Next's `reset`
 // only re-renders the payload that failed, so a failed server read stayed
 // failed until the user navigated away; `retry` refreshes the route first.
 
-function findElement(node: ReactNode, type: unknown): { props: Record<string, unknown> } | undefined {
-  for (const child of Children.toArray(node)) {
-    if (!isValidElement<{ children?: ReactNode }>(child)) continue;
-    if (child.type === type) return { props: { ...child.props } };
-    const found = findElement(child.props.children, type);
-    if (found) return found;
-  }
-  return undefined;
-}
-
-test('the page error boundary retries by reading the route again', () => {
+test("the page error boundary hands Next's retry to its retry button", async () => {
   const retry = () => {};
-  expect(findElement(AppPageError({ retry }), SectionError)?.props.onRetry).toBe(retry);
+  const elements = await renderTree(() => AppPageError({ retry }));
+  const sectionError = elements.find((element) => element.type === SectionError);
+  expect(field(sectionError, 'props', 'onRetry')).toBe(retry);
 });
