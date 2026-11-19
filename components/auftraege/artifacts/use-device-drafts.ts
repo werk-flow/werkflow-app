@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
+import { uploadDocumentDirect } from '@/lib/documents/upload-client';
 import type { DraftHolder, StoredDraft } from '@/lib/field-sync/device/draft-store';
 import type { DraftSendOutcome, DraftSendProgress } from '@/lib/field-sync/device/draft-sync';
 import type { WorkArtifactKind, WorkArtifactVisibility } from '@/lib/work-artifacts/types';
@@ -10,11 +11,13 @@ import type { WorkArtifactContentDraft } from './work-artifact-content';
 
 // The report drafts of a device as a job page sees them (decision record
 // 0010, the report draft amendment). This module is all of it that a job page
-// loads with its own code, and it imports nothing a job page did not load
-// before: the job list prefetches a job page's code, so that code counts
-// toward the field cold start. Every other part (the device store, the
-// sender, the list, the photo field, the dialog's draft keeper, the active
-// organization) loads with the dialog's module (work-artifact-dialog.tsx).
+// loads with its own code: the job list prefetches a job page's code, so that
+// code counts toward the field cold start. It loads one module more, the
+// document upload client, because the draft sender needs it when the dialog's
+// module loads at idle time; with the prefetch, opening a job loads no upload
+// code. Every other part (the device store, the sender, the list, the photo
+// field, the dialog's draft keeper, the active organization) loads with the
+// dialog's module (work-artifact-dialog.tsx).
 
 /** What the artifact screens ask of the device, for the signed-in person in the active organization. */
 export type DraftDevice = {
@@ -147,7 +150,7 @@ type ArtifactCode = Pick<typeof import('./work-artifact-dialog'), 'DeviceDrafts'
  * The dialog's module. A field worker's job page loads it once the page is idle, so a first open
  * without signal still finds it; otherwise it loads on the first open, or once the device may hold
  * a draft of the person. The section loads it with this read instead of a shared lazy-dialog
- * helper, so the job page's own code names no module it did not name before. An idle load that
+ * helper, so the job page's own code names no dialog module. An idle load that
  * fails stays silent; the next open loads again and shows a failure that persists.
  */
 export function useArtifactCode(
@@ -162,6 +165,8 @@ export function useArtifactCode(
   const idle = usePageIdle(loadWhenIdle);
   const load = useClientRead({
     read: async () => {
+      // The draft sender uploads with this client; naming it here prefetches it with the job page.
+      void uploadDocumentDirect;
       const { DeviceDrafts, WorkArtifactDialogHost } = await import('./work-artifact-dialog');
       return { success: true as const, code: { DeviceDrafts, WorkArtifactDialogHost } };
     },
