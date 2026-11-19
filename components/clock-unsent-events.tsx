@@ -3,6 +3,7 @@
 import { useState, type ComponentProps } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
+import ClockUnsentReplacement from '@/components/clock-unsent-replacement';
 import { lazyDialog } from '@/components/shared/lazy-dialog';
 import {
   UnsentEventList,
@@ -35,6 +36,7 @@ import {
   correctionScope,
   type ClockDeviceView,
 } from '@/lib/field-sync/device/time-outbox';
+import { sessionReplacement } from '@/lib/field-sync/device/time-outbox-replacement';
 import { logError } from '@/lib/logging';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatBerlinTime, parseIsoLocalDate } from '@/lib/utils';
@@ -95,8 +97,8 @@ function useOutboxAction() {
 }
 
 /**
- * The correction the first day's kept events prefill: their day, its first start and its last end. A
- * chain whose session still runs on the server offers no correction (correctionOffered, time-outbox.ts).
+ * The addition the first day's kept events prefill: their day, its first start and its last end. A
+ * chain of a session the server holds or held is replaced instead (clock-unsent-replacement.tsx).
  */
 function correctionPrefill(day: ClockDeviceView['events']) {
   const first = day[0];
@@ -120,7 +122,7 @@ function coversSession(
   return filed.userId === userId && filed.day === day;
 }
 
-/** The order that keeps the captured times and counts them once. */
+/** The order that keeps the captured times and counts them once, where the phone cannot replace the session's end itself. */
 function OpenSessionSteps({ timesWhere }: { timesWhere: string }) {
   return (
     <div className="space-y-1 text-sm text-muted-foreground" data-clock-open-session>
@@ -202,7 +204,7 @@ function UnsentActions({
   onDelete,
 }: {
   status: ReturnType<typeof unsentChainStatus>;
-  /** False for an unreadable stop, or a chain whose session still runs: those are deleted, then corrected. */
+  /** False for an unreadable stop, and for a chain of a session the server holds or held: its own flow corrects it. */
   canCorrect: boolean;
   running: string | null;
   busy: boolean;
@@ -257,7 +259,13 @@ function UnsentActions({
 }
 
 /** The sheet's section: every unsent event, what happens to it, and the person's choices. */
-function UnsentPanel({ view }: { view: ClockDeviceView }) {
+type UnsentPanelProps = {
+  view: ClockDeviceView;
+  /** The sheet's dismissal waits for a running request of the section (useReportPending). */
+  onPendingChange?: ((pending: boolean) => void) | undefined;
+};
+
+function UnsentPanel({ view, onPendingChange }: UnsentPanelProps) {
   const { confirmed } = useClockState();
   const { perform, running, isPending, error } = useOutboxAction();
   // What each question saw when it opened: a deletion or a correction acts on exactly that, never on
@@ -267,6 +275,7 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
   const status = unsentChainStatus(view);
   const holder = clockHolder();
   const openSession = status !== 'pending' && chainSessionRuns(view, confirmed);
+  const replacement = sessionReplacement(view, confirmed);
 
   /** Deletes exactly `events`, the ones the person was shown; what stays goes on from the server's clock. */
   async function deleteEvents(events: ClockDeviceView['events']): Promise<boolean> {
@@ -289,13 +298,24 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
         <UnsentStatusBadge view={view} />
       </div>
       <p className="text-sm text-muted-foreground">{unsentChainReason(view)}</p>
-      {openSession && <OpenSessionSteps timesWhere="unten" />}
+      {openSession && !replacement && <OpenSessionSteps timesWhere="unten" />}
       <UnsentEventList view={view} />
+      {replacement && holder && (
+        <ClockUnsentReplacement
+          key={replacement.sessionId}
+          replacement={replacement}
+          organizationId={holder.organizationId}
+          userId={holder.userId}
+          busy={isPending}
+          onFiled={(events) => deleteEvents(events).then(() => undefined)}
+          onPendingChange={onPendingChange}
+        />
+      )}
       <UnsentActions
         status={status}
         running={running}
         busy={isPending}
-        canCorrect={correctionOffered(view, confirmed)}
+        canCorrect={!replacement && correctionOffered(view, confirmed)}
         onSend={() => void perform('send', sendUnsentNow)}
         onResend={() =>
           void perform('resend', async () => {
@@ -335,8 +355,15 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
  * The clock's unsent events: a badge in the dock, the full section in the sheet. Renders nothing
  * while the phone holds none for the signed-in person.
  */
-export default function ClockUnsentEvents({ place }: { place: 'dock' | 'sheet' }) {
+export default function ClockUnsentEvents({
+  place,
+  onPendingChange,
+}: Pick<UnsentPanelProps, 'onPendingChange'> & { place: 'dock' | 'sheet' }) {
   const { unsent } = useClockState();
   if (!unsent) return null;
-  return place === 'dock' ? <UnsentStatusBadge view={unsent} /> : <UnsentPanel view={unsent} />;
+  return place === 'dock' ? (
+    <UnsentStatusBadge view={unsent} />
+  ) : (
+    <UnsentPanel view={unsent} onPendingChange={onPendingChange} />
+  );
 }

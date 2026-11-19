@@ -67,6 +67,11 @@ export type ClockDeviceView = {
   status: 'pending' | 'stopped';
   /** The clock with every unsent event applied; null for a stopped chain, where the server's state stands. */
   state: LiveClockState | null;
+  /**
+   * The server's segment that ran when the first unsent event was captured, as the kept clock knew
+   * it; null when the phone did not know it.
+   */
+  chainSegmentId: string | null;
   events: UnsentTimeEvent[];
 };
 
@@ -131,6 +136,7 @@ export function clockDeviceView(outbox: TimeOutbox, now: Date): ClockDeviceView 
   return {
     status: stopped ? 'stopped' : 'pending',
     state: stopped || !clock?.base ? null : outbox.events.reduce(applyUnsentEvent, clock.base),
+    chainSegmentId: clock?.base?.currentSegmentId ?? null,
     events: [
       { ...head, ...first },
       ...behind.map((event) => ({
@@ -174,6 +180,7 @@ export function withUnreadable(
   return {
     status: stopped ? 'stopped' : 'pending',
     state: stopped ? null : (view?.state ?? null),
+    chainSegmentId: view?.chainSegmentId ?? null,
     events: marked,
   };
 }
