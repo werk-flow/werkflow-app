@@ -1619,13 +1619,13 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 6113, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 14625, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 6276, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 15171, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8475, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 9027, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -1772,6 +1772,42 @@
           "to": { "reference": 1583, "tolerance": 31 },
           "runKeys": ["2026-11-08T162433969Z-6e6e07"],
           "reason": null
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 6113, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 14625, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 6276, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 15171, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-19T074926196Z-e4c59c"],
+          "reason": "Owner decision 2026-11-19 (werk-flow/werkflow-planning#23, Owner queue 3): with the Aufgaben code out of the shell, the job page loads eight shared pieces itself"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8475, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9027, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-19T074926196Z-e4c59c"],
+          "reason": "Owner decision 2026-11-19 (werk-flow/werkflow-planning#23, Owner queue 3): with the Aufgaben code out of the shell, the job page loads eight shared pieces itself"
         }
       ]
     },
