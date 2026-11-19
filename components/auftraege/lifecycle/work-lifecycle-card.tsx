@@ -101,7 +101,8 @@ function useWorkLifecycleLiveView({
   setRemoteUpdateDialog: (dialog: WorkLifecycleDialogState | null) => void;
 }) {
   // A dialog that still downloads shows no form yet, so the card stays live until it mounts.
-  const shown = dialog !== null && lazyCardDialogs.useLoaded();
+  const loaded = lazyCardDialogs.useLoaded();
+  const shown = dialog !== null && loaded;
   return useLiveView<WorkLifecycleSnapshot>({
     tables: [
       initialSnapshot.targetType === 'job' ? 'jobs' : 'projects',
