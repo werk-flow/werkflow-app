@@ -59,7 +59,7 @@ async function officeWithOpenWork(world: TestWorld): Promise<SurfaceDestination>
   return { route: '/dashboard', heading: 'Dashboard' };
 }
 
-/** The office's start before anything is open: the audit world seeds no office work of its own. */
+/** The office's start before anything is open, in the outsider organization that no set seeds. */
 function officeWithNothingOpen(): Promise<SurfaceDestination> {
   return Promise.resolve({ route: '/dashboard', heading: 'Dashboard' });
 }
@@ -74,10 +74,10 @@ function officeStartCaptures(): OpenSet {
   return {
     id: 'office-start-2026-11-17',
     captures: [
-      // Empty runs first: the other captures seed the world's open work.
       {
         id: 'admin-dashboard-leer',
         role: 'admin',
+        session: 'outsider',
         route: '/dashboard',
         view: { kind: 'page' },
         destination: officeWithNothingOpen,
