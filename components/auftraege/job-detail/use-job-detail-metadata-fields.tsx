@@ -33,16 +33,30 @@ type JobDetailFieldContext = {
   updateJobWithApprovals: (input: Parameters<typeof updateJob>[1]) => ReturnType<typeof updateJob>;
 };
 
+/** The job number and, when set, the number in the previous system; both change in the edit dialog. */
+function buildJobDetailNumberFields(liveJob: JobWithDetails): MetadataField[] {
+  return [
+    {
+      label: 'Auftragsnummer',
+      value: <span className="font-mono text-xs">{liveJob.jobNumber}</span>,
+    },
+    ...(liveJob.sourceNumber
+      ? [
+          {
+            label: 'Nummer im Altsystem',
+            value: <span className="font-mono text-xs">{liveJob.sourceNumber}</span>,
+          },
+        ]
+      : []),
+  ];
+}
+
 function buildJobDetailIdentityFields({
   liveJob,
   isAdminOrManager,
   applyLiveJobPatch,
 }: JobDetailFieldContext): MetadataField[] {
   return [
-    {
-      label: 'Auftragsnummer',
-      value: <span className="font-mono text-xs">{liveJob.jobNumber}</span>,
-    },
     {
       label: 'Titel',
       value: liveJob.title,
@@ -428,6 +442,7 @@ export function useJobDetailMetadataFields({
     updateJobWithApprovals,
   };
   const metadataFields: MetadataField[] = [
+    ...buildJobDetailNumberFields(liveJob),
     ...buildJobDetailIdentityFields(fieldContext),
     ...buildJobDetailPlanningFields(fieldContext),
     ...buildJobDetailSiteFields(job, liveJob),

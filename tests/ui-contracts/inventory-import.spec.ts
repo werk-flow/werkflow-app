@@ -5,9 +5,14 @@ import { openContractFixture } from './open-fixture';
 // werk-flow/werkflow-planning#371: the CSV import previews before it books.
 // The preview and the result show the file and the mode the preview was made
 // from, the result lists every row with a note, and going back to the mapping
-// checks the file for a repeat again.
+// checks the file for a repeat again. werk-flow/werkflow-planning#477: a
+// matched row names each price it changes.
 test.beforeEach(async ({ page }) => {
   await openContractFixture(page, 'inventory-import');
+  // The captures show the dialog as the app styles it.
+  const css = process.env.WERKFLOW_UI_CONTRACT_CSS;
+  if (!css) throw new Error('Run through bun tests/ui-contracts/run.ts.');
+  await page.addStyleTag({ path: css });
 });
 
 function booked(index: number): ImportRowOutcome {
@@ -23,6 +28,7 @@ function booked(index: number): ImportRowOutcome {
     quantityAfter: 1,
     reason: null,
     itemUnit: null,
+    priceChanges: [],
   };
 }
 
@@ -98,3 +104,63 @@ test('going back to the mapping after a failed booking checks the file for a rep
   await expect(dialog.getByRole('button', { name: 'Trotzdem fortfahren', exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.uiContractImport.repeatChecks)).toBe(2);
 });
+
+/** A row that matches „Rohrschelle 15 mm“ by its Artikelnummer and changes both its prices. */
+function repriced(index: number): ImportRowOutcome {
+  return {
+    ...booked(index),
+    matchedBy: 'internal_sku',
+    itemName: 'Rohrschelle 15 mm',
+    quantityAfter: 13,
+    priceChanges: [
+      {
+        kind: 'purchase',
+        old: { amountCents: 300, priceQuantity: 1 },
+        new: { amountCents: 320, priceQuantity: 1 },
+        validFrom: '2037-11-17',
+      },
+      { kind: 'sale', old: null, new: { amountCents: 450, priceQuantity: 1 }, validFrom: '2037-11-17' },
+    ],
+  };
+}
+
+/** Opens the preview of a file whose second row changes a matched article's prices. */
+async function previewPriceChanges(page: Page): Promise<Locator> {
+  await setContract(page, { previewRows: [booked(0), repriced(1), rejectedUnit(2)] });
+  const dialog = await chooseFile(page, 3);
+  await dialog.getByRole('button', { name: 'Vorschau anzeigen', exact: true }).click();
+  await expect(dialog.getByText('Rohrschelle 15 mm', { exact: true })).toBeVisible();
+  return dialog;
+}
+
+test('a matched row names each price it changes with the old and the new price, and the totals count them', async ({
+  page,
+}) => {
+  const dialog = await previewPriceChanges(page);
+  await expect(
+    dialog.getByText('Einkaufspreis: 3,00 € je Stk → 3,20 € je Stk ab 17.11.2037', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText('Verkaufspreis: bisher keiner → 4,50 € je Stk ab 17.11.2037', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog
+      .getByRole('region', { name: 'Summen' })
+      .getByText('Geänderte Preise', { exact: true })
+      .locator('xpath=..'),
+  ).toContainText('2');
+});
+
+for (const width of [1280, 375]) {
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`capture vorschau-preise at ${width} px, ${colorScheme}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme });
+      await previewPriceChanges(page);
+      await page.screenshot({
+        path: test.info().outputPath(`csv-vorschau-preise-${width}-${colorScheme}.png`),
+        fullPage: true,
+      });
+    });
+  }
+}

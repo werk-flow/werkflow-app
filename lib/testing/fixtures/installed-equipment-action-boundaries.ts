@@ -75,6 +75,7 @@ const form = {
   category: 'heat_generation',
   subtype: 'heat_pump',
   state: 'unknown',
+  sourceNumber: 'ANL-ALT-1',
   identifiers: [],
 } satisfies EquipmentFormInput;
 const change = { expectedVersion: 1, reason: 'Angaben berichtigt', idempotencyKey };

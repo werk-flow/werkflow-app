@@ -8,10 +8,14 @@ name: Merge queue notice
 #
 # It runs with the base repository's token on a run of a PR's code, so it checks nothing out, and
 # every event field reaches its script as data through `env`.
+#
+# Only a run on a merge queue branch starts it. Unfiltered, every completed CI run started one that
+# skipped its job: about 230 runs a day (werk-flow/werkflow-planning#294).
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+    branches: ['gh-readonly-queue/**']
 
 permissions: {}
 

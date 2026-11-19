@@ -71,7 +71,10 @@ function comment(branch = `gh-readonly-queue/main/pr-442-${'b'.repeat(40)}`) {
 }
 
 test('only a failed or timed out run of CI on a merge queue entry comments', () => {
-  expect(notice.at('on')).toEqual({ workflow_run: { workflows: ['CI'], types: ['completed'] } });
+  // The branch filter keeps every other CI run from starting a run that only skips.
+  expect(notice.at('on')).toEqual({
+    workflow_run: { workflows: ['CI'], types: ['completed'], branches: ['gh-readonly-queue/**'] },
+  });
   const condition = notice.text('jobs', 'notice', 'if').replace(/\s+/g, ' ');
   expect(condition).toBe(
     "github.event.workflow_run.event == 'merge_group' && (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out')",

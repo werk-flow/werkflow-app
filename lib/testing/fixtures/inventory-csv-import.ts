@@ -82,12 +82,15 @@ assert.deepEqual(
     mode: previewCall()?.args.p_mode,
     hash: previewCall()?.args.p_content_hash,
     mapping: previewCall()?.args.p_column_mapping,
+    // This preview shows matched articles' price changes, so its batch books them (werk-flow/werkflow-planning#477).
+    withPrices: previewCall()?.args.p_with_prices,
   },
   {
     fileName: 'nordrohr.csv',
     mode: 'master_data',
     hash: contentHash,
     mapping: { name: 'Bezeichnung', unit: 'Einheit' },
+    withPrices: true,
   },
 );
 const staged = previewCall()?.args.p_rows;
@@ -141,6 +144,7 @@ assert.deepEqual(preview.rows[0], {
   quantityAfter: null,
   reason: null,
   itemUnit: null,
+  priceChanges: [],
 });
 assert.deepEqual(
   preview.rows.map((row) => row.reason),
