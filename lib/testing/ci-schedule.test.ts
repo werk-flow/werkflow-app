@@ -128,7 +128,7 @@ test('the release waits for its hold, and only a schedule event holds', () => {
   // A skipped job would skip the gate jobs behind it, so the job itself always runs.
   expect(holdSteps).not.toMatch(/\n {4}if:/);
   expect(releaseWorkflow).toContain("github.event_name == 'schedule' && 'scheduled'");
-  expect(releaseWorkflow).toContain('needs: [hold, candidate, full, release, smoke, proof]');
+  expect(releaseWorkflow).toContain('needs: [hold, candidate, full, dev, release, smoke, proof]');
 });
 
 test('the nightly shares the release cron line, so the release usually reuses its run', () => {

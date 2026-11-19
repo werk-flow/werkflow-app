@@ -55,6 +55,7 @@ test('an overdue callback shows „Rückruf überfällig“ in the list and the 
   await expect(details.getByText('Rückruf überfällig', { exact: true })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Geschlossen', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.listNavigationContract.requests.length)).toBe(1);
   await page.evaluate(() => {
     const [request] = window.listNavigationContract.requests;
     if (!request) throw new Error('expected a recorded list navigation request');

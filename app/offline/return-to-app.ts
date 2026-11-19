@@ -8,7 +8,7 @@
 // it is. A tap, the `online` event and the page's start share one attempt.
 
 /** What reaches the server: a small static file. Any HTTP answer counts, a redirect or refusal included. */
-const PROBE_PATH = '/manifest.webmanifest';
+export const PROBE_PATH = '/manifest.webmanifest';
 
 /** A phone with a weak signal can keep a request open far longer; then the page says it has no signal. */
 const PROBE_LIMIT_MS = 8_000;
