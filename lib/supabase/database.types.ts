@@ -2149,6 +2149,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -2185,6 +2186,7 @@ export type Database = {
           parent_equipment_id?: string | null;
           predecessor_equipment_id?: string | null;
           site_id: string;
+          source_number?: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype?:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -2221,6 +2223,7 @@ export type Database = {
           parent_equipment_id?: string | null;
           predecessor_equipment_id?: string | null;
           site_id?: string;
+          source_number?: string | null;
           state?: Database["public"]["Enums"]["installed_equipment_state"];
           subtype?:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -2799,6 +2802,7 @@ export type Database = {
           imported_count: number;
           mode: string;
           organization_id: string;
+          prices_previewed: boolean;
           result_payload: Json | null;
           row_count: number;
           staged_rows: Json | null;
@@ -2817,6 +2821,7 @@ export type Database = {
           imported_count?: number;
           mode?: string;
           organization_id: string;
+          prices_previewed?: boolean;
           result_payload?: Json | null;
           row_count?: number;
           staged_rows?: Json | null;
@@ -2835,6 +2840,7 @@ export type Database = {
           imported_count?: number;
           mode?: string;
           organization_id?: string;
+          prices_previewed?: boolean;
           result_payload?: Json | null;
           row_count?: number;
           staged_rows?: Json | null;
@@ -3370,6 +3376,376 @@ export type Database = {
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inventory_supplier_catalog_articles: {
+        Row: {
+          article_number: string;
+          delivery_date: string | null;
+          ean: string | null;
+          id: string;
+          import_id: string;
+          main_product_group: string | null;
+          matchcode: string | null;
+          name: string;
+          name_addition: string;
+          organization_id: string;
+          price_cents: number | null;
+          price_kind: string | null;
+          price_quantity: number;
+          product_group: string | null;
+          rebate_group: string | null;
+          search_text: string | null;
+          supplier_id: string;
+          unit: string;
+          unit_text: string;
+          updated_at: string;
+        };
+        Insert: {
+          article_number: string;
+          delivery_date?: string | null;
+          ean?: string | null;
+          id?: string;
+          import_id: string;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name: string;
+          name_addition?: string;
+          organization_id: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity: number;
+          product_group?: string | null;
+          rebate_group?: string | null;
+          search_text?: string | null;
+          supplier_id: string;
+          unit: string;
+          unit_text: string;
+          updated_at?: string;
+        };
+        Update: {
+          article_number?: string;
+          delivery_date?: string | null;
+          ean?: string | null;
+          id?: string;
+          import_id?: string;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name?: string;
+          name_addition?: string;
+          organization_id?: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity?: number;
+          product_group?: string | null;
+          rebate_group?: string | null;
+          search_text?: string | null;
+          supplier_id?: string;
+          unit?: string;
+          unit_text?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_catalog_articles_import_fk";
+            columns: ["import_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_supplier_catalog_imports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_articles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_articles_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_catalog_import_lines: {
+        Row: {
+          article_number: string | null;
+          ean: string | null;
+          file_name: string;
+          import_id: string;
+          kind: string;
+          line_number: number;
+          main_product_group: string | null;
+          matchcode: string | null;
+          name: string | null;
+          name_addition: string | null;
+          ordinal: number;
+          organization_id: string;
+          price_cents: number | null;
+          price_kind: string | null;
+          price_quantity: number | null;
+          product_group: string | null;
+          reason: string | null;
+          reason_code: string | null;
+          rebate_group: string | null;
+          unit_text: string | null;
+        };
+        Insert: {
+          article_number?: string | null;
+          ean?: string | null;
+          file_name: string;
+          import_id: string;
+          kind: string;
+          line_number: number;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name?: string | null;
+          name_addition?: string | null;
+          ordinal: number;
+          organization_id: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity?: number | null;
+          product_group?: string | null;
+          reason?: string | null;
+          reason_code?: string | null;
+          rebate_group?: string | null;
+          unit_text?: string | null;
+        };
+        Update: {
+          article_number?: string | null;
+          ean?: string | null;
+          file_name?: string;
+          import_id?: string;
+          kind?: string;
+          line_number?: number;
+          main_product_group?: string | null;
+          matchcode?: string | null;
+          name?: string | null;
+          name_addition?: string | null;
+          ordinal?: number;
+          organization_id?: string;
+          price_cents?: number | null;
+          price_kind?: string | null;
+          price_quantity?: number | null;
+          product_group?: string | null;
+          reason?: string | null;
+          reason_code?: string | null;
+          rebate_group?: string | null;
+          unit_text?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_catalog_import_lines_import_fk";
+            columns: ["import_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_supplier_catalog_imports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_catalog_imports: {
+        Row: {
+          confirmed_at: string | null;
+          confirmed_by: string | null;
+          content_hash: string;
+          created_at: string;
+          created_by: string | null;
+          currency: string | null;
+          delivery_date: string | null;
+          file_names: string[];
+          format_version: string | null;
+          id: string;
+          organization_id: string;
+          rebate_groups: Json;
+          rebates: Json | null;
+          result: Json | null;
+          skipped: Json;
+          status: string;
+          supplier_id: string;
+          supplier_text: string | null;
+          unit_mapping: Json | null;
+        };
+        Insert: {
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          content_hash: string;
+          created_at?: string;
+          created_by?: string | null;
+          currency?: string | null;
+          delivery_date?: string | null;
+          file_names: string[];
+          format_version?: string | null;
+          id?: string;
+          organization_id: string;
+          rebate_groups?: Json;
+          rebates?: Json | null;
+          result?: Json | null;
+          skipped?: Json;
+          status?: string;
+          supplier_id: string;
+          supplier_text?: string | null;
+          unit_mapping?: Json | null;
+        };
+        Update: {
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          content_hash?: string;
+          created_at?: string;
+          created_by?: string | null;
+          currency?: string | null;
+          delivery_date?: string | null;
+          file_names?: string[];
+          format_version?: string | null;
+          id?: string;
+          organization_id?: string;
+          rebate_groups?: Json;
+          rebates?: Json | null;
+          result?: Json | null;
+          skipped?: Json;
+          status?: string;
+          supplier_id?: string;
+          supplier_text?: string | null;
+          unit_mapping?: Json | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_confirmed_by_fkey";
+            columns: ["confirmed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_catalog_imports_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_rebate_groups: {
+        Row: {
+          discount: Json;
+          id: string;
+          import_id: string;
+          organization_id: string;
+          rebate_group: string;
+          supplier_id: string;
+          text: string;
+          updated_at: string;
+        };
+        Insert: {
+          discount: Json;
+          id?: string;
+          import_id: string;
+          organization_id: string;
+          rebate_group: string;
+          supplier_id: string;
+          text?: string;
+          updated_at?: string;
+        };
+        Update: {
+          discount?: Json;
+          id?: string;
+          import_id?: string;
+          organization_id?: string;
+          rebate_group?: string;
+          supplier_id?: string;
+          text?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_rebate_groups_import_fk";
+            columns: ["import_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_supplier_catalog_imports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_rebate_groups_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_rebate_groups_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      inventory_supplier_rebates: {
+        Row: {
+          id: string;
+          organization_id: string;
+          rebate_basis_points: number;
+          rebate_group: string;
+          supplier_id: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          rebate_basis_points: number;
+          rebate_group: string;
+          supplier_id: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          rebate_basis_points?: number;
+          rebate_group?: string;
+          supplier_id?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_supplier_rebates_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_rebates_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_supplier_rebates_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -4318,6 +4694,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -4344,6 +4721,7 @@ export type Database = {
           priority?: Database["public"]["Enums"]["job_priority"];
           project_id?: string | null;
           site_id?: string | null;
+          source_number?: string | null;
           status?: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at?: string;
@@ -4370,6 +4748,7 @@ export type Database = {
           priority?: Database["public"]["Enums"]["job_priority"];
           project_id?: string | null;
           site_id?: string | null;
+          source_number?: string | null;
           status?: Database["public"]["Enums"]["job_status"];
           title?: string;
           updated_at?: string;
@@ -12204,6 +12583,42 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_signals: {
+        Row: {
+          attempts: number;
+          claimed_until: string | null;
+          event_type: string;
+          last_failure_code: string | null;
+          received_at: string;
+          settled_at: string | null;
+          state: string;
+          stripe_created_at: string;
+          stripe_event_id: string;
+        };
+        Insert: {
+          attempts?: number;
+          claimed_until?: string | null;
+          event_type: string;
+          last_failure_code?: string | null;
+          received_at?: string;
+          settled_at?: string | null;
+          state?: string;
+          stripe_created_at: string;
+          stripe_event_id: string;
+        };
+        Update: {
+          attempts?: number;
+          claimed_until?: string | null;
+          event_type?: string;
+          last_failure_code?: string | null;
+          received_at?: string;
+          settled_at?: string | null;
+          state?: string;
+          stripe_created_at?: string;
+          stripe_event_id?: string;
+        };
+        Relationships: [];
+      };
       work_artifact_actions: {
         Row: {
           action_type: Database["public"]["Enums"]["work_artifact_action_type"];
@@ -14880,6 +15295,14 @@ export type Database = {
       };
     };
     Functions: {
+      abandon_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_organization_id: string;
+        };
+        Returns: undefined;
+      };
       accept_site_access_proposal: {
         Args: {
           p_actor_id: string;
@@ -15035,6 +15458,14 @@ export type Database = {
           p_valid_from: string;
         };
         Returns: string;
+      };
+      adopt_supplier_catalog_article: {
+        Args: {
+          p_actor_id: string;
+          p_catalog_article_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
       };
       apply_problem_report_retention: {
         Args: { p_organization_id: string; p_report_id: string };
@@ -15325,6 +15756,17 @@ export type Database = {
           storage_path: string;
         }[];
       };
+      claim_werkflow_billing_signal: {
+        Args: {
+          p_event_type: string;
+          p_stripe_created_at: string;
+          p_stripe_event_id: string;
+        };
+        Returns: {
+          attempt: number;
+          result: string;
+        }[];
+      };
       clear_project_execution_override: {
         Args: {
           p_actor_id: string;
@@ -15480,6 +15922,27 @@ export type Database = {
         };
         Returns: string;
       };
+      confirm_supplier_catalog_import:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_import_id: string;
+              p_organization_id: string;
+              p_unit_mapping: Json;
+            };
+            Returns: Json;
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_import_id: string;
+              p_organization_id: string;
+              p_price_fingerprint: string;
+              p_rebates: Json;
+              p_unit_mapping: Json;
+            };
+            Returns: Json;
+          };
       consume_rate_limit: {
         Args: {
           p_action: string;
@@ -15530,6 +15993,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -15583,6 +16047,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -15735,6 +16200,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -15963,6 +16429,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -16035,6 +16502,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16086,6 +16554,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16261,6 +16730,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -17481,6 +17951,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -18038,6 +18509,19 @@ export type Database = {
         };
         Returns: Json;
       };
+      open_supplier_catalog_import: {
+        Args: {
+          p_actor_id: string;
+          p_content_hash: string;
+          p_file_names: string[];
+          p_header: Json;
+          p_organization_id: string;
+          p_rebate_groups: Json;
+          p_skipped: Json;
+          p_supplier_id: string;
+        };
+        Returns: string;
+      };
       open_time_account: {
         Args: {
           p_actor_id: string;
@@ -18131,15 +18615,46 @@ export type Database = {
         };
         Returns: string;
       };
-      preview_inventory_import: {
+      preview_inventory_import:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_column_mapping: Json;
+              p_content_hash: string;
+              p_file_name: string;
+              p_mode: string;
+              p_organization_id: string;
+              p_rows: Json;
+            };
+            Returns: Json;
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_column_mapping: Json;
+              p_content_hash: string;
+              p_file_name: string;
+              p_mode: string;
+              p_organization_id: string;
+              p_rows: Json;
+              p_with_prices: boolean;
+            };
+            Returns: Json;
+          };
+      preview_supplier_catalog_import: {
         Args: {
           p_actor_id: string;
-          p_column_mapping: Json;
-          p_content_hash: string;
-          p_file_name: string;
-          p_mode: string;
+          p_import_id: string;
           p_organization_id: string;
-          p_rows: Json;
+        };
+        Returns: Json;
+      };
+      preview_supplier_catalog_import_prices: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_organization_id: string;
+          p_rebates: Json;
         };
         Returns: Json;
       };
@@ -18910,6 +19425,7 @@ export type Database = {
               parent_equipment_id: string | null;
               predecessor_equipment_id: string | null;
               site_id: string;
+              source_number: string | null;
               state: Database["public"]["Enums"]["installed_equipment_state"];
               subtype:
                 | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -18966,6 +19482,7 @@ export type Database = {
               parent_equipment_id: string | null;
               predecessor_equipment_id: string | null;
               site_id: string;
+              source_number: string | null;
               state: Database["public"]["Enums"]["installed_equipment_state"];
               subtype:
                 | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -19502,6 +20019,20 @@ export type Database = {
         };
         Returns: Json;
       };
+      search_supplier_catalog_articles: {
+        Args: { p_limit: number; p_organization_id: string; p_search: string };
+        Returns: {
+          article_number: string;
+          id: string;
+          name: string;
+          name_addition: string;
+          price_cents: number;
+          price_kind: string;
+          price_quantity: number;
+          supplier_name: string;
+          unit: string;
+        }[];
+      };
       search_work_predecessor_options: {
         Args: {
           p_kind: string;
@@ -19651,6 +20182,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -19706,6 +20238,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20036,6 +20569,24 @@ export type Database = {
         };
         Returns: undefined;
       };
+      settle_werkflow_billing_signal: {
+        Args: {
+          p_attempt: number;
+          p_failure_code?: string;
+          p_outcome: string;
+          p_stripe_event_id: string;
+        };
+        Returns: boolean;
+      };
+      stage_supplier_catalog_import_lines: {
+        Args: {
+          p_actor_id: string;
+          p_import_id: string;
+          p_lines: Json;
+          p_organization_id: string;
+        };
+        Returns: number;
+      };
       start_organization_export: {
         Args: {
           p_actor_id: string;
@@ -20164,6 +20715,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20409,6 +20961,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -20462,6 +21015,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -20886,6 +21440,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20962,6 +21517,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -21013,6 +21569,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;

@@ -23,6 +23,7 @@ const WORKING: LiveClockState = {
 const PENDING_START: ClockDeviceView = {
   status: 'pending',
   state: WORKING,
+  chainSegmentId: null,
   events: [
     {
       operationId: '50000000-0000-4000-8000-0000000000a1',
@@ -39,6 +40,7 @@ const PENDING_START: ClockDeviceView = {
 const STOPPED_START: ClockDeviceView = {
   status: 'stopped',
   state: null,
+  chainSegmentId: null,
   events: PENDING_START.events.map((event) => ({ ...event, status: 'conflict', code: 'version_conflict' })),
 };
 

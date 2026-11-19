@@ -33,13 +33,14 @@ const ONE_PIXEL_PNG = Buffer.from(
 /**
  * Stores a small PNG in object storage and registers it through the same
  * database function a finished upload calls, so the document carries its
- * version, audit event and optional job link. Returns the document id.
+ * version, audit event and optional job or equipment link. Returns the document id.
  */
 export async function seedStoredImageDocument(input: {
   orgId: string;
   actorId: string;
   displayName: string;
   jobId?: string;
+  equipmentId?: string;
 }): Promise<string> {
   const documentId = randomUUID();
   const storagePath = buildDocumentStoragePath({
@@ -67,8 +68,8 @@ export async function seedStoredImageDocument(input: {
         p_category: 'photo',
         p_mime_type: 'image/png',
         p_size_bytes: ONE_PIXEL_PNG.byteLength,
-        p_link_kind: input.jobId ? 'job' : null,
-        p_link_target_id: input.jobId ?? null,
+        p_link_kind: input.jobId ? 'job' : input.equipmentId ? 'equipment' : null,
+        p_link_target_id: input.jobId ?? input.equipmentId ?? null,
       }),
     )
     .throwOnError();

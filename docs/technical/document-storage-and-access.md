@@ -32,15 +32,15 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 
 ## Generated documents
 
-`lib/document-rendering/` is the one renderer of generated business documents: offers now, invoices later. A caller maps its records into the module's plain model, with every amount already computed; the module imports no domain or database type.
+`lib/document-rendering/` is the one renderer of generated business documents: offers and invoices. A caller maps its records, amounts computed, into the module's plain model; the module imports no domain or database type.
 
 - It runs in the app's Node functions with `pdf-lib` and bundled Geist font subsets; no browser or external service sees a document.
-- The same model gives the same bytes: the PDF's dates come from the model, so a preview and a stored copy of the same input are equal.
+- The same model gives the same bytes, dates included, so a preview equals the stored copy.
 - Optional stationery (a PDF page or an image for the first page, another for the following pages) lies under the content, which keeps to the stationery's margins. Without it the module draws a plain letterhead from logo and sender.
 - Every page says „Seite x von y“, the table header repeats on each page, a position keeps its first description line, and a subtotal keeps its section's last position.
 - A generated offer belongs to its offer and customer, never to a job or project, because an assigned employee reads a job's documents.
-- `lib/invoicing/` sends invoice XML only after the EN 16931 check passed.
-- The company document profile's logo and stationery lie under `{organizationId}/briefpapier/{fileId}/{uploaderId}/`, outside the library. They follow the [upload flow](#upload-flow); ticket and finalize bind the key to the session's person (`bindUploadPathToCreator`), so another manager finds nothing to finalize. The finalize also refuses a file the renderer cannot embed, and registers the copy with its stored size and its history entry in one call. It keeps the staging object (`copyStagedUpload`) until the registration commits or is refused, so after an unknown outcome the retry under the same file id copies it again. The [organization export](../features/employee-management.md#current-product-baseline) plans them by that size beside the documents' originals, with no document. A replacement or removal names the file the caller saw, and removing the first page's stationery also names the following pages' file it removes too; either is refused when another file took its place since. A replaced or removed file queues its old object for the [purge](#storage-cleanup): a stored document carries its own bytes and never needs the live file.
+- `lib/invoicing/` embeds or sends invoice XML only after the EN 16931 check passed. An invoice PDF is PDF/A-3b with the XML as `factur-x.xml`, read back from the saved bytes. Only CI checks PDF/A (Mustang, veraPDF), so invoices print stationery as plain letterhead.
+- The company document profile's logo and stationery lie under `{organizationId}/briefpapier/{fileId}/{uploaderId}/`, outside the library. They follow the [upload flow](#upload-flow); ticket and finalize bind the key to the session's person (`bindUploadPathToCreator`), so another manager finds nothing to finalize. The finalize also refuses a file the renderer cannot embed, and registers the copy with its stored size and its history entry in one call. It keeps the staging object (`copyStagedUpload`) until the registration settles, so a retry under the same file id copies it again. The [organization export](../features/employee-management.md#current-product-baseline) plans them by that size beside the documents' originals. A replacement or removal names the file the caller saw, and removing the first page's stationery also names the following pages' file it removes too; either is refused when another file took its place since. A replaced or removed file queues its old object for the [purge](#storage-cleanup); stored documents carry their own bytes.
 
 ## Links and ownership
 
@@ -50,7 +50,7 @@ A document exists once. A `document_links` row points to exactly one target. A l
 - Applying a work template creates no file, folder, link, approval or signature.
 - A document becomes evidence for an artifact revision only through an explicit relation to that revision. Removing a fulfilment needs a reason.
 - A handover release freezes each source's document id, version number and storage path.
-- A link to equipment, a service case or a coverage grants an employee nothing.
+- A link to a service case or a coverage grants an employee nothing.
 - While equipment history or a service-case event depends on a link, unlink and permanent deletion are rejected. Organization teardown is the guarded exception.
 - A protected personnel file is a `documents` row plus `personnel_documents` metadata keyed to the personnel record. No ordinary link, no folder; the library excludes it.
 - Creating a job, project, customer or employee creates no folder. Entity names change and automatic folders go stale. Before automatic folders or AI extraction arrive, update the feature spec with the decided UX.
@@ -64,13 +64,13 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 | `/dokumente` library, folders, trash | Yes | No; the route redirects |
 | Upload on a job page | Yes | Only on an assigned job |
 | Upload on a project, customer or employee page | Yes | No |
-| View or download the current version | Yes | Only when linked to an assigned job, or to a project with an assigned job |
+| View or download the current version | Yes | Only when linked to an assigned job, its project or, ordinary only, its Anlage |
 | Earlier versions and audit history | Yes | No |
 | Rename, move, copy, delete, link, unlink, reclassify, new version | Yes | No |
 | Document date, retention class, filing, and seeing them | Yes | No |
 | Origin (source system and old number) | See and change until filed | See, on a document they may read |
 
-- Field access follows assigned work: `lib/documents/access.ts` decides it, and `app_private.can_access_document` holds the same rule for Realtime. A customer or employee link alone grants nothing.
+- Field access follows assigned work: `lib/documents/access.ts` and `equipment-access.ts` decide it, and `app_private.can_access_document` holds the same rule for Realtime. A customer or employee link alone grants nothing.
 - A field worker's document carries only the links `readableDocumentLinks` keeps: an assigned job, that job's project or customer, and the worker. `hydrateDocuments` takes the caller's context, so no reader resolves another link's names for them.
 - The version and audit history of an ordinary document stays with managers: both history actions authorize through `getDocumentWithHistory`, and the `document_versions` and `document_audit_events` policies give an assignment no ordinary row. A protected personnel document keeps its own rule below.
 - Every project-level write needs a manager, the upload ticket and finalize included. Exporting a project-level `Arbeitsnachweis` is such a write.

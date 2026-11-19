@@ -7,6 +7,7 @@ import { LocationDialog } from './inventory-location-dialog';
 import { StockAdjustmentDialog } from './inventory-stock-adjustment-dialog';
 import type { useInventoryEditing } from './use-inventory-editing';
 import { useArticleTerms } from './use-article-terms';
+import { WholesalerImportDialog } from './wholesaler-import-dialog';
 
 /** The inventory page's item, Lager, stock and import dialogs. */
 export function InventoryDialogs({
@@ -14,11 +15,15 @@ export function InventoryDialogs({
   editing,
   importDialogOpen,
   setImportDialogOpen,
+  wholesalerImportOpen,
+  setWholesalerImportOpen,
 }: {
   overview: InventoryOverview;
   editing: ReturnType<typeof useInventoryEditing>;
   importDialogOpen: boolean;
   setImportDialogOpen: (open: boolean) => void;
+  wholesalerImportOpen: boolean;
+  setWholesalerImportOpen: (open: boolean) => void;
 }) {
   const articleWrites = useArticleTerms(overview.articleTerms);
   return (
@@ -63,6 +68,12 @@ export function InventoryDialogs({
         existingItemCount={overview.summary.totalItems}
         locations={overview.locations}
         categories={overview.categories}
+      />
+
+      <WholesalerImportDialog
+        open={wholesalerImportOpen}
+        onOpenChange={setWholesalerImportOpen}
+        suppliers={overview.suppliers}
       />
     </>
   );

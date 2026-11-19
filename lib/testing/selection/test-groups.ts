@@ -359,7 +359,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['p1-21', ['p1_21_time_segments.sql', 'clock_job_row_lock.sql'], ['time', 'personnel', 'work']],
   [
     'p1-22',
-    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql'],
+    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql', 'late_chain_replacement.sql'],
     ['time', 'personnel', 'work'],
   ],
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
@@ -421,6 +421,9 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'inventory_import_preview.sql',
       'inventory_article_prices.sql',
       'inventory_article_prices_concurrency.sql',
+      'inventory_supplier_catalog.sql',
+      'inventory_supplier_catalog_search.sql',
+      'inventory_supplier_catalog_prices.sql',
       'inventory_item_units.sql',
       'inventory_item_units_concurrency.sql',
       'job_material_use.sql',
@@ -429,6 +432,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'job_material_retries_concurrency.sql',
       'job_material_planning.sql',
       'job_material_planning_concurrency.sql',
+      'inventory_supplier_catalog_concurrency.sql',
     ],
     ['inventory'],
   ],
@@ -453,6 +457,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
+  ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
   ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
@@ -487,12 +492,14 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     [
       'security_boundaries.sql',
       'client_read_boundaries.sql',
+      'equipment_field_documents.sql',
       'email_change_boundaries.sql',
       'event_ledger_boundaries.sql',
       'realtime_deletions.sql',
     ],
     ['*'],
   ],
+  ['work-source-numbers', ['work_source_numbers.sql'], ['work', 'service']],
 ];
 
 /** Measured performance specs judge their deadlines in release mode and on explicit request only. */
