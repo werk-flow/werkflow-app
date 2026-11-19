@@ -217,6 +217,8 @@ export type EquipmentFormInput = {
   manufacturer?: string | null;
   model?: string | null;
   locationDetail?: string | null;
+  /** The number the previous system gave the Anlage; empty clears it. A replacement ignores it. */
+  sourceNumber?: string | null;
   technicalNotes?: string | null;
   installationDate?: string | null;
   commissioningDate?: string | null;
@@ -403,6 +405,7 @@ export type EquipmentWorkLink = {
 };
 
 export type EquipmentDetail = EquipmentListItem & {
+  sourceNumber: string | null;
   technicalNotes: string | null;
   installationDate: string | null;
   commissioningDate: string | null;

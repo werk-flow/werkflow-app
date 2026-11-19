@@ -19,12 +19,13 @@ import { isManagerRole } from '@/lib/roles';
 import type { ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { TimeCorrectionDialogFields } from './time-correction-dialog-fields';
-import { useTimeCorrectionDialogForm } from './use-time-correction-dialog';
+import { useTimeCorrectionDialogForm, type FiledTimeCorrection } from './use-time-correction-dialog';
 
 type CorrectionDialogProps = {
   organizationId: string;
   entry?: TimeEntry | undefined;
-  onSubmitted?: () => void;
+  /** The request is filed; it reports the kind, since the person may change it in the form. */
+  onSubmitted?: (filed: FiledTimeCorrection) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   hideTrigger?: boolean;

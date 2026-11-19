@@ -101,6 +101,8 @@ export async function previewInventoryImport(
       p_content_hash: input.contentHash,
       p_mode: input.mode,
       p_rows: stagedImportRows(input.rows),
+      // This preview shows each matched article's price change, so its booking records them.
+      p_with_prices: true,
     }),
   );
   if (error) return inventoryWriteFailure('previewInventoryImport: preview failed', error, 'save_failed');
