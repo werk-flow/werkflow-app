@@ -2,6 +2,7 @@ import ts from 'typescript';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import { groupSelections } from './group-selection';
 import type { ChangeTrigger } from './change-triggers';
+import type { GroupDurations } from './group-durations';
 import { isPerformanceSpec } from './test-groups';
 
 /** A group as the CI plan sees it: its id, kind, spec files and what its execution imports. */
@@ -79,6 +80,7 @@ export function runnerModules(graph: ReadonlyMap<string, readonly string[]>): st
  */
 export const REGISTRY_ROWS: Readonly<Record<string, readonly string[]>> = {
   'lib/testing/selection/test-groups.ts': ['TEST_SCOPE_PREFIXES', 'auditDefinitions', 'sqlDefinitions'],
+  'lib/testing/selection/component-areas.ts': ['COMPONENT_AREAS'],
   'lib/testing/selection/dialog-inventory.ts': ['DIALOG_INVENTORY'],
   'lib/testing/selection/mobile-route-inventory.ts': [
     'MANAGER_PHONE_ROUTES',
@@ -112,23 +114,22 @@ export function changesOnlyRows(file: string, before: string, after: string): bo
 
 /** The visual groups render in the pinned Playwright image, which a runner pulls first, so they share shards of their own. */
 const VISUAL_GROUP = /^audit:visual(:|$)/;
-/** A visual shard holds about this many visual groups: a full selection's fourteen fill two. */
-const VISUAL_GROUPS_PER_SHARD = 7;
-
 /**
- * A browser shard holds about this many groups. Its setup (disk, install, stack, Playwright) takes
- * about 5 min, and a diff selection's group about 1 min, so the eleven critical journeys and lab
- * groups of a product change share one shard: about 15 min, beside the 11 min of `Component
- * contracts`, where three shards of four paid three setups for 2 to 4 min of tests each
- * (werk-flow/werkflow-planning#294).
+ * A browser shard holds about this many seconds of tests by the recorded durations
+ * (group-durations.ts), besides a setup of about 5 min (disk, install, stack, Playwright). A
+ * selection takes as few shards as hold it at this, so a product change's critical journeys and lab
+ * groups (about 9 min) pay one setup, and a full run spreads evenly over `MAX_SHARDS`.
  */
-const GROUPS_PER_SHARD = 12;
+export const TARGET_SHARD_SECONDS = 15 * 60;
 /**
- * A full selection fills this many shards: six general shards and two visual ones, each with about
- * 11 to 31 min of tests (werk-flow/werkflow-planning#291, #294). Fewer would take the slowest shard
- * past the Browser job's 45 min timeout. A diff selection of up to 72 general groups is not capped.
+ * A full selection fills this many shards: the visual ones and the others, each with about 13 to
+ * 20 min of tests (werk-flow/werkflow-planning#505). Fewer would take the slowest shard past the
+ * Browser job's 45 min timeout.
  */
 export const MAX_SHARDS = 8;
+/** The component areas of a full set split into at most this many jobs of about this many seconds each. */
+const COMPONENT_SHARDS = 2;
+const COMPONENT_SHARD_SECONDS = 8 * 60;
 
 const isBrowser = (group: CiGroup): boolean => group.kind === 'golden' || group.kind === 'audit';
 
@@ -155,6 +156,8 @@ export function ciPlan(input: {
   runnerModules: readonly string[];
   /** The changed registries whose change `changesOnlyRows` holds to their rows. */
   rowChanges: readonly string[];
+  /** The recorded group durations the shards are packed by. */
+  durations: GroupDurations;
 }): CiPlan {
   const browserGroups = input.groups.filter(
     (group) => isBrowser(group) && !group.files.some(isPerformanceSpec),
@@ -186,7 +189,14 @@ export function ciPlan(input: {
         changeSelection(input.groups.filter(isBrowser), input.changedFiles).filter((entry) =>
           browserGroups.some((group) => group.id === entry.id),
         );
-  return { fullReason, browser, shards: shardsOf(browser.map((entry) => entry.id)) };
+  return {
+    fullReason,
+    browser,
+    shards: shardsOf(
+      browser.map((entry) => entry.id),
+      input.durations,
+    ),
+  };
 }
 
 function changeSelection(
@@ -214,27 +224,61 @@ function changeSelection(
   });
 }
 
-/** Deals the groups round-robin into `count` shards. */
-function deal(groupIds: readonly string[], count: number): string[][] {
-  const shards = Array.from({ length: count }, (): string[] => []);
-  groupIds.forEach((id, index) => shards[index % count]?.push(id));
-  return shards;
+/**
+ * Packs the groups into `count` shards, longest first, each onto the shard with the least recorded
+ * time so far, the lower shard on a tie; equal durations go by id. The same selection therefore
+ * always packs alike, whatever its order. A shard lists its groups in selection order.
+ */
+function pack(groupIds: readonly string[], count: number, seconds: (id: string) => number): string[][] {
+  const loads = Array.from({ length: count }, () => ({ seconds: 0, groups: new Set<string>() }));
+  const longestFirst = [...groupIds].sort(
+    (left, right) => seconds(right) - seconds(left) || left.localeCompare(right),
+  );
+  for (const id of longestFirst) {
+    const lightest = loads.reduce((best, load) => (load.seconds < best.seconds ? load : best));
+    lightest.seconds += seconds(id);
+    lightest.groups.add(id);
+  }
+  return loads.map((load) => groupIds.filter((id) => load.groups.has(id)));
+}
+
+const secondsOf =
+  (durations: GroupDurations) =>
+  (id: string): number =>
+    durations.groups[id] ?? durations.defaultSeconds;
+
+/** How many shards of `targetSeconds` the groups fill, at least one. */
+function shardCount(
+  groupIds: readonly string[],
+  seconds: (id: string) => number,
+  targetSeconds: number,
+): number {
+  const total = groupIds.reduce((sum, id) => sum + seconds(id), 0);
+  return Math.max(1, Math.ceil(total / targetSeconds));
 }
 
 /**
- * The visual groups in shards of their own, then the other groups, each kind dealt round-robin into
- * as few shards as hold about its number per shard, the other groups within the job budget.
+ * The visual groups in shards of their own, then the other groups, each packed into as few shards
+ * as hold `TARGET_SHARD_SECONDS` each, the other groups within the job budget and never fewer than one.
  */
-function shardsOf(groupIds: readonly string[]): CiShard[] {
+function shardsOf(groupIds: readonly string[], durations: GroupDurations): CiShard[] {
+  const seconds = secondsOf(durations);
   const visual = groupIds.filter((id) => VISUAL_GROUP.test(id));
   const rest = groupIds.filter((id) => !VISUAL_GROUP.test(id));
-  const visualCount = Math.ceil(visual.length / VISUAL_GROUPS_PER_SHARD);
-  // At least one shard for the other groups, so a large visual selection can never drop them.
+  const visualCount = visual.length ? shardCount(visual, seconds, TARGET_SHARD_SECONDS) : 0;
   const restCount = rest.length
-    ? Math.max(1, Math.min(MAX_SHARDS - visualCount, Math.ceil(rest.length / GROUPS_PER_SHARD)))
+    ? Math.max(1, Math.min(MAX_SHARDS - visualCount, shardCount(rest, seconds, TARGET_SHARD_SECONDS)))
     : 0;
-  return [...deal(visual, visualCount), ...deal(rest, restCount)].map((groups, index) => ({
-    shard: index + 1,
-    groups: groups.join(','),
-  }));
+  return numbered([...pack(visual, visualCount, seconds), ...pack(rest, restCount, seconds)]);
 }
+
+/** The selected component areas in at most `COMPONENT_SHARDS` jobs, packed like the browser shards. */
+export function componentShards(groupIds: readonly string[], durations: GroupDurations): CiShard[] {
+  if (!groupIds.length) return [];
+  const seconds = secondsOf(durations);
+  const count = Math.min(COMPONENT_SHARDS, shardCount(groupIds, seconds, COMPONENT_SHARD_SECONDS));
+  return numbered(pack(groupIds, count, seconds));
+}
+
+const numbered = (shards: readonly string[][]): CiShard[] =>
+  shards.map((groups, index) => ({ shard: index + 1, groups: groups.join(',') }));

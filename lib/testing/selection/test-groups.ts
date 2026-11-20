@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 import { changeTrigger, type ChangeTrigger } from './change-triggers';
+import { componentAreaGroups } from './component-areas';
 import { MAINTENANCE_VISIT_SQL_FILES } from './maintenance-visit-sql-files';
 
 export interface TestGroup {
@@ -549,15 +550,8 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
     timing: declaredTiming([`tests/audit/${file}`]),
     changeTrigger: changeTrigger(repositoryRoot, `audit:${id}`, [`tests/audit/${file}`]),
   }));
+  groups.push(...componentAreaGroups(listTestFiles(repositoryRoot, 'tests/ui-contracts', /\.spec\.ts$/)));
   groups.push(
-    {
-      id: 'ui:contracts',
-      kind: 'ui',
-      files: listTestFiles(repositoryRoot, 'tests/ui-contracts', /\.spec\.ts$/),
-      scopes: ['*'],
-      isolation: 'process',
-      timing: untimed,
-    },
     {
       id: 'unit:all',
       kind: 'unit',

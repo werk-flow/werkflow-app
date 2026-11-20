@@ -58,7 +58,7 @@ A proof is a passing result whose fingerprint matches the current inputs; a late
 
 ## How selection works
 
-`bun run test:plan` prints each group with its reason and first file. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD`.
+`bun run test:plan` prints each group's reason and first file. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD`.
 
 Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
 
@@ -68,7 +68,7 @@ Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
 - Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed. `audit:layout:<area>` also runs when its pages or dialogs render a changed file at most five areas render (`surface-closure.ts`).
-- Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
+- Static gates run in every plan. Unit, SQL and component groups run when their inputs changed (`fast-tier.ts` in CI).
 - Groups whose own spec or support changed run first.
 - `test:verify` refuses to start while a group it would run has an unclassified latest failure.
 
