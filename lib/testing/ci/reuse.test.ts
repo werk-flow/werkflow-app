@@ -2,7 +2,10 @@
 // receipt for the key decides (lib/testing/ci/reuse.ts).
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import type { CiResult } from './results';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { type CiResult, readLedger } from './results';
 import { passedTreeActionsFilter, passedTreeInLedger, type ReuseKey, reusableReceipt } from './reuse';
 
 const TREE = 'a'.repeat(40);
@@ -115,4 +118,21 @@ test('a newer attempt that recorded its key but never finished withdraws an earl
     groups: GROUPS.map((id) => ({ id, outcome: 'not-run', durationMs: 0 })),
   });
   expect(reusableReceipt([receipt(), started], KEY, 'integration')).toBeUndefined();
+});
+
+test('an absent ledger is empty; a ledger that cannot be read, or holds one bad line, counts for nothing', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'ci-ledger-'));
+  try {
+    expect(readLedger(join(folder, 'absent.jsonl'))).toEqual([]);
+    const ledger = join(folder, 'ledger.jsonl');
+    writeFileSync(ledger, `${JSON.stringify(receipt())}\n`);
+    expect(readLedger(ledger)).toEqual([receipt()]);
+    writeFileSync(ledger, `${JSON.stringify(receipt())}\n{"version":1}\n`);
+    expect(readLedger(ledger)).toEqual({ unreadable: `${ledger}:2 is no valid receipt` });
+    const directory = join(folder, 'directory.jsonl');
+    mkdirSync(directory);
+    expect(readLedger(directory)).toHaveProperty('unreadable');
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });

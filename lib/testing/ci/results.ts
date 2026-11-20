@@ -79,8 +79,15 @@ export function readResult(path: string): CiResult | { unreadable: string } {
  */
 export function readLedger(path: string): CiResult[] | { unreadable: string } {
   if (!existsSync(path)) return [];
+  let lines: string[];
+  try {
+    lines = readFileSync(path, 'utf8').split('\n');
+  } catch (error) {
+    return {
+      unreadable: `${path} cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
   const receipts: CiResult[] = [];
-  const lines = readFileSync(path, 'utf8').split('\n');
   for (const [index, line] of lines.entries()) {
     if (!line.trim()) continue;
     try {
