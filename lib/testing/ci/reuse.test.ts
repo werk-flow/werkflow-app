@@ -91,6 +91,13 @@ test("a push's tree counts as passed only by the newest integration Check of tha
   expect(passedTreeInLedger([check({ event: 'pr' })], TREE)).toBeUndefined();
   expect(passedTreeInLedger([check({ producer: null })], TREE)).toBeUndefined();
   expect(passedTreeInLedger([check({ completedAt: null })], TREE)).toBeUndefined();
+  expect(passedTreeInLedger([check({ runUrl: null })], TREE)).toBeUndefined();
+  // A later attempt that stopped before its Check, failed or still running, withdraws the pass.
+  const later = { event: 'integration', runUrl: 'https://ci.example/runs/2' } as const;
+  expect(passedTreeInLedger([check({}), receipt({ ...later, status: 'failed' })], TREE)).toBeUndefined();
+  expect(
+    passedTreeInLedger([check({}), receipt({ ...later, status: 'running', completedAt: null })], TREE),
+  ).toBeUndefined();
 });
 
 test('the Actions adapter takes the newest completed queue run of the tree, and only when it passed (real jq)', () => {

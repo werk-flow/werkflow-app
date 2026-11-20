@@ -77,7 +77,11 @@ jobs:
       actions: read
     outputs:
       jobs: ${{ steps.plan.outputs.jobs }}
+      browser: ${{ steps.plan.outputs.browser }}
       shards: ${{ steps.plan.outputs.shards }}
+      midnight_until: ${{ steps.plan.outputs.midnight_until }}
+      static: ${{ steps.plan.outputs.static }}
+      sql: ${{ steps.plan.outputs.sql }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

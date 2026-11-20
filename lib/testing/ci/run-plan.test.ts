@@ -14,6 +14,7 @@ const SHARDS = [
 const OUTPUTS = {
   browser: 'true',
   full: 'false',
+  full_reason: '',
   shards: JSON.stringify(SHARDS),
   midnight_until: '',
   static: 'static:typecheck,static:docs',
@@ -67,6 +68,16 @@ test('an empty browser selection skips the shards with the reason', () => {
 test('a push to main whose tree an integration run passed runs no job and cites that run', () => {
   const pushed = plan('main', { passedTree: 'https://ci.example/runs/7' });
   expect(pushed.jobs).toEqual(['plan', 'check']);
+  // Every planner key stays, empty, so a reader of the outputs finds each one.
+  expect(Object.keys(pushed.outputs).sort()).toEqual([
+    'browser',
+    'full',
+    'full_reason',
+    'midnight_until',
+    'shards',
+    'sql',
+    'static',
+  ]);
   for (const job of ['fast', 'sql', 'components', 'midnight', 'browser'] as const)
     expect(pushed.skips[job]).toBe('The integration run https://ci.example/runs/7 passed this exact tree.');
   // Only a push reuses a whole run: a queue run of the same tree still runs.
@@ -109,4 +120,11 @@ test('every shard reused skips the browser job and its midnight hold', () => {
   expect(run.jobs).toEqual(['plan', 'fast', 'sql', 'components', 'check']);
   expect(run.skips.browser).toContain('shard 1 by https://ci.example/runs/4');
   expect(run.outputs.midnight_until).toBe('');
+});
+
+test('a planner answer without a required key plans nothing, so no gate goes missing as an empty selection', () => {
+  for (const key of ['static', 'sql', 'shards'] as const) {
+    const partial = Object.fromEntries(Object.entries(OUTPUTS).filter(([name]) => name !== key));
+    expect(() => plan('integration', { outputs: partial })).toThrow(`The planner gave no ${key}`);
+  }
 });

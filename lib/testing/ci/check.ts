@@ -18,8 +18,8 @@ export function parseScheduler(json: string | undefined): z.infer<typeof schedul
 }
 
 export type CheckInput = {
-  /** The tree and event this Check judges; every result must be of them. */
-  run: { tree: string; event: CiEvent };
+  /** The run this Check judges; every result must be of its tree, event and run. */
+  run: { tree: string; event: CiEvent; runUrl: string | null };
   /** The plan's result, or why it cannot be read. */
   plan: CiResult | { unreadable: string };
   /** Every other result the run's jobs wrote, or why one cannot be read. */
@@ -50,9 +50,9 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
     fail(`plan: the job ended ${scheduledPlan}`);
     return { passed, lines };
   }
-  if (plan.tree !== input.run.tree || plan.event !== input.run.event) {
+  if (plan.tree !== input.run.tree || plan.event !== input.run.event || plan.runUrl !== input.run.runUrl) {
     fail(
-      `plan: it is the ${plan.event} plan of tree ${plan.tree}, not this ${input.run.event} run of ${input.run.tree}`,
+      `plan: it is the ${plan.event} plan of tree ${plan.tree} in run ${plan.runUrl}, not of this ${input.run.event} run ${input.run.runUrl} of ${input.run.tree}`,
     );
     return { passed, lines };
   }
@@ -60,11 +60,14 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
   for (const entry of input.results) if ('unreadable' in entry) fail(`result: ${entry.unreadable}`);
   const results = input.results.filter(
     (entry): entry is CiResult =>
-      !('unreadable' in entry) && entry.tree === plan.tree && entry.event === plan.event,
+      !('unreadable' in entry) &&
+      entry.tree === plan.tree &&
+      entry.event === plan.event &&
+      entry.runUrl === plan.runUrl,
   );
   for (const entry of input.results)
     if (!('unreadable' in entry) && !results.includes(entry))
-      fail(`${entry.job}: a result of another run (${entry.event}, tree ${entry.tree})`);
+      fail(`${entry.job}: a result of another run (${entry.event}, tree ${entry.tree}, run ${entry.runUrl})`);
   for (const job of CI_JOBS.filter((name) => name !== 'plan' && name !== 'check')) {
     const scheduled = input.scheduler?.[job]?.result;
     if (scheduled === 'failure' || scheduled === 'cancelled') fail(`${job}: the job ended ${scheduled}`);

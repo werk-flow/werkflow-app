@@ -13,9 +13,21 @@ outputs:
   jobs:
     description: The plan's jobs of this run, as JSON
     value: ${{ steps.job.outputs.jobs }}
+  browser:
+    description: Whether the plan runs browser shards
+    value: ${{ steps.job.outputs.browser }}
   shards:
     description: The plan's browser shards, as JSON
     value: ${{ steps.job.outputs.shards }}
+  midnight_until:
+    description: When the plan's browser shards may start, or empty
+    value: ${{ steps.job.outputs.midnight_until }}
+  static:
+    description: The static gates besides lint
+    value: ${{ steps.job.outputs.static }}
+  sql:
+    description: The SQL groups
+    value: ${{ steps.job.outputs.sql }}
 runs:
   using: composite
   steps:

@@ -42,10 +42,12 @@ import { repository, run, step, verify } from './run';
 //   CI_FULL_REASON  plan: why every browser group runs. Required for full.
 //   CI_SHARD        browser: the shard's number in the plan. Required for browser.
 //   CI_PRODUCER     The CI runner's name, recorded in every result. Unset on a workstation, whose
-//                   results are never reused.
+//                   results are never reused. A checkout that differs from its commit records none.
 //   CI_LEDGER       The runner's JSONL ledger of results. plan reads it to reuse a passed result,
-//                   and with CI_PRODUCER set every job appends its final result. Optional.
-//   CI_RUN_URL      The run's address, which a later reuse cites. Optional.
+//                   and with CI_PRODUCER set every job appends its receipts. Optional.
+//   CI_RUN_URL      The run's identity and address: check takes only results of this run, and a
+//                   later reuse cites it. The same for every job and rerun of one run. Required
+//                   with CI_LEDGER.
 //   CI_BUILD_TAR    fast packs its build into this file, and a browser shard unpacks it. Optional.
 //   CI_NEEDS        check: the scheduler's job results, as ci.yml's `toJSON(needs)`. Optional.
 //   SHRINK_ONLY_GROWTH_APPROVED  `true` with the owner's `approved: list growth` label.
@@ -70,6 +72,16 @@ mkdirSync(ci.directory, { recursive: true });
 const git = (...args: string[]): string =>
   execFileSync('git', args, { cwd: repository, encoding: 'utf8' }).trim();
 const listGrowthApproved = environment.SHRINK_ONLY_GROWTH_APPROVED === 'true';
+// A result proves the commit's tree only when the checkout holds exactly that tree.
+const clean = git('status', '--porcelain') === '';
+if (!clean)
+  console.info(
+    '::warning title=Checkout::The checkout differs from its commit, so no result is reused or recorded for reuse.',
+  );
+if (environment.CI_LEDGER && !environment.CI_RUN_URL)
+  throw new Error('A run with CI_LEDGER needs CI_RUN_URL.');
+// One one-time-code secret for the job's build and its test server, unless the runner gives one.
+const otpSecret = environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex');
 const result: CiResult = {
   version: 1,
   job: ci.job,
@@ -83,7 +95,7 @@ const result: CiResult = {
   planReason: '',
   reusedFrom: null,
   listGrowthApproved,
-  producer: environment.CI_PRODUCER || null,
+  producer: (clean && environment.CI_PRODUCER) || null,
   runUrl: environment.CI_RUN_URL || null,
   startedAt: new Date().toISOString(),
   completedAt: null,
@@ -141,12 +153,14 @@ function passedTreeOnActions(): string | undefined {
 }
 
 async function plan(): Promise<boolean> {
-  const ledger = environment.CI_LEDGER ? readLedger(environment.CI_LEDGER) : [];
+  const ledger = environment.CI_LEDGER && clean ? readLedger(environment.CI_LEDGER) : [];
   if ('unreadable' in ledger)
     console.info(`::warning title=Ledger::${ledger.unreadable}, so no result is reused.`);
   const receipts = 'unreadable' in ledger ? [] : ledger;
   const passedTree =
-    ci.event === 'main' ? (passedTreeInLedger(receipts, result.tree) ?? passedTreeOnActions()) : undefined;
+    ci.event === 'main' && clean
+      ? (passedTreeInLedger(receipts, result.tree) ?? passedTreeOnActions())
+      : undefined;
   const planned = planRun({
     event: ci.event,
     tree: result.tree,
@@ -202,11 +216,7 @@ const buildCommands = [
   // The stack's URL and keys are the CLI's fixed defaults, recorded in .env.local-stack-backup.
   [process.execPath, ['run', 'env:local']],
   // The app reads its one-time-code secret from the environment, as on a shard (local-stack action).
-  [
-    process.execPath,
-    ['run', 'build'],
-    { EMAIL_OTP_HASH_SECRET: environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex') },
-  ],
+  [process.execPath, ['run', 'build'], { EMAIL_OTP_HASH_SECRET: otpSecret }],
 ] as const;
 
 async function fast(): Promise<boolean> {
@@ -267,6 +277,7 @@ async function startTestServer(log: string): Promise<{ ready: boolean; stop: () 
   const output = openSync(log, 'w');
   const server = spawn(process.execPath, ['run', 'test:server', 'local', '--prebuilt'], {
     cwd: repository,
+    env: { ...environment, CI: 'true', EMAIL_OTP_HASH_SECRET: otpSecret },
     stdio: ['ignore', output, output],
     detached: true,
   });
@@ -320,7 +331,7 @@ function check(): boolean {
   const own = new Set([resultFileName('plan', null), resultFileName('check', null)]);
   const plan = readResult(join(ci.directory, resultFileName('plan', null)));
   const verdict = checkRun({
-    run: { tree: result.tree, event: ci.event },
+    run: { tree: result.tree, event: ci.event, runUrl: result.runUrl },
     plan,
     results: readdirSync(ci.directory)
       .filter((file) => file.endsWith('.json') && !own.has(file))

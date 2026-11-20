@@ -15,7 +15,8 @@ export function run(...[command, args, env = {}]: Command): Promise<{ code: numb
   return new Promise((resolveRun, reject) => {
     const child = spawn(command, args, {
       cwd: repository,
-      env: { ...process.env, ...env },
+      // Every child runs in CI mode: verify.ts runs here, never on Boat, under CI's rules.
+      env: { ...process.env, CI: 'true', ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let output = '';

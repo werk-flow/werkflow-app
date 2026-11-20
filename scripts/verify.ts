@@ -722,7 +722,7 @@ async function main(): Promise<void> {
               await preparation;
               const midnightBlock = await holdOutsideMidnightWindow({
                 groupId: entry.group.id,
-                ci: process.env.GITHUB_ACTIONS === 'true',
+                ci: process.env.CI === 'true',
                 signal,
                 log: (line) => console.log(`[verify] ${line}`),
               });

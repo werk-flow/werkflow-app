@@ -60,6 +60,9 @@ function parseShards(value: string | undefined): CiShard[] {
   });
 }
 
+/** The planner outputs every plan needs; an empty selection is an empty value, never a missing key. */
+const PLANNER_OUTPUTS = ['browser', 'full', 'full_reason', 'shards', 'midnight_until', 'static', 'sql'];
+
 /**
  * The run's plan. A push to main whose tree an integration run passed runs no job and cites that
  * run. Otherwise every job of the event runs, except a browser selection that is empty, a midnight
@@ -83,10 +86,20 @@ export function planRun(input: {
       jobs: ['plan', 'check'],
       skips: Object.fromEntries(others.map((job) => [job, reason])),
       shards: [],
-      outputs: { ...input.outputs, browser: 'false', shards: '[]', midnight_until: '' },
+      outputs: {
+        browser: 'false',
+        full: 'false',
+        full_reason: '',
+        shards: '[]',
+        midnight_until: '',
+        static: '',
+        sql: '',
+      },
     };
   }
   const outputs = input.outputs ?? {};
+  const missing = PLANNER_OUTPUTS.filter((key) => outputs[key] === undefined);
+  if (missing.length) throw new Error(`The planner gave no ${missing.join(', ')}, so nothing is planned.`);
   /** The receipt that stands for the job, when the DAG lets it be reused. */
   const reusedBy = (job: CiJob, shardGroups?: string): string | undefined =>
     CI_DAG[job].reusable
