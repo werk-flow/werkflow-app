@@ -6,18 +6,46 @@
 // The registries in components/ui/ and components/shared/ are the shell's own parts and stay.
 import { describe, expect, test } from 'bun:test';
 import ts from 'typescript';
-import { resolveSpecifier } from './action-prechecks-scan';
-import { moduleSpecifierOf, repositorySources, resolveModuleFile, type SourceHost } from './module-imports';
+import {
+  moduleSpecifierOf,
+  repositorySources,
+  resolveProductModule,
+  type SourceHost,
+} from './module-imports';
 import { listProductSources, parseProductSource } from './product-sources';
 
 const APP_LAYOUT = 'app/(app)/layout.tsx';
 const SHELL_PARTS = ['components/ui/', 'components/shared/'];
 
-/** The product module a specifier names, with or without its file extension. */
-function resolveTarget(importer: string, specifier: string, host: SourceHost): string | null {
-  const exact = resolveSpecifier(importer, specifier);
-  if (exact !== null && /\.tsx?$/.test(exact) && host(exact) !== null) return exact;
-  return resolveModuleFile(importer, specifier, host);
+/**
+ * Whether a declaration brings no code: `import type`, `export type`, or named bindings that are
+ * all inline `type` ones. A side-effect import (`import './x'`) has no clause and loads code.
+ */
+function typeOnly(statement: ts.Statement): boolean {
+  if (ts.isImportDeclaration(statement)) {
+    const clause = statement.importClause;
+    if (!clause) return false;
+    if (clause.isTypeOnly) return true;
+    const bindings = clause.namedBindings;
+    return (
+      clause.name === undefined &&
+      bindings !== undefined &&
+      ts.isNamedImports(bindings) &&
+      bindings.elements.length > 0 &&
+      bindings.elements.every((element) => element.isTypeOnly)
+    );
+  }
+  if (ts.isExportDeclaration(statement)) {
+    if (statement.isTypeOnly) return true;
+    const clause = statement.exportClause;
+    return (
+      clause !== undefined &&
+      ts.isNamedExports(clause) &&
+      clause.elements.length > 0 &&
+      clause.elements.every((element) => element.isTypeOnly)
+    );
+  }
+  return false;
 }
 
 /** The product modules a module imports or re-exports statically; type-only imports leave no code. */
@@ -25,10 +53,9 @@ function staticImports(file: string, host: SourceHost): string[] {
   const text = host(file);
   if (text === null) return [];
   return parseProductSource(file, text).statements.flatMap((statement) => {
-    if (ts.isImportDeclaration(statement) && statement.importClause?.isTypeOnly) return [];
-    if (ts.isExportDeclaration(statement) && statement.isTypeOnly) return [];
+    if (typeOnly(statement)) return [];
     const specifier = moduleSpecifierOf(statement);
-    const target = specifier === null ? null : resolveTarget(file, specifier, host);
+    const target = specifier === null ? null : resolveProductModule(file, specifier, host);
     return target === null ? [] : [target];
   });
 }
@@ -87,6 +114,10 @@ describe('the (app) layout loads route skeletons lazily', () => {
       "export const load = () => import('@/components/loading-states/area-skeleton');",
     'components/shell-type.tsx':
       "import type { AreaSkeleton } from '@/components/loading-states/area-skeleton';",
+    'components/shell-inline-type.tsx': [
+      "import { type AreaSkeleton } from '@/components/loading-states/area-skeleton';",
+      "export { type AreaSkeleton as Shape } from '@/components/loading-states/area-skeleton';",
+    ].join('\n'),
     'app/(app)/static-layout.tsx': [
       "import { Skeleton } from '@/components/ui/skeleton';",
       "import { AreaSkeleton } from '@/components/shell-static';",
@@ -95,11 +126,12 @@ describe('the (app) layout loads route skeletons lazily', () => {
       "import { PageShell } from '@/components/shared/page-shell';",
       "import { load } from '@/components/shell-lazy';",
       "import '@/components/shell-type';",
+      "import '@/components/shell-inline-type';",
     ].join('\n'),
   };
   const host: SourceHost = (file) => files[file] ?? null;
 
-  test('probes: a skeleton re-exported through the shell is reported; lazy, type-only and shared parts are not', () => {
+  test('probes: a skeleton re-exported through the shell is reported; lazy, type-only (inline too) and shared parts are not', () => {
     const loading = ['app/(app)/area/loading.tsx'];
     expect(staticallyReachedSkeletons('app/(app)/static-layout.tsx', loading, host)).toEqual([
       'components/shell-static.tsx -> components/loading-states/area-skeleton.tsx',

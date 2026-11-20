@@ -7,6 +7,7 @@ import { useOrganization } from '@/components/organization/organization-context'
 import { AreaPageSkeleton } from '@/components/loading-states/area-page-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageShell } from '@/components/shared/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 
 /** Renders a skeleton; the overlay calls it, and the skeleton it returns renders as its own component. */
 type Shape = () => ReactElement;
@@ -190,12 +191,16 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
   ],
 ];
 
-/** A page's plain shape: its title. */
+/**
+ * A page's plain shape: its title over a content placeholder. The placeholder is the busy signal
+ * while the page's own skeleton loads, and after a failed load until the next switch.
+ */
 function titled(title: string): Shape {
   return function titledShape() {
     return (
       <PageShell>
         <PageHeader title={title} />
+        <Skeleton className="h-64 w-full" />
       </PageShell>
     );
   };
