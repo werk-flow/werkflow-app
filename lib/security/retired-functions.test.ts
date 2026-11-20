@@ -64,6 +64,8 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
 
 /** Function -> why it stays although the current build does not call it. */
 const KEPT_FOR_DEPLOYED_BUILD: Readonly<Record<string, string>> = {
+  complete_maintenance_due_work:
+    'the deployed production build completes maintenance through it; complete_maintenance_visit replaced it, so drop it in the first migration after the next production release',
   create_organization_with_defaults:
     'the deployed production build creates organizations through it; create_organization_from_subscription replaced it (werk-flow/werkflow-planning#248), so drop it in the first migration after the next production release',
   import_inventory_row:

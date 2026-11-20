@@ -343,6 +343,8 @@ function MaintenanceWorkspaceDialogs({
           due={dueAction.due}
           defaultAction={dueAction.defaultAction}
           plannedDurationMinutes={dueAction.due.plannedDurationMinutes}
+          currentActorId={currentActorId}
+          owners={catalogs?.followUpOwners ?? null}
           onSaved={settleOn(dueAction.due.id)}
         />
       )}

@@ -386,6 +386,27 @@ describe('lab payload rules', () => {
   });
 });
 
+test('with fewer requests than its reference a shape still fails on bytes past the ceiling, and prints otherwise', () => {
+  // 2026-11-19: main's field scripts made 41 requests instead of 42 and grew past their ceiling unjudged.
+  const base = reference();
+  const target = 'action:/auftraege/[jobNumber]#decodedBytes';
+  const shape = 'action:/auftraege/[jobNumber]';
+  const bound = base.payloads[shape];
+  if (!bound) throw new Error('the reference carries the shape');
+  const twoRequests = {
+    ...base,
+    payloads: { ...base.payloads, [shape]: { ...bound, requests: { reference: 2, tolerance: 0 } } },
+  };
+  const grown = observation({ bytes: 1_000_000 });
+  const smaller = observation({ bytes: 10 });
+  expect(
+    rowOf(compareLabStep({ step: STEP, observation: grown, reference: twoRequests }), target).status,
+  ).toBe('grew');
+  expect(
+    rowOf(compareLabStep({ step: STEP, observation: smaller, reference: twoRequests }), target).status,
+  ).toBe('ungated');
+});
+
 test('ungating removes one count from one step and records why', () => {
   const base = reference();
   const ungated = ungateLabMetric({
