@@ -139,6 +139,16 @@ async function normalizeText(
   );
 }
 
+/**
+ * Holds the page's wall clock at the moment of the call from its next navigation on, while its
+ * timers keep running: every count the app derives from the clock (useWallClockTick, such as the
+ * verification page's resend wait) shows the same value in every capture, however slow the machine.
+ * Date-derived text still gets its stand-in.
+ */
+export async function holdWallClock(page: Page): Promise<void> {
+  await page.clock.setFixedTime(new Date());
+}
+
 /** The page body inside the main landmark, the content a reference waits for. */
 export function pageBody(main: Locator): Locator {
   return main.locator('[data-page-body]');

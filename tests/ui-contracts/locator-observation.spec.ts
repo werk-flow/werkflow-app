@@ -3,8 +3,14 @@ import { assertWorkspaceTestLock } from '../../lib/testing/runner/workspace-test
 import type { LiveObservation } from '../../lib/testing/live-observation';
 import { observeLocatorDuringMutation, visibleLocatorTimestamp } from '../golden/support/locator-observation';
 
+// The observer measures with the page's performance clock. A paused fake clock
+// makes every measured duration the time a test advances, not the machine's speed.
+const CLOCK_START = new Date('2026-01-05T08:00:00Z');
+
 test.beforeEach(async ({ page }) => {
   assertWorkspaceTestLock();
+  await page.clock.install({ time: CLOCK_START });
+  await page.clock.pauseAt(CLOCK_START.getTime() + 60_000);
   await page.route('http://localhost/locator-observation**', (route) =>
     route.fulfill({
       contentType: 'text/html',
@@ -68,6 +74,7 @@ test('locator timing ends in the browser while producer confirmation remains pen
         await page.evaluate(() => document.querySelector('p')?.removeAttribute('hidden'));
         // A serial observer deadlocks here and fails the bounded assertion.
         await expect.poll(() => sampledAt, { timeout: 1000 }).toBeDefined();
+        await page.clock.runFor(100);
         confirmedAt = await page.evaluate(() => performance.timeOrigin + performance.now());
       } finally {
         releaseConfirmation();
@@ -117,9 +124,11 @@ test('locator timing resolves a result over the target but inside the tolerance 
     },
     mutation: async (start) => {
       await start();
+      await page.clock.runFor(200);
       await page.evaluate(() => document.querySelector('p')?.removeAttribute('hidden'));
     },
   });
+  expect(measured).toBe(200);
   expect(measured).toBeLessThanOrEqual(250);
   expect(records).toHaveLength(1);
   expect(records[0]).toMatchObject({ correctness: 'observed', responsiveness: 'over_target' });
@@ -136,18 +145,11 @@ test('locator timing preserves a slow correct observation for final qualificatio
     record: (value) => records.push(value),
     mutation: async (start) => {
       await start();
-      await page.evaluate(
-        () =>
-          new Promise<void>((resolve) =>
-            // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- the delayed mutation is the stimulus whose latency this contract measures
-            setTimeout(() => {
-              document.querySelector('p')?.removeAttribute('hidden');
-              resolve();
-            }, 400),
-          ),
-      );
+      await page.clock.runFor(400);
+      await page.evaluate(() => document.querySelector('p')?.removeAttribute('hidden'));
     },
   });
+  expect(measured).toBe(400);
   expect(measured).toBeGreaterThan(250);
   expect(records).toHaveLength(1);
   expect(records[0]).toMatchObject({

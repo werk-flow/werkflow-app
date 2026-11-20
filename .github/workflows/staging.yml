@@ -27,10 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/supabase-cli
+      # --include-all applies a merged migration whose version sorts before one DEV already holds;
+      # the migration-order gate let it merge only when the two change different objects. The
+      # release applies a migration to PROD only once this step recorded it in DEV's ledger.
       - name: Apply pending migrations
         env:
           DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
-        run: supabase db push --db-url "$DATABASE_URL"
+        run: supabase db push --include-all --db-url "$DATABASE_URL"
       # --use-api bundles on Supabase's side, so the runner pulls no Docker image and meets no registry rate limit.
       # The functions are named: each checks its own caller (the mail functions a secret key,
       # health its token), so none needs a JWT. A new function deploys only once it is named here,

@@ -14,13 +14,19 @@ import { openSurface } from './surface-routes';
  * as a window does. Any other trigger off screen at the width fails by name.
  * A state capture intercepts the dialog's reads in `beforeOpen`, before the
  * trigger takes focus (which may already start a read), and leaves a held
- * read's skeleton unsettled.
+ * read's skeleton unsettled. `onOpened` sees the layer as it opened, before the
+ * opener's `prepareLayer` makes the user's first choices.
  */
 export async function openLayerAt(
   context: SurfaceContext,
   opener: DialogOpener,
   width: number,
-  options: { fresh: boolean; beforeOpen?: () => Promise<void>; settleLayer?: boolean },
+  options: {
+    fresh: boolean;
+    beforeOpen?: () => Promise<void>;
+    onOpened?: (layer: Locator) => Promise<void>;
+    settleLayer?: boolean;
+  },
 ): Promise<{ trigger: Locator; layer: Locator }> {
   const { page } = context;
   const plan = openingPlan(opener, width);
@@ -32,6 +38,8 @@ export async function openLayerAt(
   await pressKey(page, 'Enter', { into: trigger });
   const layer = opener.layer(page);
   await expect(layer, 'Enter on the trigger opens the dialog').toBeVisible();
+  await options.onOpened?.(layer);
+  await opener.prepareLayer?.(layer, page);
   if (options.settleLayer ?? true) await settled(layer);
   if (plan.narrowTo) await page.setViewportSize(plan.narrowTo);
   return { trigger, layer };

@@ -10,6 +10,7 @@ import type {
   MaintenanceDueItem,
   MaintenanceEvidenceOption,
   MaintenanceMissedVisitReason,
+  MaintenanceNextAction,
   MaintenanceScopeOutcome,
 } from '@/lib/maintenance/types';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
@@ -33,6 +34,8 @@ type UseMaintenanceDueActionOptions = {
   due: MaintenanceDueItem;
   defaultAction: MaintenanceDueActionKind;
   plannedDurationMinutes: number;
+  /** The completing manager, the default owner of a next step. */
+  currentActorId: string;
   onSaved: (() => void) | undefined;
 };
 
@@ -47,6 +50,11 @@ export type MaintenanceDueActionController = MaintenanceDueActionValues & {
   setEvidenceIds: Dispatch<SetStateAction<string[]>>;
   setServiceCaseId: (serviceCaseId: string) => void;
   setMissedReason: (missedReason: MaintenanceMissedVisitReason) => void;
+  setDefectsText: (defectsText: string) => void;
+  setNextAction: (nextAction: MaintenanceNextAction) => void;
+  setNextActionOwnerId: (ownerId: string) => void;
+  setNextActionTargetDate: (targetDate: string) => void;
+  setNextActionNote: (note: string) => void;
   evidence: MaintenanceEvidenceOption[];
   isEvidenceLoading: boolean;
   evidenceFailure: ReadFailure | null;
@@ -68,6 +76,33 @@ function useMaintenanceEvidenceRead(open: boolean, jobId: MaintenanceDueItem['jo
   });
 }
 
+/** The appointment the schedule action books: the due date at eight, for the plan's duration. */
+function useScheduleState(dueDate: string, plannedDurationMinutes: number) {
+  const [date, setDate] = useState(dueDate);
+  const [time, setTime] = useState('08:00');
+  const [durationHours, setDurationHours] = useState(formatMinutesAsHoursInput(plannedDurationMinutes));
+  return { values: { date, time, durationHours }, setters: { setDate, setTime, setDurationHours } };
+}
+
+/** The Mängel and next step of a partial or unresolved visit; the owner starts as the completing manager. */
+function useNextActionState(currentActorId: string) {
+  const [defectsText, setDefectsText] = useState('');
+  const [nextAction, setNextAction] = useState<MaintenanceNextAction | null>(null);
+  const [nextActionOwnerId, setNextActionOwnerId] = useState(currentActorId);
+  const [nextActionTargetDate, setNextActionTargetDate] = useState('');
+  const [nextActionNote, setNextActionNote] = useState('');
+  return {
+    values: { defectsText, nextAction, nextActionOwnerId, nextActionTargetDate, nextActionNote },
+    setters: {
+      setDefectsText,
+      setNextAction,
+      setNextActionOwnerId,
+      setNextActionTargetDate,
+      setNextActionNote,
+    },
+  };
+}
+
 /** Collected values, the evidence read and the submit of the due-work action dialog. */
 export function useMaintenanceDueAction({
   open,
@@ -75,18 +110,18 @@ export function useMaintenanceDueAction({
   due,
   defaultAction,
   plannedDurationMinutes,
+  currentActorId,
   onSaved,
 }: UseMaintenanceDueActionOptions): MaintenanceDueActionController {
   const [action, setAction] = useState<MaintenanceDueActionKind>(defaultAction);
   const [reason, setReason] = useState('');
-  const [date, setDate] = useState(due.dueDate);
-  const [time, setTime] = useState('08:00');
-  const [durationHours, setDurationHours] = useState(formatMinutesAsHoursInput(plannedDurationMinutes));
+  const schedule = useScheduleState(due.dueDate, plannedDurationMinutes);
   const [scopeOutcome, setScopeOutcome] = useState<MaintenanceScopeOutcome>('complete');
   const [completedOn, setCompletedOn] = useState(formatBerlinLocalDate(new Date()));
   const [evidenceIds, setEvidenceIds] = useState<string[]>([]);
   const [serviceCaseId, setServiceCaseId] = useState('');
   const [missedReason, setMissedReason] = useState<MaintenanceMissedVisitReason>('customer_absent');
+  const nextStep = useNextActionState(currentActorId);
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
   const idempotencyKey = useRef(crypto.randomUUID());
@@ -95,14 +130,13 @@ export function useMaintenanceDueAction({
   const values: MaintenanceDueActionValues = {
     action,
     reason,
-    date,
-    time,
-    durationHours,
+    ...schedule.values,
     scopeOutcome,
     completedOn,
     evidenceIds,
     serviceCaseId,
     missedReason,
+    ...nextStep.values,
   };
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(async () => {
@@ -134,14 +168,13 @@ export function useMaintenanceDueAction({
     ...values,
     setAction,
     setReason,
-    setDate,
-    setTime,
-    setDurationHours,
+    ...schedule.setters,
     setScopeOutcome,
     setCompletedOn,
     setEvidenceIds,
     setServiceCaseId,
     setMissedReason,
+    ...nextStep.setters,
     evidence: evidenceRead.data?.options ?? NO_EVIDENCE,
     // Without a job no evidence can load, so completing stays held as before the read.
     isEvidenceLoading: !jobId || evidenceRead.loading,

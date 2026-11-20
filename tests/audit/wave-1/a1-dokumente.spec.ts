@@ -402,12 +402,15 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
       mimeType: 'image/png',
       buffer: onePixelPng(),
     });
-    // A tiny upload can finish before a visibility poll ever sees the
-    // progress dialog (transient-flash class, testing.md); the close-wait plus
-    // the persisted file row below are the honest proof.
-    await expect(employeePage.getByRole('dialog')).toHaveCount(0, {
+    // The upload dialog loads lazily and a tiny upload can finish before a poll sees it
+    // (transient-flash class, testing.md), so "no dialog" proves nothing: it held while the
+    // dialog's chunk still loaded, and the reload then aborted the running upload. The file's
+    // row in the section is the upload's own completion signal; the reload then proves it
+    // persisted.
+    await expect(documentOpenButton(employeePage, fileName)).toBeVisible({
       timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
+    await expect(employeePage.getByRole('dialog')).toHaveCount(0);
     await employeePage.reload();
     await documentOpenButton(employeePage, fileName).click();
     const viewer = documentViewer(employeePage, fileName);

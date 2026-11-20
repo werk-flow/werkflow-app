@@ -50,6 +50,11 @@ const REVIEWED_NEAR_FUTURE_DATES: Readonly<Record<string, ReviewedDates>> = {
     reason:
       'list_maintenance_workspace_page lists by the injected p_due_through; the clock decides only the overdue count, which the file never reads.',
   },
+  'maintenance_visit_next_actions.sql': {
+    dates: { '2027-01-10': 1, '2027-03-10': 1, '2027-05-10': 1, '2027-06-01': 1 },
+    reason:
+      'Expected next due dates computed from fixed past due dates, and a target date compared only with the 2026 completion date; the clock bounds only the completion dates.',
+  },
   'people_boundaries.sql': {
     dates: { '2026-12-01': 2, '2026-12-02': 2 },
     reason: 'Stored fixture dates; the test checks which rows each role sees.',

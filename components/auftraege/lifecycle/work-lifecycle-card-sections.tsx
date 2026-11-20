@@ -13,7 +13,7 @@ import {
   WorkLifecycleResolvedBlockers,
 } from './work-lifecycle-blockers-section';
 import { WorkLifecycleDependenciesSection } from './work-lifecycle-dependencies-section';
-import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
+import type { WorkLifecycleDialogOpener } from './work-lifecycle-dialog-state';
 import { WorkLifecycleGatesAndHistory } from './work-lifecycle-gates-history';
 import { WorkLifecycleReadinessSection } from './work-lifecycle-status';
 import { FieldTransitionActions, WorkLifecycleTransitionActions } from './work-lifecycle-transition-actions';
@@ -55,7 +55,7 @@ type WorkLifecycleCardSectionsProps = {
   ownerNames: Map<string, string>;
   ownOwnerId: string | null;
   rowBusy: { isBusy: (id: string) => boolean };
-  setDialog: (dialog: WorkLifecycleDialogState | null) => void;
+  openDialog: WorkLifecycleDialogOpener;
   completeExecution: () => Promise<string | null>;
 };
 
@@ -76,7 +76,7 @@ export function WorkLifecycleCardSections({
   ownerNames,
   ownOwnerId,
   rowBusy,
-  setDialog,
+  openDialog,
   completeExecution,
 }: WorkLifecycleCardSectionsProps): ReactElement {
   return (
@@ -90,7 +90,7 @@ export function WorkLifecycleCardSections({
           canStart={canStart}
           parking={parking}
           pendingState={pendingState}
-          setDialog={setDialog}
+          openDialog={openDialog}
           completeExecution={completeExecution}
           refresh={refresh}
         />
@@ -101,7 +101,7 @@ export function WorkLifecycleCardSections({
           isManager={isManager}
           parking={parking}
           pendingState={pendingState}
-          setDialog={setDialog}
+          openDialog={openDialog}
         />
       )}
       <WorkLifecycleReadinessSection
@@ -117,17 +117,17 @@ export function WorkLifecycleCardSections({
           ownerNames={ownerNames}
           ownOwnerId={ownOwnerId}
           rowBusy={rowBusy}
-          setDialog={setDialog}
+          openDialog={openDialog}
         />
         <WorkLifecycleDependenciesSection
           snapshot={snapshot}
           isManager={isManager}
           rowBusy={rowBusy}
-          setDialog={setDialog}
+          openDialog={openDialog}
         />
       </div>
       {isManager && snapshot.resolvedBlockers.length > 0 && (
-        <WorkLifecycleResolvedBlockers snapshot={snapshot} setDialog={setDialog} />
+        <WorkLifecycleResolvedBlockers snapshot={snapshot} openDialog={openDialog} />
       )}
       <WorkLifecycleGatesAndHistory snapshot={snapshot} />
       {unmetDependencies > 0 && (
