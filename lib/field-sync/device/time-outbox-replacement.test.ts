@@ -27,6 +27,7 @@ function stoppedChain(
     status: 'stopped',
     state: null,
     chainSegmentId,
+    setAside: [],
     events: actions.map((action, index) => ({
       operationId: `50000000-0000-4000-8000-0000000000c${index}`,
       // Six hours apart, the last at 15:00 UTC.

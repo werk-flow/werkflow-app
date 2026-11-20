@@ -5,37 +5,21 @@ import { CLOCK_ORGANIZATION_ID, CLOCK_USER_ID, RUNNING_CLOCK_STATE } from './clo
 import {
   ACCEPTED,
   CLOCKED_OUT_STATE,
+  holdDeviceStore,
   mountClock,
+  recorded,
   setNetwork,
   startWithoutNetwork,
   unsentBadge,
   unsentOnDevice,
   unsentSection,
   withoutSentAt,
-  type Envelope,
-  type Server,
 } from './clock-unsent-support';
 
 // The clock's states for time events a phone holds unsent, and the choices a
 // sign-out offers over them (werk-flow/werkflow-planning#319; decision record
 // 0010, the amendment "the time outbox"). The server is the route in
 // clock-unsent-support.ts: every envelope it received and the answer it gives.
-
-/**
- * What the server recorded: each operation id once, as it first arrived. A send in flight when
- * `online` fires is ended and sent again (decision record 0010, "the network's return ends a send
- * that hangs"); one that had reached the server arrives twice and is recorded once. A second
- * arrival must be the same envelope.
- */
-function recorded(server: Server): Envelope[] {
-  const first = new Map<string, Envelope>();
-  for (const envelope of server.sent) {
-    const earlier = first.get(envelope.operationId);
-    if (earlier) expect(withoutSentAt(envelope)).toEqual(withoutSentAt(earlier));
-    else first.set(envelope.operationId, envelope);
-  }
-  return [...first.values()];
-}
 
 test('a page whose device holds nothing unsent never runs the outbox code at its start', async ({ page }) => {
   await mountClock(page, CLOCKED_OUT_STATE);
@@ -798,34 +782,113 @@ test('an online clock call that fails late is kept at the time of the tap, under
   expect((await unsentOnDevice(page)).map((event) => event.operationId)).toEqual([online?.operationId]);
 });
 
-test('while the outbox of a device that holds unsent work has not answered yet, a new action waits behind it instead of reaching the server first', async ({
+test('while the first look at a device that may hold unsent work is open, no clock action starts; the clock shows with its controls once the outbox answers', async ({
   page,
 }) => {
-  const server = await mountClock(page, CLOCKED_OUT_STATE, () => {
-    // An earlier visit left unsent work, and the device store does not answer yet.
-    localStorage.setItem('werkflow:unsent:time', '1');
-    Object.defineProperty(window, 'indexedDB', { value: { open: () => ({}) } });
-  });
+  const server = await mountClock(page, CLOCKED_OUT_STATE, holdDeviceStore, ACCEPTED, /^Nicht bereit/);
+  const launcher = page.getByRole('button', { name: 'Zeiterfassung starten', exact: true });
 
-  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  // What the device holds is unknown: a tap would go from a clock the person never saw.
+  await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'loading');
+  await expect(launcher).toBeDisabled();
+
+  await page.evaluate(() => window.releaseDeviceStore?.());
+
+  await expect(clockStatus(page)).toHaveText('Nicht eingestempelt');
+  await launcher.click();
   await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
-
-  await expect(clockStatus(page)).toHaveText('Arbeit');
-  await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
-  expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
+  // The outbox holds nothing for the person: the start goes online, from the clock shown.
+  await expect.poll(() => page.evaluate(() => window.clockContract.transitions.length)).toBe(1);
   expect(server.sent).toEqual([]);
-  // The waiting work may be another person's: the action keeps the clock the server confirmed.
-  const kept = await page.evaluate(() =>
-    Object.keys(localStorage)
-      .filter((key) => key.startsWith('werkflow:unsent:clock:'))
-      .map((key) => JSON.parse(localStorage.getItem(key) ?? 'null')),
+});
+
+test('a running job during an open first look offers no action, queues nothing, and once the outbox answers its actions go on from the running session', async ({
+  page,
+}) => {
+  const job = {
+    id: '40000000-0000-4000-8000-000000000001',
+    title: 'Heizungswartung Müller',
+    jobNumber: 'A-2026-0142',
+    status: 'in_bearbeitung',
+    projectName: 'Neubau Musterweg',
+    clientName: 'Familie Müller',
+  };
+  const server = await mountClock(
+    page,
+    {
+      ...RUNNING_CLOCK_STATE,
+      activeJobId: job.id,
+      activeJobInfo: job,
+      resumeJobInfo: job,
+      currentActivity: { kind: 'work', allocationKind: 'job', jobId: job.id },
+      resumeActivity: { kind: 'work', allocationKind: 'job', jobId: job.id },
+    },
+    // The hint concerns only a report draft or another person's time: the outbox holds nothing to stop on.
+    holdDeviceStore,
+    ACCEPTED,
+    /^Nicht bereit/,
   );
-  expect(kept).toEqual([
+
+  // Nothing is shown, so nothing is offered: a start built here would be a switch that drops the job.
+  await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'loading');
+  await expect(clockDock(page).getByRole('button')).toHaveCount(1);
+  await expect(clockDock(page).getByRole('button')).toBeDisabled();
+  expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
+  expect(await unsentOnDevice(page)).toEqual([]);
+
+  await page.evaluate(() => window.releaseDeviceStore?.());
+
+  await expect(clockStatus(page)).toHaveText(/^Arbeit · Heizungswartung Müller/);
+  await expect(clockDock(page)).toHaveAttribute('data-clock-state', 'in');
+  // The sheet now offers the running session's actions; „Arbeit starten“ is gone with the unknown clock.
+  await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
+  const sheet = page.getByRole('dialog', { name: 'Laufende Zeiterfassung', exact: true });
+  await expect(sheet.getByRole('button', { name: 'Auftrag wechseln …', exact: true })).toBeEnabled();
+  await expect(sheet.getByRole('button', { name: 'Arbeit starten', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.clockContract.transitions.length)).toBe(1);
+  expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([
     expect.objectContaining({
-      readAt: expect.any(String),
-      base: expect.objectContaining({ isClockedIn: false }),
+      action: 'switch',
+      expectedSessionId: RUNNING_CLOCK_STATE.sessionId,
+      expectedVersion: RUNNING_CLOCK_STATE.sessionVersion,
+      selection: expect.objectContaining({ kind: 'break' }),
     }),
   ]);
+  // The server answers the online call: nothing stays on the phone for later.
+  await page.evaluate(() => window.clockContract.resolveTransition?.());
+  await expect.poll(() => unsentOnDevice(page)).toEqual([]);
+  expect(server.sent).toEqual([]);
+});
+
+test('a first look whose device store never answers ends in the clock’s failure with „Erneut laden“, never in a clock without controls', async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date('2026-11-12T07:00:00.000Z') });
+  const server = await mountClock(
+    page,
+    CLOCKED_OUT_STATE,
+    () => {
+      localStorage.setItem('werkflow:unsent:time', '1');
+      // The device store never answers.
+      Object.defineProperty(window, 'indexedDB', { value: { open: () => ({}) } });
+    },
+    ACCEPTED,
+    /^Nicht bereit/,
+  );
+  const failure = clockDock(page).getByText('Der Zeitstatus konnte nicht sicher geladen werden.');
+  await expect(failure).toHaveCount(0);
+
+  // One bounded wait for the outbox's answer.
+  await page.clock.fastForward(10_000);
+
+  await expect(failure).toBeVisible();
+  await expect(clockDock(page).getByRole('button', { name: 'Erneut laden', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Zeiterfassung starten', exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
+  expect(server.sent).toEqual([]);
 });
 
 test('a device whose storage fails says so, and its clock actions still reach the server while it has signal', async ({

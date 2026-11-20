@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import type { LiveClockState } from '@/lib/time-tracking/types';
@@ -11,6 +12,8 @@ import { RUNNING_CLOCK_STATE } from './clock-state-fixture';
 declare global {
   interface Window {
     contractOnline: boolean;
+    /** Lets the device store held back by `holdDeviceStore` answer. */
+    releaseDeviceStore?: () => void;
   }
 }
 
@@ -34,11 +37,14 @@ const envelopeSchema = z.object({
   capturedAt: z.string(),
   sentAt: z.string(),
   organizationId: z.string(),
-  payload: z.object({
-    action: z.string(),
-    expectedSessionId: z.string().nullable(),
-    expectedVersion: z.number().nullable(),
-  }),
+  // Every other payload field is kept too: a resend must carry the whole first envelope.
+  payload: z
+    .object({
+      action: z.string(),
+      expectedSessionId: z.string().nullable(),
+      expectedVersion: z.number().nullable(),
+    })
+    .loose(),
 });
 export type Envelope = z.infer<typeof envelopeSchema>;
 export type Verdict = {
@@ -73,6 +79,8 @@ export async function mountClock(
   initial: LiveClockState,
   prepare: () => void = () => undefined,
   verdict: Verdict = ACCEPTED,
+  /** The clock's readiness once mounted: not ready while what the device holds is unknown. */
+  readiness: RegExp = /^Bereit/,
 ): Promise<Server> {
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
@@ -96,6 +104,19 @@ export async function mountClock(
       ? route.fulfill({ status: 500, json: { success: false, error: 'unavailable' } })
       : route.fulfill({ json: { success: true, state: server.state } }),
   );
+  // The ledger records an operation once (decision record 0010): a resend of an accepted one answers its
+  // first state, and the same id with another envelope is an idempotency conflict.
+  const accepted = new Map<string, { envelope: Envelope; verdict: Verdict }>();
+  const answerOnce = (envelope: Envelope): Verdict & { operationId: string } => {
+    const { operationId } = envelope;
+    const first = accepted.get(operationId);
+    if (first && !isDeepStrictEqual(withoutSentAt(envelope), withoutSentAt(first.envelope)))
+      return { outcome: 'rejected', code: 'idempotency_conflict', operationId };
+    if (first) return { ...first.verdict, outcome: 'replayed', code: 'replayed', operationId };
+    const verdict = server.verdict;
+    if (verdict.outcome === 'accepted') accepted.set(operationId, { envelope, verdict });
+    return { ...verdict, operationId };
+  };
   await page.route('**/api/field-sync/v1/operations', async (route) => {
     // Without network a send never arrives, whatever the page believes about its connection.
     if (!server.online) {
@@ -108,12 +129,7 @@ export async function mountClock(
     server.authorization.push(route.request().headers()['authorization'] ?? '');
     await route.fulfill({
       status: server.status,
-      json: {
-        results: body.operations.map((operation) => ({
-          operationId: operation.operationId,
-          ...server.verdict,
-        })),
-      },
+      json: { results: body.operations.map(answerOnce) },
     });
   });
   await page.goto('http://localhost/ui-contracts');
@@ -127,7 +143,7 @@ export async function mountClock(
   // What the device holds before the app starts.
   await page.evaluate(prepare);
   await page.addScriptTag({ path: bundle });
-  await expect(page.getByLabel('Zeitstatus')).toHaveText(/^Bereit/);
+  await expect(page.getByLabel('Zeitstatus')).toHaveText(readiness);
   return server;
 }
 
@@ -195,6 +211,73 @@ export async function startWithoutNetwork(page: Page, server: Server): Promise<v
   await expect(clockStatus(page)).toHaveText('Arbeit');
 }
 
+/**
+ * Before the app starts: an earlier visit left the hint that the device may hold unsent work (it may
+ * be a report draft or another person's time), and the device store holds every answer back until
+ * `window.releaseDeviceStore()`. Runs in the page.
+ */
+export function holdDeviceStore(): void {
+  localStorage.setItem('werkflow:unsent:time', '1');
+  const factory = indexedDB;
+  let release = (): void => undefined;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  window.releaseDeviceStore = () => release();
+  type Handler = ((event: Event) => void) | null;
+  const open = (name: string, version?: number) => {
+    let answered: IDBOpenDBRequest | null = null;
+    const held: { onupgradeneeded: Handler; onsuccess: Handler; onerror: Handler; onblocked: Handler } & {
+      readonly result: IDBDatabase | undefined;
+      readonly error: DOMException | null | undefined;
+    } = {
+      onupgradeneeded: null,
+      onsuccess: null,
+      onerror: null,
+      onblocked: null,
+      get result() {
+        return answered?.result;
+      },
+      get error() {
+        return answered?.error;
+      },
+    };
+    void released.then(() => {
+      const request = factory.open(name, version);
+      answered = request;
+      request.onupgradeneeded = (event) => held.onupgradeneeded?.(event);
+      request.onsuccess = (event) => held.onsuccess?.(event);
+      request.onerror = (event) => held.onerror?.(event);
+      request.onblocked = (event) => held.onblocked?.(event);
+    });
+    return held;
+  };
+  Object.defineProperty(window, 'indexedDB', {
+    value: {
+      open,
+      databases: () => factory.databases(),
+      deleteDatabase: (name: string) => factory.deleteDatabase(name),
+      cmp: (left: unknown, right: unknown) => factory.cmp(left, right),
+    },
+  });
+}
+
 export function withoutSentAt(envelope: Envelope | undefined): Envelope | undefined {
   return envelope && { ...envelope, sentAt: '' };
+}
+
+/**
+ * What the server recorded: each operation id once, as it first arrived. A send in flight when
+ * `online` fires is ended and sent again (decision record 0010, "the network's return ends a send
+ * that hangs"); one that had reached the server arrives twice and is recorded once. A second
+ * arrival must be the same envelope.
+ */
+export function recorded(server: Server): Envelope[] {
+  const first = new Map<string, Envelope>();
+  for (const envelope of server.sent) {
+    const earlier = first.get(envelope.operationId);
+    if (earlier) expect(withoutSentAt(envelope)).toEqual(withoutSentAt(earlier));
+    else first.set(envelope.operationId, envelope);
+  }
+  return [...first.values()];
 }
