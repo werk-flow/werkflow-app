@@ -18,6 +18,21 @@ const IDENTIFIERS = {
   idempotencyKey: '77777777-7777-4777-8777-777777777777',
 } as const;
 
+const COMPLETE_VISIT = {
+  dueWorkId: IDENTIFIERS.planId,
+  expectedVersion: 2,
+  scopeOutcome: 'complete',
+  completedOn: '2026-10-01',
+  workArtifactRevisionIds: [IDENTIFIERS.equipmentId],
+  reason: 'Wartung abgeschlossen',
+  defects: [],
+  nextAction: null,
+  nextActionOwnerId: null,
+  nextActionTargetDate: null,
+  nextActionNote: '',
+  idempotencyKey: IDENTIFIERS.idempotencyKey,
+} as const;
+
 const VALID_PLAN = {
   ...IDENTIFIERS,
   status: 'active',
@@ -112,16 +127,9 @@ describe('maintenance validation boundaries', () => {
         idempotencyKey: IDENTIFIERS.idempotencyKey,
       }).success,
     ).toBe(true);
+    expect(maintenanceCompletionSchema.safeParse(COMPLETE_VISIT).success).toBe(true);
     expect(
-      maintenanceCompletionSchema.safeParse({
-        dueWorkId: IDENTIFIERS.planId,
-        expectedVersion: 2,
-        scopeOutcome: 'complete',
-        completedOn: '2026-10-01',
-        workArtifactRevisionIds: [],
-        reason: 'Wartung abgeschlossen',
-        idempotencyKey: IDENTIFIERS.idempotencyKey,
-      }).success,
+      maintenanceCompletionSchema.safeParse({ ...COMPLETE_VISIT, workArtifactRevisionIds: [] }).success,
     ).toBe(false);
   });
 
@@ -157,5 +165,42 @@ describe('maintenance validation boundaries', () => {
     expect(maintenanceVisitMissedSchema.safeParse({ ...missed, missedReason: 'job_cancelled' }).success).toBe(
       false,
     );
+  });
+
+  test('an unfinished visit names a Mangel and its next action; a complete visit names none', () => {
+    const unfinished = {
+      ...COMPLETE_VISIT,
+      scopeOutcome: 'unresolved',
+      defects: ['Umwälzpumpe defekt'],
+      nextAction: 'return_visit',
+      nextActionOwnerId: IDENTIFIERS.clientId,
+      nextActionTargetDate: '2026-10-15',
+    } as const;
+    const parse = (value: object) => maintenanceCompletionSchema.safeParse(value).success;
+    expect(parse(unfinished)).toBe(true);
+    expect(parse({ ...unfinished, scopeOutcome: 'partial' })).toBe(true);
+    expect(parse({ ...unfinished, nextAction: null })).toBe(false);
+    expect(parse({ ...unfinished, defects: [] })).toBe(false);
+    expect(parse({ ...unfinished, defects: ['ab'] })).toBe(false);
+    expect(parse({ ...unfinished, defects: Array.from({ length: 11 }, () => 'Mangel') })).toBe(false);
+    expect(parse({ ...unfinished, nextActionOwnerId: null })).toBe(false);
+    expect(parse({ ...unfinished, nextActionTargetDate: null })).toBe(false);
+    // The target lies after the visit; a month end and a leap day are ordinary dates.
+    expect(parse({ ...unfinished, nextActionTargetDate: '2026-10-01' })).toBe(false);
+    expect(parse({ ...unfinished, completedOn: '2028-02-28', nextActionTargetDate: '2028-02-29' })).toBe(
+      true,
+    );
+    expect(parse({ ...unfinished, completedOn: '2026-10-31', nextActionTargetDate: '2026-11-01' })).toBe(
+      true,
+    );
+    // Only a Rückkehr has a bound beyond the visit, the regular next due date, which the database checks.
+    expect(
+      parse({ ...unfinished, nextAction: 'offer_replacement', nextActionTargetDate: '2028-01-15' }),
+    ).toBe(true);
+    const none = { ...unfinished, nextAction: 'none', nextActionOwnerId: null, nextActionTargetDate: null };
+    expect(parse({ ...none, nextActionNote: 'Kunde kümmert sich selbst' })).toBe(true);
+    expect(parse({ ...none, nextActionNote: '' })).toBe(false);
+    expect(parse({ ...COMPLETE_VISIT, defects: ['Umwälzpumpe defekt'] })).toBe(false);
+    expect(parse({ ...COMPLETE_VISIT, nextAction: 'warranty_check' })).toBe(false);
   });
 });

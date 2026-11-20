@@ -212,6 +212,7 @@ function jobChangeColumns({
   if (input.plannedWorkingMinutes !== undefined)
     updateData.planned_working_minutes = input.plannedWorkingMinutes ?? null;
   if (input.location !== undefined) updateData.location = input.location?.trim() || null;
+  if (input.sourceNumber !== undefined) updateData.source_number = input.sourceNumber || null;
 
   if (
     input.plannedDate !== undefined &&

@@ -280,6 +280,7 @@ async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): 
 
   const detail: EquipmentDetail = {
     ...current,
+    sourceNumber: row.source_number,
     technicalNotes: row.technical_notes,
     installationDate: row.installation_date,
     commissioningDate: row.commissioning_date,

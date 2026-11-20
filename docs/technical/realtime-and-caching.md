@@ -70,7 +70,7 @@ Wrong turn: a channel, an interval or a focus listener of your own. It races the
 
 - Wait for the network before you acknowledge an action, or raise a pending flag by hand outside `HAND_PENDING_STATE`.
 - Bind pending state to a router transition: no `useTransition` and no async `startTransition` callback. Recorded exceptions: `RefreshButton`, and the document library's navigation.
-- Poll. The one interval is the wall-clock tick in `hooks/use-wall-clock-tick.ts`.
+- Poll. The one interval is the wall-clock tick in `hooks/use-wall-clock-tick.ts`. A countdown derives its value from that clock, never from a timeout its own state update starts again.
 - Show a toast. Feedback goes through `Banner` and the inline states.
 - Truncate a list silently, or turn an overflow or a failed related read into an empty list.
 - Pass an organization-sized list to `.in()`.
