@@ -303,6 +303,8 @@ describe('component contract areas', () => {
       ...areas.map((area) => area.id),
       'sql:planning',
     ]);
+    // An inherited name is no alias: it stays as given, so verify refuses it as unknown.
+    expect(expandGroupAliases(['constructor', 'toString'], groups)).toEqual(['constructor', 'toString']);
     expect(expandGroupAliases(['ui:contracts:time', 'ui:contracts'], groups)).toEqual([
       'ui:contracts:time',
       ...areas.map((area) => area.id).filter((id) => id !== 'ui:contracts:time'),
