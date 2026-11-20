@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { compile } from '@tailwindcss/node';
 import { appendFileSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { captureInputSnapshot } from '../lib/testing/evidence/group-evidence';
@@ -100,7 +101,11 @@ const fast = fastTierPlan({
   changedFiles: flag === '--base' ? change?.files : [],
   fullReason: plan.fullReason,
   rowChanges: change?.rowChanges ?? [],
-  stylesheet: stylesheetScanRoots(read('app/globals.css')),
+  // The sources Tailwind's compiler resolves, as tests/ui-contracts/run.ts compiles the stylesheet.
+  stylesheet: stylesheetScanRoots(
+    await compile(read('app/globals.css'), { base: join(repository, 'app'), onDependency() {} }),
+    repository,
+  ),
 });
 
 console.info(

@@ -1,5 +1,6 @@
 // A CI run's cheap groups are the ones its diff can break, and all of a kind when it cannot tell.
 import { expect, test } from 'bun:test';
+import { compile } from '@tailwindcss/node';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, posix, resolve } from 'node:path';
@@ -141,32 +142,39 @@ test('a file Tailwind scans for class names runs every component area, as does a
   expect(plan(['docs/README.md'], { stylesheet: scan }).components).toEqual([]);
   expect(plan(['docs/README.md'], { stylesheet: undefined }).components).toEqual(EVERYTHING.components);
   // A source at or above the repository root scans every file.
-  for (const include of [['.'], ['..']])
+  for (const include of [[''], ['..']])
     expect(
       plan(['scripts/style-candidates.ts'], { stylesheet: { include, exclude: [] } }).components,
     ).toEqual(EVERYTHING.components);
 });
 
-test("the stylesheet's scan roots are its @source paths from app/, less its plain negated ones", () => {
-  expect(
-    stylesheetScanRoots(
-      "@import 'tailwindcss' source(none);\n@source '.';\n@source '../lib';\n@source not '../lib/testing';\n@source not '../**/*.test.ts';",
-    ),
-  ).toEqual({ include: ['app', 'lib'], exclude: ['lib/testing'] });
-  // A commented-out directive is no directive.
-  expect(
-    stylesheetScanRoots(
-      "@import 'tailwindcss' source(none);\n@source '../lib';\n/* @source not '../lib/jobs'; */",
-    ),
-  ).toEqual({ include: ['lib'], exclude: [] });
-  // A glob or inline source may scan any file, so the scan counts as unknown.
-  expect(stylesheetScanRoots("@import 'tailwindcss' source(none);\n@source '../{lib,app}';")).toBeUndefined();
-  expect(stylesheetScanRoots("@import 'tailwindcss' source(none);\n@source inline('p-4');")).toBeUndefined();
-  // Automatic detection scans what it finds, so nothing narrows it.
-  expect(stylesheetScanRoots("@import 'tailwindcss';\n@source '../lib';")).toBeUndefined();
-  const real = stylesheetScanRoots(
-    readFileSync(resolve(import.meta.dir, '../../../app/globals.css'), 'utf8'),
+test("the stylesheet's scan roots are the sources Tailwind's compiler resolves, less its negated paths inside the repository", async () => {
+  const root = resolve(import.meta.dir, '../../..');
+  const roots = async (css: string): Promise<ReturnType<typeof stylesheetScanRoots>> =>
+    stylesheetScanRoots(await compile(css, { base: resolve(root, 'app'), onDependency() {} }), root);
+  const none = "@import 'tailwindcss' source(none);\n";
+  expect(await roots(`${none}@source '.';\n@source '../lib';\n@source not '../lib/testing';`)).toEqual({
+    include: ['app', 'lib'],
+    exclude: ['lib/testing'],
+  });
+  // A trailing slash, a last directive without a semicolon, and a comment change nothing.
+  for (const css of [
+    `${none}@source "../lib/";`,
+    `${none}@source "../lib"`,
+    `${none}@source '../lib';\n/* @source not '../lib/jobs'; */`,
+  ])
+    expect(await roots(css), css).toEqual({ include: ['lib'], exclude: [] });
+  // An exclusion outside the repository excludes no file of it.
+  const sibling = await roots(`${none}@source "../lib"; @source not "../../sibling-dir";`);
+  expect(plan(['lib/invoicing/rules/NOTICE.txt'], { stylesheet: sibling }).components).toEqual(
+    EVERYTHING.components,
   );
+  // A glob may scan any file, and automatic detection scans what it finds: both count every file.
+  expect(await roots(`${none}@source '../{lib,app}';`)).toBeUndefined();
+  expect(await roots("@import 'tailwindcss';\n@source '../lib';")).toBeUndefined();
+  // An inline list scans no file.
+  expect(await roots(`${none}@source inline('p-4');`)).toEqual({ include: [], exclude: [] });
+  const real = await roots(readFileSync(resolve(root, 'app/globals.css'), 'utf8'));
   expect(real?.include).toEqual(expect.arrayContaining(['app', 'components', 'lib']));
 });
 
