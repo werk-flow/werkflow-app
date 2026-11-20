@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 import { changeTrigger, type ChangeTrigger } from './change-triggers';
+import { MAINTENANCE_VISIT_SQL_FILES } from './maintenance-visit-sql-files';
 
 export interface TestGroup {
   readonly id: string;
@@ -412,7 +413,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
-  ['maintenance-missed-visits', ['maintenance_missed_visits.sql'], ['service', 'work']],
+  ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, ['service', 'work', 'attention']],
   ['weekly-outcome-numbers', ['weekly_outcome_numbers.sql'], ['customers', 'service', 'work', 'time']],
   [
     'inventory-ledger',

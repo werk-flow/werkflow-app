@@ -26,6 +26,23 @@ export const MAINTENANCE_MISSED_VISIT_REASONS = [
   'other',
 ] as const satisfies readonly Database['public']['Enums']['maintenance_missed_visit_reason'][];
 
+/** What follows a partial or unresolved visit; every action but `none` has an owner and a target date. */
+export const MAINTENANCE_NEXT_ACTIONS = [
+  'return_visit',
+  'warranty_check',
+  'offer_replacement',
+  'none',
+] as const satisfies readonly Database['public']['Enums']['maintenance_next_action'][];
+
+export type MaintenanceNextAction = (typeof MAINTENANCE_NEXT_ACTIONS)[number];
+
+export const MAINTENANCE_NEXT_ACTION_LABELS: Record<MaintenanceNextAction, string> = {
+  return_visit: 'Rückkehr',
+  warranty_check: 'Garantieprüfung',
+  offer_replacement: 'Austausch anbieten',
+  none: 'Keine',
+};
+
 export type MaintenanceMissedVisitReason = (typeof MAINTENANCE_MISSED_VISIT_REASONS)[number];
 
 export const MAINTENANCE_MISSED_VISIT_REASON_LABELS: Record<MaintenanceMissedVisitReason, string> = {
@@ -65,9 +82,9 @@ export const MAINTENANCE_DUE_STATUS_LABELS: Record<MaintenanceDueStatus, string>
 };
 
 export const MAINTENANCE_SCOPE_OUTCOME_LABELS: Record<MaintenanceScopeOutcome, string> = {
-  complete: 'Umfang vollständig erledigt',
-  partial: 'Umfang teilweise erledigt',
-  unresolved: 'Umfang nicht geklärt',
+  complete: 'Erledigt',
+  partial: 'Teilweise erledigt',
+  unresolved: 'Nicht erledigt',
 };
 
 export const MAINTENANCE_NEXT_DUE_BASIS_LABELS: Record<MaintenanceNextDueBasis, string> = {

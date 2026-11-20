@@ -5,8 +5,10 @@ import type { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -25,20 +27,26 @@ import { TimeInput } from '@/components/ui/time-input';
 import {
   MAINTENANCE_MISSED_VISIT_REASONS,
   MAINTENANCE_MISSED_VISIT_REASON_LABELS,
+  MAINTENANCE_NEXT_ACTIONS,
+  MAINTENANCE_NEXT_ACTION_LABELS,
   MAINTENANCE_SCOPE_OUTCOMES,
   MAINTENANCE_SCOPE_OUTCOME_LABELS,
+  type MaintenanceCatalogs,
   type MaintenanceDueItem,
 } from '@/lib/maintenance/types';
 import { useJobEntityOptions, type JobEntityOptionsState } from '@/hooks/use-job-entity-options';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { MaintenanceDueActionKind } from '@/lib/maintenance/due-action-fields';
 import { useMaintenanceDueAction, type MaintenanceDueActionController } from './use-maintenance-due-action';
-import { formatBerlin, parseIsoLocalDate } from '@/lib/utils';
+import { formatBerlin, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 
 const EVIDENCE_LIST_CLASS = 'max-h-40 space-y-2 overflow-y-auto rounded-md border p-3';
 const EVIDENCE_ROW_CLASS = 'flex items-center gap-2 text-sm';
 
 type DueActionFieldsProps = { controller: MaintenanceDueActionController };
+
+/** Null: the catalog read failed, and the owner field shows the failure. */
+type NextActionOwners = MaintenanceCatalogs['followUpOwners'] | null;
 
 // Every action kind once, so a Select value outside the union is never set.
 const DUE_ACTION_KINDS = {
@@ -113,7 +121,10 @@ function DueScheduleFields({ controller }: DueActionFieldsProps): ReactElement {
 
 // Stays in this file: lib/ui/contextual-documents-layout.test.ts pins both
 // evidence classes to the loading and the loaded list here.
-function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement {
+function DueCompletionFields({
+  controller,
+  owners,
+}: DueActionFieldsProps & { owners: NextActionOwners }): ReactElement {
   const { scopeOutcome, setScopeOutcome, completedOn, setCompletedOn, fieldErrors } = controller;
   const { evidence, evidenceIds, setEvidenceIds, isEvidenceLoading, evidenceFailure } = controller;
   return (
@@ -147,6 +158,7 @@ function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement
           />
         </Field>
       </div>
+      {scopeOutcome !== 'complete' && <DueNextActionFields controller={controller} owners={owners} />}
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Versionierte Arbeitsnachweise</legend>
         {evidenceFailure ? (
@@ -187,6 +199,118 @@ function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement
         <ErrorText>{fieldErrors.evidenceIds}</ErrorText>
       </fieldset>
     </>
+  );
+}
+
+/** The owner of a next step; a failed catalog read shows in its place with its retry. */
+function NextActionOwnerField({
+  controller,
+  owners,
+}: DueActionFieldsProps & { owners: NextActionOwners }): ReactElement {
+  return (
+    <Field
+      label="Zuständig"
+      htmlFor="due-next-action-owner"
+      required
+      description="Findet den Schritt in den Aufgaben."
+      error={controller.fieldErrors.nextActionOwnerId}
+    >
+      {owners ? (
+        <SearchableSelect
+          value={controller.nextActionOwnerId}
+          onChange={controller.setNextActionOwnerId}
+          options={owners.map((owner) => ({ value: owner.userId, label: owner.name }))}
+          placeholder="Person wählen"
+          searchPlaceholder="Person suchen…"
+          emptyMessage="Keine Person gefunden"
+        />
+      ) : (
+        <RegionLoadError>Die zuständigen Personen konnten nicht geladen werden.</RegionLoadError>
+      )}
+    </Field>
+  );
+}
+
+/**
+ * The open Mängel of a partial or unresolved visit and what follows: an owned
+ * next step with a target date, which lands in the owner's Aufgaben, or Keine
+ * with a reason.
+ */
+function DueNextActionFields({
+  controller,
+  owners,
+}: DueActionFieldsProps & { owners: NextActionOwners }): ReactElement {
+  const { nextAction, fieldErrors } = controller;
+  const owned = nextAction !== null && nextAction !== 'none';
+  return (
+    <fieldset className="space-y-4 rounded-md border p-3">
+      <legend className="px-1 text-sm font-medium">Mängel und nächster Schritt</legend>
+      <Field
+        label="Offene Mängel"
+        htmlFor="due-defects"
+        required
+        description="Ein Mangel pro Zeile, höchstens 10."
+        error={fieldErrors.defects}
+      >
+        <Textarea
+          rows={3}
+          value={controller.defectsText}
+          onChange={(event) => controller.setDefectsText(event.target.value)}
+        />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Nächster Schritt" htmlFor="due-next-action" required error={fieldErrors.nextAction}>
+          <Select
+            value={nextAction ?? ''}
+            onValueChange={(value) => {
+              const action = MAINTENANCE_NEXT_ACTIONS.find((candidate) => candidate === value);
+              if (action) controller.setNextAction(action);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Schritt wählen" />
+            </SelectTrigger>
+            <SelectContent>
+              {MAINTENANCE_NEXT_ACTIONS.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {MAINTENANCE_NEXT_ACTION_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        {owned && (
+          <Field
+            label="Zieldatum"
+            htmlFor="due-next-action-date"
+            required
+            description={nextAction === 'return_visit' ? 'Vor der nächsten regulären Fälligkeit.' : undefined}
+            error={fieldErrors.nextActionTargetDate}
+          >
+            <DatePicker
+              ariaLabel="Zieldatum"
+              value={parseIsoLocalDate(controller.nextActionTargetDate)}
+              onChange={(value) => controller.setNextActionTargetDate(value ? toLocalDateString(value) : '')}
+            />
+          </Field>
+        )}
+      </div>
+      {owned && <NextActionOwnerField controller={controller} owners={owners} />}
+      {nextAction === 'none' && (
+        <Field
+          label="Warum folgt nichts?"
+          htmlFor="due-next-action-note"
+          required
+          error={fieldErrors.nextActionNote}
+        >
+          <Textarea
+            maxLength={1000}
+            value={controller.nextActionNote}
+            onChange={(event) => controller.setNextActionNote(event.target.value)}
+          />
+        </Field>
+      )}
+    </fieldset>
   );
 }
 
@@ -266,6 +390,8 @@ export function MaintenanceDueActionDialog({
   due,
   defaultAction,
   plannedDurationMinutes,
+  currentActorId,
+  owners,
   onSaved,
 }: {
   open: boolean;
@@ -273,6 +399,10 @@ export function MaintenanceDueActionDialog({
   due: MaintenanceDueItem;
   defaultAction: MaintenanceDueActionKind;
   plannedDurationMinutes: number;
+  /** The completing manager, the default owner of a next step. */
+  currentActorId: string;
+  /** Who may own a next step: the organization's Admin and Büro members. */
+  owners: NextActionOwners;
   /** Settled by the caller (a live-view refresh) instead of a route refresh. */
   onSaved?: () => void;
 }): ReactElement {
@@ -282,6 +412,7 @@ export function MaintenanceDueActionDialog({
     due,
     defaultAction,
     plannedDurationMinutes,
+    currentActorId,
     onSaved,
   });
   const { action, isPending, showReason } = controller;
@@ -300,16 +431,16 @@ export function MaintenanceDueActionDialog({
             {due.planNumber} · fällig am {formatBerlin(due.dueDate, 'numericDate')}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <DialogBody className="space-y-4 py-2">
           <DueActionSelect controller={controller} due={due} />
           {action === 'schedule' && <DueScheduleFields controller={controller} />}
-          {action === 'complete' && <DueCompletionFields controller={controller} />}
+          {action === 'complete' && <DueCompletionFields controller={controller} owners={owners} />}
           {action === 'visit_missed' && <DueVisitMissedFields controller={controller} />}
           {action === 'link_service_case' && (
             <DueServiceCaseField controller={controller} caseSearch={caseSearch} />
           )}
           {showReason && <DueReasonField controller={controller} />}
-        </div>
+        </DialogBody>
         <ErrorText>{controller.error}</ErrorText>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>

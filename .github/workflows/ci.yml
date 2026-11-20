@@ -130,6 +130,10 @@ jobs:
     needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # migrations:order reads the open pull requests' migrations.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       # docs:check reads the decision records' history.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -149,6 +153,8 @@ jobs:
             echo "WERKFLOW_UNREADABLE_SIBLINGS=werkflow-business" >> "$GITHUB_ENV"
           fi
       - run: bun scripts/verify.ts run --group "${{ needs.plan.outputs.static }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: ./.github/actions/upload-evidence
         if: failure()
         with:
