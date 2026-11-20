@@ -1,17 +1,10 @@
 // A CI run's cheap groups are the ones its diff can break, and all of a kind when it cannot tell.
-import { expect, test } from 'bun:test';
-import { compile } from '@tailwindcss/node';
+import { expect, spyOn, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, posix, resolve } from 'node:path';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
-import {
-  fastTierPlan,
-  isDocsFile,
-  stylesheetScanRoots,
-  UNTRACKED_IMPORTS,
-  type FastTierGroup,
-} from './fast-tier';
+import { fastTierPlan, isDocsFile, tailwindScan, UNTRACKED_IMPORTS, type FastTierGroup } from './fast-tier';
 
 const groups: FastTierGroup[] = [
   { id: 'ui:contracts:calendar', kind: 'ui', files: ['tests/ui-contracts/calendar.spec.ts'] },
@@ -44,7 +37,7 @@ const plan = (
     fullReason?: string;
     rowChanges?: string[];
     graph?: Map<string, string[]>;
-    stylesheet?: { include: string[]; exclude: string[] } | undefined;
+    tailwindScans?: ((file: string) => boolean) | undefined;
   } = {},
 ): ReturnType<typeof fastTierPlan> =>
   fastTierPlan({
@@ -54,7 +47,8 @@ const plan = (
     fullReason: options.fullReason,
     rowChanges: options.rowChanges ?? [],
     // Tailwind scans the components here; a scanned file is covered by its own test.
-    stylesheet: 'stylesheet' in options ? options.stylesheet : { include: ['components'], exclude: [] },
+    tailwindScans:
+      'tailwindScans' in options ? options.tailwindScans : (file) => file.startsWith('components/'),
   });
 const selected = (result: ReturnType<typeof fastTierPlan>): Record<string, string[]> => ({
   components: result.components,
@@ -128,54 +122,80 @@ test('a change the contract bundle, its runner or support reaches runs every com
     expect(plan([file]).components, file).toEqual(EVERYTHING.components);
 });
 
-test('a file Tailwind scans for class names runs every component area, as does any file when the scan is not declared', () => {
-  const scan = { include: ['app', 'lib', 'proxy.ts'], exclude: ['lib/testing'] };
-  for (const file of ['app/manifest.ts', 'lib/jobs/actions.ts', 'proxy.ts'])
-    expect(plan([file], { stylesheet: scan }).components, file).toEqual(EVERYTHING.components);
-  for (const file of ['lib/testing/runner/heavy-slot.ts', 'scripts/check-docs.ts', 'proxy.tsx'])
-    expect(plan([file], { stylesheet: scan }).components, file).toEqual([]);
-  expect(plan(['scripts/check-docs.ts'], { stylesheet: undefined }).components).toEqual(
-    EVERYTHING.components,
-  );
-  // Tailwind reads Markdown under its sources too; an unknown scan may reach any file.
-  expect(plan(['lib/invoicing/README.md'], { stylesheet: scan }).components).toEqual(EVERYTHING.components);
-  expect(plan(['docs/README.md'], { stylesheet: scan }).components).toEqual([]);
-  expect(plan(['docs/README.md'], { stylesheet: undefined }).components).toEqual(EVERYTHING.components);
-  // A source at or above the repository root scans every file.
-  for (const include of [[''], ['..']])
-    expect(
-      plan(['scripts/style-candidates.ts'], { stylesheet: { include, exclude: [] } }).components,
-    ).toEqual(EVERYTHING.components);
+test('a file Tailwind scans for class names runs every component area, as does any file when the scan is unknown', () => {
+  const scans = (file: string): boolean => file.startsWith('lib/') && !file.startsWith('lib/testing/');
+  // Tailwind reads Markdown under its sources too.
+  for (const file of ['lib/jobs/actions.ts', 'lib/invoicing/README.md'])
+    expect(plan([file], { tailwindScans: scans }).components, file).toEqual(EVERYTHING.components);
+  for (const file of ['lib/testing/runner/heavy-slot.ts', 'scripts/check-docs.ts', 'docs/README.md'])
+    expect(plan([file], { tailwindScans: scans }).components, file).toEqual([]);
+  for (const file of ['scripts/check-docs.ts', 'docs/README.md'])
+    expect(plan([file], { tailwindScans: undefined }).components, file).toEqual(EVERYTHING.components);
 });
 
-test("the stylesheet's scan roots are the sources Tailwind's compiler resolves, less its negated paths inside the repository", async () => {
-  const root = resolve(import.meta.dir, '../../..');
-  const roots = async (css: string): Promise<ReturnType<typeof stylesheetScanRoots>> =>
-    stylesheetScanRoots(await compile(css, { base: resolve(root, 'app'), onDependency() {} }), root);
-  const none = "@import 'tailwindcss' source(none);\n";
-  expect(await roots(`${none}@source '.';\n@source '../lib';\n@source not '../lib/testing';`)).toEqual({
-    include: ['app', 'lib'],
-    exclude: ['lib/testing'],
-  });
-  // A trailing slash, a last directive without a semicolon, and a comment change nothing.
-  for (const css of [
-    `${none}@source "../lib/";`,
-    `${none}@source "../lib"`,
-    `${none}@source '../lib';\n/* @source not '../lib/jobs'; */`,
-  ])
-    expect(await roots(css), css).toEqual({ include: ['lib'], exclude: [] });
-  // An exclusion outside the repository excludes no file of it.
-  const sibling = await roots(`${none}@source "../lib"; @source not "../../sibling-dir";`);
-  expect(plan(['lib/invoicing/rules/NOTICE.txt'], { stylesheet: sibling }).components).toEqual(
+const repositoryRoot = resolve(import.meta.dir, '../../..');
+const NONE = "@import 'tailwindcss' source(none);\n";
+const scan = async (css: string): Promise<(file: string) => boolean> => {
+  const scans = await tailwindScan(css, repositoryRoot);
+  if (!scans) throw new Error('The stylesheet declares its sources, so its scan is known');
+  return scans;
+};
+
+test("a file counts as scanned exactly when Tailwind's own scanner reads it, an explicit file inside an excluded directory included", async () => {
+  const explicit = await scan(
+    `${NONE}@source '../lib';\n@source not '../lib/testing/';\n@source '../lib/testing/selection/test-titles.test.ts';`,
+  );
+  expect(explicit('lib/testing/selection/test-titles.test.ts')).toBe(true);
+  expect(explicit('lib/testing/selection/fast-tier.ts')).toBe(false);
+  expect(explicit('lib/zod.ts')).toBe(true);
+  expect(plan(['lib/testing/selection/test-titles.test.ts'], { tailwindScans: explicit }).components).toEqual(
     EVERYTHING.components,
   );
-  // A glob may scan any file, and automatic detection scans what it finds: both count every file.
-  expect(await roots(`${none}@source '../{lib,app}';`)).toBeUndefined();
-  expect(await roots("@import 'tailwindcss';\n@source '../lib';")).toBeUndefined();
+  // A directory source inside an excluded directory stays excluded, unlike a file source. The rule
+  // differs between Tailwind versions, so the planner asks the installed scanner.
+  const nested = await scan(
+    `${NONE}@source '../lib';\n@source not '../lib/testing';\n@source '../lib/testing/selection';`,
+  );
+  expect(nested('lib/testing/selection/test-titles.test.ts')).toBe(false);
+  // A trailing slash, a last directive without a semicolon, a comment and an exclusion outside the repository change nothing.
+  for (const css of [
+    `${NONE}@source "../lib/";`,
+    `${NONE}@source "../lib"`,
+    `${NONE}@source '../lib';\n/* @source not '../lib/zod.ts'; */`,
+    `${NONE}@source "../lib"; @source not "../../sibling-dir";`,
+  ]) {
+    const scans = await scan(css);
+    expect(scans('lib/zod.ts'), css).toBe(true);
+    expect(scans('scripts/ci-plan.ts'), css).toBe(false);
+  }
   // An inline list scans no file.
-  expect(await roots(`${none}@source inline('p-4');`)).toEqual({ include: [], exclude: [] });
-  const real = await roots(readFileSync(resolve(root, 'app/globals.css'), 'utf8'));
-  expect(real?.include).toEqual(expect.arrayContaining(['app', 'components', 'lib']));
+  expect((await scan(`${NONE}@source inline('p-4');`))('lib/zod.ts')).toBe(false);
+  const real = await scan(readFileSync(resolve(repositoryRoot, 'app/globals.css'), 'utf8'));
+  expect(real('components/ui/button.tsx')).toBe(true);
+  expect(real('lib/testing/selection/fast-tier.ts')).toBe(false);
+  expect(real('scripts/ci-plan.ts')).toBe(false);
+});
+
+test('a file the change deleted counts as scanned when a source would reach it, whatever its exclusions', async () => {
+  const scans = await scan(`${NONE}@source '../lib';\n@source not '../lib/testing';`);
+  expect(scans('lib/jobs/deleted-module.ts')).toBe(true);
+  expect(scans('lib/testing/deleted-helper.ts')).toBe(true);
+  expect(scans('docs/deleted-page.md')).toBe(false);
+  // A glob reaches every file under its fixed prefix.
+  const glob = await scan(`${NONE}@source '../{lib,app}';`);
+  expect(glob('lib/zod.ts')).toBe(true);
+  expect(glob('docs/deleted-page.md')).toBe(true);
+});
+
+test('automatic detection, or a stylesheet that does not compile, counts every file as scanned', async () => {
+  expect(await tailwindScan("@import 'tailwindcss';\n@source '../lib';", repositoryRoot)).toBeUndefined();
+  const warn = spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    expect(await tailwindScan(`${NONE}.broken { @apply not-a-utility; }`, repositoryRoot)).toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+  } finally {
+    warn.mockRestore();
+  }
 });
 
 test('a component area runs for its own spec and what only that spec imports, and for no other file', () => {

@@ -1,4 +1,7 @@
-import { relative, resolve, sep } from 'node:path';
+import { compile } from '@tailwindcss/node';
+import { Scanner } from '@tailwindcss/oxide';
+import { existsSync } from 'node:fs';
+import { join, relative, resolve, sep } from 'node:path';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 
 /** A component, unit, SQL or static group as the fast tier sees it. */
@@ -42,44 +45,51 @@ export const UNTRACKED_IMPORTS: Readonly<Record<string, string>> = {
   'lib/inventory/wholesaler-reader.ts': '@/vendor/wholesaler-reader/src/index',
 };
 
-/** The scan setup `compile` of `@tailwindcss/node` returns for a stylesheet: its root and its `@source` entries. */
-export type TailwindSources = {
-  root: unknown;
-  sources: readonly { base: string; pattern: string; negated: boolean }[];
-};
+const repositoryPath = (repositoryRoot: string, path: string): string =>
+  relative(repositoryRoot, path).split(sep).join('/');
+const inRepository = (root: string): boolean => root !== '' && root !== '..' && !root.startsWith('../');
+/** Whether `root` holds `file`; the repository root, or a root above it, holds every file. */
+const holds = (root: string, file: string): boolean =>
+  !inRepository(root) || file === root || file.startsWith(`${root}/`);
 
 /**
- * The repository paths Tailwind scans for class names under `app/globals.css`, from the sources
- * its own compiler resolves, as the contract runner compiles them: each source directory or file,
- * less each negated one inside the repository. A scanned file, Markdown included, can change the
- * stylesheet every contract renders with, even outside the bundle (a class name built at run
- * time). Undefined, so every file counts as scanned, when automatic detection stays on or a
- * source is a glob; a negated glob only narrows less.
+ * Whether Tailwind scans a repository file for class names under `stylesheet` (the text of
+ * `app/globals.css`), as the contract runner compiles and scans it. A scanned file, Markdown
+ * included, can change the stylesheet every contract renders with, even outside the bundle (a
+ * class name built at run time). Tailwind's installed scanner says which files it reads: an explicit
+ * file inside an excluded directory, for one, and the rule differs between Tailwind versions. A file the change deleted counts as scanned when any
+ * source's fixed path holds it, whatever the exclusions. Undefined, so every file counts as
+ * scanned, when automatic detection stays on or the stylesheet does not compile.
  */
-export function stylesheetScanRoots(
-  stylesheet: TailwindSources,
+export async function tailwindScan(
+  stylesheet: string,
   repositoryRoot: string,
-): { include: string[]; exclude: string[] } | undefined {
-  if (stylesheet.root !== 'none') return undefined;
-  const include: string[] = [];
-  const exclude: string[] = [];
-  for (const source of stylesheet.sources) {
-    if (/[*?{}[\]]/.test(source.pattern)) {
-      if (source.negated) continue;
-      return undefined;
-    }
-    const path = relative(repositoryRoot, resolve(source.base, source.pattern)).split(sep).join('/');
-    (source.negated ? exclude : include).push(path);
+): Promise<((file: string) => boolean) | undefined> {
+  let compiled: Awaited<ReturnType<typeof compile>>;
+  try {
+    compiled = await compile(stylesheet, { base: join(repositoryRoot, 'app'), onDependency() {} });
+  } catch (error) {
+    console.warn(
+      `[fast-tier] app/globals.css does not compile, so every file counts as scanned: ${error instanceof Error ? error.message : error}`,
+    );
+    return undefined;
   }
-  return { include, exclude };
+  if (compiled.root !== 'none') return undefined;
+  const scanned = new Set(
+    new Scanner({ sources: compiled.sources }).files.map((file) => repositoryPath(repositoryRoot, file)),
+  );
+  const sourceRoots = compiled.sources
+    .filter((source) => !source.negated)
+    .map((source) => {
+      const glob = source.pattern.search(/[*?{}[\]]/);
+      const fixed =
+        glob < 0 ? source.pattern : source.pattern.slice(0, source.pattern.lastIndexOf('/', glob) + 1);
+      return repositoryPath(repositoryRoot, resolve(source.base, fixed));
+    });
+  return (file) =>
+    scanned.has(file) ||
+    (!existsSync(join(repositoryRoot, file)) && sourceRoots.some((root) => holds(root, file)));
 }
-
-const inRepository = (root: string): boolean => root !== '' && root !== '..' && !root.startsWith('../');
-const holds = (root: string, file: string): boolean => file === root || file.startsWith(`${root}/`);
-/** Whether an included root holds `file`; the repository root, or a root above it, holds every file. */
-const included = (root: string, file: string): boolean => !inRepository(root) || holds(root, file);
-/** Whether an excluded root holds `file`; an exclusion outside the repository holds none. */
-const excluded = (root: string, file: string): boolean => inRepository(root) && holds(root, file);
 
 /** What running `roots` loads through imports, product code included, and whether an import was unresolved. */
 function closure(
@@ -136,8 +146,8 @@ export function fastTierPlan(input: {
   fullReason: string | undefined;
   /** The changed registries whose change stays inside their rows. */
   rowChanges: readonly string[];
-  /** `stylesheetScanRoots` of `app/globals.css`; undefined counts every file as scanned. */
-  stylesheet: { include: readonly string[]; exclude: readonly string[] } | undefined;
+  /** `tailwindScan` of `app/globals.css`; undefined counts every file as scanned. */
+  tailwindScans: ((file: string) => boolean) | undefined;
 }): FastTierPlan {
   const reasons: Record<string, string> = {};
   const take = (groups: readonly FastTierGroup[], reason: string): void => {
@@ -159,12 +169,9 @@ export function fastTierPlan(input: {
       docsOnly ? gates.filter((group) => DOCS_GATES.includes(group.id)) : gates,
       docsOnly ? 'Documentation changed' : 'Static gates run in every plan',
     );
-    const scanned = (file: string): boolean =>
-      !input.stylesheet ||
-      (input.stylesheet.include.some((root) => included(root, file)) &&
-        !input.stylesheet.exclude.some((root) => excluded(root, file)));
-    // Tailwind reads every file under its sources, Markdown included.
-    const restyled = changed.find(scanned);
+    // Tailwind reads Markdown under its sources too.
+    const scans = input.tailwindScans;
+    const restyled = changed.find((file) => !scans || scans(file));
     if (restyled) take(ofKind('ui'), `Tailwind scans it for class names (${restyled})`);
     // Otherwise documentation reaches no bundle, database or component, so only code changes select them.
     const code = changed.filter((file) => !isDocsFile(file));
