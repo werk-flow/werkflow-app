@@ -31,6 +31,9 @@ const runPlanSchema = z.object({
 });
 export type RunPlan = z.infer<typeof runPlanSchema>;
 
+/** A PR number or an attempt: a positive safe integer, so a measurement input that passes it parses as a receipt. */
+export const positiveIntegerSchema = z.number().int().positive();
+
 /** The failure classes of docs/technical/testing.md, "Failures". `transient` is retired. */
 export const failureClassSchema = z.enum(INCIDENT_CLASSES).exclude(['transient']);
 export type FailureClass = z.infer<typeof failureClassSchema>;
@@ -82,9 +85,9 @@ const ciResultSchema = z.object({
   // Measurement (scripts/ci/cost.ts). Optional: receipts written before it hold none, and no gate
   // or reuse decision reads them.
   /** The pull requests the run serves: a PR run's one, an integration batch's; none for a push or full run. */
-  prs: z.array(z.number().int().positive()).optional(),
+  prs: z.array(positiveIntegerSchema).optional(),
   /** The run's attempt, 1 for the first; a rerun of its failed jobs counts up (CI_RUN_ATTEMPT). */
-  attempt: z.number().int().positive().optional(),
+  attempt: positiveIntegerSchema.optional(),
   cost: jobCostSchema.optional(),
   /** On a rerun: the class the failed first attempt of this job was given (CI_FIRST_ATTEMPT_CLASS). */
   firstAttemptClass: failureClassSchema.nullable().optional(),

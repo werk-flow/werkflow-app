@@ -238,9 +238,15 @@ test('a job records its cost and the runner measurement inputs, and an unreadabl
       setupMs: Date.parse(measured.startedAt) - Date.parse(runnerStartedAt),
       wallMs: Date.parse(measured.completedAt ?? '') - Date.parse(runnerStartedAt),
     });
-    const unknown = fast({ CI_PRS: 'twelve', CI_RUN_ATTEMPT: 'x', CI_JOB_STARTED_AT: 'soon' });
-    expect(unknown).toMatchObject({ status: 'passed', prs: [], attempt: 1, firstAttemptClass: null });
-    expect(unknown.cost).toMatchObject({ runnerStartedAt: null, setupMs: 0 });
+    // Each unreadable input leaves a readable receipt, so Check and reuse still read it.
+    for (const inputs of [
+      { CI_PRS: 'twelve', CI_RUN_ATTEMPT: 'x', CI_JOB_STARTED_AT: 'soon' },
+      { CI_PRS: '9007199254740992', CI_RUN_ATTEMPT: '9007199254740992' },
+    ]) {
+      const unknown = fast(inputs);
+      expect(unknown).toMatchObject({ status: 'passed', prs: [], attempt: 1, firstAttemptClass: null });
+      expect(unknown.cost).toMatchObject({ runnerStartedAt: null, setupMs: 0 });
+    }
   });
 });
 

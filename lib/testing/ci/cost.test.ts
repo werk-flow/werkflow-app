@@ -197,9 +197,9 @@ test('the summary sums each merged PR, a cancelled job, a never-started job and 
     jobMs: 95 * MINUTE,
     machineStarts: 7 + 4 + 5 + 2,
     setupMs: (6 + 2 + 8) * MINUTE,
-    // Run 3 reused SQL; the push reused run 3's three executed jobs.
+    // Run 3 reused SQL; the push reused run 3's three executed jobs. Run 1's Fast ran twice.
     reuseHits: 1 + 3,
-    executed: 3 + 2 + 3,
+    executed: 4 + 2 + 3,
     readyToMergeMs: 40 * MINUTE,
   });
   // The batch's run (12 min) and its push (8 min) split across both PRs.
@@ -232,6 +232,41 @@ test('the summary sums each merged PR, a cancelled job, a never-started job and 
   expect(summary.firstAttemptFailures).toEqual({ environment: 1, unclassified: 1 });
   expect(summary.unselectedFailures).toEqual(['golden:p2-03']);
   expect(summary.withoutRun).toBe(1);
+});
+
+test('a cancelled attempt ends with its own attempt, a rerun is a process of its own, and a receipt read twice counts once', () => {
+  const base = { runUrl: run(1), event: 'pr' as const, tree: tree('a'), prs: [12] };
+  const receipts = receiptsOf(base, [
+    { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'fast', 'check']) },
+    { job: 'fast', from: 1, to: null },
+    { job: 'check', from: 4, to: 5, status: 'failed', endOnly: true },
+    { job: 'fast', from: 10, to: 60, endOnly: true, extra: { attempt: 2 } },
+    { job: 'check', from: 60, to: 62, endOnly: true, extra: { attempt: 2 } },
+  ]);
+  const summary = summarizeCost(receipts);
+  // Plan 1, the cancelled Fast to minute 5 (not 62), Check 1, the rerun's Fast 50 and Check 2.
+  expect(summary.all).toMatchObject({ jobMs: 58 * MINUTE, machineStarts: 5, executed: 2 });
+  expect(summary.cancelled).toBe(1);
+  // The same receipts from a ledger and a results folder are the same processes.
+  expect(summarizeCost([...receipts, ...receipts.filter((receipt) => receipt.status !== 'running')])).toEqual(
+    summary,
+  );
+});
+
+test('a push lands only an integration pass that came before it', () => {
+  const receipts = [
+    ...receiptsOf({ runUrl: run(3), event: 'integration', tree: tree('c'), prs: [12] }, [
+      { job: 'plan', from: 30, to: 31, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 49, to: 50, endOnly: true },
+    ]),
+    ...receiptsOf({ runUrl: run(4), event: 'main', tree: tree('c'), prs: [] }, [
+      { job: 'plan', from: 40, to: 41, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 41, to: 42, endOnly: true },
+    ]),
+  ];
+  const summary = summarizeCost(receipts);
+  expect(summary.merged).toEqual([]);
+  expect(summary.other.runs).toBe(1);
 });
 
 test('a push that reused a tree the input lacks counts one reuse hit, and lands no PR', () => {
@@ -268,14 +303,21 @@ test('a pull request list is numbers or a merge-queue ref; anything else is unre
   expect(pullRequestsOf('12')).toEqual([12]);
   expect(pullRequestsOf('14,15,14')).toEqual([14, 15]);
   expect(pullRequestsOf(`refs/heads/gh-readonly-queue/main/pr-568-${'a'.repeat(40)}`)).toEqual([568]);
-  for (const value of ['0', '12,', 'pr-12', '#12'])
+  for (const value of [
+    '0',
+    '12,',
+    'pr-12',
+    '#12',
+    '9007199254740992',
+    `refs/heads/gh-readonly-queue/main/pr-0-${'a'.repeat(40)}`,
+  ])
     expect([value, 'unreadable' in pullRequestsOf(value)]).toEqual([value, true]);
 });
 
 test('an unreadable measurement input warns and records unknown, so it never fails a job', () => {
   const { warnings, ...unknown } = measurementInputs({
     CI_PRS: 'twelve',
-    CI_RUN_ATTEMPT: '0',
+    CI_RUN_ATTEMPT: '9007199254740992',
     CI_FIRST_ATTEMPT_CLASS: 'transient',
     CI_JOB_STARTED_AT: 'soon',
   });
@@ -326,7 +368,7 @@ test('the script reads a ledger file and a results folder, and refuses an unread
 
     const table = cost(ledger);
     expect(table.stdout).toContain('CI cost per merged pull request: 3 merged, 9 runs.');
-    expect(table.stdout).toMatch(/^#12 +4 +95\.0 +18\.0 +17 % +33 % +40\.0 min$/m);
+    expect(table.stdout).toMatch(/^#12 +4 +95\.0 +18\.0 +17 % +31 % +40\.0 min$/m);
 
     writeFileSync(join(runFolder, 'broken.json'), '{');
     expect(cost(join(folder, 'results')).status).not.toBe(0);
