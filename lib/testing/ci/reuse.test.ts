@@ -1,10 +1,12 @@
-// Same-tree reuse stands only on a complete passed CI receipt of the identical key, and the newest
-// receipt for the key decides (lib/testing/ci/reuse.ts).
+// The reuse rule, over every ordering that broke it before: the newest start decides, every entry
+// after it must belong to its run, and the last of them must be that run's passed result
+// (lib/testing/ci/reuse.ts).
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { CiEvent } from './dag';
 import { type CiResult, readLedger } from './results';
 import { passedTreeActionsFilter, passedTreeInLedger, type ReuseKey, reusableReceipt } from './reuse';
 
@@ -12,6 +14,8 @@ const TREE = 'a'.repeat(40);
 const OTHER_TREE = 'b'.repeat(40);
 const GROUPS = ['sql:grants', 'sql:history', 'step:types', 'step:seed'];
 const KEY: ReuseKey = { job: 'sql', tree: TREE, groups: GROUPS, listGrowthApproved: false };
+const RUN_1 = 'https://ci.example/runs/1';
+const RUN_2 = 'https://ci.example/runs/2';
 
 function receipt(overrides: Partial<CiResult> = {}): CiResult {
   return {
@@ -28,64 +32,135 @@ function receipt(overrides: Partial<CiResult> = {}): CiResult {
     reusedFrom: null,
     listGrowthApproved: false,
     producer: 'mac-standin',
-    runUrl: 'https://ci.example/runs/1',
+    runUrl: RUN_1,
     startedAt: '2026-11-20T20:00:00.000Z',
     completedAt: '2026-11-20T20:05:00.000Z',
     ...overrides,
   };
 }
 
-test('a complete passed CI receipt of the identical key stands for the job, whatever the group order', () => {
-  expect(reusableReceipt([receipt()], KEY, 'integration')).toBe('https://ci.example/runs/1');
-  expect(reusableReceipt([receipt()], { ...KEY, groups: [...GROUPS].reverse() }, 'main')).toBe(
-    'https://ci.example/runs/1',
-  );
+/** A job's start receipt: its planned key, before any group ran. */
+const jobStart = (overrides: Partial<CiResult> = {}): CiResult =>
+  receipt({
+    status: 'running',
+    completedAt: null,
+    groups: GROUPS.map((id) => ({ id, outcome: 'not-run', durationMs: 0 })),
+    ...overrides,
+  });
+const jobPass = (overrides: Partial<CiResult> = {}): CiResult => receipt(overrides);
+const jobFail = (overrides: Partial<CiResult> = {}): CiResult => receipt({ status: 'failed', ...overrides });
+
+type Case = { name: string; ledger: CiResult[] | { unreadable: string }; expected: string | undefined };
+
+const JOB_CASES: Case[] = [
+  { name: 'its own start, then its pass', ledger: [jobStart(), jobPass()], expected: RUN_1 },
+  {
+    name: 'an older failure, then a newer run that passed',
+    ledger: [jobStart(), jobFail(), jobStart({ runUrl: RUN_2 }), jobPass({ runUrl: RUN_2 })],
+    expected: RUN_2,
+  },
+  {
+    name: 'an older pass, then a newer start',
+    ledger: [jobStart(), jobPass(), jobStart({ runUrl: RUN_2 })],
+    expected: undefined,
+  },
+  {
+    name: 'a newer start, then the older run’s late pass',
+    ledger: [jobStart(), jobStart({ runUrl: RUN_2 }), jobPass()],
+    expected: undefined,
+  },
+  {
+    name: 'a newer failure whose start is missing',
+    ledger: [jobStart(), jobPass(), jobFail({ runUrl: RUN_2 })],
+    expected: undefined,
+  },
+  {
+    name: "a newer full run's failure whose start is missing",
+    ledger: [jobStart(), jobPass(), jobFail({ runUrl: RUN_2, event: 'full' })],
+    expected: undefined,
+  },
+  {
+    name: 'a newer start in a changed checkout',
+    ledger: [
+      jobStart(),
+      jobPass(),
+      jobStart({ runUrl: RUN_2, producer: null }),
+      jobPass({ runUrl: RUN_2, producer: null }),
+    ],
+    expected: undefined,
+  },
+  { name: 'an unreadable ledger', ledger: { unreadable: 'ledger.jsonl:2 is no JSON' }, expected: undefined },
+  {
+    name: 'an entry without a run, before the start',
+    ledger: [jobFail({ runUrl: null }), jobStart(), jobPass()],
+    expected: undefined,
+  },
+  {
+    name: 'an entry without a run, after the pass',
+    ledger: [jobStart(), jobPass(), jobFail({ runUrl: null })],
+    expected: undefined,
+  },
+  { name: 'a pass without its start', ledger: [jobPass()], expected: undefined },
+  { name: 'a start without its end', ledger: [jobStart()], expected: undefined },
+  { name: 'a failed end', ledger: [jobStart(), jobFail()], expected: undefined },
+  {
+    name: 'an end without completion',
+    ledger: [jobStart(), jobPass({ completedAt: null })],
+    expected: undefined,
+  },
+  {
+    name: 'a passed end whose groups did not all pass',
+    ledger: [
+      jobStart(),
+      jobPass({ groups: GROUPS.map((id) => ({ id, outcome: 'not-run', durationMs: 0 })) }),
+    ],
+    expected: undefined,
+  },
+  {
+    name: 'a workstation pass',
+    ledger: [jobStart({ producer: null }), jobPass({ producer: null })],
+    expected: undefined,
+  },
+  {
+    name: 'a pass that itself reused one',
+    ledger: [jobStart(), jobPass({ reusedFrom: 'https://ci.example/runs/0' })],
+    expected: undefined,
+  },
+  {
+    name: "a full run's pass",
+    ledger: [jobStart({ event: 'full' }), jobPass({ event: 'full' })],
+    expected: undefined,
+  },
+  {
+    name: 'a newer run of another tree, job, group list or approval',
+    ledger: [
+      jobStart(),
+      jobPass(),
+      jobFail({ runUrl: RUN_2, tree: OTHER_TREE }),
+      jobFail({ runUrl: RUN_2, job: 'components' }),
+      jobFail({ runUrl: RUN_2, groups: [] }),
+      jobFail({ runUrl: RUN_2, listGrowthApproved: true }),
+    ],
+    expected: RUN_1,
+  },
+];
+
+for (const { name, ledger, expected } of JOB_CASES)
+  test(`per-job reuse, ${name}: ${expected ? 'reuses' : 'runs the job'}`, () => {
+    expect(reusableReceipt(ledger, KEY, 'integration')).toBe(expected);
+  });
+
+test('per-job reuse ignores the group order, and never serves a full run or another list-growth approval', () => {
+  const ledger = [jobStart(), jobPass()];
+  expect(reusableReceipt(ledger, { ...KEY, groups: [...GROUPS].reverse() }, 'main')).toBe(RUN_1);
+  for (const event of ['pr', 'integration', 'main'] satisfies CiEvent[])
+    expect(reusableReceipt(ledger, KEY, event)).toBe(RUN_1);
+  expect(reusableReceipt(ledger, KEY, 'full')).toBeUndefined();
+  expect(reusableReceipt(ledger, { ...KEY, listGrowthApproved: true }, 'integration')).toBeUndefined();
 });
 
-test('reuse never crosses a different tree, job or group list', () => {
-  expect(reusableReceipt([receipt({ tree: OTHER_TREE })], KEY, 'integration')).toBeUndefined();
-  expect(reusableReceipt([receipt({ job: 'components' })], KEY, 'integration')).toBeUndefined();
-  expect(reusableReceipt([receipt()], { ...KEY, groups: GROUPS.slice(1) }, 'integration')).toBeUndefined();
-});
-
-test('a failed or incomplete receipt is never reused', () => {
-  expect(reusableReceipt([receipt({ status: 'failed' })], KEY, 'integration')).toBeUndefined();
-  expect(
-    reusableReceipt([receipt({ status: 'running', completedAt: null })], KEY, 'integration'),
-  ).toBeUndefined();
-  expect(reusableReceipt([receipt({ completedAt: null })], KEY, 'integration')).toBeUndefined();
-  const notRun = receipt({ groups: GROUPS.map((id) => ({ id, outcome: 'not-run', durationMs: 0 })) });
-  expect(reusableReceipt([notRun], KEY, 'integration')).toBeUndefined();
-});
-
-test("a later failed receipt for the same key withdraws an earlier pass, a full run's included", () => {
-  expect(reusableReceipt([receipt(), receipt({ status: 'failed' })], KEY, 'integration')).toBeUndefined();
-  expect(
-    reusableReceipt([receipt(), receipt({ event: 'full', status: 'failed' })], KEY, 'integration'),
-  ).toBeUndefined();
-  // A failure on another tree withdraws nothing.
-  expect(
-    reusableReceipt([receipt(), receipt({ tree: OTHER_TREE, status: 'failed' })], KEY, 'integration'),
-  ).toBe('https://ci.example/runs/1');
-});
-
-test('a changed list-growth approval refuses the reuse', () => {
-  expect(reusableReceipt([receipt()], { ...KEY, listGrowthApproved: true }, 'integration')).toBeUndefined();
-});
-
-test('a workstation result, a reused result and a full run never stand for a job', () => {
-  expect(reusableReceipt([receipt({ producer: null })], KEY, 'integration')).toBeUndefined();
-  expect(
-    reusableReceipt([receipt({ reusedFrom: 'https://ci.example/runs/0' })], KEY, 'integration'),
-  ).toBeUndefined();
-  expect(reusableReceipt([receipt({ event: 'full' })], KEY, 'integration')).toBeUndefined();
-  expect(reusableReceipt([receipt()], KEY, 'full')).toBeUndefined();
-});
-
-const RUN_2 = 'https://ci.example/runs/2';
-const check = (overrides: Partial<CiResult> = {}) =>
-  receipt({ job: 'check', event: 'integration', groups: [], ...overrides });
-const planStart = (overrides: Partial<CiResult> = {}) =>
+/** An integration run's Plan start and its other receipts. */
+const planStart = (overrides: Partial<CiResult> = {}): CiResult =>
   receipt({
     job: 'plan',
     event: 'integration',
@@ -94,33 +169,116 @@ const planStart = (overrides: Partial<CiResult> = {}) =>
     completedAt: null,
     ...overrides,
   });
+const checkPass = (overrides: Partial<CiResult> = {}): CiResult =>
+  receipt({ job: 'check', event: 'integration', groups: [], ...overrides });
+const fastFail = (overrides: Partial<CiResult> = {}): CiResult =>
+  receipt({ job: 'fast', event: 'integration', status: 'failed', ...overrides });
 
-test("a push's tree counts as passed only by the passed Check of the newest integration run of that tree", () => {
-  expect(passedTreeInLedger([planStart(), check()], TREE)).toBe('https://ci.example/runs/1');
-  expect(passedTreeInLedger([planStart(), check(), check({ status: 'failed' })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([planStart(), check({ tree: OTHER_TREE })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([planStart(), check({ event: 'pr' })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([planStart(), check({ producer: null })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([planStart(), check({ completedAt: null })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([planStart({ runUrl: null }), check({ runUrl: null })], TREE)).toBeUndefined();
-  // A later attempt that stopped before its Check, failed or still running, withdraws the pass.
-  const later = { event: 'integration', runUrl: RUN_2 } as const;
-  const run2 = planStart({ runUrl: RUN_2 });
-  expect(
-    passedTreeInLedger([planStart(), check(), run2, receipt({ ...later, status: 'failed' })], TREE),
-  ).toBeUndefined();
-  expect(passedTreeInLedger([planStart(), check(), run2], TREE)).toBeUndefined();
-});
+const TREE_CASES: Case[] = [
+  {
+    name: 'its own start, then its passed Check',
+    ledger: [planStart(), fastFail({ status: 'passed' }), checkPass()],
+    expected: RUN_1,
+  },
+  {
+    name: 'an older failed run, then a newer run that passed',
+    ledger: [
+      planStart(),
+      checkPass({ status: 'failed' }),
+      planStart({ runUrl: RUN_2 }),
+      checkPass({ runUrl: RUN_2 }),
+    ],
+    expected: RUN_2,
+  },
+  {
+    name: 'an older pass, then a newer start',
+    ledger: [planStart(), checkPass(), planStart({ runUrl: RUN_2 })],
+    expected: undefined,
+  },
+  {
+    name: 'a newer start, then the older run’s late passed Check',
+    ledger: [planStart(), planStart({ runUrl: RUN_2 }), checkPass()],
+    expected: undefined,
+  },
+  {
+    name: 'a newer failed Check whose Plan start is missing',
+    ledger: [planStart(), checkPass(), checkPass({ runUrl: RUN_2, status: 'failed' })],
+    expected: undefined,
+  },
+  {
+    name: 'a newer failed job whose Plan start is missing',
+    ledger: [planStart(), checkPass(), fastFail({ runUrl: RUN_2 })],
+    expected: undefined,
+  },
+  {
+    name: 'a newer Plan start in a changed checkout',
+    ledger: [planStart(), checkPass(), planStart({ runUrl: RUN_2, producer: null })],
+    expected: undefined,
+  },
+  { name: 'an unreadable ledger', ledger: { unreadable: 'ledger.jsonl:2 is no JSON' }, expected: undefined },
+  {
+    name: 'an entry without a run, before the start',
+    ledger: [fastFail({ runUrl: null }), planStart(), checkPass()],
+    expected: undefined,
+  },
+  {
+    name: 'an entry without a run, after the Check',
+    ledger: [planStart(), checkPass(), fastFail({ runUrl: null })],
+    expected: undefined,
+  },
+  { name: 'a passed Check without its Plan start', ledger: [checkPass()], expected: undefined },
+  { name: 'a failed Check', ledger: [planStart(), checkPass({ status: 'failed' })], expected: undefined },
+  {
+    name: 'a Check without completion',
+    ledger: [planStart(), checkPass({ completedAt: null })],
+    expected: undefined,
+  },
+  {
+    name: 'a Check without a producer',
+    ledger: [planStart(), checkPass({ producer: null })],
+    expected: undefined,
+  },
+  {
+    name: 'a Check that reused a tree',
+    ledger: [planStart(), checkPass({ reusedFrom: RUN_2 })],
+    expected: undefined,
+  },
+  {
+    name: 'a run that ends in a passed job, not its Check',
+    ledger: [planStart(), checkPass(), fastFail({ status: 'passed' })],
+    expected: undefined,
+  },
+  {
+    name: "a pull request run's passed Check",
+    ledger: [planStart({ event: 'pr' }), checkPass({ event: 'pr' })],
+    expected: undefined,
+  },
+  {
+    name: 'a newer pull request run of the tree',
+    ledger: [
+      planStart(),
+      checkPass(),
+      planStart({ runUrl: RUN_2, event: 'pr' }),
+      checkPass({ runUrl: RUN_2, event: 'pr' }),
+    ],
+    expected: undefined,
+  },
+  {
+    name: 'a newer run of another tree',
+    ledger: [
+      planStart(),
+      checkPass(),
+      planStart({ runUrl: RUN_2, tree: OTHER_TREE }),
+      fastFail({ runUrl: RUN_2, tree: OTHER_TREE }),
+    ],
+    expected: RUN_1,
+  },
+];
 
-test("an older run's passed Check, appended after a newer run's Plan start, does not pass the tree", () => {
-  expect(passedTreeInLedger([planStart(), planStart({ runUrl: RUN_2 }), check()], TREE)).toBeUndefined();
-});
-
-test('a newer Plan start in a changed checkout withdraws an older pass', () => {
-  expect(
-    passedTreeInLedger([planStart(), check(), planStart({ runUrl: RUN_2, producer: null })], TREE),
-  ).toBeUndefined();
-});
+for (const { name, ledger, expected } of TREE_CASES)
+  test(`a push's passed tree, ${name}: ${expected ? 'reuses the run' : 'runs the work'}`, () => {
+    expect(passedTreeInLedger(ledger, TREE)).toBe(expected);
+  });
 
 test('the Actions adapter takes the newest queue run of the tree, and only when it completed and passed (real jq)', () => {
   const run = (id: number, tree: string, conclusion: string | null) => ({
@@ -140,15 +298,6 @@ test('the Actions adapter takes the newest queue run of the tree, and only when 
   expect(jq([run(2, TREE, 'failure'), run(1, TREE, 'success')])).toBe('');
   expect(jq([run(2, TREE, null), run(1, TREE, 'success')])).toBe('');
   expect(jq([run(1, TREE, 'success')], 'd'.repeat(40))).toBe('');
-});
-
-test('a newer attempt that recorded its key but never finished withdraws an earlier pass', () => {
-  const started = receipt({
-    status: 'running',
-    completedAt: null,
-    groups: GROUPS.map((id) => ({ id, outcome: 'not-run', durationMs: 0 })),
-  });
-  expect(reusableReceipt([receipt(), started], KEY, 'integration')).toBeUndefined();
 });
 
 test('an absent ledger is empty; a ledger that cannot be read, or holds one bad line, counts for nothing', () => {

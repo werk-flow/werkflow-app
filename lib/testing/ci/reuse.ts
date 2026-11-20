@@ -16,23 +16,45 @@ export type ReuseKey = {
 const sameGroups = (left: readonly string[], right: readonly string[]): boolean =>
   JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
 
-/** Where a receipt points: its run, or its place in the ledger. */
-const citation = (receipt: CiResult, index: number): string =>
-  receipt.runUrl ?? `ledger receipt ${index + 1}`;
+/** The runner's ledger as `readLedger` returns it. */
+type Ledger = readonly CiResult[] | { unreadable: string };
 
 /**
- * The passed receipt that stands for a new run of `key` on `event`, or undefined. Only the newest
- * receipt for the key counts, on any event, so a later failure withdraws an earlier pass. It counts
- * when a CI runner produced it on a reuse event, it completed, it ran exactly the key's groups and
- * every group passed.
+ * The one reuse rule. Among the ledger's entries that `concern` the work, the newest `start`
+ * decides: when every entry after it belongs to that start's run, the last of them is returned.
+ * Any entry without a run, any entry of another run after that start, a missing start or an
+ * unreadable ledger returns undefined, and the work runs.
  */
-export function reusableReceipt(
-  receipts: readonly CiResult[],
-  key: ReuseKey,
-  event: CiEvent,
-): string | undefined {
+function lastOfNewestStart(
+  ledger: Ledger,
+  concerns: (receipt: CiResult) => boolean,
+  isStart: (receipt: CiResult) => boolean,
+): CiResult | undefined {
+  if ('unreadable' in ledger) return undefined;
+  const entries = ledger.filter(concerns);
+  if (entries.some((receipt) => receipt.runUrl === null)) return undefined;
+  const start = entries.findLastIndex(isStart);
+  const runUrl = entries[start]?.runUrl;
+  const since = entries.slice(start);
+  return start !== -1 && since.every((receipt) => receipt.runUrl === runUrl) ? since.at(-1) : undefined;
+}
+
+/** A receipt that proves its own work: a CI runner's, completed, passed, and no reuse itself. */
+const provesItself = (receipt: CiResult): boolean =>
+  receipt.producer !== null &&
+  receipt.status === 'passed' &&
+  receipt.completedAt !== null &&
+  receipt.reusedFrom === null;
+
+/**
+ * The run whose passed result stands for a new run of `key` on `event`, or undefined. The reuse
+ * rule over the key's receipts on any event: the newest job start decides, and its run's own
+ * result must come last, on a reuse event, with every group passed.
+ */
+export function reusableReceipt(ledger: Ledger, key: ReuseKey, event: CiEvent): string | undefined {
   if (!REUSE_EVENTS.includes(event) || !key.groups.length) return undefined;
-  const index = receipts.findLastIndex(
+  const last = lastOfNewestStart(
+    ledger,
     (receipt) =>
       receipt.job === key.job &&
       receipt.tree === key.tree &&
@@ -41,39 +63,29 @@ export function reusableReceipt(
         receipt.groups.map((group) => group.id),
         key.groups,
       ),
+    (receipt) => receipt.status === 'running',
   );
-  const receipt = receipts[index];
-  if (
-    !receipt ||
-    !REUSE_EVENTS.includes(receipt.event) ||
-    receipt.producer === null ||
-    receipt.status !== 'passed' ||
-    receipt.completedAt === null ||
-    receipt.reusedFrom !== null ||
-    !receipt.groups.every((group) => group.outcome === 'passed')
-  )
-    return undefined;
-  return citation(receipt, index);
+  return last &&
+    REUSE_EVENTS.includes(last.event) &&
+    provesItself(last) &&
+    last.groups.every((group) => group.outcome === 'passed')
+    ? (last.runUrl ?? undefined)
+    : undefined;
 }
 
 /**
- * The integration run whose `Check` passed this tree, from the ledger, or undefined. Only the newest
- * integration run of the tree counts, by the order of its Plan start, and its newest receipt must be
- * its completed, passed `Check`. A newer attempt that failed, is still running, stopped before its
- * `Check` or planned in a changed checkout withdraws an older pass, whenever that pass was appended.
+ * The integration run whose `Check` passed this tree, from the ledger, or undefined. The reuse rule
+ * over every receipt of the tree, on any event: the newest Plan start decides, and its run's own
+ * passed integration `Check` must come last.
  */
-export function passedTreeInLedger(receipts: readonly CiResult[], tree: string): string | undefined {
-  const ofTree = receipts.filter((receipt) => receipt.event === 'integration' && receipt.tree === tree);
-  const runUrl = ofTree.findLast((receipt) => receipt.job === 'plan' && receipt.status === 'running')?.runUrl;
-  if (!runUrl) return undefined;
-  const newest = ofTree.findLast((receipt) => receipt.runUrl === runUrl);
-  return newest &&
-    newest.job === 'check' &&
-    newest.producer !== null &&
-    newest.status === 'passed' &&
-    newest.completedAt !== null &&
-    newest.reusedFrom === null
-    ? runUrl
+export function passedTreeInLedger(ledger: Ledger, tree: string): string | undefined {
+  const last = lastOfNewestStart(
+    ledger,
+    (receipt) => receipt.tree === tree,
+    (receipt) => receipt.job === 'plan' && receipt.status === 'running',
+  );
+  return last?.job === 'check' && last.event === 'integration' && provesItself(last)
+    ? (last.runUrl ?? undefined)
     : undefined;
 }
 

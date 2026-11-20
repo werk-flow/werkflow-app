@@ -3,7 +3,7 @@
 // reason for the skip.
 import { z } from 'zod';
 import { CI_JOBS, type CiEvent } from './dag';
-import type { CiResult } from './results';
+import type { CiResult, RunPlan } from './results';
 import { plannedGroups } from './run-plan';
 
 /** Each job's state as the scheduler reports it: ci.yml's `toJSON(needs)`. */
@@ -17,13 +17,35 @@ export function parseScheduler(json: string | undefined): z.infer<typeof schedul
   return json ? schedulerSchema.parse(JSON.parse(json)) : undefined;
 }
 
+/**
+ * The run a job belongs to. With a producer, a CI runner's run, the plan must have one too: a plan
+ * without one ran on a workstation or on a checkout that differs from its commit.
+ */
+export type CiRun = { tree: string; event: CiEvent; runUrl: string | null; producer: string | null };
+
+/**
+ * This run's plan, or why a job may not run by it: the plan must be of the run's tree, event and run,
+ * completed and passed. Every job after Plan and `Check` take the plan only through this.
+ */
+export function runPlanOf(
+  run: CiRun,
+  plan: CiResult | { unreadable: string },
+): { result: CiResult; plan: RunPlan } | { problem: string } {
+  if ('unreadable' in plan) return { problem: plan.unreadable };
+  if (plan.status !== 'passed' || !plan.plan || plan.completedAt === null)
+    return { problem: `the plan ${plan.status === 'passed' ? 'is incomplete' : `is ${plan.status}`}` };
+  if (plan.tree !== run.tree || plan.event !== run.event || plan.runUrl !== run.runUrl)
+    return {
+      problem: `it is the ${plan.event} plan of tree ${plan.tree} in run ${plan.runUrl}, not of this ${run.event} run ${run.runUrl} of ${run.tree}`,
+    };
+  if (run.producer !== null && plan.producer === null)
+    return { problem: 'it ran outside CI or on a checkout that differs from its commit' };
+  return { result: plan, plan: plan.plan };
+}
+
 export type CheckInput = {
-  /**
-   * The run this Check judges; every result must be of its tree, event and run. With a producer,
-   * a CI runner's Check, every result must have one too: a result without one ran on a workstation
-   * or on a checkout that differs from its commit.
-   */
-  run: { tree: string; event: CiEvent; runUrl: string | null; producer: string | null };
+  /** The run this Check judges; every result must be of its tree, event and run, and have a producer when the run has one. */
+  run: CiRun;
   /** The plan's result, or why it cannot be read. */
   plan: CiResult | { unreadable: string };
   /** Every other result the run's jobs wrote, or why one cannot be read. */
@@ -40,31 +62,19 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
     passed = false;
     lines.push(`FAILED ${line}`);
   };
-  const plan = input.plan;
-  if ('unreadable' in plan) {
-    fail(`plan: ${plan.unreadable}`);
+  // A scheduler that reports must report this run's Plan as a success: a rerun whose Plan failed
+  // could otherwise read the passed plan an earlier attempt left.
+  if (input.scheduler && input.scheduler.plan?.result !== 'success') {
+    fail(`plan: the job ended ${input.scheduler.plan?.result ?? 'without a report'}`);
     return { passed, lines };
   }
-  const scheduledPlan = input.scheduler?.plan?.result;
-  if (plan.status !== 'passed' || !plan.plan || plan.completedAt === null) {
-    fail(`plan: the plan ${plan.status === 'passed' ? 'is incomplete' : `is ${plan.status}`}`);
+  const ownPlan = runPlanOf(input.run, input.plan);
+  if ('problem' in ownPlan) {
+    fail(`plan: ${ownPlan.problem}`);
     return { passed, lines };
   }
-  if (scheduledPlan !== undefined && scheduledPlan !== 'success') {
-    fail(`plan: the job ended ${scheduledPlan}`);
-    return { passed, lines };
-  }
-  if (plan.tree !== input.run.tree || plan.event !== input.run.event || plan.runUrl !== input.run.runUrl) {
-    fail(
-      `plan: it is the ${plan.event} plan of tree ${plan.tree} in run ${plan.runUrl}, not of this ${input.run.event} run ${input.run.runUrl} of ${input.run.tree}`,
-    );
-    return { passed, lines };
-  }
-  if (input.run.producer !== null && plan.producer === null) {
-    fail('plan: it ran outside CI or on a checkout that differs from its commit');
-    return { passed, lines };
-  }
-  const { jobs, skips, shards, outputs } = plan.plan;
+  const plan = ownPlan.result;
+  const { jobs, skips, shards, outputs } = ownPlan.plan;
   for (const entry of input.results) if ('unreadable' in entry) fail(`result: ${entry.unreadable}`);
   const results = input.results.filter(
     (entry): entry is CiResult =>

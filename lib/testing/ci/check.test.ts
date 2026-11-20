@@ -1,7 +1,7 @@
 // `Check` fails closed: a missing, cancelled, failed or incomplete job fails it, and a skipped job
 // passes only with the plan's reason (lib/testing/ci/check.ts).
 import { expect, test } from 'bun:test';
-import { checkRun, parseScheduler } from './check';
+import { checkRun, parseScheduler, runPlanOf } from './check';
 import type { CiJob } from './dag';
 import type { CiResult, RunPlan } from './results';
 import { plannedGroups } from './run-plan';
@@ -94,14 +94,18 @@ test('a failed or incomplete job fails Check', () => {
 });
 
 test("a cancelled or failed job by the scheduler's account fails Check, even beside a passed result", () => {
-  const scheduler = parseScheduler(JSON.stringify({ sql: { result: 'cancelled', outputs: {} } }));
+  const scheduler = parseScheduler(
+    JSON.stringify({ plan: { result: 'success' }, sql: { result: 'cancelled', outputs: {} } }),
+  );
   const verdict = checkRun({ run: RUN, plan, results: passing, scheduler });
   expect(verdict.passed).toBe(false);
   expect(verdict.lines).toContain('FAILED sql: the job ended cancelled');
 });
 
 test('an unexplained skip fails Check: a planned job the scheduler skipped, or a skip the plan gives no reason for', () => {
-  const scheduler = parseScheduler(JSON.stringify({ components: { result: 'skipped' } }));
+  const scheduler = parseScheduler(
+    JSON.stringify({ plan: { result: 'success' }, components: { result: 'skipped' } }),
+  );
   expect(checkRun({ run: RUN, plan, results: passing, scheduler }).lines).toContain(
     'FAILED components: the plan runs it, but the scheduler skipped it',
   );
@@ -223,4 +227,59 @@ test("a CI runner's Check fails on a plan or job result without a producer, whic
   expect(checkRun({ run: ciRun, plan: dirtyPlan, results: passing, scheduler: undefined }).passed).toBe(
     false,
   );
+});
+
+test("Check requires the scheduler's success for this run's Plan, so a rerun whose Plan failed cannot use an earlier attempt's plan", () => {
+  for (const scheduled of [
+    { plan: { result: 'failure' } },
+    { plan: { result: 'skipped' } },
+    { fast: { result: 'success' } },
+  ]) {
+    const verdict = checkRun({
+      run: RUN,
+      plan,
+      results: passing,
+      scheduler: parseScheduler(JSON.stringify(scheduled)),
+    });
+    expect(verdict.passed).toBe(false);
+    expect(verdict.lines[0]).toStartWith('FAILED plan: the job ended');
+  }
+  const success = parseScheduler(JSON.stringify({ plan: { result: 'success' } }));
+  expect(checkRun({ run: RUN, plan, results: passing, scheduler: success }).passed).toBe(true);
+});
+
+const CI_RUN = {
+  tree: TREE,
+  event: 'integration',
+  runUrl: 'https://ci.example/runs/2',
+  producer: 'mac-standin',
+} as const;
+const ciPlan = result('plan', { plan: RUN_PLAN, runUrl: CI_RUN.runUrl, producer: CI_RUN.producer });
+
+test('a job takes a plan only of its own run and event, completed, passed and with a producer on a CI runner', () => {
+  expect(runPlanOf(CI_RUN, ciPlan)).toEqual({ result: ciPlan, plan: RUN_PLAN });
+  const refused: [string, CiResult | { unreadable: string }][] = [
+    ['a stale plan of the same tree from another run', { ...ciPlan, runUrl: 'https://ci.example/runs/1' }],
+    ['a plan without a run', { ...ciPlan, runUrl: null }],
+    ['the plan of another event', { ...ciPlan, event: 'pr' }],
+    ['the plan of another tree', { ...ciPlan, tree: 'f'.repeat(40) }],
+    ['a plan still running', { ...ciPlan, status: 'running', completedAt: null }],
+    ['a passed plan without completion', { ...ciPlan, completedAt: null }],
+    ['a failed plan', { ...ciPlan, status: 'failed' }],
+    ['a plan without its decision', { ...ciPlan, plan: undefined }],
+    ['a plan without a producer', { ...ciPlan, producer: null }],
+    ['a missing plan', { unreadable: 'plan.json is missing' }],
+  ];
+  for (const [name, refusedPlan] of refused)
+    expect([name, 'problem' in runPlanOf(CI_RUN, refusedPlan)]).toEqual([name, true]);
+  // A workstation run takes a workstation plan; its results never count.
+  const workstation = { ...CI_RUN, runUrl: null, producer: null };
+  expect(runPlanOf(workstation, { ...ciPlan, runUrl: null, producer: null })).toHaveProperty('plan');
+});
+
+test('Check refuses a stale plan of the same tree from another run', () => {
+  const stale = { ...ciPlan, runUrl: 'https://ci.example/runs/1' };
+  const results = passing.map((entry) => ({ ...entry, runUrl: CI_RUN.runUrl }));
+  expect(checkRun({ run: CI_RUN, plan: ciPlan, results, scheduler: undefined }).passed).toBe(true);
+  expect(checkRun({ run: CI_RUN, plan: stale, results, scheduler: undefined }).passed).toBe(false);
 });

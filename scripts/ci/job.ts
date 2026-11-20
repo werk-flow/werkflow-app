@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { checkRun, parseScheduler } from '../../lib/testing/ci/check';
+import { type CiRun, checkRun, parseScheduler, runPlanOf } from '../../lib/testing/ci/check';
 import { CI_EVENTS, CI_JOBS, type CiJob } from '../../lib/testing/ci/dag';
 import {
   type CiResult,
@@ -46,7 +46,10 @@ import { repository, run, step, verify } from './run';
 //                   results are never reused. A checkout that differs from its commit records none.
 //   CI_LEDGER       The runner's JSONL ledger of results. plan reads it to reuse a passed result,
 //                   and with CI_PRODUCER set every job appends its receipts, a changed
-//                   checkout's included. Optional.
+//                   checkout's included. Optional. Keep it outside the checkout, where the job's
+//                   code cannot write.
+//   No child process sees CI_LEDGER or CI_PRODUCER: only this script appends a receipt, after its
+//   child exited, so code under test cannot forge one.
 //   CI_RUN_URL      The run's identity and address: check takes only results of this run, and a
 //                   later reuse cites it. The same for every job and rerun of one run. Required
 //                   with CI_LEDGER.
@@ -58,6 +61,11 @@ import { repository, run, step, verify } from './run';
 // merge-queue run of the tree, and writes its outputs to $GITHUB_OUTPUT.
 
 const environment = process.env;
+// Read once, then removed from the environment every child inherits (run.ts, the test server, git).
+const ledgerPath = environment.CI_LEDGER;
+const producer = environment.CI_PRODUCER || null;
+delete environment.CI_LEDGER;
+delete environment.CI_PRODUCER;
 const jobName = CI_JOBS.find((name) => name === process.argv[2]);
 const eventName = CI_EVENTS.find((name) => name === environment.CI_EVENT);
 const directory = environment.CI_RESULTS_DIR;
@@ -80,8 +88,7 @@ if (!clean)
   console.info(
     '::warning title=Checkout::The checkout differs from its commit, so no result is reused or recorded for reuse.',
   );
-if (environment.CI_LEDGER && !environment.CI_RUN_URL)
-  throw new Error('A run with CI_LEDGER needs CI_RUN_URL.');
+if (ledgerPath && !environment.CI_RUN_URL) throw new Error('A run with CI_LEDGER needs CI_RUN_URL.');
 // One one-time-code secret for the job's build and its test server, unless the runner gives one.
 const otpSecret = environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex');
 const result: CiResult = {
@@ -97,29 +104,29 @@ const result: CiResult = {
   planReason: '',
   reusedFrom: null,
   listGrowthApproved,
-  producer: (clean && environment.CI_PRODUCER) || null,
+  producer: clean ? producer : null,
   runUrl: environment.CI_RUN_URL || null,
   startedAt: new Date().toISOString(),
   completedAt: null,
 };
+/** The run this job belongs to; it takes only this run's plan. */
+const ownRun: CiRun = { tree: result.tree, event: ci.event, runUrl: result.runUrl, producer };
 const resultPath = join(ci.directory, resultFileName(ci.job, shard));
 const writeResult = (): void => writeFileSync(resultPath, `${JSON.stringify(result, null, 2)}\n`);
 writeResult();
 const everyGroupPassed = (): boolean =>
   !verifyExitFailed && result.groups.length > 0 && result.groups.every((group) => group.outcome === 'passed');
 
-/** This run's plan; every job after plan runs by it. */
+/** This run's plan; every job after plan runs by it, and by no other run's plan of the tree. */
 function runPlan(): RunPlan {
-  const plan = readResult(join(ci.directory, resultFileName('plan', null)));
-  if ('unreadable' in plan) throw new Error(`The plan cannot be read: ${plan.unreadable}`);
-  if (plan.status !== 'passed' || !plan.plan || plan.tree !== result.tree)
-    throw new Error('The plan did not pass on this tree, so no job runs by it.');
-  result.planReason = plan.planReason;
+  const own = runPlanOf(ownRun, readResult(join(ci.directory, resultFileName('plan', null))));
+  if ('problem' in own) throw new Error(`No job runs by this plan: ${own.problem}.`);
+  result.planReason = own.result.planReason;
   // Every job diffs against the base its plan recorded, so only plan needs CI_BASE_SHA from the
   // runner. The children read it there: Fast's migration-order gate off GitHub Actions.
-  if (plan.base) environment.CI_BASE_SHA = plan.base;
-  result.base = plan.base;
-  return plan.plan;
+  if (own.result.base) environment.CI_BASE_SHA = own.result.base;
+  result.base = own.result.base;
+  return own.plan;
 }
 
 /** The outputs of scripts/ci-plan.ts, which writes them to a $GITHUB_OUTPUT file of their own. */
@@ -158,14 +165,15 @@ function passedTreeOnActions(): string | undefined {
   return undefined;
 }
 
+/** The ledger as Plan found it, before its own start; a changed checkout reads none. */
+const ledger = ci.job === 'plan' && ledgerPath && clean ? readLedger(ledgerPath) : [];
+
 async function plan(): Promise<boolean> {
-  const ledger = environment.CI_LEDGER && clean ? readLedger(environment.CI_LEDGER) : [];
   if ('unreadable' in ledger)
     console.info(`::warning title=Ledger::${ledger.unreadable}, so no result is reused.`);
-  const receipts = 'unreadable' in ledger ? [] : ledger;
   const passedTree =
     ci.event === 'main' && clean
-      ? (passedTreeInLedger(receipts, result.tree) ?? passedTreeOnActions())
+      ? (passedTreeInLedger(ledger, result.tree) ?? passedTreeOnActions())
       : undefined;
   const planned = planRun({
     event: ci.event,
@@ -173,7 +181,7 @@ async function plan(): Promise<boolean> {
     listGrowthApproved,
     outputs: passedTree === undefined ? await plannerOutputs() : undefined,
     passedTree,
-    reused: (key) => reusableReceipt(receipts, key, ci.event),
+    reused: (key) => reusableReceipt(ledger, key, ci.event),
   });
   result.plan = planned;
   result.reusedFrom = passedTree ?? null;
@@ -335,17 +343,11 @@ async function browser(): Promise<boolean> {
 
 function check(): boolean {
   // A CI Check certifies the tree only from a checkout that holds exactly its commit.
-  if (environment.CI_PRODUCER && !clean)
-    throw new Error('Check ran on a checkout that differs from its commit.');
+  if (producer && !clean) throw new Error('Check ran on a checkout that differs from its commit.');
   const own = new Set([resultFileName('plan', null), resultFileName('check', null)]);
   const plan = readResult(join(ci.directory, resultFileName('plan', null)));
   const verdict = checkRun({
-    run: {
-      tree: result.tree,
-      event: ci.event,
-      runUrl: result.runUrl,
-      producer: environment.CI_PRODUCER || null,
-    },
+    run: ownRun,
     plan,
     results: readdirSync(ci.directory)
       .filter((file) => file.endsWith('.json') && !own.has(file))
@@ -372,8 +374,7 @@ const bodies: Record<CiJob, () => Promise<boolean> | boolean> = {
 // A CI runner appends every receipt. One from a changed checkout has no producer, so it is never
 // reused, but it still withdraws an older pass of its key or tree.
 const appendToLedger = (): void => {
-  if (environment.CI_LEDGER && environment.CI_PRODUCER)
-    appendFileSync(environment.CI_LEDGER, `${JSON.stringify(result)}\n`);
+  if (ledgerPath && producer) appendFileSync(ledgerPath, `${JSON.stringify(result)}\n`);
 };
 let passed = false;
 // Plan records its attempt before it plans: a later integration attempt that is still planning,
