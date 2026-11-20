@@ -10,8 +10,8 @@ import type { CiEvent } from './dag';
 import { type CiResult, readLedger } from './results';
 import {
   ledgerAfterStart,
+  passedTree,
   passedTreeActionsFilter,
-  passedTreeInLedger,
   type ReuseKey,
   reusableReceipt,
 } from './reuse';
@@ -22,6 +22,10 @@ const GROUPS = ['sql:grants', 'sql:history', 'step:types', 'step:seed'];
 const KEY: ReuseKey = { job: 'sql', shard: null, tree: TREE, groups: GROUPS, listGrowthApproved: false };
 const RUN_1 = 'https://ci.example/runs/1';
 const RUN_2 = 'https://ci.example/runs/2';
+/** The merge-queue lookup; a configured ledger never asks it. */
+const queueUnasked = (): never => {
+  throw new Error('A configured ledger asked the merge queue.');
+};
 
 function receipt(overrides: Partial<CiResult> = {}): CiResult {
   return {
@@ -290,8 +294,17 @@ const TREE_CASES: Case[] = [
 
 for (const { name, ledger, expected } of TREE_CASES)
   test(`a push's passed tree, ${name}: ${expected ? 'reuses the run' : 'runs the work'}`, () => {
-    expect(passedTreeInLedger(ledger, TREE)).toBe(expected);
+    expect(passedTree(ledger, TREE, queueUnasked)).toBe(expected);
   });
+
+test("a configured ledger is a push's only source of a passed tree; the merge queue answers only without one", () => {
+  const queue = (): string => 'https://github.com/o/r/actions/runs/9';
+  // Another run's newer start withdrew the pass in the ledger: a green queue run cannot restore it.
+  expect(passedTree([planStart(), checkPass(), planStart({ runUrl: RUN_2 })], TREE, queue)).toBeUndefined();
+  expect(passedTree([], TREE, queue)).toBeUndefined();
+  expect(passedTree([planStart(), checkPass()], TREE, queue)).toBe(RUN_1);
+  expect(passedTree(undefined, TREE, queue)).toBe('https://github.com/o/r/actions/runs/9');
+});
 
 test('the Actions adapter takes the newest queue run of the tree, and only when it completed and passed (real jq)', () => {
   const run = (id: number, tree: string, conclusion: string | null) => ({
@@ -331,7 +344,7 @@ test('an absent ledger is empty; a ledger that cannot be read, or holds one bad 
       `${JSON.stringify(planStart())}\n${JSON.stringify(checkPass())}\n${JSON.stringify(fastFail({ runUrl: '' }))}\n`,
     );
     expect(readLedger(ledger)).toEqual({ unreadable: `${ledger}:3 is no valid receipt` });
-    expect(passedTreeInLedger(readLedger(ledger), TREE)).toBeUndefined();
+    expect(passedTree(readLedger(ledger), TREE, queueUnasked)).toBeUndefined();
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
@@ -359,13 +372,13 @@ function planLedger(before: CiResult[], during: CiResult[] = []) {
 test("Plan reads the ledger only after its own start, so another run's start appended meanwhile withdraws the reuse", () => {
   const older = [planStart(), checkPass()];
   // Only Plan's own start follows the pass: the push reuses it.
-  expect(passedTreeInLedger(planLedger(older).ledger, TREE)).toBe(RUN_1);
+  expect(passedTree(planLedger(older).ledger, TREE, queueUnasked)).toBe(RUN_1);
   // Another run's same-tree start lands after Plan's own: it withdraws the pass.
   const another = planStart({ runUrl: 'https://ci.example/runs/3' });
-  expect(passedTreeInLedger(planLedger(older, [another]).ledger, TREE)).toBeUndefined();
+  expect(passedTree(planLedger(older, [another]).ledger, TREE, queueUnasked)).toBeUndefined();
   // A rerun of Plan's own run is another start, not Plan's exact receipt: it withdraws the pass too.
   const rerun = planStart({ runUrl: RUN_2, startedAt: '2026-11-20T21:00:01.000Z' });
-  expect(passedTreeInLedger(planLedger(older, [rerun]).ledger, TREE)).toBeUndefined();
+  expect(passedTree(planLedger(older, [rerun]).ledger, TREE, queueUnasked)).toBeUndefined();
 });
 
 test('a ledger Plan cannot append its start to, cannot read, or that lacks its start reuses nothing', () => {
@@ -379,7 +392,7 @@ test('a ledger Plan cannot append its start to, cannot read, or that lacks its s
     () => older,
   );
   expect(rejected).toEqual({ unreadable: "Plan's start could not be appended: EACCES: permission denied" });
-  expect(passedTreeInLedger(rejected, TREE)).toBeUndefined();
+  expect(passedTree(rejected, TREE, queueUnasked)).toBeUndefined();
   const unreadable = ledgerAfterStart(
     own,
     () => {},
@@ -392,5 +405,5 @@ test('a ledger Plan cannot append its start to, cannot read, or that lacks its s
     () => older,
   );
   expect(lost).toEqual({ unreadable: "the ledger lacks Plan's own start" });
-  expect(passedTreeInLedger(lost, TREE)).toBeUndefined();
+  expect(passedTree(lost, TREE, queueUnasked)).toBeUndefined();
 });

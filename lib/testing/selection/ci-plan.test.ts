@@ -9,6 +9,7 @@ import {
   ciPlan,
   componentShards,
   MAX_SHARDS,
+  planLog,
   TARGET_SHARD_SECONDS,
   REGISTRY_ROWS,
   runnerModules as runnerModulesOf,
@@ -534,12 +535,73 @@ test('the component areas of a full set run in at most two jobs, a short selecti
     .filter((entry) => entry.kind === 'ui')
     .map((entry) => entry.id);
   const full = componentShards(areas, recorded);
-  expect(full).toHaveLength(2);
+  // The recorded durations are refreshed, so they may fit one job or need both.
+  expect(full.length).toBeGreaterThanOrEqual(1);
+  expect(full.length).toBeLessThanOrEqual(2);
   expect(full.flatMap((shard) => shard.groups.split(',')).sort()).toEqual([...areas].sort());
   expect(componentShards(['ui:contracts:customers'], recorded)).toEqual([
     { shard: 1, groups: 'ui:contracts:customers' },
   ]);
   expect(componentShards([], recorded)).toEqual([]);
+});
+
+test('component areas take a second job exactly when their seconds pass one job, and never a third', () => {
+  const recorded = (seconds: number): GroupDurations => ({
+    source: 'test',
+    defaultSeconds: seconds,
+    groups: {},
+  });
+  const areas = ['ui:contracts:a', 'ui:contracts:b', 'ui:contracts:c', 'ui:contracts:d'];
+  // 4 × 120 s fill one 8-minute job exactly; 4 × 121 s need a second; 4 × 600 s stay at two.
+  expect(componentShards(areas, recorded(120))).toHaveLength(1);
+  expect(componentShards(areas, recorded(121))).toHaveLength(2);
+  expect(componentShards(areas, recorded(600))).toHaveLength(2);
+});
+
+test('when the shard budget binds, the visual and other shards split it by the shortest longest shard', () => {
+  const visual = ['1', '2', '3'].map((index) =>
+    group(`audit:visual:v${index}`, `tests/audit/visual/v${index}.spec.ts`, ['*'], 'release-only'),
+  );
+  const others = Array.from({ length: 18 }, (_, index) =>
+    group(`audit:other:${index}`, `tests/audit/other/${index}.spec.ts`, ['*']),
+  );
+  const seconds = Object.fromEntries([
+    ...visual.map((entry) => [entry.id, 900] as const),
+    ...others.map((entry) => [entry.id, 700] as const),
+  ]);
+  const { shards } = ciPlan({
+    groups: [...visual, ...others],
+    changedFiles: undefined,
+    fullRun: undefined,
+    runnerModules,
+    durations: { source: 'test', defaultSeconds: 60, groups: seconds },
+    rowChanges: [],
+  });
+  const packed = shards.map((shard) => shard.groups.split(','));
+  // The targets want 3 visual and 14 other shards. 3 + 5 would load an other shard with 2,800 s.
+  expect(packed.filter((ids) => ids[0]?.startsWith('audit:visual'))).toHaveLength(2);
+  expect(packed.filter((ids) => !ids[0]?.startsWith('audit:visual'))).toHaveLength(6);
+  const load = (ids: string[]): number => ids.reduce((sum, id) => sum + (seconds[id] ?? 0), 0);
+  expect(Math.max(...packed.map(load))).toBe(2100);
+  expect(packed.flat().sort()).toEqual([...visual, ...others].map((entry) => entry.id).sort());
+});
+
+test('the planner log prints every reason and file name as one JSON string, so a path cannot forge a line or a workflow command', () => {
+  const forged = 'app/x\n::error::forged.tsx';
+  const lines = planLog(
+    {
+      fullReason: `Tooling input changed: ${forged}`,
+      browser: [{ id: 'golden:gg-00', reason: `own test (${forged})` }],
+      shards: [{ shard: 1, groups: 'golden:gg-00' }],
+    },
+    { 'ui:contracts:work': `Tailwind scans ${forged}\r::warning::also` },
+  );
+  expect(lines.length).toBeGreaterThan(0);
+  for (const line of lines) {
+    expect(line).not.toMatch(/[\r\n\u2028\u2029]/);
+    expect(line.trimStart().startsWith('::')).toBe(false);
+  }
+  expect(lines.join('\n')).toContain(JSON.stringify(`own test (${forged})`));
 });
 
 test('support only a wall-clock group imports still runs the critical journeys, never the wall-clock group', () => {

@@ -22,12 +22,12 @@ import {
 } from '../../lib/testing/ci/results';
 import {
   ledgerAfterStart,
+  passedTree,
   passedTreeActionsFilter,
   passedTreeActionsQuery,
-  passedTreeInLedger,
   reusableReceipt,
 } from '../../lib/testing/ci/reuse';
-import { isStep, jobShards, plannedGroups, planRun } from '../../lib/testing/ci/run-plan';
+import { isStep, jobShards, midnightNotice, plannedGroups, planRun } from '../../lib/testing/ci/run-plan';
 import { workspaceAppOrigin } from '../../lib/testing/runner/app-port';
 import { repository, run, step, verify } from './run';
 
@@ -64,9 +64,10 @@ import { repository, run, step, verify } from './run';
 //   CI_BUILD_TAR    fast packs its build into this file, and a browser shard unpacks it. Optional.
 //   CI_NEEDS        check: the scheduler's job results, as ci.yml's `toJSON(needs)`. Optional.
 //   SHRINK_ONLY_GROWTH_APPROVED  `true` with the owner's `approved: list growth` label.
-//   MIDNIGHT_PROOF_MINUTES       plan: passed on to scripts/ci-plan.ts.
-// On GitHub Actions (GITHUB_ACTIONS=true and GH_TOKEN) plan also asks the Actions API for a green
-// merge-queue run of the tree, and writes its outputs to $GITHUB_OUTPUT.
+//   MIDNIGHT_PROOF_MINUTES       plan: passed on to scripts/ci-plan.ts; names the wait a proof run.
+// On GitHub Actions (GITHUB_ACTIONS=true and GH_TOKEN) without CI_LEDGER, plan asks the Actions API
+// for a green merge-queue run of the tree; a configured ledger is the only reuse source. plan writes
+// its outputs to $GITHUB_OUTPUT.
 
 const environment = process.env;
 // Read once, then removed from the environment every child inherits (run.ts, the test server, git).
@@ -200,29 +201,36 @@ async function plan(): Promise<boolean> {
   const ledger = planLedger();
   if ('unreadable' in ledger)
     console.info(`::warning title=Ledger::${ledger.unreadable}, so no result is reused.`);
-  const passedTree =
+  const reusedTree =
     ci.event === 'main' && clean && !('unreadable' in ledger)
-      ? (passedTreeInLedger(ledger, result.tree) ?? passedTreeOnActions())
+      ? passedTree(ledgerPath ? ledger : undefined, result.tree, passedTreeOnActions)
       : undefined;
   const planned = planRun({
     event: ci.event,
     tree: result.tree,
     listGrowthApproved,
-    outputs: passedTree === undefined ? await plannerOutputs() : undefined,
-    passedTree,
+    outputs: reusedTree === undefined ? await plannerOutputs() : undefined,
+    passedTree: reusedTree,
     reused: (key) => reusableReceipt(ledger, key, ci.event),
   });
   result.plan = planned;
-  result.reusedFrom = passedTree ?? null;
-  result.planReason = passedTree
-    ? `Reused tree: ${passedTree}`
+  result.reusedFrom = reusedTree ?? null;
+  result.planReason = reusedTree
+    ? `Reused tree: ${reusedTree}`
     : planned.outputs.full_reason
       ? `Every browser group: ${planned.outputs.full_reason}`
       : 'Selection by diff';
   for (const [skipped, reason] of Object.entries(planned.skips))
     console.info(`[ci] ${skipped}: skipped. ${reason}`);
   console.info(`[ci] ${ci.event} run of tree ${result.tree} runs ${planned.jobs.join(', ')}.`);
-  const outputs = { ...planned.outputs, jobs: JSON.stringify(planned.jobs), reused: passedTree ?? '' };
+  // From the final plan: no notice when reuse left no browser shard to wait.
+  const notice = midnightNotice(planned, Boolean(environment.MIDNIGHT_PROOF_MINUTES));
+  if (notice) {
+    console.info(`::notice title=Midnight wait::${notice}`);
+    // Plan ends before the wait starts, so its summary is on the run page during the wait.
+    if (environment.GITHUB_STEP_SUMMARY) appendFileSync(environment.GITHUB_STEP_SUMMARY, `${notice}\n`);
+  }
+  const outputs = { ...planned.outputs, jobs: JSON.stringify(planned.jobs), reused: reusedTree ?? '' };
   if (environment.GITHUB_OUTPUT)
     appendFileSync(
       environment.GITHUB_OUTPUT,

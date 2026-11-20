@@ -312,27 +312,30 @@ function shardCount(
 
 /**
  * The visual groups in shards of their own, then the other groups, each packed into as few shards
- * as hold `TARGET_SHARD_SECONDS` each, all within `MAX_SHARDS`.
+ * as hold `TARGET_SHARD_SECONDS` each, never more shards than groups. When those counts pass
+ * `MAX_SHARDS`, each pool keeps at least one shard and the budget goes to the split whose longest
+ * shard is shortest; a tie keeps fewer visual shards.
  */
 function shardsOf(groupIds: readonly string[], durations: GroupDurations): CiShard[] {
   const seconds = secondsOf(durations);
   const visual = groupIds.filter((id) => VISUAL_GROUP.test(id));
   const rest = groupIds.filter((id) => !VISUAL_GROUP.test(id));
-  // Each pool keeps a shard while it has a group, never more shards than groups, and both stay within the budget.
-  const visualCount = visual.length
-    ? Math.min(
-        visual.length,
-        MAX_SHARDS - (rest.length ? 1 : 0),
-        shardCount(visual, seconds, TARGET_SHARD_SECONDS),
-      )
-    : 0;
-  const restCount = rest.length
-    ? Math.max(
-        1,
-        Math.min(rest.length, MAX_SHARDS - visualCount, shardCount(rest, seconds, TARGET_SHARD_SECONDS)),
-      )
-    : 0;
-  return numbered([...pack(visual, visualCount, seconds), ...pack(rest, restCount, seconds)]);
+  const wanted = (ids: readonly string[]): number =>
+    ids.length ? Math.min(ids.length, shardCount(ids, seconds, TARGET_SHARD_SECONDS)) : 0;
+  const packed = (visualCount: number, restCount: number): string[][] => [
+    ...pack(visual, visualCount, seconds),
+    ...pack(rest, restCount, seconds),
+  ];
+  const target = { visual: wanted(visual), rest: wanted(rest) };
+  if (target.visual + target.rest <= MAX_SHARDS) return numbered(packed(target.visual, target.rest));
+  const longest = (shards: string[][]): number =>
+    Math.max(...shards.map((ids) => ids.reduce((sum, id) => sum + seconds(id), 0)));
+  const lowest = visual.length ? 1 : 0;
+  const highest = Math.min(target.visual, MAX_SHARDS - (rest.length ? 1 : 0));
+  const splits = Array.from({ length: highest - lowest + 1 }, (_, index) =>
+    packed(lowest + index, Math.min(target.rest, MAX_SHARDS - lowest - index)),
+  );
+  return numbered(splits.reduce((best, split) => (longest(split) < longest(best) ? split : best)));
 }
 
 /** The selected component areas in at most `COMPONENT_SHARDS` jobs, packed like the browser shards. */
@@ -349,3 +352,17 @@ export function componentShards(groupIds: readonly string[], durations: GroupDur
 
 const numbered = (shards: readonly string[][]): CiShard[] =>
   shards.map((groups, index) => ({ shard: index + 1, groups: groups.join(',') }));
+
+/**
+ * The planner's log lines. Every reason and file name prints as one JSON string, so a newline or a
+ * leading `::` in a changed path can neither start a log line nor a workflow command.
+ */
+export function planLog(plan: CiPlan, fastReasons: Readonly<Record<string, string>>): string[] {
+  return [
+    `[ci-plan] ${plan.fullReason ? `Full run: ${JSON.stringify(plan.fullReason)}` : 'Selection by diff'}; ${plan.browser.length} browser groups in ${plan.shards.length} shards.`,
+    ...plan.browser.map((entry) => `  ${entry.id} | ${JSON.stringify(entry.reason)}`),
+    ...plan.shards.map((shard) => `  shard ${shard.shard}: ${shard.groups}`),
+    `[ci-plan] Fast tier: ${Object.keys(fastReasons).length} groups.`,
+    ...Object.entries(fastReasons).map(([id, reason]) => `  ${id} | ${JSON.stringify(reason)}`),
+  ];
+}

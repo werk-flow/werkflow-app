@@ -99,7 +99,7 @@ export function reusableReceipt(ledger: Ledger, key: ReuseKey, event: CiEvent): 
  * over every receipt of the tree, on any event: the newest Plan start decides, and its run's own
  * passed integration `Check` must come last.
  */
-export function passedTreeInLedger(ledger: Ledger, tree: string): string | undefined {
+function passedTreeInLedger(ledger: Ledger, tree: string): string | undefined {
   const last = lastOfNewestStart(
     ledger,
     (receipt) => receipt.tree === tree,
@@ -108,6 +108,19 @@ export function passedTreeInLedger(ledger: Ledger, tree: string): string | undef
   return last?.job === 'check' && last.event === 'integration' && provesItself(last)
     ? (last.runUrl ?? undefined)
     : undefined;
+}
+
+/**
+ * The integration run that passed this tree, for a push to main, or undefined. A configured ledger
+ * is the only source, so no other source can override its withdrawal of a pass; `onActions` asks
+ * the merge queue only when the runner keeps no ledger (`ledger` undefined).
+ */
+export function passedTree(
+  ledger: Ledger | undefined,
+  tree: string,
+  onActions: () => string | undefined,
+): string | undefined {
+  return ledger === undefined ? onActions() : passedTreeInLedger(ledger, tree);
 }
 
 /**

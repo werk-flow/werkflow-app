@@ -44,6 +44,7 @@ export function plannedGroups(
 /** A recorded step beside the verification groups, such as `step:build`. */
 export const isStep = (id: string): boolean => id.startsWith('step:');
 
+/** A plan's shards; each entry has a positive whole shard number and only non-empty group ids. */
 function parseShards(value: string | undefined, key = 'shards'): CiShard[] {
   const parsed: unknown = JSON.parse(value ?? '[]');
   if (!Array.isArray(parsed)) throw new Error(`The plan output \`${key}\` is no list.`);
@@ -54,7 +55,10 @@ function parseShards(value: string | undefined, key = 'shards'): CiShard[] {
       !('shard' in entry) ||
       !('groups' in entry) ||
       typeof entry.shard !== 'number' ||
-      typeof entry.groups !== 'string'
+      !Number.isInteger(entry.shard) ||
+      entry.shard < 1 ||
+      typeof entry.groups !== 'string' ||
+      !entry.groups.split(',').every(Boolean)
     )
       throw new Error(`The plan output \`${key}\` holds an entry without a shard number and groups.`);
     return { shard: entry.shard, groups: entry.groups };
@@ -219,4 +223,15 @@ export function planRun(input: {
       midnight_until: midnightUntil,
     },
   };
+}
+
+/**
+ * The notice that the run's browser shards wait for the midnight start window, from the final plan
+ * after reuse; undefined when no shard left to run waits.
+ */
+export function midnightNotice(plan: RunPlan, proofRun: boolean): string | undefined {
+  const until = plan.outputs.midnight_until;
+  return until
+    ? `This run waits on purpose${proofRun ? ' (proof run)' : ''}: the browser shards start at ${until}. No browser group starts from 23:40 to 00:10 Berlin time, and a Browser job that started now could reach that window within its timeout. The other jobs run meanwhile; Check reports after the shards.`
+    : undefined;
 }

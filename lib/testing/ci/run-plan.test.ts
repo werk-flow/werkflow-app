@@ -4,7 +4,7 @@
 import { expect, test } from 'bun:test';
 import type { CiEvent } from './dag';
 import type { ReuseKey } from './reuse';
-import { jobShards, plannedGroups, planRun } from './run-plan';
+import { jobShards, midnightNotice, plannedGroups, planRun } from './run-plan';
 
 const TREE = 'a'.repeat(40);
 const SHARDS = [
@@ -67,6 +67,26 @@ test('the integration, main and full runs run the selected shards and the midnig
   const daytime = plan('integration');
   expect(daytime.jobs).not.toContain('midnight');
   expect(daytime.skips.midnight).toBe('No browser shard waits for the midnight start window.');
+});
+
+test('the midnight notice comes from the final plan: only while a browser shard left to run waits', () => {
+  const holding = { ...OUTPUTS, midnight_until: '2026-11-20T23:10:00.000Z' };
+  const waits = midnightNotice(plan('integration', { outputs: holding }), false);
+  expect(waits).toContain('the browser shards start at 2026-11-20T23:10:00.000Z');
+  expect(waits).not.toContain('proof run');
+  expect(midnightNotice(plan('integration', { outputs: holding }), true)).toContain('(proof run)');
+  const oneReused = plan('integration', {
+    outputs: holding,
+    reused: (key) => (key.job === 'browser' && key.shard === 1 ? 'https://ci.example/runs/4' : undefined),
+  });
+  expect(midnightNotice(oneReused, false)).toBe(waits);
+  const allReused = plan('integration', {
+    outputs: holding,
+    reused: (key) => (key.job === 'browser' ? 'https://ci.example/runs/4' : undefined),
+  });
+  expect(midnightNotice(allReused, false)).toBeUndefined();
+  expect(midnightNotice(plan('pr', { outputs: holding }), false)).toBeUndefined();
+  expect(midnightNotice(plan('integration'), false)).toBeUndefined();
 });
 
 test('an empty browser selection skips the shards with the reason', () => {
@@ -179,12 +199,22 @@ test('shards that do not hold each selected group exactly once, under unique num
       { component_shards: JSON.stringify(COMPONENT_SHARDS.map((entry) => ({ ...entry, shard: 1 }))) },
     ],
     ['a component shard of no selected group', { selected_components: 'ui:contracts:work' }],
+    [
+      'a component shard numbered 0',
+      { component_shards: JSON.stringify([{ ...COMPONENT_SHARDS[0], shard: 0 }, COMPONENT_SHARDS[1]]) },
+    ],
+    [
+      'a component shard of no group',
+      { component_shards: JSON.stringify([...COMPONENT_SHARDS, { shard: 3, groups: '' }]) },
+    ],
     ['a browser selection without a shard', { shards: '[]' }],
     ['browser shards without a browser selection', { browser: 'false' }],
     [
       'a browser group in two shards',
       { shards: JSON.stringify([...SHARDS, { shard: 3, groups: 'golden:p1-01' }]) },
     ],
+    ['a browser shard numbered 1.5', { shards: JSON.stringify([{ ...SHARDS[0], shard: 1.5 }, SHARDS[1]]) }],
+    ['a browser shard of no group', { shards: JSON.stringify([...SHARDS, { shard: 3, groups: '' }]) }],
     [
       'a browser shard number twice',
       { shards: JSON.stringify(SHARDS.map((entry) => ({ ...entry, shard: 2 }))) },

@@ -9,6 +9,7 @@ import {
   changesOnlyRows,
   ciPlan,
   componentShards,
+  planLog,
   REGISTRY_ROWS,
   runnerModules,
   scriptsCiRuns,
@@ -50,7 +51,9 @@ function changedSince(base: string): { files: string[]; rowChanges: string[] } |
       .filter(Boolean);
     return { files, rowChanges: files.filter((file) => rowsOnly(mergeBase, file)) };
   } catch (error) {
-    console.warn(`[ci-plan] Cannot diff against ${base}: ${error instanceof Error ? error.message : error}`);
+    console.warn(
+      `[ci-plan] Cannot diff against ${JSON.stringify(base)}: ${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
+    );
     return undefined;
   }
 }
@@ -108,28 +111,16 @@ const fast = fastTierPlan({
   tailwindScans: await tailwindScan(read('app/globals.css'), repository),
 });
 
-console.info(
-  `[ci-plan] ${plan.fullReason ? `Full run: ${plan.fullReason}` : 'Selection by diff'}; ${plan.browser.length} browser groups in ${plan.shards.length} shards.`,
-);
-for (const entry of plan.browser) console.info(`  ${entry.id} | ${entry.reason}`);
-for (const shard of plan.shards) console.info(`  shard ${shard.shard}: ${shard.groups}`);
-console.info(`[ci-plan] Fast tier: ${Object.keys(fast.reasons).length} groups.`);
-for (const [id, reason] of Object.entries(fast.reasons)) console.info(`  ${id} | ${reason}`);
+for (const line of planLog(plan, fast.reasons)) console.info(line);
 const now = new Date();
 const proofMinutes = process.env.MIDNIGHT_PROOF_MINUTES;
 const holdUntil = proofMinutes
   ? midnightProofHoldUntil({ now, minutes: proofMinutes, ref: process.env.GITHUB_REF_NAME ?? '' })
   : ciBrowserHoldUntil(now);
 // A pull request's run starts no browser shard (scripts/ci/job.ts plan), so it never waits.
+// scripts/ci/job.ts plan announces the wait from its final plan, after reuse.
 const midnightUntil =
   process.env.CI_EVENT !== 'pr' && plan.shards.length && holdUntil ? holdUntil.toISOString() : '';
-if (midnightUntil) {
-  const message = `This run waits on purpose${proofMinutes ? ' (proof run)' : ''}: the browser shards start at ${midnightUntil}. No browser group starts from 23:40 to 00:10 Berlin time, and a Browser job that started now could reach that window within its timeout. The other jobs run meanwhile; Check reports after the shards.`;
-  console.info(`::notice title=Midnight wait::${message}`);
-  // This job ends before the wait starts, so its summary is on the run page during the wait.
-  const summary = process.env.GITHUB_STEP_SUMMARY;
-  if (summary) appendFileSync(summary, `${message}\n`);
-}
 const output = process.env.GITHUB_OUTPUT;
 if (output)
   appendFileSync(
