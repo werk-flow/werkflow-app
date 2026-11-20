@@ -81,6 +81,7 @@ test('an unreadable diff and a tooling change run every browser group except the
     'bun.lock',
     '.github/workflows/ci.yml',
     '.github/actions/setup/action.yml',
+    'postcss.config.mjs',
     'lib/testing/runner/app-port.ts',
     'lib/testing/selection/test-groups.ts',
   ])
@@ -184,6 +185,12 @@ test("the scripts CI runs and the planner's evidence modules are runner modules 
   expect(modules).toContain('scripts/switch-env.ts');
   expect(modules).toContain('lib/testing/local-stack/env-files.ts');
   expect(modules).toContain('lib/testing/evidence/group-evidence.ts');
+  // A script a runner script imports is runner code too (the preflight's realtime parity check).
+  const preflight = new Map([
+    ...planned,
+    ['scripts/playwright-preflight.ts', ['scripts/check-realtime-parity.ts']],
+  ]);
+  expect(runnerModulesOf(preflight, [])).toContain('scripts/check-realtime-parity.ts');
   // Product code and the planner's other imports stay out.
   expect(modules).not.toContain('lib/env/schema.ts');
   expect(modules).not.toContain('lib/testing/lab-steps.ts');
@@ -459,6 +466,24 @@ test('a pool never takes more shards than it has groups, so no shard is empty', 
   });
   expect(plan.shards).toHaveLength(EVERY_BROWSER_GROUP.length);
   expect(plan.shards.every((shard) => shard.groups.length > 0)).toBe(true);
+  // Zero-second groups go to the shard with fewer groups, never all into one.
+  const zero = ciPlan({
+    groups,
+    changedFiles: undefined,
+    fullRun: undefined,
+    runnerModules,
+    durations: {
+      source: 'test',
+      defaultSeconds: 60,
+      groups: { 'golden:gg-00': 1900, 'golden:p1-04': 0, 'audit:wave-2:p1-13': 0 },
+    },
+    rowChanges: [],
+  });
+  expect(zero.shards.filter((shard) => !shard.groups.startsWith('audit:visual'))).toEqual([
+    { shard: 2, groups: 'golden:gg-00' },
+    { shard: 3, groups: 'audit:wave-2:p1-13' },
+    { shard: 4, groups: 'golden:p1-04' },
+  ]);
   const long: GroupDurations = { source: 'test', defaultSeconds: TARGET_SHARD_SECONDS * 3, groups: {} };
   expect(componentShards(['ui:contracts:work'], long)).toEqual([{ shard: 1, groups: 'ui:contracts:work' }]);
 });

@@ -77,6 +77,7 @@ import { RELEASE_DIAGNOSIS_FILE, releaseAttemptProblem } from '../lib/testing/pu
 import { browserStorageProblem, pruneRunArchive } from '../lib/testing/runs/run-retention';
 import {
   discoverPlaywrightSelection,
+  exactFileFilter,
   selectedDiscoveryArguments,
   type DiscoveredPlaywrightTest,
 } from '../lib/testing/runner/playwright-discovery';
@@ -231,8 +232,8 @@ function commandForGroup(group: TestGroup, target: 'local' | 'cloud'): string[] 
     case 'unit':
       return [process.execPath, 'run', 'test:unit'];
     case 'ui':
-      // Playwright takes each path as a filter on the spec paths, so an area runs only its own specs.
-      return [process.execPath, 'run', 'test:ui', ...group.files];
+      // One exact filter per spec, so an area runs its own specs and every one of them.
+      return [process.execPath, 'run', 'test:ui', ...group.files.map(exactFileFilter)];
     case 'sql':
       return [process.execPath, 'scripts/run-sql-assertions.ts', ...group.files];
     case 'static': {

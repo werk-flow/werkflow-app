@@ -22,12 +22,14 @@ const LINT = 'static:lint';
  * runs on every CI run because an advisory can appear without any change.
  */
 const DOCS_GATES = ['static:docs', 'static:coverage', 'static:dependencies'];
-const CODE_FILE = /\.(?:[cm]?[jt]sx?|json|sql|toml|ya?ml|css)$/;
-
-/** Prose no build, bundle, database or component reads: Markdown, and the other non-code files under `docs/` and `.claude/`. */
+/**
+ * Prose no build, bundle, database, formatter or component reads: Markdown anywhere, and plain text
+ * and images under `docs/` and `.claude/`. Any other file is code, whatever its folder.
+ */
 export function isDocsFile(file: string): boolean {
   return (
-    !CODE_FILE.test(file) && (/\.mdx?$/.test(file) || file.startsWith('docs/') || file.startsWith('.claude/'))
+    /\.mdx?$/.test(file) ||
+    ((file.startsWith('docs/') || file.startsWith('.claude/')) && /\.(?:txt|png|jpe?g|gif|webp)$/.test(file))
   );
 }
 
@@ -42,17 +44,25 @@ export const UNTRACKED_IMPORTS: Readonly<Record<string, string>> = {
 
 /**
  * The repository paths Tailwind scans for class names under `app/globals.css`: each `@source`
- * directory or file, less each plain negated path. A scanned file can change the stylesheet every
+ * directory or file, less each plain negated path, comments ignored. A scanned file can change the stylesheet every
  * contract renders with, even outside the bundle (a class name built at run time). Undefined, so
- * every file counts as scanned, when the stylesheet does not turn off automatic detection.
+ * every file counts as scanned, when the stylesheet does not turn off automatic detection or names
+ * a source this cannot read (a glob, an inline list).
  */
 export function stylesheetScanRoots(css: string): { include: string[]; exclude: string[] } | undefined {
-  if (!/@import\s+['"]tailwindcss['"][^;]*\bsource\(none\)/.test(css)) return undefined;
-  const roots = (negated: boolean): string[] =>
-    [...css.matchAll(/@source\s+(not\s+)?['"]([^'"]+)['"]/g)]
-      .filter((match) => Boolean(match[1]) === negated && !/[*{}]/.test(match[2] ?? ''))
-      .map((match) => posix.normalize(posix.join('app', match[2] ?? '')));
-  return { include: roots(false), exclude: roots(true) };
+  const active = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  if (!/@import\s+['"]tailwindcss['"][^;]*\bsource\(none\)/.test(active)) return undefined;
+  const include: string[] = [];
+  const exclude: string[] = [];
+  for (const [, directive = ''] of active.matchAll(/@source\b([^;]*);/g)) {
+    const path = /^\s*(not\s+)?['"]([^'"*?{}[\]]+)['"]\s*$/.exec(directive);
+    const root = path?.[2] && posix.normalize(posix.join('app', path[2]));
+    // A glob, an inline list or anything else unread may scan any file; an unread negation only narrows less.
+    if (!root) {
+      if (!/^\s*not\b/.test(directive)) return undefined;
+    } else (path[1] ? exclude : include).push(root);
+  }
+  return { include, exclude };
 }
 
 const under = (root: string, file: string): boolean => file === root || file.startsWith(`${root}/`);

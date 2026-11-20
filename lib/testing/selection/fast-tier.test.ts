@@ -94,8 +94,15 @@ test('a diff of documentation alone runs the gates that read it, the dependency 
     static: ['static:docs', 'static:coverage', 'static:dependencies'],
     lint: ['static:lint'],
   });
-  // Code under docs/ or .claude/ is no documentation.
-  for (const file of ['.claude/hooks/refuse-heavy-commands.ts', '.claude/settings.json', 'docs/schema.sql'])
+  // Code under docs/ or .claude/ is no documentation, nor is anything a formatter or build reads.
+  expect(plan(['docs/examples.jsonc']).static).toEqual(EVERY_GATE);
+  for (const file of [
+    '.claude/hooks/refuse-heavy-commands.ts',
+    '.claude/settings.json',
+    'docs/schema.sql',
+    'docs/examples.jsonc',
+    'docs/diagram.yaml',
+  ])
     expect(isDocsFile(file)).toBe(false);
 });
 
@@ -138,6 +145,15 @@ test("the stylesheet's scan roots are its @source paths from app/, less its plai
       "@import 'tailwindcss' source(none);\n@source '.';\n@source '../lib';\n@source not '../lib/testing';\n@source not '../**/*.test.ts';",
     ),
   ).toEqual({ include: ['app', 'lib'], exclude: ['lib/testing'] });
+  // A commented-out directive is no directive.
+  expect(
+    stylesheetScanRoots(
+      "@import 'tailwindcss' source(none);\n@source '../lib';\n/* @source not '../lib/jobs'; */",
+    ),
+  ).toEqual({ include: ['lib'], exclude: [] });
+  // A glob or inline source may scan any file, so the scan counts as unknown.
+  expect(stylesheetScanRoots("@import 'tailwindcss' source(none);\n@source '../{lib,app}';")).toBeUndefined();
+  expect(stylesheetScanRoots("@import 'tailwindcss' source(none);\n@source inline('p-4');")).toBeUndefined();
   // Automatic detection scans what it finds, so nothing narrows it.
   expect(stylesheetScanRoots("@import 'tailwindcss';\n@source '../lib';")).toBeUndefined();
   const real = stylesheetScanRoots(

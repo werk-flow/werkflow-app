@@ -3,10 +3,15 @@ import { z } from 'zod';
 import type { PlaywrightSuite } from './run-policy';
 import { type TestGroup } from '../selection/test-groups';
 
+/** A Playwright file argument that matches exactly this spec: Playwright reads each argument as a regular expression. */
+export function exactFileFilter(file: string): string {
+  return file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
+}
+
 /** Discover only the selected groups, without unrelated setup journeys. */
 export function selectedDiscoveryArguments(groups: readonly TestGroup[], suite: PlaywrightSuite): string[] {
   return [...new Set(groups.filter((group) => group.kind === suite).flatMap((group) => group.files))].map(
-    (file) => file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$',
+    exactFileFilter,
   );
 }
 

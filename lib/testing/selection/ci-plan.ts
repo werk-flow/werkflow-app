@@ -30,13 +30,13 @@ export type CiPlan = {
 
 /**
  * Changes that can alter how every group installs, builds or runs: the
- * dependencies, the build and Playwright configuration, the local stack's
+ * dependencies, the build (Next.js, PostCSS) and Playwright configuration, the local stack's
  * configuration, and the CI workflow and its actions. With `runnerModules`
  * they are the tooling inputs. CI cannot map them to a scope, so a change to
  * one runs everything (fail open).
  */
 const TOOLING_INPUTS =
-  /^(package\.json|bun\.lock|bunfig\.toml|tsconfig\.json|next\.config\.ts|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|\.github\/(workflows\/ci\.yml|actions\/.+))$/;
+  /^(package\.json|bun\.lock|bunfig\.toml|tsconfig\.json|next\.config\.ts|postcss\.config\.mjs|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|\.github\/(workflows\/ci\.yml|actions\/.+))$/;
 
 /** The scripts that plan, build, serve and run every group. */
 const RUNNER_ENTRY_POINTS = [
@@ -64,8 +64,8 @@ function reachedFrom(graph: ReadonlyMap<string, readonly string[]>, entries: rea
 }
 
 /**
- * The runner entry points, the scripts CI runs (`scriptsCiRuns`), and the runner, selection and
- * local-stack modules they import, directly or through other modules. The plan also counts the
+ * The runner entry points, the scripts CI runs (`scriptsCiRuns`), and the scripts and the runner,
+ * selection and local-stack modules they import, directly or through other modules. The plan also counts the
  * evidence modules the planner imports: they build the import graph that decides what a run leaves
  * out. A module
  * only a spec, a static check or a unit test imports selects its own groups instead.
@@ -76,7 +76,7 @@ export function runnerModules(
 ): string[] {
   const entries = [...RUNNER_ENTRY_POINTS, ...ciScripts];
   const runner = [...reachedFrom(graph, entries)].filter(
-    (file) => entries.includes(file) || RUNNER_FOLDER.test(file),
+    (file) => entries.includes(file) || file.startsWith('scripts/') || RUNNER_FOLDER.test(file),
   );
   const planner = [...reachedFrom(graph, ['scripts/ci-plan.ts'])].filter((file) =>
     file.startsWith('lib/testing/evidence/'),
@@ -264,7 +264,7 @@ function changeSelection(
 
 /**
  * Packs the groups into `count` shards, longest first, each onto the shard with the least recorded
- * time so far, the lower shard on a tie; equal durations go by id. The same selection therefore
+ * time so far, then the fewest groups, then the lower shard; equal durations go by id. The same selection therefore
  * always packs alike, whatever its order. A shard lists its groups in selection order.
  */
 function pack(groupIds: readonly string[], count: number, seconds: (id: string) => number): string[][] {
@@ -273,7 +273,12 @@ function pack(groupIds: readonly string[], count: number, seconds: (id: string) 
     (left, right) => seconds(right) - seconds(left) || left.localeCompare(right),
   );
   for (const id of longestFirst) {
-    const lightest = loads.reduce((best, load) => (load.seconds < best.seconds ? load : best));
+    // On equal time the shard with fewer groups wins, so a zero-second group never leaves a shard empty.
+    const lightest = loads.reduce((best, load) =>
+      load.seconds < best.seconds || (load.seconds === best.seconds && load.groups.size < best.groups.size)
+        ? load
+        : best,
+    );
     lightest.seconds += seconds(id);
     lightest.groups.add(id);
   }
