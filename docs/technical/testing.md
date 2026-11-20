@@ -87,13 +87,13 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every PR to `main` but a label change, each queue entry and every push to `main`; `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Jobs: `lib/testing/ci/dag.ts`; bodies: `bun scripts/ci/job.ts <job>`.
+`.github/workflows/ci.yml` runs on every PR to `main` but a label change, each queue entry and each push; `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Jobs: `lib/testing/ci/dag.ts`; bodies: `bun scripts/ci/job.ts <job>`.
 
-- **Tiers.** A PR's run is the fast tier: Fast, SQL and Component contracts. The integration run, a queue entry or up-to-date PR head, adds browser shards (owner decision D1).
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the queue's base or a push's previous `main` commit. Every group runs on an unreadable diff, a full run, and a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
-- **Reuse and Check.** A push whose tree a passed integration run tested runs no job; a CI runner's passed result stands for its job on an identical tree (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
+- **Tiers.** A PR's run is the fast tier: Fast, SQL and Component contracts, each running what `fast-tier.ts` selects; an empty selection skips its job. The integration run adds browser shards (owner decision D1).
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run, or a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
+- **Reuse and Check.** A push whose tree an integration run passed runs no job; a CI runner's passed result stands for its job on an identical tree (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
 - **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
-- **Shards.** Visual groups get their own shards; a full selection fills at most `MAX_SHARDS`.
+- **Shards.** Groups pack longest-first by recorded duration (`group-durations.json`), visual groups apart, in at most `MAX_SHARDS`; component areas in two.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails when the p90 runner wait exceeds its ceiling (`.github/scripts/ci-queue.sh`).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun of failed jobs follows a local repeat's retry rules.

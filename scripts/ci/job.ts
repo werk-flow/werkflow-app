@@ -27,7 +27,7 @@ import {
   passedTreeInLedger,
   reusableReceipt,
 } from '../../lib/testing/ci/reuse';
-import { isStep, plannedGroups, planRun } from '../../lib/testing/ci/run-plan';
+import { isStep, jobShards, plannedGroups, planRun } from '../../lib/testing/ci/run-plan';
 import { workspaceAppOrigin } from '../../lib/testing/runner/app-port';
 import { repository, run, step, verify } from './run';
 
@@ -37,13 +37,14 @@ import { repository, run, step, verify } from './run';
 // The job exits 0 when it passed. It reads plain environment variables only:
 //   CI_EVENT        pr | integration | main | full (lib/testing/ci/dag.ts). Required.
 //   CI_RESULTS_DIR  The run's results directory. Required. Each job writes <job>.json there
-//                   (browser-<n>.json for a shard); every job after plan reads plan.json, and check
+//                   (<job>-<n>.json for a shard); every job after plan reads plan.json, and check
 //                   reads them all.
 //   CI_BASE_SHA     plan: the commit to diff against: a PR's or queue entry's base, the previous
 //                   main commit of a push. Any git revision. Required except for full. Every later
 //                   job takes the base its plan recorded.
 //   CI_FULL_REASON  plan: why every browser group runs. Required for full.
-//   CI_SHARD        browser: the shard's number in the plan. Required for browser.
+//   CI_SHARD        browser, components: the shard's number in the plan (plan.json .plan.shards for
+//                   browser, .plan.outputs.component_shards for components). Required for both.
 //   CI_PRODUCER     The CI runner's name, recorded in every result. Unset on a workstation, whose
 //                   results are never reused. A checkout that differs from its commit records none,
 //                   and a job whose checkout changes while it runs fails and records none.
@@ -81,9 +82,10 @@ if (!jobName || !eventName || !directory)
     `Usage: CI_EVENT=<${CI_EVENTS.join('|')}> CI_RESULTS_DIR=<directory> bun scripts/ci/job.ts <${CI_JOBS.join('|')}>`,
   );
 const ci = { job: jobName, event: eventName, directory };
-const shard = ci.job === 'browser' ? Number(environment.CI_SHARD) : null;
+// Browser and component jobs run once per shard of the plan (jobShards in lib/testing/ci/run-plan.ts).
+const shard = ci.job === 'browser' || ci.job === 'components' ? Number(environment.CI_SHARD) : null;
 if (shard !== null && !(Number.isInteger(shard) && shard > 0))
-  throw new Error('A browser job needs CI_SHARD, a shard number of the plan.');
+  throw new Error(`A ${ci.job} job needs CI_SHARD, a shard number of the plan.`);
 mkdirSync(ci.directory, { recursive: true });
 
 const git = (...args: string[]): string =>
@@ -415,9 +417,9 @@ try {
   // fails or dies before it reports a group still withdraws an earlier pass of the same key.
   if (ci.job !== 'plan' && ci.job !== 'check') {
     const plan = runPlan();
-    const shardGroups = plan.shards.find((entry) => entry.shard === shard)?.groups;
-    if (ci.job === 'browser' && shardGroups === undefined)
-      throw new Error(`The plan holds no browser shard ${shard}.`);
+    const shards = jobShards(ci.job, plan);
+    const shardGroups = shards?.find((entry) => entry.shard === shard)?.groups;
+    if (shards && shardGroups === undefined) throw new Error(`The plan holds no ${ci.job} shard ${shard}.`);
     result.groups = plannedGroups(ci.job, plan.outputs, shardGroups).map((id) => ({
       id,
       outcome: 'not-run',

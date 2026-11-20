@@ -46,7 +46,8 @@ const git = (root: string, ...args: string[]): string =>
 /**
  * A clean repository with this checkout's job.ts and run.ts and its lib, whose verify.ts is a fake
  * gate: it writes the environment it sees to $ENV_DUMP_DIR/<group list>.json and passes every group.
- * The build's package scripts call it too. Its ci-plan.ts selects only the migration-order gate.
+ * The build's package scripts call it too. Its ci-plan.ts selects the migration-order gate in Fast,
+ * one SQL group and one component area.
  */
 function fixture(folder: string): string {
   const root = join(folder, 'repository');
@@ -74,7 +75,7 @@ console.info('[verify] passed in 0.1 min (fake): ' + report);
   writeFileSync(
     join(root, 'scripts/ci-plan.ts'),
     `import { appendFileSync } from 'node:fs';
-appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=\\n');
+appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=sql:grants\\nselected_lint=\\nselected_static=static:migration-order\\nselected_unit=\\nselected_sql=sql:grants\\nselected_components=ui:contracts:work\\ncomponent_shards=[{"shard":1,"groups":"ui:contracts:work"}]\\n');
 `,
   );
   writeFileSync(
@@ -112,7 +113,7 @@ function planOf(root: string, overrides: Partial<CiResult> = {}): CiResult {
       jobs: ['plan', 'fast', 'check'],
       skips: {},
       shards: [],
-      outputs: { lint: '', static: 'static:migration-order', unit: '' },
+      outputs: { selected_lint: '', selected_static: 'static:migration-order', selected_unit: '' },
     },
     ...overrides,
   };

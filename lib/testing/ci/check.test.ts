@@ -4,7 +4,7 @@ import { expect, test } from 'bun:test';
 import { checkRun, parseScheduler, runPlanOf } from './check';
 import type { CiJob } from './dag';
 import type { CiResult, RunPlan } from './results';
-import { plannedGroups } from './run-plan';
+import { jobShards, plannedGroups } from './run-plan';
 
 const TREE = 'a'.repeat(40);
 
@@ -37,7 +37,16 @@ const RUN_PLAN: RunPlan = {
     { shard: 1, groups: 'golden:p1-01' },
     { shard: 2, groups: 'audit:lab:calendar' },
   ],
-  outputs: {},
+  outputs: {
+    selected_lint: 'static:lint',
+    selected_static: 'static:typecheck',
+    selected_unit: 'unit:all',
+    selected_sql: 'sql:grants',
+    component_shards: JSON.stringify([
+      { shard: 1, groups: 'ui:contracts:work' },
+      { shard: 2, groups: 'ui:contracts:reports' },
+    ]),
+  },
 };
 const RUN = { tree: TREE, event: 'integration', runUrl: null, producer: null } as const;
 const plan = result('plan', { plan: RUN_PLAN });
@@ -48,13 +57,14 @@ const passed = (job: CiJob, shard: number | null = null): CiResult =>
     groups: plannedGroups(
       job,
       RUN_PLAN.outputs,
-      RUN_PLAN.shards.find((entry) => entry.shard === shard)?.groups,
+      jobShards(job, RUN_PLAN)?.find((entry) => entry.shard === shard)?.groups,
     ).map((id) => ({ id, outcome: 'passed', durationMs: 1 })),
   });
 const passing = [
   passed('fast'),
   passed('sql'),
-  passed('components'),
+  passed('components', 1),
+  passed('components', 2),
   passed('browser', 1),
   passed('browser', 2),
 ];
@@ -75,7 +85,7 @@ test('a missing job result fails Check, a missing shard included', () => {
   });
   expect(missingSql.passed).toBe(false);
   expect(missingSql.lines).toContain('FAILED sql: no result');
-  const missingShard = checkRun({ run: RUN, plan, results: passing.slice(0, 4), scheduler: undefined });
+  const missingShard = checkRun({ run: RUN, plan, results: passing.slice(0, 5), scheduler: undefined });
   expect(missingShard.lines).toContain('FAILED browser 2: no result');
 });
 
@@ -144,10 +154,37 @@ test("a missing or failed plan, an unreadable result and another tree's result f
   expect(checkRun({ run: RUN, plan, results: foreign, scheduler: undefined }).passed).toBe(false);
 });
 
-test('a browser job planned without a shard fails Check instead of passing on nothing', () => {
+test('a browser or component job planned without a shard fails Check instead of passing on nothing', () => {
   const empty = result('plan', { plan: { ...RUN_PLAN, shards: [] } });
   expect(checkRun({ run: RUN, plan: empty, results: passing, scheduler: undefined }).lines).toContain(
     'FAILED browser: the plan runs it without a shard',
+  );
+  const noComponents = result('plan', {
+    plan: { ...RUN_PLAN, outputs: { ...RUN_PLAN.outputs, component_shards: '[]' } },
+  });
+  expect(checkRun({ run: RUN, plan: noComponents, results: passing, scheduler: undefined }).lines).toContain(
+    'FAILED components: the plan runs it without a shard',
+  );
+});
+
+test('a missing component shard fails Check', () => {
+  const missing = passing.filter((entry) => !(entry.job === 'components' && entry.shard === 2));
+  expect(checkRun({ run: RUN, plan, results: missing, scheduler: undefined }).lines).toContain(
+    'FAILED components 2: no result',
+  );
+});
+
+test('a job skipped for an empty selection passes Check only with the reason the plan gives', () => {
+  const reason = 'The plan selects no SQL group (lib/testing/selection/fast-tier.ts).';
+  const skipped = { ...RUN_PLAN, jobs: RUN_PLAN.jobs.filter((job) => job !== 'sql') };
+  const results = passing.filter((entry) => entry.job !== 'sql');
+  const explained = result('plan', { plan: { ...skipped, skips: { ...skipped.skips, sql: reason } } });
+  expect(checkRun({ run: RUN, plan: explained, results, scheduler: undefined }).lines).toContain(
+    `sql: skipped. ${reason}`,
+  );
+  const silent = result('plan', { plan: skipped });
+  expect(checkRun({ run: RUN, plan: silent, results, scheduler: undefined }).lines).toContain(
+    'FAILED sql: skipped without a reason in the plan',
   );
 });
 

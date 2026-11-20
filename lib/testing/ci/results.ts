@@ -23,7 +23,7 @@ export type RunPlan = z.infer<typeof runPlanSchema>;
 const ciResultSchema = z.object({
   version: z.literal(1),
   job: z.enum(CI_JOBS),
-  /** A browser shard's number, otherwise null. */
+  /** A browser or component shard's number, otherwise null. */
   shard: z.number().int().positive().nullable(),
   event: z.enum(CI_EVENTS),
   tree: z.string().regex(/^[0-9a-f]{40}$/),
@@ -54,7 +54,7 @@ const ciResultSchema = z.object({
 });
 export type CiResult = z.infer<typeof ciResultSchema>;
 
-/** The file a job writes in the results directory: `<job>.json`, a browser shard's `browser-<n>.json`. */
+/** The file a job writes in the results directory: `<job>.json`, a shard's `<job>-<n>.json`. */
 export function resultFileName(job: CiJob, shard: number | null): string {
   return shard === null ? `${job}.json` : `${job}-${shard}.json`;
 }

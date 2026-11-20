@@ -18,7 +18,7 @@ test('ci.yml holds exactly the DAG jobs, with their names and needs', () => {
   expect(Object.keys(jobs).sort()).toEqual([...CI_JOBS].sort());
   for (const job of CI_JOBS) {
     const name = ci.text('jobs', job, 'name');
-    expect(job === 'browser' ? name.replace(' ${{ matrix.shard }}', '') : name).toBe(CI_DAG[job].name);
+    expect(name.replace(' ${{ matrix.shard }}', '')).toBe(CI_DAG[job].name);
     expect(asList(ci.at('jobs', job, 'needs')).sort()).toEqual([...CI_DAG[job].needs].sort());
   }
 });
@@ -70,4 +70,21 @@ test("a browser shard runs the plan's groups untimed, one worker", () => {
   const job = readFileSync(resolve(import.meta.dir, '../../../scripts/ci/job.ts'), 'utf8');
   const browser = job.slice(job.indexOf('async function browser('), job.indexOf('function check('));
   expect(browser).toContain("verify(verificationGroups(), ['--jobs', '1', '--untimed'])");
+});
+
+test("the browser and component jobs run one job per shard of the plan, each passing its shard's number", () => {
+  for (const [job, output] of [
+    ['browser', 'shards'],
+    ['components', 'component_shards'],
+  ] as const) {
+    expect(ci.text('jobs', job, 'name')).toEndWith(' ${{ matrix.shard }}');
+    expect(ci.at('jobs', job, 'strategy', 'matrix', 'include')).toBe(
+      `\${{ fromJSON(needs.plan.outputs.${output} || '[]') }}`,
+    );
+    expect(ci.at('jobs', 'plan', 'outputs', output)).toBe(`\${{ steps.plan.outputs.${output} }}`);
+    const body = asList(ci.at('jobs', job, 'steps'))
+      .filter(isRecord)
+      .find((step) => step.uses === './.github/actions/ci-job');
+    expect(isRecord(body?.with) ? body.with.shard : undefined).toBe('${{ matrix.shard }}');
+  }
 });

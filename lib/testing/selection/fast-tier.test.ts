@@ -180,11 +180,11 @@ test('a file the change deleted counts as scanned when a source would reach it, 
   const scans = await scan(`${NONE}@source '../lib';\n@source not '../lib/testing';`);
   expect(scans('lib/jobs/deleted-module.ts')).toBe(true);
   expect(scans('lib/testing/deleted-helper.ts')).toBe(true);
-  expect(scans('docs/deleted-page.md')).toBe(false);
+  expect(scans('notes/deleted-page.md')).toBe(false);
   // A glob reaches every file under its fixed prefix.
   const glob = await scan(`${NONE}@source '../{lib,app}';`);
   expect(glob('lib/zod.ts')).toBe(true);
-  expect(glob('docs/deleted-page.md')).toBe(true);
+  expect(glob('notes/deleted-page.md')).toBe(true);
 });
 
 test('automatic detection, or a stylesheet that does not compile, counts every file as scanned', async () => {

@@ -7,7 +7,7 @@ inputs:
     description: The job of lib/testing/ci/dag.ts
     required: true
   shard:
-    description: A browser shard's number
+    description: A browser or component shard's number
     default: ''
 outputs:
   jobs:
@@ -28,6 +28,9 @@ outputs:
   sql:
     description: The SQL groups
     value: ${{ steps.job.outputs.sql }}
+  component_shards:
+    description: The plan's component contract shards, as JSON
+    value: ${{ steps.job.outputs.component_shards }}
 runs:
   using: composite
   steps:

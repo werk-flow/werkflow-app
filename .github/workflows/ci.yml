@@ -5,7 +5,9 @@ name: CI
 # scripts/ci/job.ts, the same on any runner, and runs its groups through scripts/verify.ts, the
 # engine of a local run. This file adds only what GitHub owns: triggers, runners, caches, tokens
 # and artifacts. The required check is `Check` at the end of this file.
-# - A pull request's run, draft or ready, is the fast tier: Fast, SQL and Component contracts.
+# - A pull request's run, draft or ready, is the fast tier: Fast, SQL and Component contracts, each
+#   running only the groups the plan selects for the diff (lib/testing/selection/fast-tier.ts). A job
+#   whose selection is empty is skipped with the plan's reason.
 # - The merge queue's run (`integration`) adds the plan's browser shards: browser groups run once
 #   per PR, on the PR on top of main and of every PR ahead of it (owner decision D1,
 #   werk-flow/werkflow-planning#503).
@@ -82,6 +84,7 @@ jobs:
       midnight_until: ${{ steps.plan.outputs.midnight_until }}
       static: ${{ steps.plan.outputs.static }}
       sql: ${{ steps.plan.outputs.sql }}
+      component_shards: ${{ steps.plan.outputs.component_shards }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -172,12 +175,17 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
+  # The plan's selected component areas, in the shards it packs them into (at most two).
   components:
-    name: Component contracts
+    name: Component contracts ${{ matrix.shard }}
     needs: plan
     if: contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'components')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.component_shards || '[]') }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup
@@ -185,6 +193,7 @@ jobs:
       - uses: ./.github/actions/ci-job
         with:
           job: components
+          shard: ${{ matrix.shard }}
 
   sql:
     name: SQL

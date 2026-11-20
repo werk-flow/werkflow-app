@@ -3,8 +3,8 @@
 // reason for the skip.
 import { z } from 'zod';
 import { CI_JOBS, type CiEvent } from './dag';
-import type { CiResult, RunPlan } from './results';
-import { plannedGroups } from './run-plan';
+import type { CiResult, CiShard, RunPlan } from './results';
+import { jobShards, plannedGroups } from './run-plan';
 
 /** Each job's state as the scheduler reports it: ci.yml's `toJSON(needs)`. */
 const schedulerSchema = z.partialRecord(
@@ -74,7 +74,7 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
     return { passed, lines };
   }
   const plan = ownPlan.result;
-  const { jobs, skips, shards, outputs } = ownPlan.plan;
+  const { jobs, skips, outputs } = ownPlan.plan;
   for (const entry of input.results) if ('unreadable' in entry) fail(`result: ${entry.unreadable}`);
   const results = input.results.filter(
     (entry): entry is CiResult =>
@@ -99,8 +99,15 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
       continue;
     }
     if (scheduled === 'skipped') fail(`${job}: the plan runs it, but the scheduler skipped it`);
-    if (job === 'browser' && !shards.length) fail('browser: the plan runs it without a shard');
-    const expected = job === 'browser' ? shards : [null];
+    let sharded: CiShard[] | undefined;
+    try {
+      sharded = jobShards(job, ownPlan.plan);
+    } catch (error) {
+      fail(`${job}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
+    if (sharded && !sharded.length) fail(`${job}: the plan runs it without a shard`);
+    const expected = sharded ?? [null];
     for (const shard of expected) {
       const label = shard === null ? job : `${job} ${shard.shard}`;
       const result = own.find((candidate) => candidate.shard === (shard?.shard ?? null));
