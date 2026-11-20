@@ -82,21 +82,43 @@ test('a workstation result, a reused result and a full run never stand for a job
   expect(reusableReceipt([receipt()], KEY, 'full')).toBeUndefined();
 });
 
-test("a push's tree counts as passed only by the newest integration Check of that tree", () => {
-  const check = (overrides: Partial<CiResult>) =>
-    receipt({ job: 'check', event: 'integration', groups: [], ...overrides });
-  expect(passedTreeInLedger([check({})], TREE)).toBe('https://ci.example/runs/1');
-  expect(passedTreeInLedger([check({}), check({ status: 'failed' })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([check({ tree: OTHER_TREE })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([check({ event: 'pr' })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([check({ producer: null })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([check({ completedAt: null })], TREE)).toBeUndefined();
-  expect(passedTreeInLedger([check({ runUrl: null })], TREE)).toBeUndefined();
+const RUN_2 = 'https://ci.example/runs/2';
+const check = (overrides: Partial<CiResult> = {}) =>
+  receipt({ job: 'check', event: 'integration', groups: [], ...overrides });
+const planStart = (overrides: Partial<CiResult> = {}) =>
+  receipt({
+    job: 'plan',
+    event: 'integration',
+    groups: [],
+    status: 'running',
+    completedAt: null,
+    ...overrides,
+  });
+
+test("a push's tree counts as passed only by the passed Check of the newest integration run of that tree", () => {
+  expect(passedTreeInLedger([planStart(), check()], TREE)).toBe('https://ci.example/runs/1');
+  expect(passedTreeInLedger([planStart(), check(), check({ status: 'failed' })], TREE)).toBeUndefined();
+  expect(passedTreeInLedger([planStart(), check({ tree: OTHER_TREE })], TREE)).toBeUndefined();
+  expect(passedTreeInLedger([planStart(), check({ event: 'pr' })], TREE)).toBeUndefined();
+  expect(passedTreeInLedger([planStart(), check({ producer: null })], TREE)).toBeUndefined();
+  expect(passedTreeInLedger([planStart(), check({ completedAt: null })], TREE)).toBeUndefined();
+  expect(passedTreeInLedger([planStart({ runUrl: null }), check({ runUrl: null })], TREE)).toBeUndefined();
   // A later attempt that stopped before its Check, failed or still running, withdraws the pass.
-  const later = { event: 'integration', runUrl: 'https://ci.example/runs/2' } as const;
-  expect(passedTreeInLedger([check({}), receipt({ ...later, status: 'failed' })], TREE)).toBeUndefined();
+  const later = { event: 'integration', runUrl: RUN_2 } as const;
+  const run2 = planStart({ runUrl: RUN_2 });
   expect(
-    passedTreeInLedger([check({}), receipt({ ...later, status: 'running', completedAt: null })], TREE),
+    passedTreeInLedger([planStart(), check(), run2, receipt({ ...later, status: 'failed' })], TREE),
+  ).toBeUndefined();
+  expect(passedTreeInLedger([planStart(), check(), run2], TREE)).toBeUndefined();
+});
+
+test("an older run's passed Check, appended after a newer run's Plan start, does not pass the tree", () => {
+  expect(passedTreeInLedger([planStart(), planStart({ runUrl: RUN_2 }), check()], TREE)).toBeUndefined();
+});
+
+test('a newer Plan start in a changed checkout withdraws an older pass', () => {
+  expect(
+    passedTreeInLedger([planStart(), check(), planStart({ runUrl: RUN_2, producer: null })], TREE),
   ).toBeUndefined();
 });
 

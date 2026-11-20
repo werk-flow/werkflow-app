@@ -57,20 +57,23 @@ export function reusableReceipt(
 }
 
 /**
- * The integration run whose `Check` passed this tree, from the ledger, or undefined. The newest
- * integration receipt of the tree must be that completed, passed `Check` of a named run: a later
- * attempt that failed, or stopped before its `Check`, withdraws the pass.
+ * The integration run whose `Check` passed this tree, from the ledger, or undefined. Only the newest
+ * integration run of the tree counts, by the order of its Plan start, and its newest receipt must be
+ * its completed, passed `Check`. A newer attempt that failed, is still running, stopped before its
+ * `Check` or planned in a changed checkout withdraws an older pass, whenever that pass was appended.
  */
 export function passedTreeInLedger(receipts: readonly CiResult[], tree: string): string | undefined {
-  const newest = receipts.findLast((receipt) => receipt.event === 'integration' && receipt.tree === tree);
+  const ofTree = receipts.filter((receipt) => receipt.event === 'integration' && receipt.tree === tree);
+  const runUrl = ofTree.findLast((receipt) => receipt.job === 'plan' && receipt.status === 'running')?.runUrl;
+  if (!runUrl) return undefined;
+  const newest = ofTree.findLast((receipt) => receipt.runUrl === runUrl);
   return newest &&
     newest.job === 'check' &&
-    newest.runUrl !== null &&
     newest.producer !== null &&
     newest.status === 'passed' &&
     newest.completedAt !== null &&
     newest.reusedFrom === null
-    ? newest.runUrl
+    ? runUrl
     : undefined;
 }
 

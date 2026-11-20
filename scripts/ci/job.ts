@@ -38,13 +38,15 @@ import { repository, run, step, verify } from './run';
 //                   (browser-<n>.json for a shard); every job after plan reads plan.json, and check
 //                   reads them all.
 //   CI_BASE_SHA     plan: the commit to diff against: a PR's or queue entry's base, the previous
-//                   main commit of a push. Any git revision. Required except for full.
+//                   main commit of a push. Any git revision. Required except for full. Every later
+//                   job takes the base its plan recorded.
 //   CI_FULL_REASON  plan: why every browser group runs. Required for full.
 //   CI_SHARD        browser: the shard's number in the plan. Required for browser.
 //   CI_PRODUCER     The CI runner's name, recorded in every result. Unset on a workstation, whose
 //                   results are never reused. A checkout that differs from its commit records none.
 //   CI_LEDGER       The runner's JSONL ledger of results. plan reads it to reuse a passed result,
-//                   and with CI_PRODUCER set every job appends its receipts. Optional.
+//                   and with CI_PRODUCER set every job appends its receipts, a changed
+//                   checkout's included. Optional.
 //   CI_RUN_URL      The run's identity and address: check takes only results of this run, and a
 //                   later reuse cites it. The same for every job and rerun of one run. Required
 //                   with CI_LEDGER.
@@ -113,6 +115,10 @@ function runPlan(): RunPlan {
   if (plan.status !== 'passed' || !plan.plan || plan.tree !== result.tree)
     throw new Error('The plan did not pass on this tree, so no job runs by it.');
   result.planReason = plan.planReason;
+  // Every job diffs against the base its plan recorded, so only plan needs CI_BASE_SHA from the
+  // runner. The children read it there: Fast's migration-order gate off GitHub Actions.
+  if (plan.base) environment.CI_BASE_SHA = plan.base;
+  result.base = plan.base;
   return plan.plan;
 }
 
@@ -363,13 +369,15 @@ const bodies: Record<CiJob, () => Promise<boolean> | boolean> = {
   browser,
   check,
 };
+// A CI runner appends every receipt. One from a changed checkout has no producer, so it is never
+// reused, but it still withdraws an older pass of its key or tree.
 const appendToLedger = (): void => {
-  if (environment.CI_LEDGER && result.producer)
+  if (environment.CI_LEDGER && environment.CI_PRODUCER)
     appendFileSync(environment.CI_LEDGER, `${JSON.stringify(result)}\n`);
 };
 let passed = false;
-// Plan records its attempt before it plans: a later integration attempt that is still planning, or
-// died while planning, withdraws an earlier passed tree.
+// Plan records its attempt before it plans: a later integration attempt that is still planning,
+// died while planning or planned in a changed checkout withdraws an earlier passed tree.
 if (ci.job === 'plan') appendToLedger();
 try {
   // A job records its planned key before it runs, in its result and the ledger: an attempt that
