@@ -65,7 +65,9 @@ export function stylesheetScanRoots(css: string): { include: string[]; exclude: 
   return { include, exclude };
 }
 
-const under = (root: string, file: string): boolean => file === root || file.startsWith(`${root}/`);
+/** Whether `root` holds `file`; the repository root, or a root above it, holds every file. */
+const under = (root: string, file: string): boolean =>
+  root === '.' || root === '..' || root.startsWith('../') || file === root || file.startsWith(`${root}/`);
 
 /** What running `roots` loads through imports, product code included, and whether an import was unresolved. */
 function closure(
@@ -145,14 +147,17 @@ export function fastTierPlan(input: {
       docsOnly ? gates.filter((group) => DOCS_GATES.includes(group.id)) : gates,
       docsOnly ? 'Documentation changed' : 'Static gates run in every plan',
     );
-    // Documentation reaches no bundle, database or component, so only code changes select them.
-    const code = changed.filter((file) => !isDocsFile(file));
-    const registry = input.rowChanges.find((file) => GROUP_REGISTRIES.includes(file));
     const scanned = (file: string): boolean =>
       !input.stylesheet ||
       (input.stylesheet.include.some((root) => under(root, file)) &&
         !input.stylesheet.exclude.some((root) => under(root, file)));
-    selectComponents(ofKind('ui'), input.graph, code, registry, scanned, take);
+    // Tailwind reads every file under its sources, Markdown included.
+    const restyled = changed.find(scanned);
+    if (restyled) take(ofKind('ui'), `Tailwind scans it for class names (${restyled})`);
+    // Otherwise documentation reaches no bundle, database or component, so only code changes select them.
+    const code = changed.filter((file) => !isDocsFile(file));
+    const registry = input.rowChanges.find((file) => GROUP_REGISTRIES.includes(file));
+    selectComponents(ofKind('ui'), input.graph, code, registry, take);
     selectSql(ofKind('sql'), input.graph, code, registry, take);
   }
   const selected = (kind: string): string[] =>
@@ -174,7 +179,6 @@ function selectComponents(
   graph: ReadonlyMap<string, readonly string[]>,
   changed: readonly string[],
   registry: string | undefined,
-  scanned: (file: string) => boolean,
   take: Take,
 ): void {
   const harness = closure(graph, CONTRACT_HARNESS);
@@ -183,12 +187,11 @@ function selectComponents(
       harness.files.has(file) ||
       (file.startsWith('tests/ui-contracts/') && !file.endsWith('.spec.ts')) ||
       file.endsWith('.css') ||
-      scanned(file) ||
       file === registry,
   );
   // An import loads a module, never documentation, so an unresolved one matters only beside a code change.
   if (harness.unresolved && changed.length) take(areas, 'The contract bundle has an unresolved import');
-  if (shared) take(areas, `Contract bundle, runner, support or stylesheet input changed (${shared})`);
+  if (shared) take(areas, `Contract bundle, runner, support or stylesheet changed (${shared})`);
   for (const area of areas) {
     const own = closure(graph, area.files);
     const file = changed.find((candidate) => own.files.has(candidate));

@@ -136,7 +136,15 @@ test('a file Tailwind scans for class names runs every component area, as does a
   expect(plan(['scripts/check-docs.ts'], { stylesheet: undefined }).components).toEqual(
     EVERYTHING.components,
   );
-  expect(plan(['docs/README.md'], { stylesheet: undefined }).components).toEqual([]);
+  // Tailwind reads Markdown under its sources too; an unknown scan may reach any file.
+  expect(plan(['lib/invoicing/README.md'], { stylesheet: scan }).components).toEqual(EVERYTHING.components);
+  expect(plan(['docs/README.md'], { stylesheet: scan }).components).toEqual([]);
+  expect(plan(['docs/README.md'], { stylesheet: undefined }).components).toEqual(EVERYTHING.components);
+  // A source at or above the repository root scans every file.
+  for (const include of [['.'], ['..']])
+    expect(
+      plan(['scripts/style-candidates.ts'], { stylesheet: { include, exclude: [] } }).components,
+    ).toEqual(EVERYTHING.components);
 });
 
 test("the stylesheet's scan roots are its @source paths from app/, less its plain negated ones", () => {
