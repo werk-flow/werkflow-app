@@ -18589,6 +18589,14 @@ export type Database = {
         };
         Returns: undefined;
       };
+      match_installed_equipment: {
+        Args: {
+          p_equipment_ids: string[];
+          p_organization_id: string;
+          p_search: string;
+        };
+        Returns: Json;
+      };
       move_document: {
         Args: {
           p_actor_id: string;

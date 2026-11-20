@@ -47,7 +47,8 @@ export type SearchGroup =
       hits: SearchHit[];
       /** Every match of the domain list, or null when the list counts another record. */
       total: number | null;
-      moreHref: string;
+      /** The domain list with the query; null when the role has no such list. */
+      moreHref: string | null;
     }
   | { kind: SearchGroupKind; source: SearchSource; status: 'failed' };
 
@@ -56,11 +57,12 @@ export type GlobalSearchResult = ActionResult<{ query: string; groups: SearchGro
 
 /**
  * The sources a role searches. Admin and Büro search every domain; an
- * employee only the jobs and projects the job list shows them. Never
- * Mitarbeiter, time, absences, sickness, qualifications, prices or costs.
+ * employee only the jobs and projects the job list shows them and the
+ * Anlagen of their assigned jobs. Never Mitarbeiter, time, absences,
+ * sickness, qualifications, prices or costs.
  */
 export function searchSourcesFor(isManagerOrAbove: boolean): readonly SearchSource[] {
-  return isManagerOrAbove ? SEARCH_SOURCES : ['auftraege'];
+  return isManagerOrAbove ? SEARCH_SOURCES : ['auftraege', 'anlagen'];
 }
 
 export const SEARCH_SOURCE_GROUPS: Record<SearchSource, readonly SearchGroupKind[]> = {

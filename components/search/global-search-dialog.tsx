@@ -38,20 +38,27 @@ type LoadedGroup = Extract<SearchGroup, { status: 'loaded' }>;
 function ResultGroup({ group, onNavigate }: { group: LoadedGroup; onNavigate: () => void }) {
   const headingId = useId();
   const label = SEARCH_GROUP_LABELS[group.kind];
+  const more = group.total !== null && group.total > group.hits.length;
   return (
     <section aria-labelledby={headingId} className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <h3 id={headingId} className="text-sm font-semibold">
           {label}
         </h3>
-        <Button asChild variant="link" size="sm" className="h-auto px-0">
-          <Link href={group.moreHref} onClick={onNavigate}>
-            {group.total !== null && group.total > group.hits.length
-              ? `Alle ${group.total} anzeigen`
-              : 'Alle anzeigen'}
-            <span className="sr-only">: {label}</span>
-          </Link>
-        </Button>
+        {group.moreHref ? (
+          <Button asChild variant="link" size="sm" className="h-auto px-0">
+            <Link href={group.moreHref} onClick={onNavigate}>
+              {more ? `Alle ${group.total} anzeigen` : 'Alle anzeigen'}
+              <span className="sr-only">: {label}</span>
+            </Link>
+          </Button>
+        ) : (
+          more && (
+            <span className="text-xs text-muted-foreground">
+              {group.hits.length} von {group.total}
+            </span>
+          )
+        )}
       </div>
       <ul className="divide-y rounded-lg border">
         {group.hits.map((hit) => (
@@ -198,7 +205,7 @@ function GlobalSearchPanel({ onNavigate }: { onNavigate: () => void }) {
     <>
       <SearchInput
         aria-label="Suchbegriff"
-        placeholder={fieldWorker ? 'Auftrag, Projekt oder Nummer' : 'Name, Telefon, Adresse, Nr.'}
+        placeholder={fieldWorker ? 'Auftrag, Anlage oder Nummer' : 'Name, Telefon, Adresse, Nr.'}
         value={query}
         onValueChange={setQuery}
         pending={searchable && read.loading}
@@ -211,7 +218,7 @@ function GlobalSearchPanel({ onNavigate }: { onNavigate: () => void }) {
             title={`Gib mindestens ${GLOBAL_SEARCH_MIN_LENGTH} Zeichen ein.`}
             description={
               fieldWorker
-                ? 'Du findest deine Aufträge und Projekte.'
+                ? 'Du findest deine Aufträge, Projekte und ihre Anlagen.'
                 : 'Du findest Kunden, Einsatzorte, Ansprechpartner, Aufträge, Projekte, Anfragen, Anlagen und Dokumente.'
             }
           />
