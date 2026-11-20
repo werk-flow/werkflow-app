@@ -5354,6 +5354,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -5378,6 +5379,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id?: string | null;
+          return_for_due_work_id?: string | null;
           scope_outcome?:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -5402,6 +5404,7 @@ export type Database = {
           organization_id?: string;
           original_due_date?: string;
           planning_occurrence_id?: string | null;
+          return_for_due_work_id?: string | null;
           scope_outcome?:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -5446,6 +5449,13 @@ export type Database = {
             columns: ["planning_occurrence_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "planning_occurrences";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_return_for_fkey";
+            columns: ["return_for_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
             referencedColumns: ["id", "organization_id"];
           },
         ];
@@ -5872,6 +5882,80 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      maintenance_visit_findings: {
+        Row: {
+          client_follow_up_id: string | null;
+          created_at: string;
+          created_by: string;
+          defects: string[];
+          id: string;
+          maintenance_due_work_id: string;
+          next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          note: string | null;
+          organization_id: string;
+          owner_user_id: string | null;
+          return_due_work_id: string | null;
+          target_date: string | null;
+        };
+        Insert: {
+          client_follow_up_id?: string | null;
+          created_at?: string;
+          created_by: string;
+          defects: string[];
+          id?: string;
+          maintenance_due_work_id: string;
+          next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          note?: string | null;
+          organization_id: string;
+          owner_user_id?: string | null;
+          return_due_work_id?: string | null;
+          target_date?: string | null;
+        };
+        Update: {
+          client_follow_up_id?: string | null;
+          created_at?: string;
+          created_by?: string;
+          defects?: string[];
+          id?: string;
+          maintenance_due_work_id?: string;
+          next_action?: Database["public"]["Enums"]["maintenance_next_action"];
+          note?: string | null;
+          organization_id?: string;
+          owner_user_id?: string | null;
+          return_due_work_id?: string | null;
+          target_date?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_visit_findings_client_follow_up_id_fkey";
+            columns: ["client_follow_up_id"];
+            isOneToOne: false;
+            referencedRelation: "client_follow_ups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_maintenance_due_work_id_organiz_fkey";
+            columns: ["maintenance_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_return_due_work_id_organization_fkey";
+            columns: ["return_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
           },
         ];
       };
@@ -12859,6 +12943,92 @@ export type Database = {
         };
         Relationships: [];
       };
+      werkflow_invoices: {
+        Row: {
+          buyer: Json;
+          currency: string;
+          due_cents: number;
+          file_key: string;
+          file_sha256: string;
+          file_size_bytes: number;
+          gross_cents: number;
+          id: string;
+          issue_date: string;
+          issued_at: string;
+          net_cents: number;
+          number: string;
+          organization_id: string;
+          paid_cents: number;
+          payment_means: string;
+          retain_until: string;
+          rules_release: string;
+          storno_of_invoice_id: string | null;
+          stripe_customer_id: string;
+          stripe_event_id: string;
+          stripe_invoice_id: string;
+          tax_cents: number;
+          type_code: string;
+        };
+        Insert: {
+          buyer: Json;
+          currency?: string;
+          due_cents: number;
+          file_key: string;
+          file_sha256: string;
+          file_size_bytes: number;
+          gross_cents: number;
+          id?: string;
+          issue_date: string;
+          issued_at?: string;
+          net_cents: number;
+          number: string;
+          organization_id: string;
+          paid_cents: number;
+          payment_means: string;
+          retain_until?: string;
+          rules_release: string;
+          storno_of_invoice_id?: string | null;
+          stripe_customer_id: string;
+          stripe_event_id: string;
+          stripe_invoice_id: string;
+          tax_cents: number;
+          type_code?: string;
+        };
+        Update: {
+          buyer?: Json;
+          currency?: string;
+          due_cents?: number;
+          file_key?: string;
+          file_sha256?: string;
+          file_size_bytes?: number;
+          gross_cents?: number;
+          id?: string;
+          issue_date?: string;
+          issued_at?: string;
+          net_cents?: number;
+          number?: string;
+          organization_id?: string;
+          paid_cents?: number;
+          payment_means?: string;
+          retain_until?: string;
+          rules_release?: string;
+          storno_of_invoice_id?: string | null;
+          stripe_customer_id?: string;
+          stripe_event_id?: string;
+          stripe_invoice_id?: string;
+          tax_cents?: number;
+          type_code?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "werkflow_invoices_storno_of_invoice_id_fkey";
+            columns: ["storno_of_invoice_id"];
+            isOneToOne: false;
+            referencedRelation: "werkflow_invoices";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       work_artifact_actions: {
         Row: {
           action_type: Database["public"]["Enums"]["work_artifact_action_type"];
@@ -16123,6 +16293,56 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      complete_maintenance_visit: {
+        Args: {
+          p_actor_id: string;
+          p_completed_on: string;
+          p_defects: string[];
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          p_next_action_note: string;
+          p_next_action_owner_id: string;
+          p_next_action_target_date: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_scope_outcome: Database["public"]["Enums"]["maintenance_scope_outcome"];
+          p_work_artifact_revision_ids: string[];
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -18017,6 +18237,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -18170,6 +18391,28 @@ export type Database = {
         };
         Returns: string;
       };
+      issue_werkflow_invoice: {
+        Args: {
+          p_buyer: Json;
+          p_due_cents: number;
+          p_file_key: string;
+          p_file_sha256: string;
+          p_file_size_bytes: number;
+          p_gross_cents: number;
+          p_issue_date: string;
+          p_net_cents: number;
+          p_number: string;
+          p_organization_id: string;
+          p_paid_cents: number;
+          p_payment_means: string;
+          p_rules_release: string;
+          p_stripe_customer_id: string;
+          p_stripe_event_id: string;
+          p_stripe_invoice_id: string;
+          p_tax_cents: number;
+        };
+        Returns: string;
+      };
       leistung_prices_on_day: {
         Args: {
           p_leistung_ids: string[];
@@ -18265,6 +18508,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -19233,6 +19477,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -20584,6 +20829,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -20624,6 +20870,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -22356,6 +22603,11 @@ export type Database = {
         | "postponed"
         | "other"
         | "job_cancelled";
+      maintenance_next_action:
+        | "return_visit"
+        | "warranty_check"
+        | "offer_replacement"
+        | "none";
       maintenance_next_due_basis: "planned_due_date" | "actual_completion_date";
       maintenance_plan_event_type:
         | "created"
@@ -23020,6 +23272,12 @@ export const Constants = {
         "postponed",
         "other",
         "job_cancelled",
+      ],
+      maintenance_next_action: [
+        "return_visit",
+        "warranty_check",
+        "offer_replacement",
+        "none",
       ],
       maintenance_next_due_basis: [
         "planned_due_date",

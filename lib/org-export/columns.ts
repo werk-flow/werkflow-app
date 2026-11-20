@@ -45,7 +45,10 @@ type ExcludedTable =
   | 'inventory_supplier_catalog_import_lines'
   // Delivery state of Stripe's signals to WerkFlow's own billing: event ids,
   // no record of the organization.
-  | 'werkflow_billing_signals';
+  | 'werkflow_billing_signals'
+  // WerkFlow's own invoices to the organization: WerkFlow's books, which the
+  // Admin downloads on the billing page (werk-flow/werkflow-planning#252).
+  | 'werkflow_invoices';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
@@ -136,6 +139,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   maintenance_plan_revisions: 'Wartungspläne_Fassungen',
   maintenance_plans: 'Wartungspläne',
   maintenance_service_case_links: 'Wartungen_Servicefälle',
+  maintenance_visit_findings: 'Wartungen_Befunde',
   offer_events: 'Angebote_Verlauf',
   offers: 'Angebote',
   organization_capabilities: 'Organisation_Qualifikationen',

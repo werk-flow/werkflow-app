@@ -133,8 +133,17 @@ const MAINTENANCE_DUE_ROW_ACTIONS = {
   complete: 'Abschließen',
 } as const;
 
+/** The completion choices of an unfinished visit that a test picks (maintenance-due-action-dialog.tsx). */
+const MAINTENANCE_COMPLETION_COPY = {
+  outcomePicker: 'Ergebnis',
+  unresolved: 'Nicht erledigt',
+  nextStepPicker: 'Nächster Schritt',
+  returnVisit: 'Rückkehr',
+} as const;
+
 /** Options of the due-action picker that a test chooses explicitly. */
 const MAINTENANCE_DUE_ACTION_OPTIONS = {
+  complete: 'Wartung abschließen',
   link_service_case: 'Reaktiven Servicefall verknüpfen',
 } as const;
 
@@ -832,6 +841,15 @@ export async function chooseMaintenanceDueAction(
 ): Promise<void> {
   await dialog.getByRole('combobox', { name: MAINTENANCE_COPY.dueActionPicker }).click();
   await page.getByRole('option', { name: MAINTENANCE_DUE_ACTION_OPTIONS[action] }).click();
+}
+
+/** Switches the open due dialog to completion, marks the visit not done and picks a Rückkehr as its next step. */
+export async function chooseUnresolvedWithReturn(page: Page, dialog: Locator): Promise<void> {
+  await chooseMaintenanceDueAction(page, dialog, 'complete');
+  await dialog.getByRole('combobox', { name: MAINTENANCE_COMPLETION_COPY.outcomePicker }).click();
+  await page.getByRole('option', { name: MAINTENANCE_COMPLETION_COPY.unresolved, exact: true }).click();
+  await dialog.getByRole('combobox', { name: MAINTENANCE_COMPLETION_COPY.nextStepPicker }).click();
+  await page.getByRole('option', { name: MAINTENANCE_COMPLETION_COPY.returnVisit, exact: true }).click();
 }
 
 /** The service case picker trigger of the due-action dialog. */

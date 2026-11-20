@@ -1,5 +1,5 @@
 -- Admin and Büro draft a Rechnung with its lines, terms and totals
--- (migration 20261218100000_keep_invoice_drafts_with_their_lines_and_totals.sql).
+-- (migration 20261219100000_keep_invoice_drafts_with_their_lines_and_totals.sql).
 begin;
 
 insert into auth.users (
