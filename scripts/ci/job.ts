@@ -328,10 +328,18 @@ async function browser(): Promise<boolean> {
 }
 
 function check(): boolean {
+  // A CI Check certifies the tree only from a checkout that holds exactly its commit.
+  if (environment.CI_PRODUCER && !clean)
+    throw new Error('Check ran on a checkout that differs from its commit.');
   const own = new Set([resultFileName('plan', null), resultFileName('check', null)]);
   const plan = readResult(join(ci.directory, resultFileName('plan', null)));
   const verdict = checkRun({
-    run: { tree: result.tree, event: ci.event, runUrl: result.runUrl },
+    run: {
+      tree: result.tree,
+      event: ci.event,
+      runUrl: result.runUrl,
+      producer: environment.CI_PRODUCER || null,
+    },
     plan,
     results: readdirSync(ci.directory)
       .filter((file) => file.endsWith('.json') && !own.has(file))
@@ -360,6 +368,9 @@ const appendToLedger = (): void => {
     appendFileSync(environment.CI_LEDGER, `${JSON.stringify(result)}\n`);
 };
 let passed = false;
+// Plan records its attempt before it plans: a later integration attempt that is still planning, or
+// died while planning, withdraws an earlier passed tree.
+if (ci.job === 'plan') appendToLedger();
 try {
   // A job records its planned key before it runs, in its result and the ledger: an attempt that
   // fails or dies before it reports a group still withdraws an earlier pass of the same key.

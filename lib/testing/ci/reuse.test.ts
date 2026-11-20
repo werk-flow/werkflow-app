@@ -100,10 +100,11 @@ test("a push's tree counts as passed only by the newest integration Check of tha
   ).toBeUndefined();
 });
 
-test('the Actions adapter takes the newest completed queue run of the tree, and only when it passed (real jq)', () => {
-  const run = (id: number, tree: string, conclusion: string) => ({
+test('the Actions adapter takes the newest queue run of the tree, and only when it completed and passed (real jq)', () => {
+  const run = (id: number, tree: string, conclusion: string | null) => ({
     html_url: `https://github.com/o/r/actions/runs/${id}`,
     head_commit: { tree_id: tree },
+    status: conclusion === null ? 'in_progress' : 'completed',
     conclusion,
   });
   const jq = (runs: object[], tree = TREE) =>
@@ -115,6 +116,7 @@ test('the Actions adapter takes the newest completed queue run of the tree, and 
     'https://github.com/o/r/actions/runs/2',
   );
   expect(jq([run(2, TREE, 'failure'), run(1, TREE, 'success')])).toBe('');
+  expect(jq([run(2, TREE, null), run(1, TREE, 'success')])).toBe('');
   expect(jq([run(1, TREE, 'success')], 'd'.repeat(40))).toBe('');
 });
 

@@ -75,15 +75,16 @@ export function passedTreeInLedger(receipts: readonly CiResult[], tree: string):
 }
 
 /**
- * The jq filter over GitHub's list of completed merge-queue runs of ci.yml, newest first: the
- * newest run of this tree when it succeeded, or nothing, so a later failure withdraws an earlier
- * pass as in the ledger. The merge queue squashes a PR onto main exactly as its run tested it.
+ * The jq filter over GitHub's list of merge-queue runs of ci.yml, newest first: the newest run of
+ * this tree when it completed and succeeded, or nothing, so a later run, failed or still running,
+ * withdraws an earlier pass as in the ledger. The merge queue squashes a PR onto main exactly as
+ * its run tested it.
  */
 export function passedTreeActionsFilter(tree: string): string {
-  return `[.workflow_runs[] | select(.head_commit.tree_id == "${tree}")][0] | select(.conclusion == "success") | .html_url`;
+  return `[.workflow_runs[] | select(.head_commit.tree_id == "${tree}")][0] | select(.status == "completed" and .conclusion == "success") | .html_url`;
 }
 
 /** The Actions API query that `passedTreeActionsFilter` reads. */
 export function passedTreeActionsQuery(repository: string): string {
-  return `repos/${repository}/actions/workflows/ci.yml/runs?event=merge_group&status=completed&per_page=50`;
+  return `repos/${repository}/actions/workflows/ci.yml/runs?event=merge_group&per_page=50`;
 }

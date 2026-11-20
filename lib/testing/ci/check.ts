@@ -18,8 +18,12 @@ export function parseScheduler(json: string | undefined): z.infer<typeof schedul
 }
 
 export type CheckInput = {
-  /** The run this Check judges; every result must be of its tree, event and run. */
-  run: { tree: string; event: CiEvent; runUrl: string | null };
+  /**
+   * The run this Check judges; every result must be of its tree, event and run. With a producer,
+   * a CI runner's Check, every result must have one too: a result without one ran on a workstation
+   * or on a checkout that differs from its commit.
+   */
+  run: { tree: string; event: CiEvent; runUrl: string | null; producer: string | null };
   /** The plan's result, or why it cannot be read. */
   plan: CiResult | { unreadable: string };
   /** Every other result the run's jobs wrote, or why one cannot be read. */
@@ -54,6 +58,10 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
     fail(
       `plan: it is the ${plan.event} plan of tree ${plan.tree} in run ${plan.runUrl}, not of this ${input.run.event} run ${input.run.runUrl} of ${input.run.tree}`,
     );
+    return { passed, lines };
+  }
+  if (input.run.producer !== null && plan.producer === null) {
+    fail('plan: it ran outside CI or on a checkout that differs from its commit');
     return { passed, lines };
   }
   const { jobs, skips, shards, outputs } = plan.plan;
@@ -94,6 +102,8 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
         fail(`${label}: the result is incomplete`);
       else if (result.status !== 'passed') fail(`${label}: failed`);
       else if (missing.length) fail(`${label}: no passed result for ${missing.join(', ')}`);
+      else if (input.run.producer !== null && result.producer === null)
+        fail(`${label}: it ran outside CI or on a checkout that differs from its commit`);
       else lines.push(`${label}: passed`);
     }
   }

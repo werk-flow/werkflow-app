@@ -39,7 +39,7 @@ const RUN_PLAN: RunPlan = {
   ],
   outputs: {},
 };
-const RUN = { tree: TREE, event: 'integration', runUrl: null } as const;
+const RUN = { tree: TREE, event: 'integration', runUrl: null, producer: null } as const;
 const plan = result('plan', { plan: RUN_PLAN });
 /** A passed result of the job that holds every group the plan gives it. */
 const passed = (job: CiJob, shard: number | null = null): CiResult =>
@@ -161,7 +161,7 @@ test('a push whose tree already passed checks only its plan, and says which run 
     },
   });
   const verdict = checkRun({
-    run: { tree: TREE, event: 'main', runUrl: null },
+    run: { tree: TREE, event: 'main', runUrl: null, producer: null },
     plan: reused,
     results: [],
     scheduler: undefined,
@@ -176,9 +176,9 @@ test('a plan the scheduler cancelled, or the plan of another tree or event, fail
     'FAILED plan: the job ended cancelled',
   ]);
   for (const other of [
-    { tree: 'f'.repeat(40), event: 'integration', runUrl: null },
-    { tree: TREE, event: 'pr', runUrl: null },
-    { tree: TREE, event: 'integration', runUrl: 'https://ci.example/runs/9' },
+    { tree: 'f'.repeat(40), event: 'integration', runUrl: null, producer: null },
+    { tree: TREE, event: 'pr', runUrl: null, producer: null },
+    { tree: TREE, event: 'integration', runUrl: 'https://ci.example/runs/9', producer: null },
   ] as const)
     expect(checkRun({ run: other, plan, results: passing, scheduler: undefined }).passed).toBe(false);
   const incomplete = result('plan', { plan: RUN_PLAN, completedAt: null });
@@ -210,4 +210,17 @@ test("an earlier run's leftover result of the same tree and event fails Check", 
   const verdict = checkRun({ run: RUN, plan, results: leftover, scheduler: undefined });
   expect(verdict.passed).toBe(false);
   expect(verdict.lines).toContain('FAILED fast: no result');
+});
+
+test("a CI runner's Check fails on a plan or job result without a producer, which a changed checkout leaves", () => {
+  const ciRun = { ...RUN, producer: 'github-actions' };
+  expect(checkRun({ run: ciRun, plan, results: passing, scheduler: undefined }).passed).toBe(true);
+  const dirtyFast = [...passing.slice(1), { ...passed('fast'), producer: null }];
+  expect(checkRun({ run: ciRun, plan, results: dirtyFast, scheduler: undefined }).lines).toContain(
+    'FAILED fast: it ran outside CI or on a checkout that differs from its commit',
+  );
+  const dirtyPlan = { ...plan, producer: null };
+  expect(checkRun({ run: ciRun, plan: dirtyPlan, results: passing, scheduler: undefined }).passed).toBe(
+    false,
+  );
 });
