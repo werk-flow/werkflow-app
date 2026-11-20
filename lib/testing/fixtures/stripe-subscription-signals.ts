@@ -85,7 +85,7 @@ const { subscriptionSignals } = await import('@/lib/werkflow-billing/signals/sub
 
 const secret = `whsec_${randomBytes(24).toString('hex')}`;
 const stripe = createFakeStripeBilling();
-const gateway = createFakeStripeGateway(secret, stripe);
+const gateway = createFakeStripeGateway(secret, { billing: stripe });
 
 /** A verified event, as the endpoint hands it on; its body claims what the test says. */
 async function signal(type: string, object: Record<string, unknown>): Promise<Stripe.Event> {

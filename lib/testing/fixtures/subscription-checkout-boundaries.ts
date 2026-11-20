@@ -45,7 +45,19 @@ mock.module('@/lib/werkflow-billing/stripe', () => ({
 }));
 const { createFakeStripeBilling, fakeSubscriptionCalls } = await import('./fake-stripe-gateway');
 const stripe = createFakeStripeBilling();
-gateway = { verifySignal: async () => null, subscriptions: fakeSubscriptionCalls(stripe) };
+// The Checkout flow makes none of the billing reads; any call fails the test.
+const noRead = async (): Promise<never> => {
+  throw new Error('the Checkout flow made a billing read');
+};
+gateway = {
+  verifySignal: async () => null,
+  readInvoiceForIssue: noRead,
+  readInvoice: noRead,
+  readCustomer: noRead,
+  readMandate: noRead,
+  readDispute: noRead,
+  subscriptions: fakeSubscriptionCalls(stripe),
+};
 
 const subscriptionRows = () => tableRows(world, 'werkflow_subscriptions');
 const holds = (status: string | null, reason: string | null = null) =>

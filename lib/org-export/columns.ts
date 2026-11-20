@@ -46,6 +46,12 @@ type ExcludedTable =
   // Delivery state of Stripe's signals to WerkFlow's own billing: event ids,
   // no record of the organization.
   | 'werkflow_billing_signals'
+  // WerkFlow's own delivery state of its billing mails and alarms; the
+  // Admin sees the mails on the billing page.
+  | 'werkflow_billing_mails'
+  // WerkFlow's own invoices to the organization: WerkFlow's books, which the
+  // Admin downloads on the billing page (werk-flow/werkflow-planning#252).
+  | 'werkflow_invoices'
   // WerkFlow's own billing state of the organization (Stripe ids and status),
   // the contract's record, not the organization's work.
   | 'werkflow_subscriptions';
