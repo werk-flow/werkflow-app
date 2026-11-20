@@ -2,6 +2,8 @@ import 'server-only';
 
 import Stripe from 'stripe';
 
+import { billingFailure } from '@/lib/werkflow-billing/failure';
+import { failedPaymentMethodType } from '@/lib/werkflow-billing/payment-method';
 import { type StripeInvoiceForIssue, stripeInvoiceForIssue } from '@/lib/werkflow-billing/stripe-invoice';
 
 // The one gateway every call of WerkFlow's own billing to Stripe goes through
@@ -45,6 +47,49 @@ export type StripeGateway = {
    * or at all.
    */
   readInvoiceForIssue(invoiceId: string): Promise<StripeInvoiceForIssue>;
+  /** Each read below answers Stripe's current object, or throws `stripe_read_failed`. */
+  readInvoice(invoiceId: string): Promise<StripeBillingInvoice>;
+  /** Null for a deleted customer. */
+  readCustomer(customerId: string): Promise<StripeBillingCustomer | null>;
+  readMandate(mandateId: string): Promise<StripeBillingMandate>;
+  readDispute(disputeId: string): Promise<StripeBillingDispute>;
+};
+
+type StripeBillingInvoice = {
+  id: string;
+  customerId: string | null;
+  number: string | null;
+  /** Stripe's current state: a failure signal for a paid or voided invoice is stale. */
+  status: Stripe.Invoice.Status | null;
+  /** What is still open, after any partial payment. */
+  amountRemainingCents: number;
+  /** Stripe's page where the customer can pay the invoice another way. */
+  payUrl: string | null;
+  /** The payment method type of the newest payment attempt, such as `card` or `sepa_debit`; null when unknown. */
+  paymentMethodType: string | null;
+};
+
+export type StripeBillingCustomer = {
+  id: string;
+  /** The `werkflow_organization_id` metadata WerkFlow's server set; unchecked here. */
+  organizationId: string | null;
+  email: string | null;
+  name: string | null;
+};
+
+type StripeBillingMandate = {
+  id: string;
+  status: Stripe.Mandate.Status;
+  customerId: string | null;
+  ibanLastFour: string | null;
+};
+
+type StripeBillingDispute = {
+  id: string;
+  customerId: string | null;
+  chargeId: string;
+  amountCents: number;
+  reason: string;
 };
 
 type StripeGatewayResult =
@@ -74,6 +119,79 @@ function signalVerifier(webhooks: Stripe['webhooks'], webhookSecret: string): St
       // A forged, stale or unparsable signal; its content is never logged.
       return null;
     }
+  };
+}
+
+function idOf(value: string | { id: string } | null | undefined): string | null {
+  return typeof value === 'string' ? value : (value?.id ?? null);
+}
+
+/** Runs one read; Stripe's error, which can quote request data, never leaves it. */
+async function read<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch {
+    throw billingFailure('stripe_read_failed');
+  }
+}
+
+/** The reads a signal handler makes instead of trusting the event body. */
+function billingReads(client: Stripe): Omit<StripeGateway, 'verifySignal' | 'readInvoiceForIssue'> {
+  return {
+    readInvoice: (invoiceId) =>
+      read(async () => {
+        const invoice = await client.invoices.retrieve(invoiceId);
+        const payments = await client.invoicePayments.list({
+          invoice: invoiceId,
+          // The newest attempt still open is the failed one; a paid part payment may be newer.
+          status: 'open',
+          limit: 1,
+          expand: ['data.payment.payment_intent.payment_method'],
+        });
+        return {
+          id: invoice.id ?? invoiceId,
+          customerId: idOf(invoice.customer),
+          number: invoice.number,
+          status: invoice.status,
+          amountRemainingCents: invoice.amount_remaining,
+          payUrl: invoice.hosted_invoice_url ?? null,
+          paymentMethodType: failedPaymentMethodType(payments.data[0]?.payment.payment_intent),
+        };
+      }),
+    readCustomer: (customerId) =>
+      read(async () => {
+        const customer = await client.customers.retrieve(customerId);
+        if (customer.deleted) return null;
+        return {
+          id: customer.id,
+          organizationId: customer.metadata.werkflow_organization_id ?? null,
+          email: customer.email,
+          name: customer.name ?? null,
+        };
+      }),
+    readMandate: (mandateId) =>
+      read(async () => {
+        const mandate = await client.mandates.retrieve(mandateId, { expand: ['payment_method'] });
+        const method = typeof mandate.payment_method === 'object' ? mandate.payment_method : null;
+        return {
+          id: mandate.id,
+          status: mandate.status,
+          customerId: idOf(method?.customer),
+          ibanLastFour: method?.sepa_debit?.last4 ?? null,
+        };
+      }),
+    readDispute: (disputeId) =>
+      read(async () => {
+        const dispute = await client.disputes.retrieve(disputeId, { expand: ['charge'] });
+        const charge = typeof dispute.charge === 'object' ? dispute.charge : null;
+        return {
+          id: dispute.id,
+          customerId: idOf(charge?.customer),
+          chargeId: typeof dispute.charge === 'string' ? dispute.charge : dispute.charge.id,
+          amountCents: dispute.amount,
+          reason: dispute.reason,
+        };
+      }),
   };
 }
 
@@ -173,6 +291,7 @@ export function resolveStripeGateway(
     ok: true,
     gateway: {
       verifySignal: signalVerifier(client.webhooks, webhookSecret),
+      ...billingReads(client),
       readInvoiceForIssue: invoiceReader(client),
     },
   };
