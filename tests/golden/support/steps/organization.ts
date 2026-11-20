@@ -211,11 +211,18 @@ export async function createOrganizationInOnboarding(
   return expectOrganizationCreated(page, organizationName);
 }
 
-/** Creates a further organization through the switcher's dialog and lands on its dashboard. */
+/**
+ * Creates a further organization through the switcher's dialog and lands on
+ * its dashboard. A further organization needs its own paid Checkout
+ * (werk-flow/werkflow-planning#248), so the step records one for the signed-in
+ * Admin first, as Stripe's signals would.
+ */
 export async function createAdditionalOrganization(
   page: Page,
   organizationName: string,
+  adminEmail: string,
 ): Promise<PersistedOrganization> {
+  await recordPaidCheckout(adminEmail);
   await page.getByRole('button', { name: ORGANIZATION_COPY.createOrganization }).click();
   await page.getByLabel(ORGANIZATION_COPY.organizationName).fill(organizationName);
   await page.getByRole('button', { name: SHARED_COPY.action.create, exact: true }).click();

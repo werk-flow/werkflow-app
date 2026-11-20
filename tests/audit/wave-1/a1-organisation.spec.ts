@@ -178,7 +178,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     await test.step('Admin legt eine zweite Organisation an, der Handwerker tritt per Code bei', async () => {
       await createCustomer(adminPage, primaryOrganizationCustomer);
       await adminPage.goto('/dashboard');
-      await createAdditionalOrganization(adminPage, secondaryOrganizationName);
+      await createAdditionalOrganization(adminPage, secondaryOrganizationName, world.users.admin.email);
       await expect(visibleText(adminPage, secondaryOrganizationName)).toBeVisible();
       const secondaryOrganization = await readOrganizationCode(adminPage);
       expect(secondaryOrganization.name).toBe(secondaryOrganizationName);
