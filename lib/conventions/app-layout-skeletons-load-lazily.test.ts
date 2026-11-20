@@ -60,13 +60,34 @@ function staticImports(file: string, host: SourceHost): string[] {
   });
 }
 
-/** The modules a route's `loading.tsx` imports, apart from the shell's shared parts. */
+/** The product modules a module re-exports with code; a barrel's skeletons count as its own. */
+function reExports(file: string, host: SourceHost): string[] {
+  const text = host(file);
+  if (text === null) return [];
+  return parseProductSource(file, text).statements.flatMap((statement) => {
+    if (!ts.isExportDeclaration(statement) || typeOnly(statement)) return [];
+    const specifier = moduleSpecifierOf(statement);
+    const target = specifier === null ? null : resolveProductModule(file, specifier, host);
+    return target === null ? [] : [target];
+  });
+}
+
+const outsideShell = (file: string): boolean => !SHELL_PARTS.some((part) => file.startsWith(part));
+
+/**
+ * The route skeleton modules: each `loading.tsx` itself, which can draw its skeleton inline, the
+ * modules it imports apart from the shell's shared parts, and whatever those re-export, so a
+ * skeleton imported through a barrel is found where it lives.
+ */
 function routeSkeletonModules(loadingFiles: readonly string[], host: SourceHost): Set<string> {
-  return new Set(
-    loadingFiles
-      .flatMap((file) => staticImports(file, host))
-      .filter((target) => !SHELL_PARTS.some((part) => target.startsWith(part))),
-  );
+  const modules = new Set<string>(loadingFiles);
+  const queue = loadingFiles.flatMap((file) => staticImports(file, host)).filter(outsideShell);
+  for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+    if (modules.has(next)) continue;
+    modules.add(next);
+    queue.push(...reExports(next, host).filter(outsideShell));
+  }
+  return modules;
 }
 
 /** Each route skeleton the layout reaches through static imports, as importer and skeleton. */
@@ -118,6 +139,12 @@ describe('the (app) layout loads route skeletons lazily', () => {
       "import { type AreaSkeleton } from '@/components/loading-states/area-skeleton';",
       "export { type AreaSkeleton as Shape } from '@/components/loading-states/area-skeleton';",
     ].join('\n'),
+    'app/(app)/barrel/loading.tsx': "import { BarrelSkeleton } from '@/components/loading-states';",
+    'components/loading-states/index.ts': "export { BarrelSkeleton } from './barrel-skeleton';",
+    'components/loading-states/barrel-skeleton.tsx': 'export function BarrelSkeleton() {}',
+    'app/(app)/barrel-layout.tsx':
+      "import { BarrelSkeleton } from '@/components/loading-states/barrel-skeleton';",
+    'app/(app)/inline-layout.tsx': "import Loading from './area/loading';",
     'app/(app)/static-layout.tsx': [
       "import { Skeleton } from '@/components/ui/skeleton';",
       "import { AreaSkeleton } from '@/components/shell-static';",
@@ -137,5 +164,17 @@ describe('the (app) layout loads route skeletons lazily', () => {
       'components/shell-static.tsx -> components/loading-states/area-skeleton.tsx',
     ]);
     expect(staticallyReachedSkeletons('app/(app)/lazy-layout.tsx', loading, host)).toEqual([]);
+  });
+
+  test('probes: a loading.tsx itself, and a skeleton its barrel re-exports, are route skeletons', () => {
+    expect(
+      staticallyReachedSkeletons('app/(app)/inline-layout.tsx', ['app/(app)/area/loading.tsx'], host),
+    ).toEqual([
+      'app/(app)/inline-layout.tsx -> app/(app)/area/loading.tsx',
+      'app/(app)/area/loading.tsx -> components/loading-states/area-skeleton.tsx',
+    ]);
+    expect(
+      staticallyReachedSkeletons('app/(app)/barrel-layout.tsx', ['app/(app)/barrel/loading.tsx'], host),
+    ).toEqual(['app/(app)/barrel-layout.tsx -> components/loading-states/barrel-skeleton.tsx']);
   });
 });

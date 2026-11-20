@@ -213,12 +213,12 @@ function page(Skeleton: ComponentType): Shape {
   };
 }
 
-/** An area page's shape: the area's title and tabs, around its subpage's content skeleton once loaded. */
+/** An area page's shape: the area's title and tabs, around its subpage's content skeleton once loaded, and a placeholder until then. */
 function inArea(title: string, tabCount: number, Content?: ComponentType): Shape {
   return function areaShape() {
     return (
       <AreaPageSkeleton title={title} tabCount={tabCount}>
-        {Content && <Content />}
+        {Content ? <Content /> : <Skeleton className="h-64 w-full" />}
       </AreaPageSkeleton>
     );
   };
