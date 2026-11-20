@@ -204,3 +204,7 @@ GitHub Actions has been blocked for the organization since 2026-11-14, and a sta
 With D1, a push to `main` whose tree a passed integration run tested runs no job, and its `Check` cites that run; this extends item 3 of the amendment "a merge queue". A CI runner's passed SQL, component or browser-shard result also stands for the same job on a byte-identical tree. `lib/testing/ci/dag.ts` holds the jobs, and `scripts/ci/job.ts` runs each job's body on any runner. [testing.md](../technical/testing.md#ci) owns the rules.
 
 A browser shard now starts after the Fast job, whose 30-minute timeout the midnight hold adds to its lead, so the longest hold grows from about 75 to 105 minutes. When GitHub's merge queue returns, its check timeout from the amendment "a merge queue" needs about 165 minutes instead of 150.
+
+## Amendment 2026-11-21: limits stay the repository's on every runner
+
+The stand-in runner needed threefold test and Playwright timeouts as an owner exception on 2026-11-16, while tests still held wall-clock limits that a slower machine missed. Every runner runs the limits the repository sets. No timeout or budget factor carries over to a new runner without its own decision. A test holds no wall-clock duration below a fixed number outside a measured scenario, and `test-hygiene/no-fixed-time-limit` fails on one (werk-flow/werkflow-planning#507).

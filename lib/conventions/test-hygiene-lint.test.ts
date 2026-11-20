@@ -1,4 +1,4 @@
-// Rule test: the test-hygiene lint rules refuse wall-clock waits, polling loops, per-test timeouts, retries, unpinned clocks and unquarantined skips, in every file family they own.
+// Rule test: the test-hygiene lint rules refuse wall-clock waits, polling loops, per-test timeouts, retries, unpinned clocks, fixed time limits and unquarantined skips, in every file family they own.
 import { describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -121,6 +121,76 @@ describe('test-hygiene/no-per-test-timeout', () => {
       'test.describe.configure({ mode: "serial" });',
     ].join('\n');
     expect(await reported('no-per-test-timeout', source, SPEC)).toEqual([]);
+  });
+});
+
+describe('test-hygiene/no-fixed-time-limit', () => {
+  test('refuses a wall-clock duration held below a fixed number, however the test writes it', async () => {
+    const source = [
+      'const start = performance.now();',
+      'await save();',
+      'const elapsed = performance.now() - start;',
+      'expect(elapsed).toBeLessThan(250);',
+      'expect(Date.now() - start, "save").toBeLessThanOrEqual(LIMIT_MS);',
+      'expect(elapsed).not.toBeGreaterThan(250);',
+      'expect(250).toBeGreaterThan(elapsed);',
+      'expect(elapsed < 250).toBe(true);',
+      'expect(elapsed >= 250).toBe(false);',
+      'expect.soft(Bun.nanoseconds() - begun).toBeLessThan(1e9);',
+      'if (elapsed > 250) throw new Error("slow");',
+      'const took = await page.evaluate(() => performance.now() - window.started);',
+      'expect(took).toBeLessThan(2_000);',
+    ].join('\n');
+    for (const file of [CONTRACT, SPEC, SUPPORT, UNIT])
+      expect(await reported('no-fixed-time-limit', source, file), file).toEqual([
+        4, 5, 6, 7, 8, 9, 10, 11, 13,
+      ]);
+  });
+
+  test('an ordering of clock readings, a lower bound, a count and a controlled clock pass', async () => {
+    const source = [
+      'const before = Date.now();',
+      'await save();',
+      'const after = Date.now();',
+      'const capturedAt = Date.parse(envelope.capturedAt);',
+      'expect(capturedAt).toBeGreaterThanOrEqual(before);',
+      'expect(capturedAt).toBeLessThanOrEqual(after);',
+      'expect(after - before).toBeLessThanOrEqual(Date.now() - before);',
+      'expect(after - before).toBeGreaterThanOrEqual(0);',
+      'expect(rows.length).toBeLessThan(250);',
+      'const deadline = Date.now() + 5_000;',
+      'if (Date.now() > deadline) throw new Error("missing");',
+      "test('clocked', async ({ page }) => {",
+      '  await page.clock.install();',
+      '  const age = await page.evaluate(() => Date.now() - Number(localStorage.getItem("at")));',
+      '  expect(age).toBeLessThan(120_000);',
+      '});',
+      "test.describe('fake timers', () => {",
+      '  test.beforeEach(() => setSystemTime(new Date("2026-03-02T08:00:00Z")));',
+      "  test('aged', () => { expect(Date.now() - opened).toBeLessThan(60_000); });",
+      '});',
+    ].join('\n');
+    expect(await reported('no-fixed-time-limit', source, CONTRACT)).toEqual([]);
+  });
+
+  test('a seeded fixed limit fails the lint of a real contract, and the declared measurements keep theirs', async () => {
+    const contract = 'tests/ui-contracts/problem-report.spec.ts';
+    const seeded = `${readFileSync(resolve(repositoryRoot, contract), 'utf8')}
+test('seeded', async ({ page }) => {
+  const started = Date.now();
+  await page.getByRole('main').click();
+  expect(Date.now() - started).toBeLessThan(250);
+});
+`;
+    expect(await reported('no-fixed-time-limit', seeded, contract)).toHaveLength(1);
+    for (const file of [
+      'tests/golden/support/browser-observation.ts',
+      'tests/golden/support/scenario-measurement.ts',
+    ])
+      expect(
+        effectiveLintRules(await eslint.calculateConfigForFile(file))['test-hygiene/no-fixed-time-limit'],
+        file,
+      ).toBeUndefined();
   });
 });
 
@@ -306,7 +376,8 @@ describe('test-hygiene scope', () => {
       'tests/canary/support/probe.ts',
     ]) {
       const rules = effectiveLintRules(await eslint.calculateConfigForFile(file));
-      for (const rule of shared) expect(rules[`test-hygiene/${rule}`]?.[0], `${file} ${rule}`).toBe(2);
+      for (const rule of [...shared, 'no-fixed-time-limit'])
+        expect(rules[`test-hygiene/${rule}`]?.[0], `${file} ${rule}`).toBe(2);
       expect(rules['test-hygiene/no-unpinned-clock']?.[0] === 2, file).toBe(file.startsWith('lib/'));
     }
     for (const file of [

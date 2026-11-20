@@ -391,6 +391,199 @@ const noUnpinnedClockRule = {
   },
 };
 
+/** A clock read for a duration: the wall clock and the monotonic timers. */
+function isDurationClockRead(node) {
+  if (isClockRead(node)) return true;
+  if (node.type !== 'CallExpression') return false;
+  const name = calleePath(node.callee)?.join('.');
+  return name === 'process.hrtime' || name === 'process.hrtime.bigint' || name === 'Bun.nanoseconds';
+}
+
+/** An instant read from a date: `Date.parse(text)`, `new Date(value)`, `date.getTime()`. */
+function isInstant(node) {
+  if (node.type === 'NewExpression') return node.callee.type === 'Identifier' && node.callee.name === 'Date';
+  if (node.type !== 'CallExpression') return false;
+  const path = calleePath(node.callee);
+  return path?.join('.') === 'Date.parse' || (path?.length !== 1 && path?.at(-1) === 'getTime');
+}
+
+/** A call that puts the clock under the test's control: Playwright's `page.clock`, bun:test's `setSystemTime`, fake timers. */
+function controlsClock(node) {
+  if (node.type !== 'CallExpression') return false;
+  const path = calleePath(node.callee);
+  const name = path?.at(-1);
+  return (
+    (path?.at(-2) === 'clock' && ['install', 'setFixedTime', 'setSystemTime'].includes(name)) ||
+    name === 'setSystemTime' ||
+    name === 'useFakeTimers'
+  );
+}
+
+/** The matchers that hold a value below a bound, and those that hold it above one. */
+const BELOW_MATCHERS = new Set(['toBeLessThan', 'toBeLessThanOrEqual']);
+const ABOVE_MATCHERS = new Set(['toBeGreaterThan', 'toBeGreaterThanOrEqual']);
+
+/** The `expect(...)` call a matcher chain starts from (`expect(x).not.toBe…`, `expect.soft(x).toBe…`), or null. */
+function expectCallOf(matcher) {
+  let node = matcher.callee.object;
+  let negated = false;
+  while (node?.type === 'MemberExpression') {
+    if (!node.computed && node.property.type === 'Identifier' && node.property.name === 'not')
+      negated = !negated;
+    node = node.object;
+  }
+  if (node?.type !== 'CallExpression') return null;
+  const name = calleePath(node.callee)?.join('.');
+  return name === 'expect' || name === 'expect.soft' ? { call: node, negated } : null;
+}
+
+/** The statements an `if` runs when its test holds; a throw among them makes the test a failure condition. */
+function throwsWhenTrue(statement) {
+  const body = statement.consequent;
+  return (
+    body.type === 'ThrowStatement' ||
+    (body.type === 'BlockStatement' && body.body.some((inner) => inner.type === 'ThrowStatement'))
+  );
+}
+
+/**
+ * A test that is no declared timed measurement holds no wall-clock duration
+ * below a fixed number: `expect(elapsed).toBeLessThan(250)`,
+ * `expect(Date.now() - start < 250).toBe(true)`, `if (elapsed > 250) throw`.
+ * A duration is a value computed from a clock read, directly or through
+ * variables; a bound is fixed when it reads neither a clock nor a date.
+ * Comparing a clock reading with another, or with an instant, orders events and
+ * passes, and so does a test that controls its clock (`page.clock.install`,
+ * `setSystemTime`), itself or before each test of its group. The measured
+ * scenarios own timing (docs/technical/testing.md, "Deadlines and measured
+ * scenarios"), and the lint config exempts their files.
+ */
+const noFixedTimeLimitRule = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      limit:
+        'A test that is no timed measurement holds no wall-clock duration below a fixed number: it then passes or fails by the speed of the machine it runs on. Assert the outcome, drive a clock the test controls (page.clock, setSystemTime, an injected clock), or measure through a registered scenario (docs/technical/testing.md, "Deadlines and measured scenarios").',
+    },
+  },
+  create(context) {
+    const { sourceCode } = context;
+    /** Each comparison to judge once every variable is known: the side held below the bound, and the bound. */
+    const comparisons = [];
+    /** The functions, or the whole file, in which the test controls the clock. */
+    const controlled = [];
+    const underControlledClock = (node) => {
+      for (let ancestor = node; ancestor; ancestor = ancestor.parent)
+        if (controlled.includes(ancestor)) return true;
+      return false;
+    };
+    const below = (node, limited, bound) => comparisons.push({ node, limited, bound });
+    /** `a < b` read as "a is held below b" when `holds` is true, or as a failure condition when false. */
+    const relational = (node, expression, holds) => {
+      if (expression.type !== 'BinaryExpression') return;
+      const less = expression.operator === '<' || expression.operator === '<=';
+      const more = expression.operator === '>' || expression.operator === '>=';
+      if (!less && !more) return;
+      const [small, large] =
+        less === holds ? [expression.left, expression.right] : [expression.right, expression.left];
+      below(node, small, large);
+    };
+    return {
+      CallExpression(node) {
+        if (node.callee.type !== 'MemberExpression' || node.callee.property.type !== 'Identifier') return;
+        const matcher = node.callee.property.name;
+        const start = expectCallOf(node);
+        const [subject] = start?.call.arguments ?? [];
+        const [bound] = node.arguments;
+        if (!start || !subject) return;
+        if (bound && (BELOW_MATCHERS.has(matcher) || ABOVE_MATCHERS.has(matcher))) {
+          const holdsBelow = BELOW_MATCHERS.has(matcher) !== start.negated;
+          if (holdsBelow) below(node, subject, bound);
+          else below(node, bound, subject);
+          return;
+        }
+        if (matcher === 'toBe' || matcher === 'toBeTruthy' || matcher === 'toBeFalsy') {
+          const expected =
+            matcher === 'toBe'
+              ? bound?.type === 'Literal'
+                ? bound.value
+                : undefined
+              : matcher === 'toBeTruthy';
+          if (typeof expected === 'boolean') relational(node, subject, expected !== start.negated);
+        }
+      },
+      IfStatement(node) {
+        if (throwsWhenTrue(node)) relational(node, node.test, false);
+      },
+      'CallExpression:exit'(node) {
+        if (!controlsClock(node)) return;
+        let owner = node.parent;
+        while (owner && !FUNCTION_TYPES.has(owner.type)) owner = owner.parent;
+        // A clock installed before each test controls every test of the enclosing group.
+        const hook = owner?.parent;
+        if (hook?.type === 'CallExpression' && calleePath(hook.callee)?.at(-1) === 'beforeEach') {
+          owner = hook.parent;
+          while (owner && !FUNCTION_TYPES.has(owner.type)) owner = owner.parent;
+        }
+        controlled.push(owner ?? sourceCode.ast);
+      },
+      'Program:exit'() {
+        if (!comparisons.length) return;
+        const variableOf = new Map();
+        for (const scope of sourceCode.scopeManager.scopes)
+          for (const reference of scope.references)
+            if (reference.resolved) variableOf.set(reference.identifier, reference.resolved);
+        const clocked = new Set();
+        const instants = new Set();
+        /** Whether `root` reads what `read` names, directly or through a variable in `names`. */
+        const reads = (root, read, names) => {
+          let found = false;
+          const stack = [root];
+          while (stack.length && !found) {
+            const node = stack.pop();
+            if (!node || typeof node.type !== 'string') continue;
+            if (read(node) || (node.type === 'Identifier' && names.has(variableOf.get(node)))) found = true;
+            for (const [key, value] of Object.entries(node)) {
+              if (key === 'parent') continue;
+              if (Array.isArray(value)) stack.push(...value);
+              else if (value && typeof value.type === 'string') stack.push(value);
+            }
+          }
+          return found;
+        };
+        const readsClock = (root) => reads(root, isDurationClockRead, clocked);
+        /** A clock reading or an instant: the bound of an ordering, never a fixed limit. */
+        const readsTime = (root) =>
+          reads(root, (node) => isDurationClockRead(node) || isInstant(node), instants);
+        const writes = sourceCode.scopeManager.scopes.flatMap((scope) =>
+          scope.variables.flatMap((variable) =>
+            variable.references.flatMap((reference) =>
+              reference.writeExpr ? [{ variable, value: reference.writeExpr }] : [],
+            ),
+          ),
+        );
+        // To a fixed point: `const now = Date.now(); const elapsed = now - start` reads the clock twice removed.
+        for (const [names, read] of [
+          [clocked, readsClock],
+          [instants, readsTime],
+        ])
+          for (let grown = true; grown; ) {
+            grown = false;
+            for (const { variable, value } of writes) {
+              if (names.has(variable) || !read(value)) continue;
+              names.add(variable);
+              grown = true;
+            }
+          }
+        for (const { node, limited, bound } of comparisons)
+          if (readsClock(limited) && !readsTime(bound) && !underControlledClock(node))
+            context.report({ node, messageId: 'limit' });
+      },
+    };
+  },
+};
+
 /**
  * `.only` never lands. A skipped test (`skip`, `fixme`, `todo`, a runtime
  * `test.skip()`) carries the quarantine comment on the line above, outside the
@@ -476,6 +669,7 @@ export const testHygieneRules = {
     'no-per-test-timeout': noPerTestTimeoutRule,
     'no-retries': noRetriesRule,
     'no-unpinned-clock': noUnpinnedClockRule,
+    'no-fixed-time-limit': noFixedTimeLimitRule,
     'no-excluded-test': noExcludedTestRule,
   },
 };

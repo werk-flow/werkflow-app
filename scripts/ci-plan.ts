@@ -14,6 +14,7 @@ import {
   runnerModules,
   scriptsCiRuns,
 } from '../lib/testing/selection/ci-plan';
+import { E_INVOICE_STEP, eInvoiceReason } from '../lib/testing/selection/e-invoice-selection';
 import { fastTierPlan, tailwindScan } from '../lib/testing/selection/fast-tier';
 import { readGroupDurations } from '../lib/testing/selection/group-durations';
 import { renderedSurfaceFiles, surfaceRoots } from '../lib/testing/selection/surface-closure';
@@ -27,8 +28,9 @@ import { z } from '../lib/zod';
 // commit. A base git cannot read (a force push, a new branch) plans a full run.
 // It writes `browser`, `shards`, `full`, `full_reason` and `midnight_until` to $GITHUB_OUTPUT when
 // set, and the fast tier's selection (lib/testing/selection/fast-tier.ts): `selected_components`,
-// `component_shards`, `selected_unit`, `selected_sql`, `selected_static` and `selected_lint`, each
-// group list comma-separated and empty when the run needs none.
+// `component_shards`, `selected_unit`, `selected_sql`, `selected_static` and `selected_lint`, and
+// `selected_invoices` (lib/testing/selection/e-invoice-selection.ts), each group list
+// comma-separated and empty when the run needs none.
 // scripts/ci/job.ts plan runs it and decides which jobs the run executes; with CI_EVENT=pr it
 // sets no midnight hold.
 const repository = resolve(import.meta.dir, '..');
@@ -112,6 +114,12 @@ const fast = fastTierPlan({
 });
 
 for (const line of planLog(plan, fast.reasons)) console.info(line);
+const invoices = eInvoiceReason({
+  graph: qualification.graph,
+  changedFiles: flag === '--base' ? change?.files : [],
+  fullReason: plan.fullReason,
+});
+console.info(`[ci-plan] E-invoices: ${invoices ?? 'no change reaches them'}.`);
 const now = new Date();
 const proofMinutes = process.env.MIDNIGHT_PROOF_MINUTES;
 const holdUntil = proofMinutes
@@ -140,6 +148,7 @@ if (output)
       `selected_sql=${fast.sql}`,
       `selected_static=${fast.static}`,
       `selected_lint=${fast.lint}`,
+      `selected_invoices=${invoices ? E_INVOICE_STEP : ''}`,
       '',
     ].join('\n'),
   );
