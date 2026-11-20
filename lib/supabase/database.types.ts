@@ -12667,6 +12667,59 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_mails: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          failure_code: string | null;
+          id: string;
+          kind: string;
+          organization_id: string | null;
+          provider_message_id: string | null;
+          recipient: string;
+          sent_at: string | null;
+          state: string;
+          stripe_object_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          failure_code?: string | null;
+          id?: string;
+          kind: string;
+          organization_id?: string | null;
+          provider_message_id?: string | null;
+          recipient: string;
+          sent_at?: string | null;
+          state?: string;
+          stripe_object_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          failure_code?: string | null;
+          id?: string;
+          kind?: string;
+          organization_id?: string | null;
+          provider_message_id?: string | null;
+          recipient?: string;
+          sent_at?: string | null;
+          state?: string;
+          stripe_object_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "werkflow_billing_mails_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       werkflow_billing_signals: {
         Row: {
           attempts: number;
@@ -15925,6 +15978,15 @@ export type Database = {
           organization_id: string;
           storage_path: string;
         }[];
+      };
+      claim_werkflow_billing_mail: {
+        Args: {
+          p_kind: string;
+          p_organization_id: string;
+          p_recipient: string;
+          p_stripe_object_id: string;
+        };
+        Returns: string;
       };
       claim_werkflow_billing_signal: {
         Args: {
@@ -20815,6 +20877,16 @@ export type Database = {
           p_template_id: string;
         };
         Returns: undefined;
+      };
+      settle_werkflow_billing_mail: {
+        Args: {
+          p_failure_code?: string;
+          p_mail_id: string;
+          p_organization_id: string;
+          p_outcome: string;
+          p_provider_message_id?: string;
+        };
+        Returns: boolean;
       };
       settle_werkflow_billing_signal: {
         Args: {
