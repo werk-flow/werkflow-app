@@ -2149,6 +2149,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -2185,6 +2186,7 @@ export type Database = {
           parent_equipment_id?: string | null;
           predecessor_equipment_id?: string | null;
           site_id: string;
+          source_number?: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype?:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -2221,6 +2223,7 @@ export type Database = {
           parent_equipment_id?: string | null;
           predecessor_equipment_id?: string | null;
           site_id?: string;
+          source_number?: string | null;
           state?: Database["public"]["Enums"]["installed_equipment_state"];
           subtype?:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -4691,6 +4694,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -4717,6 +4721,7 @@ export type Database = {
           priority?: Database["public"]["Enums"]["job_priority"];
           project_id?: string | null;
           site_id?: string | null;
+          source_number?: string | null;
           status?: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at?: string;
@@ -4743,6 +4748,7 @@ export type Database = {
           priority?: Database["public"]["Enums"]["job_priority"];
           project_id?: string | null;
           site_id?: string | null;
+          source_number?: string | null;
           status?: Database["public"]["Enums"]["job_status"];
           title?: string;
           updated_at?: string;
@@ -5108,6 +5114,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -5132,6 +5139,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id?: string | null;
+          return_for_due_work_id?: string | null;
           scope_outcome?:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -5156,6 +5164,7 @@ export type Database = {
           organization_id?: string;
           original_due_date?: string;
           planning_occurrence_id?: string | null;
+          return_for_due_work_id?: string | null;
           scope_outcome?:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -5200,6 +5209,13 @@ export type Database = {
             columns: ["planning_occurrence_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "planning_occurrences";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_return_for_fkey";
+            columns: ["return_for_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
             referencedColumns: ["id", "organization_id"];
           },
         ];
@@ -5626,6 +5642,80 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      maintenance_visit_findings: {
+        Row: {
+          client_follow_up_id: string | null;
+          created_at: string;
+          created_by: string;
+          defects: string[];
+          id: string;
+          maintenance_due_work_id: string;
+          next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          note: string | null;
+          organization_id: string;
+          owner_user_id: string | null;
+          return_due_work_id: string | null;
+          target_date: string | null;
+        };
+        Insert: {
+          client_follow_up_id?: string | null;
+          created_at?: string;
+          created_by: string;
+          defects: string[];
+          id?: string;
+          maintenance_due_work_id: string;
+          next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          note?: string | null;
+          organization_id: string;
+          owner_user_id?: string | null;
+          return_due_work_id?: string | null;
+          target_date?: string | null;
+        };
+        Update: {
+          client_follow_up_id?: string | null;
+          created_at?: string;
+          created_by?: string;
+          defects?: string[];
+          id?: string;
+          maintenance_due_work_id?: string;
+          next_action?: Database["public"]["Enums"]["maintenance_next_action"];
+          note?: string | null;
+          organization_id?: string;
+          owner_user_id?: string | null;
+          return_due_work_id?: string | null;
+          target_date?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_visit_findings_client_follow_up_id_fkey";
+            columns: ["client_follow_up_id"];
+            isOneToOne: false;
+            referencedRelation: "client_follow_ups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_maintenance_due_work_id_organiz_fkey";
+            columns: ["maintenance_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_return_due_work_id_organization_fkey";
+            columns: ["return_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
           },
         ];
       };
@@ -16034,6 +16124,56 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      complete_maintenance_visit: {
+        Args: {
+          p_actor_id: string;
+          p_completed_on: string;
+          p_defects: string[];
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          p_next_action_note: string;
+          p_next_action_owner_id: string;
+          p_next_action_target_date: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_scope_outcome: Database["public"]["Enums"]["maintenance_scope_outcome"];
+          p_work_artifact_revision_ids: string[];
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -16144,6 +16284,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16197,6 +16338,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16349,6 +16491,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -16577,6 +16720,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -16649,6 +16793,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16700,6 +16845,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -16875,6 +17021,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -17909,6 +18056,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -18119,6 +18267,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -18167,6 +18316,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -19148,6 +19298,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -19615,6 +19766,7 @@ export type Database = {
               parent_equipment_id: string | null;
               predecessor_equipment_id: string | null;
               site_id: string;
+              source_number: string | null;
               state: Database["public"]["Enums"]["installed_equipment_state"];
               subtype:
                 | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -19671,6 +19823,7 @@ export type Database = {
               parent_equipment_id: string | null;
               predecessor_equipment_id: string | null;
               site_id: string;
+              source_number: string | null;
               state: Database["public"]["Enums"]["installed_equipment_state"];
               subtype:
                 | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20370,6 +20523,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20425,6 +20579,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -20482,6 +20637,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -20522,6 +20678,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -20901,6 +21058,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -21146,6 +21304,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -21199,6 +21358,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -21623,6 +21783,7 @@ export type Database = {
           parent_equipment_id: string | null;
           predecessor_equipment_id: string | null;
           site_id: string;
+          source_number: string | null;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
             | Database["public"]["Enums"]["installed_equipment_subtype"]
@@ -21699,6 +21860,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -21750,6 +21912,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["job_priority"];
           project_id: string | null;
           site_id: string | null;
+          source_number: string | null;
           status: Database["public"]["Enums"]["job_status"];
           title: string;
           updated_at: string;
@@ -22248,6 +22411,11 @@ export type Database = {
         | "postponed"
         | "other"
         | "job_cancelled";
+      maintenance_next_action:
+        | "return_visit"
+        | "warranty_check"
+        | "offer_replacement"
+        | "none";
       maintenance_next_due_basis: "planned_due_date" | "actual_completion_date";
       maintenance_plan_event_type:
         | "created"
@@ -22912,6 +23080,12 @@ export const Constants = {
         "postponed",
         "other",
         "job_cancelled",
+      ],
+      maintenance_next_action: [
+        "return_visit",
+        "warranty_check",
+        "offer_replacement",
+        "none",
       ],
       maintenance_next_due_basis: [
         "planned_due_date",

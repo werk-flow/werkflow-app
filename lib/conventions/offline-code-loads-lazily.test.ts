@@ -39,6 +39,8 @@ const UNSENT_WORK_MODULES: readonly string[] = [
   'components/clock-offline.tsx',
   'components/clock-unsent-events.tsx',
   'components/clock-unsent-list.tsx',
+  'components/clock-unsent-replacement.tsx',
+  'components/clock-unsent-set-aside.tsx',
   'components/shared/unsent-work-prompt.tsx',
   'lib/field-sync/device/clock-device.ts',
   'lib/field-sync/device/clock-outbox.ts',
@@ -49,6 +51,7 @@ const UNSENT_WORK_MODULES: readonly string[] = [
   'lib/field-sync/device/time-outbox-send.ts',
   'lib/field-sync/device/time-outbox-store.ts',
   'lib/field-sync/device/time-outbox.ts',
+  'lib/field-sync/device/time-outbox-replacement.ts',
   'lib/field-sync/device/unsent-work.ts',
 ];
 

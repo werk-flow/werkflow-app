@@ -12,6 +12,8 @@ function stoppedChain(action: 'start' | 'switch' | 'end', sessionId: string | nu
   return {
     status: 'stopped',
     state: null,
+    chainSegmentId: null,
+    setAside: [],
     events: [
       {
         operationId: '50000000-0000-4000-8000-0000000000c1',
@@ -42,5 +44,19 @@ describe('a correction for a stopped chain', () => {
 
   test('is not offered while the server’s clock is unknown: the device cannot tell whether the session runs', () => {
     expect(correctionOffered(stoppedChain('start', null), null)).toBe(false);
+  });
+
+  test('is not offered for set-aside records alone, which form no chain', () => {
+    const setAsideOnly: ClockDeviceView = {
+      ...stoppedChain('start', null),
+      events: [],
+      setAside: [
+        {
+          key: 'werkflow:unsent:clock-aside:001762844400000:1:newer',
+          capturedAt: '2026-11-09T09:00:00.000Z',
+        },
+      ],
+    };
+    expect(correctionOffered(setAsideOnly, CLOCKED_OUT)).toBe(false);
   });
 });

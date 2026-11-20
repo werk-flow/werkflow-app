@@ -3,6 +3,7 @@ import type {
   StandaloneScreen,
   StandaloneSession,
 } from '../../../lib/testing/selection/standalone-route-inventory';
+import { PROBE_PATH } from '../../../app/offline/return-to-app';
 import { TEST_SUPPORT_USER } from '../../../lib/testing/support-user';
 import { seedProblemReport, seedTriagedProblemReport } from '../../golden/support/db/problem-reports';
 import { createAdminClient } from '../../golden/support/db/shared';
@@ -146,6 +147,10 @@ export async function openStandaloneScreen(input: {
     timezoneId: 'Europe/Berlin',
   });
   try {
+    if (input.screen.unreachable)
+      await context.route(`**${PROBE_PATH}`, (route) =>
+        route.request().method() === 'HEAD' ? route.abort('internetdisconnected') : route.continue(),
+      );
     const page = await openPage(context);
     const email = await prepareSession(page, input.world, input.screen.session, input.baseURL);
     const path = await resolvePath(input.world, input.screen.path);

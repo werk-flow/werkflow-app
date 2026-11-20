@@ -7,12 +7,14 @@ import {
   seedInstalledEquipmentReplacement,
   seedMaintenanceCoverage,
   seedMaintenancePlan,
+  seedMaintenanceVisitLink,
   seedServiceCase,
   seedServiceCaseJobLink,
 } from '../../../golden/support/db/service';
 import { seedRunningOnCallShift } from '../../../golden/support/db/on-call';
 import { seedJob, seedPublishedWorkTemplate, seedWorkReportDraft } from '../../../golden/support/db/work';
 import {
+  chooseUnresolvedWithReturn,
   equipmentArchiveButton,
   equipmentConfirmation,
   equipmentCorrectionButton,
@@ -62,6 +64,8 @@ function serviceAuditNames(world: TestWorld) {
     replacedEquipment: worldName('Layout Ersetzter Wärmeerzeuger', world.runId),
     evidenceClient: worldName('Layout Servicenachweis Kunde', world.runId),
     evidenceCase: worldName('Layout Servicefall mit Arbeitsnachweis', world.runId),
+    visitClient: worldName('Layout Wartungsbesuch Kunde', world.runId),
+    visitJobNumber: `LAYOUT-WARTUNG-BESUCH-${world.runId}`,
   };
 }
 
@@ -124,6 +128,56 @@ function prepareMaintenance({ world, businessDate }: SurfaceContext): Promise<st
       businessDate,
     });
     return coverage.coverageNumber;
+  });
+}
+
+/**
+ * A plan whose first due item has a visit job with a work report, so its row
+ * can be completed. Returns the visit job's number.
+ */
+function prepareMaintenanceVisit({ world, businessDate }: SurfaceContext): Promise<string> {
+  return surfaceFixture(world, 'service.maintenance-visit', async () => {
+    const names = serviceAuditNames(world);
+    const actor = { orgId: world.orgId, actorId: world.users.admin.id };
+    const { clientId, siteId } = await seedServiceCustomer(world, names.visitClient);
+    const equipment = await seedInstalledEquipment({
+      ...actor,
+      clientId,
+      siteId,
+      name: names.maintenanceEquipment,
+    });
+    const template = await seedPublishedWorkTemplate({
+      ...actor,
+      name: `${names.maintenanceTemplate} Besuch`,
+      targetType: 'job',
+      items: [{ content: 'Anlage fachgerecht warten' }],
+    });
+    const plan = await seedMaintenancePlan({
+      ...actor,
+      clientId,
+      siteId,
+      templateVersionId: template.versionId,
+      equipmentIds: [equipment.id],
+      effectiveFromDate: businessDate,
+      firstDueDate: businessDate,
+      intervalMonths: 12,
+      businessDate,
+    });
+    const jobId = await seedJob({
+      ...actor,
+      jobNumber: names.visitJobNumber,
+      title: 'Wartungsbesuch',
+      clientId,
+      siteId,
+    });
+    await seedMaintenanceVisitLink({ ...actor, planId: plan.id, jobId });
+    await seedWorkReportDraft({
+      ...actor,
+      jobId,
+      title: 'Wartungsbericht',
+      performedWork: 'Brenner geprüft, Umwälzpumpe läuft nicht an.',
+    });
+    return names.visitJobNumber;
   });
 }
 
@@ -319,6 +373,19 @@ export const SERVICE_OPENERS = {
       return maintenanceDueRowAction(row, 'createJob');
     },
     layer: maintenanceDueActionDialog,
+  },
+  // The completion of a visit that ended not done, with the Mängel and the
+  // next step it then asks for.
+  'service.due-completion': {
+    trigger: async (context) => {
+      await prepareMaintenanceVisit(context);
+      const client = serviceAuditNames(context.world).visitClient;
+      await context.page.goto(maintenanceSearchUrl(client));
+      // Without an appointment the row offers „Termin planen“; the dialog then switches to completion.
+      return maintenanceDueRowAction(maintenanceDueRowNaming(context.page, client), 'schedule');
+    },
+    layer: maintenanceDueActionDialog,
+    prepareLayer: async (layer, page) => chooseUnresolvedWithReturn(page, layer),
   },
   'service.plan-action': {
     trigger: async (context) => {
