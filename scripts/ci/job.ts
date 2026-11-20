@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { type CiRun, checkRun, parseScheduler, runPlanOf } from '../../lib/testing/ci/check';
+import { jobCost, measurementInputs } from '../../lib/testing/ci/cost';
 import { CI_EVENTS, CI_JOBS, type CiJob } from '../../lib/testing/ci/dag';
 import {
   type CiResult,
@@ -65,6 +66,14 @@ import { repository, run, step, verify } from './run';
 //   CI_NEEDS        check: the scheduler's job results, as ci.yml's `toJSON(needs)`. Optional.
 //   SHRINK_ONLY_GROWTH_APPROVED  `true` with the owner's `approved: list growth` label.
 //   MIDNIGHT_PROOF_MINUTES       plan: passed on to scripts/ci-plan.ts; names the wait a proof run.
+// Measurement inputs (lib/testing/ci/cost.ts). Optional; no gate reads them, and an unreadable one
+// warns and is recorded as unknown, never failing the job:
+//   CI_PRS          The pull requests the run serves: numbers separated by commas (a PR run's one, an
+//                   integration batch's), or GitHub's merge-queue ref. Unset for a push or full run.
+//   CI_RUN_ATTEMPT  The run's attempt, 1 for the first; a rerun of its failed jobs counts up.
+//   CI_FIRST_ATTEMPT_CLASS  On a rerun: the class the job's failed first attempt was given
+//                   (docs/technical/testing.md, "Failures").
+//   CI_JOB_STARTED_AT  When the runner began this job, before its checkout and setup, as an ISO time.
 // On GitHub Actions (GITHUB_ACTIONS=true and GH_TOKEN) without CI_LEDGER, plan asks the Actions API
 // for a green merge-queue run of the tree; a configured ledger is the only reuse source. plan writes
 // its outputs to $GITHUB_OUTPUT.
@@ -99,6 +108,11 @@ if (!clean)
     '::warning title=Checkout::The checkout differs from its commit, so no result is reused or recorded for reuse.',
   );
 if (ledgerPath && !environment.CI_RUN_URL) throw new Error('A run with CI_LEDGER needs CI_RUN_URL.');
+const measured = measurementInputs(environment);
+for (const warning of measured.warnings)
+  console.info(`::warning title=Measurement::${warning}, so the result records it as unknown.`);
+/** One machine start per job process on a CI runner, whatever its checkout holds. */
+const machineStart = producer !== null;
 // One one-time-code secret for the job's build and its test server, unless the runner gives one.
 const otpSecret = environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex');
 // The commit is read once and the tree from it, so a moving HEAD cannot pair one commit's plan with
@@ -121,7 +135,18 @@ const result: CiResult = {
   runUrl: environment.CI_RUN_URL || null,
   startedAt: new Date().toISOString(),
   completedAt: null,
+  prs: measured.prs,
+  attempt: measured.attempt,
+  firstAttemptClass: measured.firstAttemptClass,
 };
+const measureCost = (): void => {
+  result.cost = jobCost(result, {
+    machineStart,
+    runnerStartedAt: measured.runnerStartedAt,
+    completedAt: result.completedAt,
+  });
+};
+measureCost();
 /** The run this job belongs to; it takes only this run's plan. */
 const ownRun: CiRun = { tree: result.tree, event: ci.event, runUrl: result.runUrl, producer };
 const resultPath = join(ci.directory, resultFileName(ci.job, shard));
@@ -453,6 +478,7 @@ if (changed) {
 }
 result.status = passed ? 'passed' : 'failed';
 result.completedAt = new Date().toISOString();
+measureCost();
 writeResult();
 try {
   appendToLedger();

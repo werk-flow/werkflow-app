@@ -202,6 +202,48 @@ test("Fast's migration gate sees the plan's base and no ledger or producer, and 
   });
 });
 
+test('a job records its cost and the runner measurement inputs, and an unreadable input warns without failing it', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    const dumps = join(folder, 'dumps');
+    mkdirSync(dumps);
+    writePlan(root, run);
+    const fast = (measurement: Record<string, string>): CiResult => {
+      const code = runJob(root, 'fast', {
+        CI_EVENT: 'integration',
+        CI_RESULTS_DIR: run,
+        CI_PRODUCER: 'mac-standin',
+        CI_RUN_URL: RUN_URL,
+        ENV_DUMP_DIR: dumps,
+        ...measurement,
+      });
+      const result = readResult(join(run, resultFileName('fast', null)));
+      if ('unreadable' in result) throw new Error(result.unreadable);
+      expect([measurement, code]).toEqual([measurement, 0]);
+      return result;
+    };
+    const runnerStartedAt = '2026-11-20T19:00:00.000Z';
+    const measured = fast({
+      CI_PRS: '12',
+      CI_RUN_ATTEMPT: '2',
+      CI_FIRST_ATTEMPT_CLASS: 'environment',
+      CI_JOB_STARTED_AT: runnerStartedAt,
+    });
+    expect(measured).toMatchObject({ prs: [12], attempt: 2, firstAttemptClass: 'environment' });
+    expect(measured.cost).toEqual({
+      machineStart: true,
+      runnerStartedAt,
+      // Fast's build is a gate, not setup: only the runner's time before the body counts.
+      setupMs: Date.parse(measured.startedAt) - Date.parse(runnerStartedAt),
+      wallMs: Date.parse(measured.completedAt ?? '') - Date.parse(runnerStartedAt),
+    });
+    const unknown = fast({ CI_PRS: 'twelve', CI_RUN_ATTEMPT: 'x', CI_JOB_STARTED_AT: 'soon' });
+    expect(unknown).toMatchObject({ status: 'passed', prs: [], attempt: 1, firstAttemptClass: null });
+    expect(unknown.cost).toMatchObject({ runnerStartedAt: null, setupMs: 0 });
+  });
+});
+
 test('a job whose checkout changed while it ran, by an edit or a new commit, fails, and its receipt has no producer', () => {
   inFolder((folder) => {
     for (const change of ['edit', 'commit']) {
