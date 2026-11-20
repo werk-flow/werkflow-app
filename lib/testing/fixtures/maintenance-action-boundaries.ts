@@ -99,9 +99,14 @@ const officeCalls = [
     () =>
       completeMaintenanceDueWork({
         ...dueChange,
-        scopeOutcome: 'complete',
+        scopeOutcome: 'unresolved',
         completedOn: '2026-10-20',
         workArtifactRevisionIds: [revisionId],
+        defects: ['Umwälzpumpe defekt'],
+        nextAction: 'return_visit',
+        nextActionOwnerId: ownClientId,
+        nextActionTargetDate: '2026-11-03',
+        nextActionNote: '',
       }),
   ],
   [
