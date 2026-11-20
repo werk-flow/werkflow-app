@@ -66,7 +66,7 @@ const CASES: ReadonlyArray<{
     draft: { ...STANDARD_RATE_INVOICE, lines: [{ ...firstStandardLine, quantity: '1', unitPriceCents: -2 }] },
     lineNetCents: [-2],
     taxSubtotals: [{ rate: 1900, basisCents: -2, taxCents: 0 }],
-    totals: { lineNetCents: -2, taxCents: 0, grossCents: -2 },
+    totals: { lineNetCents: -2, taxCents: 0, grossCents: -2, paidCents: 0, dueCents: -2 },
   },
 ];
 
