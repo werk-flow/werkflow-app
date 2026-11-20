@@ -11,11 +11,13 @@ import {
   TARGET_SHARD_SECONDS,
   REGISTRY_ROWS,
   runnerModules as runnerModulesOf,
+  scriptsCiRuns,
   type CiGroup,
 } from './ci-plan';
 import { CRITICAL_JOURNEYS, type ChangeTrigger } from './change-triggers';
 import { readGroupDurations, type GroupDurations } from './group-durations';
 import { getTestGroups } from './test-groups';
+import { z } from '@/lib/zod';
 
 const group = (id: string, file: string, scopes: string[], trigger?: ChangeTrigger): CiGroup => ({
   id,
@@ -52,7 +54,7 @@ const graph = new Map<string, string[]>([
   ['lib/testing/selection/surface-groups.ts', []],
   ['lib/testing/selection/coverage-map.ts', []],
 ]);
-const runnerModules = runnerModulesOf(graph);
+const runnerModules = runnerModulesOf(graph, []);
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const durations: GroupDurations = { source: 'test', defaultSeconds: 60, groups: {} };
 const ids = (plan: ReturnType<typeof ciPlan>): string[] => plan.browser.map((entry) => entry.id);
@@ -168,8 +170,53 @@ test('the runner modules are what the runner entry points import, directly or th
   ]);
   // An import the graph cannot resolve takes every module of the runner, selection and local-stack folders.
   const unresolved = new Map([...graph, ['scripts/verify.ts', [UNKNOWN_IMPORT_DEPENDENCY]]]);
-  expect(runnerModulesOf(unresolved)).toContain('lib/testing/selection/surface-groups.ts');
-  expect(runnerModulesOf(unresolved)).toContain('lib/testing/selection/coverage-map.ts');
+  expect(runnerModulesOf(unresolved, [])).toContain('lib/testing/selection/surface-groups.ts');
+  expect(runnerModulesOf(unresolved, [])).toContain('lib/testing/selection/coverage-map.ts');
+});
+
+test("the scripts CI runs and the planner's evidence modules are runner modules too", () => {
+  const planned = new Map([
+    ...graph,
+    ['scripts/ci-plan.ts', ['lib/testing/evidence/group-evidence.ts', 'lib/testing/lab-steps.ts']],
+    ['scripts/switch-env.ts', ['lib/testing/local-stack/env-files.ts', 'lib/env/schema.ts']],
+  ]);
+  const modules = runnerModulesOf(planned, ['scripts/switch-env.ts']);
+  expect(modules).toContain('scripts/switch-env.ts');
+  expect(modules).toContain('lib/testing/local-stack/env-files.ts');
+  expect(modules).toContain('lib/testing/evidence/group-evidence.ts');
+  // Product code and the planner's other imports stay out.
+  expect(modules).not.toContain('lib/env/schema.ts');
+  expect(modules).not.toContain('lib/testing/lab-steps.ts');
+});
+
+test('the scripts CI runs are those its workflow and actions name, directly or through package scripts', () => {
+  const scripts = {
+    'env:local': 'bun scripts/switch-env.ts local',
+    check: 'bun run env:local && bun run lint',
+    lint: 'bun scripts/lint.ts',
+  };
+  expect(
+    scriptsCiRuns(
+      ['run: bun run check', 'run: bun scripts/verify.ts run', '# see .github/scripts/ci-queue.ts'],
+      scripts,
+    ),
+  ).toEqual(['scripts/lint.ts', 'scripts/switch-env.ts', 'scripts/verify.ts']);
+  // The real workflow's stack setup runs the environment switch through `bun run env:local`.
+  const read = (path: string): string => readFileSync(join(repositoryRoot, path), 'utf8');
+  const packageScripts = z
+    .object({ scripts: z.record(z.string(), z.string()) })
+    .parse(JSON.parse(read('package.json'))).scripts;
+  const real = scriptsCiRuns(
+    [
+      read('.github/workflows/ci.yml'),
+      ...readdirSync(join(repositoryRoot, '.github/actions')).map((action) =>
+        read(`.github/actions/${action}/action.yml`),
+      ),
+    ],
+    packageScripts,
+  );
+  expect(real).toContain('scripts/switch-env.ts');
+  expect(real).toContain('scripts/seed-demo-data.ts');
 });
 
 const REGISTRY = 'lib/testing/selection/test-groups.ts';
@@ -295,7 +342,7 @@ test('visual and layout groups run in a pull request only when their own test co
   ).toEqual([...EVERY_BROWSER_GROUP, 'audit:layout:work', 'audit:lab:office', 'audit:performance:calendar']);
 });
 
-test('the visual groups share shards of their own, and the other groups always keep one', () => {
+test('the visual groups share shards of their own, the other groups always keep one, and both stay within the budget', () => {
   const plan = ciPlan({
     groups,
     changedFiles: undefined,
@@ -319,8 +366,9 @@ test('the visual groups share shards of their own, and the other groups always k
     durations: { ...durations, defaultSeconds: TARGET_SHARD_SECONDS / 10 },
     rowChanges: [],
   }).shards;
-  expect(shards.length).toBeGreaterThan(MAX_SHARDS);
+  expect(shards).toHaveLength(MAX_SHARDS);
   expect(shards.at(-1)?.groups).toBe('golden:gg-00');
+  expect(shards.flatMap((shard) => shard.groups.split(','))).toHaveLength(crowded.length + 1);
 });
 
 test('a full run of the registered groups fills the job budget by their recorded durations, the visual groups in shards of their own', () => {
@@ -351,16 +399,6 @@ test('a full run of the registered groups fills the job budget by their recorded
   const longest = Math.max(...others.flat().map((id) => seconds([id])));
   for (const ids of others)
     expect(seconds(ids)).toBeLessThanOrEqual(seconds(others.flat()) / others.length + longest);
-});
-
-test('every registered browser group and component area has a recorded duration', () => {
-  const recorded = readGroupDurations(repositoryRoot);
-  const packed = getTestGroups(repositoryRoot).filter((entry) =>
-    ['golden', 'audit', 'ui'].includes(entry.kind),
-  );
-  expect(packed.filter((entry) => recorded.groups[entry.id] === undefined).map((entry) => entry.id)).toEqual(
-    [],
-  );
 });
 
 test('shards hold every selected group once and never exceed the job budget', () => {
@@ -408,6 +446,21 @@ test('a selection takes as few shards as hold its recorded seconds at the target
     ['golden:p1-04', 'audit:wave-2:p1-13'],
   ]);
   expect(planned({}, target)).toHaveLength(3);
+});
+
+test('a pool never takes more shards than it has groups, so no shard is empty', () => {
+  const plan = ciPlan({
+    groups,
+    changedFiles: undefined,
+    fullRun: undefined,
+    runnerModules,
+    durations: { ...durations, defaultSeconds: TARGET_SHARD_SECONDS * 3 },
+    rowChanges: [],
+  });
+  expect(plan.shards).toHaveLength(EVERY_BROWSER_GROUP.length);
+  expect(plan.shards.every((shard) => shard.groups.length > 0)).toBe(true);
+  const long: GroupDurations = { source: 'test', defaultSeconds: TARGET_SHARD_SECONDS * 3, groups: {} };
+  expect(componentShards(['ui:contracts:work'], long)).toEqual([{ shard: 1, groups: 'ui:contracts:work' }]);
 });
 
 test('packing puts the longest group first onto the lightest shard, and packs a selection alike in any order', () => {

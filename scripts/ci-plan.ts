@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { appendFileSync, readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { captureInputSnapshot } from '../lib/testing/evidence/group-evidence';
 import { createGroupQualification } from '../lib/testing/evidence/group-qualification';
 import { ciBrowserHoldUntil, midnightProofHoldUntil } from '../lib/testing/runner/group-schedule';
@@ -10,11 +10,13 @@ import {
   componentShards,
   REGISTRY_ROWS,
   runnerModules,
+  scriptsCiRuns,
 } from '../lib/testing/selection/ci-plan';
-import { fastTierPlan } from '../lib/testing/selection/fast-tier';
+import { fastTierPlan, stylesheetScanRoots } from '../lib/testing/selection/fast-tier';
 import { readGroupDurations } from '../lib/testing/selection/group-durations';
 import { renderedSurfaceFiles, surfaceRoots } from '../lib/testing/selection/surface-closure';
 import { getTestGroups } from '../lib/testing/selection/test-groups';
+import { z } from '../lib/zod';
 
 // The `Plan` job of .github/workflows/ci.yml: which browser groups this run
 // executes and how they split into shards (lib/testing/selection/ci-plan.ts).
@@ -65,6 +67,17 @@ const qualification = createGroupQualification(repository, groups, captureInputS
 const rendered = renderedSurfaceFiles(qualification.graph, surfaceRoots(repository));
 const change = flag === '--base' ? changedSince(value) : undefined;
 const durations = readGroupDurations(repository);
+const read = (path: string): string => readFileSync(join(repository, path), 'utf8');
+// The workflow and its actions name the scripts CI runs; a file that cannot be read stops the plan.
+const ciScripts = scriptsCiRuns(
+  [
+    read('.github/workflows/ci.yml'),
+    ...readdirSync(join(repository, '.github/actions')).map((action) =>
+      read(`.github/actions/${action}/action.yml`),
+    ),
+  ],
+  z.object({ scripts: z.record(z.string(), z.string()) }).parse(JSON.parse(read('package.json'))).scripts,
+);
 const plan = ciPlan({
   groups: groups.map((group) => ({
     id: group.id,
@@ -78,7 +91,7 @@ const plan = ciPlan({
   changedFiles: flag === '--base' ? change?.files : [],
   rowChanges: change?.rowChanges ?? [],
   fullRun: flag === '--full' ? value : undefined,
-  runnerModules: runnerModules(qualification.graph),
+  runnerModules: runnerModules(qualification.graph, ciScripts),
   durations,
 });
 const fast = fastTierPlan({
@@ -87,6 +100,7 @@ const fast = fastTierPlan({
   changedFiles: flag === '--base' ? change?.files : [],
   fullReason: plan.fullReason,
   rowChanges: change?.rowChanges ?? [],
+  stylesheet: stylesheetScanRoots(read('app/globals.css')),
 });
 
 console.info(

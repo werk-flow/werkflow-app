@@ -4,7 +4,13 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, posix, resolve } from 'node:path';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
-import { fastTierPlan, isDocsFile, UNTRACKED_IMPORTS, type FastTierGroup } from './fast-tier';
+import {
+  fastTierPlan,
+  isDocsFile,
+  stylesheetScanRoots,
+  UNTRACKED_IMPORTS,
+  type FastTierGroup,
+} from './fast-tier';
 
 const groups: FastTierGroup[] = [
   { id: 'ui:contracts:calendar', kind: 'ui', files: ['tests/ui-contracts/calendar.spec.ts'] },
@@ -33,7 +39,12 @@ const graph = new Map<string, string[]>([
 
 const plan = (
   changedFiles: readonly string[] | undefined,
-  options: { fullReason?: string; rowChanges?: string[]; graph?: Map<string, string[]> } = {},
+  options: {
+    fullReason?: string;
+    rowChanges?: string[];
+    graph?: Map<string, string[]>;
+    stylesheet?: { include: string[]; exclude: string[] } | undefined;
+  } = {},
 ): ReturnType<typeof fastTierPlan> =>
   fastTierPlan({
     groups,
@@ -41,6 +52,8 @@ const plan = (
     changedFiles,
     fullReason: options.fullReason,
     rowChanges: options.rowChanges ?? [],
+    // Tailwind scans the components here; a scanned file is covered by its own test.
+    stylesheet: 'stylesheet' in options ? options.stylesheet : { include: ['components'], exclude: [] },
   });
 const selected = (result: ReturnType<typeof fastTierPlan>): Record<string, string[]> => ({
   components: result.components,
@@ -66,7 +79,7 @@ test('an unreadable diff, a full run and a tooling change take every group of ev
   expect(tooling.reasons['sql:security']).toBe('Tooling input changed: bun.lock');
 });
 
-test('a diff of documentation alone runs the gates that read it, Lint and the unit suite, and no component or SQL group', () => {
+test('a diff of documentation alone runs the gates that read it, the dependency audit, Lint and the unit suite, and no component or SQL group', () => {
   const docs = [
     'docs/technical/testing.md',
     'AGENTS.md',
@@ -78,7 +91,7 @@ test('a diff of documentation alone runs the gates that read it, Lint and the un
     components: [],
     unit: ['unit:all'],
     sql: [],
-    static: ['static:docs', 'static:coverage'],
+    static: ['static:docs', 'static:coverage', 'static:dependencies'],
     lint: ['static:lint'],
   });
   // Code under docs/ or .claude/ is no documentation.
@@ -105,6 +118,32 @@ test('a change the contract bundle, its runner or support reaches runs every com
     'app/globals.css',
   ])
     expect(plan([file]).components, file).toEqual(EVERYTHING.components);
+});
+
+test('a file Tailwind scans for class names runs every component area, as does any file when the scan is not declared', () => {
+  const scan = { include: ['app', 'lib', 'proxy.ts'], exclude: ['lib/testing'] };
+  for (const file of ['app/manifest.ts', 'lib/jobs/actions.ts', 'proxy.ts'])
+    expect(plan([file], { stylesheet: scan }).components, file).toEqual(EVERYTHING.components);
+  for (const file of ['lib/testing/runner/heavy-slot.ts', 'scripts/check-docs.ts', 'proxy.tsx'])
+    expect(plan([file], { stylesheet: scan }).components, file).toEqual([]);
+  expect(plan(['scripts/check-docs.ts'], { stylesheet: undefined }).components).toEqual(
+    EVERYTHING.components,
+  );
+  expect(plan(['docs/README.md'], { stylesheet: undefined }).components).toEqual([]);
+});
+
+test("the stylesheet's scan roots are its @source paths from app/, less its plain negated ones", () => {
+  expect(
+    stylesheetScanRoots(
+      "@import 'tailwindcss' source(none);\n@source '.';\n@source '../lib';\n@source not '../lib/testing';\n@source not '../**/*.test.ts';",
+    ),
+  ).toEqual({ include: ['app', 'lib'], exclude: ['lib/testing'] });
+  // Automatic detection scans what it finds, so nothing narrows it.
+  expect(stylesheetScanRoots("@import 'tailwindcss';\n@source '../lib';")).toBeUndefined();
+  const real = stylesheetScanRoots(
+    readFileSync(resolve(import.meta.dir, '../../../app/globals.css'), 'utf8'),
+  );
+  expect(real?.include).toEqual(expect.arrayContaining(['app', 'components', 'lib']));
 });
 
 test('a component area runs for its own spec and what only that spec imports, and for no other file', () => {

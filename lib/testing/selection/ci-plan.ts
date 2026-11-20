@@ -49,24 +49,62 @@ const RUNNER_ENTRY_POINTS = [
 ];
 const RUNNER_FOLDER = /^lib\/testing\/(runner|selection|local-stack)\//;
 
-/**
- * The runner entry points and the runner, selection and local-stack modules
- * they import, directly or through other modules. A module only a spec, a static check or a unit test imports
- * selects its own groups instead. An import the graph cannot resolve takes
- * every module of those folders.
- */
-export function runnerModules(graph: ReadonlyMap<string, readonly string[]>): string[] {
+/** Every module `entries` import, directly or through other modules; an unresolved import takes every module of the runner folders. */
+function reachedFrom(graph: ReadonlyMap<string, readonly string[]>, entries: readonly string[]): Set<string> {
   const reached = new Set<string>();
-  const pending = [...RUNNER_ENTRY_POINTS];
-  while (pending.length) {
-    const file = pending.pop();
-    if (file === undefined || reached.has(file)) continue;
+  const pending = [...entries];
+  for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
+    if (reached.has(file)) continue;
     reached.add(file);
     if (file === UNKNOWN_IMPORT_DEPENDENCY)
       pending.push(...[...graph.keys()].filter((candidate) => RUNNER_FOLDER.test(candidate)));
     else pending.push(...(graph.get(file) ?? []));
   }
-  return [...reached].filter((file) => RUNNER_ENTRY_POINTS.includes(file) || RUNNER_FOLDER.test(file));
+  return reached;
+}
+
+/**
+ * The runner entry points, the scripts CI runs (`scriptsCiRuns`), and the runner, selection and
+ * local-stack modules they import, directly or through other modules. The plan also counts the
+ * evidence modules the planner imports: they build the import graph that decides what a run leaves
+ * out. A module
+ * only a spec, a static check or a unit test imports selects its own groups instead.
+ */
+export function runnerModules(
+  graph: ReadonlyMap<string, readonly string[]>,
+  ciScripts: readonly string[],
+): string[] {
+  const entries = [...RUNNER_ENTRY_POINTS, ...ciScripts];
+  const runner = [...reachedFrom(graph, entries)].filter(
+    (file) => entries.includes(file) || RUNNER_FOLDER.test(file),
+  );
+  const planner = [...reachedFrom(graph, ['scripts/ci-plan.ts'])].filter((file) =>
+    file.startsWith('lib/testing/evidence/'),
+  );
+  return [...new Set([...runner, ...planner])];
+}
+
+/**
+ * The repository scripts CI's workflow and actions run: each `scripts/<name>.ts` they name, and the
+ * scripts a `bun run <name>` reaches through package scripts, chains included. A change to one
+ * changes how CI sets up or runs, so it counts as a tooling input.
+ */
+export function scriptsCiRuns(
+  sources: readonly string[],
+  packageScripts: Readonly<Record<string, string>>,
+): string[] {
+  const scripts = new Set<string>();
+  const seen = new Set<string>();
+  const read = (text: string): void => {
+    for (const match of text.matchAll(/(?<![\w./-])scripts\/[\w./-]+\.ts\b/g)) scripts.add(match[0]);
+    for (const [, name] of text.matchAll(/\bbun run ([\w:-]+)/g)) {
+      if (name === undefined || seen.has(name) || !Object.hasOwn(packageScripts, name)) continue;
+      seen.add(name);
+      read(packageScripts[name] ?? '');
+    }
+  };
+  for (const source of sources) read(source);
+  return [...scripts].sort();
 }
 
 /**
@@ -122,9 +160,9 @@ const VISUAL_GROUP = /^audit:visual(:|$)/;
  */
 export const TARGET_SHARD_SECONDS = 15 * 60;
 /**
- * A full selection fills this many shards: the visual ones and the others, each with about 13 to
- * 20 min of tests (werk-flow/werkflow-planning#505). Fewer would take the slowest shard past the
- * Browser job's 45 min timeout.
+ * A selection never takes more shards than this. A full one fills them: the visual ones and the
+ * others, each with about 13 to 20 min of tests (werk-flow/werkflow-planning#505). Fewer would take
+ * the slowest shard past the Browser job's 45 min timeout.
  */
 export const MAX_SHARDS = 8;
 /** The component areas of a full set split into at most this many jobs of about this many seconds each. */
@@ -259,15 +297,25 @@ function shardCount(
 
 /**
  * The visual groups in shards of their own, then the other groups, each packed into as few shards
- * as hold `TARGET_SHARD_SECONDS` each, the other groups within the job budget and never fewer than one.
+ * as hold `TARGET_SHARD_SECONDS` each, all within `MAX_SHARDS`.
  */
 function shardsOf(groupIds: readonly string[], durations: GroupDurations): CiShard[] {
   const seconds = secondsOf(durations);
   const visual = groupIds.filter((id) => VISUAL_GROUP.test(id));
   const rest = groupIds.filter((id) => !VISUAL_GROUP.test(id));
-  const visualCount = visual.length ? shardCount(visual, seconds, TARGET_SHARD_SECONDS) : 0;
+  // Each pool keeps a shard while it has a group, never more shards than groups, and both stay within the budget.
+  const visualCount = visual.length
+    ? Math.min(
+        visual.length,
+        MAX_SHARDS - (rest.length ? 1 : 0),
+        shardCount(visual, seconds, TARGET_SHARD_SECONDS),
+      )
+    : 0;
   const restCount = rest.length
-    ? Math.max(1, Math.min(MAX_SHARDS - visualCount, shardCount(rest, seconds, TARGET_SHARD_SECONDS)))
+    ? Math.max(
+        1,
+        Math.min(rest.length, MAX_SHARDS - visualCount, shardCount(rest, seconds, TARGET_SHARD_SECONDS)),
+      )
     : 0;
   return numbered([...pack(visual, visualCount, seconds), ...pack(rest, restCount, seconds)]);
 }
@@ -276,7 +324,11 @@ function shardsOf(groupIds: readonly string[], durations: GroupDurations): CiSha
 export function componentShards(groupIds: readonly string[], durations: GroupDurations): CiShard[] {
   if (!groupIds.length) return [];
   const seconds = secondsOf(durations);
-  const count = Math.min(COMPONENT_SHARDS, shardCount(groupIds, seconds, COMPONENT_SHARD_SECONDS));
+  const count = Math.min(
+    COMPONENT_SHARDS,
+    groupIds.length,
+    shardCount(groupIds, seconds, COMPONENT_SHARD_SECONDS),
+  );
   return numbered(pack(groupIds, count, seconds));
 }
 

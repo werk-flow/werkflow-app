@@ -107,7 +107,7 @@ export function expandGroupAliases(ids: readonly string[], groups: readonly Test
   return [
     ...new Set(
       ids.flatMap((id) => {
-        const kind = GROUP_ALIASES[id];
+        const kind = Object.hasOwn(GROUP_ALIASES, id) ? GROUP_ALIASES[id] : undefined;
         return kind ? groups.filter((group) => group.kind === kind).map((group) => group.id) : [id];
       }),
     ),
