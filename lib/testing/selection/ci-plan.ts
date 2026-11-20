@@ -88,10 +88,13 @@ export function runnerModules(
 /** The job bodies every CI workflow job calls (scripts/ci/job.ts); they name the scripts a job runs. */
 export const CI_JOB_BODIES = ['scripts/ci/job.ts', 'scripts/ci/run.ts'];
 
+/** The root package's scripts `bun install` runs. */
+const INSTALL_LIFECYCLE = ['preinstall', 'install', 'postinstall', 'prepare'];
+
 /**
  * The repository scripts CI's workflow, actions and job bodies run: each `scripts/<name>.ts` they
- * name, and the scripts a package script reaches (`bun run <name>`, or a job body's
- * `['run', '<name>']`), chains included. A change to one changes how CI sets up or runs, so it
+ * name, and the scripts a package script reaches (`bun run <name>`, a job body's
+ * `['run', '<name>']`, or `bun install`'s lifecycle scripts), chains included. A change to one changes how CI sets up or runs, so it
  * counts as a tooling input.
  */
 export function scriptsCiRuns(
@@ -100,13 +103,15 @@ export function scriptsCiRuns(
 ): string[] {
   const scripts = new Set<string>();
   const seen = new Set<string>();
+  const readScript = (name: string | undefined): void => {
+    if (name === undefined || seen.has(name) || !Object.hasOwn(packageScripts, name)) return;
+    seen.add(name);
+    read(packageScripts[name] ?? '');
+  };
   const read = (text: string): void => {
     for (const match of text.matchAll(/(?<![\w./-])scripts\/[\w./-]+\.ts\b/g)) scripts.add(match[0]);
-    for (const [, name] of text.matchAll(/(?:\bbun run |\['run', ')([\w:-]+)/g)) {
-      if (name === undefined || seen.has(name) || !Object.hasOwn(packageScripts, name)) continue;
-      seen.add(name);
-      read(packageScripts[name] ?? '');
-    }
+    for (const [, name] of text.matchAll(/(?:\bbun run |\['run', ')([\w:-]+)/g)) readScript(name);
+    if (/\bbun install\b/.test(text)) for (const name of INSTALL_LIFECYCLE) readScript(name);
   };
   for (const source of sources) read(source);
   return [...scripts].sort();

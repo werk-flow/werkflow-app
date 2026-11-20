@@ -71,6 +71,27 @@ export function jobShards(job: CiJob, plan: RunPlan): CiShard[] | undefined {
   return undefined;
 }
 
+/**
+ * The shards of the planner output `key`. Their numbers are unique and they hold each group once:
+ * exactly the `selected` groups when the planner lists them.
+ */
+function checkedShards(
+  outputs: Readonly<Record<string, string>>,
+  key: string,
+  selected?: string[],
+): CiShard[] {
+  const shards = parseShards(outputs[key], key);
+  if (new Set(shards.map((entry) => entry.shard)).size !== shards.length)
+    throw new Error(`The plan output \`${key}\` repeats a shard number.`);
+  const held = shards.flatMap((entry) => groupList(entry.groups));
+  if (
+    new Set(held).size !== held.length ||
+    (selected && held.toSorted().join() !== selected.toSorted().join())
+  )
+    throw new Error(`The plan output \`${key}\` does not hold each selected group exactly once.`);
+  return shards;
+}
+
 /** The planner outputs every plan needs; an empty selection is an empty value, never a missing key. */
 const PLANNER_OUTPUTS = [
   'browser',
@@ -87,6 +108,13 @@ const PLANNER_OUTPUTS = [
   'selected_components',
   'component_shards',
 ];
+
+/**
+ * The planner keys `outputs` lacks. A missing key would read as an empty selection and drop its
+ * gates, so Plan refuses such a planner answer, and every later job such a plan.
+ */
+export const missingPlannerOutputs = (outputs: Readonly<Record<string, string>>): string[] =>
+  PLANNER_OUTPUTS.filter((key) => outputs[key] === undefined);
 
 /** The jobs between Plan and Check. */
 const WORK_JOBS = CI_JOBS.filter((job) => job !== 'plan' && job !== 'check');
@@ -127,15 +155,20 @@ export function planRun(input: {
 }): RunPlan {
   if (input.event === 'main' && input.passedTree) return reusedTreePlan(input.passedTree);
   const outputs = input.outputs ?? {};
-  const missing = PLANNER_OUTPUTS.filter((key) => outputs[key] === undefined);
+  const missing = missingPlannerOutputs(outputs);
   if (missing.length) throw new Error(`The planner gave no ${missing.join(', ')}, so nothing is planned.`);
-  /** The receipt that stands for the job, when the DAG lets it be reused. */
-  const reusedBy = (job: CiJob, shardGroups?: string): string | undefined =>
+  const browserShards = checkedShards(outputs, 'shards');
+  if ((outputs.browser === 'true') !== browserShards.length > 0)
+    throw new Error('The plan output `browser` contradicts its `shards`.');
+  const componentShards = checkedShards(outputs, 'component_shards', groupList(outputs.selected_components));
+  /** The receipt that stands for the job or shard, when the DAG lets it be reused. */
+  const reusedBy = (job: CiJob, shard?: CiShard): string | undefined =>
     CI_DAG[job].reusable
       ? input.reused({
           job,
+          shard: shard?.shard ?? null,
           tree: input.tree,
-          groups: plannedGroups(job, outputs, shardGroups),
+          groups: plannedGroups(job, outputs, shard?.groups),
           listGrowthApproved: input.listGrowthApproved,
         })
       : undefined;
@@ -143,7 +176,7 @@ export function planRun(input: {
   /** The planned shards that no passed result stands for, and why the job skips when none is left. */
   const shardsToRun = (job: CiJob, planned: CiShard[], none: string): CiShard[] => {
     const reused = planned.flatMap((shard) => {
-      const receipt = reusedBy(job, shard.groups);
+      const receipt = reusedBy(job, shard);
       return receipt ? [{ shard, receipt }] : [];
     });
     const left = planned.filter((shard) => !reused.some((entry) => entry.shard === shard));
@@ -155,15 +188,15 @@ export function planRun(input: {
   };
   const runsBrowser = CI_DAG.browser.events.includes(input.event);
   const shards = runsBrowser
-    ? shardsToRun('browser', parseShards(outputs.shards), 'The plan selects no browser group.')
+    ? shardsToRun('browser', browserShards, 'The plan selects no browser group.')
     : [];
   if (!runsBrowser) skips.browser = PR_BROWSER_SKIP;
   const midnightUntil = shards.length ? (outputs.midnight_until ?? '') : '';
   if (!runsBrowser) skips.midnight = PR_BROWSER_SKIP;
   else if (!midnightUntil) skips.midnight = 'No browser shard waits for the midnight start window.';
-  const componentShards = shardsToRun(
+  const componentsToRun = shardsToRun(
     'components',
-    parseShards(outputs.component_shards, 'component_shards'),
+    componentShards,
     'The plan selects no component area: no change reaches a contract, its bundle or a stylesheet (lib/testing/selection/fast-tier.ts).',
   );
   if (!groupList(outputs.selected_sql).length)
@@ -182,7 +215,7 @@ export function planRun(input: {
       ...outputs,
       browser: shards.length ? 'true' : 'false',
       shards: JSON.stringify(shards),
-      component_shards: JSON.stringify(componentShards),
+      component_shards: JSON.stringify(componentsToRun),
       midnight_until: midnightUntil,
     },
   };

@@ -119,6 +119,7 @@ test('a reused job and a reused shard do not run; the key carries the steps and 
   expect(run.shards).toEqual(SHARDS.slice(0, 1));
   expect(keys).toContainEqual({
     job: 'sql',
+    shard: null,
     tree: TREE,
     groups: ['sql:grants', 'sql:history', 'step:types', 'step:seed'],
     listGrowthApproved: false,
@@ -126,11 +127,14 @@ test('a reused job and a reused shard do not run; the key carries the steps and 
   expect(run.outputs.component_shards).toBe(JSON.stringify(COMPONENT_SHARDS.slice(1)));
   expect(keys).toContainEqual({
     job: 'components',
+    shard: 2,
     tree: TREE,
     groups: ['ui:contracts:reports', 'ui:contracts:shell'],
     listGrowthApproved: false,
   });
   expect(keys.some((key) => key.job === 'fast')).toBe(false);
+  // A shard's key carries its number, so a receipt of shard 2 never stands for shard 1.
+  expect(keys.filter((key) => key.job === 'browser').map((key) => key.shard)).toEqual([1, 2]);
 });
 
 test('every shard reused skips the browser job and its midnight hold', () => {
@@ -157,6 +161,45 @@ test('a planner answer without a required key plans nothing, so no gate goes mis
   ] as const) {
     const partial = Object.fromEntries(Object.entries(OUTPUTS).filter(([name]) => name !== key));
     expect(() => plan('integration', { outputs: partial })).toThrow(`The planner gave no ${key}`);
+  }
+});
+
+test('shards that do not hold each selected group exactly once, under unique numbers, plan nothing', () => {
+  const broken: [string, Record<string, string>][] = [
+    ['selected components without a shard', { component_shards: '[]' }],
+    ['a selected component in no shard', { component_shards: JSON.stringify(COMPONENT_SHARDS.slice(0, 1)) }],
+    [
+      'a component group in two shards',
+      {
+        component_shards: JSON.stringify([...COMPONENT_SHARDS, { shard: 3, groups: 'ui:contracts:work' }]),
+      },
+    ],
+    [
+      'a component shard number twice',
+      { component_shards: JSON.stringify(COMPONENT_SHARDS.map((entry) => ({ ...entry, shard: 1 }))) },
+    ],
+    ['a component shard of no selected group', { selected_components: 'ui:contracts:work' }],
+    ['a browser selection without a shard', { shards: '[]' }],
+    ['browser shards without a browser selection', { browser: 'false' }],
+    [
+      'a browser group in two shards',
+      { shards: JSON.stringify([...SHARDS, { shard: 3, groups: 'golden:p1-01' }]) },
+    ],
+    [
+      'a browser shard number twice',
+      { shards: JSON.stringify(SHARDS.map((entry) => ({ ...entry, shard: 2 }))) },
+    ],
+  ];
+  // Checked before reuse: a shard that every receipt stands for still has to hold its groups.
+  const reusedAll = (): string => 'https://ci.example/runs/6';
+  for (const [name, changed] of broken) {
+    let refused = false;
+    try {
+      plan('pr', { outputs: { ...OUTPUTS, ...changed }, reused: reusedAll });
+    } catch {
+      refused = true;
+    }
+    expect([name, refused]).toEqual([name, true]);
   }
 });
 

@@ -8,6 +8,8 @@ import type { CiResult, Ledger } from './results';
 /** What a result must share with the new run to stand for it. */
 export type ReuseKey = {
   job: CiJob;
+  /** A browser or component shard's number, otherwise null. */
+  shard: number | null;
   tree: string;
   /** The group ids the job runs; their order does not count. */
   groups: readonly string[];
@@ -75,6 +77,7 @@ export function reusableReceipt(ledger: Ledger, key: ReuseKey, event: CiEvent): 
     ledger,
     (receipt) =>
       receipt.job === key.job &&
+      receipt.shard === key.shard &&
       receipt.tree === key.tree &&
       receipt.listGrowthApproved === key.listGrowthApproved &&
       sameGroups(

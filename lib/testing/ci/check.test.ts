@@ -30,6 +30,22 @@ function result(job: CiJob, overrides: Partial<CiResult> = {}): CiResult {
   };
 }
 
+/** Every planner key a stored plan must hold, each with an empty selection. */
+const EMPTY_OUTPUTS = {
+  browser: 'false',
+  full: 'false',
+  full_reason: '',
+  shards: '[]',
+  midnight_until: '',
+  static: '',
+  sql: '',
+  selected_lint: '',
+  selected_static: '',
+  selected_unit: '',
+  selected_sql: '',
+  selected_components: '',
+  component_shards: '[]',
+};
 const RUN_PLAN: RunPlan = {
   jobs: ['plan', 'fast', 'sql', 'components', 'browser', 'check'],
   skips: { midnight: 'No browser shard waits for the midnight start window.' },
@@ -38,10 +54,13 @@ const RUN_PLAN: RunPlan = {
     { shard: 2, groups: 'audit:lab:calendar' },
   ],
   outputs: {
+    ...EMPTY_OUTPUTS,
+    browser: 'true',
     selected_lint: 'static:lint',
     selected_static: 'static:typecheck',
     selected_unit: 'unit:all',
     selected_sql: 'sql:grants',
+    selected_components: 'ui:contracts:work,ui:contracts:reports',
     component_shards: JSON.stringify([
       { shard: 1, groups: 'ui:contracts:work' },
       { shard: 2, groups: 'ui:contracts:reports' },
@@ -198,7 +217,7 @@ test('a push whose tree already passed checks only its plan, and says which run 
         (['fast', 'sql', 'components', 'midnight', 'browser'] as const).map((job) => [job, 'Tree passed.']),
       ),
       shards: [],
-      outputs: {},
+      outputs: EMPTY_OUTPUTS,
     },
   });
   const verdict = checkRun({
@@ -304,6 +323,18 @@ test('a job takes a plan only of its own run and event, completed, passed and wi
     ['a passed plan without completion', { ...ciPlan, completedAt: null }],
     ['a failed plan', { ...ciPlan, status: 'failed' }],
     ['a plan without its decision', { ...ciPlan, plan: undefined }],
+    [
+      'a plan without a selection key, which would read as an empty selection',
+      {
+        ...ciPlan,
+        plan: {
+          ...RUN_PLAN,
+          outputs: Object.fromEntries(
+            Object.entries(RUN_PLAN.outputs).filter(([key]) => key !== 'selected_sql'),
+          ),
+        },
+      },
+    ],
     ['a plan without a producer', { ...ciPlan, producer: null }],
     ['a missing plan', { unreadable: 'plan.json is missing' }],
   ];

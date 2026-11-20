@@ -100,13 +100,16 @@ if (!clean)
 if (ledgerPath && !environment.CI_RUN_URL) throw new Error('A run with CI_LEDGER needs CI_RUN_URL.');
 // One one-time-code secret for the job's build and its test server, unless the runner gives one.
 const otpSecret = environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex');
+// The commit is read once and the tree from it, so a moving HEAD cannot pair one commit's plan with
+// another's test; the final check compares HEAD with this commit.
+const commit = git('rev-parse', 'HEAD');
 const result: CiResult = {
   version: 1,
   job: ci.job,
   shard,
   event: ci.event,
-  tree: git('rev-parse', 'HEAD^{tree}'),
-  commit: git('rev-parse', 'HEAD'),
+  tree: git('rev-parse', `${commit}^{tree}`),
+  commit,
   base: environment.CI_BASE_SHA || null,
   status: 'running',
   groups: [],

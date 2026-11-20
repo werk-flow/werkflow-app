@@ -19,7 +19,7 @@ import {
 const TREE = 'a'.repeat(40);
 const OTHER_TREE = 'b'.repeat(40);
 const GROUPS = ['sql:grants', 'sql:history', 'step:types', 'step:seed'];
-const KEY: ReuseKey = { job: 'sql', tree: TREE, groups: GROUPS, listGrowthApproved: false };
+const KEY: ReuseKey = { job: 'sql', shard: null, tree: TREE, groups: GROUPS, listGrowthApproved: false };
 const RUN_1 = 'https://ci.example/runs/1';
 const RUN_2 = 'https://ci.example/runs/2';
 
@@ -163,6 +163,13 @@ test('per-job reuse ignores the group order, and never serves a full run or anot
     expect(reusableReceipt(ledger, KEY, event)).toBe(RUN_1);
   expect(reusableReceipt(ledger, KEY, 'full')).toBeUndefined();
   expect(reusableReceipt(ledger, { ...KEY, listGrowthApproved: true }, 'integration')).toBeUndefined();
+});
+
+test("a shard's receipt stands only for the same shard number of the same groups", () => {
+  const shard2 = { job: 'components', shard: 2 } as const;
+  const ledger = [jobStart(shard2), jobPass(shard2)];
+  expect(reusableReceipt(ledger, { ...KEY, ...shard2 }, 'integration')).toBe(RUN_1);
+  expect(reusableReceipt(ledger, { ...KEY, ...shard2, shard: 1 }, 'integration')).toBeUndefined();
 });
 
 /** An integration run's Plan start and its other receipts. */

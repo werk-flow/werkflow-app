@@ -90,6 +90,23 @@ appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_rea
   return root;
 }
 
+/** Every planner key a stored plan must hold, each with an empty selection. */
+const EMPTY_OUTPUTS = {
+  browser: 'false',
+  full: 'false',
+  full_reason: '',
+  shards: '[]',
+  midnight_until: '',
+  static: '',
+  sql: '',
+  selected_lint: '',
+  selected_static: '',
+  selected_unit: '',
+  selected_sql: '',
+  selected_components: '',
+  component_shards: '[]',
+};
+
 /** A passed plan of `RUN_URL` for the tree in `root`, whose Fast runs only the migration-order gate and the build. */
 function planOf(root: string, overrides: Partial<CiResult> = {}): CiResult {
   return {
@@ -113,7 +130,7 @@ function planOf(root: string, overrides: Partial<CiResult> = {}): CiResult {
       jobs: ['plan', 'fast', 'check'],
       skips: {},
       shards: [],
-      outputs: { selected_lint: '', selected_static: 'static:migration-order', selected_unit: '' },
+      outputs: { ...EMPTY_OUTPUTS, selected_static: 'static:migration-order' },
     },
     ...overrides,
   };
@@ -207,6 +224,50 @@ test('a job whose checkout changed while it ran, by an edit or a new commit, fai
       expect([change, code, fast]).toMatchObject([change, 1, { status: 'failed', producer: null }]);
       expect(ledgerOf(ledger).at(-1)).toMatchObject({ job: 'fast', status: 'failed', producer: null });
     }
+  });
+});
+
+test('a job whose commit moves right after it reads its tree fails, and its receipt names one commit and its tree', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    const dumps = join(folder, 'dumps');
+    mkdirSync(dumps);
+    // A git on PATH that commits once, right after the job's first read of a tree.
+    const bin = join(folder, 'bin');
+    mkdirSync(bin);
+    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+    writeFileSync(
+      join(bin, 'git'),
+      `#!/bin/sh
+"${realGit}" "$@"
+code=$?
+case "$*" in
+  *rev-parse*'^{tree}'*)
+    if [ ! -e "${join(folder, 'moved')}" ]; then
+      touch "${join(folder, 'moved')}"
+      echo '// moved' >> scripts/ci-plan.ts
+      "${realGit}" -c user.name=ci -c user.email=ci@example.invalid commit --quiet --all --message moved
+    fi
+    ;;
+esac
+exit $code
+`,
+      { mode: 0o755 },
+    );
+    writePlan(root, run);
+    const code = runJob(root, 'fast', {
+      CI_EVENT: 'integration',
+      CI_RESULTS_DIR: run,
+      CI_PRODUCER: 'mac-standin',
+      CI_RUN_URL: RUN_URL,
+      ENV_DUMP_DIR: dumps,
+      PATH: `${bin}:${process.env.PATH}`,
+    });
+    const fast = readResult(join(run, resultFileName('fast', null)));
+    if ('unreadable' in fast) throw new Error(fast.unreadable);
+    expect(git(root, 'rev-parse', `${fast.commit}^{tree}`)).toBe(fast.tree);
+    expect([code, fast.status, fast.producer]).toEqual([1, 'failed', null]);
   });
 });
 
@@ -306,7 +367,7 @@ test("off GitHub, Check fails without a scheduler report when this run's Plan is
     const rerun = join(folder, 'rerun');
     const reason = 'The integration run https://ci.example/runs/1 passed this exact tree.';
     const skips = { fast: reason, sql: reason, components: reason, midnight: reason, browser: reason };
-    writePlan(root, rerun, { plan: { jobs: ['plan', 'check'], skips, shards: [], outputs: {} } });
+    writePlan(root, rerun, { plan: { jobs: ['plan', 'check'], skips, shards: [], outputs: EMPTY_OUTPUTS } });
     // The earlier attempt's plan alone passes Check, so only the rerun's failed Plan can fail it.
     expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(0);
     expect(runJob(root, 'plan', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);

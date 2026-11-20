@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { CI_JOBS, type CiEvent } from './dag';
 import type { CiResult, CiShard, RunPlan } from './results';
-import { jobShards, plannedGroups } from './run-plan';
+import { jobShards, missingPlannerOutputs, plannedGroups } from './run-plan';
 
 /** Each job's state as the scheduler reports it: ci.yml's `toJSON(needs)`. */
 const schedulerSchema = z.partialRecord(
@@ -40,6 +40,8 @@ export function runPlanOf(
     };
   if (run.producer !== null && plan.producer === null)
     return { problem: 'it ran outside CI or on a checkout that differs from its commit' };
+  const missing = missingPlannerOutputs(plan.plan.outputs);
+  if (missing.length) return { problem: `the plan holds no ${missing.join(', ')}` };
   return { result: plan, plan: plan.plan };
 }
 

@@ -218,6 +218,14 @@ test('the scripts CI runs are those its workflow and actions name, directly or t
     ),
   ).toEqual(['scripts/lint.ts', 'scripts/switch-env.ts', 'scripts/verify.ts']);
   expect(scriptsCiRuns(["[process.execPath, ['run', 'lint']]"], scripts)).toEqual(['scripts/lint.ts']);
+  // `bun install` runs the install lifecycle scripts, and every script they reach.
+  expect(
+    scriptsCiRuns(['run: bun install --frozen-lockfile'], {
+      ...scripts,
+      preinstall: 'bun scripts/pre.ts',
+      postinstall: 'bun scripts/post.ts && bun run check',
+    }),
+  ).toEqual(['scripts/lint.ts', 'scripts/post.ts', 'scripts/pre.ts', 'scripts/switch-env.ts']);
   // The real workflow's stack setup runs the environment switch through `bun run env:local`.
   const read = (path: string): string => readFileSync(join(repositoryRoot, path), 'utf8');
   const packageScripts = z
@@ -237,6 +245,9 @@ test('the scripts CI runs are those its workflow and actions name, directly or t
   // The SQL job body runs the demo seeder directly and the types check through its package script.
   expect(real).toContain('scripts/seed-demo-data.ts');
   expect(real).toContain('scripts/generate-supabase-types.ts');
+  // The setup action's `bun install` runs the postinstall scripts.
+  expect(real).toContain('scripts/fetch-wholesaler-reader.ts');
+  expect(real).toContain('scripts/stamp-dependencies.ts');
 });
 
 const REGISTRY = 'lib/testing/selection/test-groups.ts';
