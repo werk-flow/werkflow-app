@@ -45,7 +45,8 @@ import { repository, run, step, verify } from './run';
 //   CI_FULL_REASON  plan: why every browser group runs. Required for full.
 //   CI_SHARD        browser: the shard's number in the plan. Required for browser.
 //   CI_PRODUCER     The CI runner's name, recorded in every result. Unset on a workstation, whose
-//                   results are never reused. A checkout that differs from its commit records none.
+//                   results are never reused. A checkout that differs from its commit records none,
+//                   and a job whose checkout changes while it runs fails and records none.
 //   CI_LEDGER       The runner's JSONL ledger of results. plan appends its start, then reads it to
 //                   reuse a passed result, and with CI_PRODUCER set every job appends its
 //                   receipts, a changed checkout's included. When plan cannot append or read it,
@@ -394,6 +395,20 @@ const bodies: Record<CiJob, () => Promise<boolean> | boolean> = {
   browser,
   check,
 };
+/**
+ * Why the checkout no longer holds what the job started on, or undefined: the commit moved, or a
+ * checkout that started clean changed. A result proves only the tree it tested.
+ */
+function checkoutChange(): string | undefined {
+  try {
+    if (git('rev-parse', 'HEAD') !== result.commit) return 'The checkout moved to another commit';
+    if (clean && git('status', '--porcelain') !== '') return 'The checkout changed';
+    return undefined;
+  } catch (error) {
+    return `The checkout could not be read: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
 let passed = false;
 try {
   // A job records its planned key before it runs, in its result and the ledger: an attempt that
@@ -414,6 +429,14 @@ try {
   passed = await bodies[ci.job]();
 } catch (error) {
   console.error(`::error title=${ci.job}::${error instanceof Error ? error.message : String(error)}`);
+}
+// Before a result is published, the checkout must still hold the tree it names. If not, the job
+// fails and its receipt has no producer, so it is never reused but still withdraws an older pass.
+const changed = checkoutChange();
+if (changed) {
+  console.error(`::error title=Checkout::${changed} while the job ran, so its result proves nothing.`);
+  passed = false;
+  result.producer = null;
 }
 result.status = passed ? 'passed' : 'failed';
 result.completedAt = new Date().toISOString();

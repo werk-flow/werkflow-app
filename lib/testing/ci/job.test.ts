@@ -57,8 +57,13 @@ function fixture(folder: string): string {
     symlinkSync(join(repository, link), join(root, link));
   writeFileSync(
     join(root, 'scripts/verify.ts'),
-    `import { writeFileSync } from 'node:fs';
+    `import { execFileSync } from 'node:child_process';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+// CHANGE_CHECKOUT makes the gate change the checkout it tests: an edited input, or a new commit.
+if (process.env.CHANGE_CHECKOUT) appendFileSync('scripts/ci-plan.ts', '// edited\\n');
+if (process.env.CHANGE_CHECKOUT === 'commit')
+  execFileSync('git', ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', 'commit', '--quiet', '--all', '--message', 'moved']);
 const groups = process.argv.includes('--group') ? process.argv[process.argv.indexOf('--group') + 1] : process.argv[2];
 writeFileSync(join(process.env.ENV_DUMP_DIR, groups + '.json'), JSON.stringify(process.env));
 const report = join(process.env.ENV_DUMP_DIR, 'report.json');
@@ -176,6 +181,31 @@ test("Fast's migration gate sees the plan's base and no ledger or producer, and 
       { job: 'fast', status: 'running', producer: 'mac-standin' },
       { job: 'fast', status: 'passed', producer: 'mac-standin' },
     ]);
+  });
+});
+
+test('a job whose checkout changed while it ran, by an edit or a new commit, fails, and its receipt has no producer', () => {
+  inFolder((folder) => {
+    for (const change of ['edit', 'commit']) {
+      const root = fixture(join(folder, change));
+      const run = join(folder, change, 'run');
+      const dumps = join(folder, change, 'dumps');
+      mkdirSync(dumps);
+      const ledger = join(folder, change, 'ledger.jsonl');
+      writePlan(root, run);
+      const code = runJob(root, 'fast', {
+        CI_EVENT: 'integration',
+        CI_RESULTS_DIR: run,
+        CI_PRODUCER: 'mac-standin',
+        CI_LEDGER: ledger,
+        CI_RUN_URL: RUN_URL,
+        ENV_DUMP_DIR: dumps,
+        CHANGE_CHECKOUT: change,
+      });
+      const fast = readResult(join(run, resultFileName('fast', null)));
+      expect([change, code, fast]).toMatchObject([change, 1, { status: 'failed', producer: null }]);
+      expect(ledgerOf(ledger).at(-1)).toMatchObject({ job: 'fast', status: 'failed', producer: null });
+    }
   });
 });
 
