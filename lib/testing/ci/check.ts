@@ -2,8 +2,9 @@
 // passes only with a complete passed result of this tree, and a job it skips only with the plan's
 // reason for the skip.
 import { z } from 'zod';
-import { CI_JOBS } from './dag';
+import { CI_JOBS, type CiEvent } from './dag';
 import type { CiResult } from './results';
+import { plannedGroups } from './run-plan';
 
 /** Each job's state as the scheduler reports it: ci.yml's `toJSON(needs)`. */
 const schedulerSchema = z.partialRecord(
@@ -17,6 +18,8 @@ export function parseScheduler(json: string | undefined): z.infer<typeof schedul
 }
 
 export type CheckInput = {
+  /** The tree and event this Check judges; every result must be of them. */
+  run: { tree: string; event: CiEvent };
   /** The plan's result, or why it cannot be read. */
   plan: CiResult | { unreadable: string };
   /** Every other result the run's jobs wrote, or why one cannot be read. */
@@ -38,13 +41,30 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
     fail(`plan: ${plan.unreadable}`);
     return { passed, lines };
   }
-  if (plan.status !== 'passed' || !plan.plan) {
-    fail(`plan: the plan ${plan.status === 'passed' ? 'holds no run plan' : `is ${plan.status}`}`);
+  const scheduledPlan = input.scheduler?.plan?.result;
+  if (plan.status !== 'passed' || !plan.plan || plan.completedAt === null) {
+    fail(`plan: the plan ${plan.status === 'passed' ? 'is incomplete' : `is ${plan.status}`}`);
     return { passed, lines };
   }
-  const { jobs, skips, shards } = plan.plan;
+  if (scheduledPlan !== undefined && scheduledPlan !== 'success') {
+    fail(`plan: the job ended ${scheduledPlan}`);
+    return { passed, lines };
+  }
+  if (plan.tree !== input.run.tree || plan.event !== input.run.event) {
+    fail(
+      `plan: it is the ${plan.event} plan of tree ${plan.tree}, not this ${input.run.event} run of ${input.run.tree}`,
+    );
+    return { passed, lines };
+  }
+  const { jobs, skips, shards, outputs } = plan.plan;
   for (const entry of input.results) if ('unreadable' in entry) fail(`result: ${entry.unreadable}`);
-  const results = input.results.filter((entry): entry is CiResult => !('unreadable' in entry));
+  const results = input.results.filter(
+    (entry): entry is CiResult =>
+      !('unreadable' in entry) && entry.tree === plan.tree && entry.event === plan.event,
+  );
+  for (const entry of input.results)
+    if (!('unreadable' in entry) && !results.includes(entry))
+      fail(`${entry.job}: a result of another run (${entry.event}, tree ${entry.tree})`);
   for (const job of CI_JOBS.filter((name) => name !== 'plan' && name !== 'check')) {
     const scheduled = input.scheduler?.[job]?.result;
     if (scheduled === 'failure' || scheduled === 'cancelled') fail(`${job}: the job ended ${scheduled}`);
@@ -59,16 +79,18 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
     }
     if (scheduled === 'skipped') fail(`${job}: the plan runs it, but the scheduler skipped it`);
     if (job === 'browser' && !shards.length) fail('browser: the plan runs it without a shard');
-    const expected = job === 'browser' ? shards.map((shard) => shard.shard) : [null];
+    const expected = job === 'browser' ? shards : [null];
     for (const shard of expected) {
-      const label = shard === null ? job : `${job} ${shard}`;
-      const result = own.find((candidate) => candidate.shard === shard);
+      const label = shard === null ? job : `${job} ${shard.shard}`;
+      const result = own.find((candidate) => candidate.shard === (shard?.shard ?? null));
+      const missing = plannedGroups(job, outputs, shard?.groups).filter(
+        (id) => !result?.groups.some((group) => group.id === id && group.outcome === 'passed'),
+      );
       if (!result) fail(`${label}: no result`);
-      else if (result.tree !== plan.tree)
-        fail(`${label}: the result is of tree ${result.tree}, not ${plan.tree}`);
       else if (result.status === 'running' || result.completedAt === null)
         fail(`${label}: the result is incomplete`);
       else if (result.status !== 'passed') fail(`${label}: failed`);
+      else if (missing.length) fail(`${label}: no passed result for ${missing.join(', ')}`);
       else lines.push(`${label}: passed`);
     }
   }

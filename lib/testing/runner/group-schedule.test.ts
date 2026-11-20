@@ -5,6 +5,7 @@ import {
   changedTestsFirstBlock,
   ciBrowserHoldUntil,
   CI_BROWSER_JOB_TIMEOUT_MS,
+  CI_FAST_JOB_TIMEOUT_MS,
   CI_MIDNIGHT_HOLD_MAX_MS,
   holdOutsideMidnightWindow,
   MIDNIGHT_START_WINDOW,
@@ -109,8 +110,9 @@ test('a CI run that starts inside the window holds until it closes, so no group 
   }
 });
 
-test('a CI run holds from one Browser job timeout before the window, for at most the longest hold', () => {
-  const opening = SUMMER_MIDNIGHT - MIDNIGHT_START_WINDOW.leadMs - CI_BROWSER_JOB_TIMEOUT_MS;
+test('a CI run holds from one Fast and one Browser job timeout before the window, for at most the longest hold', () => {
+  const opening =
+    SUMMER_MIDNIGHT - MIDNIGHT_START_WINDOW.leadMs - CI_FAST_JOB_TIMEOUT_MS - CI_BROWSER_JOB_TIMEOUT_MS;
   const closes = SUMMER_MIDNIGHT + MIDNIGHT_START_WINDOW.trailMs;
   expect(ciBrowserHoldUntil(new Date(opening - 1))).toBeUndefined();
   expect(ciBrowserHoldUntil(new Date(opening))?.getTime()).toBe(closes);
@@ -119,14 +121,15 @@ test('a CI run holds from one Browser job timeout before the window, for at most
   expect(ciBrowserHoldUntil(new Date(closes))).toBeUndefined();
 });
 
-test('a Browser job that starts unheld never reaches a group inside the window before its timeout', () => {
+test("a Browser job of an unheld plan never reaches a group inside the window, even after Fast's whole timeout", () => {
   // Every minute of the days around both daylight-saving changes.
   for (const firstDay of ['2026-03-27T00:00:00Z', '2026-10-23T00:00:00Z']) {
     const first = Date.parse(firstDay);
     for (let start = first; start < first + 4 * 24 * 60 * MINUTE_MS; start += MINUTE_MS) {
       if (ciBrowserHoldUntil(new Date(start))) continue;
       // The job's last instant counts: a group that reaches the window then would be blocked.
-      for (const elapsed of [0, CI_BROWSER_JOB_TIMEOUT_MS / 3, CI_BROWSER_JOB_TIMEOUT_MS - 1])
+      const latest = CI_FAST_JOB_TIMEOUT_MS + CI_BROWSER_JOB_TIMEOUT_MS - 1;
+      for (const elapsed of [0, CI_BROWSER_JOB_TIMEOUT_MS / 3, latest])
         expect(midnightStartWaitMs(new Date(start + elapsed))).toBe(0);
     }
   }
@@ -137,6 +140,7 @@ test('ci.yml keeps the timeouts the hold is built on', () => {
   const timeoutOf = (job: string): number =>
     Number(new RegExp(`\\n  ${job}:\\n(?:    .*\\n|\\n)*?    timeout-minutes: (\\d+)`).exec(workflow)?.[1]);
   expect(timeoutOf('browser') * MINUTE_MS).toBe(CI_BROWSER_JOB_TIMEOUT_MS);
+  expect(timeoutOf('fast') * MINUTE_MS).toBe(CI_FAST_JOB_TIMEOUT_MS);
   expect(timeoutOf('midnight') * MINUTE_MS).toBeGreaterThan(CI_MIDNIGHT_HOLD_MAX_MS);
 });
 
@@ -147,8 +151,8 @@ test('a midnight proof holds for the asked minutes and never on a branch that sh
   expect(proof('7').getTime()).toBe(now.getTime() + 7 * MINUTE_MS);
   for (const ref of ['main', 'production'])
     expect(() => proof('7', ref)).toThrow(`A midnight proof run never runs on ${ref}.`);
-  for (const minutes of ['0', '-1', '1.5', 'soon', '76'])
-    expect(() => proof(minutes)).toThrow('A midnight proof holds 1 to 75 minutes.');
+  for (const minutes of ['0', '-1', '1.5', 'soon', '106'])
+    expect(() => proof(minutes)).toThrow('A midnight proof holds 1 to 105 minutes.');
 });
 
 test('independent groups overlap within two slots; freshness and database gates remain exclusive', async () => {

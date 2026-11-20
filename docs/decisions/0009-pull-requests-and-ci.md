@@ -202,3 +202,5 @@ GitHub Actions has been blocked for the organization since 2026-11-14, and a sta
 2. **D4.** Feature PRs keep their place in the stand-in's queue, and the PRs of the CI hill climb follow. Those PRs group their work into as few reviewable PRs as possible, because each PR that touches a CI file costs about two hours of full run on the Mac. For that epic this overrides one problem per PR.
 
 With D1, a push to `main` whose tree a passed integration run tested runs no job, and its `Check` cites that run; this extends item 3 of the amendment "a merge queue". A CI runner's passed SQL, component or browser-shard result also stands for the same job on a byte-identical tree. `lib/testing/ci/dag.ts` holds the jobs, and `scripts/ci/job.ts` runs each job's body on any runner. [testing.md](../technical/testing.md#ci) owns the rules.
+
+A browser shard now starts after the Fast job, whose 30-minute timeout the midnight hold adds to its lead, so the longest hold grows from about 75 to 105 minutes. When GitHub's merge queue returns, its check timeout from the amendment "a merge queue" needs about 165 minutes instead of 150.

@@ -90,16 +90,29 @@ test("a push's tree counts as passed only by the newest integration Check of tha
   expect(passedTreeInLedger([check({ completedAt: null })], TREE)).toBeUndefined();
 });
 
-test('the Actions adapter names the newest green queue run of the tree, or nothing (real jq)', () => {
-  const runs = JSON.stringify({
-    workflow_runs: [
-      { html_url: 'https://github.com/o/r/actions/runs/3', head_commit: { tree_id: OTHER_TREE } },
-      { html_url: 'https://github.com/o/r/actions/runs/2', head_commit: { tree_id: TREE } },
-      { html_url: 'https://github.com/o/r/actions/runs/1', head_commit: { tree_id: TREE } },
-    ],
+test('the Actions adapter takes the newest completed queue run of the tree, and only when it passed (real jq)', () => {
+  const run = (id: number, tree: string, conclusion: string) => ({
+    html_url: `https://github.com/o/r/actions/runs/${id}`,
+    head_commit: { tree_id: tree },
+    conclusion,
   });
-  const jq = (tree: string) =>
-    spawnSync('jq', ['-r', passedTreeActionsFilter(tree)], { input: runs, encoding: 'utf8' }).stdout.trim();
-  expect(jq(TREE)).toBe('https://github.com/o/r/actions/runs/2');
-  expect(jq('d'.repeat(40))).toBe('');
+  const jq = (runs: object[], tree = TREE) =>
+    spawnSync('jq', ['-r', passedTreeActionsFilter(tree)], {
+      input: JSON.stringify({ workflow_runs: runs }),
+      encoding: 'utf8',
+    }).stdout.trim();
+  expect(jq([run(3, OTHER_TREE, 'failure'), run(2, TREE, 'success'), run(1, TREE, 'success')])).toBe(
+    'https://github.com/o/r/actions/runs/2',
+  );
+  expect(jq([run(2, TREE, 'failure'), run(1, TREE, 'success')])).toBe('');
+  expect(jq([run(1, TREE, 'success')], 'd'.repeat(40))).toBe('');
+});
+
+test('a newer attempt that recorded its key but never finished withdraws an earlier pass', () => {
+  const started = receipt({
+    status: 'running',
+    completedAt: null,
+    groups: GROUPS.map((id) => ({ id, outcome: 'not-run', durationMs: 0 })),
+  });
+  expect(reusableReceipt([receipt(), started], KEY, 'integration')).toBeUndefined();
 });

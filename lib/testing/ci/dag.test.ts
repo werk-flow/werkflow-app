@@ -69,5 +69,5 @@ test('a browser shard waits for the build by its need on Fast, never by polling 
 test("a browser shard runs the plan's groups untimed, one worker", () => {
   const job = readFileSync(resolve(import.meta.dir, '../../../scripts/ci/job.ts'), 'utf8');
   const browser = job.slice(job.indexOf('async function browser('), job.indexOf('function check('));
-  expect(browser).toContain("verify(groups, ['--jobs', '1', '--untimed'])");
+  expect(browser).toContain("verify(verificationGroups(), ['--jobs', '1', '--untimed'])");
 });

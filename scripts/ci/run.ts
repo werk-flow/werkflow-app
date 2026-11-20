@@ -57,11 +57,13 @@ const REPORT_LINE = /^\[verify\] (?:passed|failed) in [\d.]+ min \(.*\): (\S+rep
  * Runs `groups` through scripts/verify.ts, the engine of every local run, and returns each group's
  * outcome from its report. `--fresh`: a CI job never takes a proof from an earlier run on the same
  * machine; only the reuse that scripts/ci/job.ts plan decides stands for a run. A group the report
- * does not list did not run. A failed exit beside a passed report adds a failed `step:verify`.
+ * does not list did not run. `exited` is false for a failed exit, even beside a passed report.
  */
-export async function verify(groups: readonly string[], flags: readonly string[]): Promise<GroupOutcome[]> {
-  if (!groups.length) return [];
-  const started = Date.now();
+export async function verify(
+  groups: readonly string[],
+  flags: readonly string[],
+): Promise<{ groups: GroupOutcome[]; exited: boolean }> {
+  if (!groups.length) return { groups: [], exited: true };
   const { code, output } = await run(process.execPath, [
     'scripts/verify.ts',
     'run',
@@ -80,7 +82,5 @@ export async function verify(groups: readonly string[], flags: readonly string[]
     const result = results.findLast((candidate) => candidate.groupId === id);
     return { id, outcome: result?.status ?? 'not-run', durationMs: result?.durationMs ?? 0 };
   });
-  if (code !== 0 && outcomes.every((group) => group.outcome === 'passed'))
-    outcomes.push({ id: 'step:verify', outcome: 'failed', durationMs: Date.now() - started });
-  return outcomes;
+  return { groups: outcomes, exited: code === 0 };
 }

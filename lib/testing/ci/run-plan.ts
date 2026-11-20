@@ -7,29 +7,41 @@ const PR_BROWSER_SKIP =
   "A pull request's run is the fast tier. Its browser groups run once, in the integration run (owner decision D1, werk-flow/werkflow-planning#503).";
 
 /** A planner output read as a group list; empty when the key is missing or empty. */
-export const groupList = (value: string | undefined): string[] => (value ? value.split(',') : []);
+const groupList = (value: string | undefined): string[] => (value ? value.split(',') : []);
 
 /**
- * The steps a job runs beside its verification groups, recorded in its result as groups too, so a
- * reused result covers them as well.
+ * The groups a job's result holds, in its order: the verification groups, then the steps it runs
+ * beside them (`step:` ids), so a reused result covers both and `Check` can require every one.
+ * A browser shard's groups come from its plan entry. Plan, midnight and check hold none.
  */
-const JOB_STEPS = {
-  fast: ['step:build'],
-  sql: ['step:types', 'step:seed'],
-  components: [],
-  browser: ['step:server'],
-} as const;
-
-/** The verification groups of a job that runs a fixed list; the planner may add `components`. */
-export function verifyGroups(job: 'sql' | 'components', outputs: Readonly<Record<string, string>>): string[] {
-  return job === 'sql' ? groupList(outputs.sql) : groupList(outputs.components ?? 'ui:contracts');
+export function plannedGroups(
+  job: CiJob,
+  outputs: Readonly<Record<string, string>>,
+  shardGroups?: string,
+): string[] {
+  switch (job) {
+    case 'fast':
+      return [
+        ...groupList(outputs.lint ?? 'static:lint'),
+        ...groupList(outputs.static),
+        ...groupList(outputs.unit ?? 'unit:all'),
+        'step:build',
+      ];
+    case 'sql':
+      return [...groupList(outputs.sql), 'step:types', 'step:seed'];
+    case 'components':
+      return groupList(outputs.components ?? 'ui:contracts');
+    case 'browser':
+      return [...groupList(shardGroups), 'step:server'];
+    case 'plan':
+    case 'midnight':
+    case 'check':
+      return [];
+  }
 }
 
-/** What a job's result lists as its groups: its verification groups, then its steps. */
-const recordedGroups = (job: keyof typeof JOB_STEPS, groups: readonly string[]): string[] => [
-  ...groups,
-  ...JOB_STEPS[job],
-];
+/** A recorded step beside the verification groups, such as `step:build`. */
+export const isStep = (id: string): boolean => id.startsWith('step:');
 
 function parseShards(value: string | undefined): CiShard[] {
   const parsed: unknown = JSON.parse(value ?? '[]');
@@ -75,28 +87,33 @@ export function planRun(input: {
     };
   }
   const outputs = input.outputs ?? {};
-  const keyOf = (job: 'sql' | 'components' | 'browser', groups: readonly string[]): ReuseKey => ({
-    job,
-    tree: input.tree,
-    groups: recordedGroups(job, groups),
-    listGrowthApproved: input.listGrowthApproved,
-  });
+  /** The receipt that stands for the job, when the DAG lets it be reused. */
+  const reusedBy = (job: CiJob, shardGroups?: string): string | undefined =>
+    CI_DAG[job].reusable
+      ? input.reused({
+          job,
+          tree: input.tree,
+          groups: plannedGroups(job, outputs, shardGroups),
+          listGrowthApproved: input.listGrowthApproved,
+        })
+      : undefined;
   const skips: Partial<Record<CiJob, string>> = {};
   const runsBrowser = CI_DAG.browser.events.includes(input.event);
   const planned = runsBrowser ? parseShards(outputs.shards) : [];
   const reusedShards = planned.flatMap((shard) => {
-    const receipt = input.reused(keyOf('browser', groupList(shard.groups)));
+    const receipt = reusedBy('browser', shard.groups);
     return receipt ? [`shard ${shard.shard} by ${receipt}`] : [];
   });
-  const shards = planned.filter((shard) => !input.reused(keyOf('browser', groupList(shard.groups))));
+  const shards = planned.filter((shard) => !reusedBy('browser', shard.groups));
   if (!runsBrowser) skips.browser = PR_BROWSER_SKIP;
   else if (!planned.length) skips.browser = 'The plan selects no browser group.';
   else if (!shards.length) skips.browser = `Every shard reused a passed result: ${reusedShards.join(', ')}.`;
   const midnightUntil = shards.length ? (outputs.midnight_until ?? '') : '';
   if (!runsBrowser) skips.midnight = PR_BROWSER_SKIP;
   else if (!midnightUntil) skips.midnight = 'No browser shard waits for the midnight start window.';
-  for (const job of ['sql', 'components'] as const) {
-    const receipt = input.reused(keyOf(job, verifyGroups(job, outputs)));
+  for (const job of others) {
+    if (skips[job] || job === 'browser') continue;
+    const receipt = reusedBy(job);
     if (receipt) skips[job] = `Reused the passed result ${receipt} of this tree, group list and approval.`;
   }
   return {

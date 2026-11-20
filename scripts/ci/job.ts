@@ -25,7 +25,7 @@ import {
   passedTreeInLedger,
   reusableReceipt,
 } from '../../lib/testing/ci/reuse';
-import { groupList, planRun, verifyGroups } from '../../lib/testing/ci/run-plan';
+import { isStep, plannedGroups, planRun } from '../../lib/testing/ci/run-plan';
 import { workspaceAppOrigin } from '../../lib/testing/runner/app-port';
 import { repository, run, step, verify } from './run';
 
@@ -92,7 +92,7 @@ const resultPath = join(ci.directory, resultFileName(ci.job, shard));
 const writeResult = (): void => writeFileSync(resultPath, `${JSON.stringify(result, null, 2)}\n`);
 writeResult();
 const everyGroupPassed = (): boolean =>
-  result.groups.length > 0 && result.groups.every((group) => group.outcome === 'passed');
+  !verifyExitFailed && result.groups.length > 0 && result.groups.every((group) => group.outcome === 'passed');
 
 /** This run's plan; every job after plan runs by it. */
 function runPlan(): RunPlan {
@@ -176,42 +176,60 @@ async function plan(): Promise<boolean> {
   return true;
 }
 
+/** A verify.ts run that exited with a failure, even beside a passed report, fails the job. */
+let verifyExitFailed = false;
+
+/** Records outcomes over the planned groups. An outcome the plan did not list fails the job. */
+function record(outcomes: readonly CiResult['groups'][number][]): void {
+  for (const outcome of outcomes) {
+    const index = result.groups.findIndex((group) => group.id === outcome.id);
+    if (index === -1) throw new Error(`${outcome.id} ran, but the plan does not hold it.`);
+    result.groups[index] = outcome;
+  }
+}
+
+/** Records a verify.ts run: its groups, and its exit. */
+function recordVerify(verified: Awaited<ReturnType<typeof verify>>): void {
+  verifyExitFailed ||= !verified.exited;
+  record(verified.groups);
+}
+
+/** The planned verification groups of this job, without its steps. */
+const verificationGroups = (): string[] => result.groups.map((group) => group.id).filter((id) => !isStep(id));
+
+/** The commands of the one production build, which a browser shard serves. */
+const buildCommands = [
+  // The stack's URL and keys are the CLI's fixed defaults, recorded in .env.local-stack-backup.
+  [process.execPath, ['run', 'env:local']],
+  // The app reads its one-time-code secret from the environment, as on a shard (local-stack action).
+  [
+    process.execPath,
+    ['run', 'build'],
+    { EMAIL_OTP_HASH_SECRET: environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex') },
+  ],
+] as const;
+
 async function fast(): Promise<boolean> {
-  const { outputs } = runPlan();
   // Lint, the static gates and Unit overlap (verify.ts --jobs). The build follows, so the type check
   // and the linter read the checkout without the build's generated types, as they always did.
-  result.groups = await verify(
-    [
-      ...groupList(outputs.lint ?? 'static:lint'),
-      ...groupList(outputs.static),
-      ...groupList(outputs.unit ?? 'unit:all'),
-    ],
-    ['--jobs', '4'],
-  );
+  recordVerify(await verify(verificationGroups(), ['--jobs', '4']));
   const tar = environment.CI_BUILD_TAR;
-  result.groups.push(
+  record([
     await step('step:build', [
-      // The stack's URL and keys are the CLI's fixed defaults, recorded in .env.local-stack-backup.
-      [process.execPath, ['run', 'env:local']],
-      // The app reads its one-time-code secret from the environment, as on a shard (local-stack action).
-      [
-        process.execPath,
-        ['run', 'build'],
-        { EMAIL_OTP_HASH_SECRET: environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex') },
-      ],
+      ...buildCommands,
       // A tar keeps the symbolic links Next writes under .next/node_modules. The cache stays here.
       ...(tar ? [['tar', ['--create', '--file', tar, '--exclude=.next/cache', '.next']] as const] : []),
     ]),
-  );
+  ]);
   return everyGroupPassed();
 }
 
 async function sql(): Promise<boolean> {
-  result.groups = await verify(verifyGroups('sql', runPlan().outputs), []);
+  recordVerify(await verify(verificationGroups(), []));
   // The committed types match every committed migration (docs/technical/environments.md, "The
   // migration rule"), checked after a failed SQL group too. The registry variable stays on this
   // command: the build identity fingerprints every SUPABASE_ variable the test runner sees.
-  result.groups.push(
+  record([
     await step('step:types', [
       [
         process.execPath,
@@ -219,20 +237,17 @@ async function sql(): Promise<boolean> {
         { SUPABASE_INTERNAL_IMAGE_REGISTRY: 'ghcr.io' },
       ],
     ]),
-  );
+  ]);
   // The owner's demo seeder seeds both companies on the stack with every committed migration; the
   // second run starts with the reset (docs/technical/environments.md, "Work on production").
   const seed = [process.execPath, ['scripts/seed-demo-data.ts', '--target', 'local']] as const;
-  result.groups.push(
-    everyGroupPassed()
-      ? await step('step:seed', [seed, seed])
-      : { id: 'step:seed', outcome: 'not-run', durationMs: 0 },
-  );
+  if (result.groups.every((group) => group.id === 'step:seed' || group.outcome === 'passed'))
+    record([await step('step:seed', [seed, seed])]);
   return everyGroupPassed();
 }
 
 async function components(): Promise<boolean> {
-  result.groups = await verify(verifyGroups('components', runPlan().outputs), []);
+  recordVerify(await verify(verificationGroups(), []));
   return everyGroupPassed();
 }
 
@@ -277,30 +292,24 @@ async function startTestServer(log: string): Promise<{ ready: boolean; stop: () 
 }
 
 async function browser(): Promise<boolean> {
-  const own = runPlan().shards.find((entry) => entry.shard === shard);
-  if (!own) throw new Error(`The plan holds no browser shard ${shard}.`);
-  const groups = groupList(own.groups);
   const started = Date.now();
-  const unpacked =
-    !environment.CI_BUILD_TAR ||
-    (await run('tar', ['--extract', '--file', environment.CI_BUILD_TAR])).code === 0;
+  // A shard serves Fast's build when the runner hands it over in the same workspace path, which the
+  // build receipt and the site origin bind. Without it, the shard builds in its own checkout.
+  const tar = environment.CI_BUILD_TAR;
+  const built = tar
+    ? (await run('tar', ['--extract', '--file', tar])).code === 0
+    : (await step('step:server', buildCommands)).outcome === 'passed';
   mkdirSync(join(repository, '.agent-logs'), { recursive: true });
   // The server's output stays with the failure evidence under .agent-logs/.
-  const server = unpacked
-    ? await startTestServer(join(repository, '.agent-logs/test-server.log'))
-    : undefined;
+  const server = built ? await startTestServer(join(repository, '.agent-logs/test-server.log')) : undefined;
   try {
-    const serverStep = {
-      id: 'step:server',
-      outcome: server?.ready ? 'passed' : 'failed',
-      durationMs: Date.now() - started,
-    } as const;
+    record([
+      { id: 'step:server', outcome: server?.ready ? 'passed' : 'failed', durationMs: Date.now() - started },
+    ]);
     // One worker: the stack, the server and a second browser outran a shared runner's four cores.
     // Untimed: a shared runner's load makes wall clock noise, so a wall-clock group of a full run
     // proves its steps and judges no timing. No other group's verdict changes.
-    result.groups = server?.ready
-      ? [...(await verify(groups, ['--jobs', '1', '--untimed'])), serverStep]
-      : [...groups.map((id) => ({ id, outcome: 'not-run' as const, durationMs: 0 })), serverStep];
+    if (server?.ready) recordVerify(await verify(verificationGroups(), ['--jobs', '1', '--untimed']));
   } finally {
     server?.stop();
   }
@@ -311,6 +320,7 @@ function check(): boolean {
   const own = new Set([resultFileName('plan', null), resultFileName('check', null)]);
   const plan = readResult(join(ci.directory, resultFileName('plan', null)));
   const verdict = checkRun({
+    run: { tree: result.tree, event: ci.event },
     plan,
     results: readdirSync(ci.directory)
       .filter((file) => file.endsWith('.json') && !own.has(file))
@@ -334,8 +344,27 @@ const bodies: Record<CiJob, () => Promise<boolean> | boolean> = {
   browser,
   check,
 };
+const appendToLedger = (): void => {
+  if (environment.CI_LEDGER && result.producer)
+    appendFileSync(environment.CI_LEDGER, `${JSON.stringify(result)}\n`);
+};
 let passed = false;
 try {
+  // A job records its planned key before it runs, in its result and the ledger: an attempt that
+  // fails or dies before it reports a group still withdraws an earlier pass of the same key.
+  if (ci.job !== 'plan' && ci.job !== 'check') {
+    const plan = runPlan();
+    const shardGroups = plan.shards.find((entry) => entry.shard === shard)?.groups;
+    if (ci.job === 'browser' && shardGroups === undefined)
+      throw new Error(`The plan holds no browser shard ${shard}.`);
+    result.groups = plannedGroups(ci.job, plan.outputs, shardGroups).map((id) => ({
+      id,
+      outcome: 'not-run',
+      durationMs: 0,
+    }));
+    writeResult();
+    appendToLedger();
+  }
   passed = await bodies[ci.job]();
 } catch (error) {
   console.error(`::error title=${ci.job}::${error instanceof Error ? error.message : String(error)}`);
@@ -343,7 +372,6 @@ try {
 result.status = passed ? 'passed' : 'failed';
 result.completedAt = new Date().toISOString();
 writeResult();
-if (environment.CI_LEDGER && result.producer)
-  appendFileSync(environment.CI_LEDGER, `${JSON.stringify(result)}\n`);
+appendToLedger();
 console.info(`[ci] ${ci.job}${shard === null ? '' : ` ${shard}`}: ${result.status}`);
 process.exitCode = passed ? 0 : 1;
