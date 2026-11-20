@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import type { LiveClockState } from '@/lib/time-tracking/types';
@@ -36,11 +37,14 @@ const envelopeSchema = z.object({
   capturedAt: z.string(),
   sentAt: z.string(),
   organizationId: z.string(),
-  payload: z.object({
-    action: z.string(),
-    expectedSessionId: z.string().nullable(),
-    expectedVersion: z.number().nullable(),
-  }),
+  // Every other payload field is kept too: a resend must carry the whole first envelope.
+  payload: z
+    .object({
+      action: z.string(),
+      expectedSessionId: z.string().nullable(),
+      expectedVersion: z.number().nullable(),
+    })
+    .loose(),
 });
 export type Envelope = z.infer<typeof envelopeSchema>;
 export type Verdict = {
@@ -100,6 +104,19 @@ export async function mountClock(
       ? route.fulfill({ status: 500, json: { success: false, error: 'unavailable' } })
       : route.fulfill({ json: { success: true, state: server.state } }),
   );
+  // The ledger records an operation once (decision record 0010): a resend of an accepted one answers its
+  // first state, and the same id with another envelope is an idempotency conflict.
+  const accepted = new Map<string, { envelope: Envelope; verdict: Verdict }>();
+  const answerOnce = (envelope: Envelope): Verdict & { operationId: string } => {
+    const { operationId } = envelope;
+    const first = accepted.get(operationId);
+    if (first && !isDeepStrictEqual(withoutSentAt(envelope), withoutSentAt(first.envelope)))
+      return { outcome: 'rejected', code: 'idempotency_conflict', operationId };
+    if (first) return { ...first.verdict, outcome: 'replayed', code: 'replayed', operationId };
+    const verdict = server.verdict;
+    if (verdict.outcome === 'accepted') accepted.set(operationId, { envelope, verdict });
+    return { ...verdict, operationId };
+  };
   await page.route('**/api/field-sync/v1/operations', async (route) => {
     // Without network a send never arrives, whatever the page believes about its connection.
     if (!server.online) {
@@ -112,12 +129,7 @@ export async function mountClock(
     server.authorization.push(route.request().headers()['authorization'] ?? '');
     await route.fulfill({
       status: server.status,
-      json: {
-        results: body.operations.map((operation) => ({
-          operationId: operation.operationId,
-          ...server.verdict,
-        })),
-      },
+      json: { results: body.operations.map(answerOnce) },
     });
   });
   await page.goto('http://localhost/ui-contracts');
@@ -252,4 +264,20 @@ export function holdDeviceStore(): void {
 
 export function withoutSentAt(envelope: Envelope | undefined): Envelope | undefined {
   return envelope && { ...envelope, sentAt: '' };
+}
+
+/**
+ * What the server recorded: each operation id once, as it first arrived. A send in flight when
+ * `online` fires is ended and sent again (decision record 0010, "the network's return ends a send
+ * that hangs"); one that had reached the server arrives twice and is recorded once. A second
+ * arrival must be the same envelope.
+ */
+export function recorded(server: Server): Envelope[] {
+  const first = new Map<string, Envelope>();
+  for (const envelope of server.sent) {
+    const earlier = first.get(envelope.operationId);
+    if (earlier) expect(withoutSentAt(envelope)).toEqual(withoutSentAt(earlier));
+    else first.set(envelope.operationId, envelope);
+  }
+  return [...first.values()];
 }
