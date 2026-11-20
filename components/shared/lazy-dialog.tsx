@@ -19,6 +19,8 @@ export type LazyDialog<P extends DialogOpenProps> = {
   Dialog: (props: P) => ReactNode;
   /** True while an open dialog waits for its download. */
   useWaiting: (open: boolean) => boolean;
+  /** True once the module arrived, so an open dialog shows its form. */
+  useLoaded: () => boolean;
 };
 
 // Only the latest open of any lazy dialog waits for its download: an open from another row,
@@ -123,7 +125,12 @@ export function lazyDialog<P extends DialogOpenProps>(load: () => Promise<Compon
     return open && current.status === 'loading';
   }
 
+  function useLoaded(): boolean {
+    return useLoadState().status === 'loaded';
+  }
+
   return {
+    useLoaded,
     preload: () => {
       // eslint-disable-next-line no-restricted-syntax -- an intent download that fails costs nothing yet: the open that needs the dialog retries it and reports the failure
       start().catch(() => undefined);

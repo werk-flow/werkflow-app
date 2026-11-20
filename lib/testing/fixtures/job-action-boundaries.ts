@@ -41,6 +41,7 @@ const jobRow = (id: string, organizationId: string, jobNumber: string): Record<s
   planned_working_minutes: null,
   actual_completion_date: null,
   location: null,
+  source_number: null,
   created_by: CALLER_ID,
   created_at: now,
   updated_at: now,
@@ -89,6 +90,7 @@ const world = installActionWorld({
     },
     {
       ...jobRow(assignedJobId, ORGANIZATION_A, 'A-2026-001'),
+      source_number: 'ALT-4711',
       client_id: clientId,
       site_id: siteId,
       contact_id: contactId,
@@ -201,12 +203,20 @@ assert.deepEqual(await actions.createJob({ title: 'Neuer Auftrag' }), notAuthori
 assert.deepEqual(await actions.updateJob(assignedJobId, { title: 'Übernommen' }), notAuthorized);
 assert.deepEqual(await actions.updateJobAssignments(assignedJobId, [CALLER_ID]), notAuthorized);
 assert.deepEqual(await actions.deleteJob(assignedJobId), notAuthorized);
+// The number in the previous system is office data a field worker reads but never writes.
+assert.deepEqual(await actions.createJob({ title: 'Neuer Auftrag', sourceNumber: 'ALT-1' }), notAuthorized);
+assert.deepEqual(await actions.updateJob(assignedJobId, { sourceNumber: 'ALT-1' }), notAuthorized);
 assert.equal(world.adminClientRequests, 0);
 
 // A field worker reads a job only when it is assigned to them, never another organization's.
 const assignedDetails = await actions.getJobDetails(assignedJobId);
 assert.ok(assignedDetails.success);
 assert.equal(assignedDetails.job.id, assignedJobId);
+assert.equal(
+  assignedDetails.job.sourceNumber,
+  'ALT-4711',
+  'a field worker reads the old number of an own job',
+);
 assert.deepEqual(
   assignedDetails.job.assignments.map((entry) => entry.userId),
   [CALLER_ID, colleagueId],
@@ -297,6 +307,7 @@ assert.deepEqual(ownClientJob.billingParties?.versions[0]?.auftraggeber, {
 assert.deepEqual(await actions.getJobDetails(foreignJobId), jobNotFound);
 assert.deepEqual(await actions.getJobByNumber('A-2026-900'), jobNotFound);
 assert.deepEqual(await actions.updateJob(foreignJobId, { title: 'Übernommen' }), jobNotFound);
+assert.deepEqual(await actions.updateJob(foreignJobId, { sourceNumber: 'ALT-1' }), jobNotFound);
 assert.deepEqual(await actions.updateJobAssignments(foreignJobId, [CALLER_ID]), jobNotFound);
 signInAs(world, 'admin');
 assert.deepEqual(await actions.deleteJob(foreignJobId), jobNotFound);

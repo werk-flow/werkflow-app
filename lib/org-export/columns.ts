@@ -48,7 +48,10 @@ type ExcludedTable =
   | 'werkflow_billing_signals'
   // WerkFlow's own delivery state of its billing mails and alarms; the
   // Admin sees the mails on the billing page.
-  | 'werkflow_billing_mails';
+  | 'werkflow_billing_mails'
+  // WerkFlow's own invoices to the organization: WerkFlow's books, which the
+  // Admin downloads on the billing page (werk-flow/werkflow-planning#252).
+  | 'werkflow_invoices';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
@@ -136,6 +139,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   maintenance_plan_revisions: 'Wartungspläne_Fassungen',
   maintenance_plans: 'Wartungspläne',
   maintenance_service_case_links: 'Wartungen_Servicefälle',
+  maintenance_visit_findings: 'Wartungen_Befunde',
   offer_events: 'Angebote_Verlauf',
   offers: 'Angebote',
   organization_capabilities: 'Organisation_Qualifikationen',

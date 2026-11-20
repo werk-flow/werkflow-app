@@ -17,7 +17,7 @@ import type { WorkLifecycleDialogState, WorkTransitionInput } from './work-lifec
 import { ReasonDialog } from './work-lifecycle-reason-dialog';
 import { WorkTransitionDialog } from './work-lifecycle-transition-dialog';
 
-type WorkLifecycleCardDialogsProps = {
+export type WorkLifecycleCardDialogsProps = {
   dialog: WorkLifecycleDialogState | null;
   setDialog: (dialog: WorkLifecycleDialogState | null) => void;
   /** The confirmed snapshot with the optimistic execution state applied. */

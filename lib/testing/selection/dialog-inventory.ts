@@ -466,7 +466,10 @@ export const DIALOG_INVENTORY = {
       audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.coverage-follow-up' }],
     },
   'components/service/maintenance-due-action-dialog.tsx#MaintenanceDueActionDialog|Fälligkeit bearbeiten': {
-    audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.due-action' }],
+    audits: [
+      { route: '/service/wartung', role: 'admin', opener: 'service.due-action' },
+      { route: '/service/wartung', role: 'admin', opener: 'service.due-completion' },
+    ],
   },
   'components/service/maintenance-plan-action-dialog.tsx#MaintenancePlanActionDialog|{title}': {
     audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.plan-action' }],
