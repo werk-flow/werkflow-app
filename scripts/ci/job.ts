@@ -14,12 +14,14 @@ import { type CiRun, checkRun, parseScheduler, runPlanOf } from '../../lib/testi
 import { CI_EVENTS, CI_JOBS, type CiJob } from '../../lib/testing/ci/dag';
 import {
   type CiResult,
+  type Ledger,
   readLedger,
   readResult,
   resultFileName,
   type RunPlan,
 } from '../../lib/testing/ci/results';
 import {
+  ledgerAfterStart,
   passedTreeActionsFilter,
   passedTreeActionsQuery,
   passedTreeInLedger,
@@ -44,12 +46,16 @@ import { repository, run, step, verify } from './run';
 //   CI_SHARD        browser: the shard's number in the plan. Required for browser.
 //   CI_PRODUCER     The CI runner's name, recorded in every result. Unset on a workstation, whose
 //                   results are never reused. A checkout that differs from its commit records none.
-//   CI_LEDGER       The runner's JSONL ledger of results. plan reads it to reuse a passed result,
-//                   and with CI_PRODUCER set every job appends its receipts, a changed
-//                   checkout's included. Optional. Keep it outside the checkout, where the job's
-//                   code cannot write.
+//   CI_LEDGER       The runner's JSONL ledger of results. plan appends its start, then reads it to
+//                   reuse a passed result, and with CI_PRODUCER set every job appends its
+//                   receipts, a changed checkout's included. When plan cannot append or read it,
+//                   plan warns and plans the full work of its event. Optional. Set it only when
+//                   the file lives outside every job's checkout and the job's processes cannot
+//                   write it (another user, or outside the job's container); without that
+//                   guarantee leave it unset, and every run executes in full.
 //   No child process sees CI_LEDGER or CI_PRODUCER: only this script appends a receipt, after its
-//   child exited, so code under test cannot forge one.
+//   child exited. That hides the ledger's name only; the file's permissions keep code under test
+//   from forging a receipt.
 //   CI_RUN_URL      The run's identity and address: check takes only results of this run, and a
 //                   later reuse cites it. The same for every job and rerun of one run. Required
 //                   with CI_LEDGER.
@@ -165,14 +171,31 @@ function passedTreeOnActions(): string | undefined {
   return undefined;
 }
 
-/** The ledger as Plan found it, before its own start; a changed checkout reads none. */
-const ledger = ci.job === 'plan' && ledgerPath && clean ? readLedger(ledgerPath) : [];
+// A CI runner appends every receipt. One from a changed checkout has no producer, so it is never
+// reused, but it still withdraws an older pass of its key or tree.
+const appendToLedger = (): void => {
+  if (ledgerPath && producer) appendFileSync(ledgerPath, `${JSON.stringify(result)}\n`);
+};
+
+/**
+ * The ledger Plan decides by. Plan appends its start before it reads, so a later attempt of the tree
+ * that is still planning, died while planning or planned in a changed checkout withdraws an earlier
+ * pass, and so does any other run's start appended meanwhile. A changed checkout reads none.
+ */
+function planLedger(): Ledger {
+  if (!ledgerPath || !producer) return [];
+  return ledgerAfterStart({ ...result }, appendToLedger, () =>
+    clean ? readLedger(ledgerPath) : { unreadable: 'The checkout differs from its commit' },
+  );
+}
 
 async function plan(): Promise<boolean> {
+  // The ledger only saves work: when it fails, Plan plans the full work of its event and reuses nothing.
+  const ledger = planLedger();
   if ('unreadable' in ledger)
     console.info(`::warning title=Ledger::${ledger.unreadable}, so no result is reused.`);
   const passedTree =
-    ci.event === 'main' && clean
+    ci.event === 'main' && clean && !('unreadable' in ledger)
       ? (passedTreeInLedger(ledger, result.tree) ?? passedTreeOnActions())
       : undefined;
   const planned = planRun({
@@ -371,15 +394,7 @@ const bodies: Record<CiJob, () => Promise<boolean> | boolean> = {
   browser,
   check,
 };
-// A CI runner appends every receipt. One from a changed checkout has no producer, so it is never
-// reused, but it still withdraws an older pass of its key or tree.
-const appendToLedger = (): void => {
-  if (ledgerPath && producer) appendFileSync(ledgerPath, `${JSON.stringify(result)}\n`);
-};
 let passed = false;
-// Plan records its attempt before it plans: a later integration attempt that is still planning,
-// died while planning or planned in a changed checkout withdraws an earlier passed tree.
-if (ci.job === 'plan') appendToLedger();
 try {
   // A job records its planned key before it runs, in its result and the ledger: an attempt that
   // fails or dies before it reports a group still withdraws an earlier pass of the same key.
@@ -403,6 +418,14 @@ try {
 result.status = passed ? 'passed' : 'failed';
 result.completedAt = new Date().toISOString();
 writeResult();
-appendToLedger();
+try {
+  appendToLedger();
+} catch (error) {
+  // Plan's end decides no reuse, so a ledger that rejects it never fails the run.
+  if (ci.job !== 'plan') throw error;
+  console.info(
+    `::warning title=Ledger::Plan's end could not be appended: ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
 console.info(`[ci] ${ci.job}${shard === null ? '' : ` ${shard}`}: ${result.status}`);
 process.exitCode = passed ? 0 : 1;

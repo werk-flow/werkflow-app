@@ -46,7 +46,8 @@ const ciResultSchema = z.object({
   listGrowthApproved: z.boolean(),
   /** The CI runner that produced the result, or null on a workstation, whose results never count. */
   producer: z.string().min(1).nullable(),
-  runUrl: z.string().nullable(),
+  /** The run's identity (CI_RUN_URL); a receipt that names no run is invalid. */
+  runUrl: z.string().min(1).nullable(),
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().nullable(),
   plan: runPlanSchema.optional(),
@@ -72,6 +73,9 @@ export function readResult(path: string): CiResult | { unreadable: string } {
     };
   }
 }
+
+/** The runner's ledger as `readLedger` returns it. */
+export type Ledger = readonly CiResult[] | { unreadable: string };
 
 /**
  * Every receipt of the ledger, oldest first, or why none can count. One unreadable line makes the

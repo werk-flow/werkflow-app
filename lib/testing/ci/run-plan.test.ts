@@ -80,6 +80,8 @@ test('a push to main whose tree an integration run passed runs no job and cites 
   ]);
   for (const job of ['fast', 'sql', 'components', 'midnight', 'browser'] as const)
     expect(pushed.skips[job]).toBe('The integration run https://ci.example/runs/7 passed this exact tree.');
+  // An empty run URL names no run: the push runs its jobs.
+  expect(plan('main', { passedTree: '' }).jobs).toContain('fast');
   // Only a push reuses a whole run: a queue run of the same tree still runs.
   expect(plan('integration', { passedTree: 'https://ci.example/runs/7' }).jobs).toContain('browser');
 });

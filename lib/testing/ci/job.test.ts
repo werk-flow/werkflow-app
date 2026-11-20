@@ -46,7 +46,7 @@ const git = (root: string, ...args: string[]): string =>
 /**
  * A clean repository with this checkout's job.ts and run.ts and its lib, whose verify.ts is a fake
  * gate: it writes the environment it sees to $ENV_DUMP_DIR/<group list>.json and passes every group.
- * The build's package scripts call it too.
+ * The build's package scripts call it too. Its ci-plan.ts selects only the migration-order gate.
  */
 function fixture(folder: string): string {
   const root = join(folder, 'repository');
@@ -67,6 +67,12 @@ console.info('[verify] passed in 0.1 min (fake): ' + report);
 `,
   );
   writeFileSync(
+    join(root, 'scripts/ci-plan.ts'),
+    `import { appendFileSync } from 'node:fs';
+appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=\\n');
+`,
+  );
+  writeFileSync(
     join(root, 'package.json'),
     JSON.stringify({
       scripts: { 'env:local': 'bun scripts/verify.ts env-local', build: 'bun scripts/verify.ts build' },
@@ -79,8 +85,8 @@ console.info('[verify] passed in 0.1 min (fake): ' + report);
 }
 
 /** A passed plan of `RUN_URL` for the tree in `root`, whose Fast runs only the migration-order gate and the build. */
-function writePlan(root: string, directory: string, overrides: Partial<CiResult> = {}): void {
-  const plan: CiResult = {
+function planOf(root: string, overrides: Partial<CiResult> = {}): CiResult {
+  return {
     version: 1,
     job: 'plan',
     shard: null,
@@ -105,8 +111,11 @@ function writePlan(root: string, directory: string, overrides: Partial<CiResult>
     },
     ...overrides,
   };
+}
+
+function writePlan(root: string, directory: string, overrides: Partial<CiResult> = {}): void {
   mkdirSync(directory, { recursive: true });
-  writeFileSync(join(directory, resultFileName('plan', null)), JSON.stringify(plan));
+  writeFileSync(join(directory, resultFileName('plan', null)), JSON.stringify(planOf(root, overrides)));
 }
 
 const ledgerOf = (path: string): CiResult[] => {
@@ -195,5 +204,82 @@ test('a job refuses a stale same-tree plan of another run, event or a plan witho
     }
     // No gate ran by a refused plan.
     expect(spawnSync('ls', [dumps], { encoding: 'utf8' }).stdout).toBe('');
+  });
+});
+
+test("a push reuses the tree an integration run passed: Plan's own start, appended before it reads, does not withdraw it", () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    const ledger = join(folder, 'ledger.jsonl');
+    const integration = 'https://ci.example/runs/1';
+    const start = planOf(root, {
+      runUrl: integration,
+      status: 'running',
+      completedAt: null,
+      plan: undefined,
+    });
+    const check = { ...start, job: 'check', status: 'passed', completedAt: '2026-11-20T20:30:00.000Z' };
+    writeFileSync(ledger, `${JSON.stringify(start)}\n${JSON.stringify(check)}\n`);
+    const code = runJob(root, 'plan', {
+      CI_EVENT: 'main',
+      CI_BASE_SHA: 'HEAD',
+      CI_RESULTS_DIR: run,
+      CI_PRODUCER: 'mac-standin',
+      CI_LEDGER: ledger,
+      CI_RUN_URL: RUN_URL,
+    });
+    expect(code).toBe(0);
+    const plan = readResult(join(run, resultFileName('plan', null)));
+    expect(plan).toMatchObject({ status: 'passed', reusedFrom: integration });
+    expect('plan' in plan && plan.plan?.jobs).toEqual(['plan', 'check']);
+    expect(ledgerOf(ledger).map(({ job, status, runUrl }) => ({ job, status, runUrl }))).toEqual([
+      { job: 'plan', status: 'running', runUrl: integration },
+      { job: 'check', status: 'passed', runUrl: integration },
+      { job: 'plan', status: 'running', runUrl: RUN_URL },
+      { job: 'plan', status: 'passed', runUrl: RUN_URL },
+    ]);
+  });
+});
+
+test('a ledger that rejects appends and reads leaves Plan passed, with the full work of its event and no reuse', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    // A directory refuses both the append and the read.
+    const ledger = join(folder, 'ledger.jsonl');
+    mkdirSync(ledger);
+    const code = runJob(root, 'plan', {
+      CI_EVENT: 'integration',
+      CI_BASE_SHA: 'HEAD',
+      CI_RESULTS_DIR: run,
+      CI_PRODUCER: 'mac-standin',
+      CI_LEDGER: ledger,
+      CI_RUN_URL: RUN_URL,
+    });
+    expect(code).toBe(0);
+    const plan = readResult(join(run, resultFileName('plan', null)));
+    expect(plan).toMatchObject({ status: 'passed', reusedFrom: null });
+    expect('plan' in plan && plan.plan?.jobs).toEqual(['plan', 'fast', 'sql', 'components', 'check']);
+  });
+});
+
+test("off GitHub, Check fails without a scheduler report when this run's Plan is missing, or failed beside an earlier attempt's passed plan", () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const variables = { CI_EVENT: 'integration', CI_PRODUCER: 'mac-standin', CI_RUN_URL: RUN_URL };
+    const missing = join(folder, 'missing');
+    mkdirSync(missing);
+    expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: missing })).toBe(1);
+    // A rerun of the same run: its Plan fails (no CI_BASE_SHA) over the plan an earlier attempt passed.
+    const rerun = join(folder, 'rerun');
+    const reason = 'The integration run https://ci.example/runs/1 passed this exact tree.';
+    const skips = { fast: reason, sql: reason, components: reason, midnight: reason, browser: reason };
+    writePlan(root, rerun, { plan: { jobs: ['plan', 'check'], skips, shards: [], outputs: {} } });
+    // The earlier attempt's plan alone passes Check, so only the rerun's failed Plan can fail it.
+    expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(0);
+    expect(runJob(root, 'plan', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);
+    expect(readResult(join(rerun, resultFileName('plan', null)))).toMatchObject({ status: 'failed' });
+    expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);
   });
 });

@@ -1,8 +1,9 @@
 // Same-tree reuse (docs/technical/testing.md, "CI"): a CI runner's passed result stands for a new
 // run of the same job on a byte-identical tree. Missing, incomplete or contradicted evidence runs
 // the job.
+import { isDeepStrictEqual } from 'node:util';
 import { type CiEvent, type CiJob, REUSE_EVENTS } from './dag';
-import type { CiResult } from './results';
+import type { CiResult, Ledger } from './results';
 
 /** What a result must share with the new run to stand for it. */
 export type ReuseKey = {
@@ -16,8 +17,25 @@ export type ReuseKey = {
 const sameGroups = (left: readonly string[], right: readonly string[]): boolean =>
   JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
 
-/** The runner's ledger as `readLedger` returns it. */
-type Ledger = readonly CiResult[] | { unreadable: string };
+/**
+ * The ledger Plan decides by. Plan appends its own `start` first and reads after, so a start of
+ * another run appended meanwhile is in the ledger and withdraws a reuse; only Plan's exact start
+ * receipt is left out. A failed append, an unreadable ledger or a ledger without that start is
+ * unreadable, so nothing is reused.
+ */
+export function ledgerAfterStart(start: CiResult, append: () => void, read: () => Ledger): Ledger {
+  try {
+    append();
+  } catch (error) {
+    return {
+      unreadable: `Plan's start could not be appended: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  const ledger = read();
+  if ('unreadable' in ledger) return ledger;
+  const own = ledger.findLastIndex((receipt) => isDeepStrictEqual(receipt, start));
+  return own === -1 ? { unreadable: "the ledger lacks Plan's own start" } : ledger.toSpliced(own, 1);
+}
 
 /**
  * The one reuse rule. Among the ledger's entries that `concern` the work, the newest `start`

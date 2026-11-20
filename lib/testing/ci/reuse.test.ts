@@ -8,7 +8,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CiEvent } from './dag';
 import { type CiResult, readLedger } from './results';
-import { passedTreeActionsFilter, passedTreeInLedger, type ReuseKey, reusableReceipt } from './reuse';
+import {
+  ledgerAfterStart,
+  passedTreeActionsFilter,
+  passedTreeInLedger,
+  type ReuseKey,
+  reusableReceipt,
+} from './reuse';
 
 const TREE = 'a'.repeat(40);
 const OTHER_TREE = 'b'.repeat(40);
@@ -312,7 +318,72 @@ test('an absent ledger is empty; a ledger that cannot be read, or holds one bad 
     const directory = join(folder, 'directory.jsonl');
     mkdirSync(directory);
     expect(readLedger(directory)).toHaveProperty('unreadable');
+    // A receipt with an empty run URL names no run, so it is invalid and the ledger withholds reuse.
+    writeFileSync(
+      ledger,
+      `${JSON.stringify(planStart())}\n${JSON.stringify(checkPass())}\n${JSON.stringify(fastFail({ runUrl: '' }))}\n`,
+    );
+    expect(readLedger(ledger)).toEqual({ unreadable: `${ledger}:3 is no valid receipt` });
+    expect(passedTreeInLedger(readLedger(ledger), TREE)).toBeUndefined();
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
+});
+
+/** Plan's own start in run 2, and a ledger file that holds `before` until Plan appends. */
+function planLedger(before: CiResult[], during: CiResult[] = []) {
+  const own = planStart({ runUrl: RUN_2, startedAt: '2026-11-20T21:00:00.000Z' });
+  const file = [...before];
+  let appended = false;
+  const ledger = ledgerAfterStart(
+    own,
+    () => {
+      file.push(own, ...during);
+      appended = true;
+    },
+    () => {
+      if (!appended) throw new Error('Plan read the ledger before it appended its own start.');
+      return file;
+    },
+  );
+  return { own, ledger };
+}
+
+test("Plan reads the ledger only after its own start, so another run's start appended meanwhile withdraws the reuse", () => {
+  const older = [planStart(), checkPass()];
+  // Only Plan's own start follows the pass: the push reuses it.
+  expect(passedTreeInLedger(planLedger(older).ledger, TREE)).toBe(RUN_1);
+  // Another run's same-tree start lands after Plan's own: it withdraws the pass.
+  const another = planStart({ runUrl: 'https://ci.example/runs/3' });
+  expect(passedTreeInLedger(planLedger(older, [another]).ledger, TREE)).toBeUndefined();
+  // A rerun of Plan's own run is another start, not Plan's exact receipt: it withdraws the pass too.
+  const rerun = planStart({ runUrl: RUN_2, startedAt: '2026-11-20T21:00:01.000Z' });
+  expect(passedTreeInLedger(planLedger(older, [rerun]).ledger, TREE)).toBeUndefined();
+});
+
+test('a ledger Plan cannot append its start to, cannot read, or that lacks its start reuses nothing', () => {
+  const older = [planStart(), checkPass()];
+  const own = planStart({ runUrl: RUN_2 });
+  const rejected = ledgerAfterStart(
+    own,
+    () => {
+      throw new Error('EACCES: permission denied');
+    },
+    () => older,
+  );
+  expect(rejected).toEqual({ unreadable: "Plan's start could not be appended: EACCES: permission denied" });
+  expect(passedTreeInLedger(rejected, TREE)).toBeUndefined();
+  const unreadable = ledgerAfterStart(
+    own,
+    () => {},
+    () => ({ unreadable: 'ledger.jsonl:2 is no JSON' }),
+  );
+  expect(unreadable).toEqual({ unreadable: 'ledger.jsonl:2 is no JSON' });
+  const lost = ledgerAfterStart(
+    own,
+    () => {},
+    () => older,
+  );
+  expect(lost).toEqual({ unreadable: "the ledger lacks Plan's own start" });
+  expect(passedTreeInLedger(lost, TREE)).toBeUndefined();
 });

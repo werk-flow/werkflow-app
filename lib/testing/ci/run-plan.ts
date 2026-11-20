@@ -80,7 +80,7 @@ export function planRun(input: {
   reused: (key: ReuseKey) => string | undefined;
 }): RunPlan {
   const others = CI_JOBS.filter((job) => job !== 'plan' && job !== 'check');
-  if (input.event === 'main' && input.passedTree !== undefined) {
+  if (input.event === 'main' && input.passedTree) {
     const reason = `The integration run ${input.passedTree} passed this exact tree.`;
     return {
       jobs: ['plan', 'check'],
