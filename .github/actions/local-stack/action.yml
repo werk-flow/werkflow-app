@@ -12,6 +12,11 @@ inputs:
       Point .env.local at the stack from the cached stack environment and start
       no stack. A cache miss starts the stack once to record it.
     default: 'false'
+  point-env:
+    description: >-
+      Write .env.local from the stack environment. `false` leaves it to the job, which writes it
+      only for the build (scripts/ci/job.ts fast).
+    default: 'true'
 runs:
   using: composite
   steps:
@@ -146,6 +151,7 @@ runs:
     # The build identity hashes every byte of .env.local, so a random secret there would make each
     # shard's build its own. The app reads this one from the job's environment instead.
     - name: Point .env.local at the stack
+      if: inputs.point-env == 'true'
       shell: bash
       run: |
         otp_secret="$(openssl rand -hex 32)"
