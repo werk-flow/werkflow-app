@@ -12667,6 +12667,59 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_mails: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          failure_code: string | null;
+          id: string;
+          kind: string;
+          organization_id: string | null;
+          provider_message_id: string | null;
+          recipient: string;
+          sent_at: string | null;
+          state: string;
+          stripe_object_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          failure_code?: string | null;
+          id?: string;
+          kind: string;
+          organization_id?: string | null;
+          provider_message_id?: string | null;
+          recipient: string;
+          sent_at?: string | null;
+          state?: string;
+          stripe_object_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          failure_code?: string | null;
+          id?: string;
+          kind?: string;
+          organization_id?: string | null;
+          provider_message_id?: string | null;
+          recipient?: string;
+          sent_at?: string | null;
+          state?: string;
+          stripe_object_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "werkflow_billing_mails_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       werkflow_billing_signals: {
         Row: {
           attempts: number;
@@ -12702,6 +12755,92 @@ export type Database = {
           stripe_event_id?: string;
         };
         Relationships: [];
+      };
+      werkflow_invoices: {
+        Row: {
+          buyer: Json;
+          currency: string;
+          due_cents: number;
+          file_key: string;
+          file_sha256: string;
+          file_size_bytes: number;
+          gross_cents: number;
+          id: string;
+          issue_date: string;
+          issued_at: string;
+          net_cents: number;
+          number: string;
+          organization_id: string;
+          paid_cents: number;
+          payment_means: string;
+          retain_until: string;
+          rules_release: string;
+          storno_of_invoice_id: string | null;
+          stripe_customer_id: string;
+          stripe_event_id: string;
+          stripe_invoice_id: string;
+          tax_cents: number;
+          type_code: string;
+        };
+        Insert: {
+          buyer: Json;
+          currency?: string;
+          due_cents: number;
+          file_key: string;
+          file_sha256: string;
+          file_size_bytes: number;
+          gross_cents: number;
+          id?: string;
+          issue_date: string;
+          issued_at?: string;
+          net_cents: number;
+          number: string;
+          organization_id: string;
+          paid_cents: number;
+          payment_means: string;
+          retain_until?: string;
+          rules_release: string;
+          storno_of_invoice_id?: string | null;
+          stripe_customer_id: string;
+          stripe_event_id: string;
+          stripe_invoice_id: string;
+          tax_cents: number;
+          type_code?: string;
+        };
+        Update: {
+          buyer?: Json;
+          currency?: string;
+          due_cents?: number;
+          file_key?: string;
+          file_sha256?: string;
+          file_size_bytes?: number;
+          gross_cents?: number;
+          id?: string;
+          issue_date?: string;
+          issued_at?: string;
+          net_cents?: number;
+          number?: string;
+          organization_id?: string;
+          paid_cents?: number;
+          payment_means?: string;
+          retain_until?: string;
+          rules_release?: string;
+          storno_of_invoice_id?: string | null;
+          stripe_customer_id?: string;
+          stripe_event_id?: string;
+          stripe_invoice_id?: string;
+          tax_cents?: number;
+          type_code?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "werkflow_invoices_storno_of_invoice_id_fkey";
+            columns: ["storno_of_invoice_id"];
+            isOneToOne: false;
+            referencedRelation: "werkflow_invoices";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       work_artifact_actions: {
         Row: {
@@ -15841,6 +15980,15 @@ export type Database = {
           storage_path: string;
         }[];
       };
+      claim_werkflow_billing_mail: {
+        Args: {
+          p_kind: string;
+          p_organization_id: string;
+          p_recipient: string;
+          p_stripe_object_id: string;
+        };
+        Returns: string;
+      };
       claim_werkflow_billing_signal: {
         Args: {
           p_event_type: string;
@@ -18046,6 +18194,28 @@ export type Database = {
           p_readiness_snapshot?: Json;
           p_recipient_employee_record_ids?: string[];
           p_request_id?: string;
+        };
+        Returns: string;
+      };
+      issue_werkflow_invoice: {
+        Args: {
+          p_buyer: Json;
+          p_due_cents: number;
+          p_file_key: string;
+          p_file_sha256: string;
+          p_file_size_bytes: number;
+          p_gross_cents: number;
+          p_issue_date: string;
+          p_net_cents: number;
+          p_number: string;
+          p_organization_id: string;
+          p_paid_cents: number;
+          p_payment_means: string;
+          p_rules_release: string;
+          p_stripe_customer_id: string;
+          p_stripe_event_id: string;
+          p_stripe_invoice_id: string;
+          p_tax_cents: number;
         };
         Returns: string;
       };
@@ -20736,6 +20906,16 @@ export type Database = {
           p_template_id: string;
         };
         Returns: undefined;
+      };
+      settle_werkflow_billing_mail: {
+        Args: {
+          p_failure_code?: string;
+          p_mail_id: string;
+          p_organization_id: string;
+          p_outcome: string;
+          p_provider_message_id?: string;
+        };
+        Returns: boolean;
       };
       settle_werkflow_billing_signal: {
         Args: {
