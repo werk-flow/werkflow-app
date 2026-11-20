@@ -173,12 +173,14 @@ export function planRun(input: {
         })
       : undefined;
   const skips: Partial<Record<CiJob, string>> = {};
+  const reusedJobs: NonNullable<RunPlan['reused']> = [];
   /** The planned shards that no passed result stands for, and why the job skips when none is left. */
   const shardsToRun = (job: CiJob, planned: CiShard[], none: string): CiShard[] => {
     const reused = planned.flatMap((shard) => {
       const receipt = reusedBy(job, shard);
       return receipt ? [{ shard, receipt }] : [];
     });
+    for (const entry of reused) reusedJobs.push({ job, shard: entry.shard.shard, runUrl: entry.receipt });
     const left = planned.filter((shard) => !reused.some((entry) => entry.shard === shard));
     if (!planned.length) skips[job] = none;
     else if (!left.length)
@@ -205,7 +207,9 @@ export function planRun(input: {
   for (const job of WORK_JOBS) {
     if (skips[job] || job === 'browser' || job === 'components') continue;
     const receipt = reusedBy(job);
-    if (receipt) skips[job] = `Reused the passed result ${receipt} of this tree, group list and approval.`;
+    if (!receipt) continue;
+    skips[job] = `Reused the passed result ${receipt} of this tree, group list and approval.`;
+    reusedJobs.push({ job, shard: null, runUrl: receipt });
   }
   return {
     jobs: CI_JOBS.filter((job) => !skips[job]),
@@ -218,5 +222,6 @@ export function planRun(input: {
       component_shards: JSON.stringify(componentsToRun),
       midnight_until: midnightUntil,
     },
+    reused: reusedJobs,
   };
 }

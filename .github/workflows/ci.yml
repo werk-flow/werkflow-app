@@ -67,6 +67,9 @@ env:
   CI_PRODUCER: github-actions
   CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   MIDNIGHT_PROOF_MINUTES: ${{ inputs.midnight_proof_minutes }}
+  # Measurement only (lib/testing/ci/cost.ts): the PR a run serves, or the queue ref that names it.
+  CI_PRS: ${{ github.event.pull_request.number || github.event.merge_group.head_ref || '' }}
+  CI_RUN_ATTEMPT: ${{ github.run_attempt }}
 
 jobs:
   plan:
