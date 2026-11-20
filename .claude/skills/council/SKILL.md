@@ -58,7 +58,7 @@ SCORE: <n>/10
 C1 [blocker|should|nit] <claim>. Evidence: <...>. Fix: <smallest change>. Gain: <expected effect on the goal>   (stable ids across rounds)
 ```
 
-Tell members the goal, never the pass score.
+Tell members the pass score: their shortest list toward it is what lets the climb converge.
 
 ## 3. Decide what to change
 
