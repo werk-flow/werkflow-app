@@ -30,12 +30,13 @@ export type CiPlan = {
 /**
  * Changes that can alter how every group installs, builds or runs: the
  * dependencies, the build and Playwright configuration, the local stack's
- * configuration, and the CI workflow and its actions. With `runnerModules`
+ * configuration, and the CI workflow, its actions and its job bodies and logic
+ * (scripts/ci/, lib/testing/ci/, without their tests). With `runnerModules`
  * they are the tooling inputs. CI cannot map them to a scope, so a change to
  * one runs everything (fail open).
  */
 const TOOLING_INPUTS =
-  /^(package\.json|bun\.lock|bunfig\.toml|tsconfig\.json|next\.config\.ts|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|\.github\/(workflows\/ci\.yml|actions\/.+))$/;
+  /^(package\.json|bun\.lock|bunfig\.toml|tsconfig\.json|next\.config\.ts|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|\.github\/(workflows\/ci\.yml|actions\/.+)|(scripts|lib\/testing)\/ci\/[a-z-]+\.ts)$/;
 
 /** The scripts that plan, build, serve and run every group. */
 const RUNNER_ENTRY_POINTS = [

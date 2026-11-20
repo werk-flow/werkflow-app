@@ -106,6 +106,16 @@ export function changedTestsFirstBlock(failedFirstTierGroupIds: readonly string[
 }
 
 /**
+ * Whether a group shares the schedule's workers with its neighbours. The static gates and the unit
+ * suite only read the checkout, so they overlap one another: CI's fast job runs them in one
+ * `--jobs` run (scripts/ci/job.ts). A browser group overlaps unless its timing needs the machine
+ * alone. A SQL group and the component contracts run alone.
+ */
+export function overlapsNeighbours(kind: string, exclusive: boolean): boolean {
+  return ['static', 'unit'].includes(kind) || (['audit', 'golden'].includes(kind) && !exclusive);
+}
+
+/**
  * Independent browser groups share only the immutable application build and
  * run side by side on `jobs` workers; a group whose timing or database gate is
  * exclusive waits for the batch to drain and runs alone. With `tier`, every

@@ -193,3 +193,12 @@ Threads now merge in parallel. In the 24 hours before 2026-11-13 14:05 UTC, 40 P
    - `ALLGREEN`: each entry's own run must pass, so a failure names its PR, and no PR lands on a later entry's result.
    - A check timeout of 150 minutes: the longest midnight hold (about 75 minutes), a browser shard's 45-minute timeout and the jobs before it.
 5. Revisit the sizes when the queue regularly waits over an hour (build concurrency 3), or when the weekly `CI queue` check fails (fewer).
+
+## Amendment 2026-11-20: browser groups run once, in the queue
+
+GitHub Actions has been blocked for the organization since 2026-11-14, and a stand-in runner on the owner's Mac runs the jobs of `ci.yml`. The first round of external CI reviews found that a PR's browser groups ran twice, on the ready PR and again in the merge queue, that a draft's `Check` failed by design, and that the job bodies lived only in the workflow, so the stand-in copied them by hand (werk-flow/werkflow-planning#503). The owner decided on 2026-11-20:
+
+1. **D1.** A PR's run, draft or ready, runs only the fast tier: the static gates, Unit, the build, the SQL groups and the component contracts. Its `Check` reports that tier, green or red. Browser groups run once per PR, in the integration run: the queue's run of the PR on top of `main`, or, on a runner without a queue, the PR's run on its up-to-date head. Ready means "enter the queue". Boat `test:verify` of the selected browser groups stays the agent's early warning. This supersedes the amendment "browser groups run last, once a draft is marked ready".
+2. **D4.** Feature PRs keep their place in the stand-in's queue, and the PRs of the CI hill climb follow. Those PRs group their work into as few reviewable PRs as possible, because each PR that touches a CI file costs about two hours of full run on the Mac. For that epic this overrides one problem per PR.
+
+With D1, a push to `main` whose tree a passed integration run tested runs no job, and its `Check` cites that run; this extends item 3 of the amendment "a merge queue". A CI runner's passed SQL, component or browser-shard result also stands for the same job on a byte-identical tree. `lib/testing/ci/dag.ts` holds the jobs, and `scripts/ci/job.ts` runs each job's body on any runner. [testing.md](../technical/testing.md#ci) owns the rules.

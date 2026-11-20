@@ -13,7 +13,9 @@ import { getTestGroups } from '../lib/testing/selection/test-groups';
 // Usage: bun scripts/ci-plan.ts --base <commit> | --full "<reason>"
 // --base is a pull request's base or, for a push to main, the previous main
 // commit. A base git cannot read (a force push, a new branch) plans a full run.
-// It writes `browser`, `shards`, `full` and `midnight_until` to $GITHUB_OUTPUT when set.
+// It writes `browser`, `shards`, `full`, `full_reason` and `midnight_until` to $GITHUB_OUTPUT when set.
+// scripts/ci/job.ts plan runs it and decides which jobs the run executes; with CI_EVENT=pr it
+// sets no midnight hold.
 const repository = resolve(import.meta.dir, '..');
 const [flag, value] = process.argv.slice(2);
 if ((flag !== '--base' && flag !== '--full') || !value)
@@ -79,7 +81,9 @@ const proofMinutes = process.env.MIDNIGHT_PROOF_MINUTES;
 const holdUntil = proofMinutes
   ? midnightProofHoldUntil({ now, minutes: proofMinutes, ref: process.env.GITHUB_REF_NAME ?? '' })
   : ciBrowserHoldUntil(now);
-const midnightUntil = plan.shards.length && holdUntil ? holdUntil.toISOString() : '';
+// A pull request's run starts no browser shard (scripts/ci/job.ts plan), so it never waits.
+const midnightUntil =
+  process.env.CI_EVENT !== 'pr' && plan.shards.length && holdUntil ? holdUntil.toISOString() : '';
 if (midnightUntil) {
   const message = `This run waits on purpose${proofMinutes ? ' (proof run)' : ''}: the browser shards start at ${midnightUntil}. No browser group starts from 23:40 to 00:10 Berlin time, and a Browser job that started now could reach that window within its timeout. The other jobs run meanwhile; Check reports after the shards.`;
   console.info(`::notice title=Midnight wait::${message}`);
@@ -94,6 +98,7 @@ if (output)
     [
       `browser=${plan.shards.length ? 'true' : 'false'}`,
       `full=${plan.fullReason ? 'true' : 'false'}`,
+      `full_reason=${(plan.fullReason ?? '').replace(/\s+/g, ' ')}`,
       `shards=${JSON.stringify(plan.shards)}`,
       `midnight_until=${midnightUntil}`,
       // The static and SQL jobs take every group of their kind, so a new group joins CI by registration.

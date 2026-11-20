@@ -10,6 +10,7 @@ import {
   MIDNIGHT_START_WINDOW,
   midnightProofHoldUntil,
   midnightStartWaitMs,
+  overlapsNeighbours,
   runGroupSchedule,
 } from './group-schedule';
 
@@ -266,4 +267,11 @@ test('a failed changed-spec group blocks the later tier for this attempt and nam
   expect(changedTestsFirstBlock(['golden:p1-13', 'audit:wave-2:p1-13'])).toBe(
     'Changed-spec tier failed (audit:wave-2:p1-13, golden:p1-13); the groups selected only by product scope wait for its repair.',
   );
+});
+
+test('static gates and the unit suite overlap; SQL, component contracts and exclusive browser groups run alone', () => {
+  for (const kind of ['static', 'unit', 'audit', 'golden'])
+    expect(overlapsNeighbours(kind, false)).toBe(true);
+  for (const kind of ['audit', 'golden']) expect(overlapsNeighbours(kind, true)).toBe(false);
+  for (const kind of ['sql', 'ui', 'canary']) expect(overlapsNeighbours(kind, false)).toBe(false);
 });

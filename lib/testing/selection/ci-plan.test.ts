@@ -73,12 +73,19 @@ test('an unreadable diff and a tooling change run every browser group except the
     'bun.lock',
     '.github/workflows/ci.yml',
     '.github/actions/setup/action.yml',
+    'scripts/ci/job.ts',
+    'lib/testing/ci/run-plan.ts',
     'lib/testing/runner/app-port.ts',
     'lib/testing/selection/test-groups.ts',
   ])
     expect(
       ids(ciPlan({ groups, changedFiles: [tooling], fullRun: undefined, runnerModules, rowChanges: [] })),
     ).toEqual(EVERY_BROWSER_GROUP);
+  // The CI logic's own unit tests are no tooling input.
+  const ciTest = ['lib/testing/ci/check.test.ts'];
+  expect(
+    ciPlan({ groups, changedFiles: ciTest, fullRun: undefined, runnerModules, rowChanges: [] }).fullReason,
+  ).toBeUndefined();
 });
 
 test("the nightly run and the release gate add each wall-clock group's steps, untimed", () => {
@@ -358,6 +365,7 @@ test("every workflow runs the plan's browser shards untimed", () => {
       )
       .map((line) => ({ file, untimed: line.includes('--untimed') }));
   });
-  expect([...new Set(shardRuns.map((run) => run.file))].sort()).toEqual(['ci.yml', 'date-lookahead.yml']);
+  // ci.yml runs its shards through scripts/ci/job.ts browser (lib/testing/ci/dag.test.ts).
+  expect([...new Set(shardRuns.map((run) => run.file))].sort()).toEqual(['date-lookahead.yml']);
   expect(shardRuns.filter((run) => !run.untimed)).toEqual([]);
 });

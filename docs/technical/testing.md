@@ -50,7 +50,7 @@ It survives your turn and the harness, keeps the whole log, and needs a reachabl
 
 ### Grow a shrink-only list
 
-CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. When an exception is right, open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. Changing it reruns Unit (`list-growth.yml`); if that fails, push a commit.
+CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. When an exception is right, open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. Changing it reruns Fast (`list-growth.yml`); if that fails, push a commit.
 
 ## When a proof is valid
 
@@ -87,14 +87,14 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every PR to `main`, except a label change, each queue entry and every push to `main`. `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
+`.github/workflows/ci.yml` runs on every PR to `main` but a label change, each queue entry and every push to `main`; `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Jobs: `lib/testing/ci/dag.ts`; bodies: `bun scripts/ci/job.ts <job>`.
 
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules: a PR's diff against its merge base, a queue entry's against its base, a push's against the previous `main` commit unless a green queue run passed that tree. Every group runs on an unreadable diff, a full run, and a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
-- **Drafts.** A draft PR runs no browser shard, and its `Check` fails while browser groups wait. `gh pr ready` runs them ([babysit a pull request](coderabbit.md#babysit-a-pull-request)).
-- **Full run and release gate.** A full run is `ci.yml` called with `full` from a `Full run` job, nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
-- **Shards.** Visual groups get their own shards; a full selection fills at most `MAX_SHARDS`, a PR's run starts four at once.
+- **Tiers.** A PR's run is the fast tier: Fast, SQL and Component contracts. The integration run, a queue entry or the PR's up-to-date head, adds the browser shards (owner decision D1).
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the queue's base or a push's previous `main` commit. Every group runs on an unreadable diff, a full run, and a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
+- **Reuse and Check.** A push whose tree a passed integration run tested runs no job; a CI runner's passed result stands for its job on an identical tree (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
+- **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
+- **Shards.** Visual groups get their own shards; a full selection fills at most `MAX_SHARDS`.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails when the p90 runner wait exceeds its ceiling (`.github/scripts/ci-queue.sh`).
-- **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun of failed jobs follows a local repeat's retry rules.
 

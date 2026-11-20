@@ -39,6 +39,7 @@ import { loadEnvLocal } from '../tests/golden/support/env';
 import {
   changedTestsFirstBlock,
   holdOutsideMidnightWindow,
+  overlapsNeighbours,
   runGroupSchedule,
 } from '../lib/testing/runner/group-schedule';
 import {
@@ -647,7 +648,7 @@ async function main(): Promise<void> {
           entries: planning,
           jobs: options.jobs,
           tier: (entry) => entry.tier,
-          canOverlap: (entry) => ['audit', 'golden'].includes(entry.group.kind) && !entry.timing.exclusive,
+          canOverlap: (entry) => overlapsNeighbours(entry.group.kind, Boolean(entry.timing.exclusive)),
           run: async (entry) => {
             if (entry.reusable) {
               if (entry.reusable.runKey) {
