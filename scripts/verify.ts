@@ -19,6 +19,7 @@ import {
   type GroupResult,
 } from '../lib/testing/evidence/group-evidence';
 import { ADVISORY_GROUP_ID, freshAdvisoryPass } from '../lib/testing/evidence/advisory-freshness';
+import { expandGroupAliases } from '../lib/testing/selection/component-areas';
 import {
   getGroupTimingRequirements,
   getTestGroups,
@@ -77,6 +78,7 @@ import { RELEASE_DIAGNOSIS_FILE, releaseAttemptProblem } from '../lib/testing/pu
 import { browserStorageProblem, pruneRunArchive } from '../lib/testing/runs/run-retention';
 import {
   discoverPlaywrightSelection,
+  exactFileFilter,
   selectedDiscoveryArguments,
   type DiscoveredPlaywrightTest,
 } from '../lib/testing/runner/playwright-discovery';
@@ -231,7 +233,8 @@ function commandForGroup(group: TestGroup, target: 'local' | 'cloud'): string[] 
     case 'unit':
       return [process.execPath, 'run', 'test:unit'];
     case 'ui':
-      return [process.execPath, 'run', 'test:ui'];
+      // One exact filter per spec, so an area runs its own specs and every one of them.
+      return [process.execPath, 'run', 'test:ui', ...group.files.map(exactFileFilter)];
     case 'sql':
       return [process.execPath, 'scripts/run-sql-assertions.ts', ...group.files];
     case 'static': {
@@ -305,13 +308,14 @@ async function main(): Promise<void> {
   const candidates = groups.filter((group) =>
     options.target === 'cloud' ? group.kind === 'canary' : group.kind !== 'canary',
   );
-  if (options.groupIds?.some((id) => !candidates.some((group) => group.id === id)))
+  // Against every group, so an alias of an incompatible kind still fails below instead of selecting nothing.
+  const groupIds = options.groupIds && expandGroupAliases(options.groupIds, groups);
+  if (groupIds?.some((id) => !candidates.some((group) => group.id === id)))
     throw new Error(
       'Requested group is unknown or incompatible with the target/mode. Use test:plan to list available groups.',
     );
-  if (options.mode === 'release' && options.groupIds)
+  if (options.mode === 'release' && groupIds)
     throw new Error('Release verification cannot omit groups. Use change mode for focused work.');
-  const { groupIds } = options;
   const selected = groupIds ? candidates.filter((group) => groupIds.includes(group.id)) : candidates;
   const qualified = selected
     .map((group) => ({
