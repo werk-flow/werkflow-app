@@ -8,6 +8,9 @@
 // parallel starts create one, a replacement first leaves the stored one
 // unpayable, a Checkout paid before its signal is recorded, a failed attempt
 // never blocks the next, and a session whose claim lapsed never reaches a payer.
+// After a failed first debit the Admin starts again, with one payable Checkout,
+// and only an organization's Admin starts the Checkout of a further
+// organization (werk-flow/werkflow-planning#495).
 // The database functions answer as supabase/tests/werkflow_subscriptions.sql proves.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
@@ -60,9 +63,10 @@ gateway = {
 };
 
 const subscriptionRows = () => tableRows(world, 'werkflow_subscriptions');
+const runs = (status: string | null) =>
+  ['active', 'trialing', 'past_due', 'unpaid', 'paused'].includes(status ?? '');
 const holds = (status: string | null, reason: string | null = null) =>
-  ['active', 'trialing', 'past_due', 'unpaid', 'paused'].includes(status ?? '') ||
-  (status === 'canceled' && reason === 'payment_failed');
+  runs(status) || (status === 'canceled' && reason === 'payment_failed');
 
 const MINUTE = 60_000;
 const later = (minutes: number) => new Date(Date.now() + minutes * MINUTE).toISOString();
@@ -99,6 +103,7 @@ function beginCheckout(args: Record<string, unknown>) {
       status: null,
       cancellation_reason: null,
       holds_subscription: false,
+      runs_subscription: false,
       checkout_session_id: null,
       checkout_url: null,
       checkout_expires_at: null,
@@ -117,7 +122,7 @@ function beginCheckout(args: Record<string, unknown>) {
     data: { result, stripe_customer_id: held.stripe_customer_id, attempt: held.checkout_attempt, ...session },
     error: null,
   });
-  if (held.holds_subscription) return answer('subscribed');
+  if (held.runs_subscription) return answer('subscribed');
   if (before(held.checkout_expires_at, 15) && held.checkout_session_id !== args.p_closed_session_id) {
     return answer('open', { session_id: held.checkout_session_id, session_url: held.checkout_url });
   }
@@ -155,6 +160,7 @@ world.rpc = ({ name, args }) => {
       status: args.p_status,
       cancellation_reason: reason,
       holds_subscription: holds(String(args.p_status), reason),
+      runs_subscription: runs(String(args.p_status)),
     });
     return { data: 'recorded', error: null };
   }
@@ -182,7 +188,8 @@ mock.module('next/headers', () => ({
   headers: async () => ({ get: () => null }),
 }));
 
-const { startOrganizationCheckout, startSubscriptionCheckout } = await import('@/lib/subscription/actions');
+const { startFurtherOrganizationCheckout, startOrganizationCheckout, startSubscriptionCheckout } =
+  await import('@/lib/subscription/actions');
 const { createOrganization } = await import('@/lib/org/actions');
 
 const businessCalls = () => world.rpcCalls.filter((call) => call.name !== 'consume_rate_limit');
@@ -314,6 +321,7 @@ const forgetSubscription = () =>
     status: null,
     cancellation_reason: null,
     holds_subscription: false,
+    runs_subscription: false,
   });
 stripe.checkoutSessions.set('cs_test_5', 'sub_test_1');
 paidSubscription('sub_test_1', 'active');
@@ -357,6 +365,29 @@ assert.equal(stripe.checkoutRequests.length, requestsBefore, 'a paid Checkout wa
 assert.equal(stripe.expiredCheckouts.includes('cs_test_7'), false, 'a paid Checkout was expired');
 assert.equal(organizationRow().checkout_claimed_until, null);
 
+// Stripe ended sub_test_2 after its first debit failed. It still holds, so
+// access stays, but the Admin starts a new Checkout, and every further start
+// answers that one: no second payable Checkout opens.
+paidSubscription('sub_test_2', 'canceled', 'payment_failed');
+// As its signal records it.
+Object.assign(organizationRow(), {
+  status: 'canceled',
+  cancellation_reason: 'payment_failed',
+  holds_subscription: true,
+  runs_subscription: false,
+});
+const restarted = await startSubscriptionCheckout(ORGANIZATION_A);
+assert.ok(restarted.success, 'the Admin could not start again after a failed first debit');
+assert.equal(organizationRow().holds_subscription, true, 'the failed first debit ended access');
+assert.notEqual(restarted.checkoutUrl, 'https://checkout.stripe.test/c/pay/cs_test_7');
+requestsBefore = stripe.checkoutRequests.length;
+assert.deepEqual(
+  await startSubscriptionCheckout(ORGANIZATION_A),
+  restarted,
+  'a second payable Checkout opened',
+);
+assert.equal(stripe.checkoutRequests.length, requestsBefore);
+
 // --- Before any organization: the Checkout reserves the organization's id. ---
 
 setMembership(null);
@@ -376,7 +407,7 @@ assert.equal(subscriptionRows().length, 1, 'a second Checkout reserved a second 
 
 // An unpaid reservation creates nothing; a paid one creates the organization with the reserved id, once.
 assert.deepEqual(await createOrganization('Neue Firma'), { success: false, error: 'subscription_required' });
-Object.assign(reservation, { status: 'past_due', holds_subscription: true });
+Object.assign(reservation, { status: 'past_due', holds_subscription: true, runs_subscription: true });
 world.tables.werkflow_subscriptions = [reservation];
 await assert.rejects(startOrganizationCheckout(), { message: 'redirect:/onboarding/create-organization' });
 const created = await createOrganization('Neue Firma');
@@ -387,9 +418,49 @@ assert.deepEqual(await createOrganization('Zweite Firma'), {
   error: 'subscription_required',
 });
 
-// A caller who belongs to an organization reserves nothing.
+// A caller who belongs to an organization reserves nothing without naming one they administer.
 setMembership('employee');
 assert.deepEqual(await startOrganizationCheckout(), { success: false, error: 'organization_exists' });
+
+// --- A further organization: only an Admin of the named organization starts its Checkout. ---
+
+world.tables.werkflow_subscriptions = [];
+world.callerId = null;
+assert.deepEqual(await startFurtherOrganizationCheckout(ORGANIZATION_A), {
+  success: false,
+  error: 'not_authenticated',
+});
+for (const role of ['buero', 'employee'] as const) {
+  setMembership(role);
+  assert.deepEqual(
+    await startFurtherOrganizationCheckout(ORGANIZATION_A),
+    { success: false, error: 'not_authorized' },
+    role,
+  );
+}
+setMembership('admin');
+assert.deepEqual(await startFurtherOrganizationCheckout(ORGANIZATION_B), {
+  success: false,
+  error: 'not_a_member',
+});
+assert.deepEqual(await startFurtherOrganizationCheckout('not-an-id'), {
+  success: false,
+  error: 'not_a_member',
+});
+assert.deepEqual(subscriptionRows(), [], 'a refused caller reserved a further organization');
+const further = await startFurtherOrganizationCheckout(ORGANIZATION_A);
+assert.ok(further.success, 'an Admin could not start the Checkout of a further organization');
+const furtherReservation = subscriptionRows()[0];
+assert.ok(furtherReservation);
+assert.equal(furtherReservation.linked_at, null);
+assert.equal(furtherReservation.reserved_by, CALLER_ID);
+assert.ok(![ORGANIZATION_A, ORGANIZATION_B].includes(String(furtherReservation.organization_id)));
+assert.equal(stripe.checkoutRequests.at(-1)?.successUrl, 'https://app.example.test/upgrade/bestaetigt');
+Object.assign(furtherReservation, { status: 'active', holds_subscription: true, runs_subscription: true });
+assert.deepEqual(await createOrganization('Zweite Firma GmbH'), {
+  success: true,
+  organizationId: furtherReservation.organization_id,
+});
 
 // Without a price id or a reachable Stripe the Checkout is unavailable or failed, never half done.
 setMembership('admin');

@@ -11,6 +11,7 @@ import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
 import { resolveActionContext } from '@/lib/org/action-context';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
+import { endOrganizationSubscriptions } from '@/lib/subscription/end';
 import { z } from '@/lib/zod';
 
 /** A success names the organization to switch to, or null when none remains. */
@@ -84,6 +85,9 @@ async function organizationIsGone(admin: AdminClient, organizationId: string): P
  *   the backup window. A refusal queues no file
  * - After the deletion the action lists the prefix again and queues each
  *   object that landed after the first listing
+ * - Right before the deletion, the organization's WerkFlow subscription is
+ *   cancelled at Stripe at once, without a refund (lib/subscription/end.ts);
+ *   if that fails, nothing is deleted
  * - The foreign key cascade removes the memberships, invites and all other
  *   organization data in the same statement as the organization row
  * - Users who lose their only org will be redirected to onboarding on next login
@@ -130,6 +134,10 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
     // deletion would knowingly leave every object without a row behind.
     const paths = await listOrganizationFiles(activeOrgId);
     if (!paths) return { success: false, error: 'delete_org_failed' };
+
+    // Stripe never debits a customer whose organization is gone.
+    const ended = await endOrganizationSubscriptions(activeOrgId);
+    if (!ended.ok) return { success: false, error: ended.code };
 
     // One transaction: the cascade removes the memberships, invites and every
     // other organization row, and the files are queued, or nothing happens.

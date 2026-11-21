@@ -18,7 +18,8 @@ import { listProductSources, repositoryRoot } from '../conventions/product-sourc
 
 /**
  * Function -> its SQL caller: a public function, an `app_private.` function
- * (listed here in turn with its own caller), or 'RLS policies'.
+ * (listed here in turn with its own caller), 'RLS policies', or 'generated
+ * columns' (a stored column computed by the function).
  */
 const SQL_CALLERS: Readonly<Record<string, string>> = {
   acknowledge_personnel_item_review_base: 'acknowledge_personnel_item',
@@ -58,7 +59,8 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   unlink_installed_equipment_document: 'update_document_links',
   unlink_maintenance_coverage_document: 'update_document_links',
   unlink_service_case_document: 'update_document_links',
-  werkflow_subscription_holds: 'record_werkflow_subscription_state',
+  werkflow_subscription_holds: 'generated columns',
+  werkflow_subscription_runs: 'record_werkflow_subscription_state',
   withdraw_work_handover_p1_17_inner: 'withdraw_work_handover',
 };
 
@@ -152,6 +154,13 @@ function referencedByPolicy(name: string): boolean {
   return new RegExp(`\\b${name}\\s*\\(`).test(policyStatements);
 }
 
+/** Whether a committed migration computes a stored column with the function. */
+function computesGeneratedColumn(name: string): boolean {
+  return migrations.some((sql) =>
+    new RegExp(`generated\\s+always\\s+as\\s*\\(\\s*public\\.${name}\\s*\\(`, 'i').test(sql),
+  );
+}
+
 describe('retired database functions', () => {
   const dropped = droppedByMigration();
   const functions = publicFunctionNames().filter((name) => !dropped.has(name));
@@ -179,6 +188,7 @@ describe('retired database functions', () => {
       const caller = SQL_CALLERS[name];
       if (!caller || seen.has(name)) return false;
       if (caller === 'RLS policies') return referencedByPolicy(name);
+      if (caller === 'generated columns') return computesGeneratedColumn(name);
       return (
         (isPrivate(caller) || functions.includes(caller)) &&
         new RegExp(`\\b${unqualified(name)}\\s*\\(`).test(latestDefinition(caller)) &&

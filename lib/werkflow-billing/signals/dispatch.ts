@@ -5,6 +5,7 @@ import { invoiceFinalizedSignals } from '@/lib/werkflow-billing/signals/invoice-
 import { invoicePaidSignals } from '@/lib/werkflow-billing/signals/invoice-paid';
 import { mandateSignals } from '@/lib/werkflow-billing/signals/mandate';
 import { paymentFailedSignals } from '@/lib/werkflow-billing/signals/payment-failed';
+import { refundSignals } from '@/lib/werkflow-billing/signals/refund';
 import { subscriptionSignals } from '@/lib/werkflow-billing/signals/subscription';
 
 // The dispatch table: each event type belongs to exactly one family, and each
@@ -18,6 +19,7 @@ const SIGNAL_FAMILIES: readonly SignalFamily[] = [
   mandateSignals,
   checkoutSignals,
   subscriptionSignals,
+  refundSignals,
 ];
 
 const familyByEventType = new Map<string, SignalFamily>();
