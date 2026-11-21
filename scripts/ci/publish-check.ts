@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import {
   CHECK_APP_CONFIG,
+  checkOwnership,
   checkRunOf,
   postCheckRun,
   queuedCheckRunOf,
@@ -14,11 +15,14 @@ import { repository } from './run';
 // Posts a run's `Check`, a full run's `Full run / Check`, as a check run of the CI App
 // (lib/testing/ci/check-app.ts).
 // Usage: bun scripts/ci/publish-check.ts <start|finish>
-//   start   When the scheduler accepts the run, before it waits or any job starts: a queued check
-//           run, which withdraws every earlier result of that check on the commit. A full run posts
-//           none. The scheduler also stops an older run of the same head before it accepts a newer
-//           one, so no superseded run posts a verdict after the newer run's start.
-//   finish  After `bun scripts/ci/job.ts check`: the run's verdict from check.json.
+//   start   When the scheduler accepts the run or a rerun attempt, before it waits or any job
+//           starts, and for a pull request also on `ready_for_review` itself: a queued check run,
+//           which withdraws every earlier result of that check on the commit. A full run posts none.
+//   finish  After `bun scripts/ci/job.ts check`: the run's verdict from check.json, only while the
+//           run's start is the App's newest start on the commit. A run whose commit a newer run
+//           started on posts nothing and exits 1, so an older fast-tier run that ends late never
+//           replaces the integration run's queued Check. Check runs carry the run's URL and attempt
+//           as `external_id`; checkOwnership reads them.
 // Run it from a trusted copy, never from the checkout under test: a checkout of `main` that no job
 // writes, as an operating-system user that holds the App's key and token and that no job runs as.
 // Each run's results directory is writable only by that run's jobs. Code under test then reaches
@@ -86,6 +90,16 @@ if (built === undefined) {
   process.exit(0);
 }
 if ('problem' in built) fail(`No check run is posted: ${built.problem}.`);
+if (mode === 'finish') {
+  const owned = await checkOwnership({
+    scheduled,
+    appId: app.appId,
+    token,
+    repository: repositoryName,
+    fetch,
+  });
+  if ('problem' in owned) fail(`No check run is posted: ${owned.problem}.`);
+}
 const posted = await postCheckRun({
   request: built.request,
   appId: app.appId,

@@ -35,6 +35,8 @@ type CheckRunRequest = {
   name: 'Check' | 'Full run / Check';
   head_sha: string;
   details_url?: string;
+  /** The run's identity (runIdentityOf): which run a check run on the commit belongs to. */
+  external_id: string;
   output: { title: string; summary: string };
 } & (
   | { status: 'queued' }
@@ -69,6 +71,9 @@ function headOf(scheduled: ScheduledRun): { head: string } | { problem: string }
 
 const detailsOf = (runUrl: string) => (runUrl.startsWith('https://') ? { details_url: runUrl } : {});
 
+/** A run's identity on its check runs: a rerun shares the run's URL, so the attempt belongs to it. */
+const runIdentityOf = (scheduled: ScheduledRun) => `${scheduled.runUrl} attempt ${scheduled.attempt}`;
+
 /**
  * The queued check run the scheduler posts when it accepts a run, before any job starts. GitHub
  * reads the newest check run of a name, so it withdraws every earlier result on the commit: a
@@ -89,6 +94,7 @@ export function queuedCheckRunOf(
       head_sha: head.head,
       status: 'queued',
       ...detailsOf(scheduled.runUrl),
+      external_id: runIdentityOf(scheduled),
       output: {
         title: 'Waiting',
         summary: `The ${scheduled.event} run waits or runs; until it ends, no earlier result counts.\n\nRun: ${scheduled.runUrl}`,
@@ -142,6 +148,7 @@ export function checkRunOf(input: {
       completed_at: check.completedAt ?? input.now.toISOString(),
       conclusion: verdict.passed ? 'success' : 'failure',
       ...detailsOf(runUrl),
+      external_id: runIdentityOf(scheduled),
       output: {
         title: verdict.passed ? 'Passed' : 'Failed',
         summary: `${verdict.summary}\n\nRun: ${runUrl}\nTree: ${check.tree}\nRunner: ${check.producer ?? 'none'}`,
@@ -218,6 +225,92 @@ function confirmPosted(
   return { id };
 }
 
+const REPOSITORY = /^[\w.-]+\/[\w.-]+$/;
+
+const githubHeaders = (token: string) => ({
+  Accept: 'application/vnd.github+json',
+  Authorization: `Bearer ${token}`,
+  'X-GitHub-Api-Version': '2022-11-28',
+});
+
+const PAGE_SIZE = 100;
+/** More check runs of one name on one commit than this is no state the publisher decides on. */
+const MAX_PAGES = 10;
+
+const listedSchema = z.object({
+  total_count: z.number(),
+  check_runs: z.array(
+    z.object({
+      id: z.number(),
+      status: z.string(),
+      external_id: z.string().nullable(),
+      app: z.object({ id: z.number() }).nullable(),
+    }),
+  ),
+});
+
+/**
+ * Whether the scheduled run still owns its commit's `Check`, read before its verdict is posted. A
+ * run owns it while its own start, the queued check run `start` posted, is the configured App's
+ * newest start on the commit; GitHub numbers check runs in creation order. Once a newer run started,
+ * an older run's verdict would replace the newer run's queued check, so it is refused. Only starts
+ * decide: a verdict an older run posted after a newer start (it read before that start landed)
+ * never takes the commit from the newer run, whose own verdict then posts last. A full run posts no
+ * start and needs no read. An answer that cannot be read completely refuses.
+ */
+export async function checkOwnership(input: {
+  scheduled: ScheduledRun;
+  appId: number;
+  token: string;
+  repository: string;
+  fetch: (url: string, init: RequestInit) => Promise<Response>;
+}): Promise<{ owned: true } | { problem: string }> {
+  const { scheduled, appId } = input;
+  if (scheduled.event === 'full') return { owned: true };
+  const head = headOf(scheduled);
+  if ('problem' in head) return head;
+  if (!REPOSITORY.test(input.repository))
+    return { problem: `GITHUB_REPOSITORY ${input.repository} is no owner/name` };
+  const runs: z.infer<typeof listedSchema>['check_runs'] = [];
+  for (let page = 1; ; page += 1) {
+    if (page > MAX_PAGES) return { problem: `more than ${MAX_PAGES * PAGE_SIZE} Check runs on ${head.head}` };
+    const query = `check_name=Check&app_id=${appId}&filter=all&per_page=${PAGE_SIZE}&page=${page}`;
+    let response: Response;
+    try {
+      response = await input.fetch(
+        `https://api.github.com/repos/${input.repository}/commits/${head.head}/check-runs?${query}`,
+        { headers: githubHeaders(input.token), signal: AbortSignal.timeout(60_000) },
+      );
+    } catch (error) {
+      return {
+        problem: `the check runs could not be read (${error instanceof Error ? error.name : 'unknown error'})`,
+      };
+    }
+    if (!response.ok)
+      return {
+        problem: `GitHub answered ${response.status} to the check run list (request ${response.headers.get('x-github-request-id') ?? 'unknown'})`,
+      };
+    // An unreadable body is no list, and the schema says so.
+    const answer: unknown = await response.json().catch(() => null);
+    const listed = listedSchema.safeParse(answer);
+    if (!listed.success) return { problem: 'GitHub answered with no check run list' };
+    runs.push(...listed.data.check_runs);
+    if (listed.data.check_runs.length < PAGE_SIZE) {
+      if (runs.length !== listed.data.total_count)
+        return { problem: `GitHub listed ${runs.length} of ${listed.data.total_count} check runs` };
+      break;
+    }
+  }
+  const [newestStart] = runs
+    .filter((run) => run.app?.id === appId && run.status === 'queued')
+    .toSorted((one, other) => other.id - one.id);
+  if (!newestStart) return { problem: `no start of this run on ${head.head}` };
+  if (newestStart.external_id === runIdentityOf(scheduled)) return { owned: true };
+  return {
+    problem: `a newer run (${newestStart.external_id ?? 'unnamed'}) owns Check on ${head.head}; this run's verdict no longer counts`,
+  };
+}
+
 /**
  * Posts the check run as the configured App and confirms GitHub holds it from that App. The token
  * goes only into the request's header; no message names it or GitHub's answer body.
@@ -229,18 +322,13 @@ export async function postCheckRun(input: {
   repository: string;
   fetch: (url: string, init: RequestInit) => Promise<Response>;
 }): Promise<{ id: number } | { problem: string }> {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(input.repository))
+  if (!REPOSITORY.test(input.repository))
     return { problem: `GITHUB_REPOSITORY ${input.repository} is no owner/name` };
   let response: Response;
   try {
     response = await input.fetch(`https://api.github.com/repos/${input.repository}/check-runs`, {
       method: 'POST',
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${input.token}`,
-        'Content-Type': 'application/json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
+      headers: { ...githubHeaders(input.token), 'Content-Type': 'application/json' },
       body: JSON.stringify(input.request),
       signal: AbortSignal.timeout(60_000),
     });

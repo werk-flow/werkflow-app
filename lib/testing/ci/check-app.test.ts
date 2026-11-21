@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   CHECK_APP_CONFIG,
+  checkOwnership,
   checkRunOf,
   postCheckRun,
   queuedCheckRunOf,
@@ -328,6 +329,7 @@ test('a check run passes only a finished, passed Check of this run from a CI run
       completed_at: '2026-11-21T09:05:00.000Z',
       conclusion: 'success',
       details_url: RUN_URL,
+      external_id: `${RUN_URL} attempt 2`,
       output: {
         title: 'Passed',
         summary: `Selection by diff.\n\nRun: ${RUN_URL}\nTree: ${'c'.repeat(40)}\nRunner: mac`,
@@ -380,6 +382,7 @@ test("an accepted run first withdraws every earlier result on its head, so a dra
       head_sha: COMMIT,
       status: 'queued',
       details_url: RUN_URL,
+      external_id: `${RUN_URL} attempt 1`,
       output: {
         title: 'Waiting',
         summary: `The integration run waits or runs; until it ends, no earlier result counts.\n\nRun: ${RUN_URL}`,
@@ -391,6 +394,120 @@ test("an accepted run first withdraws every earlier result on its head, so a dra
   expect(queuedCheckRunOf({ ...scheduled, prHead: HEAD })).toHaveProperty('problem');
   const pr = queuedCheckRunOf({ ...scheduled, event: 'pr', prHead: HEAD });
   expect(pr && 'request' in pr && pr.request.head_sha).toBe(HEAD);
+});
+
+type Listed = { id: number; status: 'queued' | 'completed'; external_id: string | null; app: { id: number } };
+
+const OWN = `${RUN_URL} attempt 2`;
+const NEWER = 'https://ci.test/run/8 attempt 1';
+const listed = (id: number, status: Listed['status'], external_id: string | null): Listed => ({
+  id,
+  status,
+  external_id,
+  app: { id: APP },
+});
+
+/** Asks whether the scheduled run owns its commit's Check, through a fake GitHub that lists `pages`. */
+async function owns(
+  pages: Listed[][],
+  options: { status?: number; body?: string; scheduled?: Partial<Parameters<typeof build>[1]> } = {},
+) {
+  const asked: { url: string; init: RequestInit }[] = [];
+  const total = pages.flat().length;
+  const owned = await checkOwnership({
+    scheduled: {
+      runUrl: RUN_URL,
+      attempt: 2,
+      event: 'pr',
+      commit: COMMIT,
+      prHead: undefined,
+      ...options.scheduled,
+    },
+    appId: APP,
+    token: TOKEN,
+    repository: 'owner/repo',
+    fetch: async (url, init) => {
+      asked.push({ url, init });
+      const page = pages[Number(new URL(url).searchParams.get('page')) - 1] ?? [];
+      return new Response(options.body ?? JSON.stringify({ total_count: total, check_runs: page }), {
+        status: options.status ?? 200,
+      });
+    },
+  });
+  return { owned, asked };
+}
+
+test("a run's finish posts only while its own start is the newest on the commit, so an older run never overrides a newer one", async () => {
+  // The owning run: its start is the newest; an earlier run's green below it does not matter.
+  const own = await owns([[listed(5, 'completed', NEWER), listed(10, 'queued', OWN)]]);
+  expect(own.owned).toEqual({ owned: true });
+  expect(own.asked).toHaveLength(1);
+  expect(own.asked[0]?.url).toBe(
+    `https://api.github.com/repos/owner/repo/commits/${COMMIT}/check-runs?check_name=Check&app_id=${APP}&filter=all&per_page=100&page=1`,
+  );
+  expect(new Headers(own.asked[0]?.init.headers).get('authorization')).toBe(`Bearer ${TOKEN}`);
+  // A pull request's run reads the check runs on the head it posts on.
+  const merged = await owns([[listed(10, 'queued', OWN)]], { scheduled: { prHead: HEAD } });
+  expect(merged.owned).toEqual({ owned: true });
+  expect(merged.asked[0]?.url).toContain(`/commits/${HEAD}/check-runs?`);
+  // An older fast-tier run finishing after the integration run's start is refused, and so is
+  // attempt 1 of a run after attempt 2 started.
+  for (const newer of [NEWER, `${RUN_URL} attempt 3`]) {
+    const older = await owns([[listed(10, 'queued', OWN), listed(12, 'queued', newer)]]);
+    expect(older.owned, newer).toEqual({
+      problem: `a newer run (${newer}) owns Check on ${COMMIT}; this run's verdict no longer counts`,
+    });
+  }
+  // A verdict an older run posted after this run's start never takes the commit from it.
+  expect((await owns([[listed(10, 'queued', OWN), listed(11, 'completed', NEWER)]])).owned).toEqual({
+    owned: true,
+  });
+  // No start of this run on the commit: the scheduler never accepted it, so it owns nothing.
+  expect((await owns([[]])).owned).toHaveProperty('problem');
+  expect((await owns([[listed(4, 'queued', null)]])).owned).toHaveProperty('problem');
+});
+
+test('the ownership read follows every page and refuses an answer it cannot read', async () => {
+  const older = Array.from({ length: 100 }, (_, index) => listed(index + 1, 'queued', NEWER));
+  const paged = await owns([older, [listed(200, 'queued', OWN)]]);
+  expect(paged.owned).toEqual({ owned: true });
+  expect(paged.asked.map(({ url }) => new URL(url).searchParams.get('page'))).toEqual(['1', '2']);
+  const newerOnLastPage = await owns([
+    [listed(150, 'queued', OWN), ...older.slice(1)],
+    [listed(300, 'queued', NEWER)],
+  ]);
+  expect(newerOnLastPage.owned).toHaveProperty('problem');
+  // Another app's check run counts for nothing, even when GitHub's filter let it through.
+  expect(
+    (await owns([[listed(10, 'queued', OWN), { ...listed(12, 'queued', NEWER), app: { id: OTHER_APP } }]]))
+      .owned,
+  ).toEqual({ owned: true });
+  for (const unreadable of [
+    { status: 500 },
+    { status: 401, body: JSON.stringify({ message: `Bad credentials ${TOKEN}` }) },
+    { body: 'not json' },
+    { body: JSON.stringify({ total_count: 1, check_runs: [{ id: 'ten' }] }) },
+    // GitHub promises a second page that never comes.
+    { body: JSON.stringify({ total_count: 2, check_runs: [listed(10, 'queued', OWN)] }) },
+  ]) {
+    const refused = await owns([[listed(10, 'queued', OWN)]], unreadable);
+    expect(refused.owned, JSON.stringify(unreadable)).toHaveProperty('problem');
+    expect(JSON.stringify(refused.owned)).not.toContain(TOKEN);
+  }
+  const thrown = await checkOwnership({
+    scheduled: { runUrl: RUN_URL, attempt: 2, event: 'pr', commit: COMMIT, prHead: undefined },
+    appId: APP,
+    token: TOKEN,
+    repository: 'owner/repo',
+    fetch: () => Promise.reject(new TypeError('network down')),
+  });
+  expect(thrown).toEqual({ problem: 'the check runs could not be read (TypeError)' });
+});
+
+test('a full run, which posts no start, posts its verdict without an ownership read', async () => {
+  const full = await owns([[listed(12, 'queued', NEWER)]], { scheduled: { event: 'full' } });
+  expect(full.owned).toEqual({ owned: true });
+  expect(full.asked).toHaveLength(0);
 });
 
 test('a handed-over result is read only from a regular file, and no message shows what an unreadable one holds', () => {
