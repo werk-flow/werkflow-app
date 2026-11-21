@@ -89,7 +89,9 @@ function writeFullRun(
 ) {
   const checks: Check[] = [
     { name: 'Full run / Plan', status: 'completed', conclusion: 'success', started_at: startedAt },
-    { name: 'Full run / Browser 1', status: 'in_progress', conclusion: null, started_at: null },
+    check === 'running'
+      ? { name: 'Full run / Browser 1', status: 'in_progress', conclusion: null, started_at: null }
+      : { name: 'Full run / Browser 1', status: 'completed', conclusion: check, started_at: null },
     // The push's own diff run, which is no full run.
     { name: 'Check', status: 'completed', conclusion: 'success', started_at: '2026-11-13T00:00:00Z' },
   ];

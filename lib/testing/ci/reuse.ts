@@ -111,6 +111,27 @@ function passedTreeInLedger(ledger: Ledger, tree: string): string | undefined {
 }
 
 /**
+ * The run whose passed Check last proved this tree on integration, main or full, or undefined: the
+ * reuse rule over the tree's receipts, ending in a CI runner's finished passed Check. A main run's
+ * Check that cites an integration pass counts. The merge queue asks it of main's tree before it
+ * names a batch's first PR (lib/testing/ci/queue.ts).
+ */
+export function provenTree(ledger: Ledger, tree: string): string | undefined {
+  const last = lastOfNewestStart(
+    ledger,
+    (receipt) => receipt.tree === tree,
+    (receipt) => receipt.job === 'plan' && receipt.status === 'running',
+  );
+  return last?.job === 'check' &&
+    last.event !== 'pr' &&
+    last.status === 'passed' &&
+    last.producer !== null &&
+    last.completedAt !== null
+    ? (last.runUrl ?? undefined)
+    : undefined;
+}
+
+/**
  * The integration run that passed this tree, for a push to main, or undefined. A configured ledger
  * is the only source, so no other source can override its withdrawal of a pass; `onActions` asks
  * the merge queue only when the runner keeps no ledger (`ledger` undefined).

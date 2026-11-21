@@ -219,3 +219,28 @@ The first round of external CI reviews found that a tooling input sent almost ha
 ## Amendment 2026-11-21: limits stay the repository's on every runner
 
 The stand-in runner needed threefold test and Playwright timeouts as an owner exception on 2026-11-16, while tests still held wall-clock limits that a slower machine missed. Every runner runs the limits the repository sets. No timeout or budget factor carries over to a new runner without its own decision. A test holds no wall-clock duration below a fixed number outside a measured scenario, and `test-hygiene/no-fixed-time-limit` fails on one (werk-flow/werkflow-planning#507).
+
+## Amendment 2026-11-21: the stand-in's own merge queue
+
+The stand-in has no merge queue, so the ruleset requires an up-to-date branch, and every merge makes each other ready PR fetch `main` and run again (werk-flow/werkflow-planning#503). The owner decided on 2026-11-20 (D2):
+
+1. Our own merge queue lands PRs in batches of up to 4 and bisects a failed batch, so the failure names its PR. When Actions returns, GitHub's merge queue with group size 4 replaces it.
+2. The owner turns off "require branches to be up to date" only after the queue is built, tested on the stand-in and in use.
+
+`bun scripts/ci/queue.ts` is that queue (werk-flow/werkflow-planning#509). A thread queues its PR with `gh pr merge <n> --squash --auto`. The queue squashes up to four queued PRs onto `main` in queue order and runs the integration run once on the tip. On green it lands them through GitHub's own squash merge, never a bypass, and only when `main` has not moved and its tree after each merge equals the tested one. A PR with `approved: list growth` runs in a batch of its own, so a batch never borrows another PR's waiver; this narrows item 2 of the amendment "a merge queue". Before each merge it marks the PR's head `Queue`: a commit status until the CI App exists, then the App's check run (`scripts/ci/publish-check.ts queue`). Once the ruleset requires `Queue`, pinned to the App like `Check`, no PR merges outside the queue. `lib/testing/ci/queue.ts` owns the rules.
+
+## Amendment 2026-11-21: the queue's mark and a partial landing
+
+A `Queue` success that outlived a merge would let GitHub's auto-merge take the PR on any later `main` (werk-flow/werkflow-planning#509). Before it marks a PR, the queue turns the PR's auto-merge off, so only the queue's own merge can use the mark; when it cannot, it posts no mark. A mark whose merge did not happen is withdrawn, and a withdrawal that fails freezes the queue until a person clears it.
+
+Item 1 lands up to 4 PRs one squash merge at a time, so the batch's own `main` commits are not tested one by one; the batch's tip is. When a landing stops partway, `main`'s own run of that commit runs its jobs, since no pass of that tree exists unless a run tested it. The next tick starts from that `main`, and the release still needs a green full run on its exact commit.
+
+## Amendment 2026-11-21: a landed head's mark and a failed read
+
+GitHub reads a head's checks for a merge whose test merge commit has none. So once strict is off, a `Queue` success left on a merged head would pass that same head onto a later `main` without a queue run, for example when a change lands again after a revert. The queue withdraws every mark after its merge too, before it clears the mark or lands the next PR, and a tick withdraws a mark a crashed tick left whether its PR merged or not. A withdrawal that fails freezes the queue.
+
+A read or call that fails between two merges stops the landing as a `partial` landing with the last merge the queue confirmed, and the tick needs a person. `main` still moved, so its run of `main`'s head starts as after any landing.
+
+## Amendment 2026-11-21: a merge whose `main` cannot be read
+
+When `main` cannot be read right after a merge, the queue asks GitHub for the PR's merge commit. A merged PR counts as landed with its tree unverified, and the `partial` stop names that commit. When GitHub cannot answer either, the `partial` stop says a merge may have landed. Either way the tick needs a person, and `main`'s run of `main`'s head starts as after any landing.

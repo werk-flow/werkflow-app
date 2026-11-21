@@ -12,6 +12,7 @@ import {
   ledgerAfterStart,
   passedTree,
   passedTreeActionsFilter,
+  provenTree,
   type ReuseKey,
   reusableReceipt,
 } from './reuse';
@@ -416,4 +417,25 @@ test('a ledger Plan cannot append its start to, cannot read, or that lacks its s
   );
   expect(lost).toEqual({ unreadable: "the ledger lacks Plan's own start" });
   expect(passedTree(lost, TREE, queueUnasked)).toBeUndefined();
+});
+
+test("main's tree is proven only when its newest run ends in a CI runner's finished passed Check on integration, main or full", () => {
+  const start = (event: CiEvent, runUrl: string) =>
+    receipt({ job: 'plan', event, runUrl, status: 'running', completedAt: null, groups: [] });
+  const check = (event: CiEvent, runUrl: string, overrides: Partial<CiResult> = {}) =>
+    receipt({ job: 'check', event, runUrl, groups: [], ...overrides });
+  const integration = [start('integration', RUN_1), check('integration', RUN_1)];
+  expect(provenTree(integration, TREE)).toBe(RUN_1);
+  // A main run that reused the integration pass proves the tree too: its Check cites that pass.
+  expect(
+    provenTree([...integration, start('main', RUN_2), check('main', RUN_2, { reusedFrom: RUN_1 })], TREE),
+  ).toBe(RUN_2);
+  expect(
+    provenTree([...integration, start('full', RUN_2), check('full', RUN_2, { status: 'failed' })], TREE),
+  ).toBe(undefined);
+  expect(provenTree([...integration, start('main', RUN_2)], TREE)).toBe(undefined);
+  expect(provenTree([start('pr', RUN_1), check('pr', RUN_1)], TREE)).toBe(undefined);
+  expect(provenTree([start('main', RUN_1), check('main', RUN_1, { producer: null })], TREE)).toBe(undefined);
+  expect(provenTree(integration, OTHER_TREE)).toBe(undefined);
+  expect(provenTree({ unreadable: 'ledger.jsonl:1 is no JSON' }, TREE)).toBe(undefined);
 });

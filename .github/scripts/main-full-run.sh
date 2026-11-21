@@ -4,7 +4,8 @@
 #        main-full-run.sh context
 #
 # A full run is ci.yml called from a job named `Full run` (nightly.yml, release.yml and
-# main-full-run.yml). Its jobs show on their commit as the check runs `Full run / …`.
+# main-full-run.yml). Its jobs show on their commit as the check runs `Full run / …`. A runner off
+# GitHub Actions posts one check run `Full run / Check` as the CI App (scripts/ci/publish-check.ts).
 #
 # `decide` finds the newest full run on main's last commits, and any older one still running, and
 # asks the repository's rule, scripts/ci/full-run.ts (lib/testing/ci/full-run.ts), which writes
@@ -19,6 +20,14 @@ set -euo pipefail
 
 readonly DEPTH=100
 
+# The sources whose `Full run / …` check runs count: GitHub Actions, and the CI App once
+# check-app.json names one. A commit status, or another app's check of the same name, counts for nothing.
+source "$(dirname "${BASH_SOURCE[0]}")/check-app.sh"
+check_app_id || exit 1
+trusted='.app.slug == "github-actions"'
+test -z "$CHECK_APP_ID" || trusted="(${trusted} or .app.id == ${CHECK_APP_ID})"
+readonly trusted
+
 # The newest commits up to this run's, one `<sha> <subject>` per line.
 commits() {
   gh api "repos/${GITHUB_REPOSITORY}/commits?sha=${GITHUB_SHA}&per_page=${DEPTH}" \
@@ -26,21 +35,25 @@ commits() {
 }
 
 # The full run on one commit as `<started> <state>`: the epoch its first job started, and the
-# conclusion of `Full run / Check`, or `running` before that job ends. Nothing for a commit without one.
-# Only GitHub Actions writes these check runs; another app's check of the same name counts for nothing.
+# conclusion of `Full run / Check`, or `running` while any of its jobs runs or before that job ends.
+# Nothing for a commit without one. Only the trusted sources' check runs count, so a run of one
+# source still running holds the next back even after the other source's Check ended. GitHub Actions
+# ends every job by its timeout, and the CI App posts only a completed `Full run / Check`, so no
+# entry runs for ever.
 full_run() {
   gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/$1/check-runs?per_page=100" \
-    --jq '.check_runs[] | select(.app.slug == "github-actions" and (.name | startswith("Full run / ")))
+    --jq '.check_runs[] | select('"${trusted}"' and (.name | startswith("Full run / ")))
       | {name, status, conclusion, started_at}' < /dev/null \
     | jq --slurp --raw-output 'select(length > 0)
       | "\([.[].started_at // empty | fromdateiso8601] | min // 0) \(
-        [.[] | select(.name == "Full run / Check" and .status == "completed")][0].conclusion // "running")"'
+        if any(.[]; .status != "completed") then "running"
+        else [.[] | select(.name == "Full run / Check")][0].conclusion // "running" end)"'
 }
 
 # Whether a commit had a green `Full run / Check` in any attempt; a later red attempt hides none.
 passed() {
   gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/$1/check-runs?check_name=Full%20run%20%2F%20Check&filter=all&per_page=100" \
-    --jq '.check_runs[] | select(.app.slug == "github-actions" and .name == "Full run / Check" and .conclusion == "success")
+    --jq '.check_runs[] | select('"${trusted}"' and .name == "Full run / Check" and .conclusion == "success")
       | .id' < /dev/null \
     | grep --quiet .
 }
