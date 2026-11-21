@@ -313,6 +313,38 @@ insert into public.document_links (organization_id, document_id, client_id, crea
  '38060000-0000-4000-8000-000000000020', '38060000-0000-4000-8000-000000000002');
 select public.file_document('38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
   '38060000-0000-4000-8000-000000000305');
+-- Two more, each with a history entry written directly: one filed but without
+-- its customer link, one linked but marked filed without a filing record.
+insert into public.documents (
+  id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by,
+  document_date, retention_class, metadata, filed_at, filed_by
+)
+select fixture.document_id, '38060000-0000-4000-8000-000000000010',
+  '38060000-0000-4000-8000-000000000010/' || fixture.document_id || '/' || fixture.file_name,
+  fixture.file_name, fixture.file_name, 'invoice', 4096, '38060000-0000-4000-8000-000000000002',
+  (select issue_date from public.invoices where id = pg_temp.id('first')), 'ten_years',
+  jsonb_build_object('invoiceId', pg_temp.id('first'), 'contentHash', repeat('d', 64)),
+  fixture.filed_at, fixture.filed_by
+from (values
+  ('38060000-0000-4000-8000-000000000307'::uuid, 'Rechnung ohne Kunde.pdf', null::timestamptz, null::uuid),
+  ('38060000-0000-4000-8000-000000000308'::uuid, 'Rechnung ohne Ablage.pdf', now(),
+   '38060000-0000-4000-8000-000000000002'::uuid)
+) as fixture(document_id, file_name, filed_at, filed_by);
+insert into public.document_links (organization_id, document_id, client_id, created_by) values
+('38060000-0000-4000-8000-000000000010', '38060000-0000-4000-8000-000000000308',
+ '38060000-0000-4000-8000-000000000020', '38060000-0000-4000-8000-000000000002');
+select public.file_document('38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
+  '38060000-0000-4000-8000-000000000307');
+insert into public.invoice_events (
+  organization_id, invoice_id, event_type, status, version, payload, actor_id, attempt_key
+)
+select invoice.organization_id, invoice.id, 'original_registered', invoice.status, invoice.version,
+  jsonb_build_object('documentId', fixture.document_id, 'contentHash', repeat('d', 64)),
+  '38060000-0000-4000-8000-000000000002', fixture.document_id
+from public.invoices invoice
+cross join (values ('38060000-0000-4000-8000-000000000307'::uuid), ('38060000-0000-4000-8000-000000000308'::uuid))
+  as fixture(document_id)
+where invoice.id = pg_temp.id('first');
 
 -- An issued invoice refuses every change and delete, through the app's functions and directly.
 select pg_temp.expect_refusal(label, statement, refusal)
@@ -367,7 +399,13 @@ from (values
   ('name a filed invoice document without its registration', format(
     'with flag as (select set_config(''app.invoice_original_write'', ''on'', true))
       update public.invoices set original_document_id = %L where id = %L and exists (select 1 from flag)',
-    '38060000-0000-4000-8000-000000000305', pg_temp.id('first')), 'invoice_issued')
+    '38060000-0000-4000-8000-000000000305', pg_temp.id('first')), 'invoice_issued'),
+  ('name a filed invoice document without its customer link', format(
+    'update public.invoices set original_document_id = %L where id = %L',
+    '38060000-0000-4000-8000-000000000307', pg_temp.id('first')), 'invoice_issued'),
+  ('name an invoice document marked filed without its filing record', format(
+    'update public.invoices set original_document_id = %L where id = %L',
+    '38060000-0000-4000-8000-000000000308', pg_temp.id('first')), 'invoice_issued')
 ) as cases(label, statement, refusal);
 -- A deleted work clears its reference only.
 reset role;
