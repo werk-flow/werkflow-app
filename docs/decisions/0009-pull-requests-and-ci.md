@@ -219,3 +219,12 @@ The first round of external CI reviews found that a tooling input sent almost ha
 ## Amendment 2026-11-21: limits stay the repository's on every runner
 
 The stand-in runner needed threefold test and Playwright timeouts as an owner exception on 2026-11-16, while tests still held wall-clock limits that a slower machine missed. Every runner runs the limits the repository sets. No timeout or budget factor carries over to a new runner without its own decision. A test holds no wall-clock duration below a fixed number outside a measured scenario, and `test-hygiene/no-fixed-time-limit` fails on one (werk-flow/werkflow-planning#507).
+
+## Amendment 2026-11-21: the stand-in's own merge queue
+
+The stand-in has no merge queue, so the ruleset requires an up-to-date branch, and every merge makes each other ready PR fetch `main` and run again (werk-flow/werkflow-planning#503). The owner decided on 2026-11-20 (D2):
+
+1. Our own merge queue lands PRs in batches of up to 4 and bisects a failed batch, so the failure names its PR. When Actions returns, GitHub's merge queue with group size 4 replaces it.
+2. The owner turns off "require branches to be up to date" only after the queue is built, tested on the stand-in and in use.
+
+`bun scripts/ci/queue.ts` is that queue (werk-flow/werkflow-planning#509). A thread queues its PR with `gh pr merge <n> --squash --auto`. The queue squashes up to four queued PRs onto `main` in queue order and runs the integration run once on the tip. On green it lands them through GitHub's own squash merge, never a bypass, and only when `main` has not moved and its tree after each merge equals the tested one. A PR with `approved: list growth` runs in a batch of its own, so a batch never borrows another PR's waiver; this narrows item 2 of the amendment "a merge queue". Before each merge it sets the commit status `Queue` on the PR's head. Once the ruleset requires `Queue`, no PR merges outside the queue. `lib/testing/ci/queue.ts` owns the rules.
