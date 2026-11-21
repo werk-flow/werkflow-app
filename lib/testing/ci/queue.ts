@@ -50,6 +50,8 @@ export type QueueAdapter = {
   integrationRun(run: { tip: BatchEntry; base: string; pulls: readonly QueuedPull[] }): Promise<Verdict>;
   /** Marks the head as passed by the queue and squash-merges it on GitHub, only at that head. */
   land(pull: QueuedPull, proof: Verdict): Promise<void>;
+  /** The PR's merge commit when GitHub reports it merged, otherwise null. */
+  mergeCommit(pull: QueuedPull): Promise<string | null>;
   /** Marks the head as no longer passed, after a merge that did not happen, so no later merge takes the mark. */
   withdraw(pull: QueuedPull): Promise<void>;
   /** Whether the runner's ledger proves `tree` green: a passed Check of a CI runner is its newest run's last receipt. */
@@ -402,7 +404,8 @@ const message = (error: unknown): string => (error instanceof Error ? error.mess
 /**
  * Merges one PR and returns main after it, or the problem. Every outcome but the tested tree on
  * `previous` withdraws the head's `Queue` mark, so no later auto-merge takes it; on a merged head
- * the withdrawal changes nothing.
+ * the withdrawal changes nothing. After a merge error the PR counts as landed only when GitHub
+ * reports it merged as main's new head: another commit may have put the same tree onto `previous`.
  */
 async function landOne(
   adapter: QueueAdapter,
@@ -425,7 +428,14 @@ async function landOne(
       problem = `main moved to ${head.commit}, which is no single commit on ${previous}`;
     else if (head.tree !== tree)
       problem = `main's tree ${head.tree} after #${pull.number} is not the tested tree ${tree}`;
-    else return head;
+    else if (!refusal) return head;
+    else
+      try {
+        if ((await adapter.mergeCommit(pull)) === head.commit) return head;
+        problem = `GitHub did not merge #${pull.number}${refusal}; main moved to ${head.commit} without it`;
+      } catch (error) {
+        problem = `GitHub could not confirm #${pull.number} merged${refusal}: ${message(error)}`;
+      }
   } catch (error) {
     problem = `main could not be read after merging #${pull.number}${refusal}: ${message(error)}`;
   }

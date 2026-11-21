@@ -49,8 +49,9 @@ type Fake = {
  * A fake world. A tree is the list of PRs squashed onto main. A run fails when its prefix holds a
  * PR of `breaks`, and `answer` can override a run's verdict. `afterRun` changes the world after
  * the n-th run (1-based). GitHub's merge squashes onto the current main, `mergeTree` may change
- * the tree it builds, and `refuse` makes the merge throw without merging. `beforeLand` changes the
- * world before the n-th merge. The ledger proves main's tree unless `unprovenMain`. A PR of
+ * the tree it builds, `refuse` makes the merge throw without merging, and `lostAnswer` makes it
+ * throw after merging. GitHub reports a merged PR's merge commit. `beforeLand` changes the world
+ * before the n-th merge. The ledger proves main's tree unless `unprovenMain`. A PR of
  * `unchanged` holds only changes already in the batch, so its squash keeps the tree.
  */
 function fakeWorld(
@@ -61,6 +62,7 @@ function fakeWorld(
     afterRun?: (run: number, world: { pulls: QueuedPull[]; pushMain: (tree: string) => void }) => void;
     mergeTree?: (tree: string) => string;
     refuse?: number;
+    lostAnswer?: number;
     beforeLand?: (merge: number, world: { pulls: QueuedPull[]; pushMain: (tree: string) => void }) => void;
     unprovenMain?: boolean;
     unchanged?: readonly number[];
@@ -75,6 +77,7 @@ function fakeWorld(
   const landed: number[] = [];
   const rejected: number[] = [];
   const withdrawn: number[] = [];
+  const mergeCommits = new Map<number, string>();
   let merges = 0;
   const commit = (parent: string, tree: string): string => {
     const id = sha(`${parent}:${tree}`);
@@ -116,8 +119,11 @@ function fakeWorld(
       const tree = `${main().tree}+${entry.number}`;
       pushMain(options.mergeTree?.(tree) ?? tree);
       landed.push(entry.number);
+      mergeCommits.set(entry.number, mainCommit);
       open = open.filter((candidate) => candidate.number !== entry.number);
+      if (entry.number === options.lostAnswer) throw new Error('connection reset');
     },
+    mergeCommit: async (entry) => mergeCommits.get(entry.number) ?? null,
     reject: async (entry) => {
       rejected.push(entry.number);
     },
@@ -342,6 +348,35 @@ test('a merge GitHub refuses stops the landing with its reason', async () => {
     { kind: 'landing-failed', detail: 'GitHub did not merge #2: Pull request is not mergeable' },
   ]);
   expect(world.withdrawn).toEqual([2]);
+});
+
+test('a merge GitHub refuses lands nothing even when another commit put the tested tree onto main, and withdraws the mark', async () => {
+  const world = fakeWorld([pull(1), pull(2)], {
+    refuse: 1,
+    beforeLand: (merge, { pushMain }) => {
+      if (merge === 1) pushMain('main+1');
+    },
+  });
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(world.landed).toEqual([]);
+  expect(outcome.landing).toEqual([]);
+  expect(outcome.stops).toEqual([
+    {
+      kind: 'landing-failed',
+      detail: `GitHub did not merge #1: Pull request is not mergeable; main moved to ${world.main().commit} without it`,
+    },
+  ]);
+  expect(world.withdrawn).toEqual([1]);
+  expect(needsAttention(outcome)).toBe(true);
+});
+
+test("a merge whose answer was lost lands when GitHub confirms the PR merged as main's new head", async () => {
+  const world = fakeWorld([pull(1), pull(2)], { lostAnswer: 1 });
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(outcome.landing).toEqual([1, 2]);
+  expect(outcome.stops).toEqual([]);
+  expect(world.withdrawn).toEqual([]);
+  expect(world.main().tree).toBe('main+1+2');
 });
 
 test('a main that cannot be read after a merge stops the landing and withdraws the mark', async () => {

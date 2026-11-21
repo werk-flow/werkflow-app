@@ -3,6 +3,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 import {
   integrationEnvironment,
   PULLS_QUERY,
@@ -116,6 +117,12 @@ const queueStatus = (head: string, state: 'success' | 'failure', description: st
   `description=${description.slice(0, 140)}`,
 ];
 
+/** `gh pr view --json state,mergeCommit`: GitHub's word on whether a PR merged, and as which commit. */
+const mergedPullSchema = z.object({
+  state: z.string(),
+  mergeCommit: z.object({ oid: z.string() }).nullable(),
+});
+
 /** The adapter on the real repository, GitHub and runner. */
 export function createQueueAdapter(options: {
   repository: string;
@@ -184,6 +191,12 @@ export function createQueueAdapter(options: {
       gh(...queueStatus(pull.headSha, 'success', `Passed in ${proof.runUrl}`));
       gh('pr', 'merge', String(pull.number), '--squash', '--match-head-commit', pull.headSha);
       console.info(`[queue] #${pull.number}: merged`);
+    },
+    mergeCommit: async (pull) => {
+      const merged = mergedPullSchema.parse(
+        JSON.parse(gh('pr', 'view', String(pull.number), '--json', 'state,mergeCommit')),
+      );
+      return merged.state === 'MERGED' ? (merged.mergeCommit?.oid ?? null) : null;
     },
     withdraw: async (pull) => {
       gh(...queueStatus(pull.headSha, 'failure', 'Not merged; the queue tests it again'));
