@@ -148,7 +148,9 @@ describe('stornoOf', () => {
     expect(draft.delivery).toEqual({ kind: 'period', start: '2037-11-02', end: '2037-11-06' });
     expect(draft.orderReference).toBe('BE-4711');
     const xml = toEn16931(calculated);
-    expect(xml).toContain(`<ram:DuePayableAmount>${(storno.grossCents / 100).toFixed(2)}</ram:DuePayableAmount>`);
+    expect(xml).toContain(
+      `<ram:DuePayableAmount>${(storno.grossCents / 100).toFixed(2)}</ram:DuePayableAmount>`,
+    );
     expect(xml).not.toContain('<ram:SpecifiedTradeSettlementPaymentMeans>');
     expect(xml).not.toContain('<ram:DueDateDateTime>');
     const check = await checkEn16931(xml);
