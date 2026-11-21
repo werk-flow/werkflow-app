@@ -3,11 +3,12 @@ import 'server-only';
 import { formatBerlinLocalDate, formatBerlinLocalDateTime } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { Tables } from '@/lib/supabase/database.types';
 import { ROW_PAGE_SIZE, readInBatches } from '@/lib/supabase/query-batches';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { resendDebitNotice, sendInvoiceMail, sendReceiptMail } from '@/lib/werkflow-billing/invoice-mails';
 import { raiseBillingAlarm } from '@/lib/werkflow-billing/mail-delivery';
-import { expireDebitNotice } from '@/lib/werkflow-billing/mail-ledger';
+import { expireDebitNotice, recordMailAttempt } from '@/lib/werkflow-billing/mail-ledger';
 import {
   type BillingAlarmFacts,
   type BillingAlarmKind,
@@ -17,6 +18,7 @@ import { HANDLED_EVENT_TYPES } from '@/lib/werkflow-billing/signals/dispatch';
 import { handleMandateChange } from '@/lib/werkflow-billing/signals/mandate';
 import { handleFailedInvoice } from '@/lib/werkflow-billing/signals/payment-failed';
 import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
+import { z } from '@/lib/zod';
 
 // The daily comparison with Stripe (werk-flow/werkflow-planning#492), run by
 // Vercel Cron (app/api/werkflow-billing-reconciliation/route.ts). Each run:
@@ -24,6 +26,8 @@ import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
 // 2. sends the mail rows still `failed` again, longest without an attempt
 //    first, alarms included, and raises `mail_undelivered` for each one that
 //    fails again; a debit notice whose renewal has passed then ends `expired`.
+//    Each attempt moves its row behind the rows not yet tried before it
+//    resends, so a resend that fails before its claim holds back no newer row.
 //    A backlog longer than one run waits for the next and leaves this one
 //    incomplete;
 // 3. compares the invoices Stripe finalized in the last 7 days, older than an
@@ -45,8 +49,8 @@ const SETTLE = HOUR;
 /** Stripe keeps events 30 days and retries a signal for 3. */
 const SIGNAL_DAYS = 3;
 /**
- * Failed rows resent per run; a resend's claim moves its row to the back. One
- * response under PostgREST's row cap holds them and the row that shows a backlog.
+ * Failed rows resent per run; recording each attempt moves its row to the back.
+ * One response under PostgREST's row cap holds them and the row that shows a backlog.
  */
 const FAILED_MAILS_PER_RUN = ROW_PAGE_SIZE - 1;
 
@@ -60,7 +64,27 @@ export type ReconciliationRun = {
 };
 
 type Resend = (stripeObjectId: string, stripe: StripeGateway) => Promise<void>;
-type FailedMail = { id: string; kind: string; stripe_object_id: string; failure_code: string | null };
+const FAILED_MAIL_COLUMNS = 'id, kind, organization_id, stripe_object_id, failure_code';
+const failedMailSchema = z.object({
+  id: z.guid(),
+  kind: z.string().min(1),
+  organization_id: z.guid().nullable(),
+  stripe_object_id: z.string().min(1),
+  failure_code: z.string().min(1).nullable(),
+}) satisfies z.ZodType<
+  Pick<
+    Tables<'werkflow_billing_mails'>,
+    'id' | 'kind' | 'organization_id' | 'stripe_object_id' | 'failure_code'
+  >
+>;
+type FailedMail = z.infer<typeof failedMailSchema>;
+
+/** The failed mails a read found; a failed read or an invalid row fails the step. */
+function failedMails(result: { data: unknown; error: unknown }): FailedMail[] {
+  const rows = failedMailSchema.array().safeParse(result.data);
+  if (result.error || !rows.success) throw billingFailure('reconciliation_read_failed');
+  return rows.data;
+}
 
 const RESEND_CUSTOMER_MAIL: Readonly<Record<string, Resend>> = {
   payment_failed: handleFailedInvoice,
@@ -126,18 +150,30 @@ async function alarmMissedRun({ admin, nowSeconds, alarm }: Run): Promise<void> 
 }
 
 async function resendFailedMails({ admin, stripe, now, result, alarm }: Run): Promise<void> {
-  // tenant-scope: cross-organization-by-design — the daily comparison resends every organization's failed mails and the alarms.
-  const { data: failed, error } = await admin
-    .from('werkflow_billing_mails')
-    .select('id, kind, stripe_object_id, failure_code')
-    .eq('state', 'failed')
-    .order('updated_at')
-    .order('id')
-    .limit(FAILED_MAILS_PER_RUN + 1);
-  if (error) throw billingFailure('reconciliation_read_failed');
+  const failed = failedMails(
+    // tenant-scope: cross-organization-by-design — the daily comparison resends every organization's failed mails and the alarms.
+    await admin
+      .from('werkflow_billing_mails')
+      .select(FAILED_MAIL_COLUMNS)
+      .eq('state', 'failed')
+      .order('updated_at')
+      .order('id')
+      .limit(FAILED_MAILS_PER_RUN + 1),
+  );
   const batch = failed.slice(0, FAILED_MAILS_PER_RUN);
+  const tried: string[] = [];
   const passed = new Set<string>();
   for (const row of batch) {
+    // The attempt is recorded first, so the row moves back even when the resend fails before its claim.
+    const due = await recordMailAttempt({ mailId: row.id, organizationId: row.organization_id }).catch(
+      (attemptError: unknown) => {
+        logError('reconcileWerkflowBilling: recording an attempt failed', attemptError);
+        result.complete = false;
+        return false;
+      },
+    );
+    if (!due) continue;
+    tried.push(row.id);
     const outcome = await resend(row, stripe, now).catch((resendError: unknown) => {
       logError('reconcileWerkflowBilling: resend failed', resendError);
       return 'resent' as const;
@@ -145,19 +181,18 @@ async function resendFailedMails({ admin, stripe, now, result, alarm }: Run): Pr
     if (outcome === 'passed') passed.add(row.id);
     result.mailsResent += 1;
   }
-  const still = await readInBatches(
-    batch.map((row) => row.id),
-    (ids) =>
+  const still = failedMails(
+    await readInBatches(tried, (ids) =>
       // tenant-scope: cross-organization-by-design — the rows this run resent, of every organization.
       admin
         .from('werkflow_billing_mails')
-        .select('id, kind, organization_id, stripe_object_id, failure_code')
+        .select(FAILED_MAIL_COLUMNS)
         .eq('state', 'failed')
         .in('id', ids)
         .limit(ids.length),
+    ),
   );
-  if (still.error) throw billingFailure('reconciliation_read_failed');
-  for (const row of still.data) {
+  for (const row of still) {
     // An undelivered-mail alarm that fails itself is resent tomorrow, never chained; the run shows it.
     if (row.kind === 'alarm.mail_undelivered') {
       result.complete = false;
