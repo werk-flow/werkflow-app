@@ -1,9 +1,9 @@
 import { addLocalDays } from '@/lib/date-time/berlin';
-import { taxRateBasisPoints } from '@/lib/invoicing/calculate';
+import { balanceOf, taxRateBasisPoints } from '@/lib/invoicing/calculate';
 import type { CalculatedInvoice } from '@/lib/invoicing/model';
 import { formatGermanDate, formatGermanDateRange } from '@/lib/utils';
 
-import { formatTaxRate } from './format';
+import { formatEuroCents, formatTaxRate } from './format';
 import type { BusinessDocument } from './model';
 
 // The invoice layout: a calculated invoice of the invoice core as the
@@ -72,30 +72,74 @@ function metaRowsOf(invoice: CalculatedInvoice): BusinessDocument['metaRows'] {
   ];
 }
 
-/** Exemption reasons, Zahlungsziel, Skonto and Bankverbindung, one paragraph each. */
-function closingTextOf(invoice: CalculatedInvoice): string {
-  const reasons = invoice.taxSubtotals.flatMap(({ tax }) =>
-    tax.category === 'E' ? [tax.exemptionReason] : [],
-  );
-  const { paymentTerms, payee } = invoice;
-  const owed = invoice.totals.grossCents > 0;
-  const terms = owed
-    ? [
-        `Zahlbar ohne Abzug bis ${formatGermanDate(invoice.dueDate)}.`,
-        ...(paymentTerms.discount
-          ? [
-              `Bei Zahlung bis ${formatGermanDate(addLocalDays(invoice.issueDate, paymentTerms.discount.days))} ${formatTaxRate(paymentTerms.discount.percentBasisPoints)} Skonto.`,
-            ]
-          : []),
-      ]
+/** A credit names its amount and asks for nothing; it claims no refund and no debit. */
+function creditTextOf({ typeCode, totals }: CalculatedInvoice): string {
+  const amount = formatEuroCents(-totals.dueCents);
+  return typeCode === '384'
+    ? `Storniert werden ${amount}. Es ist nichts zu zahlen.`
+    : `Guthaben: ${amount}. Es ist nichts zu zahlen.`;
+}
+
+/**
+ * How the amount is paid: Zahlungsziel, Skonto and Bankverbindung, the direct
+ * debit or the card. A collection or a card payment is named as done only
+ * when a paid amount is recorded.
+ */
+function paymentTextOf(invoice: CalculatedInvoice): string[] {
+  const { payment, paymentTerms, totals } = invoice;
+  const balance = balanceOf(totals);
+  if (balance === 'credit') return [creditTextOf(invoice)];
+  if (balance === 'zero') return ['Es ist nichts zu zahlen.'];
+  const paid = totals.paidCents
+    ? [`Bereits bezahlt: ${formatEuroCents(totals.paidCents)}. Offen: ${formatEuroCents(totals.dueCents)}.`]
     : [];
+  if (balance === 'paid') {
+    if (payment?.kind === 'card')
+      return [...paid, `Bezahlt mit der Karte mit der Endung ${payment.lastFour}.`];
+    if (payment?.kind === 'direct-debit') {
+      return [
+        ...paid,
+        `Per SEPA-Lastschrift eingezogen. Mandatsreferenz ${payment.mandateReference}, Gläubiger-ID ${payment.creditorId}.`,
+      ];
+    }
+    return paid;
+  }
+  if (payment?.kind === 'direct-debit') {
+    return [
+      ...paid,
+      `Der Betrag wird per SEPA-Lastschrift eingezogen. Mandatsreferenz ${payment.mandateReference}, Gläubiger-ID ${payment.creditorId}.`,
+    ];
+  }
+  if (payment?.kind === 'card') {
+    return [...paid, `Der Betrag wird von der Karte mit der Endung ${payment.lastFour} abgebucht.`];
+  }
+  const terms = [
+    `Zahlbar ohne Abzug bis ${formatGermanDate(invoice.dueDate)}.`,
+    ...(paymentTerms.discount
+      ? [
+          `Bei Zahlung bis ${formatGermanDate(addLocalDays(invoice.issueDate, paymentTerms.discount.days))} ${formatTaxRate(paymentTerms.discount.percentBasisPoints)} Skonto.`,
+        ]
+      : []),
+  ];
+  const payee = payment?.kind === 'credit-transfer' ? payment.payee : null;
   const account = payee && [
     payee.accountName && `Kontoinhaber ${payee.accountName}`,
     `IBAN ${groupedIban(payee.iban)}`,
     payee.bic && `BIC ${payee.bic}`,
   ];
-  const bank = owed && account ? [`Bankverbindung: ${account.filter(Boolean).join(', ')}`] : [];
-  return [...new Set(reasons), terms.join(' '), ...bank].filter(Boolean).join('\n\n');
+  return [
+    ...paid,
+    terms.join(' '),
+    ...(account ? [`Bankverbindung: ${account.filter(Boolean).join(', ')}`] : []),
+  ];
+}
+
+/** Exemption reasons, then the payment, one paragraph each. */
+function closingTextOf(invoice: CalculatedInvoice): string {
+  const reasons = invoice.taxSubtotals.flatMap(({ tax }) =>
+    tax.category === 'E' ? [tax.exemptionReason] : [],
+  );
+  return [...new Set(reasons), ...paymentTextOf(invoice)].filter(Boolean).join('\n\n');
 }
 
 /** A calculated invoice as the business document the renderer draws. */

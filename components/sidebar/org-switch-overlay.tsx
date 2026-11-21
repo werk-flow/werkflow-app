@@ -189,6 +189,11 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
     angebote(),
     () => import('@/components/angebote/offers-skeleton').then((m) => angebote(m.OffersPageSkeleton)),
   ],
+  [
+    '/rechnungen',
+    titled('Rechnungen'),
+    () => import('@/components/rechnungen/invoices-skeleton').then((m) => page(m.InvoicesPageSkeleton)),
+  ],
 ];
 
 /**

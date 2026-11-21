@@ -59,15 +59,17 @@ async function focusInside(layer: Locator): Promise<boolean> {
   return layer.evaluate((root) => root.contains(document.activeElement));
 }
 
+type KeyboardPathOptions = { soft?: boolean };
+
 /**
- * The keyboard path inside an open layer: focus starts on its first control,
- * its declared start control or the layer itself, and Tab never leaves it.
+ * Where focus lands as the layer opens: its first control, its declared start
+ * control or the layer itself. Runs before an opener's `prepareLayer`, whose
+ * choices move focus as a user's would.
  */
-export async function expectKeyboardPath(
-  page: Page,
+export async function expectOpeningFocus(
   layer: Locator,
   label: string,
-  options: { soft?: boolean } = {},
+  options: KeyboardPathOptions = {},
 ): Promise<void> {
   const check = options.soft === false ? expect : expect.soft;
   // The primitive moves focus in an effect after the open frame.
@@ -85,7 +87,18 @@ export async function expectKeyboardPath(
     start.startsRight,
     `${label}: focus starts on the first control, the declared start control or the dialog, not on ${start.focused}`,
   ).toBe(true);
-  const presses = Math.min(start.tabbables + 1, 40);
+}
+
+/** Tab through every control of the open layer from where focus is; it never leaves the layer. */
+export async function expectTabCycle(
+  page: Page,
+  layer: Locator,
+  label: string,
+  options: KeyboardPathOptions = {},
+): Promise<void> {
+  const check = options.soft === false ? expect : expect.soft;
+  const { tabbables } = await focusPosition(layer);
+  const presses = Math.min(tabbables + 1, 40);
   for (let press = 0; press < presses; press += 1) {
     await pressKey(layer, 'Tab', { into: page.locator(':focus') });
     if (!(await focusInside(layer))) {
@@ -93,4 +106,18 @@ export async function expectKeyboardPath(
       return;
     }
   }
+}
+
+/**
+ * The keyboard path inside an open layer: focus starts on its first control,
+ * its declared start control or the layer itself, and Tab never leaves it.
+ */
+export async function expectKeyboardPath(
+  page: Page,
+  layer: Locator,
+  label: string,
+  options: KeyboardPathOptions = {},
+): Promise<void> {
+  await expectOpeningFocus(layer, label, options);
+  await expectTabCycle(page, layer, label, options);
 }

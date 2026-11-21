@@ -3797,6 +3797,246 @@ export type Database = {
           },
         ];
       };
+      invoice_events: {
+        Row: {
+          actor_id: string | null;
+          attempt_key: string;
+          created_at: string;
+          event_type: string;
+          id: string;
+          invoice_id: string;
+          organization_id: string;
+          payload: Json;
+          status: string;
+          version: number;
+        };
+        Insert: {
+          actor_id?: string | null;
+          attempt_key: string;
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          invoice_id: string;
+          organization_id: string;
+          payload?: Json;
+          status: string;
+          version: number;
+        };
+        Update: {
+          actor_id?: string | null;
+          attempt_key?: string;
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          invoice_id?: string;
+          organization_id?: string;
+          payload?: Json;
+          status?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invoice_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      invoice_lines: {
+        Row: {
+          description: string;
+          id: string;
+          invoice_id: string;
+          name: string;
+          net_cents: number;
+          organization_id: string;
+          position: number;
+          price_quantity: number;
+          quantity: number;
+          tax_category: string;
+          tax_rate_basis_points: number;
+          unit: string;
+          unit_price_cents: number;
+        };
+        Insert: {
+          description?: string;
+          id?: string;
+          invoice_id: string;
+          name: string;
+          net_cents: number;
+          organization_id: string;
+          position: number;
+          price_quantity?: number;
+          quantity: number;
+          tax_category: string;
+          tax_rate_basis_points: number;
+          unit: string;
+          unit_price_cents: number;
+        };
+        Update: {
+          description?: string;
+          id?: string;
+          invoice_id?: string;
+          name?: string;
+          net_cents?: number;
+          organization_id?: string;
+          position?: number;
+          price_quantity?: number;
+          quantity?: number;
+          tax_category?: string;
+          tax_rate_basis_points?: number;
+          unit?: string;
+          unit_price_cents?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invoice_lines_invoice_fk";
+            columns: ["invoice_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoice_lines_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      invoices: {
+        Row: {
+          buyer_reference: string;
+          client_id: string;
+          closing_text: string;
+          created_at: string;
+          created_by: string | null;
+          discount_basis_points: number | null;
+          discount_days: number | null;
+          gross_cents: number;
+          id: string;
+          invoice_number: string | null;
+          job_id: string | null;
+          line_net_cents: number;
+          opening_text: string;
+          order_reference: string;
+          organization_id: string;
+          payment_due_days: number;
+          project_id: string | null;
+          recipient_client_id: string;
+          service_case_id: string | null;
+          service_end: string | null;
+          service_start: string | null;
+          status: string;
+          tax_cents: number;
+          updated_at: string;
+          updated_by: string | null;
+          version: number;
+        };
+        Insert: {
+          buyer_reference?: string;
+          client_id: string;
+          closing_text?: string;
+          created_at?: string;
+          created_by?: string | null;
+          discount_basis_points?: number | null;
+          discount_days?: number | null;
+          gross_cents?: number;
+          id?: string;
+          invoice_number?: string | null;
+          job_id?: string | null;
+          line_net_cents?: number;
+          opening_text?: string;
+          order_reference?: string;
+          organization_id: string;
+          payment_due_days?: number;
+          project_id?: string | null;
+          recipient_client_id: string;
+          service_case_id?: string | null;
+          service_end?: string | null;
+          service_start?: string | null;
+          status?: string;
+          tax_cents?: number;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Update: {
+          buyer_reference?: string;
+          client_id?: string;
+          closing_text?: string;
+          created_at?: string;
+          created_by?: string | null;
+          discount_basis_points?: number | null;
+          discount_days?: number | null;
+          gross_cents?: number;
+          id?: string;
+          invoice_number?: string | null;
+          job_id?: string | null;
+          line_net_cents?: number;
+          opening_text?: string;
+          order_reference?: string;
+          organization_id?: string;
+          payment_due_days?: number;
+          project_id?: string | null;
+          recipient_client_id?: string;
+          service_case_id?: string | null;
+          service_end?: string | null;
+          service_start?: string | null;
+          status?: string;
+          tax_cents?: number;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_fk";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoices_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoices_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "invoices_project_fk";
+            columns: ["project_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoices_recipient_fk";
+            columns: ["recipient_client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoices_service_case_fk";
+            columns: ["service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       job_assignments: {
         Row: {
           assigned_at: string;
@@ -5114,6 +5354,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -5138,6 +5379,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id?: string | null;
+          return_for_due_work_id?: string | null;
           scope_outcome?:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -5162,6 +5404,7 @@ export type Database = {
           organization_id?: string;
           original_due_date?: string;
           planning_occurrence_id?: string | null;
+          return_for_due_work_id?: string | null;
           scope_outcome?:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -5206,6 +5449,13 @@ export type Database = {
             columns: ["planning_occurrence_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "planning_occurrences";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_return_for_fkey";
+            columns: ["return_for_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
             referencedColumns: ["id", "organization_id"];
           },
         ];
@@ -5632,6 +5882,80 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      maintenance_visit_findings: {
+        Row: {
+          client_follow_up_id: string | null;
+          created_at: string;
+          created_by: string;
+          defects: string[];
+          id: string;
+          maintenance_due_work_id: string;
+          next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          note: string | null;
+          organization_id: string;
+          owner_user_id: string | null;
+          return_due_work_id: string | null;
+          target_date: string | null;
+        };
+        Insert: {
+          client_follow_up_id?: string | null;
+          created_at?: string;
+          created_by: string;
+          defects: string[];
+          id?: string;
+          maintenance_due_work_id: string;
+          next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          note?: string | null;
+          organization_id: string;
+          owner_user_id?: string | null;
+          return_due_work_id?: string | null;
+          target_date?: string | null;
+        };
+        Update: {
+          client_follow_up_id?: string | null;
+          created_at?: string;
+          created_by?: string;
+          defects?: string[];
+          id?: string;
+          maintenance_due_work_id?: string;
+          next_action?: Database["public"]["Enums"]["maintenance_next_action"];
+          note?: string | null;
+          organization_id?: string;
+          owner_user_id?: string | null;
+          return_due_work_id?: string | null;
+          target_date?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_visit_findings_client_follow_up_id_fkey";
+            columns: ["client_follow_up_id"];
+            isOneToOne: false;
+            referencedRelation: "client_follow_ups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_maintenance_due_work_id_organiz_fkey";
+            columns: ["maintenance_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_findings_return_due_work_id_organization_fkey";
+            columns: ["return_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
           },
         ];
       };
@@ -12583,6 +12907,59 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_mails: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          failure_code: string | null;
+          id: string;
+          kind: string;
+          organization_id: string | null;
+          provider_message_id: string | null;
+          recipient: string;
+          sent_at: string | null;
+          state: string;
+          stripe_object_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          failure_code?: string | null;
+          id?: string;
+          kind: string;
+          organization_id?: string | null;
+          provider_message_id?: string | null;
+          recipient: string;
+          sent_at?: string | null;
+          state?: string;
+          stripe_object_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          failure_code?: string | null;
+          id?: string;
+          kind?: string;
+          organization_id?: string | null;
+          provider_message_id?: string | null;
+          recipient?: string;
+          sent_at?: string | null;
+          state?: string;
+          stripe_object_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "werkflow_billing_mails_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       werkflow_billing_signals: {
         Row: {
           attempts: number;
@@ -12616,6 +12993,158 @@ export type Database = {
           state?: string;
           stripe_created_at?: string;
           stripe_event_id?: string;
+        };
+        Relationships: [];
+      };
+      werkflow_invoices: {
+        Row: {
+          buyer: Json;
+          currency: string;
+          due_cents: number;
+          file_key: string;
+          file_sha256: string;
+          file_size_bytes: number;
+          gross_cents: number;
+          id: string;
+          issue_date: string;
+          issued_at: string;
+          net_cents: number;
+          number: string;
+          organization_id: string;
+          paid_cents: number;
+          payment_means: string;
+          retain_until: string;
+          rules_release: string;
+          storno_of_invoice_id: string | null;
+          stripe_customer_id: string;
+          stripe_event_id: string;
+          stripe_invoice_id: string;
+          tax_cents: number;
+          type_code: string;
+        };
+        Insert: {
+          buyer: Json;
+          currency?: string;
+          due_cents: number;
+          file_key: string;
+          file_sha256: string;
+          file_size_bytes: number;
+          gross_cents: number;
+          id?: string;
+          issue_date: string;
+          issued_at?: string;
+          net_cents: number;
+          number: string;
+          organization_id: string;
+          paid_cents: number;
+          payment_means: string;
+          retain_until?: string;
+          rules_release: string;
+          storno_of_invoice_id?: string | null;
+          stripe_customer_id: string;
+          stripe_event_id: string;
+          stripe_invoice_id: string;
+          tax_cents: number;
+          type_code?: string;
+        };
+        Update: {
+          buyer?: Json;
+          currency?: string;
+          due_cents?: number;
+          file_key?: string;
+          file_sha256?: string;
+          file_size_bytes?: number;
+          gross_cents?: number;
+          id?: string;
+          issue_date?: string;
+          issued_at?: string;
+          net_cents?: number;
+          number?: string;
+          organization_id?: string;
+          paid_cents?: number;
+          payment_means?: string;
+          retain_until?: string;
+          rules_release?: string;
+          storno_of_invoice_id?: string | null;
+          stripe_customer_id?: string;
+          stripe_event_id?: string;
+          stripe_invoice_id?: string;
+          tax_cents?: number;
+          type_code?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "werkflow_invoices_storno_of_invoice_id_fkey";
+            columns: ["storno_of_invoice_id"];
+            isOneToOne: false;
+            referencedRelation: "werkflow_invoices";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      werkflow_subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean;
+          cancellation_reason: string | null;
+          checkout_attempt: number;
+          checkout_claimed_until: string | null;
+          checkout_expires_at: string | null;
+          checkout_session_id: string | null;
+          checkout_url: string | null;
+          created_at: string;
+          current_period_end: string | null;
+          duplicate_subscription_ids: string[];
+          holds_subscription: boolean;
+          linked_at: string | null;
+          organization_id: string;
+          read_at_by_subscription: Json;
+          reserved_by: string | null;
+          status: string | null;
+          stripe_customer_id: string;
+          stripe_subscription_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          cancel_at_period_end?: boolean;
+          cancellation_reason?: string | null;
+          checkout_attempt?: number;
+          checkout_claimed_until?: string | null;
+          checkout_expires_at?: string | null;
+          checkout_session_id?: string | null;
+          checkout_url?: string | null;
+          created_at?: string;
+          current_period_end?: string | null;
+          duplicate_subscription_ids?: string[];
+          holds_subscription?: boolean;
+          linked_at?: string | null;
+          organization_id: string;
+          read_at_by_subscription?: Json;
+          reserved_by?: string | null;
+          status?: string | null;
+          stripe_customer_id: string;
+          stripe_subscription_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          cancel_at_period_end?: boolean;
+          cancellation_reason?: string | null;
+          checkout_attempt?: number;
+          checkout_claimed_until?: string | null;
+          checkout_expires_at?: string | null;
+          checkout_session_id?: string | null;
+          checkout_url?: string | null;
+          created_at?: string;
+          current_period_end?: string | null;
+          duplicate_subscription_ids?: string[];
+          holds_subscription?: boolean;
+          linked_at?: string | null;
+          organization_id?: string;
+          read_at_by_subscription?: Json;
+          reserved_by?: string | null;
+          status?: string | null;
+          stripe_customer_id?: string;
+          stripe_subscription_id?: string | null;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -15640,6 +16169,16 @@ export type Database = {
         };
         Returns: string[];
       };
+      begin_werkflow_checkout: {
+        Args: {
+          p_closed_session_id?: string;
+          p_linked: boolean;
+          p_organization_id: string;
+          p_stripe_customer_id: string;
+          p_user_id: string;
+        };
+        Returns: Record<string, unknown>;
+      };
       book_inventory_import: {
         Args: {
           p_actor_id: string;
@@ -15755,6 +16294,15 @@ export type Database = {
           organization_id: string;
           storage_path: string;
         }[];
+      };
+      claim_werkflow_billing_mail: {
+        Args: {
+          p_kind: string;
+          p_organization_id: string;
+          p_recipient: string;
+          p_stripe_object_id: string;
+        };
+        Returns: string;
       };
       claim_werkflow_billing_signal: {
         Args: {
@@ -15883,6 +16431,56 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      complete_maintenance_visit: {
+        Args: {
+          p_actor_id: string;
+          p_completed_on: string;
+          p_defects: string[];
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          p_next_action_note: string;
+          p_next_action_owner_id: string;
+          p_next_action_target_date: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_scope_outcome: Database["public"]["Enums"]["maintenance_scope_outcome"];
+          p_work_artifact_revision_ids: string[];
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -16453,6 +17051,17 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_invoice: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_client_id: string;
+          p_organization_id: string;
+          p_work_id: string;
+          p_work_kind: string;
+        };
+        Returns: string;
+      };
       create_job_instruction_item: {
         Args: {
           p_actor_id: string;
@@ -16756,6 +17365,10 @@ export type Database = {
         };
         Returns: string;
       };
+      create_organization_from_subscription: {
+        Args: { p_admin_id: string; p_name: string; p_unique_code: string };
+        Returns: string;
+      };
       create_organization_invite: {
         Args: {
           p_email: string;
@@ -16771,6 +17384,15 @@ export type Database = {
       };
       create_organization_with_defaults: {
         Args: { p_admin_id: string; p_name: string; p_unique_code: string };
+        Returns: string;
+      };
+      create_organization_with_id: {
+        Args: {
+          p_admin_id: string;
+          p_name: string;
+          p_organization_id: string;
+          p_unique_code: string;
+        };
         Returns: string;
       };
       create_payroll_mapping_version: {
@@ -17225,6 +17847,16 @@ export type Database = {
       };
       delete_instruction_item: {
         Args: { p_item_id: string; p_organization_id: string };
+        Returns: undefined;
+      };
+      delete_invoice_draft: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_version: number;
+          p_invoice_id: string;
+          p_organization_id: string;
+        };
         Returns: undefined;
       };
       delete_organization: {
@@ -17701,6 +18333,16 @@ export type Database = {
           matched_on: string[];
         }[];
       };
+      finish_werkflow_checkout: {
+        Args: {
+          p_attempt: number;
+          p_expires_at?: string;
+          p_organization_id: string;
+          p_session_id?: string;
+          p_session_url?: string;
+        };
+        Returns: boolean;
+      };
       fulfill_instruction_evidence: {
         Args: {
           p_actor_id: string;
@@ -17756,6 +18398,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -17790,6 +18433,10 @@ export type Database = {
           organization_id: string;
           status: Database["public"]["Enums"]["invite_status"];
         }[];
+      };
+      get_invoice: {
+        Args: { p_invoice_id: string; p_organization_id: string };
+        Returns: Json;
       };
       get_offer: {
         Args: { p_offer_id: string; p_organization_id: string };
@@ -17905,6 +18552,28 @@ export type Database = {
         };
         Returns: string;
       };
+      issue_werkflow_invoice: {
+        Args: {
+          p_buyer: Json;
+          p_due_cents: number;
+          p_file_key: string;
+          p_file_sha256: string;
+          p_file_size_bytes: number;
+          p_gross_cents: number;
+          p_issue_date: string;
+          p_net_cents: number;
+          p_number: string;
+          p_organization_id: string;
+          p_paid_cents: number;
+          p_payment_means: string;
+          p_rules_release: string;
+          p_stripe_customer_id: string;
+          p_stripe_event_id: string;
+          p_stripe_invoice_id: string;
+          p_tax_cents: number;
+        };
+        Returns: string;
+      };
       leistung_prices_on_day: {
         Args: {
           p_leistung_ids: string[];
@@ -18000,6 +18669,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -18300,6 +18970,16 @@ export type Database = {
       };
       list_inventory_page: {
         Args: { p_organization_id: string; p_query?: Json };
+        Returns: Json;
+      };
+      list_invoice_page: {
+        Args: {
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+          p_status?: string;
+        };
         Returns: Json;
       };
       list_job_entries_page: {
@@ -18958,6 +19638,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -19013,6 +19694,20 @@ export type Database = {
             };
             Returns: string;
           };
+      record_werkflow_subscription_state: {
+        Args: {
+          p_cancel_at_period_end: boolean;
+          p_cancellation_reason?: string;
+          p_current_period_end?: string;
+          p_organization_id: string;
+          p_read_at: string;
+          p_refuse_as_duplicate?: boolean;
+          p_status: string;
+          p_stripe_customer_id: string;
+          p_stripe_subscription_id: string;
+        };
+        Returns: string;
+      };
       record_work_artifact_action: {
         Args: {
           p_action_id: string;
@@ -19867,6 +20562,19 @@ export type Database = {
         };
         Returns: string;
       };
+      save_invoice_draft: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_version: number;
+          p_invoice_id: string;
+          p_lines: Json;
+          p_organization_id: string;
+          p_terms: Json;
+          p_totals: Json;
+        };
+        Returns: number;
+      };
       save_personnel_onboarding_requirement: {
         Args: {
           p_actor_id: string;
@@ -20296,6 +21004,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -20336,6 +21045,7 @@ export type Database = {
           organization_id: string;
           original_due_date: string;
           planning_occurrence_id: string | null;
+          return_for_due_work_id: string | null;
           scope_outcome:
             | Database["public"]["Enums"]["maintenance_scope_outcome"]
             | null;
@@ -20568,6 +21278,16 @@ export type Database = {
           p_template_id: string;
         };
         Returns: undefined;
+      };
+      settle_werkflow_billing_mail: {
+        Args: {
+          p_failure_code?: string;
+          p_mail_id: string;
+          p_organization_id: string;
+          p_outcome: string;
+          p_provider_message_id?: string;
+        };
+        Returns: boolean;
       };
       settle_werkflow_billing_signal: {
         Args: {
@@ -21834,6 +22554,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      werkflow_subscription_holds: {
+        Args: { p_cancellation_reason: string; p_status: string };
+        Returns: boolean;
+      };
       withdraw_customer_commitment: {
         Args: {
           p_actor_id: string;
@@ -22068,6 +22792,11 @@ export type Database = {
         | "postponed"
         | "other"
         | "job_cancelled";
+      maintenance_next_action:
+        | "return_visit"
+        | "warranty_check"
+        | "offer_replacement"
+        | "none";
       maintenance_next_due_basis: "planned_due_date" | "actual_completion_date";
       maintenance_plan_event_type:
         | "created"
@@ -22732,6 +23461,12 @@ export const Constants = {
         "postponed",
         "other",
         "job_cancelled",
+      ],
+      maintenance_next_action: [
+        "return_visit",
+        "warranty_check",
+        "offer_replacement",
+        "none",
       ],
       maintenance_next_due_basis: [
         "planned_due_date",
