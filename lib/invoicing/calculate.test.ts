@@ -13,6 +13,9 @@ import type { CalculatedInvoice, InvoiceDraft } from './model';
 // The arithmetic of the invoice core: each line rounded once (lib/inventory's
 // line rule), VAT per category and rate on the sum of that rate's lines
 // (EN 16931 BR-CO), never per line.
+const [firstStandardLine] = STANDARD_RATE_INVOICE.lines;
+if (!firstStandardLine) throw new Error('fixture without lines');
+
 const CASES: ReadonlyArray<{
   case: string;
   draft: InvoiceDraft;
@@ -57,6 +60,14 @@ const CASES: ReadonlyArray<{
     ],
     totals: { lineNetCents: -23286, taxCents: -3945, grossCents: -27231, paidCents: 0, dueCents: -27231 },
   },
+  {
+    case: 'a credit whose tax rounds to nothing owes 0, never -0',
+    // −0,02 € at 19 % = −0,0038 € → 0
+    draft: { ...STANDARD_RATE_INVOICE, lines: [{ ...firstStandardLine, quantity: '1', unitPriceCents: -2 }] },
+    lineNetCents: [-2],
+    taxSubtotals: [{ rate: 1900, basisCents: -2, taxCents: 0 }],
+    totals: { lineNetCents: -2, taxCents: 0, grossCents: -2, paidCents: 0, dueCents: -2 },
+  },
 ];
 
 const rateOf = (tax: CalculatedInvoice['taxSubtotals'][number]['tax']) =>
@@ -75,6 +86,8 @@ describe('calculateInvoice', () => {
         })),
       ).toEqual(entry.taxSubtotals);
       expect(invoice.totals).toEqual(entry.totals);
+      // toEqual may not tell -0 from 0; an XML amount of „-0.00“ would.
+      for (const row of invoice.taxSubtotals) expect(Object.is(row.taxCents, -0)).toBe(false);
     });
   }
 

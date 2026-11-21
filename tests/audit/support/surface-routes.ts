@@ -18,6 +18,7 @@ const DYNAMIC_ROUTES: ReadonlySet<string> = new Set<DynamicPhoneRoute>([
   '/kunden/[clientId]',
   '/anfragen/[requestId]',
   '/angebote/[offerId]',
+  '/rechnungen/[invoiceId]',
   '/auftraege/[jobNumber]',
   '/mitarbeiter/[userId]',
   '/auftraege/[jobNumber]/uebergabe',
@@ -115,6 +116,9 @@ export async function detailDestination(
       };
     case '/angebote/[offerId]':
       return { route: `/angebote/${details.offerId}`, heading: names.offer };
+    case '/rechnungen/[invoiceId]':
+      // A draft has no number: its page is titled „Rechnungsentwurf“.
+      return { route: `/rechnungen/${details.invoiceId}`, heading: 'Rechnungsentwurf' };
     case '/auftraege/uebergaben/[targetType]/[targetId]':
       return { route: `/auftraege/uebergaben/auftrag/${details.jobId}`, heading: names.job };
   }
