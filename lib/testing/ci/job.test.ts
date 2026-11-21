@@ -541,3 +541,37 @@ test("a full run's Check records the failed groups no landed plan selected, and 
     expect(readResult(join(run, resultFileName('check', null)))).not.toHaveProperty('unselectedFailures');
   });
 });
+
+test('off GitHub Actions the midnight job never sleeps: started before its hold ends it fails at once, after it passes', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    for (const [name, until, passes] of [
+      ['early', '2100-01-01T00:10:00.000Z', false],
+      ['due', '2026-11-01T23:10:00.000Z', true],
+    ] as const) {
+      const run = join(folder, name);
+      writePlan(root, run, {
+        plan: {
+          jobs: ['plan', 'fast', 'midnight', 'browser', 'check'],
+          skips: {},
+          shards: [{ shard: 1, groups: 'golden:p1-24a' }],
+          outputs: { ...EMPTY_OUTPUTS, midnight_until: until },
+        },
+      });
+      // A job that slept for its hold would outlast the test's timeout.
+      const code = runJob(root, 'midnight', {
+        CI_EVENT: 'integration',
+        CI_RESULTS_DIR: run,
+        CI_PRODUCER: 'mac-standin',
+        CI_RUN_URL: RUN_URL,
+        GITHUB_ACTIONS: '',
+      });
+      const midnight = readResult(join(run, resultFileName('midnight', null)));
+      expect([name, code, 'status' in midnight && midnight.status]).toEqual([
+        name,
+        passes ? 0 : 1,
+        passes ? 'passed' : 'failed',
+      ]);
+    }
+  });
+});

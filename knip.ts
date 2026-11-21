@@ -43,6 +43,8 @@ const config: KnipConfig = {
     'scripts/migration/*.ts!',
     // Run by .github/scripts/main-full-run.sh and the stand-in's scheduler.
     'scripts/ci/full-run.ts!',
+    // Run by a CI runner's orchestrator, which starts what it names.
+    'scripts/ci/schedule.ts!',
     // Run on a Boat machine by scripts/boat/remote-verify.sh, or by package scripts.
     'scripts/boat/*.ts!',
     // Agent hooks run by path from the agent settings.
