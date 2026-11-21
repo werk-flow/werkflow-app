@@ -60,7 +60,7 @@ alter table public.werkflow_subscriptions
 -- @destructive: after release 55088f06: the deployed build never writes werkflow_billing_mails, and the new rule keeps every kind the old one took
 alter table public.werkflow_billing_mails drop constraint werkflow_billing_mails_kind_check;
 
--- The list also holds the kinds of werk-flow/werkflow-app#508 (20261215100004), so either merge order keeps them.
+-- The list also holds the kinds of werk-flow/werkflow-app#508 (20261221100004), so either merge order keeps them.
 -- @destructive: after release 55088f06: the deployed build writes no werkflow_billing_mails row, and the rule takes every kind the old one took
 alter table public.werkflow_billing_mails add constraint werkflow_billing_mails_kind_check check (kind in (
   'payment_failed', 'card_problem', 'mandate_inactive', 'debit_notice', 'invoice', 'receipt',
@@ -70,7 +70,7 @@ alter table public.werkflow_billing_mails add constraint werkflow_billing_mails_
   'alarm.reconciliation_missed', 'alarm.duplicate_subscription_cancelled', 'alarm.refund_failed'
 )) not valid;
 
--- As 20261215100003, except that only a running subscription answers
+-- As 20261218100003, except that only a running subscription answers
 -- 'subscribed': after a failed first debit the Admin starts a new Checkout.
 create or replace function public.begin_werkflow_checkout(
   p_organization_id uuid,
@@ -145,7 +145,7 @@ begin
 end;
 $$;
 
--- As 20261215100003, with three changes:
+-- As 20261218100003, with three changes:
 -- - A marked duplicate answers 'duplicate' until its cleanup is settled,
 --   whatever its status, so a cleanup cut short resumes; once settled it
 --   answers 'ignored' and still never becomes the organization's.
