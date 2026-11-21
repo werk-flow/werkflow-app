@@ -57,10 +57,12 @@ import { repository } from './run';
 // Passed jobs' workspaces are removed at the end; a failed job's stays with its log.
 
 /** This run's lock once taken: a refusal after it releases it, so none is left behind. */
-const held: { release?: () => void } = {};
+const held: { release?: () => void; claim?: string } = {};
 
 function refuse(problem: string): never {
   held.release?.();
+  // A run that never started holds no claim on its commit.
+  if (held.claim) rmSync(held.claim, { force: true });
   console.error(`[run] ${problem}`);
   process.exit(2);
 }
@@ -122,6 +124,7 @@ if (event === 'main') {
   mkdirSync(join(workRoot, 'main-runs'), { recursive: true });
   try {
     writeFileSync(claim, runUrl, { flag: 'wx' });
+    held.claim = claim;
   } catch {
     const owner = readFileSync(claim, 'utf8');
     if (owner !== runUrl) refuse(`main's run of ${commit} started already: ${owner}.`);
@@ -242,6 +245,8 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const)
     controller.abort();
   });
 
+// The run starts here: from now on its claim on a main commit stays, whatever happens.
+delete held.claim;
 let exitCode = 1;
 try {
   const outcome = await runCommit(

@@ -7,11 +7,9 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, w
 import { join } from 'node:path';
 import { z } from 'zod';
 import { appCheckStateOf } from '../../lib/testing/ci/check-app';
+import { mainEnvironment, type MainFollowUp, mainFollowUpSchema } from '../../lib/testing/ci/queue-main-run';
 import {
   integrationEnvironment,
-  mainEnvironment,
-  type MainFollowUp,
-  mainFollowUpSchema,
   type QueueAdapter,
   type QueuedPull,
   type QueueState,
@@ -147,14 +145,15 @@ export function runIntegration(
 }
 
 /**
- * Starts main's run after a landing (`mainRunAfter` in lib/testing/ci/queue.ts) through the main
+ * Starts main's run after a landing (`mainRunOf` in lib/testing/ci/queue.ts) through the main
  * runner, and waits for it. Its exit code decides nothing for the queue; the run posts its own Check.
+ * False when the runner could not be started at all.
  */
 export function runMain(
   options: { repository: string; mainRunner: string; workDir: string; runUrlBase: string },
-  run: { commit: string; base: string; prs: readonly number[] },
-): void {
-  const id = `${new Date().toISOString().replace(/[-:.]/g, '')}-main-${run.commit.slice(0, 12)}`;
+  run: { commit: string; base: string; prs: readonly number[]; id: string },
+): boolean {
+  const id = `${run.id}-main-${run.commit.slice(0, 12)}`;
   const environment = mainEnvironment({
     ...run,
     runUrl: `${options.runUrlBase}/${id}`,
@@ -169,6 +168,7 @@ export function runMain(
   console.info(
     `[queue] main's runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}`,
   );
+  return ran.error === undefined;
 }
 
 /** The runner's ledger when the queue is given one, read-only; undefined without one. */

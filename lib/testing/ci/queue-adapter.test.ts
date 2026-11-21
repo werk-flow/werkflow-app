@@ -346,14 +346,11 @@ test("main's run gets main's head, the tick's base and the landed PRs, in a resu
   );
   chmodSync(mainRunner, 0o755);
   const workDir = join(folder, 'work');
-  runMain(
-    { repository, mainRunner, workDir, runUrlBase: 'https://ci.example/queue' },
-    {
-      commit: 'c'.repeat(40),
-      base: 'b'.repeat(40),
-      prs: [7, 9],
-    },
-  );
+  const main = { commit: 'c'.repeat(40), base: 'b'.repeat(40), prs: [7, 9], id: 'tick-1' };
+  const options = { repository, mainRunner, workDir, runUrlBase: 'https://ci.example/queue' };
+  // A runner that ran counts as started, whatever its exit; one that could not start does not.
+  expect(runMain({ ...options, mainRunner: join(folder, 'missing') }, main)).toBe(false);
+  expect(runMain(options, main)).toBe(true);
   const env = Object.fromEntries(
     readFileSync(join(folder, 'main-env'), 'utf8')
       .trim()
@@ -366,8 +363,9 @@ test("main's run gets main's head, the tick's base and the landed PRs, in a resu
     CI_BASE_SHA: 'b'.repeat(40),
     CI_PRS: '7,9',
   });
+  // The owed run's id stays, so a retry keeps the run's claim on its commit.
   const id = env.CI_RUN_URL?.replace('https://ci.example/queue/', '') ?? '';
-  expect(id).toEndWith(`-main-${'c'.repeat(12)}`);
+  expect(id).toBe(`tick-1-main-${'c'.repeat(12)}`);
   expect(env.CI_RESULTS_DIR).toBe(join(workDir, id));
 });
 
@@ -375,8 +373,8 @@ test('an owed main run survives between ticks until it is cleared, and a damaged
   const workDir = join(folder, 'work');
   mkdirSync(workDir);
   expect(readMainFollowUp(workDir)).toBeUndefined();
-  saveMainFollowUp(workDir, { base: 'b'.repeat(40), prs: [7] });
-  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7] });
+  saveMainFollowUp(workDir, { base: 'b'.repeat(40), prs: [7], id: 'tick-1' });
+  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7], id: 'tick-1' });
   saveMainFollowUp(workDir, undefined);
   expect(readMainFollowUp(workDir)).toBeUndefined();
   writeFileSync(join(workDir, 'main-follow-up.json'), '{"base":"main"}');

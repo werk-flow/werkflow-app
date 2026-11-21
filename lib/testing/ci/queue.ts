@@ -236,52 +236,6 @@ export function integrationEnvironment(run: {
   };
 }
 
-/** main's run a landing owes: the tick's base, main before the batch, and the PRs it landed. */
-export const mainFollowUpSchema = z
-  .object({ base: z.string().regex(/^[0-9a-f]{40}$/), prs: z.array(z.number().int().positive()) })
-  .strict();
-export type MainFollowUp = z.infer<typeof mainFollowUpSchema>;
-
-/**
- * The main run a live tick owes when it landed a PR or stopped partway (`partial`), or undefined for
- * a dry run or a tick that moved nothing. The queue saves it before it reads main, so a read that
- * fails leaves it for the next tick.
- */
-export function mainFollowUp(outcome: QueueOutcome): MainFollowUp | undefined {
-  const moved = outcome.landing.length > 0 || outcome.stops.some((stop) => stop.kind === 'partial');
-  return !outcome.dryRun && moved ? { base: outcome.base, prs: [...outcome.landing] } : undefined;
-}
-
-/**
- * main's run of its head for an owed follow-up: diffed against the tick's base, so it reuses the
- * batch's pass only for the landing the queue tested, and otherwise runs its jobs. Undefined when
- * main did not move, as when a merge that may have landed did not.
- */
-export function mainRunOf(
-  followUp: MainFollowUp,
-  head: string,
-): { commit: string; base: string; prs: number[] } | undefined {
-  return head === followUp.base ? undefined : { commit: head, ...followUp };
-}
-
-/** The environment of main's run after a landing, on top of the runner's own. */
-export function mainEnvironment(run: {
-  commit: string;
-  base: string;
-  prs: readonly number[];
-  runUrl: string;
-  resultsDir: string;
-}): Record<string, string> {
-  return {
-    CI_EVENT: 'main',
-    CI_COMMIT: run.commit,
-    CI_BASE_SHA: run.base,
-    CI_RUN_URL: run.runUrl,
-    CI_RESULTS_DIR: run.resultsDir,
-    CI_PRS: run.prs.join(','),
-  };
-}
-
 /**
  * One tick of the queue. A frozen queue does nothing. A live tick first withdraws a mark an earlier
  * tick left pending, merged or not; a withdrawal that fails freezes the queue. A live run without a

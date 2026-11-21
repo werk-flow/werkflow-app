@@ -21,7 +21,7 @@ const RECORD = (script: string) => `
 import { appendFileSync, writeFileSync } from 'node:fs';
 const job = process.argv.at(-1);
 const seen = Object.entries(process.env).filter(([name]) => /^(CI_|GH_TOKEN|SIBLING_|SHRINK_|EMAIL_|GITHUB_ENV)/.test(name)).sort();
-writeFileSync(process.env.RECORD_DIR + '/${script}-' + job + '.env', seen.map(([name, value]) => name + '=' + value).join('\\n'));
+writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/${script}-' + job + '.env', seen.map(([name, value]) => name + '=' + value).join('\\n'));
 `;
 const PREPARE = `${RECORD('prepare')}
 if (process.env.STARTS_STACK === '1') appendFileSync(process.env.GITHUB_ENV, 'CI_STACK_STARTED=1\\n');
@@ -62,6 +62,8 @@ beforeEach(() => {
   chmodSync(join(folder, 'bin/supabase'), 0o755);
   process.env.PATH = `${join(folder, 'bin')}:${saved.PATH}`;
   process.env.RECORD_DIR = folder;
+  // The trusted sibling step gets only PATH and HOME: its stub records into HOME.
+  process.env.HOME = folder;
   // The orchestrator's own variables, which no job may inherit.
   process.env.CI_LEDGER = '/ledger.jsonl';
   process.env.CI_PUBLISHER = '/publish';

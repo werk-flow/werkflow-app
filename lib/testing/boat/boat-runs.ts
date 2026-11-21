@@ -39,13 +39,20 @@ function reportFolders(repository: string): Set<string> {
   return new Set(existsSync(folder) ? readdirSync(folder) : []);
 }
 
-/** A run's start: when its machine was ready, and the report folders the checkout held then. */
-type BoatRunStart = { startedAt: string; reports: ReadonlySet<string> };
+/**
+ * A run's start: when its machine was ready, the commit it tests, and the report folders the
+ * checkout held then.
+ */
+type BoatRunStart = { startedAt: string; head: string | null; reports: ReadonlySet<string> };
 
 /** The run's start, or undefined when the checkout's reports cannot be read: the record is best effort. */
 export function boatRunStart(repository: string): BoatRunStart | undefined {
   try {
-    return { startedAt: new Date().toISOString(), reports: reportFolders(repository) };
+    return {
+      startedAt: new Date().toISOString(),
+      head: headOf(repository),
+      reports: reportFolders(repository),
+    };
   } catch (error) {
     console.warn(
       `[verify] The Boat run's cost is not recorded: ${error instanceof Error ? error.message : String(error)}`,
@@ -54,10 +61,15 @@ export function boatRunStart(repository: string): BoatRunStart | undefined {
   }
 }
 
-/** The checkout's commit, or null when git cannot say. */
+/**
+ * The commit the checkout's run tests, or null when it tests more than a commit (changed or untracked
+ * files) or git cannot say: such a run counts to no PR.
+ */
 function headOf(repository: string): string | null {
-  const answer = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' });
-  return answer.status === 0 ? answer.stdout.trim() : null;
+  const git = (...args: string[]) => spawnSync('git', args, { cwd: repository, encoding: 'utf8' });
+  const head = git('rev-parse', 'HEAD');
+  const status = git('status', '--porcelain');
+  return head.status === 0 && status.status === 0 && status.stdout.trim() === '' ? head.stdout.trim() : null;
 }
 
 /**
@@ -75,7 +87,7 @@ export function recordBoatRun(
       machine: run.machine,
       startedAt: run.started.startedAt,
       completedAt: new Date().toISOString(),
-      head: headOf(repository),
+      head: run.started.head,
       reports: [...reportFolders(repository)].filter((report) => !run.started.reports.has(report)).sort(),
       usage: run.usage ? { seconds: run.usage.seconds, dollars: run.usage.dollars } : null,
     });

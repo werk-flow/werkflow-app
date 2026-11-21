@@ -76,6 +76,27 @@ test('a run is recorded with its commit and the report folders it returned, and 
   expect(readBoatRuns(join(checkout, 'missing.jsonl'))).toEqual([]);
 });
 
+test('a run on uncommitted work counts to no commit', () => {
+  execFileSync('git', ['init', '--quiet', checkout]);
+  execFileSync(
+    'git',
+    [
+      '-c',
+      'user.name=ci',
+      '-c',
+      'user.email=ci@example.invalid',
+      'commit',
+      '--quiet',
+      '--allow-empty',
+      '-m',
+      'head',
+    ],
+    { cwd: checkout },
+  );
+  writeFileSync(join(checkout, 'work.ts'), 'in progress');
+  expect(started().head).toBeNull();
+});
+
 test('a record that cannot be written only warns, and one without a usable machine id is never written', () => {
   const start = started();
   writeFileSync(join(checkout, '.agent-logs'), 'a file where the folder belongs');

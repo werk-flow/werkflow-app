@@ -3,15 +3,8 @@
 // Each case drives runQueueTick through a fake GitHub, git and runner.
 import { expect, test } from 'bun:test';
 import { type Fake, fakeWorld, pull, sha } from '../fixtures/merge-queue-world';
-import {
-  mainFollowUp,
-  mainRunOf,
-  needsAttention,
-  pickBatch,
-  type QueuedPull,
-  runQueueTick,
-  supersession,
-} from './queue';
+import { mainFollowUp, mainRunOf } from './queue-main-run';
+import { needsAttention, pickBatch, type QueuedPull, runQueueTick, supersession } from './queue';
 import type { CiResult } from './results';
 import { passedTree, provenTree, reusableReceipt } from './reuse';
 
@@ -647,22 +640,22 @@ test('a dry run tests and decides like a live tick but never lands or tells a PR
 test("main's run follows every live landing or partial stop once, on main's head with the tick's base, and never a dry run", async () => {
   const landed = await runQueueTick(fakeWorld([pull(1), pull(2)]).adapter, LIVE);
   expect(landed.landing).toEqual([1, 2]);
-  const owed = mainFollowUp(landed);
-  expect(owed).toEqual({ base: landed.base, prs: [1, 2] });
+  const owed = mainFollowUp(landed, 'tick-1');
+  expect(owed).toEqual({ base: landed.base, prs: [1, 2], id: 'tick-1' });
   expect(owed && mainRunOf(owed, sha('head'))).toEqual({
     commit: sha('head'),
     base: landed.base,
     prs: [1, 2],
+    id: 'tick-1',
   });
   // A merge that may have landed is a partial stop without a landing: the run is owed, and starts
   // only when main moved.
-  const partial = mainFollowUp({
-    ...landed,
-    landing: [],
-    stops: [{ kind: 'partial', detail: 'may have landed' }],
-  });
-  expect(partial).toEqual({ base: landed.base, prs: [] });
+  const partial = mainFollowUp(
+    { ...landed, landing: [], stops: [{ kind: 'partial', detail: 'may have landed' }] },
+    'tick-2',
+  );
+  expect(partial).toEqual({ base: landed.base, prs: [], id: 'tick-2' });
   expect(partial && mainRunOf(partial, landed.base)).toBeUndefined();
-  expect(mainFollowUp({ ...landed, dryRun: true })).toBeUndefined();
-  expect(mainFollowUp(await runQueueTick(fakeWorld([]).adapter, LIVE))).toBeUndefined();
+  expect(mainFollowUp({ ...landed, dryRun: true }, 'tick-3')).toBeUndefined();
+  expect(mainFollowUp(await runQueueTick(fakeWorld([]).adapter, LIVE), 'tick-4')).toBeUndefined();
 });

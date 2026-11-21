@@ -31,6 +31,8 @@ import { CI_DAG, CI_JOBS, CI_TOOLS, PREPARE_STEPS, type PrepareStep } from '../.
 //                  is left out and docs:check says so. Only the clone sees it, never the job body. A
 //                  runner off GitHub runs this step from its trusted copy before the job's own steps,
 //                  which then find the clones and skip it.
+//   CI_CHECKOUT    The checkout to act on, when the step runs from another directory: a trusted step
+//                  runs outside the tested checkout, whose bunfig.toml and .env files Bun would load.
 //   CI_CACHE_DIR   Off GitHub Actions, optional: a folder the runner keeps across jobs for the
 //                  stack's environment and Chromium's system packages, in place of GitHub's caches.
 //   CI_REPLACE_STACK=1  stack: stops a running stack of the project first, its volumes included.
@@ -46,7 +48,8 @@ const STACK_PORTS = { low: 54321, high: 54327 };
 const STACK_ENVIRONMENT = '.env.local-stack-backup';
 const SIBLINGS = { website: 'werkflow-website', business: 'werkflow-business' } as const;
 const actions = process.env.GITHUB_ACTIONS === 'true';
-const checkout = process.cwd();
+/** The checkout: the current directory, or CI_CHECKOUT for a trusted step run from outside it. */
+const checkout = resolve(process.env.CI_CHECKOUT || process.cwd());
 
 function fail(message: string): never {
   console.error(`::error title=Prepare::${message}`);

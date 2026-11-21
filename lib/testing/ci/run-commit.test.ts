@@ -125,8 +125,9 @@ type WorldOptions = {
   onStart?: (unit: Unit) => void;
   /** Whether the executor runs jobs where they cannot write the ledger; default true. */
   isolated?: boolean;
-  /** What Check writes as its result. */
-  checkWrites?: CiResult['status'];
+  /** What Check writes as its result: by default its exit's, as job.ts does; `nothing` writes none. */
+  checkWrites?: CiResult['status'] | 'nothing';
+  checkOverrides?: Partial<CiResult>;
 };
 
 function world(options: WorldOptions = {}): World {
@@ -151,9 +152,11 @@ function world(options: WorldOptions = {}): World {
         results.set('plan', plan);
         identity = planIdentityOf(plan, plan.plan ?? PLAN);
       }
-      if (task.unit.job === 'check' && options.checkWrites)
-        results.set('check', result(task.unit, clock, { status: options.checkWrites }));
-      return outcome(task.unit);
+      const ended = outcome(task.unit);
+      const checkStatus = options.checkWrites ?? (ended.exitCode === 0 ? 'passed' : 'failed');
+      if (task.unit.job === 'check' && checkStatus !== 'nothing')
+        results.set('check', result(task.unit, clock, { status: checkStatus, ...options.checkOverrides }));
+      return ended;
     },
     isolatesJobs: true,
   };
@@ -411,6 +414,19 @@ test('a stopped run cancels its jobs, starts no other, and still runs Check', as
   expect(started(w)).toEqual(['host:plan', 'jobs:fast', 'host:check']);
   expect(report(w).fast).toEqual({ result: 'cancelled' });
   expect(outcome.exitCode, w.log.join('\n')).toBe(1);
+});
+
+test('a Check that exited 0 passes the run only with its completed passing result of this run', async () => {
+  const passes = async (options: WorldOptions): Promise<boolean> => {
+    const w = world(options);
+    return (await runCommit(input({ attempt: 2 }), w.deps, new AbortController().signal)).exitCode === 0;
+  };
+  const plan = { planOverrides: { attempt: 2 } };
+  expect(await passes({ ...plan, checkOverrides: { attempt: 2 } })).toBe(true);
+  expect(await passes({ ...plan, checkWrites: 'nothing' })).toBe(false);
+  expect(await passes({ ...plan, checkWrites: 'running', checkOverrides: { attempt: 2 } })).toBe(false);
+  // A pass of the earlier attempt left in place never stands for this one.
+  expect(await passes({ ...plan, checkOverrides: { attempt: 1 } })).toBe(false);
 });
 
 test('the queued Check is posted before Plan, and a run whose start post failed runs nothing', async () => {

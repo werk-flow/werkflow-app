@@ -90,9 +90,11 @@ async function lockStack(
       }
       continue;
     }
-    // A takeover lock whose taker died is taken over the same way, by its own dead holder.
+    // A taker that died mid-takeover leaves its lock for a person: two runners that both read it
+    // could each remove what the other just took.
     const taker = holderOf(takeover);
-    if (taker !== undefined && !alive(taker)) rmSync(takeover, { force: true });
+    if (taker !== undefined && !alive(taker))
+      throw new Error(`${takeover} names process ${taker}, which died; remove it once no run-commit runs.`);
     if (!announced) log(`[run] waiting for the host's stack, which process ${holder ?? 'unknown'} holds`);
     announced = true;
     await new Promise((resolve) => {
@@ -136,7 +138,11 @@ function runGroup(
     child.once('error', () => resolve(null));
     child.once('close', (code) => {
       signal.removeEventListener('abort', stop);
-      resolve(code);
+      // A stopped command never passes, whatever it exited with, and nothing of its group outlives it.
+      if (signal.aborted) {
+        signalGroup('SIGKILL');
+        resolve(null);
+      } else resolve(code);
     });
   });
 }
@@ -244,9 +250,21 @@ export function processExecutor(
         writeFileSync(passed, '');
         // The sibling clones take a token, so the trusted copy's prepare.ts clones them; the tested
         // commit's steps, its install scripts included, never see it and find the clones in place.
+        // It runs from the workspace folder, never the tested checkout, whose bunfig.toml and .env
+        // files Bun would load into the process that holds the token, with only what it needs.
         if (steps.includes('siblings')) {
           const trusted = join(options.source, 'scripts/ci/prepare.ts');
-          const cloned = await run(process.execPath, [trusted, 'siblings'], { ...env, ...task.prepareEnv });
+          const minimal: NodeJS.ProcessEnv = { NODE_ENV: host.NODE_ENV, PATH: host.PATH, HOME: host.HOME };
+          const cloned = await runGroup(
+            process.execPath,
+            [trusted, 'siblings'],
+            {
+              cwd: folder,
+              env: { ...minimal, ...task.prepareEnv, CI_CHECKOUT: checkout, GITHUB_ENV: passed },
+              log,
+            },
+            ended,
+          );
           if (cloned !== 0) return fail(`the sibling clones ended with ${cloned ?? 'a stop'}`);
         }
         const prepared = await run(process.execPath, ['scripts/ci/prepare.ts', 'for', task.unit.job], {

@@ -83,6 +83,11 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
     ],
     [{}, 'another run-commit holds this run', () => writeFileSync(join(results, RUN_COMMIT_LOCK), '')],
     [
+      { CI_EVENT: 'main' },
+      'another run-commit holds this run',
+      () => writeFileSync(join(results, RUN_COMMIT_LOCK), ''),
+    ],
+    [
       { CI_RUN_ATTEMPT: '2' },
       'holds attempt 2; a rerun counts CI_RUN_ATTEMPT up',
       () => writeFileSync(join(results, 'plan.json'), JSON.stringify(receipt({ event: 'pr', attempt: 2 }))),
@@ -95,8 +100,10 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
     const refused = runCommit(env);
     expect([cause, refused.status]).toEqual([cause, 2]);
     expect(refused.stderr).toContain(cause);
-    // A refusal starts no workspace.
+    // A refusal starts no workspace, and a main run it refused leaves no claim of its own.
     expect([cause, existsSync(join(folder, 'work', 'host'))]).toEqual([cause, false]);
+    if ('CI_EVENT' in env && env.CI_EVENT === 'main' && !cause.includes('runs/3'))
+      expect([cause, existsSync(join(folder, 'work/main-runs', head))]).toEqual([cause, false]);
     rmSync(join(folder, 'work'), { recursive: true, force: true });
   }
   expect(readdirSync(results)).toEqual(['fast.json']);

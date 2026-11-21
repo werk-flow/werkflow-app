@@ -68,7 +68,8 @@ import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { CHECK_APP_CONFIG, readCheckApp } from '../../lib/testing/ci/check-app';
-import { MAX_BATCH, mainFollowUp, mainRunOf, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
+import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
+import { mainFollowUp, mainRunOf } from '../../lib/testing/ci/queue-main-run';
 import {
   createQueueAdapter,
   QUEUE_STATE_FILE,
@@ -150,13 +151,16 @@ try {
   });
   const mainRunner = values['main-runner'] && resolve(values['main-runner']);
   const runUrlBase = values['run-url-base'];
-  /** Starts main's run a landing owes, once, and clears it; a failed read of main leaves it owed. */
+  /**
+   * Starts main's run a landing owes, once, on a live tick only, and clears it once its runner
+   * started: a failed read of main or a runner that could not start leaves it owed.
+   */
   const followUp = async (): Promise<void> => {
-    const owed = mainRunner ? readMainFollowUp(workDir) : undefined;
+    const owed = mainRunner && !values['dry-run'] ? readMainFollowUp(workDir) : undefined;
     if (!mainRunner || !owed) return;
     const main = mainRunOf(owed, (await adapter.main()).commit);
-    saveMainFollowUp(workDir, undefined);
-    if (main) runMain({ repository, mainRunner, workDir, runUrlBase }, main);
+    if (!main || runMain({ repository, mainRunner, workDir, runUrlBase }, main))
+      saveMainFollowUp(workDir, undefined);
   };
   // A follow-up an earlier tick could not start goes first.
   await followUp();
@@ -176,7 +180,7 @@ try {
   process.exitCode = needsAttention(outcome) ? 2 : 0;
   // After every landing or partial stop, whatever the exit: main's run of main's head, once. It is
   // saved first, so a read of main that fails leaves it for the next tick.
-  const owed = mainFollowUp(outcome);
+  const owed = mainFollowUp(outcome, new Date().toISOString().replace(/[-:.]/g, ''));
   if (mainRunner && owed) {
     saveMainFollowUp(workDir, owed);
     await followUp();

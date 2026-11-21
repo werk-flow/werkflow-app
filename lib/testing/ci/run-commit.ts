@@ -215,14 +215,15 @@ async function startUnit(
 ): Promise<void> {
   const name = unitName(unit);
   context.states.set(name, 'running');
+  const append = deps.appendReceipt;
   const run: ReceiptRun = {
     ...input.run,
     listGrowthApproved: input.env.SHRINK_ONLY_GROWTH_APPROVED === 'true',
     plan: context.owner,
   };
-  const start = startReceipt(run, unit, new Date(deps.now()));
+  const start = append ? startReceipt(run, unit, new Date(deps.now())) : undefined;
   try {
-    deps.appendReceipt?.(start);
+    if (start) append?.(start);
   } catch (error) {
     deps.log(`[run] ${name}: not started, its start could not reach the ledger: ${message(error)}`);
     context.states.set(name, 'failed');
@@ -239,11 +240,11 @@ async function startUnit(
       return signal.aborted ? 'cancelled' : 'failed';
     },
   );
-  if (deps.appendReceipt) {
+  if (append && start) {
     const end = endReceipt(start, deps.readResult(unit), state === 'passed', new Date(deps.now()));
     if (end.problem) deps.log(`[run] ${name}: its ledger receipt fails it: ${end.problem}`);
     try {
-      deps.appendReceipt(end.receipt);
+      append(end.receipt);
     } catch (error) {
       // A receipt that cannot reach the ledger fails the job, as job.ts fails on it.
       deps.log(`[run] ${name}: its receipt could not reach the ledger: ${message(error)}`);
@@ -349,6 +350,27 @@ function settleCheck(input: RunCommitInput, deps: RunCommitDeps, exitCode: numbe
 }
 
 /**
+ * Whether the run's Check passed: its process passed, and it left a completed passing result of
+ * this run, attempt, event, commit and tree. A runner that posts `Check` by the exit code never
+ * posts a pass that check.json does not hold.
+ */
+function checkPassed(input: RunCommitInput, deps: RunCommitDeps, exitCode: number | null): boolean {
+  const written = deps.readResult({ job: 'check', shard: null });
+  const { runUrl, attempt, event, commit, tree } = input.run;
+  return (
+    exitCode === 0 &&
+    !('unreadable' in written) &&
+    written.status === 'passed' &&
+    written.completedAt !== null &&
+    written.runUrl === runUrl &&
+    written.attempt === attempt &&
+    written.event === event &&
+    written.commit === commit &&
+    written.tree === tree
+  );
+}
+
+/**
  * The run's dependencies with the ledger only when no job can write it: an executor that runs jobs
  * as the orchestrator's own user keeps no ledger, so every run executes in full (scripts/ci/job.ts).
  */
@@ -394,7 +416,7 @@ export async function runCommit(
   if (deps.publish && !(await deps.publish('finish')))
     deps.log('[run] The Check verdict could not be posted.');
   return {
-    exitCode: checkOutcome.exitCode === 0 ? 0 : 1,
+    exitCode: checkPassed(input, deps, checkOutcome.exitCode) ? 0 : 1,
     units: planned.units.map((unit) => ({ unit, state: states.get(unitName(unit)) ?? 'waiting' })),
     scheduler,
   };
