@@ -64,15 +64,20 @@ function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
     router.refresh();
   };
   return (
-    <li className="flex flex-wrap items-start gap-x-3 gap-y-2 py-3" aria-busy={isPending || undefined}>
-      <Badge variant={STATE_BADGE[entry.state]}>{DELIVERY_STATE_LABELS[entry.state]}</Badge>
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <p className="break-words text-sm font-medium">{deliveryTitle(entry)}</p>
-        <p className="text-xs text-muted-foreground">{deliveryMeta(entry)}</p>
-        {entry.state === 'failed' && (
-          <p className="text-sm text-destructive">{deliveryFailureSentence(entry.failureCode)}</p>
-        )}
-        <ErrorText>{error}</ErrorText>
+    <li
+      className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:gap-3"
+      aria-busy={isPending || undefined}
+    >
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:gap-3">
+        <Badge variant={STATE_BADGE[entry.state]}>{DELIVERY_STATE_LABELS[entry.state]}</Badge>
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <p className="text-sm font-medium wrap-anywhere">{deliveryTitle(entry)}</p>
+          <p className="text-xs text-muted-foreground wrap-anywhere">{deliveryMeta(entry)}</p>
+          {entry.state === 'failed' && (
+            <p className="text-sm text-destructive">{deliveryFailureSentence(entry.failureCode)}</p>
+          )}
+          <ErrorText>{error}</ErrorText>
+        </div>
       </div>
       {entry.retryable && (
         <Button
