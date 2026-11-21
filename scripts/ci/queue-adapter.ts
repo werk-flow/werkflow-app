@@ -11,7 +11,8 @@ import {
   type Verdict,
   verdictOf,
 } from '../../lib/testing/ci/queue';
-import { readResult, resultFileName } from '../../lib/testing/ci/results';
+import { type Ledger, readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
+import { provenTree } from '../../lib/testing/ci/reuse';
 
 /** The commit status the queue sets on a PR's head right before it merges it. The ruleset requires it (owner's step). */
 const QUEUE_STATUS = 'Queue';
@@ -69,7 +70,7 @@ export function squashCommit(
  * wrote. The runner's exit code decides nothing: only this run's Check and job results count.
  */
 export function runIntegration(
-  options: { repository: string; runner: string; resultsDir: string; runUrl: string },
+  options: { repository: string; runner: string; resultsDir: string; runUrl: string; ledger?: string },
   run: Parameters<QueueAdapter['integrationRun']>[0],
 ): Verdict {
   const git = gitIn(options.repository);
@@ -87,13 +88,33 @@ export function runIntegration(
   } finally {
     git('update-ref', '-d', ref);
   }
+  const result = (file: string) => readResult(join(options.resultsDir, file));
   const files = existsSync(options.resultsDir) ? readdirSync(options.resultsDir) : [];
   return verdictOf(
-    { commit: run.tip.commit, tree: run.tip.tree, runUrl: options.runUrl },
-    readResult(join(options.resultsDir, resultFileName('check', null))),
-    files.filter((file) => file.endsWith('.json')).map((file) => readResult(join(options.resultsDir, file))),
+    { commit: run.tip.commit, tree: run.tip.tree, base: run.base, runUrl: options.runUrl },
+    {
+      plan: result(resultFileName('plan', null)),
+      check: result(resultFileName('check', null)),
+      results: files.filter((file) => file.endsWith('.json')).map(result),
+      ledger: ledgerOf(options.ledger),
+    },
   );
 }
+
+/** The runner's ledger when the queue is given one, read-only; undefined without one. */
+const ledgerOf = (path: string | undefined): Ledger | undefined => (path ? readLedger(path) : undefined);
+
+/** The status call that marks `head` for the queue. */
+const queueStatus = (head: string, state: 'success' | 'failure', description: string): string[] => [
+  'api',
+  `repos/{owner}/{repo}/statuses/${head}`,
+  '-f',
+  `state=${state}`,
+  '-f',
+  `context=${QUEUE_STATUS}`,
+  '-f',
+  `description=${description.slice(0, 140)}`,
+];
 
 /** The adapter on the real repository, GitHub and runner. */
 export function createQueueAdapter(options: {
@@ -101,6 +122,7 @@ export function createQueueAdapter(options: {
   runner: string;
   workDir: string;
   runUrlBase: string;
+  ledger?: string;
 }): QueueAdapter {
   const git = gitIn(options.repository);
   const gh = (...args: string[]): string =>
@@ -157,18 +179,17 @@ export function createQueueAdapter(options: {
       return verdict;
     },
     land: async (pull, proof) => {
-      gh(
-        'api',
-        `repos/{owner}/{repo}/statuses/${pull.headSha}`,
-        '-f',
-        'state=success',
-        '-f',
-        `context=${QUEUE_STATUS}`,
-        '-f',
-        `description=${`Passed in ${proof.runUrl}`.slice(0, 140)}`,
-      );
+      gh(...queueStatus(pull.headSha, 'success', `Passed in ${proof.runUrl}`));
       gh('pr', 'merge', String(pull.number), '--squash', '--match-head-commit', pull.headSha);
       console.info(`[queue] #${pull.number}: merged`);
+    },
+    withdraw: async (pull) => {
+      gh(...queueStatus(pull.headSha, 'failure', 'Not merged; the queue tests it again'));
+      console.info(`[queue] #${pull.number}: Queue withdrawn`);
+    },
+    proven: async (tree) => {
+      const ledger = ledgerOf(options.ledger);
+      return ledger !== undefined && provenTree(ledger, tree) !== undefined;
     },
     reject: async (pull, proof) => {
       gh('pr', 'merge', String(pull.number), '--disable-auto');

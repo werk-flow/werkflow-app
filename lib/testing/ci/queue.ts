@@ -5,7 +5,8 @@
 // prefix before it lands. scripts/ci/queue-adapter.ts holds git, GitHub and the runner; every
 // decision lives here.
 import { z } from 'zod';
-import type { CiResult } from './results';
+import type { CiResult, Ledger } from './results';
+import { passedTree } from './reuse';
 
 /** The owner's batch size (D2). */
 export const MAX_BATCH = 4;
@@ -49,6 +50,10 @@ export type QueueAdapter = {
   integrationRun(run: { tip: BatchEntry; base: string; pulls: readonly QueuedPull[] }): Promise<Verdict>;
   /** Marks the head as passed by the queue and squash-merges it on GitHub, only at that head. */
   land(pull: QueuedPull, proof: Verdict): Promise<void>;
+  /** Marks the head as no longer passed, after a merge that did not happen, so no later merge takes the mark. */
+  withdraw(pull: QueuedPull): Promise<void>;
+  /** Whether the runner's ledger proves `tree` green: a passed Check of a CI runner is its newest run's last receipt. */
+  proven(tree: string): Promise<boolean>;
   /** Tells the PR's thread that its batch failed on it, and takes it out of the queue. */
   reject(pull: QueuedPull, proof: Verdict): Promise<void>;
 };
@@ -112,37 +117,66 @@ export function supersession(taken: QueuedPull, now: readonly QueuedPull[]): str
   if (!current) return `#${taken.number} was closed, merged or moved off main`;
   if (current.headSha !== taken.headSha) return `#${taken.number} was pushed to ${current.headSha}`;
   if (current.isDraft && !taken.isDraft) return `#${taken.number} went back to draft`;
-  if (current.queuedAt === null && taken.queuedAt !== null) return `#${taken.number} left the queue`;
+  if (current.queuedAt !== taken.queuedAt)
+    return current.queuedAt === null
+      ? `#${taken.number} left the queue`
+      : `#${taken.number} was queued again`;
+  return undefined;
+}
+
+type Evidence = CiResult | { unreadable: string };
+
+/** What the integration run `run` left: its plan, its Check, every job result, and the runner's ledger when the queue reads one. */
+export type RunEvidence = {
+  plan: Evidence;
+  check: Evidence;
+  results: readonly Evidence[];
+  ledger: Ledger | undefined;
+};
+
+type IntegrationRun = { commit: string; tree: string; base: string; runUrl: string };
+
+const ofRun =
+  (run: IntegrationRun) =>
+  (result: CiResult): boolean =>
+    result.event === 'integration' &&
+    result.commit === run.commit &&
+    result.tree === run.tree &&
+    result.runUrl === run.runUrl;
+
+/** Why the run's plan and Check cannot stand for the run, or undefined. */
+function proofProblem(run: IntegrationRun, plan: Evidence, check: Evidence): string | undefined {
+  if ('unreadable' in plan) return `no plan: ${plan.unreadable}`;
+  if (plan.job !== 'plan' || !ofRun(run)(plan))
+    return `the plan is of another run (${plan.runUrl}, tree ${plan.tree})`;
+  if (plan.base !== run.base) return `the plan diffed against ${plan.base}, not the batch's base ${run.base}`;
+  if (plan.status !== 'passed' || plan.completedAt === null || plan.producer === null)
+    return 'the plan did not pass on a CI runner';
+  if ('unreadable' in check) return `no Check result: ${check.unreadable}`;
+  if (check.job !== 'check' || !ofRun(run)(check))
+    return `the Check result is of another run (${check.runUrl}, tree ${check.tree})`;
+  if (check.status === 'running' || check.completedAt === null) return 'Check did not finish';
+  if (check.producer === null) return 'Check ran outside a CI runner or on a changed checkout';
   return undefined;
 }
 
 /**
- * The verdict of the integration run `run` from its Check result and its jobs' results. Only a
- * finished Check of this run counts. A failed Check counts against the batch only when a group of
- * this run failed; otherwise the run proved nothing either way.
+ * The verdict of the integration run `run`. Only a CI runner's finished plan of the batch's base
+ * and Check of this run count. A pass counts only when the ledger, if the queue reads one, holds it
+ * as the tree's pass, so the push to main reuses it. A failed Check counts against the batch only
+ * when a CI runner's finished job of this run failed a group; otherwise the run proved nothing.
  */
-export function verdictOf(
-  run: { commit: string; tree: string; runUrl: string },
-  check: CiResult | { unreadable: string },
-  results: readonly (CiResult | { unreadable: string })[],
-): Verdict {
+export function verdictOf(run: IntegrationRun, evidence: RunEvidence): Verdict {
   const verdict = (kind: Verdict['kind'], detail: string): Verdict => ({ kind, runUrl: run.runUrl, detail });
-  if ('unreadable' in check) return verdict('inconclusive', `no Check result: ${check.unreadable}`);
-  const ownRun = (result: CiResult): boolean =>
-    result.event === 'integration' && result.tree === run.tree && result.runUrl === run.runUrl;
-  if (check.job !== 'check' || !ownRun(check) || check.commit !== run.commit)
-    return verdict(
-      'inconclusive',
-      `the Check result is of another run (${check.runUrl}, tree ${check.tree})`,
-    );
-  if (check.status === 'running' || check.completedAt === null)
-    return verdict('inconclusive', 'Check did not finish');
+  const { check, ledger } = evidence;
+  const problem = proofProblem(run, evidence.plan, check);
+  if (problem || 'unreadable' in check) return verdict('inconclusive', problem ?? 'no Check result');
   if (check.status === 'passed')
-    return check.producer === null
-      ? verdict('inconclusive', 'Check passed outside a CI runner')
-      : verdict('passed', 'Check passed');
-  const failed = results.flatMap((result) =>
-    'unreadable' in result || !ownRun(result)
+    return ledger === undefined || passedTree(ledger, run.tree, () => undefined) === run.runUrl
+      ? verdict('passed', 'Check passed')
+      : verdict('inconclusive', "Check passed, but the ledger does not hold the run as its tree's pass");
+  const failed = evidence.results.flatMap((result) =>
+    'unreadable' in result || !ofRun(run)(result) || result.producer === null || result.completedAt === null
       ? []
       : result.groups.filter((group) => group.outcome === 'failed').map((group) => group.id),
   );
@@ -150,7 +184,7 @@ export function verdictOf(
     ? verdict('failed', `failed: ${[...new Set(failed)].join(', ')}`)
     : verdict(
         'inconclusive',
-        'Check failed, but no group failed: a job was cancelled, lost its result or failed before its groups ran',
+        'Check failed, but no CI job of the run failed a group: a job was cancelled, lost its result or failed before its groups ran',
       );
 }
 
@@ -210,7 +244,8 @@ export async function runQueueTick(
     return outcome;
   }
   const verdicts = await bisect(adapter, base.commit, chain, outcome);
-  await settle(adapter, base.commit, chain, verdicts, outcome);
+  // A run without a verdict stops the tick for a person: nothing lands and nobody is named.
+  if (!needsAttention(outcome)) await settle(adapter, base, chain, verdicts, outcome);
   return outcome;
 }
 
@@ -264,7 +299,7 @@ const supersededIn = (entries: readonly BatchEntry[], now: readonly QueuedPull[]
  */
 async function settle(
   adapter: QueueAdapter,
-  base: string,
+  base: MainCommit,
   chain: readonly BatchEntry[],
   verdicts: ReadonlyMap<number, Verdict>,
   outcome: QueueOutcome,
@@ -281,28 +316,36 @@ async function settle(
   const passed = (length: number): boolean => length === 0 || verdicts.get(length)?.kind === 'passed';
   const breaking = tested.find(([length, verdict]) => verdict.kind === 'failed' && passed(length - 1));
   const culprit = breaking && chain[breaking[0] - 1];
-  if (breaking && culprit) {
+  // The first PR's failure is its own only on a main the ledger proves green.
+  if (breaking && culprit && breaking[0] === 1 && !(await adapter.proven(base.tree)))
+    outcome.stops.push({
+      kind: 'inconclusive',
+      detail: `#${culprit.pull.number} fails on main, but the ledger does not prove main's tree ${base.tree} green`,
+    });
+  else if (breaking && culprit) {
     outcome.culprit = culprit.pull.number;
     if (!outcome.dryRun) await adapter.reject(culprit.pull, breaking[1]);
   }
   const proven = tested.findLast(([, verdict]) => verdict.kind === 'passed');
   if (!proven) return;
-  const head = await adapter.main();
-  if (head.commit !== base) {
-    outcome.stops.push({
-      kind: 'stale-base',
-      detail: `main moved from ${base} to ${head.commit} during the run`,
-    });
-    return;
-  }
   const landing = chain.slice(0, proven[0]);
-  if (outcome.dryRun) outcome.landing = landing.map((entry) => entry.pull.number);
-  else await land(adapter, base, landing, proven[1], outcome);
+  if (!outcome.dryRun) await land(adapter, base.commit, landing, proven[1], outcome);
+  else if (await onBase(adapter, base.commit, outcome))
+    outcome.landing = landing.map((entry) => entry.pull.number);
+}
+
+/** Whether main still sits on `base`; otherwise the tick records a stale base. */
+async function onBase(adapter: QueueAdapter, base: string, outcome: QueueOutcome): Promise<boolean> {
+  const head = await adapter.main();
+  if (head.commit === base) return true;
+  outcome.stops.push({ kind: 'stale-base', detail: `main moved from ${base} to ${head.commit}` });
+  return false;
 }
 
 /**
- * Lands each entry through GitHub's squash merge, in order. After each merge main must be one new
- * commit on the previous head holding exactly the entry's tree; anything else stops the landing.
+ * Lands each entry through GitHub's squash merge, in order. Before each merge main must sit on the
+ * previous head and the PR must be as tested; after it main must be one new commit on the previous
+ * head holding exactly the entry's tree. Anything else stops the landing.
  */
 async function land(
   adapter: QueueAdapter,
@@ -313,6 +356,12 @@ async function land(
 ): Promise<void> {
   let previous = base;
   for (const { pull, tree } of landing) {
+    if (!(await onBase(adapter, previous, outcome))) return;
+    const superseded = supersession(pull, await adapter.pulls());
+    if (superseded) {
+      outcome.stops.push({ kind: 'superseded', detail: superseded });
+      return;
+    }
     let refusal = '';
     try {
       await adapter.land(pull, proof);
@@ -329,6 +378,7 @@ async function land(
             ? `main's tree ${head.tree} after #${pull.number} is not the tested tree ${tree}`
             : undefined;
     if (problem) {
+      if (head.commit === previous) await adapter.withdraw(pull);
       outcome.stops.push({ kind: 'landing-failed', detail: problem });
       return;
     }

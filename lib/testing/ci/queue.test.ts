@@ -11,6 +11,7 @@ import {
   pullsFromGitHub,
   type QueueAdapter,
   type QueuedPull,
+  type RunEvidence,
   runQueueTick,
   supersession,
   type Verdict,
@@ -40,6 +41,7 @@ type Fake = {
   tested: number[][];
   landed: number[];
   rejected: number[];
+  withdrawn: number[];
   main: () => MainCommit;
 };
 
@@ -47,7 +49,8 @@ type Fake = {
  * A fake world. A tree is the list of PRs squashed onto main. A run fails when its prefix holds a
  * PR of `breaks`, and `answer` can override a run's verdict. `afterRun` changes the world after
  * the n-th run (1-based). GitHub's merge squashes onto the current main, `mergeTree` may change
- * the tree it builds, and `refuse` makes the merge throw without merging.
+ * the tree it builds, and `refuse` makes the merge throw without merging. `beforeLand` changes the
+ * world before the n-th merge. The ledger proves main's tree unless `unprovenMain`.
  */
 function fakeWorld(
   pulls: QueuedPull[],
@@ -57,6 +60,8 @@ function fakeWorld(
     afterRun?: (run: number, world: { pulls: QueuedPull[]; pushMain: (tree: string) => void }) => void;
     mergeTree?: (tree: string) => string;
     refuse?: number;
+    beforeLand?: (merge: number, world: { pulls: QueuedPull[]; pushMain: (tree: string) => void }) => void;
+    unprovenMain?: boolean;
   } = {},
 ): Fake {
   const commits = new Map<string, { parents: string[]; tree: string }>([
@@ -67,6 +72,8 @@ function fakeWorld(
   const tested: number[][] = [];
   const landed: number[] = [];
   const rejected: number[] = [];
+  const withdrawn: number[] = [];
+  let merges = 0;
   const commit = (parent: string, tree: string): string => {
     const id = sha(`${parent}:${tree}`);
     commits.set(id, { parents: [parent], tree });
@@ -101,6 +108,7 @@ function fakeWorld(
       return { kind, runUrl: `run-${tested.length}:${tip.tree}`, detail: kind };
     },
     land: async (entry) => {
+      options.beforeLand?.(++merges, { pulls: open, pushMain });
       if (entry.number === options.refuse) throw new Error('Pull request is not mergeable');
       const tree = `${main().tree}+${entry.number}`;
       pushMain(options.mergeTree?.(tree) ?? tree);
@@ -110,8 +118,12 @@ function fakeWorld(
     reject: async (entry) => {
       rejected.push(entry.number);
     },
+    withdraw: async (entry) => {
+      withdrawn.push(entry.number);
+    },
+    proven: async (tree) => tree === 'main' && !options.unprovenMain,
   };
-  return { adapter, tested, landed, rejected, main };
+  return { adapter, tested, landed, rejected, withdrawn, main };
 }
 
 const LIVE = { maxBatch: 4, dryRun: false };
@@ -215,7 +227,7 @@ test('a run without a verdict (a cancelled worker, a missing result) lands nothi
   expect(needsAttention(outcome)).toBe(true);
 });
 
-test('a bisection run without a verdict stops the search, names no PR, and lands only a prefix it proved', async () => {
+test('a bisection run without a verdict stops the search, names no PR and lands nothing, not even a proved prefix', async () => {
   const world = fakeWorld([pull(1), pull(2), pull(3), pull(4)], {
     answer: (prs) => (prs.length === 4 ? 'failed' : prs.length === 2 ? 'passed' : 'inconclusive'),
   });
@@ -227,7 +239,7 @@ test('a bisection run without a verdict stops the search, names no PR, and lands
   ]);
   expect(outcome.culprit).toBe(null);
   expect(world.rejected).toEqual([]);
-  expect(world.landed).toEqual([1, 2]);
+  expect(world.landed).toEqual([]);
   expect(needsAttention(outcome)).toBe(true);
 });
 
@@ -262,6 +274,7 @@ test('a PR that went back to draft or left the queue is superseded; one that was
   expect(supersession(pull(1), now)).toBe('#1 went back to draft');
   expect(supersession(pull(2), now)).toBe('#2 left the queue');
   expect(supersession(pull(3, { queuedAt: null }), now)).toBe(undefined);
+  expect(supersession(pull(4), [pull(4, { queuedAt: '2026-11-21T10:00:00Z' })])).toBe('#4 was queued again');
 });
 
 test('a PR that conflicts with the batch so far is left out and the rest is tested without it', async () => {
@@ -297,6 +310,34 @@ test('a merge GitHub refuses stops the landing with its reason', async () => {
   expect(outcome.stops).toEqual([
     { kind: 'landing-failed', detail: 'GitHub did not merge #2: Pull request is not mergeable' },
   ]);
+  expect(world.withdrawn).toEqual([2]);
+});
+
+test('a first PR failing on a main the ledger does not prove green is not named, and needs a person', async () => {
+  const world = fakeWorld([pull(1), pull(2)], { breaks: [1], unprovenMain: true });
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(outcome.culprit).toBe(null);
+  expect(world.rejected).toEqual([]);
+  expect(outcome.stops[0]?.detail).toContain("the ledger does not prove main's tree main green");
+  expect(needsAttention(outcome)).toBe(true);
+});
+
+test('a later PR is named on its own green prefix, whatever the ledger says about main', async () => {
+  const world = fakeWorld([pull(1), pull(2)], { breaks: [2], unprovenMain: true });
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(outcome.culprit).toBe(2);
+  expect(world.landed).toEqual([1]);
+});
+
+test('each merge first checks main and the PR again: a PR taken out of the queue during the landing is not merged', async () => {
+  const world = fakeWorld([pull(1), pull(2), pull(3)], {
+    beforeLand: (merge, { pulls }) => {
+      if (merge === 1) pulls.splice(1, 1, pull(2, { queuedAt: null }));
+    },
+  });
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(world.landed).toEqual([1]);
+  expect(outcome.stops).toEqual([{ kind: 'superseded', detail: '#2 left the queue' }]);
 });
 
 test('a dry run tests and decides like a live tick but never lands or tells a PR', async () => {
@@ -310,7 +351,7 @@ test('a dry run tests and decides like a live tick but never lands or tells a PR
   expect(world.main().commit).toBe(sha('main'));
 });
 
-const RUN = { commit: sha('tip'), tree: sha('tree'), runUrl: 'queue/1' };
+const RUN = { commit: sha('tip'), tree: sha('tree'), base: sha('main'), runUrl: 'queue/1' };
 
 function result(overrides: Partial<CiResult>): CiResult {
   return {
@@ -320,7 +361,7 @@ function result(overrides: Partial<CiResult>): CiResult {
     event: 'integration',
     tree: RUN.tree,
     commit: RUN.commit,
-    base: sha('main'),
+    base: RUN.base,
     status: 'passed',
     groups: [],
     planReason: '',
@@ -334,22 +375,60 @@ function result(overrides: Partial<CiResult>): CiResult {
   };
 }
 
-test('only a finished, passed Check of this run from a CI runner passes a batch', () => {
-  expect(verdictOf(RUN, result({}), []).kind).toBe('passed');
-  expect(verdictOf(RUN, result({ producer: null }), []).kind).toBe('inconclusive');
-  expect(verdictOf(RUN, result({ runUrl: 'queue/0' }), []).kind).toBe('inconclusive');
-  expect(verdictOf(RUN, result({ commit: sha('other') }), []).kind).toBe('inconclusive');
-  expect(verdictOf(RUN, result({ event: 'pr' }), []).kind).toBe('inconclusive');
+const PLAN = result({ job: 'plan' });
+const START = result({ job: 'plan', status: 'running', completedAt: null });
+/** The run's evidence: its plan, its Check and its results; no ledger unless given. */
+const evidence = (check: RunEvidence['check'], changes: Partial<RunEvidence> = {}): RunEvidence => ({
+  plan: PLAN,
+  check,
+  results: [],
+  ledger: undefined,
+  ...changes,
+});
+
+test("only a CI runner's finished, passed Check of this run, commit and tree passes a batch", () => {
+  expect(verdictOf(RUN, evidence(result({}))).kind).toBe('passed');
+  for (const foreign of [
+    { producer: null },
+    { runUrl: 'queue/0' },
+    { commit: sha('other') },
+    { event: 'pr' as const },
+  ])
+    expect(verdictOf(RUN, evidence(result(foreign))).kind).toBe('inconclusive');
+});
+
+test("a pass needs a CI runner's passed plan of this run against the batch's base", () => {
+  expect(verdictOf(RUN, evidence(result({}), { plan: result({ job: 'plan', base: 'HEAD' }) })).detail).toBe(
+    `the plan diffed against HEAD, not the batch's base ${RUN.base}`,
+  );
+  for (const plan of [
+    { unreadable: 'plan.json is missing' },
+    result({ job: 'plan', runUrl: 'queue/0' }),
+    result({ job: 'plan', status: 'failed' }),
+    result({ job: 'plan', producer: null }),
+  ])
+    expect(verdictOf(RUN, evidence(result({}), { plan })).kind).toBe('inconclusive');
+});
+
+test("with a ledger, a pass counts only when the ledger holds the run as its tree's pass, so the push to main reuses it", () => {
+  const passed = result({});
+  expect(verdictOf(RUN, evidence(passed, { ledger: [START, PLAN, passed] })).kind).toBe('passed');
+  expect(verdictOf(RUN, evidence(passed, { ledger: [] })).kind).toBe('inconclusive');
+  expect(verdictOf(RUN, evidence(passed, { ledger: { unreadable: 'ledger.jsonl:3 is no JSON' } })).kind).toBe(
+    'inconclusive',
+  );
 });
 
 test('a missing Check result or one still running (a cancelled worker) is no verdict', () => {
-  expect(verdictOf(RUN, { unreadable: 'check.json is missing' }, []).detail).toBe(
+  expect(verdictOf(RUN, evidence({ unreadable: 'check.json is missing' })).detail).toBe(
     'no Check result: check.json is missing',
   );
-  expect(verdictOf(RUN, result({ status: 'running', completedAt: null }), []).kind).toBe('inconclusive');
+  expect(verdictOf(RUN, evidence(result({ status: 'running', completedAt: null }))).kind).toBe(
+    'inconclusive',
+  );
 });
 
-test('a failed Check counts against the batch only with a failed group of this run; a missing artifact or a cancelled job is no verdict', () => {
+test('a failed Check counts against the batch only with a CI job of this run that failed a group; a missing artifact, a cancelled job or a changed checkout is no verdict', () => {
   const failedCheck = result({ status: 'failed' });
   const failedGroup = result({
     job: 'browser',
@@ -357,7 +436,7 @@ test('a failed Check counts against the batch only with a failed group of this r
     status: 'failed',
     groups: [{ id: 'golden:p1-24a', outcome: 'failed', durationMs: 1 }],
   });
-  expect(verdictOf(RUN, failedCheck, [failedGroup])).toEqual({
+  expect(verdictOf(RUN, evidence(failedCheck, { results: [failedGroup] }))).toEqual({
     kind: 'failed',
     runUrl: RUN.runUrl,
     detail: 'failed: golden:p1-24a',
@@ -368,10 +447,13 @@ test('a failed Check counts against the batch only with a failed group of this r
     status: 'failed',
     groups: [{ id: 'golden:p1-24a', outcome: 'not-run', durationMs: 0 }],
   });
-  expect(verdictOf(RUN, failedCheck, [noGroupRan, { unreadable: 'browser-2.json is missing' }]).kind).toBe(
-    'inconclusive',
-  );
-  expect(verdictOf(RUN, failedCheck, [{ ...failedGroup, runUrl: 'queue/0' }]).kind).toBe('inconclusive');
+  for (const results of [
+    [noGroupRan, { unreadable: 'browser-2.json is missing' }],
+    [{ ...failedGroup, runUrl: 'queue/0' }],
+    [{ ...failedGroup, producer: null }],
+    [{ ...failedGroup, status: 'running' as const, completedAt: null }],
+  ])
+    expect(verdictOf(RUN, evidence(failedCheck, { results })).kind).toBe('inconclusive');
 });
 
 test("an integration run names the batch's base, PRs and run, and takes any PR's list-growth approval", () => {

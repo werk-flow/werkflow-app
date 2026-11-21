@@ -33,7 +33,10 @@ beforeEach(() => {
   commitFile('a.txt', 'one\ntwo\nthree\n');
 });
 
-afterEach(() => rmSync(folder, { recursive: true, force: true }));
+afterEach(() => {
+  delete process.env.LEDGER;
+  rmSync(folder, { recursive: true, force: true });
+});
 
 test("a squash entry holds the three-way merge's tree on its parent alone, and a conflict leaves the PR out", () => {
   const base = git('rev-parse', 'HEAD');
@@ -66,7 +69,11 @@ const pull: QueuedPull = {
   listGrowthApproved: false,
 };
 
-/** A runner that fetches the commit as the queue's contract says, then runs `body` in bash. */
+/**
+ * A runner that fetches the commit as the queue's contract says and writes a passed plan, then runs
+ * `body` in bash. `receipt <job> <status> <completedAt>` writes that job's result; `ledger` appends
+ * the last one to $LEDGER.
+ */
 function runner(body: string): string {
   const path = join(folder, 'runner.sh');
   writeFileSync(
@@ -77,10 +84,14 @@ checkout="$(mktemp -d "${folder}/checkout-XXXXXX")"
 git init --quiet "$checkout"
 git -C "$checkout" fetch --quiet "$CI_QUEUE_REPOSITORY" "refs/ci-queue/runs/$CI_QUEUE_COMMIT"
 tree="$(git -C "$checkout" rev-parse "$CI_QUEUE_COMMIT^{tree}")"
-check() {
-  printf '{"version":1,"job":"check","shard":null,"event":"%s","tree":"%s","commit":"%s","base":"%s","status":"%s","groups":[],"planReason":"","reusedFrom":null,"listGrowthApproved":false,"producer":"stub","runUrl":"%s","startedAt":"2026-11-21T08:00:00Z","completedAt":%s}' \\
-    "$CI_EVENT" "$tree" "$CI_QUEUE_COMMIT" "$CI_BASE_SHA" "$1" "$CI_RUN_URL" "$2" > "$CI_RESULTS_DIR/check.json"
+receipt() {
+  printf '{"version":1,"job":"%s","shard":null,"event":"%s","tree":"%s","commit":"%s","base":"%s","status":"%s","groups":[],"planReason":"","reusedFrom":null,"listGrowthApproved":false,"producer":"stub","runUrl":"%s","startedAt":"2026-11-21T08:00:00Z","completedAt":%s}\\n' \\
+    "$1" "$CI_EVENT" "$tree" "$CI_QUEUE_COMMIT" "$CI_BASE_SHA" "$2" "$CI_RUN_URL" "$3" > "$CI_RESULTS_DIR/$1.json"
+  last="$CI_RESULTS_DIR/$1.json"
 }
+ledger() { cat "$last" >> "$LEDGER"; }
+receipt plan running null; ledger
+receipt plan passed '"2026-11-21T08:10:00Z"'
 ${body}
 `,
   );
@@ -88,23 +99,39 @@ ${body}
   return path;
 }
 
-function integration(body: string, runUrl: string) {
+function integration(body: string, runUrl: string, ledger?: string) {
   const commit = git('rev-parse', 'HEAD');
   const tip = { pull, commit, tree: git('rev-parse', 'HEAD^{tree}') };
+  process.env.LEDGER = join(folder, 'ledger.jsonl');
   return runIntegration(
-    { repository, runner: runner(body), resultsDir: join(folder, 'results', runUrl), runUrl },
+    {
+      repository,
+      runner: runner(body),
+      resultsDir: join(folder, 'results', runUrl),
+      runUrl,
+      ...(ledger ? { ledger } : {}),
+    },
     { tip, base: commit, pulls: [pull] },
   );
 }
 
 test("a run's verdict is its own finished Check, whatever the runner's exit code", () => {
-  expect(integration('check passed \'"2026-11-21T09:00:00Z"\'; exit 1', 'queue/1').kind).toBe('passed');
+  expect(integration('receipt check passed \'"2026-11-21T09:00:00Z"\'; exit 1', 'queue/1').kind).toBe(
+    'passed',
+  );
   expect(git('for-each-ref', 'refs/ci-queue')).toBe('');
+});
+
+test("with the runner's ledger, a passed Check counts only once the ledger holds it as the tree's pass", () => {
+  const ledger = join(folder, 'ledger.jsonl');
+  const passed = 'receipt check passed \'"2026-11-21T09:00:00Z"\'';
+  expect(integration(passed, 'queue/4', ledger).kind).toBe('inconclusive');
+  expect(integration(`${passed}; ledger`, 'queue/5', ledger).kind).toBe('passed');
 });
 
 test('a runner that leaves no Check result, or one still running, gives no verdict', () => {
   expect(integration('exit 0', 'queue/2').detail).toStartWith('no Check result:');
-  expect(integration('check running null; kill -9 $$', 'queue/3')).toEqual({
+  expect(integration('receipt check running null; kill -9 $$', 'queue/3')).toEqual({
     kind: 'inconclusive',
     runUrl: 'queue/3',
     detail: 'Check did not finish',

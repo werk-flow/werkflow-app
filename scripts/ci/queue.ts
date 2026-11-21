@@ -3,7 +3,7 @@
 // clean clone of werkflow-app whose `gh` may merge PRs and set commit statuses.
 //
 // Usage: bun scripts/ci/queue.ts --runner <executable> --work-dir <dir> --run-url-base <url>
-//                                [--max-batch <1-4>] [--dry-run [--prs <n,...>]]
+//                                [--ledger <file>] [--max-batch <1-4>] [--dry-run [--prs <n,...>]]
 //   --runner        Runs one integration run of a commit, every job of its plan through
 //                   `bun scripts/ci/job.ts`, in checkouts of that commit, ending with `job.ts check`.
 //                   It takes the runner's own variables (CI_PRODUCER, CI_LEDGER) and these, the same
@@ -14,11 +14,15 @@
 //                   Its exit code decides nothing: the queue reads the run's results.
 //   --work-dir      Holds one results directory per run.
 //   --run-url-base  Each run's CI_RUN_URL is <base>/<time>-<commit>.
+//   --ledger        The runner's CI_LEDGER, read only. A pass counts only when the ledger holds it as
+//                   its tree's pass, and a batch's first PR is named only on a main tree it proves
+//                   green. Without it neither proof exists: a failure of the first PR needs a person.
 //   --max-batch     The most PRs in a batch, default 4. 1 while the ruleset requires up-to-date branches.
 //   --dry-run       Builds, tests and decides, but never sets a status, merges, comments or
 //                   turns auto-merge off. --prs names the PRs to rehearse with, in order.
 // Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base).
-// Exit 2: it needs a person: a run without a verdict, or a landing that broke. Stop the loop.
+// Exit 2: it needs a person: a run without a verdict, a first PR failing on an unproven main, or a
+// landing that broke. Stop the loop.
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -34,6 +38,7 @@ const { values } = parseArgs({
     'max-batch': { type: 'string', default: String(MAX_BATCH) },
     'dry-run': { type: 'boolean', default: false },
     prs: { type: 'string' },
+    ledger: { type: 'string' },
   },
 });
 const maxBatch = Number(values['max-batch']);
@@ -62,6 +67,7 @@ try {
     runner: resolve(values.runner),
     workDir,
     runUrlBase: values['run-url-base'],
+    ...(values.ledger ? { ledger: resolve(values.ledger) } : {}),
   });
   const outcome = await runQueueTick(adapter, {
     maxBatch,
