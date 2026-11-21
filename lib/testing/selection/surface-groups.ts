@@ -77,6 +77,8 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
   '/angebote': 'commercial',
   '/angebote/[offerId]': 'commercial',
   '/angebote/leistungen': 'commercial',
+  '/rechnungen': 'commercial',
+  '/rechnungen/[invoiceId]': 'commercial',
   '/service/faelle': 'service',
   '/service/anlagen': 'service',
   '/service/wartung': 'service',

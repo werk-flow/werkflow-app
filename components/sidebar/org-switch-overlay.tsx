@@ -8,6 +8,8 @@ import { DashboardPageSkeleton } from '@/components/loading-states/dashboard-pag
 import { MitarbeiterPageSkeleton } from '@/components/loading-states/mitarbeiter-page-skeleton';
 import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 import { AreaPageSkeleton } from '@/components/loading-states/area-page-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageShell } from '@/components/shared/page-shell';
 import { ZeiterfassungOverviewSkeleton } from '@/components/loading-states/zeiterfassung-content-skeleton';
 import {
   TimeAccountSettingsSkeleton,
@@ -35,7 +37,7 @@ import { ServiceCasesPageSkeleton } from '@/components/loading-states/service-ca
 // skeleton inside the area header. The first matching prefix wins, so a
 // subpage sits above its area.
 const ORG_SWITCH_SKELETONS: ReadonlyArray<
-  readonly [prefix: string, skeleton: (angebote: AngeboteSkeletons | null) => ReactElement]
+  readonly [prefix: string, skeleton: (lazy: LazySkeletons) => ReactElement]
 > = [
   ['/mitarbeiter', () => <MitarbeiterPageSkeleton />],
   ['/aufgaben', () => <AufgabenPageSkeleton />],
@@ -116,7 +118,7 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
   ['/inventar', () => <InventarPageSkeleton />],
   [
     '/angebote/leistungen',
-    (angebote) => (
+    ({ angebote }) => (
       <AreaPageSkeleton title="Angebote" tabCount={2}>
         {angebote && <angebote.LeistungenPageSkeleton />}
       </AreaPageSkeleton>
@@ -124,11 +126,22 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
   ],
   [
     '/angebote',
-    (angebote) => (
+    ({ angebote }) => (
       <AreaPageSkeleton title="Angebote" tabCount={2}>
         {angebote && <angebote.OffersPageSkeleton />}
       </AreaPageSkeleton>
     ),
+  ],
+  [
+    '/rechnungen',
+    ({ rechnungen }) =>
+      rechnungen ? (
+        <rechnungen.InvoicesPageSkeleton />
+      ) : (
+        <PageShell>
+          <PageHeader title="Rechnungen" />
+        </PageShell>
+      ),
   ],
 ];
 
@@ -152,22 +165,32 @@ function inArea(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-function orgSwitchSkeleton(pathname: string, angebote: AngeboteSkeletons | null): ReactElement | null {
+function orgSwitchSkeleton(pathname: string, lazy: LazySkeletons): ReactElement | null {
   const match = ORG_SWITCH_SKELETONS.find(([prefix]) => inArea(pathname, prefix));
-  return match ? match[1](angebote) : null;
+  return match ? match[1](lazy) : null;
 }
 
 type AngeboteSkeletons = typeof import('@/components/angebote/area-skeletons');
+type RechnungenSkeletons = typeof import('@/components/rechnungen/invoices-skeleton');
+type LazySkeletons = { angebote: AngeboteSkeletons | null; rechnungen: RechnungenSkeletons | null };
 
-// Only the office opens Angebote, so the area's content skeletons load once the user is in it
-// and no field worker's start-up carries them. Until they arrive, or when the load failed (as
-// without signal), a switch shows the area's title and tabs; each switch start tries again.
-function useAngeboteSkeletons(inAngebote: boolean, isSwitchingOrg: boolean): AngeboteSkeletons | null {
-  const [skeletons, setSkeletons] = useState<AngeboteSkeletons | null>(null);
+const loadAngebote = () => import('@/components/angebote/area-skeletons');
+const loadRechnungen = () => import('@/components/rechnungen/invoices-skeleton');
+
+// Only the office opens Angebote and Rechnungen, so an area's content skeletons load once the
+// user is in it and no field worker's start-up carries them. Until they arrive, or when the load
+// failed (as without signal), a switch shows the area's title (and tabs); each switch start tries
+// again.
+function useAreaSkeletons<Skeletons>(
+  inThisArea: boolean,
+  isSwitchingOrg: boolean,
+  load: () => Promise<Skeletons>,
+): Skeletons | null {
+  const [skeletons, setSkeletons] = useState<Skeletons | null>(null);
   useEffect(() => {
-    if (!inAngebote || skeletons) return;
+    if (!inThisArea || skeletons) return;
     let current = true;
-    import('@/components/angebote/area-skeletons').then(
+    load().then(
       (loaded) => {
         if (current) setSkeletons(loaded);
       },
@@ -176,7 +199,7 @@ function useAngeboteSkeletons(inAngebote: boolean, isSwitchingOrg: boolean): Ang
     return () => {
       current = false;
     };
-  }, [inAngebote, isSwitchingOrg, skeletons]);
+  }, [inThisArea, isSwitchingOrg, skeletons, load]);
   return skeletons;
 }
 
@@ -184,9 +207,13 @@ function useAngeboteSkeletons(inAngebote: boolean, isSwitchingOrg: boolean): Ang
 export function OrgSwitchOverlay() {
   const { isSwitchingOrg } = useOrganization();
   const pathname = usePathname();
-  const angebote = useAngeboteSkeletons(inArea(pathname, '/angebote'), isSwitchingOrg);
+  const angebote = useAreaSkeletons(inArea(pathname, '/angebote'), isSwitchingOrg, loadAngebote);
+  const rechnungen = useAreaSkeletons(inArea(pathname, '/rechnungen'), isSwitchingOrg, loadRechnungen);
 
-  const currentSkeleton = useMemo(() => orgSwitchSkeleton(pathname, angebote), [pathname, angebote]);
+  const currentSkeleton = useMemo(
+    () => orgSwitchSkeleton(pathname, { angebote, rechnungen }),
+    [pathname, angebote, rechnungen],
+  );
 
   if (!isSwitchingOrg || !currentSkeleton) return null;
 

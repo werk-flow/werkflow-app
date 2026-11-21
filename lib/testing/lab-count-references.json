@@ -16,7 +16,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 57, "tolerance": 1 },
+        "requests": { "reference": 59, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -68,8 +68,8 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 7517, "tolerance": { "relative": 0.9589, "absolute": 512 } },
-          "decodedBytes": { "reference": 27113, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 7690, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+          "decodedBytes": { "reference": 27845, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -378,6 +378,32 @@
           "to": { "reference": 57, "tolerance": 1 },
           "runKeys": ["2026-11-13T073843350Z-d01ff1"],
           "reason": "Merged with main 5100c6de, the field cold start loads 41 script files instead of 43 (main alone: 42, 58 requests); the five job prefetches stay. Every other request shape (the API and Supabase reads, route, document, fonts, images, stylesheets) and every backend read by path match main 8783c979 and this branch before the merge (c0ea3439). The /auftraege entry chunks of the three builds name both files: one goes with main's own start-up, which since #382 (decision 13) loads the activity fields and their alarm-clock icon on first use and since #405 keeps the member-removal dialog out; the other is bundling: all 564 start-up modules of main 5100c6de stay in the start-up, and Turbopack packs five of main's (app) layout chunks with this PR's two Leistungen skeleton modules (the org-switch overlay's map) into four (1,740,600 to 1,743,228 B over all entry files)."
+        },
+        {
+          "kind": "raise",
+          "target": "requests",
+          "from": { "reference": 57, "tolerance": 1 },
+          "to": { "reference": 59, "tolerance": 1 },
+          "runKeys": ["2026-11-20T105334831Z-6a1656"],
+          "reason": "Owner-approved one-time change: werk-flow/werkflow-planning#17, Owner queue 4 (owner decision 2026-11-20). werk-flow/werkflow-app#485 adds the two Rechnungen routes, and Turbopack's production chunker re-packs the shared (app) layout's unchanged client code into 23 chunks instead of main's 21 (diagnosis in #485's Verification, 'Lab payload regression'). The layout gains only the Receipt icon, the moved ReceiptText and the lazy invoice skeleton loader; no invoice code reaches field workers. Every cold start loads the two extra chunk files: 57 to 59 requests on Boat, head cb34906a."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 7517, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+            "decodedBytes": { "reference": 27113, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 7690, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+            "decodedBytes": { "reference": 27845, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-20T105334831Z-6a1656"],
+          "reason": "Owner-approved one-time change: werk-flow/werkflow-planning#17, Owner queue 4 (owner decision 2026-11-20). werk-flow/werkflow-app#485 adds the two Rechnungen routes, and Turbopack's production chunker re-packs the shared (app) layout's unchanged client code into 23 chunks instead of main's 21 (diagnosis in #485's Verification, 'Lab payload regression'). The layout gains only the Receipt icon, the moved ReceiptText and the lazy invoice skeleton loader; no invoice code reaches field workers. The route payload's client-reference rows name the two extra chunks: 27,113 to 27,845 decoded bytes on Boat, head cb34906a."
         }
       ]
     },
@@ -850,8 +876,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9104, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 25593, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 9271, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 26273, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -971,6 +997,24 @@
           "to": { "reference": 656, "tolerance": 13 },
           "runKeys": ["2026-11-12T193422901Z-d6057f"],
           "reason": null
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9104, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 25593, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9271, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 26273, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-20T105334831Z-6a1656"],
+          "reason": "Owner-approved one-time change: werk-flow/werkflow-planning#17, Owner queue 4 (owner decision 2026-11-20). werk-flow/werkflow-app#485 adds the two Rechnungen routes, and Turbopack's production chunker re-packs the shared (app) layout's unchanged client code into 23 chunks instead of main's 21 (diagnosis in #485's Verification, 'Lab payload regression'). The layout gains only the Receipt icon, the moved ReceiptText and the lazy invoice skeleton loader; no invoice code reaches field workers. The action's route payload names the two extra chunks: 25,593 to 26,273 decoded bytes on Boat, head cb34906a."
         }
       ]
     },
@@ -1087,8 +1131,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9101, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 25592, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 9271, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 26272, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -1242,6 +1286,24 @@
           "to": null,
           "runKeys": ["2026-11-13T190548549Z-ac6c68"],
           "reason": "CI read 3 requests and 14 backend requests on this step once (merge-queue run 43483232112, tree d71678a01 = main e1dc6e9be + PR #445) and 4 and 18 in the 46 other CI readings since 2026-11-13 morning, including #445 alone (run 43480952615) and main with #443 (run 43483228169); Boat run 2026-11-13T190548549Z-ac6c68 on the same merged tree read 4 and 18. The clock sheet suspends live reads while open; the clock's own Realtime echo either lands before the explicit refresh after the transition, which clears it (3), or after, which queues one catch-up clock read when the sheet closes (4). Both start their read after the commit, so the count does not repeat on this step (performance.md)."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9101, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 25592, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9271, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 26272, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-20T105334831Z-6a1656"],
+          "reason": "Owner-approved one-time change: werk-flow/werkflow-planning#17, Owner queue 4 (owner decision 2026-11-20). werk-flow/werkflow-app#485 adds the two Rechnungen routes, and Turbopack's production chunker re-packs the shared (app) layout's unchanged client code into 23 chunks instead of main's 21 (diagnosis in #485's Verification, 'Lab payload regression'). The layout gains only the Receipt icon, the moved ReceiptText and the lazy invoice skeleton loader; no invoice code reaches field workers. The action's route payload names the two extra chunks: 25,592 to 26,272 decoded bytes on Boat, head cb34906a."
         }
       ]
     },
@@ -1260,7 +1322,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 51, "tolerance": 1 },
+        "requests": { "reference": 53, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -1582,6 +1644,14 @@
           "to": { "reference": 51, "tolerance": 1 },
           "runKeys": ["2026-11-13T073843350Z-996ca3"],
           "reason": "Merged with main 5100c6de, the office cold start loads 35 script files instead of 37 (main alone: 36, 52 requests). Every other request shape (the API and Supabase reads, route, document, fonts, images, stylesheets) and every backend read by path match main 8783c979; against this branch before the merge (c0ea3439) one read differs by main's #391: two read_manager_attention_sets calls replace two list_open_request_attention calls. The /auftraege entry chunks of the three builds name both files: one goes with main's own start-up, which since #382 (decision 13) loads the activity fields and their alarm-clock icon on first use and since #405 keeps the member-removal dialog out; the other is bundling: all 564 start-up modules of main 5100c6de stay in the start-up, and Turbopack packs five of main's (app) layout chunks with this PR's two Leistungen skeleton modules (the org-switch overlay's map) into four (1,740,600 to 1,743,228 B over all entry files)."
+        },
+        {
+          "kind": "raise",
+          "target": "requests",
+          "from": { "reference": 51, "tolerance": 1 },
+          "to": { "reference": 53, "tolerance": 1 },
+          "runKeys": ["2026-11-20T105334831Z-054694"],
+          "reason": "Owner-approved one-time change: werk-flow/werkflow-planning#17, Owner queue 4 (owner decision 2026-11-20). werk-flow/werkflow-app#485 adds the two Rechnungen routes, and Turbopack's production chunker re-packs the shared (app) layout's unchanged client code into 23 chunks instead of main's 21 (diagnosis in #485's Verification, 'Lab payload regression'). The layout gains only the Receipt icon, the moved ReceiptText and the lazy invoice skeleton loader; no invoice code reaches field workers. Every cold start loads the two extra chunk files: 51 to 53 requests on Boat, head cb34906a."
         }
       ]
     },
@@ -1635,8 +1705,8 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 6113, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 14625, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1220, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 15161, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -1796,6 +1866,24 @@
           "to": { "reference": 1501, "tolerance": 31 },
           "runKeys": ["2026-11-19T155027767Z-db164d"],
           "reason": null
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 6113, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 14625, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1220, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 15161, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-20T105334831Z-054694"],
+          "reason": "Owner-approved one-time change: werk-flow/werkflow-planning#17, Owner queue 4 (owner decision 2026-11-20). werk-flow/werkflow-app#485 adds the two Rechnungen routes, and Turbopack's production chunker re-packs the shared (app) layout's unchanged client code into 23 chunks instead of main's 21 (diagnosis in #485's Verification, 'Lab payload regression'). The layout gains only the Receipt icon, the moved ReceiptText and the lazy invoice skeleton loader; no invoice code reaches field workers. The route payload's client-reference rows name the two extra chunks: 14,625 to 15,161 decoded bytes on Boat, head cb34906a."
         }
       ]
     },
