@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { CHECK_APP_CONFIG, checkRunOf, postCheckRun, readCheckApp } from './check-app';
 import type { CiResult } from './results';
+import { readWorkflow } from '../ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const APP = 4242;
@@ -52,14 +53,20 @@ const CONFIGS: readonly { config: string | undefined; appId: number | null | 're
   { config: '{"appId": 1.5}', appId: 'refused' },
   { config: `{"appId": "${APP}"}`, appId: 'refused' },
   { config: '{"appId": true}', appId: 'refused' },
-  { config: '{"appId": 9007199254740993}', appId: 'refused' },
+  { config: '{"appId": 1234567890123456}', appId: 'refused' },
   { config: `{"appId": ${APP}, "slug": "werkflow-ci"}`, appId: 'refused' },
   { config: `{"appId": ${APP}} {"appId": ${OTHER_APP}}`, appId: 'refused' },
   { config: `{"appId": ${APP}`, appId: 'refused' },
+  // Lenient parsers read these as numbers; the readers take only the canonical digits.
+  { config: '{"appId": +42}', appId: 'refused' },
+  { config: '{"appId": 042}', appId: 'refused' },
+  { config: '{"appId": 42.0}', appId: 'refused' },
+  { config: '{"appId": 4e3}', appId: 'refused' },
 ];
 
 test('the gates and the publisher read the same App from the configuration, and refuse a missing or malformed one', () => {
-  expect(readCheckApp(join(repositoryRoot, CHECK_APP_CONFIG))).toEqual({ appId: null });
+  // The committed file holds one of the two forms: null until the App exists, then its id.
+  expect(readCheckApp(join(repositoryRoot, CHECK_APP_CONFIG))).toHaveProperty('appId');
   for (const { config, appId } of CONFIGS) {
     const scripts = gates(config);
     const typescript = readCheckApp(join(scripts, 'check-app.json'));
@@ -289,13 +296,14 @@ function result(overrides: Partial<CiResult>): CiResult {
   };
 }
 
-const build = (check: CiResult | { unreadable: string }, prHead?: string) =>
+const build = (
+  check: CiResult | { unreadable: string },
+  scheduled: Partial<Parameters<typeof checkRunOf>[0]['scheduled']> = {},
+) =>
   checkRunOf({
     check,
     plan: result({ job: 'plan', startedAt: '2026-11-21T08:00:00.000Z' }),
-    runUrl: RUN_URL,
-    prHead,
-    parents: (commit) => (commit === COMMIT ? ['d'.repeat(40), HEAD] : []),
+    scheduled: { runUrl: RUN_URL, event: 'pr', commit: COMMIT, prHead: undefined, ...scheduled },
     now: new Date('2026-11-21T10:00:00.000Z'),
   });
 
@@ -322,19 +330,22 @@ test('a check run passes only a finished, passed Check of this run from a CI run
   expect(conclusion(result({ status: 'failed' }))).toBe('failure');
   expect(conclusion(result({ status: 'running', completedAt: null }))).toBe('failure');
   expect(conclusion(result({ producer: null }))).toBe('failure');
-  const full = build(result({ event: 'full' }));
+  const full = build(result({ event: 'full' }), { event: 'full' });
   expect('request' in full && full.request.name).toBe('Full run / Check');
 });
 
-test("another run's result, another job's result or an untested head posts nothing", () => {
+test("a result of another run, job, event or commit than the scheduler's posts nothing", () => {
   expect(build({ unreadable: 'check.json is missing' })).toEqual({ problem: 'check.json is missing' });
   expect(build(result({ runUrl: 'https://ci.test/run/6' }))).toHaveProperty('problem');
   expect(build(result({ job: 'fast' }))).toHaveProperty('problem');
-  // A PR head counts only as a parent of the merge commit the run tested.
-  const merged = build(result({}), HEAD);
+  // A job cannot make a pull request's run post `Full run / Check`, or post on another commit.
+  expect(build(result({ event: 'full' }))).toHaveProperty('problem');
+  expect(build(result({ commit: HEAD }))).toHaveProperty('problem');
+  // The scheduler's PR head under its merge commit takes the check run; only a pull request has one.
+  const merged = build(result({}), { prHead: HEAD });
   expect('request' in merged && merged.request.head_sha).toBe(HEAD);
-  expect(build(result({}), 'e'.repeat(40))).toHaveProperty('problem');
-  expect(build(result({ event: 'main' }), HEAD)).toHaveProperty('problem');
+  expect(build(result({ event: 'main' }), { event: 'main', prHead: HEAD })).toHaveProperty('problem');
+  expect(build(result({}), { prHead: 'not-a-commit' })).toHaveProperty('problem');
 });
 
 function request() {
@@ -351,7 +362,6 @@ async function post(answer: unknown, status = 201) {
     appId: APP,
     token: TOKEN,
     repository: 'owner/repo',
-    apiUrl: 'https://api.github.test',
     fetch: async (url, init) => {
       sent.push({ url, init });
       return new Response(JSON.stringify(answer), {
@@ -375,7 +385,7 @@ test('the publisher posts as the configured App and fails when GitHub holds the 
   const { posted, sent } = await post(answer(APP));
   expect(posted).toEqual({ id: 77 });
   expect(sent).toHaveLength(1);
-  expect(sent[0]?.url).toBe('https://api.github.test/repos/owner/repo/check-runs');
+  expect(sent[0]?.url).toBe('https://api.github.com/repos/owner/repo/check-runs');
   expect(new Headers(sent[0]?.init.headers).get('authorization')).toBe(`Bearer ${TOKEN}`);
   expect(JSON.parse(String(sent[0]?.init.body))).toEqual(request());
   const other = await post(answer(OTHER_APP));
@@ -388,10 +398,10 @@ test("a refused request names GitHub's status and request id, never the token or
   expect(posted).toEqual({ problem: 'GitHub answered 401 (request R1)' });
 });
 
-test('without a configured App the publisher posts nothing and prints no token', () => {
+test("the publisher posts nothing for another run's Check and prints no token", () => {
   const results = join(stub, 'results');
   mkdirSync(results);
-  writeFileSync(join(results, 'check.json'), JSON.stringify(result({})));
+  writeFileSync(join(results, 'check.json'), JSON.stringify(result({ runUrl: 'https://ci.test/run/6' })));
   const run = spawnSync(process.execPath, [join(repositoryRoot, 'scripts/ci/publish-check.ts')], {
     encoding: 'utf8',
     env: {
@@ -399,13 +409,27 @@ test('without a configured App the publisher posts nothing and prints no token',
       PATH: process.env.PATH,
       CI_RESULTS_DIR: results,
       CI_RUN_URL: RUN_URL,
+      CI_EVENT: 'pr',
+      CI_COMMIT: COMMIT,
       CI_CHECK_APP_TOKEN: TOKEN,
       GITHUB_REPOSITORY: 'owner/repo',
-      // Nothing listens here: a request would fail with another message.
-      GITHUB_API_URL: 'http://127.0.0.1:9',
     },
   });
   expect(run.status).not.toBe(0);
-  expect(run.stderr).toContain('names no CI App yet');
+  // Before the App exists the publisher stops at its configuration, after that at the foreign result.
+  expect(run.stderr).toMatch(
+    /names no CI App yet|No check run is posted: the Check result is of the pr run https:\/\/ci\.test\/run\/6/,
+  );
   expect(run.stdout + run.stderr).not.toContain(TOKEN);
+});
+
+test('the gate jobs may read check runs, so a configured App is not refused by GitHub', () => {
+  expect(readWorkflow('release.yml').at('jobs', 'candidate', 'permissions')).toEqual({
+    contents: 'read',
+    actions: 'read',
+    checks: 'read',
+  });
+  const fullRun = readWorkflow('main-full-run.yml');
+  expect(fullRun.at('jobs', 'decide', 'permissions')).toMatchObject({ checks: 'read' });
+  expect(fullRun.at('jobs', 'alert', 'permissions')).toMatchObject({ checks: 'read' });
 });

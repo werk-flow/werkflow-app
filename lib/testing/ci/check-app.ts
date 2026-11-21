@@ -3,6 +3,9 @@
 // `main` pins `Check` to that App, and the release and full-run gates trust it beside GitHub
 // Actions (.github/scripts/check-app.sh reads the file alike). scripts/ci/publish-check.ts posts as it
 // with an installation token the runner mints; the repository never reads the App's key.
+// The file holds exactly {"appId": <id>} or {"appId": null}, spaces aside: both readers match the
+// text with the same pattern, so no JSON parser's leniency decides which App counts. Fifteen digits
+// at most keep the id a safe integer.
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import type { CiEvent } from './dag';
@@ -11,18 +14,15 @@ import type { CiResult } from './results';
 /** The configuration file, from the repository root. */
 export const CHECK_APP_CONFIG = '.github/scripts/check-app.json';
 
-const configSchema = z.strictObject({ appId: z.number().int().positive().nullable() });
+const CONFIG =
+  /^[ \t\r\n]*\{[ \t\r\n]*"appId"[ \t\r\n]*:[ \t\r\n]*(null|[1-9][0-9]{0,14})[ \t\r\n]*\}[ \t\r\n]*$/;
 
 /** The configured App's id, null while none is configured, or why the file cannot count. */
 export function readCheckApp(path: string): { appId: number | null } | { problem: string } {
-  if (!existsSync(path)) return { problem: `${path} is missing` };
-  try {
-    const parsed = configSchema.safeParse(JSON.parse(readFileSync(path, 'utf8')));
-    if (parsed.success) return { appId: parsed.data.appId };
-  } catch {
-    // Unreadable or no JSON: the same answer as a malformed value.
-  }
-  return { problem: `${path} must hold {"appId": <a positive integer>} or {"appId": null}` };
+  const id = existsSync(path) ? CONFIG.exec(readFileSync(path, 'utf8'))?.[1] : undefined;
+  if (id === undefined)
+    return { problem: `${path} must hold {"appId": <a positive integer>} or {"appId": null}` };
+  return { appId: id === 'null' ? null : Number(id) };
 }
 
 /** The check run a run's Check posts: `Full run / Check` for a full run, which the release reads. */
@@ -44,36 +44,42 @@ type CheckRunRequest = {
 
 const SHA = /^[0-9a-f]{40}$/;
 
+/** What the runner's scheduler, not the job, says the run was: the result must match it. */
+type ScheduledRun = {
+  /** CI_RUN_URL. */
+  runUrl: string;
+  /** CI_EVENT: only a scheduled full run posts `Full run / Check`. */
+  event: CiEvent;
+  /** CI_COMMIT: the commit the runner checked out. */
+  commit: string;
+  /** CI_PR_HEAD_SHA: a pull request's head under the merge commit the runner built, or undefined. */
+  prHead: string | undefined;
+};
+
 /**
  * The check run for this run's Check result, or why none may be posted. It passes only a complete,
- * passed Check of this run from a CI runner; any other Check of this run posts a failure. A result
- * of another run, or a head the run did not test, posts nothing: its commit is not this run's.
+ * passed Check of the scheduled run from a CI runner; any other Check of that run posts a failure.
+ * A result of another run, event or commit posts nothing: its commit is not this run's.
  */
 export function checkRunOf(input: {
   check: CiResult | { unreadable: string };
   /** The run's plan result: its start is the run's start. Another run's plan is ignored. */
   plan: CiResult | { unreadable: string };
-  /** The run's identity, CI_RUN_URL. */
-  runUrl: string;
-  /** A pull request's head under a merge-commit checkout (CI_PR_HEAD_SHA), or undefined. */
-  prHead: string | undefined;
-  /** The parents of a commit in the checkout. */
-  parents: (commit: string) => readonly string[];
+  scheduled: ScheduledRun;
   now: Date;
 }): { request: CheckRunRequest } | { problem: string } {
-  const { check, runUrl, prHead } = input;
+  const { check, scheduled } = input;
+  const runUrl = scheduled.runUrl;
   if ('unreadable' in check) return { problem: check.unreadable };
   if (check.job !== 'check' || check.shard !== null)
     return { problem: `the result is of the ${check.job} job, not of Check` };
-  if (check.runUrl !== runUrl)
-    return { problem: `the Check result is of run ${check.runUrl}, not ${runUrl}` };
-  let head = check.commit;
-  if (prHead !== undefined && prHead !== check.commit) {
-    if (check.event !== 'pr') return { problem: `a ${check.event} run tests its own commit, not ${prHead}` };
-    if (!SHA.test(prHead) || !input.parents(check.commit).includes(prHead))
-      return { problem: `${prHead} is no parent of the tested merge commit ${check.commit}` };
-    head = prHead;
-  }
+  if (check.runUrl !== runUrl || check.event !== scheduled.event || check.commit !== scheduled.commit)
+    return {
+      problem: `the Check result is of the ${check.event} run ${check.runUrl} on ${check.commit}, not of the scheduled ${scheduled.event} run ${runUrl} on ${scheduled.commit}`,
+    };
+  const prHead = scheduled.prHead ?? check.commit;
+  if (prHead !== check.commit && (check.event !== 'pr' || !SHA.test(prHead)))
+    return { problem: `a ${check.event} run posts on its own commit, not on ${prHead}` };
   const verdict = checkVerdict(check);
   const plan = input.plan;
   const ownPlan =
@@ -84,7 +90,7 @@ export function checkRunOf(input: {
   return {
     request: {
       name: checkRunName(check.event),
-      head_sha: head,
+      head_sha: prHead,
       status: 'completed',
       started_at: ownPlan ? plan.startedAt : check.startedAt,
       completed_at: check.completedAt ?? input.now.toISOString(),
@@ -145,14 +151,13 @@ export async function postCheckRun(input: {
   appId: number;
   token: string;
   repository: string;
-  apiUrl: string;
   fetch: (url: string, init: RequestInit) => Promise<Response>;
 }): Promise<{ id: number } | { problem: string }> {
   if (!/^[\w.-]+\/[\w.-]+$/.test(input.repository))
     return { problem: `GITHUB_REPOSITORY ${input.repository} is no owner/name` };
   let response: Response;
   try {
-    response = await input.fetch(`${input.apiUrl}/repos/${input.repository}/check-runs`, {
+    response = await input.fetch(`https://api.github.com/repos/${input.repository}/check-runs`, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.github+json',
