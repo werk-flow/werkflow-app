@@ -1,5 +1,5 @@
 // The German sentence of each refusal the invoice actions answer
-// (lib/invoices/actions.ts). Shared codes take their sentence from
+// (lib/invoices/actions.ts, issue-actions.ts). Shared codes take their sentence from
 // lib/action-messages.ts.
 export const INVOICE_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   client_not_found: 'Den Kunden gibt es nicht mehr. Wähle einen anderen.',
@@ -10,4 +10,9 @@ export const INVOICE_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   stale_version: 'Jemand hat die Rechnung inzwischen geändert. Lade die Seite neu und prüfe die Änderungen.',
   save_failed: 'Die Rechnung konnte nicht gespeichert werden. Bitte versuche es erneut.',
   delete_failed: 'Der Entwurf konnte nicht gelöscht werden. Bitte versuche es erneut.',
+  invoice_incomplete: 'Der Rechnung fehlen noch Positionen oder das Leistungsdatum.',
+  invoice_not_issued: 'Die Rechnung ist noch ein Entwurf.',
+  issue_failed: 'Die Rechnung konnte nicht ausgestellt werden. Bitte versuche es erneut.',
+  invoice_number_moved: 'Gerade wurden mehrere andere Rechnungen ausgestellt. Bitte versuche es noch einmal.',
+  original_failed: 'Der Beleg konnte nicht erstellt werden. Bitte versuche es in einem Moment erneut.',
 };

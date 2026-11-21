@@ -10,6 +10,7 @@ import {
   CreditCard,
   FileText,
   LayoutDashboard,
+  Receipt,
   Shield,
   User,
   Users,
@@ -26,6 +27,7 @@ export type SettingsSectionSlug =
   | 'dashboard'
   | 'organisation'
   | 'dokumente'
+  | 'rechnungen'
   | 'kalender'
   | 'zeiterfassung'
   | 'mitarbeiter'
@@ -128,6 +130,19 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     icon: FileText,
     group: 'organization',
     scope: 'organization',
+    managersOnly: true,
+    implemented: true,
+  },
+  {
+    slug: 'rechnungen',
+    label: 'Rechnungen',
+    shortDescription: 'Nummernkreis und Zahlungsziel',
+    description:
+      'Rechnungsnummern und die Zahlungsbedingungen, mit denen ein neuer Rechnungsentwurf beginnt.',
+    icon: Receipt,
+    group: 'organization',
+    scope: 'organization',
+    adminOnlyWrites: true,
     managersOnly: true,
     implemented: true,
   },

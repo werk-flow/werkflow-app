@@ -27,6 +27,7 @@ export const CONTEXT_WRAPPERS: Record<string, string> = {
   authenticateAndAuthorize: 'lib/jobs/auth.ts',
   getAuthorizedDocumentContext: 'lib/documents/access.ts',
   requireServiceManager: 'lib/service-cases/manager-context.ts',
+  resolveManagerContext: 'lib/org/manager-context.ts',
   requireAuth: 'lib/time-accounts/access.ts',
   requireManagerAndClient: 'lib/clients/manager-access.ts',
   requireManagedInvite: 'lib/invites/managed-invite.ts',

@@ -31,6 +31,8 @@ const CONTEXT_RESOLVERS = new Set([
   // resolveActionContextFor and resolveActiveOrgId.
   'verifyCurrentMembership',
   'getCurrentOrgId',
+  // lib/org/manager-context.ts: resolveActionContext's caller, refused unless Admin or Büro.
+  'resolveManagerContext',
 ]);
 
 /** The resolvers that verify their first argument as an organization the caller belongs to. */

@@ -328,6 +328,11 @@ export const COMMERCIAL_OPENERS = {
       page.getByRole('main').getByRole('button', { name: 'Entwurf löschen', exact: true }),
     layer: (page) => page.getByRole('alertdialog', { name: /^Entwurf für „.+“ löschen\?$/ }),
   },
+  'commercial.invoice-issue': {
+    trigger: async ({ page }) =>
+      page.getByRole('main').getByRole('button', { name: 'Ausstellen', exact: true }),
+    layer: (page) => page.getByRole('alertdialog', { name: 'Rechnung ausstellen?', exact: true }),
+  },
   'commercial.leistung': {
     trigger: async ({ page }) => createLeistungButton(page),
     layer: (page) => leistungDialogLayer(page, 'create'),

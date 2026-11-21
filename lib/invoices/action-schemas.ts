@@ -1,7 +1,7 @@
 import { isInventoryUnitCode } from '@/lib/inventory/units';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { INVOICE_TAX_RATES, invoiceWorkKindSchema } from './types';
+import { INVOICE_REFERENCE_MAX_LENGTH, INVOICE_TAX_RATES, invoiceWorkKindSchema } from './types';
 
 // The inputs of the invoice actions. The editor checks the same limits before
 // it submits; the server parses every input again, and the table checks
@@ -34,8 +34,8 @@ const termsSchema = z
     paymentDueDays: z.number().int().min(0).max(365),
     discountDays: z.number().int().min(1).nullable(),
     discountBasisPoints: z.number().int().min(1).max(9999).nullable(),
-    orderReference: z.string().trim().max(200),
-    buyerReference: z.string().trim().max(200),
+    orderReference: z.string().trim().max(INVOICE_REFERENCE_MAX_LENGTH),
+    buyerReference: z.string().trim().max(INVOICE_REFERENCE_MAX_LENGTH),
     openingText: z.string().trim().max(4000),
     closingText: z.string().trim().max(4000),
   })
@@ -66,3 +66,14 @@ export const deleteInvoiceDraftSchema = z.object({
   attemptKey: uuidSchema,
 });
 export type DeleteInvoiceDraftInput = z.input<typeof deleteInvoiceDraftSchema>;
+
+export const issueInvoiceSchema = z.object({
+  invoiceId: uuidSchema,
+  expectedVersion: z.number().int().min(1),
+  /** One key per opening of the issue dialog: a retried press answers with the first issue. */
+  attemptKey: uuidSchema,
+});
+export type IssueInvoiceInput = z.input<typeof issueInvoiceSchema>;
+
+export const fileInvoiceOriginalSchema = z.object({ invoiceId: uuidSchema });
+export type FileInvoiceOriginalInput = z.input<typeof fileInvoiceOriginalSchema>;

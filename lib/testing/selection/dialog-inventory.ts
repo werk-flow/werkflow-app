@@ -63,6 +63,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-delete' }],
     },
+  'components/rechnungen/invoice-issue.tsx#IssueInvoiceButton|Rechnung ausstellen?': {
+    audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-issue' }],
+  },
   "components/angebote/leistungen/leistung-dialog.tsx#LeistungDialog|{entry ? 'Leistung bearbeiten' : 'Leistung anlegen'}":
     {
       audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung' }],

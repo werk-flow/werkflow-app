@@ -48,6 +48,7 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
     'app/api/calendar-window/route.ts',
     'app/api/customer-page/route.ts',
     'app/api/musterrechnung/route.ts',
+    'app/api/rechnungen/vorschau/route.ts',
     'app/api/time-tracking-state/route.ts',
   ]);
   expect(readerOwners.sort()).toEqual([

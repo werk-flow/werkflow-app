@@ -42,6 +42,13 @@ function taxCentsOf(basisCents: number, rateBasisPoints: number): number {
   return basisCents < 0 && rounded > 0 ? -rounded : rounded;
 }
 
+/** a + b, refused when the sum leaves the safe integer range, where a cent could be lost. */
+function safeSum(a: number, b: number): number {
+  const sum = a + b;
+  if (!Number.isSafeInteger(sum)) throw new RangeError('An invoice sum exceeds the safe integer range.');
+  return sum;
+}
+
 /** One breakdown row per category and rate; an exemption keeps one reason. */
 function taxKey(tax: InvoiceTax): string {
   return `${tax.category}:${taxRateBasisPoints(tax)}`;
@@ -56,8 +63,9 @@ function paymentOf({ payee, payment }: Pick<InvoiceDraft, 'payee' | 'payment'>):
 
 /**
  * Every amount of the draft, computed. A draft without lines, with a bad
- * quantity, with both a payee and a payment, or with a paid amount that is
- * negative, not whole cents or above the gross throws a RangeError.
+ * quantity, with a sum beyond the safe integer range, with both a payee and
+ * a payment, or with a paid amount that is negative, not whole cents or above
+ * the gross throws a RangeError.
  */
 export function calculateInvoice(draft: InvoiceDraft): CalculatedInvoice {
   const { payee, payment: draftPayment, paidCents = 0, lines: draftLines, ...rest } = draft;
@@ -83,16 +91,16 @@ export function calculateInvoice(draft: InvoiceDraft): CalculatedInvoice {
     ) {
       throw new RangeError('All exempt lines of one invoice share one exemption reason.');
     }
-    row.basisCents += line.netCents;
+    row.basisCents = safeSum(row.basisCents, line.netCents);
   }
   const taxSubtotals = [...subtotals.values()].map((row) => ({
     ...row,
     taxCents: taxCentsOf(row.basisCents, taxRateBasisPoints(row.tax)),
   }));
 
-  const lineNetCents = lines.reduce((sum, line) => sum + line.netCents, 0);
-  const taxCents = taxSubtotals.reduce((sum, row) => sum + row.taxCents, 0);
-  const grossCents = lineNetCents + taxCents;
+  const lineNetCents = lines.reduce((sum, line) => safeSum(sum, line.netCents), 0);
+  const taxCents = taxSubtotals.reduce((sum, row) => safeSum(sum, row.taxCents), 0);
+  const grossCents = safeSum(lineNetCents, taxCents);
   if (!Number.isSafeInteger(paidCents) || paidCents < 0 || paidCents > Math.max(grossCents, 0)) {
     throw new RangeError('The paid amount lies between zero and the gross amount.');
   }
