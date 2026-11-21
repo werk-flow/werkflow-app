@@ -96,8 +96,8 @@ function siblings(): void {
   const parent = resolve(checkout, '..');
   // scripts/ci/process-executor.ts clones them first with the trusted copy of this step, and ci.yml
   // with an inline step, so the tested commit's steps never hold the token: each clone in place is
-  // kept, each missing one made. git runs beside the checkout, never in it: off GitHub the job
-  // user owns the checkout, and this step runs as the orchestrator.
+  // kept, each missing one made. git runs beside the checkout, never in it, so no configuration of
+  // the tested checkout reaches the process that holds the token.
   if (!existsSync(join(parent, SIBLINGS.website)))
     sh(
       'git',

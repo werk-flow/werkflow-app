@@ -1,39 +1,37 @@
-// The executor of scripts/ci/run-commit.ts that runs each job as a process group on this host, in
-// its own clone of the commit (lib/testing/ci/run-commit.ts names the interface; a container
-// executor takes the same tasks later). Each job gets a fresh workspace: its clone, the sibling clones
-// beside it, its log and the variables its environment steps pass on. Plan and Check share one
-// workspace on the orchestrator's host. A job's clone shares the source's objects read-only and has
-// its own .git, so no job writes the orchestrator's hooks, refs or configuration.
-//
-// Every command of the tested commit runs as the job user, never as the orchestrator's: through
-// `<sudo> -n -H -u <job user> --preserve-env=<names> -- /usr/bin/env PATH=<path> <command>`, which one
-// fixed sudoers rule allows (`<runner> ALL=(<job user>) NOPASSWD:SETENV: /usr/bin/env`). <sudo> is an
-// absolute path to a root-owned file (CI_SUDO, launcherProblem), and its environment is built by the
-// runner alone: the job's task variables and a short list of the host's (HOST_VARIABLES). Nothing a
-// job writes reaches it, so a job's GITHUB_ENV never chooses the program the orchestrator runs; the
-// body reads what its steps passed on itself (CI_PASSED_ENV, lib/testing/ci/passed-variables.ts). No
-// job reaches the orchestrator's files (the queue's state, its ledger, its publisher) or its tokens.
-// The variable values travel in sudo's environment, never in an argument another user could read.
+// The local and test executor of scripts/ci/run-commit.ts: it runs each job as a process group on
+// this host, as run-commit's own user, in its own clone of the commit. It isolates nothing: a job can
+// read and write whatever this user can. run-commit therefore refuses it whenever the run has a
+// ledger, comes from the merge queue, posts its Check or holds a credential
+// (isolationProblem in lib/testing/ci/run-commit.ts); CI runs through an executor that isolates each
+// job, a container per job or a machine of its own (Executors in lib/testing/ci/run-commit.ts).
+// Each job gets a fresh workspace: its clone, the sibling clones beside it, its log and the variables
+// its environment steps pass on. Plan and Check share one workspace on the orchestrator's host. A
+// job's clone shares the source's objects read-only and has its own .git, so no job writes the
+// orchestrator's hooks, refs or configuration.
 import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   closeSync,
   existsSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
-  realpathSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { join } from 'node:path';
 import { CI_DAG } from '../../lib/testing/ci/dag';
-import { passedVariables } from '../../lib/testing/ci/passed-variables';
-import { type Executor, type Unit, unitName } from '../../lib/testing/ci/run-commit';
+import {
+  type Executor,
+  type Executors,
+  type ExecutorSetup,
+  type Unit,
+  unitName,
+} from '../../lib/testing/ci/run-commit';
 
-export type ProcessExecutorOptions = {
+type ProcessExecutorOptions = {
   /** The repository the job clones are made from; it holds the commit. */
   source: string;
   /** This run's folder of workspaces. */
@@ -50,59 +48,18 @@ export type ProcessExecutorOptions = {
   replaceStack: boolean;
   /** The host-wide lock of the one Supabase stack a host holds. */
   stackLock: string;
-  /** The user every job runs as: never the orchestrator's own, never root. */
-  jobUser: string;
-  /** sudo's absolute path, checked by launcherProblem before a run starts. */
-  sudo: string;
   log(line: string): void;
 };
 
-/**
- * The host variables a job takes, beside its task's: the tools' path, the locale and Docker. Its
- * home is the job user's (`sudo -H`); nothing else of the orchestrator passes.
- */
-const HOST_VARIABLES = ['PATH', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TERM', 'DOCKER_HOST'] as const;
+/** Variables of the orchestrator and its secrets: a job sees only the run's variables of its task. */
+const NOT_FOR_JOBS =
+  /^(CI_.*|GH_TOKEN|GITHUB_TOKEN|SIBLING_REPOSITORIES_TOKEN|SHRINK_ONLY_GROWTH_APPROVED|GITHUB_ENV|GITHUB_OUTPUT)$/;
 
-/** The allowed host variables, and git's leave to read the clones the orchestrator owns. */
-function hostEnvironment(): Record<string, string> {
-  const host: Record<string, string> = {};
-  for (const name of HOST_VARIABLES) {
-    const value = process.env[name];
-    if (value) host[name] = value;
-  }
-  // The job's clone borrows the trusted clone's objects, and the sibling clones are the
-  // orchestrator's: git reads repositories of another user only when told to.
-  return { ...host, GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'safe.directory', GIT_CONFIG_VALUE_0: '*' };
-}
-
-/** A command as the job user, with exactly `env` (PATH in the arguments, the values in sudo's environment). */
-function asJobUser(
-  { jobUser, sudo }: { jobUser: string; sudo: string },
-  command: string,
-  args: readonly string[],
-  env: Readonly<Record<string, string | undefined>>,
-): { command: string; args: string[]; env: Record<string, string> } {
-  const variables = Object.fromEntries(
-    Object.entries(env).flatMap(([name, value]) => (value === undefined ? [] : [[name, value]])),
-  );
-  const path = variables.PATH ?? '/usr/bin:/bin';
-  const kept = Object.keys(variables).filter((name) => name !== 'PATH');
-  return {
-    command: sudo,
-    args: [
-      '-n',
-      '-H',
-      '-u',
-      jobUser,
-      ...(kept.length ? [`--preserve-env=${kept.join(',')}`] : []),
-      '--',
-      '/usr/bin/env',
-      `PATH=${path}`,
-      command,
-      ...args,
-    ],
-    env: { ...variables, PATH: path },
-  };
+/** The host's own environment without the orchestrator's variables. */
+function hostEnvironment(): NodeJS.ProcessEnv {
+  const host = { ...process.env };
+  for (const name of Object.keys(host)) if (NOT_FOR_JOBS.test(name)) delete host[name];
+  return host;
 }
 
 const alive = (pid: number): boolean => {
@@ -122,7 +79,6 @@ const holderOf = (path: string): number | undefined => {
     return undefined;
   }
 };
-
 /**
  * Creates `path` holding this process's id, or returns false when it exists. The id is written to a
  * file of its own first and linked into place, so a lock is never seen empty or half written.
@@ -178,46 +134,23 @@ async function lockStack(
   }
 }
 
-/** The first line a command prints, or undefined. */
-const firstLine = (command: string, args: readonly string[]): string | undefined =>
-  spawnSync(command, args, { encoding: 'utf8' }).stdout?.trim().split('\n')[0]?.trim() || undefined;
-
 /**
- * The process group of the job user's command under `sudo` (process `pid`): sudo passes SIGTERM on
- * to it, but SIGKILL only reaches the job user's processes from the job user.
- */
-function jobGroupOf(pid: number): string | undefined {
-  const command = firstLine('pgrep', ['-P', String(pid)]);
-  return command && firstLine('ps', ['-o', 'pgid=', '-p', command]);
-}
-
-/**
- * Runs a command as its own process group until it exits; `signal` ends the group. With `as`, the
- * command runs as that job user through that sudo (asJobUser), and a stop kills that user's group
- * as that user.
+ * Runs a command as its own process group until it exits; `signal` ends the group. `onSpawn` runs
+ * once the command's process exists, never before; when it throws, the group is killed at once and
+ * the command gives no exit code.
  */
 function runGroup(
   command: string,
   args: readonly string[],
-  options: {
-    cwd: string;
-    env: Readonly<Record<string, string | undefined>>;
-    log: string;
-    as?: { jobUser: string; sudo: string };
-  },
+  options: { cwd: string; env: NodeJS.ProcessEnv; log: string; onSpawn?: () => void },
   signal: AbortSignal,
 ): Promise<number | null> {
   if (signal.aborted) return Promise.resolve(null);
-  const { as } = options;
-  const started = as
-    ? asJobUser(as, command, args, options.env)
-    : { command, args: [...args], env: options.env };
   return new Promise((resolve) => {
     const output = openSync(options.log, 'a');
-    const child = spawn(started.command, started.args, {
+    const child = spawn(command, args, {
       cwd: options.cwd,
-      // sudo resets its environment and passes on only the kept names; NODE_ENV is never one.
-      env: { NODE_ENV: process.env.NODE_ENV, ...started.env },
+      env: options.env,
       stdio: ['ignore', output, output],
       detached: true,
     });
@@ -231,22 +164,19 @@ function runGroup(
         if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error;
       }
     };
-    let jobGroup: string | undefined;
-    const killJobGroup = (): void => {
-      signalGroup('SIGKILL');
-      if (as && jobGroup)
-        spawnSync(
-          as.sudo,
-          ['-n', '-u', as.jobUser, '--', '/usr/bin/env', 'kill', '-KILL', '--', `-${jobGroup}`],
-          { stdio: 'ignore', env: { NODE_ENV: process.env.NODE_ENV, ...hostEnvironment() } },
-        );
-    };
+    let refused = false;
+    child.once('spawn', () => {
+      try {
+        options.onSpawn?.();
+      } catch {
+        refused = true;
+        signalGroup('SIGKILL');
+      }
+    });
     let escalation: ReturnType<typeof setTimeout> | undefined;
     const stop = (): void => {
-      // Found while sudo still runs: after it, nothing names the job user's group.
-      if (as && child.pid !== undefined) jobGroup = jobGroupOf(child.pid);
       signalGroup('SIGTERM');
-      escalation = setTimeout(killJobGroup, 10_000);
+      escalation = setTimeout(() => signalGroup('SIGKILL'), 10_000);
     };
     signal.addEventListener('abort', stop, { once: true });
     child.once('error', () => resolve(null));
@@ -254,12 +184,25 @@ function runGroup(
       signal.removeEventListener('abort', stop);
       clearTimeout(escalation);
       // A stopped command never passes, whatever it exited with, and nothing of its group outlives it.
-      if (signal.aborted) {
-        killJobGroup();
+      if (signal.aborted || refused) {
+        signalGroup('SIGKILL');
         resolve(null);
       } else resolve(code);
     });
   });
+}
+
+/** The `KEY=value` lines the environment steps passed on (GITHUB_ENV). */
+function exported(path: string): Record<string, string> {
+  if (!existsSync(path)) return {};
+  return Object.fromEntries(
+    readFileSync(path, 'utf8')
+      .split('\n')
+      .flatMap((line) => {
+        const index = line.indexOf('=');
+        return index > 0 ? [[line.slice(0, index), line.slice(index + 1)]] : [];
+      }),
+  );
 }
 
 /** The source's `origin` without credentials, so no job reads a token from its clone's configuration. */
@@ -271,82 +214,25 @@ function originOf(source: string): string | undefined {
 const minutes = (ms: number): string => `${(ms / 60_000).toFixed(1)} min`;
 
 /**
- * Refuses a job user that is this process's own user or root: a job would reach the orchestrator's
- * files and tokens again.
- */
-export function jobUserProblem(jobUser: string | undefined): string | undefined {
-  if (!jobUser) return 'CI_JOB_USER names the user every job runs as: required.';
-  // By the user id: a name from the environment ($USER) proves nothing.
-  const id = spawnSync('id', ['-u', jobUser], { encoding: 'utf8' });
-  const uid = id.status === 0 ? Number(id.stdout.trim()) : undefined;
-  if (uid === undefined || !Number.isInteger(uid)) return `CI_JOB_USER ${jobUser} is no user of this host.`;
-  if (uid === 0 || uid === process.getuid?.())
-    return `CI_JOB_USER ${jobUser} is the user run-commit runs as, or root: every job runs as a user of its own.`;
-  return undefined;
-}
-
-/**
- * Refuses a sudo that is no absolute path, or whose file or any folder above it is not root's or
- * may be written by another user: the orchestrator runs it with the job's variables.
- */
-export function launcherProblem(sudo: string): string | undefined {
-  if (!isAbsolute(sudo)) return `CI_SUDO ${sudo} is no absolute path.`;
-  let path: string;
-  try {
-    path = realpathSync(sudo);
-  } catch {
-    return `CI_SUDO ${sudo} cannot be read.`;
-  }
-  for (let at = path; ; at = dirname(at)) {
-    const { uid, mode } = statSync(at);
-    if (uid !== 0) return `CI_SUDO ${sudo}: ${at} is not owned by root.`;
-    if (mode & 0o022) return `CI_SUDO ${sudo}: ${at} may be written by others than root.`;
-    if (at === dirname(at)) return undefined;
-  }
-}
-
-/**
  * The folder the token-holding steps run in: the orchestrator's alone. Created when missing, and
- * refused when another user owns it.
+ * refused when it is a link or another user owns it.
  */
 function trustedFolder(path: string): string {
   mkdirSync(path, { recursive: true, mode: 0o700 });
-  if (statSync(path).uid !== process.getuid?.()) throw new Error(`${path} is not run-commit's own folder.`);
+  const folder = lstatSync(path);
+  if (!folder.isDirectory() || folder.uid !== process.getuid?.())
+    throw new Error(`${path} is not run-commit's own folder.`);
   chmodSync(path, 0o700);
   return path;
 }
 
-/** A folder every job user writes to; the sticky bit keeps each file its owner's. */
-function sharedFolder(path: string): void {
-  mkdirSync(path, { recursive: true });
-  chmodSync(path, 0o1777);
-}
-
-export function processExecutor(options: ProcessExecutorOptions): Executor & {
-  workspace(unit: Unit): string;
-  /** Removes a folder of the run's workspaces, the job user's files first. */
-  remove(folder: string): void;
-} {
-  const problem = jobUserProblem(options.jobUser);
-  if (problem) throw new Error(problem);
-  const { jobUser, sudo } = options;
-  const as = { jobUser, sudo };
+function processExecutor(options: ProcessExecutorOptions): Executor & { workspace(unit: Unit): string } {
   const workspace = (unit: Unit): string =>
     join(options.root, unit.job === 'plan' || unit.job === 'check' ? 'host' : unitName(unit));
   const origin = originOf(options.source);
   return {
     workspace,
-    remove(folder) {
-      if (!existsSync(folder)) return;
-      spawnSync(sudo, ['-n', '-u', jobUser, '--', '/usr/bin/env', 'rm', '-rf', '--', folder], {
-        stdio: 'ignore',
-        env: { NODE_ENV: process.env.NODE_ENV, ...hostEnvironment() },
-      });
-      rmSync(folder, { recursive: true, force: true });
-    },
-    // The jobs run as the job user, who cannot write the ledger. Plan and Check still run the tested
-    // commit's job.ts, which reads and appends the ledger itself, so a run keeps none until the
-    // orchestrator holds Plan's and Check's ledger work (lib/testing/ci/run-commit.ts).
+    // Every job runs as this process's user, who can write the ledger and read every credential.
     isolatesJobs: false,
     async run(task, signal) {
       const name = unitName(task.unit);
@@ -354,8 +240,7 @@ export function processExecutor(options: ProcessExecutorOptions): Executor & {
       const checkout = join(folder, 'werkflow-app');
       const log = join(folder, `${name}.log`);
       const passed = join(folder, `${name}.env`);
-      sharedFolder(options.root);
-      sharedFolder(folder);
+      mkdirSync(folder, { recursive: true });
       const host = hostEnvironment();
       const steps = CI_DAG[task.unit.job].prepare;
       let release: (() => void) | undefined;
@@ -369,11 +254,11 @@ export function processExecutor(options: ProcessExecutorOptions): Executor & {
       // passes on: the next job's stack starts fresh, and a stack this job did not start stays.
       const freeStack = async (): Promise<void> => {
         if (!release) return;
-        if (passedVariables(passed).CI_STACK_STARTED === '1')
+        if (exported(passed).CI_STACK_STARTED === '1')
           await runGroup(
             'supabase',
             ['stop', '--no-backup'],
-            { cwd: checkout, env: host, log, as },
+            { cwd: checkout, env: host, log },
             AbortSignal.timeout(120_000),
           );
         release();
@@ -389,13 +274,20 @@ export function processExecutor(options: ProcessExecutorOptions): Executor & {
           command: string,
           args: readonly string[],
           env: Readonly<Record<string, string | undefined>> = {},
-        ) => runGroup(command, args, { cwd: checkout, env: { ...host, ...env }, log, as }, ended);
+          onSpawn?: () => void,
+        ) =>
+          runGroup(
+            command,
+            args,
+            { cwd: checkout, env: { ...host, ...env }, log, ...(onSpawn ? { onSpawn } : {}) },
+            ended,
+          );
         if (!existsSync(checkout)) {
           if (
             (await runGroup(
               'git',
               ['clone', '--quiet', '--shared', '--no-checkout', options.source, checkout],
-              { cwd: folder, env: host, log, as },
+              { cwd: folder, env: host, log },
               ended,
             )) !== 0
           )
@@ -418,16 +310,13 @@ export function processExecutor(options: ProcessExecutorOptions): Executor & {
           GITHUB_ENV: passed,
         };
         writeFileSync(passed, '');
-        chmodSync(passed, 0o666);
-        // The sibling clones take a token, so the trusted copy's prepare.ts clones them, as the
-        // orchestrator: no process of the job user ever holds the token, and the job user reads the
-        // clones. The tested commit's steps, its install scripts included, find them in place.
+        // The sibling clones take a token, so the trusted copy's prepare.ts clones them: the tested
+        // commit's steps, its install scripts included, never hold it and find the clones in place.
         // It runs from the orchestrator's own folder, never one a job writes, with only what it
         // needs, and Bun reads no bunfig.toml or .env file there into the process that holds the token.
         if (steps.includes('siblings')) {
           const trusted = join(options.source, 'scripts/ci/prepare.ts');
-          const { NODE_ENV, PATH, HOME } = process.env;
-          const minimal = { NODE_ENV, PATH, HOME };
+          const minimal: NodeJS.ProcessEnv = { NODE_ENV: host.NODE_ENV, PATH: host.PATH, HOME: host.HOME };
           const cloned = await runGroup(
             process.execPath,
             ['--config=/dev/null', '--no-env-file', trusted, 'siblings'],
@@ -448,18 +337,22 @@ export function processExecutor(options: ProcessExecutorOptions): Executor & {
         const setup = Date.now() - began;
         // Fast reads only the stack's environment file, so only a job that uses the stack keeps it.
         if (!steps.includes('stack')) await freeStack();
-        // The body reads what the steps passed on from their file, as the job user: none of it
-        // reaches sudo's environment. It writes no more there.
-        const variables: Record<string, string> = { ...env, CI_PASSED_ENV: passed };
+        // The body gets what the steps passed on, never the file they wrote it to.
+        const variables: Record<string, string> = { ...env, ...exported(passed) };
+        delete variables.CI_STACK_STARTED;
         delete variables.GITHUB_ENV;
-        try {
-          task.onLaunch?.();
-        } catch (error) {
-          return fail(
-            `its launch could not be recorded: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-        const code = await run(process.execPath, ['scripts/ci/job.ts', task.unit.job], variables);
+        // The task learns of the launch once the body's process exists: a body that never launched
+        // is never reported launched. A launch that cannot be recorded ends the body at once.
+        let unrecorded: string | undefined;
+        const code = await run(process.execPath, ['scripts/ci/job.ts', task.unit.job], variables, () => {
+          try {
+            task.onLaunch?.();
+          } catch (error) {
+            unrecorded = error instanceof Error ? error.message : String(error);
+            throw error;
+          }
+        });
+        if (unrecorded !== undefined) return fail(`its launch could not be recorded: ${unrecorded}`);
         return code === null
           ? fail('the job was stopped')
           : {
@@ -471,6 +364,40 @@ export function processExecutor(options: ProcessExecutorOptions): Executor & {
       } finally {
         await freeStack();
       }
+    },
+  };
+}
+
+/**
+ * Plan and Check on this host and every other job as a process here, each in a workspace of the run
+ * under the work root. Passed jobs' workspaces are removed once the run ends, and the whole run's
+ * after a pass; a failed job's stays with its log.
+ */
+export function processExecutors(setup: ExecutorSetup): Executors {
+  const root = join(setup.workRoot, setup.runKey);
+  const executor = (machineStart: boolean) =>
+    processExecutor({
+      source: setup.source,
+      root,
+      commit: setup.commit,
+      machineStart,
+      replaceStack: setup.replaceStack,
+      stackLock: join(setup.workRoot, 'stack.lock'),
+      trusted: join(setup.workRoot, 'trusted'),
+      log: setup.log,
+    });
+  const jobs = executor(true);
+  return {
+    host: executor(false),
+    jobs,
+    release(outcome) {
+      for (const { unit, state } of outcome.units) {
+        const folder = jobs.workspace(unit);
+        if (state === 'passed') rmSync(folder, { recursive: true, force: true });
+        else if (existsSync(folder))
+          setup.log(`[run] ${unitName(unit)} ${state}: its workspace stays at ${folder}`);
+      }
+      if (outcome.exitCode === 0) rmSync(root, { recursive: true, force: true });
     },
   };
 }

@@ -1,8 +1,9 @@
 // One CI run of one commit off GitHub Actions, as ci.yml runs it there (scripts/ci/run-commit.ts is
 // its command). Plan runs on the orchestrator's host, then every job and shard the plan runs goes
 // through an executor by the needs of lib/testing/ci/dag.ts, then Check runs on the host with the
-// scheduler's report. The executor decides where a job runs: a process in its own checkout now, a
-// container later. Each job takes `scripts/ci/prepare.ts for <job>`, then `scripts/ci/job.ts <job>`.
+// scheduler's report. The executor decides where a job runs (Executors): an isolating one, a container
+// per job or a machine of its own, for CI; the process executor, which isolates nothing, for local
+// and test runs only. Each job takes `scripts/ci/prepare.ts for <job>`, then `scripts/ci/job.ts <job>`.
 // This module decides; it starts nothing itself.
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -134,8 +135,8 @@ export type ExecutorTask = {
   /** The whole job, setup included, as ci.yml's `timeout-minutes`. */
   timeoutMs: number;
   /**
-   * Called once the job's steps passed, right before its body is launched. A throw keeps the body
-   * from starting, and the job fails.
+   * Called once the job's steps passed and its body's process exists, never before: a crash before
+   * the launch never leaves a launch behind. A throw ends the body at once, and the job fails.
    */
   onLaunch?: (() => void) | undefined;
 };
@@ -147,13 +148,66 @@ export type ExecutorOutcome = { exitCode: number | null; detail: string };
 export type Executor = {
   run(task: ExecutorTask, signal: AbortSignal): Promise<ExecutorOutcome>;
   /**
-   * Whether the run may keep a ledger (scripts/ci/job.ts, CI_LEDGER): no job, Plan and Check
-   * included, can write it, and the orchestrator holds Plan's and Check's ledger work. The process
-   * executor runs every job as the job user, but Plan's and Check's job.ts still read and append the
-   * ledger themselves, so it keeps none.
+   * Whether no job, Plan and Check included, reaches the orchestrator's files, ledger and
+   * credentials: each runs in a container or on a machine of its own. Only then may a run keep a
+   * ledger, come from the merge queue, post its Check or hold a credential (isolationProblem).
    */
   isolatesJobs: boolean;
 };
+
+/** What scripts/ci/run-commit.ts hands an executor for one run. */
+export type ExecutorSetup = {
+  /** The orchestrator's trusted clone, which holds the commit and GitHub's branches as `origin`. */
+  source: string;
+  commit: string;
+  /** The host's work root (CI_WORK_ROOT), which only the orchestrator writes. */
+  workRoot: string;
+  /** The run's key, unique per run URL and attempt. */
+  runKey: string;
+  /** CI_DEDICATED_HOST: this host's Docker serves CI alone. */
+  replaceStack: boolean;
+  log(line: string): void;
+};
+
+/**
+ * Where one run's jobs run: Plan and Check on the orchestrator's host (`host`), every other job and
+ * shard through `jobs`. An isolating executor, a container per job on the Mac or a mirror job on
+ * GitHub, plugs in here with `isolatesJobs` on both; scripts/ci/process-executor.ts is the local one.
+ */
+export type Executors = {
+  host: Executor;
+  jobs: Executor;
+  /** Frees what the run left once it ended; a failed job's workspace may stay for a person. */
+  release(outcome: RunCommitOutcome): void;
+};
+
+/** What only a run through an isolating executor may hold, and why. */
+const NEEDS_ISOLATION = {
+  CI_LEDGER: 'a ledger',
+  CI_QUEUE_COMMIT: "the merge queue's --runner",
+  CI_QUEUE_MAIN_RUN: "the merge queue's --main-runner",
+  CI_PUBLISHER: 'the Check publisher',
+  GH_TOKEN: 'a GitHub token',
+  GITHUB_TOKEN: 'a GitHub token',
+  CI_JOB_GH_TOKEN: "the jobs' GitHub token",
+  SIBLING_REPOSITORIES_TOKEN: 'the sibling token',
+} as const;
+
+/**
+ * Why a run cannot go through executors that do not isolate its jobs (`isolatesJobs` false), or
+ * undefined: a job would reach the ledger, the queue's state and hooks, the publisher or a credential.
+ */
+export function isolationProblem(
+  isolatesJobs: boolean,
+  environment: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  if (isolatesJobs) return undefined;
+  const configured = Object.entries(NEEDS_ISOLATION).flatMap(([name, what]) =>
+    environment[name] ? [`${name} (${what})`] : [],
+  );
+  if (!configured.length) return undefined;
+  return `The process executor runs every job as this user on this host, so it serves local and test runs only, without ${configured.join(', ')}. Run CI through an executor that isolates each job: a container per job on the Mac, or a CI mirror job on GitHub.`;
+}
 
 type UnitState = 'waiting' | 'running' | 'passed' | 'failed' | 'skipped' | 'cancelled';
 type SchedulerResult = 'success' | 'failure' | 'cancelled' | 'skipped';
@@ -524,8 +578,9 @@ function checkPassed(input: RunCommitInput, deps: RunCommitDeps, exitCode: numbe
 }
 
 /**
- * The run's dependencies with the ledger only when no job can write it: with an executor whose Plan
- * and Check still append it themselves, a run keeps no ledger and executes in full (scripts/ci/job.ts).
+ * The run's dependencies with the ledger only when no job can write it: with an executor that does
+ * not isolate its jobs, a run keeps no ledger and executes in full. scripts/ci/run-commit.ts refuses
+ * such a run with a ledger before it starts (isolationProblem); this keeps the rule for every caller.
  */
 function withLedgerBoundary(
   input: RunCommitInput,
@@ -533,7 +588,7 @@ function withLedgerBoundary(
 ): { input: RunCommitInput; deps: RunCommitDeps } {
   if (deps.jobs.isolatesJobs || (!input.env.CI_LEDGER && !deps.appendReceipt)) return { input, deps };
   deps.log(
-    "[run] The executor's Plan and Check would append to the ledger themselves, so this run keeps no ledger and reuses nothing.",
+    "[run] The executor's jobs could write the ledger, so this run keeps no ledger and reuses nothing.",
   );
   const env = { ...input.env };
   delete env.CI_LEDGER;

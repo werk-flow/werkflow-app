@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   createQueueAdapter,
+  mainHolds,
   markQueue,
   readQueueState,
   readMainFollowUp,
@@ -430,4 +431,16 @@ test("a queue run's runner never gets the main run's Check publisher", () => {
   } finally {
     delete process.env.CI_PUBLISHER;
   }
+});
+
+test("main holds a merge once the queue's read of main is that merge or above it, and never a commit the clone lacks", () => {
+  const first = git('rev-parse', 'HEAD');
+  const second = commitFile('b.txt', 'b\n');
+  git('update-ref', 'refs/ci-queue/main', first);
+  expect(mainHolds(repository, first)).toBe(true);
+  expect(mainHolds(repository, second)).toBe(false);
+  expect(mainHolds(repository, 'f'.repeat(40))).toBe(false);
+  git('update-ref', 'refs/ci-queue/main', second);
+  expect(mainHolds(repository, first)).toBe(true);
+  expect(mainHolds(repository, second)).toBe(true);
 });

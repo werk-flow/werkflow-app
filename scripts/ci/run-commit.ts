@@ -3,7 +3,6 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   appendFileSync,
-  chmodSync,
   closeSync,
   existsSync,
   mkdirSync,
@@ -21,45 +20,43 @@ import {
   acknowledgedStart,
   acknowledgeStart,
   claimMainRun,
+  type Executors,
+  type ExecutorSetup,
+  isolationProblem,
   mainStartRecord,
   releaseMainRun,
   RUN_COMMIT_LOCK,
   runCommit,
   type RunCommitInput,
   runVariables,
-  unitName,
 } from '../../lib/testing/ci/run-commit';
-import { jobUserProblem, launcherProblem, processExecutor } from './process-executor';
-import { repository } from './run';
+import { processExecutors } from './process-executor';
+import { repository as ownRepository } from './run';
 
-// One CI run of one commit off GitHub Actions: Plan on this host, the plan's jobs through the process
-// executor, then Check on this host (lib/testing/ci/run-commit.ts). The Mac and any other runner call
-// it for every run; the merge queue calls it as its --runner (scripts/ci/queue.ts), and its
-// --main-runner for main after a landing. Run it from a trusted clone of werkflow-app that no job
-// writes; it clones each job's checkout from that clone. Every job, Plan and Check included, runs as
-// CI_JOB_USER (scripts/ci/process-executor.ts).
-// Usage: bun scripts/ci/run-commit.ts   (executable: the queue starts it without arguments)
+// One CI run of one commit off GitHub Actions: Plan on this host, the plan's jobs through an executor,
+// then Check on this host (lib/testing/ci/run-commit.ts). Run it from a trusted clone of
+// werkflow-app that no job writes; the executor makes each job's checkout from that clone.
+//
+// The executor (Executors in lib/testing/ci/run-commit.ts) decides where jobs run. From the command
+// line it is the process executor (scripts/ci/process-executor.ts), which runs every job as this user
+// and isolates nothing, so it serves local and test runs only: run-commit refuses it whenever the run
+// has a ledger, comes from the merge queue (--runner, --main-runner), posts its Check or holds a
+// credential (isolationProblem). CI runs through an isolating executor, a container per job on the
+// Mac or a mirror job on GitHub, passed to runCommitCommand; until one exists, the Mac's runner keeps
+// calling scripts/ci/prepare.ts and scripts/ci/job.ts per job in its own container.
+// Usage: bun scripts/ci/run-commit.ts   (executable: it takes no arguments)
 // It reads plain environment variables only. scripts/ci/job.ts names the run's variables it passes to
 // every job: CI_EVENT, CI_RESULTS_DIR, CI_RUN_URL, CI_BASE_SHA or CI_FULL_REASON, CI_PRODUCER, CI_PRS,
 // CI_PR_HEAD_REF, CI_PR_HEAD_SHA, SHRINK_ONLY_GROWTH_APPROVED, GITHUB_REPOSITORY, CI_CACHE_DIR. Also:
-//   CI_COMMIT       The commit to run. The queue gives CI_QUEUE_COMMIT and CI_QUEUE_REPOSITORY instead.
-//                   A commit this clone lacks is fetched: the queue's ref, else origin (and
-//                   CI_PR_HEAD_REF for a pull request).
-//   CI_JOB_USER     The user every job runs as, through one sudoers rule
-//                   (`<this user> ALL=(<job user>) NOPASSWD:SETENV: /usr/bin/env`). Required; refused
-//                   when it is this process's own user or root. It reads the trusted clone and writes
-//                   CI_CACHE_DIR; the run's results directory and workspaces are made writable to it.
-//   CI_SUDO         sudo's absolute path, default /usr/bin/sudo. Refused unless root owns it and every
-//                   folder above it, and no one else may write them.
+//   CI_COMMIT       The commit to run. The queue gives CI_QUEUE_COMMIT and CI_QUEUE_REPOSITORY instead,
+//                   and CI_QUEUE_MAIN_RUN=1 for main's run after a landing. A commit this clone lacks
+//                   is fetched: the queue's ref, else origin (and CI_PR_HEAD_REF for a pull request).
 //   CI_JOB_GH_TOKEN A read-only GitHub token for the jobs that read GitHub (Plan, Fast), as their
-//                   GH_TOKEN. This process's own GH_TOKEN never reaches a job.
+//                   GH_TOKEN; an isolating executor only. This process's own GH_TOKEN never reaches a job.
 //   CI_RUN_ATTEMPT  1 for a run's first attempt (also when unset). A rerun keeps CI_RUN_URL and
 //                   CI_RESULTS_DIR and counts this up; the earlier attempt's results move to
 //                   attempt-<n>/ in the results directory, and the rerun plans and runs every job anew.
-//   CI_LEDGER       The runner's ledger, kept only when the executor runs jobs where they cannot write
-//                   it and the orchestrator holds Plan's and Check's ledger work. The process executor
-//                   runs Plan and Check's job.ts, which append themselves, so with it the run keeps no
-//                   ledger and runs every job; main runs are still deduplicated by it.
+//   CI_LEDGER       The runner's ledger; an isolating executor only. main runs are deduplicated by it.
 //   CI_WORK_ROOT    A folder only this user writes, for the jobs' workspaces, the host's stack lock,
 //                   the folder the token-holding steps run in (trusted/), and the claims and start
 //                   records of main runs (main-runs/); one per host, shared by every run-commit there.
@@ -69,19 +66,19 @@ import { repository } from './run';
 //   CI_PARALLEL     The most jobs at once, default 2.
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.
 //   CI_PUBLISHER    An executable that runs `bun scripts/ci/publish-check.ts <start|finish>` from the
-//                   trusted copy as the CI App's user; it gets CI_RUN_URL, CI_RUN_ATTEMPT, CI_EVENT,
-//                   CI_COMMIT, CI_TREE, CI_PR_HEAD_SHA, CI_RESULTS_DIR and GITHUB_REPOSITORY. The run posts
-//                   `start` before Plan and starts nothing when that fails, and `finish` after Check.
-//                   Refused for a queue run, whose commit is not on GitHub.
-//   SIBLING_REPOSITORIES_TOKEN  Reaches only Fast's trusted sibling clone, which runs as this user.
+//                   trusted copy as the CI App's user; an isolating executor only. It gets CI_RUN_URL,
+//                   CI_RUN_ATTEMPT, CI_EVENT, CI_COMMIT, CI_TREE, CI_PR_HEAD_SHA, CI_RESULTS_DIR and
+//                   GITHUB_REPOSITORY. The run posts `start` before Plan and starts nothing when that
+//                   fails, and `finish` after Check. Refused for a queue run, whose commit is not on GitHub.
+//   SIBLING_REPOSITORIES_TOKEN  Reaches only Fast's trusted sibling clone; an isolating executor only.
 // Exit 0: Check passed. 1: it failed. 2: the run never started: every failure before its start was
-// acknowledged, such as a missing or unreadable variable, an attempt that does not count up, a
-// results directory another run-commit holds, an `origin` or commit git cannot fetch, a queued Check
-// the publisher could not post, or another main run of the commit that claimed it but has not
-// started; a main run then gives up its claim of the commit. 3: nothing ran because another `main`
-// run of the commit started already (the ledger holds its Plan, or its start record on this host
-// names it); the start record names that run.
-// Passed jobs' workspaces are removed at the end; a failed job's stays with its log.
+// acknowledged, such as a missing or unreadable variable, a refused executor, an attempt that does
+// not count up, a results directory another run-commit holds, an `origin` or commit git cannot fetch,
+// a queued Check the publisher could not post, or another main run of the commit that claimed it but
+// has not started; a main run then gives up its claim of the commit. 3: nothing ran because another
+// `main` run of the commit started already (the ledger holds its Plan, or its start record on this
+// host names it); the start record names that run.
+// The executor frees what the run left (Executors.release).
 
 /** A stop before the run started: 2, or 3 when another main run of the commit started. */
 class Refusal extends Error {
@@ -97,13 +94,44 @@ function refuse(problem: string, code: 2 | 3 = 2): never {
   throw new Refusal(problem, code);
 }
 
-const environment = process.env;
-/** Set once the run's start is acknowledged: every failure before it is a run that never started. */
-let started = false;
-/** What a stop undoes, newest first: the run's lock, and a main claim of a run that never started. */
-const undo: (() => void)[] = [];
+/** One run of run-commit: where it runs, with which variables and executor, until `signal` stops it. */
+type RunCommitCommand = {
+  /** The trusted clone the run's checkouts come from. */
+  repository: string;
+  environment: Readonly<Record<string, string | undefined>>;
+  executors(setup: ExecutorSetup): Executors;
+  signal: AbortSignal;
+  log(line: string): void;
+  /** Why the run refused or failed. */
+  error(line: string): void;
+};
 
-async function main(): Promise<0 | 1 | 2 | 3> {
+/** Runs one commit's CI run as the header says, and returns its exit code. */
+export async function runCommitCommand(command: RunCommitCommand): Promise<0 | 1 | 2 | 3> {
+  /** Set once the run's start is acknowledged: every failure before it is a run that never started. */
+  const state = { started: false };
+  /** What a stop undoes, newest first: the run's lock, and a main claim of a run that never started. */
+  const undo: (() => void)[] = [];
+  try {
+    return await run(command, state, undo);
+  } catch (error) {
+    if (error instanceof Refusal) {
+      command.error(`[run] ${error.message}`);
+      return error.code;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    command.error(`[run] ${state.started ? 'the run failed' : 'the run could not start'}: ${detail}`);
+    return state.started ? 1 : 2;
+  } finally {
+    for (const step of undo.reverse()) step();
+  }
+}
+
+async function run(
+  { repository, environment, executors, signal, log }: RunCommitCommand,
+  state: { started: boolean },
+  undo: (() => void)[],
+): Promise<0 | 1 | 2 | 3> {
   const event = CI_EVENTS.find((name) => name === environment.CI_EVENT);
   const resultsDir = environment.CI_RESULTS_DIR && resolve(environment.CI_RESULTS_DIR);
   const runUrl = environment.CI_RUN_URL;
@@ -123,21 +151,27 @@ async function main(): Promise<0 | 1 | 2 | 3> {
     refuse(
       "A queue run posts no Check: its commit is not on GitHub, and the queue's verdict reaches it as Queue.",
     );
-  const jobUser = environment.CI_JOB_USER;
-  const userProblem = jobUserProblem(jobUser);
-  if (userProblem || !jobUser) return refuse(userProblem ?? 'CI_JOB_USER is required.');
   const ledger = environment.CI_LEDGER && resolve(environment.CI_LEDGER);
   const producer = environment.CI_PRODUCER || null;
-  const sudo = environment.CI_SUDO || '/usr/bin/sudo';
-  const sudoProblem = launcherProblem(sudo);
-  if (sudoProblem) refuse(sudoProblem);
+  const runKey = `${createHash('sha256').update(runUrl).digest('hex').slice(0, 16)}-${attempt.data}`;
+  const { host, jobs, release } = executors({
+    source: repository,
+    commit,
+    workRoot,
+    runKey,
+    replaceStack: environment.CI_DEDICATED_HOST === '1',
+    log,
+  });
+  // A job of an executor that isolates nothing reaches whatever this process holds.
+  const unisolated = isolationProblem(host.isolatesJobs && jobs.isolatesJobs, environment);
+  if (unisolated) refuse(unisolated);
 
   const git = (...args: string[]): string => {
     try {
       return execFileSync('git', args, {
         cwd: repository,
         encoding: 'utf8',
-        env: { ...environment, GIT_TERMINAL_PROMPT: '0' },
+        env: { NODE_ENV: process.env.NODE_ENV, ...environment, GIT_TERMINAL_PROMPT: '0' },
         stdio: ['ignore', 'pipe', 'inherit'],
       }).trim();
     } catch {
@@ -184,9 +218,7 @@ async function main(): Promise<0 | 1 | 2 | 3> {
 
   // One orchestrator per results directory, for the run's whole life. scripts/ci/schedule.ts never
   // names a run whose directory holds the lock: its held shards are this orchestrator's to start.
-  // The jobs write their results here as the job user; the sticky bit keeps this process's files its own.
   mkdirSync(resultsDir, { recursive: true });
-  chmodSync(resultsDir, 0o1777);
   const lockPath = join(resultsDir, RUN_COMMIT_LOCK);
   let lock: number;
   try {
@@ -220,7 +252,7 @@ async function main(): Promise<0 | 1 | 2 | 3> {
     for (const file of left) renameSync(join(resultsDir, file), join(aside, file));
   }
 
-  // The jobs read GitHub's branches through this clone's `origin` (scripts/ci/process-executor.ts).
+  // The jobs read GitHub's branches through this clone's `origin`.
   git('fetch', '--quiet', '--no-tags', 'origin');
   const hasCommit = (): boolean =>
     spawnSync('git', ['cat-file', '-e', `${commit}^{commit}`], { cwd: repository }).status === 0;
@@ -245,28 +277,6 @@ async function main(): Promise<0 | 1 | 2 | 3> {
     if (!hasCommit()) refuse(`${commit} cannot be fetched.`);
   }
   const tree = git('rev-parse', `${commit}^{tree}`);
-  // The sudoers rule the jobs need, before anything starts.
-  if (spawnSync(sudo, ['-n', '-u', jobUser, '--', '/usr/bin/env', 'true']).status !== 0)
-    refuse(`sudo cannot run /usr/bin/env as ${jobUser} without a password; add the sudoers rule first.`);
-
-  const runKey = `${createHash('sha256').update(runUrl).digest('hex').slice(0, 16)}-${attempt.data}`;
-  const root = join(workRoot, runKey);
-  const log = (line: string): void => console.info(line);
-  const executor = (machineStart: boolean) =>
-    processExecutor({
-      source: repository,
-      root,
-      commit,
-      machineStart,
-      replaceStack: environment.CI_DEDICATED_HOST === '1',
-      stackLock: join(workRoot, 'stack.lock'),
-      trusted: join(workRoot, 'trusted'),
-      jobUser,
-      sudo,
-      log,
-    });
-  const jobs = executor(true);
-  const host = executor(false);
 
   const input: RunCommitInput = {
     run: { event, commit, tree, runUrl, attempt: attempt.data, producer },
@@ -279,12 +289,6 @@ async function main(): Promise<0 | 1 | 2 | 3> {
   };
 
   const publisher = environment.CI_PUBLISHER && resolve(environment.CI_PUBLISHER);
-  const controller = new AbortController();
-  for (const signal of ['SIGINT', 'SIGTERM'] as const)
-    process.once(signal, () => {
-      log(`[run] ${signal}: stopping every job, then Check`);
-      controller.abort();
-    });
 
   // The same on this host before any Plan wrote: the first starter claims the commit, atomically, as
   // the last step before the run starts. A run that does not start gives its claim up.
@@ -293,7 +297,7 @@ async function main(): Promise<0 | 1 | 2 | 3> {
     if ('unwritable' in claimed) refuse(claimed.unwritable);
     if ('owner' in claimed) claimedElsewhere(claimed.owner);
     undo.push(() => {
-      if (!started) releaseMainRun(mainRuns, commit, runUrl);
+      if (!state.started) releaseMainRun(mainRuns, commit, runUrl);
     });
   }
 
@@ -310,6 +314,7 @@ async function main(): Promise<0 | 1 | 2 | 3> {
             const ran = spawnSync(publisher, [mode], {
               stdio: 'inherit',
               env: {
+                NODE_ENV: process.env.NODE_ENV,
                 ...environment,
                 CI_RUN_URL: runUrl,
                 CI_RUN_ATTEMPT: String(attempt.data),
@@ -325,46 +330,48 @@ async function main(): Promise<0 | 1 | 2 | 3> {
       // Once Plan's body launched: the one record a second main run and the queue read.
       acknowledgeStart: () => {
         if (event === 'main') acknowledgeStart(startRecord, { commit, runUrl });
-        started = true;
+        state.started = true;
       },
       now: () => Date.now(),
-      sleep: (ms, signal) =>
+      sleep: (ms, sleepSignal) =>
         new Promise((resolveSleep) => {
           const timer = setTimeout(resolveSleep, ms);
-          signal.addEventListener('abort', () => (clearTimeout(timer), resolveSleep(undefined)), {
+          sleepSignal.addEventListener('abort', () => (clearTimeout(timer), resolveSleep(undefined)), {
             once: true,
           });
         }),
       log,
-      // A result the job user wrote is replaced, never written into: this process owns the directory.
+      // A result a job wrote is replaced, never written into.
       writeResult: (unit, result) => {
         const path = join(resultsDir, resultFileName(unit.job, unit.shard));
         writeFileSync(`${path}.tmp`, `${JSON.stringify(result, null, 2)}\n`);
         renameSync(`${path}.tmp`, path);
       },
     },
-    controller.signal,
+    signal,
   );
-  for (const { unit, state } of outcome.units) {
-    const folder = jobs.workspace(unit);
-    if (state === 'passed') jobs.remove(folder);
-    else if (existsSync(folder)) log(`[run] ${unitName(unit)} ${state}: its workspace stays at ${folder}`);
-  }
-  if (outcome.exitCode === 0) jobs.remove(root);
+  release(outcome);
   log(
     `[run] ${event} run of ${commit}: ${outcome.exitCode === 2 ? 'not started' : `Check ${outcome.exitCode === 0 ? 'passed' : 'failed'}`}`,
   );
   return outcome.exitCode;
 }
 
-const exitCode = await main().catch((error: unknown): 1 | 2 | 3 => {
-  if (error instanceof Refusal) {
-    console.error(`[run] ${error.message}`);
-    return error.code;
-  }
-  const detail = error instanceof Error ? error.message : String(error);
-  console.error(`[run] ${started ? 'the run failed' : 'the run could not start'}: ${detail}`);
-  return started ? 1 : 2;
-});
-for (const step of undo.reverse()) step();
-process.exit(exitCode);
+if (import.meta.main) {
+  const controller = new AbortController();
+  for (const name of ['SIGINT', 'SIGTERM'] as const)
+    process.once(name, () => {
+      console.info(`[run] ${name}: stopping every job, then Check`);
+      controller.abort();
+    });
+  process.exit(
+    await runCommitCommand({
+      repository: ownRepository,
+      environment: process.env,
+      executors: processExecutors,
+      signal: controller.signal,
+      log: (line) => console.info(line),
+      error: (line) => console.error(line),
+    }),
+  );
+}

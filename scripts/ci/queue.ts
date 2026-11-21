@@ -21,6 +21,9 @@
 //                   the repository's runner, starts its own run's held shards, and the scheduler never
 //                   names a run it holds. A hand-written runner waits for them and never starts them;
 //                   the orchestrator's `bun scripts/ci/schedule.ts due --run "$CI_RESULTS_DIR"` does.
+//                   Its jobs must not reach the queue's state, tokens or hooks: run-commit only
+//                   through an isolating executor (it refuses its process executor here), or the
+//                   Mac's own runner, which runs each job in a container of its own.
 //                   A queue run is never a `--pr-run`: the queue cancels its own superseded entries.
 //   --main-runner   Starts main's run after every live tick that landed a PR or stopped partway
 //                   (`partial`), whatever the tick's exit: once, for main's head, with CI_EVENT=main,
@@ -30,13 +33,14 @@
 //                   each merge, naming that merge's PR, and again with the PRs that landed before it
 //                   reads main, so a tick that dies after a merge leaves the run owed. Before it
 //                   reads main, a tick asks GitHub whether that PR merged: no answer, or a merge
-//                   main does not show yet, keeps the run owed; only an unmerged PR on an unmoved
-//                   main clears it. It is paid once the start record of main's run of the commit in
-//                   CI_WORK_ROOT names a run (scripts/ci/run-commit.ts writes it once Plan launched);
-//                   its exit code decides nothing. While it is owed, a tick starts it first, before
-//                   it touches a pending `Queue` mark, and lands nothing, exit 2.
-//                   Pass scripts/ci/run-commit.ts, with CI_WORK_ROOT (required) in the queue's
-//                   environment; without the flag the runner starts that run itself.
+//                   the main it reads does not hold yet, keeps the run owed; only an unmerged PR on
+//                   an unmoved main clears it. It is paid once the start record of main's run of
+//                   the commit in CI_WORK_ROOT names a run (scripts/ci/run-commit.ts writes it once
+//                   Plan's body launched, never before); its exit code decides nothing. While it is
+//                   owed, a tick starts it first, before it touches a pending `Queue` mark, and
+//                   lands nothing, exit 2. It gets CI_QUEUE_MAIN_RUN=1. Pass run-commit through an
+//                   isolating executor, with CI_WORK_ROOT (required) in the queue's environment;
+//                   without the flag the runner starts that run itself.
 //   --work-dir      Holds one results directory per run, and the queue's state between ticks
 //                   (queue-state.json): the `Queue` success it is about to post, saved before it
 //                   posts it, and cleared once it was withdrawn after the merge or its failure. A
@@ -80,6 +84,7 @@ import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/qu
 import { mainFollowUp, mainRunOf, type MergeAnswer } from '../../lib/testing/ci/queue-main-run';
 import {
   createQueueAdapter,
+  mainHolds,
   QUEUE_STATE_FILE,
   readMainFollowUp,
   runMain,
@@ -187,7 +192,8 @@ try {
     const owed = mainRunner && !values['dry-run'] ? readMainFollowUp(workDir) : undefined;
     if (!mainRunner || !workRoot || !owed) return true;
     const merge = await mergeAnswer(owed.merging);
-    const main = mainRunOf(owed, (await adapter.main()).commit, merge);
+    const { commit } = await adapter.main();
+    const main = mainRunOf(owed, { commit, contains: (merged) => mainHolds(repository, merged) }, merge);
     if (main && 'unresolved' in main) {
       console.error(`[queue] ${main.unresolved}`);
       return false;

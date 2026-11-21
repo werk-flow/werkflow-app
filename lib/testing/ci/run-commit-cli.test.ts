@@ -1,16 +1,26 @@
-// The runner rules scripts/ci/run-commit.ts enforces before anything runs: one orchestrator per run,
-// a rerun that counts its attempt up, at most one `main` run per commit, no Check for a queue run,
-// and a scheduler that never names a run its run-commit holds (scripts/ci/schedule.ts).
+// The runner rules scripts/ci/run-commit.ts enforces before anything runs: the process executor for
+// local and test runs only, one orchestrator per run, a rerun that counts its attempt up, at most one
+// `main` run per commit, no Check for a queue run, and a scheduler that never names a run its
+// run-commit holds (scripts/ci/schedule.ts). The queue's hooks run through a stub isolating executor.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { CiResult } from './results';
+import { runCommitCommand } from '../../../scripts/ci/run-commit';
+import { processExecutors } from '../../../scripts/ci/process-executor';
+import { pull } from '../fixtures/merge-queue-world';
+import { integrationEnvironment } from './queue';
+import { mainEnvironment } from './queue-main-run';
+import { type CiResult, readResult } from './results';
 import {
   acknowledgedStart,
   acknowledgeStart,
   claimMainRun,
+  type Executor,
+  type Executors,
+  type ExecutorSetup,
+  type ExecutorTask,
   mainStartRecord,
   releaseMainRun,
   RUN_COMMIT_LOCK,
@@ -38,7 +48,6 @@ function runCommit(env: Record<string, string>): { status: number | null; stderr
       CI_RUN_URL: 'https://ci.example/runs/2',
       CI_COMMIT: head,
       CI_WORK_ROOT: join(folder, 'work'),
-      CI_JOB_USER: 'nobody',
       ...env,
     },
   });
@@ -72,24 +81,11 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
   writeFileSync(ledger, `${JSON.stringify(receipt({}))}\n`);
   for (const [env, cause, prepare] of [
     [{ CI_WORK_ROOT: '' }, 'CI_WORK_ROOT are required', undefined],
-    [{ CI_JOB_USER: '' }, 'CI_JOB_USER names the user every job runs as', undefined],
-    [
-      { CI_JOB_USER: execFileSync('id', ['-un'], { encoding: 'utf8' }).trim() },
-      'is the user run-commit runs as',
-      undefined,
-    ],
-    [{ CI_JOB_USER: 'root' }, 'is the user run-commit runs as', undefined],
     // A failure no check names, such as a results directory that is a file, is a refusal too.
     [{}, 'the run could not start', () => (rmSync(results, { recursive: true }), writeFileSync(results, ''))],
     [{ CI_COMMIT: 'main' }, 'is no full commit id', undefined],
     [{ CI_RUN_ATTEMPT: '0' }, 'is no attempt number', undefined],
     [{ CI_QUEUE_COMMIT: head, CI_PUBLISHER: '/bin/true' }, 'A queue run posts no Check', undefined],
-    // A second main run of one commit, such as a push trigger after the queue's own main run.
-    [
-      { CI_EVENT: 'main', CI_LEDGER: ledger },
-      `main's run of ${head} started already: https://ci.example/runs/1`,
-      undefined,
-    ],
     [{}, 'another run-commit holds this run', () => writeFileSync(join(results, RUN_COMMIT_LOCK), '')],
     [
       { CI_RUN_ATTEMPT: '2' },
@@ -102,24 +98,35 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
     mkdirSync(results, { recursive: true });
     prepare?.();
     const refused = runCommit(env);
-    // 3: another main run of the commit started, so nothing ran; 2: any other refusal.
-    expect([cause, refused.status]).toEqual([cause, cause.startsWith("main's run") ? 3 : 2]);
+    expect([cause, refused.status]).toEqual([cause, 2]);
     expect(refused.stderr).toContain(cause);
-    // A refusal starts no workspace and claims no main commit. Only another run's durable start
-    // pays an owed main run: the ledger's Plan of it becomes this host's start record of the commit.
-    const record = mainStartRecord(join(folder, 'work'), head);
-    expect([cause, acknowledgedStart(record, head)]).toEqual([
-      cause,
-      cause.startsWith("main's run") ? 'https://ci.example/runs/1' : undefined,
-    ]);
-    rmSync(record, { force: true });
-    expect([
-      cause,
-      readdirSync(folder).includes('work') && readdirSync(join(folder, 'work', 'main-runs')).length,
-    ]).toEqual([cause, cause.startsWith("main's run") ? 0 : false]);
-    rmSync(join(folder, 'work'), { recursive: true, force: true });
+    // A refusal starts no workspace, claims no main commit and records no start.
+    expect([cause, readdirSync(folder).includes('work')]).toEqual([cause, false]);
   }
   expect(readdirSync(results)).toEqual(['fast.json']);
+});
+
+// The process executor runs every job as this user: a job would reach the ledger, the queue's state
+// and hooks, the publisher and every credential this process holds.
+test('the process executor refuses a run with a ledger, from the queue, with the publisher or with any credential', () => {
+  for (const [name, value] of [
+    ['CI_LEDGER', join(folder, 'ledger.jsonl')],
+    ['CI_QUEUE_COMMIT', head],
+    ['CI_QUEUE_MAIN_RUN', '1'],
+    ['CI_PUBLISHER', '/bin/true'],
+    ['GH_TOKEN', 'token'],
+    ['GITHUB_TOKEN', 'token'],
+    ['CI_JOB_GH_TOKEN', 'token'],
+    ['SIBLING_REPOSITORIES_TOKEN', 'token'],
+  ] as const) {
+    const refused = runCommit({ CI_EVENT: 'main', [name]: value });
+    expect([name, refused.status]).toEqual([name, 2]);
+    expect(refused.stderr).toContain('The process executor runs every job as this user on this host');
+    expect(refused.stderr).toContain(`without ${name} (`);
+    expect(refused.stderr).toContain('a container per job on the Mac, or a CI mirror job on GitHub');
+    expect([name, existsSync(join(folder, 'work'))]).toEqual([name, false]);
+    expect([name, existsSync(join(folder, 'results'))]).toEqual([name, false]);
+  }
 });
 
 // Exit 3 tells the queue that another run pays its owed main run, so it needs that run's durable
@@ -207,7 +214,6 @@ test("a job gets the runner's read-only token as its GH_TOKEN, never the runner'
     CI_LEDGER: '/ledger.jsonl',
     CI_PUBLISHER: '/publish',
     CI_WORK_ROOT: '/work',
-    CI_JOB_USER: 'nobody',
   };
   expect(runVariables(runner)).toEqual({
     CI_EVENT: 'integration',
@@ -225,4 +231,199 @@ test('a start acknowledgement is whole or absent and names its commit', () => {
   expect(acknowledgedStart(path, 'f'.repeat(40))).toBeUndefined();
   writeFileSync(path, '{"commit":');
   expect(acknowledgedStart(path, head)).toBeUndefined();
+});
+
+/** A trusted clone whose `origin` is a local repository holding one commit, so a run fetches offline. */
+function trustedClone(): { clone: string; commit: string; tree: string } {
+  const origin = join(folder, 'origin');
+  const clone = join(folder, 'trusted-clone');
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync(
+      'git',
+      ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', '-c', 'commit.gpgSign=false', ...args],
+      { cwd, encoding: 'utf8' },
+    ).trim();
+  mkdirSync(origin);
+  git(origin, 'init', '--quiet', '--initial-branch=main');
+  writeFileSync(join(origin, 'a.txt'), 'a\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '--quiet', '-m', 'a');
+  git(folder, 'clone', '--quiet', origin, clone);
+  return { clone, commit: git(clone, 'rev-parse', 'HEAD'), tree: git(clone, 'rev-parse', 'HEAD^{tree}') };
+}
+
+const EMPTY_OUTPUTS = {
+  browser: 'false',
+  full: 'false',
+  full_reason: '',
+  shards: '[]',
+  midnight_until: '',
+  static: '',
+  sql: '',
+  selected_lint: '',
+  selected_static: '',
+  selected_unit: '',
+  selected_sql: '',
+  selected_components: '',
+  component_shards: '[]',
+  selected_invoices: '',
+};
+
+/**
+ * An isolating executor that runs nothing: Plan launches (onLaunch) and plans no job, Check passes.
+ * Each writes its result as job.ts would, of the run its task names.
+ */
+function stubIsolating(tasks: ExecutorTask[], tree: string): (setup: ExecutorSetup) => Executors {
+  return (setup) => {
+    const host: Executor = {
+      isolatesJobs: true,
+      async run(task) {
+        tasks.push(task);
+        const { job } = task.unit;
+        if (job === 'plan') task.onLaunch?.();
+        const result: CiResult = {
+          version: 1,
+          job,
+          shard: null,
+          event: task.env.CI_EVENT === 'integration' ? 'integration' : 'main',
+          tree,
+          commit: setup.commit,
+          base: null,
+          status: 'passed',
+          groups: [],
+          planReason: 'Selection by diff',
+          reusedFrom: null,
+          listGrowthApproved: false,
+          producer: task.env.CI_PRODUCER ?? null,
+          runUrl: task.env.CI_RUN_URL ?? null,
+          startedAt: '2026-11-21T08:00:00.000Z',
+          completedAt: '2026-11-21T08:01:00.000Z',
+          attempt: Number(task.env.CI_RUN_ATTEMPT),
+          ...(job === 'plan'
+            ? { plan: { jobs: ['plan', 'check'], skips: {}, shards: [], outputs: EMPTY_OUTPUTS } }
+            : {}),
+        };
+        writeFileSync(join(task.env.CI_RESULTS_DIR ?? '', `${job}.json`), JSON.stringify(result));
+        return { exitCode: 0, detail: 'stub' };
+      },
+    };
+    const jobs: Executor = {
+      isolatesJobs: true,
+      run: async () => ({ exitCode: 1, detail: 'nothing planned' }),
+    };
+    return { host, jobs, release: () => undefined };
+  };
+}
+
+const command = (
+  repository: string,
+  environment: Record<string, string>,
+  executors: (setup: ExecutorSetup) => Executors,
+) => {
+  const errors: string[] = [];
+  const ran = runCommitCommand({
+    repository,
+    environment: { PATH: process.env.PATH, HOME: folder, ...environment },
+    executors,
+    signal: new AbortController().signal,
+    log: () => undefined,
+    error: (line) => errors.push(line),
+  });
+  return ran.then((code) => ({ code, errors }));
+};
+
+test("the queue's --main-runner hook runs through an isolating executor: its start record pays the debt, and a second main run exits 3", async () => {
+  const { clone, commit, tree } = trustedClone();
+  const workRoot = join(folder, 'work');
+  const runUrl = 'https://ci.example/queue/tick-1-main';
+  const environment = {
+    ...mainEnvironment({ commit, base: commit, prs: [7], runUrl, resultsDir: join(folder, 'main-1') }),
+    CI_WORK_ROOT: workRoot,
+    CI_PRODUCER: 'mac-standin',
+    CI_LEDGER: join(folder, 'ledger.jsonl'),
+    GH_TOKEN: 'queue-token',
+  };
+  // The process executor refuses the queue's call before anything starts.
+  const refused = await command(clone, environment, processExecutors);
+  expect(refused.code).toBe(2);
+  expect(refused.errors.join('\n')).toContain('CI_QUEUE_MAIN_RUN');
+  expect(acknowledgedStart(mainStartRecord(workRoot, commit), commit)).toBeUndefined();
+
+  const tasks: ExecutorTask[] = [];
+  const ran = await command(clone, environment, stubIsolating(tasks, tree));
+  expect(ran.errors).toEqual([]);
+  expect(ran.code).toBe(0);
+  expect(tasks.map((task) => task.unit.job)).toEqual(['plan', 'check']);
+  // The queue's own token never reaches a job.
+  expect(tasks.some((task) => task.env.GH_TOKEN === 'queue-token')).toBe(false);
+  expect(acknowledgedStart(mainStartRecord(workRoot, commit), commit)).toBe(runUrl);
+
+  // A push's own main run of the commit afterwards runs nothing.
+  const duplicate = await command(
+    clone,
+    { ...environment, CI_RUN_URL: 'https://ci.example/runs/push', CI_RESULTS_DIR: join(folder, 'main-2') },
+    stubIsolating([], tree),
+  );
+  expect(duplicate.code).toBe(3);
+  expect(duplicate.errors.join('\n')).toContain(`main's run of ${commit} started already: ${runUrl}`);
+});
+
+test("a main run whose commit's Plan another run left in the ledger exits 3, and the start record names that run", async () => {
+  const { clone, commit, tree } = trustedClone();
+  const workRoot = join(folder, 'work');
+  const ledger = join(folder, 'ledger.jsonl');
+  writeFileSync(ledger, `${JSON.stringify(receipt({ commit, tree }))}\n`);
+  const duplicate = await command(
+    clone,
+    {
+      CI_EVENT: 'main',
+      CI_COMMIT: commit,
+      CI_RUN_URL: 'https://ci.example/runs/2',
+      CI_RESULTS_DIR: join(folder, 'results'),
+      CI_WORK_ROOT: workRoot,
+      CI_LEDGER: ledger,
+      CI_PRODUCER: 'mac-standin',
+    },
+    stubIsolating([], tree),
+  );
+  expect(duplicate.code).toBe(3);
+  expect(acknowledgedStart(mainStartRecord(workRoot, commit), commit)).toBe('https://ci.example/runs/1');
+});
+
+test("the queue's --runner hook runs a commit only the queue's clone holds through an isolating executor, and passes", async () => {
+  const { clone, commit: main } = trustedClone();
+  // The batch tip lives only in the queue's clone, under its run ref.
+  const queue = join(folder, 'queue');
+  execFileSync('git', ['clone', '--quiet', clone, queue]);
+  writeFileSync(join(queue, 'b.txt'), 'b\n');
+  const git = (...args: string[]) =>
+    execFileSync(
+      'git',
+      ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', '-c', 'commit.gpgSign=false', ...args],
+      { cwd: queue, encoding: 'utf8' },
+    ).trim();
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'b');
+  const tip = { commit: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}') };
+  git('update-ref', `refs/ci-queue/runs/${tip.commit}`, tip.commit);
+  const resultsDir = join(folder, 'integration-1');
+  const environment = {
+    ...integrationEnvironment({
+      tip: { ...tip, pull: pull(7) },
+      base: main,
+      pulls: [pull(7)],
+      runUrl: 'https://ci.example/queue/1',
+      resultsDir,
+      repository: queue,
+    }),
+    CI_WORK_ROOT: join(folder, 'work'),
+    CI_PRODUCER: 'mac-standin',
+  };
+  const refused = await command(clone, environment, processExecutors);
+  expect(refused.code).toBe(2);
+  expect(refused.errors.join('\n')).toContain('CI_QUEUE_COMMIT');
+  const ran = await command(clone, environment, stubIsolating([], tip.tree));
+  expect(ran.errors).toEqual([]);
+  expect(ran.code).toBe(0);
+  expect(readResult(join(resultsDir, 'check.json'))).toMatchObject({ status: 'passed', commit: tip.commit });
 });

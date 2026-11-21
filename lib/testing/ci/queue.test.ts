@@ -8,6 +8,12 @@ import { needsAttention, pickBatch, type QueuedPull, runQueueTick, supersession 
 import type { CiResult } from './results';
 import { passedTree, provenTree, reusableReceipt } from './reuse';
 
+/** main as a tick reads it: its head and the commits it holds, the head alone by default. */
+const onMain = (commit: string, holds: readonly string[] = [commit]) => ({
+  commit,
+  contains: (other: string) => holds.includes(other),
+});
+
 const LIVE = { maxBatch: 4, dryRun: false };
 
 test('a batch takes at most four queued PRs by queue place; drafts, unqueued, unchecked, conflicting and behind PRs wait', () => {
@@ -666,7 +672,7 @@ test("main's run follows every live landing or partial stop once, on main's head
   expect(landed.landing).toEqual([1, 2]);
   const owed = mainFollowUp(landed, 'tick-1', 2);
   expect(owed).toEqual({ base: landed.base, prs: [1, 2], id: 'tick-1', merging: 2 });
-  expect(owed && mainRunOf(owed, sha('head'), { merged: sha('head') })).toEqual({
+  expect(owed && mainRunOf(owed, onMain(sha('head'), [sha('head')]), { merged: sha('head') })).toEqual({
     commit: sha('head'),
     base: landed.base,
     prs: [1, 2],
@@ -680,7 +686,7 @@ test("main's run follows every live landing or partial stop once, on main's head
     1,
   );
   expect(partial).toEqual({ base: landed.base, prs: [], id: 'tick-2', merging: 1 });
-  expect(partial && mainRunOf(partial, landed.base, { unmerged: true })).toBeUndefined();
+  expect(partial && mainRunOf(partial, onMain(landed.base), { unmerged: true })).toBeUndefined();
   expect(mainFollowUp({ ...landed, dryRun: true }, 'tick-3', 2)).toBeUndefined();
   expect(mainFollowUp(await runQueueTick(fakeWorld([]).adapter, LIVE), 'tick-4', null)).toBeUndefined();
 });
@@ -689,19 +695,39 @@ test("main's run follows every live landing or partial stop once, on main's head
 // GitHub's word that the last merge asked for did not land lets an unmoved main clear the debt.
 test('an owed main run clears on an unmoved main only once GitHub reports the merge it asked for unmerged', () => {
   const owed = { base: sha('main'), prs: [7], id: 'tick-1', merging: 7 };
-  expect(mainRunOf(owed, sha('main'), { unknown: 'GitHub could not be read' })).toEqual({
+  expect(mainRunOf(owed, onMain(sha('main')), { unknown: 'GitHub could not be read' })).toEqual({
     unresolved: "GitHub could not say whether #7 merged (GitHub could not be read), so main's run stays owed",
   });
-  expect(mainRunOf(owed, sha('main'), { merged: sha('merged-7') })).toEqual({
-    unresolved: `GitHub reports #7 merged as ${sha('merged-7')}, but main still reads ${sha('main')}, so main's run stays owed`,
+  expect(mainRunOf(owed, onMain(sha('main')), { merged: sha('merged-7') })).toEqual({
+    unresolved: `GitHub reports #7 merged as ${sha('merged-7')}, but main reads ${sha('main')}, which does not hold it yet, so main's run stays owed`,
   });
-  expect(mainRunOf(owed, sha('main'), { unmerged: true })).toBeUndefined();
+  expect(mainRunOf(owed, onMain(sha('main')), { unmerged: true })).toBeUndefined();
   // Unknown keeps the debt even when main moved: it runs once GitHub answers.
-  expect(mainRunOf(owed, sha('head'), { unknown: 'timeout' })).toHaveProperty('unresolved');
-  expect(mainRunOf(owed, sha('head'), { unmerged: true })).toEqual({
+  expect(mainRunOf(owed, onMain(sha('head')), { unknown: 'timeout' })).toHaveProperty('unresolved');
+  expect(mainRunOf(owed, onMain(sha('head')), { unmerged: true })).toEqual({
     commit: sha('head'),
     base: sha('main'),
     prs: [7],
     id: 'tick-1',
   });
+});
+
+// A tick that landed #7 (main B) and asked for #9 (main C) may read main at B while GitHub already
+// reports #9's merge: a run of B would pay the debt that C's run owes.
+test('an owed main run waits until the main it reads holds the merge GitHub reports for the last PR asked for', () => {
+  const owed = { base: sha('base'), prs: [7, 9], id: 'tick-1', merging: 9 };
+  const readsB = onMain(sha('first-merge'), [sha('base'), sha('first-merge')]);
+  expect(mainRunOf(owed, readsB, { merged: sha('second-merge') })).toEqual({
+    unresolved: `GitHub reports #9 merged as ${sha('second-merge')}, but main reads ${sha('first-merge')}, which does not hold it yet, so main's run stays owed`,
+  });
+  // Once main holds the merge, its head runs, whether the merge is the head or below it.
+  const readsC = onMain(sha('second-merge'), [sha('base'), sha('first-merge'), sha('second-merge')]);
+  expect(mainRunOf(owed, readsC, { merged: sha('second-merge') })).toEqual({
+    commit: sha('second-merge'),
+    base: sha('base'),
+    prs: [7, 9],
+    id: 'tick-1',
+  });
+  const readsD = onMain(sha('push'), [sha('base'), sha('first-merge'), sha('second-merge'), sha('push')]);
+  expect(mainRunOf(owed, readsD, { merged: sha('second-merge') })).toHaveProperty('commit', sha('push'));
 });

@@ -37,15 +37,19 @@ export function mainFollowUp(
 /** GitHub's word on the merge a follow-up names: its merge commit, unmerged, or no answer. */
 export type MergeAnswer = { merged: string } | { unmerged: true } | { unknown: string };
 
+/** main as a tick read it: its head, and whether it holds a commit (the head or one below it). */
+export type MainRead = { commit: string; contains(commit: string): boolean };
+
 /**
  * main's run of its head for an owed follow-up: diffed against the tick's base, so it reuses the
  * batch's pass only for the landing the queue tested, and otherwise runs its jobs. Undefined when
  * the debt is clear: main did not move and GitHub reports the merge asked for last unmerged.
- * `unresolved` keeps it owed: GitHub gave no answer, or reports a merge main does not show yet.
+ * `unresolved` keeps it owed: GitHub gave no answer, or reports a merge the main read does not hold
+ * yet, such as a tick's second merge while main still reads its first.
  */
 export function mainRunOf(
   followUp: MainFollowUp,
-  head: string,
+  main: MainRead,
   merge: MergeAnswer,
 ): { commit: string; base: string; prs: number[]; id: string } | { unresolved: string } | undefined {
   const { merging, ...run } = followUp;
@@ -53,15 +57,18 @@ export function mainRunOf(
     return {
       unresolved: `GitHub could not say whether #${merging} merged (${merge.unknown}), so main's run stays owed`,
     };
-  if (head !== followUp.base) return { commit: head, ...run };
-  return 'merged' in merge
-    ? {
-        unresolved: `GitHub reports #${merging} merged as ${merge.merged}, but main still reads ${head}, so main's run stays owed`,
-      }
-    : undefined;
+  if ('merged' in merge && !main.contains(merge.merged))
+    return {
+      unresolved: `GitHub reports #${merging} merged as ${merge.merged}, but main reads ${main.commit}, which does not hold it yet, so main's run stays owed`,
+    };
+  return main.commit === followUp.base ? undefined : { commit: main.commit, ...run };
 }
 
-/** The environment of main's run after a landing, on top of the runner's own. */
+/**
+ * The environment of main's run after a landing, on top of the runner's own. CI_QUEUE_MAIN_RUN tells
+ * scripts/ci/run-commit.ts that the queue started it, which it refuses through an executor that
+ * isolates nothing.
+ */
 export function mainEnvironment(run: {
   commit: string;
   base: string;
@@ -76,5 +83,6 @@ export function mainEnvironment(run: {
     CI_RUN_URL: run.runUrl,
     CI_RESULTS_DIR: run.resultsDir,
     CI_PRS: run.prs.join(','),
+    CI_QUEUE_MAIN_RUN: '1',
   };
 }

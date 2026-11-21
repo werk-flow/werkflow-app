@@ -188,6 +188,19 @@ export function runMain(
   return paid();
 }
 
+/**
+ * Whether main as the queue's last `main()` read it holds `commit`: its head or a commit below it.
+ * A commit the queue's clone lacks is not held.
+ */
+export function mainHolds(repository: string, commit: string): boolean {
+  return (
+    spawnSync('git', ['merge-base', '--is-ancestor', commit, `${QUEUE_REFS}/main`], {
+      cwd: repository,
+      stdio: 'ignore',
+    }).status === 0
+  );
+}
+
 /** The runner's ledger when the queue is given one, read-only; undefined without one. */
 const ledgerOf = (path: string | undefined): Ledger | undefined => (path ? readLedger(path) : undefined);
 
