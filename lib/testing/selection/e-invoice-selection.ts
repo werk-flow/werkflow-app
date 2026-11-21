@@ -18,8 +18,9 @@ const DEPENDENCY_INPUTS = ['package.json', 'bun.lock', 'bunfig.toml', 'tsconfig.
 
 /**
  * Why a CI run checks the reference e-invoices, or undefined when no change reaches them. It fails
- * open, like the fast tier: an unreadable diff, a full run or a tooling change (`fullReason`) checks
- * them, and so does a code change beside an unresolved import of the check. Otherwise a change to
+ * open, like the fast tier: an unreadable diff, a full run (`fullReason`) or a tooling input of the
+ * `invoices` job (`toolingReason`) checks them, and so does a code change beside an unresolved
+ * import of the check. Otherwise a change to
  * what the check and the renderer import, to a file of the invoice core or the renderer, or to the
  * dependencies selects it. Documentation never does.
  */
@@ -29,9 +30,12 @@ export function eInvoiceReason(input: {
   changedFiles: readonly string[] | undefined;
   /** Why the browser plan runs every group (ci-plan.ts), or undefined. */
   fullReason: string | undefined;
+  /** Why a changed tooling input runs the `invoices` job (ci-plan.ts `tooling.invoices`), or undefined. */
+  toolingReason: string | undefined;
 }): string | undefined {
   if (input.changedFiles === undefined) return 'The diff against the base could not be read';
   if (input.fullReason !== undefined) return input.fullReason;
+  if (input.toolingReason !== undefined) return input.toolingReason;
   const code = input.changedFiles.filter((file) => !isDocsFile(file));
   const reached = closure(input.graph, [E_INVOICE_CHECK, E_INVOICE_WRITER]);
   if (reached.unresolved && code.length) return 'The e-invoice check has an unresolved import';

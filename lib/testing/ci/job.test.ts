@@ -490,3 +490,54 @@ test("Check's start reaches the ledger before its end, so a cancelled Check stil
     ]);
   });
 });
+
+test("a full run's Check records the failed groups no landed plan selected, and only from a runner's ledger", () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    const ledger = join(folder, 'ledger.jsonl');
+    // main's push of this tree selected sql:grants; the full run fails it and sql:missed.
+    const landed = planOf(root, {
+      event: 'main',
+      runUrl: 'https://ci.example/runs/1',
+      plan: {
+        jobs: ['plan', 'sql', 'check'],
+        skips: {},
+        shards: [],
+        outputs: { ...EMPTY_OUTPUTS, selected_sql: 'sql:grants' },
+      },
+    });
+    writeFileSync(ledger, `${JSON.stringify(landed)}\n`);
+    const outputs = { ...EMPTY_OUTPUTS, selected_sql: 'sql:grants,sql:missed' };
+    writePlan(root, run, {
+      event: 'full',
+      plan: { jobs: ['plan', 'sql', 'check'], skips: {}, shards: [], outputs },
+    });
+    const failed = (id: string) => ({ id, outcome: 'failed' as const, durationMs: 1 });
+    writeFileSync(
+      join(run, resultFileName('sql', null)),
+      JSON.stringify(
+        planOf(root, {
+          job: 'sql',
+          event: 'full',
+          status: 'failed',
+          plan: undefined,
+          groups: [failed('sql:grants'), failed('sql:missed')],
+        }),
+      ),
+    );
+    const variables = {
+      CI_EVENT: 'full',
+      CI_RESULTS_DIR: run,
+      CI_PRODUCER: 'mac-standin',
+      CI_RUN_URL: RUN_URL,
+    };
+    expect(runJob(root, 'check', { ...variables, CI_LEDGER: ledger })).toBe(1);
+    expect(readResult(join(run, resultFileName('check', null)))).toMatchObject({
+      unselectedFailures: ['sql:missed'],
+    });
+    // Without a ledger no plan of the landed trees is known, so the count stays unknown.
+    expect(runJob(root, 'check', variables)).toBe(1);
+    expect(readResult(join(run, resultFileName('check', null)))).not.toHaveProperty('unselectedFailures');
+  });
+});

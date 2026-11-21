@@ -3,7 +3,13 @@ import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { type FullRun, fullRunDue, fullRunsInLedger, type Landed } from '../../lib/testing/ci/full-run';
+import {
+  type FullRun,
+  fullRunDue,
+  fullRunsInLedger,
+  type Landed,
+  MAIN_HISTORY_DEPTH,
+} from '../../lib/testing/ci/full-run';
 import { readLedger } from '../../lib/testing/ci/results';
 import { isDocsFile, tailwindScan } from '../../lib/testing/selection/fast-tier';
 
@@ -15,7 +21,6 @@ import { isDocsFile, tailwindScan } from '../../lib/testing/selection/fast-tier'
 //             seconds) and whether it ended. Repeat it for more runs.
 // It prints {"run": true|false, "reason": "…"} and writes run= and reason= to $GITHUB_OUTPUT when
 // set. An unreadable ledger or a malformed --run exits 1 without an answer.
-const DEPTH = 100;
 const repository = resolve(import.meta.dir, '../..');
 const git = (...args: string[]): string =>
   execFileSync('git', args, { cwd: repository, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -88,7 +93,7 @@ function landedSince(commit: string): Landed | undefined {
 
 const decision = fullRunDue({
   now,
-  history: git('rev-list', '--first-parent', `--max-count=${DEPTH}`, 'HEAD').trim().split('\n'),
+  history: git('rev-list', '--first-parent', `--max-count=${MAIN_HISTORY_DEPTH}`, 'HEAD').trim().split('\n'),
   runs,
   landedSince,
 });

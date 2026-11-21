@@ -14,7 +14,7 @@ const graph = new Map<string, string[]>([
   ['lib/document-rendering/e-invoice.ts', ['lib/document-rendering/render.ts']],
 ]);
 const reason = (changedFiles: readonly string[] | undefined, fullReason?: string, imports = graph) =>
-  eInvoiceReason({ graph: imports, changedFiles, fullReason });
+  eInvoiceReason({ graph: imports, changedFiles, fullReason, toolingReason: undefined });
 
 test('a change to what the check imports, to the invoice core or renderer, or to the dependencies selects it', () => {
   for (const file of [
@@ -40,9 +40,16 @@ test('a change the check cannot reach, and documentation, select nothing', () =>
 test('an unreadable diff, a full run, a tooling change and an unresolved import select it', () => {
   expect(reason(undefined)).toBe('The diff against the base could not be read');
   expect(reason([], 'Nightly run')).toBe('Nightly run');
-  expect(reason(['docs/technical/testing.md'], 'Tooling input changed: scripts/ci/job.ts')).toBe(
-    'Tooling input changed: scripts/ci/job.ts',
-  );
+  // A tooling input samples the browser groups without a full reason (ci-plan.ts), and still checks them.
+  const tooling = 'Tooling input changed: scripts/ci/job.ts';
+  expect(
+    eInvoiceReason({
+      graph,
+      changedFiles: ['docs/technical/testing.md'],
+      fullReason: undefined,
+      toolingReason: tooling,
+    }),
+  ).toBe(tooling);
   const unresolved = new Map([...graph, ['lib/money/round.ts', [UNKNOWN_IMPORT_DEPENDENCY]]]);
   expect(reason(['app/page.tsx'], undefined, unresolved)).toBe(
     'The e-invoice check has an unresolved import',

@@ -153,6 +153,7 @@ const invoices = eInvoiceReason({
   graph: qualification.graph,
   changedFiles: flag === '--base' ? change?.files : [],
   fullReason: plan.fullReason,
+  toolingReason: plan.tooling.invoices,
 });
 console.info(`[ci-plan] E-invoices: ${invoices ?? 'no change reaches them'}.`);
 const now = new Date();

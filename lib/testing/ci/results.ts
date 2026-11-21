@@ -91,7 +91,7 @@ const ciResultSchema = z.object({
   cost: jobCostSchema.optional(),
   /** On a rerun: the class the failed first attempt of this job was given (CI_FIRST_ATTEMPT_CLASS). */
   firstAttemptClass: failureClassSchema.nullable().optional(),
-  /** A full run's failed groups that no diff plan of its trees selected: selection misses. */
+  /** A full run's failed groups that no diff plan of its trees selected: selection misses. A full run's Check records them from its runner's ledger (scripts/ci/job.ts). */
   unselectedFailures: z.array(z.string().min(1)).optional(),
 });
 export type CiResult = z.infer<typeof ciResultSchema>;

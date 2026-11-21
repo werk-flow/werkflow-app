@@ -161,11 +161,12 @@ test('a tooling change runs its affected groups, the runner pilots and the short
   ]) {
     const plan = planFor([file], { groups: sampled, durations: sampledDurations });
     expect([file, plan.fullReason, ids(plan)]).toEqual([file, undefined, SAMPLE]);
-    const reason = `Tooling input changed: ${file}${file.startsWith('.github/actions/') ? ', used by plan, fast, sql, components, midnight, browser, check' : ''}`;
+    const reason = `Tooling input changed: ${file}${file.startsWith('.github/actions/') ? `, used by ${CI_JOBS.join(', ')}` : ''}`;
     expect(plan.tooling).toEqual({
       everyGroup: undefined,
       browser: reason,
       fast: { ui: reason, sql: reason, static: reason },
+      invoices: reason,
       lintOnly: [],
     });
   }
@@ -214,6 +215,16 @@ test('an action change runs what the CI jobs that use it run', () => {
   expect([ids(sql), Object.keys(sql.tooling.fast)]).toEqual([SAMPLE, ['sql']]);
   expect(sql.tooling.browser).toBe(
     'Tooling input changed: .github/actions/supabase-cli/action.yml, used by sql',
+  );
+  // Only an action the E-invoices job uses runs the e-invoice check.
+  expect([playwright.tooling.invoices, sql.tooling.invoices]).toEqual([undefined, undefined]);
+  const invoices = planFor(['.github/actions/setup/action.yml'], {
+    groups: sampled,
+    durations: sampledDurations,
+    actionJobs: { setup: ['invoices'] },
+  });
+  expect(invoices.tooling.invoices).toBe(
+    'Tooling input changed: .github/actions/setup/action.yml, used by invoices',
   );
 });
 
@@ -683,7 +694,7 @@ test('the planner log prints every reason and file name as one JSON string, so a
       fullReason: `Tooling input changed: ${forged}`,
       browser: [{ id: `golden:${forged}`, reason: `own test (${forged})` }],
       shards: [{ shard: 1, groups: `golden:${forged}` }],
-      tooling: { everyGroup: undefined, browser: undefined, fast: {}, lintOnly: [] },
+      tooling: { everyGroup: undefined, browser: undefined, fast: {}, invoices: undefined, lintOnly: [] },
     },
     { [`ui:${forged}`]: `Tailwind scans ${forged}\r::warning::also` },
   );

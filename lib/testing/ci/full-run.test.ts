@@ -8,6 +8,7 @@ import {
   fullRunsInLedger,
   landedSelections,
   type Landed,
+  treesSinceFullRun,
   unselectedFailures,
 } from './full-run';
 import type { CiResult } from './results';
@@ -189,6 +190,7 @@ test('a full-run failure counts as unselected unless CI selected its group on a 
       { shard: 1, groups: 'ui:contracts:work' },
       { shard: 2, groups: 'ui:contracts:time' },
     ]),
+    selected_invoices: '',
   };
   // The integration run reuses the second component shard and the second browser shard.
   const runPlan = planRun({
@@ -256,4 +258,12 @@ test('a full-run failure counts as unselected unless CI selected its group on a 
       selected,
     ),
   ).toEqual(['sql:pr-only', 'sql:failed-plan', 'sql:other-tree', 'audit:visual', 'audit:performance:field']);
+});
+
+test("the trees landed since the previous full run end before that run's commit, and always hold the full run's own", () => {
+  const history = HISTORY.map((commit) => ({ commit, tree: `tree-${commit}` }));
+  // The full run's own commit c3 is in the ledger as well; only an older commit's run ends the walk.
+  const runs = [ended('c3', NOON), ended('c1', hoursBefore(NOON, 5))];
+  expect([...treesSinceFullRun(history, runs)]).toEqual(['tree-c3', 'tree-c2']);
+  expect([...treesSinceFullRun(history, [])]).toEqual(['tree-c3', 'tree-c2', 'tree-c1', 'tree-c0']);
 });

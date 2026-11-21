@@ -11,6 +11,13 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { type CiRun, checkRun, parseScheduler, runPlanOf } from '../../lib/testing/ci/check';
+import {
+  fullRunsInLedger,
+  landedSelections,
+  MAIN_HISTORY_DEPTH,
+  treesSinceFullRun,
+  unselectedFailures,
+} from '../../lib/testing/ci/full-run';
 import { jobCost, measurementInputs } from '../../lib/testing/ci/measurement';
 import { CI_EVENTS, CI_JOBS, type CiJob } from '../../lib/testing/ci/dag';
 import {
@@ -53,11 +60,13 @@ import { repository, run, step, verify } from './run';
 //                   and a job whose checkout changes while it runs fails and records none.
 //   CI_LEDGER       The runner's JSONL ledger of results. plan appends its start, then reads it to
 //                   reuse a passed result, and with CI_PRODUCER set every job appends its
-//                   receipts, a changed checkout's included. When plan cannot append or read it,
-//                   plan warns and plans the full work of its event. Optional. Set it only when
-//                   the file lives outside every job's checkout and the job's processes cannot
-//                   write it (another user, or outside the job's container); without that
-//                   guarantee leave it unset, and every run executes in full.
+//                   receipts, a changed checkout's included. check of a full run reads it to
+//                   record the groups the run failed that no landed plan selected. When plan
+//                   cannot append or read it, plan warns and plans the full work of its event.
+//                   Optional. Set it only when the file lives outside every job's checkout and
+//                   the job's processes cannot write it (another user, or outside the job's
+//                   container); without that guarantee leave it unset, and every run executes in
+//                   full.
 //   No child process sees CI_LEDGER or CI_PRODUCER: only this script appends a receipt, after its
 //   child exited. That hides the ledger's name only; the file's permissions keep code under test
 //   from forging a receipt.
@@ -445,24 +454,59 @@ async function browser(): Promise<boolean> {
   return everyGroupPassed();
 }
 
+/**
+ * A full run's failed groups that no plan of the trees landed since the previous full run selected
+ * (lib/testing/ci/full-run.ts), or undefined when the runner keeps no ledger, which alone holds
+ * those plans. A measurement: what it cannot read warns and stays unknown, never failing Check.
+ */
+function fullRunMisses(results: readonly (CiResult | { unreadable: string })[]): string[] | undefined {
+  if (ci.event !== 'full' || !ledgerPath || !producer) return undefined;
+  try {
+    const ledger = readLedger(ledgerPath);
+    if ('unreadable' in ledger) throw new Error(ledger.unreadable);
+    const history = git(
+      'log',
+      '--first-parent',
+      `--max-count=${MAIN_HISTORY_DEPTH}`,
+      '--format=%H %T',
+      commit,
+    )
+      .split('\n')
+      .flatMap((line) => {
+        const [lineCommit, tree] = line.split(' ');
+        return lineCommit && tree ? [{ commit: lineCommit, tree }] : [];
+      });
+    const failed = results.flatMap((entry) =>
+      'unreadable' in entry || entry.runUrl !== result.runUrl || entry.tree !== result.tree
+        ? []
+        : entry.groups.filter((group) => group.outcome === 'failed').map((group) => group.id),
+    );
+    const landed = treesSinceFullRun(history, fullRunsInLedger(ledger, new Date()));
+    return unselectedFailures(failed, landedSelections(ledger, landed));
+  } catch (error) {
+    console.info(
+      `::warning title=Measurement::The full run's unselected failures cannot be counted (${error instanceof Error ? error.message : String(error)}), so the result records them as unknown.`,
+    );
+    return undefined;
+  }
+}
+
 function check(): boolean {
   // A CI Check certifies the tree only from a checkout that holds exactly its commit.
   if (producer && !clean) throw new Error('Check ran on a checkout that differs from its commit.');
   const own = new Set([resultFileName('plan', null), resultFileName('check', null)]);
   const plan = readResult(join(ci.directory, resultFileName('plan', null)));
-  const verdict = checkRun({
-    run: ownRun,
-    plan,
-    results: readdirSync(ci.directory)
-      .filter((file) => file.endsWith('.json') && !own.has(file))
-      .map((file) => readResult(join(ci.directory, file))),
-    scheduler: parseScheduler(environment.CI_NEEDS),
-  });
+  const results = readdirSync(ci.directory)
+    .filter((file) => file.endsWith('.json') && !own.has(file))
+    .map((file) => readResult(join(ci.directory, file)));
+  const verdict = checkRun({ run: ownRun, plan, results, scheduler: parseScheduler(environment.CI_NEEDS) });
   for (const line of verdict.lines) console.info(line);
   if (!('unreadable' in plan)) {
     result.planReason = plan.planReason;
     result.reusedFrom = plan.reusedFrom;
   }
+  const misses = fullRunMisses(results);
+  if (misses) result.unselectedFailures = misses;
   return verdict.passed;
 }
 

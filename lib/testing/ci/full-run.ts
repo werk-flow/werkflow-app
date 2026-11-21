@@ -11,6 +11,9 @@ import type { CiResult } from './results';
  */
 export type FullRun = { commit: string; startedAt: Date; ended: boolean };
 
+/** How many of main's commits, from its head back, the full-run rule and its measurement read. */
+export const MAIN_HISTORY_DEPTH = 100;
+
 /** Daytime slots start from FIRST to LAST Berlin time, at most one per INTERVAL. */
 export const FULL_RUN_SLOTS = { first: '06:00', last: '20:00', intervalMs: 3 * 60 * 60 * 1000 };
 /**
@@ -126,6 +129,21 @@ export function landedSelections(ledger: readonly CiResult[], landedTrees: Reado
       selected.add(id);
   }
   return new Set([...selected].filter((id) => !isStep(id)));
+}
+
+/**
+ * The trees that landed on main since the previous full run, up to a full run's own commit:
+ * `history` is main's first-parent commits with their trees from that commit back, newest first.
+ * The full run's own tree counts, and the walk stops before the newest older commit another full
+ * run tested (`runs`, as `fullRunsInLedger` reports them).
+ */
+export function treesSinceFullRun(
+  history: readonly { commit: string; tree: string }[],
+  runs: readonly FullRun[],
+): Set<string> {
+  const tested = new Set(runs.map((run) => run.commit));
+  const end = history.findIndex((entry, index) => index > 0 && tested.has(entry.commit));
+  return new Set(history.slice(0, end === -1 ? undefined : end).map((entry) => entry.tree));
 }
 
 /**

@@ -34,6 +34,8 @@ type ToolingClass = {
   browser: string | undefined;
   /** The fast-tier kinds a tooling input takes whole, with the reason. */
   fast: Partial<Record<FastKind, string>>;
+  /** Why a tooling input of the `invoices` job runs the e-invoice check (e-invoice-selection.ts), or undefined. */
+  invoices: string | undefined;
   /** Dependency files whose change moves only lint and type packages: they select no group. */
   lintOnly: string[];
 };
@@ -58,8 +60,9 @@ const EVERY_GROUP_INPUTS =
 /**
  * The CI workflow, its job bodies and logic (scripts/ci/, lib/testing/ci/, without their tests) and
  * Bun's test configuration. With `runnerModules` they are the tooling inputs: a change to one runs
- * its affected groups, the runner pilots, one browser group of every shard kind and every fast-tier
- * group, and main's full run starts right after its merge (lib/testing/ci/full-run.ts).
+ * its affected groups, the runner pilots, one browser group of every shard kind, every fast-tier
+ * group and the e-invoice check, and main's full run starts right after its merge
+ * (lib/testing/ci/full-run.ts).
  */
 const TOOLING_INPUTS =
   /^(bunfig\.toml|\.github\/workflows\/ci\.yml|(scripts|lib\/testing)\/ci\/[a-z-]+\.ts)$/;
@@ -240,10 +243,17 @@ function toolingClass(input: {
   dependencies: Readonly<Record<string, DependencyChange>>;
   actionJobs: Readonly<Record<string, readonly CiJob[]>>;
 }): ToolingClass {
-  const tooling: ToolingClass = { everyGroup: undefined, browser: undefined, fast: {}, lintOnly: [] };
+  const tooling: ToolingClass = {
+    everyGroup: undefined,
+    browser: undefined,
+    fast: {},
+    invoices: undefined,
+    lintOnly: [],
+  };
   const runner = new Set(input.runnerModules);
   const runs = (reason: string, jobs: readonly CiJob[]): void => {
     if (jobs.includes('browser')) tooling.browser ??= reason;
+    if (jobs.includes('invoices')) tooling.invoices ??= reason;
     for (const kind of jobs.flatMap((job) => FAST_KINDS_OF_JOB[job] ?? [])) tooling.fast[kind] ??= reason;
   };
   for (const file of input.changedFiles) {
