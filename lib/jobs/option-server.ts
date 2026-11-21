@@ -355,6 +355,7 @@ async function loadJobOptions(
         `client_id.is.null,client_id.eq.${input.clientId}${input.projectId ? `,project_id.eq.${input.projectId}` : ''}`,
       );
   }
+  if (input.purpose === 'invoice-work') query = query.eq('client_id', input.clientId ?? '');
   if (input.purpose === 'equipment-work') {
     if (input.clientId) query = query.eq('client_id', input.clientId);
     if (input.siteId) query = query.eq('site_id', input.siteId);

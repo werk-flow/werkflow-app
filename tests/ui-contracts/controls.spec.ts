@@ -320,7 +320,7 @@ for (const failure of ['returned', 'thrown'] as const) {
     }, failure);
     const section = page.getByRole('region', { name: 'Zahlung', exact: true });
     const button = section.getByRole('button', {
-      name: 'Zahlung simulieren / Fortfahren',
+      name: 'Weiter zur Zahlung',
     });
     await button.click();
     await expect(section.getByRole('alert')).toBeVisible();
