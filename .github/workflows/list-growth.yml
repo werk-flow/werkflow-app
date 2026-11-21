@@ -38,7 +38,7 @@ jobs:
           # A title or body edit starts a ci.yml run without a Check job (ci.yml, `on`): the newest run
           # with one holds the Fast job whose rerun reports Check again.
           run=""
-          for candidate in $(gh run list --workflow ci.yml --event pull_request --commit "$SHA" --limit 20 --json databaseId --jq '.[].databaseId'); do
+          for candidate in $(gh api --paginate "repos/$GH_REPO/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$SHA&per_page=100" --jq '.workflow_runs[].id'); do
             if test "$(gh run view "$candidate" --json jobs --jq 'any(.jobs[]; .name == "Check")')" = true; then
               run="$candidate"
               break

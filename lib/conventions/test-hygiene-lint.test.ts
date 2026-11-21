@@ -141,14 +141,18 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       'const took = await page.evaluate(() => performance.now() - window.started);',
       'expect(took).toBeLessThan(2_000);',
       'const deadline = Date.now() + 250;',
-      'expect(Date.now()).toBeLessThan(deadline);',
+      'const limit = deadline;',
+      'expect(Date.now()).toBeLessThan(limit);',
       'expect(started).toBeGreaterThan(Date.now() - 250);',
       'const { tookMs } = await page.evaluate(() => ({ tookMs: performance.now() - window.started, rows: 2 }));',
       'expect(tookMs).toBeLessThan(250);',
+      'let bound = Date.now();',
+      'bound = 250;',
+      'expect(performance.now() - start).toBeLessThan(bound);',
     ].join('\n');
     for (const file of [CONTRACT, SPEC, SUPPORT, UNIT])
       expect(await reported('no-fixed-time-limit', source, file), file).toEqual([
-        4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 16, 18,
+        4, 5, 6, 7, 8, 9, 10, 11, 13, 16, 17, 19, 22,
       ]);
   });
 
@@ -162,6 +166,9 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       'expect(capturedAt).toBeLessThanOrEqual(after);',
       'expect(after - before).toBeLessThanOrEqual(Date.now() - before);',
       'expect(after - before).toBeGreaterThanOrEqual(0);',
+      'let returnedAt = 0;',
+      'await going.then(() => { returnedAt = Date.now(); });',
+      'expect(returnedAt).toBeGreaterThanOrEqual(after);',
       'expect(rows.length).toBeLessThan(250);',
       "test('clocked', async ({ page }) => {",
       '  await page.clock.install();',
@@ -176,6 +183,12 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       'expect(sample.rowCount).toBeLessThan(100);',
       'const { rowCount } = await page.evaluate(() => ({ takenAt: Date.now(), rowCount: rows.length }));',
       'expect(rowCount).toBeLessThan(100);',
+      'const nested = { rowCount: rows.length, metadata: { rowCount: Date.now() - start } };',
+      'expect(nested.rowCount).toBeLessThan(100);',
+      'const { rowCount: count } = nested;',
+      'expect(count).toBeLessThan(100);',
+      'expect(Date.now()).toBeGreaterThanOrEqual(start + 250);',
+      'expect(start).toBeLessThan(Date.now() - 250);',
     ].join('\n');
     expect(await reported('no-fixed-time-limit', source, CONTRACT)).toEqual([]);
   });
@@ -183,6 +196,7 @@ describe('test-hygiene/no-fixed-time-limit', () => {
   test("a controlled clock covers only its own reads: the page's in a page function, Date after setSystemTime", async () => {
     const source = [
       "test('page clock', async ({ page }) => {",
+      '  expect(await page.evaluate(() => performance.now() - window.opened)).toBeLessThan(250);',
       '  await page.clock.install();',
       '  const started = performance.now();',
       '  await page.clock.fastForward("11:00");',
@@ -196,7 +210,7 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       '  expect(Date.now() - opened).toBeLessThan(60_000);',
       '});',
     ].join('\n');
-    expect(await reported('no-fixed-time-limit', source, CONTRACT)).toEqual([5, 11]);
+    expect(await reported('no-fixed-time-limit', source, CONTRACT)).toEqual([2, 6, 12]);
   });
 
   test('a seeded fixed limit fails the lint of a real contract and of a shared session helper', async () => {

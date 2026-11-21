@@ -445,24 +445,6 @@ function inBrowserCallback(node) {
   return false;
 }
 
-/** The properties named `key` of every object literal in a subtree: what `value.key` may read. */
-function propertyValues(root, key) {
-  const values = [];
-  const stack = [root];
-  while (stack.length) {
-    const node = stack.pop();
-    if (!node || typeof node.type !== 'string') continue;
-    if (node.type === 'Property' && node.parent?.type === 'ObjectExpression' && keyName(node) === key)
-      values.push(node.value);
-    for (const [name, value] of Object.entries(node)) {
-      if (name === 'parent') continue;
-      if (Array.isArray(value)) stack.push(...value);
-      else if (value && typeof value.type === 'string') stack.push(value);
-    }
-  }
-  return values;
-}
-
 /** An expression without the wrappers that keep its value: `await`, `!`, `as`, `?.`. */
 function unwrapped(node) {
   let current = node;
@@ -540,7 +522,8 @@ const noFixedTimeLimitRule = {
     };
     /** A clock read whose clock the test controls at that point. */
     const controlledRead = (node) =>
-      controlled.some(({ region, clock }) => {
+      controlled.some(({ region, clock, from }) => {
+        if (node.range[0] < from) return false;
         let inside = false;
         for (let ancestor = node; ancestor && !inside; ancestor = ancestor.parent)
           inside = ancestor === region;
@@ -582,13 +565,16 @@ const noFixedTimeLimitRule = {
         if (!clock) return;
         let region = node.parent;
         while (region && !FUNCTION_TYPES.has(region.type)) region = region.parent;
-        // A clock installed before each test controls every test of the enclosing group.
+        // A clock installed before each test controls every test of the enclosing group from its
+        // start; one installed in a test controls the reads after the install.
+        let from = node.range[1];
         const hook = region?.parent;
         if (hook?.type === 'CallExpression' && calleePath(hook.callee)?.at(-1) === 'beforeEach') {
           region = hook.parent;
           while (region && !FUNCTION_TYPES.has(region.type)) region = region.parent;
+          from = 0;
         }
-        controlled.push({ region: region ?? sourceCode.ast, clock });
+        controlled.push({ region: region ?? sourceCode.ast, clock, from });
       },
       'Program:exit'() {
         if (!comparisons.length) return;
@@ -596,25 +582,68 @@ const noFixedTimeLimitRule = {
         for (const scope of sourceCode.scopeManager.scopes)
           for (const reference of scope.references)
             if (reference.resolved) variableOf.set(reference.identifier, reference.resolved);
-        // What each variable holds: a destructured property holds only that property of the value.
-        const writesOf = new Map();
+        const assigned = new Map();
         for (const scope of sourceCode.scopeManager.scopes)
           for (const variable of scope.variables)
-            writesOf.set(
+            assigned.set(
               variable,
-              variable.references.flatMap(({ identifier, writeExpr }) => {
-                if (!writeExpr) return [];
-                const property = identifier.parent;
-                const key =
-                  property?.type === 'Property' &&
-                  property.value === identifier &&
-                  property.parent?.type === 'ObjectPattern'
-                    ? keyName(property)
-                    : null;
-                const values = key === null ? [] : propertyValues(writeExpr, key);
-                return values.length ? values : [writeExpr];
-              }),
+              variable.references.flatMap(({ identifier, writeExpr }) =>
+                writeExpr ? [{ identifier, writeExpr }] : [],
+              ),
             );
+        /**
+         * The object literals a value is, at its own level: a literal, a variable that holds one, or
+         * what a page function returns (`page.evaluate(() => ({ ... }))`). Empty when it cannot say.
+         */
+        const literalsOf = (node, seen = new Set()) => {
+          const value = unwrapped(node);
+          if (value.type === 'ObjectExpression') return [value];
+          if (value.type === 'Identifier') {
+            const variable = variableOf.get(value);
+            if (!variable || seen.has(variable)) return [];
+            seen.add(variable);
+            return (writesOf(variable) ?? []).flatMap((write) => literalsOf(write, seen));
+          }
+          if (value.type !== 'CallExpression') return [];
+          return value.arguments
+            .filter((argument) => FUNCTION_TYPES.has(argument.type))
+            .flatMap((callback) =>
+              callback.body.type === 'BlockStatement'
+                ? callback.body.body
+                    .filter((statement) => statement.type === 'ReturnStatement' && statement.argument)
+                    .flatMap((statement) => literalsOf(statement.argument, seen))
+                : literalsOf(callback.body, seen),
+            );
+        };
+        /** What `value.key` holds, when every literal behind `value` names `key`; otherwise undefined. */
+        const propertyOf = (value, key) => {
+          const literals = literalsOf(value);
+          const properties = literals.map((literal) =>
+            literal.properties.find((property) => keyName(property) === key),
+          );
+          return literals.length && properties.every(Boolean)
+            ? properties.map((property) => property.value)
+            : undefined;
+        };
+        /** What each variable holds: a destructured property holds only that property of the value. */
+        const writing = new Map();
+        const writesOf = (variable) => {
+          // A variable read while its own writes are being read holds nothing more.
+          if (writing.has(variable)) return writing.get(variable) ?? [];
+          writing.set(variable, undefined);
+          const values = (assigned.get(variable) ?? []).flatMap(({ identifier, writeExpr }) => {
+            const property = identifier.parent;
+            const key =
+              property?.type === 'Property' &&
+              property.value === identifier &&
+              property.parent?.type === 'ObjectPattern'
+                ? keyName(property)
+                : null;
+            return (key === null ? undefined : propertyOf(writeExpr, key)) ?? [writeExpr];
+          });
+          writing.set(variable, values);
+          return values;
+        };
         const clocked = new Set();
         const instants = new Set();
         /** Whether `root` reads what `read` names, directly or through a variable in `names`. */
@@ -626,12 +655,11 @@ const noFixedTimeLimitRule = {
             if (!node || typeof node.type !== 'string') continue;
             if (read(node) || (node.type === 'Identifier' && names.has(variableOf.get(node)))) found = true;
             // `sample.rowCount` reads only what the literal behind `sample` puts there, when it says.
-            const holder =
-              node.type === 'MemberExpression' && !node.computed ? variableOf.get(node.object) : null;
-            const held = holder
-              ? (writesOf.get(holder) ?? []).flatMap((value) => propertyValues(value, node.property.name))
-              : [];
-            if (held.length) {
+            const held =
+              node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier'
+                ? propertyOf(node.object, node.property.name)
+                : undefined;
+            if (held) {
               stack.push(...held);
               continue;
             }
@@ -649,39 +677,59 @@ const noFixedTimeLimitRule = {
         const readsTime = (root) =>
           reads(root, (node) => isDurationClockRead(node) || isInstant(node), instants);
         // To a fixed point: `const now = Date.now(); const elapsed = now - start` reads the clock twice removed.
-        for (const [names, read] of [
-          [clocked, readsClock],
-          [instants, readsTime],
+        // A variable holds a duration when any write reads a clock, but counts as a time bound only
+        // when every write does: `let limit = Date.now(); limit = 250` is a fixed limit. A
+        // placeholder (`let returnedAt = 0`, `null`) is no value.
+        const placeholder = (value) =>
+          (value.type === 'Literal' && (value.value === 0 || value.value === null)) ||
+          (value.type === 'Identifier' && value.name === 'undefined');
+        const holds = {
+          clocked: (values) => values.some(readsClock),
+          instants: (values) => {
+            const real = values.filter((value) => !placeholder(value));
+            return real.length > 0 && real.every(readsTime);
+          },
+        };
+        for (const [names, held] of [
+          [clocked, holds.clocked],
+          [instants, holds.instants],
         ])
           for (let grown = true; grown; ) {
             grown = false;
-            for (const [variable, values] of writesOf) {
-              if (names.has(variable) || !values.some(read)) continue;
+            for (const variable of assigned.keys()) {
+              if (names.has(variable) || !held(writesOf(variable))) continue;
               names.add(variable);
               grown = true;
             }
           }
-        /** A clock reading moved by a fixed amount, `Date.now() + 250`: a deadline, or a start pushed back. */
-        const offsetClock = (node) => {
+        /**
+         * Which way a clock reading moved by a fixed amount points: `+` for `Date.now() + 250`, a
+         * deadline; `-` for `Date.now() - 250`, a start pushed back; null for anything else. A
+         * variable that holds one, directly or through another, points the same way.
+         */
+        const offsetOf = (node, seen = new Set()) => {
           const value = unwrapped(node);
-          if (value.type !== 'BinaryExpression' || (value.operator !== '+' && value.operator !== '-'))
-            return false;
-          return (
+          if (value.type === 'Identifier') {
+            const variable = variableOf.get(value);
+            if (!variable || seen.has(variable)) return null;
+            seen.add(variable);
+            const offsets = writesOf(variable).map((write) => offsetOf(write, seen));
+            return offsets.find((offset) => offset !== null) ?? null;
+          }
+          if (value.type !== 'BinaryExpression') return null;
+          if (value.operator === '-' && readsClock(value.left) && !readsTime(value.right)) return '-';
+          const fixedSum =
             (readsClock(value.left) && !readsTime(value.right)) ||
-            (value.operator === '+' && readsClock(value.right) && !readsTime(value.left))
-          );
+            (readsClock(value.right) && !readsTime(value.left));
+          return value.operator === '+' && fixedSum ? '+' : null;
         };
-        const deadlines = new Set(
-          [...writesOf].filter(([, values]) => values.some(offsetClock)).map(([variable]) => variable),
-        );
-        const isDeadline = (node) => {
-          const value = unwrapped(node);
-          return offsetClock(value) || (value.type === 'Identifier' && deadlines.has(variableOf.get(value)));
-        };
+        // Held below a deadline, a clock reading has an upper limit on its distance from the start
+        // the deadline counts from; so has a start pushed back, held below a clock reading. The
+        // other two orders set a lower limit, which a slower machine always meets.
         for (const { node, limited, bound } of comparisons)
           if (
-            (readsClock(limited) && (!readsTime(bound) || isDeadline(bound))) ||
-            (isDeadline(limited) && readsClock(bound))
+            (readsClock(limited) && (!readsTime(bound) || offsetOf(bound) === '+')) ||
+            (offsetOf(limited) === '-' && readsClock(bound))
           )
             context.report({ node, messageId: 'limit' });
       },
