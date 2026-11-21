@@ -4,6 +4,8 @@
 // ledger, comes from the merge queue, posts its Check or holds a credential
 // (isolationProblem in lib/testing/ci/run-commit.ts); CI runs through an executor that isolates each
 // job, a container per job or a machine of its own (Executors in lib/testing/ci/run-commit.ts).
+// Never run it on the CI host under the CI account: the refusal sees configured variables, not that
+// account's files (credentials, the ledger, the queue's state), which a local job could still read.
 // Each job gets a fresh workspace: its clone, the sibling clones beside it, its log and the variables
 // its environment steps pass on. Plan and Check share one workspace on the orchestrator's host. A
 // job's clone shares the source's objects read-only and has its own .git, so no job writes the

@@ -384,7 +384,10 @@ export function createQueueAdapter(options: {
       const merged = mergedPullSchema.parse(
         JSON.parse(gh('pr', 'view', String(number), '--json', 'state,mergeCommit')),
       );
-      return merged.state === 'MERGED' ? (merged.mergeCommit?.oid ?? null) : null;
+      if (merged.state !== 'MERGED') return null;
+      // Merged without a commit is no answer: read as unmerged, it would clear main's owed run.
+      if (!merged.mergeCommit) throw new Error(`GitHub reports #${number} merged without a merge commit`);
+      return merged.mergeCommit.oid;
     },
     withdraw: async (pending) => {
       mark(pending.head, 'failure', 'Withdrawn: a queue pass counts only for its own merge', pending.runUrl);

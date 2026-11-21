@@ -394,6 +394,37 @@ test("main's run gets main's head, the tick's base and the landed PRs, in a resu
   expect(existsSync(join(folder, 'main-env'))).toBe(false);
 });
 
+test('a PR GitHub reports merged without a merge commit is no answer, never unmerged, so the owed main run stays owed', async () => {
+  const bin = join(folder, 'bin');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'gh'), `#!/usr/bin/env bash\ncat "${folder}/gh-view"\n`);
+  chmodSync(join(bin, 'gh'), 0o755);
+  const adapter = createQueueAdapter({
+    repository,
+    runner: 'unused',
+    workDir: folder,
+    runUrlBase: 'queue',
+    appId: null,
+  });
+  const answer = async (view: object): Promise<string | null> => {
+    writeFileSync(join(folder, 'gh-view'), JSON.stringify(view));
+    return adapter.mergeCommit(7);
+  };
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path}`;
+  try {
+    expect(await answer({ state: 'MERGED', mergeCommit: { oid: 'c'.repeat(40) } })).toBe('c'.repeat(40));
+    expect(await answer({ state: 'OPEN', mergeCommit: null })).toBeNull();
+    expect(await answer({ state: 'CLOSED', mergeCommit: null })).toBeNull();
+    // A null here would read as unmerged and clear main's run on an unchanged base.
+    await expect(answer({ state: 'MERGED', mergeCommit: null })).rejects.toThrow(
+      'GitHub reports #7 merged without a merge commit',
+    );
+  } finally {
+    process.env.PATH = path;
+  }
+});
+
 test("with a main runner, the adapter saves main's run a merge would owe under the tick's id; without one, nothing", async () => {
   const workDir = join(folder, 'work');
   mkdirSync(workDir);

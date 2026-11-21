@@ -104,7 +104,7 @@ export type QueueAdapter = {
   oweMainRun(followUp: { base: string; prs: readonly number[]; merging: number }): Promise<void>;
   /** Marks the head as passed by the queue and squash-merges it on GitHub, only at that head. */
   land(pull: QueuedPull, proof: Verdict): Promise<void>;
-  /** The PR's merge commit when GitHub reports it merged, otherwise null. */
+  /** The PR's merge commit when GitHub reports it merged, otherwise null. Throws when GitHub reports it merged without one. */
   mergeCommit(pull: number): Promise<string | null>;
   /** Marks the head as no longer passed, after its merge or one that did not happen, so no later merge takes the mark. Throws when it cannot. */
   withdraw(mark: PendingMark): Promise<void>;
