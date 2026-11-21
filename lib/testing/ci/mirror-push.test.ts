@@ -151,3 +151,18 @@ test('the push places the commit on its ci branch, replaces an earlier push of i
     pushMirrorCommit({ repository: source, remote, commit: again.commit, branch, token: 'secret' }),
   ).toThrow('https remote only');
 });
+
+test('a workflow path with a tab or a line break moves aside whole, and the mirror workflow stays the only active one', () => {
+  for (const name of ['tab\there.yml', 'line\nbreak.yml'])
+    writeFileSync(join(source, '.github/workflows', name), 'name: Odd\n');
+  git(source, 'add', '.');
+  git(source, 'commit', '--quiet', '-m', 'odd names');
+  commit = git(source, 'rev-parse', 'HEAD');
+  const built = build();
+  const paths = git(source, 'ls-tree', '-r', '-z', '--name-only', '--full-tree', built.tree)
+    .split('\0')
+    .filter(Boolean);
+  expect(paths.filter((path) => path.startsWith('.github/workflows/'))).toEqual([MIRROR_WORKFLOW]);
+  expect(paths).toContain(`${HELD_WORKFLOWS}/tab\there.yml`);
+  expect(paths).toContain(`${HELD_WORKFLOWS}/line\nbreak.yml`);
+});

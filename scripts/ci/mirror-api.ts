@@ -36,6 +36,7 @@ export type MirrorApi = {
   /** The push runs of `branch` at `sha`. */
   runsOf(branch: string, sha: string): Promise<MirrorRun[]>;
   run(id: number): Promise<MirrorRun>;
+  /** The jobs of a run's first attempt. */
   jobs(runId: number): Promise<MirrorJob[]>;
   artifacts(runId: number): Promise<MirrorArtifact[]>;
   /** An artifact's zip archive. */
@@ -50,6 +51,8 @@ export type MirrorApi = {
 type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 
 const PAGE = 100;
+/** The longest one call or archive download may take. */
+const CALL_LIMIT_MS = 60_000;
 /** The most an artifact archive may hold: a job's result is a few kilobytes. */
 const ARCHIVE_LIMIT = 4 * 1024 * 1024;
 
@@ -74,7 +77,12 @@ export function githubMirrorApi(input: {
   };
 
   async function call(method: string, path: string, accept: readonly number[] = [200]): Promise<Response> {
-    const response = await send(`${api}${base}${path}`, { method, headers, redirect: 'manual' });
+    const response = await send(`${api}${base}${path}`, {
+      method,
+      headers,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(CALL_LIMIT_MS),
+    });
     if (!accept.includes(response.status)) {
       await response.body?.cancel();
       throw new Error(`GitHub ${method} ${path.split('?')[0]} answered ${response.status}.`);
@@ -129,7 +137,7 @@ export function githubMirrorApi(input: {
         runSchema,
       ),
     run: async (id) => runSchema.parse(await json(`/actions/runs/${id}`)),
-    jobs: (runId) => every(`/actions/runs/${runId}/jobs?filter=all`, 'jobs', jobSchema),
+    jobs: (runId) => every(`/actions/runs/${runId}/attempts/1/jobs`, 'jobs', jobSchema),
     artifacts: (runId) => every(`/actions/runs/${runId}/artifacts`, 'artifacts', artifactSchema),
     async download(artifactId) {
       // GitHub answers with a short-lived address on its storage, which gets no token.
@@ -137,13 +145,33 @@ export function githubMirrorApi(input: {
       const location = response.headers.get('location');
       await response.body?.cancel();
       if (!location?.startsWith('https://')) throw new Error('GitHub named no archive address.');
-      const archive = await send(location, { method: 'GET', headers: { 'User-Agent': 'ci-mirror' } });
-      if (archive.status !== 200) {
+      const archive = await send(location, {
+        method: 'GET',
+        headers: { 'User-Agent': 'ci-mirror' },
+        signal: AbortSignal.timeout(CALL_LIMIT_MS),
+      });
+      if (archive.status !== 200 || !archive.body) {
         await archive.body?.cancel();
         throw new Error(`The artifact archive answered ${archive.status}.`);
       }
-      const bytes = new Uint8Array(await archive.arrayBuffer());
-      if (bytes.byteLength > ARCHIVE_LIMIT) throw new Error('The artifact archive is larger than a result.');
+      // Read up to the limit and no further: a larger archive is no result.
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const reader = archive.body.getReader();
+      for (let read = await reader.read(); !read.done; read = await reader.read()) {
+        size += read.value.byteLength;
+        if (size > ARCHIVE_LIMIT) {
+          await reader.cancel();
+          throw new Error('The artifact archive is larger than a result.');
+        }
+        chunks.push(read.value);
+      }
+      const bytes = new Uint8Array(size);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
       return bytes;
     },
     async cancel(runId) {

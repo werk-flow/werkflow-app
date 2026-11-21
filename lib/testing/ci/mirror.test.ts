@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { workflowsFolder } from '../ci-workflow';
 import { planIdentityOf } from './check';
-import { CI_DAG, CI_JOBS, CI_TOOLS, HOST_GROUPS, partGroups, partOf, partSteps } from './dag';
+import { CI_DAG, CI_JOBS, CI_TOOLS, HOST_GROUPS, partGroups, partOf, partSteps, partUnitFiles } from './dag';
 import { type ExpectedResult, foreignResult, joinFastParts, mirrorBranch, staleBranches } from './mirror';
 import { mirrorMessage, mirrorVariables, parseMirrorMessage } from './mirror-message';
 import type { CiResult, RunPlan } from './results';
@@ -86,31 +86,66 @@ const fastPart = (groups: string[], overrides: Partial<CiResult> = {}): CiResult
     ...overrides,
   });
 
-test("Fast's two parts form one result in the plan's order, passed only when both passed", () => {
+test("Fast's two parts form one result in the plan's order; the unit group, run by both, passes only when both passed", () => {
   const tree = fastPart(partGroups(FAST_PLANNED, 'tree'), { completedAt: '2026-11-21T10:09:00.000Z' });
-  const host = fastPart(partGroups(FAST_PLANNED, 'host'), { startedAt: '2026-11-21T10:01:30.000Z' });
-  const joined = joinFastParts({ tree, host }, FAST_PLANNED);
+  const host = fastPart(partGroups(FAST_PLANNED, 'host'), {
+    startedAt: '2026-11-21T10:01:30.000Z',
+    listGrowthApproved: true,
+  });
+  const joined = joinFastParts(
+    { tree: { result: tree, passed: true }, host: { result: host, passed: true } },
+    FAST_PLANNED,
+  );
   if ('problem' in joined) throw new Error(joined.problem);
-  expect(joined.groups.map((group) => group.id)).toEqual(FAST_PLANNED);
-  expect(joined.status).toBe('passed');
+  expect(joined.groups.map((group) => [group.id, group.durationMs])).toEqual([
+    ['static:lint', 1],
+    ['static:docs', 1],
+    ['static:migration-order', 1],
+    ['unit:all', 2],
+    ['step:build', 1],
+  ]);
+  expect([joined.status, joined.listGrowthApproved]).toEqual(['passed', true]);
   expect([joined.startedAt, joined.completedAt]).toEqual([
     '2026-11-21T10:01:30.000Z',
     '2026-11-21T10:09:00.000Z',
   ]);
-  const failed = joinFastParts({ tree, host: { ...host, status: 'failed' } }, FAST_PLANNED);
-  expect('problem' in failed ? failed.problem : failed.status).toBe('failed');
+  // The host's share of the unit group failed: the unit group and Fast fail.
+  const hostUnitFailed = {
+    ...host,
+    groups: host.groups.map((group) =>
+      group.id === 'unit:all' ? { ...group, outcome: 'failed' as const } : group,
+    ),
+  };
+  const split = joinFastParts(
+    { tree: { result: tree, passed: true }, host: { result: hostUnitFailed, passed: true } },
+    FAST_PLANNED,
+  );
+  expect(
+    'problem' in split
+      ? split.problem
+      : [split.status, split.groups.find((group) => group.id === 'unit:all')?.outcome],
+  ).toEqual(['failed', 'failed']);
+  // A part whose process failed after it wrote a pass fails Fast.
+  const exited = joinFastParts(
+    { tree: { result: tree, passed: true }, host: { result: host, passed: false } },
+    FAST_PLANNED,
+  );
+  expect('problem' in exited ? exited.problem : exited.status).toBe('failed');
 });
 
-test("Fast's parts that miss or repeat a planned group, or read different approvals, form no result", () => {
+test("Fast's parts must each hold exactly their own groups, so swapped or missing lists form no result", () => {
   const tree = fastPart(partGroups(FAST_PLANNED, 'tree'));
   const host = fastPart(partGroups(FAST_PLANNED, 'host'));
-  expect(joinFastParts({ tree, host: fastPart(['static:docs']) }, FAST_PLANNED)).toHaveProperty('problem');
-  expect(joinFastParts({ tree, host: fastPart([...HOST_GROUPS, 'unit:all']) }, FAST_PLANNED)).toHaveProperty(
-    'problem',
-  );
-  expect(joinFastParts({ tree, host: { ...host, listGrowthApproved: true } }, FAST_PLANNED)).toHaveProperty(
-    'problem',
-  );
+  const join = (treePart: CiResult, hostPart: CiResult) =>
+    joinFastParts(
+      { tree: { result: treePart, passed: true }, host: { result: hostPart, passed: true } },
+      FAST_PLANNED,
+    );
+  expect(join(tree, fastPart(['static:docs']))).toHaveProperty('problem');
+  expect(join(host, tree)).toHaveProperty('problem');
+  expect(
+    join(fastPart(['static:lint', 'unit:all']), fastPart([...HOST_GROUPS, 'unit:all', 'step:build'])),
+  ).toHaveProperty('problem');
 });
 
 test('on the mirror a job takes every step and group but those that read outside the tree, which its host part takes', () => {
@@ -120,13 +155,22 @@ test('on the mirror a job takes every step and group but those that read outside
   for (const job of CI_JOBS.filter((name) => name !== 'fast'))
     expect(partSteps(job, 'tree'), job).toEqual([...CI_DAG[job].prepare]);
   expect(partGroups(FAST_PLANNED, 'tree')).toEqual(['static:lint', 'unit:all', 'step:build']);
-  expect(partGroups(FAST_PLANNED, 'host')).toEqual(['static:docs', 'static:migration-order']);
+  expect(partGroups(FAST_PLANNED, 'host')).toEqual(['static:docs', 'static:migration-order', 'unit:all']);
+  const files = ['./lib/a.test.ts', './lib/testing/publication/shrink-only-lists.test.ts'];
+  expect(partUnitFiles(files, 'tree')).toEqual(['./lib/a.test.ts']);
+  expect(partUnitFiles(files, 'host')).toEqual(['./lib/testing/publication/shrink-only-lists.test.ts']);
+  expect(partUnitFiles(files, undefined)).toEqual(files);
   expect(() => partOf('everything')).toThrow('CI_PART everything is no part');
+  expect(() => partOf('host', 'sql')).toThrow('Only Fast has a host part');
 });
 
-test('a branch names the source commit, the attempt and the job or shard, so each attempt pushes new branches', () => {
-  expect(mirrorBranch(SOURCE, 2, { job: 'browser', shard: 3 })).toBe(`ci/${SOURCE}-a2/browser-3`);
-  expect(mirrorBranch(SOURCE, 1, { job: 'fast', shard: null })).toBe(`ci/${SOURCE}-a1/fast`);
+test("a branch names the source commit, the run's key and the job or shard, so two runs of a commit never share one", () => {
+  expect(mirrorBranch(SOURCE, '0123456789abcdef-2', { job: 'browser', shard: 3 })).toBe(
+    `ci/${SOURCE}-0123456789abcdef-2/browser-3`,
+  );
+  expect(mirrorBranch(SOURCE, 'fedcba9876543210-1', { job: 'fast', shard: null })).toBe(
+    `ci/${SOURCE}-fedcba9876543210-1/fast`,
+  );
 });
 
 test('the sweep deletes only branches whose commit is older than a day', () => {

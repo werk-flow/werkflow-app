@@ -89,6 +89,15 @@ import { repository as ownRepository } from './run';
 // host names it); the start record names that run.
 // The executor frees what the run left (Executors.release).
 
+/** The environment without the CI mirror's repository and token, which only its executor takes. */
+function withoutMirror(
+  environment: Readonly<Record<string, string | undefined>>,
+): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(environment).filter(([name]) => name !== 'CI_MIRROR_REPO' && name !== 'CI_MIRROR_TOKEN'),
+  );
+}
+
 /** A stop before the run started: 2, or 3 when another main run of the commit started. */
 class Refusal extends Error {
   constructor(
@@ -328,7 +337,7 @@ async function run(
               stdio: 'inherit',
               env: {
                 NODE_ENV: process.env.NODE_ENV,
-                ...environment,
+                ...withoutMirror(environment),
                 CI_RUN_URL: runUrl,
                 CI_RUN_ATTEMPT: String(attempt.data),
                 CI_EVENT: event,

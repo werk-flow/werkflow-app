@@ -1,7 +1,7 @@
 // What the orchestrator decides about the CI mirror (scripts/ci/mirror-executor.ts): the branch of
 // each job start, whether a result the mirror returned is this run's own, how Fast's two parts
 // form its one result, and which branches are stale. It starts and reads nothing itself.
-import { CI_DAG, type CiEvent, type CiJob } from './dag';
+import { CI_DAG, type CiEvent, type CiJob, partGroups, splitGroup } from './dag';
 import type { CiResult, PlanIdentity } from './results';
 
 /** The mirror's own workflow, the only one its pushed tree holds (scripts/ci/mirror-push.ts). */
@@ -16,11 +16,13 @@ const MIRROR_BRANCH_TTL_MS = 24 * 60 * 60_000;
 type Unit = { job: CiJob; shard: number | null };
 
 /**
- * The branch of one job start: the source commit, the attempt and the job or shard. The workflow
- * runs the job its last segment names; a new attempt pushes new branches.
+ * The branch of one job start: the source commit, the run's key (a digest of its run URL, and its
+ * attempt: ExecutorSetup.runKey) and the job or shard. Two runs of one commit, such as its pull
+ * request run and its queue run, never share a branch; the workflow runs the job its last segment
+ * names.
  */
-export function mirrorBranch(commit: string, attempt: number, unit: Unit): string {
-  return `ci/${commit}-a${attempt}/${unit.shard === null ? unit.job : `${unit.job}-${unit.shard}`}`;
+export function mirrorBranch(commit: string, runKey: string, unit: Unit): string {
+  return `ci/${commit}-${runKey}/${unit.shard === null ? unit.job : `${unit.job}-${unit.shard}`}`;
 }
 
 /** What a mirror job's result must name: this run, attempt, unit, source and Plan. */
@@ -62,29 +64,51 @@ export function foreignResult(result: CiResult, expected: ExpectedResult): strin
   return mismatches.length ? `it names ${mismatches.join(', ')}` : undefined;
 }
 
+type FastPart = { result: CiResult; passed: boolean };
+
 /**
- * Fast's one result from its two parts: the mirror's (`tree`) and the host's (`host`, the groups
- * that read outside the tree). Each part must be this run's own (foreignResult) and hold exactly
- * its share of `planned`, and both must read the same list growth approval. It passes only when
- * both parts passed; its cost is the mirror machine's.
+ * Fast's one result from its two parts: the mirror's (`tree`) and the host's (`host`). Each part
+ * must be this run's own (foreignResult) and hold exactly its own groups of `planned` (partGroups).
+ * The unit group, which both run, passed only when both passed. The result passed only when each
+ * part passed by its process (`passed`) and its result. The list growth approval is the host's,
+ * which read the labels and ran the one test that reads it; the cost is the mirror machine's.
  */
 export function joinFastParts(
-  parts: { tree: CiResult; host: CiResult },
+  parts: { tree: FastPart; host: FastPart },
   planned: readonly string[],
 ): CiResult | { problem: string } {
   const { tree, host } = parts;
-  if (tree.listGrowthApproved !== host.listGrowthApproved)
-    return { problem: 'the two parts read different list growth approvals; run the job again' };
-  const groups = [...tree.groups, ...host.groups];
-  const ids = groups.map((group) => group.id);
-  if (ids.length !== new Set(ids).size || [...ids].sort().join() !== [...planned].sort().join())
-    return { problem: `the parts hold ${ids.join(', ')}, not the planned ${planned.join(', ')}` };
-  const ended = [tree.completedAt, host.completedAt];
+  for (const [part, { result }] of [
+    ['tree', tree],
+    ['host', host],
+  ] as const) {
+    const own = partGroups(planned, part);
+    const ids = result.groups.map((group) => group.id);
+    if (ids.join() !== own.join())
+      return { problem: `the ${part} part holds ${ids.join(', ') || 'no group'}, not its ${own.join(', ')}` };
+  }
+  const groups = planned.map((id): CiResult['groups'][number] => {
+    const outcomes = [...tree.result.groups, ...host.result.groups].filter((group) => group.id === id);
+    const [first] = outcomes;
+    if (!first) return { id, outcome: 'not-run', durationMs: 0 };
+    if (!splitGroup(id)) return first;
+    const failed = outcomes.find((group) => group.outcome !== 'passed');
+    return {
+      id,
+      outcome: failed ? failed.outcome : 'passed',
+      durationMs: outcomes.reduce((sum, group) => sum + group.durationMs, 0),
+    };
+  });
+  const ended = [tree.result.completedAt, host.result.completedAt];
+  const passed =
+    [tree, host].every((part) => part.passed && part.result.status === 'passed') &&
+    groups.every((group) => group.outcome === 'passed');
   return {
-    ...tree,
-    groups: planned.flatMap((id) => groups.filter((group) => group.id === id)),
-    status: tree.status === 'passed' && host.status === 'passed' ? 'passed' : 'failed',
-    startedAt: [tree.startedAt, host.startedAt].sort()[0] ?? tree.startedAt,
+    ...tree.result,
+    groups,
+    listGrowthApproved: host.result.listGrowthApproved,
+    status: passed ? 'passed' : 'failed',
+    startedAt: [tree.result.startedAt, host.result.startedAt].sort()[0] ?? tree.result.startedAt,
     completedAt: ended.includes(null) ? null : (ended.sort().at(-1) ?? null),
   };
 }

@@ -12,7 +12,7 @@ import type { MirrorApi, MirrorJob, MirrorRun } from '../../../scripts/ci/mirror
 import { mirrorExecutors } from '../../../scripts/ci/mirror-executor';
 import { DEFAULT_MIRROR_IDENTITY, pushMirrorCommit } from '../../../scripts/ci/mirror-push';
 import { planIdentityOf } from './check';
-import { CI_DAG, CI_JOBS } from './dag';
+import { CI_DAG, CI_JOBS, partGroups } from './dag';
 import { HELD_WORKFLOWS, MIRROR_JOB_CAP, MIRROR_WORKFLOW, mirrorBranch } from './mirror';
 import { parseMirrorMessage } from './mirror-message';
 import { type CiResult, type RunPlan, readResult, resultFileName } from './results';
@@ -153,10 +153,7 @@ function mirrorResult(unit: Unit, overrides: Partial<CiResult> = {}): CiResult {
     plan: undefined,
     job: unit.job,
     shard: unit.shard,
-    groups: (unit.job === 'fast'
-      ? groups.filter((id) => id !== 'static:docs' && id !== 'static:migration-order')
-      : groups
-    ).map((id) => ({ id, outcome: 'passed', durationMs: 5 })),
+    groups: partGroups(groups, 'tree').map((id) => ({ id, outcome: 'passed', durationMs: 5 })),
     startedAt: new Date(now).toISOString(),
     completedAt: new Date(now + 1000).toISOString(),
     planIdentity: planIdentityOf(planResult, PLAN),
@@ -171,6 +168,8 @@ type Scenario = {
   /** Holds the run in progress while it returns true. */
   running?: () => boolean;
   attempt?: number;
+  /** The mirror reruns the job once its result artifact was downloaded. */
+  rerunAfterDownload?: boolean;
   otherJobRan?: boolean;
   /** The result file the artifact holds, or the files it holds. */
   result?: (unit: Unit) => CiResult;
@@ -272,6 +271,7 @@ function fakeMirror(scenario: Scenario = {}): Fake {
     },
     async download(artifactId) {
       const run = runById(artifactId / 10);
+      if (scenario.rerunAfterDownload) run.run_attempt = 2;
       const result = (scenario.result ?? mirrorResult)(run.unit);
       const files = scenario.files?.(run.unit, result) ?? {
         [resultFileName(run.unit.job, run.unit.shard)]: JSON.stringify(result),
@@ -307,13 +307,15 @@ function fakeMirror(scenario: Scenario = {}): Fake {
   return { ...fake, api };
 }
 
+const RUN_KEY = '0123456789abcdef-1';
 const executorsOf = (
   fake: Fake,
   jobCap = MIRROR_JOB_CAP,
   log: (line: string) => void = () => undefined,
+  runKey = RUN_KEY,
 ): Executors =>
   mirrorExecutors(
-    { source, commit, workRoot: join(folder, 'work'), runKey: 'run', replaceStack: false, log },
+    { source, commit, workRoot: join(folder, 'work'), runKey, replaceStack: false, log },
     {
       api: fake.api,
       push: (pushed, branch) =>
@@ -355,7 +357,7 @@ test("a job runs on the mirror from one parentless commit of the source tree, an
   expect(outcome.exitCode, outcome.detail).toBe(0);
   const written = readResult(join(results, 'sql.json'));
   expect(written).toMatchObject({ job: 'sql', status: 'passed', tree, commit, runUrl: RUN_URL });
-  const branch = mirrorBranch(commit, 1, SQL);
+  const branch = mirrorBranch(commit, RUN_KEY, SQL);
   const pushed = git(remote, 'rev-parse', `refs/heads/${branch}`);
   expect(git(remote, 'rev-list', '--parents', '-n', '1', pushed)).toBe(pushed);
   const paths = git(remote, 'ls-tree', '-r', '--name-only', pushed).split('\n');
@@ -434,6 +436,11 @@ test('an artifact that holds more or other than the result, or a run that is not
     ],
     ['a rerun on the mirror', { attempt: 2 }, 'only a first attempt counts'],
     ['another job that ran', { otherJobRan: true }, 'the mirror run ran'],
+    [
+      'a rerun while the result was read',
+      { rerunAfterDownload: true },
+      'ran it again while its result was read',
+    ],
   ]);
 });
 
@@ -465,7 +472,7 @@ test('a stop cancels the running mirror run, reads no result and deletes its bra
   expect(fake.cancelled).toEqual([1]);
   expect(existsSync(join(results, 'sql.json'))).toBe(false);
   await done(executors, 1);
-  expect(fake.deleted).toEqual([mirrorBranch(commit, 1, SQL)]);
+  expect(fake.deleted).toEqual([mirrorBranch(commit, RUN_KEY, SQL)]);
 });
 
 test('the first job start sweeps ci branches older than a day; fresh ones stay', async () => {
@@ -499,14 +506,18 @@ test('the first job start sweeps ci branches older than a day; fresh ones stay',
   expect(swept.exitCode, swept.detail).toBe(0);
   expect(fake.deleted).toEqual([`ci/${'1'.repeat(40)}-a1/sql`]);
   expect(git(remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/ci/').split('\n').sort()).toEqual(
-    [`refs/heads/ci/${'2'.repeat(40)}-a1/sql`, `refs/heads/${mirrorBranch(commit, 1, SQL)}`].sort(),
+    [`refs/heads/ci/${'2'.repeat(40)}-a1/sql`, `refs/heads/${mirrorBranch(commit, RUN_KEY, SQL)}`].sort(),
   );
 });
 
 test('Fast joins its mirror part and its host part, which runs the groups that read outside the tree on this host', async () => {
   const fast: Unit = { job: 'fast', shard: null };
   const host = mirrorResult(fast, {
-    groups: ['static:docs', 'static:migration-order'].map((id) => ({ id, outcome: 'passed', durationMs: 7 })),
+    groups: partGroups(plannedGroups('fast', OUTPUTS), 'host').map((id) => ({
+      id,
+      outcome: 'passed',
+      durationMs: 7,
+    })),
   });
   writeFileSync(join(folder, 'host-result.json'), JSON.stringify(host));
   const outcome = await executorsOf(fakeMirror()).jobs.run(task(fast), new AbortController().signal);
@@ -520,12 +531,18 @@ test('Fast joins its mirror part and its host part, which runs the groups that r
   expect(seen).toContain('CI_PART=host');
   expect(seen).toContain('GH_TOKEN=job-token');
   expect(seen).not.toContain(`CI_RESULTS_DIR=${results}\n`);
-  // A host part that read another approval leaves no Fast result.
+  // The approval is the host's, which read the labels and ran the one test that reads it.
   rmSync(join(results, 'fast.json'));
   writeFileSync(join(folder, 'host-result.json'), JSON.stringify({ ...host, listGrowthApproved: true }));
-  const split = await executorsOf(fakeMirror()).jobs.run(task(fast), new AbortController().signal);
-  expect(split.exitCode, split.detail).toBe(1);
-  expect(split.detail).toContain('different list growth approvals');
+  const approved = await executorsOf(fakeMirror()).jobs.run(task(fast), new AbortController().signal);
+  expect(approved.exitCode, approved.detail).toBe(0);
+  expect(readResult(join(results, 'fast.json'))).toMatchObject({ listGrowthApproved: true });
+  // A host part that ran the mirror's groups leaves no Fast result.
+  rmSync(join(results, 'fast.json'));
+  writeFileSync(join(folder, 'host-result.json'), JSON.stringify(mirrorResult(fast)));
+  const swapped = await executorsOf(fakeMirror()).jobs.run(task(fast), new AbortController().signal);
+  expect(swapped.exitCode, swapped.detail).toBe(1);
+  expect(swapped.detail).toContain('the host part holds');
   expect(existsSync(join(results, 'fast.json'))).toBe(false);
 });
 
@@ -556,4 +573,44 @@ test("a host's mirror job cap holds every run together: a job beyond it waits fo
   expect((await outcomes).map((outcome) => outcome?.exitCode)).toEqual([0, 0, 0]);
   expect(pushed()).toBe(cap + 1);
   expect(MIRROR_JOB_CAP).toBe(16);
+});
+
+test("two runs of one commit push their own branches, and one run's cleanup leaves the other's branch", async () => {
+  const fake = fakeMirror();
+  const pullRequestRun = executorsOf(fake, MIRROR_JOB_CAP, () => undefined, 'aaaaaaaaaaaaaaaa-1');
+  const queueRun = executorsOf(fake, MIRROR_JOB_CAP, () => undefined, 'bbbbbbbbbbbbbbbb-1');
+  for (const executors of [pullRequestRun, queueRun]) {
+    const outcome = await executors.jobs.run(task(SQL), new AbortController().signal);
+    expect(outcome.exitCode, outcome.detail).toBe(0);
+  }
+  await done(pullRequestRun, 0);
+  expect(git(remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/ci/')).toBe(
+    `refs/heads/${mirrorBranch(commit, 'bbbbbbbbbbbbbbbb-1', SQL)}`,
+  );
+});
+
+test('the executors read the source tree only at a job start, after run-commit fetched the commit', () => {
+  const absent = 'f'.repeat(40);
+  expect(() =>
+    mirrorExecutors(
+      {
+        source,
+        commit: absent,
+        workRoot: join(folder, 'work'),
+        runKey: RUN_KEY,
+        replaceStack: false,
+        log: () => undefined,
+      },
+      {
+        api: fakeMirror().api,
+        push: () => undefined,
+        workflow: WORKFLOW,
+        identity: DEFAULT_MIRROR_IDENTITY,
+        now: () => NOW,
+        sleep: () => Promise.resolve(),
+        pollMs: 1,
+        jobCap: 1,
+      },
+    ),
+  ).not.toThrow();
 });

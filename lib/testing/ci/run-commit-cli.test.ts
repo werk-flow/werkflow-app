@@ -4,7 +4,16 @@
 // run-commit holds (scripts/ci/schedule.ts). The queue's hooks run through a stub isolating executor.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runCommitCommand } from '../../../scripts/ci/run-commit';
@@ -457,4 +466,34 @@ test("the queue's --runner hook runs a commit only the queue's clone holds throu
   expect(ran.errors).toEqual([]);
   expect(ran.code).toBe(0);
   expect(readResult(join(resultsDir, 'check.json'))).toMatchObject({ status: 'passed', commit: tip.commit });
+});
+
+// The CI App's publisher posts Check with its own credentials: the mirror's repository and token
+// stay with the mirror executor.
+test("the Check publisher never receives the CI mirror's repository or token", async () => {
+  const { clone, commit, tree } = trustedClone();
+  const publisher = join(folder, 'publish.sh');
+  writeFileSync(publisher, `#!/usr/bin/env bash\nenv >> "${join(folder, 'publisher.env')}"\n`);
+  chmodSync(publisher, 0o755);
+  const ran = await command(
+    clone,
+    {
+      CI_EVENT: 'pr',
+      CI_COMMIT: commit,
+      CI_RESULTS_DIR: join(folder, 'results'),
+      CI_RUN_URL: 'https://ci.example/runs/9',
+      CI_WORK_ROOT: join(folder, 'work'),
+      CI_PRODUCER: 'ci-mirror',
+      CI_PUBLISHER: publisher,
+      CI_MIRROR_REPO: 'owner/mirror',
+      CI_MIRROR_TOKEN: 'mirror-token',
+    },
+    stubExecutors([], tree),
+  );
+  // The run started and posted: the stub's Check, of another event, fails it.
+  expect(ran.code, ran.errors.join('\n')).toBe(1);
+  const seen = readFileSync(join(folder, 'publisher.env'), 'utf8');
+  expect(seen).toContain('CI_RUN_URL=https://ci.example/runs/9');
+  expect(seen).not.toContain('CI_MIRROR_TOKEN');
+  expect(seen).not.toContain('CI_MIRROR_REPO');
 });

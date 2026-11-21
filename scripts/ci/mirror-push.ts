@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { HELD_WORKFLOWS, MIRROR_WORKFLOW } from '../../lib/testing/ci/mirror';
 
 const SOURCE_WORKFLOWS = '.github/workflows';
+const GIT_LIMIT_MS = 10 * 60_000;
 
 /** The mirror commit's author and committer. */
 export type MirrorIdentity = { name: string; email: string };
@@ -34,7 +35,7 @@ export function mirrorIdentity(value: string | undefined): MirrorIdentity {
 function git(
   repository: string,
   args: readonly string[],
-  options: { env?: Readonly<Record<string, string>>; input?: string } = {},
+  options: { env?: Readonly<Record<string, string>>; input?: string; quiet?: boolean } = {},
 ): string {
   const ran = spawnSync('git', args, {
     cwd: repository,
@@ -43,11 +44,15 @@ function git(
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...options.env },
     stdio: ['pipe', 'pipe', 'pipe'],
     maxBuffer: 64 * 1024 * 1024,
+    // A push of the whole tree takes a minute or two; no git call here waits longer.
+    timeout: GIT_LIMIT_MS,
   });
-  if (ran.status !== 0)
-    throw new Error(
-      `git ${args.find((arg) => !arg.startsWith('-') && !arg.includes('=')) ?? ''} failed (${ran.status ?? ran.signal}): ${ran.stderr.trim().split('\n').at(-1) ?? ''}`,
-    );
+  if (ran.status !== 0) {
+    const command = args.find((arg) => !arg.startsWith('-') && !arg.includes('=')) ?? '';
+    // A push's own output stays out of the error: it talks to a remote that holds the token.
+    const said = options.quiet ? '' : `: ${ran.stderr.trim().split('\n').at(-1) ?? ''}`;
+    throw new Error(`git ${command} failed (${ran.status ?? ran.signal})${said}`);
+  }
   return ran.stdout;
 }
 
@@ -59,9 +64,10 @@ function entriesUnder(repository: string, tree: string, folder: string): TreeEnt
     .split('\0')
     .filter(Boolean)
     .map((line) => {
-      const [meta = '', path = ''] = line.split('\t');
-      const [mode = '', type = '', object = ''] = meta.split(' ');
-      return { mode, type, object, path };
+      // A path may hold a tab or a line break: only the first tab ends the metadata.
+      const tab = line.indexOf('\t');
+      const [mode = '', type = '', object = ''] = line.slice(0, tab).split(' ');
+      return { mode, type, object, path: line.slice(tab + 1) };
     });
 }
 
@@ -94,6 +100,7 @@ export function buildMirrorCommit(input: {
     git(repository, ['read-tree', sourceTree], { env });
     const workflows = entriesUnder(repository, sourceTree, SOURCE_WORKFLOWS);
     const placed = git(repository, ['hash-object', '-w', '--stdin'], { input: input.workflow }).trim();
+    // NUL-terminated records keep every path byte, a tab or a line break included.
     const updates = [
       ...workflows.map((entry) => `0 ${'0'.repeat(40)}\t${entry.path}`),
       ...workflows.map(
@@ -102,8 +109,12 @@ export function buildMirrorCommit(input: {
       ),
       `100644 ${placed}\t${MIRROR_WORKFLOW}`,
     ];
-    git(repository, ['update-index', '--index-info'], { env, input: `${updates.join('\n')}\n` });
+    git(repository, ['update-index', '-z', '--index-info'], { env, input: `${updates.join('\0')}\0` });
     const tree = git(repository, ['write-tree'], { env }).trim();
+    // The tree holds the mirror's workflow and nothing else under .github/workflows.
+    const active = entriesUnder(repository, tree, SOURCE_WORKFLOWS);
+    if (active.length !== 1 || active[0]?.path !== MIRROR_WORKFLOW || active[0].object !== placed)
+      throw new Error(`The mirror tree holds ${active.length} workflows, not the mirror's alone.`);
     const date = input.date.toISOString();
     const mirror = git(repository, ['commit-tree', '--no-gpg-sign', tree, '-F', '-'], {
       input: input.message,
@@ -158,6 +169,6 @@ export function pushMirrorCommit(input: {
       input.remote,
       `+${input.commit}:refs/heads/${input.branch}`,
     ],
-    { env: header },
+    { env: header, quiet: true },
   );
 }

@@ -20,6 +20,7 @@ import {
 } from '../../lib/testing/ci/full-run';
 import { jobCost, measurementInputs } from '../../lib/testing/ci/measurement';
 import { CI_EVENTS, CI_JOBS, type CiJob, partGroups, partOf } from '../../lib/testing/ci/dag';
+import { parseMirrorMessage } from '../../lib/testing/ci/mirror-message';
 import {
   type CiResult,
   type Ledger,
@@ -92,11 +93,13 @@ import { repository, run, step, verify } from './run';
 //   CI_PR_HEAD_SHA  pr: the head commit this run tests, when the checkout is a merge commit on top
 //                   of it. Defaults to the checkout's commit.
 //   SHRINK_ONLY_GROWTH_APPROVED  `true` with the owner's `approved: list growth` label.
-//   CI_SOURCE_COMMIT, CI_SOURCE_TREE  The CI mirror only (scripts/ci/mirror-executor.ts): the
-//                   checkout is one parentless commit of this source commit's tree with its workflows
-//                   moved aside, and the result names the source commit and tree. Both or neither.
-//   CI_PART         fast on the CI mirror: `tree` runs every group but HOST_GROUPS and the build,
-//                   `host` only HOST_GROUPS (lib/testing/ci/dag.ts). Unset: the whole job.
+//   CI_PART         The CI mirror's job parts (scripts/ci/mirror-executor.ts, lib/testing/ci/dag.ts).
+//                   `tree`: the job runs on the mirror, whose checkout is one parentless commit of
+//                   the source's tree with its workflows moved aside; that commit's message names
+//                   the source commit and tree, and the result names them. Any other checkout fails.
+//                   Fast's tree part runs every group but HOST_GROUPS, the unit group without the
+//                   host's files. `host`: Fast only, on the orchestrator's host: HOST_GROUPS and the
+//                   unit group's host files, without the build. Unset: the whole job.
 //   MIDNIGHT_PROOF_MINUTES       plan: passed on to scripts/ci-plan.ts; names the wait a proof run.
 // Measurement inputs (lib/testing/ci/measurement.ts). Optional; no gate reads them, and an unreadable one
 // warns and is recorded as unknown, never failing the job. Reuse reads the attempt: an unreadable one
@@ -127,24 +130,12 @@ if (!jobName || !eventName || !directory)
   throw new Error(
     `Usage: CI_EVENT=<${CI_EVENTS.join('|')}> CI_RESULTS_DIR=<directory> bun scripts/ci/job.ts <${CI_JOBS.join('|')}>`,
   );
-const ci = { job: jobName, event: eventName, directory, part: partOf(environment.CI_PART) };
+const ci = { job: jobName, event: eventName, directory, part: partOf(environment.CI_PART, jobName) };
 // Browser and component jobs run once per shard of the plan (jobShards in lib/testing/ci/run-plan.ts).
 const shard = ci.job === 'browser' || ci.job === 'components' ? Number(environment.CI_SHARD) : null;
 if (shard !== null && !(Number.isInteger(shard) && shard > 0))
   throw new Error(`A ${ci.job} job needs CI_SHARD, a shard number of the plan.`);
 mkdirSync(ci.directory, { recursive: true });
-
-/** The source commit and tree a mirror checkout stands for, or undefined off the mirror. */
-function sourceOf(
-  sourceCommit: string | undefined,
-  sourceTree: string | undefined,
-): { commit: string; tree: string } | undefined {
-  if (!sourceCommit && !sourceTree) return undefined;
-  const objectId = /^[0-9a-f]{40}$/;
-  if (sourceCommit && sourceTree && objectId.test(sourceCommit) && objectId.test(sourceTree))
-    return { commit: sourceCommit, tree: sourceTree };
-  throw new Error('CI_SOURCE_COMMIT and CI_SOURCE_TREE are both full object ids, or both unset.');
-}
 
 const git = (...args: string[]): string =>
   execFileSync('git', args, { cwd: repository, encoding: 'utf8' }).trim();
@@ -167,9 +158,20 @@ const otpSecret = environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString(
 // another's test; the final check compares HEAD with this commit.
 const checkoutCommit = git('rev-parse', 'HEAD');
 // On the CI mirror the checkout is the source's tree transformed, which the orchestrator checked
-// after the push; the result names the source.
-const source = sourceOf(environment.CI_SOURCE_COMMIT, environment.CI_SOURCE_TREE);
+// after the push: a parentless commit whose message names the source, which the result names.
+const source = ci.part === 'tree' ? mirrorSource() : undefined;
 const commit = source?.commit ?? checkoutCommit;
+
+/** The source commit and tree the mirror's checkout stands for; any other checkout throws. */
+function mirrorSource(): { commit: string; tree: string } {
+  const run = parseMirrorMessage(git('log', '-1', '--format=%B', checkoutCommit));
+  if ('problem' in run) throw new Error(`CI_PART=tree runs only a CI mirror commit: ${run.problem}.`);
+  if (git('rev-list', '--parents', '-n', '1', checkoutCommit) !== checkoutCommit)
+    throw new Error('CI_PART=tree runs only a parentless CI mirror commit.');
+  if (run.job !== ci.job || run.shard !== shard)
+    throw new Error(`This mirror commit runs ${run.job} ${run.shard ?? ''}, not this job.`);
+  return run.source;
+}
 // A superseded pull request run proves nothing for its PR: it ends before it records anything, so
 // it neither costs a runner more time nor withdraws a pass from the ledger.
 const newerHead = supersedingHead({

@@ -38,8 +38,6 @@ const unit = run.shard === null ? job : `${job}-${run.shard}`;
 const variables: Record<string, string> = {
   ...run.variables,
   CI_RESULTS_DIR: results,
-  CI_SOURCE_COMMIT: run.source.commit,
-  CI_SOURCE_TREE: run.source.tree,
   CI_PART: 'tree',
   ...(run.shard === null ? {} : { CI_SHARD: String(run.shard) }),
 };

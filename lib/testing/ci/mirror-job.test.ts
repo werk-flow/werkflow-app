@@ -1,6 +1,6 @@
 // The first step of a CI mirror job (scripts/ci/mirror-job.ts) on a throwaway checkout whose commit
-// message holds the run: it writes the run's Plan and passes the run's variables, the source and the
-// tree part to the later steps, and refuses a commit that runs another job or no mirror run at all.
+// message holds the run: it writes the run's Plan and passes the run's variables and the tree part to
+// the later steps, and refuses a commit that runs another job or no mirror run at all.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(folder, { recursive: true, force: true }));
 
-test("a mirror job writes its run's Plan and passes the run's variables, the source and the tree part to its steps", () => {
+test("a mirror job writes its run's Plan and passes the run's variables and the tree part to its steps", () => {
   const ran = run(checkout(mirrorMessage(RUN)), 'browser');
   expect(ran.status, ran.output).toBe(0);
   const results = join(folder, 'temp/ci-results');
@@ -78,8 +78,6 @@ test("a mirror job writes its run's Plan and passes the run's variables, the sou
       'CI_RUN_URL=https://ci.example/runs/1',
       'CI_RUN_ATTEMPT=2',
       `CI_RESULTS_DIR=${results}`,
-      `CI_SOURCE_COMMIT=${'c'.repeat(40)}`,
-      `CI_SOURCE_TREE=${'a'.repeat(40)}`,
       'CI_PART=tree',
       'CI_SHARD=3',
     ].sort(),

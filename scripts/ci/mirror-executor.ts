@@ -2,14 +2,17 @@
 // every job and shard but Plan and Check runs on GitHub's machines in the CI mirror, a public
 // repository of its own with no link to this one: no app, webhook, secret or shared account. Each
 // job start pushes one parentless commit of the tested tree (scripts/ci/mirror-push.ts) to
-// `ci/<commit>-a<attempt>/<job>`, whose push runs the mirror's workflow (ci/mirror/workflow.yml);
+// `ci/<commit>-<run key>/<job>` (mirrorBranch), whose push runs the mirror's workflow
+// (ci/mirror/workflow.yml);
 // the executor waits for that run through the API, reads the job's result from its artifact, and
 // writes it into the run's results directory only when it is this run's own (foreignResult in
 // lib/testing/ci/mirror.ts). The run's branches are deleted once the run ended, and every `ci/**`
 // branch older than a day at the first job start.
 // Plan, Check and Fast's host part run on the orchestrator's host through the process executor:
 // Fast's groups that read outside the tree (HOST_GROUPS in lib/testing/ci/dag.ts) need the sibling
-// clones, one of them private, the base's history and GitHub's labels, which the mirror never gets.
+// clones, one of them private, the base's history and GitHub's labels, which the mirror never gets,
+// and the unit test files that read the history or the labels' approval (partUnitFiles) run there
+// too, as the host's share of the unit group.
 // These host jobs run the tested commit's code as the orchestrator's user, which can reach the
 // ledger and this process's credentials: an accepted residual until the orchestrator computes them
 // from main's code. The jobs on the mirror reach nothing of this host, so the executor counts as
@@ -56,6 +59,8 @@ import { processExecutors, takeLock } from './process-executor';
 const QUEUE_ALLOWANCE_MS = 30 * 60_000;
 /** How long the mirror may take to start the push's run at all. */
 const RUN_START_LIMIT_MS = 10 * 60_000;
+/** How long a cancelled mirror run may take to end before its slot passes on anyway. */
+const CANCEL_LIMIT_MS = 5 * 60_000;
 /** API calls in a row that may fail while a job runs before the job fails. */
 const POLL_FAILURES = 5;
 
@@ -108,14 +113,20 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
   const { api } = options;
   const { log } = setup;
   const local = processExecutors(setup);
-  const treeOf = spawnSync('git', ['rev-parse', '--verify', `${setup.commit}^{tree}`], {
-    cwd: setup.source,
-    encoding: 'utf8',
-  });
-  if (treeOf.status !== 0) throw new Error(`The tree of ${setup.commit} cannot be read.`);
-  const sourceTree = treeOf.stdout.trim();
-  /** This run's branches, deleted once the run ended. */
-  const branches = new Set<string>();
+  /** This run's branches with the commit each holds, deleted once the run ended. */
+  const branches = new Map<string, string>();
+  // Read at the first job start: run-commit fetches the commit after it built the executors.
+  let knownTree: string | undefined;
+  const sourceTree = (): string => {
+    if (knownTree) return knownTree;
+    const treeOf = spawnSync('git', ['rev-parse', '--verify', `${setup.commit}^{tree}`], {
+      cwd: setup.source,
+      encoding: 'utf8',
+    });
+    if (treeOf.status !== 0) throw new Error(`The tree of ${setup.commit} cannot be read.`);
+    knownTree = treeOf.stdout.trim();
+    return knownTree;
+  };
   /** One push at a time: a later push of the tree sends only its commit. */
   let pushes: Promise<unknown> = Promise.resolve();
   let swept: Promise<void> | undefined;
@@ -172,7 +183,7 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       return { problem: 'the job names no event, run, attempt or results directory' };
     const producer = env.CI_PRODUCER || null;
     const plan = runPlanOf(
-      { tree: sourceTree, event, runUrl: env.CI_RUN_URL, producer },
+      { tree: sourceTree(), event, runUrl: env.CI_RUN_URL, producer },
       readResult(join(env.CI_RESULTS_DIR, resultFileName('plan', null))),
     );
     if ('problem' in plan) return { problem: `no job runs by this plan: ${plan.problem}` };
@@ -181,7 +192,7 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
         ...task.unit,
         event,
         commit: setup.commit,
-        tree: sourceTree,
+        tree: sourceTree(),
         runUrl: env.CI_RUN_URL,
         attempt,
         producer,
@@ -254,11 +265,20 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     return foreign ? { refused: foreign } : result;
   }
 
-  /** Cancels the runs of a pushed branch that a stop or a timeout left running. */
+  /**
+   * Cancels the runs of a pushed branch that a stop or a timeout left running, and waits until each
+   * ended, at most CANCEL_LIMIT_MS: its job's slot passes on only then.
+   */
   async function cancelRuns(branch: string, commit: string, run: MirrorRun | undefined): Promise<void> {
     try {
       const runs = run ? [run] : await api.runsOf(branch, commit);
       for (const each of runs) await api.cancel(each.id);
+      const until = options.now() + CANCEL_LIMIT_MS;
+      for (const each of runs)
+        while ((await api.run(each.id)).status !== 'completed') {
+          if (options.now() > until) throw new Error(`run ${each.id} did not end after its cancel`);
+          await options.sleep(options.pollMs, AbortSignal.timeout(CANCEL_LIMIT_MS));
+        }
     } catch (error) {
       log(`[mirror] ${branch}: its run could not be cancelled: ${message(error)}`);
     }
@@ -286,15 +306,17 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
           version: 1,
           job: task.unit.job,
           shard: task.unit.shard,
-          source: { commit: setup.commit, tree: sourceTree },
+          source: { commit: setup.commit, tree: expected.tree },
           variables: mirrorVariables(task.env),
           plan,
         }),
         date: new Date(options.now()),
       });
-      if (built.sourceTree !== sourceTree) return { exitCode: null, detail: 'the source tree moved' };
-      const branch = mirrorBranch(setup.commit, expected.attempt, task.unit);
-      branches.add(branch);
+      if (built.sourceTree !== expected.tree) return { exitCode: null, detail: 'the source tree moved' };
+      // Built before a slot was free or the sweep ended: a stop since pushes nothing.
+      if (signal.aborted) return { exitCode: null, detail: 'the job was stopped before its push' };
+      const branch = mirrorBranch(setup.commit, setup.runKey, task.unit);
+      branches.set(branch, built.commit);
       const push = pushes.then(() => options.push(built.commit, branch));
       pushes = push.catch(() => undefined);
       await push;
@@ -323,7 +345,13 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
         return { exitCode: null, detail: ended.stopped };
       }
       const finished = ended.run;
-      if (finished.run_attempt !== 1)
+      const firstAttempt = (run: MirrorRun): boolean =>
+        run.run_attempt === 1 &&
+        run.status === 'completed' &&
+        run.head_sha === built.commit &&
+        run.head_branch === branch &&
+        run.path === MIRROR_WORKFLOW;
+      if (!firstAttempt(finished))
         return {
           exitCode: null,
           detail: `the mirror ran it ${finished.run_attempt} times; only a first attempt counts`,
@@ -338,6 +366,12 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       const passed = finished.conclusion === 'success' && ran[0]?.conclusion === 'success';
       const own = await resultOf(finished, expected);
       if ('refused' in own) return { exitCode: 1, detail: `its result is refused: ${own.refused}` };
+      // A rerun on the mirror keeps the run's id and its artifacts: the run is read again after them.
+      if (!firstAttempt(await api.run(finished.id)))
+        return {
+          exitCode: null,
+          detail: 'the mirror ran it again while its result was read; only a first attempt counts',
+        };
       // A pass the mirror job did not end with is a failure, in the results directory too.
       const result: CiResult = passed || own.status !== 'passed' ? own : { ...own, status: 'failed' };
       return {
@@ -395,7 +429,13 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       const detail = `${tree.detail}; host part: ${host.detail}`;
       if (!tree.result || !host.result)
         return { exitCode: tree.exitCode === null || host.exitCode === null ? null : 1, detail };
-      const joined = joinFastParts({ tree: tree.result, host: host.result }, planned);
+      const joined = joinFastParts(
+        {
+          tree: { result: tree.result, passed: tree.exitCode === 0 },
+          host: { result: host.result, passed: host.exitCode === 0 },
+        },
+        planned,
+      );
       if ('problem' in joined) return { exitCode: 1, detail: `${detail}; ${joined.problem}` };
       replaceResult(target, joined);
       return {
@@ -411,9 +451,11 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     jobs,
     async release(outcome) {
       await local.release(outcome);
-      for (const branch of branches)
+      // Only a branch that still holds this run's push: another holder's stays.
+      for (const [branch, pushed] of branches)
         await api
-          .deleteBranch(branch)
+          .branchHead(branch)
+          .then((head) => (head === pushed ? api.deleteBranch(branch) : undefined))
           .catch((error: unknown) =>
             log(`[mirror] ${branch} could not be deleted; the next sweep takes it: ${message(error)}`),
           );

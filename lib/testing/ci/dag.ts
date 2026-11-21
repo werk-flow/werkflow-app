@@ -158,7 +158,7 @@ export const CI_DAG: Readonly<Record<CiJob, CiJobSpec>> = {
  * orchestrator's host. A runner that holds the whole job sets no part (CI_PART unset).
  */
 const CI_PARTS = ['tree', 'host'] as const;
-type CiPart = (typeof CI_PARTS)[number];
+export type CiPart = (typeof CI_PARTS)[number];
 
 /**
  * The environment steps that read outside the tested tree: the sibling clones (one private, read
@@ -169,15 +169,30 @@ const HOST_STEPS: readonly PrepareStep[] = ['siblings', 'approval'];
 /**
  * The Fast groups that read outside the tested tree: docs:check reads the sibling clones and the
  * decision records' published history, migrations:order the base's migrations and the open pull
- * requests'. Only Fast runs them.
+ * requests'. Only Fast runs them, on the host alone.
  */
 export const HOST_GROUPS: readonly string[] = ['static:docs', 'static:migration-order'];
 
-/** The part a runner gives (CI_PART), undefined for the whole job; anything else throws. */
-export function partOf(value: string | undefined): CiPart | undefined {
+/** The unit group, which both parts of Fast run: each its own files of it (partUnitFiles). */
+const SPLIT_GROUP = 'unit:all';
+
+/**
+ * The unit test files that read the repository's history or the run's list growth approval: the
+ * shrink-only lists compare with the merge base with origin/main, which a parentless commit lacks.
+ * They run in Fast's host part; every other unit test file runs on the mirror.
+ */
+const HOST_UNIT_TESTS: readonly string[] = ['lib/testing/publication/shrink-only-lists.test.ts'];
+
+/**
+ * The part a runner gives (CI_PART), undefined for the whole job. Only Fast has a host part;
+ * anything else throws.
+ */
+export function partOf(value: string | undefined, job?: CiJob): CiPart | undefined {
   if (!value) return undefined;
   const part = CI_PARTS.find((name) => name === value);
   if (!part) throw new Error(`CI_PART ${value} is no part: ${CI_PARTS.join(' or ')}.`);
+  if (part === 'host' && job !== undefined && job !== 'fast')
+    throw new Error(`Only Fast has a host part, not ${job}.`);
   return part;
 }
 
@@ -192,12 +207,26 @@ export function partSteps(job: CiJob, part: CiPart | undefined): PrepareStep[] {
   return [...steps];
 }
 
-/** A job part's groups of `planned`, in order: the whole list without a part. */
+/**
+ * A job part's groups of `planned`, in order: the whole list without a part. The unit group is in
+ * both parts, each running its own files of it.
+ */
 export function partGroups(planned: readonly string[], part: CiPart | undefined): string[] {
   if (part === 'tree') return planned.filter((group) => !HOST_GROUPS.includes(group));
-  if (part === 'host') return planned.filter((group) => HOST_GROUPS.includes(group));
+  if (part === 'host') return planned.filter((group) => HOST_GROUPS.includes(group) || group === SPLIT_GROUP);
   return [...planned];
 }
+
+/** A part's unit test files of `files` (repository paths): all of them without a part. */
+export function partUnitFiles(files: readonly string[], part: CiPart | undefined): string[] {
+  const host = (file: string): boolean => HOST_UNIT_TESTS.includes(file.replace(/^\.\//, ''));
+  if (part === 'tree') return files.filter((file) => !host(file));
+  if (part === 'host') return files.filter(host);
+  return [...files];
+}
+
+/** Whether a group runs in both parts of Fast, so its outcome needs both. */
+export const splitGroup = (group: string): boolean => group === SPLIT_GROUP;
 
 /**
  * The events whose results may stand for each other on an identical tree. A full run is the

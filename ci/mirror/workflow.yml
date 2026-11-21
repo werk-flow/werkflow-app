@@ -2,7 +2,7 @@ name: CI mirror
 
 # The CI mirror's one workflow (scripts/ci/mirror-executor.ts). The orchestrator places it, from its
 # own trusted copy, as the only workflow of each tree it pushes, and pushes one parentless commit
-# per job start to `ci/<commit>-a<attempt>/<job>`: the branch's last segment picks the job, and the
+# per job start to `ci/<commit>-<run key>/<job>`: the branch's last segment picks the job, and the
 # commit's message holds the run, its source tree and its Plan (scripts/ci/mirror-job.ts). Every
 # other job of this file is skipped. The jobs, their names and timeouts are lib/testing/ci/dag.ts;
 # Plan and Check run on the orchestrator's host, which also holds the needs between jobs and the

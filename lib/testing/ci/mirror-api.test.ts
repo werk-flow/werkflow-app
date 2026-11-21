@@ -70,3 +70,21 @@ test('a failed call names its method, path and status, never the body; a deleted
   expect(failure).toBe('GitHub GET /actions/runs/5 answered 500.');
   expect(() => githubMirrorApi({ repository: 'not a repository', token: 't' })).toThrow('owner/name');
 });
+
+test('an archive larger than a result is refused while it streams, never held whole', async () => {
+  let sent = 0;
+  const endless = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      sent += 1024 * 1024;
+      controller.enqueue(new Uint8Array(1024 * 1024));
+    },
+  });
+  const net = network((url) =>
+    url.endsWith('/zip')
+      ? new Response(null, { status: 302, headers: { location: 'https://storage.example/archive' } })
+      : new Response(endless, { status: 200 }),
+  );
+  const api = githubMirrorApi({ repository: 'owner/mirror', token: 't', fetch: net.fetch });
+  await expect(api.download(1)).rejects.toThrow('larger than a result');
+  expect(sent).toBeLessThan(16 * 1024 * 1024);
+});
