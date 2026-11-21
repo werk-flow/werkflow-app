@@ -228,3 +228,9 @@ The stand-in has no merge queue, so the ruleset requires an up-to-date branch, a
 2. The owner turns off "require branches to be up to date" only after the queue is built, tested on the stand-in and in use.
 
 `bun scripts/ci/queue.ts` is that queue (werk-flow/werkflow-planning#509). A thread queues its PR with `gh pr merge <n> --squash --auto`. The queue squashes up to four queued PRs onto `main` in queue order and runs the integration run once on the tip. On green it lands them through GitHub's own squash merge, never a bypass, and only when `main` has not moved and its tree after each merge equals the tested one. A PR with `approved: list growth` runs in a batch of its own, so a batch never borrows another PR's waiver; this narrows item 2 of the amendment "a merge queue". Before each merge it marks the PR's head `Queue`: a commit status until the CI App exists, then the App's check run (`scripts/ci/publish-check.ts queue`). Once the ruleset requires `Queue`, pinned to the App like `Check`, no PR merges outside the queue. `lib/testing/ci/queue.ts` owns the rules.
+
+## Amendment 2026-11-21: the queue's mark and a partial landing
+
+A `Queue` success that outlived a merge would let GitHub's auto-merge take the PR on any later `main` (werk-flow/werkflow-planning#509). Before it marks a PR, the queue turns the PR's auto-merge off, so only the queue's own merge can use the mark; when it cannot, it posts no mark. A mark whose merge did not happen is withdrawn, and a withdrawal that fails freezes the queue until a person clears it.
+
+Item 1 lands up to 4 PRs one squash merge at a time, so the batch's own `main` commits are not tested one by one; the batch's tip is. When a landing stops partway, `main`'s own run of that commit runs its jobs, since no pass of that tree exists unless a run tested it. The next tick starts from that `main`, and the release still needs a green full run on its exact commit.

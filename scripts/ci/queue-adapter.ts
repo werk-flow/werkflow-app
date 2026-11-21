@@ -214,6 +214,9 @@ export function createQueueAdapter(options: {
   const mark = (head: string, state: Mark['state'], description: string, runUrl: string) =>
     markQueue(options, { head, state, description, runUrl }, gh);
   const stateFile = join(options.workDir, QUEUE_STATE_FILE);
+  const disableAutoMerge = (number: number): void => {
+    gh('pr', 'merge', String(number), '--disable-auto');
+  };
   return {
     main: async () => {
       git('fetch', '--quiet', '--no-tags', 'origin', `+refs/heads/main:${QUEUE_REFS}/main`);
@@ -260,6 +263,10 @@ export function createQueueAdapter(options: {
       console.info(`[queue] ${runUrl}: ${verdict.kind}, ${verdict.detail}`);
       return verdict;
     },
+    disableAutoMerge: async (pull) => {
+      disableAutoMerge(pull.number);
+      console.info(`[queue] #${pull.number}: auto-merge off`);
+    },
     land: async (pull, proof) => {
       mark(pull.headSha, 'success', `Passed in ${proof.runUrl}`, proof.runUrl);
       gh('pr', 'merge', String(pull.number), '--squash', '--match-head-commit', pull.headSha);
@@ -282,7 +289,7 @@ export function createQueueAdapter(options: {
       return ledger !== undefined && provenTree(ledger, tree) !== undefined;
     },
     reject: async (pull, proof) => {
-      gh('pr', 'merge', String(pull.number), '--disable-auto');
+      disableAutoMerge(pull.number);
       gh(
         'pr',
         'comment',

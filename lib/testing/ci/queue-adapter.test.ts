@@ -2,11 +2,12 @@
 // is the squash merge GitHub would build, and a run's verdict comes only from the results the runner
 // wrote for that run.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  createQueueAdapter,
   markQueue,
   readQueueState,
   runIntegration,
@@ -19,11 +20,15 @@ let folder = '';
 let repository = '';
 
 const git = (...args: string[]): string =>
-  execFileSync('git', ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', ...args], {
-    cwd: repository,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
+  execFileSync(
+    'git',
+    ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', '-c', 'commit.gpgSign=false', ...args],
+    {
+      cwd: repository,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  ).trim();
 
 function commitFile(file: string, content: string): string {
   writeFileSync(join(repository, file), content);
@@ -40,7 +45,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.LEDGER;
   rmSync(folder, { recursive: true, force: true });
 });
 
@@ -78,7 +82,7 @@ const pull: QueuedPull = {
 /**
  * A runner that fetches the commit as the queue's contract says and writes a passed plan, then runs
  * `body` in bash. `receipt <job> <status> <completedAt>` writes that job's result; `ledger` appends
- * the last one to $LEDGER.
+ * the last one to the folder's ledger.jsonl.
  */
 function runner(body: string): string {
   const path = join(folder, 'runner.sh');
@@ -95,7 +99,7 @@ receipt() {
     "$1" "$CI_EVENT" "$tree" "$CI_QUEUE_COMMIT" "$CI_BASE_SHA" "$2" "$CI_RUN_URL" "$3" > "$CI_RESULTS_DIR/$1.json"
   last="$CI_RESULTS_DIR/$1.json"
 }
-ledger() { cat "$last" >> "$LEDGER"; }
+ledger() { cat "$last" >> "${join(folder, 'ledger.jsonl')}"; }
 receipt plan running null; ledger
 receipt plan passed '"2026-11-21T08:10:00Z"'
 ${body}
@@ -108,7 +112,6 @@ ${body}
 function integration(body: string, runUrl: string, ledger?: string) {
   const commit = git('rev-parse', 'HEAD');
   const tip = { pull, commit, tree: git('rev-parse', 'HEAD^{tree}') };
-  process.env.LEDGER = join(folder, 'ledger.jsonl');
   return runIntegration(
     {
       repository,
@@ -193,6 +196,66 @@ test('with a CI App the Queue mark goes only through the publisher as the App; w
     ],
   ]);
   expect(readFileSync(called, 'utf8').split('\n')).toHaveLength(4);
+});
+
+test("the queue turns a PR's auto-merge off through gh, and a refusal throws so no Queue success follows", async () => {
+  const called = join(folder, 'gh.log');
+  const bin = join(folder, 'bin');
+  mkdirSync(bin);
+  writeFileSync(
+    join(bin, 'gh'),
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${called}"\nexit "$(cat "${folder}/gh-exit" 2> /dev/null || echo 0)"\n`,
+  );
+  chmodSync(join(bin, 'gh'), 0o755);
+  const adapter = createQueueAdapter({
+    repository,
+    runner: 'unused',
+    workDir: folder,
+    runUrlBase: 'queue',
+    appId: 4242,
+    publisher: 'unused',
+  });
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path}`;
+  try {
+    await adapter.disableAutoMerge(pull);
+    writeFileSync(join(folder, 'gh-exit'), '1');
+    await expect(adapter.disableAutoMerge(pull)).rejects.toThrow();
+  } finally {
+    process.env.PATH = path;
+  }
+  expect(readFileSync(called, 'utf8')).toBe('pr merge 7 --disable-auto\npr merge 7 --disable-auto\n');
+});
+
+/** One tick of the real CLI; each case here refuses before it reads GitHub. */
+const tick = (...args: string[]) =>
+  spawnSync(process.execPath, [join(import.meta.dir, '../../../scripts/ci/queue.ts'), ...args], {
+    encoding: 'utf8',
+  });
+
+test('every refusal before the tick exits 2, the code that stops the loop, and names its cause', () => {
+  const required = ['--runner', 'runner', '--run-url-base', 'queue'];
+  const workDir = join(folder, 'work');
+  const file = join(folder, 'file');
+  writeFileSync(file, '');
+  mkdirSync(workDir);
+  writeFileSync(join(workDir, 'queue.lock'), '');
+  for (const [args, cause] of [
+    [[], 'needs --runner, --work-dir and --run-url-base'],
+    [['--unknown'], "Unknown option '--unknown'"],
+    [[...required, '--work-dir', workDir, '--max-batch', '5'], '--max-batch takes 1 to 4'],
+    [[...required, '--work-dir', workDir, '--max-batch', '0x2'], '--max-batch takes 1 to 4'],
+    // Number() reads `0x10` as 16 and `1e1` as 10: only decimal PR numbers pass.
+    [[...required, '--work-dir', workDir, '--dry-run', '--prs', '0x10'], '--prs takes PR numbers'],
+    [[...required, '--work-dir', workDir, '--dry-run', '--prs', '7,1e1'], '--prs takes PR numbers'],
+    [[...required, '--work-dir', workDir, '--prs', '7'], 'only with --dry-run'],
+    [[...required, '--work-dir', workDir], 'queue.lock exists: another tick runs'],
+    [[...required, '--work-dir', join(file, 'work')], 'queue.lock could not be created: ENOTDIR'],
+  ] as const) {
+    const refused = tick(...args);
+    expect(refused.status, args.join(' ')).toBe(2);
+    expect(refused.stderr, args.join(' ')).toContain(cause);
+  }
 });
 
 test("the queue's state survives between ticks; a missing file is clear and a damaged one stops the tick", () => {

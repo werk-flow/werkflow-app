@@ -23,9 +23,10 @@
 //                   posts it. A tick starts by settling a saved mark: done when the PR merged as
 //                   main's head, otherwise withdrawn. A withdrawal that fails freezes the queue.
 //   --run-url-base  Each run's CI_RUN_URL is <base>/<time>-<commit>.
-//   --ledger        The runner's CI_LEDGER, read only. A pass counts only when the ledger holds it as
-//                   its tree's pass, and a batch's first PR is named only on a main tree it proves
-//                   green. Without it neither proof exists: a failure of the first PR needs a person.
+//   --ledger        The runner's CI_LEDGER, read only. With it, a pass counts only when the ledger
+//                   holds it as its tree's pass, so main's push reuses it; without it, the run's own
+//                   passed Check is the verdict. A batch's first PR is named only on a main tree the
+//                   ledger proves green, so without a ledger a failure of the first PR needs a person.
 //   --publisher     Required once .github/scripts/check-app.json names the CI App: an executable that
 //                   runs `bun scripts/ci/publish-check.ts queue <success|failure>` from the trusted
 //                   copy as the App's user, with the CI_RUN_URL and CI_COMMIT the queue passes.
@@ -34,11 +35,12 @@
 //   --max-batch     The most PRs in a batch, default 4. 1 while the ruleset requires up-to-date branches.
 //   --dry-run       Builds, tests and decides, but never sets a status, merges, comments or
 //                   turns auto-merge off. --prs names the PRs to rehearse with, in order.
-// Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base).
+// Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base, or a
+// landing that stopped after part of the tested prefix: main's own run of that commit runs its jobs).
 // Exit 2: it needs a person: a run without a verdict, a first PR failing on an unproven main, a
-// landing that broke, a frozen queue, or an error. Stop the loop. A frozen queue lands nothing
-// until a person confirms on GitHub that the named PR merged or that its head's newest `Queue` is
-// no success, then deletes queue-state.json.
+// landing that broke, a frozen queue, a refused option or configuration, or an error. Stop the
+// loop. A frozen queue lands nothing until a person confirms on GitHub that the named PR merged or
+// that its head's newest `Queue` is no success, then deletes queue-state.json.
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -47,47 +49,64 @@ import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/qu
 import { createQueueAdapter, QUEUE_STATE_FILE } from './queue-adapter';
 import { repository } from './run';
 
-const { values } = parseArgs({
-  options: {
-    runner: { type: 'string' },
-    'work-dir': { type: 'string' },
-    'run-url-base': { type: 'string' },
-    'max-batch': { type: 'string', default: String(MAX_BATCH) },
-    'dry-run': { type: 'boolean', default: false },
-    prs: { type: 'string' },
-    ledger: { type: 'string' },
-    publisher: { type: 'string' },
-  },
-});
+/** Refuses before the tick changes anything, with the exit that stops the loop. */
+function refuse(problem: string): never {
+  console.error(`[queue] ${problem}`);
+  process.exit(2);
+}
+
+const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const { values } = (() => {
+  try {
+    return parseArgs({
+      options: {
+        runner: { type: 'string' },
+        'work-dir': { type: 'string' },
+        'run-url-base': { type: 'string' },
+        'max-batch': { type: 'string', default: String(MAX_BATCH) },
+        'dry-run': { type: 'boolean', default: false },
+        prs: { type: 'string' },
+        ledger: { type: 'string' },
+        publisher: { type: 'string' },
+      },
+    });
+  } catch (error) {
+    return refuse(message(error));
+  }
+})();
 const maxBatch = Number(values['max-batch']);
-const only = values.prs?.split(',').map(Number);
+const numbers = values.prs?.split(',');
 if (!values.runner || !values['work-dir'] || !values['run-url-base'])
-  throw new Error('The queue needs --runner, --work-dir and --run-url-base.');
-if (!Number.isInteger(maxBatch) || maxBatch < 1 || maxBatch > MAX_BATCH)
-  throw new Error(`--max-batch takes 1 to ${MAX_BATCH}.`);
-if (only && (!values['dry-run'] || only.some((number) => !Number.isInteger(number) || number < 1)))
-  throw new Error('--prs takes PR numbers, and only with --dry-run: a live tick lands only queued PRs.');
+  refuse('The queue needs --runner, --work-dir and --run-url-base.');
+// Decimal digits only: Number() reads `0x10` as 16 and `1e1` as 10.
+if (!/^[1-9][0-9]*$/.test(values['max-batch']) || maxBatch > MAX_BATCH)
+  refuse(`--max-batch takes 1 to ${MAX_BATCH}.`);
+if (numbers && (!values['dry-run'] || numbers.some((number) => !/^[1-9][0-9]{0,8}$/.test(number))))
+  refuse('--prs takes PR numbers, and only with --dry-run: a live tick lands only queued PRs.');
+const only = numbers?.map(Number);
 
 // The App this clone's main names: the tick reads `Check` and posts `Queue` as that App, or as before.
 const app = readCheckApp(join(repository, CHECK_APP_CONFIG));
-if ('problem' in app) throw new Error(app.problem);
+if ('problem' in app) refuse(app.problem);
 if (app.appId !== null && !values.publisher)
-  throw new Error(
-    `${CHECK_APP_CONFIG} names CI App ${app.appId}: the queue needs --publisher to post Queue as it.`,
-  );
+  refuse(`${CHECK_APP_CONFIG} names CI App ${app.appId}: the queue needs --publisher to post Queue as it.`);
 
 const workDir = resolve(values['work-dir']);
-mkdirSync(workDir, { recursive: true });
 // One tick at a time: a second tick would test against a main the first is about to move. The lock
 // guards this work directory only, so one queue loop runs per repository; a tick that lands onto a
 // main another moved stops after that merge (landing-failed).
 const lock = join(workDir, 'queue.lock');
 let held: number;
 try {
+  mkdirSync(workDir, { recursive: true });
   held = openSync(lock, 'wx');
-} catch {
-  console.error(`[queue] ${lock} exists: another tick runs, or one died. Remove it once no tick runs.`);
-  process.exit(2);
+} catch (error) {
+  refuse(
+    error instanceof Error && 'code' in error && error.code === 'EEXIST'
+      ? `${lock} exists: another tick runs, or one died. Remove it once no tick runs.`
+      : `${lock} could not be created: ${message(error)}`,
+  );
 }
 try {
   const adapter = createQueueAdapter({

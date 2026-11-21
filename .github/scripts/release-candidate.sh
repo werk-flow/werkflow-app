@@ -45,9 +45,10 @@ git merge-base --is-ancestor origin/production "$sha" \
 # job is `Full run / Check` (.github/workflows/nightly.yml). Only a nightly, release or
 # main-full-run run on main counts: their workflow files come from the commit itself, so no
 # other branch can stand in for one, and no pull request starts them. The newest completed full
-# run decides; a later failure replaces a pass. A runner off GitHub Actions posts a full run's
-# `Full run / Check` as the CI App (check-app.sh, scripts/ci/publish-check.ts), which only that runner
-# can; another app's check run or a commit status of that name counts for nothing.
+# run decides; a later failure replaces a pass, and so does one that ended in the same second. A
+# runner off GitHub Actions posts a full run's `Full run / Check` as the CI App (check-app.sh,
+# scripts/ci/publish-check.ts), which only that runner can; another app's check run or a commit
+# status of that name counts for nothing.
 runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}&branch=main&per_page=100" \
   --jq '.workflow_runs[] | select(.head_branch == "main"
     and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml"
@@ -67,7 +68,11 @@ latest="$({
       || exit 1
   done
   printf '%s\n' "$app_checks"
-} | sed '/^$/d' | sort | tail -n 1)"
+} | sed '/^$/d' | sort | awk '
+  # Among the runs that ended last, a non-success wins: a tie never lets a pass hide a later failure.
+  $1 != last { last = $1; pick = $0; next }
+  $2 != "success" { pick = $0 }
+  END { if (last != "") print pick }')"
 echo "Newest full run on ${sha}: ${latest:-none}"
 conclusion="$(echo "$latest" | cut -d ' ' -f 2)"
 
