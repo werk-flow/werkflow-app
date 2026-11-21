@@ -51,8 +51,8 @@ type PendingMark = { pull: number; head: string; runUrl: string; verdict: 'succe
 /** A verdict a run reached on a tree: the next tick's runs of that tree must agree with it. */
 type Seen = { tree: string; kind: 'passed' | 'failed'; runUrl: string };
 
-/** A run without a verdict the next tick retries once, with the verdicts its tick reached. */
-type Retry = { runUrl: string; detail: string; seen: Seen[] };
+/** A run without a verdict whose tree the next tick retries once, with the verdicts its tick reached. */
+type Retry = { runUrl: string; tree: string; detail: string; seen: Seen[] };
 
 /**
  * What the queue keeps between ticks: a mark it may have left green, why it froze, if it did, and
@@ -75,6 +75,7 @@ export const queueStateSchema = z
     retry: z
       .object({
         runUrl: z.string().min(1),
+        tree: z.string().min(1),
         detail: z.string(),
         seen: z.array(
           z
@@ -353,7 +354,7 @@ async function recordRetry(adapter: QueueAdapter, state: QueueState, outcome: Qu
   if (retry && run)
     await adapter.saveState({
       ...CLEAR,
-      retry: { runUrl: run.verdict.runUrl, detail: run.verdict.detail, seen },
+      retry: { runUrl: run.verdict.runUrl, tree: run.tree, detail: run.verdict.detail, seen },
     });
   else if (state.retry && run && !outcome.stops.some((stop) => stop.kind === 'inconclusive'))
     await adapter.saveState(CLEAR);
@@ -438,10 +439,8 @@ const markOf = (pull: QueuedPull, proof: Verdict): PendingMark => ({
 /**
  * Tests the whole batch, then on red the prefixes between the longest green and the shortest red
  * one, until they differ by one PR: that PR breaks the batch. When only the whole batch failed,
- * one environment rerun of its tree confirms the failure before its last PR is named. Returns each
- * tested prefix length's verdict. A superseded entry in the next prefix or a run without a verdict
- * ends the search: the first such live run since the last verdict is a `retry` (`retry` null), any
- * other needs a person (`retry` the earlier one, or undefined in a dry run).
+ * one rerun of its tree confirms it before its last PR is named. Returns each prefix's verdict. A
+ * superseded prefix or a run without a verdict ends the search (`noVerdict`).
  */
 async function bisect(
   adapter: QueueAdapter,
@@ -505,7 +504,7 @@ async function bisect(
   return verdicts;
 }
 
-/** The stop of a run without a verdict: a contradiction or a repeated one needs a person, the first live one is retried. */
+/** A run without a verdict: retried live unless a tick retried its tree; else for a person (a dry run: `retry` undefined). */
 function noVerdict(
   tree: string,
   verdict: Verdict,
@@ -518,7 +517,8 @@ function noVerdict(
       detail: `tree ${tree} ${contradicted.kind} in ${contradicted.runUrl} but ${verdict.kind} in ${verdict.runUrl}`,
     };
   const detail = `${verdict.runUrl}: ${verdict.detail}`;
-  if (retry === null) return { kind: 'retry', detail };
+  // The retry is the tree's own: other work that ends without a verdict gets its own one.
+  if (retry === null || (retry !== undefined && retry.tree !== tree)) return { kind: 'retry', detail };
   return {
     kind: 'inconclusive',
     detail: retry ? `${detail}, after the retry of ${retry.runUrl} (${retry.detail})` : detail,

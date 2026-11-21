@@ -59,8 +59,8 @@ import { repository, run, step, verify } from './run';
 //                   (<job>-<n>.json for a shard); every job after plan reads plan.json, and check
 //                   reads them all.
 //   CI_BASE_SHA     plan: the commit to diff against: a PR's or queue entry's base, the previous
-//                   main commit of a push. Any git revision. Required except for full. Every later
-//                   job takes the base its plan recorded. A push reuses an integration pass of its
+//                   main commit of a push. Any git revision; plan records the commit it names.
+//                   Required except for full. Every later job takes the base its plan recorded. A push reuses an integration pass of its
 //                   tree only on the commit that pass diffed against, so after a queue landing pass
 //                   the tick's `base`, main before the batch: every landed PR's diff, as tested.
 //   CI_FULL_REASON  plan: why every browser group runs. Required for full.
@@ -171,6 +171,10 @@ if (newerHead) {
   );
   process.exit(1);
 }
+// Plan records its base as the commit it names, once, so the planner diffs against the commit its
+// receipt records and reuse compares; a revision git cannot resolve stays as given, and the planner fails on it.
+if (ci.job === 'plan' && environment.CI_BASE_SHA)
+  environment.CI_BASE_SHA = commitOf(environment.CI_BASE_SHA) ?? environment.CI_BASE_SHA;
 const result: CiResult = {
   version: 1,
   job: ci.job,
@@ -305,7 +309,9 @@ async function plan(): Promise<boolean> {
     console.info(`::warning title=Ledger::${ledger.unreadable}, so no result is reused.`);
   // A push reuses a passed run only for the same landing: the same tree, base commit and required work.
   const base =
-    ci.event === 'main' && clean && !('unreadable' in ledger) ? commitOf(environment.CI_BASE_SHA) : undefined;
+    ci.event === 'main' && clean && !('unreadable' in ledger)
+      ? commitOf(result.base ?? undefined)
+      : undefined;
   const reusedTree = base
     ? passedTree(
         ledgerPath ? ledger : undefined,

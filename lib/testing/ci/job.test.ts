@@ -456,6 +456,20 @@ test('a push runs its jobs when another run of its tree starts while its planner
   });
 });
 
+test('Plan records the commit its base names, so the planner, the receipt and reuse agree on one commit', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    expect(runJob(root, 'plan', { CI_EVENT: 'integration', CI_BASE_SHA: 'HEAD', CI_RESULTS_DIR: run })).toBe(
+      0,
+    );
+    expect(readResult(join(run, resultFileName('plan', null)))).toMatchObject({
+      status: 'passed',
+      base: git(root, 'rev-parse', 'HEAD'),
+    });
+  });
+});
+
 test('a push runs its jobs when the integration pass of its tree diffed against another base or required other work', () => {
   inFolder((folder) => {
     const root = fixture(folder);

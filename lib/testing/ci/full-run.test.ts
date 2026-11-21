@@ -39,7 +39,6 @@ test('requests for a commit that has a full run, or while the newest one runs, s
   expect(decide([ended('c3', hoursBefore(NOON, 5))])).toEqual({
     run: false,
     reason: 'c3 already has a full run.',
-    headHasFullRun: true,
   });
   const running = decide([{ commit: 'c1', startedAt: hoursBefore(NOON, 5), ended: false }], {
     landed: landed(['scripts/ci/job.ts'], 'Tooling input changed: scripts/ci/job.ts'),
@@ -306,4 +305,34 @@ test('an unfinished full run on an older commit does not end the landed window',
     ended('c1', hoursBefore(NOON, 5)),
   ];
   expect([...treesSinceFullRun(history, runs)]).toEqual(['tree-c3', 'tree-c2']);
+});
+
+test("only a head's ended full run that tested something lets the nightly skip it; one that ended before any group ran does not", () => {
+  const failedBeforeTests = [
+    receipt({ status: 'failed' }),
+    receipt({ job: 'check', status: 'failed', startedAt: '2026-11-21T09:05:00.000Z' }),
+  ];
+  const tested = [
+    receipt({}),
+    receipt({
+      job: 'browser',
+      shard: 1,
+      status: 'failed',
+      groups: [{ id: 'golden:p1-01', outcome: 'failed', durationMs: 1 }],
+      startedAt: '2026-11-21T09:30:00.000Z',
+    }),
+    receipt({ job: 'check', status: 'failed', startedAt: '2026-11-21T09:40:00.000Z' }),
+  ];
+  const head = (ledger: CiResult[]) =>
+    fullRunDue({
+      now: NOON,
+      history: ['c'.repeat(40)],
+      runs: fullRunsInLedger(ledger, NOON),
+      landedSince: () => landed([]),
+    });
+  expect(head(failedBeforeTests)).toEqual({
+    run: false,
+    reason: `${'c'.repeat(40)} already has a full run.`,
+  });
+  expect(head(tested)).toMatchObject({ run: false, headHasFullRun: true });
 });

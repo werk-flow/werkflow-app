@@ -17,7 +17,7 @@ test('a first run without a verdict is retried on the next tick, recorded, and l
   expect(world.state()).toEqual({
     pending: null,
     frozen: null,
-    retry: { runUrl: 'run-1:main+1+2', detail: 'inconclusive', seen: [] },
+    retry: { runUrl: 'run-1:main+1+2', tree: 'main+1+2', detail: 'inconclusive', seen: [] },
   });
   expect(world.landed).toEqual([]);
   expect(world.rejected).toEqual([]);
@@ -155,4 +155,23 @@ test('a red full batch whose confirming rerun could not run names nobody, even w
   expect(outcome.culprit).toBe(null);
   expect(world.rejected).toEqual([]);
   expect(world.landed).toEqual([1]);
+});
+
+test('a retry belongs to the tree that ended without a verdict: other work that ends without one gets its own retry', async () => {
+  const world = fakeWorld([pull(1), pull(2, { queuedAt: '2026-11-21T09:00:00Z' })], {
+    answer: () => 'inconclusive',
+    afterRun: (run, { pulls }) => {
+      // #1 leaves the queue after its run, so the next tick takes #2.
+      if (run === 1) pulls.splice(0, 1, pull(1, { queuedAt: null }));
+    },
+  });
+  const one = { maxBatch: 1, dryRun: false };
+  await runQueueTick(world.adapter, one);
+  const other = await runQueueTick(world.adapter, one);
+  expect(world.tested).toEqual([[1], [2]]);
+  expect(other.stops.map((stop) => stop.kind)).toEqual(['retry']);
+  expect(needsAttention(other)).toBe(false);
+  // #2's own second run without a verdict needs a person.
+  const again = await runQueueTick(world.adapter, one);
+  expect(again.stops.map((stop) => stop.kind)).toEqual(['inconclusive']);
 });
