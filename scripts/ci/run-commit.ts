@@ -60,9 +60,10 @@ import { repository as ownRepository } from './run';
 //   CI_WORK_ROOT    A folder only this user writes, for the jobs' workspaces, the host's stack lock,
 //                   the folder the token-holding steps run in (trusted/), and the claims and start
 //                   records of main runs (main-runs/); one per host, shared by every run-commit there.
-//                   Required. A main run writes its start record (main-runs/<commit>.started) durably
-//                   once its Plan's body launched, or once Plan ended before it; a second main run of
-//                   the commit and the queue's owed main run read that one record.
+//                   Required. A main run through an isolating executor writes its start record
+//                   (main-runs/<commit>.started) durably once its Plan's body launched, or once Plan's
+//                   setup failed before it; a second main run of the commit and the queue's owed main
+//                   run read that one record. A run through the process executor writes neither.
 //   CI_PARALLEL     The most jobs at once, default 2.
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.
 //   CI_PUBLISHER    An executable that runs `bun scripts/ci/publish-check.ts <start|finish>` from the
@@ -163,8 +164,12 @@ async function run(
     log,
   });
   // A job of an executor that isolates nothing reaches whatever this process holds.
-  const unisolated = isolationProblem(host.isolatesJobs && jobs.isolatesJobs, environment);
+  const isolated = host.isolatesJobs && jobs.isolatesJobs;
+  const unisolated = isolationProblem(isolated, environment);
   if (unisolated) refuse(unisolated);
+  // Only a run whose jobs cannot reach the work root writes main's claims and start records, which
+  // the queue and a second main run trust: a local run through the process executor writes none.
+  const recordsMain = event === 'main' && isolated;
 
   const git = (...args: string[]): string => {
     try {
@@ -208,7 +213,7 @@ async function run(
             );
       // Its Plan in the ledger proves it started: this host's start record of the commit names it.
       if (earlier?.runUrl) {
-        acknowledgeStart(startRecord, { commit, runUrl: earlier.runUrl });
+        if (recordsMain) acknowledgeStart(startRecord, { commit, runUrl: earlier.runUrl });
         refuse(`main's run of ${commit} started already: ${earlier.runUrl}.`, 3);
       }
     }
@@ -292,7 +297,7 @@ async function run(
 
   // The same on this host before any Plan wrote: the first starter claims the commit, atomically, as
   // the last step before the run starts. A run that does not start gives its claim up.
-  if (event === 'main') {
+  if (recordsMain) {
     const claimed = claimMainRun(mainRuns, commit, runUrl);
     if ('unwritable' in claimed) refuse(claimed.unwritable);
     if ('owner' in claimed) claimedElsewhere(claimed.owner);
@@ -329,7 +334,7 @@ async function run(
         : undefined,
       // Once Plan's body launched: the one record a second main run and the queue read.
       acknowledgeStart: () => {
-        if (event === 'main') acknowledgeStart(startRecord, { commit, runUrl });
+        if (recordsMain) acknowledgeStart(startRecord, { commit, runUrl });
         state.started = true;
       },
       now: () => Date.now(),

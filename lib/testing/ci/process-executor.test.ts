@@ -32,6 +32,7 @@ import { appendFileSync, writeFileSync } from 'node:fs';
 const job = process.argv.at(-1);
 const seen = Object.entries(process.env).filter(([name]) => /^(CI_|GH_TOKEN|SIBLING_|SHRINK_|EMAIL_|GITHUB_ENV|HOME$)/.test(name)).sort();
 writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/${script}-' + job + '.env', [...seen, ['CWD', process.cwd()]].map(([name, value]) => name + '=' + value).join('\\n'));
+writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/${script}-' + job + '.names', Object.keys(process.env).sort().join('\\n'));
 `;
 const PREPARE = `${RECORD('prepare')}
 if (process.env.STARTS_STACK === '1') appendFileSync(process.env.GITHUB_ENV, 'CI_STACK_STARTED=1\\n');
@@ -159,6 +160,29 @@ test("a job's body sees only its task's variables and what its environment steps
   expect(cloneGit('rev-parse', 'HEAD')).toBe(commit);
   expect(cloneGit('rev-parse', 'origin/main')).toBe(commit);
   expect(cloneGit('remote', 'get-url', 'origin')).toBe('https://github.com/werk-flow/werkflow-app');
+});
+
+// A job never inherits this process's environment: credentials outside run-commit's refusal list,
+// such as a Supabase access token in the owner's shell, never reach a job's steps or body.
+test("a job's steps and body get only the host variables a job needs, never the orchestrator's other variables", async () => {
+  const credentials = {
+    SUPABASE_ACCESS_TOKEN: 'sbp_secret',
+    STRIPE_SECRET_KEY: 'sk_live_secret',
+    AWS_SECRET_ACCESS_KEY: 'aws-secret',
+    VERCEL_TOKEN: 'vercel-secret',
+    NPM_TOKEN: 'npm-secret',
+    DATABASE_URL: 'postgres://user:secret@db.example/app',
+  };
+  Object.assign(process.env, credentials, { LANG: 'de_DE.UTF-8', TZ: 'Europe/Berlin' });
+  const run = await executor().run(task('fast'), new AbortController().signal);
+  expect(run.exitCode, run.detail).toBe(0);
+  for (const file of ['prepare-siblings', 'prepare-fast', 'job-fast']) {
+    const names = readFileSync(join(folder, `${file}.names`), 'utf8').split('\n');
+    for (const name of Object.keys(credentials)) expect([file, names.includes(name)]).toEqual([file, false]);
+    expect([file, names.includes('PATH'), names.includes('HOME')]).toEqual([file, true, true]);
+    if (file !== 'prepare-siblings')
+      expect([file, names.includes('LANG'), names.includes('TZ')]).toEqual([file, true, true]);
+  }
 });
 
 // run-commit.ts refuses it for every run that holds what a job must not reach (isolationProblem).

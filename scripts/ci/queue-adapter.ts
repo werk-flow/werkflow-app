@@ -189,12 +189,13 @@ export function runMain(
 }
 
 /**
- * Whether main as the queue's last `main()` read it holds `commit`: its head or a commit below it.
- * A commit the queue's clone lacks is not held.
+ * Whether `main`, the commit a tick read, holds `commit`: is it or a commit above it. It checks the
+ * captured commit, never the queue's ref, which a concurrent read in the same clone can move. A
+ * commit the queue's clone lacks is not held.
  */
-export function mainHolds(repository: string, commit: string): boolean {
+export function mainHolds(repository: string, commit: string, main: string): boolean {
   return (
-    spawnSync('git', ['merge-base', '--is-ancestor', commit, `${QUEUE_REFS}/main`], {
+    spawnSync('git', ['merge-base', '--is-ancestor', commit, main], {
       cwd: repository,
       stdio: 'ignore',
     }).status === 0

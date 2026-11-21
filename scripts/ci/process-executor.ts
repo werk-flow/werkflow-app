@@ -51,15 +51,21 @@ type ProcessExecutorOptions = {
   log(line: string): void;
 };
 
-/** Variables of the orchestrator and its secrets: a job sees only the run's variables of its task. */
-const NOT_FOR_JOBS =
-  /^(CI_.*|GH_TOKEN|GITHUB_TOKEN|SIBLING_REPOSITORIES_TOKEN|SHRINK_ONLY_GROWTH_APPROVED|GITHUB_ENV|GITHUB_OUTPUT)$/;
+/**
+ * The host variables a job's tools need: NODE_ENV, the user, shell, temporary folder, locale and time
+ * zone, the Docker socket the Supabase CLI reaches, and where Bun and Playwright live. A job gets these and its
+ * task's variables, never the rest of this process's environment: a credential in the owner's shell
+ * that no refusal names stays out of every job.
+ */
+const FOR_JOBS =
+  /^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|TERM|TZ|LANG|LANGUAGE|LC_[A-Z]+|DOCKER_HOST|XDG_RUNTIME_DIR|BUN_INSTALL|PLAYWRIGHT_BROWSERS_PATH)$/;
 
-/** The host's own environment without the orchestrator's variables. */
+/** The host variables of FOR_JOBS from this process's environment, and nothing else. */
 function hostEnvironment(): NodeJS.ProcessEnv {
-  const host = { ...process.env };
-  for (const name of Object.keys(host)) if (NOT_FOR_JOBS.test(name)) delete host[name];
-  return host;
+  return {
+    NODE_ENV: process.env.NODE_ENV,
+    ...Object.fromEntries(Object.entries(process.env).filter(([name]) => FOR_JOBS.test(name))),
+  };
 }
 
 const alive = (pid: number): boolean => {

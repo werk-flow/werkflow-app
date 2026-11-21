@@ -433,14 +433,20 @@ test("a queue run's runner never gets the main run's Check publisher", () => {
   }
 });
 
-test("main holds a merge once the queue's read of main is that merge or above it, and never a commit the clone lacks", () => {
+test('main holds a merge once the commit the tick read is that merge or above it, and never a commit the clone lacks', () => {
   const first = git('rev-parse', 'HEAD');
   const second = commitFile('b.txt', 'b\n');
-  git('update-ref', 'refs/ci-queue/main', first);
-  expect(mainHolds(repository, first)).toBe(true);
-  expect(mainHolds(repository, second)).toBe(false);
-  expect(mainHolds(repository, 'f'.repeat(40))).toBe(false);
+  expect(mainHolds(repository, first, first)).toBe(true);
+  expect(mainHolds(repository, second, first)).toBe(false);
+  expect(mainHolds(repository, 'f'.repeat(40), first)).toBe(false);
+  expect(mainHolds(repository, first, second)).toBe(true);
+  expect(mainHolds(repository, second, second)).toBe(true);
+});
+
+test("a concurrent read that moves the queue's main ref never makes the tick's captured main hold a later merge", () => {
+  const first = git('rev-parse', 'HEAD');
+  const second = commitFile('c.txt', 'c\n');
+  // The tick read main at `first`; a dry run in the same clone then fetched main at `second`.
   git('update-ref', 'refs/ci-queue/main', second);
-  expect(mainHolds(repository, first)).toBe(true);
-  expect(mainHolds(repository, second)).toBe(true);
+  expect(mainHolds(repository, second, first)).toBe(false);
 });

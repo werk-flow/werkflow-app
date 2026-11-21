@@ -270,13 +270,17 @@ const EMPTY_OUTPUTS = {
 };
 
 /**
- * An isolating executor that runs nothing: Plan launches (onLaunch) and plans no job, Check passes.
- * Each writes its result as job.ts would, of the run its task names.
+ * An executor that runs nothing, isolating unless `isolates` is false: Plan launches (onLaunch) and
+ * plans no job, Check passes. Each writes its result as job.ts would, of the run its task names.
  */
-function stubIsolating(tasks: ExecutorTask[], tree: string): (setup: ExecutorSetup) => Executors {
+function stubExecutors(
+  tasks: ExecutorTask[],
+  tree: string,
+  isolates = true,
+): (setup: ExecutorSetup) => Executors {
   return (setup) => {
     const host: Executor = {
-      isolatesJobs: true,
+      isolatesJobs: isolates,
       async run(task) {
         tasks.push(task);
         const { job } = task.unit;
@@ -308,7 +312,7 @@ function stubIsolating(tasks: ExecutorTask[], tree: string): (setup: ExecutorSet
       },
     };
     const jobs: Executor = {
-      isolatesJobs: true,
+      isolatesJobs: isolates,
       run: async () => ({ exitCode: 1, detail: 'nothing planned' }),
     };
     return { host, jobs, release: () => undefined };
@@ -350,7 +354,7 @@ test("the queue's --main-runner hook runs through an isolating executor: its sta
   expect(acknowledgedStart(mainStartRecord(workRoot, commit), commit)).toBeUndefined();
 
   const tasks: ExecutorTask[] = [];
-  const ran = await command(clone, environment, stubIsolating(tasks, tree));
+  const ran = await command(clone, environment, stubExecutors(tasks, tree));
   expect(ran.errors).toEqual([]);
   expect(ran.code).toBe(0);
   expect(tasks.map((task) => task.unit.job)).toEqual(['plan', 'check']);
@@ -362,10 +366,34 @@ test("the queue's --main-runner hook runs through an isolating executor: its sta
   const duplicate = await command(
     clone,
     { ...environment, CI_RUN_URL: 'https://ci.example/runs/push', CI_RESULTS_DIR: join(folder, 'main-2') },
-    stubIsolating([], tree),
+    stubExecutors([], tree),
   );
   expect(duplicate.code).toBe(3);
   expect(duplicate.errors.join('\n')).toContain(`main's run of ${commit} started already: ${runUrl}`);
+});
+
+// Only a run whose jobs cannot reach the work root writes what the queue and a second main run read:
+// a local main run through an executor that isolates nothing claims no commit and records no start.
+test('a main run through an executor that isolates nothing leaves no claim or start record the queue reads', async () => {
+  const { clone, commit, tree } = trustedClone();
+  const workRoot = join(folder, 'work');
+  const tasks: ExecutorTask[] = [];
+  const ran = await command(
+    clone,
+    {
+      CI_EVENT: 'main',
+      CI_COMMIT: commit,
+      CI_RUN_URL: 'https://ci.example/runs/local',
+      CI_RESULTS_DIR: join(folder, 'results'),
+      CI_WORK_ROOT: workRoot,
+    },
+    stubExecutors(tasks, tree, false),
+  );
+  expect(ran.errors).toEqual([]);
+  expect(ran.code).toBe(0);
+  expect(tasks.map((task) => task.unit.job)).toEqual(['plan', 'check']);
+  expect(acknowledgedStart(mainStartRecord(workRoot, commit), commit)).toBeUndefined();
+  expect(existsSync(join(workRoot, 'main-runs'))).toBe(false);
 });
 
 test("a main run whose commit's Plan another run left in the ledger exits 3, and the start record names that run", async () => {
@@ -384,7 +412,7 @@ test("a main run whose commit's Plan another run left in the ledger exits 3, and
       CI_LEDGER: ledger,
       CI_PRODUCER: 'mac-standin',
     },
-    stubIsolating([], tree),
+    stubExecutors([], tree),
   );
   expect(duplicate.code).toBe(3);
   expect(acknowledgedStart(mainStartRecord(workRoot, commit), commit)).toBe('https://ci.example/runs/1');
@@ -422,7 +450,7 @@ test("the queue's --runner hook runs a commit only the queue's clone holds throu
   const refused = await command(clone, environment, processExecutors);
   expect(refused.code).toBe(2);
   expect(refused.errors.join('\n')).toContain('CI_QUEUE_COMMIT');
-  const ran = await command(clone, environment, stubIsolating([], tip.tree));
+  const ran = await command(clone, environment, stubExecutors([], tip.tree));
   expect(ran.errors).toEqual([]);
   expect(ran.code).toBe(0);
   expect(readResult(join(resultsDir, 'check.json'))).toMatchObject({ status: 'passed', commit: tip.commit });

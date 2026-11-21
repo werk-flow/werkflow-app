@@ -54,7 +54,8 @@ export function releaseMainRun(folder: string, commit: string, runUrl: string): 
 
 /**
  * The one start record of main's run of `commit` on the host whose work root is `workRoot`: written
- * once that run's Plan launched (runCommit, acknowledgeStart). A second starter of the commit exits 3
+ * once that run's Plan launched (runCommit, acknowledgeStart), by a run through an isolating
+ * executor only. A second starter of the commit exits 3
  * only by it, and the queue clears an owed main run only by it (scripts/ci/queue-adapter.ts, runMain).
  */
 export const mainStartRecord = (workRoot: string, commit: string): string =>
@@ -249,8 +250,8 @@ export type RunCommitDeps = {
    */
   publish?: ((mode: 'start' | 'finish') => Promise<boolean>) | undefined;
   /**
-   * Records durably that the run started, once Plan's body launched, or once Plan ended before its
-   * body (its setup failed: a run that started and fails). A second main run of the commit and the
+   * Records durably that the run started, once Plan's body launched, or once Plan's setup failed
+   * before its body (a run that started and fails; a stop before the body is no start). A second main run of the commit and the
    * queue's owed main run read it (mainStartRecord). Throws when it cannot; Plan's body then does
    * not start, and neither does the run.
    */
@@ -264,8 +265,8 @@ export type RunCommitDeps = {
 export type RunCommitOutcome = {
   /**
    * 0 when the run's Check passed, 1 when it failed, 2 when the run never started because its queued
-   * Check could not be posted or its start could not be recorded: no job body ran, so the run is
-   * still owed.
+   * Check could not be posted, its start could not be recorded or a stop ended Plan before its body:
+   * no job body ran, so the run is still owed.
    */
   exitCode: 0 | 1 | 2;
   units: { unit: Unit; state: UnitState }[];
@@ -350,14 +351,14 @@ type Planned = { passed: boolean; units: Unit[]; owner?: ReceiptRun['plan'] };
 
 /**
  * Plan on the host, and the jobs and shards its plan runs. None run when Plan failed, or its plan is
- * not this run's and attempt's. The run's start is recorded once Plan's body launched, or once Plan
- * ended before it; 'unrecorded' when that record failed, and the run did not start.
+ * not this run's and attempt's. The run's start is recorded once Plan's body launched, or once Plan's
+ * setup failed before it; 'unstarted' when that record failed, or a stop ended Plan before its body.
  */
 async function planRun(
   input: RunCommitInput,
   deps: RunCommitDeps,
   signal: AbortSignal,
-): Promise<Planned | 'unrecorded'> {
+): Promise<Planned | 'unstarted'> {
   const planUnit: Unit = { job: 'plan', shard: null };
   const start: { launched: boolean; failure?: string } = { launched: false };
   const record = (): void => {
@@ -371,6 +372,10 @@ async function planRun(
   };
   const outcome = await deps.host.run({ ...taskOf(input, planUnit), onLaunch: record }, signal);
   deps.log(`[run] plan: ${outcome.detail}`);
+  if (!start.launched && signal.aborted) {
+    deps.log('[run] The run was stopped before Plan began, so it did not start.');
+    return 'unstarted';
+  }
   // A Plan whose setup failed before its body is a run that started, and fails.
   if (!start.launched)
     try {
@@ -380,7 +385,7 @@ async function planRun(
     }
   if (start.failure !== undefined) {
     deps.log(`[run] The run's start could not be recorded, so it does not start: ${start.failure}`);
-    return 'unrecorded';
+    return 'unstarted';
   }
   const { event, tree, runUrl, producer, attempt } = input.run;
   const planned = runPlanOf({ tree, event, runUrl, producer }, deps.readResult(planUnit));
@@ -607,7 +612,7 @@ export async function runCommit(
     return { exitCode: 2, units: [], scheduler: {} };
   }
   const planned = await planRun(input, deps, signal);
-  if (planned === 'unrecorded') return { exitCode: 2, units: [], scheduler: {} };
+  if (planned === 'unstarted') return { exitCode: 2, units: [], scheduler: {} };
   const states = await runUnits(input, deps, signal, planned);
   const scheduler = schedulerReport(planned.passed, planned.units, states);
   // Check runs even after a cancellation, as on GitHub: a cancelled run reports a failed Check.

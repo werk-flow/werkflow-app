@@ -193,7 +193,11 @@ try {
     if (!mainRunner || !workRoot || !owed) return true;
     const merge = await mergeAnswer(owed.merging);
     const { commit } = await adapter.main();
-    const main = mainRunOf(owed, { commit, contains: (merged) => mainHolds(repository, merged) }, merge);
+    const main = mainRunOf(
+      owed,
+      { commit, contains: (merged) => mainHolds(repository, merged, commit) },
+      merge,
+    );
     if (main && 'unresolved' in main) {
       console.error(`[queue] ${main.unresolved}`);
       return false;

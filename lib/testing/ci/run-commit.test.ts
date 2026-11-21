@@ -567,3 +567,20 @@ test('a Plan whose setup failed before its body is a started run: its start is r
   expect(order).toEqual(['acknowledged:host:plan']);
   expect(started(w)).toEqual(['host:plan', 'host:check']);
 });
+
+// A stop that ends Plan before its body launched is no run that started: the queue's owed main run
+// stays owed, and a second main run of the commit still runs it.
+test("a run stopped before Plan's body launched records no start, runs no job or Check, and exits as not run", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const w = world({ planLaunches: false });
+  const acknowledged: string[] = [];
+  const run = await runCommit(
+    input(),
+    { ...w.deps, acknowledgeStart: () => acknowledged.push('acknowledged') },
+    controller.signal,
+  );
+  expect(run.exitCode, w.log.join('\n')).toBe(2);
+  expect(acknowledged).toEqual([]);
+  expect(started(w)).toEqual(['host:plan']);
+});
