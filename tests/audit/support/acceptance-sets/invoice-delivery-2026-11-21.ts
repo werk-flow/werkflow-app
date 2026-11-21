@@ -1,12 +1,14 @@
 import type { TestWorld } from '../../../golden/support/world';
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
-import { issuedInvoiceForDelivery } from '../invoice-delivery-fixtures';
+import { invoiceDeliverySeed, parseDeliverySeed } from '../invoice-delivery-fixtures';
+import { surfaceFixture } from '../surface-fixtures';
 import type { SurfaceDestination } from '../surface-routes';
 
 const invoicePage =
   (state: 'fresh' | 'delivered') =>
   async (world: TestWorld): Promise<SurfaceDestination> => {
-    const { id, heading } = await issuedInvoiceForDelivery(world, state);
+    const seed = invoiceDeliverySeed(world, state);
+    const { id, heading } = parseDeliverySeed(await surfaceFixture(world, seed.name, seed.create));
     return { route: `/rechnungen/${id}`, heading };
   };
 

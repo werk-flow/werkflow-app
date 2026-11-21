@@ -4,7 +4,6 @@ import { getBusinessTodayIso } from '../../../lib/date-time/berlin';
 import { rpcArgs } from '../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../golden/support/db/shared';
 import type { TestWorld } from '../../golden/support/world';
-import { surfaceFixture } from './surface-fixtures';
 
 // Issued invoices with a filed stand-in original for the audit world, written
 // through the office's database functions as the issue action writes them;
@@ -159,32 +158,40 @@ async function emailed(
 }
 
 /**
- * An issued invoice with its filed original: `fresh` was never sent,
- * `delivered` went out by email, failed once and went by post.
+ * The seed of an issued invoice with its filed original for `surfaceFixture`:
+ * `fresh` was never sent, `delivered` went out by email, failed once and went
+ * by post. `parseDeliverySeed` reads back what `create` stored.
  */
-export async function issuedInvoiceForDelivery(
+export function invoiceDeliverySeed(
   world: TestWorld,
   state: 'fresh' | 'delivered',
-): Promise<{ id: string; heading: string }> {
-  const value = await surfaceFixture(world, `commercial.invoice-delivery-${state}`, async () => {
-    const invoice = await issueFiled(world, state);
-    if (state === 'delivered') {
-      await emailed(world, invoice, 'buchhaltung@lindenhof.example', { messageId: randomUUID() });
-      await emailed(world, invoice, 'verwaltung@lindenhof.example', { failureCode: 'email_provider_503' });
-      await createAdminClient()
-        .rpc('record_manual_delivery', {
-          p_actor_id: world.users.admin.id,
-          p_organization_id: world.orgId,
-          p_attempt_key: randomUUID(),
-          p_subject_kind: 'invoice',
-          p_subject_id: invoice.id,
-          p_document_id: invoice.documentId,
-          p_note: 'per Post an die Hausverwaltung',
-        })
-        .throwOnError();
-    }
-    return JSON.stringify({ id: invoice.id, heading: `Rechnung ${invoice.number}` });
-  });
+): { name: string; create: () => Promise<string> } {
+  return {
+    name: `commercial.invoice-delivery-${state}`,
+    create: async () => {
+      const invoice = await issueFiled(world, state);
+      if (state === 'delivered') {
+        await emailed(world, invoice, 'buchhaltung@lindenhof.example', { messageId: randomUUID() });
+        await emailed(world, invoice, 'verwaltung@lindenhof.example', { failureCode: 'email_provider_503' });
+        await createAdminClient()
+          .rpc('record_manual_delivery', {
+            p_actor_id: world.users.admin.id,
+            p_organization_id: world.orgId,
+            p_attempt_key: randomUUID(),
+            p_subject_kind: 'invoice',
+            p_subject_id: invoice.id,
+            p_document_id: invoice.documentId,
+            p_note: 'per Post an die Hausverwaltung',
+          })
+          .throwOnError();
+      }
+      return JSON.stringify({ id: invoice.id, heading: `Rechnung ${invoice.number}` });
+    },
+  };
+}
+
+/** The invoice id and page heading a seed stored. */
+export function parseDeliverySeed(value: string): { id: string; heading: string } {
   const parsed: unknown = JSON.parse(value);
   return { id: field(parsed, 'id'), heading: field(parsed, 'heading') };
 }

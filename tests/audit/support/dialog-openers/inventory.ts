@@ -33,7 +33,7 @@ import {
 import { worldName } from '../../../../lib/testing/seed-world-plan';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
-import { issuedInvoiceForDelivery } from '../invoice-delivery-fixtures';
+import { invoiceDeliverySeed, parseDeliverySeed } from '../invoice-delivery-fixtures';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];
 
@@ -42,7 +42,8 @@ async function invoiceDeliveryButton(
   { page, world }: SurfaceContext,
   name: 'Per E-Mail senden' | 'Als manuell versendet markieren',
 ): Promise<Locator> {
-  const { id } = await issuedInvoiceForDelivery(world, 'fresh');
+  const seed = invoiceDeliverySeed(world, 'fresh');
+  const { id } = parseDeliverySeed(await surfaceFixture(world, seed.name, seed.create));
   if (!page.url().endsWith(`/rechnungen/${id}`)) await page.goto(`/rechnungen/${id}`);
   return page.getByRole('main').getByRole('button', { name, exact: true });
 }

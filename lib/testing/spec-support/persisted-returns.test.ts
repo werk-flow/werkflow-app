@@ -53,12 +53,6 @@ const NON_PERSISTED_RETURNS: readonly { file: string; name: string; reason: stri
     reason: 'returns the id of a row seeded once per audit world, read from the world checkpoint',
   },
   {
-    file: 'tests/audit/support/invoice-delivery-fixtures.ts',
-    name: 'issuedInvoiceForDelivery',
-    reason:
-      'returns the id and heading of an issued invoice seeded once per audit world, through surfaceFixture',
-  },
-  {
     file: 'tests/audit/support/surface-routes.ts',
     name: 'surfaceDestination',
     reason: 'resolves an inventoried route to the page the audit opens, not a saved row',

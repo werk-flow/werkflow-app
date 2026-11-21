@@ -257,7 +257,7 @@ begin
   end if;
   if (select (state, provider_message_id, failure_code, attempts, sent_at is not null)
       from public.document_deliveries where id = pg_temp.id('delivery'))
-    is distinct from ('sent', '4ef9a417-02e9-4d39-ad75-9611e0fcc33c', null::text, 2, true) then
+    is distinct from ('sent'::text, '4ef9a417-02e9-4d39-ad75-9611e0fcc33c'::text, null::text, 2, true) then
     raise exception 'the sent delivery reads wrong';
   end if;
   -- One transaction gives every entry the same time, so the history compares sorted.
@@ -321,7 +321,7 @@ begin
   end if;
   if (select (channel, state, note, recipient_email, attachment_content_hash)
       from public.document_deliveries where id = v_manual)
-    is distinct from ('manual', 'sent', 'per Post am 20.11.', null::text, repeat('a', 64)) then
+    is distinct from ('manual'::text, 'sent'::text, 'per Post am 20.11.'::text, null::text, repeat('a', 64)) then
     raise exception 'the manual send reads wrong';
   end if;
 end;
