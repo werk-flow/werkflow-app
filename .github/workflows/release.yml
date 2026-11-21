@@ -77,6 +77,10 @@ jobs:
     if: ${{ !inputs.alert_proof }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # the full runs of GitHub Actions
+      checks: read # the CI App's full runs (.github/scripts/check-app.sh)
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       verified: ${{ steps.candidate.outputs.verified }}
