@@ -57,7 +57,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 ### Requests
 
 - **Server Actions.** Every exported action has a boundary test for a foreign id or a lower role, unless it is self-scoped and takes no id.
-- **Route handlers.** Each handler or its action authenticates the caller; field sync accepts bearer tokens too, Stripe's webhook only its signature. No response or redirect carries an error's message or details.
+- **Route handlers.** Each handler or its action authenticates the caller; field sync accepts bearer tokens too, Stripe's and Resend's webhooks only their signatures. No response or redirect carries an error's message or details.
 - **Auth links.** No browser client reads a URL session (`auth-url-session.spec.ts`). A GET redeems an invite only after a code exchange in that request; a reset hash waits in an httpOnly cookie for the reset page's click (`lib/auth/recovery-link.ts`).
 - **Email in URLs.** No URL carries a provider message or an email address. The next step reads the address from an httpOnly cookie scoped to its page (`lib/auth/address-cookies.ts`), the invite row, or the session.
 - **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; route a new one there. `app/(app)/layout.tsx` checks the session again and is the authority.
