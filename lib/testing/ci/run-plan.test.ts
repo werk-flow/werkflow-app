@@ -157,6 +157,12 @@ test('a reused job and a reused shard do not run; the key carries the steps and 
   expect(keys.some((key) => key.job === 'fast')).toBe(false);
   // A shard's key carries its number, so a receipt of shard 2 never stands for shard 1.
   expect(keys.filter((key) => key.job === 'browser').map((key) => key.shard)).toEqual([1, 2]);
+  // The plan names each reuse with its run, so the cost summary counts the hits (lib/testing/ci-cost/summary.ts).
+  expect(run.reused).toEqual([
+    { job: 'browser', shard: 2, runUrl: 'https://ci.example/runs/3' },
+    { job: 'components', shard: 1, runUrl: 'https://ci.example/runs/3' },
+    { job: 'sql', shard: null, runUrl: 'https://ci.example/runs/3' },
+  ]);
 });
 
 test('every shard reused skips the browser job and its midnight hold', () => {

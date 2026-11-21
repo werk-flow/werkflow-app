@@ -2,6 +2,7 @@
 // `Check` reads the results of its run; a later run reads the ledger to reuse a passed result.
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
+import { INCIDENT_CLASSES } from '../runner/run-policy';
 import { CI_EVENTS, CI_JOBS, type CiJob } from './dag';
 
 const shardSchema = z.object({ shard: z.number().int().positive(), groups: z.string().min(1) });
@@ -17,8 +18,38 @@ const runPlanSchema = z.object({
   shards: z.array(shardSchema),
   /** The planner's outputs, `$GITHUB_OUTPUT` keys of scripts/ci-plan.ts with the run's changes. */
   outputs: z.record(z.string(), z.string()),
+  /** Each job or shard that another run's passed result stands for, with that run. Absent on older plans. */
+  reused: z
+    .array(
+      z.object({
+        job: z.enum(CI_JOBS),
+        shard: z.number().int().positive().nullable(),
+        runUrl: z.string().min(1),
+      }),
+    )
+    .optional(),
 });
 export type RunPlan = z.infer<typeof runPlanSchema>;
+
+/** A PR number or an attempt: a positive safe integer, so a measurement input that passes it parses as a receipt. */
+export const positiveIntegerSchema = z.number().int().positive();
+
+/** The failure classes of docs/technical/testing.md, "Failures". `transient` is retired. */
+export const failureClassSchema = z.enum(INCIDENT_CLASSES).exclude(['transient']);
+export type FailureClass = z.infer<typeof failureClassSchema>;
+
+/** What a job cost (lib/testing/ci/measurement.ts). The runner sets the inputs; the job never fails on them. */
+const jobCostSchema = z.object({
+  /** One per job process on a CI runner; none on a workstation. */
+  machineStart: z.boolean(),
+  /** When the runner began the job, before its checkout and setup (CI_JOB_STARTED_AT), or null. */
+  runnerStartedAt: z.string().datetime().nullable(),
+  /** The runner's setup before the job body, and a browser shard's build and server start. */
+  setupMs: z.number().nonnegative(),
+  /** From the runner's start of the job, or the body's when unknown, to its result; null while it runs. */
+  wallMs: z.number().nonnegative().nullable(),
+});
+export type JobCost = z.infer<typeof jobCostSchema>;
 
 const ciResultSchema = z.object({
   version: z.literal(1),
@@ -51,6 +82,17 @@ const ciResultSchema = z.object({
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().nullable(),
   plan: runPlanSchema.optional(),
+  // Measurement (lib/testing/ci/measurement.ts, summed by scripts/ci-cost.ts). Optional: receipts written before it hold none, and no gate
+  // or reuse decision reads them.
+  /** The pull requests the run serves: a PR run's one, an integration batch's, a push's landed ones; none for a full run. */
+  prs: z.array(positiveIntegerSchema).optional(),
+  /** The run's attempt, 1 for the first; a rerun of its failed jobs counts up (CI_RUN_ATTEMPT). */
+  attempt: positiveIntegerSchema.optional(),
+  cost: jobCostSchema.optional(),
+  /** On a rerun: the class the failed first attempt of this job was given (CI_FIRST_ATTEMPT_CLASS). */
+  firstAttemptClass: failureClassSchema.nullable().optional(),
+  /** A full run's failed groups that no diff plan of its trees selected: selection misses. */
+  unselectedFailures: z.array(z.string().min(1)).optional(),
 });
 export type CiResult = z.infer<typeof ciResultSchema>;
 
