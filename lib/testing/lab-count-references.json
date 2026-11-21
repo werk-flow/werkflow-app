@@ -642,7 +642,7 @@
             "rows": null
           },
           "runKeys": ["2026-11-21T055139543Z-159aab"],
-          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29): area skeletons load lazily (#560); every role's start-up 66 KB gzip lighter and office routes no longer move the field cold start"
+          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the job page's own chunks (card, checkbox, textarea, detail columns, section title, documents layout, client select) no longer come with the layout's start-up, so the job page loads them on its first open; start-up 66 KB gzip lighter for every role"
         }
       ]
     },
@@ -2053,7 +2053,7 @@
             "rows": null
           },
           "runKeys": ["2026-11-21T055139544Z-a5f23c"],
-          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29): area skeletons load lazily (#560); every role's start-up 66 KB gzip lighter and office routes no longer move the field cold start"
+          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the office UI the layout preloaded (date picker, select, popover, tabs, documents layout) now loads with the job page that uses it, on its first open; start-up 66 KB gzip lighter for every role"
         }
       ]
     },
@@ -3148,7 +3148,7 @@
           "from": { "reference": 8, "tolerance": 0 },
           "to": { "reference": 14, "tolerance": 0 },
           "runKeys": ["2026-11-21T055139544Z-a5f23c"],
-          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29): area skeletons load lazily (#560); every role's start-up 66 KB gzip lighter and office routes no longer move the field cold start"
+          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the Aufgaben page's code and the Zeiterfassung prefetch's date picker no longer come with the layout's start-up, so opening Aufgaben fetches their chunks (4 to 10 scripts); no organization switch is involved; start-up 66 KB gzip lighter for every role"
         }
       ]
     },
@@ -3324,7 +3324,7 @@
           "from": { "reference": 2, "tolerance": 0 },
           "to": { "reference": 4, "tolerance": 0 },
           "runKeys": ["2026-11-21T055139544Z-a5f23c"],
-          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29): area skeletons load lazily (#560); every role's start-up 66 KB gzip lighter and office routes no longer move the field cold start"
+          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the settings page's UI (tabs, select) no longer comes with the layout's start-up, so opening the settings fetches its own chunks; no organization switch is involved; start-up 66 KB gzip lighter for every role"
         }
       ]
     }
