@@ -8,8 +8,9 @@ import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './
 
 const ownDocumentId = '95000000-0000-4000-8000-000000000001';
 const foreignDocumentId = '95000000-0000-4000-8000-000000000002';
-// An issued invoice's original: update_document_links refuses every added link
-// (supabase/tests/invoice_issue.sql), so no work link opens it to the work's employees.
+// An issued invoice's original: the database refuses every added link
+// (guard_invoice_original_links, supabase/tests/invoice_issue.sql), so no work
+// link opens it to the work's employees.
 const invoiceOriginalId = '95000000-0000-4000-8000-000000000003';
 const ownJobId = '96000000-0000-4000-8000-000000000001';
 const foreignJobId = '96000000-0000-4000-8000-000000000002';

@@ -15,7 +15,8 @@
 -- The series carries no year, so no number depends on the day the test runs;
 -- each issue names the Berlin day its own statement starts at, the day
 -- issue_invoice takes once the series' lock is held. A run across midnight or
--- New Year changes no expected number. The yearly restart is in invoice_issue.sql.
+-- New Year changes no expected number; a race that crosses midnight says so.
+-- The yearly restart is in invoice_issue.sql.
 \connect postgres supabase_admin
 begin;
 set local search_path = public, extensions, pg_temp;
@@ -65,14 +66,15 @@ begin
 end $$
 $setup$);
 
--- An issue of p_draft checked under the series' p_sequence-th number, on the
--- Berlin day the statement starts at.
-create function pg_temp.issue_statement(p_draft text, p_sequence integer) returns text language sql as $$
+-- An issue of p_draft checked under the series' p_sequence-th number, on
+-- p_day or else the Berlin day the statement starts at.
+create function pg_temp.issue_statement(p_draft text, p_sequence integer, p_day date default null)
+returns text language sql as $$
   select format($issue$select public.issue_invoice('38070000-0000-4000-8000-000000000001',
     '38070000-0000-4000-8000-000000000010', %L, 1, gen_random_uuid(),
     '{"organizationName":"Haustechnik Sonnenberg","profile":{},"files":{},"buyer":{}}', %L,
-    (statement_timestamp() at time zone 'Europe/Berlin')::date) ->> 'invoiceNumber'$issue$,
-    p_draft, 'RE-' || lpad(p_sequence::text, 3, '0'));
+    coalesce(%L::date, (statement_timestamp() at time zone 'Europe/Berlin')::date)) ->> 'invoiceNumber'$issue$,
+    p_draft, 'RE-' || lpad(p_sequence::text, 3, '0'), p_day);
 $$;
 
 -- The first issue holds its transaction open with its number taken.
@@ -81,10 +83,16 @@ select dblink_exec('issue_race_first', 'set local role service_role');
 select * from dblink('issue_race_first', pg_temp.issue_statement('38070000-0000-4000-8000-000000000101', 1))
   as first(number text);
 
+-- The second issue is checked under the first one's number and its very day,
+-- so only the number can make it stale.
+create temporary table issue_race_day on commit drop as
+select day from dblink('issue_race_first',
+  'select issue_date from public.invoices where id = ''38070000-0000-4000-8000-000000000101''') as first(day date);
 create temporary table issue_race_second_pid on commit drop as
 select pid from dblink('issue_race_second', 'select pg_backend_pid()') as second(pid integer);
 select dblink_exec('issue_race_second', 'set role service_role');
-select dblink_send_query('issue_race_second', pg_temp.issue_statement('38070000-0000-4000-8000-000000000102', 1));
+select dblink_send_query('issue_race_second',
+  pg_temp.issue_statement('38070000-0000-4000-8000-000000000102', 1, (select day from issue_race_day)));
 
 do $$
 declare
@@ -109,6 +117,11 @@ begin
   perform * from dblink_get_result('issue_race_second', false) as result(number text);
   v_message := dblink_error_message('issue_race_second');
   perform * from dblink_get_result('issue_race_second', false) as done(number text);
+  -- The second issue read its day after the first committed, so before now: on
+  -- the same Berlin day still, its refusal came from the number.
+  if (clock_timestamp() at time zone 'Europe/Berlin')::date is distinct from (select day from issue_race_day) then
+    raise exception 'the race crossed Berlin midnight, so its refusal proves nothing; run it again';
+  end if;
   if position('invoice_number_moved' in coalesce(v_message, '')) = 0 then
     raise exception 'an issue checked under a number another issue took answered %', v_message;
   end if;

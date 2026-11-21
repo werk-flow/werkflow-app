@@ -331,9 +331,13 @@ from (values
     'invoice_issued'),
   ('clear a live person', format('update public.invoices set issued_by = null where id = %L', pg_temp.id('first')),
     'invoice_issued'),
-  -- Only register_invoice_original names the first original, after it filed it.
+  -- Only register_invoice_original names the first original, after it filed it,
+  -- also not a direct issue of a draft that names one in the same statement.
   ('name an original directly', format('update public.invoices set original_document_id = %L where id = %L',
-    '38060000-0000-4000-8000-000000000304', pg_temp.id('first')), 'invoice_issued')
+    '38060000-0000-4000-8000-000000000304', pg_temp.id('first')), 'invoice_issued'),
+  ('issue a draft with an original directly', format(
+    'update public.invoices set status = ''ausgestellt'', original_document_id = %L where id = %L',
+    '38060000-0000-4000-8000-000000000304', pg_temp.id('empty')), 'invoice_issued')
 ) as cases(label, statement, refusal);
 -- A deleted work clears its reference only.
 reset role;
@@ -418,16 +422,27 @@ begin
 end;
 $$;
 
--- A manager links no work, customer or person to the original: a work link
--- would open it to every employee assigned to that work. Removal stays.
-select pg_temp.expect_refusal(label, format(
-  'select public.update_document_links(%L, %L, %L, null, %s, null, %s, null, null, null, null)',
-  '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
-  '38060000-0000-4000-8000-000000000301', jobs, clients), 'document_is_invoice_original')
+-- No one links a work, customer or person to the original, through the app
+-- or directly: a work link would open it to every employee assigned to that
+-- work. Removal stays (below).
+select pg_temp.expect_refusal(label, statement, 'document_is_invoice_original')
 from (values
-  ('link the original to a job', 'array[''38060000-0000-4000-8000-000000000051'']::uuid[]', 'null'),
-  ('link it to its customer again', 'null', 'array[''38060000-0000-4000-8000-000000000020'']::uuid[]')
-) as cases(label, jobs, clients);
+  ('link the original to a job', format(
+    'select public.update_document_links(%L, %L, %L, null, %L, null, null, null, null, null, null)',
+    '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
+    '38060000-0000-4000-8000-000000000301', '{38060000-0000-4000-8000-000000000051}')),
+  ('link it to its customer again', format(
+    'select public.update_document_links(%L, %L, %L, null, null, null, %L, null, null, null, null)',
+    '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
+    '38060000-0000-4000-8000-000000000301', '{38060000-0000-4000-8000-000000000020}')),
+  ('insert a job link directly', $direct$insert into public.document_links
+    (organization_id, document_id, job_id, created_by) values ('38060000-0000-4000-8000-000000000010',
+    '38060000-0000-4000-8000-000000000301', '38060000-0000-4000-8000-000000000051',
+    '38060000-0000-4000-8000-000000000002')$direct$),
+  ('turn the customer link to a job', $direct$update public.document_links
+    set client_id = null, job_id = '38060000-0000-4000-8000-000000000051'
+    where document_id = '38060000-0000-4000-8000-000000000301'$direct$)
+) as cases(label, statement);
 
 -- Filed, the original is never deleted or replaced, and the invoice keeps it.
 select pg_temp.expect_refusal(label, statement, refusal)
@@ -484,6 +499,26 @@ begin
     or pg_temp.document_seen_by('38060000-0000-4000-8000-000000000003', '38060000-0000-4000-8000-000000000301')
       is distinct from 0::bigint then
     raise exception 'the assigned field worker reads the original, or the reads prove nothing';
+  end if;
+end;
+$$;
+
+-- A manager still removes the original's customer link; the filed original and the invoice's reference stay.
+do $$
+declare
+  v_counts record;
+begin
+  select * into v_counts from public.update_document_links('38060000-0000-4000-8000-000000000002',
+    '38060000-0000-4000-8000-000000000010', '38060000-0000-4000-8000-000000000301',
+    array(select id from public.document_links where document_id = '38060000-0000-4000-8000-000000000301'),
+    null, null, null, null, null, null, null);
+  if v_counts.removed_count is distinct from 1
+    or exists (select 1 from public.document_links where document_id = '38060000-0000-4000-8000-000000000301')
+    or not exists (select 1 from public.documents
+      where id = '38060000-0000-4000-8000-000000000301' and filed_at is not null and deleted_at is null)
+    or (select original_document_id from public.invoices where id = pg_temp.id('first'))
+      is distinct from '38060000-0000-4000-8000-000000000301' then
+    raise exception 'removing the original''s customer link answered % or changed the original', v_counts;
   end if;
 end;
 $$;

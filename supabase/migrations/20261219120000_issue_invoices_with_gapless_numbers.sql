@@ -21,8 +21,9 @@
 --    the ten-year class, linked to the customer, once per invoice, and files
 --    it through file_document in the same transaction. issue_invoice calls
 --    it; „Beleg erstellen“ calls it for an original still pending.
---    update_document_links adds no link to a registered original, so no
---    work link opens it to that work's employees.
+--    No link is added to a registered original afterwards
+--    (guard_invoice_original_links), so no work link opens it to that work's
+--    employees.
 -- 5. save_invoice_settings, get_invoice_settings; create_invoice takes the
 --    default terms; get_invoice answers the issue facts.
 --
@@ -32,8 +33,7 @@
 -- function checks the actor again under the access lock.
 --
 -- Expand-only: a new table, new nullable columns, a widened event check, new
--- functions; create_invoice, get_invoice and update_document_links keep their
--- signatures.
+-- functions and triggers; create_invoice and get_invoice keep their signatures.
 --
 -- Prevention: Tier 1 (the guards, the issue checks, no client grant), Tier 2
 -- supabase/tests/invoice_issue.sql and invoice_issue_concurrency.sql.
@@ -215,6 +215,10 @@ begin
   end if;
   perform set_config('app.invoice_original_write', 'off', true);
   if old.status = 'entwurf' then
+    -- A draft has no original; only the registration names one, on an issued invoice.
+    if new.original_document_id is not null then
+      raise exception 'invoice_issued';
+    end if;
     return new;
   end if;
   if to_jsonb(new) - v_free is distinct from to_jsonb(old) - v_free
@@ -498,162 +502,44 @@ grant execute on function public.register_invoice_original(uuid, uuid, uuid, uui
   to service_role;
 
 -- An invoice's original keeps only the customer link its registration wrote:
--- a work link would let every employee assigned to that work read it, so an
--- added link is refused (document_is_invoice_original); a removal stays
--- possible. Otherwise as in 20261004140000_write_document_uploads_and_links_atomically.sql.
--- The registration links in its own transaction before it names the
--- original, so this refusal never meets it.
-create or replace function public.update_document_links(
-  p_actor_id uuid,
-  p_organization_id uuid,
-  p_document_id uuid,
-  p_remove_link_ids uuid[],
-  p_add_job_ids uuid[],
-  p_add_project_ids uuid[],
-  p_add_client_ids uuid[],
-  p_add_employee_ids uuid[],
-  p_add_equipment_ids uuid[],
-  p_add_service_case_ids uuid[],
-  p_add_maintenance_coverage_ids uuid[]
-)
-returns table (added_count integer, removed_count integer)
+-- a work link would let every employee assigned to that work read it. So no
+-- link is added to a registered original and no link of it turns to another
+-- target, whoever writes; a removal, and a deleted target's set null, stay.
+-- The registration links before it names the original, in one transaction,
+-- so the refusal never meets it. Security definer as the personnel-document
+-- link guard: no role executes it.
+create function app_private.guard_invoice_original_links()
+returns trigger
 language plpgsql
 security definer
 set search_path to ''
 as $$
-declare
-  v_remove_ids uuid[] := array(select distinct unnest(coalesce(p_remove_link_ids, '{}')));
-  v_link public.document_links;
-  v_version bigint;
-  v_add_count integer := coalesce(cardinality(p_add_job_ids), 0) + coalesce(cardinality(p_add_project_ids), 0)
-    + coalesce(cardinality(p_add_client_ids), 0) + coalesce(cardinality(p_add_employee_ids), 0)
-    + coalesce(cardinality(p_add_equipment_ids), 0) + coalesce(cardinality(p_add_service_case_ids), 0)
-    + coalesce(cardinality(p_add_maintenance_coverage_ids), 0);
 begin
-  if not app_private.is_document_manager(p_organization_id, p_actor_id) then
-    raise exception 'not_authorized';
+  if tg_op = 'UPDATE' and new.document_id = old.document_id
+    and (new.job_id is null or new.job_id is not distinct from old.job_id)
+    and (new.project_id is null or new.project_id is not distinct from old.project_id)
+    and (new.client_id is null or new.client_id is not distinct from old.client_id)
+    and (new.employee_id is null or new.employee_id is not distinct from old.employee_id)
+    and (new.request_id is null or new.request_id is not distinct from old.request_id)
+    and (new.equipment_id is null or new.equipment_id is not distinct from old.equipment_id)
+    and (new.service_case_id is null or new.service_case_id is not distinct from old.service_case_id)
+    and (new.maintenance_coverage_id is null
+      or new.maintenance_coverage_id is not distinct from old.maintenance_coverage_id)
+  then
+    return new;
   end if;
-  perform 1 from public.documents document
-  where document.id = p_document_id and document.organization_id = p_organization_id
-    and document.deleted_at is null
-  for update;
-  if not found then
-    raise exception 'document_not_found';
-  end if;
-  if v_add_count > 0 and exists (
+  if exists (
     select 1 from public.invoices invoice
-    where invoice.original_document_id = p_document_id and invoice.organization_id = p_organization_id
+    where invoice.original_document_id = new.document_id and invoice.organization_id = new.organization_id
   ) then
     raise exception 'document_is_invoice_original';
   end if;
-  if (
-    select count(*) from public.document_links link
-    where link.organization_id = p_organization_id and link.document_id = p_document_id
-      and link.id = any(v_remove_ids)
-  ) <> cardinality(v_remove_ids) then
-    raise exception 'link_not_found';
-  end if;
-
-  for v_link in
-    select * from public.document_links link
-    where link.organization_id = p_organization_id and link.id = any(v_remove_ids)
-    order by link.id
-    for update
-  loop
-    if v_link.equipment_id is not null then
-      perform public.unlink_installed_equipment_document(
-        p_organization_id, v_link.id, p_actor_id, v_link.id
-      );
-    elsif v_link.service_case_id is not null then
-      select service_case.version into v_version from public.service_cases service_case
-      where service_case.id = v_link.service_case_id
-        and service_case.organization_id = p_organization_id;
-      perform public.unlink_service_case_document(
-        p_organization_id, v_link.id, v_version, 'Dokumentverknüpfung entfernt', p_actor_id, v_link.id
-      );
-    elsif v_link.maintenance_coverage_id is not null then
-      select coverage.version into v_version from public.maintenance_coverages coverage
-      where coverage.id = v_link.maintenance_coverage_id
-        and coverage.organization_id = p_organization_id;
-      perform public.unlink_maintenance_coverage_document(
-        p_organization_id, v_link.id, v_version, 'Dokumentverknüpfung entfernt', p_actor_id, v_link.id
-      );
-    else
-      delete from public.document_links link
-      where link.id = v_link.id and link.organization_id = p_organization_id;
-    end if;
-    insert into public.document_audit_events (
-      organization_id, document_id, actor_id, event_type, event_payload
-    ) values (
-      p_organization_id, p_document_id, p_actor_id, 'unlinked',
-      jsonb_build_object(
-        'jobId', v_link.job_id, 'projectId', v_link.project_id, 'clientId', v_link.client_id,
-        'employeeId', v_link.employee_id, 'requestId', v_link.request_id,
-        'equipmentId', v_link.equipment_id, 'serviceCaseId', v_link.service_case_id,
-        'maintenanceCoverageId', v_link.maintenance_coverage_id
-      )
-    );
-  end loop;
-
-  with requested (job_id, project_id, client_id, employee_id, equipment_id, service_case_id,
-    maintenance_coverage_id) as (
-    select target_id, null::uuid, null::uuid, null::uuid, null::uuid, null::uuid, null::uuid
-    from unnest(coalesce(p_add_job_ids, '{}')) target_id
-    union all
-    select null, target_id, null, null, null, null, null
-    from unnest(coalesce(p_add_project_ids, '{}')) target_id
-    union all
-    select null, null, target_id, null, null, null, null
-    from unnest(coalesce(p_add_client_ids, '{}')) target_id
-    union all
-    select null, null, null, target_id, null, null, null
-    from unnest(coalesce(p_add_employee_ids, '{}')) target_id
-    union all
-    select null, null, null, null, target_id, null, null
-    from unnest(coalesce(p_add_equipment_ids, '{}')) target_id
-    union all
-    select null, null, null, null, null, target_id, null
-    from unnest(coalesce(p_add_service_case_ids, '{}')) target_id
-    union all
-    select null, null, null, null, null, null, target_id
-    from unnest(coalesce(p_add_maintenance_coverage_ids, '{}')) target_id
-  ),
-  added as (
-    insert into public.document_links (
-      organization_id, document_id, job_id, project_id, client_id, employee_id, equipment_id,
-      service_case_id, maintenance_coverage_id, created_by
-    )
-    select p_organization_id, p_document_id, requested.job_id, requested.project_id,
-      requested.client_id, requested.employee_id, requested.equipment_id,
-      requested.service_case_id, requested.maintenance_coverage_id, p_actor_id
-    from requested
-    on conflict do nothing
-    returning *
-  )
-  insert into public.document_audit_events (
-    organization_id, document_id, actor_id, event_type, event_payload
-  )
-  select p_organization_id, p_document_id, p_actor_id, 'linked',
-    jsonb_strip_nulls(jsonb_build_object(
-      'jobId', added.job_id, 'projectId', added.project_id, 'clientId', added.client_id,
-      'employeeId', added.employee_id, 'equipmentId', added.equipment_id,
-      'serviceCaseId', added.service_case_id, 'maintenanceCoverageId', added.maintenance_coverage_id
-    ))
-  from added;
-
-  -- Every requested target is linked now, the ones linked before included.
-  added_count := v_add_count;
-  removed_count := cardinality(v_remove_ids);
-  return next;
+  return new;
 end;
 $$;
-
-revoke all on function public.update_document_links(
-  uuid, uuid, uuid, uuid[], uuid[], uuid[], uuid[], uuid[], uuid[], uuid[], uuid[]
-) from public, anon, authenticated;
-grant execute on function public.update_document_links(
-  uuid, uuid, uuid, uuid[], uuid[], uuid[], uuid[], uuid[], uuid[], uuid[], uuid[]
-) to service_role;
+revoke all on function app_private.guard_invoice_original_links() from public, anon, authenticated, service_role;
+create trigger guard_invoice_original_links before insert or update on public.document_links
+  for each row execute function app_private.guard_invoice_original_links();
 
 -- 5. The organization's invoice settings with the number the next invoice
 -- issued today takes; an organization that saved none reads the defaults at
