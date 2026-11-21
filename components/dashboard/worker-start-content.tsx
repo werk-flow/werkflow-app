@@ -2,8 +2,6 @@
 
 import { memo, useCallback, useState, type ReactElement } from 'react';
 
-import { useClockState } from '@/components/clock-state-provider';
-import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { workerStartClockView } from './worker-start-clock';
@@ -16,25 +14,41 @@ import {
   WorkerStartTasks,
 } from './worker-start-sections';
 
+/**
+ * The shell state the start page follows, read through hooks the page part hands in
+ * (worker-start.tsx). This lazily loaded part imports no shell context module: a lazy chunk that
+ * does makes Turbopack split the (app) layout's start-up code into one more script, which every
+ * field cold start loads (werk-flow/werkflow-planning#489).
+ */
+export type WorkerStartSources = {
+  useClock: () => Parameters<typeof workerStartClockView>[0];
+  useActionableCount: () => number;
+  useUserId: () => string | null;
+  /** The active organization while the person works in it as `employee`, else null. */
+  useEmployeeOrgId: () => string | null;
+};
+
+type SourcesProps = { sources: WorkerStartSources };
+
 /** The only component that follows the clock: each clock action changes its state several times. */
-function ClockLines(): ReactElement {
+function ClockLines({ sources }: SourcesProps): ReactElement {
   // Berlin midnight renews „today“: a clock state of the day before then shows no hours as today's.
   const [today, setToday] = useState(getBusinessTodayIso);
   useBusinessDayRefresh(useCallback(() => setToday(getBusinessTodayIso()), []));
-  return clockLines(workerStartClockView(useClockState(), today));
+  return clockLines(workerStartClockView(sources.useClock(), today));
 }
 
 /** The only component that follows the attention counts. */
-function TaskCount(): ReactElement | null {
-  return taskCount(useAttentionCounts().actionableCount);
+function TaskCount({ sources }: SourcesProps): ReactElement | null {
+  return taskCount(sources.useActionableCount());
 }
 
 /**
  * The only component that follows the device day and the organization and profile contexts, which
  * a clock action's route refresh renders again; the sections below it compare their props.
  */
-function EinsaetzePart(): ReactElement {
-  const day = useWorkerStartDay();
+function EinsaetzePart({ sources }: SourcesProps): ReactElement {
+  const day = useWorkerStartDay(sources.useUserId(), sources.useEmployeeOrgId());
   const online = useOnline();
   return (
     <WorkerStartEinsaetze
@@ -51,18 +65,19 @@ function EinsaetzePart(): ReactElement {
 /**
  * A field worker's start page: today's Einsätze from the phone's snapshot, the clock and today's
  * working time, and the own open Aufgaben. Everything comes from what the app already holds;
- * the only reads are the phone's own storage. Memoized without props and reading no context: a
- * route refresh after a clock action renders the page again and leaves this part as it is.
+ * the only reads are the phone's own storage. Memoized on the page part's fixed sources and reading
+ * no context itself: a route refresh after a clock action renders the page again and leaves this
+ * part as it is.
  */
-export const WorkerStartContent = memo(function WorkerStartContent(): ReactElement {
+export const WorkerStartContent = memo(function WorkerStartContent({ sources }: SourcesProps): ReactElement {
   return (
     <div className="mx-auto max-w-3xl space-y-6" data-testid="worker-start">
-      <EinsaetzePart />
+      <EinsaetzePart sources={sources} />
       <WorkerStartClock>
-        <ClockLines />
+        <ClockLines sources={sources} />
       </WorkerStartClock>
       <WorkerStartTasks>
-        <TaskCount />
+        <TaskCount sources={sources} />
       </WorkerStartTasks>
     </div>
   );

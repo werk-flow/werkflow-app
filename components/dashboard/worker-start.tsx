@@ -3,9 +3,25 @@
 import { lazy, Suspense, type ComponentType, type ReactElement } from 'react';
 
 import { TodayRefreshOnStart } from '@/components/auftraege/work-pack/today-refresh-on-start';
+import { useClockState } from '@/components/clock-state-context';
+import { useOrganization } from '@/components/organization/organization-context';
+import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import { SectionError } from '@/components/ui/section-error';
+import { useUserProfile } from '@/components/user/user-profile-context';
 import { logError } from '@/lib/logging';
+import type { WorkerStartSources } from './worker-start-content';
 import { WorkerStartSkeleton } from './worker-start-skeleton';
+
+/** The shell state the lazily loaded part follows; fixed, so that part's memo holds. */
+const SOURCES: WorkerStartSources = {
+  useClock: useClockState,
+  useActionableCount: () => useAttentionCounts().actionableCount,
+  useUserId: () => useUserProfile().profile?.id ?? null,
+  useEmployeeOrgId: () => {
+    const { activeOrg } = useOrganization();
+    return activeOrg?.role === 'employee' ? activeOrg.orgId : null;
+  },
+};
 
 /** A start page whose code cannot load (a chunk a deployment removed, a dropped connection). */
 function WorkerStartLoadError(): ReactElement {
@@ -20,7 +36,9 @@ function WorkerStartLoadError(): ReactElement {
 
 // Loads after the page is usable: the server render carries only this reference, and every
 // clock action renders the page again. The job page never loads this code.
-async function loadWorkerStartContent(): Promise<{ default: ComponentType }> {
+async function loadWorkerStartContent(): Promise<{
+  default: ComponentType<{ sources: WorkerStartSources }>;
+}> {
   try {
     const { WorkerStartContent } = await import('./worker-start-content');
     return { default: WorkerStartContent };
@@ -42,7 +60,7 @@ export function WorkerStart(): ReactElement {
     <>
       <TodayRefreshOnStart />
       <Suspense fallback={<WorkerStartSkeleton />}>
-        <WorkerStartContent />
+        <WorkerStartContent sources={SOURCES} />
       </Suspense>
     </>
   );

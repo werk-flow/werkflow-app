@@ -300,12 +300,12 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^@\/(lib\/field-sync\/device\/today-(store|refresh)|components\/clock-state-provider|components\/realtime\/attention-count-provider|components\/organization\/organization-context|components\/user\/user-profile-context)$/,
+                  /^@\/(lib\/field-sync\/device\/today-(store|refresh)|components\/clock-state-context|components\/realtime\/attention-count-provider|components\/organization\/organization-context|components\/user\/user-profile-context)$/,
               },
               (args) => {
                 if (
-                  args.importer.endsWith('worker-start-day.ts') ||
-                  args.importer.endsWith('worker-start-content.tsx')
+                  args.importer.endsWith('worker-start.tsx') ||
+                  args.importer.endsWith('worker-start-day.ts')
                 )
                   return { path: join(import.meta.dir, 'worker-start-service-boundaries.ts') };
               },

@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
-import { useOrganization } from '@/components/organization/organization-context';
-import { useUserProfile } from '@/components/user/user-profile-context';
 import { useClientRead } from '@/hooks/use-client-read';
 import type { StoredToday } from '@/lib/field-sync/device/today-store';
 import { TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
@@ -87,11 +85,9 @@ function useDropOnWipe(dropAndReadAgain: () => void): void {
  * The day the start page may show: the device's day, only while it belongs to this tab's person and
  * employee organization. The device claim is browser-wide, so another tab's organization can own
  * it; a lost membership or role changes the organization context and hides the day at once.
+ * `organizationId` is the active organization while the person is its `employee`, else null.
  */
-export function useWorkerStartDay() {
-  const userId = useUserProfile().profile?.id ?? null;
-  const { activeOrg } = useOrganization();
-  const organizationId = activeOrg?.role === 'employee' ? activeOrg.orgId : null;
+export function useWorkerStartDay(userId: string | null, organizationId: string | null) {
   // A sign-out or organization switch in another tab drops the shown day at once (a deps change).
   const [wipes, setWipes] = useState(0);
   const dropAndReadAgain = useCallback(() => setWipes((count) => count + 1), []);
