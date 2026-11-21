@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { fullRunsInLedger } from '../../lib/testing/ci/full-run';
+import { type FullRunDecision, fullRunsInLedger } from '../../lib/testing/ci/full-run';
 import { readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
 import {
   CLOCK_WORK_NAMES,
@@ -85,7 +85,7 @@ if (command === 'started') {
 }
 if (command !== 'due' || positionals.length !== 1) throw new Error(usage);
 
-function fullRun(): { run: boolean; reason: string } | { unreadable: string } {
+function fullRun(): FullRunDecision | { unreadable: string } {
   const answer = spawnSync(
     process.execPath,
     ['scripts/ci/full-run.ts', 'due', ...(values.ledger ? ['--ledger', values.ledger] : [])],
@@ -103,7 +103,12 @@ function fullRun(): { run: boolean; reason: string } | { unreadable: string } {
       'reason' in decision &&
       typeof decision.reason === 'string'
     )
-      return { run: decision.run, reason: decision.reason };
+      return {
+        run: decision.run,
+        reason: decision.reason,
+        // Only an explicit `true` skips the nightly; anything else leaves it due.
+        ...('headHasFullRun' in decision && decision.headHasFullRun === true ? { headHasFullRun: true } : {}),
+      };
   } catch {
     // Not JSON: no answer, below.
   }

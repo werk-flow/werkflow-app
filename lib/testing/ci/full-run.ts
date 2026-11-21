@@ -33,7 +33,8 @@ export type Landed = {
   isDocs: (file: string) => boolean;
 };
 
-export type FullRunDecision = { run: boolean; reason: string };
+/** Whether a full run starts now, and why; `headHasFullRun` when main's head already has one (the nightly then skips it). */
+export type FullRunDecision = { run: boolean; reason: string; headHasFullRun?: true };
 
 /** The Berlin wall-clock time of an instant as `HH:MM`. */
 const berlinClock = (at: Date): string => formatBerlinLocalDateTime(at).slice(11);
@@ -56,7 +57,7 @@ export function fullRunDue(input: {
   const commit = input.history[behind];
   if (commit === undefined)
     return { run: true, reason: `No full run on the last ${input.history.length} commits of main.` };
-  if (behind === 0) return { run: false, reason: `${commit} already has a full run.` };
+  if (behind === 0) return { run: false, reason: `${commit} already has a full run.`, headHasFullRun: true };
   const runs = input.runs.filter((run) => run.commit === commit);
   const active = input.runs.find((run) => !run.ended && input.history.includes(run.commit));
   if (active)

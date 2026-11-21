@@ -15,6 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { type CiResult, readLedger, readResult, resultFileName } from './results';
+import { plannedWork } from './run-plan';
 
 const repository = resolve(import.meta.dir, '../../..');
 const RUN_URL = 'https://ci.example/runs/2';
@@ -127,6 +128,7 @@ function planOf(root: string, overrides: Partial<CiResult> = {}): CiResult {
     runUrl: RUN_URL,
     startedAt: '2026-11-20T20:00:00.000Z',
     completedAt: '2026-11-20T20:01:00.000Z',
+    attempt: 1,
     plan: {
       jobs: ['plan', 'fast', 'check'],
       skips: {},
@@ -348,38 +350,99 @@ test('a job refuses a stale same-tree plan of another run, event or a plan witho
   });
 });
 
-test("a push reuses the tree an integration run passed: Plan's own start, appended before it reads, does not withdraw it", () => {
+/** The fixture planner's outputs, as scripts/ci-plan.ts writes them in `fixture`. */
+const FIXTURE_OUTPUTS = {
+  ...EMPTY_OUTPUTS,
+  static: 'static:migration-order',
+  sql: 'sql:grants',
+  selected_static: 'static:migration-order',
+  selected_sql: 'sql:grants',
+  selected_components: 'ui:contracts:work',
+  component_shards: '[{"shard":1,"groups":"ui:contracts:work"}]',
+};
+
+/** An integration run of the fixture's tree in the ledger: its Plan start, its passed Plan on `base` with `work`, and its passed Check. */
+function integrationPass(root: string, ledger: string, base: string, work: readonly string[]): string {
+  const integration = 'https://ci.example/runs/1';
+  const start = planOf(root, {
+    runUrl: integration,
+    status: 'running',
+    completedAt: null,
+    plan: undefined,
+    base,
+  });
+  const planned = planOf(root, {
+    runUrl: integration,
+    base,
+    plan: {
+      jobs: ['plan', 'fast', 'sql', 'components', 'check'],
+      skips: {},
+      shards: [],
+      outputs: FIXTURE_OUTPUTS,
+      work: [...work],
+    },
+  });
+  const check = { ...start, job: 'check', status: 'passed', completedAt: '2026-11-20T20:30:00.000Z' };
+  writeFileSync(ledger, [start, planned, check].map((receipt) => `${JSON.stringify(receipt)}\n`).join(''));
+  return integration;
+}
+
+/** Plan of a push of the fixture's commit with base `base`, against `ledger`. */
+function pushPlan(
+  root: string,
+  run: string,
+  ledger: string,
+  base: string,
+): CiResult | { unreadable: string } {
+  const code = runJob(root, 'plan', {
+    CI_EVENT: 'main',
+    CI_BASE_SHA: base,
+    CI_RESULTS_DIR: run,
+    CI_PRODUCER: 'mac-standin',
+    CI_LEDGER: ledger,
+    CI_RUN_URL: RUN_URL,
+  });
+  expect(code).toBe(0);
+  return readResult(join(run, resultFileName('plan', null)));
+}
+
+test("a push reuses the landing an integration run passed: Plan's own start, appended before it reads, does not withdraw it", () => {
   inFolder((folder) => {
     const root = fixture(folder);
     const run = join(folder, 'run');
     const ledger = join(folder, 'ledger.jsonl');
-    const integration = 'https://ci.example/runs/1';
-    const start = planOf(root, {
-      runUrl: integration,
-      status: 'running',
-      completedAt: null,
-      plan: undefined,
-    });
-    const check = { ...start, job: 'check', status: 'passed', completedAt: '2026-11-20T20:30:00.000Z' };
-    writeFileSync(ledger, `${JSON.stringify(start)}\n${JSON.stringify(check)}\n`);
-    const code = runJob(root, 'plan', {
-      CI_EVENT: 'main',
-      CI_BASE_SHA: 'HEAD',
-      CI_RESULTS_DIR: run,
-      CI_PRODUCER: 'mac-standin',
-      CI_LEDGER: ledger,
-      CI_RUN_URL: RUN_URL,
-    });
-    expect(code).toBe(0);
-    const plan = readResult(join(run, resultFileName('plan', null)));
+    const head = git(root, 'rev-parse', 'HEAD');
+    const integration = integrationPass(root, ledger, head, plannedWork('main', FIXTURE_OUTPUTS));
+    // A symbolic base counts by the commit it names.
+    const plan = pushPlan(root, run, ledger, 'HEAD');
     expect(plan).toMatchObject({ status: 'passed', reusedFrom: integration });
     expect('plan' in plan && plan.plan?.jobs).toEqual(['plan', 'check']);
     expect(ledgerOf(ledger).map(({ job, status, runUrl }) => ({ job, status, runUrl }))).toEqual([
       { job: 'plan', status: 'running', runUrl: integration },
+      { job: 'plan', status: 'passed', runUrl: integration },
       { job: 'check', status: 'passed', runUrl: integration },
       { job: 'plan', status: 'running', runUrl: RUN_URL },
       { job: 'plan', status: 'passed', runUrl: RUN_URL },
     ]);
+  });
+});
+
+test('a push runs its jobs when the integration pass of its tree diffed against another base or required other work', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const head = git(root, 'rev-parse', 'HEAD');
+    const work = plannedWork('main', FIXTURE_OUTPUTS);
+    const cases = [
+      { base: 'e'.repeat(40), work },
+      { base: head, work: work.filter((entry) => !entry.startsWith('sql:')) },
+    ];
+    for (const [index, { base, work: required }] of cases.entries()) {
+      const ledger = join(folder, `ledger-${index}.jsonl`);
+      integrationPass(root, ledger, base, required);
+      const plan = pushPlan(root, join(folder, `run-${index}`), ledger, 'HEAD');
+      expect(plan).toMatchObject({ status: 'passed', reusedFrom: null });
+      expect('plan' in plan && plan.plan?.jobs).toEqual(['plan', 'fast', 'sql', 'components', 'check']);
+    }
   });
 });
 

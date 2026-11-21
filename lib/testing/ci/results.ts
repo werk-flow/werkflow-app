@@ -28,6 +28,12 @@ const runPlanSchema = z.object({
       }),
     )
     .optional(),
+  /**
+   * The work the run's event requires of the selection before reuse, as `job:group`, sorted
+   * (`plannedWork` in lib/testing/ci/run-plan.ts). A push reuses a passed run of its tree only when
+   * that run required the same work. Absent on older plans, which no push reuses.
+   */
+  work: z.array(z.string().min(1)).optional(),
 });
 export type RunPlan = z.infer<typeof runPlanSchema>;
 

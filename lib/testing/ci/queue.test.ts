@@ -59,10 +59,10 @@ test('a green batch runs once and lands every PR in order, and main ends on the 
   expect(needsAttention(outcome)).toBe(false);
 });
 
-test('a failed batch of one names its PR without bisection and lands nothing', async () => {
+test('a failed batch of one names its PR after one confirming rerun, and lands nothing', async () => {
   const world = fakeWorld([pull(1)], { breaks: [1] });
   const outcome = await runQueueTick(world.adapter, LIVE);
-  expect(world.tested).toEqual([[1]]);
+  expect(world.tested).toEqual([[1], [1]]);
   expect(outcome.culprit).toBe(1);
   expect(world.rejected).toEqual([1]);
   expect(world.landed).toEqual([]);
@@ -91,13 +91,14 @@ test('bisection names the first PR when it breaks the batch, and lands nothing',
   expect(world.landed).toEqual([]);
 });
 
-test('bisection names the last PR when only it breaks, and lands the three before it', async () => {
+test('bisection names the last PR when only it breaks, after one confirming rerun, and lands the three before it', async () => {
   const world = fakeWorld([pull(1), pull(2), pull(3), pull(4)], { breaks: [4] });
   const outcome = await runQueueTick(world.adapter, LIVE);
   expect(world.tested).toEqual([
     [1, 2, 3, 4],
     [1, 2],
     [1, 2, 3],
+    [1, 2, 3, 4],
   ]);
   expect(outcome.culprit).toBe(4);
   expect(world.landed).toEqual([1, 2, 3]);
@@ -111,32 +112,6 @@ test('a stale base lands nothing: main moved while the batch ran', async () => {
   expect(world.landed).toEqual([]);
   expect(outcome.stops.map((stop) => stop.kind)).toEqual(['stale-base']);
   expect(needsAttention(outcome)).toBe(false);
-});
-
-test('a run without a verdict (a cancelled worker, a missing result) lands nothing, names no PR and needs a person', async () => {
-  const world = fakeWorld([pull(1), pull(2)], { answer: () => 'inconclusive' });
-  const outcome = await runQueueTick(world.adapter, LIVE);
-  expect(world.tested).toEqual([[1, 2]]);
-  expect(world.landed).toEqual([]);
-  expect(world.rejected).toEqual([]);
-  expect(outcome.culprit).toBe(null);
-  expect(needsAttention(outcome)).toBe(true);
-});
-
-test('a bisection run without a verdict stops the search, names no PR and lands nothing, not even a proved prefix', async () => {
-  const world = fakeWorld([pull(1), pull(2), pull(3), pull(4)], {
-    answer: (prs) => (prs.length === 4 ? 'failed' : prs.length === 2 ? 'passed' : 'inconclusive'),
-  });
-  const outcome = await runQueueTick(world.adapter, LIVE);
-  expect(world.tested).toEqual([
-    [1, 2, 3, 4],
-    [1, 2],
-    [1, 2, 3],
-  ]);
-  expect(outcome.culprit).toBe(null);
-  expect(world.rejected).toEqual([]);
-  expect(world.landed).toEqual([]);
-  expect(needsAttention(outcome)).toBe(true);
 });
 
 test('a tree that passed and failed in one tick is no verdict: nobody is named and its pass lands nothing', async () => {
@@ -214,17 +189,6 @@ test('an empty queue runs nothing', async () => {
   expect(outcome.stops.map((stop) => stop.kind)).toEqual(['idle']);
 });
 
-test('a landed tree that differs from the tested tree stops the landing at that PR and needs a person', async () => {
-  const world = fakeWorld([pull(1), pull(2), pull(3)], {
-    mergeTree: (tree) => (tree.endsWith('+2') ? `${tree}*` : tree),
-  });
-  const outcome = await runQueueTick(world.adapter, LIVE);
-  expect(outcome.landing).toEqual([1]);
-  expect(world.landed).toEqual([1, 2]);
-  expect(outcome.stops[0]?.detail).toContain('is not the tested tree');
-  expect(needsAttention(outcome)).toBe(true);
-});
-
 test('a merge GitHub refuses stops the landing with its reason', async () => {
   const world = fakeWorld([pull(1), pull(2)], { refuse: 2 });
   const outcome = await runQueueTick(world.adapter, LIVE);
@@ -238,26 +202,6 @@ test('a merge GitHub refuses stops the landing with its reason', async () => {
   ]);
   expect(world.withdrawn).toEqual([1, 2]);
   expect(world.state()).toEqual({ pending: null, frozen: null });
-});
-
-test('a merge GitHub refuses lands nothing even when another commit put the tested tree onto main, and withdraws the mark', async () => {
-  const world = fakeWorld([pull(1), pull(2)], {
-    refuse: 1,
-    beforeLand: (merge, { pushMain }) => {
-      if (merge === 1) pushMain('main+1');
-    },
-  });
-  const outcome = await runQueueTick(world.adapter, LIVE);
-  expect(world.landed).toEqual([]);
-  expect(outcome.landing).toEqual([]);
-  expect(outcome.stops).toEqual([
-    {
-      kind: 'landing-failed',
-      detail: `GitHub did not merge #1: Pull request is not mergeable; main moved to ${world.main().commit} without it`,
-    },
-  ]);
-  expect(world.withdrawn).toEqual([1]);
-  expect(needsAttention(outcome)).toBe(true);
 });
 
 test("a merge whose answer was lost lands when GitHub confirms the PR merged as main's new head", async () => {
@@ -399,13 +343,18 @@ test('a landing stopped after a prefix a bisection run passed says so: main hold
     },
   });
   const outcome = await runQueueTick(world.adapter, LIVE);
-  expect(world.tested).toEqual([[1, 2, 3], [1], [1, 2]]);
+  expect(world.tested).toEqual([[1, 2, 3], [1], [1, 2], [1, 2, 3]]);
   expect(world.landed).toEqual([1]);
   expect(outcome.stops.at(-1)).toEqual({
     kind: 'partial',
     detail: `the landing stopped after #1 of #1, #2: main's ${world.main().commit} holds the tree that run-2:main+1 passed, and the next tick starts from it`,
   });
 });
+
+/** The work every plan of `runReceipts` requires. */
+const WORK = ['browser:sql:grants', 'sql:sql:grants'];
+/** A landing on main before the batch with that work. */
+const landingOf = (tree: string) => ({ tree, base: sha('main'), work: WORK });
 
 /** Every receipt one run leaves in the runner's ledger: Plan's, a job's and a browser shard's start and end, and its Check. */
 function runReceipts(tree: string, runUrl: string, event: CiResult['event'], passed: boolean): CiResult[] {
@@ -428,6 +377,10 @@ function runReceipts(tree: string, runUrl: string, event: CiResult['event'], pas
       runUrl,
       startedAt: '2026-11-21T08:00:00Z',
       completedAt: ended ? '2026-11-21T09:00:00Z' : null,
+      attempt: 1,
+      ...(job === 'plan' && ended
+        ? { plan: { jobs: [], skips: {}, shards: [], outputs: {}, work: WORK } }
+        : {}),
     };
   };
   return [
@@ -455,7 +408,7 @@ test("a landing stopped after an untested prefix leaves main on a tree that no r
     runReceipts(run.tree, run.verdict.runUrl, 'integration', run.verdict.kind === 'passed'),
   );
   // The batch's pass stands for its own tip, so the receipts are ones the reuse rule reads.
-  expect(passedTree(batch, 'main+1+2+3', () => undefined)).toBe('run-1:main+1+2+3');
+  expect(passedTree(batch, landingOf('main+1+2+3'), () => undefined)).toBe('run-1:main+1+2+3');
   // #1's own green fast tier ran on the same tree as main's new head, on the PR event.
   const ledger = [...batch, ...runReceipts(untested, 'pr/1', 'pr', true)];
   const key = (job: 'sql' | 'browser') => ({
@@ -466,7 +419,7 @@ test("a landing stopped after an untested prefix leaves main on a tree that no r
     listGrowthApproved: false,
   });
   for (const entries of [ledger, ...ledger.map((entry) => [entry])]) {
-    expect(passedTree(entries, untested, () => undefined)).toBe(undefined);
+    expect(passedTree(entries, landingOf(untested), () => undefined)).toBe(undefined);
     expect(provenTree(entries, untested)).toBe(undefined);
   }
   for (const entries of [batch, ...batch.map((entry) => [entry])])

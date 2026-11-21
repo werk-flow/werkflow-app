@@ -46,6 +46,7 @@ function receipt(overrides: Partial<CiResult> = {}): CiResult {
     runUrl: RUN_1,
     startedAt: '2026-11-20T20:00:00.000Z',
     completedAt: '2026-11-20T20:05:00.000Z',
+    attempt: 1,
     ...overrides,
   };
 }
@@ -156,6 +157,24 @@ const JOB_CASES: Case[] = [
   },
 ];
 
+JOB_CASES.push(
+  {
+    name: "a rerun attempt's start, then the first attempt's late pass",
+    ledger: [jobStart(), jobStart({ attempt: 2 }), jobPass()],
+    expected: undefined,
+  },
+  {
+    name: 'a failed first attempt, then a passed rerun of the job',
+    ledger: [jobStart(), jobFail(), jobStart({ attempt: 2 }), jobPass({ attempt: 2 })],
+    expected: RUN_1,
+  },
+  {
+    name: 'a receipt written before attempts were recorded',
+    ledger: [jobStart({ attempt: undefined }), jobPass({ attempt: undefined })],
+    expected: undefined,
+  },
+);
+
 for (const { name, ledger, expected } of JOB_CASES)
   test(`per-job reuse, ${name}: ${expected ? 'reuses' : 'runs the job'}`, () => {
     expect(reusableReceipt(ledger, KEY, 'integration')).toBe(expected);
@@ -192,101 +211,117 @@ const checkPass = (overrides: Partial<CiResult> = {}): CiResult =>
 const fastFail = (overrides: Partial<CiResult> = {}): CiResult =>
   receipt({ job: 'fast', event: 'integration', status: 'failed', ...overrides });
 
+/** The landing a push asks about: its tree, the commit its plan diffs against, and the work that plan requires. */
+const BASE = 'd'.repeat(40);
+const WORK = ['fast:step:build', 'sql:sql:grants', 'sql:step:seed', 'sql:step:types'];
+const LANDING = { tree: TREE, base: BASE, work: WORK };
+/** An integration run's Plan start and its passed end, which records its base and its required work. */
+const planned = (overrides: Partial<CiResult> = {}): CiResult[] => [
+  planStart({ base: BASE, ...overrides }),
+  planStart({
+    base: BASE,
+    status: 'passed',
+    completedAt: '2026-11-20T20:01:00.000Z',
+    plan: { jobs: ['plan', 'fast', 'sql', 'check'], skips: {}, shards: [], outputs: {}, work: WORK },
+    ...overrides,
+  }),
+];
+
 const TREE_CASES: Case[] = [
   {
     name: 'its own start, then its passed Check',
-    ledger: [planStart(), fastFail({ status: 'passed' }), checkPass()],
+    ledger: [...planned(), fastFail({ status: 'passed' }), checkPass()],
     expected: RUN_1,
   },
   {
     name: 'an older failed run, then a newer run that passed',
     ledger: [
-      planStart(),
+      ...planned(),
       checkPass({ status: 'failed' }),
-      planStart({ runUrl: RUN_2 }),
+      ...planned({ runUrl: RUN_2 }),
       checkPass({ runUrl: RUN_2 }),
     ],
     expected: RUN_2,
   },
   {
     name: 'an older pass, then a newer start',
-    ledger: [planStart(), checkPass(), planStart({ runUrl: RUN_2 })],
+    ledger: [...planned(), checkPass(), ...planned({ runUrl: RUN_2 })],
     expected: undefined,
   },
   {
     name: 'a newer start, then the older run’s late passed Check',
-    ledger: [planStart(), planStart({ runUrl: RUN_2 }), checkPass()],
+    ledger: [...planned(), ...planned({ runUrl: RUN_2 }), checkPass()],
     expected: undefined,
   },
   {
     name: 'a newer failed Check whose Plan start is missing',
-    ledger: [planStart(), checkPass(), checkPass({ runUrl: RUN_2, status: 'failed' })],
+    ledger: [...planned(), checkPass(), checkPass({ runUrl: RUN_2, status: 'failed' })],
     expected: undefined,
   },
   {
     name: 'a newer failed job whose Plan start is missing',
-    ledger: [planStart(), checkPass(), fastFail({ runUrl: RUN_2 })],
+    ledger: [...planned(), checkPass(), fastFail({ runUrl: RUN_2 })],
     expected: undefined,
   },
   {
     name: 'a newer Plan start in a changed checkout',
-    ledger: [planStart(), checkPass(), planStart({ runUrl: RUN_2, producer: null })],
+    ledger: [...planned(), checkPass(), ...planned({ runUrl: RUN_2, producer: null })],
     expected: undefined,
   },
   { name: 'an unreadable ledger', ledger: { unreadable: 'ledger.jsonl:2 is no JSON' }, expected: undefined },
   {
     name: 'an entry without a run, before the start',
-    ledger: [fastFail({ runUrl: null }), planStart(), checkPass()],
+    ledger: [fastFail({ runUrl: null }), ...planned(), checkPass()],
     expected: undefined,
   },
   {
     name: 'an entry without a run, after the Check',
-    ledger: [planStart(), checkPass(), fastFail({ runUrl: null })],
+    ledger: [...planned(), checkPass(), fastFail({ runUrl: null })],
     expected: undefined,
   },
   {
     name: "its Check's start, then its pass",
-    ledger: [planStart(), checkPass({ status: 'running', completedAt: null }), checkPass()],
+    ledger: [...planned(), checkPass({ status: 'running', completedAt: null }), checkPass()],
     expected: RUN_1,
   },
   {
     name: 'a Check that started and never ended',
-    ledger: [planStart(), checkPass(), checkPass({ status: 'running', completedAt: null })],
+    ledger: [...planned(), checkPass(), checkPass({ status: 'running', completedAt: null })],
     expected: undefined,
   },
   { name: 'a passed Check without its Plan start', ledger: [checkPass()], expected: undefined },
-  { name: 'a failed Check', ledger: [planStart(), checkPass({ status: 'failed' })], expected: undefined },
+  { name: 'a failed Check', ledger: [...planned(), checkPass({ status: 'failed' })], expected: undefined },
   {
     name: 'a Check without completion',
-    ledger: [planStart(), checkPass({ completedAt: null })],
+    ledger: [...planned(), checkPass({ completedAt: null })],
     expected: undefined,
   },
   {
     name: 'a Check without a producer',
-    ledger: [planStart(), checkPass({ producer: null })],
+    ledger: [...planned(), checkPass({ producer: null })],
     expected: undefined,
   },
   {
     name: 'a Check that reused a tree',
-    ledger: [planStart(), checkPass({ reusedFrom: RUN_2 })],
+    ledger: [...planned(), checkPass({ reusedFrom: RUN_2 })],
     expected: undefined,
   },
   {
     name: 'a run that ends in a passed job, not its Check',
-    ledger: [planStart(), checkPass(), fastFail({ status: 'passed' })],
+    ledger: [...planned(), checkPass(), fastFail({ status: 'passed' })],
     expected: undefined,
   },
   {
     name: "a pull request run's passed Check",
-    ledger: [planStart({ event: 'pr' }), checkPass({ event: 'pr' })],
+    ledger: [...planned({ event: 'pr' }), checkPass({ event: 'pr' })],
     expected: undefined,
   },
   {
     name: 'a newer pull request run of the tree',
     ledger: [
-      planStart(),
+      ...planned(),
       checkPass(),
-      planStart({ runUrl: RUN_2, event: 'pr' }),
+      ...planned({ runUrl: RUN_2, event: 'pr' }),
       checkPass({ runUrl: RUN_2, event: 'pr' }),
     ],
     expected: undefined,
@@ -294,47 +329,115 @@ const TREE_CASES: Case[] = [
   {
     name: 'a newer run of another tree',
     ledger: [
-      planStart(),
+      ...planned(),
       checkPass(),
-      planStart({ runUrl: RUN_2, tree: OTHER_TREE }),
+      ...planned({ runUrl: RUN_2, tree: OTHER_TREE }),
       fastFail({ runUrl: RUN_2, tree: OTHER_TREE }),
     ],
     expected: RUN_1,
   },
 ];
 
-for (const { name, ledger, expected } of TREE_CASES)
+const BOUND_CASES: Case[] = [
+  {
+    name: 'a pass of the same tree on another base',
+    ledger: [...planned({ base: 'e'.repeat(40) }), checkPass()],
+    expected: undefined,
+  },
+  {
+    name: 'a pass of the same tree whose plan required other work',
+    ledger: [
+      planStart({ base: BASE }),
+      planStart({
+        base: BASE,
+        status: 'passed',
+        plan: { jobs: [], skips: {}, shards: [], outputs: {}, work: ['fast:step:build'] },
+      }),
+      checkPass(),
+    ],
+    expected: undefined,
+  },
+  {
+    name: 'a pass whose plan recorded no work',
+    ledger: [
+      planStart({ base: BASE }),
+      planStart({ base: BASE, status: 'passed', plan: { jobs: [], skips: {}, shards: [], outputs: {} } }),
+      checkPass(),
+    ],
+    expected: undefined,
+  },
+  {
+    name: 'a pass whose Plan did not end',
+    ledger: [planStart({ base: BASE }), checkPass()],
+    expected: undefined,
+  },
+  {
+    name: "a rerun attempt's Plan, then the first attempt's late passed Check",
+    ledger: [
+      ...planned(),
+      checkPass({ status: 'failed' }),
+      ...planned({ attempt: 2 }),
+      checkPass({ attempt: 2, status: 'failed' }),
+      checkPass(),
+    ],
+    expected: undefined,
+  },
+  {
+    name: 'a rerun of the failed jobs that passed in the second attempt',
+    ledger: [
+      ...planned(),
+      fastFail(),
+      checkPass({ status: 'failed' }),
+      fastFail({ attempt: 2, status: 'passed' }),
+      checkPass({ attempt: 2 }),
+    ],
+    expected: RUN_1,
+  },
+  {
+    name: 'a pass whose attempt is unreadable',
+    ledger: [...planned(), checkPass({ attempt: null })],
+    expected: undefined,
+  },
+];
+
+for (const { name, ledger, expected } of [...TREE_CASES, ...BOUND_CASES])
   test(`a push's passed tree, ${name}: ${expected ? 'reuses the run' : 'runs the work'}`, () => {
-    expect(passedTree(ledger, TREE, queueUnasked)).toBe(expected);
+    expect(passedTree(ledger, LANDING, queueUnasked)).toBe(expected);
   });
 
 test("a configured ledger is a push's only source of a passed tree; the merge queue answers only without one", () => {
   const queue = (): string => 'https://github.com/o/r/actions/runs/9';
   // Another run's newer start withdrew the pass in the ledger: a green queue run cannot restore it.
-  expect(passedTree([planStart(), checkPass(), planStart({ runUrl: RUN_2 })], TREE, queue)).toBeUndefined();
-  expect(passedTree([], TREE, queue)).toBeUndefined();
-  expect(passedTree([planStart(), checkPass()], TREE, queue)).toBe(RUN_1);
-  expect(passedTree(undefined, TREE, queue)).toBe('https://github.com/o/r/actions/runs/9');
+  expect(
+    passedTree([...planned(), checkPass(), ...planned({ runUrl: RUN_2 })], LANDING, queue),
+  ).toBeUndefined();
+  expect(passedTree([], LANDING, queue)).toBeUndefined();
+  expect(passedTree([...planned(), checkPass()], LANDING, queue)).toBe(RUN_1);
+  expect(passedTree(undefined, LANDING, queue)).toBe('https://github.com/o/r/actions/runs/9');
 });
 
-test('the Actions adapter takes the newest queue run of the tree, and only when it completed and passed (real jq)', () => {
-  const run = (id: number, tree: string, conclusion: string | null) => ({
+test('the Actions adapter takes the newest queue run of the exact commit, and only when it completed and passed (real jq)', () => {
+  const COMMIT = 'c'.repeat(40);
+  const OTHER_COMMIT = 'f'.repeat(40);
+  const run = (id: number, commit: string, conclusion: string | null) => ({
     html_url: `https://github.com/o/r/actions/runs/${id}`,
-    head_commit: { tree_id: tree },
+    head_sha: commit,
+    head_commit: { tree_id: TREE },
     status: conclusion === null ? 'in_progress' : 'completed',
     conclusion,
   });
-  const jq = (runs: object[], tree = TREE) =>
-    spawnSync('jq', ['-r', passedTreeActionsFilter(tree)], {
+  const jq = (runs: object[], commit = COMMIT) =>
+    spawnSync('jq', ['-r', passedTreeActionsFilter(commit)], {
       input: JSON.stringify({ workflow_runs: runs }),
       encoding: 'utf8',
     }).stdout.trim();
-  expect(jq([run(3, OTHER_TREE, 'failure'), run(2, TREE, 'success'), run(1, TREE, 'success')])).toBe(
+  expect(jq([run(3, OTHER_COMMIT, 'failure'), run(2, COMMIT, 'success'), run(1, COMMIT, 'success')])).toBe(
     'https://github.com/o/r/actions/runs/2',
   );
-  expect(jq([run(2, TREE, 'failure'), run(1, TREE, 'success')])).toBe('');
-  expect(jq([run(2, TREE, null), run(1, TREE, 'success')])).toBe('');
-  expect(jq([run(1, TREE, 'success')], 'd'.repeat(40))).toBe('');
+  expect(jq([run(2, COMMIT, 'failure'), run(1, COMMIT, 'success')])).toBe('');
+  expect(jq([run(2, COMMIT, null), run(1, COMMIT, 'success')])).toBe('');
+  // The same tree on another commit is another landing: another parent, so maybe another plan.
+  expect(jq([run(1, OTHER_COMMIT, 'success')])).toBe('');
 });
 
 test('an absent ledger is empty; a ledger that cannot be read, or holds one bad line, counts for nothing', () => {
@@ -355,7 +458,7 @@ test('an absent ledger is empty; a ledger that cannot be read, or holds one bad 
       `${JSON.stringify(planStart())}\n${JSON.stringify(checkPass())}\n${JSON.stringify(fastFail({ runUrl: '' }))}\n`,
     );
     expect(readLedger(ledger)).toEqual({ unreadable: `${ledger}:3 is no valid receipt` });
-    expect(passedTree(readLedger(ledger), TREE, queueUnasked)).toBeUndefined();
+    expect(passedTree(readLedger(ledger), LANDING, queueUnasked)).toBeUndefined();
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
@@ -381,19 +484,19 @@ function planLedger(before: CiResult[], during: CiResult[] = []) {
 }
 
 test("Plan reads the ledger only after its own start, so another run's start appended meanwhile withdraws the reuse", () => {
-  const older = [planStart(), checkPass()];
+  const older = [...planned(), checkPass()];
   // Only Plan's own start follows the pass: the push reuses it.
-  expect(passedTree(planLedger(older).ledger, TREE, queueUnasked)).toBe(RUN_1);
+  expect(passedTree(planLedger(older).ledger, LANDING, queueUnasked)).toBe(RUN_1);
   // Another run's same-tree start lands after Plan's own: it withdraws the pass.
   const another = planStart({ runUrl: 'https://ci.example/runs/3' });
-  expect(passedTree(planLedger(older, [another]).ledger, TREE, queueUnasked)).toBeUndefined();
+  expect(passedTree(planLedger(older, [another]).ledger, LANDING, queueUnasked)).toBeUndefined();
   // A rerun of Plan's own run is another start, not Plan's exact receipt: it withdraws the pass too.
   const rerun = planStart({ runUrl: RUN_2, startedAt: '2026-11-20T21:00:01.000Z' });
-  expect(passedTree(planLedger(older, [rerun]).ledger, TREE, queueUnasked)).toBeUndefined();
+  expect(passedTree(planLedger(older, [rerun]).ledger, LANDING, queueUnasked)).toBeUndefined();
 });
 
 test('a ledger Plan cannot append its start to, cannot read, or that lacks its start reuses nothing', () => {
-  const older = [planStart(), checkPass()];
+  const older = [...planned(), checkPass()];
   const own = planStart({ runUrl: RUN_2 });
   const rejected = ledgerAfterStart(
     own,
@@ -403,7 +506,7 @@ test('a ledger Plan cannot append its start to, cannot read, or that lacks its s
     () => older,
   );
   expect(rejected).toEqual({ unreadable: "Plan's start could not be appended: EACCES: permission denied" });
-  expect(passedTree(rejected, TREE, queueUnasked)).toBeUndefined();
+  expect(passedTree(rejected, LANDING, queueUnasked)).toBeUndefined();
   const unreadable = ledgerAfterStart(
     own,
     () => {},
@@ -416,7 +519,7 @@ test('a ledger Plan cannot append its start to, cannot read, or that lacks its s
     () => older,
   );
   expect(lost).toEqual({ unreadable: "the ledger lacks Plan's own start" });
-  expect(passedTree(lost, TREE, queueUnasked)).toBeUndefined();
+  expect(passedTree(lost, LANDING, queueUnasked)).toBeUndefined();
 });
 
 test("main's tree is proven only when its newest run ends in a CI runner's finished passed Check on integration, main or full", () => {

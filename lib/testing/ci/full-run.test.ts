@@ -39,6 +39,7 @@ test('requests for a commit that has a full run, or while the newest one runs, s
   expect(decide([ended('c3', hoursBefore(NOON, 5))])).toEqual({
     run: false,
     reason: 'c3 already has a full run.',
+    headHasFullRun: true,
   });
   const running = decide([{ commit: 'c1', startedAt: hoursBefore(NOON, 5), ended: false }], {
     landed: landed(['scripts/ci/job.ts'], 'Tooling input changed: scripts/ci/job.ts'),

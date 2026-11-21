@@ -127,7 +127,7 @@ export const missingPlannerOutputs = (outputs: Readonly<Record<string, string>>)
 const WORK_JOBS = CI_JOBS.filter((job) => job !== 'plan' && job !== 'check');
 
 /** A push's plan whose tree `passedTree` passed: no job runs, and every planner key stays, empty. */
-function reusedTreePlan(passedTree: string): RunPlan {
+function reusedTreePlan(passedTree: string, work: string[]): RunPlan {
   const reason = `The integration run ${passedTree} passed this exact tree.`;
   const empty: Readonly<Record<string, string>> = {
     browser: 'false',
@@ -140,7 +140,44 @@ function reusedTreePlan(passedTree: string): RunPlan {
     skips: Object.fromEntries(WORK_JOBS.map((job) => [job, reason])),
     shards: [],
     outputs: Object.fromEntries(PLANNER_OUTPUTS.map((key) => [key, empty[key] ?? ''])),
+    work,
   };
+}
+
+/** The planner's browser and component shards, after every check that they stand for its selection. */
+function plannedShards(outputs: Readonly<Record<string, string>>): {
+  browser: CiShard[];
+  components: CiShard[];
+} {
+  const missing = missingPlannerOutputs(outputs);
+  if (missing.length) throw new Error(`The planner gave no ${missing.join(', ')}, so nothing is planned.`);
+  const browser = checkedShards(outputs, 'shards');
+  if ((outputs.browser === 'true') !== browser.length > 0)
+    throw new Error('The plan output `browser` contradicts its `shards`.');
+  return {
+    browser,
+    components: checkedShards(outputs, 'component_shards', groupList(outputs.selected_components)),
+  };
+}
+
+/**
+ * The work `event` requires of the planner's selection, before any reuse: `job:group` for every
+ * group of every job the event runs and the selection does not skip, each shard's included,
+ * sorted. Two runs of one tree stand for each other only when they require the same work
+ * (lib/testing/ci/reuse.ts).
+ */
+export function plannedWork(event: CiEvent, outputs: Readonly<Record<string, string>>): string[] {
+  const shards = plannedShards(outputs);
+  const skips = emptySelectionSkips(outputs);
+  return WORK_JOBS.filter((job) => CI_DAG[job].events.includes(event) && !skips[job])
+    .flatMap((job) => {
+      const split = job === 'browser' || job === 'components' ? shards[job] : undefined;
+      const groups = split
+        ? split.flatMap((shard) => plannedGroups(job, outputs, shard.groups))
+        : plannedGroups(job, outputs);
+      return [...new Set(groups)].map((group) => `${job}:${group}`);
+    })
+    .toSorted();
 }
 
 /** Why the SQL and e-invoice jobs skip when the planner selected nothing for them. */
@@ -156,8 +193,8 @@ function emptySelectionSkips(outputs: Readonly<Record<string, string>>): Partial
 }
 
 /**
- * The run's plan. A push to main whose tree an integration run passed runs no job and cites that
- * run. Otherwise every job of the event runs, except a job whose selection is empty, a midnight
+ * The run's plan, with the work its event requires. A push to main whose landing an integration
+ * run passed runs no job and cites that run. Otherwise every job of the event runs, except a job whose selection is empty, a midnight
  * hold that no shard waits for, and a job or shard whose passed result `reused` finds for the same
  * key.
  */
@@ -165,21 +202,17 @@ export function planRun(input: {
   event: CiEvent;
   tree: string;
   listGrowthApproved: boolean;
-  /** The planner's `$GITHUB_OUTPUT` keys; undefined when `passedTree` made planning unnecessary. */
-  outputs: Readonly<Record<string, string>> | undefined;
-  /** The integration run that passed this tree, for a push to main. */
+  /** The planner's `$GITHUB_OUTPUT` keys. */
+  outputs: Readonly<Record<string, string>>;
+  /** The integration run that passed this landing (same tree, base and work), for a push to main. */
   passedTree: string | undefined;
   /** The receipt that stands for a job with this key, or undefined. */
   reused: (key: ReuseKey) => string | undefined;
 }): RunPlan {
-  if (input.event === 'main' && input.passedTree) return reusedTreePlan(input.passedTree);
-  const outputs = input.outputs ?? {};
-  const missing = missingPlannerOutputs(outputs);
-  if (missing.length) throw new Error(`The planner gave no ${missing.join(', ')}, so nothing is planned.`);
-  const browserShards = checkedShards(outputs, 'shards');
-  if ((outputs.browser === 'true') !== browserShards.length > 0)
-    throw new Error('The plan output `browser` contradicts its `shards`.');
-  const componentShards = checkedShards(outputs, 'component_shards', groupList(outputs.selected_components));
+  const outputs = input.outputs;
+  const work = plannedWork(input.event, outputs);
+  if (input.event === 'main' && input.passedTree) return reusedTreePlan(input.passedTree, work);
+  const { browser: browserShards, components: componentShards } = plannedShards(outputs);
   /** The receipt that stands for the job or shard, when the DAG lets it be reused. */
   const reusedBy = (job: CiJob, shard?: CiShard): string | undefined =>
     CI_DAG[job].reusable
@@ -239,6 +272,7 @@ export function planRun(input: {
       midnight_until: midnightUntil,
     },
     reused: reusedJobs,
+    work,
   };
 }
 

@@ -27,9 +27,11 @@ export const CLOCK_WORK = {
   release: { time: '03:30', weekdays: [0, 1, 2, 3, 4], lateMs: 13 * HOUR_MS },
   /**
    * Every browser group once a day, just after the midnight start window, so it plans no hold
-   * (`ciBrowserHoldUntil`), tests the new business date, and ends before the release decides on its
-   * commit. A missed night stays due until the next slot, 23 to 25 hours later (`scheduleDue`
-   * defers it where it would plan a hold or meet a running full run).
+   * (`ciBrowserHoldUntil`) and ends before the release decides on its commit. A head that already
+   * has a full run skips it: an unchanged head gets no second full run for the new date alone (the
+   * release keeps its own exact-commit gate). A skipped or missed night stays due until the next
+   * slot, 23 to 25 hours later, and starts once main moves on (`scheduleDue` also defers it where
+   * it would plan a hold or meet a running full run).
    */
   nightly: { time: '00:15', weekdays: EVERY_DAY, lateMs: Number.POSITIVE_INFINITY },
 } as const satisfies Record<string, ClockWork>;
@@ -119,9 +121,10 @@ export type ScheduleAnswer = {
 
 /**
  * Everything due at `now`. A due nightly waits while a full run runs, and a missed one waits for
- * the next slot when that is near (`NIGHTLY_CATCH_UP_CUTOFF_MS`). A nightly that starts now is
- * main's full run too, so the full-run rule is asked only without one. A pull request run stops
- * only when its PR's head moved past the commit it tests; an unanswered question keeps it running.
+ * the next slot when that is near (`NIGHTLY_CATCH_UP_CUTOFF_MS`); it skips a head the full-run rule
+ * says already has a full run. A nightly that starts now is main's full run too, so the full-run
+ * rule starts no second one beside it. A pull request run stops only when its PR's head moved
+ * past the commit it tests; an unanswered question keeps it running.
  */
 export function scheduleDue(input: {
   now: Date;
@@ -144,6 +147,12 @@ export function scheduleDue(input: {
 }): ScheduleAnswer {
   const answer: ScheduleAnswer = { start: [], stop: [], unanswered: [], wakeAt: '' };
   const wakes: number[] = [];
+  let decision: ReturnType<typeof input.fullRun> | undefined;
+  const fullRun = (): ReturnType<typeof input.fullRun> => (decision ??= input.fullRun());
+  const headTested = (): boolean => {
+    const answered = fullRun();
+    return !('unreadable' in answered) && answered.headHasFullRun === true;
+  };
   for (const work of CLOCK_WORK_NAMES) {
     if (work === 'release' && input.releaseOnCron !== false) {
       if (input.releaseOnCron !== true)
@@ -155,7 +164,7 @@ export function scheduleDue(input: {
     wakes.push(next.getTime());
     const nightlyWaits =
       next.getTime() - input.now.getTime() < NIGHTLY_CATCH_UP_CUTOFF_MS || input.fullRunning === true;
-    if (due && work === 'nightly' && nightlyWaits) continue;
+    if (due && work === 'nightly' && (nightlyWaits || headTested())) continue;
     if (due && work === 'nightly' && typeof input.fullRunning === 'object')
       answer.unanswered.push({
         work,
@@ -169,9 +178,9 @@ export function scheduleDue(input: {
       });
   }
   if (!answer.start.some((start) => start.work === 'nightly')) {
-    const decision = input.fullRun();
-    if ('unreadable' in decision) answer.unanswered.push({ work: 'full', reason: decision.unreadable });
-    else if (decision.run) answer.start.push({ work: 'full', reason: decision.reason });
+    const answered = fullRun();
+    if ('unreadable' in answered) answer.unanswered.push({ work: 'full', reason: answered.unreadable });
+    else if (answered.run) answer.start.push({ work: 'full', reason: answered.reason });
   }
   for (const { run, until } of input.held) {
     if (until === undefined) continue;

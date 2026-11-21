@@ -48,21 +48,25 @@ const withVersion = (name: string): Migration[] => {
 };
 
 /**
- * One problem per migration the working tree adds since its merge base with `mainRef` that
- * shares its version with another migration on `mainRef` or in an open pull request, or changes
- * an object a migration on `mainRef` with a higher version also changes. Each names the lowest
- * free version that clears both. `openPullRequests` is null when GitHub could not be read.
+ * One problem per migration the working tree, or the commit `head`, adds since its merge base with
+ * `mainRef` that shares its version with another migration on `mainRef` or in an open pull
+ * request, or changes an object a migration on `mainRef` with a higher version also changes. Each
+ * names the lowest free version that clears both. `openPullRequests` is null when GitHub could not
+ * be read. The merge queue passes `head` to check a batch prefix against its parent without a
+ * checkout (lib/testing/ci/queue.ts).
  */
 export function migrationOrderProblems(input: {
   repositoryRoot: string;
   mainRef: string;
+  head?: string;
   openPullRequests: readonly OpenMigration[] | null;
 }): string[] {
   const root = input.repositoryRoot;
-  const base = git(root, ['merge-base', 'HEAD', input.mainRef]).trim();
+  const { head } = input;
+  const base = git(root, ['merge-base', head ?? 'HEAD', input.mainRef]).trim();
   const onMain = migrationsAt(root, input.mainRef).flatMap(withVersion);
   const known = new Set([...migrationsAt(root, base), ...onMain.map((migration) => migration.name)]);
-  const added = readdirSync(join(root, MIGRATIONS))
+  const added = (head ? migrationsAt(root, head) : readdirSync(join(root, MIGRATIONS)))
     .filter((name) => !known.has(name))
     .flatMap(withVersion)
     .sort((a, b) => (a.name < b.name ? -1 : 1));
@@ -95,7 +99,11 @@ export function migrationOrderProblems(input: {
         return shared.length ? [{ ...other, shared }] : [];
       });
   return added.flatMap(({ name, version }) => {
-    const mine = migrationChanges(readFileSync(join(root, MIGRATIONS, name), 'utf8'));
+    const mine = migrationChanges(
+      head
+        ? git(root, ['show', `${head}:${MIGRATIONS}/${name}`])
+        : readFileSync(join(root, MIGRATIONS, name), 'utf8'),
+    );
     const twins = elsewhere.filter((other) => other.version === version).map((other) => other.where);
     const conflicts = twins.length ? [] : conflictsAt(version, mine);
     // The lowest version after the original that no other migration holds and no newer migration conflicts with.

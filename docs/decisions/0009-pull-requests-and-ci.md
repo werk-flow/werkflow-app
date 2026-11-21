@@ -244,3 +244,15 @@ A read or call that fails between two merges stops the landing as a `partial` la
 ## Amendment 2026-11-21: a merge whose `main` cannot be read
 
 When `main` cannot be read right after a merge, the queue asks GitHub for the PR's merge commit. A merged PR counts as landed with its tree unverified, and the `partial` stop names that commit. When GitHub cannot answer either, the `partial` stop says a merge may have landed. Either way the tick needs a person, and `main`'s run of `main`'s head starts as after any landing.
+
+## Amendment 2026-11-21: reuse binds to the landing, and the queue retries before it blames
+
+The second round of external CI reviews found that a same-tree pass could stand for a push with another base or plan, that a batch could hide a migration-order conflict between its own PRs, and that a setup failure or a single flaky run could name an innocent PR (werk-flow/werkflow-planning#503):
+
+1. A push reuses an integration pass only for the same landing: the same tree, base commit and planned work, in that run's newest attempt. On GitHub Actions, only a queue run of the same commit counts. This narrows item 3 of the amendment "a merge queue" and the reuse of the amendment "browser groups run once, in the queue".
+2. The queue checks each PR's migrations against the batch prefix it lands on, and leaves a PR that would land out of order for a later tick.
+3. A run without a verdict, a browser setup failure alone included, gets one retry on the next tick; a second needs a person. A red batch whose shorter prefixes passed runs once more before its last PR is named.
+4. While `main` requires up-to-date branches, the queue updates the oldest queued PR that is behind `main`, one at a time.
+5. The nightly full run skips a head that already has a full run.
+
+`lib/testing/ci/reuse.ts`, `scripts/ci/queue.ts` and `lib/testing/ci/schedule.ts` own the rules.

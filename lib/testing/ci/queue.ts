@@ -5,8 +5,6 @@
 // prefix before it lands. scripts/ci/queue-adapter.ts holds git, GitHub and the runner; every
 // decision lives here.
 import { z } from 'zod';
-import type { CiResult, Ledger } from './results';
-import { passedTree } from './reuse';
 
 /** The owner's batch size (D2). */
 export const MAX_BATCH = 4;
@@ -50,8 +48,14 @@ export type Verdict = { kind: 'passed' | 'failed' | 'inconclusive'; runUrl: stri
  */
 type PendingMark = { pull: number; head: string; runUrl: string; verdict: 'success' };
 
-/** What the queue keeps between ticks: a mark it may have left green, and why it froze, if it did. */
-export type QueueState = { pending: PendingMark | null; frozen: string | null };
+/** A run without a verdict that the next tick retries once: its run and what it left. */
+type Retry = { runUrl: string; detail: string };
+
+/**
+ * What the queue keeps between ticks: a mark it may have left green, why it froze, if it did, and
+ * the run without a verdict the next tick retries, if the last one had one.
+ */
+export type QueueState = { pending: PendingMark | null; frozen: string | null; retry?: Retry | undefined };
 
 export const queueStateSchema = z
   .object({
@@ -65,6 +69,10 @@ export const queueStateSchema = z
       .strict()
       .nullable(),
     frozen: z.string().min(1).nullable(),
+    retry: z
+      .object({ runUrl: z.string().min(1), detail: z.string() })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -79,6 +87,14 @@ export type QueueAdapter = {
   pulls(): Promise<readonly QueuedPull[]>;
   /** The squash commit of `pull` onto `parent`, as GitHub's squash merge builds it, or undefined on a conflict. */
   squash(parent: string, pull: QueuedPull): Promise<{ commit: string; tree: string } | undefined>;
+  /**
+   * Why the migrations `entry` adds would land out of order on `parent`, a prefix of the batch: the
+   * migration-order gate (lib/testing/local-stack/migration-order.ts) of its commit against
+   * `parent`. Empty when they would not.
+   */
+  migrationProblems(parent: string, entry: BatchEntry): Promise<string[]>;
+  /** Merges main into the PR's branch on GitHub (`gh pr update-branch`). Throws when it cannot. */
+  updateBranch(pull: QueuedPull): Promise<void>;
   /** The integration run of `tip` (scripts/ci/job.ts through the runner) and its verdict. */
   integrationRun(run: { tip: BatchEntry; base: string; pulls: readonly QueuedPull[] }): Promise<Verdict>;
   /** Turns the PR's auto-merge off, so a green `Queue` alone never merges it. Throws when it cannot. */
@@ -100,19 +116,25 @@ export type QueueAdapter = {
 };
 
 /**
- * `partial`: the landing stopped after some PRs of the tested prefix, or after a merge whose main
- * could not be read, so main may have moved. Under D2 a batch's own main commits are not tested one
- * by one; main's own run of that commit runs its jobs unless a run passed its exact tree, and the
- * next tick starts from that main.
+ * `partial`: the landing stopped after some PRs of the tested prefix, or after a merge that moved
+ * main to a commit the queue could not verify or read, so main may have moved. Under D2 a batch's
+ * own main commits are not tested one by one; main's own run of that commit runs its jobs unless a
+ * run passed its exact landing, and the next tick starts from that main. `retry`: a run without a
+ * verdict, which the next tick retries once. `migration-order`: a PR whose migration would land
+ * out of order after another PR of the batch waits for a later tick. `update-failed`: GitHub
+ * refused to update a branch that is behind main; the next tick asks again.
  */
 type StopKind =
   | 'idle'
   | 'superseded'
   | 'inconclusive'
+  | 'retry'
   | 'stale-base'
   | 'landing-failed'
   | 'frozen'
-  | 'partial';
+  | 'partial'
+  | 'migration-order'
+  | 'update-failed';
 
 /** What one tick did, for its log and the runner. */
 export type QueueOutcome = {
@@ -121,12 +143,15 @@ export type QueueOutcome = {
   batch: number[];
   /** Taken PRs left out because they conflict with main and the PRs before them. */
   conflicts: number[];
-  runs: { prs: number[]; tree: string; verdict: Verdict }[];
+  /** Each integration run; a rerun that confirms a red full batch names the run it repeats. */
+  runs: { prs: number[]; tree: string; verdict: Verdict; rerunOf?: string }[];
   /** The PR the failed batch names; in a dry run it is not told. */
   culprit: number | null;
   /** The PRs landed, in order; in a dry run the PRs it would land. */
   landing: number[];
   stops: { kind: StopKind; detail: string }[];
+  /** The behind PR whose branch the tick updated with main, or null. */
+  updated: number | null;
 };
 
 /** A tick that stopped on something a person has to look at: no verdict, a landing that broke, or a freeze. */
@@ -136,12 +161,19 @@ export function needsAttention(outcome: QueueOutcome): boolean {
   );
 }
 
-const isQueued = (pull: QueuedPull): boolean =>
-  !pull.isDraft &&
-  pull.queuedAt !== null &&
-  pull.check === 'SUCCESS' &&
-  pull.mergeState !== 'DIRTY' &&
-  pull.mergeState !== 'BEHIND';
+/** Whether the PR asked to merge: ready, and auto-merge on. */
+const asked = (pull: QueuedPull): boolean => !pull.isDraft && pull.queuedAt !== null;
+
+/** Whether GitHub would merge the PR onto main as it is: neither conflicting nor behind. */
+const upToDate = (pull: QueuedPull): boolean => pull.mergeState !== 'DIRTY' && pull.mergeState !== 'BEHIND';
+
+const isQueued = (pull: QueuedPull): boolean => asked(pull) && pull.check === 'SUCCESS' && upToDate(pull);
+
+/** Oldest place in the queue first, ties by number. */
+const byQueuePlace = (left: QueuedPull, right: QueuedPull): number =>
+  left.queuedAt === right.queuedAt
+    ? left.number - right.number
+    : (left.queuedAt ?? '').localeCompare(right.queuedAt ?? '');
 
 /**
  * The batch: up to `maxBatch` queued PRs, oldest place first (ties by number), ending before a PR
@@ -158,13 +190,7 @@ export function pickBatch(
         if (!named) throw new Error(`#${number} is not open against main.`);
         return named;
       })
-    : pulls
-        .filter(isQueued)
-        .toSorted((left, right) =>
-          left.queuedAt === right.queuedAt
-            ? left.number - right.number
-            : (left.queuedAt ?? '').localeCompare(right.queuedAt ?? ''),
-        );
+    : pulls.filter(isQueued).toSorted(byQueuePlace);
   // A PR with the owner's list-growth approval runs alone, so a batch never borrows its waiver for
   // another PR whose own approval may be gone.
   const approved = ordered.findIndex((pull) => pull.listGrowthApproved);
@@ -188,70 +214,6 @@ export function supersession(taken: QueuedPull, now: readonly QueuedPull[]): str
       ? `#${taken.number} left the queue`
       : `#${taken.number} was queued again`;
   return undefined;
-}
-
-type Evidence = CiResult | { unreadable: string };
-
-/** What the integration run `run` left: its plan, its Check, every job result, and the runner's ledger when the queue reads one. */
-export type RunEvidence = {
-  plan: Evidence;
-  check: Evidence;
-  results: readonly Evidence[];
-  ledger: Ledger | undefined;
-};
-
-type IntegrationRun = { commit: string; tree: string; base: string; runUrl: string };
-
-const ofRun =
-  (run: IntegrationRun) =>
-  (result: CiResult): boolean =>
-    result.event === 'integration' &&
-    result.commit === run.commit &&
-    result.tree === run.tree &&
-    result.runUrl === run.runUrl;
-
-/** Why the run's plan and Check cannot stand for the run, or undefined. */
-function proofProblem(run: IntegrationRun, plan: Evidence, check: Evidence): string | undefined {
-  if ('unreadable' in plan) return `no plan: ${plan.unreadable}`;
-  if (plan.job !== 'plan' || !ofRun(run)(plan))
-    return `the plan is of another run (${plan.runUrl}, tree ${plan.tree})`;
-  if (plan.base !== run.base) return `the plan diffed against ${plan.base}, not the batch's base ${run.base}`;
-  if (plan.status !== 'passed' || plan.completedAt === null || plan.producer === null)
-    return 'the plan did not pass on a CI runner';
-  if ('unreadable' in check) return `no Check result: ${check.unreadable}`;
-  if (check.job !== 'check' || !ofRun(run)(check))
-    return `the Check result is of another run (${check.runUrl}, tree ${check.tree})`;
-  if (check.status === 'running' || check.completedAt === null) return 'Check did not finish';
-  if (check.producer === null) return 'Check ran outside a CI runner or on a changed checkout';
-  return undefined;
-}
-
-/**
- * The verdict of the integration run `run`. Only a CI runner's finished plan of the batch's base
- * and Check of this run count. A pass counts only when the ledger, if the queue reads one, holds it
- * as the tree's pass, so the push to main reuses it. A failed Check counts against the batch only
- * when a CI runner's finished job of this run failed a group; otherwise the run proved nothing.
- */
-export function verdictOf(run: IntegrationRun, evidence: RunEvidence): Verdict {
-  const verdict = (kind: Verdict['kind'], detail: string): Verdict => ({ kind, runUrl: run.runUrl, detail });
-  const { check, ledger } = evidence;
-  const problem = proofProblem(run, evidence.plan, check);
-  if (problem || 'unreadable' in check) return verdict('inconclusive', problem ?? 'no Check result');
-  if (check.status === 'passed')
-    return ledger === undefined || passedTree(ledger, run.tree, () => undefined) === run.runUrl
-      ? verdict('passed', 'Check passed')
-      : verdict('inconclusive', "Check passed, but the ledger does not hold the run as its tree's pass");
-  const failed = evidence.results.flatMap((result) =>
-    'unreadable' in result || !ofRun(run)(result) || result.producer === null || result.completedAt === null
-      ? []
-      : result.groups.filter((group) => group.outcome === 'failed').map((group) => group.id),
-  );
-  return failed.length
-    ? verdict('failed', `failed: ${[...new Set(failed)].join(', ')}`)
-    : verdict(
-        'inconclusive',
-        'Check failed, but no CI job of the run failed a group: a job was cancelled, lost its result or failed before its groups ran',
-      );
 }
 
 /**
@@ -281,8 +243,10 @@ export function integrationEnvironment(run: {
 
 /**
  * One tick of the queue. A frozen queue does nothing. A live tick first withdraws a mark an earlier
- * tick left pending, merged or not; a withdrawal that fails freezes the queue. A dry run builds,
- * tests and decides, but never lands, tells a PR or withdraws a mark.
+ * tick left pending, merged or not; a withdrawal that fails freezes the queue. A live run without a
+ * verdict is retried once, on the next tick, and the second needs a person. A live tick ends by
+ * updating the oldest queued PR that is behind main. A dry run builds, tests and decides, but never
+ * lands, tells a PR, withdraws a mark, records a retry or updates a branch.
  */
 export async function runQueueTick(
   adapter: QueueAdapter,
@@ -298,6 +262,7 @@ export async function runQueueTick(
     culprit: null,
     landing: [],
     stops: [],
+    updated: null,
   };
   const state = await adapter.state();
   if (state.frozen !== null) {
@@ -308,23 +273,102 @@ export async function runQueueTick(
     return outcome;
   const batch = pickBatch(await adapter.pulls(), options);
   outcome.batch = batch.map((pull) => pull.number);
+  const chain = await buildChain(adapter, base.commit, batch, outcome);
+  if (chain.length) {
+    const retry = options.dryRun ? undefined : (state.retry ?? null);
+    const verdicts = await bisect(adapter, base.commit, chain, outcome, retry);
+    if (!options.dryRun) await recordRetry(adapter, state, outcome);
+    // A run without a verdict stops the tick: nothing lands and nobody is named.
+    if (!needsAttention(outcome) && !outcome.stops.some((stop) => stop.kind === 'retry'))
+      await settle(adapter, base, chain, verdicts, outcome);
+  } else
+    outcome.stops.push({
+      kind: 'idle',
+      detail: batch.length ? 'Every taken pull request conflicts with main.' : 'No pull request is queued.',
+    });
+  if (!options.dryRun && !needsAttention(outcome)) await updateOldestBehind(adapter, outcome);
+  return outcome;
+}
+
+/**
+ * Squashes the batch onto main one PR at a time. A PR that conflicts is left out, and so is a PR
+ * whose migration would land out of order after a PR ahead of it: DEV applies migrations in
+ * landing order and a fresh database in version order. The integration run checks each migration
+ * against main before the batch; only the prefix a PR lands on shows the batch's own.
+ */
+async function buildChain(
+  adapter: QueueAdapter,
+  base: string,
+  batch: readonly QueuedPull[],
+  outcome: QueueOutcome,
+): Promise<BatchEntry[]> {
   const chain: BatchEntry[] = [];
   for (const pull of batch) {
-    const squashed = await adapter.squash(chain.at(-1)?.commit ?? base.commit, pull);
-    if (squashed) chain.push({ pull, ...squashed });
-    else outcome.conflicts.push(pull.number);
+    const parent = chain.at(-1);
+    const squashed = await adapter.squash(parent?.commit ?? base, pull);
+    if (!squashed) {
+      outcome.conflicts.push(pull.number);
+      continue;
+    }
+    const entry = { pull, ...squashed };
+    const problems = parent ? await adapter.migrationProblems(parent.commit, entry) : [];
+    if (!problems.length) {
+      chain.push(entry);
+      continue;
+    }
+    outcome.conflicts.push(pull.number);
+    outcome.stops.push({
+      kind: 'migration-order',
+      detail: `#${pull.number} waits for a later tick, which tests it on the main its batch left: ${problems.join(' ')}`,
+    });
   }
-  if (!chain.length) {
-    const detail = batch.length
-      ? 'Every taken pull request conflicts with main.'
-      : 'No pull request is queued.';
-    outcome.stops.push({ kind: 'idle', detail });
-    return outcome;
+  return chain;
+}
+
+/**
+ * Saves the tick's retry, or clears an earlier one once a run reached a verdict, so only two runs
+ * in a row without one stop the queue.
+ */
+async function recordRetry(adapter: QueueAdapter, state: QueueState, outcome: QueueOutcome): Promise<void> {
+  const retry = outcome.stops.find((stop) => stop.kind === 'retry');
+  const run = outcome.runs.at(-1);
+  if (retry && run)
+    await adapter.saveState({ ...CLEAR, retry: { runUrl: run.verdict.runUrl, detail: run.verdict.detail } });
+  else if (state.retry && run && !outcome.stops.some((stop) => stop.kind === 'inconclusive'))
+    await adapter.saveState(CLEAR);
+}
+
+/**
+ * While the ruleset requires up-to-date branches, GitHub reports a PR that lacks main as `BEHIND`,
+ * and the queue cannot take it. The queue updates the oldest queued one with main, one at a time:
+ * none while a queued PR that is up to date waits for its Check or could land, since its landing
+ * would leave the updated one behind again. A refused update waits for the next tick.
+ */
+async function updateOldestBehind(adapter: QueueAdapter, outcome: QueueOutcome): Promise<void> {
+  try {
+    const pulls = await adapter.pulls();
+    const next = pulls.some(
+      (pull) => asked(pull) && upToDate(pull) && (pull.check === 'SUCCESS' || pull.check === 'PENDING'),
+    );
+    const oldest = pulls
+      .filter((pull) => asked(pull) && pull.mergeState === 'BEHIND' && pull.check === 'SUCCESS')
+      .toSorted(byQueuePlace)[0];
+    if (next || !oldest) return;
+    try {
+      await adapter.updateBranch(oldest);
+      outcome.updated = oldest.number;
+    } catch (error) {
+      outcome.stops.push({
+        kind: 'update-failed',
+        detail: `#${oldest.number}'s branch could not be updated with main: ${message(error)}`,
+      });
+    }
+  } catch (error) {
+    outcome.stops.push({
+      kind: 'update-failed',
+      detail: `the pull requests could not be read: ${message(error)}`,
+    });
   }
-  const verdicts = await bisect(adapter, base.commit, chain, outcome);
-  // A run without a verdict stops the tick for a person: nothing lands and nobody is named.
-  if (!needsAttention(outcome)) await settle(adapter, base, chain, verdicts, outcome);
-  return outcome;
 }
 
 /**
@@ -370,19 +414,25 @@ const markOf = (pull: QueuedPull, proof: Verdict): PendingMark => ({
 
 /**
  * Tests the whole batch, then on red the prefixes between the longest green and the shortest red
- * one, until they differ by one PR: that PR breaks the batch. Returns each tested prefix length's
- * verdict. A superseded entry in the next prefix or an inconclusive run ends the search.
+ * one, until they differ by one PR: that PR breaks the batch. When only the whole batch failed,
+ * one environment rerun of its tree confirms the failure before its last PR is named. Returns each
+ * tested prefix length's verdict. A superseded entry in the next prefix or a run without a verdict
+ * ends the search: the first such live run since the last verdict is a `retry` (`retry` null), any
+ * other needs a person (`retry` the earlier one, or undefined in a dry run).
  */
 async function bisect(
   adapter: QueueAdapter,
   base: string,
   chain: readonly BatchEntry[],
   outcome: QueueOutcome,
+  retry: Retry | null | undefined,
 ): Promise<Map<number, Verdict>> {
   const verdicts = new Map<number, Verdict>();
   let green = 0;
   let red: number | undefined;
   let length: number | undefined = chain.length;
+  let rerunOf: string | undefined;
+  let confirming = false;
   while (length !== undefined) {
     const prefix = chain.slice(0, length);
     const tip = prefix.at(-1);
@@ -398,20 +448,48 @@ async function bisect(
     const contradicted = outcome.runs.find(
       (run) => run.tree === tip.tree && run.verdict.kind !== verdict.kind,
     );
-    outcome.runs.push({ prs: pulls.map((pull) => pull.number), tree: tip.tree, verdict });
+    outcome.runs.push({
+      prs: pulls.map((pull) => pull.number),
+      tree: tip.tree,
+      verdict,
+      ...(rerunOf === undefined ? {} : { rerunOf }),
+    });
+    rerunOf = undefined;
     if (verdict.kind === 'inconclusive' || contradicted) {
-      const detail = contradicted
-        ? `tree ${tip.tree} ${contradicted.verdict.kind} in ${contradicted.verdict.runUrl} but ${verdict.kind} in ${verdict.runUrl}`
-        : `${verdict.runUrl}: ${verdict.detail}`;
-      outcome.stops.push({ kind: 'inconclusive', detail });
+      outcome.stops.push(noVerdict(tip.tree, verdict, contradicted?.verdict, retry));
       break;
     }
     verdicts.set(length, verdict);
     if (verdict.kind === 'passed') green = length;
     else red = length;
     length = red !== undefined && red - green > 1 ? Math.floor((green + red) / 2) : undefined;
+    if (length === undefined && !confirming && red === chain.length && green === red - 1) {
+      confirming = true;
+      rerunOf = verdicts.get(red)?.runUrl;
+      length = red;
+    }
   }
   return verdicts;
+}
+
+/** The stop of a run without a verdict: a contradiction or a repeated one needs a person, the first live one is retried. */
+function noVerdict(
+  tree: string,
+  verdict: Verdict,
+  contradicted: Verdict | undefined,
+  retry: Retry | null | undefined,
+): QueueOutcome['stops'][number] {
+  if (contradicted)
+    return {
+      kind: 'inconclusive',
+      detail: `tree ${tree} ${contradicted.kind} in ${contradicted.runUrl} but ${verdict.kind} in ${verdict.runUrl}`,
+    };
+  const detail = `${verdict.runUrl}: ${verdict.detail}`;
+  if (retry === null) return { kind: 'retry', detail };
+  return {
+    kind: 'inconclusive',
+    detail: retry ? `${detail}, after the retry of ${retry.runUrl} (${retry.detail})` : detail,
+  };
 }
 
 const supersededIn = (entries: readonly BatchEntry[], now: readonly QueuedPull[]): string | undefined =>
@@ -535,15 +613,20 @@ async function landNext(
 const prs = (numbers: readonly number[]): string => numbers.map((number) => `#${number}`).join(', ');
 
 /**
- * A merge after which main could not be read: GitHub's merge commit for the PR when it reports one,
+ * A merge after which main is not the tested tree on the previous head: main's head when it was
+ * read (null when it could not be), and GitHub's merge commit for the PR when it reports one,
  * otherwise why a merge may still have landed.
  */
-type Unverified = { problem: string } & ({ mergeCommit: string } | { unconfirmed: string });
+type Unverified = { problem: string; head: string | null } & (
+  | { mergeCommit: string }
+  | { unconfirmed: string }
+);
 
 /**
- * Records a merge whose main could not be read, and withdraws its mark. A PR GitHub reports merged
- * counts as landed, its tree unverified; otherwise the merge may have landed. Either way main may
- * have moved, so the `partial` stop has main's own run start, and the tick needs a person.
+ * Records a merge after which main moved where the queue did not test, or could not be read, and
+ * withdraws its mark. A PR GitHub reports merged counts as landed, its tree unverified; otherwise
+ * the merge may have landed. Either way main moved or may have, so the `partial` stop has main's
+ * own run of main's head start, and the tick needs a person.
  */
 async function landedUnverified(
   adapter: QueueAdapter,
@@ -555,34 +638,47 @@ async function landedUnverified(
 ): Promise<void> {
   const all = prs(landing.map((entry) => entry.pull.number));
   outcome.stops.push({ kind: 'landing-failed', detail: merge.problem });
-  if ('mergeCommit' in merge) {
-    outcome.landing.push(pull.number);
-    outcome.stops.push({
-      kind: 'partial',
-      detail: `the landing stopped after ${prs(outcome.landing)} of ${all}: GitHub reports #${pull.number} merged as ${merge.mergeCommit}, whose tree the queue could not verify, so main's own run of it runs its jobs unless a run passed its exact tree, and the next tick starts from it`,
-    });
-  } else
-    outcome.stops.push({
-      kind: 'partial',
-      detail: `#${pull.number}'s merge may have landed after ${prs(outcome.landing) || 'nothing'} of ${all}: ${merge.unconfirmed}, so main's own run of main's head runs its jobs, and the next tick starts from main`,
-    });
+  if ('mergeCommit' in merge) outcome.landing.push(pull.number);
+  outcome.stops.push({ kind: 'partial', detail: unverifiedDetail(pull, all, merge, prs(outcome.landing)) });
   await withdrawPending(adapter, markOf(pull, proof), outcome);
 }
 
-/** After main could not be read: GitHub's word on whether the PR merged. Only a refused merge GitHub reports unmerged did not land. */
-async function mergeAfterUnreadMain(
+/** The `partial` stop's words for an unverified merge: where main stands, and that its own run runs its jobs. */
+function unverifiedDetail(pull: QueuedPull, all: string, merge: Unverified, landed: string): string {
+  const after = `the landing stopped after ${landed} of ${all}`;
+  if (merge.head === null)
+    return 'mergeCommit' in merge
+      ? `${after}: GitHub reports #${pull.number} merged as ${merge.mergeCommit}, whose tree the queue could not verify, so main's own run of it runs its jobs unless a run passed its exact tree, and the next tick starts from it`
+      : `#${pull.number}'s merge may have landed after ${landed || 'nothing'} of ${all}: ${merge.unconfirmed}, so main's own run of main's head runs its jobs, and the next tick starts from main`;
+  return 'mergeCommit' in merge
+    ? `${after}: GitHub reports #${pull.number} merged as ${merge.mergeCommit}, and main's head ${merge.head} holds a tree no run of this tick verified, so main's own run of it runs its jobs, and the next tick starts from it`
+    : `main moved to ${merge.head} after ${landed || 'nothing'} of ${all} without a merge of #${pull.number} GitHub confirms (${merge.unconfirmed}), so main's own run of ${merge.head} runs its jobs, and the next tick starts from it`;
+}
+
+/**
+ * GitHub's word on whether the PR merged, after main moved to `head` or could not be read (`head`
+ * null). Only a refused merge GitHub reports unmerged while main stayed unread did not land.
+ */
+async function mergeAfterUnverifiedMain(
   adapter: QueueAdapter,
   pull: QueuedPull,
   problem: string,
+  head: string | null,
   refused: boolean,
 ): Promise<Unverified | string> {
   try {
     const mergeCommit = await adapter.mergeCommit(pull.number);
-    if (mergeCommit) return { problem, mergeCommit };
-    if (refused) return problem;
-    return { problem, unconfirmed: 'GitHub reports it unmerged although it accepted the merge' };
+    if (mergeCommit) return { problem, head, mergeCommit };
+    if (refused && head === null) return problem;
+    return {
+      problem,
+      head,
+      unconfirmed: refused
+        ? 'GitHub reports it unmerged'
+        : 'GitHub reports it unmerged although it accepted the merge',
+    };
   } catch (error) {
-    return { problem, unconfirmed: `GitHub could not confirm it (${message(error)})` };
+    return { problem, head, unconfirmed: `GitHub could not confirm it (${message(error)})` };
   }
 }
 
@@ -637,107 +733,34 @@ async function landOne(
   } catch (error) {
     refusal = `: ${message(error)}`;
   }
-  let problem: string;
+  let head: MainCommit;
   try {
-    const head = await adapter.main();
-    if (head.commit === previous) problem = `GitHub did not merge #${pull.number}${refusal}`;
-    else if (head.parents.length !== 1 || head.parents[0] !== previous)
-      problem = `main moved to ${head.commit}, which is no single commit on ${previous}`;
-    else if (head.tree !== tree)
-      problem = `main's tree ${head.tree} after #${pull.number} is not the tested tree ${tree}`;
-    else if (!refusal) return head;
-    else
-      try {
-        if ((await adapter.mergeCommit(pull.number)) === head.commit) return head;
-        problem = `GitHub did not merge #${pull.number}${refusal}; main moved to ${head.commit} without it`;
-      } catch (error) {
-        problem = `GitHub could not confirm #${pull.number} merged${refusal}: ${message(error)}`;
-      }
+    head = await adapter.main();
   } catch (error) {
     const unread = `main could not be read after merging #${pull.number}${refusal}: ${message(error)}`;
-    const merge = await mergeAfterUnreadMain(adapter, pull, unread, refusal !== '');
+    const merge = await mergeAfterUnverifiedMain(adapter, pull, unread, null, refusal !== '');
     if (typeof merge !== 'string') return merge;
-    problem = merge;
+    await withdrawPending(adapter, mark, outcome);
+    return merge;
   }
-  await withdrawPending(adapter, mark, outcome);
-  return problem;
-}
-
-const gitHubPullSchema = z.object({
-  number: z.number().int().positive(),
-  title: z.string(),
-  isDraft: z.boolean(),
-  headRefOid: z.string().regex(/^[0-9a-f]{40}$/),
-  mergeStateStatus: z.string(),
-  autoMergeRequest: z.object({ enabledAt: z.string().datetime() }).nullable(),
-  labels: z.object({ nodes: z.array(z.object({ name: z.string() })), totalCount: z.number() }),
-  commits: z.object({
-    nodes: z.array(
-      z.object({
-        commit: z.object({
-          oid: z.string(),
-          status: z
-            .object({ contexts: z.array(z.object({ context: z.string(), state: z.string() })) })
-            .nullable(),
-        }),
-      }),
-    ),
-  }),
-});
-
-/** The query `pullsFromGitHub` reads: every open PR against main with what the queue decides by. */
-export const PULLS_QUERY = `query($owner: String!, $name: String!, $endCursor: String) {
-  repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, baseRefName: "main", first: 100, after: $endCursor) {
-      totalCount
-      pageInfo { hasNextPage endCursor }
-      nodes {
-        number title isDraft headRefOid mergeStateStatus
-        autoMergeRequest { enabledAt }
-        labels(first: 100) { totalCount nodes { name } }
-        commits(last: 1) { nodes { commit { oid status { contexts { context state } } } } }
-      }
+  if (head.commit === previous) {
+    await withdrawPending(adapter, mark, outcome);
+    return `GitHub did not merge #${pull.number}${refusal}`;
+  }
+  let problem: string;
+  if (head.parents.length !== 1 || head.parents[0] !== previous)
+    problem = `main moved to ${head.commit}, which is no single commit on ${previous}`;
+  else if (head.tree !== tree)
+    problem = `main's tree ${head.tree} after #${pull.number} is not the tested tree ${tree}`;
+  else if (!refusal) return head;
+  else
+    try {
+      if ((await adapter.mergeCommit(pull.number)) === head.commit) return head;
+      problem = `GitHub did not merge #${pull.number}${refusal}; main moved to ${head.commit} without it`;
+    } catch (error) {
+      problem = `GitHub could not confirm #${pull.number} merged${refusal}: ${message(error)}`;
     }
-  }
-}`;
-
-const pullsAnswerSchema = z.object({
-  data: z.object({
-    repository: z.object({
-      pullRequests: z.object({ totalCount: z.number(), nodes: z.array(gitHubPullSchema) }),
-    }),
-  }),
-});
-
-/**
- * The PRs in GitHub's pages of answers to `PULLS_QUERY` (`gh api graphql --paginate --slurp`). A
- * truncated answer throws: a missing PR could be a superseded one.
- */
-export function pullsFromGitHub(pages: unknown): QueuedPull[] {
-  const answers = z.array(pullsAnswerSchema).min(1).parse(pages);
-  const totalCount = answers[0]?.data.repository.pullRequests.totalCount;
-  const nodes = answers.flatMap((answer) => answer.data.repository.pullRequests.nodes);
-  if (nodes.length !== totalCount)
-    throw new Error(`GitHub listed ${nodes.length} of ${totalCount} open pull requests.`);
-  return nodes.map((node) => {
-    if (node.labels.nodes.length !== node.labels.totalCount)
-      throw new Error(
-        `GitHub listed ${node.labels.nodes.length} of #${node.number}'s ${node.labels.totalCount} labels.`,
-      );
-    const head = node.commits.nodes[0]?.commit;
-    const check =
-      head?.oid === node.headRefOid
-        ? head.status?.contexts.find((context) => context.context === 'Check')?.state
-        : undefined;
-    return {
-      number: node.number,
-      title: node.title,
-      headSha: node.headRefOid,
-      isDraft: node.isDraft,
-      queuedAt: node.autoMergeRequest?.enabledAt ?? null,
-      check: check ?? 'MISSING',
-      mergeState: node.mergeStateStatus,
-      listGrowthApproved: node.labels.nodes.some((label) => label.name === 'approved: list growth'),
-    };
-  });
+  // Main moved, but not to the tested tree on `previous`: `land` asks for main's run of that head.
+  const merge = await mergeAfterUnverifiedMain(adapter, pull, problem, head.commit, refusal !== '');
+  return typeof merge === 'string' ? { problem, head: head.commit, unconfirmed: merge } : merge;
 }
