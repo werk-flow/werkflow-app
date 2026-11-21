@@ -135,13 +135,13 @@ export function landedSelections(ledger: readonly CiResult[], landedTrees: Reado
  * The trees that landed on main since the previous full run, up to a full run's own commit:
  * `history` is main's first-parent commits with their trees from that commit back, newest first.
  * The full run's own tree counts, and the walk stops before the newest older commit another full
- * run tested (`runs`, as `fullRunsInLedger` reports them).
+ * run tested to its end (`runs`, as `fullRunsInLedger` reports them): an unfinished run tested nothing yet.
  */
 export function treesSinceFullRun(
   history: readonly { commit: string; tree: string }[],
   runs: readonly FullRun[],
 ): Set<string> {
-  const tested = new Set(runs.map((run) => run.commit));
+  const tested = new Set(runs.filter((run) => run.ended).map((run) => run.commit));
   const end = history.findIndex((entry, index) => index > 0 && tested.has(entry.commit));
   return new Set(history.slice(0, end === -1 ? undefined : end).map((entry) => entry.tree));
 }

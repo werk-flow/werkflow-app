@@ -267,3 +267,13 @@ test("the trees landed since the previous full run end before that run's commit,
   expect([...treesSinceFullRun(history, runs)]).toEqual(['tree-c3', 'tree-c2']);
   expect([...treesSinceFullRun(history, [])]).toEqual(['tree-c3', 'tree-c2', 'tree-c1', 'tree-c0']);
 });
+
+test('an unfinished full run on an older commit does not end the landed window', () => {
+  const history = HISTORY.map((commit) => ({ commit, tree: `tree-${commit}` }));
+  const runs = [
+    ended('c3', NOON),
+    { commit: 'c2', startedAt: hoursBefore(NOON, 1), ended: false },
+    ended('c1', hoursBefore(NOON, 5)),
+  ];
+  expect([...treesSinceFullRun(history, runs)]).toEqual(['tree-c3', 'tree-c2']);
+});
