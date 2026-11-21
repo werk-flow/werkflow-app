@@ -225,10 +225,13 @@ function useTimeCorrectionDialogSession({
   };
 }
 
+/** What the form filed, for a caller that acts only on one kind of request. */
+export type FiledTimeCorrection = { kind: TimeCorrectionKind };
+
 type TimeCorrectionDialogFormInput = {
   organizationId: string;
   entry: TimeEntry | undefined;
-  onSubmitted: (() => void) | undefined;
+  onSubmitted: ((filed: FiledTimeCorrection) => void) | undefined;
   controlledOpen: boolean | undefined;
   onOpenChange: ((open: boolean) => void) | undefined;
   closedPeriods: readonly ClosedTimePeriod[];
@@ -511,7 +514,7 @@ export function useTimeCorrectionDialogForm({
       showBanner({ variant: 'success', message: answer.message });
       setOpen(false);
       setReason('');
-      onSubmitted?.();
+      onSubmitted?.({ kind });
     } catch {
       setSubmitError(TIME_CORRECTION_SAVE_FAILURE);
     }

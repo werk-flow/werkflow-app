@@ -76,7 +76,15 @@ async function isolatedTests(): Promise<void> {
     }),
   }));
 
-  const { holdClock, sendOwnTimeEvents, takeInKept, timeUnsentSource } = await import('./clock-device');
+  const {
+    holdClock,
+    removeShownTimeEvents,
+    sendOwnTimeEvents,
+    setAsideShownStop,
+    takeInKept,
+    timeUnsentSource,
+  } = await import('./clock-device');
+  const { clearTodayOnDevice } = await import('./today-wipe');
   const { callWhileKept, keepClockAction } = await import('./unsent-mark');
   const { readTimeOutbox } = await import('./time-outbox-store');
 
@@ -243,6 +251,158 @@ async function isolatedTests(): Promise<void> {
       expect((await timeUnsentSource.summarize('session')).map(({ label }) => label)).toEqual([
         'Stempelzeiten, die diese App-Version nicht lesen kann',
       ]);
+    });
+  });
+
+  describe('an unreadable record set aside (werk-flow/werkflow-planning#407 item 3)', () => {
+    /** The key of a kept action tapped at `at`; under `prefix`, the kept store's or the set-aside one. */
+    const keyAt = (at: string, operationId: string, prefix = 'werkflow:unsent:clock:') =>
+      `${prefix}${String(Date.parse(at)).padStart(15, '0')}:1:${operationId}`;
+    /** A record of a newer version: this version cannot read it. */
+    const NEWER = JSON.stringify({ version: 2, userId: WORKER.userId, kind: 'new' });
+
+    test('no longer holds the person’s later taps, and is never sent itself', async () => {
+      const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
+      storage.set(stop, NEWER);
+      keepClockAction(start(WORKER, '50000000-0000-4000-8000-0000000000f1', '2026-11-11T07:05:00.000Z'), '');
+      let shown: { status: string } | null = null;
+      await holdClock(WORKER, (view) => {
+        shown = view;
+      });
+      await sendOwnTimeEvents();
+      // Behind the stop, the later tap waits kept and nothing leaves the phone.
+      expect(sends).toBe(0);
+      expect(keptKeys()).toHaveLength(2);
+
+      expect(await setAsideShownStop(stop)).toBe('set_aside');
+
+      // The later tap went as its own chain; the record stays on the phone, as it was, outside the kept store.
+      expect(sends).toBe(1);
+      expect(keptKeys()).toEqual([]);
+      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+      const aside = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version', 'werkflow:unsent:clock-aside:');
+      expect(storage.get(aside)).toBe(NEWER);
+      await sendOwnTimeEvents();
+      expect(sends).toBe(1);
+      // The clock is no stopped chain: a tap without signal is kept again (clock-outbox-state.ts).
+      expect(shown).toEqual(expect.objectContaining({ status: 'set_aside', events: [] }));
+    });
+
+    test('never brings back a stop another tab deleted while the move waited', async () => {
+      const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
+      storage.set(stop, NEWER);
+      await holdClock(WORKER, () => undefined);
+      // Another tab, possibly of an earlier version, deletes the stop while this tab asks whether its call runs.
+      const locks = navigator.locks;
+      const request = locks.request.bind(locks);
+      Object.defineProperty(navigator, 'locks', {
+        configurable: true,
+        value: {
+          ...locks,
+          request: (...args: Parameters<LockManager['request']>) => {
+            if (args[0].startsWith('werkflow-clock-call:')) storage.delete(stop);
+            return request(...args);
+          },
+        },
+      });
+      try {
+        expect(await setAsideShownStop(stop)).toBe('gone');
+      } finally {
+        Object.defineProperty(navigator, 'locks', { configurable: true, value: locks });
+      }
+
+      expect([...storage.keys()].filter((key) => key.startsWith('werkflow:unsent:clock'))).toEqual([]);
+    });
+
+    test('is never taken in or sent, also by a version that can read it: the person settles it through the correction', async () => {
+      const aside = keyAt(
+        '2026-11-11T07:00:00.000Z',
+        '50000000-0000-4000-8000-0000000000f2',
+        'werkflow:unsent:clock-aside:',
+      );
+      keepClockAction(start(WORKER, '50000000-0000-4000-8000-0000000000f2', '2026-11-11T07:00:00.000Z'), '');
+      // A record this version reads, as a later version would read the one a person set aside.
+      const [kept] = keptKeys();
+      storage.set(aside, storage.get(kept ?? '') ?? '');
+      storage.delete(kept ?? '');
+      await holdClock(WORKER, () => undefined);
+
+      expect((await takeInKept()).moved).toBe(0);
+      await sendOwnTimeEvents();
+
+      expect(sends).toBe(0);
+      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+      expect(storage.has(aside)).toBe(true);
+    });
+
+    test('stays a stop while its online call may still run: its page may yet record it', async () => {
+      const stop = keyAt('2026-11-11T11:59:58.000Z', 'from-a-newer-version');
+      storage.set(stop, NEWER);
+      await holdClock(WORKER, () => undefined);
+
+      expect(await setAsideShownStop(stop)).toBe('sending');
+      expect(keptKeys()).toEqual([stop]);
+    });
+
+    test('stays a stop past the grace period while its page still holds the clock call’s lock', async () => {
+      const stop = keyAt('2026-11-11T07:00:00.000Z', 'call-still-open');
+      storage.set(stop, NEWER);
+      await holdClock(WORKER, () => undefined);
+      // The page that tapped still waits for the server's answer, under the call's lock.
+      let answer = (): void => undefined;
+      let granted = (): void => undefined;
+      const lockHeld = new Promise<void>((resolve) => {
+        granted = resolve;
+      });
+      const openCall = navigator.locks.request(
+        'werkflow-clock-call:call-still-open',
+        () =>
+          new Promise<void>((resolve) => {
+            answer = resolve;
+            granted();
+          }),
+      );
+      await lockHeld;
+      try {
+        expect(await setAsideShownStop(stop)).toBe('sending');
+        expect(keptKeys()).toEqual([stop]);
+      } finally {
+        answer();
+        await openCall;
+      }
+    });
+
+    test('is named by the session end’s question and deleted by its discard; the wipe leaves it', async () => {
+      const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
+      storage.set(stop, NEWER);
+      await holdClock(WORKER, () => undefined);
+      await setAsideShownStop(stop);
+      const aside = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version', 'werkflow:unsent:clock-aside:');
+
+      // The wipe that ends a session never names unsent work: the question before it does.
+      await clearTodayOnDevice();
+      expect(storage.has(aside)).toBe(true);
+      const shown = await timeUnsentSource.summarize('session');
+      expect(shown.map(({ label, ids }) => [label, ids])).toEqual([
+        ['Beiseitegelegte Stempelzeiten', [aside]],
+      ]);
+
+      await timeUnsentSource.discard('session', shownIds(shown));
+
+      expect(storage.has(aside)).toBe(false);
+      expect(await timeUnsentSource.summarize('session')).toEqual([]);
+    });
+
+    test('is deleted from the clock by the deletion the person confirmed', async () => {
+      const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
+      storage.set(stop, NEWER);
+      await holdClock(WORKER, () => undefined);
+      await setAsideShownStop(stop);
+      const aside = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version', 'werkflow:unsent:clock-aside:');
+
+      await removeShownTimeEvents(WORKER, [aside], CLOCKED_OUT);
+
+      expect(storage.has(aside)).toBe(false);
     });
   });
 }

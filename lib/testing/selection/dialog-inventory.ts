@@ -473,7 +473,10 @@ export const DIALOG_INVENTORY = {
       audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.coverage-follow-up' }],
     },
   'components/service/maintenance-due-action-dialog.tsx#MaintenanceDueActionDialog|Fälligkeit bearbeiten': {
-    audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.due-action' }],
+    audits: [
+      { route: '/service/wartung', role: 'admin', opener: 'service.due-action' },
+      { route: '/service/wartung', role: 'admin', opener: 'service.due-completion' },
+    ],
   },
   'components/service/maintenance-plan-action-dialog.tsx#MaintenancePlanActionDialog|{title}': {
     audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.plan-action' }],
@@ -549,6 +552,10 @@ export const DIALOG_INVENTORY = {
   'components/auftraege/work-pack/field-site-access-dialog.tsx#SiteAccessProposalDialog|Zugang korrigieren': {
     audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.site-access' }],
   },
+  'components/auftraege/work-pack/field-equipment-record-dialog.tsx#FieldEquipmentRecordDialog|Verlauf und Dokumente':
+    {
+      audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.equipment-record' }],
+    },
   'components/kunden/site-access-review-dialog.tsx#SiteAccessReviewDialog|{title}': {
     audits: [{ route: '/aufgaben', role: 'admin', opener: 'customers.site-access-review' }],
   },

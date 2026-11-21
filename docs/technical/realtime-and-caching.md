@@ -11,7 +11,7 @@ Decide the feedback, the freshness and the read shape before you write the compo
 1. Write the Server Action in its domain's `actions.ts`: parse the input, [establish the caller and the permission](security.md#add-a-server-action-or-route-handler), then write ([related rows in one call](code-quality.md#write-related-rows)). Use the admin client only when RLS cannot express the write.
 2. Call `updateTag()` only for a `CACHE_TAGS` entry that a cached reader of the changed data carries. Otherwise call no tag function.
 3. Pick the first-frame feedback from the pending-feedback matrix in the `werkflow-design` skill: `useOptimisticList` for a list edit, `InlinePending` with `useBusyIds` for a row action, `usePendingTask` for several steps, the `isPending` of `useServerAction` otherwise. A flow that leaves the page ends with `untilPageLeaves()`.
-4. Name every view that shows the changed rows. An action that revalidates (`revalidatePath`, `updateTag`, a cookie) renders the route into its own response: await the new props with `useSettleOnChange`, never `router.refresh()`. Otherwise start `router.refresh()`. Finish with `view.refresh()`, or pass the view's read as the `settle` option of `useServerAction`. The own write never waits for Realtime.
+4. Name every view that shows the changed rows. An action that revalidates (`revalidatePath`, `updateTag`, a cookie) renders the route into its own response: await the new props with `useSettleOnChange`, never `router.refresh()`. Otherwise start `router.refresh()`, unless the flow navigates: `router.push()` or `router.replace()` renders its target fresh, and a refresh after it takes over the navigation (`lib/conventions/navigation-refresh.test.ts`). The action revalidates the page it leaves, so Back restores that page with the change. Finish with `view.refresh()`, or pass the view's read as the `settle` option of `useServerAction`. The own write never waits for Realtime.
 5. Name the sessions that must see the change. The changed table is published, or the mutation touches a published owning root.
 6. Write a contract that holds the write open with `holdWrite` and checks the screen before and after the answer, as `tests/ui-contracts/team-qualifications.spec.ts` does. Run `bun run test:ui tests/ui-contracts/<file>.spec.ts`.
 
@@ -70,7 +70,7 @@ Wrong turn: a channel, an interval or a focus listener of your own. It races the
 
 - Wait for the network before you acknowledge an action, or raise a pending flag by hand outside `HAND_PENDING_STATE`.
 - Bind pending state to a router transition: no `useTransition` and no async `startTransition` callback. Recorded exceptions: `RefreshButton`, and the document library's navigation.
-- Poll. The one interval is the wall-clock tick in `hooks/use-wall-clock-tick.ts`.
+- Poll. The one interval is the wall-clock tick in `hooks/use-wall-clock-tick.ts`. A countdown derives its value from that clock, never from a timeout its own state update starts again.
 - Show a toast. Feedback goes through `Banner` and the inline states.
 - Truncate a list silently, or turn an overflow or a failed related read into an empty list.
 - Pass an organization-sized list to `.in()`.

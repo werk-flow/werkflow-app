@@ -3,7 +3,7 @@ import type { InvoiceLineSource } from './line-sources';
 
 // A Rechnung as the office keeps it: customer, recipient, the work it bills,
 // terms, lines and the totals the server computed
-// (supabase/migrations/20261215100000_keep_invoice_drafts_with_their_lines_and_totals.sql).
+// (supabase/migrations/20261219100000_keep_invoice_drafts_with_their_lines_and_totals.sql).
 
 /** Every status the database check allows; this release writes only `entwurf`. */
 export const INVOICE_STATUSES = ['entwurf', 'ausgestellt', 'storniert'] as const;

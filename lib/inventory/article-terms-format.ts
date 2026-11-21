@@ -1,5 +1,9 @@
 import { formatEuroCents } from '@/lib/document-rendering/format';
-import type { ArticlePriceEntry, ArticleSupplierReference } from '@/lib/inventory/article-price-terms';
+import type {
+  ArticlePriceEntry,
+  ArticlePriceKind,
+  ArticleSupplierReference,
+} from '@/lib/inventory/article-price-terms';
 import type { PriceQuantity } from '@/lib/inventory/line-amount';
 import { formatInventoryQuantity, getInventoryUnitLabel } from '@/lib/inventory/types';
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
@@ -17,6 +21,24 @@ export function formatArticlePrice(amountCents: number, priceQuantity: PriceQuan
   const per =
     priceQuantity === 1 ? unitShortLabelOrStored(unit) : `${priceQuantity} ${unitShortLabelOrStored(unit)}`;
   return `${formatEuroCents(amountCents)} je ${per}`;
+}
+
+export const ARTICLE_PRICE_KIND_LABELS: Record<ArticlePriceKind, string> = {
+  purchase: 'Einkaufspreis',
+  sale: 'Verkaufspreis',
+};
+
+type PriceAmount = { amountCents: number; priceQuantity: PriceQuantity };
+
+/** „Einkaufspreis: 4,00 € je m → 457,50 € je 100 m“, or „bisher keiner“ before a first price. */
+export function formatPriceChange(
+  kind: ArticlePriceKind,
+  before: PriceAmount | null,
+  after: PriceAmount,
+  unit: string,
+): string {
+  const old = before ? formatArticlePrice(before.amountCents, before.priceQuantity, unit) : 'bisher keiner';
+  return `${ARTICLE_PRICE_KIND_LABELS[kind]}: ${old} → ${formatArticlePrice(after.amountCents, after.priceQuantity, unit)}`;
 }
 
 /** „1 Rolle = 50 Meter“, or „Bestellt in Meter“ when the supplier sells in the base unit. */
