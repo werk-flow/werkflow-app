@@ -206,6 +206,7 @@ export const COLUMN_LABELS_N_TO_Z = {
   resolution_summary: 'Lösung',
   resolved_at: 'Gelöst am',
   resolved_by: 'Gelöst von (ID)',
+  resolved_by_due_work_id: 'Geschlossen durch Wartung (ID)',
   responsibility: 'Zuständigkeit',
   responsibility_context: 'Verantwortungsbereich',
   responsibility_snapshot: 'Stand der Zuständigkeit',
