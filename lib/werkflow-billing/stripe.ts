@@ -6,6 +6,7 @@ import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { failedPaymentMethodType } from '@/lib/werkflow-billing/payment-method';
 import { type StripeInvoiceForIssue, stripeInvoiceForIssue } from '@/lib/werkflow-billing/stripe-invoice';
 import {
+  expanded,
   subscriptionCalls,
   type StripeSubscriptionGateway,
 } from '@/lib/werkflow-billing/stripe-subscriptions';
@@ -209,11 +210,6 @@ function paymentIntentIdOf(invoice: Stripe.Invoice): string | null {
   const payment = payments.find((entry) => entry.is_default) ?? payments[0];
   const intent = payment?.payment.payment_intent;
   return typeof intent === 'string' ? intent : (intent?.id ?? null);
-}
-
-/** The object of a field Stripe expanded; null for an id or nothing. */
-function expanded<T extends object>(value: string | T | null | undefined): T | null {
-  return typeof value === 'object' ? value : null;
 }
 
 /**

@@ -461,6 +461,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['werkflow-billing-mails', ['werkflow_billing_mails.sql'], ['*']],
   ['werkflow-invoices', ['werkflow_invoices.sql'], ['*']],
   ['werkflow-subscriptions', ['werkflow_subscriptions.sql'], ['*']],
+  ['werkflow-billing-page-signals', ['werkflow_billing_page_signals.sql'], ['*']],
   ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
