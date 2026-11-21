@@ -5,6 +5,7 @@
 // prefix before it lands. scripts/ci/queue-adapter.ts holds git, GitHub and the runner; every
 // decision lives here.
 import { z } from 'zod';
+import { contradiction, noVerdict, type Retry, retryOf, retrySchema, workOf } from './queue-retry';
 
 /** The owner's batch size (D2). */
 export const MAX_BATCH = 4;
@@ -48,12 +49,6 @@ export type Verdict = { kind: 'passed' | 'failed' | 'inconclusive'; runUrl: stri
  */
 type PendingMark = { pull: number; head: string; runUrl: string; verdict: 'success' };
 
-/** A verdict a run reached on a tree: the next tick's runs of that tree must agree with it. */
-type Seen = { tree: string; kind: 'passed' | 'failed'; runUrl: string };
-
-/** A run without a verdict whose tree the next tick retries once, with the verdicts its tick reached. */
-type Retry = { runUrl: string; tree: string; detail: string; seen: Seen[] };
-
 /**
  * What the queue keeps between ticks: a mark it may have left green, why it froze, if it did, and
  * the run without a verdict the next tick retries, if the last one had one.
@@ -72,23 +67,7 @@ export const queueStateSchema = z
       .strict()
       .nullable(),
     frozen: z.string().min(1).nullable(),
-    retry: z
-      .object({
-        runUrl: z.string().min(1),
-        tree: z.string().min(1),
-        detail: z.string(),
-        seen: z.array(
-          z
-            .object({
-              tree: z.string().min(1),
-              kind: z.enum(['passed', 'failed']),
-              runUrl: z.string().min(1),
-            })
-            .strict(),
-        ),
-      })
-      .strict()
-      .optional(),
+    retry: retrySchema.optional(),
   })
   .strict();
 
@@ -260,7 +239,7 @@ export function integrationEnvironment(run: {
 /**
  * One tick of the queue. A frozen queue does nothing. A live tick first withdraws a mark an earlier
  * tick left pending, merged or not; a withdrawal that fails freezes the queue. A live run without a
- * verdict is retried once, on the next tick, and the second needs a person. A live tick ends by
+ * verdict is retried once, on the next tick, and the same work's second needs a person. A live tick ends by
  * updating the oldest queued PR that is behind main. A dry run builds, tests and decides, but never
  * lands, tells a PR, withdraws a mark, records a retry or updates a branch.
  */
@@ -292,8 +271,8 @@ export async function runQueueTick(
   const chain = await buildChain(adapter, base.commit, batch, outcome);
   if (chain.length) {
     const retry = options.dryRun ? undefined : (state.retry ?? null);
-    const verdicts = await bisect(adapter, base.commit, chain, outcome, retry);
-    if (!options.dryRun) await recordRetry(adapter, state, outcome);
+    const { verdicts, unanswered } = await bisect(adapter, base.commit, chain, outcome, retry);
+    if (!options.dryRun) await recordRetry(adapter, state, outcome, unanswered);
     // A run without a verdict stops the tick: nothing lands and nobody is named.
     if (!needsAttention(outcome) && !outcome.stops.some((stop) => stop.kind === 'retry'))
       await settle(adapter, base, chain, verdicts, outcome);
@@ -342,21 +321,17 @@ async function buildChain(
 }
 
 /**
- * Saves the tick's retry, or clears an earlier one once a run reached a verdict, so only two runs
- * in a row without one stop the queue.
+ * Saves the tick's retry, or clears an earlier one once a tick reached its verdicts, so only the
+ * same work's second run without one stops the queue.
  */
-async function recordRetry(adapter: QueueAdapter, state: QueueState, outcome: QueueOutcome): Promise<void> {
-  const retry = outcome.stops.find((stop) => stop.kind === 'retry');
-  const run = outcome.runs.at(-1);
-  const seen = outcome.runs.flatMap(({ tree, verdict }) =>
-    verdict.kind === 'inconclusive' ? [] : [{ tree, kind: verdict.kind, runUrl: verdict.runUrl }],
-  );
-  if (retry && run)
-    await adapter.saveState({
-      ...CLEAR,
-      retry: { runUrl: run.verdict.runUrl, tree: run.tree, detail: run.verdict.detail, seen },
-    });
-  else if (state.retry && run && !outcome.stops.some((stop) => stop.kind === 'inconclusive'))
+async function recordRetry(
+  adapter: QueueAdapter,
+  state: QueueState,
+  outcome: QueueOutcome,
+  unanswered: Retry | undefined,
+): Promise<void> {
+  if (unanswered) await adapter.saveState({ ...CLEAR, retry: unanswered });
+  else if (state.retry && outcome.runs.length && !outcome.stops.some((stop) => stop.kind === 'inconclusive'))
     await adapter.saveState(CLEAR);
 }
 
@@ -439,8 +414,9 @@ const markOf = (pull: QueuedPull, proof: Verdict): PendingMark => ({
 /**
  * Tests the whole batch, then on red the prefixes between the longest green and the shortest red
  * one, until they differ by one PR: that PR breaks the batch. When only the whole batch failed,
- * one rerun of its tree confirms it before its last PR is named. Returns each prefix's verdict. A
- * superseded prefix or a run without a verdict ends the search (`noVerdict`).
+ * one rerun of its tree confirms it before its last PR is named. Returns each prefix's verdict, and
+ * the retry record of a run without a verdict the next tick retries. A superseded prefix or a run
+ * without a verdict ends the search (`noVerdict`).
  */
 async function bisect(
   adapter: QueueAdapter,
@@ -448,7 +424,7 @@ async function bisect(
   chain: readonly BatchEntry[],
   outcome: QueueOutcome,
   retry: Retry | null | undefined,
-): Promise<Map<number, Verdict>> {
+): Promise<{ verdicts: Map<number, Verdict>; unanswered?: Retry }> {
   const verdicts = new Map<number, Verdict>();
   let green = 0;
   let red: number | undefined;
@@ -465,19 +441,8 @@ async function bisect(
     }
     const pulls = prefix.map((entry) => entry.pull);
     const verdict = await adapter.integrationRun({ tip, base, pulls });
-    // A PR that repeats changes already in the batch keeps the tree; a second run of a tree that
-    // answers otherwise than its first, in this tick or the tick a retry repeats, is a flake and
-    // proves neither answer. A run without a verdict contradicts nothing.
-    const seen = [
-      ...(retry?.seen ?? []),
-      ...outcome.runs.map((run) => ({ tree: run.tree, kind: run.verdict.kind, runUrl: run.verdict.runUrl })),
-    ];
-    const contradicted =
-      verdict.kind === 'inconclusive'
-        ? undefined
-        : seen.find(
-            (run) => run.tree === tip.tree && run.kind !== 'inconclusive' && run.kind !== verdict.kind,
-          );
+    const work = workOf(base, tip.tree, prefix);
+    const contradicted = contradiction(work, verdict, outcome, retry);
     outcome.runs.push({
       prs: pulls.map((pull) => pull.number),
       tree: tip.tree,
@@ -486,7 +451,9 @@ async function bisect(
     });
     rerunOf = undefined;
     if (verdict.kind === 'inconclusive' || contradicted) {
-      outcome.stops.push(noVerdict(tip.tree, verdict, contradicted, retry));
+      const stop = noVerdict(work, verdict, contradicted, retry);
+      outcome.stops.push(stop);
+      if (stop.kind === 'retry') return { verdicts, unanswered: retryOf(work, verdict, outcome, retry) };
       break;
     }
     verdicts.set(length, verdict);
@@ -501,28 +468,7 @@ async function bisect(
       length = red;
     }
   }
-  return verdicts;
-}
-
-/** A run without a verdict: retried live unless a tick retried its tree; else for a person (a dry run: `retry` undefined). */
-function noVerdict(
-  tree: string,
-  verdict: Verdict,
-  contradicted: { kind: string; runUrl: string } | undefined,
-  retry: Retry | null | undefined,
-): QueueOutcome['stops'][number] {
-  if (contradicted)
-    return {
-      kind: 'inconclusive',
-      detail: `tree ${tree} ${contradicted.kind} in ${contradicted.runUrl} but ${verdict.kind} in ${verdict.runUrl}`,
-    };
-  const detail = `${verdict.runUrl}: ${verdict.detail}`;
-  // The retry is the tree's own: other work that ends without a verdict gets its own one.
-  if (retry === null || (retry !== undefined && retry.tree !== tree)) return { kind: 'retry', detail };
-  return {
-    kind: 'inconclusive',
-    detail: retry ? `${detail}, after the retry of ${retry.runUrl} (${retry.detail})` : detail,
-  };
+  return { verdicts };
 }
 
 const supersededIn = (entries: readonly BatchEntry[], now: readonly QueuedPull[]): string | undefined =>

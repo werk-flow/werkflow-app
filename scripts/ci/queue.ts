@@ -46,16 +46,16 @@
 // batch, or a first run without a verdict, a browser setup failure alone included, which the next
 // tick retries: `retry`). A red batch whose shorter prefixes all passed runs once more before its
 // last PR is named; a pass of that rerun is a contradiction for a person.
-// Exit 2: it needs a person: a second run in a row without a verdict, a contradicted tree, a first
-// PR failing on an unproven main, a landing that broke (a failed read between merges included), a
-// frozen queue, a refused option or configuration, or an error. Stop the loop. A tick that exits 2
-// after a merge still moved main: it logs a `partial` stop with the last merge it confirmed, the
-// merge commit GitHub reports, or the head main moved to when that was not the tested tree, or says
-// a merge may have landed when GitHub could not answer. After any landing or `partial` stop the
-// runner starts main's run of main's head, whatever the exit, with CI_BASE_SHA the tick's `base`
-// (main before the batch): that run reuses the batch's pass only for the landing it tested. A
-// frozen queue lands nothing until a person confirms on GitHub that the named head's newest `Queue`
-// is no success, merged or not, then deletes queue-state.json.
+// Exit 2: it needs a person: the same work's second run without a verdict, a contradicted tree, a
+// first PR failing on an unproven main, a landing that broke (a failed read between merges
+// included), a frozen queue, a refused option or configuration, or an error. Stop the loop. A tick
+// that exits 2 after a merge still moved main: it logs a `partial` stop with the last merge it
+// confirmed, the merge commit GitHub reports, or the head main moved to when that was not the
+// tested tree, or says a merge may have landed when GitHub could not answer. After any landing or
+// `partial` stop the runner starts main's run of main's head, whatever the exit, with CI_BASE_SHA
+// the tick's `base` (main before the batch): that run reuses the batch's pass only for the landing
+// it tested. A frozen queue lands nothing until a person confirms on GitHub that the named head's
+// newest `Queue` is no success, merged or not, then deletes queue-state.json.
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';

@@ -1,10 +1,10 @@
 // A run without a verdict is an environment question before it is a person's: the queue retries it
-// once, recorded, on the next tick, and stops only on the second. A PR is named only when its
+// once, recorded, on the next tick, and stops only on the same work's second. A PR is named only when its
 // failure was seen twice: a red full batch whose prefixes passed runs once more before its last
 // PR leaves the queue. Each case drives runQueueTick through a fake GitHub, git and runner.
 import { expect, test } from 'bun:test';
-import { fakeWorld, pull } from '../fixtures/merge-queue-world';
-import { needsAttention, runQueueTick } from './queue';
+import { fakeWorld, pull, sha } from '../fixtures/merge-queue-world';
+import { needsAttention, type QueuedPull, runQueueTick } from './queue';
 
 const LIVE = { maxBatch: 4, dryRun: false };
 
@@ -17,7 +17,17 @@ test('a first run without a verdict is retried on the next tick, recorded, and l
   expect(world.state()).toEqual({
     pending: null,
     frozen: null,
-    retry: { runUrl: 'run-1:main+1+2', tree: 'main+1+2', detail: 'inconclusive', seen: [] },
+    retry: {
+      base: sha('main'),
+      tree: 'main+1+2',
+      pulls: [
+        { number: 1, head: sha('head-1') },
+        { number: 2, head: sha('head-2') },
+      ],
+      runUrl: 'run-1:main+1+2',
+      detail: 'inconclusive',
+      seen: [],
+    },
   });
   expect(world.landed).toEqual([]);
   expect(world.rejected).toEqual([]);
@@ -174,4 +184,59 @@ test('a retry belongs to the tree that ended without a verdict: other work that 
   // #2's own second run without a verdict needs a person.
   const again = await runQueueTick(world.adapter, one);
   expect(again.stops.map((stop) => stop.kind)).toEqual(['inconclusive']);
+});
+
+test('a retry belongs to the exact work: the same tree with other PRs, another base or another head gets its own retry', async () => {
+  // #2 repeats #1's changes, so [1, 2] and [1] share a tree. The retried [1, 2] fails, then [1]
+  // ends without a verdict: other PRs, so a retry of its own.
+  const batch = fakeWorld([pull(1), pull(2)], {
+    unchanged: [2],
+    answer: (_prs, run) => (run === 2 ? 'failed' : 'inconclusive'),
+  });
+  await runQueueTick(batch.adapter, LIVE);
+  const retried = await runQueueTick(batch.adapter, LIVE);
+  expect(batch.tested).toEqual([[1, 2], [1, 2], [1]]);
+  expect(retried.runs.map((run) => run.tree)).toEqual(['main+1', 'main+1']);
+  expect(retried.stops.map((stop) => stop.kind)).toEqual(['retry']);
+  expect(batch.state().retry).toMatchObject({ tree: 'main+1', pulls: [{ number: 1, head: sha('head-1') }] });
+  // Main moves to another commit with the same tree, or #1 to another head with the same changes.
+  const moves = {
+    base: (world: { pushMain: (tree: string) => void }) => world.pushMain('main'),
+    head: (world: { pulls: QueuedPull[] }) => world.pulls.splice(0, 1, pull(1, { headSha: sha('head-1b') })),
+  };
+  for (const move of Object.values(moves)) {
+    const world = fakeWorld([pull(1)], {
+      answer: () => 'inconclusive',
+      afterRun: (run, state) => {
+        if (run === 1) move(state);
+      },
+    });
+    await runQueueTick(world.adapter, LIVE);
+    const again = await runQueueTick(world.adapter, LIVE);
+    expect(again.runs.map((run) => run.tree)).toEqual(['main+1']);
+    expect(again.stops.map((stop) => stop.kind)).toEqual(['retry']);
+    // That work's own second run without a verdict needs a person.
+    const third = await runQueueTick(world.adapter, LIVE);
+    expect(third.stops.map((stop) => stop.kind)).toEqual(['inconclusive']);
+  }
+});
+
+test('a later retry keeps the verdicts of the earlier ones: a tree that failed before two retries and then passes is a contradiction for a person', async () => {
+  const world = fakeWorld([pull(1), pull(2)], {
+    answer: (_prs, run) => (run === 1 ? 'failed' : run === 4 ? 'passed' : 'inconclusive'),
+  });
+  // Tick 1: [1, 2] fails, [1] has no verdict. Tick 2: [1, 2] has no verdict, other work.
+  await runQueueTick(world.adapter, LIVE);
+  const second = await runQueueTick(world.adapter, LIVE);
+  expect(second.stops.map((stop) => stop.kind)).toEqual(['retry']);
+  expect(world.state().retry?.seen).toEqual([
+    { base: sha('main'), tree: 'main+1+2', kind: 'failed', runUrl: 'run-1:main+1+2' },
+  ]);
+  // Tick 3: [1, 2] passes, which tick 1 saw fail.
+  const third = await runQueueTick(world.adapter, LIVE);
+  expect(world.tested).toEqual([[1, 2], [1], [1, 2], [1, 2]]);
+  expect(third.stops.map((stop) => stop.kind)).toEqual(['inconclusive']);
+  expect(third.stops[0]?.detail).toContain('failed in run-1:main+1+2 but passed in run-4:main+1+2');
+  expect(world.landed).toEqual([]);
+  expect(needsAttention(third)).toBe(true);
 });
