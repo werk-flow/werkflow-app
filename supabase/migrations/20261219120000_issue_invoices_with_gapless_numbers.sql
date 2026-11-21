@@ -606,7 +606,7 @@ revoke all on function public.save_invoice_settings(uuid, uuid, integer, jsonb) 
 grant execute on function public.save_invoice_settings(uuid, uuid, integer, jsonb) to service_role;
 
 -- A new draft starts with the organization's default Zahlungsziel and Skonto.
--- Otherwise as in 20261215100000_keep_invoice_drafts_with_their_lines_and_totals.sql.
+-- Otherwise as in 20261219100000_keep_invoice_drafts_with_their_lines_and_totals.sql.
 create or replace function public.create_invoice(
   p_actor_id uuid,
   p_organization_id uuid,
@@ -689,7 +689,7 @@ revoke all on function public.create_invoice(uuid, uuid, uuid, uuid, text, uuid)
 grant execute on function public.create_invoice(uuid, uuid, uuid, uuid, text, uuid) to service_role;
 
 -- The issue facts join the answer: Rechnungsdatum, the snapshot and the original's
--- filing. Otherwise as in 20261215100000_keep_invoice_drafts_with_their_lines_and_totals.sql.
+-- filing. Otherwise as in 20261219100000_keep_invoice_drafts_with_their_lines_and_totals.sql.
 create or replace function public.get_invoice(p_organization_id uuid, p_invoice_id uuid)
 returns jsonb language sql stable security invoker set search_path = '' as $$
   select jsonb_build_object(

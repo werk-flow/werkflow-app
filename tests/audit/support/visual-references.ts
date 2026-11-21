@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { settled } from '../../golden/support/steps/interaction';
+import { hydrated, settled } from '../../golden/support/steps/interaction';
 import { clockInLauncher } from '../../golden/support/steps/time-tracking';
 
 // Capture rules for the visual reference group (docs/technical/standards-audit.md,
@@ -140,17 +140,29 @@ async function normalizeText(
 }
 
 /**
- * Waits until the page shows its settled content: the busy signals clear
- * (`settled`: no skeleton, spinner, busy region or route refresh), fonts
- * loaded, the clock launcher ready.
+ * Holds the page's wall clock at the moment of the call from its next navigation on, while its
+ * timers keep running: every count the app derives from the clock (useWallClockTick, such as the
+ * verification page's resend wait) shows the same value in every capture, however slow the machine.
+ * Date-derived text still gets its stand-in.
  */
+export async function holdWallClock(page: Page): Promise<void> {
+  await page.clock.setFixedTime(new Date());
+}
+
 /** The page body inside the main landmark, the content a reference waits for. */
 export function pageBody(main: Locator): Locator {
   return main.locator('[data-page-body]');
 }
 
+/**
+ * Waits until the page shows its settled content: React hydrated every
+ * element (`hydrated`: no server HTML left that a client render still
+ * changes), the busy signals clear (`settled`: no skeleton, spinner, busy
+ * region or route refresh), fonts loaded, the clock launcher ready.
+ */
 export async function settlePage(page: Page, ready: Locator): Promise<void> {
   await expect(ready).toBeVisible();
+  await hydrated(page);
   await settled(page);
   const launcher = clockInLauncher(page);
   if (await launcher.count()) await expect(launcher).toBeEnabled();

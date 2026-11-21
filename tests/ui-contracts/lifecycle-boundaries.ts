@@ -47,6 +47,7 @@ declare global {
       | 'today-refresh-profile'
       | 'today-refresh-fallback'
       | 'offline-today'
+      | 'offline-retry'
       | 'offline-clock'
       | 'unsent-time-landing'
       | 'work-handover'

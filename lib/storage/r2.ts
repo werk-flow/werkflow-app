@@ -355,6 +355,18 @@ function isPreconditionFailed(error: unknown): boolean {
  */
 export type StoredObject = { created: true } | { created: false; sizeBytes: number | null };
 
+async function putObject(key: string, body: Uint8Array | Buffer, contentType: string, ifAbsent: boolean) {
+  await getR2Client().send(
+    new PutObjectCommand({
+      Bucket: getR2BucketName(),
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+      ...(ifAbsent ? { IfNoneMatch: '*' } : {}),
+    }),
+  );
+}
+
 export async function putStorageObject({
   organizationId,
   path,
@@ -370,20 +382,49 @@ export async function putStorageObject({
 }): Promise<StoredObject> {
   assertOrganizationStorageKey(organizationId, path);
   try {
-    await getR2Client().send(
-      new PutObjectCommand({
-        Bucket: getR2BucketName(),
-        Key: path,
-        Body: body,
-        ContentType: contentType,
-        ...(ifAbsent ? { IfNoneMatch: '*' } : {}),
-      }),
-    );
+    await putObject(path, body, contentType, ifAbsent);
     return { created: true };
   } catch (error) {
     if (!ifAbsent || !isPreconditionFailed(error)) throw error;
     const head = await headStorageObject({ organizationId, path });
     return { created: false, sizeBytes: head.sizeBytes };
+  }
+}
+
+/**
+ * WerkFlow's own books: the originals of its invoices to its customers
+ * (lib/werkflow-billing/). Their keys start with `werkflow-billing/`, never an
+ * organization id, so no organization operation, deletion or purge in this
+ * module reaches them, and they outlive the customer's organization.
+ */
+const WERKFLOW_BILLING_KEY = /^werkflow-billing\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
+
+/** Stores a WerkFlow billing original once: a taken key keeps its first object, whose size it reports. */
+export async function putWerkflowBillingObject({
+  path,
+  body,
+  contentType,
+}: {
+  path: string;
+  body: Uint8Array;
+  contentType: string;
+}): Promise<StoredObject> {
+  if (
+    !WERKFLOW_BILLING_KEY.test(path) ||
+    path.split('/').some((segment) => segment === '..' || segment === '.')
+  ) {
+    throw new Error('storage_key_outside_werkflow_billing');
+  }
+  try {
+    await putObject(path, body, contentType, true);
+    return { created: true };
+  } catch (error) {
+    if (!isPreconditionFailed(error)) throw error;
+    const result = await getR2Client().send(new HeadObjectCommand({ Bucket: getR2BucketName(), Key: path }));
+    return {
+      created: false,
+      sizeBytes: typeof result.ContentLength === 'number' ? result.ContentLength : null,
+    };
   }
 }
 

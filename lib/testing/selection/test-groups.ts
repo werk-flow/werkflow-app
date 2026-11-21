@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 import { changeTrigger, type ChangeTrigger } from './change-triggers';
+import { MAINTENANCE_VISIT_SQL_FILES } from './maintenance-visit-sql-files';
 
 export interface TestGroup {
   readonly id: string;
@@ -47,7 +48,7 @@ const freshnessFiles = new Set([
   'tests/audit/performance/planning-benchmark.spec.ts',
   'tests/audit/performance/field.spec.ts',
 ]);
-// Audit P1-22 times opening readiness in its imported submission helper; keep this through any refactor.
+// Audit P1-22 measures readiness in its imported submission helper; this survives a helper refactor.
 const readinessSources: Readonly<Record<string, string>> = {
   'tests/golden/p1-22.spec.ts': 'tests/golden/p1-22.spec.ts',
   'tests/golden/p1-11.spec.ts': 'tests/golden/p1-11.spec.ts',
@@ -70,12 +71,8 @@ function declaredTiming(files: readonly string[]): GroupTimingRequirements {
   };
 }
 
-// Prefixes describe ownership, not proof that a change cannot affect another area.
-// A changed file under a prefix selects the browser groups that declare its scope;
-// a product file no prefix owns selects the core set (group-selection.ts).
-// An entry ending in "/" owns a directory; any other entry owns exactly one file,
-// for a shared file whose feature is obvious (a hook, a skeleton, an API route).
-// Every entry must exist on disk (test-scope-prefixes.test.ts): naming nothing owns nothing.
+// Ownership, not proof of isolation: a changed file selects its scope's browser groups, an unowned one the
+// core set (group-selection.ts); "/" owns a directory, else one file; test-scope-prefixes.test.ts checks.
 export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   customers: [
     'lib/clients/',
@@ -296,11 +293,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['layout:field-time', 'layout/surfaces-field-time.spec.ts', ['time', 'personnel']],
   // The screens outside the app shell with their own sessions (standalone-route-inventory.ts).
   ['layout:standalone', 'layout/standalone-screens.spec.ts', ['standalone']],
-  // Reference screenshots of every page family.
   ['visual', 'visual/references.spec.ts', ['*']],
-  // Rendered acceptance captures by what a capture drives, so a changed helper selects the groups that import it:
-  // the inventory rounds' pages, dialogs per opener module and standalone screens
-  // (tests/audit/support/acceptance-rounds.ts), then the open sets (acceptance-sets/, one file each).
+  // Acceptance captures by what they drive (tests/audit/support/acceptance-rounds.ts), then the open sets.
   ['visual:acceptance:pages', 'visual/acceptance-pages.spec.ts', ['*']],
   ['visual:acceptance:calendar', 'visual/acceptance-calendar.spec.ts', ['planning']],
   ['visual:acceptance:customers', 'visual/acceptance-customers.spec.ts', ['customers']],
@@ -364,7 +358,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['p1-21', ['p1_21_time_segments.sql', 'clock_job_row_lock.sql'], ['time', 'personnel', 'work']],
   [
     'p1-22',
-    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql'],
+    ['p1_22_time_corrections.sql', 'open_session_past_day_addition.sql', 'late_chain_replacement.sql'],
     ['time', 'personnel', 'work'],
   ],
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
@@ -417,7 +411,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
-  ['maintenance-missed-visits', ['maintenance_missed_visits.sql'], ['service', 'work']],
+  ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, ['service', 'work', 'attention']],
   [
     'inventory-ledger',
     [
@@ -428,6 +422,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'inventory_article_prices_concurrency.sql',
       'inventory_supplier_catalog.sql',
       'inventory_supplier_catalog_search.sql',
+      'inventory_supplier_catalog_prices.sql',
       'inventory_item_units.sql',
       'inventory_item_units_concurrency.sql',
       'job_material_use.sql',
@@ -464,6 +459,10 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
+  ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
+  ['werkflow-billing-mails', ['werkflow_billing_mails.sql'], ['*']],
+  ['werkflow-invoices', ['werkflow_invoices.sql'], ['*']],
+  ['werkflow-subscriptions', ['werkflow_subscriptions.sql'], ['*']],
   ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
@@ -505,6 +504,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ],
     ['*'],
   ],
+  ['work-source-numbers', ['work_source_numbers.sql'], ['work', 'service']],
 ];
 
 /** Measured performance specs judge their deadlines in release mode and on explicit request only. */
@@ -671,7 +671,7 @@ export function getGroupTimingRequirements(
     const sourceTiming = readSourceTiming(source);
     requireFreshness ||= sourceTiming.requireFreshness;
     requireReadiness ||= sourceTiming.requireReadiness;
-    // A scenario call and its registration for this file must both exist: neither drifts silently.
+    // Scenario calls and registrations of this file must match: neither can drift silently.
     const registered = new Set(scenariosForFiles([file]).map((scenario) => scenario.id));
     for (const id of sourceTiming.scenarioIds) {
       if (!registered.has(id))

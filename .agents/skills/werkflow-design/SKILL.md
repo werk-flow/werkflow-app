@@ -131,6 +131,7 @@ Trap: a reference rewritten because the comparison failed. A reference records a
 - A placeholder is `Skeleton`. A running action is `Spinner` or `Button pending`. A live pulse is `animate-live`.
 - Expected latency under about one second gets no loader. A background `router.refresh()` gets none either.
 - Sections load and fail on their own, each with its `SectionError` and retry.
+- Content that draws after the first HTML holds its place with a `Skeleton` until it does: a browser-only `dynamic` names its `loading`, and a section's own read shows its skeleton, never nothing.
 
 ## Feedback
 

@@ -55,7 +55,7 @@ export function InvoiceLinesFields({
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <SectionTitle>Positionen</SectionTitle>
+        <SectionTitle as="h2">Positionen</SectionTitle>
         {!issued && (
           <Button type="button" variant="outline" size="sm" onClick={onAdd} disabled={disabled}>
             <Plus className="size-4" />

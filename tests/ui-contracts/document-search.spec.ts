@@ -43,19 +43,18 @@ test('a filter commit that keeps the query does not overwrite the text typed mea
   await commitRequest(page, 0);
   await expect(searchField(page)).toHaveValue('neu');
   await searchField(page).press('Enter');
-  expect(await page.evaluate(() => window.listNavigationContract.requests)).toEqual([
-    '/dokumente?view=all&q=alt',
-    '/dokumente?view=all&q=neu',
-  ]);
+  await expect
+    .poll(() => page.evaluate(() => window.listNavigationContract.requests))
+    .toEqual(['/dokumente?view=all&q=alt', '/dokumente?view=all&q=neu']);
 });
 
 test('a search submitted while a filter change loads keeps that filter change', async ({ page }) => {
   await chooseAllLinks(page);
   await searchField(page).fill('neu');
   await searchField(page).press('Enter');
-  expect(await page.evaluate(() => window.listNavigationContract.requests[1])).toBe(
-    '/dokumente?view=all&q=neu',
-  );
+  await expect
+    .poll(() => page.evaluate(() => window.listNavigationContract.requests[1]))
+    .toBe('/dokumente?view=all&q=neu');
   await commitRequest(page, 0);
   await commitRequest(page, 1);
   await expect(searchField(page)).toHaveValue('neu');
@@ -71,6 +70,7 @@ test('a changed query in the URL replaces the field text', async ({ page }) => {
 test('a search cleared between a URL commit and its passive effects stays requested', async ({ page }) => {
   await searchField(page).fill('neu');
   await searchField(page).press('Enter');
+  await expect.poll(() => page.evaluate(() => window.listNavigationContract.requests.length)).toBe(1);
   // Clearing the field lands right after the commit renders, before React
   // flushes that commit's passive effects.
   await page.evaluate(
@@ -97,9 +97,11 @@ test('a search cleared between a URL commit and its passive effects stays reques
   await expect(page.getByLabel('Bibliotheksstatus')).toHaveText('Wird geladen');
   await searchField(page).fill('neu');
   await searchField(page).press('Enter');
-  expect(await page.evaluate(() => window.listNavigationContract.requests)).toEqual([
-    '/dokumente?view=all&q=neu&link=employees',
-    '/dokumente?view=all&link=employees',
-    '/dokumente?view=all&q=neu&link=employees',
-  ]);
+  await expect
+    .poll(() => page.evaluate(() => window.listNavigationContract.requests))
+    .toEqual([
+      '/dokumente?view=all&q=neu&link=employees',
+      '/dokumente?view=all&link=employees',
+      '/dokumente?view=all&q=neu&link=employees',
+    ]);
 });

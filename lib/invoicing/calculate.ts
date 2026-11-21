@@ -6,11 +6,31 @@
 import { addLocalDays } from '@/lib/date-time/berlin';
 import { lineAmountCents } from '@/lib/inventory/line-amount';
 
-import type { CalculatedInvoice, InvoiceDraft, InvoiceTax, InvoiceTaxSubtotal } from './model';
+import type {
+  CalculatedInvoice,
+  InvoiceDraft,
+  InvoicePayment,
+  InvoiceTax,
+  InvoiceTaxSubtotal,
+} from './model';
 
 /** The rate in basis points: zero for a zero rate and an exemption. */
 export function taxRateBasisPoints(tax: InvoiceTax): number {
   return tax.category === 'S' ? tax.rateBasisPoints : 0;
+}
+
+/**
+ * What an invoice's balance asks of the buyer: an amount `due`, nothing
+ * because a recorded payment settled it (`paid`), nothing at all (`zero`), or
+ * a `credit` such as a Storno. Only `paid` says that a payment was made.
+ */
+export function balanceOf({
+  paidCents,
+  dueCents,
+}: CalculatedInvoice['totals']): 'due' | 'paid' | 'zero' | 'credit' {
+  if (dueCents > 0) return 'due';
+  if (dueCents < 0) return 'credit';
+  return paidCents > 0 ? 'paid' : 'zero';
 }
 
 /** basis × rate ÷ 10 000, rounded half away from zero; the basis may be negative. */
@@ -34,13 +54,24 @@ function taxKey(tax: InvoiceTax): string {
   return `${tax.category}:${taxRateBasisPoints(tax)}`;
 }
 
+/** The draft's payment: its `payment`, or its payee as a credit transfer. */
+function paymentOf({ payee, payment }: Pick<InvoiceDraft, 'payee' | 'payment'>): InvoicePayment | null {
+  if (payee && payment) throw new RangeError('A draft names a payee or a payment, not both.');
+  if (payee) return { kind: 'credit-transfer', payee };
+  return payment ?? null;
+}
+
 /**
  * Every amount of the draft, computed. A draft without lines, with a bad
- * quantity or with a sum beyond the safe integer range throws a RangeError.
+ * quantity, with a sum beyond the safe integer range, with both a payee and
+ * a payment, or with a paid amount that is negative, not whole cents or above
+ * the gross throws a RangeError.
  */
 export function calculateInvoice(draft: InvoiceDraft): CalculatedInvoice {
-  if (draft.lines.length === 0) throw new RangeError('An invoice has at least one line.');
-  const lines = draft.lines.map((line) => ({
+  const { payee, payment: draftPayment, paidCents = 0, lines: draftLines, ...rest } = draft;
+  if (draftLines.length === 0) throw new RangeError('An invoice has at least one line.');
+  const payment = paymentOf({ payee, payment: draftPayment });
+  const lines = draftLines.map((line) => ({
     ...line,
     netCents: lineAmountCents(line.quantity, line.unitPriceCents, line.priceQuantity),
   }));
@@ -69,11 +100,16 @@ export function calculateInvoice(draft: InvoiceDraft): CalculatedInvoice {
 
   const lineNetCents = lines.reduce((sum, line) => safeSum(sum, line.netCents), 0);
   const taxCents = taxSubtotals.reduce((sum, row) => safeSum(sum, row.taxCents), 0);
+  const grossCents = safeSum(lineNetCents, taxCents);
+  if (!Number.isSafeInteger(paidCents) || paidCents < 0 || paidCents > Math.max(grossCents, 0)) {
+    throw new RangeError('The paid amount lies between zero and the gross amount.');
+  }
   return {
-    ...draft,
+    ...rest,
+    payment,
     lines,
     dueDate: addLocalDays(draft.issueDate, draft.paymentTerms.dueInDays),
     taxSubtotals,
-    totals: { lineNetCents, taxCents, grossCents: safeSum(lineNetCents, taxCents) },
+    totals: { lineNetCents, taxCents, grossCents, paidCents, dueCents: grossCents - paidCents },
   };
 }

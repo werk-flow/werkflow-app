@@ -17,7 +17,7 @@ const { checkEn16931 } = await import('@/lib/invoicing/check-en16931').finally((
 
 // The Stornorechnung cancel_invoice stores: every line negated by its
 // quantity. The database negates the stored amounts instead of computing them
-// (supabase/migrations/20261216120000_cancel_and_correct_issued_invoices.sql);
+// (supabase/migrations/20261219130000_cancel_and_correct_issued_invoices.sql);
 // this proves the invoice core, run on the negated lines, computes exactly
 // those amounts, and that the result passes the EN 16931 rules as a 384.
 
@@ -132,7 +132,10 @@ describe('stornoOf', () => {
       lineNetCents: storno.lineNetCents,
       taxCents: storno.taxCents,
       grossCents: storno.grossCents,
+      paidCents: 0,
+      dueCents: storno.grossCents,
     });
+    expect(calculated.totals.dueCents).toBeLessThan(0);
     expect([storno.lineNetCents, storno.taxCents, storno.grossCents]).toEqual(
       [original.lineNetCents, original.taxCents, original.grossCents].map((cents) =>
         cents === 0 ? 0 : -cents,
@@ -144,7 +147,11 @@ describe('stornoOf', () => {
     expect(draft.paymentTerms).toEqual({ dueInDays: 0, discount: null });
     expect(draft.delivery).toEqual({ kind: 'period', start: '2037-11-02', end: '2037-11-06' });
     expect(draft.orderReference).toBe('BE-4711');
-    const check = await checkEn16931(toEn16931(calculated));
+    const xml = toEn16931(calculated);
+    expect(xml).toContain(`<ram:DuePayableAmount>${(storno.grossCents / 100).toFixed(2)}</ram:DuePayableAmount>`);
+    expect(xml).not.toContain('<ram:SpecifiedTradeSettlementPaymentMeans>');
+    expect(xml).not.toContain('<ram:DueDateDateTime>');
+    const check = await checkEn16931(xml);
     expect(check.errors).toEqual([]);
   });
 });

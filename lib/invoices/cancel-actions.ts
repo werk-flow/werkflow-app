@@ -18,7 +18,7 @@ import {
 import { readIssuedInvoice } from './reads';
 
 // „Stornieren“ and „Korrigieren“
-// (supabase/migrations/20261216120000_cancel_and_correct_issued_invoices.sql).
+// (supabase/migrations/20261219130000_cancel_and_correct_issued_invoices.sql).
 // The order of „Ausstellen“, through its issueUnderCheckedNumber: the server
 // checks the Stornorechnung with the EN 16931 rules under the series' next
 // number and today's date first and stores the original rendered under them;

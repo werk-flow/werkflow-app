@@ -81,6 +81,8 @@ export type CreateJobInput = {
   clientId?: string;
   projectId?: string;
   jobNumber?: string;
+  /** The number the previous system gave the job; empty clears it. */
+  sourceNumber?: string;
   priority?: JobPriority;
   plannedDate?: string;
   plannedTime?: string;

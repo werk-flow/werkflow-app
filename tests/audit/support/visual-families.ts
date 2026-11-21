@@ -404,7 +404,7 @@ export const STANDALONE_FAMILIES: readonly StandaloneFamily[] = [
   { id: 'nicht-gefunden', screen: 'not-found', heading: 'Seite nicht gefunden' },
   { id: 'onboarding-start', screen: '/onboarding/start', heading: 'Willkommen bei WerkFlow' },
   { id: 'onboarding-beitreten', screen: '/onboarding/join-organization', heading: 'Organisation beitreten' },
-  { id: 'upgrade', screen: '/upgrade', heading: 'WerkFlow Pro' },
+  { id: 'upgrade', screen: '/upgrade', heading: 'WerkFlow abonnieren' },
   {
     id: 'onboarding-organisation',
     screen: '/onboarding/create-organization',

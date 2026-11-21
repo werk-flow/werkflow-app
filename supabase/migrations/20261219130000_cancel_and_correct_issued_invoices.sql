@@ -61,7 +61,7 @@ alter table public.invoice_events drop constraint invoice_events_type_check;
 alter table public.invoice_events add constraint invoice_events_type_check
   check (event_type in ('created', 'saved', 'deleted', 'issued', 'original_registered', 'cancelled')) not valid;
 
--- 2. As in 20261216100000_issue_invoices_with_gapless_numbers.sql, with two
+-- 2. As in 20261219120000_issue_invoices_with_gapless_numbers.sql, with two
 -- additions. A link is inserted only by cancel_invoice, for the invoice it
 -- cancels (it raises app.invoice_cancel to that id for its transaction), and
 -- never changes. Inside that call, and once an issued Stornorechnung names
@@ -369,7 +369,7 @@ grant execute on function app_private.invoice_chain(uuid, uuid) to service_role;
 
 -- The links join the answer: the invoice a Stornorechnung cancels with its
 -- number and Rechnungsdatum, the reason, and the chain. Otherwise as in
--- 20261216100000_issue_invoices_with_gapless_numbers.sql.
+-- 20261219120000_issue_invoices_with_gapless_numbers.sql.
 create or replace function public.get_invoice(p_organization_id uuid, p_invoice_id uuid)
 returns jsonb language sql stable security invoker set search_path = '' as $$
   select jsonb_build_object(
@@ -441,7 +441,7 @@ grant execute on function public.get_invoice(uuid, uuid) to service_role;
 
 -- A row names the invoice its Stornorechnung or correction refers to, and the
 -- search finds a Stornorechnung and a correction by that number too.
--- Otherwise as in 20261215100000_keep_invoice_drafts_with_their_lines_and_totals.sql.
+-- Otherwise as in 20261219100000_keep_invoice_drafts_with_their_lines_and_totals.sql.
 create or replace function public.list_invoice_page(
   p_organization_id uuid,
   p_status text default null,

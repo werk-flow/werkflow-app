@@ -1,6 +1,6 @@
 -- „Stornieren“ and „Korrigieren“ issue a Stornorechnung with the series' next
 -- number, leave the original untouched but Storniert, and link the chain
--- (migration 20261216120000_cancel_and_correct_issued_invoices.sql).
+-- (migration 20261219130000_cancel_and_correct_issued_invoices.sql).
 begin;
 
 insert into auth.users (
