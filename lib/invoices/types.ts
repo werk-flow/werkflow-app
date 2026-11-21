@@ -4,7 +4,7 @@ import { z } from '@/lib/zod';
 // terms, lines and the totals the server computed
 // (supabase/migrations/20261219100000_keep_invoice_drafts_with_their_lines_and_totals.sql).
 
-/** Every status the database check allows; a Storno (`storniert`) is not written yet. */
+/** Every status the database check allows. `storniert`: an issued invoice a Stornorechnung cancels. */
 export const INVOICE_STATUSES = ['entwurf', 'ausgestellt', 'storniert'] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 export const invoiceStatusSchema = z.enum(INVOICE_STATUSES);
@@ -36,6 +36,10 @@ export const INVOICE_WORK_LABELS: Record<InvoiceWorkKind, string> = {
 export const INVOICE_TAX_RATES = [1900, 700, 0] as const;
 export type InvoiceTaxRate = (typeof INVOICE_TAX_RATES)[number];
 
+/** What an invoice is in its chain: an invoice, the Stornorechnung of one, or the correction of one. */
+export const INVOICE_CHAIN_KINDS = ['rechnung', 'storno', 'korrektur'] as const;
+export type InvoiceChainKind = (typeof INVOICE_CHAIN_KINDS)[number];
+
 export type InvoiceListEntry = {
   id: string;
   /** Null while it is a draft. */
@@ -46,6 +50,17 @@ export type InvoiceListEntry = {
   recipientName: string | null;
   grossCents: number;
   updatedAt: string;
+  /** The invoice a Stornorechnung cancels or a correction corrects. */
+  refersTo: { kind: Exclude<InvoiceChainKind, 'rechnung'>; invoiceNumber: string | null } | null;
+};
+
+/** One invoice of a chain: the original, its Stornorechnung, its correction, and theirs. */
+export type InvoiceChainEntry = {
+  id: string;
+  invoiceNumber: string | null;
+  status: InvoiceStatus;
+  kind: InvoiceChainKind;
+  issueDate: string | null;
 };
 
 /** One line as the editor and the database keep it. */
@@ -88,6 +103,11 @@ export type InvoiceDetail = InvoiceTerms &
     issueDate: string | null;
     /** The registered original and whether it is filed; null while none is registered. */
     original: { documentId: string; filed: boolean } | null;
+    /** A Stornorechnung's invoice it cancels, and the reason; both null otherwise. */
+    cancels: { id: string; invoiceNumber: string; issueDate: string } | null;
+    cancellationReason: string | null;
+    /** Every invoice linked through Stornos and corrections, this one included; itself alone when none. */
+    chain: InvoiceChainEntry[];
     client: { id: string; name: string };
     recipient: { id: string; name: string; address: string | null };
     /** The work it bills, with its label and detail route. */

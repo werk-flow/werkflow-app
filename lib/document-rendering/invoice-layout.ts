@@ -46,21 +46,13 @@ function groupedIban(iban: string): string {
 }
 
 function metaRowsOf(invoice: CalculatedInvoice): BusinessDocument['metaRows'] {
-  const { delivery, seller, precedingInvoice, deliverTo } = invoice;
+  const { delivery, seller, deliverTo } = invoice;
   return [
     { label: 'Rechnungsnummer', value: invoice.number },
     { label: 'Rechnungsdatum', value: formatGermanDate(invoice.issueDate) },
     delivery.kind === 'date'
       ? { label: 'Leistungsdatum', value: formatGermanDate(delivery.date) }
       : { label: 'Leistungszeitraum', value: formatGermanDateRange(delivery.start, delivery.end) },
-    ...(precedingInvoice
-      ? [
-          {
-            label: 'Storno zu',
-            value: `Rechnung ${precedingInvoice.number} vom ${formatGermanDate(precedingInvoice.issueDate)}`,
-          },
-        ]
-      : []),
     ...(invoice.orderReference ? [{ label: 'Bestellnummer', value: invoice.orderReference }] : []),
     ...(invoice.buyerReference ? [{ label: 'Referenz', value: invoice.buyerReference }] : []),
     ...(deliverTo
@@ -70,6 +62,18 @@ function metaRowsOf(invoice: CalculatedInvoice): BusinessDocument['metaRows'] {
       ? { label: 'USt-IdNr.', value: seller.vatId }
       : { label: 'Steuernummer', value: seller.taxNumber ?? '' },
   ];
+}
+
+/**
+ * The invoice a Storno cancels, then the invoice's notes. The reference opens
+ * this text, which flows onto the next page, and not the head: a Storno's head
+ * then holds its original's rows, and that head left room for the lines.
+ */
+function openingTextOf({ precedingInvoice, notes }: CalculatedInvoice): string {
+  const reference = precedingInvoice
+    ? `Storno zu Rechnung ${precedingInvoice.number} vom ${formatGermanDate(precedingInvoice.issueDate)}`
+    : '';
+  return [reference, ...notes].filter(Boolean).join('\n');
 }
 
 /** A credit names its amount and asks for nothing; it claims no refund and no debit. */
@@ -151,7 +155,7 @@ export function invoiceDocument(invoice: CalculatedInvoice, letterhead: Letterhe
     recipientLines: [invoice.buyer.name, ...addressLines(invoice.buyer.address)],
     title: `${title} ${invoice.number}`,
     metaRows: metaRowsOf(invoice),
-    openingText: invoice.notes.join('\n'),
+    openingText: openingTextOf(invoice),
     sections: [
       {
         number: '',
