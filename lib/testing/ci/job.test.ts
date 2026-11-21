@@ -75,7 +75,7 @@ console.info('[verify] passed in 0.1 min (fake): ' + report);
   writeFileSync(
     join(root, 'scripts/ci-plan.ts'),
     `import { appendFileSync } from 'node:fs';
-appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=sql:grants\\nselected_lint=\\nselected_static=static:migration-order\\nselected_unit=\\nselected_sql=sql:grants\\nselected_components=ui:contracts:work\\ncomponent_shards=[{"shard":1,"groups":"ui:contracts:work"}]\\n');
+appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=sql:grants\\nselected_lint=\\nselected_static=static:migration-order\\nselected_unit=\\nselected_sql=sql:grants\\nselected_components=ui:contracts:work\\ncomponent_shards=[{"shard":1,"groups":"ui:contracts:work"}]\\nselected_invoices=\\n');
 `,
   );
   writeFileSync(
@@ -105,6 +105,7 @@ const EMPTY_OUTPUTS = {
   selected_sql: '',
   selected_components: '',
   component_shards: '[]',
+  selected_invoices: '',
 };
 
 /** A passed plan of `RUN_URL` for the tree in `root`, whose Fast runs only the migration-order gate and the build. */
@@ -199,6 +200,54 @@ test("Fast's migration gate sees the plan's base and no ledger or producer, and 
       { job: 'fast', status: 'running', producer: 'mac-standin' },
       { job: 'fast', status: 'passed', producer: 'mac-standin' },
     ]);
+  });
+});
+
+test('a job records its cost and the runner measurement inputs, and an unreadable input warns without failing it', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    const dumps = join(folder, 'dumps');
+    mkdirSync(dumps);
+    writePlan(root, run);
+    const fast = (measurement: Record<string, string>): CiResult => {
+      const code = runJob(root, 'fast', {
+        CI_EVENT: 'integration',
+        CI_RESULTS_DIR: run,
+        CI_PRODUCER: 'mac-standin',
+        CI_RUN_URL: RUN_URL,
+        ENV_DUMP_DIR: dumps,
+        ...measurement,
+      });
+      const result = readResult(join(run, resultFileName('fast', null)));
+      if ('unreadable' in result) throw new Error(result.unreadable);
+      expect([measurement, code]).toEqual([measurement, 0]);
+      return result;
+    };
+    const runnerStartedAt = '2026-11-20T19:00:00.000Z';
+    const measured = fast({
+      CI_PRS: '12',
+      CI_RUN_ATTEMPT: '2',
+      CI_FIRST_ATTEMPT_CLASS: 'environment',
+      CI_JOB_STARTED_AT: runnerStartedAt,
+    });
+    expect(measured).toMatchObject({ prs: [12], attempt: 2, firstAttemptClass: 'environment' });
+    expect(measured.cost).toEqual({
+      machineStart: true,
+      runnerStartedAt,
+      // Fast's build is a gate, not setup: only the runner's time before the body counts.
+      setupMs: Date.parse(measured.startedAt) - Date.parse(runnerStartedAt),
+      wallMs: Date.parse(measured.completedAt ?? '') - Date.parse(runnerStartedAt),
+    });
+    // Each unreadable input leaves a readable receipt, so Check and reuse still read it.
+    for (const inputs of [
+      { CI_PRS: 'twelve', CI_RUN_ATTEMPT: 'x', CI_JOB_STARTED_AT: 'soon' },
+      { CI_PRS: '9007199254740992', CI_RUN_ATTEMPT: '9007199254740992' },
+    ]) {
+      const unknown = fast(inputs);
+      expect(unknown).toMatchObject({ status: 'passed', prs: [], attempt: null, firstAttemptClass: null });
+      expect(unknown.cost).toMatchObject({ runnerStartedAt: null, setupMs: 0 });
+    }
   });
 });
 
@@ -366,12 +415,133 @@ test("off GitHub, Check fails without a scheduler report when this run's Plan is
     // A rerun of the same run: its Plan fails (no CI_BASE_SHA) over the plan an earlier attempt passed.
     const rerun = join(folder, 'rerun');
     const reason = 'The integration run https://ci.example/runs/1 passed this exact tree.';
-    const skips = { fast: reason, sql: reason, components: reason, midnight: reason, browser: reason };
+    const skips = {
+      fast: reason,
+      sql: reason,
+      components: reason,
+      invoices: reason,
+      midnight: reason,
+      browser: reason,
+    };
     writePlan(root, rerun, { plan: { jobs: ['plan', 'check'], skips, shards: [], outputs: EMPTY_OUTPUTS } });
     // The earlier attempt's plan alone passes Check, so only the rerun's failed Plan can fail it.
     expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(0);
     expect(runJob(root, 'plan', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);
     expect(readResult(join(rerun, resultFileName('plan', null)))).toMatchObject({ status: 'failed' });
     expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);
+  });
+});
+
+test('a pull request run that a newer push superseded ends at once and records nothing; on its current head it plans', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const head = git(root, 'rev-parse', 'HEAD');
+    // The repository is its own origin, whose pull request ref first holds a newer commit.
+    git(root, 'remote', 'add', 'origin', root);
+    git(root, 'commit', '--quiet', '--allow-empty', '--message', 'newer push');
+    git(root, 'update-ref', 'refs/pull/1/head', 'HEAD');
+    git(root, 'checkout', '--quiet', '--detach', head);
+    const ledger = join(folder, 'ledger.jsonl');
+    const variables = {
+      CI_EVENT: 'pr',
+      CI_BASE_SHA: 'HEAD',
+      CI_PRODUCER: 'mac-standin',
+      CI_LEDGER: ledger,
+      CI_RUN_URL: RUN_URL,
+      CI_PR_HEAD_REF: 'refs/pull/1/head',
+    };
+    const superseded = join(folder, 'superseded');
+    expect(runJob(root, 'plan', { ...variables, CI_RESULTS_DIR: superseded })).toBe(1);
+    expect(readResult(join(superseded, resultFileName('plan', null)))).toHaveProperty('unreadable');
+    expect(readLedger(ledger)).toEqual([]);
+    git(root, 'update-ref', 'refs/pull/1/head', head);
+    const current = join(folder, 'current');
+    expect(runJob(root, 'plan', { ...variables, CI_RESULTS_DIR: current })).toBe(0);
+    expect(readResult(join(current, resultFileName('plan', null)))).toMatchObject({ status: 'passed' });
+  });
+});
+
+test("Check's start reaches the ledger before its end, so a cancelled Check still counts as started", () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    const ledger = join(folder, 'ledger.jsonl');
+    const reason = 'The integration run https://ci.example/runs/1 passed this exact tree.';
+    const skips = {
+      fast: reason,
+      sql: reason,
+      components: reason,
+      invoices: reason,
+      midnight: reason,
+      browser: reason,
+    };
+    writePlan(root, run, { plan: { jobs: ['plan', 'check'], skips, shards: [], outputs: EMPTY_OUTPUTS } });
+    const code = runJob(root, 'check', {
+      CI_EVENT: 'integration',
+      CI_RESULTS_DIR: run,
+      CI_PRODUCER: 'mac-standin',
+      CI_LEDGER: ledger,
+      CI_RUN_URL: RUN_URL,
+    });
+    expect(code).toBe(0);
+    expect(ledgerOf(ledger).map(({ job, status }) => ({ job, status }))).toEqual([
+      { job: 'check', status: 'running' },
+      { job: 'check', status: 'passed' },
+    ]);
+  });
+});
+
+test("a full run's Check records the failed groups no landed plan selected, and only from a runner's ledger", () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    const ledger = join(folder, 'ledger.jsonl');
+    // main's push of this tree selected sql:grants; the full run fails it and sql:missed.
+    const landed = planOf(root, {
+      event: 'main',
+      runUrl: 'https://ci.example/runs/1',
+      plan: {
+        jobs: ['plan', 'sql', 'check'],
+        skips: {},
+        shards: [],
+        outputs: { ...EMPTY_OUTPUTS, selected_sql: 'sql:grants' },
+      },
+    });
+    writeFileSync(ledger, `${JSON.stringify(landed)}\n`);
+    const outputs = { ...EMPTY_OUTPUTS, selected_sql: 'sql:grants,sql:missed' };
+    writePlan(root, run, {
+      event: 'full',
+      plan: { jobs: ['plan', 'sql', 'check'], skips: {}, shards: [], outputs },
+    });
+    const failed = (id: string) => ({ id, outcome: 'failed' as const, durationMs: 1 });
+    writeFileSync(
+      join(run, resultFileName('sql', null)),
+      JSON.stringify(
+        planOf(root, {
+          job: 'sql',
+          event: 'full',
+          status: 'failed',
+          plan: undefined,
+          groups: [failed('sql:grants'), failed('sql:missed')],
+        }),
+      ),
+    );
+    const variables = {
+      CI_EVENT: 'full',
+      CI_RESULTS_DIR: run,
+      CI_PRODUCER: 'mac-standin',
+      CI_RUN_URL: RUN_URL,
+    };
+    expect(runJob(root, 'check', { ...variables, CI_LEDGER: ledger })).toBe(1);
+    expect(readResult(join(run, resultFileName('check', null)))).toMatchObject({
+      unselectedFailures: ['sql:missed'],
+    });
+    // Without a ledger no plan of the landed trees is known, so the count stays unknown.
+    expect(runJob(root, 'check', variables)).toBe(1);
+    expect(readResult(join(run, resultFileName('check', null)))).not.toHaveProperty('unselectedFailures');
+    // A result Check cannot read may hold failures, so the count stays unknown too, never a known zero.
+    writeFileSync(join(run, resultFileName('sql', null)), '{');
+    expect(runJob(root, 'check', { ...variables, CI_LEDGER: ledger })).toBe(1);
+    expect(readResult(join(run, resultFileName('check', null)))).not.toHaveProperty('unselectedFailures');
   });
 });

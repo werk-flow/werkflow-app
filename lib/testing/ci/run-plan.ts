@@ -32,6 +32,8 @@ export function plannedGroups(
       return [...groupList(outputs.selected_sql), 'step:types', 'step:seed'];
     case 'components':
       return groupList(shardGroups);
+    case 'invoices':
+      return groupList(outputs.selected_invoices);
     case 'browser':
       return [...groupList(shardGroups), 'step:server'];
     case 'plan':
@@ -111,6 +113,7 @@ const PLANNER_OUTPUTS = [
   'selected_sql',
   'selected_components',
   'component_shards',
+  'selected_invoices',
 ];
 
 /**
@@ -138,6 +141,18 @@ function reusedTreePlan(passedTree: string): RunPlan {
     shards: [],
     outputs: Object.fromEntries(PLANNER_OUTPUTS.map((key) => [key, empty[key] ?? ''])),
   };
+}
+
+/** Why the SQL and e-invoice jobs skip when the planner selected nothing for them. */
+function emptySelectionSkips(outputs: Readonly<Record<string, string>>): Partial<Record<CiJob, string>> {
+  const skips: Partial<Record<CiJob, string>> = {};
+  if (!groupList(outputs.selected_sql).length)
+    skips.sql =
+      "The plan selects no SQL group: no change reaches the schema, an assertion, the generated types or the SQL job's scripts (lib/testing/selection/fast-tier.ts).";
+  if (!groupList(outputs.selected_invoices).length)
+    skips.invoices =
+      'The plan selects no e-invoice check: no change reaches the invoice core, the renderer, what they import or the dependencies (lib/testing/selection/e-invoice-selection.ts).';
+  return skips;
 }
 
 /**
@@ -176,13 +191,15 @@ export function planRun(input: {
           listGrowthApproved: input.listGrowthApproved,
         })
       : undefined;
-  const skips: Partial<Record<CiJob, string>> = {};
+  const skips = emptySelectionSkips(outputs);
+  const reusedJobs: NonNullable<RunPlan['reused']> = [];
   /** The planned shards that no passed result stands for, and why the job skips when none is left. */
   const shardsToRun = (job: CiJob, planned: CiShard[], none: string): CiShard[] => {
     const reused = planned.flatMap((shard) => {
       const receipt = reusedBy(job, shard);
       return receipt ? [{ shard, receipt }] : [];
     });
+    for (const entry of reused) reusedJobs.push({ job, shard: entry.shard.shard, runUrl: entry.receipt });
     const left = planned.filter((shard) => !reused.some((entry) => entry.shard === shard));
     if (!planned.length) skips[job] = none;
     else if (!left.length)
@@ -203,13 +220,12 @@ export function planRun(input: {
     componentShards,
     'The plan selects no component area: no change reaches a contract, its bundle or a stylesheet (lib/testing/selection/fast-tier.ts).',
   );
-  if (!groupList(outputs.selected_sql).length)
-    skips.sql =
-      "The plan selects no SQL group: no change reaches the schema, an assertion, the generated types or the SQL job's scripts (lib/testing/selection/fast-tier.ts).";
   for (const job of WORK_JOBS) {
     if (skips[job] || job === 'browser' || job === 'components') continue;
     const receipt = reusedBy(job);
-    if (receipt) skips[job] = `Reused the passed result ${receipt} of this tree, group list and approval.`;
+    if (!receipt) continue;
+    skips[job] = `Reused the passed result ${receipt} of this tree, group list and approval.`;
+    reusedJobs.push({ job, shard: null, runUrl: receipt });
   }
   return {
     jobs: CI_JOBS.filter((job) => !skips[job]),
@@ -222,6 +238,7 @@ export function planRun(input: {
       component_shards: JSON.stringify(componentsToRun),
       midnight_until: midnightUntil,
     },
+    reused: reusedJobs,
   };
 }
 

@@ -5,9 +5,10 @@ name: CI
 # scripts/ci/job.ts, the same on any runner, and runs its groups through scripts/verify.ts, the
 # engine of a local run. This file adds only what GitHub owns: triggers, runners, caches, tokens
 # and artifacts. The required check is `Check` at the end of this file.
-# - A pull request's run, draft or ready, is the fast tier: Fast, SQL and Component contracts, each
-#   running only the groups the plan selects for the diff (lib/testing/selection/fast-tier.ts). A job
-#   whose selection is empty is skipped with the plan's reason.
+# - A pull request's run, draft or ready, is the fast tier: Fast, SQL, Component contracts and
+#   E-invoices, each running only the groups the plan selects for the diff
+#   (lib/testing/selection/fast-tier.ts, e-invoice-selection.ts). A job whose selection is empty is
+#   skipped with the plan's reason.
 # - The merge queue's run (`integration`) adds the plan's browser shards: browser groups run once
 #   per PR, on the PR on top of main and of every PR ahead of it (owner decision D1,
 #   werk-flow/werkflow-planning#503).
@@ -23,9 +24,13 @@ on:
   # left the required `Check` failed or "Expected". The Fast job reads the PR's labels at run
   # time, and list-growth.yml reruns it when the owner's `approved: list growth` label changes.
   # Marking a draft ready starts no run: the draft's run already is the PR's whole run.
+  # A stacked PR runs when GitHub retargets it to main after its base branch merged: an `edited`
+  # event that changed the base. Any other edit (title, body) starts a run in a group of its own,
+  # so it cancels nothing; it skips Plan, so no job runs, and its skipped last job is named
+  # `Ignored edit`, never `Check`, because a skipped Check would count as passed.
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
   merge_group:
     types: [checks_requested]
   push:
@@ -51,7 +56,7 @@ permissions:
 # list-growth.yml may rerun a commit the PR has just left, and that rerun must neither cancel nor
 # replace the new head's run.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}${{ github.event.action == 'edited' && !github.event.changes.base && format('-edit-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The inputs of scripts/ci/job.ts (its header names them all).
@@ -67,10 +72,15 @@ env:
   CI_PRODUCER: github-actions
   CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   MIDNIGHT_PROOF_MINUTES: ${{ inputs.midnight_proof_minutes }}
+  # Measurement only (lib/testing/ci/measurement.ts): the PR a run serves, or the queue ref that names it.
+  CI_PRS: ${{ github.event.pull_request.number || github.event.merge_group.head_ref || '' }}
+  CI_RUN_ATTEMPT: ${{ github.run_attempt }}
 
 jobs:
   plan:
     name: Plan
+    # An edit that kept the base changes no tested input (see `on`).
+    if: github.event.action != 'edited' || github.event.changes.base
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Lists the merge queue's runs of this workflow.
@@ -195,6 +205,31 @@ jobs:
           job: components
           shard: ${{ matrix.shard }}
 
+  # The reference invoices rendered as ZUGFeRD PDFs, then Mustang and veraPDF on them, when the
+  # plan selects them (lib/testing/selection/e-invoice-selection.ts).
+  invoices:
+    name: E-invoices
+    needs: plan
+    if: contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'invoices')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/ci-job
+        with:
+          job: invoices
+      - name: Keep the checked PDFs and Mustang's reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e-invoices
+          path: .agent-logs/e-invoices
+          retention-days: 14
+          if-no-files-found: ignore
+          # A rerun of the job keeps its own attempt's folder beside the earlier ones.
+          overwrite: true
+
   sql:
     name: SQL
     needs: plan
@@ -286,9 +321,9 @@ jobs:
   # skips has the plan's reason. `always()`, never `!cancelled()`: a cancelled run reports a failed
   # Check, and a skipped Check would count as passed.
   check:
-    name: Check
-    if: always()
-    needs: [plan, fast, sql, components, midnight, browser]
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Ignored edit' || 'Check' }}
+    if: always() && (github.event.action != 'edited' || github.event.changes.base)
+    needs: [plan, fast, sql, components, invoices, midnight, browser]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

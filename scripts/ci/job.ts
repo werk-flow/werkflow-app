@@ -11,6 +11,14 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { type CiRun, checkRun, parseScheduler, runPlanOf } from '../../lib/testing/ci/check';
+import {
+  fullRunsInLedger,
+  landedSelections,
+  MAIN_HISTORY_DEPTH,
+  treesSinceFullRun,
+  unselectedFailures,
+} from '../../lib/testing/ci/full-run';
+import { jobCost, measurementInputs } from '../../lib/testing/ci/measurement';
 import { CI_EVENTS, CI_JOBS, type CiJob } from '../../lib/testing/ci/dag';
 import {
   type CiResult,
@@ -28,12 +36,14 @@ import {
   reusableReceipt,
 } from '../../lib/testing/ci/reuse';
 import { isStep, jobShards, midnightNotice, plannedGroups, planRun } from '../../lib/testing/ci/run-plan';
+import { lsRemoteCommit, supersedingHead } from '../../lib/testing/ci/superseded';
 import { workspaceAppOrigin } from '../../lib/testing/runner/app-port';
+import { E_INVOICE_CHECK, E_INVOICE_STEP } from '../../lib/testing/selection/e-invoice-selection';
 import { repository, run, step, verify } from './run';
 
 // One CI job's body, the same on GitHub Actions (.github/workflows/ci.yml) and on any other runner
 // (docs/technical/testing.md, "CI"). lib/testing/ci/dag.ts holds the jobs, their needs and events.
-// Usage: bun scripts/ci/job.ts <plan|fast|sql|components|midnight|browser|check>
+// Usage: bun scripts/ci/job.ts <plan|fast|sql|components|invoices|midnight|browser|check>
 // The job exits 0 when it passed. It reads plain environment variables only:
 //   CI_EVENT        pr | integration | main | full (lib/testing/ci/dag.ts). Required.
 //   CI_RESULTS_DIR  The run's results directory. Required. Each job writes <job>.json there
@@ -50,11 +60,13 @@ import { repository, run, step, verify } from './run';
 //                   and a job whose checkout changes while it runs fails and records none.
 //   CI_LEDGER       The runner's JSONL ledger of results. plan appends its start, then reads it to
 //                   reuse a passed result, and with CI_PRODUCER set every job appends its
-//                   receipts, a changed checkout's included. When plan cannot append or read it,
-//                   plan warns and plans the full work of its event. Optional. Set it only when
-//                   the file lives outside every job's checkout and the job's processes cannot
-//                   write it (another user, or outside the job's container); without that
-//                   guarantee leave it unset, and every run executes in full.
+//                   receipts, a changed checkout's included. check of a full run reads it to
+//                   record the groups the run failed that no landed plan selected. When plan
+//                   cannot append or read it, plan warns and plans the full work of its event.
+//                   Optional. Set it only when the file lives outside every job's checkout and
+//                   the job's processes cannot write it (another user, or outside the job's
+//                   container); without that guarantee leave it unset, and every run executes in
+//                   full.
 //   No child process sees CI_LEDGER or CI_PRODUCER: only this script appends a receipt, after its
 //   child exited. That hides the ledger's name only; the file's permissions keep code under test
 //   from forging a receipt.
@@ -63,8 +75,22 @@ import { repository, run, step, verify } from './run';
 //                   with CI_LEDGER.
 //   CI_BUILD_TAR    fast packs its build into this file, and a browser shard unpacks it. Optional.
 //   CI_NEEDS        check: the scheduler's job results, as ci.yml's `toJSON(needs)`. Optional.
+//   CI_PR_HEAD_REF  pr: the ref on `origin` that holds the pull request's current head, such as
+//                   refs/pull/568/head. When a newer push moved it, every job of the run ends at
+//                   once, failed, and writes no result or receipt. Optional.
+//   CI_PR_HEAD_SHA  pr: the head commit this run tests, when the checkout is a merge commit on top
+//                   of it. Defaults to the checkout's commit.
 //   SHRINK_ONLY_GROWTH_APPROVED  `true` with the owner's `approved: list growth` label.
 //   MIDNIGHT_PROOF_MINUTES       plan: passed on to scripts/ci-plan.ts; names the wait a proof run.
+// Measurement inputs (lib/testing/ci/measurement.ts). Optional; no gate reads them, and an unreadable one
+// warns and is recorded as unknown, never failing the job:
+//   CI_PRS          The pull requests the run serves: numbers separated by commas (a PR run's one, an
+//                   integration batch's, a push's landed PRs when the runner knows them), or GitHub's
+//                   merge-queue ref. Unset for a full run.
+//   CI_RUN_ATTEMPT  The run's attempt, 1 for the first; a rerun of its failed jobs counts up.
+//   CI_FIRST_ATTEMPT_CLASS  On a rerun: the class the job's failed first attempt was given
+//                   (docs/technical/testing.md, "Failures").
+//   CI_JOB_STARTED_AT  When the runner began this job, before its checkout and setup, as an ISO time.
 // On GitHub Actions (GITHUB_ACTIONS=true and GH_TOKEN) without CI_LEDGER, plan asks the Actions API
 // for a green merge-queue run of the tree; a configured ledger is the only reuse source. plan writes
 // its outputs to $GITHUB_OUTPUT.
@@ -99,11 +125,40 @@ if (!clean)
     '::warning title=Checkout::The checkout differs from its commit, so no result is reused or recorded for reuse.',
   );
 if (ledgerPath && !environment.CI_RUN_URL) throw new Error('A run with CI_LEDGER needs CI_RUN_URL.');
+const measured = measurementInputs(environment);
+for (const warning of measured.warnings)
+  console.info(`::warning title=Measurement::${warning}, so the result records it as unknown.`);
+/** One machine start per job process on a CI runner, whatever its checkout holds. */
+const machineStart = producer !== null;
 // One one-time-code secret for the job's build and its test server, unless the runner gives one.
 const otpSecret = environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex');
 // The commit is read once and the tree from it, so a moving HEAD cannot pair one commit's plan with
 // another's test; the final check compares HEAD with this commit.
 const commit = git('rev-parse', 'HEAD');
+// A superseded pull request run proves nothing for its PR: it ends before it records anything, so
+// it neither costs a runner more time nor withdraws a pass from the ledger.
+const newerHead = supersedingHead({
+  event: ci.event,
+  headRef: environment.CI_PR_HEAD_REF,
+  testedHead: environment.CI_PR_HEAD_SHA || commit,
+  remoteHead: (ref) => {
+    // An unanswered question runs the job: no credential prompt, and at most a minute.
+    const answer = spawnSync('git', ['ls-remote', 'origin', ref], {
+      cwd: repository,
+      encoding: 'utf8',
+      env: { ...environment, GIT_TERMINAL_PROMPT: '0' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+    });
+    return answer.status === 0 ? lsRemoteCommit(answer.stdout, ref) : undefined;
+  },
+});
+if (newerHead) {
+  console.error(
+    `::error title=Superseded::The pull request moved on to ${newerHead}, so this run of ${environment.CI_PR_HEAD_SHA || commit} stops.`,
+  );
+  process.exit(1);
+}
 const result: CiResult = {
   version: 1,
   job: ci.job,
@@ -121,7 +176,18 @@ const result: CiResult = {
   runUrl: environment.CI_RUN_URL || null,
   startedAt: new Date().toISOString(),
   completedAt: null,
+  prs: measured.prs,
+  attempt: measured.attempt,
+  firstAttemptClass: measured.firstAttemptClass,
 };
+const measureCost = (): void => {
+  result.cost = jobCost(result, {
+    machineStart,
+    runnerStartedAt: measured.runnerStartedAt,
+    completedAt: result.completedAt,
+  });
+};
+measureCost();
 /** The run this job belongs to; it takes only this run's plan. */
 const ownRun: CiRun = { tree: result.tree, event: ci.event, runUrl: result.runUrl, producer };
 const resultPath = join(ci.directory, resultFileName(ci.job, shard));
@@ -312,6 +378,16 @@ async function components(): Promise<boolean> {
   return everyGroupPassed();
 }
 
+/**
+ * Mustang and veraPDF on the reference invoices; Docker and the network required. The PDFs and
+ * Mustang's reports stay under .agent-logs/e-invoices/, one folder per attempt.
+ */
+async function invoices(): Promise<boolean> {
+  const folder = join(repository, '.agent-logs/e-invoices', result.startedAt.replaceAll(':', '-'));
+  record([await step(E_INVOICE_STEP, [[process.execPath, [E_INVOICE_CHECK, folder]]])]);
+  return everyGroupPassed();
+}
+
 async function midnight(): Promise<boolean> {
   const until = Date.parse(runPlan().outputs.midnight_until ?? '');
   if (Number.isNaN(until))
@@ -378,24 +454,62 @@ async function browser(): Promise<boolean> {
   return everyGroupPassed();
 }
 
+/**
+ * A full run's failed groups that no plan of the trees landed since the previous full run selected
+ * (lib/testing/ci/full-run.ts), or undefined when the runner keeps no ledger, which alone holds
+ * those plans, or when a result cannot be read, which may hold failures. A measurement: what it
+ * cannot read warns and stays unknown, never failing Check.
+ */
+function fullRunMisses(results: readonly (CiResult | { unreadable: string })[]): string[] | undefined {
+  if (ci.event !== 'full' || !ledgerPath || !producer) return undefined;
+  try {
+    const unreadable = results.flatMap((entry) => ('unreadable' in entry ? [entry.unreadable] : []));
+    if (unreadable.length) throw new Error(unreadable.join('; '));
+    const ledger = readLedger(ledgerPath);
+    if ('unreadable' in ledger) throw new Error(ledger.unreadable);
+    const history = git(
+      'log',
+      '--first-parent',
+      `--max-count=${MAIN_HISTORY_DEPTH}`,
+      '--format=%H %T',
+      commit,
+    )
+      .split('\n')
+      .flatMap((line) => {
+        const [lineCommit, tree] = line.split(' ');
+        return lineCommit && tree ? [{ commit: lineCommit, tree }] : [];
+      });
+    const failed = results.flatMap((entry) =>
+      'unreadable' in entry || entry.runUrl !== result.runUrl || entry.tree !== result.tree
+        ? []
+        : entry.groups.filter((group) => group.outcome === 'failed').map((group) => group.id),
+    );
+    const landed = treesSinceFullRun(history, fullRunsInLedger(ledger, new Date()));
+    return unselectedFailures(failed, landedSelections(ledger, landed));
+  } catch (error) {
+    console.info(
+      `::warning title=Measurement::The full run's unselected failures cannot be counted (${JSON.stringify(error instanceof Error ? error.message : String(error))}), so the result records them as unknown.`,
+    );
+    return undefined;
+  }
+}
+
 function check(): boolean {
   // A CI Check certifies the tree only from a checkout that holds exactly its commit.
   if (producer && !clean) throw new Error('Check ran on a checkout that differs from its commit.');
   const own = new Set([resultFileName('plan', null), resultFileName('check', null)]);
   const plan = readResult(join(ci.directory, resultFileName('plan', null)));
-  const verdict = checkRun({
-    run: ownRun,
-    plan,
-    results: readdirSync(ci.directory)
-      .filter((file) => file.endsWith('.json') && !own.has(file))
-      .map((file) => readResult(join(ci.directory, file))),
-    scheduler: parseScheduler(environment.CI_NEEDS),
-  });
+  const results = readdirSync(ci.directory)
+    .filter((file) => file.endsWith('.json') && !own.has(file))
+    .map((file) => readResult(join(ci.directory, file)));
+  const verdict = checkRun({ run: ownRun, plan, results, scheduler: parseScheduler(environment.CI_NEEDS) });
   for (const line of verdict.lines) console.info(line);
   if (!('unreadable' in plan)) {
     result.planReason = plan.planReason;
     result.reusedFrom = plan.reusedFrom;
   }
+  const misses = fullRunMisses(results);
+  if (misses) result.unselectedFailures = misses;
   return verdict.passed;
 }
 
@@ -404,6 +518,7 @@ const bodies: Record<CiJob, () => Promise<boolean> | boolean> = {
   fast,
   sql,
   components,
+  invoices,
   midnight,
   browser,
   check,
@@ -424,6 +539,9 @@ function checkoutChange(): string | undefined {
 
 let passed = false;
 try {
+  // Check's start reaches the ledger too, so a cancelled Check still counts as started; its end, a
+  // passed Check of this run, is still the last receipt that reuses the tree (lib/testing/ci/reuse.ts).
+  if (ci.job === 'check') appendToLedger();
   // A job records its planned key before it runs, in its result and the ledger: an attempt that
   // fails or dies before it reports a group still withdraws an earlier pass of the same key.
   if (ci.job !== 'plan' && ci.job !== 'check') {
@@ -453,6 +571,7 @@ if (changed) {
 }
 result.status = passed ? 'passed' : 'failed';
 result.completedAt = new Date().toISOString();
+measureCost();
 writeResult();
 try {
   appendToLedger();

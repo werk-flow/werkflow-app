@@ -6,15 +6,18 @@
 # A full run is ci.yml called from a job named `Full run` (nightly.yml, release.yml and
 # main-full-run.yml). Its jobs show on their commit as the check runs `Full run / …`.
 #
-# `decide` writes run=true|false and reason to $GITHUB_OUTPUT. A full run starts only from 06:00 to
-# 20:00 Berlin, only when main moved since the newest full run, and only when that run has ended and
-# started 3 hours ago or more. It reads no clock but this one, so the dispatcher may ask at any time.
+# `decide` finds the newest full run on main's last commits, and any older one still running, and
+# asks the repository's rule, scripts/ci/full-run.ts (lib/testing/ci/full-run.ts), which writes
+# run=true|false and reason to $GITHUB_OUTPUT: at once after a tooling change, otherwise in a
+# daytime slot every 3 hours, and never while a full run runs, for a commit that has one, or when
+# only documentation landed. It needs a checkout of GITHUB_SHA with its history and the installed
+# dependencies.
 # `context` prints the alert's detail: the groups that this run's
 # failed jobs report, and the commits since the newest green full run.
 # Needs GH_TOKEN, GITHUB_REPOSITORY and GITHUB_SHA; `context` also GITHUB_RUN_ID and GITHUB_SERVER_URL.
 set -euo pipefail
 
-readonly FIRST=06:00 LAST=20:00 INTERVAL=$((3 * 3600)) DEPTH=100
+readonly DEPTH=100
 
 # The newest commits up to this run's, one `<sha> <subject>` per line.
 commits() {
@@ -42,49 +45,22 @@ passed() {
     | grep --quiet .
 }
 
-# The Berlin time of an epoch as HH:MM. Python knows Berlin's clock changes, so the window stays right
-# in summer and in winter.
-berlin() {
-  python3 -c '
-import sys
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
-print(datetime.fromtimestamp(int(sys.argv[1]), ZoneInfo("Europe/Berlin")).strftime("%H:%M"))
-' "$1"
-}
-
-answer() {
-  {
-    echo "run=$1"
-    echo "reason=$2"
-  } >> "$GITHUB_OUTPUT"
-  echo "::notice title=Full run on main::$2"
-  exit 0
-}
-
 decide() {
-  local now clock list commit state="" behind=0 started conclusion
-  now="$(date +%s)"
-  clock="$(berlin "$now")"
-  if [[ "$clock" < "$FIRST" || ! "$clock" < "$LAST" ]]; then
-    answer false "It is ${clock} in Berlin; full runs on main start from ${FIRST} to ${LAST}."
-  fi
+  local list commit state="" started conclusion decision run=() newest=""
   # A failed request fails the decision: a missing check run could be the newest full run.
   list="$(commits)"
+  # A cancelled or timed-out full run tested nothing, so an older one decides. Past the newest
+  # ended one, a full run still running on an older commit holds the next back too.
   while read -r commit _; do
     state="$(full_run "$commit")"
-    test -z "$state" || break
-    behind=$((behind + 1))
+    read -r started conclusion <<< "${state:-0 none}"
+    case "$conclusion" in
+      running) run+=(--run "${commit},${started},running") && break ;;
+      success | failure) test -n "$newest" || { newest="$commit" && run+=(--run "${commit},${started},ended"); } ;;
+    esac
   done <<< "$list"
-  test -n "$state" || answer true "No full run on the last ${DEPTH} commits."
-  read -r started conclusion <<< "$state"
-  test "$behind" -gt 0 || answer false "${GITHUB_SHA} already has a full run."
-  test "$conclusion" != running \
-    || answer false "The full run on ${commit} is still running; a later dispatch takes the newer commits."
-  test $((now - started)) -ge "$INTERVAL" \
-    || answer false "The full run on ${commit} started $(((now - started) / 60)) min ago; the next is due at $(berlin $((started + INTERVAL))) in Berlin."
-  answer true "main moved ${behind} commits since the full run on ${commit}."
+  decision="$(bun scripts/ci/full-run.ts due "${run[@]}")"
+  echo "::notice title=Full run on main::${decision}"
 }
 
 context() {

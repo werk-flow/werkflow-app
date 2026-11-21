@@ -89,10 +89,10 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 `.github/workflows/ci.yml` runs on every PR to `main` but a label change, each queue entry and each push; `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Jobs: `lib/testing/ci/dag.ts`; bodies: `bun scripts/ci/job.ts <job>`.
 
-- **Tiers.** A PR's run is the fast tier: Fast, SQL and Component contracts, each running what `fast-tier.ts` selects; an empty selection skips its job. The integration run adds browser shards (owner decision D1).
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run, or a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
+- **Tiers.** A PR's run is the fast tier: Fast, SQL, Component contracts and E-invoices, each running its selection; an empty selection skips its job. The integration run adds browser shards (owner decision D1).
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run or an every-group input (`toolingClass`); a tooling change runs a sample (owner decision D3).
 - **Reuse and Check.** A push whose tree an integration run passed runs no job; a CI runner's passed result stands for its job on an identical tree (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
-- **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
+- **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release, and on `main` when `bun scripts/ci/full-run.ts due` says so. `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
 - **Shards.** Groups pack longest-first by recorded duration (`group-durations.json`), visual groups apart, in at most `MAX_SHARDS`; component areas in two.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails when the p90 runner wait exceeds its ceiling (`.github/scripts/ci-queue.sh`).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
@@ -212,7 +212,7 @@ Check these before classifying.
 - Treat a review score or old report as acceptance.
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock.
 - Add a package script that builds or tests outside the workspace lock, or changes the shared stack's schema outside its exclusive lock.
-- Set a duration assertion in a unit test. Make a slow test cheaper.
+- Set a duration assertion outside a [measured scenario](#deadlines-and-measured-scenarios). Make a slow test cheaper.
 
 ## Verify your work
 
