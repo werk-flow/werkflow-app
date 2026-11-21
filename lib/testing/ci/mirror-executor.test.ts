@@ -168,6 +168,9 @@ type Scenario = {
   /** Holds the run in progress while it returns true. */
   running?: () => boolean;
   attempt?: number;
+  /** The branch cannot be read once it exists, as when the API fails right after a push. */
+  unreadableBranch?: boolean;
+  cancelFails?: boolean;
   /** The mirror reruns the job once its result artifact was downloaded. */
   rerunAfterDownload?: boolean;
   otherJobRan?: boolean;
@@ -183,12 +186,11 @@ type Fake = {
   api: MirrorApi;
   cancelled: number[];
   deleted: string[];
-  calls: { runsOf: number };
 };
 
 function fakeMirror(scenario: Scenario = {}): Fake {
   const runs = new Map<string, MirrorRun & { unit: Unit }>();
-  const fake = { cancelled: new Array<number>(), deleted: new Array<string>(), calls: { runsOf: 0 } };
+  const fake = { cancelled: new Array<number>(), deleted: new Array<string>() };
   let nextId = 1;
   const branchHead = (branch: string): string | undefined => {
     const head = spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], {
@@ -221,7 +223,11 @@ function fakeMirror(scenario: Scenario = {}): Fake {
     return new Uint8Array(readFileSync(join(zipFolder, 'out.zip')));
   };
   const api: MirrorApi = {
-    branchHead: async (branch) => branchHead(branch),
+    async branchHead(branch) {
+      const head = branchHead(branch);
+      if (head && scenario.unreadableBranch) throw new Error('GitHub GET /git/ref answered 502.');
+      return head;
+    },
     async commit(sha) {
       return {
         tree: scenario.tree ?? git(remote, 'rev-parse', `${sha}^{tree}`),
@@ -229,7 +235,6 @@ function fakeMirror(scenario: Scenario = {}): Fake {
       };
     },
     async runsOf(branch, sha) {
-      fake.calls.runsOf += 1;
       scenario.onRunsOf?.();
       if (!runs.has(branch) && branchHead(branch) === sha) {
         runs.set(branch, {
@@ -279,6 +284,7 @@ function fakeMirror(scenario: Scenario = {}): Fake {
       return zipOf(files);
     },
     async cancel(id) {
+      if (scenario.cancelFails) throw new Error('GitHub POST /actions/runs/cancel answered 500.');
       fake.cancelled.push(id);
       const run = runById(id);
       run.status = 'completed';
@@ -381,12 +387,12 @@ test("a job runs on the mirror from one parentless commit of the source tree, an
   expect(git(remote, 'for-each-ref', 'refs/heads/ci/')).toBe('');
 });
 
-test('a mirror that does not hold the pushed tree fails the job before any run is read', async () => {
-  const fake = fakeMirror({ tree: 'f'.repeat(40) });
+test('a mirror that does not hold the pushed tree fails the job, reads no result and stops the run it started', async () => {
+  const fake = fakeMirror({ tree: 'f'.repeat(40), running: () => true });
   const outcome = await executorsOf(fake).jobs.run(task(SQL), new AbortController().signal);
   expect(outcome.exitCode, outcome.detail).toBeNull();
   expect(outcome.detail).toContain('is not the pushed tree');
-  expect(fake.calls.runsOf).toBe(0);
+  expect(fake.cancelled).toEqual([1]);
   expect(existsSync(join(results, 'sql.json'))).toBe(false);
 });
 
@@ -613,4 +619,43 @@ test('the executors read the source tree only at a job start, after run-commit f
       },
     ),
   ).not.toThrow();
+});
+
+test("a failure after the push cancels the push's run and frees its slot only once the run ended", async () => {
+  let holding = true;
+  const fake = fakeMirror({ running: () => holding, unreadableBranch: true });
+  const executors = executorsOf(fake, 1);
+  const failed = await executors.jobs.run(task(SQL), new AbortController().signal);
+  expect(failed.exitCode, failed.detail).toBeNull();
+  expect(failed.detail).toContain('502');
+  expect(fake.cancelled).toEqual([1]);
+  // The one slot is free again: the next job runs.
+  holding = false;
+  const next = await executorsOf(fakeMirror(), 1, () => undefined, 'fedcba9876543210-1').jobs.run(
+    task({ job: 'browser', shard: 1 }),
+    new AbortController().signal,
+  );
+  expect(next.exitCode, next.detail).toBe(0);
+});
+
+test('a run whose end cannot be told keeps its slot, so the cap never counts it free', async () => {
+  const controller = new AbortController();
+  const fake = fakeMirror({ running: () => true, cancelFails: true, onRunsOf: () => controller.abort() });
+  const stopped = await executorsOf(fake, 1).jobs.run(task(SQL), controller.signal);
+  expect(stopped.exitCode, stopped.detail).toBeNull();
+  const waiting = Promise.withResolvers<void>();
+  const second = new AbortController();
+  const next = executorsOf(
+    fakeMirror(),
+    1,
+    (line) => {
+      if (line.includes('1 mirror jobs run on this host')) waiting.resolve();
+    },
+    'fedcba9876543210-1',
+  ).jobs.run(task({ job: 'browser', shard: 1 }), second.signal);
+  await waiting.promise;
+  second.abort();
+  const outcome = await next;
+  expect(outcome.exitCode, outcome.detail).toBeNull();
+  expect(outcome.detail).toBe('stopped before a mirror slot was free');
 });

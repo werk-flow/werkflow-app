@@ -217,12 +217,18 @@ export function partGroups(planned: readonly string[], part: CiPart | undefined)
   return [...planned];
 }
 
-/** A part's unit test files of `files` (repository paths): all of them without a part. */
+/**
+ * A part's unit test files of `files` (repository paths): all of them without a part. The host part
+ * throws when a host file is missing: with no file named, the runner would run the whole suite there.
+ */
 export function partUnitFiles(files: readonly string[], part: CiPart | undefined): string[] {
   const host = (file: string): boolean => HOST_UNIT_TESTS.includes(file.replace(/^\.\//, ''));
   if (part === 'tree') return files.filter((file) => !host(file));
-  if (part === 'host') return files.filter(host);
-  return [...files];
+  if (part !== 'host') return [...files];
+  const hosted = files.filter(host);
+  if (hosted.length !== HOST_UNIT_TESTS.length)
+    throw new Error(`The host part's unit test files are not all here: ${HOST_UNIT_TESTS.join(', ')}.`);
+  return hosted;
 }
 
 /** Whether a group runs in both parts of Fast, so its outcome needs both. */

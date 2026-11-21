@@ -141,3 +141,34 @@ test("Fast's host part runs only the groups that read outside the tree, without 
     ]);
   });
 });
+
+test('a mirror message on a commit that has a parent runs nothing, even in a shallow checkout that hides it', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    writeFileSync(join(root, 'second.txt'), 'second\n');
+    execFileSync('git', ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', 'add', 'second.txt'], {
+      cwd: root,
+    });
+    execFileSync(
+      'git',
+      ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', 'commit', '--quiet', '-m', 'second'],
+      { cwd: root },
+    );
+    asMirrorCommit(root, 'fast');
+    const shallow = join(folder, 'shallow');
+    execFileSync('git', ['clone', '--quiet', '--depth', '1', `file://${root}`, shallow]);
+    const run = join(folder, 'run');
+    mkdirSync(run);
+    writeFileSync(join(run, resultFileName('plan', null)), JSON.stringify(mirrorPlan(shallow)));
+    expect(
+      runJob(shallow, 'fast', {
+        CI_EVENT: 'integration',
+        CI_RESULTS_DIR: run,
+        CI_PRODUCER: 'mac-standin',
+        CI_RUN_URL: RUN_URL,
+        CI_PART: 'tree',
+      }),
+    ).toBe(1);
+    expect(readResult(join(run, resultFileName('fast', null)))).toHaveProperty('unreadable');
+  });
+});

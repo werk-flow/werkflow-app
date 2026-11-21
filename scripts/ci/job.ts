@@ -166,7 +166,13 @@ const commit = source?.commit ?? checkoutCommit;
 function mirrorSource(): { commit: string; tree: string } {
   const run = parseMirrorMessage(git('log', '-1', '--format=%B', checkoutCommit));
   if ('problem' in run) throw new Error(`CI_PART=tree runs only a CI mirror commit: ${run.problem}.`);
-  if (git('rev-list', '--parents', '-n', '1', checkoutCommit) !== checkoutCommit)
+  // The commit's own headers: a shallow checkout hides a parent from rev-list.
+  if (
+    git('cat-file', 'commit', checkoutCommit)
+      .split('\n\n')[0]
+      ?.split('\n')
+      .some((line) => line.startsWith('parent '))
+  )
     throw new Error('CI_PART=tree runs only a parentless CI mirror commit.');
   if (run.job !== ci.job || run.shard !== shard)
     throw new Error(`This mirror commit runs ${run.job} ${run.shard ?? ''}, not this job.`);

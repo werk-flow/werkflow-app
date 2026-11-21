@@ -56,10 +56,12 @@ test('a list reads every page, and one that holds fewer items than GitHub counts
 });
 
 test('a failed call names its method, path and status, never the body; a deleted branch that is gone passes', async () => {
-  const net = network((_url, init) =>
+  const net = network((url, init) =>
     init.method === 'DELETE'
       ? new Response('{"message":"Reference does not exist"}', { status: 422 })
-      : new Response('{"message":"secret detail"}', { status: 500 }),
+      : url.includes('/git/ref/')
+        ? new Response('{"message":"Not Found"}', { status: 404 })
+        : new Response('{"message":"secret detail"}', { status: 500 }),
   );
   const api = githubMirrorApi({ repository: 'owner/mirror', token: 't', fetch: net.fetch });
   await api.deleteBranch(`ci/${'c'.repeat(40)}-a1/sql`);
@@ -87,4 +89,14 @@ test('an archive larger than a result is refused while it streams, never held wh
   const api = githubMirrorApi({ repository: 'owner/mirror', token: 't', fetch: net.fetch });
   await expect(api.download(1)).rejects.toThrow('larger than a result');
   expect(sent).toBeLessThan(16 * 1024 * 1024);
+});
+
+test('a refused delete that leaves the branch in place is a failure, not a sweep', async () => {
+  const net = network((_url, init) =>
+    init.method === 'DELETE'
+      ? new Response('{"message":"Validation Failed"}', { status: 422 })
+      : Response.json({ object: { sha: 'c'.repeat(40) } }),
+  );
+  const api = githubMirrorApi({ repository: 'owner/mirror', token: 't', fetch: net.fetch });
+  await expect(api.deleteBranch('ci/x/sql')).rejects.toThrow('answered 422, and the branch stays');
 });

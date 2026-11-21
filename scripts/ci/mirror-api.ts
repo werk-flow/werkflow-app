@@ -115,15 +115,17 @@ export function githubMirrorApi(input: {
 
   const branchPath = (branch: string): string => branch.split('/').map(encodeURIComponent).join('/');
 
+  async function branchHead(branch: string): Promise<string | undefined> {
+    const response = await call('GET', `/git/ref/heads/${branchPath(branch)}`, [200, 404]);
+    if (response.status === 404) {
+      await response.body?.cancel();
+      return undefined;
+    }
+    return z.object({ object: z.object({ sha: z.string() }) }).parse(await response.json()).object.sha;
+  }
+
   return {
-    async branchHead(branch) {
-      const response = await call('GET', `/git/ref/heads/${branchPath(branch)}`, [200, 404]);
-      if (response.status === 404) {
-        await response.body?.cancel();
-        return undefined;
-      }
-      return z.object({ object: z.object({ sha: z.string() }) }).parse(await response.json()).object.sha;
-    },
+    branchHead,
     async commit(sha) {
       const commit = z
         .object({ tree: z.object({ sha: z.string() }), committer: z.object({ date: z.string().datetime() }) })
@@ -186,9 +188,11 @@ export function githubMirrorApi(input: {
       return refs.map((ref) => ({ name: ref.ref.replace(/^refs\/heads\//, ''), sha: ref.object.sha }));
     },
     async deleteBranch(branch) {
-      // 422: the branch is gone already.
+      // 422 also answers a refused delete: it counts only when the branch is gone.
       const response = await call('DELETE', `/git/refs/heads/${branchPath(branch)}`, [204, 404, 422]);
       await response.body?.cancel();
+      if (response.status === 422 && (await branchHead(branch)) !== undefined)
+        throw new Error(`GitHub DELETE /git/refs/heads/${branch} answered 422, and the branch stays.`);
     },
   };
 }

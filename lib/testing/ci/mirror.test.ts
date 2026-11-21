@@ -160,6 +160,10 @@ test('on the mirror a job takes every step and group but those that read outside
   expect(partUnitFiles(files, 'tree')).toEqual(['./lib/a.test.ts']);
   expect(partUnitFiles(files, 'host')).toEqual(['./lib/testing/publication/shrink-only-lists.test.ts']);
   expect(partUnitFiles(files, undefined)).toEqual(files);
+  // A host file that moved runs no whole suite on the host: the host part fails.
+  expect(() => partUnitFiles(['./lib/a.test.ts'], 'host')).toThrow(
+    "host part's unit test files are not all here",
+  );
   expect(() => partOf('everything')).toThrow('CI_PART everything is no part');
   expect(() => partOf('host', 'sql')).toThrow('Only Fast has a host part');
 });
@@ -238,12 +242,15 @@ test('the mirror workflow runs only on a push to ci/**, reads the repository onl
   for (const uses of [...text.matchAll(/uses: (\S+)/g)].map((match) => match[1]))
     expect(uses, 'a third-party action is pinned by its commit').toMatch(/@[0-9a-f]{40}$/);
   expect(at('env', 'CI_WORKFLOWS_DIR')).toBe('.github/held-workflows');
+  // The runner's own folder (the mirror sets one) comes back for every later test.
+  const runners = process.env.CI_WORKFLOWS_DIR;
   expect(() => {
     process.env.CI_WORKFLOWS_DIR = '../elsewhere';
     try {
       workflowsFolder();
     } finally {
-      delete process.env.CI_WORKFLOWS_DIR;
+      if (runners === undefined) delete process.env.CI_WORKFLOWS_DIR;
+      else process.env.CI_WORKFLOWS_DIR = runners;
     }
   }).toThrow('no folder of .github');
 });

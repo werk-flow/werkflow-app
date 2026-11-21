@@ -266,21 +266,32 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
   }
 
   /**
-   * Cancels the runs of a pushed branch that a stop or a timeout left running, and waits until each
-   * ended, at most CANCEL_LIMIT_MS: its job's slot passes on only then.
+   * Whether every run of a push ended: cancels the runs a stop, a timeout or a failure left going
+   * and waits until they ended, or until the push started no run within RUN_START_LIMIT_MS. False
+   * when that cannot be told within CANCEL_LIMIT_MS, or the mirror cannot be read: the job's slot
+   * then stays held, so the cap never counts a run that may still go.
    */
-  async function cancelRuns(branch: string, commit: string, run: MirrorRun | undefined): Promise<void> {
+  async function settled(
+    pushed: { branch: string; commit: string; at: number },
+    known: MirrorRun | undefined,
+  ): Promise<boolean> {
+    const until = Math.max(pushed.at + RUN_START_LIMIT_MS, options.now() + CANCEL_LIMIT_MS);
+    const cancelled = new Set<number>();
     try {
-      const runs = run ? [run] : await api.runsOf(branch, commit);
-      for (const each of runs) await api.cancel(each.id);
-      const until = options.now() + CANCEL_LIMIT_MS;
-      for (const each of runs)
-        while ((await api.run(each.id)).status !== 'completed') {
-          if (options.now() > until) throw new Error(`run ${each.id} did not end after its cancel`);
-          await options.sleep(options.pollMs, AbortSignal.timeout(CANCEL_LIMIT_MS));
+      for (;;) {
+        const runs = known ? [await api.run(known.id)] : await api.runsOf(pushed.branch, pushed.commit);
+        const going = runs.filter((run) => run.status !== 'completed');
+        if (runs.length ? !going.length : options.now() - pushed.at > RUN_START_LIMIT_MS) return true;
+        for (const run of going.filter((each) => !cancelled.has(each.id))) {
+          await api.cancel(run.id);
+          cancelled.add(run.id);
         }
+        if (options.now() > until) return false;
+        await options.sleep(options.pollMs, AbortSignal.timeout(CANCEL_LIMIT_MS));
+      }
     } catch (error) {
-      log(`[mirror] ${branch}: its run could not be cancelled: ${message(error)}`);
+      log(`[mirror] ${pushed.branch}: whether its run ended cannot be told: ${message(error)}`);
+      return false;
     }
   }
 
@@ -294,6 +305,10 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     const name = unitName(task.unit);
     const release = await slot(signal);
     if (!release) return { exitCode: null, detail: 'stopped before a mirror slot was free' };
+    /** The push, once tried: from then on a run may go on the mirror until it is known ended. */
+    let pushed: { branch: string; commit: string; at: number } | undefined;
+    let known: MirrorRun | undefined;
+    let ended = false;
     try {
       swept ??= sweep();
       await swept;
@@ -317,6 +332,7 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       if (signal.aborted) return { exitCode: null, detail: 'the job was stopped before its push' };
       const branch = mirrorBranch(setup.commit, setup.runKey, task.unit);
       branches.set(branch, built.commit);
+      pushed = { branch, commit: built.commit, at: options.now() };
       const push = pushes.then(() => options.push(built.commit, branch));
       pushes = push.catch(() => undefined);
       await push;
@@ -327,24 +343,25 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
           exitCode: null,
           detail: `${branch} names ${head ?? 'nothing'}, not the pushed ${built.commit}`,
         };
-      const pushed = await api.commit(built.commit);
-      if (pushed.tree !== built.tree)
+      const held = await api.commit(built.commit);
+      if (held.tree !== built.tree)
         return {
           exitCode: null,
-          detail: `the mirror's tree ${pushed.tree} is not the pushed tree ${built.tree}`,
+          detail: `the mirror's tree ${held.tree} is not the pushed tree ${built.tree}`,
         };
       log(`[mirror] ${name}: pushed ${built.commit} (tree ${built.tree}) to ${branch}`);
-      const ended = await awaitRun(
+      const awaited = await awaitRun(
         branch,
         built.commit,
         options.now() + task.timeoutMs + QUEUE_ALLOWANCE_MS,
         signal,
       );
-      if ('stopped' in ended) {
-        await cancelRuns(branch, built.commit, ended.run);
-        return { exitCode: null, detail: ended.stopped };
+      if ('stopped' in awaited) {
+        known = awaited.run;
+        return { exitCode: null, detail: awaited.stopped };
       }
-      const finished = ended.run;
+      const finished = awaited.run;
+      ended = true;
       const firstAttempt = (run: MirrorRun): boolean =>
         run.run_attempt === 1 &&
         run.status === 'completed' &&
@@ -382,7 +399,8 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     } catch (error) {
       return { exitCode: null, detail: `the mirror executor failed: ${message(error)}` };
     } finally {
-      release();
+      if (!pushed || ended || (await settled(pushed, known))) release();
+      else log(`[mirror] ${name}: its mirror slot stays held until this process ends: its run may still go`);
     }
   }
 
