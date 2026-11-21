@@ -10,8 +10,9 @@ check_app_id() {
   local file text space='[ '$'\t'$'\r'$'\n'']*'
   local pattern="^${space}\\{${space}\"appId\"${space}:${space}(null|[1-9][0-9]{0,14})${space}\\}${space}\$"
   file="$(dirname "${BASH_SOURCE[0]}")/check-app.json"
-  # The x keeps the file's trailing newlines, which $(…) would strip.
-  if text="$(cat "$file" 2> /dev/null && echo x)" && [[ "${text%x}" =~ $pattern ]]; then
+  # $(…) drops NUL bytes, so tr turns each into a byte the pattern refuses; the x keeps the file's
+  # trailing newlines, which $(…) would strip.
+  if text="$(LC_ALL=C tr '\000' '\001' 2> /dev/null < "$file" && echo x)" && [[ "${text%x}" =~ $pattern ]]; then
     CHECK_APP_ID="${BASH_REMATCH[1]#null}"
     return 0
   fi

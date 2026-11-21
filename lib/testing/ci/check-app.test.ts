@@ -7,11 +7,19 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { CHECK_APP_CONFIG, checkRunOf, postCheckRun, readCheckApp } from './check-app';
+import {
+  CHECK_APP_CONFIG,
+  checkRunOf,
+  postCheckRun,
+  queuedCheckRunOf,
+  readCheckApp,
+  readHandoff,
+} from './check-app';
 import type { CiResult } from './results';
 import { readWorkflow } from '../ci-workflow';
 
@@ -62,6 +70,8 @@ const CONFIGS: readonly { config: string | undefined; appId: number | null | 're
   { config: '{"appId": 042}', appId: 'refused' },
   { config: '{"appId": 42.0}', appId: 'refused' },
   { config: '{"appId": 4e3}', appId: 'refused' },
+  // Bash drops NUL bytes from a command's output; the shell reader must not read 4242 here.
+  { config: '{"appId": 42\u000042}', appId: 'refused' },
 ];
 
 test('the gates and the publisher read the same App from the configuration, and refuse a missing or malformed one', () => {
@@ -290,6 +300,7 @@ function result(overrides: Partial<CiResult>): CiResult {
     listGrowthApproved: false,
     producer: 'mac',
     runUrl: RUN_URL,
+    attempt: 2,
     startedAt: '2026-11-21T09:00:00.000Z',
     completedAt: '2026-11-21T09:05:00.000Z',
     ...overrides,
@@ -303,7 +314,7 @@ const build = (
   checkRunOf({
     check,
     plan: result({ job: 'plan', startedAt: '2026-11-21T08:00:00.000Z' }),
-    scheduled: { runUrl: RUN_URL, event: 'pr', commit: COMMIT, prHead: undefined, ...scheduled },
+    scheduled: { runUrl: RUN_URL, attempt: 2, event: 'pr', commit: COMMIT, prHead: undefined, ...scheduled },
     now: new Date('2026-11-21T10:00:00.000Z'),
   });
 
@@ -325,7 +336,8 @@ test('a check run passes only a finished, passed Check of this run from a CI run
   });
   const conclusion = (check: CiResult) => {
     const built = build(check);
-    return 'request' in built ? built.request.conclusion : built.problem;
+    if (!('request' in built)) return built.problem;
+    return built.request.status === 'completed' ? built.request.conclusion : built.request.status;
   };
   expect(conclusion(result({ status: 'failed' }))).toBe('failure');
   expect(conclusion(result({ status: 'running', completedAt: null }))).toBe('failure');
@@ -348,6 +360,63 @@ test("a result of another run, job, event or commit than the scheduler's posts n
   expect(build(result({}), { prHead: 'not-a-commit' })).toHaveProperty('problem');
 });
 
+test("a rerun never posts an earlier attempt's result: the attempt must be the scheduler's", () => {
+  // Attempt 2's Check died before it wrote check.json, so attempt 1's green result is still there.
+  expect(build(result({ attempt: 1 }))).toHaveProperty('problem');
+  expect(build(result({ attempt: undefined }))).toHaveProperty('problem');
+});
+
+test("an accepted run first withdraws every earlier result on its head, so a draft's green fast tier never lands a ready PR", () => {
+  const scheduled = {
+    runUrl: RUN_URL,
+    attempt: 1,
+    event: 'integration' as const,
+    commit: COMMIT,
+    prHead: undefined,
+  };
+  expect(queuedCheckRunOf(scheduled)).toEqual({
+    request: {
+      name: 'Check',
+      head_sha: COMMIT,
+      status: 'queued',
+      details_url: RUN_URL,
+      output: {
+        title: 'Waiting',
+        summary: `The integration run waits or runs; until it ends, no earlier result counts.\n\nRun: ${RUN_URL}`,
+      },
+    },
+  });
+  const full = queuedCheckRunOf({ ...scheduled, event: 'full' });
+  expect('request' in full && full.request.name).toBe('Full run / Check');
+  expect(queuedCheckRunOf({ ...scheduled, prHead: HEAD })).toHaveProperty('problem');
+  const pr = queuedCheckRunOf({ ...scheduled, event: 'pr', prHead: HEAD });
+  expect('request' in pr && pr.request.head_sha).toBe(HEAD);
+});
+
+test('a handed-over result is read only from a regular file, and no message shows what an unreadable one holds', () => {
+  const secret = '-----BEGIN RSA PRIVATE KEY----- MIIEsecret';
+  const key = join(stub, 'key.pem');
+  writeFileSync(key, secret);
+  const results = join(stub, 'handoff');
+  mkdirSync(results);
+  const valid = join(results, 'valid.json');
+  writeFileSync(valid, JSON.stringify(result({})));
+  expect(readHandoff(valid)).toEqual(result({}));
+  const linked = join(results, 'check.json');
+  symlinkSync(key, linked);
+  const malformed = join(results, 'malformed.json');
+  writeFileSync(malformed, `{"job": "${secret}"}`);
+  const large = join(results, 'large.json');
+  writeFileSync(large, ' '.repeat(1024 * 1024 + 1));
+  const pipe = join(results, 'pipe.json');
+  expect(spawnSync('mkfifo', [pipe]).status).toBe(0);
+  for (const path of [linked, malformed, large, pipe, join(results, 'missing.json')]) {
+    const read = readHandoff(path);
+    expect(read, path).toHaveProperty('unreadable');
+    expect(JSON.stringify(read), path).not.toContain('BEGIN');
+  }
+});
+
 function request() {
   const built = build(result({}));
   if (!('request' in built)) throw new Error(built.problem);
@@ -355,10 +424,10 @@ function request() {
 }
 
 /** Posts through a fake GitHub that answers `answer` with `status`, and records what it was sent. */
-async function post(answer: unknown, status = 201) {
+async function post(answer: unknown, status = 201, asked = request()) {
   const sent: { url: string; init: RequestInit }[] = [];
   const posted = await postCheckRun({
-    request: request(),
+    request: asked,
     appId: APP,
     token: TOKEN,
     repository: 'owner/repo',
@@ -391,6 +460,16 @@ test('the publisher posts as the configured App and fails when GitHub holds the 
   const other = await post(answer(OTHER_APP));
   expect(other.posted).toHaveProperty('problem');
   expect(JSON.stringify(other.posted)).toContain(`App ${OTHER_APP}`);
+  const queued = queuedCheckRunOf({
+    runUrl: RUN_URL,
+    attempt: 1,
+    event: 'pr',
+    commit: COMMIT,
+    prHead: undefined,
+  });
+  if (!('request' in queued)) throw new Error(queued.problem);
+  expect((await post({ ...answer(APP), conclusion: null }, 201, queued.request)).posted).toEqual({ id: 77 });
+  expect((await post(answer(APP), 201, queued.request)).posted).toHaveProperty('problem');
 });
 
 test("a refused request names GitHub's status and request id, never the token or GitHub's body", async () => {
@@ -402,13 +481,14 @@ test("the publisher posts nothing for another run's Check and prints no token", 
   const results = join(stub, 'results');
   mkdirSync(results);
   writeFileSync(join(results, 'check.json'), JSON.stringify(result({ runUrl: 'https://ci.test/run/6' })));
-  const run = spawnSync(process.execPath, [join(repositoryRoot, 'scripts/ci/publish-check.ts')], {
+  const run = spawnSync(process.execPath, [join(repositoryRoot, 'scripts/ci/publish-check.ts'), 'finish'], {
     encoding: 'utf8',
     env: {
       NODE_ENV: 'test',
       PATH: process.env.PATH,
       CI_RESULTS_DIR: results,
       CI_RUN_URL: RUN_URL,
+      CI_RUN_ATTEMPT: '2',
       CI_EVENT: 'pr',
       CI_COMMIT: COMMIT,
       CI_CHECK_APP_TOKEN: TOKEN,

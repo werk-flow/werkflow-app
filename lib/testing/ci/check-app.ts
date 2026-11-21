@@ -6,10 +6,10 @@
 // The file holds exactly {"appId": <id>} or {"appId": null}, spaces aside: both readers match the
 // text with the same pattern, so no JSON parser's leniency decides which App counts. Fifteen digits
 // at most keep the id a safe integer.
-import { existsSync, readFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, openSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import type { CiEvent } from './dag';
-import type { CiResult } from './results';
+import { type CiResult, parseResult } from './results';
 
 /** The configuration file, from the repository root. */
 export const CHECK_APP_CONFIG = '.github/scripts/check-app.json';
@@ -30,24 +30,25 @@ function checkRunName(event: CiEvent): 'Check' | 'Full run / Check' {
   return event === 'full' ? 'Full run / Check' : 'Check';
 }
 
-/** The body of GitHub's "create a check run" request. */
+/** The body of GitHub's "create a check run" request: queued when a run is accepted, completed at its end. */
 type CheckRunRequest = {
   name: 'Check' | 'Full run / Check';
   head_sha: string;
-  status: 'completed';
-  started_at: string;
-  completed_at: string;
-  conclusion: 'success' | 'failure';
   details_url?: string;
   output: { title: string; summary: string };
-};
+} & (
+  | { status: 'queued' }
+  | { status: 'completed'; started_at: string; completed_at: string; conclusion: 'success' | 'failure' }
+);
 
 const SHA = /^[0-9a-f]{40}$/;
 
-/** What the runner's scheduler, not the job, says the run was: the result must match it. */
+/** What the runner's scheduler, not a job, says the run is: a result must match it. */
 type ScheduledRun = {
   /** CI_RUN_URL. */
   runUrl: string;
+  /** CI_RUN_ATTEMPT: a rerun shares the run's URL, so an earlier attempt's result never counts. */
+  attempt: number;
   /** CI_EVENT: only a scheduled full run posts `Full run / Check`. */
   event: CiEvent;
   /** CI_COMMIT: the commit the runner checked out. */
@@ -56,10 +57,46 @@ type ScheduledRun = {
   prHead: string | undefined;
 };
 
+/** The commit the run's check run goes on: the PR head of a `pr` run on a merge commit, else the run's commit. */
+function headOf(scheduled: ScheduledRun): { head: string } | { problem: string } {
+  const head = scheduled.prHead ?? scheduled.commit;
+  if (!SHA.test(scheduled.commit) || !SHA.test(head))
+    return { problem: `${scheduled.commit} or ${head} is no commit id` };
+  if (head !== scheduled.commit && scheduled.event !== 'pr')
+    return { problem: `a ${scheduled.event} run posts on its own commit, not on ${head}` };
+  return { head };
+}
+
+const detailsOf = (runUrl: string) => (runUrl.startsWith('https://') ? { details_url: runUrl } : {});
+
+/**
+ * The queued check run the scheduler posts when it accepts a run, before any job starts. GitHub
+ * reads the newest check run of a name, so it withdraws every earlier result on the commit: a
+ * draft's green fast tier never stands for the integration run that a ready PR waits for.
+ */
+export function queuedCheckRunOf(
+  scheduled: ScheduledRun,
+): { request: CheckRunRequest } | { problem: string } {
+  const head = headOf(scheduled);
+  if ('problem' in head) return head;
+  return {
+    request: {
+      name: checkRunName(scheduled.event),
+      head_sha: head.head,
+      status: 'queued',
+      ...detailsOf(scheduled.runUrl),
+      output: {
+        title: 'Waiting',
+        summary: `The ${scheduled.event} run waits or runs; until it ends, no earlier result counts.\n\nRun: ${scheduled.runUrl}`,
+      },
+    },
+  };
+}
+
 /**
  * The check run for this run's Check result, or why none may be posted. It passes only a complete,
- * passed Check of the scheduled run from a CI runner; any other Check of that run posts a failure.
- * A result of another run, event or commit posts nothing: its commit is not this run's.
+ * passed Check of the scheduled run and attempt from a CI runner; any other Check of that attempt
+ * posts a failure. A result of another run, attempt, event or commit posts nothing.
  */
 export function checkRunOf(input: {
   check: CiResult | { unreadable: string };
@@ -73,29 +110,34 @@ export function checkRunOf(input: {
   if ('unreadable' in check) return { problem: check.unreadable };
   if (check.job !== 'check' || check.shard !== null)
     return { problem: `the result is of the ${check.job} job, not of Check` };
-  if (check.runUrl !== runUrl || check.event !== scheduled.event || check.commit !== scheduled.commit)
+  if (
+    check.runUrl !== runUrl ||
+    check.attempt !== scheduled.attempt ||
+    check.event !== scheduled.event ||
+    check.commit !== scheduled.commit
+  )
     return {
-      problem: `the Check result is of the ${check.event} run ${check.runUrl} on ${check.commit}, not of the scheduled ${scheduled.event} run ${runUrl} on ${scheduled.commit}`,
+      problem: `the Check result is of the ${check.event} run ${check.runUrl} attempt ${check.attempt ?? 'unknown'} on ${check.commit}, not of the scheduled ${scheduled.event} run ${runUrl} attempt ${scheduled.attempt} on ${scheduled.commit}`,
     };
-  const prHead = scheduled.prHead ?? check.commit;
-  if (prHead !== check.commit && (check.event !== 'pr' || !SHA.test(prHead)))
-    return { problem: `a ${check.event} run posts on its own commit, not on ${prHead}` };
+  const head = headOf(scheduled);
+  if ('problem' in head) return head;
   const verdict = checkVerdict(check);
   const plan = input.plan;
   const ownPlan =
     !('unreadable' in plan) &&
     plan.runUrl === runUrl &&
+    plan.attempt === scheduled.attempt &&
     plan.tree === check.tree &&
     plan.event === check.event;
   return {
     request: {
       name: checkRunName(check.event),
-      head_sha: prHead,
+      head_sha: head.head,
       status: 'completed',
       started_at: ownPlan ? plan.startedAt : check.startedAt,
       completed_at: check.completedAt ?? input.now.toISOString(),
       conclusion: verdict.passed ? 'success' : 'failure',
-      ...(runUrl.startsWith('https://') ? { details_url: runUrl } : {}),
+      ...detailsOf(runUrl),
       output: {
         title: verdict.passed ? 'Passed' : 'Failed',
         summary: `${verdict.summary}\n\nRun: ${runUrl}\nTree: ${check.tree}\nRunner: ${check.producer ?? 'none'}`,
@@ -114,6 +156,28 @@ function checkVerdict(check: CiResult): { passed: boolean; summary: string } {
     };
   if (check.status === 'failed') return { passed: false, summary: 'Check failed; the run names each job.' };
   return { passed: true, summary: check.planReason || 'Every job the plan runs passed.' };
+}
+
+/** A result file is at most this large; a larger one is no result. */
+const MAX_RESULT_BYTES = 1024 * 1024;
+
+/**
+ * A result a job handed over, read as the key's user: only a regular file, never through a link or
+ * from a pipe, at most 1 MiB. Nothing of an unreadable file's content reaches the message.
+ */
+export function readHandoff(path: string): CiResult | { unreadable: string } {
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const stat = fstatSync(descriptor);
+    if (!stat.isFile() || stat.size > MAX_RESULT_BYTES)
+      return { unreadable: `${path} is no regular file of at most 1 MiB` };
+    return parseResult(readFileSync(descriptor, 'utf8')) ?? { unreadable: `${path} is no valid result` };
+  } catch {
+    return { unreadable: `${path} cannot be opened as a regular file` };
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
 }
 
 const postedSchema = z.object({
@@ -137,7 +201,8 @@ function confirmPosted(
     return {
       problem: `the token belongs to App ${app.id}, not the configured App ${appId}; the gates ignore its check run ${id}`,
     };
-  if (name !== request.name || head_sha !== request.head_sha || conclusion !== request.conclusion)
+  const asked = request.status === 'completed' ? request.conclusion : null;
+  if (name !== request.name || head_sha !== request.head_sha || conclusion !== asked)
     return { problem: `GitHub holds check run ${id} with another name, commit or conclusion` };
   return { id };
 }

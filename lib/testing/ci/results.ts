@@ -101,6 +101,16 @@ export function resultFileName(job: CiJob, shard: number | null): string {
   return shard === null ? `${job}.json` : `${job}-${shard}.json`;
 }
 
+/** The result a text holds, or undefined; no detail of a malformed text is kept. */
+export function parseResult(text: string): CiResult | undefined {
+  try {
+    const parsed = ciResultSchema.safeParse(JSON.parse(text));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The result in `path`, or why it cannot count. */
 export function readResult(path: string): CiResult | { unreadable: string } {
   if (!existsSync(path)) return { unreadable: `${path} is missing` };
