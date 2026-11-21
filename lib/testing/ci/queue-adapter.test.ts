@@ -6,7 +6,13 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { markQueue, runIntegration, squashCommit } from '../../../scripts/ci/queue-adapter';
+import {
+  markQueue,
+  readQueueState,
+  runIntegration,
+  squashCommit,
+  writeQueueState,
+} from '../../../scripts/ci/queue-adapter';
 import type { QueuedPull } from './queue';
 
 let folder = '';
@@ -187,4 +193,22 @@ test('with a CI App the Queue mark goes only through the publisher as the App; w
     ],
   ]);
   expect(readFileSync(called, 'utf8').split('\n')).toHaveLength(4);
+});
+
+test("the queue's state survives between ticks; a missing file is clear and a damaged one stops the tick", () => {
+  const path = join(folder, 'queue-state.json');
+  expect(readQueueState(path)).toEqual({ pending: null, frozen: null });
+  const state = {
+    pending: { pull: 7, head: 'a'.repeat(40), runUrl: 'queue/9', verdict: 'success' as const },
+    frozen: 'the publisher was down',
+  };
+  writeQueueState(path, state);
+  expect(readQueueState(path)).toEqual(state);
+  writeQueueState(path, { pending: null, frozen: null });
+  expect(readQueueState(path)).toEqual({ pending: null, frozen: null });
+  for (const damaged of ['{"pending": null', '{"pending": {"pull": 7}, "frozen": null}', '{}'])
+    expect(() => {
+      writeFileSync(path, damaged);
+      readQueueState(path);
+    }, damaged).toThrow();
 });

@@ -11,6 +11,7 @@ import {
   pullsFromGitHub,
   type QueueAdapter,
   type QueuedPull,
+  type QueueState,
   type RunEvidence,
   runQueueTick,
   supersession,
@@ -42,7 +43,10 @@ type Fake = {
   landed: number[];
   rejected: number[];
   withdrawn: number[];
+  /** The pending mark's PR when each merge was asked for: the mark is saved before it is posted. */
+  pendingAtLand: (number | null)[];
   main: () => MainCommit;
+  state: () => QueueState;
 };
 
 /**
@@ -52,7 +56,8 @@ type Fake = {
  * the tree it builds, `refuse` makes the merge throw without merging, and `lostAnswer` makes it
  * throw after merging. GitHub reports a merged PR's merge commit. `beforeLand` changes the world
  * before the n-th merge. The ledger proves main's tree unless `unprovenMain`. A PR of
- * `unchanged` holds only changes already in the batch, so its squash keeps the tree.
+ * `unchanged` holds only changes already in the batch, so its squash keeps the tree. The publisher
+ * is down for the first `failedWithdrawals` withdrawals. The queue's saved state starts as `state`.
  */
 function fakeWorld(
   pulls: QueuedPull[],
@@ -66,6 +71,8 @@ function fakeWorld(
     beforeLand?: (merge: number, world: { pulls: QueuedPull[]; pushMain: (tree: string) => void }) => void;
     unprovenMain?: boolean;
     unchanged?: readonly number[];
+    failedWithdrawals?: number;
+    state?: QueueState;
   } = {},
 ): Fake {
   const commits = new Map<string, { parents: string[]; tree: string }>([
@@ -77,6 +84,9 @@ function fakeWorld(
   const landed: number[] = [];
   const rejected: number[] = [];
   const withdrawn: number[] = [];
+  const pendingAtLand: (number | null)[] = [];
+  let saved: QueueState = options.state ?? { pending: null, frozen: null };
+  let withdrawals = 0;
   const mergeCommits = new Map<number, string>();
   let merges = 0;
   const commit = (parent: string, tree: string): string => {
@@ -114,6 +124,7 @@ function fakeWorld(
       return { kind, runUrl: `run-${tested.length}:${tip.tree}`, detail: kind };
     },
     land: async (entry) => {
+      pendingAtLand.push(saved.pending?.pull ?? null);
       options.beforeLand?.(++merges, { pulls: open, pushMain });
       if (entry.number === options.refuse) throw new Error('Pull request is not mergeable');
       const tree = `${main().tree}+${entry.number}`;
@@ -123,16 +134,21 @@ function fakeWorld(
       open = open.filter((candidate) => candidate.number !== entry.number);
       if (entry.number === options.lostAnswer) throw new Error('connection reset');
     },
-    mergeCommit: async (entry) => mergeCommits.get(entry.number) ?? null,
+    mergeCommit: async (number) => mergeCommits.get(number) ?? null,
     reject: async (entry) => {
       rejected.push(entry.number);
     },
-    withdraw: async (entry) => {
-      withdrawn.push(entry.number);
+    withdraw: async (mark) => {
+      if (++withdrawals <= (options.failedWithdrawals ?? 0)) throw new Error('publisher unavailable');
+      withdrawn.push(mark.pull);
+    },
+    state: async () => saved,
+    saveState: async (state) => {
+      saved = state;
     },
     proven: async (tree) => tree === 'main' && !options.unprovenMain,
   };
-  return { adapter, tested, landed, rejected, withdrawn, main };
+  return { adapter, tested, landed, rejected, withdrawn, pendingAtLand, main, state: () => saved };
 }
 
 const LIVE = { maxBatch: 4, dryRun: false };
@@ -173,6 +189,8 @@ test('a green batch runs once and lands every PR in order, and main ends on the 
   const outcome = await runQueueTick(world.adapter, LIVE);
   expect(world.tested).toEqual([[1, 2, 3, 4]]);
   expect(world.landed).toEqual([1, 2, 3, 4]);
+  expect(world.pendingAtLand).toEqual([1, 2, 3, 4]);
+  expect(world.state()).toEqual({ pending: null, frozen: null });
   expect(outcome.landing).toEqual([1, 2, 3, 4]);
   expect(world.main().tree).toBe(outcome.runs[0]?.tree ?? 'untested');
   expect(outcome.stops).toEqual([]);
@@ -312,6 +330,11 @@ test('a PR that went back to draft or left the queue is superseded; one that was
   expect(supersession(pull(5, { listGrowthApproved: true }), [pull(5)])).toBe(
     "#5's list-growth approval changed",
   );
+  expect(supersession(pull(6), [pull(6, { check: 'FAILURE' })])).toBe(
+    `#6's Check on ${sha('head-6')} is FAILURE`,
+  );
+  // A rehearsal may take a red PR on purpose; only a Check that stopped being a success supersedes.
+  expect(supersession(pull(7, { check: 'FAILURE' }), [pull(7, { check: 'FAILURE' })])).toBe(undefined);
 });
 
 test('a PR that conflicts with the batch so far is left out and the rest is tested without it', async () => {
@@ -348,6 +371,7 @@ test('a merge GitHub refuses stops the landing with its reason', async () => {
     { kind: 'landing-failed', detail: 'GitHub did not merge #2: Pull request is not mergeable' },
   ]);
   expect(world.withdrawn).toEqual([2]);
+  expect(world.state()).toEqual({ pending: null, frozen: null });
 });
 
 test('a merge GitHub refuses lands nothing even when another commit put the tested tree onto main, and withdraws the mark', async () => {
@@ -424,7 +448,117 @@ test('each merge first checks main and the PR again: a PR taken out of the queue
     { kind: 'superseded', detail: '#2 left the queue' },
     { kind: 'landing-failed', detail: `main holds the untested prefix #1 (${world.main().commit})` },
   ]);
+  expect(world.withdrawn).toEqual([2]);
   expect(needsAttention(outcome)).toBe(true);
+});
+
+test('a PR whose Check went pending on the same head after its run is not landed, and its Queue is withdrawn', async () => {
+  const world = fakeWorld([pull(1), pull(2)]);
+  const read = world.adapter.pulls;
+  let reads = 0;
+  // Reads: the batch, the run, the settling, then the check right before #1's mark.
+  world.adapter.pulls = async () => {
+    const now = await read();
+    return ++reads < 4
+      ? now
+      : now.map((entry) => (entry.number === 1 ? { ...entry, check: 'PENDING' } : entry));
+  };
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(world.tested).toEqual([[1, 2]]);
+  expect(world.landed).toEqual([]);
+  expect(world.pendingAtLand).toEqual([]);
+  expect(world.withdrawn).toEqual([1]);
+  expect(outcome.stops).toEqual([
+    { kind: 'superseded', detail: `#1's Check on ${sha('head-1')} is PENDING` },
+  ]);
+});
+
+test('a refused merge whose withdrawal fails keeps the mark pending, and the next tick withdraws it before it takes a batch', async () => {
+  const world = fakeWorld([pull(1), pull(2)], { refuse: 1, failedWithdrawals: 1 });
+  const first = await runQueueTick(world.adapter, LIVE);
+  expect(world.landed).toEqual([]);
+  expect(world.main().commit).toBe(sha('main'));
+  expect(first.stops).toEqual([
+    {
+      kind: 'landing-failed',
+      detail: `GitHub did not merge #1: Pull request is not mergeable; #1's Queue on ${sha('head-1')} could not be withdrawn (publisher unavailable); the next tick withdraws it first`,
+    },
+  ]);
+  expect(world.state()).toEqual({
+    pending: { pull: 1, head: sha('head-1'), runUrl: 'run-1:main+1+2', verdict: 'success' },
+    frozen: null,
+  });
+  expect(needsAttention(first)).toBe(true);
+
+  const run = world.adapter.integrationRun;
+  const withdrawnAtRun: number[][] = [];
+  world.adapter.integrationRun = async (prefix) => {
+    withdrawnAtRun.push([...world.withdrawn]);
+    return run(prefix);
+  };
+  const second = await runQueueTick(world.adapter, { ...LIVE, maxBatch: 1 });
+  expect(withdrawnAtRun).toEqual([[1]]);
+  expect(second.stops[0]?.kind).not.toBe('frozen');
+});
+
+test('a pending mark the next tick cannot withdraw freezes the queue, and a frozen queue tests and lands nothing until a person clears it', async () => {
+  const world = fakeWorld([pull(1), pull(2)], { refuse: 1, failedWithdrawals: 2 });
+  await runQueueTick(world.adapter, LIVE);
+  const frozen = await runQueueTick(world.adapter, LIVE);
+  expect(world.tested).toEqual([[1, 2]]);
+  expect(frozen.stops.map((stop) => stop.kind)).toEqual(['frozen']);
+  expect(frozen.stops[0]?.detail).toContain(`#1's Queue success on ${sha('head-1')}`);
+  expect(world.state().frozen).toBe(frozen.stops[0]?.detail ?? 'no freeze');
+  expect(world.state().pending?.pull).toBe(1);
+  expect(needsAttention(frozen)).toBe(true);
+
+  // The publisher is back, but only a person lifts the freeze: the queue neither retries nor lands.
+  for (const dryRun of [false, true]) {
+    const still = await runQueueTick(world.adapter, { maxBatch: 4, dryRun });
+    expect(still.stops.map((stop) => stop.kind)).toEqual(['frozen']);
+    expect(still.batch).toEqual([]);
+  }
+  expect(world.tested).toEqual([[1, 2]]);
+  expect(world.withdrawn).toEqual([]);
+  expect(world.landed).toEqual([]);
+});
+
+test("a pending mark whose PR merged as main's head is cleared without a withdrawal; one merged under a later head is withdrawn", async () => {
+  // The process died between the merge and clearing the mark.
+  const mark = { pull: 1, head: sha('head-1'), runUrl: 'run-0', verdict: 'success' as const };
+  const merged = fakeWorld([], { state: { pending: mark, frozen: null } });
+  merged.adapter.mergeCommit = async () => merged.main().commit;
+  expect((await runQueueTick(merged.adapter, LIVE)).stops.map((stop) => stop.kind)).toEqual(['idle']);
+  expect(merged.withdrawn).toEqual([]);
+  expect(merged.state()).toEqual({ pending: null, frozen: null });
+
+  const earlier = fakeWorld([], { state: { pending: mark, frozen: null } });
+  earlier.adapter.mergeCommit = async () => sha('older');
+  await runQueueTick(earlier.adapter, LIVE);
+  expect(earlier.withdrawn).toEqual([1]);
+  expect(earlier.state()).toEqual({ pending: null, frozen: null });
+});
+
+test('a pending mark whose PR did not merge, or whose merge GitHub cannot confirm, is withdrawn first', async () => {
+  const mark = { pull: 7, head: sha('head-7'), runUrl: 'run-0', verdict: 'success' as const };
+  const unconfirmed = fakeWorld([], { state: { pending: mark, frozen: null } });
+  unconfirmed.adapter.mergeCommit = async () => {
+    throw new Error('gh failed');
+  };
+  for (const world of [fakeWorld([], { state: { pending: mark, frozen: null } }), unconfirmed]) {
+    const outcome = await runQueueTick(world.adapter, LIVE);
+    expect(world.withdrawn).toEqual([7]);
+    expect(world.state()).toEqual({ pending: null, frozen: null });
+    expect(outcome.stops.map((stop) => stop.kind)).toEqual(['idle']);
+  }
+});
+
+test('a dry run neither settles nor clears a pending mark', async () => {
+  const mark = { pull: 7, head: sha('head-7'), runUrl: 'run-0', verdict: 'success' as const };
+  const world = fakeWorld([pull(1)], { state: { pending: mark, frozen: null } });
+  await runQueueTick(world.adapter, { maxBatch: 4, dryRun: true });
+  expect(world.withdrawn).toEqual([]);
+  expect(world.state().pending).toEqual(mark);
 });
 
 test('a dry run tests and decides like a live tick but never lands or tells a PR', async () => {

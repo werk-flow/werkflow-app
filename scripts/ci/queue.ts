@@ -18,7 +18,10 @@
 //                   from the orchestrator's `bun scripts/ci/schedule.ts due --run "$CI_RESULTS_DIR"`;
 //                   the runner waits for them and never starts them itself. A queue run is never a
 //                   `--pr-run`: the queue cancels its own superseded entries.
-//   --work-dir      Holds one results directory per run.
+//   --work-dir      Holds one results directory per run, and the queue's state between ticks
+//                   (queue-state.json): the `Queue` success it is about to post, saved before it
+//                   posts it. A tick starts by settling a saved mark: done when the PR merged as
+//                   main's head, otherwise withdrawn. A withdrawal that fails freezes the queue.
 //   --run-url-base  Each run's CI_RUN_URL is <base>/<time>-<commit>.
 //   --ledger        The runner's CI_LEDGER, read only. A pass counts only when the ledger holds it as
 //                   its tree's pass, and a batch's first PR is named only on a main tree it proves
@@ -33,13 +36,15 @@
 //                   turns auto-merge off. --prs names the PRs to rehearse with, in order.
 // Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base).
 // Exit 2: it needs a person: a run without a verdict, a first PR failing on an unproven main, a
-// landing that broke, or an error. Stop the loop.
+// landing that broke, a frozen queue, or an error. Stop the loop. A frozen queue lands nothing
+// until a person confirms on GitHub that the named PR merged or that its head's newest `Queue` is
+// no success, then deletes queue-state.json.
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { CHECK_APP_CONFIG, readCheckApp } from '../../lib/testing/ci/check-app';
 import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
-import { createQueueAdapter } from './queue-adapter';
+import { createQueueAdapter, QUEUE_STATE_FILE } from './queue-adapter';
 import { repository } from './run';
 
 const { values } = parseArgs({
@@ -101,6 +106,10 @@ try {
   });
   console.info(`[queue] ${JSON.stringify(outcome)}`);
   for (const stop of outcome.stops) console.info(`[queue] ${stop.kind}: ${stop.detail}`);
+  if (outcome.stops.some((stop) => stop.kind === 'frozen'))
+    console.error(
+      `[queue] The queue is frozen. Once GitHub shows the PR merged or its head's newest Queue is no success, delete ${join(workDir, QUEUE_STATE_FILE)} and restart the loop.`,
+    );
   const landing = outcome.landing.map((number) => `#${number}`).join(', ') || 'nothing';
   console.info(`[queue] ${outcome.dryRun ? 'would land' : 'landed'} ${landing}`);
   process.exitCode = needsAttention(outcome) ? 2 : 0;

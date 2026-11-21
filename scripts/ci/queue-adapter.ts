@@ -3,7 +3,7 @@
 // Once .github/scripts/check-app.json names the CI App, a PR's `Check` is the App's check run and
 // the `Queue` mark goes through the publisher as the App's check run (lib/testing/ci/check-app.ts).
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { appCheckStateOf } from '../../lib/testing/ci/check-app';
@@ -13,6 +13,8 @@ import {
   pullsFromGitHub,
   type QueueAdapter,
   type QueuedPull,
+  type QueueState,
+  queueStateSchema,
   type Verdict,
   verdictOf,
 } from '../../lib/testing/ci/queue';
@@ -24,7 +26,23 @@ const QUEUE_STATUS = 'Queue';
 /** Where the queue keeps main and each batch tip under test, so no garbage collection takes them. */
 const QUEUE_REFS = 'refs/ci-queue';
 
+/** The queue's state between ticks, in its work directory: a pending `Queue` mark or a freeze. */
+export const QUEUE_STATE_FILE = 'queue-state.json';
+
 type Git = (...args: string[]) => string;
+
+/** The state at `path`; a missing file is a clear state. A damaged one throws, so the tick stops for a person. */
+export function readQueueState(path: string): QueueState {
+  if (!existsSync(path)) return { pending: null, frozen: null };
+  return queueStateSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+}
+
+/** Writes the state through a flushed temporary file and a rename: a crash leaves the old state or the new one. */
+export function writeQueueState(path: string, state: QueueState): void {
+  const temporary = `${path}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(queueStateSchema.parse(state), null, 2)}\n`, { flush: true });
+  renameSync(temporary, path);
+}
 
 /** git in `repository`, never prompting for a credential. */
 function gitIn(repository: string): Git {
@@ -193,8 +211,9 @@ export function createQueueAdapter(options: {
             appId,
           ),
         };
-  const mark = (pull: QueuedPull, state: Mark['state'], description: string, runUrl: string) =>
-    markQueue(options, { head: pull.headSha, state, description, runUrl }, gh);
+  const mark = (head: string, state: Mark['state'], description: string, runUrl: string) =>
+    markQueue(options, { head, state, description, runUrl }, gh);
+  const stateFile = join(options.workDir, QUEUE_STATE_FILE);
   return {
     main: async () => {
       git('fetch', '--quiet', '--no-tags', 'origin', `+refs/heads/main:${QUEUE_REFS}/main`);
@@ -242,20 +261,22 @@ export function createQueueAdapter(options: {
       return verdict;
     },
     land: async (pull, proof) => {
-      mark(pull, 'success', `Passed in ${proof.runUrl}`, proof.runUrl);
+      mark(pull.headSha, 'success', `Passed in ${proof.runUrl}`, proof.runUrl);
       gh('pr', 'merge', String(pull.number), '--squash', '--match-head-commit', pull.headSha);
       console.info(`[queue] #${pull.number}: merged`);
     },
-    mergeCommit: async (pull) => {
+    mergeCommit: async (number) => {
       const merged = mergedPullSchema.parse(
-        JSON.parse(gh('pr', 'view', String(pull.number), '--json', 'state,mergeCommit')),
+        JSON.parse(gh('pr', 'view', String(number), '--json', 'state,mergeCommit')),
       );
       return merged.state === 'MERGED' ? (merged.mergeCommit?.oid ?? null) : null;
     },
-    withdraw: async (pull, proof) => {
-      mark(pull, 'failure', 'Not merged; the queue tests it again', proof.runUrl);
-      console.info(`[queue] #${pull.number}: Queue withdrawn`);
+    withdraw: async (pending) => {
+      mark(pending.head, 'failure', 'Not merged; the queue tests it again', pending.runUrl);
+      console.info(`[queue] #${pending.pull}: Queue withdrawn on ${pending.head}`);
     },
+    state: async () => readQueueState(stateFile),
+    saveState: async (state) => writeQueueState(stateFile, state),
     proven: async (tree) => {
       const ledger = ledgerOf(options.ledger);
       return ledger !== undefined && provenTree(ledger, tree) !== undefined;

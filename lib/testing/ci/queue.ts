@@ -42,6 +42,35 @@ export type MainCommit = { commit: string; parents: readonly string[]; tree: str
  */
 export type Verdict = { kind: 'passed' | 'failed' | 'inconclusive'; runUrl: string; detail: string };
 
+/**
+ * The `Queue` success the queue posts on a PR head right before it merges it. The queue saves it
+ * before it posts it, and clears it only once the PR merged as main's head or the mark was
+ * withdrawn, so a green mark whose merge did not happen never outlives the tick unnoticed.
+ */
+type PendingMark = { pull: number; head: string; runUrl: string; verdict: 'success' };
+
+/** What the queue keeps between ticks: a mark it may have left green, and why it froze, if it did. */
+export type QueueState = { pending: PendingMark | null; frozen: string | null };
+
+export const queueStateSchema = z
+  .object({
+    pending: z
+      .object({
+        pull: z.number().int().positive(),
+        head: z.string().regex(/^[0-9a-f]{40}$/),
+        runUrl: z.string().min(1),
+        verdict: z.literal('success'),
+      })
+      .strict()
+      .nullable(),
+    frozen: z.string().min(1).nullable(),
+  })
+  .strict();
+
+const CLEAR: QueueState = { pending: null, frozen: null };
+
+const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
 /** Everything the queue does outside its decisions. */
 export type QueueAdapter = {
   main(): Promise<MainCommit>;
@@ -54,16 +83,20 @@ export type QueueAdapter = {
   /** Marks the head as passed by the queue and squash-merges it on GitHub, only at that head. */
   land(pull: QueuedPull, proof: Verdict): Promise<void>;
   /** The PR's merge commit when GitHub reports it merged, otherwise null. */
-  mergeCommit(pull: QueuedPull): Promise<string | null>;
-  /** Marks the head as no longer passed, after a merge that did not happen, so no later merge takes the mark. */
-  withdraw(pull: QueuedPull, proof: Verdict): Promise<void>;
+  mergeCommit(pull: number): Promise<string | null>;
+  /** Marks the head as no longer passed, after a merge that did not happen, so no later merge takes the mark. Throws when it cannot. */
+  withdraw(mark: PendingMark): Promise<void>;
+  /** The state the last tick saved; a fresh queue's is clear. Throws when it cannot be read. */
+  state(): Promise<QueueState>;
+  /** Saves the state durably before it returns. */
+  saveState(state: QueueState): Promise<void>;
   /** Whether the runner's ledger proves `tree` green: a passed Check of a CI runner is its newest run's last receipt. */
   proven(tree: string): Promise<boolean>;
   /** Tells the PR's thread that its batch failed on it, and takes it out of the queue. */
   reject(pull: QueuedPull, proof: Verdict): Promise<void>;
 };
 
-type StopKind = 'idle' | 'superseded' | 'inconclusive' | 'stale-base' | 'landing-failed';
+type StopKind = 'idle' | 'superseded' | 'inconclusive' | 'stale-base' | 'landing-failed' | 'frozen';
 
 /** What one tick did, for its log and the runner. */
 export type QueueOutcome = {
@@ -80,9 +113,11 @@ export type QueueOutcome = {
   stops: { kind: StopKind; detail: string }[];
 };
 
-/** A tick that stopped on something a person has to look at: no verdict, or a landing that broke. */
+/** A tick that stopped on something a person has to look at: no verdict, a landing that broke, or a freeze. */
 export function needsAttention(outcome: QueueOutcome): boolean {
-  return outcome.stops.some((stop) => stop.kind === 'inconclusive' || stop.kind === 'landing-failed');
+  return outcome.stops.some(
+    (stop) => stop.kind === 'inconclusive' || stop.kind === 'landing-failed' || stop.kind === 'frozen',
+  );
 }
 
 const isQueued = (pull: QueuedPull): boolean =>
@@ -128,6 +163,8 @@ export function supersession(taken: QueuedPull, now: readonly QueuedPull[]): str
   if (!current) return `#${taken.number} was closed, merged or moved off main`;
   if (current.headSha !== taken.headSha) return `#${taken.number} was pushed to ${current.headSha}`;
   if (current.isDraft && !taken.isDraft) return `#${taken.number} went back to draft`;
+  if (taken.check === 'SUCCESS' && current.check !== 'SUCCESS')
+    return `#${taken.number}'s Check on ${taken.headSha} is ${current.check}`;
   if (current.listGrowthApproved !== taken.listGrowthApproved)
     return `#${taken.number}'s list-growth approval changed`;
   if (current.queuedAt !== taken.queuedAt)
@@ -226,23 +263,35 @@ export function integrationEnvironment(run: {
   };
 }
 
-/** One tick of the queue. A dry run builds, tests and decides, but never lands or tells a PR. */
+/**
+ * One tick of the queue. A frozen queue does nothing. A live tick first settles a mark an earlier
+ * tick left pending. A dry run builds, tests and decides, but never lands, tells a PR or settles a
+ * mark.
+ */
 export async function runQueueTick(
   adapter: QueueAdapter,
   options: { maxBatch: number; dryRun: boolean; only?: readonly number[] },
 ): Promise<QueueOutcome> {
   const base = await adapter.main();
-  const batch = pickBatch(await adapter.pulls(), options);
   const outcome: QueueOutcome = {
     base: base.commit,
     dryRun: options.dryRun,
-    batch: batch.map((pull) => pull.number),
+    batch: [],
     conflicts: [],
     runs: [],
     culprit: null,
     landing: [],
     stops: [],
   };
+  const state = await adapter.state();
+  if (state.frozen !== null) {
+    outcome.stops.push({ kind: 'frozen', detail: state.frozen });
+    return outcome;
+  }
+  if (state.pending && !options.dryRun && !(await reconcile(adapter, state.pending, base, outcome)))
+    return outcome;
+  const batch = pickBatch(await adapter.pulls(), options);
+  outcome.batch = batch.map((pull) => pull.number);
   const chain: BatchEntry[] = [];
   for (const pull of batch) {
     const squashed = await adapter.squash(chain.at(-1)?.commit ?? base.commit, pull);
@@ -261,6 +310,58 @@ export async function runQueueTick(
   if (!needsAttention(outcome)) await settle(adapter, base, chain, verdicts, outcome);
   return outcome;
 }
+
+/**
+ * Settles a mark an earlier tick left pending: done when GitHub reports its PR merged as main's
+ * head, otherwise withdrawn. A withdrawal that fails freezes the queue until a person clears it,
+ * since the green mark may let GitHub's auto-merge take an untested PR.
+ */
+async function reconcile(
+  adapter: QueueAdapter,
+  mark: PendingMark,
+  main: MainCommit,
+  outcome: QueueOutcome,
+): Promise<boolean> {
+  const merged = await adapter.mergeCommit(mark.pull).then(
+    (commit) => commit === main.commit,
+    () => false,
+  );
+  const failure = merged ? undefined : await withdrawal(adapter, mark);
+  if (failure === undefined) {
+    await adapter.saveState(CLEAR);
+    return true;
+  }
+  const frozen = `#${mark.pull}'s Queue success on ${mark.head} (${mark.runUrl}) may still stand: the queue could not withdraw it (${failure}). The queue lands nothing until a person confirms on GitHub that #${mark.pull} merged or that the newest Queue on ${mark.head} is not a success, and clears the freeze.`;
+  await adapter.saveState({ pending: mark, frozen });
+  outcome.stops.push({ kind: 'frozen', detail: frozen });
+  return false;
+}
+
+/** Withdraws the mark; undefined when it did, otherwise why not. */
+const withdrawal = (adapter: QueueAdapter, mark: PendingMark): Promise<string | undefined> =>
+  adapter.withdraw(mark).then(
+    () => undefined,
+    (error: unknown) => message(error),
+  );
+
+/**
+ * Withdraws the mark and clears it. When the withdrawal fails, the mark stays pending, so the next
+ * tick withdraws it before it takes a batch, and the returned problem stops this one.
+ */
+async function withdrawPending(adapter: QueueAdapter, mark: PendingMark): Promise<string | undefined> {
+  const failure = await withdrawal(adapter, mark);
+  await adapter.saveState(failure === undefined ? CLEAR : { pending: mark, frozen: null });
+  return failure === undefined
+    ? undefined
+    : `#${mark.pull}'s Queue on ${mark.head} could not be withdrawn (${failure}); the next tick withdraws it first`;
+}
+
+const markOf = (pull: QueuedPull, proof: Verdict): PendingMark => ({
+  pull: pull.number,
+  head: pull.headSha,
+  runUrl: proof.runUrl,
+  verdict: 'success',
+});
 
 /**
  * Tests the whole batch, then on red the prefixes between the longest green and the shortest red
@@ -365,8 +466,9 @@ async function onBase(adapter: QueueAdapter, base: string, outcome: QueueOutcome
 
 /**
  * Lands each entry through GitHub's squash merge, in order. Before each merge main must sit on the
- * previous head and the PR must be as tested; after it main must be one new commit on the previous
- * head holding exactly the entry's tree. Anything else stops the landing.
+ * previous head and the PR must be as tested, its Check still a success; after it main must be one
+ * new commit on the previous head holding exactly the entry's tree. Anything else stops the
+ * landing; a PR that changed since its run has its `Queue` withdrawn.
  */
 async function land(
   adapter: QueueAdapter,
@@ -381,6 +483,8 @@ async function land(
     const superseded = current ? supersession(pull, await adapter.pulls()) : undefined;
     if (superseded) {
       outcome.stops.push({ kind: 'superseded', detail: superseded });
+      const failure = await withdrawPending(adapter, markOf(pull, proof));
+      if (failure !== undefined) outcome.stops.push({ kind: 'landing-failed', detail: failure });
       current = false;
     }
     if (!current) {
@@ -402,13 +506,12 @@ async function land(
   }
 }
 
-const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
 /**
- * Merges one PR and returns main after it, or the problem. Every outcome but the tested tree on
- * `previous` withdraws the head's `Queue` mark, so no later auto-merge takes it; on a merged head
- * the withdrawal changes nothing. After a merge error the PR counts as landed only when GitHub
- * reports it merged as main's new head: another commit may have put the same tree onto `previous`.
+ * Merges one PR and returns main after it, or the problem. The `Queue` mark is saved as pending
+ * before it is posted. Every outcome but the tested tree on `previous` withdraws it, so no later
+ * auto-merge takes it; on a merged head the withdrawal changes nothing. After a merge error the PR
+ * counts as landed only when GitHub reports it merged as main's new head: another commit may have
+ * put the same tree onto `previous`.
  */
 async function landOne(
   adapter: QueueAdapter,
@@ -417,6 +520,8 @@ async function landOne(
   previous: string,
   proof: Verdict,
 ): Promise<MainCommit | string> {
+  const mark = markOf(pull, proof);
+  await adapter.saveState({ pending: mark, frozen: null });
   let refusal = '';
   try {
     await adapter.land(pull, proof);
@@ -431,10 +536,10 @@ async function landOne(
       problem = `main moved to ${head.commit}, which is no single commit on ${previous}`;
     else if (head.tree !== tree)
       problem = `main's tree ${head.tree} after #${pull.number} is not the tested tree ${tree}`;
-    else if (!refusal) return head;
+    else if (!refusal) return landed(adapter, head);
     else
       try {
-        if ((await adapter.mergeCommit(pull)) === head.commit) return head;
+        if ((await adapter.mergeCommit(pull.number)) === head.commit) return landed(adapter, head);
         problem = `GitHub did not merge #${pull.number}${refusal}; main moved to ${head.commit} without it`;
       } catch (error) {
         problem = `GitHub could not confirm #${pull.number} merged${refusal}: ${message(error)}`;
@@ -442,8 +547,14 @@ async function landOne(
   } catch (error) {
     problem = `main could not be read after merging #${pull.number}${refusal}: ${message(error)}`;
   }
-  await adapter.withdraw(pull, proof);
-  return problem;
+  const failure = await withdrawPending(adapter, mark);
+  return failure === undefined ? problem : `${problem}; ${failure}`;
+}
+
+/** Clears the pending mark of a PR that merged as main's head, and returns that head. */
+async function landed(adapter: QueueAdapter, head: MainCommit): Promise<MainCommit> {
+  await adapter.saveState(CLEAR);
+  return head;
 }
 
 const gitHubPullSchema = z.object({
