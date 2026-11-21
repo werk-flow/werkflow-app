@@ -60,6 +60,13 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   unlink_service_case_document: 'update_document_links',
   werkflow_subscription_holds: 'record_werkflow_subscription_state',
   withdraw_work_handover_p1_17_inner: 'withdraw_work_handover',
+  // The weekly numbers, one function per rule so a later start page reuses them.
+  berlin_day_end_or_now: 'count_overdue_items_at',
+  count_berlin_workdays: 'count_overdue_items_at',
+  count_overdue_items_at: 'read_weekly_outcome_numbers',
+  measure_handover_turnaround: 'read_weekly_outcome_numbers',
+  measure_own_time_capture_share: 'read_weekly_outcome_numbers',
+  measure_work_report_share: 'read_weekly_outcome_numbers',
 };
 
 /** Function -> why it stays although the current build does not call it. */

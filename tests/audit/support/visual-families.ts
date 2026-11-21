@@ -189,6 +189,15 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     heading: 'Qualifikationen',
   },
   {
+    id: 'kennzahlen',
+    role: 'admin',
+    // Its 12 week labels move with the run day; the clock stand-ins replace them whole
+    // (lib/testing/spec-support/visual-reference-text.test.ts), so no calendarWeek.
+    covers: ['/kennzahlen'],
+    route: fixed('/kennzahlen'),
+    heading: 'Wochenzahlen',
+  },
+  {
     id: 'meldungen',
     role: 'admin',
     covers: ['/meldungen'],

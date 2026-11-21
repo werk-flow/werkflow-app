@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Wrench,
   ReceiptText,
+  BarChart3,
 } from 'lucide-react';
 
 import { isManagerRole, type OrgRole } from '@/lib/roles';
@@ -23,6 +24,8 @@ type NavItem = {
   icon: typeof LayoutDashboard;
   /** If true, only admins and managers can see this item */
   managerOrAbove?: boolean;
+  /** If true, only admins see this item; the page refuses everyone else on the server. */
+  adminOnly?: boolean;
   /** The route section this item stays active in when it is wider than `href`. */
   activePrefix?: string;
 };
@@ -108,12 +111,20 @@ const navItems: NavItem[] = [
     icon: Building2,
     managerOrAbove: true,
   },
+  {
+    href: '/kennzahlen',
+    label: 'Wochenzahlen',
+    icon: BarChart3,
+    adminOnly: true,
+  },
 ];
 
 /** The items a member with `role` sees; the office pages refuse the others on the server. */
 export function navItemsFor(role: OrgRole | undefined): NavItem[] {
   const isManager = role !== undefined && isManagerRole(role);
-  return navItems.filter((item) => !item.managerOrAbove || isManager);
+  return navItems.filter(
+    (item) => (!item.managerOrAbove || isManager) && (!item.adminOnly || role === 'admin'),
+  );
 }
 
 /** Whether the item is the highlighted sidebar entry for `pathname`. */

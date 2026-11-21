@@ -27,6 +27,9 @@ import { EinstellungenPageSkeleton } from '@/components/loading-states/einstellu
 import { WorkTemplatesPageSkeleton } from '@/components/loading-states/work-templates-page-skeleton';
 import { EquipmentPageSkeleton } from '@/components/loading-states/equipment-page-skeleton';
 import { ServiceCasesPageSkeleton } from '@/components/loading-states/service-cases-page-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // The skeleton of the page the user lands on after an organization switch.
 // A record's detail page belongs to the organization being left, so it maps to
@@ -105,6 +108,19 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
   ['/arbeitsvorlagen', () => <WorkTemplatesPageSkeleton />],
   ['/einstellungen', () => <EinstellungenPageSkeleton />],
   ['/inventar', () => <InventarPageSkeleton />],
+  // Admin only: a plain page shape, because every role's start-up carries this map
+  // and the page's own skeleton would bring the Wochenzahlen view into it.
+  [
+    '/kennzahlen',
+    () => (
+      <PageShell>
+        <PageHeader title="Wochenzahlen" />
+        <PageBody>
+          <Skeleton className="h-96 w-full" />
+        </PageBody>
+      </PageShell>
+    ),
+  ],
   [
     '/angebote/leistungen',
     (angebote) => (
