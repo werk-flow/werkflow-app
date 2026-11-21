@@ -13,6 +13,9 @@ import type { CalculatedInvoice, InvoiceDraft } from './model';
 // The arithmetic of the invoice core: each line rounded once (lib/inventory's
 // line rule), VAT per category and rate on the sum of that rate's lines
 // (EN 16931 BR-CO), never per line.
+const [firstStandardLine] = STANDARD_RATE_INVOICE.lines;
+if (!firstStandardLine) throw new Error('fixture without lines');
+
 const CASES: ReadonlyArray<{
   case: string;
   draft: InvoiceDraft;
@@ -26,7 +29,7 @@ const CASES: ReadonlyArray<{
     // 2 × 24,50; 3,25 h × 68,00; 12,125 m × 12,34 € per 100 m = 1,4962 → 1,50; −35,00
     lineNetCents: [4900, 22100, 150, -3500],
     taxSubtotals: [{ rate: 1900, basisCents: 23650, taxCents: 4494 }],
-    totals: { lineNetCents: 23650, taxCents: 4494, grossCents: 28144 },
+    totals: { lineNetCents: 23650, taxCents: 4494, grossCents: 28144, paidCents: 0, dueCents: 28144 },
   },
   {
     case: 'two tax rates, each taxed on its own sum',
@@ -38,14 +41,14 @@ const CASES: ReadonlyArray<{
       // 7 % of 39,90 = 2,793 → 2,79
       { rate: 700, basisCents: 3990, taxCents: 279 },
     ],
-    totals: { lineNetCents: 23286, taxCents: 3945, grossCents: 27231 },
+    totals: { lineNetCents: 23286, taxCents: 3945, grossCents: 27231, paidCents: 0, dueCents: 27231 },
   },
   {
     case: 'a § 19 UStG exemption carries no VAT',
     draft: EXEMPT_INVOICE,
     lineNetCents: [8250],
     taxSubtotals: [{ rate: null, basisCents: 8250, taxCents: 0 }],
-    totals: { lineNetCents: 8250, taxCents: 0, grossCents: 8250 },
+    totals: { lineNetCents: 8250, taxCents: 0, grossCents: 8250, paidCents: 0, dueCents: 8250 },
   },
   {
     case: 'a Storno negates every amount, rounding half away from zero',
@@ -55,7 +58,15 @@ const CASES: ReadonlyArray<{
       { rate: 1900, basisCents: -19296, taxCents: -3666 },
       { rate: 700, basisCents: -3990, taxCents: -279 },
     ],
-    totals: { lineNetCents: -23286, taxCents: -3945, grossCents: -27231 },
+    totals: { lineNetCents: -23286, taxCents: -3945, grossCents: -27231, paidCents: 0, dueCents: -27231 },
+  },
+  {
+    case: 'a credit whose tax rounds to nothing owes 0, never -0',
+    // −0,02 € at 19 % = −0,0038 € → 0
+    draft: { ...STANDARD_RATE_INVOICE, lines: [{ ...firstStandardLine, quantity: '1', unitPriceCents: -2 }] },
+    lineNetCents: [-2],
+    taxSubtotals: [{ rate: 1900, basisCents: -2, taxCents: 0 }],
+    totals: { lineNetCents: -2, taxCents: 0, grossCents: -2, paidCents: 0, dueCents: -2 },
   },
 ];
 
@@ -75,6 +86,8 @@ describe('calculateInvoice', () => {
         })),
       ).toEqual(entry.taxSubtotals);
       expect(invoice.totals).toEqual(entry.totals);
+      // toEqual may not tell -0 from 0; an XML amount of „-0.00“ would.
+      for (const row of invoice.taxSubtotals) expect(Object.is(row.taxCents, -0)).toBe(false);
     });
   }
 
@@ -114,6 +127,28 @@ describe('calculateInvoice', () => {
         ...EXEMPT_INVOICE,
         lines: [first, { ...first, id: '2', tax: { category: 'E', exemptionReason: 'Anderer Grund' } }],
       }),
+    ).toThrow(RangeError);
+  });
+
+  test('a paid amount leaves the gross minus it due (BR-CO-16)', () => {
+    const invoice = calculateInvoice({ ...EXEMPT_INVOICE, payee: null, paidCents: 3000 });
+    expect(invoice.totals).toMatchObject({ grossCents: 8250, paidCents: 3000, dueCents: 5250 });
+  });
+
+  test('a paid amount above the gross, below zero or in fractions of a cent is refused', () => {
+    for (const paidCents of [8251, -1, 0.5]) {
+      expect(() => calculateInvoice({ ...EXEMPT_INVOICE, paidCents })).toThrow(RangeError);
+    }
+  });
+
+  test("a payee is the credit transfer of E2c's drafts; a draft with both a payee and a payment is refused", () => {
+    expect(calculateInvoice(EXEMPT_INVOICE).payment).toEqual({
+      kind: 'credit-transfer',
+      payee: { iban: 'DE00111111111111111111', bic: null, accountName: 'Erika Musterfrau' },
+    });
+    expect(() =>
+      // @ts-expect-error -- Tier 1 probe: a draft names a payee or a payment, never both; the guard holds at run time too.
+      calculateInvoice({ ...EXEMPT_INVOICE, payment: { kind: 'card', lastFour: '4242' } }),
     ).toThrow(RangeError);
   });
 

@@ -32,6 +32,8 @@ export const jobOptionRequestSchema = z.object({
       'equipment-work',
       // Customers new work may name: active ones; an archived one stays only as a selection.
       'customer-work',
+      // Jobs an invoice may bill: the chosen customer's only.
+      'invoice-work',
     ])
     .default('filter'),
 });
