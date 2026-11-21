@@ -3,10 +3,11 @@
 // Once .github/scripts/check-app.json names the CI App, a PR's `Check` is the App's check run and
 // the `Queue` mark goes through the publisher as the App's check run (lib/testing/ci/check-app.ts).
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { appCheckStateOf } from '../../lib/testing/ci/check-app';
+import { mainEnvironment, type MainFollowUp, mainFollowUpSchema } from '../../lib/testing/ci/queue-main-run';
 import {
   integrationEnvironment,
   type QueueAdapter,
@@ -28,6 +29,22 @@ const QUEUE_REFS = 'refs/ci-queue';
 
 /** The queue's state between ticks, in its work directory: a pending `Queue` mark or a freeze. */
 export const QUEUE_STATE_FILE = 'queue-state.json';
+/** main's run a landing still owes (`mainFollowUp`), until it started. */
+const MAIN_FOLLOW_UP_FILE = 'main-follow-up.json';
+
+/** The owed main run in `workDir`, or undefined. A damaged file throws, so the tick stops for a person. */
+export function readMainFollowUp(workDir: string): MainFollowUp | undefined {
+  const path = join(workDir, MAIN_FOLLOW_UP_FILE);
+  return existsSync(path) ? mainFollowUpSchema.parse(JSON.parse(readFileSync(path, 'utf8'))) : undefined;
+}
+
+/** Saves an owed main run durably, or clears it with undefined. */
+export function saveMainFollowUp(workDir: string, followUp: MainFollowUp | undefined): void {
+  const path = join(workDir, MAIN_FOLLOW_UP_FILE);
+  if (!followUp) return rmSync(path, { force: true });
+  writeFileSync(`${path}.tmp`, `${JSON.stringify(mainFollowUpSchema.parse(followUp))}\n`, { flush: true });
+  renameSync(`${path}.tmp`, path);
+}
 
 type Git = (...args: string[]) => string;
 
@@ -101,10 +118,13 @@ export function runIntegration(
   mkdirSync(options.resultsDir, { recursive: true });
   git('update-ref', ref, run.tip.commit);
   try {
+    // A queue run posts no Check, so its runner never gets the main run's publisher.
+    const inherited = { ...process.env };
+    delete inherited.CI_PUBLISHER;
     const environment = integrationEnvironment({ ...run, ...options });
     const ran = spawnSync(options.runner, [], {
       cwd: options.repository,
-      env: { ...process.env, ...environment },
+      env: { ...inherited, ...environment },
       stdio: 'inherit',
     });
     console.info(`[queue] runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}`);
@@ -122,6 +142,35 @@ export function runIntegration(
       ledger: ledgerOf(options.ledger),
     },
   );
+}
+
+/**
+ * Starts main's run after a landing (`mainRunOf` in lib/testing/ci/queue.ts) through the main
+ * runner, and waits for it. Its exit code decides nothing for the queue; the run posts its own Check.
+ * True once the run is paid: the runner ran (exit 0 or 1), or another run of the commit started
+ * (3). False when it could not start or refused before anything ran (2).
+ */
+export function runMain(
+  options: { repository: string; mainRunner: string; workDir: string; runUrlBase: string },
+  run: { commit: string; base: string; prs: readonly number[]; id: string },
+): boolean {
+  const id = `${run.id}-main-${run.commit.slice(0, 12)}`;
+  const environment = mainEnvironment({
+    ...run,
+    runUrl: `${options.runUrlBase}/${id}`,
+    resultsDir: join(options.workDir, id),
+  });
+  console.info(`[queue] main's run ${environment.CI_RUN_URL} of ${run.commit}, base ${run.base}`);
+  const ran = spawnSync(options.mainRunner, [], {
+    cwd: options.repository,
+    env: { ...process.env, ...environment },
+    stdio: 'inherit',
+  });
+  console.info(
+    `[queue] main's runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}`,
+  );
+  // 2: run-commit refused before anything ran. 3: another run of that main commit started.
+  return ran.error === undefined && (ran.status === 0 || ran.status === 1 || ran.status === 3);
 }
 
 /** The runner's ledger when the queue is given one, read-only; undefined without one. */

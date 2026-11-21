@@ -131,39 +131,13 @@ jobs:
       # docs:check reads the sibling clones beside the app (docs/README.md, "Sibling repositories").
       - name: Clone the sibling repositories
         env:
-          SIBLING_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
-        run: |
-          git clone --quiet --depth 1 https://github.com/werk-flow/werkflow-website ../werkflow-website
-          if test -n "$SIBLING_TOKEN"; then
-            git clone --quiet --depth 1 "https://x-access-token:${SIBLING_TOKEN}@github.com/werk-flow/werkflow-business" ../werkflow-business
-          else
-            echo "::warning::SIBLING_REPOSITORIES_TOKEN is not set, so docs:check cannot read the private werkflow-business clone."
-            echo "WERKFLOW_UNREADABLE_SIBLINGS=werkflow-business" >> "$GITHUB_ENV"
-          fi
-      # The owner's approval for a shrink-only list to grow (docs/technical/testing.md, "Grow a
-      # shrink-only list"). Read now, not from the event, so a rerun after a label change sees it.
-      # A queue run holds its own PR (named in its branch) and each PR ahead of it, one squash commit
-      # "<title> (#<n>)" each above the queue's base; it diffs all of them against main. Each PR's own
-      # Check already held its growth to its label, so one approval covers the group.
+          SIBLING_REPOSITORIES_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
+        run: bun scripts/ci/prepare.ts siblings
+      # The owner's approval for a shrink-only list to grow, read at run time from the labels of the
+      # run's PRs (scripts/ci/prepare.ts approval).
       - name: Read the list growth approval
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        env:
-          PR: ${{ github.event.pull_request.number }}
-          QUEUE_BRANCH: ${{ github.event.merge_group.head_ref }}
-          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
-        run: |
-          prs="$PR"
-          if test -n "$QUEUE_BRANCH"; then
-            prs="$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$QUEUE_BRANCH"
-              git log --format=%s "$QUEUE_BASE..HEAD" | sed -nE 's/.*\(#([0-9]+)\)$/\1/p')"
-          fi
-          approved=false
-          for pr in $(sort -u <<< "$prs"); do
-            labels="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr/labels" --jq '.[].name')"
-            if grep -qxF 'approved: list growth' <<< "$labels"; then approved=true; fi
-          done
-          echo "SHRINK_ONLY_GROWTH_APPROVED=$approved" >> "$GITHUB_ENV"
-          echo "approved: list growth = $approved"
+        run: bun scripts/ci/prepare.ts approval
       # The stack's URL and keys are the CLI's fixed defaults, so the build needs no stack. The job
       # writes .env.local only after the static gates and Unit, which run without it as before.
       - uses: ./.github/actions/local-stack

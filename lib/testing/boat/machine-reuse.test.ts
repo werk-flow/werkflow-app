@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { z } from '../../zod';
 
 import { BoatError, boatClient } from './boat-api';
+import { BOAT_RUNS_FILE, readBoatRuns } from './boat-runs';
 import { MARK_IDLE, workstationLabel } from './machine-eviction';
 import { acquireMachine, keepMachine, reapIdleMachine, withMachine } from './machine-reuse';
 
@@ -614,4 +615,16 @@ test('an idle record whose machine another workstation evicted frees nothing, so
   expect(boat.calls).toContain('DELETE /sandboxes/bx_otherws1');
   expect(boat.calls).not.toContain('DELETE /sandboxes/bx_gone0001');
   expect(readdirSync(records)).toEqual([]);
+});
+
+test("a checkout's machine records each run's cost there for the CI cost report, and a machine of none records nothing", async () => {
+  const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
+  const machine = { id: 'bx_kept0001', client: boat.client, log: () => undefined };
+  await withMachine({ ...machine, repository: checkout }, new AbortController().signal, async () => 0);
+  expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toMatchObject([
+    { machine: 'bx_kept0001', usage: { seconds: 4, dollars: 0.001 }, reports: [] },
+  ]);
+  await withMachine(machine, new AbortController().signal, async () => 0);
+  expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toHaveLength(1);
 });

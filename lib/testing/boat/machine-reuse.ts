@@ -16,6 +16,7 @@ import {
   runScript,
   shellQuote,
 } from './boat-machine';
+import { boatRunStart, recordBoatRun } from './boat-runs';
 import { MARK_IDLE, claimKeptMachine, takeIdleMachineElsewhere, workstationLabel } from './machine-eviction';
 import { mainWipeScript } from './main-wipe-script';
 
@@ -197,7 +198,8 @@ export async function acquireMachine(
     for (const id of taken) await deleteLeftover(client, id, input.log);
     throw error;
   }
-  if (kept) return { machine: { id: kept.id, client, log: input.log }, reused: true };
+  if (kept)
+    return { machine: { id: kept.id, client, log: input.log, repository: input.repository }, reused: true };
   // Read before the start, so a script that cannot be read costs no start.
   const record = wipeCommand((input.wipeScript ?? mainWipeScript)(input.repository), ['record']);
   const create = () =>
@@ -243,14 +245,15 @@ export async function acquireMachine(
     await deleteMachine(machine);
     throw error;
   }
-  return { machine, reused: false };
+  return { machine: { ...machine, repository: input.repository }, reused: false };
 }
 
 /**
  * Runs `work` on a started machine, then hands the machine to `keep` when `work` returned a result,
  * and deletes it when `keep` declines or fails, `work` failed or the user interrupted. Its last line
- * says whether the machine was kept or why it was deleted, with its cost so far. A Ctrl-C during that cleanup still stops the run: no fallback to
- * a local run follows an interruption.
+ * says whether the machine was kept or why it was deleted, with its cost so far, which a checkout's
+ * machine also records for scripts/ci-cost.ts (boat-runs.ts). A Ctrl-C during that cleanup still
+ * stops the run: no fallback to a local run follows an interruption.
  */
 export async function withMachine<T>(
   machine: Machine,
@@ -260,11 +263,14 @@ export async function withMachine<T>(
   keep: (result: T) => Promise<true | string> = async () => 'the run keeps no machine',
 ): Promise<T> {
   let returned: { result: T } | undefined;
+  const started = machine.repository ? boatRunStart(machine.repository) : undefined;
   try {
     returned = { result: await work() };
   } finally {
     // Read before the keep, so nothing awaits between the keep's last interruption check and the end.
     const usage = await machineUsage(machine);
+    if (machine.repository && started)
+      recordBoatRun(machine.repository, { machine: machine.id, started, usage });
     let kept: true | string = signal.aborted ? 'interrupted' : 'the run ended without a result';
     if (returned && !signal.aborted)
       kept = await keep(returned.result).catch(

@@ -1,13 +1,17 @@
-import { readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseArgs } from 'node:util';
+import { type BoatRun, readBoatRuns } from '../lib/testing/boat/boat-runs';
 import { formatCost, summarizeCost } from '../lib/testing/ci-cost/summary';
 import { type CiResult, readLedger, readResult } from '../lib/testing/ci/results';
 
 // What CI cost per merged pull request (lib/testing/ci-cost/summary.ts): job-minutes, machine starts, setup
-// share, reuse rate and ready-to-merge time.
-// Usage: bun scripts/ci-cost.ts [--json] <ledger.jsonl | results folder>...
+// share, reuse rate and ready-to-merge time, and the Boat verification runs beside them.
+// Usage: bun scripts/ci-cost.ts [--json] [--boat <boat-runs.jsonl>]... <ledger.jsonl | results folder>...
 // A file is a runner's ledger (CI_LEDGER of scripts/ci/job.ts). A folder holds run folders of
-// results (CI_RESULTS_DIR), searched to any depth for `.json` files. An unreadable input fails.
+// results (CI_RESULTS_DIR), searched to any depth for `.json` files. --boat names a checkout's
+// .agent-logs/boat-runs.jsonl (lib/testing/boat/boat-runs.ts); pass every checkout's, since a kept
+// machine can serve another checkout. An unreadable input fails.
 
 /** Every result file under `folder`, at any depth. */
 function resultFiles(folder: string): string[] {
@@ -32,9 +36,21 @@ function receiptsOf(path: string): CiResult[] {
   return ledger;
 }
 
-const json = process.argv.includes('--json');
-const paths = process.argv.slice(2).filter((argument) => argument !== '--json');
-if (!paths.length)
-  throw new Error('Usage: bun scripts/ci-cost.ts [--json] <ledger.jsonl | results folder>...');
-const summary = summarizeCost(paths.flatMap(receiptsOf));
-console.info(json ? JSON.stringify(summary, null, 2) : formatCost(summary));
+function boatRunsOf(path: string): BoatRun[] {
+  // A path given by name must exist: a mistyped one would report no Boat runs at all.
+  if (!existsSync(path)) throw new Error(`${path} does not exist.`);
+  const runs = readBoatRuns(path);
+  if ('unreadable' in runs) throw new Error(runs.unreadable);
+  return runs;
+}
+
+const { values, positionals } = parseArgs({
+  allowPositionals: true,
+  options: { json: { type: 'boolean', default: false }, boat: { type: 'string', multiple: true } },
+});
+if (!positionals.length)
+  throw new Error(
+    'Usage: bun scripts/ci-cost.ts [--json] [--boat <boat-runs.jsonl>]... <ledger.jsonl | results folder>...',
+  );
+const summary = summarizeCost(positionals.flatMap(receiptsOf), values.boat?.flatMap(boatRunsOf));
+console.info(values.json ? JSON.stringify(summary, null, 2) : formatCost(summary));

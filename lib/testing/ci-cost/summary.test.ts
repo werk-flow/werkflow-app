@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { CiJob } from '../ci/dag';
 import { type CiResult, resultFileName } from '../ci/results';
+import type { BoatRun } from '../boat/boat-runs';
 import { formatCost, summarizeCost } from './summary';
 
 const repository = resolve(import.meta.dir, '../../..');
@@ -416,6 +417,10 @@ test('the script reads a ledger file and a results folder, and refuses an unread
 
     writeFileSync(join(runFolder, 'broken.json'), '{');
     expect(cost(join(folder, 'results')).status).not.toBe(0);
+    // A Boat record named by path must exist: a mistyped one would report no Boat runs at all.
+    const missingBoat = cost('--boat', join(folder, 'missing.jsonl'), ledger);
+    expect(missingBoat.status).not.toBe(0);
+    expect(missingBoat.stderr).toContain('missing.jsonl does not exist');
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
@@ -504,4 +509,36 @@ test('a full run whose final Check measured no selection misses leaves them unkn
     ]),
   ];
   expect(summarizeCost(rerun).unselectedFailures).toBeUndefined();
+});
+
+test('Boat runs count beside CI to the merged PR whose run tested their commit, and elsewhere otherwise', () => {
+  const boat = (machine: string, minute: number, head: string | null, dollars: number | null): BoatRun => ({
+    version: 1,
+    machine,
+    startedAt: at(minute),
+    completedAt: at(minute + 6),
+    head,
+    reports: [],
+    usage: dollars === null ? null : { seconds: 600, dollars },
+  });
+  const receipts = fixtureLedger();
+  const merged = 'c'.repeat(40);
+  const summary = summarizeCost(receipts, [
+    boat('bx_aaaaaaaa', 0, merged, 0.1),
+    // The same kept machine: its total grew by 0.05 for this run.
+    boat('bx_aaaaaaaa', 20, merged, 0.15),
+    boat('bx_bbbbbbbb', 0, 'd'.repeat(40), 0.2),
+    boat('bx_cccccccc', 0, null, null),
+  ]);
+  // Every fixture PR run tested commit c…: PRs 12 and 13; 13 never merged, so half of each run counts elsewhere.
+  expect(summary.boat?.merged).toEqual([
+    { pr: 12, runs: 1, wallMs: 6 * MINUTE, dollars: 0.075, withoutUsage: 0 },
+  ]);
+  expect(summary.boat?.elsewhere).toMatchObject({ runs: 3, wallMs: 18 * MINUTE, withoutUsage: 1 });
+  expect(summary.boat?.all).toMatchObject({ runs: 4, wallMs: 24 * MINUTE, withoutUsage: 1 });
+  expect(summary.boat?.all.dollars).toBeCloseTo(0.35);
+  const table = formatCost(summary);
+  expect(table).toMatch(/^#12 +1\.0 +6\.0 +\$0\.07$/m);
+  expect(table).toContain("(1.0 runs without Boat's usage)");
+  expect(formatCost(summarizeCost(receipts))).toContain('Boat verification: no Boat run records given');
 });

@@ -65,8 +65,16 @@ test('an unreadable measurement input warns and records unknown, so it never fai
     CI_RUN_ATTEMPT: '9007199254740992',
     CI_FIRST_ATTEMPT_CLASS: 'transient',
     CI_JOB_STARTED_AT: 'soon',
+    CI_MACHINE_START: 'maybe',
   });
-  expect(unknown).toEqual({ prs: [], attempt: null, firstAttemptClass: null, runnerStartedAt: null });
+  // An unreadable CI_MACHINE_START counts a machine start, as every CI job did before it.
+  expect(unknown).toEqual({
+    prs: [],
+    attempt: null,
+    firstAttemptClass: null,
+    runnerStartedAt: null,
+    machineStart: true,
+  });
   // An unset CI_RUN_ATTEMPT still means the first attempt.
   expect(measurementInputs({}).attempt).toBe(1);
   expect(warnings.map((warning) => warning.split(' ')[0])).toEqual([
@@ -74,6 +82,7 @@ test('an unreadable measurement input warns and records unknown, so it never fai
     'CI_RUN_ATTEMPT',
     'CI_FIRST_ATTEMPT_CLASS',
     'CI_JOB_STARTED_AT',
+    'CI_MACHINE_START',
   ]);
   expect(
     measurementInputs({
@@ -81,12 +90,14 @@ test('an unreadable measurement input warns and records unknown, so it never fai
       CI_RUN_ATTEMPT: '2',
       CI_FIRST_ATTEMPT_CLASS: 'environment',
       CI_JOB_STARTED_AT: at(0),
+      CI_MACHINE_START: 'false',
     }),
   ).toEqual({
     prs: [12],
     attempt: 2,
     firstAttemptClass: 'environment',
     runnerStartedAt: at(0),
+    machineStart: false,
     warnings: [],
   });
 });

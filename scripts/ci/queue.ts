@@ -6,8 +6,8 @@
 // head the queue saw green), one at a time; no other PR is freshened.
 //
 // Usage: bun scripts/ci/queue.ts --runner <executable> --work-dir <dir> --run-url-base <url>
-//                                [--ledger <file>] [--publisher <executable>] [--max-batch <1-4>]
-//                                [--dry-run [--prs <n,...>]]
+//                                [--main-runner <executable>] [--ledger <file>] [--publisher <executable>]
+//                                [--max-batch <1-4>] [--dry-run [--prs <n,...>]]
 //   --runner        Runs one integration run of a commit, every job of its plan through
 //                   `bun scripts/ci/job.ts`, in checkouts of that commit, ending with `job.ts check`.
 //                   It takes the runner's own variables (CI_PRODUCER, CI_LEDGER) and these, the same
@@ -17,10 +17,19 @@
 //                   `git fetch "$CI_QUEUE_REPOSITORY" "refs/ci-queue/runs/$CI_QUEUE_COMMIT"`.
 //                   Its exit code decides nothing: the queue reads the run's results. It posts no
 //                   `Check`: its commit exists only in the queue's clone, and the queue's verdict
-//                   reaches GitHub as `Queue`. Held browser shards start once, as for any held run:
-//                   from the orchestrator's `bun scripts/ci/schedule.ts due --run "$CI_RESULTS_DIR"`;
-//                   the runner waits for them and never starts them itself. A queue run is never a
-//                   `--pr-run`: the queue cancels its own superseded entries.
+//                   reaches GitHub as `Queue`. Held browser shards start once: scripts/ci/run-commit.ts,
+//                   the repository's runner, starts its own run's held shards, and the scheduler never
+//                   names a run it holds. A hand-written runner waits for them and never starts them;
+//                   the orchestrator's `bun scripts/ci/schedule.ts due --run "$CI_RESULTS_DIR"` does.
+//                   A queue run is never a `--pr-run`: the queue cancels its own superseded entries.
+//   --main-runner   Starts main's run after every live tick that landed a PR or stopped partway
+//                   (`partial`), whatever the tick's exit: once, for main's head, with CI_EVENT=main,
+//                   CI_COMMIT, CI_BASE_SHA the tick's `base`, CI_PRS the landed PRs, and its own
+//                   CI_RUN_URL and CI_RESULTS_DIR in the work directory. The tick waits for it.
+//                   The tick saves the run it owes (main-follow-up.json) before it reads main. It is
+//                   paid once the runner ran (exit 0 or 1) or found another run of that commit (3).
+//                   While it is owed, a tick starts it first and lands nothing, exit 2.
+//                   Pass scripts/ci/run-commit.ts; without the flag the runner starts that run itself.
 //   --work-dir      Holds one results directory per run, and the queue's state between ticks
 //                   (queue-state.json): the `Queue` success it is about to post, saved before it
 //                   posts it, and cleared once it was withdrawn after the merge or its failure. A
@@ -61,7 +70,14 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { CHECK_APP_CONFIG, readCheckApp } from '../../lib/testing/ci/check-app';
 import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
-import { createQueueAdapter, QUEUE_STATE_FILE } from './queue-adapter';
+import { mainFollowUp, mainRunOf } from '../../lib/testing/ci/queue-main-run';
+import {
+  createQueueAdapter,
+  QUEUE_STATE_FILE,
+  readMainFollowUp,
+  runMain,
+  saveMainFollowUp,
+} from './queue-adapter';
 import { repository } from './run';
 
 /** Refuses before the tick changes anything, with the exit that stops the loop. */
@@ -77,6 +93,7 @@ const { values } = (() => {
     return parseArgs({
       options: {
         runner: { type: 'string' },
+        'main-runner': { type: 'string' },
         'work-dir': { type: 'string' },
         'run-url-base': { type: 'string' },
         'max-batch': { type: 'string', default: String(MAX_BATCH) },
@@ -133,20 +150,52 @@ try {
     appId: app.appId,
     ...(values.publisher ? { publisher: resolve(values.publisher) } : {}),
   });
-  const outcome = await runQueueTick(adapter, {
-    maxBatch,
-    dryRun: values['dry-run'],
-    ...(only ? { only } : {}),
-  });
-  console.info(`[queue] ${JSON.stringify(outcome)}`);
-  for (const stop of outcome.stops) console.info(`[queue] ${stop.kind}: ${stop.detail}`);
-  if (outcome.stops.some((stop) => stop.kind === 'frozen'))
-    console.error(
-      `[queue] The queue is frozen. Once GitHub shows that the head's newest Queue is no success, merged or not, delete ${join(workDir, QUEUE_STATE_FILE)} and restart the loop.`,
-    );
-  const landing = outcome.landing.map((number) => `#${number}`).join(', ') || 'nothing';
-  console.info(`[queue] ${outcome.dryRun ? 'would land' : 'landed'} ${landing}`);
-  process.exitCode = needsAttention(outcome) ? 2 : 0;
+  const mainRunner = values['main-runner'] && resolve(values['main-runner']);
+  const runUrlBase = values['run-url-base'];
+  /**
+   * Starts main's run a landing owes, on a live tick only. True once it is paid: the runner ran
+   * (exit 0 or 1), another run of that commit started (3), or main did not move. A failed read of
+   * main, a runner that could not start or one that refused (2) leaves it owed.
+   */
+  const followUp = async (): Promise<boolean> => {
+    const owed = mainRunner && !values['dry-run'] ? readMainFollowUp(workDir) : undefined;
+    if (!mainRunner || !owed) return true;
+    const main = mainRunOf(owed, (await adapter.main()).commit);
+    const paid = !main || runMain({ repository, mainRunner, workDir, runUrlBase }, main);
+    if (paid) saveMainFollowUp(workDir, undefined);
+    return paid;
+  };
+  const unpaid = `[queue] main's run of the last landing did not start, so the queue lands nothing until it does (${join(workDir, 'main-follow-up.json')}).`;
+  // A follow-up an earlier tick could not start goes first; while it is owed, nothing lands.
+  if (!(await followUp())) {
+    console.error(unpaid);
+    process.exitCode = 2;
+  } else {
+    const outcome = await runQueueTick(adapter, {
+      maxBatch,
+      dryRun: values['dry-run'],
+      ...(only ? { only } : {}),
+    });
+    console.info(`[queue] ${JSON.stringify(outcome)}`);
+    for (const stop of outcome.stops) console.info(`[queue] ${stop.kind}: ${stop.detail}`);
+    if (outcome.stops.some((stop) => stop.kind === 'frozen'))
+      console.error(
+        `[queue] The queue is frozen. Once GitHub shows that the head's newest Queue is no success, merged or not, delete ${join(workDir, QUEUE_STATE_FILE)} and restart the loop.`,
+      );
+    const landing = outcome.landing.map((number) => `#${number}`).join(', ') || 'nothing';
+    console.info(`[queue] ${outcome.dryRun ? 'would land' : 'landed'} ${landing}`);
+    process.exitCode = needsAttention(outcome) ? 2 : 0;
+    // After every landing or partial stop, whatever the exit: main's run of main's head, once. It
+    // is saved first, so a read of main that fails leaves it for the next tick.
+    const owed = mainFollowUp(outcome, new Date().toISOString().replace(/[-:.]/g, ''));
+    if (mainRunner && owed) {
+      saveMainFollowUp(workDir, owed);
+      if (!(await followUp())) {
+        console.error(unpaid);
+        process.exitCode = 2;
+      }
+    }
+  }
 } catch (error) {
   console.error(`[queue] the tick failed: ${error instanceof Error ? error.stack : String(error)}`);
   process.exitCode = 2;

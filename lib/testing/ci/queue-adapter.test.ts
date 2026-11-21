@@ -10,7 +10,10 @@ import {
   createQueueAdapter,
   markQueue,
   readQueueState,
+  readMainFollowUp,
   runIntegration,
+  runMain,
+  saveMainFollowUp,
   squashCommit,
   writeQueueState,
 } from '../../../scripts/ci/queue-adapter';
@@ -333,4 +336,71 @@ test("the queue's state survives between ticks; a missing file is clear and a da
       writeFileSync(path, damaged);
       readQueueState(path);
     }, damaged).toThrow();
+});
+
+test("main's run gets main's head, the tick's base and the landed PRs, in a results directory of its own", () => {
+  const mainRunner = join(folder, 'main-runner');
+  writeFileSync(
+    mainRunner,
+    `#!/usr/bin/env bash\nenv | grep -E '^CI_(EVENT|COMMIT|BASE_SHA|PRS|RUN_URL|RESULTS_DIR)=' | sort > "${join(folder, 'main-env')}"\nexit 1\n`,
+  );
+  chmodSync(mainRunner, 0o755);
+  const workDir = join(folder, 'work');
+  const main = { commit: 'c'.repeat(40), base: 'b'.repeat(40), prs: [7, 9], id: 'tick-1' };
+  const options = { repository, mainRunner, workDir, runUrlBase: 'https://ci.example/queue' };
+  // A runner that ran pays the run, passed or failed; one that could not start or refused does not,
+  // and one that found another run of the commit started does.
+  expect(runMain({ ...options, mainRunner: join(folder, 'missing') }, main)).toBe(false);
+  for (const [code, paid] of [
+    [2, false],
+    [3, true],
+  ] as const) {
+    const exits = join(folder, `exits-${code}`);
+    writeFileSync(exits, `#!/usr/bin/env bash\nexit ${code}\n`);
+    chmodSync(exits, 0o755);
+    expect([code, runMain({ ...options, mainRunner: exits }, main)]).toEqual([code, paid]);
+  }
+  expect(runMain(options, main)).toBe(true);
+  const env = Object.fromEntries(
+    readFileSync(join(folder, 'main-env'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
+  );
+  expect(env).toMatchObject({
+    CI_EVENT: 'main',
+    CI_COMMIT: 'c'.repeat(40),
+    CI_BASE_SHA: 'b'.repeat(40),
+    CI_PRS: '7,9',
+  });
+  // The owed run's id stays, so a retry keeps the run's claim on its commit.
+  const id = env.CI_RUN_URL?.replace('https://ci.example/queue/', '') ?? '';
+  expect(id).toBe(`tick-1-main-${'c'.repeat(12)}`);
+  expect(env.CI_RESULTS_DIR).toBe(join(workDir, id));
+});
+
+test('an owed main run survives between ticks until it is cleared, and a damaged record stops the tick', () => {
+  const workDir = join(folder, 'work');
+  mkdirSync(workDir);
+  expect(readMainFollowUp(workDir)).toBeUndefined();
+  saveMainFollowUp(workDir, { base: 'b'.repeat(40), prs: [7], id: 'tick-1' });
+  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7], id: 'tick-1' });
+  saveMainFollowUp(workDir, undefined);
+  expect(readMainFollowUp(workDir)).toBeUndefined();
+  writeFileSync(join(workDir, 'main-follow-up.json'), '{"base":"main"}');
+  expect(() => readMainFollowUp(workDir)).toThrow();
+});
+
+test("a queue run's runner never gets the main run's Check publisher", () => {
+  process.env.CI_PUBLISHER = '/publish-check-hook';
+  try {
+    const seen = join(folder, 'publisher');
+    integration(
+      `printf '%s' "\${CI_PUBLISHER:-none}" > "${seen}"; receipt check passed '"2026-11-21T09:00:00Z"'`,
+      'queue/9',
+    );
+    expect(readFileSync(seen, 'utf8')).toBe('none');
+  } finally {
+    delete process.env.CI_PUBLISHER;
+  }
 });

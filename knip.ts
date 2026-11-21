@@ -49,6 +49,8 @@ const config: KnipConfig = {
     'scripts/ci/publish-check.ts!',
     // Run in a loop by the stand-in runner: the merge queue.
     'scripts/ci/queue.ts!',
+    // Run by a runner off GitHub Actions for each commit's run, and by the queue as its runner.
+    'scripts/ci/run-commit.ts!',
     // Run on a Boat machine by scripts/boat/remote-verify.sh, or by package scripts.
     'scripts/boat/*.ts!',
     // Agent hooks run by path from the agent settings.
