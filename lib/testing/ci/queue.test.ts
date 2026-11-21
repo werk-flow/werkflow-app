@@ -275,6 +275,9 @@ test('a PR that went back to draft or left the queue is superseded; one that was
   expect(supersession(pull(2), now)).toBe('#2 left the queue');
   expect(supersession(pull(3, { queuedAt: null }), now)).toBe(undefined);
   expect(supersession(pull(4), [pull(4, { queuedAt: '2026-11-21T10:00:00Z' })])).toBe('#4 was queued again');
+  expect(supersession(pull(5, { listGrowthApproved: true }), [pull(5)])).toBe(
+    "#5's list-growth approval changed",
+  );
 });
 
 test('a PR that conflicts with the batch so far is left out and the rest is tested without it', async () => {
@@ -311,6 +314,22 @@ test('a merge GitHub refuses stops the landing with its reason', async () => {
     { kind: 'landing-failed', detail: 'GitHub did not merge #2: Pull request is not mergeable' },
   ]);
   expect(world.withdrawn).toEqual([2]);
+});
+
+test('a main that cannot be read after a merge stops the landing and withdraws the mark', async () => {
+  const world = fakeWorld([pull(1)]);
+  const read = world.adapter.main;
+  let reads = 0;
+  world.adapter.main = async () => {
+    if (++reads === 3) throw new Error('fetch failed');
+    return read();
+  };
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(outcome.stops).toEqual([
+    { kind: 'landing-failed', detail: 'main could not be read after merging #1: fetch failed' },
+  ]);
+  expect(world.withdrawn).toEqual([1]);
+  expect(needsAttention(outcome)).toBe(true);
 });
 
 test('a first PR failing on a main the ledger does not prove green is not named, and needs a person', async () => {
@@ -493,11 +512,11 @@ const node = (overrides: Record<string, unknown> = {}) => ({
   },
   ...overrides,
 });
-const answer = (nodes: unknown[], totalCount = nodes.length) => ({
-  data: { repository: { pullRequests: { totalCount, nodes } } },
-});
+const answer = (nodes: unknown[], totalCount = nodes.length) => [
+  { data: { repository: { pullRequests: { totalCount, nodes } } } },
+];
 
-test("GitHub's answer gives each PR's queue place, its head's Check and its approval; a truncated answer throws", () => {
+test("GitHub's pages give each PR's queue place, its head's Check and its approval; a truncated answer throws", () => {
   expect(pullsFromGitHub(answer([node()]))).toEqual([
     {
       number: 7,
@@ -513,4 +532,6 @@ test("GitHub's answer gives each PR's queue place, its head's Check and its appr
   const olderHead = node({ commits: { nodes: [{ commit: { oid: sha('old'), status: null } }] } });
   expect(pullsFromGitHub(answer([olderHead]))[0]?.check).toBe('MISSING');
   expect(() => pullsFromGitHub(answer([node()], 101))).toThrow('GitHub listed 1 of 101');
+  const pages = [...answer([node()], 2), ...answer([node({ number: 8 })], 2)];
+  expect(pullsFromGitHub(pages).map((entry) => entry.number)).toEqual([7, 8]);
 });

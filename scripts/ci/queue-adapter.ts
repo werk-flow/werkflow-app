@@ -149,6 +149,8 @@ export function createQueueAdapter(options: {
           gh(
             'api',
             'graphql',
+            '--paginate',
+            '--slurp',
             '-f',
             `query=${PULLS_QUERY}`,
             ...['owner', 'name'].flatMap((field, index) => ['-f', `${field}=${repositoryName()[index]}`]),

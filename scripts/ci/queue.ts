@@ -21,8 +21,8 @@
 //   --dry-run       Builds, tests and decides, but never sets a status, merges, comments or
 //                   turns auto-merge off. --prs names the PRs to rehearse with, in order.
 // Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base).
-// Exit 2: it needs a person: a run without a verdict, a first PR failing on an unproven main, or a
-// landing that broke. Stop the loop.
+// Exit 2: it needs a person: a run without a verdict, a first PR failing on an unproven main, a
+// landing that broke, or an error. Stop the loop.
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -79,6 +79,9 @@ try {
   const landing = outcome.landing.map((number) => `#${number}`).join(', ') || 'nothing';
   console.info(`[queue] ${outcome.dryRun ? 'would land' : 'landed'} ${landing}`);
   process.exitCode = needsAttention(outcome) ? 2 : 0;
+} catch (error) {
+  console.error(`[queue] the tick failed: ${error instanceof Error ? error.stack : String(error)}`);
+  process.exitCode = 2;
 } finally {
   closeSync(held);
   rmSync(lock);

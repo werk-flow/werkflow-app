@@ -117,6 +117,8 @@ export function supersession(taken: QueuedPull, now: readonly QueuedPull[]): str
   if (!current) return `#${taken.number} was closed, merged or moved off main`;
   if (current.headSha !== taken.headSha) return `#${taken.number} was pushed to ${current.headSha}`;
   if (current.isDraft && !taken.isDraft) return `#${taken.number} went back to draft`;
+  if (current.listGrowthApproved !== taken.listGrowthApproved)
+    return `#${taken.number}'s list-growth approval changed`;
   if (current.queuedAt !== taken.queuedAt)
     return current.queuedAt === null
       ? `#${taken.number} left the queue`
@@ -362,29 +364,50 @@ async function land(
       outcome.stops.push({ kind: 'superseded', detail: superseded });
       return;
     }
-    let refusal = '';
-    try {
-      await adapter.land(pull, proof);
-    } catch (error) {
-      refusal = `: ${error instanceof Error ? error.message : String(error)}`;
-    }
-    const head = await adapter.main();
-    const problem =
-      head.commit === previous
-        ? `GitHub did not merge #${pull.number}${refusal}`
-        : head.parents.length !== 1 || head.parents[0] !== previous
-          ? `main moved to ${head.commit}, which is no single commit on ${previous}`
-          : head.tree !== tree
-            ? `main's tree ${head.tree} after #${pull.number} is not the tested tree ${tree}`
-            : undefined;
-    if (problem) {
-      if (head.commit === previous) await adapter.withdraw(pull);
-      outcome.stops.push({ kind: 'landing-failed', detail: problem });
+    const head = await landOne(adapter, pull, tree, previous, proof);
+    if (typeof head === 'string') {
+      outcome.stops.push({ kind: 'landing-failed', detail: head });
       return;
     }
     outcome.landing.push(pull.number);
     previous = head.commit;
   }
+}
+
+const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/**
+ * Merges one PR and returns main after it, or the problem. Every outcome but the tested tree on
+ * `previous` withdraws the head's `Queue` mark, so no later auto-merge takes it; on a merged head
+ * the withdrawal changes nothing.
+ */
+async function landOne(
+  adapter: QueueAdapter,
+  pull: QueuedPull,
+  tree: string,
+  previous: string,
+  proof: Verdict,
+): Promise<MainCommit | string> {
+  let refusal = '';
+  try {
+    await adapter.land(pull, proof);
+  } catch (error) {
+    refusal = `: ${message(error)}`;
+  }
+  let problem: string;
+  try {
+    const head = await adapter.main();
+    if (head.commit === previous) problem = `GitHub did not merge #${pull.number}${refusal}`;
+    else if (head.parents.length !== 1 || head.parents[0] !== previous)
+      problem = `main moved to ${head.commit}, which is no single commit on ${previous}`;
+    else if (head.tree !== tree)
+      problem = `main's tree ${head.tree} after #${pull.number} is not the tested tree ${tree}`;
+    else return head;
+  } catch (error) {
+    problem = `main could not be read after merging #${pull.number}${refusal}: ${message(error)}`;
+  }
+  await adapter.withdraw(pull);
+  return problem;
 }
 
 const gitHubPullSchema = z.object({
@@ -410,10 +433,11 @@ const gitHubPullSchema = z.object({
 });
 
 /** The query `pullsFromGitHub` reads: every open PR against main with what the queue decides by. */
-export const PULLS_QUERY = `query($owner: String!, $name: String!) {
+export const PULLS_QUERY = `query($owner: String!, $name: String!, $endCursor: String) {
   repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, baseRefName: "main", first: 100) {
+    pullRequests(states: OPEN, baseRefName: "main", first: 100, after: $endCursor) {
       totalCount
+      pageInfo { hasNextPage endCursor }
       nodes {
         number title isDraft headRefOid mergeStateStatus
         autoMergeRequest { enabledAt }
@@ -432,9 +456,14 @@ const pullsAnswerSchema = z.object({
   }),
 });
 
-/** The PRs in GitHub's answer to `PULLS_QUERY`. A truncated answer throws: a missing PR could be a superseded one. */
-export function pullsFromGitHub(answer: unknown): QueuedPull[] {
-  const { totalCount, nodes } = pullsAnswerSchema.parse(answer).data.repository.pullRequests;
+/**
+ * The PRs in GitHub's pages of answers to `PULLS_QUERY` (`gh api graphql --paginate --slurp`). A
+ * truncated answer throws: a missing PR could be a superseded one.
+ */
+export function pullsFromGitHub(pages: unknown): QueuedPull[] {
+  const answers = z.array(pullsAnswerSchema).min(1).parse(pages);
+  const totalCount = answers[0]?.data.repository.pullRequests.totalCount;
+  const nodes = answers.flatMap((answer) => answer.data.repository.pullRequests.nodes);
   if (nodes.length !== totalCount)
     throw new Error(`GitHub listed ${nodes.length} of ${totalCount} open pull requests.`);
   return nodes.map((node) => {
