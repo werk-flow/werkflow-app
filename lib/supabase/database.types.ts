@@ -13009,6 +13009,33 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_reconciliations: {
+        Row: {
+          alarms_raised: number;
+          complete: boolean;
+          id: string;
+          invoices_compared: number;
+          mails_resent: number;
+          ran_at: string;
+        };
+        Insert: {
+          alarms_raised: number;
+          complete: boolean;
+          id?: string;
+          invoices_compared: number;
+          mails_resent: number;
+          ran_at?: string;
+        };
+        Update: {
+          alarms_raised?: number;
+          complete?: boolean;
+          id?: string;
+          invoices_compared?: number;
+          mails_resent?: number;
+          ran_at?: string;
+        };
+        Relationships: [];
+      };
       werkflow_billing_signals: {
         Row: {
           attempts: number;
@@ -18065,6 +18092,10 @@ export type Database = {
       ensure_inventory_defaults: {
         Args: { p_actor_id: string; p_org_id: string };
         Returns: undefined;
+      };
+      expire_werkflow_billing_mail: {
+        Args: { p_mail_id: string; p_organization_id: string };
+        Returns: boolean;
       };
       export_work_artifact: {
         Args: {
