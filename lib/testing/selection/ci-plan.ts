@@ -58,14 +58,14 @@ export type CiPlan = {
 const EVERY_GROUP_INPUTS =
   /^(next\.config\.ts|postcss\.config\.mjs|tsconfig\.json|playwright[^/]*\.config\.ts|supabase\/config\.toml|patches\/.+)$/;
 /**
- * The CI workflow, its job bodies and logic (scripts/ci/, lib/testing/ci/, without their tests) and
- * Bun's test configuration. With `runnerModules` they are the tooling inputs: a change to one runs
+ * The CI workflow and the CI mirror's (ci/mirror/workflow.yml), the job bodies and logic
+ * (scripts/ci/, lib/testing/ci/, without their tests) and Bun's test configuration. With `runnerModules` they are the tooling inputs: a change to one runs
  * its affected groups, the runner pilots, one browser group of every shard kind, every fast-tier
  * group and the e-invoice check, and main's full run starts right after its merge
  * (lib/testing/ci/full-run.ts).
  */
 const TOOLING_INPUTS =
-  /^(bunfig\.toml|\.github\/workflows\/ci\.yml|(scripts|lib\/testing)\/ci\/[a-z-]+\.ts)$/;
+  /^(bunfig\.toml|\.github\/workflows\/ci\.yml|ci\/mirror\/workflow\.yml|(scripts|lib\/testing)\/ci\/[a-z-]+\.ts)$/;
 const DEPENDENCY_FILES = ['package.json', 'bun.lock'];
 /** A file of a composite action: `.github/actions/<name>/…`. */
 const ACTION_FILE = /^\.github\/actions\/([^/]+)\//;

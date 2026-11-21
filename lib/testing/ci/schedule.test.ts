@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ciBrowserHoldUntil } from '../runner/group-schedule';
 import { clockSlot, heldUntil, type ScheduleAnswer, scheduleDue, type ScheduleState } from './schedule';
+import { workflowsFolder } from '../ci-workflow';
 
 const repository = resolve(import.meta.dir, '../../..');
 const at = (iso: string): Date => new Date(iso);
@@ -429,7 +430,7 @@ test("the CLI reads release.yml's cron: with one it never names the release", ()
   try {
     const { root, run } = schedulerFixture(folder);
     copyFileSync(
-      join(repository, '.github/workflows/release.yml'),
+      join(repository, workflowsFolder(), 'release.yml'),
       join(root, '.github/workflows/release.yml'),
     );
     // No state: every clock work has a missed slot, and only the nightly may be named.

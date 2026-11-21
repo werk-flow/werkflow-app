@@ -165,12 +165,12 @@ type Scenario = {
   /** The pushed commit's tree as the API reports it, when it lies. */
   tree?: string;
   conclusion?: string;
-  /** Holds the run in progress while it returns true. */
-  running?: () => boolean;
+  /** Holds a run in progress while it returns true for the run's id. */
+  running?: (id: number) => boolean;
   attempt?: number;
   /** The branch cannot be read once it exists, as when the API fails right after a push. */
   unreadableBranch?: boolean;
-  cancelFails?: boolean;
+  cancelFails?: () => boolean;
   /** The mirror reruns the job once its result artifact was downloaded. */
   rerunAfterDownload?: boolean;
   otherJobRan?: boolean;
@@ -205,7 +205,7 @@ function fakeMirror(scenario: Scenario = {}): Fake {
     return found;
   };
   const settle = (run: MirrorRun) => {
-    if (run.status !== 'completed' && !(scenario.running?.() ?? false)) {
+    if (run.status !== 'completed' && !(scenario.running?.(run.id) ?? false)) {
       run.status = 'completed';
       run.conclusion = scenario.conclusion ?? 'success';
     }
@@ -284,7 +284,7 @@ function fakeMirror(scenario: Scenario = {}): Fake {
       return zipOf(files);
     },
     async cancel(id) {
-      if (scenario.cancelFails) throw new Error('GitHub POST /actions/runs/cancel answered 500.');
+      if (scenario.cancelFails?.()) throw new Error('GitHub POST /actions/runs/cancel answered 500.');
       fake.cancelled.push(id);
       const run = runById(id);
       run.status = 'completed';
@@ -640,7 +640,11 @@ test("a failure after the push cancels the push's run and frees its slot only on
 
 test('a run whose end cannot be told keeps its slot, so the cap never counts it free', async () => {
   const controller = new AbortController();
-  const fake = fakeMirror({ running: () => true, cancelFails: true, onRunsOf: () => controller.abort() });
+  const fake = fakeMirror({
+    running: () => true,
+    cancelFails: () => true,
+    onRunsOf: () => controller.abort(),
+  });
   const stopped = await executorsOf(fake, 1).jobs.run(task(SQL), controller.signal);
   expect(stopped.exitCode, stopped.detail).toBeNull();
   const waiting = Promise.withResolvers<void>();
@@ -658,4 +662,29 @@ test('a run whose end cannot be told keeps its slot, so the cap never counts it 
   const outcome = await next;
   expect(outcome.exitCode, outcome.detail).toBeNull();
   expect(outcome.detail).toBe('stopped before a mirror slot was free');
+});
+
+test('a slot whose holder died with its run unsettled is taken only after that run was cancelled and ended', async () => {
+  const controller = new AbortController();
+  let cancelFails = true;
+  // The dead holder's run goes until it is cancelled; the new job's run ends by itself.
+  const fake = fakeMirror({
+    running: (id) => id === 1,
+    cancelFails: () => cancelFails,
+    onRunsOf: () => controller.abort(),
+  });
+  const first = await executorsOf(fake, 1, () => undefined).jobs.run(task(SQL), controller.signal);
+  expect(first.exitCode, first.detail).toBeNull();
+  expect(fake.cancelled).toEqual([]);
+  // The holder dies: its lock names a process that is gone; its record stays.
+  const gone = spawnSync('true').pid;
+  writeFileSync(join(folder, 'work/mirror-slots/slot-0'), String(gone));
+  cancelFails = false;
+  const next = await executorsOf(fake, 1, () => undefined, 'fedcba9876543210-1').jobs.run(
+    task({ job: 'browser', shard: 1 }),
+    new AbortController().signal,
+  );
+  expect(next.exitCode, next.detail).toBe(0);
+  expect(fake.cancelled).toEqual([1]);
+  expect(existsSync(join(folder, 'work/mirror-slots/slot-0.push'))).toBe(false);
 });

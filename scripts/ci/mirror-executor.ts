@@ -24,9 +24,20 @@
 //                       create and delete `ci/**` branches only.
 //   CI_MIRROR_IDENTITY  The mirror commits' author and committer, `Name <email>`; a neutral default.
 // At most MIRROR_JOB_CAP (lib/testing/ci/mirror.ts) mirror jobs run at once on this host, every run
-// together, each holding a slot under CI_WORK_ROOT/mirror-slots.
+// together, each holding a slot under CI_WORK_ROOT/mirror-slots. A slot records the push its job
+// tried until that push's run is known ended; a process that dies leaves the record, and the next
+// taker of the slot cancels and waits out that run first.
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPlanOf } from '../../lib/testing/ci/check';
@@ -154,14 +165,45 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     }
   }
 
+  /** Where each slot's lock and the push its holder tried (`slot-<n>.push`) live. */
+  const slots = join(setup.workRoot, 'mirror-slots');
+
+  /** The push a slot's record names, or 'unreadable'. */
+  function recordedPush(path: string): { branch: string; commit: string } | 'unreadable' {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        'branch' in parsed &&
+        'commit' in parsed &&
+        typeof parsed.branch === 'string' &&
+        typeof parsed.commit === 'string'
+      )
+        return { branch: parsed.branch, commit: parsed.commit };
+    } catch {
+      // Logged by the caller.
+    }
+    return 'unreadable';
+  }
+
   /** A slot of the host's mirror job cap, waiting for one; undefined when `signal` stopped the wait. */
-  async function slot(signal: AbortSignal): Promise<(() => void) | undefined> {
-    const folder = join(setup.workRoot, 'mirror-slots');
-    mkdirSync(folder, { recursive: true });
+  async function slot(signal: AbortSignal): Promise<{ record: string; release: () => void } | undefined> {
+    mkdirSync(slots, { recursive: true });
     for (let announced = false; !signal.aborted; ) {
       for (let index = 0; index < options.jobCap; index += 1) {
-        const taken = takeLock(join(folder, `slot-${index}`));
-        if ('release' in taken) return taken.release;
+        const taken = takeLock(join(slots, `slot-${index}`));
+        if (!('release' in taken)) continue;
+        // A push its holder left unsettled, as when it died: its run is settled before the slot is reused.
+        const record = join(slots, `slot-${index}.push`);
+        const left = existsSync(record) ? recordedPush(record) : undefined;
+        if (left === 'unreadable' || (left && !(await settled({ ...left, at: 0 }, undefined)))) {
+          log(`[mirror] slot ${index}: the run its last holder pushed may still go, so it stays out of use`);
+          taken.release();
+          continue;
+        }
+        rmSync(record, { force: true });
+        return { record, release: taken.release };
       }
       if (!announced) log(`[mirror] waiting: ${options.jobCap} mirror jobs run on this host`);
       announced = true;
@@ -281,7 +323,10 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       for (;;) {
         const runs = known ? [await api.run(known.id)] : await api.runsOf(pushed.branch, pushed.commit);
         const going = runs.filter((run) => run.status !== 'completed');
-        if (runs.length ? !going.length : options.now() - pushed.at > RUN_START_LIMIT_MS) return true;
+        if (runs.length && !going.length) return true;
+        // No run, and no branch holds the push: it never landed, so it started none.
+        if (!runs.length && (await api.branchHead(pushed.branch)) !== pushed.commit) return true;
+        if (!runs.length && options.now() - pushed.at > RUN_START_LIMIT_MS) return true;
         for (const run of going.filter((each) => !cancelled.has(each.id))) {
           await api.cancel(run.id);
           cancelled.add(run.id);
@@ -303,8 +348,8 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
   ): Promise<Finished> {
     const { expected, plan } = started;
     const name = unitName(task.unit);
-    const release = await slot(signal);
-    if (!release) return { exitCode: null, detail: 'stopped before a mirror slot was free' };
+    const held = await slot(signal);
+    if (!held) return { exitCode: null, detail: 'stopped before a mirror slot was free' };
     /** The push, once tried: from then on a run may go on the mirror until it is known ended. */
     let pushed: { branch: string; commit: string; at: number } | undefined;
     let known: MirrorRun | undefined;
@@ -333,6 +378,8 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       const branch = mirrorBranch(setup.commit, setup.runKey, task.unit);
       branches.set(branch, built.commit);
       pushed = { branch, commit: built.commit, at: options.now() };
+      // Beside the slot until the push's run is known ended: a holder that dies leaves it to the next.
+      writeFileSync(held.record, JSON.stringify({ branch, commit: built.commit }));
       const push = pushes.then(() => options.push(built.commit, branch));
       pushes = push.catch(() => undefined);
       await push;
@@ -343,11 +390,11 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
           exitCode: null,
           detail: `${branch} names ${head ?? 'nothing'}, not the pushed ${built.commit}`,
         };
-      const held = await api.commit(built.commit);
-      if (held.tree !== built.tree)
+      const mirrored = await api.commit(built.commit);
+      if (mirrored.tree !== built.tree)
         return {
           exitCode: null,
-          detail: `the mirror's tree ${held.tree} is not the pushed tree ${built.tree}`,
+          detail: `the mirror's tree ${mirrored.tree} is not the pushed tree ${built.tree}`,
         };
       log(`[mirror] ${name}: pushed ${built.commit} (tree ${built.tree}) to ${branch}`);
       const awaited = await awaitRun(
@@ -399,8 +446,13 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     } catch (error) {
       return { exitCode: null, detail: `the mirror executor failed: ${message(error)}` };
     } finally {
-      if (!pushed || ended || (await settled(pushed, known))) release();
-      else log(`[mirror] ${name}: its mirror slot stays held until this process ends: its run may still go`);
+      if (!pushed || ended || (await settled(pushed, known))) {
+        rmSync(held.record, { force: true });
+        held.release();
+      } else
+        log(
+          `[mirror] ${name}: its run may still go, so its mirror slot stays held and recorded for the next holder`,
+        );
     }
   }
 

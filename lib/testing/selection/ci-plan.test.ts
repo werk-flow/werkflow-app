@@ -153,6 +153,7 @@ test('a tooling change runs its affected groups, the runner pilots and the short
   for (const file of [
     'bunfig.toml',
     '.github/workflows/ci.yml',
+    'ci/mirror/workflow.yml',
     'scripts/ci/job.ts',
     'lib/testing/ci/run-plan.ts',
     'lib/testing/runner/app-port.ts',
