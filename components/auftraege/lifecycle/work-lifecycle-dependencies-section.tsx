@@ -10,24 +10,24 @@ import {
   type WorkDependency,
   type WorkLifecycleSnapshot,
 } from '@/lib/work-lifecycle/types';
-import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
+import type { WorkLifecycleDialogOpener } from './work-lifecycle-dialog-state';
 
 type WorkLifecycleDependenciesSectionProps = {
   snapshot: WorkLifecycleSnapshot;
   isManager: boolean;
   rowBusy: { isBusy: (id: string) => boolean };
-  setDialog: (dialog: WorkLifecycleDialogState | null) => void;
+  openDialog: WorkLifecycleDialogOpener;
 };
 
 /** Link an approval, mark a declared condition met or open, or remove the dependency. */
 function DependencyRowActions({
   dependency,
   rowBusy,
-  setDialog,
+  openDialog,
 }: {
   dependency: WorkDependency;
   rowBusy: WorkLifecycleDependenciesSectionProps['rowBusy'];
-  setDialog: WorkLifecycleDependenciesSectionProps['setDialog'];
+  openDialog: WorkLifecycleDependenciesSectionProps['openDialog'];
 }) {
   return (
     <div className="flex items-center gap-1">
@@ -40,7 +40,7 @@ function DependencyRowActions({
           size="sm"
           variant="outline"
           disabled={rowBusy.isBusy(dependency.id)}
-          onClick={() => setDialog({ type: 'artifact-approval-dependency', dependency })}
+          {...openDialog({ type: 'artifact-approval-dependency', dependency })}
         >
           Freigabe verknüpfen
         </Button>
@@ -51,13 +51,11 @@ function DependencyRowActions({
             size="sm"
             variant="outline"
             disabled={rowBusy.isBusy(dependency.id)}
-            onClick={() =>
-              setDialog({
-                type: 'dependency-state',
-                dependency,
-                state: dependency.is_satisfied ? 'open' : 'satisfied',
-              })
-            }
+            {...openDialog({
+              type: 'dependency-state',
+              dependency,
+              state: dependency.is_satisfied ? 'open' : 'satisfied',
+            })}
           >
             {dependency.is_satisfied ? 'Wieder öffnen' : 'Erfüllt'}
           </Button>
@@ -69,7 +67,7 @@ function DependencyRowActions({
         variant="ghost"
         aria-label="Voraussetzung entfernen"
         disabled={rowBusy.isBusy(dependency.id)}
-        onClick={() => setDialog({ type: 'remove-dependency', dependency })}
+        {...openDialog({ type: 'remove-dependency', dependency })}
       >
         <Unlink className="size-4" />
       </Button>
@@ -81,14 +79,14 @@ export function WorkLifecycleDependenciesSection({
   snapshot,
   isManager,
   rowBusy,
-  setDialog,
+  openDialog,
 }: WorkLifecycleDependenciesSectionProps) {
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-x-2">
         <h3 className="text-sm font-medium">Voraussetzungen</h3>
         {isManager && (
-          <Button type="button" size="sm" variant="ghost" onClick={() => setDialog({ type: 'dependency' })}>
+          <Button type="button" size="sm" variant="ghost" {...openDialog({ type: 'dependency' })}>
             <Plus className="size-4" />
             Voraussetzung hinzufügen
           </Button>
@@ -112,7 +110,7 @@ export function WorkLifecycleDependenciesSection({
                 </p>
               </div>
               {isManager && (
-                <DependencyRowActions dependency={dependency} rowBusy={rowBusy} setDialog={setDialog} />
+                <DependencyRowActions dependency={dependency} rowBusy={rowBusy} openDialog={openDialog} />
               )}
             </div>
           </div>
