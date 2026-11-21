@@ -44,6 +44,8 @@ import { repository, run, step, verify } from './run';
 // One CI job's body, the same on GitHub Actions (.github/workflows/ci.yml) and on any other runner
 // (docs/technical/testing.md, "CI"). lib/testing/ci/dag.ts holds the jobs, their needs and events.
 // Usage: bun scripts/ci/job.ts <plan|fast|sql|components|invoices|midnight|browser|check>
+// `midnight` waits for the plan's hold only on GitHub Actions. Any other runner starts it when
+// `bun scripts/ci/schedule.ts due` names its run, and a start before the hold ends fails.
 // The job exits 0 when it passed. It reads plain environment variables only:
 //   CI_EVENT        pr | integration | main | full (lib/testing/ci/dag.ts). Required.
 //   CI_RESULTS_DIR  The run's results directory. Required. Each job writes <job>.json there
@@ -392,6 +394,14 @@ async function midnight(): Promise<boolean> {
   const until = Date.parse(runPlan().outputs.midnight_until ?? '');
   if (Number.isNaN(until))
     throw new Error('The plan sets no midnight hold, so this job has nothing to wait for.');
+  // Only GitHub Actions cannot start a job later, so only there does a runner wait. Any other runner
+  // starts this job when `bun scripts/ci/schedule.ts due` names it, and an early start fails.
+  if (environment.GITHUB_ACTIONS !== 'true' && Date.now() < until) {
+    console.error(
+      `::error title=Midnight wait::This job started before the hold ends at ${new Date(until).toISOString()}. Start it when bun scripts/ci/schedule.ts due names its run; no runner waits for the clock.`,
+    );
+    return false;
+  }
   for (let left = until - Date.now(); left > 0; left = until - Date.now()) {
     console.info(`Waiting for the midnight start window: ${Math.ceil(left / 60_000)} min left.`);
     await Bun.sleep(Math.min(left, 60_000));
