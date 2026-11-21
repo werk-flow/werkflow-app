@@ -147,7 +147,7 @@ test("a ledger's full run runs until its final Check, and a stale one without it
     receipt({ runUrl: null }),
     receipt({}),
     receipt({ job: 'browser', startedAt: '2026-11-21T09:30:00.000Z' }),
-    receipt({ job: 'check', status: 'running', completedAt: null }),
+    receipt({ job: 'check', status: 'running', completedAt: null, startedAt: '2026-11-21T09:40:00.000Z' }),
     receipt({ runUrl: RUN(2), commit: 'd'.repeat(40), startedAt: '2026-11-21T10:00:00.000Z' }),
     receipt({
       runUrl: RUN(2),
@@ -161,10 +161,39 @@ test("a ledger's full run runs until its final Check, and a stale one without it
     { commit: 'c'.repeat(40), startedAt: new Date('2026-11-21T09:00:00.000Z'), ended: false },
     { commit: 'd'.repeat(40), startedAt: new Date('2026-11-21T10:00:00.000Z'), ended: true },
   ]);
-  // A run whose runner died tested nothing: once stale it neither holds the next back nor counts.
-  expect(fullRunsInLedger(ledger, new Date('2026-11-21T13:00:00Z'))).toEqual([
+  // A run whose runner died tested nothing: 4 hours after its newest receipt it neither holds the
+  // next back nor counts.
+  expect(fullRunsInLedger(ledger, new Date('2026-11-21T13:40:00Z'))).toEqual([
     { commit: 'd'.repeat(40), startedAt: new Date('2026-11-21T10:00:00.000Z'), ended: true },
   ]);
+});
+
+test('a rerun of an ended full run runs again until its own final Check, and goes stale from its own start', () => {
+  const first = [
+    receipt({}),
+    receipt({ job: 'check', status: 'failed', startedAt: '2026-11-21T09:40:00.000Z' }),
+  ];
+  // The rerun's first job starts before its Check writes any receipt.
+  const rerun = [...first, receipt({ job: 'browser', attempt: 2, startedAt: '2026-11-21T10:30:00.000Z' })];
+  const run = (ended: boolean): FullRun => ({
+    commit: 'c'.repeat(40),
+    startedAt: new Date('2026-11-21T09:00:00.000Z'),
+    ended,
+  });
+  expect(fullRunsInLedger(first, NOON)).toEqual([run(true)]);
+  expect(fullRunsInLedger(rerun, NOON)).toEqual([run(false)]);
+  const checking = [
+    ...rerun,
+    receipt({ job: 'check', status: 'running', attempt: 2, startedAt: '2026-11-21T10:50:00.000Z' }),
+  ];
+  expect(fullRunsInLedger(checking, NOON)).toEqual([run(false)]);
+  // 4 hours after the first attempt's start, the rerun that started later still runs.
+  expect(fullRunsInLedger(checking, new Date('2026-11-21T13:10:00Z'))).toEqual([run(false)]);
+  const done = [
+    ...checking,
+    receipt({ job: 'check', status: 'passed', attempt: 2, startedAt: '2026-11-21T10:50:00.000Z' }),
+  ];
+  expect(fullRunsInLedger(done, NOON)).toEqual([run(true)]);
 });
 
 test('a full-run failure counts as unselected unless CI selected its group on a landed tree, reused shards included', () => {

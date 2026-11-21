@@ -522,7 +522,11 @@ const numbered = (shards: readonly string[][]): CiShard[] =>
  * The planner's log lines. Every group id, reason and file name prints as one JSON string, so a newline or a
  * leading `::` in a changed path can neither start a log line nor a workflow command.
  */
-export function planLog(plan: CiPlan, fastReasons: Readonly<Record<string, string>>): string[] {
+export function planLog(
+  plan: CiPlan,
+  fastReasons: Readonly<Record<string, string>>,
+  invoices: string | undefined,
+): string[] {
   return [
     `[ci-plan] ${plan.fullReason ? `Full run: ${JSON.stringify(plan.fullReason)}` : plan.tooling.browser ? `Tooling sample: ${JSON.stringify(plan.tooling.browser)}` : 'Selection by diff'}; ${plan.browser.length} browser groups in ${plan.shards.length} shards.`,
     ...plan.browser.map((entry) => `  ${JSON.stringify(entry.id)} | ${JSON.stringify(entry.reason)}`),
@@ -531,5 +535,6 @@ export function planLog(plan: CiPlan, fastReasons: Readonly<Record<string, strin
     ...Object.entries(fastReasons).map(
       ([id, reason]) => `  ${JSON.stringify(id)} | ${JSON.stringify(reason)}`,
     ),
+    `[ci-plan] E-invoices: ${invoices === undefined ? 'no change reaches them' : JSON.stringify(invoices)}.`,
   ];
 }

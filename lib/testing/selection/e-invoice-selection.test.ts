@@ -14,7 +14,7 @@ const graph = new Map<string, string[]>([
   ['lib/document-rendering/e-invoice.ts', ['lib/document-rendering/render.ts']],
 ]);
 const reason = (changedFiles: readonly string[] | undefined, fullReason?: string, imports = graph) =>
-  eInvoiceReason({ graph: imports, changedFiles, fullReason, toolingReason: undefined });
+  eInvoiceReason({ graph: imports, changedFiles, lintOnly: [], fullReason, toolingReason: undefined });
 
 test('a change to what the check imports, to the invoice core or renderer, or to the dependencies selects it', () => {
   for (const file of [
@@ -46,6 +46,7 @@ test('an unreadable diff, a full run, a tooling change and an unresolved import 
     eInvoiceReason({
       graph,
       changedFiles: ['docs/technical/testing.md'],
+      lintOnly: [],
       fullReason: undefined,
       toolingReason: tooling,
     }),
@@ -55,6 +56,22 @@ test('an unreadable diff, a full run, a tooling change and an unresolved import 
     'The e-invoice check has an unresolved import',
   );
   expect(reason(['docs/technical/testing.md'], undefined, unresolved)).toBe(undefined);
+});
+
+test('a dependency change that moves only lint and type packages selects it only through a full run or a tooling input', () => {
+  const lintOnly = (fullReason?: string, toolingReason?: string) =>
+    eInvoiceReason({
+      graph,
+      changedFiles: ['package.json', 'bun.lock'],
+      lintOnly: ['package.json', 'bun.lock'],
+      fullReason,
+      toolingReason,
+    });
+  expect(lintOnly()).toBe(undefined);
+  expect(lintOnly('Nightly run')).toBe('Nightly run');
+  expect(lintOnly(undefined, 'Tooling input changed: scripts/ci/job.ts')).toBe(
+    'Tooling input changed: scripts/ci/job.ts',
+  );
 });
 
 test("the repository's import graph carries the check to the invoice core and the renderer, with every import resolved", () => {

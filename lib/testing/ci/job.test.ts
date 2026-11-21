@@ -245,7 +245,7 @@ test('a job records its cost and the runner measurement inputs, and an unreadabl
       { CI_PRS: '9007199254740992', CI_RUN_ATTEMPT: '9007199254740992' },
     ]) {
       const unknown = fast(inputs);
-      expect(unknown).toMatchObject({ status: 'passed', prs: [], attempt: 1, firstAttemptClass: null });
+      expect(unknown).toMatchObject({ status: 'passed', prs: [], attempt: null, firstAttemptClass: null });
       expect(unknown.cost).toMatchObject({ runnerStartedAt: null, setupMs: 0 });
     }
   });
@@ -538,6 +538,10 @@ test("a full run's Check records the failed groups no landed plan selected, and 
     });
     // Without a ledger no plan of the landed trees is known, so the count stays unknown.
     expect(runJob(root, 'check', variables)).toBe(1);
+    expect(readResult(join(run, resultFileName('check', null)))).not.toHaveProperty('unselectedFailures');
+    // A result Check cannot read may hold failures, so the count stays unknown too, never a known zero.
+    writeFileSync(join(run, resultFileName('sql', null)), '{');
+    expect(runJob(root, 'check', { ...variables, CI_LEDGER: ledger })).toBe(1);
     expect(readResult(join(run, resultFileName('check', null)))).not.toHaveProperty('unselectedFailures');
   });
 });

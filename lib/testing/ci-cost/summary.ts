@@ -11,6 +11,8 @@ type JobProcess = CiResult;
 type UnitKey = `${CiJob} ${number | 'one'}`;
 const unitKey = (job: CiJob, shard: number | null): UnitKey => `${job} ${shard ?? 'one'}`;
 const isWork = (job: CiJob): boolean => job !== 'plan' && job !== 'check';
+/** A process's attempt: a receipt written before measurement holds none and was a first attempt; null is unknown. */
+const attemptOf = (entry: JobProcess): number | null => (entry.attempt === undefined ? 1 : entry.attempt);
 
 /**
  * The job processes in `receipts`, in the order each first appears. A process is one start of a
@@ -63,7 +65,8 @@ type RunCost = Tally & {
   cancelled: number;
   neverStarted: number;
   firstAttemptFailures: (FailureClass | 'unclassified')[];
-  unselectedFailures: string[];
+  /** A full run's selection misses as its final Check recorded them, or undefined when it recorded none. */
+  unselectedFailures: string[] | undefined;
 };
 
 /** The jobs and shards the plan runs, or an empty list when its shards cannot be read. */
@@ -106,11 +109,13 @@ function firstAttemptFailures(
   for (const entry of processes) {
     if (entry.job === 'check') continue;
     const key = unitKey(entry.job, entry.shard);
-    if ((entry.attempt ?? 1) > 1 && entry.firstAttemptClass) failures.set(key, entry.firstAttemptClass);
-    else if ((entry.attempt ?? 1) === 1 && entry.status === 'failed' && !failures.has(key))
+    const attempt = attemptOf(entry);
+    if (attempt !== null && attempt > 1 && entry.firstAttemptClass)
+      failures.set(key, entry.firstAttemptClass);
+    else if (attempt === 1 && entry.status === 'failed' && !failures.has(key))
       failures.set(key, 'unclassified');
   }
-  const firstAttempt = processes.filter((entry) => (entry.attempt ?? 1) === 1);
+  const firstAttempt = processes.filter((entry) => attemptOf(entry) === 1);
   const check = firstAttempt.find((entry) => entry.job === 'check');
   const othersPassed = firstAttempt.every((entry) => entry.job === 'check' || entry.status === 'passed');
   const firstStarted = new Set(firstAttempt.map((entry) => unitKey(entry.job, entry.shard)));
@@ -121,10 +126,10 @@ function firstAttemptFailures(
 }
 
 function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
-  const attemptEnd = (attempt: number): number =>
+  const attemptEnd = (attempt: number | null): number =>
     Math.max(
       ...processes
-        .filter((entry) => (entry.attempt ?? 1) === attempt)
+        .filter((entry) => attemptOf(entry) === attempt)
         .map((entry) => Date.parse(entry.completedAt ?? entry.startedAt)),
     );
   const work = processes.filter((entry) => isWork(entry.job));
@@ -134,7 +139,7 @@ function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
   const started = new Set(processes.map((entry) => unitKey(entry.job, entry.shard)));
   const planned = plannedUnits(plan?.plan);
   // A rerun's Plan can reuse what the first attempt never started, so the first attempt answers to its own.
-  const firstPlan = plans.find((entry) => (entry.attempt ?? 1) === 1) ?? plan;
+  const firstPlan = plans.find((entry) => attemptOf(entry) === 1) ?? plan;
   const first = processes[0];
   return {
     runUrl,
@@ -145,7 +150,7 @@ function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
     passedAt: check?.status === 'passed' && check.completedAt ? Date.parse(check.completedAt) : null,
     reusedFrom: plan?.reusedFrom ?? null,
     runs: 1,
-    jobMs: processes.reduce((sum, entry) => sum + processMs(entry, attemptEnd(entry.attempt ?? 1)), 0),
+    jobMs: processes.reduce((sum, entry) => sum + processMs(entry, attemptEnd(attemptOf(entry))), 0),
     machineStarts: processes.filter((entry) => entry.cost?.machineStart ?? true).length,
     setupMs: processes.reduce((sum, entry) => sum + (entry.cost?.setupMs ?? 0), 0),
     reuseHits: plan?.plan?.reused?.length ?? 0,
@@ -157,7 +162,7 @@ function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
     cancelled: processes.filter((entry) => entry.status === 'running').length,
     neverStarted: planned.filter((unit) => !started.has(unit)).length,
     firstAttemptFailures: firstAttemptFailures(processes, plannedUnits(firstPlan?.plan)),
-    unselectedFailures: [...new Set(processes.flatMap((entry) => entry.unselectedFailures ?? []))],
+    unselectedFailures: check?.unselectedFailures && [...new Set(check.unselectedFailures)],
   };
 }
 
@@ -180,7 +185,8 @@ export type CostSummary = {
   cancelled: number;
   neverStarted: number;
   firstAttemptFailures: Partial<Record<FailureClass | 'unclassified', number>>;
-  unselectedFailures: string[];
+  /** The full runs' selection misses, or undefined when a full run's final Check recorded none: unknown. */
+  unselectedFailures: string[] | undefined;
   /** Receipts that name no run: a workstation's, never CI's. */
   withoutRun: number;
 };
@@ -256,7 +262,11 @@ export function summarizeCost(receipts: readonly CiResult[]): CostSummary {
     summary.neverStarted += run.neverStarted;
     for (const failure of run.firstAttemptFailures)
       summary.firstAttemptFailures[failure] = (summary.firstAttemptFailures[failure] ?? 0) + 1;
-    summary.unselectedFailures.push(...run.unselectedFailures);
+    if (run.event === 'full')
+      summary.unselectedFailures =
+        summary.unselectedFailures && run.unselectedFailures
+          ? [...summary.unselectedFailures, ...run.unselectedFailures]
+          : undefined;
     const prs = landedPrs.get(run) ?? run.prs;
     if (run.event === 'full') add(summary.full, run, 1);
     else if (!prs.length) add(summary.other, run, 1);
@@ -268,7 +278,7 @@ export function summarizeCost(receipts: readonly CiResult[]): CostSummary {
     const unmerged = prs.filter((pr) => !perPr.has(pr)).length;
     if (unmerged) add(summary.unmerged, run, unmerged / prs.length);
   }
-  summary.unselectedFailures.sort();
+  summary.unselectedFailures?.sort();
   summary.merged = [...perPr]
     .toSorted(([left], [right]) => left - right)
     .map(([pr, tally]) => {
@@ -306,6 +316,10 @@ export function formatCost(summary: CostSummary): string {
   const failures = Object.entries(summary.firstAttemptFailures)
     .map(([kind, count]) => `${kind} ${count}`)
     .join(', ');
+  const unselected =
+    summary.unselectedFailures === undefined
+      ? 'unknown: a full run did not measure them'
+      : summary.unselectedFailures.join(', ') || 'none';
   return [
     `CI cost per merged pull request: ${summary.merged.length} merged, ${summary.all.runs} runs.`,
     `${'PR'.padEnd(14)}${'Runs'.padStart(5)}${'Job-min'.padStart(9)}${'Machine starts'.padStart(15)}${'Setup share'.padStart(12)}${'Reuse rate'.padStart(11)}${'Ready to merge'.padStart(15)}`,
@@ -322,7 +336,7 @@ export function formatCost(summary: CostSummary): string {
     row('All runs', summary.all),
     `Cancelled jobs: ${summary.cancelled} (counted to their attempt's last receipt; when they ended is unknown). Never started: ${summary.neverStarted}.`,
     `First-attempt failures: ${failures || 'none'}.`,
-    `Failed groups of full runs that no plan selected: ${summary.unselectedFailures.length ? summary.unselectedFailures.join(', ') : 'none'}.`,
+    `Failed groups of full runs that no plan selected: ${unselected}.`,
     `Receipts without a run, left out: ${summary.withoutRun}.`,
   ].join('\n');
 }

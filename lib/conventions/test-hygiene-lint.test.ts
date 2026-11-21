@@ -154,10 +154,12 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       'expect(performance.now() - measuredFrom).toBeLessThan(isCI ? 250 : Date.now());',
       'const limits = { bound: isCI ? 250 : Date.now() };',
       'expect(performance.now() - measuredFrom).toBeLessThan(limits.bound);',
+      'expect(Date.now()).toBeLessThan(start + 250);',
+      'expect(Date.now() - 250).toBeLessThan(start);',
     ].join('\n');
     for (const file of [CONTRACT, SPEC, SUPPORT, UNIT])
       expect(await reported('no-fixed-time-limit', source, file), file).toEqual([
-        4, 5, 6, 7, 8, 9, 10, 11, 13, 16, 17, 19, 22, 23, 25, 27,
+        4, 5, 6, 7, 8, 9, 10, 11, 13, 16, 17, 19, 22, 23, 25, 27, 28, 29,
       ]);
   });
 
@@ -205,6 +207,9 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       'expect(count).toBeLessThan(100);',
       'expect(Date.now()).toBeGreaterThanOrEqual(start + 250);',
       'expect(start).toBeLessThan(Date.now() - 250);',
+      // The bound reads the clock after `before`: the elapsed time is only held above -250 ms.
+      'expect(before).toBeLessThan(Date.now() + 250);',
+      'expect(before - 250).toBeLessThan(Date.now());',
     ].join('\n');
     expect(await reported('no-fixed-time-limit', source, CONTRACT)).toEqual([]);
   });
