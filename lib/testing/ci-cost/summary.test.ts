@@ -228,7 +228,7 @@ test('the summary sums each merged PR, a cancelled job, a never-started job and 
   expect(summary.all).toMatchObject({ runs: 9, jobMs: 182 * MINUTE, machineStarts: 31 });
   expect(summary.cancelled).toBe(1);
   expect(summary.neverStarted).toBe(1);
-  // A failed Check follows a failed job, so only the job's first attempt counts.
+  // Run 1's failed Check follows its failed Fast, so only Fast's first attempt counts.
   expect(summary.firstAttemptFailures).toEqual({ environment: 1, unclassified: 1 });
   expect(summary.unselectedFailures).toEqual(['golden:p2-03']);
   expect(summary.withoutRun).toBe(1);
@@ -444,4 +444,14 @@ test('a run that names a PR twice splits its cost evenly across its distinct PRs
   const summary = summarizeCost(batch([12, 12, 13]));
   expect(summary.merged.map((entry) => entry.jobMs)).toEqual([2.5 * MINUTE, 2.5 * MINUTE]);
   expect(summary).toEqual(summarizeCost(batch([12, 13])));
+});
+
+test('a first-attempt Check after a job that started only in the rerun counts no failure of its own', () => {
+  const receipts = receiptsOf({ runUrl: run(1), event: 'pr', tree: tree('a'), prs: [12] }, [
+    { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'fast', 'check']) },
+    { job: 'check', from: 2, to: 3, status: 'failed', endOnly: true },
+    { job: 'fast', from: 10, to: 20, extra: { attempt: 2 } },
+    { job: 'check', from: 20, to: 21, endOnly: true, extra: { attempt: 2 } },
+  ]);
+  expect(summarizeCost(receipts).firstAttemptFailures).toEqual({});
 });
