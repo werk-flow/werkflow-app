@@ -35,7 +35,14 @@ import {
   passedTreeActionsQuery,
   reusableReceipt,
 } from '../../lib/testing/ci/reuse';
-import { isStep, jobShards, midnightNotice, plannedGroups, planRun } from '../../lib/testing/ci/run-plan';
+import {
+  isStep,
+  jobShards,
+  midnightNotice,
+  plannedGroups,
+  plannedWork,
+  planRun,
+} from '../../lib/testing/ci/run-plan';
 import { lsRemoteCommit, supersedingHead } from '../../lib/testing/ci/superseded';
 import { workspaceAppOrigin } from '../../lib/testing/runner/app-port';
 import { E_INVOICE_CHECK, E_INVOICE_STEP } from '../../lib/testing/selection/e-invoice-selection';
@@ -52,8 +59,10 @@ import { repository, run, step, verify } from './run';
 //                   (<job>-<n>.json for a shard); every job after plan reads plan.json, and check
 //                   reads them all.
 //   CI_BASE_SHA     plan: the commit to diff against: a PR's or queue entry's base, the previous
-//                   main commit of a push. Any git revision. Required except for full. Every later
-//                   job takes the base its plan recorded.
+//                   main commit of a push. Any git revision; plan records the commit it names.
+//                   Required except for full. Every later job takes the base its plan recorded. A push reuses an integration pass of its
+//                   tree only on the commit that pass diffed against, so after a queue landing pass
+//                   the tick's `base`, main before the batch: every landed PR's diff, as tested.
 //   CI_FULL_REASON  plan: why every browser group runs. Required for full.
 //   CI_SHARD        browser, components: the shard's number in the plan (plan.json .plan.shards for
 //                   browser, .plan.outputs.component_shards for components). Required for both.
@@ -85,16 +94,17 @@ import { repository, run, step, verify } from './run';
 //   SHRINK_ONLY_GROWTH_APPROVED  `true` with the owner's `approved: list growth` label.
 //   MIDNIGHT_PROOF_MINUTES       plan: passed on to scripts/ci-plan.ts; names the wait a proof run.
 // Measurement inputs (lib/testing/ci/measurement.ts). Optional; no gate reads them, and an unreadable one
-// warns and is recorded as unknown, never failing the job:
+// warns and is recorded as unknown, never failing the job. Reuse reads the attempt: an unreadable one
+// reuses nothing, and a later attempt's receipt withdraws an earlier attempt's pass:
 //   CI_PRS          The pull requests the run serves: numbers separated by commas (a PR run's one, an
 //                   integration batch's, a push's landed PRs when the runner knows them), or GitHub's
 //                   merge-queue ref. Unset for a full run.
-//   CI_RUN_ATTEMPT  The run's attempt, 1 for the first; a rerun of its failed jobs counts up.
+//   CI_RUN_ATTEMPT  The run's attempt, 1 for the first (also when unset); a rerun counts up.
 //   CI_FIRST_ATTEMPT_CLASS  On a rerun: the class the job's failed first attempt was given
 //                   (docs/technical/testing.md, "Failures").
 //   CI_JOB_STARTED_AT  When the runner began this job, before its checkout and setup, as an ISO time.
 // On GitHub Actions (GITHUB_ACTIONS=true and GH_TOKEN) without CI_LEDGER, plan asks the Actions API
-// for a green merge-queue run of the tree; a configured ledger is the only reuse source. plan writes
+// for a green merge-queue run of the commit; a configured ledger is the only reuse source. plan writes
 // its outputs to $GITHUB_OUTPUT.
 
 const environment = process.env;
@@ -161,6 +171,10 @@ if (newerHead) {
   );
   process.exit(1);
 }
+// Plan records its base as the commit it names, once, so the planner diffs against the commit its
+// receipt records and reuse compares; a revision git cannot resolve stays as given, and the planner fails on it.
+if (ci.job === 'plan' && environment.CI_BASE_SHA)
+  environment.CI_BASE_SHA = commitOf(environment.CI_BASE_SHA) ?? environment.CI_BASE_SHA;
 const result: CiResult = {
   version: 1,
   job: ci.job,
@@ -207,6 +221,8 @@ function runPlan(): RunPlan {
   // runner. The children read it there: Fast's migration-order gate off GitHub Actions.
   if (own.result.base) environment.CI_BASE_SHA = own.result.base;
   result.base = own.result.base;
+  // Check passes this result only under the Plan it names (lib/testing/ci/check.ts).
+  result.planIdentity = own.identity;
   return own.plan;
 }
 
@@ -230,13 +246,13 @@ async function plannerOutputs(): Promise<Record<string, string>> {
   );
 }
 
-/** The green merge-queue run of this tree on GitHub Actions, or undefined when there is none or the API cannot say. */
+/** The green merge-queue run of this exact commit on GitHub Actions, or undefined when there is none or the API cannot say. */
 function passedTreeOnActions(): string | undefined {
   const repositoryName = environment.GITHUB_REPOSITORY;
   if (environment.GITHUB_ACTIONS !== 'true' || !repositoryName) return undefined;
   const answer = spawnSync(
     'gh',
-    ['api', passedTreeActionsQuery(repositoryName), '--jq', passedTreeActionsFilter(result.tree)],
+    ['api', passedTreeActionsQuery(repositoryName), '--jq', passedTreeActionsFilter(result.commit)],
     { encoding: 'utf8' },
   );
   if (answer.status === 0) return answer.stdout.trim() || undefined;
@@ -253,31 +269,63 @@ const appendToLedger = (): void => {
 };
 
 /**
- * The ledger Plan decides by. Plan appends its start before it reads, so a later attempt of the tree
- * that is still planning, died while planning or planned in a changed checkout withdraws an earlier
- * pass, and so does any other run's start appended meanwhile. A changed checkout reads none.
+ * The ledger Plan decides by. Plan appends its start before the planner runs and reads after it, so
+ * a later attempt of the tree that is still planning, died while planning or planned in a changed
+ * checkout withdraws an earlier pass, and so does any other run's start appended meanwhile. A
+ * changed checkout reads none. `plan` runs between the append and the read.
  */
-function planLedger(): Ledger {
-  if (!ledgerPath || !producer) return [];
-  return ledgerAfterStart({ ...result }, appendToLedger, () =>
-    clean ? readLedger(ledgerPath) : { unreadable: 'The checkout differs from its commit' },
+async function planLedger<T>(plan: () => Promise<T>): Promise<{ ledger: Ledger; planned: T }> {
+  if (!ledgerPath || !producer) return { ledger: [], planned: await plan() };
+  const start = { ...result };
+  let appended: Error | null = null;
+  try {
+    appendToLedger();
+  } catch (error) {
+    appended = error instanceof Error ? error : new Error(String(error));
+  }
+  const planned = await plan();
+  const ledger = ledgerAfterStart(
+    start,
+    () => {
+      if (appended !== null) throw appended;
+    },
+    () => (clean ? readLedger(ledgerPath) : { unreadable: 'The checkout differs from its commit' }),
   );
+  return { ledger, planned };
+}
+
+/** The commit a revision names, or undefined when git cannot resolve it. */
+function commitOf(revision: string | undefined): string | undefined {
+  if (!revision) return undefined;
+  try {
+    return git('rev-parse', '--verify', '--quiet', `${revision}^{commit}`);
+  } catch {
+    return undefined;
+  }
 }
 
 async function plan(): Promise<boolean> {
   // The ledger only saves work: when it fails, Plan plans the full work of its event and reuses nothing.
-  const ledger = planLedger();
+  const { ledger, planned: selection } = await planLedger(plannerOutputs);
   if ('unreadable' in ledger)
     console.info(`::warning title=Ledger::${ledger.unreadable}, so no result is reused.`);
-  const reusedTree =
+  // A push reuses a passed run only for the same landing: the same tree, base commit and required work.
+  const base =
     ci.event === 'main' && clean && !('unreadable' in ledger)
-      ? passedTree(ledgerPath ? ledger : undefined, result.tree, passedTreeOnActions)
+      ? commitOf(result.base ?? undefined)
       : undefined;
+  const reusedTree = base
+    ? passedTree(
+        ledgerPath ? ledger : undefined,
+        { tree: result.tree, base, work: plannedWork(ci.event, selection) },
+        passedTreeOnActions,
+      )
+    : undefined;
   const planned = planRun({
     event: ci.event,
     tree: result.tree,
     listGrowthApproved,
-    outputs: reusedTree === undefined ? await plannerOutputs() : undefined,
+    outputs: selection,
     passedTree: reusedTree,
     reused: (key) => reusableReceipt(ledger, key, ci.event),
   });
@@ -517,6 +565,8 @@ function check(): boolean {
   if (!('unreadable' in plan)) {
     result.planReason = plan.planReason;
     result.reusedFrom = plan.reusedFrom;
+    // A push reuses this run only by the Plan this Check verified it by (lib/testing/ci/reuse.ts).
+    result.planStartedAt = plan.startedAt;
   }
   const misses = fullRunMisses(results);
   if (misses) result.unselectedFailures = misses;

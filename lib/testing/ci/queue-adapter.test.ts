@@ -81,8 +81,8 @@ const pull: QueuedPull = {
 
 /**
  * A runner that fetches the commit as the queue's contract says and writes a passed plan, then runs
- * `body` in bash. `receipt <job> <status> <completedAt>` writes that job's result; `ledger` appends
- * the last one to the folder's ledger.jsonl.
+ * `body` in bash. `receipt <job> <status> <completedAt> [fields]` writes that job's result;
+ * `ledger` appends the last one to the folder's ledger.jsonl.
  */
 function runner(body: string): string {
   const path = join(folder, 'runner.sh');
@@ -95,13 +95,13 @@ git init --quiet "$checkout"
 git -C "$checkout" fetch --quiet "$CI_QUEUE_REPOSITORY" "refs/ci-queue/runs/$CI_QUEUE_COMMIT"
 tree="$(git -C "$checkout" rev-parse "$CI_QUEUE_COMMIT^{tree}")"
 receipt() {
-  printf '{"version":1,"job":"%s","shard":null,"event":"%s","tree":"%s","commit":"%s","base":"%s","status":"%s","groups":[],"planReason":"","reusedFrom":null,"listGrowthApproved":false,"producer":"stub","runUrl":"%s","startedAt":"2026-11-21T08:00:00Z","completedAt":%s}\\n' \\
-    "$1" "$CI_EVENT" "$tree" "$CI_QUEUE_COMMIT" "$CI_BASE_SHA" "$2" "$CI_RUN_URL" "$3" > "$CI_RESULTS_DIR/$1.json"
+  printf '{"version":1,"job":"%s","shard":null,"event":"%s","tree":"%s","commit":"%s","base":"%s","status":"%s","groups":[],"planReason":"","reusedFrom":null,"listGrowthApproved":false,"producer":"stub","runUrl":"%s","startedAt":"2026-11-21T08:00:00Z","completedAt":%s,"attempt":1%s}\\n' \\
+    "$1" "$CI_EVENT" "$tree" "$CI_QUEUE_COMMIT" "$CI_BASE_SHA" "$2" "$CI_RUN_URL" "$3" "\${4:-}" > "$CI_RESULTS_DIR/$1.json"
   last="$CI_RESULTS_DIR/$1.json"
 }
 ledger() { cat "$last" >> "${join(folder, 'ledger.jsonl')}"; }
 receipt plan running null; ledger
-receipt plan passed '"2026-11-21T08:10:00Z"'
+receipt plan passed '"2026-11-21T08:10:00Z"' ',"plan":{"jobs":["plan","check"],"skips":{},"shards":[],"outputs":{},"work":["fast:step:build"]}'; ledger
 ${body}
 `,
   );
@@ -131,9 +131,10 @@ test("a run's verdict is its own finished Check, whatever the runner's exit code
   expect(git('for-each-ref', 'refs/ci-queue')).toBe('');
 });
 
-test("with the runner's ledger, a passed Check counts only once the ledger holds it as the tree's pass", () => {
+test("with the runner's ledger, a passed Check counts only once the ledger holds it as the landing's pass", () => {
   const ledger = join(folder, 'ledger.jsonl');
-  const passed = 'receipt check passed \'"2026-11-21T09:00:00Z"\'';
+  const passed =
+    'receipt check passed \'"2026-11-21T09:00:00Z"\' \',"planStartedAt":"2026-11-21T08:00:00Z"\'';
   expect(integration(passed, 'queue/4', ledger).kind).toBe('inconclusive');
   expect(integration(`${passed}; ledger`, 'queue/5', ledger).kind).toBe('passed');
 });
@@ -225,6 +226,64 @@ test("the queue turns a PR's auto-merge off through gh, and a refusal throws so 
     process.env.PATH = path;
   }
   expect(readFileSync(called, 'utf8')).toBe('pr merge 7 --disable-auto\npr merge 7 --disable-auto\n');
+});
+
+test("a behind PR's branch is updated with main through gh at the head the queue saw, and a refusal throws", async () => {
+  const called = join(folder, 'gh.log');
+  const bin = join(folder, 'bin');
+  mkdirSync(bin);
+  writeFileSync(
+    join(bin, 'gh'),
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${called}"\nexit "$(cat "${folder}/gh-exit" 2> /dev/null || echo 0)"\n`,
+  );
+  chmodSync(join(bin, 'gh'), 0o755);
+  const adapter = createQueueAdapter({
+    repository,
+    runner: 'unused',
+    workDir: folder,
+    runUrlBase: 'queue',
+    appId: null,
+  });
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path}`;
+  try {
+    await adapter.updateBranch(pull);
+    writeFileSync(join(folder, 'gh-exit'), '1');
+    await expect(adapter.updateBranch(pull)).rejects.toThrow();
+  } finally {
+    process.env.PATH = path;
+  }
+  // The update names the head the queue saw green, so GitHub refuses it once the branch moved on.
+  const update = `api --method PUT repos/{owner}/{repo}/pulls/7/update-branch -f expected_head_sha=${pull.headSha}\n`;
+  expect(readFileSync(called, 'utf8')).toBe(update + update);
+});
+
+test("a batch entry's migrations are checked against the prefix it lands on, from the queue's commits alone", async () => {
+  mkdirSync(join(repository, 'supabase/migrations'), { recursive: true });
+  const main = commitFile(
+    'supabase/migrations/20261020100000_first.sql',
+    'create table public.jobs (id int);\n',
+  );
+  const higher = commitFile(
+    'supabase/migrations/20261027100000_job_due.sql',
+    'alter table public.jobs add column due date;\n',
+  );
+  const lower = commitFile(
+    'supabase/migrations/20261026120000_job_owner.sql',
+    'alter table public.jobs add column owner text;\n',
+  );
+  const adapter = createQueueAdapter({
+    repository,
+    runner: 'unused',
+    workDir: folder,
+    runUrlBase: 'queue',
+    appId: null,
+  });
+  const entry = { pull, commit: lower, tree: git('rev-parse', `${lower}^{tree}`) };
+  expect(await adapter.migrationProblems(higher, entry)).toEqual([
+    expect.stringContaining('20261026120000_job_owner.sql changes what a migration with a higher version'),
+  ]);
+  expect(await adapter.migrationProblems(main, { ...entry, commit: higher })).toEqual([]);
 });
 
 /** One tick of the real CLI; each case here refuses before it reads GitHub. */

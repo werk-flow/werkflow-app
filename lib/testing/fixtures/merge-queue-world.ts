@@ -26,6 +26,8 @@ export type Fake = {
   tested: number[][];
   landed: number[];
   rejected: number[];
+  /** The PRs whose branch the queue updated with main, in order. */
+  updated: number[];
   withdrawn: number[];
   /** The pending mark's PR when each merge was asked for: the mark is saved before it is posted. */
   pendingAtLand: (number | null)[];
@@ -81,10 +83,47 @@ function fakePublisher(failures: Readonly<Record<number, number>>) {
   };
 }
 
+/**
+ * The fake's squash, and its migration-order check: a tree is the list of PRs squashed onto main,
+ * and PR n's migration conflicts with PR `migrationConflicts[n]`'s in the prefix it lands on.
+ */
+function fakeBatchGit(
+  git: ReturnType<typeof fakeGit>,
+  options: WorldOptions,
+): Pick<QueueAdapter, 'squash' | 'migrationProblems'> {
+  return {
+    squash: async (parent, entry) => {
+      if (entry.title.includes('conflict')) return undefined;
+      const before = `${git.treeOf(parent)}`;
+      const tree = options.unchanged?.includes(entry.number) ? before : `${before}+${entry.number}`;
+      return { commit: git.commit(parent, tree), tree };
+    },
+    migrationProblems: async (parent, entry) => {
+      const ahead = options.migrationConflicts?.[entry.pull.number];
+      return ahead !== undefined && `${git.treeOf(parent)}`.split('+').includes(String(ahead))
+        ? [`#${entry.pull.number}'s migration changes what #${ahead}'s newer migration changes.`]
+        : [];
+    },
+  };
+}
+
+/** A PR after GitHub merged main into its branch: a new head, up to date, whose Check the runner has not posted yet. */
+const updatedBranch = (entry: QueuedPull): QueuedPull => ({
+  ...entry,
+  headSha: sha(`updated-${entry.number}`),
+  check: 'MISSING',
+  mergeState: 'BLOCKED',
+});
+
+/** The fake run's verdict: `answer`'s, or failed when the prefix holds a PR of `breaks`. */
+const fakeVerdict = (options: WorldOptions, prs: readonly number[], run: number): Verdict['kind'] =>
+  options.answer?.(prs, run) ??
+  (prs.some((number) => options.breaks?.includes(number)) ? 'failed' : 'passed');
+
 /** The switches of `fakeWorld`, each described there. */
 type WorldOptions = {
   breaks?: readonly number[];
-  answer?: (prs: readonly number[]) => Verdict['kind'] | undefined;
+  answer?: (prs: readonly number[], run: number) => Verdict['kind'] | undefined;
   afterRun?: (run: number, world: { pulls: QueuedPull[]; pushMain: (tree: string) => void }) => void;
   mergeTree?: (tree: string) => string;
   refuse?: number;
@@ -95,6 +134,8 @@ type WorldOptions = {
   failedWithdrawals?: Readonly<Record<number, number>>;
   stuckAutoMerge?: number;
   state?: QueueState;
+  migrationConflicts?: Readonly<Record<number, number>>;
+  updateFails?: boolean;
 };
 
 /**
@@ -106,16 +147,19 @@ type WorldOptions = {
  * before the n-th merge. The ledger proves main's tree unless `unprovenMain`. A PR of
  * `unchanged` holds only changes already in the batch, so its squash keeps the tree. The publisher
  * is down for PR n's first `failedWithdrawals[n]` withdrawals. GitHub refuses to turn off the auto-merge
- * of `stuckAutoMerge`. The queue's saved state starts as `state`.
+ * of `stuckAutoMerge`. The queue's saved state starts as `state`. PR n's migration conflicts with
+ * PR `migrationConflicts[n]`'s when that PR is in the prefix it lands on. Updating a branch throws
+ * with `updateFails`.
  */
 export function fakeWorld(pulls: QueuedPull[], options: WorldOptions = {}): Fake {
   const git = fakeGit();
-  const { commit, pushMain, main } = git;
+  const { pushMain, main } = git;
   const publisher = fakePublisher(options.failedWithdrawals ?? {});
   let open = [...pulls];
   const tested: number[][] = [];
   const landed: number[] = [];
   const rejected: number[] = [];
+  const updated: number[] = [];
   const pendingAtLand: (number | null)[] = [];
   const autoMergeAtLand: boolean[] = [];
   let saved: QueueState = options.state ?? { pending: null, frozen: null };
@@ -124,22 +168,12 @@ export function fakeWorld(pulls: QueuedPull[], options: WorldOptions = {}): Fake
   const adapter: QueueAdapter = {
     main: async () => main(),
     pulls: async () => open,
-    squash: async (parent, entry) => {
-      if (entry.title.includes('conflict')) return undefined;
-      const before = `${git.treeOf(parent)}`;
-      const tree = options.unchanged?.includes(entry.number) ? before : `${before}+${entry.number}`;
-      return { commit: commit(parent, tree), tree };
-    },
+    ...fakeBatchGit(git, options),
     integrationRun: async ({ tip, pulls: prefix }) => {
       const prs = prefix.map((entry) => entry.number);
       tested.push(prs);
-      const kind =
-        options.answer?.(prs) ??
-        (prs.some((number) => options.breaks?.includes(number)) ? 'failed' : 'passed');
-      options.afterRun?.(tested.length, {
-        pulls: open,
-        pushMain,
-      });
+      const kind = fakeVerdict(options, prs, tested.length);
+      options.afterRun?.(tested.length, { pulls: open, pushMain });
       open = [...open];
       return { kind, runUrl: `run-${tested.length}:${tip.tree}`, detail: kind };
     },
@@ -165,6 +199,13 @@ export function fakeWorld(pulls: QueuedPull[], options: WorldOptions = {}): Fake
       if (entry.number === options.lostAnswer) throw new Error('connection reset');
     },
     mergeCommit: async (number) => mergeCommits.get(number) ?? null,
+    updateBranch: async (entry) => {
+      if (options.updateFails) throw new Error('GitHub refused the update');
+      updated.push(entry.number);
+      open = open.map((candidate) =>
+        candidate.number === entry.number ? updatedBranch(candidate) : candidate,
+      );
+    },
     reject: async (entry) => {
       rejected.push(entry.number);
     },
@@ -180,6 +221,7 @@ export function fakeWorld(pulls: QueuedPull[], options: WorldOptions = {}): Fake
     tested,
     landed,
     rejected,
+    updated,
     withdrawn: publisher.withdrawn,
     pendingAtLand,
     autoMergeAtLand,

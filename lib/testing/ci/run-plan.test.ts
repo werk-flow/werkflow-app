@@ -4,7 +4,7 @@
 import { expect, test } from 'bun:test';
 import type { CiEvent } from './dag';
 import type { ReuseKey } from './reuse';
-import { jobShards, midnightNotice, plannedGroups, planRun } from './run-plan';
+import { jobShards, midnightNotice, plannedGroups, plannedWork, planRun } from './run-plan';
 
 const TREE = 'a'.repeat(40);
 const SHARDS = [
@@ -122,6 +122,41 @@ test('a push to main whose tree an integration run passed runs no job and cites 
   expect(plan('main', { passedTree: '' }).jobs).toContain('fast');
   // Only a push reuses a whole run: a queue run of the same tree still runs.
   expect(plan('integration', { passedTree: 'https://ci.example/runs/7' }).jobs).toContain('browser');
+});
+
+test("a plan records its event's required work before reuse: every job's groups, each shard's included", () => {
+  const work = [
+    'browser:audit:lab:calendar',
+    'browser:audit:visual:one',
+    'browser:audit:visual:two',
+    'browser:golden:p1-01',
+    'browser:step:server',
+    'components:ui:contracts:reports',
+    'components:ui:contracts:shell',
+    'components:ui:contracts:work',
+    'fast:static:lint',
+    'fast:static:typecheck',
+    'fast:static:docs',
+    'fast:unit:all',
+    'fast:step:build',
+    'sql:sql:grants',
+    'sql:sql:history',
+    'sql:step:types',
+    'sql:step:seed',
+  ].toSorted();
+  expect(plannedWork('integration', OUTPUTS)).toEqual(work);
+  expect(plannedWork('main', OUTPUTS)).toEqual(work);
+  // A reused shard is still required work: reuse decides who ran it, not what the run needs.
+  const reusedShard = plan('integration', {
+    reused: (key) => (key.job === 'browser' && key.shard === 1 ? 'https://ci.example/runs/3' : undefined),
+  });
+  expect(reusedShard.work).toEqual(work);
+  // A pull request's run requires no browser group (owner decision D1).
+  expect(plannedWork('pr', OUTPUTS).some((entry) => entry.startsWith('browser:'))).toBe(false);
+  // A push that reuses a passed tree records the work that run stood for.
+  expect(plan('main', { passedTree: 'https://ci.example/runs/7' }).work).toEqual(work);
+  const withoutSql = Object.fromEntries(Object.entries(OUTPUTS).filter(([key]) => key !== 'selected_sql'));
+  expect(() => plannedWork('main', withoutSql)).toThrow('selected_sql');
 });
 
 test('a reused job and a reused shard do not run; the key carries the steps and the approval', () => {

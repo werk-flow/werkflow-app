@@ -1,6 +1,9 @@
 // One tick of the batching merge queue (owner decision D2; lib/testing/ci/queue.ts decides,
 // scripts/ci/queue-adapter.ts acts). A CI runner calls it in a loop, one tick at a time, from a
-// clean clone of werkflow-app on main's head whose `gh` may merge PRs and set commit statuses.
+// clean clone of werkflow-app on main's head whose `gh` may merge PRs, update their branches and
+// set commit statuses. While the ruleset requires up-to-date branches, a live tick ends by
+// updating the oldest queued PR GitHub reports `BEHIND` with main (GitHub's update-branch, only at the
+// head the queue saw green), one at a time; no other PR is freshened.
 //
 // Usage: bun scripts/ci/queue.ts --runner <executable> --work-dir <dir> --run-url-base <url>
 //                                [--ledger <file>] [--publisher <executable>] [--max-batch <1-4>]
@@ -22,7 +25,8 @@
 //                   (queue-state.json): the `Queue` success it is about to post, saved before it
 //                   posts it, and cleared once it was withdrawn after the merge or its failure. A
 //                   tick starts by withdrawing a saved mark, merged or not. A withdrawal that fails
-//                   freezes the queue.
+//                   freezes the queue. It also records a run without a verdict, which the next tick
+//                   retries once.
 //   --run-url-base  Each run's CI_RUN_URL is <base>/<time>-<commit>.
 //   --ledger        The runner's CI_LEDGER, read only. With it, a pass counts only when the ledger
 //                   holds it as its tree's pass, so main's push reuses it; without it, the run's own
@@ -36,16 +40,22 @@
 //   --max-batch     The most PRs in a batch, default 4. 1 while the ruleset requires up-to-date branches.
 //   --dry-run       Builds, tests and decides, but never sets a status, merges, comments or
 //                   turns auto-merge off. --prs names the PRs to rehearse with, in order.
-// Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base, or a
-// landing that stopped after part of the tested prefix: main's own run of that commit runs its jobs).
-// Exit 2: it needs a person: a run without a verdict, a first PR failing on an unproven main, a
-// landing that broke (a failed read between merges included), a frozen queue, a refused option or
-// configuration, or an error. Stop the loop. A tick that exits 2 after a merge still moved main: it
-// logs a `partial` stop with the last merge it confirmed, or with the merge commit GitHub reports
-// when main could not be read after a merge, or says a merge may have landed when GitHub could not
-// answer either. After any landing or `partial` stop the runner starts main's run of main's head,
-// whatever the exit. A frozen queue lands nothing until a person confirms on GitHub that the named
-// head's newest `Queue` is no success, merged or not, then deletes queue-state.json.
+// Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base, a
+// landing that stopped after part of the tested prefix: main's own run of that commit runs its jobs,
+// a PR left for a later tick because its migration would land out of order after another of the
+// batch, or a first run without a verdict, a browser setup failure alone included, which the next
+// tick retries: `retry`). A red batch whose shorter prefixes all passed runs once more before its
+// last PR is named; a pass of that rerun is a contradiction for a person.
+// Exit 2: it needs a person: the same work's second run without a verdict, a contradicted tree, a
+// first PR failing on an unproven main, a landing that broke (a failed read between merges
+// included), a frozen queue, a refused option or configuration, or an error. Stop the loop. A tick
+// that exits 2 after a merge still moved main: it logs a `partial` stop with the last merge it
+// confirmed, the merge commit GitHub reports, or the head main moved to when that was not the
+// tested tree, or says a merge may have landed when GitHub could not answer. After any landing or
+// `partial` stop the runner starts main's run of main's head, whatever the exit, with CI_BASE_SHA
+// the tick's `base` (main before the batch): that run reuses the batch's pass only for the landing
+// it tested. A frozen queue lands nothing until a person confirms on GitHub that the named head's
+// newest `Queue` is no success, merged or not, then deletes queue-state.json.
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';

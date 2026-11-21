@@ -121,16 +121,32 @@ test("the nightly never plans a midnight hold: every day's slot is outside ciBro
   }
 });
 
-test("a nightly that starts now is main's full run, so the full-run rule is not asked beside it", () => {
+test("a nightly that starts now is main's full run, so no second full run starts beside it", () => {
   let asked = 0;
   const fullRun = () => {
     asked += 1;
     return { run: true, reason: 'A tooling change landed.' };
   };
   const nightly = due('2026-11-21T23:15:00Z', { release: '2026-11-20T02:30:00.000Z' }, { fullRun });
-  expect([started(nightly), asked]).toEqual([['nightly 2026-11-21T23:15:00.000Z'], 0]);
+  expect([started(nightly), asked]).toEqual([['nightly 2026-11-21T23:15:00.000Z'], 1]);
   const day = due('2026-11-22T09:00:00Z', { nightly: '2026-11-21T23:15:00.000Z' }, { fullRun });
-  expect([started(day), asked]).toEqual([['full'], 1]);
+  expect([started(day), asked]).toEqual([['full'], 2]);
+});
+
+test('the nightly skips a head that already has a full run, and stays due until main moves on or its next slot', () => {
+  const tested = () => ({ run: false, reason: 'c3 already has a full run.', headHasFullRun: true as const });
+  const state = { release: '2026-11-20T02:30:00.000Z' };
+  expect(started(due('2026-11-21T23:15:00Z', state, { fullRun: tested }))).toEqual([]);
+  // Main moved on: the missed nightly starts, as that head's full run.
+  const moved = () => ({ run: true, reason: 'main moved 1 commits since the full run on c3.' });
+  expect(started(due('2026-11-22T09:00:00Z', state, { fullRun: moved }))).toEqual([
+    'nightly 2026-11-21T23:15:00.000Z',
+  ]);
+  // A rule without an answer cannot show the head tested: the nightly starts.
+  const unreadable = () => ({ unreadable: 'the ledger cannot count' });
+  expect(started(due('2026-11-21T23:15:00Z', state, { fullRun: unreadable }))).toEqual([
+    'nightly 2026-11-21T23:15:00.000Z',
+  ]);
 });
 
 test('a full-run rule without an answer is unanswered, never a start', () => {

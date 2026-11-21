@@ -2,7 +2,8 @@
 // PR's queue place, head Check and approval from GitHub's pages, and the environment of an
 // integration run.
 import { expect, test } from 'bun:test';
-import { type BatchEntry, integrationEnvironment, pullsFromGitHub, type QueuedPull } from './queue';
+import { type BatchEntry, integrationEnvironment, type QueuedPull } from './queue';
+import { pullsFromGitHub } from './queue-github';
 
 const MAIN = 'a'.repeat(40);
 const TIP = 'b'.repeat(40);

@@ -9,17 +9,17 @@ import { z } from 'zod';
 import { appCheckStateOf } from '../../lib/testing/ci/check-app';
 import {
   integrationEnvironment,
-  PULLS_QUERY,
-  pullsFromGitHub,
   type QueueAdapter,
   type QueuedPull,
   type QueueState,
   queueStateSchema,
   type Verdict,
-  verdictOf,
 } from '../../lib/testing/ci/queue';
+import { verdictOf } from '../../lib/testing/ci/queue-verdict';
+import { PULLS_QUERY, pullsFromGitHub } from '../../lib/testing/ci/queue-github';
 import { type Ledger, readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
 import { provenTree } from '../../lib/testing/ci/reuse';
+import { migrationOrderProblems } from '../../lib/testing/local-stack/migration-order';
 
 /** The commit status the queue sets on a PR's head right before it merges it. The ruleset requires it (owner's step). */
 const QUEUE_STATUS = 'Queue';
@@ -252,6 +252,30 @@ export function createQueueAdapter(options: {
         `[queue] #${pull.number}: ${squashed ? `squashed as ${squashed.commit}` : 'conflicts, left out'}`,
       );
       return squashed;
+    },
+    migrationProblems: async (parent, entry) => {
+      // Only the batch's order counts here: open PRs' versions are the integration run's Fast gate's.
+      const problems = migrationOrderProblems({
+        repositoryRoot: options.repository,
+        mainRef: parent,
+        head: entry.commit,
+        openPullRequests: [],
+      });
+      if (problems.length)
+        console.info(`[queue] #${entry.pull.number}: migration order: ${problems.join(' ')}`);
+      return problems;
+    },
+    updateBranch: async (pull) => {
+      // Only at the head the queue saw green: GitHub refuses the update once the branch moved on.
+      gh(
+        'api',
+        '--method',
+        'PUT',
+        `repos/{owner}/{repo}/pulls/${pull.number}/update-branch`,
+        '-f',
+        `expected_head_sha=${pull.headSha}`,
+      );
+      console.info(`[queue] #${pull.number}: branch updated with main`);
     },
     integrationRun: async (run) => {
       const id = `${new Date().toISOString().replace(/[-:.]/g, '')}-${run.tip.commit.slice(0, 12)}`;

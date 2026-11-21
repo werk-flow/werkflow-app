@@ -9,7 +9,13 @@ import type { CiResult } from './results';
  * A full run on a commit of main, as GitHub's check runs or a runner's ledger report it: running,
  * or ended with a verdict. A run that died or was cancelled tested nothing, so no adapter reports it.
  */
-export type FullRun = { commit: string; startedAt: Date; ended: boolean };
+export type FullRun = {
+  commit: string;
+  startedAt: Date;
+  ended: boolean;
+  /** Set when a job of the run passed or failed a group: a run that ended before any group ran tested nothing. */
+  tested?: true;
+};
 
 /** How many of main's commits, from its head back, the full-run rule and its measurement read. */
 export const MAIN_HISTORY_DEPTH = 100;
@@ -33,7 +39,11 @@ export type Landed = {
   isDocs: (file: string) => boolean;
 };
 
-export type FullRunDecision = { run: boolean; reason: string };
+/**
+ * Whether a full run starts now, and why; `headHasFullRun` when main's head has an ended full run
+ * that tested something, so the nightly skips it.
+ */
+export type FullRunDecision = { run: boolean; reason: string; headHasFullRun?: true };
 
 /** The Berlin wall-clock time of an instant as `HH:MM`. */
 const berlinClock = (at: Date): string => formatBerlinLocalDateTime(at).slice(11);
@@ -56,7 +66,14 @@ export function fullRunDue(input: {
   const commit = input.history[behind];
   if (commit === undefined)
     return { run: true, reason: `No full run on the last ${input.history.length} commits of main.` };
-  if (behind === 0) return { run: false, reason: `${commit} already has a full run.` };
+  if (behind === 0)
+    return {
+      run: false,
+      reason: `${commit} already has a full run.`,
+      ...(input.runs.some((run) => run.commit === commit && run.ended && run.tested)
+        ? { headHasFullRun: true }
+        : {}),
+    };
   const runs = input.runs.filter((run) => run.commit === commit);
   const active = input.runs.find((run) => !run.ended && input.history.includes(run.commit));
   if (active)
@@ -97,8 +114,13 @@ export function fullRunsInLedger(ledger: readonly CiResult[], now: Date): FullRu
     if (receipt.event !== 'full' || receipt.runUrl === null) continue;
     const startedAt = new Date(receipt.startedAt);
     const known = runs.get(receipt.runUrl);
+    const tested = receipt.groups.some((group) => group.outcome === 'passed' || group.outcome === 'failed');
+    if (known && tested) known.run.tested = true;
     if (!known) {
-      runs.set(receipt.runUrl, { run: { commit: receipt.commit, startedAt, ended: false }, newest: receipt });
+      runs.set(receipt.runUrl, {
+        run: { commit: receipt.commit, startedAt, ended: false, ...(tested ? { tested: true } : {}) },
+        newest: receipt,
+      });
       continue;
     }
     if (startedAt < known.run.startedAt) known.run.startedAt = startedAt;
