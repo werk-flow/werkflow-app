@@ -106,7 +106,9 @@ type Delivery = {
   stored: Record<'recipient' | 'subject' | 'text' | 'senderName' | 'fromHeader' | 'replyTo', unknown>;
 };
 const deliveries: Delivery[] = [];
+// The limiter refuses every check, or only the one action it names.
 let limiterAllows = true;
+let limitedAction: string | null = null;
 const refused = (message: string) => ({ data: null, error: { code: 'P0001', message } });
 const payloadOf = (delivery: Delivery, claimed: boolean) => ({
   deliveryId: delivery.id,
@@ -121,7 +123,8 @@ const payloadOf = (delivery: Delivery, claimed: boolean) => ({
   contentHash,
 });
 world.rpc = ({ name, args }) => {
-  if (name === 'consume_rate_limit') return { data: limiterAllows, error: null };
+  if (name === 'consume_rate_limit')
+    return { data: limiterAllows && args.p_action !== limitedAction, error: null };
   if (name === 'get_invoice') {
     const own = args.p_organization_id === ORGANIZATION_A && args.p_invoice_id === invoiceId;
     return { data: own ? issued : null, error: null };
@@ -177,7 +180,13 @@ const syncTable = () => {
     created_by: CALLER_ID,
     state: delivery.state,
     failure_code: delivery.failureCode,
+    channel: 'email',
+    subject_kind: 'invoice',
+    invoice_id: invoiceId,
+    document_id: originalId,
     recipient_email: delivery.stored.recipient,
+    email_subject: delivery.stored.subject,
+    message_text: delivery.stored.text,
   }));
 };
 
@@ -286,6 +295,15 @@ limiterAllows = false;
 world.rpcCalls.length = 0;
 assert.deepEqual(await send(pressKey), { success: true, state: 'sent', failureCode: null });
 assert.equal(callsNamed('request_document_delivery').length, 0, 'a limited press reached the request');
+// The same key with another mail never answers the earlier mail's result: the limit's refusal stands.
+for (const changed of [
+  { recipient: 'andere@lindenhof.example' },
+  { subject: 'Andere' },
+  { text: 'Anders' },
+]) {
+  assert.deepEqual(await send(pressKey, changed), { success: false, error: 'rate_limited' });
+}
+assert.equal(callsNamed('request_document_delivery').length, 0, 'a limited press reached the request');
 limiterAllows = true;
 
 // The provider fails: the delivery is failed with its code; the retry sends it once, a second retry not at all.
@@ -311,6 +329,20 @@ globalThis.fetch = realFetch;
 // A changed sending address between attempts leaves the retry's payload as it was, so its key still matches.
 process.env.FROM_EMAIL = 'WerkFlow <neu@werkflow.example>';
 syncTable();
+// The organization's budget allows, the stored recipient's is full: no claim, no mail.
+limitedAction = 'document_send_per_recipient';
+world.rpcCalls.length = 0;
+assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, expectedAttempt: 1 }), {
+  success: false,
+  error: 'rate_limited',
+});
+assert.deepEqual(
+  callsNamed('consume_rate_limit').map((call) => call.args.p_action),
+  ['document_send_per_organization', 'document_send_per_recipient'],
+);
+assert.equal(callsNamed('retry_document_delivery').length, 0, 'a retry past its recipient limit was claimed');
+assert.equal(mailsOf(failedDelivery.id).length, 0, 'a retry past its recipient limit sent a mail');
+limitedAction = null;
 world.rpcCalls.length = 0;
 assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, expectedAttempt: 1 }), {
   success: true,

@@ -26,9 +26,10 @@ import {
   type DeliveryMailDefaults,
   type DeliveryState,
 } from '@/lib/delivery/delivery-types';
+import { deliveryFailureAdvice } from '@/lib/delivery/failure-advice';
 import { markInvoiceSentManually, sendInvoiceEmail } from '@/lib/invoices/delivery-actions';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { DELIVERY_FAILURE_MESSAGES, deliveryFailureSentence } from './invoice-delivery-messages';
+import { DELIVERY_FAILURE_MESSAGES } from './invoice-delivery-messages';
 
 const SEND_FAILED = 'Die E-Mail konnte nicht versendet werden. Bitte versuche es erneut.';
 const RECORD_FAILED = 'Der Versand konnte nicht vermerkt werden. Bitte versuche es erneut.';
@@ -52,7 +53,7 @@ function sendBanner(
   if (state === 'failed') {
     return {
       variant: 'error',
-      message: `${deliveryFailureSentence(result.failureCode)} Unter „Versand“ kannst du sie erneut senden.`,
+      message: deliveryFailureAdvice(result.failureCode, 'Unter „Versand“ kannst du sie erneut senden.'),
     };
   }
   return state === 'sent'
@@ -117,7 +118,7 @@ export function SendInvoiceEmailDialog({
   invoiceId: string;
   invoiceNumber: string;
   defaults: DeliveryMailDefaults;
-  /** The last email that went out, shown so the office does not send twice by mistake. */
+  /** The last email that went out or may have, shown so the office does not send twice by mistake. */
   sentBefore: string | null;
   onClose: () => void;
 }) {

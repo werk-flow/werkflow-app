@@ -21,10 +21,12 @@ import {
   type DeliveryMailDefaults,
   type DeliveryState,
 } from '@/lib/delivery/delivery-types';
+import { deliveryFailureAdvice } from '@/lib/delivery/failure-advice';
+import { retryWindowAt, retryWindowEnd } from '@/lib/delivery/retry-window';
 import { retryInvoiceDelivery } from '@/lib/invoices/delivery-actions';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { ManualDeliveryDialog, SendInvoiceEmailDialog } from './invoice-delivery-dialogs';
-import { DELIVERY_FAILURE_MESSAGES, deliveryFailureSentence } from './invoice-delivery-messages';
+import { DELIVERY_FAILURE_MESSAGES } from './invoice-delivery-messages';
 
 const RETRY_FAILED = 'Die E-Mail konnte nicht erneut gesendet werden. Bitte versuche es erneut.';
 
@@ -47,22 +49,10 @@ function deliveryMeta(entry: DeliveryEntry): string {
   return parts.join(' · ');
 }
 
-const instant = (value: string | null): number | null => (value === null ? null : Date.parse(value));
-
-/**
- * Whether „Erneut senden“ shows now, and whether an attempt went unanswered,
- * by the minute tick: crossing ten minutes or 23 hours sends no event, so the
- * page follows the clock; retry_document_delivery decides.
- */
+/** The row's retry window by the minute tick, until the clock can no longer change it. */
 function useRetryWindow(entry: DeliveryEntry): { retryable: boolean; unanswered: boolean } {
-  const from = instant(entry.retryFrom);
-  const until = instant(entry.retryUntil);
-  const now = useWallClockTick(60_000, until !== null, until);
-  const begun = from !== null && now >= from;
-  return {
-    retryable: begun && until !== null && now < until,
-    unanswered: entry.state === 'sending' && begun,
-  };
+  const end = retryWindowEnd(entry);
+  return retryWindowAt(entry, useWallClockTick(60_000, end !== null, end));
 }
 
 function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
@@ -78,7 +68,7 @@ function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
     if (!result.success)
       return setError(describeFailure(result.error, DELIVERY_FAILURE_MESSAGES, RETRY_FAILED));
     if (result.state === 'failed')
-      setError(`${deliveryFailureSentence(result.failureCode)} Versuche es später erneut.`);
+      setError(deliveryFailureAdvice(result.failureCode, 'Versuche es später erneut.'));
     else if (result.state === 'sent')
       showBanner({ variant: 'success', message: `E-Mail an ${entry.recipient ?? ''} versendet.` });
     router.refresh();
@@ -95,7 +85,7 @@ function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
           <p className="text-xs text-muted-foreground wrap-anywhere">{deliveryMeta(entry)}</p>
           {(entry.state === 'failed' || unanswered) && (
             <p className="text-sm text-destructive">
-              {deliveryFailureSentence(unanswered ? 'email_provider_unreachable' : entry.failureCode)}
+              {deliveryFailureAdvice(unanswered ? 'email_provider_unreachable' : entry.failureCode)}
             </p>
           )}
           {/* A later send, here or in another session, makes an earlier retry's error stale. */}
@@ -119,11 +109,17 @@ function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
   );
 }
 
-/** The last email that went out, so the dialog can say the invoice was sent before. */
+/**
+ * The newest email that went out or may have (still sending, or unanswered),
+ * so the dialog warns before a second one; a failed one never left.
+ */
 function lastEmailSent(list: DeliveryList): string | null {
-  const sent = list.entries.find((entry) => entry.channel === 'email' && entry.state === 'sent');
-  if (!sent?.sentAt) return null;
-  return `Zuletzt ging sie am ${formatBerlinDateTime(sent.sentAt)} an ${sent.recipient ?? ''} raus.`;
+  const last = list.entries.find((entry) => entry.channel === 'email' && entry.state !== 'failed');
+  if (!last) return null;
+  if (last.state === 'sending') {
+    return `Ob die E-Mail vom ${formatBerlinDateTime(last.createdAt)} an ${last.recipient ?? ''} rausging, ist unklar. Frag am besten beim Kunden nach, bevor du sie noch einmal sendest.`;
+  }
+  return `Zuletzt ging sie am ${formatBerlinDateTime(last.sentAt ?? last.createdAt)} an ${last.recipient ?? ''} raus.`;
 }
 
 /**

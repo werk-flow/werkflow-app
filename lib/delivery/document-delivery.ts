@@ -172,25 +172,51 @@ async function sendClaimed(
   return transmit(caller, payload.data);
 }
 
+type DeliveryRequest = {
+  attemptKey: string;
+  subject: DeliverySubject;
+  documentId: string;
+  recipient: string;
+  emailSubject: string;
+  text: string;
+};
+
 /**
- * The recorded result of an earlier press under the same attempt key, so a
- * repeated press the limit refuses still answers what happened; null when
- * the caller made no such press; a failed read is the send's own failure.
+ * The recorded result of an earlier press under the same attempt key and
+ * with the same mail, so a repeated press the limit refuses still answers
+ * what happened; null when the caller made no such press or the mail differs
+ * (request_document_delivery refuses that replay too); a failed read is the
+ * send's own failure.
  */
-async function recordedOutcome(caller: DeliveryCaller, attemptKey: string): Promise<DeliveryOutcome | null> {
+async function recordedOutcome(
+  caller: DeliveryCaller,
+  request: DeliveryRequest,
+): Promise<DeliveryOutcome | null> {
   const { data, error } = await loggedRead(
     'sendDocument: earlier delivery read failed',
     createSupabaseAdminClient()
       .from('document_deliveries')
-      .select('state, failure_code')
+      .select(
+        'state, failure_code, channel, subject_kind, invoice_id, document_id, recipient_email, email_subject, message_text',
+      )
       .eq('organization_id', caller.orgId)
-      .eq('attempt_key', attemptKey)
+      .eq('attempt_key', request.attemptKey)
       .eq('created_by', caller.userId)
       .maybeSingle(),
   );
   if (error) return SEND_UNAVAILABLE;
+  const sameMail =
+    data?.channel === 'email' &&
+    data.subject_kind === request.subject.kind &&
+    data.invoice_id === request.subject.id &&
+    data.document_id === request.documentId &&
+    data.recipient_email === request.recipient &&
+    data.email_subject === request.emailSubject &&
+    data.message_text === request.text;
   const state = z.enum(DELIVERY_STATES).safeParse(data?.state);
-  return state.success ? { success: true, state: state.data, failureCode: data?.failure_code ?? null } : null;
+  return sameMail && state.success
+    ? { success: true, state: state.data, failureCode: data.failure_code }
+    : null;
 }
 
 /**
@@ -199,17 +225,10 @@ async function recordedOutcome(caller: DeliveryCaller, attemptKey: string): Prom
  */
 export async function sendDocument(
   caller: DeliveryCaller,
-  request: {
-    attemptKey: string;
-    subject: DeliverySubject;
-    documentId: string;
-    recipient: string;
-    emailSubject: string;
-    text: string;
-  },
+  request: DeliveryRequest,
 ): Promise<DeliveryOutcome> {
   const limited = await passRateLimit(caller, request.recipient);
-  if (limited) return (await recordedOutcome(caller, request.attemptKey)) ?? limited;
+  if (limited) return (await recordedOutcome(caller, request)) ?? limited;
   const sender = await readDeliverySender(caller);
   if (!sender) return { success: false, error: 'load_failed' };
   const answer = await createSupabaseAdminClient().rpc(
