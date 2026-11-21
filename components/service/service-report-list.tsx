@@ -4,6 +4,7 @@ import { useRef, type ReactElement } from 'react';
 import { ClipboardCheck, MapPin } from 'lucide-react';
 
 import { useOrganization } from '@/components/organization/organization-context';
+import { DUE_ROW_CLASS } from '@/components/service/maintenance-lists';
 import { ListPagination } from '@/components/shared/list-pagination';
 import { StaleRegion } from '@/components/shared/stale-region';
 import { Badge } from '@/components/ui/badge';
@@ -25,17 +26,12 @@ import {
   type CompletedVisit,
   type CompletedVisitPage,
 } from '@/lib/service-reports/types';
-import { cn, formatGermanDate } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 
 // „Abgeschlossene Wartungsbesuche“ on the Wartung page: each completed visit
 // with „Servicebericht erstellen“, and once filed „Herunterladen“ and „Neu
 // erstellen“. A report reaches the visit job's documents, where the assigned
 // employee downloads it too.
-
-const ROW_CLASS = cn(
-  'grid min-w-0 gap-3 @3xl/reports:items-center @3xl/reports:gap-4',
-  '@3xl/reports:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_14rem]',
-);
 
 // A finished visit is a reached good state; an unfinished one is neutral, its next step lives in Aufgaben.
 const OUTCOME_VARIANTS = { complete: 'success', partial: 'secondary', unresolved: 'secondary' } as const;
@@ -53,8 +49,8 @@ function VisitRow({ visit, actions }: { visit: CompletedVisit; actions: ReportAc
   const report = visit.latestReport;
   const busy = actions.isBusy(visit.dueWorkId);
   return (
-    <ListRow variant="plain" data-testid="service-report-row" className={ROW_CLASS}>
-      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1 @3xl/reports:block">
+    <ListRow variant="plain" data-testid="service-report-row" className={DUE_ROW_CLASS}>
+      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1 @3xl/maintenance:block">
         <span className="block font-medium">{formatGermanDate(visit.completedOn)}</span>
         <Badge variant={OUTCOME_VARIANTS[visit.outcome]}>
           {MAINTENANCE_SCOPE_OUTCOME_LABELS[visit.outcome]}
@@ -76,7 +72,7 @@ function VisitRow({ visit, actions }: { visit: CompletedVisit; actions: ReportAc
       </span>
       <fieldset
         disabled={busy}
-        className="flex min-w-0 flex-wrap items-center gap-2 @3xl/reports:justify-end"
+        className="flex min-w-0 flex-wrap items-center gap-2 @3xl/maintenance:justify-end"
       >
         <InlinePending active={busy} label="Servicebericht wird bearbeitet" />
         {report ? (
@@ -198,7 +194,7 @@ function ServiceReportPage({
           description="Schließe eine Fälligkeit mit ihrem Nachweis ab. Danach erstellst du hier den Servicebericht."
         />
       ) : (
-        <div className="@container/reports space-y-3">
+        <div className="@container/maintenance space-y-3">
           <div className="divide-y overflow-hidden rounded-lg border shadow-xs">
             {view.items.map((visit) => (
               <VisitRow key={visit.dueWorkId} visit={visit} actions={actions} />
