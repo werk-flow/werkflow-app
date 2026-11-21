@@ -147,6 +147,25 @@ describe('calculateInvoice', () => {
     );
   });
 
+  test('a gross that leaves the safe integer range is refused although its net and tax fit', () => {
+    const [first] = MIXED_RATE_INVOICE.lines;
+    if (!first) throw new Error('fixture without lines');
+    // The net sum stays 5 cents below the limit; the taxed line's 19 cents of VAT pass it.
+    const line = { ...first, quantity: '1', priceQuantity: 1 as const };
+    const zeroRated = {
+      ...line,
+      unitPriceCents: Number.MAX_SAFE_INTEGER - 105,
+      tax: { category: 'Z' as const },
+    };
+    const taxed = {
+      ...line,
+      id: '2',
+      unitPriceCents: 100,
+      tax: { category: 'S' as const, rateBasisPoints: 1900 },
+    };
+    expect(() => calculateInvoice({ ...MIXED_RATE_INVOICE, lines: [zeroRated, taxed] })).toThrow(RangeError);
+  });
+
   test('a paid amount leaves the gross minus it due (BR-CO-16)', () => {
     const invoice = calculateInvoice({ ...EXEMPT_INVOICE, payee: null, paidCents: 3000 });
     expect(invoice.totals).toMatchObject({ grossCents: 8250, paidCents: 3000, dueCents: 5250 });
