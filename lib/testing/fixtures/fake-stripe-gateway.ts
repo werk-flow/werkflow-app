@@ -87,8 +87,12 @@ export function createFakeStripeGateway(
     readMandate: (id) => lookup(objects.mandates, id),
     readDispute: (id) => lookup(objects.disputes, id),
     // Without objects these two stay the real reads over `answers` (stripe.test.ts).
-    ...(objects.upcomingDebits ? { readUpcomingDebit: (id) => lookup(objects.upcomingDebits, id) } : {}),
-    ...(objects.invoiceDebits ? { readInvoiceDebit: (id) => lookup(objects.invoiceDebits, id) } : {}),
+    readUpcomingDebit: objects.upcomingDebits
+      ? (id) => lookup(objects.upcomingDebits, id)
+      : resolved.gateway.readUpcomingDebit,
+    readInvoiceDebit: objects.invoiceDebits
+      ? (id) => lookup(objects.invoiceDebits, id)
+      : resolved.gateway.readInvoiceDebit,
     listFinalizedInvoices: async () => objects.finalizedInvoices ?? [],
     listEventIds: async () => objects.eventIds ?? [],
   };
