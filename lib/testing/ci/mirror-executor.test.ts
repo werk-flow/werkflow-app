@@ -178,8 +178,10 @@ type Scenario = {
   result?: (unit: Unit) => CiResult;
   files?: (unit: Unit, result: CiResult) => Record<string, string>;
   onRunsOf?: () => void;
-  /** Told each time the mirror starts a run of a push, with the number of runs so far. */
-  onRun?: (runs: number) => void;
+  /** Told each time the mirror starts a run of a push, with the number of runs so far and its branch. */
+  onRun?: (runs: number, branch: string) => void;
+  /** Holds back the run of a push to `branch` while it returns false, as a mirror slow to start it. */
+  startsRun?: (branch: string) => boolean;
 };
 
 type Fake = {
@@ -236,7 +238,7 @@ function fakeMirror(scenario: Scenario = {}): Fake {
     },
     async runsOf(branch, sha) {
       scenario.onRunsOf?.();
-      if (!runs.has(branch) && branchHead(branch) === sha) {
+      if (!runs.has(branch) && branchHead(branch) === sha && (scenario.startsRun?.(branch) ?? true)) {
         runs.set(branch, {
           id: nextId++,
           path: MIRROR_WORKFLOW,
@@ -248,7 +250,7 @@ function fakeMirror(scenario: Scenario = {}): Fake {
           run_attempt: scenario.attempt ?? 1,
           unit: unitOf(branch),
         });
-        scenario.onRun?.(runs.size);
+        scenario.onRun?.(runs.size, branch);
       }
       const run = runs.get(branch);
       return run ? [settle(run)] : [];
@@ -687,4 +689,75 @@ test('a slot whose holder died with its run unsettled is taken only after that r
   expect(next.exitCode, next.detail).toBe(0);
   expect(fake.cancelled).toEqual([1]);
   expect(existsSync(join(folder, 'work/mirror-slots/slot-0.push'))).toBe(false);
+});
+
+/**
+ * A holder that died with its push recorded and its run not yet started: the push to `SQL`'s branch,
+ * its record and a lock that names a gone process. The scenario's run of that push starts once
+ * `start` is called; the returned branch's ref is dropped when `landed` is false, as a push the dead
+ * holder left in flight. Run ids count from 1 in the order the mirror starts them.
+ */
+async function diedBeforeItsRunStarted(scenario: Scenario, landed: boolean) {
+  let started = false;
+  // The dead holder's run goes until it is cancelled; every other run ends by itself.
+  let deadRun: number | undefined;
+  Object.assign(scenario, {
+    unreadableBranch: true,
+    startsRun: (branch: string) => started || !branch.endsWith('/sql'),
+    onRun: (runs: number, branch: string) => {
+      if (branch.endsWith('/sql')) deadRun = runs;
+    },
+    running: (id: number) => id === deadRun,
+  });
+  const fake = fakeMirror(scenario);
+  const first = await executorsOf(fake, 1).jobs.run(task(SQL), new AbortController().signal);
+  expect(first.exitCode, first.detail).toBeNull();
+  expect(existsSync(join(folder, 'work/mirror-slots/slot-0.push'))).toBe(true);
+  const [branch = '', pushed = ''] = git(
+    remote,
+    'for-each-ref',
+    '--format=%(refname:lstrip=2) %(objectname)',
+    'refs/heads/ci/',
+  ).split(' ');
+  writeFileSync(join(folder, 'work/mirror-slots/slot-0'), String(spawnSync('true').pid));
+  scenario.unreadableBranch = false;
+  if (!landed) git(remote, 'update-ref', '-d', `refs/heads/${branch}`);
+  return { fake, branch, pushed, start: () => (started = true) };
+}
+
+test("a dead holder's push whose run has not started yet keeps its slot until that run started and ended", async () => {
+  const scenario: Scenario = {};
+  const dead = await diedBeforeItsRunStarted(scenario, true);
+  let reads = 0;
+  scenario.onRunsOf = () => {
+    reads += 1;
+    if (reads === 3) dead.start();
+  };
+  const next = await executorsOf(dead.fake, 1, () => undefined, 'fedcba9876543210-1').jobs.run(
+    task({ job: 'browser', shard: 1 }),
+    new AbortController().signal,
+  );
+  expect(next.exitCode, next.detail).toBe(0);
+  // The dead holder's run started first and was cancelled before the slot's next job pushed.
+  expect(dead.fake.cancelled).toEqual([1]);
+});
+
+test("a dead holder's push still in flight keeps its slot until it landed and its run ended", async () => {
+  const scenario: Scenario = {};
+  const dead = await diedBeforeItsRunStarted(scenario, false);
+  let reads = 0;
+  scenario.onRunsOf = () => {
+    reads += 1;
+    if (reads === 3) {
+      git(remote, 'update-ref', `refs/heads/${dead.branch}`, dead.pushed);
+      dead.start();
+    }
+  };
+  const next = await executorsOf(dead.fake, 1, () => undefined, 'fedcba9876543210-1').jobs.run(
+    task({ job: 'browser', shard: 1 }),
+    new AbortController().signal,
+  );
+  expect(next.exitCode, next.detail).toBe(0);
+  // The dead holder's run started first and was cancelled before the slot's next job pushed.
+  expect(dead.fake.cancelled).toEqual([1]);
 });
