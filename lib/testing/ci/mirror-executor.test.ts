@@ -382,7 +382,7 @@ test("a job runs on the mirror from one parentless commit of the source tree, an
 test('a mirror that does not hold the pushed tree fails the job before any run is read', async () => {
   const fake = fakeMirror({ tree: 'f'.repeat(40) });
   const outcome = await executorsOf(fake).jobs.run(task(SQL), new AbortController().signal);
-  expect(outcome.exitCode).toBeNull();
+  expect(outcome.exitCode, outcome.detail).toBeNull();
   expect(outcome.detail).toContain('is not the pushed tree');
   expect(fake.calls.runsOf).toBe(0);
   expect(existsSync(join(results, 'sql.json'))).toBe(false);
@@ -441,14 +441,14 @@ test("a failed mirror job's own result stays as its evidence, and a pass it did 
   const failed = await executorsOf(
     fakeMirror({ conclusion: 'failure', result: (unit) => mirrorResult(unit, { status: 'failed' }) }),
   ).jobs.run(task(SQL), new AbortController().signal);
-  expect(failed.exitCode).toBe(1);
+  expect(failed.exitCode, failed.detail).toBe(1);
   expect(readResult(join(results, 'sql.json'))).toMatchObject({ status: 'failed' });
   rmSync(join(results, 'sql.json'));
   const unearned = await executorsOf(fakeMirror({ conclusion: 'failure' })).jobs.run(
     task(SQL),
     new AbortController().signal,
   );
-  expect(unearned.exitCode).toBe(1);
+  expect(unearned.exitCode, unearned.detail).toBe(1);
   expect(readResult(join(results, 'sql.json'))).toMatchObject({ status: 'failed' });
 });
 
@@ -460,7 +460,7 @@ test('a stop cancels the running mirror run, reads no result and deletes its bra
   });
   const executors = executorsOf(fake);
   const outcome = await executors.jobs.run(task(SQL), controller.signal);
-  expect(outcome.exitCode).toBeNull();
+  expect(outcome.exitCode, outcome.detail).toBeNull();
   expect(outcome.detail).toBe('the job was stopped');
   expect(fake.cancelled).toEqual([1]);
   expect(existsSync(join(results, 'sql.json'))).toBe(false);
@@ -495,7 +495,8 @@ test('the first job start sweeps ci branches older than a day; fresh ones stay',
   );
   const fake = fakeMirror();
   const executors = executorsOf(fake);
-  expect((await executors.jobs.run(task(SQL), new AbortController().signal)).exitCode).toBe(0);
+  const swept = await executors.jobs.run(task(SQL), new AbortController().signal);
+  expect(swept.exitCode, swept.detail).toBe(0);
   expect(fake.deleted).toEqual([`ci/${'1'.repeat(40)}-a1/sql`]);
   expect(git(remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/ci/').split('\n').sort()).toEqual(
     [`refs/heads/ci/${'2'.repeat(40)}-a1/sql`, `refs/heads/${mirrorBranch(commit, 1, SQL)}`].sort(),
@@ -523,7 +524,7 @@ test('Fast joins its mirror part and its host part, which runs the groups that r
   rmSync(join(results, 'fast.json'));
   writeFileSync(join(folder, 'host-result.json'), JSON.stringify({ ...host, listGrowthApproved: true }));
   const split = await executorsOf(fakeMirror()).jobs.run(task(fast), new AbortController().signal);
-  expect(split.exitCode).toBe(1);
+  expect(split.exitCode, split.detail).toBe(1);
   expect(split.detail).toContain('different list growth approvals');
   expect(existsSync(join(results, 'fast.json'))).toBe(false);
 });
