@@ -136,6 +136,8 @@ describe('stornoOf', () => {
       dueCents: storno.grossCents,
     });
     expect(calculated.totals.dueCents).toBeLessThan(0);
+    // The seller has an IBAN, but a Stornorechnung asks for no payment.
+    expect(calculated.payment).toBeNull();
     expect([storno.lineNetCents, storno.taxCents, storno.grossCents]).toEqual(
       [original.lineNetCents, original.taxCents, original.grossCents].map((cents) =>
         cents === 0 ? 0 : -cents,

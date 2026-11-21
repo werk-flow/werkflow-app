@@ -199,7 +199,8 @@ export function invoiceDraftOf(
           ? { days: discountDays, percentBasisPoints: discountBasisPoints }
           : null,
     },
-    payee: payeeOf(snapshot.profile),
+    // A Stornorechnung asks for no payment, so it names no payee.
+    payee: cancels ? null : payeeOf(snapshot.profile),
     notes: [
       invoice.openingText,
       invoice.closingText,
