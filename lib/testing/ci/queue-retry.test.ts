@@ -17,7 +17,7 @@ test('a first run without a verdict is retried on the next tick, recorded, and l
   expect(world.state()).toEqual({
     pending: null,
     frozen: null,
-    retry: { runUrl: 'run-1:main+1+2', detail: 'inconclusive' },
+    retry: { runUrl: 'run-1:main+1+2', detail: 'inconclusive', seen: [] },
   });
   expect(world.landed).toEqual([]);
   expect(world.rejected).toEqual([]);
@@ -113,4 +113,46 @@ test('a culprit inside the batch is named without a rerun: the full batch and it
   const outcome = await runQueueTick(world.adapter, LIVE);
   expect(world.tested).toEqual([[1, 2, 3], [1], [1, 2]]);
   expect(outcome.culprit).toBe(2);
+});
+
+test('a confirming rerun that ends without a verdict is retried on the next tick, not taken for a contradiction', async () => {
+  const world = fakeWorld([pull(1)], { answer: (_prs, run) => (run === 1 ? 'failed' : 'inconclusive') });
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(world.tested).toEqual([[1], [1]]);
+  expect(outcome.stops.map((stop) => stop.kind)).toEqual(['retry']);
+  expect(outcome.culprit).toBe(null);
+  expect(world.rejected).toEqual([]);
+});
+
+test('a retried tick remembers the verdicts before the retry: a tree that failed then passes is a contradiction for a person', async () => {
+  const world = fakeWorld([pull(1), pull(2)], {
+    answer: (_prs, run) => (run === 1 ? 'failed' : run === 2 ? 'inconclusive' : 'passed'),
+  });
+  await runQueueTick(world.adapter, LIVE);
+  expect(world.tested).toEqual([[1, 2], [1]]);
+  const retried = await runQueueTick(world.adapter, LIVE);
+  expect(world.tested).toEqual([[1, 2], [1], [1, 2]]);
+  expect(retried.stops.map((stop) => stop.kind)).toEqual(['inconclusive']);
+  expect(retried.stops[0]?.detail).toContain('failed in run-1:main+1+2 but passed in run-3:main+1+2');
+  expect(world.landed).toEqual([]);
+  expect(needsAttention(retried)).toBe(true);
+});
+
+test('a red full batch whose confirming rerun could not run names nobody, even when its PR is current again when the tick settles', async () => {
+  const world = fakeWorld([pull(1), pull(2)], { breaks: [2] });
+  const read = world.adapter.pulls;
+  let reads = 0;
+  // Reads: the batch, the full batch's run, the prefix's run, then the confirming rerun's: #2's
+  // Check is pending for that one read only.
+  world.adapter.pulls = async () => {
+    const now = await read();
+    return ++reads === 4
+      ? now.map((entry) => (entry.number === 2 ? { ...entry, check: 'PENDING' } : entry))
+      : now;
+  };
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(world.tested).toEqual([[1, 2], [1]]);
+  expect(outcome.culprit).toBe(null);
+  expect(world.rejected).toEqual([]);
+  expect(world.landed).toEqual([1]);
 });

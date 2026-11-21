@@ -41,10 +41,11 @@ export function ledgerAfterStart(start: CiResult, append: () => void, read: () =
 
 /**
  * The one reuse rule. Among the ledger's entries that `concern` the work, the newest `start`
- * decides: every entry from it on must belong to that start's run and to an attempt no later than
- * the last entry's, which is the accepted attempt; those entries are returned. Any entry without a
- * run or a readable attempt, any entry of another run or a later attempt after that start, a
- * missing start or an unreadable ledger returns undefined, and the work runs.
+ * decides: every entry from it on must belong to that start's run, to the start's attempt or a
+ * later one, and to an attempt no later than the last entry's, which is the accepted attempt; those
+ * entries are returned. Any entry without a run or a readable attempt, any entry of another run,
+ * an earlier attempt or a later attempt after that start, a missing start or an unreadable ledger
+ * returns undefined, and the work runs.
  */
 function sinceNewestStart(
   ledger: Ledger,
@@ -58,11 +59,15 @@ function sinceNewestStart(
   if (start === -1) return undefined;
   const since = entries.slice(start);
   const runUrl = since[0]?.runUrl;
+  const first = since[0]?.attempt;
   const accepted = since.at(-1)?.attempt;
-  if (typeof accepted !== 'number') return undefined;
+  if (typeof first !== 'number' || typeof accepted !== 'number') return undefined;
   return since.every(
     (receipt) =>
-      receipt.runUrl === runUrl && typeof receipt.attempt === 'number' && receipt.attempt <= accepted,
+      receipt.runUrl === runUrl &&
+      typeof receipt.attempt === 'number' &&
+      receipt.attempt >= first &&
+      receipt.attempt <= accepted,
   )
     ? since
     : undefined;
@@ -118,6 +123,8 @@ const isPlanStart = (receipt: CiResult): boolean => receipt.job === 'plan' && re
 function passedTreeInLedger(ledger: Ledger, landing: Landing): string | undefined {
   const since = sinceNewestStart(ledger, (receipt) => receipt.tree === landing.tree, isPlanStart);
   const last = since?.at(-1);
+  // The newest start's own Plan: a rerun of failed jobs keeps it, a rerun of every job starts anew,
+  // and an earlier attempt's late receipt withdraws the reuse.
   const plan = since?.find((receipt) => receipt.job === 'plan' && provesItself(receipt));
   return last?.job === 'check' &&
     last.event === 'integration' &&

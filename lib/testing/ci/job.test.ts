@@ -48,7 +48,7 @@ const git = (root: string, ...args: string[]): string =>
  * A clean repository with this checkout's job.ts and run.ts and its lib, whose verify.ts is a fake
  * gate: it writes the environment it sees to $ENV_DUMP_DIR/<group list>.json and passes every group.
  * The build's package scripts call it too. Its ci-plan.ts selects the migration-order gate in Fast,
- * one SQL group and one component area.
+ * one SQL group and one component area, and can append a receipt to a ledger while it plans.
  */
 function fixture(folder: string): string {
   const root = join(folder, 'repository');
@@ -76,6 +76,8 @@ console.info('[verify] passed in 0.1 min (fake): ' + report);
   writeFileSync(
     join(root, 'scripts/ci-plan.ts'),
     `import { appendFileSync } from 'node:fs';
+// PLAN_APPENDS: another run appends this receipt line to the file PLAN_LEDGER while the planner runs.
+if (process.env.PLAN_APPENDS) appendFileSync(process.env.PLAN_LEDGER, process.env.PLAN_APPENDS + '\\n');
 appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=sql:grants\\nselected_lint=\\nselected_static=static:migration-order\\nselected_unit=\\nselected_sql=sql:grants\\nselected_components=ui:contracts:work\\ncomponent_shards=[{"shard":1,"groups":"ui:contracts:work"}]\\nselected_invoices=\\n');
 `,
   );
@@ -393,6 +395,7 @@ function pushPlan(
   run: string,
   ledger: string,
   base: string,
+  extra: Record<string, string> = {},
 ): CiResult | { unreadable: string } {
   const code = runJob(root, 'plan', {
     CI_EVENT: 'main',
@@ -401,6 +404,7 @@ function pushPlan(
     CI_PRODUCER: 'mac-standin',
     CI_LEDGER: ledger,
     CI_RUN_URL: RUN_URL,
+    ...extra,
   });
   expect(code).toBe(0);
   return readResult(join(run, resultFileName('plan', null)));
@@ -424,6 +428,31 @@ test("a push reuses the landing an integration run passed: Plan's own start, app
       { job: 'plan', status: 'running', runUrl: RUN_URL },
       { job: 'plan', status: 'passed', runUrl: RUN_URL },
     ]);
+  });
+});
+
+test('a push runs its jobs when another run of its tree starts while its planner runs: Plan reads the ledger after planning', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const ledger = join(folder, 'ledger.jsonl');
+    integrationPass(root, ledger, git(root, 'rev-parse', 'HEAD'), plannedWork('main', FIXTURE_OUTPUTS));
+    const another = planOf(root, {
+      runUrl: 'https://ci.example/runs/3',
+      status: 'running',
+      completedAt: null,
+      plan: undefined,
+    });
+    const plan = pushPlan(root, join(folder, 'run'), ledger, 'HEAD', {
+      PLAN_LEDGER: ledger,
+      PLAN_APPENDS: JSON.stringify(another),
+    });
+    expect(plan).toMatchObject({ status: 'passed', reusedFrom: null });
+    // Plan's own start still reached the ledger before the planner ran.
+    expect(
+      ledgerOf(ledger)
+        .slice(3)
+        .map(({ runUrl, status }) => `${runUrl} ${status}`),
+    ).toEqual([`${RUN_URL} running`, 'https://ci.example/runs/3 running', `${RUN_URL} passed`]);
   });
 });
 

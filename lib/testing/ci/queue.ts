@@ -48,8 +48,11 @@ export type Verdict = { kind: 'passed' | 'failed' | 'inconclusive'; runUrl: stri
  */
 type PendingMark = { pull: number; head: string; runUrl: string; verdict: 'success' };
 
-/** A run without a verdict that the next tick retries once: its run and what it left. */
-type Retry = { runUrl: string; detail: string };
+/** A verdict a run reached on a tree: the next tick's runs of that tree must agree with it. */
+type Seen = { tree: string; kind: 'passed' | 'failed'; runUrl: string };
+
+/** A run without a verdict the next tick retries once, with the verdicts its tick reached. */
+type Retry = { runUrl: string; detail: string; seen: Seen[] };
 
 /**
  * What the queue keeps between ticks: a mark it may have left green, why it froze, if it did, and
@@ -70,7 +73,19 @@ export const queueStateSchema = z
       .nullable(),
     frozen: z.string().min(1).nullable(),
     retry: z
-      .object({ runUrl: z.string().min(1), detail: z.string() })
+      .object({
+        runUrl: z.string().min(1),
+        detail: z.string(),
+        seen: z.array(
+          z
+            .object({
+              tree: z.string().min(1),
+              kind: z.enum(['passed', 'failed']),
+              runUrl: z.string().min(1),
+            })
+            .strict(),
+        ),
+      })
       .strict()
       .optional(),
   })
@@ -332,8 +347,14 @@ async function buildChain(
 async function recordRetry(adapter: QueueAdapter, state: QueueState, outcome: QueueOutcome): Promise<void> {
   const retry = outcome.stops.find((stop) => stop.kind === 'retry');
   const run = outcome.runs.at(-1);
+  const seen = outcome.runs.flatMap(({ tree, verdict }) =>
+    verdict.kind === 'inconclusive' ? [] : [{ tree, kind: verdict.kind, runUrl: verdict.runUrl }],
+  );
   if (retry && run)
-    await adapter.saveState({ ...CLEAR, retry: { runUrl: run.verdict.runUrl, detail: run.verdict.detail } });
+    await adapter.saveState({
+      ...CLEAR,
+      retry: { runUrl: run.verdict.runUrl, detail: run.verdict.detail, seen },
+    });
   else if (state.retry && run && !outcome.stops.some((stop) => stop.kind === 'inconclusive'))
     await adapter.saveState(CLEAR);
 }
@@ -341,14 +362,16 @@ async function recordRetry(adapter: QueueAdapter, state: QueueState, outcome: Qu
 /**
  * While the ruleset requires up-to-date branches, GitHub reports a PR that lacks main as `BEHIND`,
  * and the queue cannot take it. The queue updates the oldest queued one with main, one at a time:
- * none while a queued PR that is up to date waits for its Check or could land, since its landing
+ * none while a queued PR that is up to date waits for its Check (pending or not yet posted) or
+ * could land, since its landing
  * would leave the updated one behind again. A refused update waits for the next tick.
  */
 async function updateOldestBehind(adapter: QueueAdapter, outcome: QueueOutcome): Promise<void> {
   try {
     const pulls = await adapter.pulls();
     const next = pulls.some(
-      (pull) => asked(pull) && upToDate(pull) && (pull.check === 'SUCCESS' || pull.check === 'PENDING'),
+      // An updated head shows `MISSING` until the runner posts its Check.
+      (pull) => asked(pull) && upToDate(pull) && ['SUCCESS', 'PENDING', 'MISSING'].includes(pull.check),
     );
     const oldest = pulls
       .filter((pull) => asked(pull) && pull.mergeState === 'BEHIND' && pull.check === 'SUCCESS')
@@ -444,10 +467,18 @@ async function bisect(
     const pulls = prefix.map((entry) => entry.pull);
     const verdict = await adapter.integrationRun({ tip, base, pulls });
     // A PR that repeats changes already in the batch keeps the tree; a second run of a tree that
-    // answers otherwise than its first is a flake and proves neither answer.
-    const contradicted = outcome.runs.find(
-      (run) => run.tree === tip.tree && run.verdict.kind !== verdict.kind,
-    );
+    // answers otherwise than its first, in this tick or the tick a retry repeats, is a flake and
+    // proves neither answer. A run without a verdict contradicts nothing.
+    const seen = [
+      ...(retry?.seen ?? []),
+      ...outcome.runs.map((run) => ({ tree: run.tree, kind: run.verdict.kind, runUrl: run.verdict.runUrl })),
+    ];
+    const contradicted =
+      verdict.kind === 'inconclusive'
+        ? undefined
+        : seen.find(
+            (run) => run.tree === tip.tree && run.kind !== 'inconclusive' && run.kind !== verdict.kind,
+          );
     outcome.runs.push({
       prs: pulls.map((pull) => pull.number),
       tree: tip.tree,
@@ -456,7 +487,7 @@ async function bisect(
     });
     rerunOf = undefined;
     if (verdict.kind === 'inconclusive' || contradicted) {
-      outcome.stops.push(noVerdict(tip.tree, verdict, contradicted?.verdict, retry));
+      outcome.stops.push(noVerdict(tip.tree, verdict, contradicted, retry));
       break;
     }
     verdicts.set(length, verdict);
@@ -464,8 +495,10 @@ async function bisect(
     else red = length;
     length = red !== undefined && red - green > 1 ? Math.floor((green + red) / 2) : undefined;
     if (length === undefined && !confirming && red === chain.length && green === red - 1) {
+      // The red stands only once the rerun is red too: a rerun that never runs names nobody.
       confirming = true;
       rerunOf = verdicts.get(red)?.runUrl;
+      verdicts.delete(red);
       length = red;
     }
   }
@@ -476,7 +509,7 @@ async function bisect(
 function noVerdict(
   tree: string,
   verdict: Verdict,
-  contradicted: Verdict | undefined,
+  contradicted: { kind: string; runUrl: string } | undefined,
   retry: Retry | null | undefined,
 ): QueueOutcome['stops'][number] {
   if (contradicted)

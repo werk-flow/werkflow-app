@@ -263,15 +263,29 @@ const appendToLedger = (): void => {
 };
 
 /**
- * The ledger Plan decides by. Plan appends its start before it reads, so a later attempt of the tree
- * that is still planning, died while planning or planned in a changed checkout withdraws an earlier
- * pass, and so does any other run's start appended meanwhile. A changed checkout reads none.
+ * The ledger Plan decides by. Plan appends its start before the planner runs and reads after it, so
+ * a later attempt of the tree that is still planning, died while planning or planned in a changed
+ * checkout withdraws an earlier pass, and so does any other run's start appended meanwhile. A
+ * changed checkout reads none. `plan` runs between the append and the read.
  */
-function planLedger(): Ledger {
-  if (!ledgerPath || !producer) return [];
-  return ledgerAfterStart({ ...result }, appendToLedger, () =>
-    clean ? readLedger(ledgerPath) : { unreadable: 'The checkout differs from its commit' },
+async function planLedger<T>(plan: () => Promise<T>): Promise<{ ledger: Ledger; planned: T }> {
+  if (!ledgerPath || !producer) return { ledger: [], planned: await plan() };
+  const start = { ...result };
+  let appended: Error | null = null;
+  try {
+    appendToLedger();
+  } catch (error) {
+    appended = error instanceof Error ? error : new Error(String(error));
+  }
+  const planned = await plan();
+  const ledger = ledgerAfterStart(
+    start,
+    () => {
+      if (appended !== null) throw appended;
+    },
+    () => (clean ? readLedger(ledgerPath) : { unreadable: 'The checkout differs from its commit' }),
   );
+  return { ledger, planned };
 }
 
 /** The commit a revision names, or undefined when git cannot resolve it. */
@@ -286,10 +300,9 @@ function commitOf(revision: string | undefined): string | undefined {
 
 async function plan(): Promise<boolean> {
   // The ledger only saves work: when it fails, Plan plans the full work of its event and reuses nothing.
-  const ledger = planLedger();
+  const { ledger, planned: selection } = await planLedger(plannerOutputs);
   if ('unreadable' in ledger)
     console.info(`::warning title=Ledger::${ledger.unreadable}, so no result is reused.`);
-  const selection = await plannerOutputs();
   // A push reuses a passed run only for the same landing: the same tree, base commit and required work.
   const base =
     ci.event === 'main' && clean && !('unreadable' in ledger) ? commitOf(environment.CI_BASE_SHA) : undefined;

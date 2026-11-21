@@ -215,16 +215,19 @@ const fastFail = (overrides: Partial<CiResult> = {}): CiResult =>
 const BASE = 'd'.repeat(40);
 const WORK = ['fast:step:build', 'sql:sql:grants', 'sql:step:seed', 'sql:step:types'];
 const LANDING = { tree: TREE, base: BASE, work: WORK };
-/** An integration run's Plan start and its passed end, which records its base and its required work. */
-const planned = (overrides: Partial<CiResult> = {}): CiResult[] => [
-  planStart({ base: BASE, ...overrides }),
+/** An integration run's passed Plan, which records its base and its required work. */
+const planEnd = (overrides: Partial<CiResult> = {}): CiResult =>
   planStart({
     base: BASE,
     status: 'passed',
     completedAt: '2026-11-20T20:01:00.000Z',
     plan: { jobs: ['plan', 'fast', 'sql', 'check'], skips: {}, shards: [], outputs: {}, work: WORK },
     ...overrides,
-  }),
+  });
+/** An integration run's Plan start and its passed end. */
+const planned = (overrides: Partial<CiResult> = {}): CiResult[] => [
+  planStart({ base: BASE, ...overrides }),
+  planEnd(overrides),
 ];
 
 const TREE_CASES: Case[] = [
@@ -392,6 +395,23 @@ const BOUND_CASES: Case[] = [
       checkPass({ attempt: 2 }),
     ],
     expected: RUN_1,
+  },
+  {
+    name: "a rerun of every job whose Plan dropped work, then the first attempt's late Plan that held it",
+    ledger: [
+      ...planned(),
+      checkPass({ status: 'failed' }),
+      planStart({ base: BASE, attempt: 2 }),
+      planEnd(),
+      planStart({
+        base: BASE,
+        attempt: 2,
+        status: 'passed',
+        plan: { jobs: [], skips: {}, shards: [], outputs: {}, work: ['fast:step:build'] },
+      }),
+      checkPass({ attempt: 2 }),
+    ],
+    expected: undefined,
   },
   {
     name: 'a pass whose attempt is unreadable',

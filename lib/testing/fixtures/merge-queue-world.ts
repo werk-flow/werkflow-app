@@ -107,11 +107,11 @@ function fakeBatchGit(
   };
 }
 
-/** A PR after GitHub merged main into its branch: a new head whose Check runs, up to date. */
+/** A PR after GitHub merged main into its branch: a new head, up to date, whose Check the runner has not posted yet. */
 const updatedBranch = (entry: QueuedPull): QueuedPull => ({
   ...entry,
   headSha: sha(`updated-${entry.number}`),
-  check: 'PENDING',
+  check: 'MISSING',
   mergeState: 'BLOCKED',
 });
 
