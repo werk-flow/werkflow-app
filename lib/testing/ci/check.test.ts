@@ -45,10 +45,14 @@ const EMPTY_OUTPUTS = {
   selected_sql: '',
   selected_components: '',
   component_shards: '[]',
+  selected_invoices: '',
 };
 const RUN_PLAN: RunPlan = {
   jobs: ['plan', 'fast', 'sql', 'components', 'browser', 'check'],
-  skips: { midnight: 'No browser shard waits for the midnight start window.' },
+  skips: {
+    invoices: 'The plan selects no e-invoice check.',
+    midnight: 'No browser shard waits for the midnight start window.',
+  },
   shards: [
     { shard: 1, groups: 'golden:p1-01' },
     { shard: 2, groups: 'audit:lab:calendar' },
@@ -214,7 +218,10 @@ test('a push whose tree already passed checks only its plan, and says which run 
     plan: {
       jobs: ['plan', 'check'],
       skips: Object.fromEntries(
-        (['fast', 'sql', 'components', 'midnight', 'browser'] as const).map((job) => [job, 'Tree passed.']),
+        (['fast', 'sql', 'components', 'invoices', 'midnight', 'browser'] as const).map((job) => [
+          job,
+          'Tree passed.',
+        ]),
       ),
       shards: [],
       outputs: EMPTY_OUTPUTS,
@@ -350,4 +357,24 @@ test('Check refuses a stale plan of the same tree from another run', () => {
   const results = passing.map((entry) => ({ ...entry, runUrl: CI_RUN.runUrl }));
   expect(checkRun({ run: CI_RUN, plan: ciPlan, results, scheduler: undefined }).passed).toBe(true);
   expect(checkRun({ run: CI_RUN, plan: stale, results, scheduler: undefined }).passed).toBe(false);
+});
+
+test('a planned e-invoice check holds Check until its step passed, so a red Mustang or veraPDF result cannot merge', () => {
+  const withInvoices: RunPlan = {
+    ...RUN_PLAN,
+    jobs: [...RUN_PLAN.jobs, 'invoices'],
+    skips: { midnight: 'No browser shard waits for the midnight start window.' },
+    outputs: { ...RUN_PLAN.outputs, selected_invoices: 'step:e-invoices' },
+  };
+  const invoicePlan = result('plan', { plan: withInvoices });
+  const step = (outcome: 'passed' | 'failed') =>
+    result('invoices', {
+      status: outcome,
+      groups: [{ id: 'step:e-invoices', outcome, durationMs: 1 }],
+    });
+  const verdict = (results: CiResult[]) =>
+    checkRun({ run: RUN, plan: invoicePlan, results: [...passing, ...results], scheduler: undefined });
+  expect(verdict([]).lines).toContain('FAILED invoices: no result');
+  expect(verdict([step('failed')]).lines).toContain('FAILED invoices: failed');
+  expect(verdict([step('passed')]).passed).toBe(true);
 });

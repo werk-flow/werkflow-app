@@ -28,12 +28,14 @@ import {
   reusableReceipt,
 } from '../../lib/testing/ci/reuse';
 import { isStep, jobShards, midnightNotice, plannedGroups, planRun } from '../../lib/testing/ci/run-plan';
+import { lsRemoteCommit, supersedingHead } from '../../lib/testing/ci/superseded';
 import { workspaceAppOrigin } from '../../lib/testing/runner/app-port';
+import { E_INVOICE_CHECK, E_INVOICE_STEP } from '../../lib/testing/selection/e-invoice-selection';
 import { repository, run, step, verify } from './run';
 
 // One CI job's body, the same on GitHub Actions (.github/workflows/ci.yml) and on any other runner
 // (docs/technical/testing.md, "CI"). lib/testing/ci/dag.ts holds the jobs, their needs and events.
-// Usage: bun scripts/ci/job.ts <plan|fast|sql|components|midnight|browser|check>
+// Usage: bun scripts/ci/job.ts <plan|fast|sql|components|invoices|midnight|browser|check>
 // The job exits 0 when it passed. It reads plain environment variables only:
 //   CI_EVENT        pr | integration | main | full (lib/testing/ci/dag.ts). Required.
 //   CI_RESULTS_DIR  The run's results directory. Required. Each job writes <job>.json there
@@ -63,6 +65,11 @@ import { repository, run, step, verify } from './run';
 //                   with CI_LEDGER.
 //   CI_BUILD_TAR    fast packs its build into this file, and a browser shard unpacks it. Optional.
 //   CI_NEEDS        check: the scheduler's job results, as ci.yml's `toJSON(needs)`. Optional.
+//   CI_PR_HEAD_REF  pr: the ref on `origin` that holds the pull request's current head, such as
+//                   refs/pull/568/head. When a newer push moved it, every job of the run ends at
+//                   once, failed, and writes no result or receipt. Optional.
+//   CI_PR_HEAD_SHA  pr: the head commit this run tests, when the checkout is a merge commit on top
+//                   of it. Defaults to the checkout's commit.
 //   SHRINK_ONLY_GROWTH_APPROVED  `true` with the owner's `approved: list growth` label.
 //   MIDNIGHT_PROOF_MINUTES       plan: passed on to scripts/ci-plan.ts; names the wait a proof run.
 // On GitHub Actions (GITHUB_ACTIONS=true and GH_TOKEN) without CI_LEDGER, plan asks the Actions API
@@ -104,6 +111,30 @@ const otpSecret = environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString(
 // The commit is read once and the tree from it, so a moving HEAD cannot pair one commit's plan with
 // another's test; the final check compares HEAD with this commit.
 const commit = git('rev-parse', 'HEAD');
+// A superseded pull request run proves nothing for its PR: it ends before it records anything, so
+// it neither costs a runner more time nor withdraws a pass from the ledger.
+const newerHead = supersedingHead({
+  event: ci.event,
+  headRef: environment.CI_PR_HEAD_REF,
+  testedHead: environment.CI_PR_HEAD_SHA || commit,
+  remoteHead: (ref) => {
+    // An unanswered question runs the job: no credential prompt, and at most a minute.
+    const answer = spawnSync('git', ['ls-remote', 'origin', ref], {
+      cwd: repository,
+      encoding: 'utf8',
+      env: { ...environment, GIT_TERMINAL_PROMPT: '0' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+    });
+    return answer.status === 0 ? lsRemoteCommit(answer.stdout, ref) : undefined;
+  },
+});
+if (newerHead) {
+  console.error(
+    `::error title=Superseded::The pull request moved on to ${newerHead}, so this run of ${environment.CI_PR_HEAD_SHA || commit} stops.`,
+  );
+  process.exit(1);
+}
 const result: CiResult = {
   version: 1,
   job: ci.job,
@@ -312,6 +343,16 @@ async function components(): Promise<boolean> {
   return everyGroupPassed();
 }
 
+/**
+ * Mustang and veraPDF on the reference invoices; Docker and the network required. The PDFs and
+ * Mustang's reports stay under .agent-logs/e-invoices/, one folder per attempt.
+ */
+async function invoices(): Promise<boolean> {
+  const folder = join(repository, '.agent-logs/e-invoices', result.startedAt.replaceAll(':', '-'));
+  record([await step(E_INVOICE_STEP, [[process.execPath, [E_INVOICE_CHECK, folder]]])]);
+  return everyGroupPassed();
+}
+
 async function midnight(): Promise<boolean> {
   const until = Date.parse(runPlan().outputs.midnight_until ?? '');
   if (Number.isNaN(until))
@@ -404,6 +445,7 @@ const bodies: Record<CiJob, () => Promise<boolean> | boolean> = {
   fast,
   sql,
   components,
+  invoices,
   midnight,
   browser,
   check,

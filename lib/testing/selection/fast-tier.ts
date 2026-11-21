@@ -92,7 +92,7 @@ export async function tailwindScan(
 }
 
 /** What running `roots` loads through imports, product code included, and whether an import was unresolved. */
-function closure(
+export function closure(
   graph: ReadonlyMap<string, readonly string[]>,
   roots: readonly string[],
 ): { files: Set<string>; unresolved: boolean } {

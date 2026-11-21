@@ -215,3 +215,7 @@ The first round of external CI reviews found that a tooling input sent almost ha
 4. The release still needs a green full run on its exact commit.
 
 [testing.md](../technical/testing.md#ci) owns the rules.
+
+## Amendment 2026-11-21: limits stay the repository's on every runner
+
+The stand-in runner needed threefold test and Playwright timeouts as an owner exception on 2026-11-16, while tests still held wall-clock limits that a slower machine missed. Every runner runs the limits the repository sets. No timeout or budget factor carries over to a new runner without its own decision. A test holds no wall-clock duration below a fixed number outside a measured scenario, and `test-hygiene/no-fixed-time-limit` fails on one (werk-flow/werkflow-planning#507).

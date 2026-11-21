@@ -29,6 +29,7 @@ const OUTPUTS = {
   selected_sql: 'sql:grants,sql:history',
   selected_components: 'ui:contracts:work,ui:contracts:reports,ui:contracts:shell',
   component_shards: JSON.stringify(COMPONENT_SHARDS),
+  selected_invoices: '',
 };
 const nothingReused = (): undefined => undefined;
 
@@ -106,6 +107,7 @@ test('a push to main whose tree an integration run passed runs no job and cites 
     'full_reason',
     'midnight_until',
     'selected_components',
+    'selected_invoices',
     'selected_lint',
     'selected_sql',
     'selected_static',
@@ -114,7 +116,7 @@ test('a push to main whose tree an integration run passed runs no job and cites 
     'sql',
     'static',
   ]);
-  for (const job of ['fast', 'sql', 'components', 'midnight', 'browser'] as const)
+  for (const job of ['fast', 'sql', 'components', 'invoices', 'midnight', 'browser'] as const)
     expect(pushed.skips[job]).toBe('The integration run https://ci.example/runs/7 passed this exact tree.');
   // An empty run URL names no run: the push runs its jobs.
   expect(plan('main', { passedTree: '' }).jobs).toContain('fast');
@@ -178,6 +180,7 @@ test('a planner answer without a required key plans nothing, so no gate goes mis
     'selected_sql',
     'selected_components',
     'component_shards',
+    'selected_invoices',
   ] as const) {
     const partial = Object.fromEntries(Object.entries(OUTPUTS).filter(([name]) => name !== key));
     expect(() => plan('integration', { outputs: partial })).toThrow(`The planner gave no ${key}`);
@@ -286,4 +289,23 @@ test('a docs-only plan keeps the static gates #567 selects for documentation, Li
     'unit:all',
     'step:build',
   ]);
+});
+
+test('the e-invoice check runs as its own job when the plan selects it, and is skipped with the reason otherwise', () => {
+  const selected = { ...OUTPUTS, selected_invoices: 'step:e-invoices' };
+  const run = plan('pr', { outputs: selected });
+  expect(run.jobs).toContain('invoices');
+  expect(plannedGroups('invoices', selected)).toEqual(['step:e-invoices']);
+  const none = plan('pr');
+  expect(none.jobs).not.toContain('invoices');
+  expect(none.skips.invoices).toContain('selects no e-invoice check');
+  const reused = plan('integration', {
+    outputs: selected,
+    reused: (key) =>
+      key.job === 'invoices' && key.groups.join() === 'step:e-invoices'
+        ? 'https://ci.example/runs/5'
+        : undefined,
+  });
+  expect(reused.jobs).not.toContain('invoices');
+  expect(reused.skips.invoices).toContain('https://ci.example/runs/5');
 });

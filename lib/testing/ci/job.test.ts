@@ -75,7 +75,7 @@ console.info('[verify] passed in 0.1 min (fake): ' + report);
   writeFileSync(
     join(root, 'scripts/ci-plan.ts'),
     `import { appendFileSync } from 'node:fs';
-appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=sql:grants\\nselected_lint=\\nselected_static=static:migration-order\\nselected_unit=\\nselected_sql=sql:grants\\nselected_components=ui:contracts:work\\ncomponent_shards=[{"shard":1,"groups":"ui:contracts:work"}]\\n');
+appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=sql:grants\\nselected_lint=\\nselected_static=static:migration-order\\nselected_unit=\\nselected_sql=sql:grants\\nselected_components=ui:contracts:work\\ncomponent_shards=[{"shard":1,"groups":"ui:contracts:work"}]\\nselected_invoices=\\n');
 `,
   );
   writeFileSync(
@@ -105,6 +105,7 @@ const EMPTY_OUTPUTS = {
   selected_sql: '',
   selected_components: '',
   component_shards: '[]',
+  selected_invoices: '',
 };
 
 /** A passed plan of `RUN_URL` for the tree in `root`, whose Fast runs only the migration-order gate and the build. */
@@ -366,12 +367,48 @@ test("off GitHub, Check fails without a scheduler report when this run's Plan is
     // A rerun of the same run: its Plan fails (no CI_BASE_SHA) over the plan an earlier attempt passed.
     const rerun = join(folder, 'rerun');
     const reason = 'The integration run https://ci.example/runs/1 passed this exact tree.';
-    const skips = { fast: reason, sql: reason, components: reason, midnight: reason, browser: reason };
+    const skips = {
+      fast: reason,
+      sql: reason,
+      components: reason,
+      invoices: reason,
+      midnight: reason,
+      browser: reason,
+    };
     writePlan(root, rerun, { plan: { jobs: ['plan', 'check'], skips, shards: [], outputs: EMPTY_OUTPUTS } });
     // The earlier attempt's plan alone passes Check, so only the rerun's failed Plan can fail it.
     expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(0);
     expect(runJob(root, 'plan', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);
     expect(readResult(join(rerun, resultFileName('plan', null)))).toMatchObject({ status: 'failed' });
     expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);
+  });
+});
+
+test('a pull request run that a newer push superseded ends at once and records nothing; on its current head it plans', () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const head = git(root, 'rev-parse', 'HEAD');
+    // The repository is its own origin, whose pull request ref first holds a newer commit.
+    git(root, 'remote', 'add', 'origin', root);
+    git(root, 'commit', '--quiet', '--allow-empty', '--message', 'newer push');
+    git(root, 'update-ref', 'refs/pull/1/head', 'HEAD');
+    git(root, 'checkout', '--quiet', '--detach', head);
+    const ledger = join(folder, 'ledger.jsonl');
+    const variables = {
+      CI_EVENT: 'pr',
+      CI_BASE_SHA: 'HEAD',
+      CI_PRODUCER: 'mac-standin',
+      CI_LEDGER: ledger,
+      CI_RUN_URL: RUN_URL,
+      CI_PR_HEAD_REF: 'refs/pull/1/head',
+    };
+    const superseded = join(folder, 'superseded');
+    expect(runJob(root, 'plan', { ...variables, CI_RESULTS_DIR: superseded })).toBe(1);
+    expect(readResult(join(superseded, resultFileName('plan', null)))).toHaveProperty('unreadable');
+    expect(readLedger(ledger)).toEqual([]);
+    git(root, 'update-ref', 'refs/pull/1/head', head);
+    const current = join(folder, 'current');
+    expect(runJob(root, 'plan', { ...variables, CI_RESULTS_DIR: current })).toBe(0);
+    expect(readResult(join(current, resultFileName('plan', null)))).toMatchObject({ status: 'passed' });
   });
 });

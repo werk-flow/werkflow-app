@@ -13,7 +13,16 @@
 export const CI_EVENTS = ['pr', 'integration', 'main', 'full'] as const;
 export type CiEvent = (typeof CI_EVENTS)[number];
 
-export const CI_JOBS = ['plan', 'fast', 'sql', 'components', 'midnight', 'browser', 'check'] as const;
+export const CI_JOBS = [
+  'plan',
+  'fast',
+  'sql',
+  'components',
+  'invoices',
+  'midnight',
+  'browser',
+  'check',
+] as const;
 export type CiJob = (typeof CI_JOBS)[number];
 
 type CiJobSpec = {
@@ -37,12 +46,15 @@ export const CI_DAG: Readonly<Record<CiJob, CiJobSpec>> = {
   fast: { name: 'Fast', needs: ['plan'], events: CI_EVENTS, reusable: false },
   sql: { name: 'SQL', needs: ['plan'], events: CI_EVENTS, reusable: true },
   components: { name: 'Component contracts', needs: ['plan'], events: CI_EVENTS, reusable: true },
+  // The reference invoices through Mustang and veraPDF, when the plan selects them. Every tool is
+  // pinned by checksum or digest, so a pass of the tree stands.
+  invoices: { name: 'E-invoices', needs: ['plan'], events: CI_EVENTS, reusable: true },
   midnight: { name: 'Midnight wait', needs: ['plan'], events: AFTER_REVIEW, reusable: false },
   // A shard serves the fast job's build, so it needs that job instead of polling for it.
   browser: { name: 'Browser', needs: ['plan', 'fast', 'midnight'], events: AFTER_REVIEW, reusable: true },
   check: {
     name: 'Check',
-    needs: ['plan', 'fast', 'sql', 'components', 'midnight', 'browser'],
+    needs: ['plan', 'fast', 'sql', 'components', 'invoices', 'midnight', 'browser'],
     events: CI_EVENTS,
     reusable: false,
   },

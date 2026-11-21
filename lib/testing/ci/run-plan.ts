@@ -32,6 +32,8 @@ export function plannedGroups(
       return [...groupList(outputs.selected_sql), 'step:types', 'step:seed'];
     case 'components':
       return groupList(shardGroups);
+    case 'invoices':
+      return groupList(outputs.selected_invoices);
     case 'browser':
       return [...groupList(shardGroups), 'step:server'];
     case 'plan':
@@ -111,6 +113,7 @@ const PLANNER_OUTPUTS = [
   'selected_sql',
   'selected_components',
   'component_shards',
+  'selected_invoices',
 ];
 
 /**
@@ -206,6 +209,9 @@ export function planRun(input: {
   if (!groupList(outputs.selected_sql).length)
     skips.sql =
       "The plan selects no SQL group: no change reaches the schema, an assertion, the generated types or the SQL job's scripts (lib/testing/selection/fast-tier.ts).";
+  if (!groupList(outputs.selected_invoices).length)
+    skips.invoices =
+      'The plan selects no e-invoice check: no change reaches the invoice core, the renderer, what they import or the dependencies (lib/testing/selection/e-invoice-selection.ts).';
   for (const job of WORK_JOBS) {
     if (skips[job] || job === 'browser' || job === 'components') continue;
     const receipt = reusedBy(job);

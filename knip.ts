@@ -69,6 +69,8 @@ const config: KnipConfig = {
     // The E7 ↔ E8 seam (werk-flow/werkflow-planning#22): `onTodaySaved` exists
     // before E8's worker start imports it. Remove this entry with that import.
     'lib/field-sync/device/today-refresh.ts!',
+    // Run by path: CI's e-invoice check (scripts/ci/job.ts) and the writer it starts.
+    'lib/document-rendering/fixtures/{check,write}-reference-e-invoices.ts',
     // Recompiles the vendored EN 16931 rules (`bun run rules:en16931`); the
     // package script makes it an entry of the first pass only.
     'lib/invoicing/rules/compile.ts!',

@@ -12,13 +12,19 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const asList = (value: unknown): unknown[] =>
   Array.isArray(value) ? value : value === undefined ? [] : [value];
 
+/** An `edited` event that kept the base: a title or body edit, which changes no tested input. */
+const KEPT_BASE = "github.event.action == 'edited' && !github.event.changes.base";
+
 test('ci.yml holds exactly the DAG jobs, with their names and needs', () => {
   const jobs = ci.at('jobs');
   if (!isRecord(jobs)) throw new Error('ci.yml has no jobs');
   expect(Object.keys(jobs).sort()).toEqual([...CI_JOBS].sort());
   for (const job of CI_JOBS) {
-    const name = ci.text('jobs', job, 'name');
-    expect(name.replace(' ${{ matrix.shard }}', '')).toBe(CI_DAG[job].name);
+    const name = ci
+      .text('jobs', job, 'name')
+      .replace(' ${{ matrix.shard }}', '')
+      .replace(`\${{ ${KEPT_BASE} && 'Ignored edit' || 'Check' }}`, 'Check');
+    expect(name).toBe(CI_DAG[job].name);
     expect(asList(ci.at('jobs', job, 'needs')).sort()).toEqual([...CI_DAG[job].needs].sort());
   }
 });
@@ -36,7 +42,9 @@ test("each job body is one call of scripts/ci/job.ts, and a job starts only when
 });
 
 test('Check runs after every other job, always, and passes it the scheduler results', () => {
-  expect(ci.at('jobs', 'check', 'if')).toBe('always()');
+  expect(ci.at('jobs', 'check', 'if')).toBe(
+    "always() && (github.event.action != 'edited' || github.event.changes.base)",
+  );
   const body = asList(ci.at('jobs', 'check', 'steps'))
     .filter(isRecord)
     .at(-1);
@@ -44,7 +52,7 @@ test('Check runs after every other job, always, and passes it the scheduler resu
 });
 
 test('the events map to the DAG events, and a draft becoming ready starts no second run (D1)', () => {
-  expect(ci.at('on', 'pull_request', 'types')).toEqual(['opened', 'synchronize', 'reopened']);
+  expect(ci.at('on', 'pull_request', 'types')).toEqual(['opened', 'synchronize', 'reopened', 'edited']);
   expect(ci.at('on', 'merge_group', 'types')).toEqual(['checks_requested']);
   const event = ci.text('env', 'CI_EVENT');
   for (const mapping of [
@@ -87,4 +95,17 @@ test("the browser and component jobs run one job per shard of the plan, each pas
       .find((step) => step.uses === './.github/actions/ci-job');
     expect(isRecord(body?.with) ? body.with.shard : undefined).toBe('${{ matrix.shard }}');
   }
+});
+
+// A stacked PR gets its run when GitHub retargets it to main (werk-flow/werkflow-planning#507). Any
+// other edit must neither cancel the head's run nor leave a skipped `Check`, which counts as passed.
+test('a retarget to main runs the PR; an edit that keeps the base runs no job, cancels nothing and reports no Check', () => {
+  expect(ci.text('concurrency', 'group')).toEndWith(
+    `\${{ ${KEPT_BASE} && format('-edit-{0}', github.run_id) || '' }}`,
+  );
+  expect(ci.at('jobs', 'plan', 'if')).toBe("github.event.action != 'edited' || github.event.changes.base");
+  expect(ci.text('jobs', 'check', 'name')).toBe(`\${{ ${KEPT_BASE} && 'Ignored edit' || 'Check' }}`);
+  // Every other job starts only from Plan's jobs, which a skipped Plan leaves empty.
+  for (const job of CI_JOBS.filter((name) => name !== 'plan' && name !== 'check'))
+    expect(ci.text('jobs', job, 'if')).toContain("fromJSON(needs.plan.outputs.jobs || '[]')");
 });
