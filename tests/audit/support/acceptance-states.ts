@@ -5,6 +5,7 @@ import {
   FAILED_REGION_SELECTOR,
   SKELETON_SELECTOR,
   interceptsRequest,
+  isAppPrefetch,
   isTargetPrefetch,
   navigationStart,
   stateCapturePlan,
@@ -89,11 +90,14 @@ async function appRouter(page: Page, method: 'prefetch' | 'push', url: string): 
 async function navigateHeld(page: Page, path: string, interception: Interception): Promise<void> {
   const target = { origin: new URL(page.url()).origin, path };
   const pending = new Set<Request>();
-  // router.prefetch returns before the browser starts the request: wait until one started and all ended.
+  // router.prefetch returns before the browser starts the request: wait until the
+  // target's prefetch started and every prefetch of the app ended, the target's
+  // and any other a link on the page started meanwhile.
   let seen = 0;
   const started = (request: Request): void => {
-    if (!isTargetPrefetch(observed(request), target)) return;
-    seen += 1;
+    const seenRequest = observed(request);
+    if (!isAppPrefetch(seenRequest, target.origin)) return;
+    if (isTargetPrefetch(seenRequest, target)) seen += 1;
     pending.add(request);
   };
   const ended = (request: Request): void => {
@@ -105,7 +109,9 @@ async function navigateHeld(page: Page, path: string, interception: Interception
   try {
     await appRouter(page, 'prefetch', path);
     await expect
-      .poll(() => seen > 0 && pending.size === 0, { message: 'the prefetch of the target route finished' })
+      .poll(() => seen > 0 && pending.size === 0, {
+        message: 'the prefetch of the target route and every other prefetch finished',
+      })
       .toBe(true);
   } finally {
     page.off('request', started);
