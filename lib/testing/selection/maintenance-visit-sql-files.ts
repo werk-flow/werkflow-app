@@ -5,4 +5,5 @@
 export const MAINTENANCE_VISIT_SQL_FILES: readonly string[] = [
   'maintenance_missed_visits.sql',
   'maintenance_visit_next_actions.sql',
+  'maintenance_open_findings.sql',
 ];

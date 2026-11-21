@@ -5,6 +5,7 @@ import type { FieldHistoryEntry, FieldHistoryEquipment, FieldHistoryVisit } from
 
 // Every key the technician's history carries. A new field fails here first, so
 // adding one is a decision about what leaves the office (werk-flow/werkflow-planning#468).
+// Open Mängel are their texts alone: no next step, owner, date or reason (werk-flow/werkflow-planning#484).
 type Keys<T> = T extends unknown ? keyof T : never;
 type HistoryKeys =
   | Keys<FieldHistoryEntry>
@@ -19,6 +20,7 @@ type CustomerSafeKey =
   | 'equipment'
   | 'defects'
   | 'measurements'
+  | 'openFindings'
   | 'predecessor'
   | 'successor'
   | 'equipmentNumber'
