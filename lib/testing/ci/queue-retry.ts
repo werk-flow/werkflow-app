@@ -1,27 +1,39 @@
-// The queue's retry before blame: a run without a verdict is retried once, on the next tick, and
-// only the same work's second run without one needs a person. The record keeps every verdict its
+// The queue's retry before blame: a run without a verdict is retried once, on a later tick, and
+// only the same work's second run without one needs a person. The record keeps every outstanding
+// retry by its exact work until that work reaches a verdict or a tick settles, and every verdict its
 // ticks reached, so a tree that answers otherwise on the same base later is still a contradiction.
 import { z } from 'zod';
 import type { BatchEntry, QueueOutcome, Verdict } from './queue';
 
 /** The exact work a run tested: main before the batch, the PRs at their heads, and the tree. */
-type Work = { base: string; tree: string; pulls: { number: number; head: string }[] };
+export type Work = { base: string; tree: string; pulls: { number: number; head: string }[] };
 
 /** A verdict a run reached on a tree and base: a later run of them must agree with it. */
 type Seen = { base: string; tree: string; kind: 'passed' | 'failed'; runUrl: string };
 
-/** A run without a verdict whose work the next tick retries once, with every verdict reached since the last clear. */
-export type Retry = Work & { runUrl: string; detail: string; seen: Seen[] };
+/** A run without a verdict whose work a later tick retries once. */
+type Unanswered = Work & { runUrl: string; detail: string };
+
+/** Every outstanding run without a verdict, one per work, and every verdict reached since the last clear. */
+export type Retry = { unanswered: Unanswered[]; seen: Seen[] };
 
 const sha = z.string().regex(/^[0-9a-f]{40}$/);
 
 export const retrySchema = z
   .object({
-    runUrl: z.string().min(1),
-    base: sha,
-    tree: z.string().min(1),
-    pulls: z.array(z.object({ number: z.number().int().positive(), head: sha }).strict()).min(1),
-    detail: z.string(),
+    unanswered: z
+      .array(
+        z
+          .object({
+            runUrl: z.string().min(1),
+            base: sha,
+            tree: z.string().min(1),
+            pulls: z.array(z.object({ number: z.number().int().positive(), head: sha }).strict()).min(1),
+            detail: z.string(),
+          })
+          .strict(),
+      )
+      .min(1),
     seen: z.array(
       z
         .object({
@@ -76,22 +88,27 @@ export const contradiction = (
         (seen) => seen.base === work.base && seen.tree === work.tree && seen.kind !== verdict.kind,
       );
 
-/** The record of a run without a verdict, keeping the earlier record's verdicts beside the tick's. */
+/**
+ * The record after a run of `work` without a verdict: every other outstanding retry stays unless
+ * its work reached a verdict in this tick (`answered`), and the tick's verdicts join the earlier ones.
+ */
 export const retryOf = (
   work: Work,
   verdict: Verdict,
   outcome: QueueOutcome,
   earlier: Retry | null | undefined,
+  answered: readonly Work[],
 ): Retry => ({
-  ...work,
-  runUrl: verdict.runUrl,
-  detail: verdict.detail,
+  unanswered: [
+    ...(earlier?.unanswered ?? []).filter((entry) => !answered.some((done) => sameWork(done, entry))),
+    { ...work, runUrl: verdict.runUrl, detail: verdict.detail },
+  ],
   seen: [...(earlier?.seen ?? []), ...seenIn(outcome)],
 });
 
 /**
- * A run without a verdict: retried live unless the record is this work's own; else for a person
- * (a dry run: `retry` undefined). Other work that ends without a verdict gets its own retry.
+ * A run without a verdict: retried live unless the record holds this work's own retry; else for a
+ * person (a dry run: `retry` undefined).
  */
 export function noVerdict(
   work: Work,
@@ -105,9 +122,11 @@ export function noVerdict(
       detail: `tree ${work.tree} ${contradicted.kind} in ${contradicted.runUrl} but ${verdict.kind} in ${verdict.runUrl}`,
     };
   const detail = `${verdict.runUrl}: ${verdict.detail}`;
-  if (retry === null || (retry !== undefined && !sameWork(retry, work))) return { kind: 'retry', detail };
+  if (retry === undefined) return { kind: 'inconclusive', detail };
+  const earlier = retry?.unanswered.find((entry) => sameWork(entry, work));
+  if (!earlier) return { kind: 'retry', detail };
   return {
     kind: 'inconclusive',
-    detail: retry ? `${detail}, after the retry of ${retry.runUrl} (${retry.detail})` : detail,
+    detail: `${detail}, after the retry of ${earlier.runUrl} (${earlier.detail})`,
   };
 }

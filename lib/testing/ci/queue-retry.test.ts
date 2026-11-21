@@ -18,14 +18,18 @@ test('a first run without a verdict is retried on the next tick, recorded, and l
     pending: null,
     frozen: null,
     retry: {
-      base: sha('main'),
-      tree: 'main+1+2',
-      pulls: [
-        { number: 1, head: sha('head-1') },
-        { number: 2, head: sha('head-2') },
+      unanswered: [
+        {
+          base: sha('main'),
+          tree: 'main+1+2',
+          pulls: [
+            { number: 1, head: sha('head-1') },
+            { number: 2, head: sha('head-2') },
+          ],
+          runUrl: 'run-1:main+1+2',
+          detail: 'inconclusive',
+        },
       ],
-      runUrl: 'run-1:main+1+2',
-      detail: 'inconclusive',
       seen: [],
     },
   });
@@ -198,7 +202,10 @@ test('a retry belongs to the exact work: the same tree with other PRs, another b
   expect(batch.tested).toEqual([[1, 2], [1, 2], [1]]);
   expect(retried.runs.map((run) => run.tree)).toEqual(['main+1', 'main+1']);
   expect(retried.stops.map((stop) => stop.kind)).toEqual(['retry']);
-  expect(batch.state().retry).toMatchObject({ tree: 'main+1', pulls: [{ number: 1, head: sha('head-1') }] });
+  // [1, 2] reached a verdict, so only [1]'s retry is outstanding.
+  expect(batch.state().retry?.unanswered).toMatchObject([
+    { tree: 'main+1', pulls: [{ number: 1, head: sha('head-1') }] },
+  ]);
   // Main moves to another commit with the same tree, or #1 to another head with the same changes.
   const moves = {
     base: (world: { pushMain: (tree: string) => void }) => world.pushMain('main'),
@@ -239,4 +246,22 @@ test('a later retry keeps the verdicts of the earlier ones: a tree that failed b
   expect(third.stops[0]?.detail).toContain('failed in run-1:main+1+2 but passed in run-4:main+1+2');
   expect(world.landed).toEqual([]);
   expect(needsAttention(third)).toBe(true);
+});
+
+test("a batch without a verdict keeps its prefix's outstanding retry: the prefix's second run without one reaches a person by tick 3", async () => {
+  // Sol's sequence with unchanged heads and base: [1, 2] fails and [1] has no verdict, then [1, 2]
+  // has no verdict, and so on for six ticks. Each work's second run without a verdict needs a person.
+  const world = fakeWorld([pull(1), pull(2)], {
+    answer: (prs, run) => (prs.length === 2 && run % 3 === 1 ? 'failed' : 'inconclusive'),
+  });
+  const stops: string[][] = [];
+  for (let tick = 1; tick <= 6; tick++) {
+    const outcome = await runQueueTick(world.adapter, LIVE);
+    stops.push(outcome.stops.map((stop) => stop.kind));
+    if (needsAttention(outcome)) break;
+  }
+  expect(world.tested).toEqual([[1, 2], [1], [1, 2], [1, 2], [1]]);
+  expect(stops).toEqual([['retry'], ['retry'], ['inconclusive']]);
+  expect(world.landed).toEqual([]);
+  expect(world.rejected).toEqual([]);
 });

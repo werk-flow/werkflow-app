@@ -5,7 +5,7 @@
 // prefix before it lands. scripts/ci/queue-adapter.ts holds git, GitHub and the runner; every
 // decision lives here.
 import { z } from 'zod';
-import { contradiction, noVerdict, type Retry, retryOf, retrySchema, workOf } from './queue-retry';
+import { contradiction, noVerdict, type Retry, retryOf, retrySchema, type Work, workOf } from './queue-retry';
 
 /** The owner's batch size (D2). */
 export const MAX_BATCH = 4;
@@ -51,7 +51,7 @@ type PendingMark = { pull: number; head: string; runUrl: string; verdict: 'succe
 
 /**
  * What the queue keeps between ticks: a mark it may have left green, why it froze, if it did, and
- * the run without a verdict the next tick retries, if the last one had one.
+ * the runs without a verdict later ticks retry, one per work.
  */
 export type QueueState = { pending: PendingMark | null; frozen: string | null; retry?: Retry | undefined };
 
@@ -321,8 +321,8 @@ async function buildChain(
 }
 
 /**
- * Saves the tick's retry, or clears an earlier one once a tick reached its verdicts, so only the
- * same work's second run without one stops the queue.
+ * Saves the tick's retry record, or clears the earlier one once a tick reached its verdicts, so
+ * only the same work's second run without one stops the queue.
  */
 async function recordRetry(
   adapter: QueueAdapter,
@@ -426,6 +426,7 @@ async function bisect(
   retry: Retry | null | undefined,
 ): Promise<{ verdicts: Map<number, Verdict>; unanswered?: Retry }> {
   const verdicts = new Map<number, Verdict>();
+  const answered: Work[] = [];
   let green = 0;
   let red: number | undefined;
   let length: number | undefined = chain.length;
@@ -453,9 +454,11 @@ async function bisect(
     if (verdict.kind === 'inconclusive' || contradicted) {
       const stop = noVerdict(work, verdict, contradicted, retry);
       outcome.stops.push(stop);
-      if (stop.kind === 'retry') return { verdicts, unanswered: retryOf(work, verdict, outcome, retry) };
+      if (stop.kind === 'retry')
+        return { verdicts, unanswered: retryOf(work, verdict, outcome, retry, answered) };
       break;
     }
+    answered.push(work);
     verdicts.set(length, verdict);
     if (verdict.kind === 'passed') green = length;
     else red = length;

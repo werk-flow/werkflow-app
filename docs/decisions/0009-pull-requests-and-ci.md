@@ -260,3 +260,7 @@ The second round of external CI reviews found that a same-tree pass could stand 
 ## Amendment 2026-11-21: a retry belongs to its work
 
 A retry record names the work its run tested: the base commit, the batch's PRs at their heads, and the tree. Only that work's second run without a verdict needs a person; other work gets its own retry. Each record keeps the verdicts of the records before it, so a tree that answered otherwise on the same base before the retries is still a contradiction for a person. A tick that settles clears the record. `lib/testing/ci/queue-retry.ts` owns the rule.
+
+## Amendment 2026-11-21: every outstanding retry stays
+
+This narrows "a retry belongs to its work". The record holds every outstanding retry, one per work, and recording one work's retry never removes another's: otherwise a batch and its prefix that take turns ending without a verdict would retry forever. A retry stays until its work reaches a verdict or a tick settles. `lib/testing/ci/queue-retry.ts` owns the rule.
