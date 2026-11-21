@@ -140,7 +140,9 @@ world.rpc = ({ name, args }) => {
   const delivery = deliveries.find((candidate) => candidate.id === args.p_delivery_id);
   if (!delivery) return refused('delivery_not_found');
   if (name === 'retry_document_delivery') {
-    if (delivery.state !== 'failed') return { data: payloadOf(delivery, false), error: null };
+    if (delivery.state !== 'failed' || delivery.attempt !== args.p_expected_attempt) {
+      return { data: payloadOf(delivery, false), error: null };
+    }
     Object.assign(delivery, { state: 'sending', attempt: delivery.attempt + 1 });
     return { data: payloadOf(delivery, true), error: null };
   }
@@ -164,7 +166,10 @@ await assertRefused(
   world,
   [
     ['sendInvoiceEmail', () => send(crypto.randomUUID())],
-    ['retryInvoiceDelivery', () => retryInvoiceDelivery({ deliveryId: crypto.randomUUID() })],
+    [
+      'retryInvoiceDelivery',
+      () => retryInvoiceDelivery({ deliveryId: crypto.randomUUID(), expectedAttempt: 1 }),
+    ],
     [
       'markInvoiceSentManually',
       () => markInvoiceSentManually({ invoiceId, attemptKey: crypto.randomUUID(), note: '' }),
@@ -191,7 +196,7 @@ await assertRefused(
 );
 // Another organization's delivery is refused by the function under the caller's organization.
 world.rpcCalls.length = 0;
-assert.deepEqual(await retryInvoiceDelivery({ deliveryId: crypto.randomUUID() }), {
+assert.deepEqual(await retryInvoiceDelivery({ deliveryId: crypto.randomUUID(), expectedAttempt: 1 }), {
   success: false,
   error: 'delivery_not_found',
 });
@@ -259,12 +264,15 @@ assert.ok(failedDelivery && failedDelivery.state === 'failed');
 assert.equal(mailsOf(failedDelivery.id).length, 0);
 delete process.env.VERCEL_ENV;
 globalThis.fetch = realFetch;
-assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id }), {
+world.rpcCalls.length = 0;
+assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, expectedAttempt: 1 }), {
   success: true,
   state: 'sent',
   failureCode: null,
 });
-assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id }), {
+assert.equal(callsNamed('retry_document_delivery')[0]?.args.p_expected_attempt, 1);
+// The same press again, as after a lost answer: nothing is sent.
+assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, expectedAttempt: 1 }), {
   success: true,
   state: 'sent',
   failureCode: null,

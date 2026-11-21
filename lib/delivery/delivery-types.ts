@@ -37,7 +37,7 @@ export type DeliveryEntry = {
   createdAt: string;
   sentAt: string | null;
   createdBy: string | null;
-  /** Failed, or sending for ten minutes without an answer. */
+  /** Failed, or sending for ten minutes without an answer, and requested under 23 hours ago. */
   retryable: boolean;
 };
 

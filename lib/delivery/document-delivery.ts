@@ -44,6 +44,7 @@ const refusal = writeRefusalFor(
     'document_not_found',
     'delivery_not_found',
     'delivery_not_retryable',
+    'delivery_retry_expired',
   ]),
 );
 
@@ -134,7 +135,7 @@ async function transmit(caller: DeliveryCaller, payload: DeliveryPayload): Promi
     result.status === 'accepted'
       ? { p_outcome: 'sent', p_provider_message_id: result.messageId }
       : { p_outcome: 'failed', p_failure_code: result.code };
-  const { error } = await createSupabaseAdminClient().rpc('settle_document_delivery', {
+  const { data: settled, error } = await createSupabaseAdminClient().rpc('settle_document_delivery', {
     p_actor_id: caller.userId,
     p_organization_id: caller.orgId,
     p_delivery_id: payload.deliveryId,
@@ -143,8 +144,10 @@ async function transmit(caller: DeliveryCaller, payload: DeliveryPayload): Promi
   });
   // Unsettled, the delivery reads as sending; after ten minutes it can be
   // retried under the same key, which the provider delivers once within a day.
-  if (error) {
-    logError('sendDocument: settle_document_delivery failed', error);
+  // A refused settlement (another attempt took over) answers the same: the
+  // page reads the recorded state.
+  if (error || settled !== true) {
+    if (error) logError('sendDocument: settle_document_delivery failed', error);
     return { success: true, state: 'sending', failureCode: null };
   }
   return result.status === 'accepted'
@@ -204,19 +207,29 @@ export async function sendDocument(
 }
 
 /**
- * Sends a failed email delivery again with its stored content; a sent one is
- * never sent twice. Its recipient counted when it was requested.
+ * Sends a failed email delivery again with its stored content, once per
+ * attempt the office saw; a sent one is never sent twice. It counts against
+ * its stored recipient's limit too.
  */
 export async function retryDocumentDelivery(
   caller: DeliveryCaller,
-  deliveryId: string,
+  delivery: { id: string; expectedAttempt: number },
 ): Promise<DeliveryOutcome> {
-  const limited = await passRateLimit(caller, null);
+  const stored = await createSupabaseAdminClient()
+    .from('document_deliveries')
+    .select('recipient_email')
+    .eq('organization_id', caller.orgId)
+    .eq('id', delivery.id)
+    .maybeSingle();
+  if (stored.error)
+    return refusal(stored.error, 'send_failed', 'retryDocumentDelivery: delivery read failed');
+  const limited = await passRateLimit(caller, stored.data?.recipient_email ?? null);
   if (limited) return limited;
   const answer = await createSupabaseAdminClient().rpc('retry_document_delivery', {
     p_actor_id: caller.userId,
     p_organization_id: caller.orgId,
-    p_delivery_id: deliveryId,
+    p_delivery_id: delivery.id,
+    p_expected_attempt: delivery.expectedAttempt,
   });
   return sendClaimed(caller, answer, 'retryDocumentDelivery: retry_document_delivery failed');
 }

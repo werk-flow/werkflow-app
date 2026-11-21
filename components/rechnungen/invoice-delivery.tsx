@@ -53,7 +53,7 @@ function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
   const [error, setError] = useState<string | null>(null);
   const retry = async () => {
     setError(null);
-    const result = await run({ deliveryId: entry.id }).catch(() => null);
+    const result = await run({ deliveryId: entry.id, expectedAttempt: entry.attempts }).catch(() => null);
     if (!result) return setError(RETRY_FAILED);
     if (!result.success)
       return setError(describeFailure(result.error, DELIVERY_FAILURE_MESSAGES, RETRY_FAILED));

@@ -293,14 +293,20 @@ grant execute on function public.request_document_delivery(uuid, uuid, uuid, tex
 
 -- Claims a failed email delivery for another attempt, or one whose attempt
 -- has been sending for ten minutes (its process ended without an answer),
--- and answers its payload with claimed true. A sent delivery, or one that is
--- sending now, answers claimed false and is not sent again. Refusals:
--- not_authorized, delivery_not_found, delivery_not_retryable, and the
--- document's when the subject no longer sends it.
+-- and answers its payload with claimed true. A sent delivery, one that is
+-- sending now, or one whose attempt is no longer p_expected_attempt (a
+-- repeated press) answers claimed false and is not sent again. A delivery
+-- requested 23 hours ago or earlier is not retried: the provider keeps the
+-- idempotency key 24 hours from the first attempt, so a later retry could
+-- deliver a mail whose acceptance was lost a second time. Refusals:
+-- not_authorized, delivery_not_found, delivery_not_retryable,
+-- delivery_retry_expired, and the document's when the subject no longer
+-- sends it.
 create function public.retry_document_delivery(
   p_actor_id uuid,
   p_organization_id uuid,
-  p_delivery_id uuid
+  p_delivery_id uuid,
+  p_expected_attempt integer
 )
 returns jsonb
 language plpgsql
@@ -311,7 +317,7 @@ declare
   v_delivery public.document_deliveries;
   v_document public.documents;
 begin
-  if p_actor_id is null or p_organization_id is null or p_delivery_id is null then
+  if p_actor_id is null or p_organization_id is null or p_delivery_id is null or p_expected_attempt is null then
     raise exception 'invalid_input';
   end if;
   perform app_private.lock_office_actor(p_organization_id, p_actor_id);
@@ -320,9 +326,12 @@ begin
   for update;
   if not found then raise exception 'delivery_not_found'; end if;
   if v_delivery.channel <> 'email' then raise exception 'delivery_not_retryable'; end if;
+  if v_delivery.created_at <= now() - interval '23 hours' and v_delivery.state <> 'sent' then
+    raise exception 'delivery_retry_expired';
+  end if;
   v_document := app_private.lock_delivery_document(
     p_organization_id, v_delivery.subject_kind, v_delivery.invoice_id, v_delivery.document_id);
-  if v_delivery.state = 'sent'
+  if v_delivery.state = 'sent' or v_delivery.attempts <> p_expected_attempt
     or (v_delivery.state = 'sending' and v_delivery.updated_at > now() - interval '10 minutes')
   then
     return app_private.delivery_payload(v_delivery, v_document, false);
@@ -338,8 +347,8 @@ begin
   return app_private.delivery_payload(v_delivery, v_document, true);
 end;
 $$;
-revoke all on function public.retry_document_delivery(uuid, uuid, uuid) from public, anon, authenticated;
-grant execute on function public.retry_document_delivery(uuid, uuid, uuid) to service_role;
+revoke all on function public.retry_document_delivery(uuid, uuid, uuid, integer) from public, anon, authenticated;
+grant execute on function public.retry_document_delivery(uuid, uuid, uuid, integer) to service_role;
 
 -- Ends one attempt: sent with the provider's message id, or failed with a
 -- stable code. Only the attempt that is sending settles; a sent delivery
@@ -457,7 +466,7 @@ grant execute on function public.record_manual_delivery(uuid, uuid, uuid, text, 
 
 -- A subject's deliveries, newest first, at most p_limit with the total, so
 -- the page names what it leaves out. retryable: failed, or sending for ten
--- minutes without an answer.
+-- minutes without an answer, and requested less than 23 hours ago.
 create function public.list_document_deliveries(
   p_organization_id uuid,
   p_subject_kind text,
@@ -489,8 +498,9 @@ as $$
           'createdAt', delivery.created_at,
           'sentAt', delivery.sent_at,
           'createdBy', nullif(btrim(concat_ws(' ', profile.first_name, profile.last_name)), ''),
-          'retryable', delivery.channel = 'email' and (delivery.state = 'failed'
-            or (delivery.state = 'sending' and delivery.updated_at <= now() - interval '10 minutes'))
+          'retryable', delivery.channel = 'email' and delivery.created_at > now() - interval '23 hours'
+            and (delivery.state = 'failed'
+              or (delivery.state = 'sending' and delivery.updated_at <= now() - interval '10 minutes'))
         ) as row_data
         from public.document_deliveries delivery
         left join public.profiles profile on profile.id = delivery.created_by

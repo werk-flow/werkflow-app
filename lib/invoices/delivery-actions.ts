@@ -22,7 +22,11 @@ import { readIssuedInvoice } from './reads';
 
 const sendInvoiceEmailSchema = sendDocumentEmailSchema.extend({ invoiceId: uuidSchema });
 const markInvoiceSentManuallySchema = recordManualDeliverySchema.extend({ invoiceId: uuidSchema });
-const retryInvoiceDeliverySchema = z.object({ deliveryId: uuidSchema });
+const retryInvoiceDeliverySchema = z.object({
+  deliveryId: uuidSchema,
+  /** The attempt the office saw failed: a repeated press sends nothing again. */
+  expectedAttempt: z.number().int().min(1),
+});
 
 /** The caller and the filed original of an issued invoice of their organization. */
 async function issuedOriginal(
@@ -70,7 +74,10 @@ export async function retryInvoiceDelivery(
   try {
     const caller = await resolveManagerContext();
     if (!caller.success) return caller;
-    return await retryDocumentDelivery(caller.context, parsed.data.deliveryId);
+    return await retryDocumentDelivery(caller.context, {
+      id: parsed.data.deliveryId,
+      expectedAttempt: parsed.data.expectedAttempt,
+    });
   } catch (error) {
     logError('retryInvoiceDelivery: unexpected error', error);
     return { success: false, error: 'unexpected_error' };

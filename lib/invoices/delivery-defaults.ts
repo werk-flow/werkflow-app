@@ -35,9 +35,9 @@ async function readRecipientEmail(organizationId: string, clientId: string): Pro
         .eq('organization_id', organizationId)
         .eq('client_id', clientId)
         .eq('is_active', true)
+        .eq('is_primary', true)
         .is('site_id', null)
         .not('email', 'is', null)
-        .order('is_primary', { ascending: false })
         .order('created_at')
         .limit(1)
         .maybeSingle(),

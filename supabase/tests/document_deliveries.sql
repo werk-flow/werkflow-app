@@ -78,7 +78,7 @@ begin
       or has_column_privilege(v_role, 'public.document_deliveries', 'note', 'SELECT')
       or has_function_privilege(v_role,
         'public.request_document_delivery(uuid,uuid,uuid,text,uuid,uuid,text,text,text,text,text)', 'EXECUTE')
-      or has_function_privilege(v_role, 'public.retry_document_delivery(uuid,uuid,uuid)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.retry_document_delivery(uuid,uuid,uuid,integer)', 'EXECUTE')
       or has_function_privilege(v_role,
         'public.settle_document_delivery(uuid,uuid,uuid,integer,text,text,text)', 'EXECUTE')
       or has_function_privilege(v_role,
@@ -216,20 +216,23 @@ select pg_temp.expect_refusal('the same attempt key with another recipient', $sq
 $sql$, 'invalid_input');
 
 -- Settle and retry: a failure keeps its code; only the sending attempt
--- settles; a retry while sending or after the send claims nothing.
+-- settles; a retry while sending, after the send, or repeated after its own
+-- failure (an older expected attempt) claims nothing.
 create function pg_temp.settle(p_attempt integer, p_outcome text, p_message text, p_code text) returns boolean
 language sql as $$
   select public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
     '38070000-0000-4000-8000-000000000010', pg_temp.id('delivery'), p_attempt, p_outcome, p_message, p_code)
 $$;
-create function pg_temp.retry(p_actor uuid default '38070000-0000-4000-8000-000000000002') returns jsonb language sql as $$
-  select public.retry_document_delivery(p_actor, '38070000-0000-4000-8000-000000000010', pg_temp.id('delivery'))
+create function pg_temp.retry(p_expected integer, p_actor uuid default '38070000-0000-4000-8000-000000000002')
+returns jsonb language sql as $$
+  select public.retry_document_delivery(p_actor, '38070000-0000-4000-8000-000000000010', pg_temp.id('delivery'),
+    p_expected)
 $$;
 do $$
 declare
   v_retry jsonb;
 begin
-  if pg_temp.retry() ->> 'claimed' is distinct from 'false' then
+  if pg_temp.retry(1) ->> 'claimed' is distinct from 'false' then
     raise exception 'a retry claimed a delivery that is sending';
   end if;
   if not pg_temp.settle(1, 'failed', null, 'email_provider_unreachable') then
@@ -238,32 +241,41 @@ begin
   if pg_temp.settle(1, 'failed', null, 'email_provider_unreachable') then
     raise exception 'a settled attempt settled again';
   end if;
-  v_retry := pg_temp.retry();
+  v_retry := pg_temp.retry(1);
   if (v_retry ->> 'claimed')::boolean is distinct from true or (v_retry ->> 'attempt')::integer is distinct from 2
     or v_retry ->> 'recipient' is distinct from 'erika.musterfrau@example.com' then
     raise exception 'the retry answered %', v_retry;
   end if;
-  if pg_temp.retry() ->> 'claimed' is distinct from 'false' then
+  if pg_temp.retry(1) ->> 'claimed' is distinct from 'false' then
     raise exception 'a second retry claimed the attempt in flight';
   end if;
-  if pg_temp.settle(1, 'sent', 'old-attempt', null) then
-    raise exception 'the first attempt''s late answer settled the second';
+  if not pg_temp.settle(2, 'failed', null, 'email_provider_503') then
+    raise exception 'the retry''s failure was not settled';
   end if;
-  if not pg_temp.settle(2, 'sent', '4ef9a417-02e9-4d39-ad75-9611e0fcc33c', null) then
+  if pg_temp.retry(1) ->> 'claimed' is distinct from 'false' then
+    raise exception 'the first retry, pressed again after its failure, claimed a third attempt';
+  end if;
+  if (pg_temp.retry(2) ->> 'attempt')::integer is distinct from 3 then
+    raise exception 'a retry of the second attempt was not claimed';
+  end if;
+  if pg_temp.settle(2, 'sent', 'old-attempt', null) then
+    raise exception 'the second attempt''s late answer settled the third';
+  end if;
+  if not pg_temp.settle(3, 'sent', '4ef9a417-02e9-4d39-ad75-9611e0fcc33c', null) then
     raise exception 'the send was not settled';
   end if;
-  if pg_temp.retry() ->> 'claimed' is distinct from 'false' or pg_temp.settle(2, 'failed', null, 'email_provider_503') then
+  if pg_temp.retry(3) ->> 'claimed' is distinct from 'false' or pg_temp.settle(3, 'failed', null, 'email_provider_503') then
     raise exception 'a sent delivery was claimed or changed again';
   end if;
   if (select (state, provider_message_id, failure_code, attempts, sent_at is not null)
       from public.document_deliveries where id = pg_temp.id('delivery'))
-    is distinct from ('sent'::text, '4ef9a417-02e9-4d39-ad75-9611e0fcc33c'::text, null::text, 2, true) then
+    is distinct from ('sent'::text, '4ef9a417-02e9-4d39-ad75-9611e0fcc33c'::text, null::text, 3, true) then
     raise exception 'the sent delivery reads wrong';
   end if;
   -- One transaction gives every entry the same time, so the history compares sorted.
   if (select array_agg(event_type || ':' || attempt order by event_type || ':' || attempt)
       from public.document_delivery_events where delivery_id = pg_temp.id('delivery'))
-    is distinct from array['failed:1', 'requested:1', 'retried:2', 'sent:2'] then
+    is distinct from array['failed:1', 'failed:2', 'requested:1', 'retried:2', 'retried:3', 'sent:3'] then
     raise exception 'the history reads %', (select array_agg(event_type || ':' || attempt)
       from public.document_delivery_events where delivery_id = pg_temp.id('delivery'));
   end if;
@@ -271,29 +283,42 @@ end;
 $$;
 select pg_temp.expect_refusal(label, statement, refusal)
 from (values
-  ('a retry by a field worker', 'select pg_temp.retry(''38070000-0000-4000-8000-000000000003'')', 'not_authorized'),
+  ('a retry by a field worker', 'select pg_temp.retry(3, ''38070000-0000-4000-8000-000000000003'')',
+   'not_authorized'),
   ('a retry in another organization', format(
-    'select public.retry_document_delivery(%L, %L, %L)', '38070000-0000-4000-8000-000000000004',
+    'select public.retry_document_delivery(%L, %L, %L, 3)', '38070000-0000-4000-8000-000000000004',
     '38070000-0000-4000-8000-000000000011', pg_temp.id('delivery')), 'delivery_not_found'),
-  ('a sent result without its message id', 'select pg_temp.settle(2, ''sent'', null, null)', 'invalid_input')
+  ('a sent result without its message id', 'select pg_temp.settle(3, ''sent'', null, null)', 'invalid_input')
 ) as cases(label, statement, refusal);
 
--- An attempt whose process ended without an answer is claimed after ten minutes.
+-- An attempt whose process ended without an answer is claimed after ten
+-- minutes; a failed delivery requested 23 hours ago or earlier is not
+-- retried, because the provider's key may have expired.
 do $$
 declare
   v_stale jsonb := pg_temp.request('38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
     'invoice', '38070000-0000-4000-8000-000000000301', '38070000-0000-4000-8000-000000000402');
+  v_old jsonb := pg_temp.request('38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
+    'invoice', '38070000-0000-4000-8000-000000000301', '38070000-0000-4000-8000-000000000404');
   v_retry jsonb;
 begin
   update public.document_deliveries set updated_at = now() - interval '11 minutes'
   where id = (v_stale ->> 'deliveryId')::uuid;
   v_retry := public.retry_document_delivery('38070000-0000-4000-8000-000000000001',
-    '38070000-0000-4000-8000-000000000010', (v_stale ->> 'deliveryId')::uuid);
+    '38070000-0000-4000-8000-000000000010', (v_stale ->> 'deliveryId')::uuid, 1);
   if (v_retry ->> 'claimed')::boolean is distinct from true or (v_retry ->> 'attempt')::integer is distinct from 2 then
     raise exception 'a stale attempt was not claimed: %', v_retry;
   end if;
+  insert into ids values ('old', (v_old ->> 'deliveryId')::uuid);
+  perform public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
+    '38070000-0000-4000-8000-000000000010', pg_temp.id('old'), 1, 'failed', null, 'email_provider_unreachable');
+  update public.document_deliveries set created_at = now() - interval '23 hours'
+  where id = pg_temp.id('old');
 end;
 $$;
+select pg_temp.expect_refusal('a retry 23 hours after the request', format(
+  'select public.retry_document_delivery(%L, %L, %L, 1)', '38070000-0000-4000-8000-000000000002',
+  '38070000-0000-4000-8000-000000000010', pg_temp.id('old')), 'delivery_retry_expired');
 
 -- Manual sending: recorded once as sent, with its note; never retried.
 create function pg_temp.manual(p_actor uuid, p_org uuid, p_document uuid, p_note text) returns uuid language sql as $$
@@ -331,7 +356,7 @@ select pg_temp.expect_refusal('the same manual key with another note', $sql$
     '38070000-0000-4000-8000-000000000301', 'per Bote')
 $sql$, 'invalid_input');
 select pg_temp.expect_refusal('a retry of a manual send', format(
-  'select public.retry_document_delivery(%L, %L, %L)', '38070000-0000-4000-8000-000000000002',
+  'select public.retry_document_delivery(%L, %L, %L, 1)', '38070000-0000-4000-8000-000000000002',
   '38070000-0000-4000-8000-000000000010', pg_temp.id('manual')), 'delivery_not_retryable');
 
 -- The list: its total beside the rows it holds, who sent, and what may be
@@ -345,7 +370,7 @@ declare
   v_foreign jsonb := public.list_document_deliveries('38070000-0000-4000-8000-000000000011', 'invoice',
     pg_temp.id('invoice'), 50);
 begin
-  if (v_list ->> 'total')::integer is distinct from 3 or jsonb_array_length(v_list -> 'rows') is distinct from 3
+  if (v_list ->> 'total')::integer is distinct from 4 or jsonb_array_length(v_list -> 'rows') is distinct from 4
     or v_manual ->> 'channel' is distinct from 'manual'
     or v_manual ->> 'createdBy' is distinct from 'Max Mustermann'
     or (v_manual ->> 'retryable')::boolean
@@ -363,15 +388,31 @@ begin
 end;
 $$;
 
--- The history refuses changes, also to the service role.
-select pg_temp.expect_refusal(label, statement, '42501')
+reset role;
+
+-- The history refuses changes, also to the table owner, whom no grant stops;
+-- the organization's teardown removes its deliveries and their history.
+select pg_temp.expect_refusal(label, statement, 'event_ledger_history_immutable')
 from (values
   ('a history change', format('update public.document_delivery_events set failure_code = ''x'' where delivery_id = %L',
     pg_temp.id('delivery'))),
   ('a history delete', format('delete from public.document_delivery_events where delivery_id = %L',
     pg_temp.id('delivery')))
 ) as cases(label, statement);
+set local role service_role;
+select public.record_manual_delivery('38070000-0000-4000-8000-000000000004', '38070000-0000-4000-8000-000000000011',
+  gen_random_uuid(), 'invoice', pg_temp.id('foreign'), '38070000-0000-4000-8000-000000000302', 'per Bote');
 reset role;
+delete from public.organizations where id = '38070000-0000-4000-8000-000000000011';
+do $$
+begin
+  if exists (select 1 from public.document_deliveries where organization_id = '38070000-0000-4000-8000-000000000011')
+    or exists (select 1 from public.document_delivery_events
+      where organization_id = '38070000-0000-4000-8000-000000000011') then
+    raise exception 'the organization''s teardown left its deliveries';
+  end if;
+end;
+$$;
 
 -- A session reads the signal columns of its organization's deliveries as
 -- Admin or Büro, never an address or text; an employee and an outsider read none.
@@ -392,7 +433,7 @@ end;
 $$;
 do $$
 begin
-  if pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000002') is distinct from 3::bigint
+  if pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000002') is distinct from 4::bigint
     or pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000003') is distinct from 0::bigint
     or pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000004') is distinct from 0::bigint then
     raise exception 'a delivery read crossed a role or an organization';
