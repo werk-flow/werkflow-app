@@ -1,5 +1,6 @@
-// The merge queue runs ci.yml on its own commit, planned against the queue's base, and a push to
-// main whose tree a green queue run passed runs no browser group (.github/workflows/ci.yml).
+// A merge-queue run takes the list growth approval of every PR in its group, a pull request run only
+// its own (.github/workflows/ci.yml, job Fast). lib/testing/ci/ owns the queue's plan and the reuse
+// of its tree.
 import { beforeEach, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -10,10 +11,9 @@ import { temporaryDirectory } from './temporary-directory';
 const ci = readWorkflow('ci.yml');
 
 // Answers like gh: `--jq` runs through real jq, so the step's own filter is under test. It records
-// each call, fails every call while `broken` exists, and lists `labels-<n>.json` for PR <n>.
+// each call and lists `labels-<n>.json` for PR <n>.
 const GH_STUB = `#!/usr/bin/env bash
 echo "$*" >> "$STUB/gh.calls"
-if test -e "$STUB/broken"; then echo 'HTTP 502' >&2; exit 1; fi
 filter=.
 previous=
 for argument in "$@"; do
@@ -21,16 +21,11 @@ for argument in "$@"; do
   previous="$argument"
 done
 case "$*" in
-  *'/actions/workflows/ci.yml/runs?'*) jq -r "$filter" "$STUB/runs.json" ;;
   *'/issues/'*'/labels'*)
     pr="$(sed -nE 's|.*/issues/([0-9]+)/labels.*|\\1|p' <<< "$*")"
     jq -r "$filter" "$STUB/labels-$pr.json" 2> /dev/null || echo '[]' | jq -r "$filter" ;;
   *) echo "unexpected gh $*" >&2; exit 1 ;;
 esac
-`;
-// Records how the plan step calls the planner.
-const BUN_STUB = `#!/usr/bin/env bash
-echo "$*" >> "$STUB/bun.calls"
 `;
 
 let stub = '';
@@ -53,14 +48,8 @@ function commit(subject: string): string {
 
 beforeEach(() => {
   stub = temporaryDirectory('ci-merge-queue-');
-  for (const [name, text] of [
-    ['gh', GH_STUB],
-    ['bun', BUN_STUB],
-  ] as const) {
-    writeFileSync(join(stub, name), text);
-    chmodSync(join(stub, name), 0o755);
-  }
-  writeFileSync(join(stub, 'output'), '');
+  writeFileSync(join(stub, 'gh'), GH_STUB);
+  chmodSync(join(stub, 'gh'), 0o755);
   writeFileSync(join(stub, 'env'), '');
   repository = join(stub, 'repository');
   mkdirSync(repository);
@@ -78,86 +67,14 @@ function step(job: string, name: string, env: Record<string, string>) {
       PATH: `${stub}:${process.env.PATH}`,
       STUB: stub,
       GITHUB_REPOSITORY: 'owner/repo',
-      GITHUB_OUTPUT: join(stub, 'output'),
       GITHUB_ENV: join(stub, 'env'),
       ...env,
     },
   });
 }
 
-/** The green merge_group runs of ci.yml that the runs list returns, newest first. */
-function writeQueueRuns(trees: string[]) {
-  writeFileSync(
-    join(stub, 'runs.json'),
-    JSON.stringify({
-      workflow_runs: trees.map((tree, index) => ({
-        html_url: `https://github.com/owner/repo/actions/runs/${index + 1}`,
-        head_commit: { tree_id: tree },
-      })),
-    }),
-  );
-}
-
-const findQueueRun = () => step('plan', "Find the queue's run of this tree", { GH_TOKEN: 'token' });
-const plan = (env: Record<string, string>) =>
-  step('plan', 'Plan the browser groups', { FULL: '', QUEUE_RUN: '', BASE: '', ...env });
-
-test('the merge queue starts a run that plans against the queue base and is never a draft', () => {
-  expect(ci.at('on', 'merge_group', 'types')).toEqual(['checks_requested']);
-  expect(ci.step('plan', 'Plan the browser groups').env).toHaveProperty(
-    'BASE',
-    expect.stringContaining("github.event_name == 'merge_group' && github.event.merge_group.base_sha ||"),
-  );
-  // A merge_group event has no pull_request, so the draft guards hold and Check's DRAFT is false.
-  expect(ci.text('jobs', 'browser', 'if')).toContain('github.event.pull_request.draft != true');
-  expect(ci.at('jobs', 'check', 'if')).toBe('always()');
-
-  expect(plan({ BASE: 'queue-base-sha' }).passed).toBe(true);
-  expect(read('bun.calls')).toBe('scripts/ci-plan.ts --base queue-base-sha\n');
-});
-
-test('a push to main whose tree a green queue run passed plans no browser group', () => {
-  expect(ci.step('plan', "Find the queue's run of this tree").if).toBe("github.event_name == 'push'");
-  const tree = git('rev-parse', 'HEAD^{tree}');
-  writeQueueRuns(['0'.repeat(40), tree]);
-  const found = findQueueRun();
-  expect(found.passed).toBe(true);
-  expect(read('gh.calls')).toContain('/actions/workflows/ci.yml/runs?event=merge_group&status=success&');
-  expect(read('output')).toBe('run=https://github.com/owner/repo/actions/runs/2\n');
-
-  const planned = plan({ QUEUE_RUN: 'https://github.com/owner/repo/actions/runs/2', BASE: 'before-sha' });
-  expect(planned.passed).toBe(true);
-  expect(planned.output).toContain('passed on this exact tree, so this push runs no browser group');
-  expect(read('bun.calls')).toBe('scripts/ci-plan.ts --base HEAD\n');
-});
-
-test('a push whose tree no green queue run passed plans by its diff', () => {
-  writeQueueRuns(['0'.repeat(40)]);
-  const found = findQueueRun();
-  expect(found.passed).toBe(true);
-  expect(found.output).not.toContain('::warning');
-  expect(read('output')).toBe('run=\n');
-  expect(plan({ BASE: 'before-sha' }).passed).toBe(true);
-  expect(read('bun.calls')).toBe('scripts/ci-plan.ts --base before-sha\n');
-});
-
-test('an unreadable queue run list fails closed: the push runs its browser groups and says why', () => {
-  writeFileSync(join(stub, 'broken'), '');
-  const found = findQueueRun();
-  expect(found.passed).toBe(true);
-  expect(found.output).toContain("::warning title=Merge queue::The merge queue's runs could not be read");
-  expect(read('output')).toBe('');
-});
-
-test('a full run stays full on any event', () => {
-  expect(plan({ FULL: 'Nightly', QUEUE_RUN: 'https://github.com/owner/repo/actions/runs/2' }).passed).toBe(
-    true,
-  );
-  expect(read('bun.calls')).toBe('scripts/ci-plan.ts --full Nightly\n');
-});
-
 const approval = (env: Record<string, string>) =>
-  step('unit', 'Read the list growth approval', {
+  step('fast', 'Read the list growth approval', {
     GH_TOKEN: 'token',
     PR: '',
     QUEUE_BRANCH: '',

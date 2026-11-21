@@ -9,6 +9,7 @@ import {
   listStorageObjectPaths,
   promoteUploadedObject,
   putStorageObject,
+  putWerkflowBillingObject,
 } from './r2';
 
 const organizationId = '0f0c2e3a-6d4f-4d3a-9e58-2c7b3b7f1a11';
@@ -137,4 +138,22 @@ test('discard swallows the refusal of a foreign key without reaching the storage
   await expect(
     discardStorageObjects({ organizationId, paths: [`${otherOrganizationId}/documents/doc-1/Angebot.pdf`] }),
   ).resolves.toBeUndefined();
+});
+
+test("no organization operation reaches WerkFlow's billing originals, and their write stays under their prefix", async () => {
+  const original = 'werkflow-billing/invoices/in_test_0001/original.pdf';
+  for (const operation of operations) {
+    await expect(operation.call({ organizationId, path: original })).rejects.toThrow(refusal);
+  }
+  await expect(deleteStorageObjects({ organizationId, paths: [original] })).rejects.toThrow(refusal);
+  for (const path of [
+    `${organizationId}/documents/doc-1/Angebot.pdf`,
+    'werkflow-billing/../x.pdf',
+    'werkflow-billing//x.pdf',
+    'werkflow-billing/',
+  ]) {
+    await expect(
+      putWerkflowBillingObject({ path, body: new Uint8Array(), contentType: 'application/pdf' }),
+    ).rejects.toThrow('storage_key_outside_werkflow_billing');
+  }
 });

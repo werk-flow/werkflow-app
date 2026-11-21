@@ -45,7 +45,16 @@ type ExcludedTable =
   | 'inventory_supplier_catalog_import_lines'
   // Delivery state of Stripe's signals to WerkFlow's own billing: event ids,
   // no record of the organization.
-  | 'werkflow_billing_signals';
+  | 'werkflow_billing_signals'
+  // WerkFlow's own delivery state of its billing mails and alarms; the
+  // Admin sees the mails on the billing page.
+  | 'werkflow_billing_mails'
+  // WerkFlow's own invoices to the organization: WerkFlow's books, which the
+  // Admin downloads on the billing page (werk-flow/werkflow-planning#252).
+  | 'werkflow_invoices'
+  // WerkFlow's own billing state of the organization (Stripe ids and status),
+  // the contract's record, not the organization's work.
+  | 'werkflow_subscriptions';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
@@ -109,6 +118,9 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   inventory_supplier_rebate_groups: 'Lager_Rabattgruppen',
   inventory_supplier_rebates: 'Lager_Rabatte',
   inventory_suppliers: 'Lager_Lieferanten',
+  invoice_events: 'Rechnungen_Verlauf',
+  invoice_lines: 'Rechnungen_Positionen',
+  invoices: 'Rechnungen',
   job_assignments: 'Aufträge_Zuweisungen',
   job_capability_requirement_origins: 'Aufträge_Qualifikationsanforderungen_Herkunft',
   job_capability_requirements: 'Aufträge_Qualifikationsanforderungen',
@@ -133,6 +145,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   maintenance_plan_revisions: 'Wartungspläne_Fassungen',
   maintenance_plans: 'Wartungspläne',
   maintenance_service_case_links: 'Wartungen_Servicefälle',
+  maintenance_visit_finding_resolutions: 'Wartungen_Befunde_geschlossen',
+  maintenance_visit_findings: 'Wartungen_Befunde',
   offer_events: 'Angebote_Verlauf',
   offers: 'Angebote',
   organization_capabilities: 'Organisation_Qualifikationen',

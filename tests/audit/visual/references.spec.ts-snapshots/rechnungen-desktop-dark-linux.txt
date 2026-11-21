@@ -1,0 +1,44 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Angebote
+Rechnungen
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+Problem melden
+F2
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Rechnungen
+Jede Rechnung mit Kunde, Rechnungsempfänger und Betrag.
+Rechnung erstellen
+Alle Status
+1
+Rechnung
+Rechnungsnummer
+Kunde
+Status
+Brutto
+Geändert
+Ohne Nummer
+Familie Hoffmann
+Entwurf
+553,35 €
+01.01.2026
+1–1
+von
+1
+Nicht eingestempelt

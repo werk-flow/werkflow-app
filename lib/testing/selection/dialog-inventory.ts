@@ -56,6 +56,13 @@ export const DIALOG_INVENTORY = {
   'components/angebote/create-offer-dialog.tsx#CreateOfferDialog|Angebot anlegen': {
     audits: [{ route: '/angebote', role: 'admin', opener: 'commercial.offer' }],
   },
+  'components/rechnungen/create-invoice-dialog.tsx#CreateInvoiceDialog|Rechnung erstellen': {
+    audits: [{ route: '/rechnungen', role: 'admin', opener: 'commercial.invoice' }],
+  },
+  'components/rechnungen/invoice-header.tsx#DeleteInvoiceDraftButton|{`Entwurf für „${invoice.client.name}“ löschen?`}':
+    {
+      audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-delete' }],
+    },
   "components/angebote/leistungen/leistung-dialog.tsx#LeistungDialog|{entry ? 'Leistung bearbeiten' : 'Leistung anlegen'}":
     {
       audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung' }],
@@ -466,7 +473,10 @@ export const DIALOG_INVENTORY = {
       audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.coverage-follow-up' }],
     },
   'components/service/maintenance-due-action-dialog.tsx#MaintenanceDueActionDialog|Fälligkeit bearbeiten': {
-    audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.due-action' }],
+    audits: [
+      { route: '/service/wartung', role: 'admin', opener: 'service.due-action' },
+      { route: '/service/wartung', role: 'admin', opener: 'service.due-completion' },
+    ],
   },
   'components/service/maintenance-plan-action-dialog.tsx#MaintenancePlanActionDialog|{title}': {
     audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.plan-action' }],

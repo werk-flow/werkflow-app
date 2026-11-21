@@ -18,6 +18,11 @@ export type DialogOpener = {
   trigger: (context: SurfaceContext) => Promise<Locator>;
   /** The open layer by its role (`dialog` or `alertdialog`) and accessible name. */
   layer: (page: Page) => Locator;
+  /**
+   * Brings the open layer into the audited state with the choices a user
+   * makes first, such as a picked outcome that reveals its fields; nothing is saved.
+   */
+  prepareLayer?: (layer: Locator, page: Page) => Promise<void>;
   /** Where focus returns after Escape when it is not the trigger, such as a row menu's button. */
   returnFocus?: (context: SurfaceContext) => Locator;
   /** Parent layers to close after the audited one, innermost first. */
