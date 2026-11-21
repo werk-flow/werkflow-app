@@ -420,3 +420,28 @@ test('the script reads a ledger file and a results folder, and refuses an unread
     rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test('a first-attempt Check that fails while every job passed counts as a failure of its own', () => {
+  const receipts = receiptsOf({ runUrl: run(1), event: 'pr', tree: tree('a'), prs: [12] }, [
+    { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'fast', 'check']) },
+    { job: 'fast', from: 1, to: 10 },
+    { job: 'check', from: 10, to: 11, status: 'failed', endOnly: true },
+  ]);
+  expect(summarizeCost(receipts).firstAttemptFailures).toEqual({ unclassified: 1 });
+});
+
+test('a run that names a PR twice splits its cost evenly across its distinct PRs', () => {
+  const batch = (prs: number[]): CiResult[] => [
+    ...receiptsOf({ runUrl: run(31), event: 'integration', tree: tree('3'), prs }, [
+      { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 1, to: 3, endOnly: true },
+    ]),
+    ...receiptsOf({ runUrl: run(32), event: 'main', tree: tree('3'), prs: [12, 13] }, [
+      { job: 'plan', from: 10, to: 11, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 11, to: 12, endOnly: true },
+    ]),
+  ];
+  const summary = summarizeCost(batch([12, 12, 13]));
+  expect(summary.merged.map((entry) => entry.jobMs)).toEqual([2.5 * MINUTE, 2.5 * MINUTE]);
+  expect(summary).toEqual(summarizeCost(batch([12, 13])));
+});

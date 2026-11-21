@@ -94,10 +94,14 @@ function processMs(entry: JobProcess, attemptEnd: number): number {
 
 /**
  * The failure class of each job or shard whose first attempt failed, once: a later attempt names it,
- * and a results folder may hold only that later attempt. A failed Check only follows a failed job,
- * so it counts none of its own.
+ * and a results folder may hold only that later attempt. A failed first-attempt Check counts only
+ * when every other first-attempt job passed and none the plan held is missing: then it is a failure
+ * of its own (for example a checkout that changed), not the echo of a failed, cancelled or unstarted job.
  */
-function firstAttemptFailures(processes: readonly JobProcess[]): RunCost['firstAttemptFailures'] {
+function firstAttemptFailures(
+  processes: readonly JobProcess[],
+  missingUnits: number,
+): RunCost['firstAttemptFailures'] {
   const failures = new Map<UnitKey, FailureClass | 'unclassified'>();
   for (const entry of processes) {
     if (entry.job === 'check') continue;
@@ -106,6 +110,11 @@ function firstAttemptFailures(processes: readonly JobProcess[]): RunCost['firstA
     else if ((entry.attempt ?? 1) === 1 && entry.status === 'failed' && !failures.has(key))
       failures.set(key, 'unclassified');
   }
+  const firstAttempt = processes.filter((entry) => (entry.attempt ?? 1) === 1);
+  const check = firstAttempt.find((entry) => entry.job === 'check');
+  const othersPassed = firstAttempt.every((entry) => entry.job === 'check' || entry.status === 'passed');
+  if (check?.status === 'failed' && othersPassed && !missingUnits && !failures.size)
+    failures.set(unitKey('check', null), 'unclassified');
   return [...failures.values()];
 }
 
@@ -126,7 +135,7 @@ function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
     runUrl,
     event: plan?.event ?? first?.event ?? 'pr',
     tree: plan?.tree ?? first?.tree ?? '',
-    prs: processes.find((entry) => entry.prs !== undefined)?.prs ?? [],
+    prs: [...new Set(processes.find((entry) => entry.prs !== undefined)?.prs ?? [])],
     plannedAt: plans[0] ? Date.parse(plans[0].startedAt) : null,
     passedAt: check?.status === 'passed' && check.completedAt ? Date.parse(check.completedAt) : null,
     reusedFrom: plan?.reusedFrom ?? null,
@@ -142,7 +151,10 @@ function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
     ]).size,
     cancelled: processes.filter((entry) => entry.status === 'running').length,
     neverStarted: plannedUnits(plan?.plan).filter((unit) => !started.has(unit)).length,
-    firstAttemptFailures: firstAttemptFailures(processes),
+    firstAttemptFailures: firstAttemptFailures(
+      processes,
+      plannedUnits(plan?.plan).filter((unit) => !started.has(unit)).length,
+    ),
     unselectedFailures: [...new Set(processes.flatMap((entry) => entry.unselectedFailures ?? []))],
   };
 }
