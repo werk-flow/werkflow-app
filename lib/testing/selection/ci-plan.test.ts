@@ -202,8 +202,17 @@ test('an action change runs what the CI jobs that use it run', () => {
   });
   expect(ids(playwright)).toEqual(SAMPLE);
   expect(Object.keys(playwright.tooling.fast)).toEqual(['ui']);
-  const sql = planFor(['.github/actions/supabase-cli/action.yml'], { groups: sampled, actionJobs });
-  expect([ids(sql), sql.tooling.browser, Object.keys(sql.tooling.fast)]).toEqual([[], undefined, ['sql']]);
+  // An action only SQL uses takes every SQL group, and still the browser sample: a job's setup can
+  // change what the browser shards build or serve.
+  const sql = planFor(['.github/actions/supabase-cli/action.yml'], {
+    groups: sampled,
+    durations: sampledDurations,
+    actionJobs,
+  });
+  expect([ids(sql), Object.keys(sql.tooling.fast)]).toEqual([SAMPLE, ['sql']]);
+  expect(sql.tooling.browser).toBe(
+    'Tooling input changed: .github/actions/supabase-cli/action.yml, used by sql',
+  );
 });
 
 test("a dependency change that moves only lint and type packages selects no group, and a development tool's the dependency set", () => {

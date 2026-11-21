@@ -4,18 +4,15 @@ name: Full run on main
 # owner decision D3, werk-flow/werkflow-planning#503), and otherwise every 3 hours from 06:00 to
 # 20:00 Berlin when something besides documentation landed, so a break that no change plan selected
 # shows within hours instead of at the nightly (werk-flow/werkflow-planning#413). GitHub starts
-# this repository's scheduled runs 4 to 10 hours late, so a push to main and the timer of
-# ops/ci-alert.py in werk-flow/werkflow-planning start it. Its first job decides in about a minute
+# this repository's scheduled runs 4 to 10 hours late, so the timer of ops/ci-alert.py in
+# werk-flow/werkflow-planning dispatches it (the release gate counts only dispatched or scheduled
+# full runs, .github/scripts/release-candidate.sh). Its first job decides in about a minute
 # and ends the run when no full run is due (scripts/ci/full-run.ts owns the rule; any runner's
 # scheduler asks it too). No job waits on a runner. The release reuses a green full run.
 # A red run opens or updates the issue "CI alert: full run on main", which names the failed groups and
 # the commits since the last green full run; the next green run closes it.
 on:
   workflow_dispatch:
-  # Each push asks at once, so a tooling change's full run starts right after its merge; the
-  # concurrency group below holds the question while a full run runs.
-  push:
-    branches: [main]
 
 # The browser shards of ci.yml read the Build job's state.
 permissions:

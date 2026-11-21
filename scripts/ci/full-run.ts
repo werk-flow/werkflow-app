@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { type FullRun, fullRunDue, fullRunsInLedger, type Landed } from '../../lib/testing/ci/full-run';
 import { readLedger } from '../../lib/testing/ci/results';
-import { isDocsFile } from '../../lib/testing/selection/fast-tier';
+import { isDocsFile, tailwindScan } from '../../lib/testing/selection/fast-tier';
 
 // Whether main's head needs a full run now (lib/testing/ci/full-run.ts, owner decision D3). Run it
 // in a checkout of main's head; every runner's scheduler asks it, GitHub's main-full-run.yml too.
@@ -70,12 +70,17 @@ function tooling(commit: string): string | undefined {
   }
 }
 
+// Markdown Tailwind scans for class names can change the stylesheet every page renders with, so it
+// is no documentation here; an unknown scan counts every file.
+const scans = await tailwindScan(readFileSync(join(repository, 'app/globals.css'), 'utf8'), repository);
+const isDocs = (file: string): boolean => isDocsFile(file) && scans !== undefined && !scans(file);
+
 function landedSince(commit: string): Landed | undefined {
   try {
     const files = git('diff', '--name-only', '--no-renames', '-z', commit, 'HEAD', '--')
       .split('\0')
       .filter(Boolean);
-    return { files, tooling: () => tooling(commit), isDocs: isDocsFile };
+    return { files, tooling: () => tooling(commit), isDocs };
   } catch {
     return undefined;
   }

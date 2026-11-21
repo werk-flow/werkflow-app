@@ -234,6 +234,8 @@ test('a full-run failure counts as unselected unless CI selected its group on a 
         'audit:visual',
         'audit:performance:field',
         'audit:visual',
+        'step:server',
+        'step:build',
       ],
       selected,
     ),

@@ -179,11 +179,15 @@ function resolveKey(lock: Lock, from: string, name: string): string | undefined 
   return undefined;
 }
 
-/** For every lock key, the root packages whose installed tree holds it. */
+/**
+ * For every lock key, the root packages whose installed tree holds it. A peer the root lists
+ * itself belongs to that root entry, not to the package that declares it: the quarantine report's
+ * parser declares `eslint` as a peer without loading it.
+ */
 function rootsByKey(lock: Lock): Map<string, Set<string>> {
   const owners = new Map<string, Set<string>>();
-  const roots = SECTIONS.flatMap((section) => Object.keys(lock.workspaces['']?.[section] ?? {}));
-  for (const root of new Set(roots)) {
+  const roots = new Set(SECTIONS.flatMap((section) => Object.keys(lock.workspaces['']?.[section] ?? {})));
+  for (const root of roots) {
     const pending = lock.packages[root] ? [root] : [];
     const seen = new Set<string>();
     for (let key = pending.pop(); key !== undefined; key = pending.pop()) {
@@ -191,7 +195,11 @@ function rootsByKey(lock: Lock): Map<string, Set<string>> {
       seen.add(key);
       owners.set(key, (owners.get(key) ?? new Set()).add(root));
       const meta = packageMetaSchema.safeParse(lock.packages[key]?.[2]);
-      const names = meta.success ? Object.values(meta.data).flatMap((deps) => Object.keys(deps ?? {})) : [];
+      const { peerDependencies, ...installed } = meta.success ? meta.data : {};
+      const names = [
+        ...Object.values(installed).flatMap((deps) => Object.keys(deps ?? {})),
+        ...Object.keys(peerDependencies ?? {}).filter((name) => !roots.has(name)),
+      ];
       for (const name of names) {
         const resolved = resolveKey(lock, key, name);
         if (resolved) pending.push(resolved);

@@ -62,6 +62,18 @@ test('a moved package counts by the strongest root package that installs it, nes
     effect: 'tooling',
     reason: 'bun.lock: supertool through development tool supertool',
   });
+  // A peer no root lists counts through the package that declares it; one the root lists, by that entry.
+  const peerOnly = lock({
+    react: 'react@19.0.0", "", { "peerDependencies": { "peer-only": "^1" } }',
+    'peer-only': 'peer-only@1.0.0", "", {}',
+  });
+  expect(lockfileChange(peerOnly, peerOnly.replace('peer-only@1.0.0', 'peer-only@1.1.0')).effect).toBe(
+    'every-group',
+  );
+  const peerEslint = lock({ react: 'react@19.0.0", "", { "peerDependencies": { "eslint": "^9" } }' });
+  expect(lockfileChange(peerEslint, peerEslint.replace('eslint@9.0.0', 'eslint@9.1.0')).effect).toBe(
+    'lint-type',
+  );
   // A Playwright package counts by its own name and resolved name, whoever installs it.
   const browserTool = lockfileChange(
     BASE,
@@ -180,8 +192,10 @@ test("the repository's own lock classifies a moved package by its real installer
     effect: 'lint-type',
     reason: 'bun.lock: @types/react, type declarations only',
   });
-  // The quarantine report's parser declares eslint as a peer, so eslint is more than lint.
-  expect(lockfileChange(real, bump('eslint')).effect).toBe('tooling');
+  // The quarantine report's parser declares eslint as a peer; the root's own eslint entry decides.
+  expect(lockfileChange(real, bump('eslint')).effect).toBe('lint-type');
+  // A package only a runtime dependency installs runs every group.
+  expect(lockfileChange(real, bump('@radix-ui/react-primitive')).effect).toBe('every-group');
   expect(lockfileChange(real, bump('next')).effect).toBe('every-group');
   expect(lockfileChange(real, bump('playwright-core')).effect).toBe('every-group');
   expect(lockfileChange(real, bump('tailwindcss')).effect).toBe('every-group');

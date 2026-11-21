@@ -26,7 +26,7 @@ export type Landed = {
   files: readonly string[];
   /** Why the changes run a tooling sample or every group (scripts/ci-plan.ts), or undefined. */
   tooling: () => string | undefined;
-  /** Whether a file is documentation only (lib/testing/selection/fast-tier.ts, `isDocsFile`). */
+  /** Whether a file is documentation no build reads: `isDocsFile` and no Tailwind source (fast-tier.ts). */
   isDocs: (file: string) => boolean;
 };
 
@@ -129,8 +129,8 @@ export function landedSelections(ledger: readonly CiResult[], landedTrees: Reado
 
 /**
  * The groups a full run failed that `landedSelections` lacks: the breaks only the full run could
- * find. Their count per full run is what justifies its cadence, or retires it.
+ * find. A failed step (`step:build`, `step:server`) is no group. Their count per full run is what justifies its cadence, or retires it.
  */
 export function unselectedFailures(failed: readonly string[], selected: ReadonlySet<string>): string[] {
-  return [...new Set(failed)].filter((id) => !selected.has(id));
+  return [...new Set(failed)].filter((id) => !isStep(id) && !selected.has(id));
 }

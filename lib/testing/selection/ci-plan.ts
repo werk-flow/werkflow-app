@@ -230,7 +230,8 @@ const FAST_KINDS_OF_JOB: Readonly<Partial<Record<CiJob, readonly FastKind[]>>> =
 /**
  * What the changed tooling inputs run. A row-only registry change is none. A dependency file counts
  * by `dependencies` (dependency-change.ts), and as every group without an entry there. An action
- * counts by the CI jobs that use it (`actionJobs`), and as used by every job without an entry.
+ * takes the fast-tier kinds of the CI jobs that use it (`actionJobs`; every job without an entry)
+ * and the browser sample.
  */
 function toolingClass(input: {
   changedFiles: readonly string[];
@@ -261,7 +262,8 @@ function toolingClass(input: {
     } else if (dependency) runs(`Tooling input changed: ${dependency.reason}`, CI_JOBS);
     else if (action !== undefined) {
       const jobs = input.actionJobs[action] ?? CI_JOBS;
-      runs(`Tooling input changed: ${file}, used by ${jobs.join(', ')}`, jobs);
+      // Any job's setup can change the build the browser shards serve, so the sample runs too.
+      runs(`Tooling input changed: ${file}, used by ${jobs.join(', ')}`, [...jobs, 'browser']);
     } else if (TOOLING_INPUTS.test(file) || runner.has(file)) runs(`Tooling input changed: ${file}`, CI_JOBS);
   }
   return tooling;
