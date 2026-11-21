@@ -336,7 +336,8 @@ from (values
   ('name an original directly', format('update public.invoices set original_document_id = %L where id = %L',
     '38060000-0000-4000-8000-000000000304', pg_temp.id('first')), 'invoice_issued'),
   ('issue a draft with an original directly', format(
-    'update public.invoices set status = ''ausgestellt'', original_document_id = %L where id = %L',
+    'update public.invoices set status = ''ausgestellt'', invoice_number = ''X-1'', issue_date = current_date,
+      issued_at = now(), issue_snapshot = ''{}'', original_document_id = %L where id = %L',
     '38060000-0000-4000-8000-000000000304', pg_temp.id('empty')), 'invoice_issued')
 ) as cases(label, statement, refusal);
 -- A deleted work clears its reference only.
