@@ -18,7 +18,7 @@ export const DELIVERY_STATE_LABELS: Record<DeliveryState, string> = {
 };
 
 export const DELIVERY_CHANNELS = ['email', 'manual'] as const;
-export type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number];
+type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number];
 
 export const DELIVERY_LIMITS = { subject: 200, text: 5000, note: 500 } as const;
 

@@ -15,7 +15,7 @@ import {
 // read throws; it never becomes an empty list.
 
 /** The newest deliveries a page lists; the total names the ones it leaves out. */
-export const DELIVERY_LIST_LIMIT = 50;
+const DELIVERY_LIST_LIMIT = 50;
 
 const listSchema = z.object({
   total: z.number().int().nonnegative(),

@@ -20,7 +20,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
-import { DELIVERY_LIMITS, recipientSchema, type DeliveryMailDefaults } from '@/lib/delivery/delivery-types';
+import {
+  DELIVERY_LIMITS,
+  recipientSchema,
+  type DeliveryMailDefaults,
+  type DeliveryState,
+} from '@/lib/delivery/delivery-types';
 import { markInvoiceSentManually, sendInvoiceEmail } from '@/lib/invoices/delivery-actions';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { DELIVERY_FAILURE_MESSAGES } from './invoice-delivery-messages';
@@ -35,6 +40,65 @@ function mailErrors(form: DeliveryMailDefaults): Record<string, string | undefin
       : 'Gib eine E-Mail-Adresse ein, zum Beispiel buchhaltung@kunde.de.',
     'delivery-subject': form.subject.trim() ? undefined : 'Gib einen Betreff ein.',
   };
+}
+
+/** The banner after a send: sent, still sending, or refused by the provider. */
+function sendBanner(
+  state: DeliveryState,
+  invoiceNumber: string,
+  recipient: string,
+): { variant: 'success' | 'info' | 'error'; message: string } {
+  if (state === 'failed') {
+    return {
+      variant: 'error',
+      message: 'Die E-Mail ist nicht rausgegangen. Unter „Versand“ kannst du sie erneut senden.',
+    };
+  }
+  return state === 'sent'
+    ? { variant: 'success', message: `Rechnung ${invoiceNumber} ist an ${recipient} versendet.` }
+    : { variant: 'info', message: `Rechnung ${invoiceNumber} wird versendet.` };
+}
+
+/** Recipient, subject and text of the email. */
+function MailFields({
+  form,
+  errors,
+  change,
+}: {
+  form: DeliveryMailDefaults;
+  errors: Record<string, string | undefined>;
+  change: (patch: Partial<DeliveryMailDefaults>) => void;
+}) {
+  return (
+    <>
+      <Field label="Empfänger" htmlFor="delivery-recipient" required error={errors['delivery-recipient']}>
+        <Input
+          type="email"
+          autoComplete="email"
+          value={form.recipient}
+          onChange={(event) => change({ recipient: event.target.value })}
+          maxLength={254}
+          required
+        />
+      </Field>
+      <Field label="Betreff" htmlFor="delivery-subject" required error={errors['delivery-subject']}>
+        <Input
+          value={form.subject}
+          onChange={(event) => change({ subject: event.target.value })}
+          maxLength={DELIVERY_LIMITS.subject}
+          required
+        />
+      </Field>
+      <Field label="Nachricht" htmlFor="delivery-text">
+        <Textarea
+          value={form.text}
+          onChange={(event) => change({ text: event.target.value })}
+          maxLength={DELIVERY_LIMITS.text}
+          rows={7}
+        />
+      </Field>
+    </>
+  );
 }
 
 /**
@@ -78,20 +142,7 @@ export function SendInvoiceEmailDialog({
     if (!result.success)
       return setError(describeFailure(result.error, DELIVERY_FAILURE_MESSAGES, SEND_FAILED));
     onClose();
-    showBanner(
-      result.state === 'failed'
-        ? {
-            variant: 'error',
-            message: 'Die E-Mail ist nicht rausgegangen. Unter „Versand“ kannst du sie erneut senden.',
-          }
-        : {
-            variant: result.state === 'sent' ? 'success' : 'info',
-            message:
-              result.state === 'sent'
-                ? `Rechnung ${invoiceNumber} ist an ${form.recipient.trim()} versendet.`
-                : `Rechnung ${invoiceNumber} wird versendet.`,
-          },
-    );
+    showBanner(sendBanner(result.state, invoiceNumber, form.recipient.trim()));
     router.refresh();
   };
   return (
@@ -106,37 +157,7 @@ export function SendInvoiceEmailDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <Field
-              label="Empfänger"
-              htmlFor="delivery-recipient"
-              required
-              error={errors['delivery-recipient']}
-            >
-              <Input
-                type="email"
-                autoComplete="email"
-                value={form.recipient}
-                onChange={(event) => change({ recipient: event.target.value })}
-                maxLength={254}
-                required
-              />
-            </Field>
-            <Field label="Betreff" htmlFor="delivery-subject" required error={errors['delivery-subject']}>
-              <Input
-                value={form.subject}
-                onChange={(event) => change({ subject: event.target.value })}
-                maxLength={DELIVERY_LIMITS.subject}
-                required
-              />
-            </Field>
-            <Field label="Nachricht" htmlFor="delivery-text">
-              <Textarea
-                value={form.text}
-                onChange={(event) => change({ text: event.target.value })}
-                maxLength={DELIVERY_LIMITS.text}
-                rows={7}
-              />
-            </Field>
+            <MailFields form={form} errors={errors} change={change} />
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
