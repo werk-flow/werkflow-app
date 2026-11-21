@@ -1,6 +1,4 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   PREPARED_PLAN_ENV,
@@ -11,6 +9,7 @@ import {
 } from './prepared-plan';
 import { selectedDiscoveryArguments } from './playwright-discovery';
 import type { TestGroup } from '../selection/test-groups';
+import { temporaryDirectory } from '../temporary-directory';
 
 test('discovery includes only selected files, without inherited setup journeys', () => {
   const common = {
@@ -64,18 +63,14 @@ const plan: PreparedPlan = {
 };
 
 test('a prepared plan round-trips through its file and the environment names it', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'prepared-plan-'));
-  try {
-    const path = join(directory, 'prepared-plan.json');
-    writePreparedPlan(path, plan);
-    expect(readPreparedPlan({})).toBeNull();
-    expect(readPreparedPlan({ [PREPARED_PLAN_ENV]: path })).toEqual(plan);
-    expect(() => readPreparedPlan({ [PREPARED_PLAN_ENV]: join(directory, 'missing.json') })).toThrow(
-      'missing file',
-    );
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const directory = temporaryDirectory('prepared-plan-');
+  const path = join(directory, 'prepared-plan.json');
+  writePreparedPlan(path, plan);
+  expect(readPreparedPlan({})).toBeNull();
+  expect(readPreparedPlan({ [PREPARED_PLAN_ENV]: path })).toEqual(plan);
+  expect(() => readPreparedPlan({ [PREPARED_PLAN_ENV]: join(directory, 'missing.json') })).toThrow(
+    'missing file',
+  );
 });
 
 test('a group run takes its identity and discovery from the plan and refuses a mismatch', () => {

@@ -1,14 +1,9 @@
-import { afterEach, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type OpenMigration, migrationOrderProblems } from './migration-order';
-
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
+import { temporaryDirectory } from '../temporary-directory';
 
 function git(root: string, ...args: string[]): void {
   execFileSync(
@@ -30,8 +25,7 @@ function addMigration(root: string, name: string, sql: string, commit: boolean):
  * replaces the function close_period.
  */
 function repository(): string {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-migration-order-'));
-  directories.push(root);
+  const root = temporaryDirectory('werkflow-migration-order-');
   git(root, 'init', '--quiet', '--initial-branch=main');
   mkdirSync(join(root, 'supabase/migrations'), { recursive: true });
   addMigration(root, '20261020100000_first.sql', 'create table jobs (id int);\n', true);

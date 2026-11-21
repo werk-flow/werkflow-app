@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const script = join(repositoryRoot, '.github/scripts/main-full-run.sh');
@@ -43,7 +43,7 @@ const DATE_STUB = '#!/usr/bin/env bash\necho "$NOW"\n';
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'main-full-run-'));
+  stub = temporaryDirectory('main-full-run-');
   for (const [name, body] of [
     ['gh', GH_STUB],
     ['curl', CURL_STUB],
@@ -58,8 +58,6 @@ beforeEach(() => {
   writeFileSync(join(stub, 'jobs.json'), JSON.stringify({ jobs: [] }));
   writeFileSync(join(stub, 'gh.log'), '');
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 /** Main's commits, newest first: `c0` is the run's own. */
 function writeCommits(count: number) {

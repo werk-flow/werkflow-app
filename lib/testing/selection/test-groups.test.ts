@@ -1,7 +1,6 @@
 // Rule test: every spec file is a registered group with its scopes.
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   getGroupTimingRequirements,
@@ -15,6 +14,7 @@ import { z } from '@/lib/zod';
 import { expectDefined } from '../spec-support/expect-defined';
 import { labStepsForFiles } from '../lab-steps';
 import { groupSelections } from './group-selection';
+import { temporaryDirectory } from '../temporary-directory';
 
 function group(id: string, files: string[]): TestGroup {
   return {
@@ -175,33 +175,26 @@ describe('independent group registry', () => {
   });
 
   test('new freshness calls, aliases and namespace calls reserve exclusive time without a title tag', () => {
-    const root = mkdtempSync(resolve(tmpdir(), 'werkflow-timing-'));
+    const root = temporaryDirectory('werkflow-timing-');
     const file = 'tests/golden/new.spec.ts';
     mkdirSync(resolve(root, 'tests/golden'), { recursive: true });
     const entry = group('new', [file]);
-    try {
-      for (const source of [
-        `import { expectLiveWithin } from './support/freshness'; await expectLiveWithin(page, check);`,
-        `import { expectLiveWithin as measure } from './support/freshness'; async function helper() { await measure(page, check); }`,
-        `import * as timing from './support/freshness'; await timing.expectLiveWithin(page, check);`,
-      ]) {
-        writeFileSync(resolve(root, file), source);
-        expect(getGroupTimingRequirements(entry, root)).toMatchObject({
-          requireFreshness: true,
-          exclusive: true,
-        });
-      }
-      writeFileSync(
-        resolve(root, file),
-        `// expectLiveWithin(page, check)\nconst text = 'expectLiveWithin';`,
-      );
+    for (const source of [
+      `import { expectLiveWithin } from './support/freshness'; await expectLiveWithin(page, check);`,
+      `import { expectLiveWithin as measure } from './support/freshness'; async function helper() { await measure(page, check); }`,
+      `import * as timing from './support/freshness'; await timing.expectLiveWithin(page, check);`,
+    ]) {
+      writeFileSync(resolve(root, file), source);
       expect(getGroupTimingRequirements(entry, root)).toMatchObject({
-        requireFreshness: false,
-        exclusive: false,
+        requireFreshness: true,
+        exclusive: true,
       });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
     }
+    writeFileSync(resolve(root, file), `// expectLiveWithin(page, check)\nconst text = 'expectLiveWithin';`);
+    expect(getGroupTimingRequirements(entry, root)).toMatchObject({
+      requireFreshness: false,
+      exclusive: false,
+    });
   });
 
   test('all declared freshness scopes reserve exclusive measurement time', () => {

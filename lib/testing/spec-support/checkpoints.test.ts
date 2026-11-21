@@ -1,8 +1,8 @@
-import { afterEach, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { expect, test } from 'bun:test';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readCheckpoint, writeCheckpoint } from './checkpoints';
+import { temporaryDirectory } from '../temporary-directory';
 
 const layoutDetails = {
   clientId: '11111111-1111-4111-8111-111111111111',
@@ -17,15 +17,10 @@ const layoutDetails = {
   offerId: '00000000-0000-4000-8000-000000000009',
 };
 
-const directories: string[] = [];
 function temporaryPath(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-checkpoint-'));
-  directories.push(directory);
+  const directory = temporaryDirectory('werkflow-checkpoint-');
   return join(directory, 'checkpoints.json');
 }
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
 
 test('recovers an exact persisted value without process memory', () => {
   const path = temporaryPath();

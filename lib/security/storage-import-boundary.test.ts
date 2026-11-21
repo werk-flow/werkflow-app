@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import ts from 'typescript';
 import { sourceImportGraph, UNKNOWN_IMPORT_DEPENDENCY } from '../testing/evidence/group-evidence';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 // Tier 2 import inventory, not a substitute for checking serialized responses.
 // Follow browser dependencies through lib/; Next's server-only and use-server
@@ -107,21 +107,13 @@ test('the admin client keeps its build-time server-only guard', () => {
 });
 
 function fixture(files: Record<string, string>): string[] {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-storage-boundary-'));
-  try {
-    for (const [file, source] of Object.entries(files)) {
-      const destination = resolve(root, file);
-      mkdirSync(dirname(destination), { recursive: true });
-      writeFileSync(destination, source);
-    }
-    return storageBoundaryViolations(root, Object.keys(files));
-  } finally {
-    const tempRelative = relative(resolve(tmpdir()), root);
-    if (!tempRelative.startsWith('werkflow-storage-boundary-') || tempRelative.includes('..')) {
-      throw new Error('Refusing to remove an unexpected fixture directory');
-    }
-    rmSync(root, { recursive: true, force: true });
+  const root = temporaryDirectory('werkflow-storage-boundary-');
+  for (const [file, source] of Object.entries(files)) {
+    const destination = resolve(root, file);
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, source);
   }
+  return storageBoundaryViolations(root, Object.keys(files));
 }
 
 for (const expression of [
