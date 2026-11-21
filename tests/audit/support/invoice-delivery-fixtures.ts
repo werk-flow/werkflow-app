@@ -165,7 +165,7 @@ async function emailed(
 export function invoiceDeliverySeed(
   world: TestWorld,
   state: 'fresh' | 'delivered',
-): { name: string; create: () => Promise<string> } {
+): { name: `commercial.invoice-delivery-${typeof state}`; create: () => Promise<string> } {
   return {
     name: `commercial.invoice-delivery-${state}`,
     create: async () => {
