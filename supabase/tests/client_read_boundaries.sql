@@ -396,6 +396,15 @@ insert into public.organization_capabilities (id, organization_id, kind, name, d
 insert into public.employee_capabilities (organization_id, employee_record_id, capability_id, capability_kind, valid_from)
 select 'cb000000-0000-4000-8000-000000000010', id, 'cb000000-0000-4000-8000-000000000142', 'skill', '2026-01-01'
 from suspended_employee;
+-- A delivery of an invoice (20261219140000_record_document_deliveries.sql); a
+-- session reads only its signal columns.
+insert into public.document_deliveries (
+  id, organization_id, subject_kind, invoice_id, document_id, attachment_content_hash, channel, note, state,
+  attempt_key, sent_at
+) values
+('cb000000-0000-4000-8000-000000000143', 'cb000000-0000-4000-8000-000000000010', 'invoice',
+ 'cb000000-0000-4000-8000-000000000144', 'cb000000-0000-4000-8000-000000000145', repeat('a', 64), 'manual',
+ 'per Post', 'sent', 'cb000000-0000-4000-8000-000000000146', now());
 set local session_replication_role = origin;
 
 create function pg_temp.visible_families() returns text language sql as $$
@@ -428,7 +437,9 @@ create function pg_temp.visible_families() returns text language sql as $$
     'people=' || (select count(*) from public.teams where id = 'cb000000-0000-4000-8000-000000000141')
       || (select count(*) from public.organization_capabilities where id = 'cb000000-0000-4000-8000-000000000142'),
     'onboarding=' || (select count(*) from public.personnel_access_lifecycles
-      where organization_id = 'cb000000-0000-4000-8000-000000000010')
+      where organization_id = 'cb000000-0000-4000-8000-000000000010'),
+    'delivery=' || (select count(*) from public.document_deliveries
+      where id = 'cb000000-0000-4000-8000-000000000143')
   );
 $$;
 grant execute on function pg_temp.visible_families() to authenticated;
@@ -464,10 +475,15 @@ $$;
 -- assigned work and their own records, no manager-only family.
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000006',
   'work=111 instructions=11 artifacts=1 handover=1 inventory=11 service=11 maintenance=11 planning=1 '
-  || 'zeitkonto=111 organization=11111 people=11 onboarding=0');
+  || 'zeitkonto=111 organization=11111 people=11 onboarding=0 delivery=1');
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000007',
   'work=111 instructions=11 artifacts=1 handover=1 inventory=01 service=00 maintenance=01 planning=1 '
-  || 'zeitkonto=110 organization=11101 people=11 onboarding=0');
+  || 'zeitkonto=110 organization=11101 people=11 onboarding=0 delivery=0');
+
+-- Another organization's Admin reads none of these families' rows while they exist.
+select pg_temp.expect_families('cb000000-0000-4000-8000-000000000005',
+  'work=000 instructions=00 artifacts=0 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
+  || 'zeitkonto=000 organization=00000 people=00 onboarding=0 delivery=0');
 
 -- Suspended: nothing, although membership, employee record and assignments stay.
 select pg_temp.set_access('cb000000-0000-4000-8000-000000000006', 0, 'suspend_now', clock_timestamp(),
@@ -476,10 +492,10 @@ select pg_temp.set_access('cb000000-0000-4000-8000-000000000007', 0, 'suspend_no
   'cb000000-0000-4000-8000-000000000151');
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000006',
   'work=000 instructions=00 artifacts=0 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
-  || 'zeitkonto=000 organization=00000 people=00 onboarding=0');
+  || 'zeitkonto=000 organization=00000 people=00 onboarding=0 delivery=0');
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000007',
   'work=000 instructions=00 artifacts=0 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
-  || 'zeitkonto=000 organization=00000 people=00 onboarding=0');
+  || 'zeitkonto=000 organization=00000 people=00 onboarding=0 delivery=0');
 
 -- Prestart (a scheduled reactivation): the employee reads their own onboarding
 -- state, but by the owner's decision not their Zeitkonto.
@@ -487,7 +503,7 @@ select pg_temp.set_access('cb000000-0000-4000-8000-000000000007', 1, 'schedule_a
   clock_timestamp() + interval '1 day', 'cb000000-0000-4000-8000-000000000152');
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000007',
   'work=000 instructions=00 artifacts=0 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
-  || 'zeitkonto=000 organization=00000 people=00 onboarding=1');
+  || 'zeitkonto=000 organization=00000 people=00 onboarding=1 delivery=0');
 
 -- Substitutes. The Büro member names the colleague as substitute for time
 -- approval (a selected holder) and for handover review (the role default).

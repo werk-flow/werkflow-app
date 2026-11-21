@@ -33,7 +33,8 @@ const listSchema = z.object({
         createdAt: z.string(),
         sentAt: z.string().nullable(),
         createdBy: z.string().nullable(),
-        retryable: z.boolean(),
+        retryFrom: z.string().nullable(),
+        retryUntil: z.string().nullable(),
       }),
     )
     .max(DELIVERY_LIST_LIMIT),

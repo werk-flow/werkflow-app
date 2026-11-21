@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import type { ActionResult } from '@/lib/action-result';
 import { readCompanyProfile } from '@/lib/company-profile/reads';
 import { getCachedMemberships } from '@/lib/data/cached';
+import { loggedRead } from '@/lib/data/read-request-cache';
 import { sendEmail } from '@/lib/delivery/send-email';
 import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
@@ -57,6 +58,7 @@ const payloadSchema = z.object({
   subject: z.string(),
   text: z.string(),
   senderName: z.string(),
+  fromHeader: z.string().nullable(),
   replyTo: z.string().nullable(),
   storagePath: z.string(),
   fileName: z.string(),
@@ -115,7 +117,6 @@ async function attachmentOf(
 /** Sends one claimed attempt and settles it with the transport's answer. */
 async function transmit(caller: DeliveryCaller, payload: DeliveryPayload): Promise<DeliveryOutcome> {
   const attachment = await attachmentOf(caller, payload);
-  const from = senderHeader(payload.senderName, process.env);
   const result =
     typeof attachment === 'string'
       ? ({ status: 'permanent', code: attachment } as const)
@@ -125,7 +126,7 @@ async function transmit(caller: DeliveryCaller, payload: DeliveryPayload): Promi
           html: deliveryHtml(payload.text),
           text: payload.text,
           idempotencyKey: `document-delivery/${payload.deliveryId}`,
-          ...(from ? { from } : {}),
+          ...(payload.fromHeader ? { from: payload.fromHeader } : {}),
           ...(payload.replyTo ? { replyTo: payload.replyTo } : {}),
           attachments: [
             { filename: payload.fileName, content: attachment, contentType: payload.contentType },
@@ -169,6 +170,26 @@ async function sendClaimed(
 }
 
 /**
+ * The recorded result of an earlier press under the same attempt key, so a
+ * repeated press the limit refuses still answers what happened; null when
+ * the caller made no such press or the read failed.
+ */
+async function recordedOutcome(caller: DeliveryCaller, attemptKey: string): Promise<DeliveryOutcome | null> {
+  const { data } = await loggedRead(
+    'sendDocument: earlier delivery read failed',
+    createSupabaseAdminClient()
+      .from('document_deliveries')
+      .select('state, failure_code')
+      .eq('organization_id', caller.orgId)
+      .eq('attempt_key', attemptKey)
+      .eq('created_by', caller.userId)
+      .maybeSingle(),
+  );
+  const state = z.enum(DELIVERY_STATES).safeParse(data?.state);
+  return state.success ? { success: true, state: state.data, failureCode: data?.failure_code ?? null } : null;
+}
+
+/**
  * Sends the subject's filed document to one recipient by email, once per
  * attempt key. The answer says whether it went out or failed with a code.
  */
@@ -184,7 +205,7 @@ export async function sendDocument(
   },
 ): Promise<DeliveryOutcome> {
   const limited = await passRateLimit(caller, request.recipient);
-  if (limited) return limited;
+  if (limited) return (await recordedOutcome(caller, request.attemptKey)) ?? limited;
   const sender = await readDeliverySender(caller);
   if (!sender) return { success: false, error: 'load_failed' };
   const answer = await createSupabaseAdminClient().rpc(
@@ -200,6 +221,7 @@ export async function sendDocument(
       p_email_subject: request.emailSubject,
       p_message_text: request.text,
       p_sender_name: sender.name,
+      p_from_header: senderHeader(sender.name, process.env) ?? null,
       p_reply_to: sender.replyTo,
     }),
   );

@@ -77,7 +77,7 @@ begin
       or has_column_privilege(v_role, 'public.document_deliveries', 'message_text', 'SELECT')
       or has_column_privilege(v_role, 'public.document_deliveries', 'note', 'SELECT')
       or has_function_privilege(v_role,
-        'public.request_document_delivery(uuid,uuid,uuid,text,uuid,uuid,text,text,text,text,text)', 'EXECUTE')
+        'public.request_document_delivery(uuid,uuid,uuid,text,uuid,uuid,text,text,text,text,text,text)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.retry_document_delivery(uuid,uuid,uuid,integer)', 'EXECUTE')
       or has_function_privilege(v_role,
         'public.settle_document_delivery(uuid,uuid,uuid,integer,text,text,text)', 'EXECUTE')
@@ -88,8 +88,14 @@ begin
       raise exception '% reaches a delivery row, column or function', v_role;
     end if;
   end loop;
-  if has_column_privilege('anon', 'public.document_deliveries', 'state', 'SELECT') then
-    raise exception 'anon reads delivery states';
+  -- A session reads exactly the signal columns, anon none.
+  if (select array_agg(attribute.attname::text order by attribute.attname::text) from pg_attribute attribute
+      where attribute.attrelid = 'public.document_deliveries'::regclass and attribute.attnum > 0
+        and not attribute.attisdropped
+        and has_column_privilege('authenticated', 'public.document_deliveries', attribute.attname, 'SELECT'))
+    is distinct from array['id', 'invoice_id', 'organization_id', 'state', 'subject_kind', 'updated_at']
+    or has_any_column_privilege('anon', 'public.document_deliveries', 'SELECT') then
+    raise exception 'a client role reads delivery columns beyond the signal';
   end if;
   if has_table_privilege('service_role', 'public.document_deliveries', 'DELETE')
     or has_table_privilege('service_role', 'public.document_delivery_events', 'UPDATE,DELETE') then
@@ -145,7 +151,7 @@ create function pg_temp.request(p_actor uuid, p_org uuid, p_name text, p_documen
 returns jsonb language sql as $$
   select public.request_document_delivery(p_actor, p_org, p_attempt, 'invoice', pg_temp.id(p_name), p_document,
     p_recipient, 'Rechnung RE-1', 'Guten Tag, anbei die Rechnung.', 'Haustechnik Sonnenberg GmbH',
-    'buero@example.com')
+    '"Haustechnik Sonnenberg GmbH" <rechnung@werkflow.example>', 'buero@example.com')
 $$;
 
 -- Refused, and nothing recorded: a field worker, an outsider, another
@@ -197,7 +203,8 @@ begin
     or (v_first ->> 'attempt')::integer is distinct from 1 or v_first ->> 'contentHash' is distinct from repeat('a', 64)
     or v_first ->> 'storagePath' is distinct from
       '38070000-0000-4000-8000-000000000010/38070000-0000-4000-8000-000000000301/Rechnung.pdf'
-    or v_first ->> 'replyTo' is distinct from 'buero@example.com' then
+    or v_first ->> 'replyTo' is distinct from 'buero@example.com'
+    or v_first ->> 'fromHeader' is distinct from '"Haustechnik Sonnenberg GmbH" <rechnung@werkflow.example>' then
     raise exception 'the request answered %', v_first;
   end if;
   if (v_again ->> 'claimed')::boolean is distinct from false or v_again ->> 'deliveryId' is distinct from v_first ->> 'deliveryId'
@@ -373,8 +380,11 @@ begin
   if (v_list ->> 'total')::integer is distinct from 4 or jsonb_array_length(v_list -> 'rows') is distinct from 4
     or v_manual ->> 'channel' is distinct from 'manual'
     or v_manual ->> 'createdBy' is distinct from 'Max Mustermann'
-    or (v_manual ->> 'retryable')::boolean
-    or exists (select 1 from jsonb_array_elements(v_list -> 'rows') row_data where (row_data ->> 'retryable')::boolean)
+    or v_manual ->> 'retryFrom' is not null or v_manual ->> 'retryUntil' is not null
+    or exists (select 1 from jsonb_array_elements(v_list -> 'rows') row_data
+      where (row_data ->> 'retryFrom')::timestamptz <= now() and (row_data ->> 'retryUntil')::timestamptz > now())
+    or (select (row_data ->> 'retryUntil')::timestamptz from jsonb_array_elements(v_list -> 'rows') row_data
+      where row_data ->> 'id' = pg_temp.id('old')::text) is distinct from now()
   then
     raise exception 'the list reads %', v_list;
   end if;

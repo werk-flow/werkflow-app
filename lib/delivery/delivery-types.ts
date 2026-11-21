@@ -37,8 +37,13 @@ export type DeliveryEntry = {
   createdAt: string;
   sentAt: string | null;
   createdBy: string | null;
-  /** Failed, or sending for ten minutes without an answer, and requested under 23 hours ago. */
-  retryable: boolean;
+  /**
+   * When „Erneut senden“ appears and ends (ISO instants): at once for a
+   * failure, ten minutes into an unanswered attempt; 23 hours after the
+   * request. Both null for a sent or manual delivery.
+   */
+  retryFrom: string | null;
+  retryUntil: string | null;
 };
 
 export type DeliveryList = { total: number; entries: DeliveryEntry[] };

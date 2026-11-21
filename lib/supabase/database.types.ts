@@ -1314,6 +1314,7 @@ export type Database = {
           document_id: string;
           email_subject: string | null;
           failure_code: string | null;
+          from_header: string | null;
           id: string;
           invoice_id: string | null;
           message_text: string | null;
@@ -1338,6 +1339,7 @@ export type Database = {
           document_id: string;
           email_subject?: string | null;
           failure_code?: string | null;
+          from_header?: string | null;
           id?: string;
           invoice_id?: string | null;
           message_text?: string | null;
@@ -1362,6 +1364,7 @@ export type Database = {
           document_id?: string;
           email_subject?: string | null;
           failure_code?: string | null;
+          from_header?: string | null;
           id?: string;
           invoice_id?: string | null;
           message_text?: string | null;
@@ -20576,6 +20579,7 @@ export type Database = {
           p_attempt_key: string;
           p_document_id: string;
           p_email_subject: string;
+          p_from_header: string;
           p_message_text: string;
           p_organization_id: string;
           p_recipient_email: string;

@@ -138,6 +138,7 @@ async function emailed(
         p_email_subject: `Rechnung ${invoice.number} – Haustechnik Sonnenberg GmbH`,
         p_message_text: `Guten Tag,\n\nanbei die Rechnung ${invoice.number}.`,
         p_sender_name: 'Haustechnik Sonnenberg GmbH',
+        p_from_header: null,
         p_reply_to: null,
       }),
     )

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mock, spyOn } from 'bun:test';
 import { EMPTY_COMPANY_PROFILE_DETAILS } from '@/lib/company-profile/profile';
-import { ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
+import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs, tableRows } from './action-boundary-world';
 import { companyProfileRow } from './company-profile-rows';
 import { assertRefused } from './operations-boundary-refusals';
 
@@ -96,7 +96,14 @@ const issued = {
 };
 
 // The database functions: one row per attempt key, a claim per attempt, a settle per claim.
-type Delivery = { id: string; attemptKey: string; state: 'sending' | 'sent' | 'failed'; attempt: number };
+// A delivery keeps what the action forwarded, as the table does, and answers it on every attempt.
+type Delivery = {
+  id: string;
+  attemptKey: string;
+  state: 'sending' | 'sent' | 'failed';
+  attempt: number;
+  stored: Record<'recipient' | 'subject' | 'text' | 'senderName' | 'fromHeader' | 'replyTo', unknown>;
+};
 const deliveries: Delivery[] = [];
 let limiterAllows = true;
 const refused = (message: string) => ({ data: null, error: { code: 'P0001', message } });
@@ -105,11 +112,7 @@ const payloadOf = (delivery: Delivery, claimed: boolean) => ({
   claimed,
   state: delivery.state,
   attempt: delivery.attempt,
-  recipient,
-  subject: mailSubject,
-  text: mailText,
-  senderName: 'Haustechnik Sonnenberg GmbH',
-  replyTo: 'buero@sonnenberg.example',
+  ...delivery.stored,
   storagePath: originalPath,
   fileName: 'Rechnung RE-2037-001.pdf',
   contentType: 'application/pdf',
@@ -133,6 +136,14 @@ world.rpc = ({ name, args }) => {
       attemptKey: String(args.p_attempt_key),
       state: 'sending',
       attempt: 1,
+      stored: {
+        recipient: args.p_recipient_email,
+        subject: args.p_email_subject,
+        text: args.p_message_text,
+        senderName: args.p_sender_name,
+        fromHeader: args.p_from_header,
+        replyTo: args.p_reply_to,
+      },
     };
     deliveries.push(delivery);
     return { data: payloadOf(delivery, true), error: null };
@@ -150,6 +161,18 @@ world.rpc = ({ name, args }) => {
   const settles = delivery.state === 'sending' && delivery.attempt === args.p_attempt;
   if (settles) delivery.state = args.p_outcome === 'sent' ? 'sent' : 'failed';
   return { data: settles, error: null };
+};
+// The table rows the server reads directly: a retry's recipient, a limited press's recorded result.
+const syncTable = () => {
+  world.tables.document_deliveries = deliveries.map((delivery) => ({
+    id: delivery.id,
+    organization_id: ORGANIZATION_A,
+    attempt_key: delivery.attemptKey,
+    created_by: CALLER_ID,
+    state: delivery.state,
+    failure_code: null,
+    recipient_email: delivery.stored.recipient,
+  }));
 };
 
 const mailsOf = (deliveryId: string) =>
@@ -241,6 +264,7 @@ assert.equal(mail.to, recipient);
 assert.equal(mail.from, '"Haustechnik Sonnenberg GmbH" <rechnung@werkflow.example>');
 assert.equal(mail.replyTo, 'buero@sonnenberg.example');
 assert.equal(mail.subject, mailSubject);
+assert.equal(mail.text, mailText);
 assert.deepEqual(
   mail.attachments?.map((attachment) => [
     attachment.filename,
@@ -250,6 +274,13 @@ assert.deepEqual(
   [['Rechnung RE-2037-001.pdf', 'application/pdf', [...pdf]]],
 );
 assert.equal(callsNamed('settle_document_delivery').length, 1, 'the repeated press settled again');
+// Pressed again once the limit is full: the recorded result, no new request.
+syncTable();
+limiterAllows = false;
+world.rpcCalls.length = 0;
+assert.deepEqual(await send(pressKey), { success: true, state: 'sent', failureCode: null });
+assert.equal(callsNamed('request_document_delivery').length, 0, 'a limited press reached the request');
+limiterAllows = true;
 
 // The provider fails: the delivery is failed with its code; the retry sends it once, a second retry not at all.
 const realFetch = globalThis.fetch;
@@ -264,6 +295,9 @@ assert.ok(failedDelivery && failedDelivery.state === 'failed');
 assert.equal(mailsOf(failedDelivery.id).length, 0);
 delete process.env.VERCEL_ENV;
 globalThis.fetch = realFetch;
+// A changed sending address between attempts leaves the retry's payload as it was, so its key still matches.
+process.env.FROM_EMAIL = 'WerkFlow <neu@werkflow.example>';
+syncTable();
 world.rpcCalls.length = 0;
 assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, expectedAttempt: 1 }), {
   success: true,
@@ -271,6 +305,8 @@ assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, exp
   failureCode: null,
 });
 assert.equal(callsNamed('retry_document_delivery')[0]?.args.p_expected_attempt, 1);
+assert.equal(callsNamed('consume_rate_limit').length, 2, 'the retry did not count its recipient');
+assert.ok(tableRows(world, 'document_deliveries').length > 0);
 // The same press again, as after a lost answer: nothing is sent.
 assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, expectedAttempt: 1 }), {
   success: true,
@@ -278,6 +314,11 @@ assert.deepEqual(await retryInvoiceDelivery({ deliveryId: failedDelivery.id, exp
   failureCode: null,
 });
 assert.equal(mailsOf(failedDelivery.id).length, 1, 'the retry did not send exactly once');
+assert.equal(
+  mailsOf(failedDelivery.id)[0]?.from,
+  '"Haustechnik Sonnenberg GmbH" <rechnung@werkflow.example>',
+);
+process.env.FROM_EMAIL = 'WerkFlow <rechnung@werkflow.example>';
 
 // An original whose bytes changed since it was filed is never attached.
 storedPdf = new TextEncoder().encode('%PDF-1.7 something else');

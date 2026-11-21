@@ -28,7 +28,7 @@ import {
 } from '@/lib/delivery/delivery-types';
 import { markInvoiceSentManually, sendInvoiceEmail } from '@/lib/invoices/delivery-actions';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { DELIVERY_FAILURE_MESSAGES } from './invoice-delivery-messages';
+import { DELIVERY_FAILURE_MESSAGES, deliveryFailureSentence } from './invoice-delivery-messages';
 
 const SEND_FAILED = 'Die E-Mail konnte nicht versendet werden. Bitte versuche es erneut.';
 const RECORD_FAILED = 'Der Versand konnte nicht vermerkt werden. Bitte versuche es erneut.';
@@ -44,14 +44,15 @@ function mailErrors(form: DeliveryMailDefaults): Record<string, string | undefin
 
 /** The banner after a send: sent, still sending, or refused by the provider. */
 function sendBanner(
-  state: DeliveryState,
+  result: { state: DeliveryState; failureCode: string | null },
   invoiceNumber: string,
   recipient: string,
 ): { variant: 'success' | 'info' | 'error'; message: string } {
+  const { state } = result;
   if (state === 'failed') {
     return {
       variant: 'error',
-      message: 'Die E-Mail ist nicht rausgegangen. Unter „Versand“ kannst du sie erneut senden.',
+      message: `${deliveryFailureSentence(result.failureCode)} Unter „Versand“ kannst du sie erneut senden.`,
     };
   }
   return state === 'sent'
@@ -142,7 +143,7 @@ export function SendInvoiceEmailDialog({
     if (!result.success)
       return setError(describeFailure(result.error, DELIVERY_FAILURE_MESSAGES, SEND_FAILED));
     onClose();
-    showBanner(sendBanner(result.state, invoiceNumber, form.recipient.trim()));
+    showBanner(sendBanner(result, invoiceNumber, form.recipient.trim()));
     router.refresh();
   };
   return (

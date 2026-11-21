@@ -48,6 +48,9 @@ create table public.document_deliveries (
   email_subject text,
   message_text text,
   sender_name text,
+  -- The From header the first attempt sent, so every retry sends the same
+  -- payload under its key; null leaves the sender to the transport.
+  from_header text,
   reply_to text,
   -- How a manual delivery went out, in the office's words.
   note text not null default '',
@@ -72,9 +75,10 @@ create table public.document_deliveries (
       and char_length(message_text) <= 5000
       and btrim(sender_name) <> '' and char_length(sender_name) <= 200
       and (reply_to is null or reply_to ~ '^[^@\s<>,;"]{1,64}@[^@\s<>,;"]{1,255}$')
+      and (from_header is null or (char_length(from_header) <= 520 and from_header !~ '[[:cntrl:]]'))
       and note = '')
     or (channel = 'manual'
-      and num_nulls(recipient_email, email_subject, message_text, sender_name, reply_to) = 5
+      and num_nulls(recipient_email, email_subject, message_text, sender_name, from_header, reply_to) = 6
       and state = 'sent' and char_length(note) <= 500)
   ),
   constraint document_deliveries_state_check check (state in ('sending', 'sent', 'failed')),
@@ -207,6 +211,7 @@ as $$
     'subject', p_delivery.email_subject,
     'text', p_delivery.message_text,
     'senderName', p_delivery.sender_name,
+    'fromHeader', p_delivery.from_header,
     'replyTo', p_delivery.reply_to,
     'storagePath', p_document.storage_path,
     'fileName', p_document.original_file_name,
@@ -235,6 +240,7 @@ create function public.request_document_delivery(
   p_email_subject text,
   p_message_text text,
   p_sender_name text,
+  p_from_header text,
   p_reply_to text
 )
 returns jsonb
@@ -272,11 +278,11 @@ begin
   v_document := app_private.lock_delivery_document(p_organization_id, p_subject_kind, p_subject_id, p_document_id);
   insert into public.document_deliveries (
     organization_id, subject_kind, invoice_id, document_id, attachment_content_hash, channel,
-    recipient_email, email_subject, message_text, sender_name, reply_to, state, attempt_key, created_by
+    recipient_email, email_subject, message_text, sender_name, from_header, reply_to, state, attempt_key, created_by
   ) values (
     p_organization_id, p_subject_kind, p_subject_id, p_document_id, v_document.metadata ->> 'contentHash', 'email',
-    p_recipient_email, p_email_subject, p_message_text, p_sender_name, p_reply_to, 'sending', p_attempt_key,
-    p_actor_id
+    p_recipient_email, p_email_subject, p_message_text, p_sender_name, p_from_header, p_reply_to, 'sending',
+    p_attempt_key, p_actor_id
   )
   returning * into v_delivery;
   insert into public.document_delivery_events (organization_id, delivery_id, event_type, state, attempt, actor_id)
@@ -286,9 +292,9 @@ exception
   when check_violation then raise exception 'invalid_input';
 end;
 $$;
-revoke all on function public.request_document_delivery(uuid, uuid, uuid, text, uuid, uuid, text, text, text, text, text)
+revoke all on function public.request_document_delivery(uuid, uuid, uuid, text, uuid, uuid, text, text, text, text, text, text)
   from public, anon, authenticated;
-grant execute on function public.request_document_delivery(uuid, uuid, uuid, text, uuid, uuid, text, text, text, text, text)
+grant execute on function public.request_document_delivery(uuid, uuid, uuid, text, uuid, uuid, text, text, text, text, text, text)
   to service_role;
 
 -- Claims a failed email delivery for another attempt, or one whose attempt
@@ -465,8 +471,10 @@ grant execute on function public.record_manual_delivery(uuid, uuid, uuid, text, 
   to service_role;
 
 -- A subject's deliveries, newest first, at most p_limit with the total, so
--- the page names what it leaves out. retryable: failed, or sending for ten
--- minutes without an answer, and requested less than 23 hours ago.
+-- the page names what it leaves out. An email that is not sent may be retried
+-- from retryFrom (at once when failed, ten minutes after its attempt began
+-- when still sending) until retryUntil (23 hours after the request); the page
+-- follows the clock, and retry_document_delivery decides.
 create function public.list_document_deliveries(
   p_organization_id uuid,
   p_subject_kind text,
@@ -498,9 +506,15 @@ as $$
           'createdAt', delivery.created_at,
           'sentAt', delivery.sent_at,
           'createdBy', nullif(btrim(concat_ws(' ', profile.first_name, profile.last_name)), ''),
-          'retryable', delivery.channel = 'email' and delivery.created_at > now() - interval '23 hours'
-            and (delivery.state = 'failed'
-              or (delivery.state = 'sending' and delivery.updated_at <= now() - interval '10 minutes'))
+          'retryFrom', case
+            when delivery.channel = 'email' and delivery.state = 'failed' then delivery.updated_at
+            when delivery.channel = 'email' and delivery.state = 'sending'
+              then delivery.updated_at + interval '10 minutes'
+          end,
+          'retryUntil', case
+            when delivery.channel = 'email' and delivery.state <> 'sent'
+              then delivery.created_at + interval '23 hours'
+          end
         ) as row_data
         from public.document_deliveries delivery
         left join public.profiles profile on profile.id = delivery.created_by

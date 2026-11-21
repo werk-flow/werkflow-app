@@ -324,6 +324,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   follow_up_id: 'Wiedervorlage-ID',
   format_version: 'Formatversion',
   friday_minutes: 'Freitag (Minuten)',
+  from_header: 'Absender (Kopfzeile)',
   from_state: 'Von Status',
   gate_fingerprint: 'Prüfsumme Freigabeprüfung',
   gate_snapshot: 'Stand Freigabeprüfung',

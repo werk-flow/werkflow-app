@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorText } from '@/components/ui/error-text';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useServerAction } from '@/hooks/use-server-action';
+import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { describeFailure } from '@/lib/action-messages';
 import {
   DELIVERY_STATE_LABELS,
@@ -46,11 +47,30 @@ function deliveryMeta(entry: DeliveryEntry): string {
   return parts.join(' · ');
 }
 
+const instant = (value: string | null): number | null => (value === null ? null : Date.parse(value));
+
+/**
+ * Whether „Erneut senden“ shows now, and whether an attempt went unanswered,
+ * by the minute tick: crossing ten minutes or 23 hours sends no event, so the
+ * page follows the clock; retry_document_delivery decides.
+ */
+function useRetryWindow(entry: DeliveryEntry): { retryable: boolean; unanswered: boolean } {
+  const from = instant(entry.retryFrom);
+  const until = instant(entry.retryUntil);
+  const now = useWallClockTick(60_000, until !== null, until);
+  const begun = from !== null && now >= from;
+  return {
+    retryable: begun && until !== null && now < until,
+    unanswered: entry.state === 'sending' && begun,
+  };
+}
+
 function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(retryInvoiceDelivery);
   const [error, setError] = useState<string | null>(null);
+  const { retryable, unanswered } = useRetryWindow(entry);
   const retry = async () => {
     setError(null);
     const result = await run({ deliveryId: entry.id, expectedAttempt: entry.attempts }).catch(() => null);
@@ -73,13 +93,16 @@ function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
         <div className="min-w-0 flex-1 space-y-0.5">
           <p className="text-sm font-medium wrap-anywhere">{deliveryTitle(entry)}</p>
           <p className="text-xs text-muted-foreground wrap-anywhere">{deliveryMeta(entry)}</p>
-          {entry.state === 'failed' && (
-            <p className="text-sm text-destructive">{deliveryFailureSentence(entry.failureCode)}</p>
+          {(entry.state === 'failed' || unanswered) && (
+            <p className="text-sm text-destructive">
+              {deliveryFailureSentence(unanswered ? 'email_provider_unreachable' : entry.failureCode)}
+            </p>
           )}
-          <ErrorText>{error}</ErrorText>
+          {/* A later send, here or in another session, makes an earlier retry's error stale. */}
+          <ErrorText>{entry.state === 'sent' ? null : error}</ErrorText>
         </div>
       </div>
-      {entry.retryable && (
+      {retryable && (
         <Button
           type="button"
           variant="outline"
