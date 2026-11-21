@@ -1,7 +1,7 @@
 // A dependency change runs what the packages it moves can break: every group for the app's, the
 // browser's or the stack's, a sample for a development tool, Lint and the static gates for lint and types.
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { LINT_AND_TYPE_PACKAGES, lockfileChange, packageJsonChange } from './dependency-change';
@@ -70,10 +70,14 @@ test('a moved package counts by the strongest root package that installs it, nes
   expect(lockfileChange(peerOnly, peerOnly.replace('peer-only@1.0.0', 'peer-only@1.1.0')).effect).toBe(
     'every-group',
   );
+  // A runtime package's peer counts through it even when the root lists the peer as a lint package,
+  // and so does what that peer installs.
   const peerEslint = lock({ react: 'react@19.0.0", "", { "peerDependencies": { "eslint": "^9" } }' });
-  expect(lockfileChange(peerEslint, peerEslint.replace('eslint@9.0.0', 'eslint@9.1.0')).effect).toBe(
-    'lint-type',
-  );
+  for (const [from, to] of [
+    ['eslint@9.0.0', 'eslint@9.1.0'],
+    ['minimatch@9.0.0', 'minimatch@9.0.1'],
+  ] as const)
+    expect(lockfileChange(peerEslint, peerEslint.replace(from, to)).effect).toBe('every-group');
   // A Playwright package counts by its own name and resolved name, whoever installs it.
   const browserTool = lockfileChange(
     BASE,
@@ -192,7 +196,13 @@ test("the repository's own lock classifies a moved package by its real installer
     effect: 'lint-type',
     reason: 'bun.lock: @types/react, type declarations only',
   });
-  // The quarantine report's parser declares eslint as a peer; the root's own eslint entry decides.
+  // The quarantine report's parser declares eslint as a peer it never loads (UNLOADED_PEERS).
+  const loads = spawnSync(
+    'grep',
+    ['-rlE', `(require\\(|from )['"]eslint['"/]`, join(root, 'node_modules/@typescript-eslint/parser/dist')],
+    { encoding: 'utf8' },
+  );
+  expect([loads.status, loads.stdout]).toEqual([1, '']);
   expect(lockfileChange(real, bump('eslint')).effect).toBe('lint-type');
   // A package only a runtime dependency installs runs every group.
   expect(lockfileChange(real, bump('@radix-ui/react-primitive')).effect).toBe('every-group');

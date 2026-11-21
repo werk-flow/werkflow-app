@@ -180,10 +180,15 @@ function resolveKey(lock: Lock, from: string, name: string): string | undefined 
 }
 
 /**
- * For every lock key, the root packages whose installed tree holds it. A peer the root lists
- * itself belongs to that root entry, not to the package that declares it: the quarantine report's
- * parser declares `eslint` as a peer without loading it.
+ * Peers a package declares without loading them: the quarantine report's parser declares `eslint`,
+ * yet never imports it (node_modules/@typescript-eslint/parser/dist). Every other peer counts as
+ * loaded by its declarer.
  */
+const UNLOADED_PEERS: Readonly<Record<string, readonly string[]>> = {
+  '@typescript-eslint/parser': ['eslint'],
+};
+
+/** For every lock key, the root packages whose installed tree holds it, peers included. */
 function rootsByKey(lock: Lock): Map<string, Set<string>> {
   const owners = new Map<string, Set<string>>();
   const roots = new Set(SECTIONS.flatMap((section) => Object.keys(lock.workspaces['']?.[section] ?? {})));
@@ -198,7 +203,9 @@ function rootsByKey(lock: Lock): Map<string, Set<string>> {
       const { peerDependencies, ...installed } = meta.success ? meta.data : {};
       const names = [
         ...Object.values(installed).flatMap((deps) => Object.keys(deps ?? {})),
-        ...Object.keys(peerDependencies ?? {}).filter((name) => !roots.has(name)),
+        ...Object.keys(peerDependencies ?? {}).filter(
+          (name) => !UNLOADED_PEERS[keySegments(key).at(-1) ?? '']?.includes(name),
+        ),
       ];
       for (const name of names) {
         const resolved = resolveKey(lock, key, name);
