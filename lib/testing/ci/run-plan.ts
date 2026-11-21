@@ -201,6 +201,8 @@ function emptySelectionSkips(outputs: Readonly<Record<string, string>>): Partial
 export function planRun(input: {
   event: CiEvent;
   tree: string;
+  /** The commit the Plan diffs against, resolved; null for a full run. Part of every reuse key. */
+  base: string | null;
   listGrowthApproved: boolean;
   /** The planner's `$GITHUB_OUTPUT` keys. */
   outputs: Readonly<Record<string, string>>;
@@ -220,6 +222,7 @@ export function planRun(input: {
           job,
           shard: shard?.shard ?? null,
           tree: input.tree,
+          base: input.base,
           groups: plannedGroups(job, outputs, shard?.groups),
           listGrowthApproved: input.listGrowthApproved,
         })

@@ -56,9 +56,14 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-/** Runs a command in the checkout with its output shown; a failure ends the step. */
-function sh(command: string, args: readonly string[], env: Readonly<Record<string, string>> = {}): void {
-  const ran = spawnSync(command, args, { cwd: checkout, stdio: 'inherit', env: { ...process.env, ...env } });
+/** Runs a command in `cwd`, the checkout by default, with its output shown; a failure ends the step. */
+function sh(
+  command: string,
+  args: readonly string[],
+  env: Readonly<Record<string, string>> = {},
+  cwd = checkout,
+): void {
+  const ran = spawnSync(command, args, { cwd, stdio: 'inherit', env: { ...process.env, ...env } });
   if (ran.status !== 0)
     fail(`${command} ${args.join(' ')} ended with ${ran.error?.message ?? ran.signal ?? ran.status}.`);
 }
@@ -89,17 +94,24 @@ function install(): void {
 /** The clones docs:check reads beside the checkout (docs/README.md, "Sibling repositories"). */
 function siblings(): void {
   const parent = resolve(checkout, '..');
-  // scripts/ci/process-executor.ts clones them first with the trusted copy of this step, so the
-  // tested commit's steps never hold the token: each clone in place is kept, each missing one made.
+  // scripts/ci/process-executor.ts clones them first with the trusted copy of this step, and ci.yml
+  // with an inline step, so the tested commit's steps never hold the token: each clone in place is
+  // kept, each missing one made. git runs beside the checkout, never in it: off GitHub the job
+  // user owns the checkout, and this step runs as the orchestrator.
   if (!existsSync(join(parent, SIBLINGS.website)))
-    sh('git', [
-      'clone',
-      '--quiet',
-      '--depth',
-      '1',
-      `https://github.com/werk-flow/${SIBLINGS.website}`,
-      join(parent, SIBLINGS.website),
-    ]);
+    sh(
+      'git',
+      [
+        'clone',
+        '--quiet',
+        '--depth',
+        '1',
+        `https://github.com/werk-flow/${SIBLINGS.website}`,
+        join(parent, SIBLINGS.website),
+      ],
+      {},
+      parent,
+    );
   if (existsSync(join(parent, SIBLINGS.business))) return;
   const token = process.env.SIBLING_REPOSITORIES_TOKEN;
   if (!token) {
@@ -127,6 +139,7 @@ function siblings(): void {
       GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
       GIT_CONFIG_VALUE_0: header,
     },
+    parent,
   );
 }
 

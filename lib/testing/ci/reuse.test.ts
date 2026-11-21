@@ -20,7 +20,16 @@ import {
 const TREE = 'a'.repeat(40);
 const OTHER_TREE = 'b'.repeat(40);
 const GROUPS = ['sql:grants', 'sql:history', 'step:types', 'step:seed'];
-const KEY: ReuseKey = { job: 'sql', shard: null, tree: TREE, groups: GROUPS, listGrowthApproved: false };
+/** The commit a job's Plan diffed against, as every job's receipt records it. */
+const JOB_BASE = 'e'.repeat(40);
+const KEY: ReuseKey = {
+  job: 'sql',
+  shard: null,
+  tree: TREE,
+  base: JOB_BASE,
+  groups: GROUPS,
+  listGrowthApproved: false,
+};
 const RUN_1 = 'https://ci.example/runs/1';
 const RUN_2 = 'https://ci.example/runs/2';
 /** The merge-queue lookup; a configured ledger never asks it. */
@@ -36,7 +45,7 @@ function receipt(overrides: Partial<CiResult> = {}): CiResult {
     event: 'pr',
     tree: TREE,
     commit: 'c'.repeat(40),
-    base: 'HEAD^1',
+    base: JOB_BASE,
     status: 'passed',
     groups: GROUPS.map((id) => ({ id, outcome: 'passed', durationMs: 1000 })),
     planReason: 'Selection by diff',
@@ -187,6 +196,15 @@ test('per-job reuse ignores the group order, and never serves a full run or anot
     expect(reusableReceipt(ledger, KEY, event)).toBe(RUN_1);
   expect(reusableReceipt(ledger, KEY, 'full')).toBeUndefined();
   expect(reusableReceipt(ledger, { ...KEY, listGrowthApproved: true }, 'integration')).toBeUndefined();
+});
+
+// A job's own result can depend on the base its Plan diffed against (the migration order, the
+// selection's inputs): the same tree on another base is another key.
+test('per-job reuse stands only for a pass whose Plan diffed against the same resolved base', () => {
+  const ledger = [jobStart(), jobPass()];
+  expect(reusableReceipt(ledger, KEY, 'integration')).toBe(RUN_1);
+  expect(reusableReceipt(ledger, { ...KEY, base: 'f'.repeat(40) }, 'integration')).toBeUndefined();
+  expect(reusableReceipt(ledger, { ...KEY, base: null }, 'integration')).toBeUndefined();
 });
 
 test("a shard's receipt stands only for the same shard number of the same groups", () => {

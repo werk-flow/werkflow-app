@@ -38,6 +38,8 @@ test("an integration run names the batch's base, PRs and run, and takes any PR's
     CI_EVENT: 'integration',
     CI_BASE_SHA: MAIN,
     CI_RUN_URL: 'queue/1',
+    // Each run has its own URL, so its verdict takes only results of its first attempt.
+    CI_RUN_ATTEMPT: '1',
     CI_RESULTS_DIR: '/runs/1',
     CI_PRS: '1,2',
     SHRINK_ONLY_GROWTH_APPROVED: 'true',

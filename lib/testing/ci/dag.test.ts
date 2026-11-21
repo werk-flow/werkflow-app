@@ -182,3 +182,29 @@ test('prepare.ts pins the tools the actions install and key their caches by', ()
   for (const key of ['supabase-environment-v1-', 'supabase-images-v3-ghcr-'])
     expect(action('local-stack')).toContain(`key: ${key}${CI_TOOLS.supabaseCli}-`);
 });
+
+// On Actions a job's process can read every other process of the job's user, so the sibling token
+// lives only in one inline step that runs before any code of the tested checkout (its install
+// scripts, its Bun configuration, its composites) and outside it. prepare.ts siblings then finds
+// the clones in place and only reports a missing one.
+test("on Actions the sibling token reaches only an inline clone step that runs before the checkout's code", () => {
+  const holders: string[] = [];
+  for (const job of CI_JOBS) {
+    if (JSON.stringify(ci.at('jobs', job, 'env') ?? {}).includes('SIBLING_REPOSITORIES_TOKEN'))
+      holders.push(`${job} (job)`);
+    const steps = asList(ci.at('jobs', job, 'steps')).filter(isRecord);
+    for (const [index, step] of steps.entries()) {
+      if (!JSON.stringify(step.env ?? {}).includes('SIBLING_REPOSITORIES_TOKEN')) continue;
+      holders.push(`${job} ${String(step.name)}`);
+      const run = typeof step.run === 'string' ? step.run : '';
+      expect(run, `${job}: ${String(step.name)}`).not.toMatch(/\bbun\b|\bnode\b|scripts\/|\.\//);
+      expect(step['working-directory']).toBe('${{ runner.temp }}');
+      // Only GitHub's own checkout runs before it.
+      expect(
+        steps.slice(0, index).map((earlier) => earlier.uses),
+        `${job}: ${String(step.name)}`,
+      ).toEqual([expect.stringMatching(/^actions\/checkout@[0-9a-f]{40}$/)]);
+    }
+  }
+  expect(holders).toEqual(['fast Clone the sibling repositories']);
+});

@@ -33,6 +33,8 @@ export type Fake = {
   pendingAtLand: (number | null)[];
   /** Whether the PR's auto-merge was still on when its `Queue` success and merge were asked for. */
   autoMergeAtLand: boolean[];
+  /** The main run the queue had saved as owed when each merge was asked for. */
+  owedAtLand: ({ base: string; prs: readonly number[] } | null)[];
   /** The newest `Queue` on a head: success when the queue marked it, failure once withdrawn. */
   queueOn: (head: string) => 'success' | 'failure' | undefined;
   main: () => MainCommit;
@@ -107,6 +109,31 @@ function fakeBatchGit(
   };
 }
 
+/**
+ * What the queue held when it asked for each merge: its pending mark, the PR's auto-merge, and
+ * main's run it saved as owed. Saving that run throws with `owingFails`.
+ */
+function fakeMergeRecord(owingFails: boolean | undefined) {
+  const seen: Pick<Fake, 'pendingAtLand' | 'autoMergeAtLand' | 'owedAtLand'> = {
+    pendingAtLand: [],
+    autoMergeAtLand: [],
+    owedAtLand: [],
+  };
+  let owed: Fake['owedAtLand'][number] = null;
+  const oweMainRun: QueueAdapter['oweMainRun'] = async (followUp) => {
+    if (owingFails) throw new Error('the work directory is full');
+    owed = followUp;
+  };
+  const atLand = (entry: QueuedPull, open: readonly QueuedPull[], saved: QueueState): void => {
+    seen.pendingAtLand.push(saved.pending?.pull ?? null);
+    seen.autoMergeAtLand.push(
+      open.some((candidate) => candidate.number === entry.number && candidate.queuedAt !== null),
+    );
+    seen.owedAtLand.push(owed);
+  };
+  return { seen, oweMainRun, atLand };
+}
+
 /** A PR after GitHub merged main into its branch: a new head, up to date, whose Check the runner has not posted yet. */
 const updatedBranch = (entry: QueuedPull): QueuedPull => ({
   ...entry,
@@ -136,6 +163,7 @@ type WorldOptions = {
   state?: QueueState;
   migrationConflicts?: Readonly<Record<number, number>>;
   updateFails?: boolean;
+  owingFails?: boolean;
 };
 
 /**
@@ -149,7 +177,7 @@ type WorldOptions = {
  * is down for PR n's first `failedWithdrawals[n]` withdrawals. GitHub refuses to turn off the auto-merge
  * of `stuckAutoMerge`. The queue's saved state starts as `state`. PR n's migration conflicts with
  * PR `migrationConflicts[n]`'s when that PR is in the prefix it lands on. Updating a branch throws
- * with `updateFails`.
+ * with `updateFails`. Saving an owed main run throws with `owingFails`.
  */
 export function fakeWorld(pulls: QueuedPull[], options: WorldOptions = {}): Fake {
   const git = fakeGit();
@@ -160,8 +188,7 @@ export function fakeWorld(pulls: QueuedPull[], options: WorldOptions = {}): Fake
   const landed: number[] = [];
   const rejected: number[] = [];
   const updated: number[] = [];
-  const pendingAtLand: (number | null)[] = [];
-  const autoMergeAtLand: boolean[] = [];
+  const record = fakeMergeRecord(options.owingFails);
   let saved: QueueState = options.state ?? { pending: null, frozen: null };
   const mergeCommits = new Map<number, string>();
   let merges = 0;
@@ -183,11 +210,9 @@ export function fakeWorld(pulls: QueuedPull[], options: WorldOptions = {}): Fake
         candidate.number === entry.number ? { ...candidate, queuedAt: null } : candidate,
       );
     },
+    oweMainRun: record.oweMainRun,
     land: async (entry) => {
-      pendingAtLand.push(saved.pending?.pull ?? null);
-      autoMergeAtLand.push(
-        open.some((candidate) => candidate.number === entry.number && candidate.queuedAt !== null),
-      );
+      record.atLand(entry, open, saved);
       publisher.mark(entry.headSha);
       options.beforeLand?.(++merges, { pulls: open, pushMain });
       if (entry.number === options.refuse) throw new Error('Pull request is not mergeable');
@@ -223,8 +248,7 @@ export function fakeWorld(pulls: QueuedPull[], options: WorldOptions = {}): Fake
     rejected,
     updated,
     withdrawn: publisher.withdrawn,
-    pendingAtLand,
-    autoMergeAtLand,
+    ...record.seen,
     queueOn: publisher.queueOn,
     main,
     state: () => saved,

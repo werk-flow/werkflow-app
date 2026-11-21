@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { appCheckStateOf } from '../../lib/testing/ci/check-app';
 import { mainEnvironment, type MainFollowUp, mainFollowUpSchema } from '../../lib/testing/ci/queue-main-run';
 import {
+  INTEGRATION_ATTEMPT,
   integrationEnvironment,
   type QueueAdapter,
   type QueuedPull,
@@ -20,6 +21,7 @@ import { verdictOf } from '../../lib/testing/ci/queue-verdict';
 import { PULLS_QUERY, pullsFromGitHub } from '../../lib/testing/ci/queue-github';
 import { type Ledger, readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
 import { provenTree } from '../../lib/testing/ci/reuse';
+import { acknowledgedStart } from '../../lib/testing/ci/run-commit';
 import { migrationOrderProblems } from '../../lib/testing/local-stack/migration-order';
 
 /** The commit status the queue sets on a PR's head right before it merges it. The ruleset requires it (owner's step). */
@@ -134,7 +136,13 @@ export function runIntegration(
   const result = (file: string) => readResult(join(options.resultsDir, file));
   const files = existsSync(options.resultsDir) ? readdirSync(options.resultsDir) : [];
   return verdictOf(
-    { commit: run.tip.commit, tree: run.tip.tree, base: run.base, runUrl: options.runUrl },
+    {
+      commit: run.tip.commit,
+      tree: run.tip.tree,
+      base: run.base,
+      runUrl: options.runUrl,
+      attempt: INTEGRATION_ATTEMPT,
+    },
     {
       plan: result(resultFileName('plan', null)),
       check: result(resultFileName('check', null)),
@@ -146,15 +154,20 @@ export function runIntegration(
 
 /**
  * Starts main's run after a landing (`mainRunOf` in lib/testing/ci/queue.ts) through the main
- * runner, and waits for it. Its exit code decides nothing for the queue; the run posts its own Check.
- * True once the run is paid: the runner ran (exit 0 or 1), or another run of the commit started
- * (3). False when it could not start or refused before anything ran (2), its queued Check unposted too.
+ * runner, and waits for it. True once the run is paid: the runner acknowledged durably that the run
+ * started, or that another main run of the commit started (CI_START_ACK, written by
+ * scripts/ci/run-commit.ts). Its exit code decides nothing: every failure before that
+ * acknowledgement, whatever it exits with, leaves the run owed. A run acknowledged on an earlier tick
+ * is paid without starting it again.
  */
 export function runMain(
   options: { repository: string; mainRunner: string; workDir: string; runUrlBase: string },
   run: { commit: string; base: string; prs: readonly number[]; id: string },
 ): boolean {
   const id = `${run.id}-main-${run.commit.slice(0, 12)}`;
+  const ack = join(options.workDir, `${id}.started.json`);
+  const paid = (): boolean => acknowledgedStart(ack, run.commit) !== undefined;
+  if (paid()) return true;
   const environment = mainEnvironment({
     ...run,
     runUrl: `${options.runUrlBase}/${id}`,
@@ -163,14 +176,13 @@ export function runMain(
   console.info(`[queue] main's run ${environment.CI_RUN_URL} of ${run.commit}, base ${run.base}`);
   const ran = spawnSync(options.mainRunner, [], {
     cwd: options.repository,
-    env: { ...process.env, ...environment },
+    env: { ...process.env, ...environment, CI_START_ACK: ack },
     stdio: 'inherit',
   });
   console.info(
-    `[queue] main's runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}`,
+    `[queue] main's runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}${paid() ? '' : ', before its start was acknowledged'}`,
   );
-  // 2: run-commit refused before anything ran. 3: another run of that main commit started.
-  return ran.error === undefined && (ran.status === 0 || ran.status === 1 || ran.status === 3);
+  return paid();
 }
 
 /** The runner's ledger when the queue is given one, read-only; undefined without one. */
@@ -230,6 +242,8 @@ export function createQueueAdapter(options: {
   appId: number | null;
   /** Runs the publisher's `queue` mode as the App's user; required once an App is configured. */
   publisher?: string;
+  /** With a main runner, the tick's id: main's run a merge would owe is saved under it. */
+  mainFollowUpId?: string;
 }): QueueAdapter {
   const git = gitIn(options.repository);
   const gh = (...args: string[]): string =>
@@ -339,6 +353,10 @@ export function createQueueAdapter(options: {
     disableAutoMerge: async (pull) => {
       disableAutoMerge(pull.number);
       console.info(`[queue] #${pull.number}: auto-merge off`);
+    },
+    oweMainRun: async ({ base, prs }) => {
+      if (options.mainFollowUpId)
+        saveMainFollowUp(options.workDir, { base, prs: [...prs], id: options.mainFollowUpId });
     },
     land: async (pull, proof) => {
       mark(pull.headSha, 'success', `Passed in ${proof.runUrl}`, proof.runUrl);

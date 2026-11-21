@@ -15,7 +15,8 @@ export type RunEvidence = {
   ledger: Ledger | undefined;
 };
 
-type IntegrationRun = { commit: string; tree: string; base: string; runUrl: string };
+/** The run the queue started: its commit, tree, base, URL and attempt (CI_RUN_ATTEMPT). */
+type IntegrationRun = { commit: string; tree: string; base: string; runUrl: string; attempt: number };
 
 const ofRun =
   (run: IntegrationRun) =>
@@ -33,9 +34,17 @@ function proofProblem(run: IntegrationRun, plan: Evidence, check: Evidence): str
   if (plan.base !== run.base) return `the plan diffed against ${plan.base}, not the batch's base ${run.base}`;
   if (plan.status !== 'passed' || plan.completedAt === null || plan.producer === null)
     return 'the plan did not pass on a CI runner';
+  if (plan.attempt !== run.attempt)
+    return `the plan is of attempt ${plan.attempt ?? 'unknown'}, not the expected attempt ${run.attempt}`;
   if ('unreadable' in check) return `no Check result: ${check.unreadable}`;
   if (check.job !== 'check' || !ofRun(run)(check))
     return `the Check result is of another run (${check.runUrl}, tree ${check.tree})`;
+  if (check.attempt !== run.attempt)
+    return `the Check result is of attempt ${check.attempt ?? 'unknown'}, not the expected attempt ${run.attempt}`;
+  // A rerun under the same run URL plans again, perhaps on another base: only the Check that
+  // verified the run by this Plan stands for it.
+  if (check.planStartedAt !== plan.startedAt)
+    return `the Check verified the run by the Plan started ${check.planStartedAt ?? 'at no recorded time'}, not by this plan of ${plan.startedAt}`;
   if (check.status === 'running' || check.completedAt === null) return 'Check did not finish';
   if (check.producer === null) return 'Check ran outside a CI runner or on a changed checkout';
   return undefined;
@@ -49,7 +58,7 @@ const SETUP_STEPS: ReadonlySet<string> = new Set(['step:server']);
 
 /**
  * The verdict of the integration run `run`. Only a CI runner's finished plan of the batch's base
- * and Check of this run count. A pass counts only when the ledger, if the queue reads one, holds it
+ * and Check of this run, its expected attempt and that plan count. A pass counts only when the ledger, if the queue reads one, holds it
  * as the pass of this landing (tree, base and the plan's work), so the push to main reuses it. A
  * failed Check counts against the batch only when a CI runner's finished job of this run failed a
  * group beyond its setup; otherwise the run proved nothing.
@@ -65,8 +74,14 @@ export function verdictOf(run: IntegrationRun, evidence: RunEvidence): Verdict {
     return ledger === undefined || passedTree(ledger, landing, () => undefined) === run.runUrl
       ? verdict('passed', 'Check passed')
       : verdict('inconclusive', "Check passed, but the ledger does not hold the run as its landing's pass");
+  // Only a job that ran under this Plan and attempt names a failure.
   const failed = evidence.results.flatMap((result) =>
-    'unreadable' in result || !ofRun(run)(result) || result.producer === null || result.completedAt === null
+    'unreadable' in result ||
+    !ofRun(run)(result) ||
+    result.producer === null ||
+    result.completedAt === null ||
+    result.attempt !== run.attempt ||
+    result.planIdentity?.startedAt !== plan.startedAt
       ? []
       : result.groups.filter((group) => group.outcome === 'failed').map((group) => group.id),
   );

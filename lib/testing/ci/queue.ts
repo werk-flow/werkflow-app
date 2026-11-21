@@ -94,6 +94,13 @@ export type QueueAdapter = {
   integrationRun(run: { tip: BatchEntry; base: string; pulls: readonly QueuedPull[] }): Promise<Verdict>;
   /** Turns the PR's auto-merge off, so a green `Queue` alone never merges it. Throws when it cannot. */
   disableAutoMerge(pull: QueuedPull): Promise<void>;
+  /**
+   * Saves durably that main's run after this tick's landing is owed: the tick's base and the PRs it
+   * may have landed once the next merge went through. Called before each merge is asked for, so a
+   * tick that dies after GitHub accepted it leaves the run to the next tick, which starts it before
+   * it touches the pending mark (scripts/ci/queue.ts). Throws when it cannot; nothing merges then.
+   */
+  oweMainRun(followUp: { base: string; prs: readonly number[] }): Promise<void>;
   /** Marks the head as passed by the queue and squash-merges it on GitHub, only at that head. */
   land(pull: QueuedPull, proof: Verdict): Promise<void>;
   /** The PR's merge commit when GitHub reports it merged, otherwise null. */
@@ -212,6 +219,12 @@ export function supersession(taken: QueuedPull, now: readonly QueuedPull[]): str
 }
 
 /**
+ * Every integration run's attempt: each run has its own URL and results directory, so none is
+ * rerun under its URL, and its verdict takes only results of this attempt (lib/testing/ci/queue-verdict.ts).
+ */
+export const INTEGRATION_ATTEMPT = 1;
+
+/**
  * The environment of the batch prefix's integration run, on top of the runner's own: every job of
  * the run takes it. The run takes the list-growth approval of any PR in it (decision 0009, "a merge
  * queue").
@@ -228,6 +241,7 @@ export function integrationEnvironment(run: {
     CI_EVENT: 'integration',
     CI_BASE_SHA: run.base,
     CI_RUN_URL: run.runUrl,
+    CI_RUN_ATTEMPT: String(INTEGRATION_ATTEMPT),
     CI_RESULTS_DIR: run.resultsDir,
     CI_PRS: run.pulls.map((pull) => pull.number).join(','),
     SHRINK_ONLY_GROWTH_APPROVED: String(run.pulls.some((pull) => pull.listGrowthApproved)),
@@ -687,7 +701,8 @@ function stoppedPartway(
 
 /**
  * Merges one PR and returns main after it, or the problem. The PR's auto-merge goes off first, so
- * only this merge can use the `Queue` mark; when it cannot, no mark is posted. The mark is saved as
+ * only this merge can use the `Queue` mark; when it cannot, no mark is posted. main's run the merge
+ * would owe is saved next, or nothing is posted and merged. The mark is saved as
  * pending before it is posted. Every outcome but the tested tree on `previous` withdraws it here,
  * and a withdrawal that fails freezes the queue; `land` withdraws a merged PR's. After a merge
  * error the PR counts as landed only when GitHub reports it merged as main's new head: another
@@ -706,6 +721,11 @@ async function landOne(
     await adapter.disableAutoMerge(pull);
   } catch (error) {
     return `#${pull.number}'s auto-merge could not be turned off (${message(error)}), so the queue posted no Queue success`;
+  }
+  try {
+    await adapter.oweMainRun({ base: outcome.base, prs: [...outcome.landing, pull.number] });
+  } catch (error) {
+    return `main's run it would owe could not be saved before merging #${pull.number} (${message(error)}), so the queue posted no Queue success`;
   }
   const mark = markOf(pull, proof);
   await adapter.saveState({ pending: mark, frozen: null });

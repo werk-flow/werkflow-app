@@ -41,6 +41,29 @@ test('a rehearsal batch takes the named open PRs in their order, and refuses a P
   expect(() => pickBatch(pulls, { maxBatch: 4, only: [1, 3] })).toThrow('#3 is not open against main');
 });
 
+// A tick that dies after GitHub accepted a merge never reaches its end, where it saves main's run
+// it owes: so the run is saved before each merge is asked for, and the next tick pays it first
+// (scripts/ci/queue.ts) before it touches the pending mark.
+test("main's run a landing owes is saved before each merge is asked for, and no merge without it", async () => {
+  const world = fakeWorld([pull(1), pull(2)]);
+  const base = world.main().commit;
+  await runQueueTick(world.adapter, LIVE);
+  expect(world.landed).toEqual([1, 2]);
+  expect(world.owedAtLand).toEqual([
+    { base, prs: [1] },
+    { base, prs: [1, 2] },
+  ]);
+
+  const unsaved = fakeWorld([pull(1), pull(2)], { owingFails: true });
+  const outcome = await runQueueTick(unsaved.adapter, LIVE);
+  expect(unsaved.landed).toEqual([]);
+  expect(unsaved.queueOn(sha('head-1'))).toBeUndefined();
+  expect(needsAttention(outcome)).toBe(true);
+  expect(outcome.stops.map((stop) => stop.detail).join(' ')).toContain(
+    "main's run it would owe could not be saved",
+  );
+});
+
 test('a green batch runs once and lands every PR in order, and main ends on the tested tree', async () => {
   const world = fakeWorld([pull(1), pull(2), pull(3), pull(4), pull(5)]);
   const outcome = await runQueueTick(world.adapter, LIVE);
@@ -417,6 +440,7 @@ test("a landing stopped after an untested prefix leaves main on a tree that no r
     job,
     shard: job === 'browser' ? 1 : null,
     tree: untested,
+    base: sha('main'),
     groups: ['sql:grants'],
     listGrowthApproved: false,
   });

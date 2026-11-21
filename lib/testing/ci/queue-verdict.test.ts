@@ -5,7 +5,14 @@ import { expect, test } from 'bun:test';
 import { type RunEvidence, verdictOf } from './queue-verdict';
 import type { CiResult } from './results';
 
-const RUN = { commit: 'c'.repeat(40), tree: 'd'.repeat(40), base: 'e'.repeat(40), runUrl: 'queue/1' };
+const RUN = {
+  commit: 'c'.repeat(40),
+  tree: 'd'.repeat(40),
+  base: 'e'.repeat(40),
+  runUrl: 'queue/1',
+  attempt: 1,
+};
+const PLAN_STARTED = '2026-11-21T08:00:00.000Z';
 
 function result(overrides: Partial<CiResult>): CiResult {
   return {
@@ -23,9 +30,18 @@ function result(overrides: Partial<CiResult>): CiResult {
     listGrowthApproved: false,
     producer: 'mac-standin',
     runUrl: RUN.runUrl,
-    startedAt: '2026-11-21T08:00:00Z',
+    startedAt: PLAN_STARTED,
     completedAt: '2026-11-21T09:00:00Z',
     attempt: 1,
+    // Check and every job name the Plan they ran under.
+    planStartedAt: PLAN_STARTED,
+    planIdentity: {
+      runUrl: RUN.runUrl,
+      attempt: 1,
+      startedAt: PLAN_STARTED,
+      base: RUN.base,
+      digest: 'a'.repeat(64),
+    },
     ...overrides,
   };
 }
@@ -53,6 +69,36 @@ test("only a CI runner's finished, passed Check of this run, commit and tree pas
     { event: 'pr' as const },
   ])
     expect(verdictOf(RUN, evidence(result(foreign))).kind).toBe('inconclusive');
+});
+
+// A rerun under the same run URL plans again, perhaps on another base: a Check or a failed job of
+// the first attempt's Plan never stands for the second's.
+test("only the Check of this run's Plan and expected attempt passes a batch, and only that Plan's jobs fail it", () => {
+  const secondPlan = result({ job: 'plan', attempt: 2, startedAt: '2026-11-21T10:00:00.000Z' });
+  expect(verdictOf(RUN, evidence(result({}), { plan: secondPlan })).detail).toBe(
+    'the plan is of attempt 2, not the expected attempt 1',
+  );
+  expect(verdictOf({ ...RUN, attempt: 2 }, evidence(result({}), { plan: secondPlan })).detail).toBe(
+    'the Check result is of attempt 1, not the expected attempt 2',
+  );
+  const laterPlan = result({ job: 'plan', startedAt: '2026-11-21T10:00:00.000Z' });
+  expect(verdictOf(RUN, evidence(result({}), { plan: laterPlan })).detail).toBe(
+    `the Check verified the run by the Plan started ${PLAN_STARTED}, not by this plan of 2026-11-21T10:00:00.000Z`,
+  );
+  const { planStartedAt, ...unbound } = result({});
+  expect(planStartedAt).toBe(PLAN_STARTED);
+  expect(verdictOf(RUN, evidence(unbound)).kind).toBe('inconclusive');
+  const failedGroup = result({
+    job: 'sql',
+    status: 'failed',
+    groups: [{ id: 'sql:grants', outcome: 'failed', durationMs: 1 }],
+  });
+  const failedCheck = result({ status: 'failed' });
+  expect(verdictOf(RUN, evidence(failedCheck, { results: [failedGroup] })).kind).toBe('failed');
+  const { planIdentity, ...unplanned } = failedGroup;
+  const earlierPlan = planIdentity && { ...planIdentity, startedAt: '2026-11-21T07:00:00.000Z' };
+  for (const stale of [unplanned, { ...failedGroup, planIdentity: earlierPlan }])
+    expect(verdictOf(RUN, evidence(failedCheck, { results: [stale] })).kind).toBe('inconclusive');
 });
 
 test("a pass needs a CI runner's passed plan of this run against the batch's base", () => {

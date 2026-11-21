@@ -225,6 +225,7 @@ test('a full-run failure counts as unselected unless CI selected its group on a 
   const runPlan = planRun({
     event: 'integration',
     tree: landedTree,
+    base: null,
     listGrowthApproved: false,
     outputs,
     passedTree: undefined,

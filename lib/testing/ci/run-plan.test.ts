@@ -44,11 +44,19 @@ const plan = (
   planRun({
     event,
     tree: TREE,
+    base: 'e'.repeat(40),
     listGrowthApproved: false,
     outputs: options.outputs ?? OUTPUTS,
     passedTree: options.passedTree,
     reused: options.reused ?? nothingReused,
   });
+
+test("every reuse key names the base the run's Plan diffed against", () => {
+  const keys: ReuseKey[] = [];
+  plan('integration', { reused: (key) => (keys.push(key), undefined) });
+  expect(keys.length).toBeGreaterThan(0);
+  expect(new Set(keys.map((key) => key.base))).toEqual(new Set(['e'.repeat(40)]));
+});
 
 test("a pull request's run plans no browser shard and no midnight wait, and says why", () => {
   const pr = plan('pr', { outputs: { ...OUTPUTS, midnight_until: '2026-11-20T23:10:00.000Z' } });
@@ -178,6 +186,7 @@ test('a reused job and a reused shard do not run; the key carries the steps and 
     job: 'sql',
     shard: null,
     tree: TREE,
+    base: 'e'.repeat(40),
     groups: ['sql:grants', 'sql:history', 'step:types', 'step:seed'],
     listGrowthApproved: false,
   });
@@ -186,6 +195,7 @@ test('a reused job and a reused shard do not run; the key carries the steps and 
     job: 'components',
     shard: 2,
     tree: TREE,
+    base: 'e'.repeat(40),
     groups: ['ui:contracts:reports', 'ui:contracts:shell'],
     listGrowthApproved: false,
   });

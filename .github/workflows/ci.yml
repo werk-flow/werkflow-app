@@ -127,11 +127,25 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/setup
       # docs:check reads the sibling clones beside the app (docs/README.md, "Sibling repositories").
+      # The token stays in this step: it runs before any code of the checkout (its install scripts,
+      # its Bun configuration), outside it, and hands the token to git through its environment, so
+      # it is in no argument and no clone's .git/config. prepare.ts siblings keeps the clones in place.
       - name: Clone the sibling repositories
+        working-directory: ${{ runner.temp }}
         env:
           SIBLING_REPOSITORIES_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
+        run: |
+          parent="$(dirname "$GITHUB_WORKSPACE")"
+          git clone --quiet --depth 1 https://github.com/werk-flow/werkflow-website "$parent/werkflow-website"
+          if [ -n "$SIBLING_REPOSITORIES_TOKEN" ]; then
+            header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$SIBLING_REPOSITORIES_TOKEN" | base64 -w0)"
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader GIT_CONFIG_VALUE_0="$header" \
+              git clone --quiet --depth 1 https://github.com/werk-flow/werkflow-business "$parent/werkflow-business"
+          fi
+      - uses: ./.github/actions/setup
+      # Without the token the business clone is missing: docs:check then says it cannot read it.
+      - name: Mark a missing sibling clone
         run: bun scripts/ci/prepare.ts siblings
       # The owner's approval for a shrink-only list to grow, read at run time from the labels of the
       # run's PRs (scripts/ci/prepare.ts approval).

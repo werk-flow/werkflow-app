@@ -11,6 +11,11 @@ export type ReuseKey = {
   /** A browser or component shard's number, otherwise null. */
   shard: number | null;
   tree: string;
+  /**
+   * The commit the run's Plan diffed against, resolved (null for a full run): every job's receipt
+   * records its Plan's. The same tree on another base is another change.
+   */
+  base: string | null;
   /** The group ids the job runs; their order does not count. */
   groups: readonly string[];
   listGrowthApproved: boolean;
@@ -93,6 +98,7 @@ export function reusableReceipt(ledger: Ledger, key: ReuseKey, event: CiEvent): 
       receipt.job === key.job &&
       receipt.shard === key.shard &&
       receipt.tree === key.tree &&
+      receipt.base === key.base &&
       receipt.listGrowthApproved === key.listGrowthApproved &&
       sameGroups(
         receipt.groups.map((group) => group.id),

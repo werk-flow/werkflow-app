@@ -326,6 +326,8 @@ async function plan(): Promise<boolean> {
   const planned = planRun({
     event: ci.event,
     tree: result.tree,
+    // Plan resolved CI_BASE_SHA to its commit above; every job of the run records this base.
+    base: result.base,
     listGrowthApproved,
     outputs: selection,
     passedTree: reusedTree,

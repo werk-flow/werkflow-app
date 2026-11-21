@@ -3,7 +3,7 @@
 // wrote for that run.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -84,7 +84,7 @@ const pull: QueuedPull = {
 
 /**
  * A runner that fetches the commit as the queue's contract says and writes a passed plan, then runs
- * `body` in bash. `receipt <job> <status> <completedAt> [fields]` writes that job's result;
+ * `body` in bash. `receipt <job> <status> <completedAt> [fields]` writes that job's result under the plan;
  * `ledger` appends the last one to the folder's ledger.jsonl.
  */
 function runner(body: string): string {
@@ -98,7 +98,7 @@ git init --quiet "$checkout"
 git -C "$checkout" fetch --quiet "$CI_QUEUE_REPOSITORY" "refs/ci-queue/runs/$CI_QUEUE_COMMIT"
 tree="$(git -C "$checkout" rev-parse "$CI_QUEUE_COMMIT^{tree}")"
 receipt() {
-  printf '{"version":1,"job":"%s","shard":null,"event":"%s","tree":"%s","commit":"%s","base":"%s","status":"%s","groups":[],"planReason":"","reusedFrom":null,"listGrowthApproved":false,"producer":"stub","runUrl":"%s","startedAt":"2026-11-21T08:00:00Z","completedAt":%s,"attempt":1%s}\\n' \\
+  printf '{"version":1,"job":"%s","shard":null,"event":"%s","tree":"%s","commit":"%s","base":"%s","status":"%s","groups":[],"planReason":"","reusedFrom":null,"listGrowthApproved":false,"producer":"stub","runUrl":"%s","startedAt":"2026-11-21T08:00:00Z","completedAt":%s,"attempt":1,"planStartedAt":"2026-11-21T08:00:00Z"%s}\\n' \\
     "$1" "$CI_EVENT" "$tree" "$CI_QUEUE_COMMIT" "$CI_BASE_SHA" "$2" "$CI_RUN_URL" "$3" "\${4:-}" > "$CI_RESULTS_DIR/$1.json"
   last="$CI_RESULTS_DIR/$1.json"
 }
@@ -136,8 +136,7 @@ test("a run's verdict is its own finished Check, whatever the runner's exit code
 
 test("with the runner's ledger, a passed Check counts only once the ledger holds it as the landing's pass", () => {
   const ledger = join(folder, 'ledger.jsonl');
-  const passed =
-    'receipt check passed \'"2026-11-21T09:00:00Z"\' \',"planStartedAt":"2026-11-21T08:00:00Z"\'';
+  const passed = 'receipt check passed \'"2026-11-21T09:00:00Z"\'';
   expect(integration(passed, 'queue/4', ledger).kind).toBe('inconclusive');
   expect(integration(`${passed}; ledger`, 'queue/5', ledger).kind).toBe('passed');
 });
@@ -340,25 +339,25 @@ test("the queue's state survives between ticks; a missing file is clear and a da
 
 test("main's run gets main's head, the tick's base and the landed PRs, in a results directory of its own", () => {
   const mainRunner = join(folder, 'main-runner');
+  // A run that started acknowledges it, then fails: still paid.
   writeFileSync(
     mainRunner,
-    `#!/usr/bin/env bash\nenv | grep -E '^CI_(EVENT|COMMIT|BASE_SHA|PRS|RUN_URL|RESULTS_DIR)=' | sort > "${join(folder, 'main-env')}"\nexit 1\n`,
+    `#!/usr/bin/env bash\nenv | grep -E '^CI_(EVENT|COMMIT|BASE_SHA|PRS|RUN_URL|RESULTS_DIR|START_ACK)=' | sort > "${join(folder, 'main-env')}"\nprintf '{"commit":"%s","runUrl":"%s"}' "$CI_COMMIT" "$CI_RUN_URL" > "$CI_START_ACK"\nexit 1\n`,
   );
   chmodSync(mainRunner, 0o755);
   const workDir = join(folder, 'work');
+  mkdirSync(workDir);
   const main = { commit: 'c'.repeat(40), base: 'b'.repeat(40), prs: [7, 9], id: 'tick-1' };
   const options = { repository, mainRunner, workDir, runUrlBase: 'https://ci.example/queue' };
-  // A runner that ran pays the run, passed or failed; one that could not start or refused does not,
-  // and one that found another run of the commit started does.
+  // Only the run's durable start pays it: a runner that could not start, or ended with any exit
+  // before it acknowledged a start (a preflight failure's 1, a 3 while the other run may still
+  // refuse), leaves it owed.
   expect(runMain({ ...options, mainRunner: join(folder, 'missing') }, main)).toBe(false);
-  for (const [code, paid] of [
-    [2, false],
-    [3, true],
-  ] as const) {
+  for (const code of [0, 1, 2, 3]) {
     const exits = join(folder, `exits-${code}`);
     writeFileSync(exits, `#!/usr/bin/env bash\nexit ${code}\n`);
     chmodSync(exits, 0o755);
-    expect([code, runMain({ ...options, mainRunner: exits }, main)]).toEqual([code, paid]);
+    expect([code, runMain({ ...options, mainRunner: exits }, main)]).toEqual([code, false]);
   }
   expect(runMain(options, main)).toBe(true);
   const env = Object.fromEntries(
@@ -377,6 +376,24 @@ test("main's run gets main's head, the tick's base and the landed PRs, in a resu
   const id = env.CI_RUN_URL?.replace('https://ci.example/queue/', '') ?? '';
   expect(id).toBe(`tick-1-main-${'c'.repeat(12)}`);
   expect(env.CI_RESULTS_DIR).toBe(join(workDir, id));
+  // The acknowledgement lives in the queue's own work directory, outside the jobs' results.
+  expect(env.CI_START_ACK).toBe(join(workDir, `${id}.started.json`));
+  // A run whose start was acknowledged is paid on a later tick without starting it again.
+  rmSync(join(folder, 'main-env'));
+  expect(runMain(options, main)).toBe(true);
+  expect(existsSync(join(folder, 'main-env'))).toBe(false);
+});
+
+test("with a main runner, the adapter saves main's run a merge would owe under the tick's id; without one, nothing", async () => {
+  const workDir = join(folder, 'work');
+  mkdirSync(workDir);
+  const options = { repository, runner: '/bin/true', workDir, runUrlBase: 'queue', appId: null };
+  await createQueueAdapter(options).oweMainRun({ base: 'b'.repeat(40), prs: [7] });
+  expect(readMainFollowUp(workDir)).toBeUndefined();
+  const adapter = createQueueAdapter({ ...options, mainFollowUpId: 'tick-1' });
+  await adapter.oweMainRun({ base: 'b'.repeat(40), prs: [7] });
+  await adapter.oweMainRun({ base: 'b'.repeat(40), prs: [7, 9] });
+  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7, 9], id: 'tick-1' });
 });
 
 test('an owed main run survives between ticks until it is cleared, and a damaged record stops the tick', () => {

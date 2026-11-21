@@ -4,8 +4,9 @@
 // scheduler's report. The executor decides where a job runs: a process in its own checkout now, a
 // container later. Each job takes `scripts/ci/prepare.ts for <job>`, then `scripts/ci/job.ts <job>`.
 // This module decides; it starts nothing itself.
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 import { runPlanOf } from './check';
 import { CI_DAG, type CiEvent, type CiJob } from './dag';
 import type { CiResult, RunPlan } from './results';
@@ -50,6 +51,67 @@ export function releaseMainRun(folder: string, commit: string, runUrl: string): 
   if (existsSync(claim) && readFileSync(claim, 'utf8') === runUrl) rmSync(claim);
 }
 
+const startAckSchema = z
+  .object({ commit: z.string().regex(/^[0-9a-f]{40}$/), runUrl: z.string().min(1) })
+  .strict();
+
+/**
+ * Records durably at `path` that `runUrl`'s run of `commit` started: written to a flushed file of its
+ * own and renamed into place, so a crash leaves it whole or absent. The queue clears an owed main run
+ * only by it (scripts/ci/queue-adapter.ts, runMain), and a second starter of a main commit exits 3
+ * only by its owner's.
+ */
+export function acknowledgeStart(path: string, ack: { commit: string; runUrl: string }): void {
+  writeFileSync(`${path}.tmp`, `${JSON.stringify(startAckSchema.parse(ack))}\n`, { flush: true });
+  renameSync(`${path}.tmp`, path);
+}
+
+/** The run whose start of `commit` the record at `path` acknowledges, or undefined. */
+export function acknowledgedStart(path: string, commit: string): string | undefined {
+  try {
+    const ack = startAckSchema.safeParse(JSON.parse(readFileSync(path, 'utf8')));
+    return ack.success && ack.data.commit === commit ? ack.data.runUrl : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The run variables a runner passes to its jobs as they are (scripts/ci/job.ts names them). */
+const RUN_VARIABLES = [
+  'CI_EVENT',
+  'CI_RESULTS_DIR',
+  'CI_RUN_URL',
+  'CI_BASE_SHA',
+  'CI_FULL_REASON',
+  'CI_PRODUCER',
+  'CI_PRS',
+  'CI_PR_HEAD_REF',
+  'CI_PR_HEAD_SHA',
+  'CI_FIRST_ATTEMPT_CLASS',
+  'SHRINK_ONLY_GROWTH_APPROVED',
+  'GITHUB_REPOSITORY',
+  'CI_CACHE_DIR',
+  'SIBLING_REPOSITORIES_TOKEN',
+] as const;
+
+/**
+ * The run's variables from the runner's environment. The runner's own GH_TOKEN, which may merge
+ * PRs or post statuses, never reaches a job: a job that reads GitHub gets CI_JOB_GH_TOKEN, a
+ * read-only token the runner supplies, as its GH_TOKEN. Nothing else of the runner passes: not its
+ * ledger, publisher, work root or queue state.
+ */
+export function runVariables(
+  environment: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+  const variables: Record<string, string> = {};
+  for (const name of RUN_VARIABLES) {
+    const value = environment[name];
+    if (value) variables[name] = value;
+  }
+  if (environment.CI_JOB_GH_TOKEN) variables.GH_TOKEN = environment.CI_JOB_GH_TOKEN;
+  return variables;
+}
+
 /** One job, or one shard of a sharded job. */
 export type Unit = { job: CiJob; shard: number | null };
 export const unitName = (unit: Unit): string =>
@@ -73,8 +135,10 @@ export type ExecutorOutcome = { exitCode: number | null; detail: string };
 export type Executor = {
   run(task: ExecutorTask, signal: AbortSignal): Promise<ExecutorOutcome>;
   /**
-   * Whether its jobs run where they cannot write the orchestrator's files: as another user, or in a
-   * container. Only then does the run keep a ledger (scripts/ci/job.ts, CI_LEDGER).
+   * Whether the run may keep a ledger (scripts/ci/job.ts, CI_LEDGER): no job, Plan and Check
+   * included, can write it, and the orchestrator holds Plan's and Check's ledger work. The process
+   * executor runs every job as the job user, but Plan's and Check's job.ts still read and append the
+   * ledger themselves, so it keeps none.
    */
   isolatesJobs: boolean;
 };
@@ -118,6 +182,12 @@ export type RunCommitDeps = {
    * run. False when the post failed.
    */
   publish?: ((mode: 'start' | 'finish') => Promise<boolean>) | undefined;
+  /**
+   * Records durably that the run started, after its queued Check and before Plan: the queue clears
+   * an owed main run only by it (scripts/ci/queue-adapter.ts). Throws when it cannot; the run then
+   * does not start.
+   */
+  acknowledgeStart?: (() => void) | undefined;
   now(): number;
   /** Resolves after `ms`, or at once when `signal` aborts. */
   sleep(ms: number, signal: AbortSignal): Promise<void>;
@@ -127,7 +197,8 @@ export type RunCommitDeps = {
 export type RunCommitOutcome = {
   /**
    * 0 when the run's Check passed, 1 when it failed, 2 when the run never started because its queued
-   * Check could not be posted: nothing ran, so the run is still owed.
+   * Check could not be posted or its start could not be acknowledged: nothing ran, so the run is
+   * still owed.
    */
   exitCode: 0 | 1 | 2;
   units: { unit: Unit; state: UnitState }[];
@@ -414,8 +485,8 @@ function checkPassed(input: RunCommitInput, deps: RunCommitDeps, exitCode: numbe
 }
 
 /**
- * The run's dependencies with the ledger only when no job can write it: an executor that runs jobs
- * as the orchestrator's own user keeps no ledger, so every run executes in full (scripts/ci/job.ts).
+ * The run's dependencies with the ledger only when no job can write it: with an executor whose Plan
+ * and Check still append it themselves, a run keeps no ledger and executes in full (scripts/ci/job.ts).
  */
 function withLedgerBoundary(
   input: RunCommitInput,
@@ -423,7 +494,7 @@ function withLedgerBoundary(
 ): { input: RunCommitInput; deps: RunCommitDeps } {
   if (deps.jobs.isolatesJobs || (!input.env.CI_LEDGER && !deps.appendReceipt)) return { input, deps };
   deps.log(
-    '[run] The executor runs jobs as this user, who could write the ledger, so this run keeps no ledger and reuses nothing.',
+    "[run] The executor's Plan and Check would append to the ledger themselves, so this run keeps no ledger and reuses nothing.",
   );
   const env = { ...input.env };
   delete env.CI_LEDGER;
@@ -439,6 +510,12 @@ export async function runCommit(
   const { input, deps } = withLedgerBoundary(given, dependencies);
   if (deps.publish && !(await deps.publish('start'))) {
     deps.log('[run] The queued Check could not be posted, so the run does not start.');
+    return { exitCode: 2, units: [], scheduler: {} };
+  }
+  try {
+    deps.acknowledgeStart?.();
+  } catch (error) {
+    deps.log(`[run] The run's start could not be recorded, so it does not start: ${message(error)}`);
     return { exitCode: 2, units: [], scheduler: {} };
   }
   const planned = await planRun(input, deps, signal);

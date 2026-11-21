@@ -26,9 +26,13 @@
 //                   (`partial`), whatever the tick's exit: once, for main's head, with CI_EVENT=main,
 //                   CI_COMMIT, CI_BASE_SHA the tick's `base`, CI_PRS the landed PRs, and its own
 //                   CI_RUN_URL and CI_RESULTS_DIR in the work directory. The tick waits for it.
-//                   The tick saves the run it owes (main-follow-up.json) before it reads main. It is
-//                   paid once the runner ran (exit 0 or 1) or found another run of that commit (3).
-//                   While it is owed, a tick starts it first and lands nothing, exit 2.
+//                   The tick saves the run it owes (main-follow-up.json) before it asks GitHub for
+//                   each merge, and again with the PRs that landed before it reads main, so a tick
+//                   that dies after a merge leaves the run owed. It is paid only once the runner
+//                   acknowledged durably that the run started, or that another main run of that
+//                   commit started (the file CI_START_ACK names); its exit code decides nothing.
+//                   While it is owed, a tick starts it first, before it touches a pending `Queue`
+//                   mark, and lands nothing, exit 2.
 //                   Pass scripts/ci/run-commit.ts; without the flag the runner starts that run itself.
 //   --work-dir      Holds one results directory per run, and the queue's state between ticks
 //                   (queue-state.json): the `Queue` success it is about to post, saved before it
@@ -141,6 +145,10 @@ try {
   );
 }
 try {
+  const mainRunner = values['main-runner'] && resolve(values['main-runner']);
+  // The id of main's run this tick may owe: saved before each merge is asked for, and again with
+  // the PRs that landed once the tick ends.
+  const tickId = new Date().toISOString().replace(/[-:.]/g, '');
   const adapter = createQueueAdapter({
     repository,
     runner: resolve(values.runner),
@@ -149,13 +157,13 @@ try {
     ...(values.ledger ? { ledger: resolve(values.ledger) } : {}),
     appId: app.appId,
     ...(values.publisher ? { publisher: resolve(values.publisher) } : {}),
+    ...(mainRunner ? { mainFollowUpId: tickId } : {}),
   });
-  const mainRunner = values['main-runner'] && resolve(values['main-runner']);
   const runUrlBase = values['run-url-base'];
   /**
-   * Starts main's run a landing owes, on a live tick only. True once it is paid: the runner ran
-   * (exit 0 or 1), another run of that commit started (3), or main did not move. A failed read of
-   * main, a runner that could not start or one that refused (2) leaves it owed.
+   * Starts main's run a landing owes, on a live tick only. True once it is paid: the runner
+   * acknowledged the run's start or another main run's of that commit (runMain), or main did not
+   * move. A failed read of main, or a runner that ended before an acknowledgement, leaves it owed.
    */
   const followUp = async (): Promise<boolean> => {
     const owed = mainRunner && !values['dry-run'] ? readMainFollowUp(workDir) : undefined;
@@ -166,7 +174,8 @@ try {
     return paid;
   };
   const unpaid = `[queue] main's run of the last landing did not start, so the queue lands nothing until it does (${join(workDir, 'main-follow-up.json')}).`;
-  // A follow-up an earlier tick could not start goes first; while it is owed, nothing lands.
+  // A follow-up an earlier tick could not start goes first, before the tick touches a pending mark:
+  // one a tick that died after a merge saved too. While it is owed, nothing lands.
   if (!(await followUp())) {
     console.error(unpaid);
     process.exitCode = 2;
@@ -186,15 +195,16 @@ try {
     console.info(`[queue] ${outcome.dryRun ? 'would land' : 'landed'} ${landing}`);
     process.exitCode = needsAttention(outcome) ? 2 : 0;
     // After every landing or partial stop, whatever the exit: main's run of main's head, once. It
-    // is saved first, so a read of main that fails leaves it for the next tick.
-    const owed = mainFollowUp(outcome, new Date().toISOString().replace(/[-:.]/g, ''));
+    // is saved first, with the PRs that landed, so a read of main that fails leaves it for the next
+    // tick. A tick that is sure nothing landed drops what it saved before a merge GitHub refused.
+    const owed = mainFollowUp(outcome, tickId);
     if (mainRunner && owed) {
       saveMainFollowUp(workDir, owed);
       if (!(await followUp())) {
         console.error(unpaid);
         process.exitCode = 2;
       }
-    }
+    } else if (mainRunner && readMainFollowUp(workDir)?.id === tickId) saveMainFollowUp(workDir, undefined);
   }
 } catch (error) {
   console.error(`[queue] the tick failed: ${error instanceof Error ? error.stack : String(error)}`);

@@ -414,7 +414,7 @@ test("without a ledger too, a job that passed but left another attempt's result 
   expect(report(w).browser).toEqual({ result: 'skipped' });
 });
 
-test('an executor that runs jobs as the orchestrator user keeps no ledger: no job sees it and nothing is appended', async () => {
+test('an executor whose jobs could write the ledger keeps none: no job sees it and nothing is appended', async () => {
   const w = world({ isolated: false });
   await runCommit(input(), w.deps, new AbortController().signal);
   expect(w.starts.map((entry) => entry.task.env.CI_LEDGER)).toEqual(w.starts.map(() => undefined));
@@ -501,4 +501,41 @@ test('the queued Check is posted before Plan, and a run whose start post failed 
   // 2, not run: the queue keeps an owed main run until a run of it starts (scripts/ci/queue.ts).
   expect(refusedRun.exitCode, refused.log.join('\n')).toBe(2);
   expect(started(refused)).toEqual([]);
+});
+
+// The queue clears an owed main run only on a durable acknowledgement that it started
+// (scripts/ci/queue-adapter.ts, runMain): every failure before it is a run that never started.
+test('a run acknowledges its start after the queued Check and before Plan; a failure before it is a run not started', async () => {
+  const order: string[] = [];
+  const w = world({ publish: (mode) => (order.push(mode), true) });
+  const run = await runCommit(
+    input(),
+    { ...w.deps, acknowledgeStart: () => order.push(`acknowledged:${started(w).length}`) },
+    new AbortController().signal,
+  );
+  expect(run.exitCode, w.log.join('\n')).toBe(0);
+  expect(order).toEqual(['start', 'acknowledged:0', 'finish']);
+
+  const unposted = world({ publish: () => false });
+  const acknowledged: string[] = [];
+  await runCommit(
+    input(),
+    { ...unposted.deps, acknowledgeStart: () => acknowledged.push('acknowledged') },
+    new AbortController().signal,
+  );
+  expect(acknowledged).toEqual([]);
+
+  const unacknowledged = world();
+  const refused = await runCommit(
+    input(),
+    {
+      ...unacknowledged.deps,
+      acknowledgeStart: () => {
+        throw new Error('the work directory is read-only');
+      },
+    },
+    new AbortController().signal,
+  );
+  expect(refused.exitCode, unacknowledged.log.join('\n')).toBe(2);
+  expect(started(unacknowledged)).toEqual([]);
 });
