@@ -57,7 +57,7 @@ type RunCost = Tally & {
   plannedAt: number | null;
   /** When the run's Check passed, or null. */
   passedAt: number | null;
-  /** The jobs and shards between Plan and Check that ran, each once. */
+  /** The jobs and shards between Plan and Check the run covered, by running or reusing them, each once. */
   units: number;
   reusedFrom: string | null;
   cancelled: number;
@@ -93,22 +93,20 @@ function processMs(entry: JobProcess, attemptEnd: number): number {
 }
 
 /**
- * The failure class of each job's failed first attempt; a later attempt of the job names it. A
- * failed Check only follows a failed job, so it counts none of its own.
+ * The failure class of each job or shard whose first attempt failed, once: a later attempt names it,
+ * and a results folder may hold only that later attempt. A failed Check only follows a failed job,
+ * so it counts none of its own.
  */
 function firstAttemptFailures(processes: readonly JobProcess[]): RunCost['firstAttemptFailures'] {
-  return processes
-    .filter((entry) => entry.job !== 'check' && entry.status === 'failed' && (entry.attempt ?? 1) === 1)
-    .map((failed) => {
-      const named = processes.find(
-        (later) =>
-          later.job === failed.job &&
-          later.shard === failed.shard &&
-          (later.attempt ?? 1) > 1 &&
-          later.firstAttemptClass,
-      );
-      return named?.firstAttemptClass ?? 'unclassified';
-    });
+  const failures = new Map<UnitKey, FailureClass | 'unclassified'>();
+  for (const entry of processes) {
+    if (entry.job === 'check') continue;
+    const key = unitKey(entry.job, entry.shard);
+    if ((entry.attempt ?? 1) > 1 && entry.firstAttemptClass) failures.set(key, entry.firstAttemptClass);
+    else if ((entry.attempt ?? 1) === 1 && entry.status === 'failed' && !failures.has(key))
+      failures.set(key, 'unclassified');
+  }
+  return [...failures.values()];
 }
 
 function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
@@ -138,7 +136,10 @@ function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
     setupMs: processes.reduce((sum, entry) => sum + (entry.cost?.setupMs ?? 0), 0),
     reuseHits: plan?.plan?.reused?.length ?? 0,
     executed: work.length,
-    units: new Set(work.map((entry) => unitKey(entry.job, entry.shard))).size,
+    units: new Set([
+      ...work.map((entry) => unitKey(entry.job, entry.shard)),
+      ...(plan?.plan?.reused ?? []).map((entry) => unitKey(entry.job, entry.shard)),
+    ]).size,
     cancelled: processes.filter((entry) => entry.status === 'running').length,
     neverStarted: plannedUnits(plan?.plan).filter((unit) => !started.has(unit)).length,
     firstAttemptFailures: firstAttemptFailures(processes),
@@ -181,7 +182,10 @@ function landedBy(push: RunCost, runs: readonly RunCost[]): RunCost | undefined 
     .filter(
       (run) => run.event === 'integration' && run.tree === push.tree && (run.passedAt ?? Infinity) <= before,
     )
-    .toSorted((left, right) => (left.passedAt ?? 0) - (right.passedAt ?? 0))
+    .toSorted(
+      (left, right) =>
+        (left.passedAt ?? 0) - (right.passedAt ?? 0) || left.runUrl.localeCompare(right.runUrl),
+    )
     .at(-1);
 }
 
@@ -194,14 +198,21 @@ function landedBy(push: RunCost, runs: readonly RunCost[]): RunCost | undefined 
  */
 export function summarizeCost(receipts: readonly CiResult[]): CostSummary {
   const byRun = new Map<string, JobProcess[]>();
-  const inTimeOrder = jobProcesses(receipts).toSorted((left, right) =>
-    left.startedAt.localeCompare(right.startedAt),
+  const inTimeOrder = jobProcesses(receipts).toSorted(
+    (left, right) =>
+      left.startedAt.localeCompare(right.startedAt) ||
+      (left.attempt ?? 1) - (right.attempt ?? 1) ||
+      unitKey(left.job, left.shard).localeCompare(unitKey(right.job, right.shard)),
   );
   for (const entry of inTimeOrder)
     if (entry.runUrl !== null) byRun.set(entry.runUrl, [...(byRun.get(entry.runUrl) ?? []), entry]);
   const runs = [...byRun]
     .map(([runUrl, processes]) => runCost(runUrl, processes))
-    .toSorted((left, right) => (left.plannedAt ?? Infinity) - (right.plannedAt ?? Infinity) || 0);
+    .toSorted(
+      (left, right) =>
+        (left.plannedAt ?? Infinity) - (right.plannedAt ?? Infinity) ||
+        left.runUrl.localeCompare(right.runUrl),
+    );
   const landedPrs = new Map<RunCost, number[]>();
   const mergedBy = new Map<number, RunCost>();
   for (const push of runs.filter((run) => run.event === 'main')) {

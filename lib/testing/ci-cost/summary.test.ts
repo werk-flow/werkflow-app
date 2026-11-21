@@ -197,8 +197,8 @@ test('the summary sums each merged PR, a cancelled job, a never-started job and 
     jobMs: 95 * MINUTE,
     machineStarts: 7 + 4 + 5 + 2,
     setupMs: (6 + 2 + 8) * MINUTE,
-    // Run 3 reused SQL; the push reused run 3's three executed jobs. Run 1's Fast ran twice.
-    reuseHits: 1 + 3,
+    // Run 3 reused SQL; the push reused run 3's three executed jobs and its SQL. Run 1's Fast ran twice.
+    reuseHits: 1 + 4,
     executed: 4 + 2 + 3,
     readyToMergeMs: 40 * MINUTE,
   });
@@ -333,6 +333,54 @@ test('a cancelled job whose runner clock runs ahead counts from its body start, 
   expect(summary.all.jobMs).toBe(5 * MINUTE);
 });
 
+test('ties in time resolve by run, so tied integration passes credit the same push in any order', () => {
+  const tied = (number: number, pr: number): CiResult[] =>
+    receiptsOf({ runUrl: run(number), event: 'integration', tree: tree('c'), prs: [pr] }, [
+      { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 1, to: 2, endOnly: true },
+    ]);
+  const receipts = [
+    ...tied(31, 31),
+    ...tied(32, 32),
+    ...receiptsOf({ runUrl: run(33), event: 'main', tree: tree('c'), prs: [] }, [
+      { job: 'plan', from: 5, to: 6, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 6, to: 7, endOnly: true },
+    ]),
+  ];
+  const summary = summarizeCost(receipts);
+  expect(summary.merged.map((entry) => entry.pr)).toEqual([32]);
+  expect(summarizeCost(receipts.toReversed())).toEqual(summary);
+});
+
+test('a rerun names its first attempt’s class even when only the rerun’s receipt is left', () => {
+  const receipts = receiptsOf({ runUrl: run(1), event: 'pr', tree: tree('a'), prs: [12] }, [
+    { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'fast', 'check']) },
+    { job: 'fast', from: 10, to: 20, endOnly: true, extra: { attempt: 2, firstAttemptClass: 'environment' } },
+  ]);
+  expect(summarizeCost(receipts).firstAttemptFailures).toEqual({ environment: 1 });
+});
+
+test('a push that reused a tree counts every job its integration run ran or reused', () => {
+  const receipts = [
+    ...receiptsOf({ runUrl: run(3), event: 'integration', tree: tree('c'), prs: [12] }, [
+      {
+        job: 'plan',
+        from: 0,
+        to: 1,
+        extra: planned(['plan', 'fast', 'check'], { reused: [{ job: 'sql', shard: null, runUrl: run(1) }] }),
+      },
+      { job: 'fast', from: 1, to: 5 },
+      { job: 'check', from: 5, to: 6, endOnly: true },
+    ]),
+    ...receiptsOf({ runUrl: run(4), event: 'main', tree: tree('c'), prs: [] }, [
+      { job: 'plan', from: 10, to: 11, extra: { ...planned(['plan', 'check']), reusedFrom: run(3) } },
+      { job: 'check', from: 11, to: 12, endOnly: true, extra: { reusedFrom: run(3) } },
+    ]),
+  ];
+  // The integration run's SQL reuse and the push's Fast and SQL: three hits, one execution.
+  expect(summarizeCost(receipts).merged[0]).toMatchObject({ pr: 12, reuseHits: 3, executed: 1 });
+});
+
 test('a push that reused a tree the input lacks counts one reuse hit, and lands no PR', () => {
   const push = fixtureLedger().filter((receipt) => receipt.runUrl === run(4));
   const summary = summarizeCost(push);
@@ -364,7 +412,7 @@ test('the script reads a ledger file and a results folder, and refuses an unread
 
     const table = cost(ledger);
     expect(table.stdout).toContain('CI cost per merged pull request: 3 merged, 9 runs.');
-    expect(table.stdout).toMatch(/^#12 +4 +95\.0 +18\.0 +17 % +31 % +40\.0 min$/m);
+    expect(table.stdout).toMatch(/^#12 +4 +95\.0 +18\.0 +17 % +36 % +40\.0 min$/m);
 
     writeFileSync(join(runFolder, 'broken.json'), '{');
     expect(cost(join(folder, 'results')).status).not.toBe(0);

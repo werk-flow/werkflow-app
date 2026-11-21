@@ -243,6 +243,16 @@ const TREE_CASES: Case[] = [
     ledger: [planStart(), checkPass(), fastFail({ runUrl: null })],
     expected: undefined,
   },
+  {
+    name: "its Check's start, then its pass",
+    ledger: [planStart(), checkPass({ status: 'running', completedAt: null }), checkPass()],
+    expected: RUN_1,
+  },
+  {
+    name: 'a Check that started and never ended',
+    ledger: [planStart(), checkPass(), checkPass({ status: 'running', completedAt: null })],
+    expected: undefined,
+  },
   { name: 'a passed Check without its Plan start', ledger: [checkPass()], expected: undefined },
   { name: 'a failed Check', ledger: [planStart(), checkPass({ status: 'failed' })], expected: undefined },
   {

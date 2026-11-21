@@ -450,6 +450,9 @@ function checkoutChange(): string | undefined {
 
 let passed = false;
 try {
+  // Check's start reaches the ledger too, so a cancelled Check still counts as started; its end, a
+  // passed Check of this run, is still the last receipt that reuses the tree (lib/testing/ci/reuse.ts).
+  if (ci.job === 'check') appendToLedger();
   // A job records its planned key before it runs, in its result and the ledger: an attempt that
   // fails or dies before it reports a group still withdraws an earlier pass of the same key.
   if (ci.job !== 'plan' && ci.job !== 'check') {

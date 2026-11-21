@@ -423,3 +423,26 @@ test("off GitHub, Check fails without a scheduler report when this run's Plan is
     expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);
   });
 });
+
+test("Check's start reaches the ledger before its end, so a cancelled Check still counts as started", () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const run = join(folder, 'run');
+    const ledger = join(folder, 'ledger.jsonl');
+    const reason = 'The integration run https://ci.example/runs/1 passed this exact tree.';
+    const skips = { fast: reason, sql: reason, components: reason, midnight: reason, browser: reason };
+    writePlan(root, run, { plan: { jobs: ['plan', 'check'], skips, shards: [], outputs: EMPTY_OUTPUTS } });
+    const code = runJob(root, 'check', {
+      CI_EVENT: 'integration',
+      CI_RESULTS_DIR: run,
+      CI_PRODUCER: 'mac-standin',
+      CI_LEDGER: ledger,
+      CI_RUN_URL: RUN_URL,
+    });
+    expect(code).toBe(0);
+    expect(ledgerOf(ledger).map(({ job, status }) => ({ job, status }))).toEqual([
+      { job: 'check', status: 'running' },
+      { job: 'check', status: 'passed' },
+    ]);
+  });
+});
