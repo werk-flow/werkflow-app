@@ -63,8 +63,8 @@ alter table public.invoice_events add constraint invoice_events_type_check
 
 -- 2. As in 20261219120000_issue_invoices_with_gapless_numbers.sql, with two
 -- additions. A link is inserted only by cancel_invoice, for the invoice it
--- cancels (it raises app.invoice_cancel to that id for its transaction), and
--- never changes. Inside that call, and once an issued Stornorechnung names
+-- cancels (it raises app.invoice_cancel to that id for its transaction), on a
+-- new draft without an original, and never changes. Inside that call, and once an issued Stornorechnung names
 -- the invoice, its status alone turns from Ausgestellt to Storniert; the
 -- cancel's actor and time are in its history. Every other rule of R4's guard
 -- stays: a work or person reference clears only when its target is gone,
@@ -86,6 +86,12 @@ begin
   if tg_op = 'INSERT' then
     if coalesce(new.cancels_invoice_id, new.corrects_invoice_id)::text <> v_cancelling then
       raise exception 'invoice_link_fixed';
+    end if;
+    -- A linked invoice starts as a draft without an original; issue_invoice and the registration name the rest.
+    if num_nonnulls(new.cancels_invoice_id, new.corrects_invoice_id) > 0
+      and (new.status <> 'entwurf' or new.original_document_id is not null)
+    then
+      raise exception 'invoice_issued';
     end if;
     return new;
   end if;

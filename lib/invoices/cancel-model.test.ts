@@ -5,7 +5,7 @@ import { calculateInvoice } from '@/lib/invoicing/calculate';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
 import { cancelInvoiceSchema, cancellationReasonProblem, negatedQuantity, stornoOf } from './cancel-model';
 import { invoiceDraftOf, type IssueSnapshot } from './issue-model';
-import type { InvoiceLineValues } from './types';
+import { INVOICE_REFERENCE_MAX_LENGTH, type InvoiceLineValues } from './types';
 
 mock.module('server-only', () => ({}));
 // SaxonJS loads only with Bun's own stack traces; see lib/invoicing/check-en16931.test.ts.
@@ -57,14 +57,14 @@ const line = (
 });
 
 /** An issued invoice of these lines, its amounts computed by the core as at issue. */
-function issued(lines: InvoiceLineValues[], buyerReference = '') {
+function issued(lines: InvoiceLineValues[], buyerReference = '', orderReference = 'BE-4711') {
   const facts = {
     serviceStart: '2037-11-02',
     serviceEnd: '2037-11-06',
     paymentDueDays: 14,
     discountDays: 7,
     discountBasisPoints: 200,
-    orderReference: 'BE-4711',
+    orderReference,
     buyerReference,
     openingText: 'Vielen Dank.',
     closingText: '',
@@ -208,24 +208,29 @@ describe("a Stornorechnung's head", () => {
     );
   }
 
-  const ORIGINAL_ISSUE = { number: 'RE-2037-001', issueDate: '2037-11-10' };
-  const referenceOf = (words: number) => Array.from({ length: words }, () => 'Referenz').join(' ');
+  // A series whose ten-character prefix (invoice_settings takes 20) nearly fills the number's row
+  // rolls from 99 to 100 between the original and its Stornorechnung: the longer number takes a
+  // second row. References of one-letter lines, each within INVOICE_REFERENCE_MAX_LENGTH, fill
+  // the head up to its limit.
+  const prefix = 'WWWWWWWWII';
+  const ORIGINAL_ISSUE = { number: `${prefix}2037-99`, issueDate: '2037-11-10' };
+  const NEXT_ISSUE = { number: `${prefix}2037-100`, issueDate: '2037-11-20' };
+  const referenceOf = (rows: number) => Array.from({ length: rows }, () => 'A').join('\n');
+  const originalOf = (rows: number) =>
+    issued(lines, referenceOf(Math.floor(rows / 2)), referenceOf(Math.ceil(rows / 2)));
 
-  test('an original whose head is exactly at the limit can still be cancelled', async () => {
-    // The longest Referenz whose head still leaves room for the lines: one more word does not.
-    let fits = 0;
-    let tooTall = 400;
-    expect(await headFits(issued(lines, referenceOf(tooTall)), ORIGINAL_ISSUE)).toBe(false);
-    while (tooTall - fits > 1) {
-      const words = Math.floor((fits + tooTall) / 2);
-      if (await headFits(issued(lines, referenceOf(words)), ORIGINAL_ISSUE)) fits = words;
-      else tooTall = words;
-    }
-    expect(fits).toBeGreaterThan(0);
-    const original = issued(lines, referenceOf(fits));
-    expect(await headFits(original, ORIGINAL_ISSUE)).toBe(true);
+  test('a Stornorechnung under a longer number fits wherever its original fit', async () => {
+    let rows = 2;
+    while (await headFits(originalOf(rows + 1), ORIGINAL_ISSUE)) rows += 1;
+    const original = originalOf(rows);
+    expect(original.orderReference.length).toBeLessThanOrEqual(INVOICE_REFERENCE_MAX_LENGTH);
+    // The original's head is at its limit, and the next number alone would push it over.
+    expect(await headFits(original, NEXT_ISSUE)).toBe(false);
 
-    const storno = stornoOf(original, 'Falscher Rechnungsempfänger');
-    expect(await headFits(storno, { number: 'RE-2037-002', issueDate: '2037-11-20' })).toBe(true);
+    const storno = stornoOf(
+      { ...original, invoiceNumber: ORIGINAL_ISSUE.number },
+      'Falscher Rechnungsempfänger',
+    );
+    expect(await headFits(storno, NEXT_ISSUE)).toBe(true);
   });
 });

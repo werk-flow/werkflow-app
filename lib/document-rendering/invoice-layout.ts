@@ -45,10 +45,15 @@ function groupedIban(iban: string): string {
   return iban.replaceAll(/(.{4})(?=.)/g, '$1 ');
 }
 
+/**
+ * The head's rows. A Storno's number stands in its title, which flows, and
+ * not in the head: its head is then its original's head without the number
+ * row, so a longer number of the same series never leaves its lines no room.
+ */
 function metaRowsOf(invoice: CalculatedInvoice): BusinessDocument['metaRows'] {
-  const { delivery, seller, deliverTo } = invoice;
+  const { delivery, seller, deliverTo, precedingInvoice } = invoice;
   return [
-    { label: 'Rechnungsnummer', value: invoice.number },
+    ...(precedingInvoice ? [] : [{ label: 'Rechnungsnummer', value: invoice.number }]),
     { label: 'Rechnungsdatum', value: formatGermanDate(invoice.issueDate) },
     delivery.kind === 'date'
       ? { label: 'Leistungsdatum', value: formatGermanDate(delivery.date) }
@@ -66,8 +71,7 @@ function metaRowsOf(invoice: CalculatedInvoice): BusinessDocument['metaRows'] {
 
 /**
  * The invoice a Storno cancels, then the invoice's notes. The reference opens
- * this text, which flows onto the next page, and not the head: a Storno's head
- * then holds its original's rows, and that head left room for the lines.
+ * this text, which flows onto the next page, and not the head (`metaRowsOf`).
  */
 function openingTextOf({ precedingInvoice, notes }: CalculatedInvoice): string {
   const reference = precedingInvoice
