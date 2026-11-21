@@ -76,7 +76,7 @@ function world(answers: Readonly<Record<string, unknown>>) {
   const requests: Array<{ method: string; path: string; query: string }> = [];
   const stored = new Map<string, Uint8Array>();
   const records: IssuedInvoiceRecord[] = [];
-  const stripe = createFakeStripeGateway('whsec_synthetic0000', answers, requests);
+  const stripe = createFakeStripeGateway('whsec_synthetic0000', { answers, requests });
   const dependencies: IssueDependencies = {
     readInvoice: (id) => stripe.readInvoiceForIssue(id),
     seller: () => MADE_UP_SELLER,
@@ -296,7 +296,7 @@ async function handle(event: Stripe.Event, answers: Readonly<Record<string, unkn
   const requests: Array<{ method: string; path: string; query: string }> = [];
   await signalFamilyFor(event.type)?.handle(
     event,
-    createFakeStripeGateway('whsec_synthetic0000', answers, requests),
+    createFakeStripeGateway('whsec_synthetic0000', { answers, requests }),
   );
   return requests;
 }

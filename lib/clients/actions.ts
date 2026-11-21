@@ -135,6 +135,7 @@ const clientDeletionSchema = z.object({
     site_roles: linkCount,
     billing_parties: linkCount,
     offers: linkCount,
+    invoices: linkCount,
   }),
 });
 

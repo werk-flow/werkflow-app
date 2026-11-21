@@ -1,4 +1,4 @@
-// Actual mail-sending and activation actions with the real rate limiter over
+// Actual mail-sending and Checkout actions with the real rate limiter over
 // the in-memory database: a reached limit answers too_many_attempts and sends
 // no mail, writes no invite and activates nothing; a limiter outage refuses
 // with the action's retryable failure; under the limit the action proceeds.
@@ -19,8 +19,8 @@ const world = installActionWorld(
     organization_members: [],
     organization_invites: [],
     profiles: [{ id: CALLER_ID, first_name: 'Carla', last_name: 'Caller' }],
-    subscriptions: [],
     email_change_challenges: [],
+    werkflow_subscriptions: [],
   },
   { organization_invites: () => ({ status: 'pending' }) },
 );
@@ -37,7 +37,6 @@ const idleState = {
 mock.module('@/lib/settings/email-change-state', () => ({
   getInitialEmailChangeWizardState: async () => idleState,
 }));
-mock.module('@/lib/subscription/helpers', () => ({ userHasOrganizations: async () => false }));
 
 /** Which limiter action answers how; every other action allows. */
 let limiterOutcomes: Record<string, LimiterOutcome> = {};
@@ -67,7 +66,7 @@ const { sendOrgInvite } = await import('@/lib/invites/actions');
 const { requestCurrentEmailChangeOtp, savePendingNewEmailVerification } = await import(
   '@/lib/settings/email-change-actions'
 );
-const { simulatePayment } = await import('@/lib/subscription/actions');
+const { startOrganizationCheckout } = await import('@/lib/subscription/actions');
 
 const limiterActions = (): unknown[] =>
   world.rpcCalls.filter((call) => call.name === 'consume_rate_limit').map((call) => call.args.p_action);
@@ -126,10 +125,11 @@ assert.deepEqual(
   ],
 );
 
-// The simulated payment: a reached limit or an outage activates nothing.
+// The Checkout start: a reached limit or an outage opens no Checkout and reserves nothing.
 reset({ subscription_activation_per_user: 'refuse' });
-assert.deepEqual(await simulatePayment(), { success: false, error: 'too_many_attempts' });
+assert.deepEqual(await startOrganizationCheckout(), { success: false, error: 'too_many_attempts' });
 reset({ subscription_activation_per_user: 'fail' });
-assert.deepEqual(await simulatePayment(), { success: false, error: 'subscription_activation_failed' });
-assert.deepEqual(tableRows(world, 'subscriptions'), []);
+assert.deepEqual(await startOrganizationCheckout(), { success: false, error: 'checkout_failed' });
+assert.deepEqual(businessRpcs(), []);
+assert.deepEqual(tableRows(world, 'werkflow_subscriptions'), []);
 assert.deepEqual(limiterActions(), ['subscription_activation_per_user']);

@@ -121,7 +121,8 @@ export type ClientLinkKind =
   | 'follow_ups'
   | 'site_roles'
   | 'billing_parties'
-  | 'offers';
+  | 'offers'
+  | 'invoices';
 export type ClientLinks = { [Kind in ClientLinkKind]?: number | undefined };
 
 /** Archiving or restoring answers the customer's archive mark: null while it is active. */

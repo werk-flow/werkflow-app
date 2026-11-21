@@ -13,7 +13,7 @@ WerkFlow runs on two cloud backends ([decision 0003](../decisions/0003-dev-prod-
 | Serves | The deployed app and real customers | Local development, the cloud canary, the partner preview, scoped provider checks |
 | Auth site URL | `https://app.werk-flow.app` | `http://localhost:3000` |
 
-Both projects deploy the edge functions from `supabase/functions/`. The production Resend key never leaves production.
+Both projects deploy the edge functions from `supabase/functions/`; each keeps its own Resend key.
 
 Both run Micro compute, whose latency rises steeply with concurrency, accepted while one beta business is the traffic. Cloud canary timings are no capacity proof.
 
@@ -59,14 +59,14 @@ This table is the one home of every deployment and workflow credential. No check
 | `SUPABASE_SECRET_KEY` | Vercel | Admin client, edge-function calls | Never | As above. The functions accept every secret key of their project. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Vercel | Document storage | As set on the token | Cloudflare R2, Manage API tokens: one token scoped to the bucket; set both, redeploy, delete the old token. |
 | `CRON_SECRET` | Vercel, Production | Vercel Cron: [storage purge](document-storage-and-access.md#storage-cleanup) and [report deletion](../features/problem-reports.md#current-product-baseline) | Never | `openssl rand -hex 32`, then redeploy. |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Vercel Preview (sandbox); Production empty until the live switch | `lib/werkflow-billing/` | Never | Roll in Stripe, set, redeploy. |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_MONTHLY_PRICE_ID` | Vercel Preview (sandbox); Production empty until go-live | `lib/werkflow-billing/`, `lib/subscription/` | Never | Roll in Stripe, set, redeploy. |
 | `WERKFLOW_SELLER_*` | Vercel | `lib/werkflow-billing/seller.ts`; `_VAT_ID` optional | Never | Set, redeploy. |
 | `PROBLEM_REPORT_HANDOUT_SECRET` | Vercel; `~/.config/werkflow/problem-report-handout.env`, mode 600, with `PROBLEM_REPORT_HANDOUT_ORIGIN` and an optional `VERCEL_AUTOMATION_BYPASS_SECRET`, on each machine that runs report threads | The [hand-out](problem-report-scrubbing.md#hand-out): `report-dispatch`, `scripts/report-thread.ts` | Never | `openssl rand -hex 32` on Vercel and in each file, redeploy. |
 | `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `POSTHOG_PROJECT_API_KEY`, `POSTHOG_ORGANIZATION_IDS` | Vercel | [Usage statistics](security.md#mail-and-providers) | Never | Rotate in PostHog, redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
-| `RESEND_API_KEY` | Supabase secrets, one key per project | The mail functions | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
-| `FROM_EMAIL` | Supabase secrets | The mail functions' sender | Never | `supabase secrets set`. |
+| `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key per project, `supabase secrets set --project-ref <ref> RESEND_API_KEY` or Vercel, delete the old one. |
+| `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO` | Vercel | Alarm recipient; reply-to | Never | Set, redeploy. |
 
 The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the owner's local Supabase and R2 admin tokens in the env backups, and `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name.
 
