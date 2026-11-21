@@ -5885,6 +5885,55 @@ export type Database = {
           },
         ];
       };
+      maintenance_visit_finding_resolutions: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          id: string;
+          maintenance_visit_finding_id: string;
+          organization_id: string;
+          resolved_by_due_work_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          id?: string;
+          maintenance_visit_finding_id: string;
+          organization_id: string;
+          resolved_by_due_work_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          maintenance_visit_finding_id?: string;
+          organization_id?: string;
+          resolved_by_due_work_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_visit_finding_res_maintenance_visit_finding_id_fkey";
+            columns: ["maintenance_visit_finding_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_visit_findings";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_finding_res_resolved_by_due_work_id_orga_fkey";
+            columns: ["resolved_by_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_visit_finding_resolutions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       maintenance_visit_findings: {
         Row: {
           client_follow_up_id: string | null;
@@ -18913,6 +18962,10 @@ export type Database = {
           project_id: string;
         }[];
       };
+      list_installed_equipment_lineage: {
+        Args: { p_equipment_ids: string[]; p_organization_id: string };
+        Returns: string[];
+      };
       list_installed_equipment_predecessor_events: {
         Args: {
           p_equipment_id: string;
@@ -19024,6 +19077,25 @@ export type Database = {
           p_status?: string;
         };
         Returns: Json;
+      };
+      list_open_maintenance_visit_findings: {
+        Args: { p_equipment_ids: string[]; p_organization_id: string };
+        Returns: {
+          completed_on: string;
+          defects: string[];
+          finding_id: string;
+          fully_covered: boolean;
+          job_id: string;
+          maintenance_due_work_id: string;
+          maintenance_plan_id: string;
+          next_action: Database["public"]["Enums"]["maintenance_next_action"];
+          note: string;
+          owner_user_id: string;
+          plan_number: string;
+          recorded_at: string;
+          scope_outcome: Database["public"]["Enums"]["maintenance_scope_outcome"];
+          target_date: string;
+        }[];
       };
       list_open_request_attention: {
         Args: { p_organization_id: string };

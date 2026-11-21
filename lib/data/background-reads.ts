@@ -31,6 +31,10 @@ import {
   getFieldEquipmentHistory,
 } from '@/lib/installed-equipment/field-history-reads';
 import { getInstalledEquipmentPage } from '@/lib/installed-equipment/list-page-server';
+import {
+  equipmentOpenFindingsInputSchema,
+  getEquipmentOpenFindings,
+} from '@/lib/installed-equipment/open-findings-reads';
 import { getEquipmentSourceOptions } from '@/lib/installed-equipment/source-options-server';
 import { getOrgMembersAction, getProfilesByIds } from '@/lib/members/actions';
 import { getJobDetails, getNextJobNumber, getParkedJobs } from '@/lib/jobs/actions';
@@ -350,6 +354,11 @@ export const BACKGROUND_READS = {
   'maintenance-evidence-options': defineRead(jobInput, (input) => getMaintenanceEvidenceOptions(input.jobId)),
   // The work pack's „Verlauf und Dokumente“ of one Anlage of the job.
   'equipment-field-history': defineRead(fieldHistoryInputSchema, (input) => getFieldEquipmentHistory(input)),
+  // The office's open Mängel of one Anlage; a switched organization refuses the stale read.
+  'equipment-open-findings': defineRead(
+    equipmentOpenFindingsInputSchema.extend({ organizationId: uuidSchema }),
+    (input) => getEquipmentOpenFindings({ equipmentId: input.equipmentId }),
+  ),
   'equipment-field-documents': defineRead(fieldDocumentsInputSchema, (input) =>
     getFieldEquipmentDocuments(input),
   ),
