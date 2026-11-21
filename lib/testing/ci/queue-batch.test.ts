@@ -115,8 +115,13 @@ test('while strict up-to-date branches are on, a tick updates the oldest queued 
   expect(next.updated).toBeNull();
 });
 
-test('a tick that lands updates the oldest queued PR main left behind', async () => {
-  const world = fakeWorld([pull(1), pull(2, behind)], { breaks: [] });
+test('a tick that lands updates the oldest queued PR the landing left behind, by the PRs as they are after it', async () => {
+  // #2 is up to date until #1 lands; a tick that decided by the PRs before the landing would wait.
+  const world = fakeWorld([pull(1), pull(2)], {
+    beforeLand: (merge, { pulls }) => {
+      if (merge === 1) pulls.splice(1, 1, pull(2, behind));
+    },
+  });
   const outcome = await runQueueTick(world.adapter, { maxBatch: 1, dryRun: false });
   expect(outcome.landing).toEqual([1]);
   expect(world.updated).toEqual([2]);

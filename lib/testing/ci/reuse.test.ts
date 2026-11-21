@@ -343,6 +343,16 @@ const TREE_CASES: Case[] = [
 
 const BOUND_CASES: Case[] = [
   {
+    name: "a rerun whose Plan start was lost and whose Plan diffed against another base, after the first attempt's Plan",
+    ledger: [
+      ...planned(),
+      checkPass({ status: 'failed' }),
+      planEnd({ attempt: 2, base: 'e'.repeat(40) }),
+      checkPass({ attempt: 2 }),
+    ],
+    expected: undefined,
+  },
+  {
     name: 'a pass of the same tree on another base',
     ledger: [...planned({ base: 'e'.repeat(40) }), checkPass()],
     expected: undefined,
@@ -351,11 +361,7 @@ const BOUND_CASES: Case[] = [
     name: 'a pass of the same tree whose plan required other work',
     ledger: [
       planStart({ base: BASE }),
-      planStart({
-        base: BASE,
-        status: 'passed',
-        plan: { jobs: [], skips: {}, shards: [], outputs: {}, work: ['fast:step:build'] },
-      }),
+      planEnd({ plan: { jobs: [], skips: {}, shards: [], outputs: {}, work: ['fast:step:build'] } }),
       checkPass(),
     ],
     expected: undefined,
@@ -364,7 +370,7 @@ const BOUND_CASES: Case[] = [
     name: 'a pass whose plan recorded no work',
     ledger: [
       planStart({ base: BASE }),
-      planStart({ base: BASE, status: 'passed', plan: { jobs: [], skips: {}, shards: [], outputs: {} } }),
+      planEnd({ plan: { jobs: [], skips: {}, shards: [], outputs: {} } }),
       checkPass(),
     ],
     expected: undefined,

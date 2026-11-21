@@ -227,7 +227,7 @@ test("the queue turns a PR's auto-merge off through gh, and a refusal throws so 
   expect(readFileSync(called, 'utf8')).toBe('pr merge 7 --disable-auto\npr merge 7 --disable-auto\n');
 });
 
-test("a behind PR's branch is updated with main through gh, and a refusal throws", async () => {
+test("a behind PR's branch is updated with main through gh at the head the queue saw, and a refusal throws", async () => {
   const called = join(folder, 'gh.log');
   const bin = join(folder, 'bin');
   mkdirSync(bin);
@@ -252,7 +252,9 @@ test("a behind PR's branch is updated with main through gh, and a refusal throws
   } finally {
     process.env.PATH = path;
   }
-  expect(readFileSync(called, 'utf8')).toBe('pr update-branch 7\npr update-branch 7\n');
+  // The update names the head the queue saw green, so GitHub refuses it once the branch moved on.
+  const update = `api --method PUT repos/{owner}/{repo}/pulls/7/update-branch -f expected_head_sha=${pull.headSha}\n`;
+  expect(readFileSync(called, 'utf8')).toBe(update + update);
 });
 
 test("a batch entry's migrations are checked against the prefix it lands on, from the queue's commits alone", async () => {

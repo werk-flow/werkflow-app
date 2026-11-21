@@ -266,7 +266,15 @@ export function createQueueAdapter(options: {
       return problems;
     },
     updateBranch: async (pull) => {
-      gh('pr', 'update-branch', String(pull.number));
+      // Only at the head the queue saw green: GitHub refuses the update once the branch moved on.
+      gh(
+        'api',
+        '--method',
+        'PUT',
+        `repos/{owner}/{repo}/pulls/${pull.number}/update-branch`,
+        '-f',
+        `expected_head_sha=${pull.headSha}`,
+      );
       console.info(`[queue] #${pull.number}: branch updated with main`);
     },
     integrationRun: async (run) => {

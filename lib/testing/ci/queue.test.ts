@@ -238,7 +238,7 @@ test("a merge whose main cannot be read lands by GitHub's merge commit: the land
       { kind: 'landing-failed', detail: 'main could not be read after merging #1: fetch failed' },
       {
         kind: 'partial',
-        detail: `the landing stopped after #1 of ${prs}: GitHub reports #1 merged as ${world.main().commit}, whose tree the queue could not verify, so main's own run of it runs its jobs unless a run passed its exact tree, and the next tick starts from it`,
+        detail: `the landing stopped after #1 of ${prs}: GitHub reports #1 merged as ${world.main().commit}, but main could not be read, so main's own run of main's head runs its jobs unless a run passed its exact landing, and the next tick reads main again`,
       },
     ]);
     expect(needsAttention(outcome)).toBe(true);
@@ -256,7 +256,7 @@ test('a later merge whose main cannot be read records one partial stop, at its o
     { kind: 'landing-failed', detail: 'main could not be read after merging #2: fetch failed' },
     {
       kind: 'partial',
-      detail: `the landing stopped after #1, #2 of #1, #2, #3: GitHub reports #2 merged as ${world.main().commit}, whose tree the queue could not verify, so main's own run of it runs its jobs unless a run passed its exact tree, and the next tick starts from it`,
+      detail: `the landing stopped after #1, #2 of #1, #2, #3: GitHub reports #2 merged as ${world.main().commit}, but main could not be read, so main's own run of main's head runs its jobs unless a run passed its exact landing, and the next tick reads main again`,
     },
   ]);
 });

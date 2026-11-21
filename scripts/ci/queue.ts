@@ -2,8 +2,8 @@
 // scripts/ci/queue-adapter.ts acts). A CI runner calls it in a loop, one tick at a time, from a
 // clean clone of werkflow-app on main's head whose `gh` may merge PRs, update their branches and
 // set commit statuses. While the ruleset requires up-to-date branches, a live tick ends by
-// updating the oldest queued PR GitHub reports `BEHIND` with main (`gh pr update-branch`), one at a
-// time; no other PR is freshened.
+// updating the oldest queued PR GitHub reports `BEHIND` with main (GitHub's update-branch, only at the
+// head the queue saw green), one at a time; no other PR is freshened.
 //
 // Usage: bun scripts/ci/queue.ts --runner <executable> --work-dir <dir> --run-url-base <url>
 //                                [--ledger <file>] [--publisher <executable>] [--max-batch <1-4>]

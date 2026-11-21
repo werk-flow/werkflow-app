@@ -123,9 +123,10 @@ const isPlanStart = (receipt: CiResult): boolean => receipt.job === 'plan' && re
 function passedTreeInLedger(ledger: Ledger, landing: Landing): string | undefined {
   const since = sinceNewestStart(ledger, (receipt) => receipt.tree === landing.tree, isPlanStart);
   const last = since?.at(-1);
-  // The newest start's own Plan: a rerun of failed jobs keeps it, a rerun of every job starts anew,
-  // and an earlier attempt's late receipt withdraws the reuse.
-  const plan = since?.find((receipt) => receipt.job === 'plan' && provesItself(receipt));
+  // The run's one passed Plan: a rerun of failed jobs keeps it, and a second one (a rerun whose start
+  // was lost, or an earlier attempt's late receipt) leaves the landing it passed unclear.
+  const plans = since?.filter((receipt) => receipt.job === 'plan' && provesItself(receipt)) ?? [];
+  const plan = plans.length === 1 ? plans[0] : undefined;
   return last?.job === 'check' &&
     last.event === 'integration' &&
     provesItself(last) &&

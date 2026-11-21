@@ -109,7 +109,7 @@ export type QueueAdapter = {
    * `parent`. Empty when they would not.
    */
   migrationProblems(parent: string, entry: BatchEntry): Promise<string[]>;
-  /** Merges main into the PR's branch on GitHub (`gh pr update-branch`). Throws when it cannot. */
+  /** Merges main into the PR's branch on GitHub, only while its head is still `pull.headSha`. Throws when it cannot. */
   updateBranch(pull: QueuedPull): Promise<void>;
   /** The integration run of `tip` (scripts/ci/job.ts through the runner) and its verdict. */
   integrationRun(run: { tip: BatchEntry; base: string; pulls: readonly QueuedPull[] }): Promise<Verdict>;
@@ -681,7 +681,7 @@ function unverifiedDetail(pull: QueuedPull, all: string, merge: Unverified, land
   const after = `the landing stopped after ${landed} of ${all}`;
   if (merge.head === null)
     return 'mergeCommit' in merge
-      ? `${after}: GitHub reports #${pull.number} merged as ${merge.mergeCommit}, whose tree the queue could not verify, so main's own run of it runs its jobs unless a run passed its exact tree, and the next tick starts from it`
+      ? `${after}: GitHub reports #${pull.number} merged as ${merge.mergeCommit}, but main could not be read, so main's own run of main's head runs its jobs unless a run passed its exact landing, and the next tick reads main again`
       : `#${pull.number}'s merge may have landed after ${landed || 'nothing'} of ${all}: ${merge.unconfirmed}, so main's own run of main's head runs its jobs, and the next tick starts from main`;
   return 'mergeCommit' in merge
     ? `${after}: GitHub reports #${pull.number} merged as ${merge.mergeCommit}, and main's head ${merge.head} holds a tree no run of this tick verified, so main's own run of it runs its jobs, and the next tick starts from it`
