@@ -87,6 +87,7 @@ async function issueFiled(
     .rpc('get_invoice_settings', { p_organization_id: orgId })
     .throwOnError();
   const documentId = randomUUID();
+  const number = field(series, 'nextInvoiceNumber');
   const { data: issued } = await admin
     .rpc('issue_invoice', {
       p_actor_id: actor,
@@ -103,11 +104,11 @@ async function issueFiled(
           address: { lines: ['Hofweg 1'], postalCode: '10117', city: 'Berlin', countryCode: 'DE' },
         },
       },
-      p_expected_number: field(series, 'nextInvoiceNumber'),
+      p_expected_number: number,
       p_expected_issue_date: getBusinessTodayIso(),
       p_original_document_id: documentId,
-      p_original_storage_path: `${orgId}/${documentId}/Rechnung.pdf`,
-      p_original_file_name: 'Rechnung.pdf',
+      p_original_storage_path: `${orgId}/${documentId}/Rechnung ${number}.pdf`,
+      p_original_file_name: `Rechnung ${number}.pdf`,
       p_original_size_bytes: 4096,
       p_original_content_hash: 'a'.repeat(64),
     })
