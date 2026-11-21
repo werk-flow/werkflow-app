@@ -264,6 +264,9 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.includes('/components/auftraege/handover/'))
                 return { path: join(import.meta.dir, 'work-handover-service-boundaries.ts') };
             });
+            builder.onResolve({ filter: /^@\/lib\/invoices\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'invoice-service-boundaries.ts'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/qualifications\/actions$/ }, () => ({
               path: join(import.meta.dir, 'qualification-service-boundaries.ts'),
             }));

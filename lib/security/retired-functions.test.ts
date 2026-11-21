@@ -35,6 +35,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   finalize_personnel_document_metadata_base: 'finalize_personnel_document_metadata',
   finalize_work_artifact_export: 'export_work_artifact',
   'app_private.generate_due_work_for_active_plan': 'create_maintenance_plan_with_due_work',
+  get_invoice: 'get_invoice_with_line_sources',
   replace_job_assignments_with_assessment: 'replace_job_assignments_with_visit_assessment',
   generate_maintenance_due_work: 'app_private.generate_due_work_for_active_plan',
   get_user_admin_or_manager_org_ids: 'RLS policies',

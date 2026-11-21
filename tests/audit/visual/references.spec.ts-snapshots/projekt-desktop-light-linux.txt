@@ -26,6 +26,7 @@ Aufträge
 P-2026-0007
 Sanierung Wohnanlage Uferweg
 Nicht begonnen
+Rechnung erstellen
 Auftrag hinzufügen
 Arbeitsstand
 Nächster Schritt:
