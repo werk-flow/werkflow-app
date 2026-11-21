@@ -68,7 +68,8 @@ alter table public.invoice_events add constraint invoice_events_type_check
 -- the invoice, its status alone turns from Ausgestellt to Storniert; the
 -- cancel's actor and time are in its history. Every other rule of R4's guard
 -- stays: a work or person reference clears only when its target is gone,
--- only register_invoice_original names the original, a draft names none.
+-- an original is named once and only when it is the invoice's filed ten-year
+-- document with the registration's history, and a draft names none.
 -- Security definer as there; no role executes it.
 create or replace function app_private.guard_issued_invoice()
 returns trigger
@@ -80,7 +81,6 @@ declare
   v_free constant text[] := array[
     'job_id', 'project_id', 'service_case_id', 'created_by', 'updated_by', 'issued_by', 'original_document_id'
   ];
-  v_registering constant boolean := coalesce(current_setting('app.invoice_original_write', true), '') = 'on';
   v_cancelling constant text := coalesce(current_setting('app.invoice_cancel', true), '');
 begin
   if tg_op = 'INSERT' then
@@ -97,7 +97,6 @@ begin
     end if;
     raise exception 'invoice_issued';
   end if;
-  perform set_config('app.invoice_original_write', 'off', true);
   if (new.cancels_invoice_id, new.cancellation_reason, new.corrects_invoice_id)
     is distinct from (old.cancels_invoice_id, old.cancellation_reason, old.corrects_invoice_id)
   then
@@ -135,8 +134,24 @@ begin
       or exists (select 1 from auth.users person where person.id = old.updated_by)))
     or (new.issued_by is distinct from old.issued_by and (new.issued_by is not null
       or exists (select 1 from auth.users person where person.id = old.issued_by)))
-    or (new.original_document_id is distinct from old.original_document_id
-      and (old.original_document_id is not null or new.original_document_id is null or not v_registering))
+    or (new.original_document_id is distinct from old.original_document_id and (
+      old.original_document_id is not null or new.original_document_id is null
+      or not exists (
+        select 1 from public.documents document
+        where document.id = new.original_document_id and document.organization_id = old.organization_id
+          and document.filed_at is not null and document.category = 'invoice'
+          and document.retention_class = 'ten_years' and document.document_date = old.issue_date
+          and document.metadata ->> 'invoiceId' = old.id::text)
+      or not exists (
+        select 1 from public.invoice_events event
+        where event.organization_id = old.organization_id and event.invoice_id = old.id
+          and event.event_type = 'original_registered' and event.attempt_key = new.original_document_id)
+      or exists (
+        select 1 from public.document_links link
+        where link.document_id = new.original_document_id and link.organization_id = old.organization_id
+          and (link.client_id is distinct from old.client_id or num_nonnulls(link.job_id, link.project_id,
+            link.employee_id, link.request_id, link.equipment_id, link.service_case_id,
+            link.maintenance_coverage_id) > 0))))
   then
     raise exception 'invoice_issued';
   end if;
