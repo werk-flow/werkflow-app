@@ -1,85 +1,10 @@
-// What CI costs per merged pull request (scripts/ci/cost.ts), from a runner's ledger or its results
+// What CI costs per merged pull request (scripts/ci-cost.ts), from a runner's ledger or its results
 // folders: job-minutes, machine starts, setup share, reuse rate and ready-to-merge time. It reads
-// synthetic CI metadata only: run addresses, trees, PR numbers, groups and times.
-import { z } from 'zod';
-import type { CiJob } from './dag';
-import {
-  type CiResult,
-  type FailureClass,
-  failureClassSchema,
-  type JobCost,
-  positiveIntegerSchema,
-} from './results';
-import { jobShards } from './run-plan';
-
-/** Steps inside a job body that set the job up rather than prove a gate: a browser shard's build and server. */
-const SETUP_STEPS: readonly string[] = ['step:server'];
-
-/** The cost of `result` at `completedAt` (null while it runs). `runnerStartedAt` adds the runner's setup. */
-export function jobCost(
-  result: CiResult,
-  input: { machineStart: boolean; runnerStartedAt: string | null; completedAt: string | null },
-): JobCost {
-  // A runner clock ahead of the job's adds no setup and takes no wall time away.
-  const bodyStarted = Date.parse(result.startedAt);
-  const began = Math.min(Date.parse(input.runnerStartedAt ?? result.startedAt), bodyStarted);
-  const beforeBody = bodyStarted - began;
-  const inBody = result.groups
-    .filter((group) => SETUP_STEPS.includes(group.id))
-    .reduce((sum, group) => sum + group.durationMs, 0);
-  return {
-    machineStart: input.machineStart,
-    runnerStartedAt: input.runnerStartedAt,
-    setupMs: beforeBody + inBody,
-    wallMs: input.completedAt === null ? null : Math.max(0, Date.parse(input.completedAt) - began),
-  };
-}
-
-/** GitHub's merge-queue branch: `…/gh-readonly-queue/<base>/pr-<n>-<sha>`. */
-const QUEUE_REF = /\/pr-(\d+)-[0-9a-f]{40}$/;
-
-/**
- * The pull requests in CI_PRS: numbers separated by commas, or GitHub's merge-queue ref. Empty for
- * an empty value; a value of neither form is unreadable.
- */
-export function pullRequestsOf(value: string | undefined): number[] | { unreadable: string } {
-  if (!value) return [];
-  const queued = QUEUE_REF.exec(value)?.[1];
-  const numbers = z
-    .array(positiveIntegerSchema)
-    .safeParse(queued ? [Number(queued)] : /^\d+(,\d+)*$/.test(value) ? value.split(',').map(Number) : []);
-  return numbers.success && numbers.data.length
-    ? [...new Set(numbers.data)]
-    : { unreadable: `CI_PRS "${value}" is neither PR numbers nor a merge-queue ref` };
-}
-
-/** The runner's measurement inputs to a job (scripts/ci/job.ts names them), and a warning for each it could not read. */
-export function measurementInputs(environment: Readonly<Record<string, string | undefined>>): {
-  prs: number[];
-  attempt: number;
-  firstAttemptClass: FailureClass | null;
-  runnerStartedAt: string | null;
-  warnings: string[];
-} {
-  const warnings: string[] = [];
-  const prs = pullRequestsOf(environment.CI_PRS);
-  if ('unreadable' in prs) warnings.push(prs.unreadable);
-  const attempt = positiveIntegerSchema.safeParse(Number(environment.CI_RUN_ATTEMPT || '1'));
-  if (!attempt.success) warnings.push(`CI_RUN_ATTEMPT "${environment.CI_RUN_ATTEMPT}" is no attempt number`);
-  const failureClass = failureClassSchema.safeParse(environment.CI_FIRST_ATTEMPT_CLASS);
-  if (environment.CI_FIRST_ATTEMPT_CLASS && !failureClass.success)
-    warnings.push(`CI_FIRST_ATTEMPT_CLASS "${environment.CI_FIRST_ATTEMPT_CLASS}" is no failure class`);
-  const startedAt = z.string().datetime().safeParse(environment.CI_JOB_STARTED_AT);
-  if (environment.CI_JOB_STARTED_AT && !startedAt.success)
-    warnings.push(`CI_JOB_STARTED_AT "${environment.CI_JOB_STARTED_AT}" is no ISO time`);
-  return {
-    prs: 'unreadable' in prs ? [] : prs,
-    attempt: attempt.success ? attempt.data : 1,
-    firstAttemptClass: failureClass.success ? failureClass.data : null,
-    runnerStartedAt: startedAt.success ? startedAt.data : null,
-    warnings,
-  };
-}
+// synthetic CI metadata only: run addresses, trees, PR numbers, groups and times. It lives outside
+// lib/testing/ci/, so a change to the report alone is no CI tooling change.
+import type { CiJob } from '../ci/dag';
+import type { CiResult, FailureClass } from '../ci/results';
+import { jobShards } from '../ci/run-plan';
 
 /** One job process: the newest receipt of one start of a job or shard. */
 type JobProcess = CiResult;
@@ -154,11 +79,15 @@ function plannedUnits(plan: CiResult['plan']): UnitKey[] {
   });
 }
 
-/** A process's job time; a cancelled one counts up to its attempt's last receipt, an upper bound. */
+/**
+ * A process's job time. A cancelled one counts up to its attempt's last receipt; when it ended is
+ * unknown. A runner clock ahead of the body counts from the body's start, as jobCost does.
+ */
 function processMs(entry: JobProcess, attemptEnd: number): number {
   const recorded = entry.cost?.wallMs;
   if (typeof recorded === 'number') return recorded;
-  const began = Date.parse(entry.cost?.runnerStartedAt ?? entry.startedAt);
+  const bodyStarted = Date.parse(entry.startedAt);
+  const began = Math.min(Date.parse(entry.cost?.runnerStartedAt ?? entry.startedAt), bodyStarted);
   const ended = entry.completedAt === null ? attemptEnd : Date.parse(entry.completedAt);
   return Math.max(0, ended - began);
 }
@@ -257,25 +186,31 @@ function landedBy(push: RunCost, runs: readonly RunCost[]): RunCost | undefined 
 }
 
 /**
- * Sums `receipts` per merged pull request. A PR merged when a push to main landed the tree of a
- * passed integration run that served it. A run's cost splits evenly across the PRs it served, and a
- * push's across its integration run's. A push that reused a tree counts the jobs and shards that run executed
+ * Sums `receipts` per merged pull request, the same in any input order. A PR merged when a push to
+ * main landed the tree of a passed integration run that served it, or names it among the PRs it
+ * landed. A run's cost splits evenly across the PRs it served, and a push's across those it landed. A push that reused a tree counts the jobs and shards that run executed
  * as hits, or one when the input lacks that run. Ready to merge: the PR's first integration Plan to
  * the push's Plan.
  */
 export function summarizeCost(receipts: readonly CiResult[]): CostSummary {
   const byRun = new Map<string, JobProcess[]>();
-  for (const entry of jobProcesses(receipts))
+  const inTimeOrder = jobProcesses(receipts).toSorted((left, right) =>
+    left.startedAt.localeCompare(right.startedAt),
+  );
+  for (const entry of inTimeOrder)
     if (entry.runUrl !== null) byRun.set(entry.runUrl, [...(byRun.get(entry.runUrl) ?? []), entry]);
-  const runs = [...byRun].map(([runUrl, processes]) => runCost(runUrl, processes));
+  const runs = [...byRun]
+    .map(([runUrl, processes]) => runCost(runUrl, processes))
+    .toSorted((left, right) => (left.plannedAt ?? Infinity) - (right.plannedAt ?? Infinity) || 0);
   const landedPrs = new Map<RunCost, number[]>();
   const mergedBy = new Map<number, RunCost>();
   for (const push of runs.filter((run) => run.event === 'main')) {
     const landed = landedBy(push, runs);
     if (push.reusedFrom) push.reuseHits += landed ? Math.max(landed.units, 1) : 1;
-    if (!landed?.prs.length) continue;
-    landedPrs.set(push, landed.prs);
-    for (const pr of landed.prs) if (!mergedBy.has(pr)) mergedBy.set(pr, push);
+    const prs = [...new Set([...push.prs, ...(landed?.prs ?? [])])];
+    if (!prs.length) continue;
+    landedPrs.set(push, prs);
+    for (const pr of prs) if (!mergedBy.has(pr)) mergedBy.set(pr, push);
   }
   const perPr = new Map<number, Tally>([...mergedBy.keys()].map((pr) => [pr, emptyTally()]));
   const summary: CostSummary = {
@@ -308,17 +243,20 @@ export function summarizeCost(receipts: readonly CiResult[]): CostSummary {
     const unmerged = prs.filter((pr) => !perPr.has(pr)).length;
     if (unmerged) add(summary.unmerged, run, unmerged / prs.length);
   }
-  summary.merged = [...perPr].map(([pr, tally]) => {
-    const push = mergedBy.get(pr)?.plannedAt ?? null;
-    const ready = runs.flatMap((run) =>
-      run.event === 'integration' && run.prs.includes(pr) && run.plannedAt !== null ? [run.plannedAt] : [],
-    );
-    return {
-      pr,
-      ...tally,
-      readyToMergeMs: push !== null && ready.length ? push - Math.min(...ready) : null,
-    };
-  });
+  summary.unselectedFailures.sort();
+  summary.merged = [...perPr]
+    .toSorted(([left], [right]) => left - right)
+    .map(([pr, tally]) => {
+      const push = mergedBy.get(pr)?.plannedAt ?? null;
+      const ready = runs.flatMap((run) =>
+        run.event === 'integration' && run.prs.includes(pr) && run.plannedAt !== null ? [run.plannedAt] : [],
+      );
+      return {
+        pr,
+        ...tally,
+        readyToMergeMs: push !== null && ready.length ? push - Math.min(...ready) : null,
+      };
+    });
   return summary;
 }
 
@@ -357,7 +295,7 @@ export function formatCost(summary: CostSummary): string {
     row('Full runs', summary.full),
     row('Other runs', summary.other),
     row('All runs', summary.all),
-    `Cancelled jobs: ${summary.cancelled} (counted to their attempt's last receipt, an upper bound). Never started: ${summary.neverStarted}.`,
+    `Cancelled jobs: ${summary.cancelled} (counted to their attempt's last receipt; when they ended is unknown). Never started: ${summary.neverStarted}.`,
     `First-attempt failures: ${failures || 'none'}.`,
     `Failed groups of full runs that no plan selected: ${summary.unselectedFailures.length ? summary.unselectedFailures.join(', ') : 'none'}.`,
     `Receipts without a run, left out: ${summary.withoutRun}.`,

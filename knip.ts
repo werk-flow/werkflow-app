@@ -40,8 +40,6 @@ const config: KnipConfig = {
     'lib/testing/runner/file-lock-worker.ts!',
     'lib/testing/fixtures/*.{ts,tsx}',
     'scripts/*.ts!',
-    // CI's job bodies and its cost summary, run by path on any runner (docs/technical/testing.md, "CI").
-    'scripts/ci/{job,cost}.ts!',
     'scripts/migration/*.ts!',
     // Run on a Boat machine by scripts/boat/remote-verify.sh, or by package scripts.
     'scripts/boat/*.ts!',

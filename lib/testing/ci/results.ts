@@ -38,7 +38,7 @@ export const positiveIntegerSchema = z.number().int().positive();
 export const failureClassSchema = z.enum(INCIDENT_CLASSES).exclude(['transient']);
 export type FailureClass = z.infer<typeof failureClassSchema>;
 
-/** What a job cost (lib/testing/ci/cost.ts). The runner sets the inputs; the job never fails on them. */
+/** What a job cost (lib/testing/ci/measurement.ts). The runner sets the inputs; the job never fails on them. */
 const jobCostSchema = z.object({
   /** One per job process on a CI runner; none on a workstation. */
   machineStart: z.boolean(),
@@ -82,9 +82,9 @@ const ciResultSchema = z.object({
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().nullable(),
   plan: runPlanSchema.optional(),
-  // Measurement (scripts/ci/cost.ts). Optional: receipts written before it hold none, and no gate
+  // Measurement (lib/testing/ci/measurement.ts, summed by scripts/ci-cost.ts). Optional: receipts written before it hold none, and no gate
   // or reuse decision reads them.
-  /** The pull requests the run serves: a PR run's one, an integration batch's; none for a push or full run. */
+  /** The pull requests the run serves: a PR run's one, an integration batch's, a push's landed ones; none for a full run. */
   prs: z.array(positiveIntegerSchema).optional(),
   /** The run's attempt, 1 for the first; a rerun of its failed jobs counts up (CI_RUN_ATTEMPT). */
   attempt: positiveIntegerSchema.optional(),

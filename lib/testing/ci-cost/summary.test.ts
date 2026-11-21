@@ -5,9 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { jobCost, measurementInputs, pullRequestsOf, summarizeCost } from './cost';
-import type { CiJob } from './dag';
-import { type CiResult, resultFileName } from './results';
+import type { CiJob } from '../ci/dag';
+import { type CiResult, resultFileName } from '../ci/results';
+import { summarizeCost } from './summary';
 
 const repository = resolve(import.meta.dir, '../../..');
 const T0 = Date.parse('2026-11-21T08:00:00.000Z');
@@ -269,79 +269,75 @@ test('a push lands only an integration pass that came before it', () => {
   expect(summary.other.runs).toBe(1);
 });
 
+test('the summary is the same in any input order', () => {
+  const receipts = fixtureLedger();
+  expect(summarizeCost(receipts.toReversed())).toEqual(summarizeCost(receipts));
+});
+
+test('a push that names the PRs it landed merges each of them, a queue entry ahead of the last included', () => {
+  const receipts = [
+    ...receiptsOf({ runUrl: run(21), event: 'integration', tree: tree('1'), prs: [21] }, [
+      { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 1, to: 2, endOnly: true },
+    ]),
+    ...receiptsOf({ runUrl: run(22), event: 'integration', tree: tree('2'), prs: [22] }, [
+      { job: 'plan', from: 3, to: 4, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 4, to: 5, endOnly: true },
+    ]),
+    ...receiptsOf({ runUrl: run(23), event: 'main', tree: tree('2'), prs: [21, 22] }, [
+      { job: 'plan', from: 10, to: 11, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 11, to: 12, endOnly: true },
+    ]),
+  ];
+  const summary = summarizeCost(receipts);
+  // Each entry run is its PR's own; the push splits across both.
+  expect(summary.merged).toEqual([
+    {
+      pr: 21,
+      runs: 2,
+      jobMs: 3 * MINUTE,
+      machineStarts: 3,
+      setupMs: 0,
+      reuseHits: 0,
+      executed: 0,
+      readyToMergeMs: 10 * MINUTE,
+    },
+    {
+      pr: 22,
+      runs: 2,
+      jobMs: 3 * MINUTE,
+      machineStarts: 3,
+      setupMs: 0,
+      reuseHits: 0,
+      executed: 0,
+      readyToMergeMs: 7 * MINUTE,
+    },
+  ]);
+});
+
+test('a cancelled job whose runner clock runs ahead counts from its body start, as the writer does', () => {
+  const base = { runUrl: run(1), event: 'pr' as const, tree: tree('a'), prs: [12] };
+  const summary = summarizeCost(
+    receiptsOf(base, [
+      { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'fast', 'check']) },
+      {
+        job: 'fast',
+        from: 3,
+        to: null,
+        extra: { cost: { machineStart: true, runnerStartedAt: at(8), setupMs: 0, wallMs: null } },
+      },
+      { job: 'check', from: 5, to: 6, status: 'failed', endOnly: true },
+    ]),
+  );
+  // Plan 1, the cancelled Fast from minute 3 to the attempt's last receipt at 6, and Check 1.
+  expect(summary.all.jobMs).toBe(5 * MINUTE);
+});
+
 test('a push that reused a tree the input lacks counts one reuse hit, and lands no PR', () => {
   const push = fixtureLedger().filter((receipt) => receipt.runUrl === run(4));
   const summary = summarizeCost(push);
   expect(summary.merged).toEqual([]);
   expect(summary.other).toMatchObject({ runs: 1, reuseHits: 1, executed: 0 });
-});
-
-test('a job cost adds the runner setup before the body and a shard server start, and no gate step', () => {
-  const result = processReceipts(
-    { runUrl: run(1), event: 'integration', tree: tree('c'), prs: [12] },
-    { job: 'browser', shard: 1, from: 10, to: 30 },
-  )[1];
-  if (!result) throw new Error('The fixture holds no end receipt.');
-  const groups: CiResult['groups'] = [
-    { id: 'step:server', outcome: 'passed', durationMs: 4 * MINUTE },
-    { id: 'golden:p1-01', outcome: 'passed', durationMs: 12 * MINUTE },
-  ];
-  expect(
-    jobCost({ ...result, groups }, { machineStart: true, runnerStartedAt: at(7), completedAt: at(30) }),
-  ).toEqual({ machineStart: true, runnerStartedAt: at(7), setupMs: 7 * MINUTE, wallMs: 23 * MINUTE });
-  expect(
-    jobCost({ ...result, groups }, { machineStart: false, runnerStartedAt: null, completedAt: null }),
-  ).toEqual({ machineStart: false, runnerStartedAt: null, setupMs: 4 * MINUTE, wallMs: null });
-  // A runner clock ahead of the body's start counts from the body's start.
-  expect(
-    jobCost({ ...result, groups: [] }, { machineStart: true, runnerStartedAt: at(12), completedAt: at(30) }),
-  ).toEqual({ machineStart: true, runnerStartedAt: at(12), setupMs: 0, wallMs: 20 * MINUTE });
-});
-
-test('a pull request list is numbers or a merge-queue ref; anything else is unreadable', () => {
-  expect(pullRequestsOf(undefined)).toEqual([]);
-  expect(pullRequestsOf('12')).toEqual([12]);
-  expect(pullRequestsOf('14,15,14')).toEqual([14, 15]);
-  expect(pullRequestsOf(`refs/heads/gh-readonly-queue/main/pr-568-${'a'.repeat(40)}`)).toEqual([568]);
-  for (const value of [
-    '0',
-    '12,',
-    'pr-12',
-    '#12',
-    '9007199254740992',
-    `refs/heads/gh-readonly-queue/main/pr-0-${'a'.repeat(40)}`,
-  ])
-    expect([value, 'unreadable' in pullRequestsOf(value)]).toEqual([value, true]);
-});
-
-test('an unreadable measurement input warns and records unknown, so it never fails a job', () => {
-  const { warnings, ...unknown } = measurementInputs({
-    CI_PRS: 'twelve',
-    CI_RUN_ATTEMPT: '9007199254740992',
-    CI_FIRST_ATTEMPT_CLASS: 'transient',
-    CI_JOB_STARTED_AT: 'soon',
-  });
-  expect(unknown).toEqual({ prs: [], attempt: 1, firstAttemptClass: null, runnerStartedAt: null });
-  expect(warnings.map((warning) => warning.split(' ')[0])).toEqual([
-    'CI_PRS',
-    'CI_RUN_ATTEMPT',
-    'CI_FIRST_ATTEMPT_CLASS',
-    'CI_JOB_STARTED_AT',
-  ]);
-  expect(
-    measurementInputs({
-      CI_PRS: '12',
-      CI_RUN_ATTEMPT: '2',
-      CI_FIRST_ATTEMPT_CLASS: 'environment',
-      CI_JOB_STARTED_AT: at(0),
-    }),
-  ).toEqual({
-    prs: [12],
-    attempt: 2,
-    firstAttemptClass: 'environment',
-    runnerStartedAt: at(0),
-    warnings: [],
-  });
 });
 
 test('the script reads a ledger file and a results folder, and refuses an unreadable input', () => {
@@ -356,7 +352,7 @@ test('the script reads a ledger file and a results folder, and refuses an unread
     for (const receipt of receipts.filter((entry) => entry.runUrl === run(2)))
       writeFileSync(join(runFolder, resultFileName(receipt.job, receipt.shard)), JSON.stringify(receipt));
     const cost = (...paths: string[]): { status: number | null; stdout: string; stderr: string } =>
-      spawnSync(process.execPath, ['scripts/ci/cost.ts', ...paths], { cwd: repository, encoding: 'utf8' });
+      spawnSync(process.execPath, ['scripts/ci-cost.ts', ...paths], { cwd: repository, encoding: 'utf8' });
 
     const fromLedger = cost('--json', ledger);
     expect([fromLedger.status, fromLedger.stderr]).toEqual([0, '']);

@@ -1,11 +1,11 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { formatCost, summarizeCost } from '../../lib/testing/ci/cost';
-import { type CiResult, readLedger, readResult } from '../../lib/testing/ci/results';
+import { formatCost, summarizeCost } from '../lib/testing/ci-cost/summary';
+import { type CiResult, readLedger, readResult } from '../lib/testing/ci/results';
 
-// What CI cost per merged pull request (lib/testing/ci/cost.ts): job-minutes, machine starts, setup
+// What CI cost per merged pull request (lib/testing/ci-cost/summary.ts): job-minutes, machine starts, setup
 // share, reuse rate and ready-to-merge time.
-// Usage: bun scripts/ci/cost.ts [--json] <ledger.jsonl | results folder>...
+// Usage: bun scripts/ci-cost.ts [--json] <ledger.jsonl | results folder>...
 // A file is a runner's ledger (CI_LEDGER of scripts/ci/job.ts). A folder holds run folders of
 // results (CI_RESULTS_DIR), searched to any depth for `.json` files. An unreadable input fails.
 
@@ -35,6 +35,6 @@ function receiptsOf(path: string): CiResult[] {
 const json = process.argv.includes('--json');
 const paths = process.argv.slice(2).filter((argument) => argument !== '--json');
 if (!paths.length)
-  throw new Error('Usage: bun scripts/ci/cost.ts [--json] <ledger.jsonl | results folder>...');
+  throw new Error('Usage: bun scripts/ci-cost.ts [--json] <ledger.jsonl | results folder>...');
 const summary = summarizeCost(paths.flatMap(receiptsOf));
 console.info(json ? JSON.stringify(summary, null, 2) : formatCost(summary));
