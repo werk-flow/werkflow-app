@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 
-import { sendEmail } from '@/lib/delivery/send-email';
+import { type EmailMessage, sendEmail } from '@/lib/delivery/send-email';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
@@ -18,7 +18,7 @@ import type { RenderedMail } from '@/lib/werkflow-billing/mails/layout';
 // send (quota, rate limit, outage) stays `failed` with its code and is sent on
 // the next claim, which Stripe's next delivery of the signal makes.
 
-export type CustomerMailKind = 'payment_failed' | 'card_problem' | 'mandate_inactive';
+export type CustomerMailKind = 'payment_failed' | 'card_problem' | 'mandate_inactive' | 'refund';
 type MailKind = CustomerMailKind | `alarm.${BillingAlarmKind}`;
 
 export type BillingMailOutcome =
@@ -27,11 +27,19 @@ export type BillingMailOutcome =
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-function contentHash(recipient: string, mail: RenderedMail, replyTo: string | undefined): string {
-  return createHash('sha256')
-    .update(JSON.stringify([recipient, replyTo ?? null, mail.subject, mail.html, mail.text]))
-    .digest('hex')
-    .slice(0, 32);
+type Attachments = EmailMessage['attachments'];
+
+function contentHash(
+  recipient: string,
+  mail: RenderedMail,
+  replyTo: string | undefined,
+  attachments: Attachments,
+): string {
+  const hash = createHash('sha256').update(
+    JSON.stringify([recipient, replyTo ?? null, mail.subject, mail.html, mail.text]),
+  );
+  for (const attachment of attachments ?? []) hash.update(attachment.filename).update(attachment.content);
+  return hash.digest('hex').slice(0, 32);
 }
 
 /** One customer mail (with its organization) or one alarm (with none). */
@@ -43,6 +51,7 @@ export async function deliverBillingMail(
     stripeObjectId: string;
     mail: RenderedMail;
     replyTo?: string;
+    attachments?: Attachments;
   },
   environment: Environment = process.env,
 ): Promise<BillingMailOutcome> {
@@ -66,8 +75,9 @@ export async function deliverBillingMail(
       subject: mail.subject,
       html: mail.html,
       text: mail.text,
-      idempotencyKey: `werkflow-billing-mail/${mailId}/${contentHash(recipient, mail, input.replyTo)}`,
+      idempotencyKey: `werkflow-billing-mail/${mailId}/${contentHash(recipient, mail, input.replyTo, input.attachments)}`,
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+      ...(input.attachments ? { attachments: input.attachments } : {}),
     },
     environment,
   );

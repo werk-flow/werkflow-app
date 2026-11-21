@@ -4,6 +4,7 @@ import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { issueWerkflowStorno, type StornoDependencies } from '@/lib/werkflow-billing/issue-storno';
+import { sendRefundMail } from '@/lib/werkflow-billing/refund-mail';
 import type { SignalFamily } from '@/lib/werkflow-billing/signals/family';
 import { alarmedIssue, liveIssueDependencies } from '@/lib/werkflow-billing/signals/issue-original';
 import type { StripeGateway } from '@/lib/werkflow-billing/stripe';
@@ -14,7 +15,10 @@ import { z } from '@/lib/zod';
 // (werk-flow/werkflow-planning#491, issue-storno.ts). Contract (family.ts):
 // the handler re-reads the credit note and its invoice from Stripe by id, is
 // idempotent through `werkflow_invoices`, and throws a stable code on failure
-// so Stripe delivers again; a check failure also raises the alarm once.
+// so Stripe delivers again; a check failure also raises the alarm once. Once
+// the credit note's Storno stands, issued now or before, the customer gets its
+// refund mail (refund-mail.ts), at most once, so a delivery after a refused
+// send sends it then.
 
 const creditNoteEventSchema = z.object({
   id: z.string(),
@@ -106,9 +110,11 @@ export const creditNoteSignals: SignalFamily = {
   handle: async (event, stripe) => {
     const parsed = creditNoteEventSchema.safeParse(event);
     if (!parsed.success) throw billingFailure('werkflow_invoice_unreadable');
+    const stripeCreditNoteId = parsed.data.data.object.id;
     await issueWerkflowStorno(
-      { stripeCreditNoteId: parsed.data.data.object.id, stripeEventId: parsed.data.id },
+      { stripeCreditNoteId, stripeEventId: parsed.data.id },
       liveStornoDependencies(stripe),
     );
+    await sendRefundMail(stripeCreditNoteId, stripe);
   },
 };
