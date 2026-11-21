@@ -86,6 +86,8 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
     [{ CI_COMMIT: 'main' }, 'is no full commit id', undefined],
     [{ CI_RUN_ATTEMPT: '0' }, 'is no attempt number', undefined],
     [{ CI_QUEUE_COMMIT: head, CI_PUBLISHER: '/bin/true' }, 'A queue run posts no Check', undefined],
+    [{ CI_EXECUTOR: 'mirror' }, 'CI_EXECUTOR=mirror needs CI_MIRROR_REPO and CI_MIRROR_TOKEN', undefined],
+    [{ CI_EXECUTOR: 'docker' }, 'CI_EXECUTOR docker is no executor', undefined],
     [{}, 'another run-commit holds this run', () => writeFileSync(join(results, RUN_COMMIT_LOCK), '')],
     [
       { CI_RUN_ATTEMPT: '2' },
@@ -118,6 +120,7 @@ test('the process executor refuses a run with a ledger, from the queue, with the
     ['GITHUB_TOKEN', 'token'],
     ['CI_JOB_GH_TOKEN', 'token'],
     ['SIBLING_REPOSITORIES_TOKEN', 'token'],
+    ['CI_MIRROR_TOKEN', 'token'],
   ] as const) {
     const refused = runCommit({ CI_EVENT: 'main', [name]: value });
     expect([name, refused.status]).toEqual([name, 2]);

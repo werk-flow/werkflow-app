@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { CI_EVENTS } from '../../lib/testing/ci/dag';
+import { MIRROR_JOB_CAP } from '../../lib/testing/ci/mirror';
 import { positiveIntegerSchema, readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
 import {
   acknowledgedStart,
@@ -30,6 +31,9 @@ import {
   type RunCommitInput,
   runVariables,
 } from '../../lib/testing/ci/run-commit';
+import { mirrorExecutors } from './mirror-executor';
+import { githubMirrorApi } from './mirror-api';
+import { mirrorIdentity, pushMirrorCommit } from './mirror-push';
 import { processExecutors } from './process-executor';
 import { repository as ownRepository } from './run';
 
@@ -37,13 +41,15 @@ import { repository as ownRepository } from './run';
 // then Check on this host (lib/testing/ci/run-commit.ts). Run it from a trusted clone of
 // werkflow-app that no job writes; the executor makes each job's checkout from that clone.
 //
-// The executor (Executors in lib/testing/ci/run-commit.ts) decides where jobs run. From the command
-// line it is the process executor (scripts/ci/process-executor.ts), which runs every job as this user
-// and isolates nothing, so it serves local and test runs only: run-commit refuses it whenever the run
-// has a ledger, comes from the merge queue (--runner, --main-runner), posts its Check or holds a
-// credential (isolationProblem). CI runs through an isolating executor, a container per job on the
-// Mac or a mirror job on GitHub, passed to runCommitCommand; until one exists, the Mac's runner keeps
-// calling scripts/ci/prepare.ts and scripts/ci/job.ts per job in its own container.
+// The executor (Executors in lib/testing/ci/run-commit.ts) decides where jobs run. With
+// CI_EXECUTOR=mirror it is the CI mirror (scripts/ci/mirror-executor.ts, which names its variables):
+// every job but Plan and Check runs on GitHub's machines in a repository of its own, so the run may
+// keep a ledger, come from the queue and post its Check. Otherwise it is the process executor
+// (scripts/ci/process-executor.ts), which runs every job as this user and isolates nothing, so it
+// serves local and test runs only: run-commit refuses it whenever the run has a ledger, comes from
+// the merge queue (--runner, --main-runner), posts its Check or holds a credential
+// (isolationProblem). The Mac's runner keeps calling scripts/ci/prepare.ts and scripts/ci/job.ts per
+// job in its own container.
 // Usage: bun scripts/ci/run-commit.ts   (executable: it takes no arguments)
 // It reads plain environment variables only. scripts/ci/job.ts names the run's variables it passes to
 // every job: CI_EVENT, CI_RESULTS_DIR, CI_RUN_URL, CI_BASE_SHA or CI_FULL_REASON, CI_PRODUCER, CI_PRS,
@@ -64,7 +70,9 @@ import { repository as ownRepository } from './run';
 //                   (main-runs/<commit>.started) durably once its Plan's body launched, or once Plan's
 //                   setup failed before it; a second main run of the commit and the queue's owed main
 //                   run read that one record. A run through the process executor writes neither.
-//   CI_PARALLEL     The most jobs at once, default 2.
+//   CI_PARALLEL     The most jobs at once, default 2. On the mirror, 16: its own cap holds every
+//                   run of the host together.
+//   CI_EXECUTOR     `mirror` for the CI mirror; unset for the process executor.
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.
 //   CI_PUBLISHER    An executable that runs `bun scripts/ci/publish-check.ts <start|finish>` from the
 //                   trusted copy as the CI App's user; an isolating executor only. It gets CI_RUN_URL,
@@ -355,11 +363,45 @@ async function run(
     },
     signal,
   );
-  release(outcome);
+  await release(outcome);
   log(
     `[run] ${event} run of ${commit}: ${outcome.exitCode === 2 ? 'not started' : `Check ${outcome.exitCode === 0 ? 'passed' : 'failed'}`}`,
   );
   return outcome.exitCode;
+}
+
+/** The CI mirror's executors from this process's environment (scripts/ci/mirror-executor.ts). */
+function onMirror(
+  setup: ExecutorSetup,
+  environment: Readonly<Record<string, string | undefined>>,
+): Executors {
+  const repository = environment.CI_MIRROR_REPO;
+  const token = environment.CI_MIRROR_TOKEN;
+  if (!repository || !token) throw new Error('CI_EXECUTOR=mirror needs CI_MIRROR_REPO and CI_MIRROR_TOKEN.');
+  return mirrorExecutors(setup, {
+    api: githubMirrorApi({ repository, token }),
+    push: (commit, branch) =>
+      pushMirrorCommit({
+        repository: setup.source,
+        remote: `https://github.com/${repository}.git`,
+        commit,
+        branch,
+        token,
+      }),
+    // The orchestrator's own copy: a tested tree never chooses the workflow its jobs run under.
+    workflow: readFileSync(join(setup.source, 'ci/mirror/workflow.yml'), 'utf8'),
+    identity: mirrorIdentity(environment.CI_MIRROR_IDENTITY),
+    now: () => Date.now(),
+    sleep: (ms, signal) =>
+      new Promise((resolveSleep) => {
+        const timer = setTimeout(resolveSleep, ms);
+        signal.addEventListener('abort', () => (clearTimeout(timer), resolveSleep(undefined)), {
+          once: true,
+        });
+      }),
+    pollMs: 20_000,
+    jobCap: MIRROR_JOB_CAP,
+  });
 }
 
 if (import.meta.main) {
@@ -369,11 +411,17 @@ if (import.meta.main) {
       console.info(`[run] ${name}: stopping every job, then Check`);
       controller.abort();
     });
+  const environment = process.env;
   process.exit(
     await runCommitCommand({
       repository: ownRepository,
-      environment: process.env,
-      executors: processExecutors,
+      environment,
+      executors: (setup) => {
+        if (environment.CI_EXECUTOR === 'mirror') return onMirror(setup, environment);
+        if (environment.CI_EXECUTOR)
+          throw new Error(`CI_EXECUTOR ${environment.CI_EXECUTOR} is no executor.`);
+        return processExecutors(setup);
+      },
       signal: controller.signal,
       log: (line) => console.info(line),
       error: (line) => console.error(line),

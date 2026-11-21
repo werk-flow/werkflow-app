@@ -13,6 +13,7 @@ import {
   typesOnBoat,
   typesUnavailableNotice,
 } from './types-on-boat';
+import { workflowsFolder } from '../ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const noDrift = { stackOnly: [], treeOnly: [], changed: [], unverified: [], unknownVersions: [] };
@@ -110,7 +111,7 @@ test('the machine and CI leave the generated file where the workstation reads it
   const remote = read('scripts/boat/remote-verify.sh');
   expect(remote).toContain('bun run types:generate -- --local && mkdir -p .agent-logs/types/generated');
   expect(remote).toContain('cp lib/supabase/database.types.ts .agent-logs/types/generated/');
-  const ci = read('.github/workflows/ci.yml');
+  const ci = read(`${workflowsFolder()}/ci.yml`);
   expect(ci).toContain('WERKFLOW_TYPES_ARTIFACT: ${{ runner.temp }}/database-types/database.types.ts');
   expect(ci).toContain('name: database-types');
 });

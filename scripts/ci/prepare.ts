@@ -12,7 +12,14 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { CI_DAG, CI_JOBS, CI_TOOLS, PREPARE_STEPS, type PrepareStep } from '../../lib/testing/ci/dag';
+import {
+  CI_JOBS,
+  CI_TOOLS,
+  PREPARE_STEPS,
+  partOf,
+  partSteps,
+  type PrepareStep,
+} from '../../lib/testing/ci/dag';
 
 // The environment a CI job takes before its body, the same on every runner (lib/testing/ci/dag.ts
 // names each job's steps). On GitHub Actions the composites of .github/actions call one step at a
@@ -40,6 +47,9 @@ import { CI_DAG, CI_JOBS, CI_TOOLS, PREPARE_STEPS, type PrepareStep } from '../.
 //                  fails the step, so a job never tests against another job's schema.
 //   MISSING, DEBS  playwright-packages on GitHub Actions: the packages `playwright` found missing,
 //                  and the folder of their cached .deb files.
+//   CI_PART        for: the part of the job on the CI mirror (lib/testing/ci/dag.ts, partSteps).
+//                  `tree` leaves out the steps that read outside the tree, `host` takes only those
+//                  and the install. Unset: every step of the job.
 
 const PROJECT_LABEL = 'com.supabase.cli.project=werkflow-app';
 const STACK_NETWORK = 'supabase_network_werkflow-app';
@@ -354,7 +364,13 @@ async function forJob(job: string | undefined): Promise<void> {
   const outputs = join(folder, 'output');
   writeFileSync(outputs, '');
   process.env.GITHUB_OUTPUT = outputs;
-  for (const step of CI_DAG[name].prepare) {
+  let part: ReturnType<typeof partOf>;
+  try {
+    part = partOf(process.env.CI_PART);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+  for (const step of partSteps(name, part)) {
     console.info(`[prepare] ${name}: ${step}`);
     if (step === 'playwright-packages')
       process.env.MISSING = /^missing=(.*)$/m.exec(readFileSync(outputs, 'utf8'))?.[1]?.trim() ?? '';

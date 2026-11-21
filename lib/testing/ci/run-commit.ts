@@ -173,13 +173,14 @@ export type ExecutorSetup = {
 /**
  * Where one run's jobs run: Plan and Check on the orchestrator's host (`host`), every other job and
  * shard through `jobs`. An isolating executor, a container per job on the Mac or a mirror job on
- * GitHub, plugs in here with `isolatesJobs` on both; scripts/ci/process-executor.ts is the local one.
+ * GitHub (scripts/ci/mirror-executor.ts), plugs in here with `isolatesJobs` on both;
+ * scripts/ci/process-executor.ts is the local one.
  */
 export type Executors = {
   host: Executor;
   jobs: Executor;
   /** Frees what the run left once it ended; a failed job's workspace may stay for a person. */
-  release(outcome: RunCommitOutcome): void;
+  release(outcome: RunCommitOutcome): void | Promise<void>;
 };
 
 /** What only a run through an isolating executor may hold, and why. */
@@ -192,6 +193,7 @@ const NEEDS_ISOLATION = {
   GITHUB_TOKEN: 'a GitHub token',
   CI_JOB_GH_TOKEN: "the jobs' GitHub token",
   SIBLING_REPOSITORIES_TOKEN: 'the sibling token',
+  CI_MIRROR_TOKEN: "the CI mirror's token",
 } as const;
 
 /**

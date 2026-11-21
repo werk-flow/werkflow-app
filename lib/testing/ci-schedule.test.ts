@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { FULL_RUN_SLOTS } from './ci/full-run';
 import { CLOCK_WORK } from './ci/schedule';
+import { workflowsFolder } from './ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const holdScript = join(repositoryRoot, '.github/scripts/hold-until.sh');
@@ -27,9 +28,12 @@ const SLOWEST_FULL_RUN_MINUTES = 62;
 // From a green full run to a promoted build: under 7 minutes in the releases so far.
 const SHIP_MINUTES = 10;
 
-const releaseWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/release.yml'), 'utf8');
-const nightlyWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/nightly.yml'), 'utf8');
-const mainFullRunWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/main-full-run.yml'), 'utf8');
+const releaseWorkflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'release.yml'), 'utf8');
+const nightlyWorkflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'nightly.yml'), 'utf8');
+const mainFullRunWorkflow = readFileSync(
+  join(repositoryRoot, workflowsFolder(), 'main-full-run.yml'),
+  'utf8',
+);
 const mainFullRunScript = readFileSync(join(repositoryRoot, '.github/scripts/main-full-run.sh'), 'utf8');
 
 let stub = '';

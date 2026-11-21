@@ -26,6 +26,7 @@ import { readGroupDurations } from '../lib/testing/selection/group-durations';
 import { renderedSurfaceFiles, surfaceRoots } from '../lib/testing/selection/surface-closure';
 import { getTestGroups } from '../lib/testing/selection/test-groups';
 import { z } from '../lib/zod';
+import { workflowsFolder } from '../lib/testing/ci-workflow';
 
 // The `Plan` job of .github/workflows/ci.yml: which browser groups this run
 // executes and how they split into shards (lib/testing/selection/ci-plan.ts).
@@ -115,7 +116,7 @@ const actions = Object.fromEntries(
   ]),
 );
 const ciScripts = scriptsCiRuns(
-  [read('.github/workflows/ci.yml'), ...Object.values(actions), ...CI_JOB_BODIES.map(read)],
+  [read(`${workflowsFolder()}/ci.yml`), ...Object.values(actions), ...CI_JOB_BODIES.map(read)],
   z.object({ scripts: z.record(z.string(), z.string()) }).parse(JSON.parse(read('package.json'))).scripts,
 );
 const plan = ciPlan({
@@ -131,7 +132,7 @@ const plan = ciPlan({
   changedFiles: flag === '--base' ? change?.files : [],
   rowChanges: change?.rowChanges ?? [],
   dependencies: change?.dependencies ?? {},
-  actionJobs: actionJobsOf(read('.github/workflows/ci.yml'), actions),
+  actionJobs: actionJobsOf(read(`${workflowsFolder()}/ci.yml`), actions),
   fullRun: flag === '--full' ? value : undefined,
   runnerModules: runnerModules(qualification.graph, ciScripts),
   durations,

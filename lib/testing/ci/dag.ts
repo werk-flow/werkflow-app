@@ -1,7 +1,8 @@
 // The CI pipeline as data: its jobs, what each needs, which events run it, the environment it takes
 // and how long it may run (docs/technical/testing.md, "CI"). scripts/ci/job.ts runs each job's body
 // and scripts/ci/prepare.ts its environment; .github/workflows/ci.yml and scripts/ci/run-commit.ts
-// schedule the jobs by this table, and dag.test.ts keeps ci.yml and its actions in step with it.
+// schedule the jobs by this table, and dag.test.ts keeps ci.yml and its actions in step with it
+// (mirror.test.ts the CI mirror's workflow, ci/mirror/workflow.yml).
 
 /**
  * - `pr`: a pull request's own run, draft or ready: the fast tier.
@@ -150,6 +151,53 @@ export const CI_DAG: Readonly<Record<CiJob, CiJobSpec>> = {
     githubToken: false,
   },
 };
+
+/**
+ * Where a part of a job runs on the CI mirror (scripts/ci/mirror-executor.ts), which holds only the
+ * tested tree, as one parentless commit, and no credential: `tree` there, `host` on the
+ * orchestrator's host. A runner that holds the whole job sets no part (CI_PART unset).
+ */
+const CI_PARTS = ['tree', 'host'] as const;
+type CiPart = (typeof CI_PARTS)[number];
+
+/**
+ * The environment steps that read outside the tested tree: the sibling clones (one private, read
+ * with a token) and the labels of the run's pull requests (read with the GitHub token).
+ */
+const HOST_STEPS: readonly PrepareStep[] = ['siblings', 'approval'];
+
+/**
+ * The Fast groups that read outside the tested tree: docs:check reads the sibling clones and the
+ * decision records' published history, migrations:order the base's migrations and the open pull
+ * requests'. Only Fast runs them.
+ */
+export const HOST_GROUPS: readonly string[] = ['static:docs', 'static:migration-order'];
+
+/** The part a runner gives (CI_PART), undefined for the whole job; anything else throws. */
+export function partOf(value: string | undefined): CiPart | undefined {
+  if (!value) return undefined;
+  const part = CI_PARTS.find((name) => name === value);
+  if (!part) throw new Error(`CI_PART ${value} is no part: ${CI_PARTS.join(' or ')}.`);
+  return part;
+}
+
+/**
+ * A job part's environment steps: the whole job's without the host steps on the mirror, and on the
+ * host the install and the host steps only.
+ */
+export function partSteps(job: CiJob, part: CiPart | undefined): PrepareStep[] {
+  const steps = CI_DAG[job].prepare;
+  if (part === 'tree') return steps.filter((step) => !HOST_STEPS.includes(step));
+  if (part === 'host') return steps.filter((step) => step === 'install' || HOST_STEPS.includes(step));
+  return [...steps];
+}
+
+/** A job part's groups of `planned`, in order: the whole list without a part. */
+export function partGroups(planned: readonly string[], part: CiPart | undefined): string[] {
+  if (part === 'tree') return planned.filter((group) => !HOST_GROUPS.includes(group));
+  if (part === 'host') return planned.filter((group) => HOST_GROUPS.includes(group));
+  return [...planned];
+}
 
 /**
  * The events whose results may stand for each other on an identical tree. A full run is the

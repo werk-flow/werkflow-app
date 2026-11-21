@@ -235,3 +235,20 @@ test('each sibling clone in place is kept and each missing one made; without the
   expect(read('env')).toBe('WERKFLOW_UNREADABLE_SIBLINGS=werkflow-business\n');
   expect(existsSync(join(stub, 'werkflow-business'))).toBe(false);
 });
+
+test('a job part the mirror does not know fails `for` before any step runs', () => {
+  const ran = spawnSync(process.execPath, [PREPARE, 'for', 'fast'], {
+    cwd: repository,
+    encoding: 'utf8',
+    env: {
+      NODE_ENV: 'test',
+      PATH: `${stub}:${process.env.PATH}`,
+      HOME: stub,
+      STUB: stub,
+      CI_PART: 'everything',
+    },
+  });
+  expect(ran.status).toBe(1);
+  expect(`${ran.stdout}${ran.stderr}`).toContain('CI_PART everything is no part');
+  expect(`${ran.stdout}${ran.stderr}`).not.toContain('[prepare] fast:');
+});

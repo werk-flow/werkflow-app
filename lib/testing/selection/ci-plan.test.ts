@@ -24,6 +24,7 @@ import { RUNNER_PILOTS } from './group-selection';
 import { readGroupDurations, type GroupDurations } from './group-durations';
 import { getTestGroups } from './test-groups';
 import { z } from '@/lib/zod';
+import { workflowsFolder } from '../ci-workflow';
 
 const group = (id: string, file: string, scopes: string[], trigger?: ChangeTrigger): CiGroup => ({
   id,
@@ -277,7 +278,7 @@ test('the CI jobs of ci.yml that use each action, directly or through another ac
       read(`.github/actions/${name}/action.yml`),
     ]),
   );
-  const users = actionJobsOf(read('.github/workflows/ci.yml'), actions);
+  const users = actionJobsOf(read(`${workflowsFolder()}/ci.yml`), actions);
   expect(users.playwright?.toSorted()).toEqual(['browser', 'components']);
   expect(users['supabase-cli']).toEqual(users['local-stack']);
   expect(users['local-stack']?.toSorted()).toEqual(['browser', 'fast', 'sql']);
@@ -287,7 +288,7 @@ test('the CI jobs of ci.yml that use each action, directly or through another ac
   // A workflow whose jobs were renamed is no evidence that an action is unused.
   expect(() => actionJobsOf('jobs:\n  build:\n    steps: []\n', actions)).toThrow('ci.yml has no job plan');
   expect(
-    actionJobsOf(read('.github/workflows/ci.yml'), { ...actions, unused: 'runs:\n  steps: []\n' }).unused,
+    actionJobsOf(read(`${workflowsFolder()}/ci.yml`), { ...actions, unused: 'runs:\n  steps: []\n' }).unused,
   ).toBeUndefined();
 });
 
@@ -383,7 +384,7 @@ test('the scripts CI runs are those its workflow and actions name, directly or t
     .parse(JSON.parse(read('package.json'))).scripts;
   const real = scriptsCiRuns(
     [
-      read('.github/workflows/ci.yml'),
+      read(`${workflowsFolder()}/ci.yml`),
       ...readdirSync(join(repositoryRoot, '.github/actions')).map((action) =>
         read(`.github/actions/${action}/action.yml`),
       ),
@@ -748,7 +749,7 @@ test('the critical journeys and both lab groups of a product change share one sh
 // A hosted runner has no reviewed wall-clock baseline, so a timed shard fails its wall-clock group on
 // "no reviewed baseline" whatever its steps do. Every job that runs the plan's shards runs them untimed.
 test("every workflow runs the plan's browser shards untimed", () => {
-  const workflows = resolve(import.meta.dir, '../../../.github/workflows');
+  const workflows = resolve(import.meta.dir, '../../..', workflowsFolder());
   const shardRuns = readdirSync(workflows).flatMap((file) => {
     const lines = readFileSync(join(workflows, file), 'utf8').split('\n');
     // A shard's groups reach its step as `matrix.groups`, directly or through an env variable.

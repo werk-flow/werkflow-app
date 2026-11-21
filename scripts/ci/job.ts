@@ -19,7 +19,7 @@ import {
   unselectedFailures,
 } from '../../lib/testing/ci/full-run';
 import { jobCost, measurementInputs } from '../../lib/testing/ci/measurement';
-import { CI_EVENTS, CI_JOBS, type CiJob } from '../../lib/testing/ci/dag';
+import { CI_EVENTS, CI_JOBS, type CiJob, partGroups, partOf } from '../../lib/testing/ci/dag';
 import {
   type CiResult,
   type Ledger,
@@ -92,6 +92,11 @@ import { repository, run, step, verify } from './run';
 //   CI_PR_HEAD_SHA  pr: the head commit this run tests, when the checkout is a merge commit on top
 //                   of it. Defaults to the checkout's commit.
 //   SHRINK_ONLY_GROWTH_APPROVED  `true` with the owner's `approved: list growth` label.
+//   CI_SOURCE_COMMIT, CI_SOURCE_TREE  The CI mirror only (scripts/ci/mirror-executor.ts): the
+//                   checkout is one parentless commit of this source commit's tree with its workflows
+//                   moved aside, and the result names the source commit and tree. Both or neither.
+//   CI_PART         fast on the CI mirror: `tree` runs every group but HOST_GROUPS and the build,
+//                   `host` only HOST_GROUPS (lib/testing/ci/dag.ts). Unset: the whole job.
 //   MIDNIGHT_PROOF_MINUTES       plan: passed on to scripts/ci-plan.ts; names the wait a proof run.
 // Measurement inputs (lib/testing/ci/measurement.ts). Optional; no gate reads them, and an unreadable one
 // warns and is recorded as unknown, never failing the job. Reuse reads the attempt: an unreadable one
@@ -122,12 +127,24 @@ if (!jobName || !eventName || !directory)
   throw new Error(
     `Usage: CI_EVENT=<${CI_EVENTS.join('|')}> CI_RESULTS_DIR=<directory> bun scripts/ci/job.ts <${CI_JOBS.join('|')}>`,
   );
-const ci = { job: jobName, event: eventName, directory };
+const ci = { job: jobName, event: eventName, directory, part: partOf(environment.CI_PART) };
 // Browser and component jobs run once per shard of the plan (jobShards in lib/testing/ci/run-plan.ts).
 const shard = ci.job === 'browser' || ci.job === 'components' ? Number(environment.CI_SHARD) : null;
 if (shard !== null && !(Number.isInteger(shard) && shard > 0))
   throw new Error(`A ${ci.job} job needs CI_SHARD, a shard number of the plan.`);
 mkdirSync(ci.directory, { recursive: true });
+
+/** The source commit and tree a mirror checkout stands for, or undefined off the mirror. */
+function sourceOf(
+  sourceCommit: string | undefined,
+  sourceTree: string | undefined,
+): { commit: string; tree: string } | undefined {
+  if (!sourceCommit && !sourceTree) return undefined;
+  const objectId = /^[0-9a-f]{40}$/;
+  if (sourceCommit && sourceTree && objectId.test(sourceCommit) && objectId.test(sourceTree))
+    return { commit: sourceCommit, tree: sourceTree };
+  throw new Error('CI_SOURCE_COMMIT and CI_SOURCE_TREE are both full object ids, or both unset.');
+}
 
 const git = (...args: string[]): string =>
   execFileSync('git', args, { cwd: repository, encoding: 'utf8' }).trim();
@@ -148,7 +165,11 @@ const machineStart = producer !== null && measured.machineStart;
 const otpSecret = environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex');
 // The commit is read once and the tree from it, so a moving HEAD cannot pair one commit's plan with
 // another's test; the final check compares HEAD with this commit.
-const commit = git('rev-parse', 'HEAD');
+const checkoutCommit = git('rev-parse', 'HEAD');
+// On the CI mirror the checkout is the source's tree transformed, which the orchestrator checked
+// after the push; the result names the source.
+const source = sourceOf(environment.CI_SOURCE_COMMIT, environment.CI_SOURCE_TREE);
+const commit = source?.commit ?? checkoutCommit;
 // A superseded pull request run proves nothing for its PR: it ends before it records anything, so
 // it neither costs a runner more time nor withdraws a pass from the ledger.
 const newerHead = supersedingHead({
@@ -182,7 +203,7 @@ const result: CiResult = {
   job: ci.job,
   shard,
   event: ci.event,
-  tree: git('rev-parse', `${commit}^{tree}`),
+  tree: source?.tree ?? git('rev-parse', `${checkoutCommit}^{tree}`),
   commit,
   base: environment.CI_BASE_SHA || null,
   status: 'running',
@@ -393,7 +414,9 @@ const buildCommands = [
 async function fast(): Promise<boolean> {
   // Lint, the static gates and Unit overlap (verify.ts --jobs). The build follows, so the type check
   // and the linter read the checkout without the build's generated types, as they always did.
-  recordVerify(await verify(verificationGroups(), ['--jobs', '4']));
+  if (verificationGroups().length) recordVerify(await verify(verificationGroups(), ['--jobs', '4']));
+  // The host part on the CI mirror runs only the groups that read outside the tree, without the build.
+  if (!result.groups.some((group) => group.id === 'step:build')) return everyGroupPassed();
   const tar = environment.CI_BUILD_TAR;
   record([
     await step('step:build', [
@@ -593,7 +616,7 @@ const bodies: Record<CiJob, () => Promise<boolean> | boolean> = {
  */
 function checkoutChange(): string | undefined {
   try {
-    if (git('rev-parse', 'HEAD') !== result.commit) return 'The checkout moved to another commit';
+    if (git('rev-parse', 'HEAD') !== checkoutCommit) return 'The checkout moved to another commit';
     if (clean && git('status', '--porcelain') !== '') return 'The checkout changed';
     return undefined;
   } catch (error) {
@@ -613,7 +636,7 @@ try {
     const shards = jobShards(ci.job, plan);
     const shardGroups = shards?.find((entry) => entry.shard === shard)?.groups;
     if (shards && shardGroups === undefined) throw new Error(`The plan holds no ${ci.job} shard ${shard}.`);
-    result.groups = plannedGroups(ci.job, plan.outputs, shardGroups).map((id) => ({
+    result.groups = partGroups(plannedGroups(ci.job, plan.outputs, shardGroups), ci.part).map((id) => ({
       id,
       outcome: 'not-run',
       durationMs: 0,

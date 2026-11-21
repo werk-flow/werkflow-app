@@ -13,6 +13,7 @@ import {
   scheduleStateSchema,
 } from '../../lib/testing/ci/schedule';
 import { lsRemoteCommit } from '../../lib/testing/ci/superseded';
+import { workflowsFolder } from '../../lib/testing/ci-workflow';
 
 // What a CI runner's orchestrator starts and stops now, so no runner waits for a clock
 // (lib/testing/ci/schedule.ts). Run it in a checkout of main's head, every few minutes and at the
@@ -156,7 +157,7 @@ const held = (values.run ?? []).map((run) => {
 function releaseOnCron(): boolean | { unreadable: string } {
   try {
     const workflow: unknown = Bun.YAML.parse(
-      readFileSync(join(repository, '.github/workflows/release.yml'), 'utf8'),
+      readFileSync(join(repository, workflowsFolder(), 'release.yml'), 'utf8'),
     );
     const triggers =
       typeof workflow === 'object' && workflow !== null && 'on' in workflow ? workflow.on : undefined;

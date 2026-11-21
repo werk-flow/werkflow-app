@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { workflowsFolder } from './ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const script = join(repositoryRoot, '.github/scripts/main-full-run.sh');
@@ -293,7 +294,7 @@ test('the alert detail says so when no green full run is in reach', () => {
 });
 
 test('the alert speaks for a full run or a failed decision, never for a skipped one', () => {
-  const workflow = readFileSync(join(repositoryRoot, '.github/workflows/main-full-run.yml'), 'utf8');
+  const workflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'main-full-run.yml'), 'utf8');
   const alert = workflow.slice(workflow.indexOf('\n  alert:'));
   expect(alert).toContain('needs: [decide, full]\n');
   const condition = /\n {4}if: >-\n((?: {6}.+\n)+)/.exec(alert)?.[1]?.replace(/\s+/g, ' ').trim();

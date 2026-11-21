@@ -51,6 +51,8 @@ const config: KnipConfig = {
     'scripts/ci/queue.ts!',
     // Run by a runner off GitHub Actions for each commit's run, and by the queue as its runner.
     'scripts/ci/run-commit.ts!',
+    // Run by the CI mirror's workflow (ci/mirror/workflow.yml), which knip does not read.
+    'scripts/ci/mirror-job.ts!',
     // Run on a Boat machine by scripts/boat/remote-verify.sh, or by package scripts.
     'scripts/boat/*.ts!',
     // Agent hooks run by path from the agent settings.

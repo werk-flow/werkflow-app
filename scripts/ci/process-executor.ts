@@ -4,8 +4,10 @@
 // ledger, comes from the merge queue, posts its Check or holds a credential
 // (isolationProblem in lib/testing/ci/run-commit.ts); CI runs through an executor that isolates each
 // job, a container per job or a machine of its own (Executors in lib/testing/ci/run-commit.ts).
-// Never run it on the CI host under the CI account: the refusal sees configured variables, not that
-// account's files (credentials, the ledger, the queue's state), which a local job could still read.
+// Never run a job through it on the CI host under the CI account: the refusal sees configured
+// variables, not that account's files (credentials, the ledger, the queue's state), which a local job
+// could still read. The CI mirror executor (scripts/ci/mirror-executor.ts) runs only Plan, Check and
+// Fast's host part through it there, the residual that executor's header names.
 // Each job gets a fresh workspace: its clone, the sibling clones beside it, its log and the variables
 // its environment steps pass on. Plan and Check share one workspace on the orchestrator's host. A
 // job's clone shares the source's objects read-only and has its own .git, so no job writes the
@@ -24,7 +26,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { CI_DAG } from '../../lib/testing/ci/dag';
+import { partOf, partSteps } from '../../lib/testing/ci/dag';
 import {
   type Executor,
   type Executors,
@@ -106,19 +108,14 @@ function create(path: string): boolean {
 }
 
 /**
- * Waits for the host's stack lock and resolves to its release. A lock whose process died is taken
- * over under a second lock, one taker at a time, and only while it still names that dead process:
- * two runners that both read the dead holder never both take it.
+ * Takes the lock at `path` for this process and returns its release, or the process that holds it.
+ * A lock whose process died is taken over under a second lock, one taker at a time, and only while
+ * it still names that dead process: two runners that both read the dead holder never both take it.
  */
-async function lockStack(
-  path: string,
-  signal: AbortSignal,
-  log: (line: string) => void,
-): Promise<() => void> {
+export function takeLock(path: string): { release: () => void } | { holder: number | undefined } {
   const takeover = `${path}.takeover`;
-  for (let announced = false; ; ) {
-    signal.throwIfAborted();
-    if (create(path)) return () => rmSync(path, { force: true });
+  for (;;) {
+    if (create(path)) return { release: () => rmSync(path, { force: true }) };
     const holder = holderOf(path);
     if (holder !== undefined && !alive(holder) && create(takeover)) {
       try {
@@ -133,6 +130,21 @@ async function lockStack(
     const taker = holderOf(takeover);
     if (taker !== undefined && !alive(taker))
       throw new Error(`${takeover} names process ${taker}, which died; remove it once no run-commit runs.`);
+    return { holder };
+  }
+}
+
+/** Waits for the host's stack lock and resolves to its release. */
+async function lockStack(
+  path: string,
+  signal: AbortSignal,
+  log: (line: string) => void,
+): Promise<() => void> {
+  for (let announced = false; ; ) {
+    signal.throwIfAborted();
+    const taken = takeLock(path);
+    if ('release' in taken) return taken.release;
+    const { holder } = taken;
     if (!announced) log(`[run] waiting for the host's stack, which process ${holder ?? 'unknown'} holds`);
     announced = true;
     await new Promise((resolve) => {
@@ -250,7 +262,8 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
       const passed = join(folder, `${name}.env`);
       mkdirSync(folder, { recursive: true });
       const host = hostEnvironment();
-      const steps = CI_DAG[task.unit.job].prepare;
+      // Fast's host part for the CI mirror takes only its host steps (lib/testing/ci/dag.ts).
+      const steps = partSteps(task.unit.job, partOf(task.env.CI_PART));
       let release: (() => void) | undefined;
       let began = Date.now();
       let ended = signal;
