@@ -25,7 +25,7 @@ import {
 } from './original';
 import { readIssuedInvoice } from './reads';
 
-// „Ausstellen“ (supabase/migrations/20261216100000_issue_invoices_with_gapless_numbers.sql).
+// „Ausstellen“ (supabase/migrations/20261219120000_issue_invoices_with_gapless_numbers.sql).
 // Order of work: the server builds the invoice from the draft and one
 // company-profile snapshot and runs the EN 16931 rules and the renderer under
 // the series' next number and today's date; a refusal answers the fields at

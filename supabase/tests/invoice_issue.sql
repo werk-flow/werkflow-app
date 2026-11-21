@@ -1,6 +1,6 @@
 -- „Ausstellen“ gives a checked draft the next gapless number, freezes it and
 -- registers its original once (migration
--- 20261216100000_issue_invoices_with_gapless_numbers.sql). Two concurrent
+-- 20261219120000_issue_invoices_with_gapless_numbers.sql). Two concurrent
 -- issues: invoice_issue_concurrency.sql.
 begin;
 
