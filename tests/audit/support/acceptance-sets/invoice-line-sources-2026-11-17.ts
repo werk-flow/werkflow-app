@@ -29,7 +29,8 @@ async function seedSourcedDraft(world: TestWorld): Promise<string> {
       .insert({
         id: leistungId,
         organization_id: orgId,
-        leistung_number: `L-${world.runId}`,
+        // Not `L-<runId>`: the Leistung price dialog's opener seeds that number in the same world.
+        leistung_number: `RE-${world.runId}`,
         name: 'Monteurstunde Geselle',
         description: 'Arbeitszeit vor Ort',
         kind: 'arbeit',
