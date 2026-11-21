@@ -3,7 +3,9 @@ import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
+import { CI_JOBS } from '../ci/dag';
 import {
+  actionJobsOf,
   CI_JOB_BODIES,
   changesOnlyRows,
   ciPlan,
@@ -17,6 +19,8 @@ import {
   type CiGroup,
 } from './ci-plan';
 import { CRITICAL_JOURNEYS, type ChangeTrigger } from './change-triggers';
+import type { DependencyChange } from './dependency-change';
+import { RUNNER_PILOTS } from './group-selection';
 import { readGroupDurations, type GroupDurations } from './group-durations';
 import { getTestGroups } from './test-groups';
 import { z } from '@/lib/zod';
@@ -60,6 +64,21 @@ const runnerModules = runnerModulesOf(graph, []);
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const durations: GroupDurations = { source: 'test', defaultSeconds: 60, groups: {} };
 const ids = (plan: ReturnType<typeof ciPlan>): string[] => plan.browser.map((entry) => entry.id);
+const planFor = (
+  changedFiles: readonly string[] | undefined,
+  options: Partial<Parameters<typeof ciPlan>[0]> = {},
+): ReturnType<typeof ciPlan> =>
+  ciPlan({
+    groups,
+    changedFiles,
+    fullRun: undefined,
+    runnerModules,
+    durations,
+    rowChanges: [],
+    dependencies: {},
+    actionJobs: {},
+    ...options,
+  });
 const EVERY_BROWSER_GROUP = [
   'golden:gg-00',
   'golden:p1-04',
@@ -68,50 +87,189 @@ const EVERY_BROWSER_GROUP = [
   'audit:visual:acceptance:sets',
 ];
 
-test('an unreadable diff and a tooling change run every browser group except the wall-clock ones', () => {
-  const unreadable = ciPlan({
-    groups,
-    changedFiles: undefined,
-    fullRun: undefined,
-    runnerModules,
-    durations,
-    rowChanges: [],
-  });
+test('an unreadable diff and an every-group input run every browser group except the wall-clock ones', () => {
+  const unreadable = planFor(undefined);
   expect(unreadable.fullReason).toBe('The diff against the base could not be read');
   expect(ids(unreadable)).toEqual(EVERY_BROWSER_GROUP);
-  for (const tooling of [
-    'bun.lock',
+  const runtime: DependencyChange = {
+    effect: 'every-group',
+    reason: 'package.json: runtime dependency next',
+  };
+  for (const [file, dependencies] of [
+    ['next.config.ts', {}],
+    ['postcss.config.mjs', {}],
+    ['tsconfig.json', {}],
+    ['playwright.config.ts', {}],
+    ['playwright.visual.config.ts', {}],
+    ['supabase/config.toml', {}],
+    ['patches/@supabase%2Fssr@0.7.0.patch', {}],
+    ['package.json', { 'package.json': runtime }],
+    // A dependency file the planner could not classify runs every group.
+    ['bun.lock', {}],
+  ] as const) {
+    const plan = planFor([file], { dependencies });
+    expect([file, plan.fullReason?.startsWith('Every group runs for'), ids(plan)]).toEqual([
+      file,
+      true,
+      EVERY_BROWSER_GROUP,
+    ]);
+  }
+});
+
+// The sampled kinds: each fixture kind holds a longer and a shorter group, and the runner pilots.
+const sampled: CiGroup[] = [
+  ...groups,
+  group('audit:layout:work', 'tests/audit/layout/surfaces-work.spec.ts', ['work'], 'release-only'),
+  group('audit:layout:time', 'tests/audit/layout/surfaces-time.spec.ts', ['time'], 'release-only'),
+  group('audit:lab:office', 'tests/audit/lab/office.spec.ts', ['work'], 'product'),
+  group('golden:p1-21', 'tests/golden/p1-21.spec.ts', ['time'], 'critical'),
+  group('golden:p1-24a', 'tests/golden/p1-24a.spec.ts', ['personnel'], 'own-test'),
+  group('audit:wave-3:p1-24a', 'tests/audit/wave-3/p1-24a.spec.ts', ['personnel'], 'own-test'),
+];
+const sampledDurations: GroupDurations = {
+  source: 'test',
+  defaultSeconds: 60,
+  groups: {
+    'audit:visual': 300,
+    'audit:visual:acceptance:sets': 30,
+    'audit:layout:time': 20,
+    'golden:p1-21': 10,
+  },
+};
+// In the fixture's order, as the plan lists its groups.
+const SAMPLE = [
+  'audit:visual:acceptance:sets',
+  'audit:layout:time',
+  'audit:lab:office',
+  'golden:p1-21',
+  'golden:p1-24a',
+  'audit:wave-3:p1-24a',
+];
+
+test('a tooling change runs its affected groups, the runner pilots and the shortest group of every shard kind', () => {
+  for (const file of [
+    'bunfig.toml',
     '.github/workflows/ci.yml',
-    '.github/actions/setup/action.yml',
     'scripts/ci/job.ts',
     'lib/testing/ci/run-plan.ts',
-    'postcss.config.mjs',
     'lib/testing/runner/app-port.ts',
     'lib/testing/selection/test-groups.ts',
-  ])
-    expect(
-      ids(
-        ciPlan({
-          groups,
-          changedFiles: [tooling],
-          fullRun: undefined,
-          runnerModules,
-          durations,
-          rowChanges: [],
-        }),
-      ),
-    ).toEqual(EVERY_BROWSER_GROUP);
-  // The CI logic's own unit tests are no tooling input.
-  const ciTest = ['lib/testing/ci/check.test.ts'];
+    // An action without a known user counts as used by every job.
+    '.github/actions/setup/action.yml',
+  ]) {
+    const plan = planFor([file], { groups: sampled, durations: sampledDurations });
+    expect([file, plan.fullReason, ids(plan)]).toEqual([file, undefined, SAMPLE]);
+    const reason = `Tooling input changed: ${file}${file.startsWith('.github/actions/') ? ', used by plan, fast, sql, components, midnight, browser, check' : ''}`;
+    expect(plan.tooling).toEqual({
+      everyGroup: undefined,
+      browser: reason,
+      fast: { ui: reason, sql: reason, static: reason },
+      lintOnly: [],
+    });
+  }
+  // A kind the change already selects adds no sample of it; the change's own groups stay.
+  const visual = planFor(['scripts/ci/job.ts', 'tests/audit/visual/references.spec.ts'], {
+    groups: sampled,
+    durations: sampledDurations,
+  });
+  expect(ids(visual)).toEqual(
+    [...SAMPLE.filter((id) => id !== 'audit:visual:acceptance:sets'), 'audit:visual'].sort(
+      byOrderIn(sampled),
+    ),
+  );
+  // A product change beside it keeps its whole selection.
   expect(
-    ciPlan({ groups, changedFiles: ciTest, fullRun: undefined, runnerModules, durations, rowChanges: [] })
-      .fullReason,
-  ).toBeUndefined();
+    ids(
+      planFor(['scripts/ci/job.ts', 'lib/inventory/stock.ts'], {
+        groups: sampled,
+        durations: sampledDurations,
+      }),
+    ),
+  ).toEqual([...SAMPLE, 'golden:gg-00', 'audit:wave-2:p1-13'].sort(byOrderIn(sampled)));
+});
+
+const byOrderIn =
+  (list: readonly CiGroup[]) =>
+  (left: string, right: string): number =>
+    list.findIndex((entry) => entry.id === left) - list.findIndex((entry) => entry.id === right);
+
+test('an action change runs what the CI jobs that use it run', () => {
+  const actionJobs = { playwright: ['components', 'browser'], 'supabase-cli': ['sql'] } as const;
+  const playwright = planFor(['.github/actions/playwright/action.yml'], {
+    groups: sampled,
+    durations: sampledDurations,
+    actionJobs,
+  });
+  expect(ids(playwright)).toEqual(SAMPLE);
+  expect(Object.keys(playwright.tooling.fast)).toEqual(['ui']);
+  const sql = planFor(['.github/actions/supabase-cli/action.yml'], { groups: sampled, actionJobs });
+  expect([ids(sql), sql.tooling.browser, Object.keys(sql.tooling.fast)]).toEqual([[], undefined, ['sql']]);
+});
+
+test("a dependency change that moves only lint and type packages selects no group, and a development tool's the dependency set", () => {
+  const lint: DependencyChange = { effect: 'lint-type', reason: 'package.json: lint or type package eslint' };
+  const lintOnly = planFor(['package.json'], { dependencies: { 'package.json': lint } });
+  expect([lintOnly.fullReason, lintOnly.tooling.browser, ids(lintOnly)]).toEqual([undefined, undefined, []]);
+  expect(lintOnly.tooling.lintOnly).toEqual(['package.json']);
+  // A development tool selects the dependency row's groups (the critical journeys) besides the sample.
+  const tool: DependencyChange = { effect: 'tooling', reason: 'package.json: development tool knip' };
+  expect(ids(planFor(['package.json'], { dependencies: { 'package.json': tool } }))).toContain(
+    'golden:gg-00',
+  );
+});
+
+test('the registered groups hold the runner pilots and a group of every sampled shard kind', () => {
+  const registered = getTestGroups(repositoryRoot).map((entry) => ({
+    ...entry,
+    executionInputs: entry.files,
+    trigger: entry.changeTrigger,
+  }));
+  const plan = planFor(['scripts/ci/job.ts'], {
+    groups: registered,
+    durations: readGroupDurations(repositoryRoot),
+  });
+  const reasons = plan.browser.map((entry) => entry.reason.split(' (')[0]);
+  expect(new Set(reasons)).toEqual(
+    new Set([
+      'Runner integration pilot',
+      'One visual group',
+      'One layout group',
+      'One lab group',
+      'One critical group',
+    ]),
+  );
+  expect(
+    ids(plan)
+      .filter((id) => RUNNER_PILOTS.has(id))
+      .sort(),
+  ).toEqual([...RUNNER_PILOTS].sort());
+});
+
+test('the CI jobs of ci.yml that use each action, directly or through another action', () => {
+  const read = (path: string): string => readFileSync(join(repositoryRoot, path), 'utf8');
+  const actions = Object.fromEntries(
+    readdirSync(join(repositoryRoot, '.github/actions')).map((name) => [
+      name,
+      read(`.github/actions/${name}/action.yml`),
+    ]),
+  );
+  const users = actionJobsOf(read('.github/workflows/ci.yml'), actions);
+  expect(users.playwright?.toSorted()).toEqual(['browser', 'components']);
+  expect(users['supabase-cli']).toEqual(users['local-stack']);
+  expect(users['local-stack']?.toSorted()).toEqual(['browser', 'fast', 'sql']);
+  expect(users['upload-evidence']).toEqual(users['ci-job']);
+  expect(users.setup?.toSorted()).toEqual([...CI_JOBS].sort());
+  expect(() => actionJobsOf('jobs: [', actions)).toThrow();
+});
+
+test("the CI logic's own unit tests are no tooling input", () => {
+  const plan = planFor(['lib/testing/ci/check.test.ts']);
+  expect([plan.fullReason, plan.tooling.browser]).toEqual([undefined, undefined]);
 });
 
 test("the nightly run and the release gate add each wall-clock group's steps, untimed", () => {
   for (const fullRun of ['Nightly run', 'Release 0123abc']) {
-    const plan = ciPlan({ groups, changedFiles: [], fullRun, runnerModules, durations, rowChanges: [] });
+    const plan = planFor([], { fullRun });
     expect(plan.fullReason).toBe(fullRun);
     expect(ids(plan)).toEqual([...EVERY_BROWSER_GROUP, 'audit:performance:calendar']);
     expect(plan.browser.at(-1)?.reason).toBe(`${fullRun}: its steps, untimed`);
@@ -120,50 +278,12 @@ test("the nightly run and the release gate add each wall-clock group's steps, un
 });
 
 test('a pull request or a push to main runs the critical journeys and the groups its changed files select', () => {
-  const plan = ciPlan({
-    groups,
-    changedFiles: ['lib/inventory/stock.ts'],
-    fullRun: undefined,
-    runnerModules,
-    durations,
-    rowChanges: [],
-  });
+  const plan = planFor(['lib/inventory/stock.ts']);
   expect(plan.fullReason).toBeUndefined();
   expect(ids(plan)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13']);
-  expect(
-    ids(
-      ciPlan({
-        groups,
-        changedFiles: ['tests/golden/p1-04.spec.ts'],
-        fullRun: undefined,
-        runnerModules,
-        durations,
-        rowChanges: [],
-      }),
-    ),
-  ).toEqual(['golden:p1-04']);
-  expect(
-    ids(
-      ciPlan({
-        groups,
-        changedFiles: ['docs/README.md'],
-        fullRun: undefined,
-        runnerModules,
-        durations,
-        rowChanges: [],
-      }),
-    ),
-  ).toEqual([]);
-  expect(
-    ciPlan({
-      groups,
-      changedFiles: ['docs/README.md'],
-      fullRun: undefined,
-      runnerModules,
-      durations,
-      rowChanges: [],
-    }).shards,
-  ).toEqual([]);
+  expect(ids(planFor(['tests/golden/p1-04.spec.ts']))).toEqual(['golden:p1-04']);
+  expect(ids(planFor(['docs/README.md']))).toEqual([]);
+  expect(planFor(['docs/README.md']).shards).toEqual([]);
 });
 
 test('the runner modules are what the runner entry points import, directly or through other modules', () => {
@@ -275,25 +395,14 @@ test("a registry change inside its rows plans by diff, and one in the runner's l
   );
 
   const changedFiles = [REGISTRY, 'lib/inventory/stock.ts'];
-  const rows = ciPlan({
-    groups,
-    changedFiles,
-    fullRun: undefined,
-    runnerModules,
-    durations,
-    rowChanges: [REGISTRY],
-  });
+  const rows = planFor(changedFiles, { rowChanges: [REGISTRY] });
   expect(rows.fullReason).toBeUndefined();
   expect(ids(rows)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13']);
-  const logic = ciPlan({
-    groups,
-    changedFiles,
-    fullRun: undefined,
-    runnerModules,
-    durations,
-    rowChanges: [],
-  });
-  expect(logic.fullReason).toBe(`Tooling input changed: ${REGISTRY}`);
+  const logic = planFor(changedFiles);
+  expect([logic.fullReason, logic.tooling.browser]).toEqual([
+    undefined,
+    `Tooling input changed: ${REGISTRY}`,
+  ]);
 });
 
 test('every registry row declaration names a top-level declaration of its module', () => {
@@ -316,14 +425,7 @@ test('files that cannot change how every group installs, builds or runs plan by 
     'lib/testing/runner/delete-after-cd.test.ts',
     'lib/testing/selection/coverage-map.json',
   ]) {
-    const plan = ciPlan({
-      groups,
-      changedFiles: [file],
-      fullRun: undefined,
-      runnerModules,
-      durations,
-      rowChanges: [],
-    });
+    const plan = planFor([file]);
     expect([file, plan.fullReason, ids(plan)]).toEqual([file, undefined, []]);
   }
 });
@@ -339,10 +441,7 @@ test('visual and layout groups run in a pull request only when their own test co
     ),
     group('audit:lab:office', 'tests/audit/lab/office.spec.ts', ['work', 'planning'], 'product'),
   ];
-  const plan = (changedFiles: string[]): string[] =>
-    ids(
-      ciPlan({ groups: sweeps, changedFiles, fullRun: undefined, runnerModules, durations, rowChanges: [] }),
-    );
+  const plan = (changedFiles: string[]): string[] => ids(planFor(changedFiles, { groups: sweeps }));
   // A work page selects the work journey and the lab group, never the work sweep that shares its scope.
   expect(plan(['app/(app)/auftraege/page.tsx', 'components/ui/button.tsx', 'app/globals.css'])).toEqual([
     'golden:gg-00',
@@ -360,29 +459,16 @@ test('visual and layout groups run in a pull request only when their own test co
       sweeps.filter((entry) => entry.files.includes(spec)).map((entry) => entry.id),
     );
   expect(plan(['tests/audit/performance/calendar.spec.ts'])).toEqual([]);
-  expect(
-    ids(
-      ciPlan({
-        groups: sweeps,
-        changedFiles: [],
-        fullRun: 'Nightly run',
-        runnerModules,
-        durations,
-        rowChanges: [],
-      }),
-    ),
-  ).toEqual([...EVERY_BROWSER_GROUP, 'audit:layout:work', 'audit:lab:office', 'audit:performance:calendar']);
+  expect(ids(planFor([], { groups: sweeps, fullRun: 'Nightly run' }))).toEqual([
+    ...EVERY_BROWSER_GROUP,
+    'audit:layout:work',
+    'audit:lab:office',
+    'audit:performance:calendar',
+  ]);
 });
 
 test('the visual groups share shards of their own, the other groups always keep one, and both stay within the budget', () => {
-  const plan = ciPlan({
-    groups,
-    changedFiles: undefined,
-    fullRun: undefined,
-    runnerModules,
-    durations,
-    rowChanges: [],
-  });
+  const plan = planFor(undefined);
   expect(plan.shards).toEqual([
     { shard: 1, groups: 'audit:visual,audit:visual:acceptance:sets' },
     { shard: 2, groups: 'golden:gg-00,golden:p1-04,audit:wave-2:p1-13' },
@@ -390,13 +476,9 @@ test('the visual groups share shards of their own, the other groups always keep 
   const crowded = Array.from({ length: 100 }, (_, index) =>
     group(`audit:visual:set-${index}`, `tests/audit/visual/set-${index}.spec.ts`, ['*']),
   );
-  const shards = ciPlan({
+  const shards = planFor(undefined, {
     groups: [...crowded, group('golden:gg-00', 'tests/golden/gg-00.spec.ts', ['*'])],
-    changedFiles: undefined,
-    fullRun: undefined,
-    runnerModules,
     durations: { ...durations, defaultSeconds: TARGET_SHARD_SECONDS / 10 },
-    rowChanges: [],
   }).shards;
   expect(shards).toHaveLength(MAX_SHARDS);
   expect(shards.at(-1)?.groups).toBe('golden:gg-00');
@@ -410,13 +492,10 @@ test('a full run of the registered groups fills the job budget by their recorded
     trigger: entry.changeTrigger,
   }));
   const recorded = readGroupDurations(repositoryRoot);
-  const { browser, shards } = ciPlan({
+  const { browser, shards } = planFor([], {
     groups: registered,
-    changedFiles: [],
     fullRun: 'Nightly run',
-    runnerModules,
     durations: recorded,
-    rowChanges: [],
   });
   expect(shards).toHaveLength(MAX_SHARDS);
   const packed = shards.map((shard) => shard.groups.split(','));
@@ -437,38 +516,20 @@ test('shards hold every selected group once and never exceed the job budget', ()
   const many = Array.from({ length: 100 }, (_, index) =>
     group(`audit:many:${index}`, `tests/audit/many/${index}.spec.ts`, ['*']),
   );
-  const plan = ciPlan({
+  const plan = planFor(undefined, {
     groups: many,
-    changedFiles: undefined,
-    fullRun: undefined,
-    runnerModules,
     durations: { ...durations, defaultSeconds: TARGET_SHARD_SECONDS / 10 },
-    rowChanges: [],
   });
   expect(plan.shards).toHaveLength(MAX_SHARDS);
   const dealt = plan.shards.flatMap((shard) => shard.groups.split(','));
   expect(dealt.sort()).toEqual(many.map((entry) => entry.id).sort());
-  const one = ciPlan({
-    groups,
-    changedFiles: ['lib/inventory/stock.ts'],
-    fullRun: undefined,
-    runnerModules,
-    durations,
-    rowChanges: [],
-  });
+  const one = planFor(['lib/inventory/stock.ts']);
   expect(one.shards).toEqual([{ shard: 1, groups: 'golden:gg-00,audit:wave-2:p1-13' }]);
 });
 
 test('a selection takes as few shards as hold its recorded seconds at the target, and an unknown group counts the default', () => {
   const planned = (seconds: Record<string, number>, defaultSeconds = 60): string[][] =>
-    ciPlan({
-      groups,
-      changedFiles: undefined,
-      fullRun: undefined,
-      runnerModules,
-      durations: { source: 'test', defaultSeconds, groups: seconds },
-      rowChanges: [],
-    })
+    planFor(undefined, { durations: { source: 'test', defaultSeconds, groups: seconds } })
       .shards.filter((shard) => !shard.groups.startsWith('audit:visual'))
       .map((shard) => shard.groups.split(','));
   const target = TARGET_SHARD_SECONDS;
@@ -481,14 +542,7 @@ test('a selection takes as few shards as hold its recorded seconds at the target
 });
 
 test('a pool never takes more shards than it has groups, so no shard is empty', () => {
-  const plan = ciPlan({
-    groups,
-    changedFiles: undefined,
-    fullRun: undefined,
-    runnerModules,
-    durations: { ...durations, defaultSeconds: TARGET_SHARD_SECONDS * 3 },
-    rowChanges: [],
-  });
+  const plan = planFor(undefined, { durations: { ...durations, defaultSeconds: TARGET_SHARD_SECONDS * 3 } });
   expect(plan.shards).toHaveLength(EVERY_BROWSER_GROUP.length);
   expect(plan.shards.every((shard) => shard.groups.length > 0)).toBe(true);
   // Zero-second groups go to the shard with fewer groups, never all into one.
@@ -503,6 +557,8 @@ test('a pool never takes more shards than it has groups, so no shard is empty', 
       groups: { 'golden:gg-00': 1900, 'golden:p1-04': 0, 'audit:wave-2:p1-13': 0 },
     },
     rowChanges: [],
+    dependencies: {},
+    actionJobs: {},
   });
   expect(zero.shards.filter((shard) => !shard.groups.startsWith('audit:visual'))).toEqual([
     { shard: 2, groups: 'golden:gg-00' },
@@ -569,13 +625,9 @@ test('when the shard budget binds, the visual and other shards split it by the s
     ...visual.map((entry) => [entry.id, 900] as const),
     ...others.map((entry) => [entry.id, 700] as const),
   ]);
-  const { shards } = ciPlan({
+  const { shards } = planFor(undefined, {
     groups: [...visual, ...others],
-    changedFiles: undefined,
-    fullRun: undefined,
-    runnerModules,
     durations: { source: 'test', defaultSeconds: 60, groups: seconds },
-    rowChanges: [],
   });
   const packed = shards.map((shard) => shard.groups.split(','));
   // The targets want 3 visual and 14 other shards. 3 + 5 would load an other shard with 2,800 s.
@@ -593,6 +645,7 @@ test('the planner log prints every reason and file name as one JSON string, so a
       fullReason: `Tooling input changed: ${forged}`,
       browser: [{ id: 'golden:gg-00', reason: `own test (${forged})` }],
       shards: [{ shard: 1, groups: 'golden:gg-00' }],
+      tooling: { everyGroup: undefined, browser: undefined, fast: {}, lintOnly: [] },
     },
     { 'ui:contracts:work': `Tailwind scans ${forged}\r::warning::also` },
   );
@@ -614,13 +667,8 @@ test('support only a wall-clock group imports still runs the critical journeys, 
     ),
     executionInputs: ['tests/audit/performance/calendar.spec.ts', 'tests/audit/support/calendar-live.ts'],
   };
-  const plan = ciPlan({
+  const plan = planFor(['tests/audit/support/calendar-live.ts'], {
     groups: [...groups.filter((entry) => entry.id !== measured.id), measured],
-    changedFiles: ['tests/audit/support/calendar-live.ts'],
-    fullRun: undefined,
-    runnerModules,
-    durations,
-    rowChanges: [],
   });
   expect(ids(plan)).toEqual(['golden:gg-00']);
 });
@@ -632,13 +680,9 @@ test('the critical journeys and both lab groups of a product change share one sh
   const labs = ['field', 'office'].map((name) =>
     group(`audit:lab:${name}`, `tests/audit/lab/${name}.spec.ts`, ['*'], 'product'),
   );
-  const plan = ciPlan({
+  const plan = planFor(['lib/jobs/actions.ts'], {
     groups: [...critical, ...labs],
-    changedFiles: ['lib/jobs/actions.ts'],
-    fullRun: undefined,
-    runnerModules,
     durations: readGroupDurations(repositoryRoot),
-    rowChanges: [],
   });
   expect(plan.browser.map((entry) => entry.id)).toEqual([
     ...Object.keys(CRITICAL_JOURNEYS),

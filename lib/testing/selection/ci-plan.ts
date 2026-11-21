@@ -1,9 +1,12 @@
 import ts from 'typescript';
+import { CI_JOBS, type CiJob } from '../ci/dag';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
-import { groupSelections } from './group-selection';
+import type { DependencyChange } from './dependency-change';
+import { groupSelections, RUNNER_PILOTS } from './group-selection';
 import type { ChangeTrigger } from './change-triggers';
 import type { GroupDurations } from './group-durations';
 import { isPerformanceSpec } from './test-groups';
+import { z } from 'zod';
 
 /** A group as the CI plan sees it: its id, kind, spec files and what its execution imports. */
 export type CiGroup = {
@@ -20,24 +23,49 @@ export type CiGroup = {
 
 type CiShard = { shard: number; groups: string };
 
+/** The fast tier's kinds a tooling input can take whole: component areas, SQL groups, static gates. */
+type FastKind = 'ui' | 'sql' | 'static';
+
+/** What the change's tooling inputs run (owner decision D3, werk-flow/werkflow-planning#503). */
+type ToolingClass = {
+  /** Why every group of every kind runs, or undefined. */
+  everyGroup: string | undefined;
+  /** Why the browser plan adds the runner pilots and one group of every shard kind, or undefined. */
+  browser: string | undefined;
+  /** The fast-tier kinds a tooling input takes whole, with the reason. */
+  fast: Partial<Record<FastKind, string>>;
+  /** Dependency files whose change moves only lint and type packages: they select no group. */
+  lintOnly: string[];
+};
+
 export type CiPlan = {
   /** Why the plan selects every browser group, or undefined for a selection by diff. */
   fullReason: string | undefined;
   /** Every selected browser group with the reason for it. */
   browser: { id: string; reason: string }[];
   shards: CiShard[];
+  tooling: ToolingClass;
 };
 
 /**
- * Changes that can alter how every group installs, builds or runs: the
- * dependencies, the build (Next.js, PostCSS) and Playwright configuration, the local stack's
- * configuration, and the CI workflow, its actions and its job bodies and logic
- * (scripts/ci/, lib/testing/ci/, without their tests). With `runnerModules`
- * they are the tooling inputs. CI cannot map them to a scope, so a change to
- * one runs everything (fail open).
+ * Inputs that change how every group builds, serves or runs: the Next.js, PostCSS, TypeScript and
+ * Playwright configuration, the local stack's configuration, and the patches of installed packages.
+ * A change to one runs every group (D3). So does a runtime or Playwright dependency
+ * (dependency-change.ts).
+ */
+const EVERY_GROUP_INPUTS =
+  /^(next\.config\.ts|postcss\.config\.mjs|tsconfig\.json|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|patches\/.+)$/;
+/**
+ * The CI workflow, its job bodies and logic (scripts/ci/, lib/testing/ci/, without their tests) and
+ * Bun's test configuration. With `runnerModules` they are the tooling inputs: a change to one runs
+ * its affected groups, the runner pilots, one browser group of every shard kind and every fast-tier
+ * group, and main's full run starts right after its merge (lib/testing/ci/full-run.ts).
  */
 const TOOLING_INPUTS =
-  /^(package\.json|bun\.lock|bunfig\.toml|tsconfig\.json|next\.config\.ts|postcss\.config\.mjs|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|\.github\/(workflows\/ci\.yml|actions\/.+)|(scripts|lib\/testing)\/ci\/[a-z-]+\.ts)$/;
+  /^(bunfig\.toml|\.github\/workflows\/ci\.yml|(scripts|lib\/testing)\/ci\/[a-z-]+\.ts)$/;
+const DEPENDENCY_FILES = ['package.json', 'bun.lock'];
+/** A file of a composite action: `.github/actions/<name>/…`. */
+const ACTION_FILE = /^\.github\/actions\/([^/]+)\//;
 
 /** The scripts that plan, build, serve and run every group. */
 const RUNNER_ENTRY_POINTS = [
@@ -182,17 +210,109 @@ const COMPONENT_SHARD_SECONDS = 8 * 60;
 const isBrowser = (group: CiGroup): boolean => group.kind === 'golden' || group.kind === 'audit';
 
 /**
- * The browser groups a CI run executes, split into shards. A full run (the
- * nightly run, the release gate, an unreadable diff or a tooling change)
- * takes every browser group except the wall-clock `audit:performance:*`
- * groups, whose medians follow a shared runner's load
- * (docs/technical/performance.md). Only the nightly run and the release gate
- * add them, and every shard runs `--untimed`, so they prove their steps and
- * judge no timing. A pull request and a push to `main` take
- * the change-mode selection of `groupSelections` for their diff against the
- * base (a push's previous `main` commit): the critical journeys, the lab
- * groups, the permission groups by scope, and the other groups only when their
- * own test code changed.
+ * The browser shard kinds a tooling change samples, one group each: each kind runs in its own way
+ * (the pinned image, the sweeps, the measured counts, the journeys every product change runs).
+ */
+const SHARD_KINDS: readonly { kind: string; holds: (group: CiGroup) => boolean }[] = [
+  { kind: 'visual', holds: (group) => VISUAL_GROUP.test(group.id) },
+  { kind: 'layout', holds: (group) => /^audit:layout(:|$)/.test(group.id) },
+  { kind: 'lab', holds: (group) => group.trigger === 'product' },
+  { kind: 'critical', holds: (group) => group.trigger === 'critical' },
+];
+
+/** The fast-tier kinds each CI job runs whole for a tooling input; Plan, Check and the midnight wait run in every run. */
+const FAST_KINDS_OF_JOB: Readonly<Partial<Record<CiJob, readonly FastKind[]>>> = {
+  fast: ['static'],
+  sql: ['sql'],
+  components: ['ui'],
+};
+
+/**
+ * What the changed tooling inputs run. A row-only registry change is none. A dependency file counts
+ * by `dependencies` (dependency-change.ts), and as every group without an entry there. An action
+ * counts by the CI jobs that use it (`actionJobs`), and as used by every job without an entry.
+ */
+function toolingClass(input: {
+  changedFiles: readonly string[];
+  runnerModules: readonly string[];
+  rowChanges: readonly string[];
+  dependencies: Readonly<Record<string, DependencyChange>>;
+  actionJobs: Readonly<Record<string, readonly CiJob[]>>;
+}): ToolingClass {
+  const tooling: ToolingClass = { everyGroup: undefined, browser: undefined, fast: {}, lintOnly: [] };
+  const runner = new Set(input.runnerModules);
+  const runs = (reason: string, jobs: readonly CiJob[]): void => {
+    if (jobs.includes('browser')) tooling.browser ??= reason;
+    for (const kind of jobs.flatMap((job) => FAST_KINDS_OF_JOB[job] ?? [])) tooling.fast[kind] ??= reason;
+  };
+  for (const file of input.changedFiles) {
+    if (input.rowChanges.includes(file)) continue;
+    const action = ACTION_FILE.exec(file)?.[1];
+    const dependency = DEPENDENCY_FILES.includes(file)
+      ? (input.dependencies[file] ?? { effect: 'every-group', reason: `${file}: not classified` })
+      : undefined;
+    if (EVERY_GROUP_INPUTS.test(file)) tooling.everyGroup ??= `Every group runs for ${file}`;
+    else if (dependency?.effect === 'every-group')
+      tooling.everyGroup ??= `Every group runs for ${dependency.reason}`;
+    else if (dependency?.effect === 'lint-type') tooling.lintOnly.push(file);
+    else if (dependency) runs(`Tooling input changed: ${dependency.reason}`, CI_JOBS);
+    else if (action !== undefined) {
+      const jobs = input.actionJobs[action] ?? CI_JOBS;
+      runs(`Tooling input changed: ${file}, used by ${jobs.join(', ') || 'no CI job'}`, jobs);
+    } else if (TOOLING_INPUTS.test(file) || runner.has(file)) runs(`Tooling input changed: ${file}`, CI_JOBS);
+  }
+  return tooling;
+}
+
+/**
+ * The CI jobs of `ci.yml` that use each composite action under `.github/actions/`, directly or
+ * through another action. `workflow` is ci.yml's text and `actions` each `action.yml` text by its
+ * directory name; a text that is no workflow or action throws, so the plan stops.
+ */
+export function actionJobsOf(
+  workflow: string,
+  actions: Readonly<Record<string, string>>,
+): Record<string, CiJob[]> {
+  const stepsSchema = z.array(z.object({ uses: z.string().optional() })).optional();
+  const uses = (steps: z.infer<typeof stepsSchema>): string[] =>
+    (steps ?? []).flatMap((step) => {
+      const name = /^\.\/\.github\/actions\/([^/]+)$/.exec(step.uses ?? '')?.[1];
+      return name === undefined ? [] : [name];
+    });
+  const jobs = z
+    .object({ jobs: z.record(z.string(), z.object({ steps: stepsSchema })) })
+    .parse(Bun.YAML.parse(workflow)).jobs;
+  const nested = Object.fromEntries(
+    Object.entries(actions).map(([name, text]) => [
+      name,
+      uses(z.object({ runs: z.object({ steps: stepsSchema }) }).parse(Bun.YAML.parse(text)).runs.steps),
+    ]),
+  );
+  const users: Record<string, CiJob[]> = Object.fromEntries(Object.keys(actions).map((name) => [name, []]));
+  for (const job of CI_JOBS) {
+    const pending = uses(jobs[job]?.steps);
+    const seen = new Set<string>();
+    for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      (users[name] ??= []).push(job);
+      pending.push(...(nested[name] ?? []));
+    }
+  }
+  return users;
+}
+
+/**
+ * The browser groups a CI run executes, split into shards. A full run (the nightly run, the release
+ * gate, an unreadable diff or an every-group input of `toolingClass`) takes every browser group
+ * except the wall-clock `audit:performance:*` groups, whose medians follow a shared runner's load
+ * (docs/technical/performance.md). Only a full run by name adds them, and every shard runs
+ * `--untimed`, so they prove their steps and judge no timing. A pull request and a push to `main`
+ * take the change-mode selection of `groupSelections` for their diff against the base (a push's
+ * previous `main` commit): the critical journeys, the lab groups, the permission groups by scope,
+ * and the other groups only when their own test code changed. A tooling change adds the runner
+ * pilots and the shortest recorded group of each shard kind the selection lacks (owner decision
+ * D3); main's full run right after the merge takes the rest.
  */
 export function ciPlan(input: {
   groups: readonly CiGroup[];
@@ -204,6 +324,10 @@ export function ciPlan(input: {
   runnerModules: readonly string[];
   /** The changed registries whose change `changesOnlyRows` holds to their rows. */
   rowChanges: readonly string[];
+  /** The effect of each changed dependency file (dependency-change.ts). */
+  dependencies: Readonly<Record<string, DependencyChange>>;
+  /** The output of `actionJobsOf`. */
+  actionJobs: Readonly<Record<string, readonly CiJob[]>>;
   /** The recorded group durations the shards are packed by. */
   durations: GroupDurations;
 }): CiPlan {
@@ -216,35 +340,48 @@ export function ciPlan(input: {
       : input.groups
           .filter((group) => isBrowser(group) && group.files.some(isPerformanceSpec))
           .map((group) => ({ id: group.id, reason: `${input.fullRun}: its steps, untimed` }));
-  const runner = new Set(input.runnerModules);
-  const tooling = input.changedFiles?.find(
-    (file) => (TOOLING_INPUTS.test(file) || runner.has(file)) && !input.rowChanges.includes(file),
-  );
+  const tooling = toolingClass({ ...input, changedFiles: input.changedFiles ?? [] });
   const fullReason =
     input.fullRun ??
-    (input.changedFiles === undefined
-      ? 'The diff against the base could not be read'
-      : tooling
-        ? `Tooling input changed: ${tooling}`
-        : undefined);
-  const browser =
-    fullReason !== undefined || input.changedFiles === undefined
-      ? [
-          ...browserGroups.map((group) => ({ id: group.id, reason: fullReason ?? 'Full run' })),
-          ...wallClockSteps,
-        ]
-      : // Every browser group's support counts as shared; the plan then never runs a wall-clock group.
-        changeSelection(input.groups.filter(isBrowser), input.changedFiles).filter((entry) =>
-          browserGroups.some((group) => group.id === entry.id),
-        );
-  return {
+    (input.changedFiles === undefined ? 'The diff against the base could not be read' : tooling.everyGroup);
+  const plan = (browser: { id: string; reason: string }[]): CiPlan => ({
     fullReason,
     browser,
     shards: shardsOf(
       browser.map((entry) => entry.id),
       input.durations,
     ),
-  };
+    tooling,
+  });
+  if (fullReason !== undefined || input.changedFiles === undefined)
+    return plan([
+      ...browserGroups.map((group) => ({ id: group.id, reason: fullReason ?? 'Full run' })),
+      ...wallClockSteps,
+    ]);
+  const changed = input.changedFiles.filter((file) => !tooling.lintOnly.includes(file));
+  // Every browser group's support counts as shared; the plan then never runs a wall-clock group.
+  const reasons = new Map(
+    changeSelection(input.groups.filter(isBrowser), changed).map((entry) => [entry.id, entry.reason]),
+  );
+  if (tooling.browser) {
+    const seconds = secondsOf(input.durations);
+    for (const id of RUNNER_PILOTS)
+      if (!reasons.has(id)) reasons.set(id, `Runner integration pilot (${tooling.browser})`);
+    for (const { kind, holds } of SHARD_KINDS) {
+      const ofKind = browserGroups.filter(holds);
+      const [shortest] = ofKind.toSorted(
+        (left, right) => seconds(left.id) - seconds(right.id) || left.id.localeCompare(right.id),
+      );
+      if (shortest && !ofKind.some((group) => reasons.has(group.id)))
+        reasons.set(shortest.id, `One ${kind} group (${tooling.browser})`);
+    }
+  }
+  return plan(
+    browserGroups.flatMap((group) => {
+      const reason = reasons.get(group.id);
+      return reason === undefined ? [] : [{ id: group.id, reason }];
+    }),
+  );
 }
 
 function changeSelection(
@@ -359,7 +496,7 @@ const numbered = (shards: readonly string[][]): CiShard[] =>
  */
 export function planLog(plan: CiPlan, fastReasons: Readonly<Record<string, string>>): string[] {
   return [
-    `[ci-plan] ${plan.fullReason ? `Full run: ${JSON.stringify(plan.fullReason)}` : 'Selection by diff'}; ${plan.browser.length} browser groups in ${plan.shards.length} shards.`,
+    `[ci-plan] ${plan.fullReason ? `Full run: ${JSON.stringify(plan.fullReason)}` : plan.tooling.browser ? `Tooling sample: ${JSON.stringify(plan.tooling.browser)}` : 'Selection by diff'}; ${plan.browser.length} browser groups in ${plan.shards.length} shards.`,
     ...plan.browser.map((entry) => `  ${entry.id} | ${JSON.stringify(entry.reason)}`),
     ...plan.shards.map((shard) => `  shard ${shard.shard}: ${shard.groups}`),
     `[ci-plan] Fast tier: ${Object.keys(fastReasons).length} groups.`,
