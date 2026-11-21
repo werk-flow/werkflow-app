@@ -28,11 +28,19 @@ export const CLOCK_WORK = {
   /**
    * Every browser group once a day, just after the midnight start window, so it plans no hold
    * (`ciBrowserHoldUntil`), tests the new business date, and ends before the release decides on its
-   * commit. A missed night still runs until the next one is due.
+   * commit. A missed night stays due until the next slot, 23 to 25 hours later (`scheduleDue`
+   * defers it where it would plan a hold or meet a running full run).
    */
-  nightly: { time: '00:15', weekdays: EVERY_DAY, lateMs: 24 * HOUR_MS },
+  nightly: { time: '00:15', weekdays: EVERY_DAY, lateMs: Number.POSITIVE_INFINITY },
 } as const satisfies Record<string, ClockWork>;
 export type ClockWorkName = keyof typeof CLOCK_WORK;
+
+/**
+ * A missed nightly this close to its next slot waits for that slot: started now, it would plan a
+ * midnight hold (`ciBrowserHoldUntil` holds from 22:25 Berlin), and the next slot runs the same
+ * full run a few minutes later.
+ */
+const NIGHTLY_CATCH_UP_CUTOFF_MS = 2 * HOUR_MS;
 export const CLOCK_WORK_NAMES = ['release', 'nightly'] as const satisfies readonly ClockWorkName[];
 
 /** The newest slot of each clock work the runner started, as `scripts/ci/schedule.ts started` records it. */
@@ -110,15 +118,18 @@ export type ScheduleAnswer = {
 };
 
 /**
- * Everything due at `now`. A nightly that starts now is main's full run too, so the full-run rule is
- * asked only without one. A pull request run stops only when its PR's head moved past the commit it
- * tests; an unanswered question keeps it running.
+ * Everything due at `now`. A due nightly waits while a full run runs, and a missed one waits for
+ * the next slot when that is near (`NIGHTLY_CATCH_UP_CUTOFF_MS`). A nightly that starts now is
+ * main's full run too, so the full-run rule is asked only without one. A pull request run stops
+ * only when its PR's head moved past the commit it tests; an unanswered question keeps it running.
  */
 export function scheduleDue(input: {
   now: Date;
   state: ScheduleState;
   /** `bun scripts/ci/full-run.ts due` on main's head, or why it gave no answer. */
   fullRun: () => FullRunDecision | { unreadable: string };
+  /** Whether a full run runs now (`fullRunsInLedger`), or why the ledger cannot say; then the nightly starts. */
+  fullRunning: boolean | { unreadable: string };
   /** The runs that wait for their browser shards, with `heldUntil` of each one's plan. */
   held: readonly { run: string; until: ReturnType<typeof heldUntil> }[];
   /** The pull request runs in progress: the ref that holds the PR's head, and the commit the run tests. */
@@ -131,6 +142,14 @@ export function scheduleDue(input: {
     const recorded = input.state[work];
     const { due, next } = clockSlot(work, input.now, recorded ? new Date(recorded) : undefined);
     wakes.push(next.getTime());
+    const nightlyWaits =
+      next.getTime() - input.now.getTime() < NIGHTLY_CATCH_UP_CUTOFF_MS || input.fullRunning === true;
+    if (due && work === 'nightly' && nightlyWaits) continue;
+    if (due && work === 'nightly' && typeof input.fullRunning === 'object')
+      answer.unanswered.push({
+        work,
+        reason: `Whether a full run runs is unknown: ${input.fullRunning.unreadable}`,
+      });
     if (due)
       answer.start.push({
         work,

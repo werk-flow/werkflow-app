@@ -2,7 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { readResult, resultFileName } from '../../lib/testing/ci/results';
+import { fullRunsInLedger } from '../../lib/testing/ci/full-run';
+import { readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
 import {
   CLOCK_WORK_NAMES,
   heldUntil,
@@ -20,7 +21,8 @@ import { lsRemoteCommit } from '../../lib/testing/ci/superseded';
 //                                  [--pr-run <id>,<head ref>,<tested commit>]...
 //     --state   The runner's schedule state, which `started` writes. A missing file has started
 //               nothing, so today's missed slots are due.
-//     --ledger  The runner's ledger (CI_LEDGER), passed on to scripts/ci/full-run.ts due.
+//     --ledger  The runner's ledger (CI_LEDGER): a nightly waits while a full run in it runs, and
+//               scripts/ci/full-run.ts due reads it.
 //     --run     A run's results directory (CI_RESULTS_DIR) whose browser shards wait: due once its
 //               plan's midnight hold ended and the run has no midnight.json yet.
 //     --pr-run  A pull request run in progress: the runner's id for it, the ref on origin that holds
@@ -131,10 +133,13 @@ const held = (values.run ?? []).map((run) => {
   return { run, until: heldUntil(plan.plan) };
 });
 
+const now = new Date();
+const ledger = values.ledger === undefined ? [] : readLedger(values.ledger);
 const answer = scheduleDue({
-  now: new Date(),
+  now,
   state: readState(statePath),
   fullRun,
+  fullRunning: 'unreadable' in ledger ? ledger : fullRunsInLedger(ledger, now).some((run) => !run.ended),
   held,
   prRuns,
   remoteHead,

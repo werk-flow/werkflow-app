@@ -547,7 +547,7 @@ test('off GitHub Actions the midnight job never sleeps: started before its hold 
     const root = fixture(folder);
     for (const [name, until, passes] of [
       ['early', '2100-01-01T00:10:00.000Z', false],
-      ['due', '2026-11-01T23:10:00.000Z', true],
+      ['due', '2000-01-01T23:10:00.000Z', true],
     ] as const) {
       const run = join(folder, name);
       writePlan(root, run, {

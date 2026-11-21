@@ -93,8 +93,10 @@ jobs:
         with:
           name: build
           path: ${{ runner.temp }}/build.tar
-          retention-days: 1
+          # A rerun of failed legs, possible for 30 days, reuses this artifact; a full rerun replaces it.
+          retention-days: 30
           if-no-files-found: error
+          overwrite: true
 
   leg:
     name: ${{ matrix.name }}

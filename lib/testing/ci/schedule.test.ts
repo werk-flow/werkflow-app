@@ -25,6 +25,7 @@ function due(now: string, state: ScheduleState = {}, extra: Partial<Parameters<t
     now: at(now),
     state,
     fullRun: () => ({ run: false, reason: 'main has its full run.' }),
+    fullRunning: false,
     held: [],
     prRuns: [],
     remoteHead: () => undefined,
@@ -294,7 +295,7 @@ test('the CLI answers from its state, the full-run rule, held runs and moved pul
           jobs: ['plan', 'fast', 'midnight', 'browser', 'check'],
           skips: {},
           shards: [{ shard: 1, groups: 'golden:p1-24a' }],
-          outputs: { midnight_until: '2026-11-20T23:10:00.000Z' },
+          outputs: { midnight_until: '2000-01-01T23:10:00.000Z' },
         },
       }),
     );
@@ -344,4 +345,44 @@ test('the CLI exits 1 on an unreadable state, and after its answer when the full
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
+});
+
+test('a missed nightly stays due until the next slot, through the 25-hour day of the autumn clock change', () => {
+  // 00:15 on 2026-10-25 (UTC+2); 22:00 that day (UTC+1) is 24 h 45 min later.
+  expect(clockSlot('nightly', at('2026-10-25T21:00:00Z'), undefined).due).toEqual(at('2026-10-24T22:15:00Z'));
+  expect(started(due('2026-10-25T21:00:00Z', { release: '2026-10-23T01:30:00.000Z' }))).toEqual([
+    'nightly 2026-10-24T22:15:00.000Z',
+  ]);
+});
+
+test('a missed nightly never starts where it would plan a midnight hold, and waits for the next slot instead', () => {
+  const missed = { release: '2026-01-01T02:30:00.000Z', nightly: '2026-01-01T23:15:00.000Z' };
+  // The week of each clock change, every five minutes from 19:00 to 24:00 UTC: 20:00 or 21:00 to
+  // 01:00 or 02:00 Berlin, around every hold.
+  for (const from of ['2026-10-22T19:00:00Z', '2027-03-25T19:00:00Z'])
+    for (let time = Date.parse(from); time < Date.parse(from) + 7 * 86_400_000; time += 5 * MINUTE) {
+      const now = new Date(time);
+      if (now.getUTCHours() < 19) continue;
+      const starts = started(due(now.toISOString(), missed)).some((start) => start.startsWith('nightly'));
+      expect([now.toISOString(), starts ? ciBrowserHoldUntil(now) : undefined]).toEqual([
+        now.toISOString(),
+        undefined,
+      ]);
+    }
+  // 23:00 Berlin waits; 00:15 starts the next slot instead; 22:00 still catches up.
+  expect(started(due('2026-11-21T22:00:00Z', missed))).toEqual([]);
+  expect(started(due('2026-11-21T23:15:00Z', missed))).toEqual(['nightly 2026-11-21T23:15:00.000Z']);
+  expect(started(due('2026-11-21T21:00:00Z', missed))).toEqual(['nightly 2026-11-20T23:15:00.000Z']);
+});
+
+test('a due nightly waits while a full run runs, and starts when the ledger cannot say', () => {
+  const state = { release: '2026-11-20T02:30:00.000Z' };
+  expect(started(due('2026-11-21T23:15:00Z', state, { fullRunning: true }))).toEqual([]);
+  const unknown = due('2026-11-21T23:15:00Z', state, {
+    fullRunning: { unreadable: 'ledger.jsonl:3 is no JSON' },
+  });
+  expect([started(unknown), unknown.unanswered]).toEqual([
+    ['nightly 2026-11-21T23:15:00.000Z'],
+    [{ work: 'nightly', reason: 'Whether a full run runs is unknown: ledger.jsonl:3 is no JSON' }],
+  ]);
 });
