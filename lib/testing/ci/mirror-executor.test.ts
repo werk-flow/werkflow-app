@@ -3,8 +3,9 @@
 // from one parentless commit holding only the mirror's workflow, its own result reaches the run's
 // results directory, a forged or foreign one never does, a stop cancels the mirror run, old branches
 // are swept, Fast's host part joins its mirror part, and the host's job cap holds. No network.
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -664,6 +665,19 @@ test('a run whose end cannot be told keeps its slot, so the cap never counts it 
   const outcome = await next;
   expect(outcome.exitCode, outcome.detail).toBeNull();
   expect(outcome.detail).toBe('stopped before a mirror slot was free');
+});
+
+test("a slot's push record is renamed into place whole, so a holder that dies mid-write never leaves it unreadable", async () => {
+  const written = spyOn(fs, 'writeFileSync');
+  try {
+    const ran = await executorsOf(fakeMirror(), 1).jobs.run(task(SQL), new AbortController().signal);
+    expect(ran.exitCode, ran.detail).toBe(0);
+    const paths = written.mock.calls.map(([path]) => String(path));
+    expect(paths.filter((path) => /slot-\d+\.push\.tmp$/.test(path))).toHaveLength(1);
+    expect(paths.filter((path) => /slot-\d+\.push$/.test(path))).toEqual([]);
+  } finally {
+    written.mockRestore();
+  }
 });
 
 test('a slot whose holder died with its run unsettled is taken only after that run was cancelled and ended', async () => {

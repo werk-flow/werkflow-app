@@ -386,7 +386,9 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       branches.set(branch, built.commit);
       pushed = { branch, commit: built.commit, at: options.now() };
       // Beside the slot until the push's run is known ended: a holder that dies leaves it to the next.
-      writeFileSync(held.record, JSON.stringify({ branch, commit: built.commit, at: pushed.at }));
+      // Renamed into place, so a holder that dies mid-write never leaves an unreadable record.
+      writeFileSync(`${held.record}.tmp`, JSON.stringify({ branch, commit: built.commit, at: pushed.at }));
+      renameSync(`${held.record}.tmp`, held.record);
       const push = pushes.then(() => options.push(built.commit, branch));
       pushes = push.catch(() => undefined);
       await push;

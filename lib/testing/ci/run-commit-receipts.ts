@@ -57,9 +57,9 @@ export function startReceipt(run: ReceiptRun, unit: Unit, startedAt: Date): CiRe
 
 /**
  * The job's end receipt. Its own result counts only when it is of this run, attempt, commit, tree,
- * unit and Plan and started after the start receipt; a pass counts only when the executor saw the job
- * pass. Anything else ends the start receipt failed, so the attempt withdraws an earlier pass and
- * proves nothing.
+ * unit and Plan and started after the start receipt; a pass counts only when it completed and the
+ * executor saw the job pass. Anything else ends the start receipt failed, so the attempt withdraws an
+ * earlier pass and proves nothing. A failure it wrote is a problem even when the executor saw a pass.
  */
 export function endReceipt(
   start: CiResult,
@@ -87,5 +87,9 @@ export function endReceipt(
   if (written.status === 'passed' && !executorPassed)
     return { ...failed('it wrote a pass, but did not pass'), receipt: { ...written, status: 'failed' } };
   if (written.status === 'running') return failed('it ended without a result');
+  if (written.status === 'passed' && written.completedAt === null)
+    return failed('it wrote a pass without completion');
+  if (written.status === 'failed' && executorPassed)
+    return { receipt: written, problem: 'it exited 0, but wrote a failure' };
   return { receipt: written };
 }

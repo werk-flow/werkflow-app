@@ -411,6 +411,20 @@ test('a job that passed but left a result that is not its own fails, and nothing
   expect(report(w).browser).toEqual({ result: 'skipped' });
 });
 
+test('a job that exited 0 but wrote a failure, or a pass without completion, fails, and nothing that needs it starts', async () => {
+  const writes: ((unit: Unit, at: number, own: Partial<CiResult>) => CiResult)[] = [
+    (unit, at, own) => result(unit, at, { ...own, status: 'failed' }),
+    (unit, at, own) => result(unit, at, { ...own, status: 'passed', completedAt: null }),
+  ];
+  for (const fast of writes) {
+    const w = world({ written: { fast }, exits: { check: 1 } });
+    const outcome = await runCommit(input(), w.deps, new AbortController().signal);
+    expect(outcome.units.find((entry) => entry.unit.job === 'fast')?.state, w.log.join('\n')).toBe('failed');
+    expect(started(w)).not.toContain('jobs:browser-1');
+    expect(w.ledger.filter((receipt) => receipt.job === 'fast').at(-1)?.status).toBe('failed');
+  }
+});
+
 test("without a ledger too, a job that passed but left another attempt's result fails, and nothing that needs it starts", async () => {
   const w = world({
     isolated: false,
@@ -512,6 +526,15 @@ test('the queued Check is posted before Plan, and a run whose start post failed 
   // 2, not run: the queue keeps an owed main run until a run of it starts (scripts/ci/queue.ts).
   expect(refusedRun.exitCode, refused.log.join('\n')).toBe(2);
   expect(started(refused)).toEqual([]);
+});
+
+test('a run whose Check verdict could not be posted exits 4, never 0, so its caller posts it again', async () => {
+  for (const check of [0, 1]) {
+    const w = world({ exits: { check }, publish: (mode) => mode === 'start' });
+    const outcome = await runCommit(input(), w.deps, new AbortController().signal);
+    expect([check, outcome.exitCode], w.log.join('\n')).toEqual([check, 4]);
+    expect(w.log).toContain('[run] The Check verdict could not be posted, so Check stays queued.');
+  }
 });
 
 // The queue clears an owed main run only by the run's start record (scripts/ci/queue-adapter.ts,

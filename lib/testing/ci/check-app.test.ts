@@ -333,6 +333,13 @@ test('the ownership read follows every page and refuses an answer it cannot read
       .filter(({ method }) => method === 'GET')
       .map(({ url }) => new URL(url).searchParams.get('page')),
   ).toEqual(['1', '2']);
+  // Exactly the most a read takes: the tenth page completes the count, so no eleventh is asked.
+  const most = fakeGitHub([
+    ...Array.from({ length: 999 }, (_, index) => start(index + 1, NEWER)),
+    start(1000, OWN),
+  ]);
+  expect(await finish(most)).toEqual({ id: 1000 });
+  expect(most.asked.filter(({ method }) => method === 'GET')).toHaveLength(10);
   const newerOnLastPage = fakeGitHub([start(150, OWN), ...older.slice(1), start(300, NEWER)]);
   expect(await finish(newerOnLastPage)).toHaveProperty('problem');
   // Another app's check run counts for nothing, even when GitHub's filter let it through.

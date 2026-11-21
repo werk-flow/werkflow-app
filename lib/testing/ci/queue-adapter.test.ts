@@ -327,6 +327,33 @@ test('every refusal before the tick exits 2, the code that stops the loop, and n
   }
 });
 
+test('a live tick without a main runner lands nothing while main-follow-up.json holds an owed run: exit 2 before GitHub is read', () => {
+  const workDir = join(folder, 'work');
+  mkdirSync(workDir);
+  saveMainFollowUp(workDir, { base: 'b'.repeat(40), prs: [7], id: 'tick-1', merging: 7 });
+  // A gh that records every call: the refused tick never reaches GitHub.
+  const bin = join(folder, 'bin');
+  mkdirSync(bin);
+  const called = join(folder, 'gh-called');
+  writeFileSync(join(bin, 'gh'), `#!/usr/bin/env bash\necho "$@" >> "${called}"\nexit 1\n`);
+  chmodSync(join(bin, 'gh'), 0o755);
+  const refused = spawnSync(
+    process.execPath,
+    [
+      join(import.meta.dir, '../../../scripts/ci/queue.ts'),
+      ...['--runner', 'runner', '--run-url-base', 'queue', '--work-dir', workDir],
+    ],
+    { encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } },
+  );
+  expect(refused.status, refused.stderr).toBe(2);
+  expect(refused.stderr).toContain("main's run of the last landing did not start");
+  expect(refused.stderr).toContain('Pass --main-runner');
+  expect(existsSync(called)).toBe(false);
+  // The owed run stays for a tick that can start it, and the lock is released.
+  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7], id: 'tick-1', merging: 7 });
+  expect(existsSync(join(workDir, 'queue.lock'))).toBe(false);
+});
+
 test("the queue's state survives between ticks; a missing file is clear and a damaged one stops the tick", () => {
   const path = join(folder, 'queue-state.json');
   expect(readQueueState(path)).toEqual({ pending: null, frozen: null });

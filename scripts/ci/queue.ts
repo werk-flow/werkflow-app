@@ -40,7 +40,8 @@
 //                   owed, a tick starts it first, before it touches a pending `Queue` mark, and
 //                   lands nothing, exit 2. It gets CI_QUEUE_MAIN_RUN=1. Pass run-commit through an
 //                   isolating executor, with CI_WORK_ROOT (required) in the queue's environment;
-//                   without the flag the runner starts that run itself.
+//                   without the flag the runner starts that run itself, and a live tick that finds
+//                   one owed lands nothing, exit 2.
 //   --work-dir      Holds one results directory per run, and the queue's state between ticks
 //                   (queue-state.json): the `Queue` success it is about to post, saved before it
 //                   posts it, and cleared once it was withdrawn after the merge or its failure. A
@@ -208,8 +209,12 @@ try {
   };
   const unpaid = `[queue] main's run of the last landing did not start, so the queue lands nothing until it does (${join(workDir, 'main-follow-up.json')}).`;
   // A follow-up an earlier tick could not start goes first, before the tick touches a pending mark:
-  // one a tick that died after a merge saved too. While it is owed, nothing lands.
-  if (!(await followUp())) {
+  // one a tick that died after a merge saved too. While it is owed, nothing lands, and a live tick
+  // without a main runner cannot pay it.
+  if (!mainRunner && !values['dry-run'] && readMainFollowUp(workDir)) {
+    console.error(`${unpaid} Pass --main-runner to start it.`);
+    process.exitCode = 2;
+  } else if (!(await followUp())) {
     console.error(unpaid);
     process.exitCode = 2;
   } else {

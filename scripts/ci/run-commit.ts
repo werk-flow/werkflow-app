@@ -29,6 +29,7 @@ import {
   RUN_COMMIT_LOCK,
   runCommit,
   type RunCommitInput,
+  type RunCommitOutcome,
   runVariables,
 } from '../../lib/testing/ci/run-commit';
 import { mirrorExecutors } from './mirror-executor';
@@ -86,8 +87,17 @@ import { repository as ownRepository } from './run';
 // a queued Check the publisher could not post, or another main run of the commit that claimed it but
 // has not started; a main run then gives up its claim of the commit. 3: nothing ran because another
 // `main` run of the commit started already (the ledger holds its Plan, or its start record on this
-// host names it); the start record names that run.
+// host names it); the start record names that run. 4: Check ran, but the publisher did not post its
+// verdict, so this run's `Check` stays queued; a refusal because a newer run owns `Check` exits 4 too.
 // The executor frees what the run left (Executors.release).
+
+/** What each exit of runCommit says of the run. */
+const verdicts: Record<RunCommitOutcome['exitCode'], string> = {
+  0: 'Check passed',
+  1: 'Check failed',
+  2: 'not started',
+  4: 'its Check verdict was not posted',
+};
 
 /** The environment without the CI mirror's repository and token, which only its executor takes. */
 function withoutMirror(
@@ -125,7 +135,7 @@ type RunCommitCommand = {
 };
 
 /** Runs one commit's CI run as the header says, and returns its exit code. */
-export async function runCommitCommand(command: RunCommitCommand): Promise<0 | 1 | 2 | 3> {
+export async function runCommitCommand(command: RunCommitCommand): Promise<0 | 1 | 2 | 3 | 4> {
   /** Set once the run's start is acknowledged: every failure before it is a run that never started. */
   const state = { started: false };
   /** What a stop undoes, newest first: the run's lock, and a main claim of a run that never started. */
@@ -149,7 +159,7 @@ async function run(
   { repository, environment, executors, signal, log }: RunCommitCommand,
   state: { started: boolean },
   undo: (() => void)[],
-): Promise<0 | 1 | 2 | 3> {
+): Promise<0 | 1 | 2 | 3 | 4> {
   const event = CI_EVENTS.find((name) => name === environment.CI_EVENT);
   const resultsDir = environment.CI_RESULTS_DIR && resolve(environment.CI_RESULTS_DIR);
   const runUrl = environment.CI_RUN_URL;
@@ -373,9 +383,7 @@ async function run(
     signal,
   );
   await release(outcome);
-  log(
-    `[run] ${event} run of ${commit}: ${outcome.exitCode === 2 ? 'not started' : `Check ${outcome.exitCode === 0 ? 'passed' : 'failed'}`}`,
-  );
+  log(`[run] ${event} run of ${commit}: ${verdicts[outcome.exitCode]}`);
   return outcome.exitCode;
 }
 

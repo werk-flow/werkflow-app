@@ -388,6 +388,7 @@ async function ownStartOf(
     const listed = listedSchema.safeParse(answer);
     if (!listed.success) return { problem: 'GitHub answered with no check run list' };
     runs.push(...listed.data.check_runs);
+    if (runs.length === listed.data.total_count) break;
     if (listed.data.check_runs.length < PAGE_SIZE) {
       if (runs.length !== listed.data.total_count)
         return { problem: `GitHub listed ${runs.length} of ${listed.data.total_count} check runs` };

@@ -268,9 +268,9 @@ export type RunCommitOutcome = {
   /**
    * 0 when the run's Check passed, 1 when it failed, 2 when the run never started because its queued
    * Check could not be posted, its start could not be recorded or a stop ended Plan before its body:
-   * no job body ran, so the run is still owed.
+   * no job body ran, so the run is still owed. 4 when Check ran but its verdict could not be posted.
    */
-  exitCode: 0 | 1 | 2;
+  exitCode: 0 | 1 | 2 | 4;
   units: { unit: Unit; state: UnitState }[];
   scheduler: Partial<Record<CiJob, { result: SchedulerResult }>>;
 };
@@ -632,10 +632,11 @@ export async function runCommit(
     deps.log(`[run] check: its failure could not be recorded, so no verdict is posted: ${message(error)}`);
     settled = false;
   }
-  if (settled && deps.publish && !(await deps.publish('finish')))
-    deps.log('[run] The Check verdict could not be posted.');
+  // A verdict that could not be posted leaves Check queued: 4, so the caller posts it again.
+  const unposted = settled && deps.publish !== undefined && !(await deps.publish('finish'));
+  if (unposted) deps.log('[run] The Check verdict could not be posted, so Check stays queued.');
   return {
-    exitCode: checkPassed(input, deps, checkOutcome.exitCode) ? 0 : 1,
+    exitCode: unposted ? 4 : checkPassed(input, deps, checkOutcome.exitCode) ? 0 : 1,
     units: planned.units.map((unit) => ({ unit, state: states.get(unitName(unit)) ?? 'waiting' })),
     scheduler,
   };
