@@ -455,3 +455,19 @@ test('a first-attempt Check after a job that started only in the rerun counts no
   ]);
   expect(summarizeCost(receipts).firstAttemptFailures).toEqual({});
 });
+
+test('a first-attempt Check answers to the first attempt’s Plan, not to a rerun’s Plan that reused the missing job', () => {
+  const receipts = receiptsOf({ runUrl: run(1), event: 'pr', tree: tree('a'), prs: [12] }, [
+    { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'fast', 'sql', 'check']) },
+    { job: 'fast', from: 1, to: 10 },
+    { job: 'check', from: 10, to: 11, status: 'failed', endOnly: true },
+    {
+      job: 'plan',
+      from: 20,
+      to: 21,
+      extra: { attempt: 2, ...planned(['plan', 'check'], { reused: [{ job: 'sql', shard: null, runUrl: run(9) }] }) },
+    },
+    { job: 'check', from: 21, to: 22, endOnly: true, extra: { attempt: 2 } },
+  ]);
+  expect(summarizeCost(receipts).firstAttemptFailures).toEqual({});
+});

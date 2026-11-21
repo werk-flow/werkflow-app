@@ -133,6 +133,8 @@ function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
   const plan = plans.at(-1);
   const started = new Set(processes.map((entry) => unitKey(entry.job, entry.shard)));
   const planned = plannedUnits(plan?.plan);
+  // A rerun's Plan can reuse what the first attempt never started, so the first attempt answers to its own.
+  const firstPlan = plans.find((entry) => (entry.attempt ?? 1) === 1) ?? plan;
   const first = processes[0];
   return {
     runUrl,
@@ -154,7 +156,7 @@ function runCost(runUrl: string, processes: readonly JobProcess[]): RunCost {
     ]).size,
     cancelled: processes.filter((entry) => entry.status === 'running').length,
     neverStarted: planned.filter((unit) => !started.has(unit)).length,
-    firstAttemptFailures: firstAttemptFailures(processes, planned),
+    firstAttemptFailures: firstAttemptFailures(processes, plannedUnits(firstPlan?.plan)),
     unselectedFailures: [...new Set(processes.flatMap((entry) => entry.unselectedFailures ?? []))],
   };
 }
