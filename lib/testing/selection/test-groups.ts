@@ -487,6 +487,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'time_correction_history_pages.sql',
       'record_number_options.sql',
       'entity_option_search.sql',
+      'global_search_matches.sql',
     ],
     ['customers', 'work', 'documents', 'inventory', 'service', 'time'],
   ],
