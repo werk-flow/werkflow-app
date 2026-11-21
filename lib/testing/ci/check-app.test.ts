@@ -14,13 +14,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   CHECK_APP_CONFIG,
-  checkOwnership,
   checkRunOf,
+  finishCheckRun,
   postCheckRun,
   queuedCheckRunOf,
   readCheckApp,
   readHandoff,
 } from './check-app';
+import { z } from 'zod';
 import type { CiResult } from './results';
 import { readWorkflow } from '../ci-workflow';
 
@@ -396,118 +397,237 @@ test("an accepted run first withdraws every earlier result on its head, so a dra
   expect(pr && 'request' in pr && pr.request.head_sha).toBe(HEAD);
 });
 
-type Listed = { id: number; status: 'queued' | 'completed'; external_id: string | null; app: { id: number } };
+type Stored = {
+  id: number;
+  name: string;
+  head_sha: string;
+  status: 'queued' | 'completed';
+  conclusion: string | null;
+  external_id: string | null;
+  app: { id: number };
+};
 
 const OWN = `${RUN_URL} attempt 2`;
-const NEWER = 'https://ci.test/run/8 attempt 1';
-const listed = (id: number, status: Listed['status'], external_id: string | null): Listed => ({
+const NEWER_RUN = { runUrl: 'https://ci.test/run/8', attempt: 1 };
+const NEWER = `${NEWER_RUN.runUrl} attempt 1`;
+const start = (id: number, external_id: string | null, overrides: Partial<Stored> = {}): Stored => ({
   id,
-  status,
+  name: 'Check',
+  head_sha: COMMIT,
+  status: 'queued',
+  conclusion: null,
   external_id,
   app: { id: APP },
+  ...overrides,
 });
 
-/** Asks whether the scheduled run owns its commit's Check, through a fake GitHub that lists `pages`. */
-async function owns(
-  pages: Listed[][],
-  options: { status?: number; body?: string; scheduled?: Partial<Parameters<typeof build>[1]> } = {},
+/**
+ * A fake GitHub that holds `runs` for every App, as GitHub's app filter may let another through: it
+ * lists a commit's check runs of a name in pages, creates and updates them, and records each request.
+ */
+function fakeGitHub(
+  runs: Stored[],
+  options: { listStatus?: number; listBody?: string; beforeWrite?: () => void } = {},
 ) {
-  const asked: { url: string; init: RequestInit }[] = [];
-  const total = pages.flat().length;
-  const owned = await checkOwnership({
-    scheduled: {
-      runUrl: RUN_URL,
-      attempt: 2,
-      event: 'pr',
-      commit: COMMIT,
-      prHead: undefined,
-      ...options.scheduled,
-    },
+  const asked: { method: string; url: string; body: unknown }[] = [];
+  const fetch = async (url: string, init: RequestInit) => {
+    const method = init.method ?? 'GET';
+    const body: unknown = init.body === undefined ? undefined : JSON.parse(String(init.body));
+    asked.push({ method, url, body });
+    expect(new Headers(init.headers).get('authorization')).toBe(`Bearer ${TOKEN}`);
+    const { pathname, searchParams } = new URL(url);
+    if (method === 'GET') {
+      const listed = runs.filter(
+        (run) => run.head_sha === pathname.split('/')[5] && run.name === searchParams.get('check_name'),
+      );
+      const page = Number(searchParams.get('page'));
+      return new Response(
+        options.listBody ??
+          JSON.stringify({
+            total_count: listed.length,
+            check_runs: listed.slice((page - 1) * 100, page * 100),
+          }),
+        { status: options.listStatus ?? 200 },
+      );
+    }
+    options.beforeWrite?.();
+    const sent = z
+      .object({
+        name: z.string(),
+        head_sha: z.string().optional(),
+        status: z.enum(['queued', 'completed']),
+        conclusion: z.string().optional(),
+        external_id: z.string(),
+      })
+      .parse(body);
+    if (method === 'POST') {
+      const created = start(Math.max(0, ...runs.map(({ id }) => id)) + 1, sent.external_id, {
+        name: sent.name,
+        head_sha: sent.head_sha ?? '',
+        status: sent.status,
+        conclusion: sent.conclusion ?? null,
+      });
+      runs.push(created);
+      return Response.json(created, { status: 201 });
+    }
+    const updated = runs.find(({ id }) => `/repos/owner/repo/check-runs/${id}` === pathname);
+    if (!updated) return new Response('{}', { status: 404 });
+    Object.assign(updated, {
+      name: sent.name,
+      status: sent.status,
+      conclusion: sent.conclusion ?? null,
+      external_id: sent.external_id,
+    });
+    return Response.json(updated);
+  };
+  /** What GitHub shows as the App's Check on `sha`: its newest check run of that name. */
+  const newestCheck = (sha = COMMIT) =>
+    runs
+      .filter((run) => run.name === 'Check' && run.head_sha === sha && run.app.id === APP)
+      .toSorted((one, other) => other.id - one.id)[0];
+  const writes = () => asked.filter(({ method }) => method !== 'GET');
+  return { fetch, asked, writes, newestCheck };
+}
+
+/** Finishes a run through `github`: by default this file's run, attempt 2 of a `pr` run on COMMIT. */
+function finish(
+  github: ReturnType<typeof fakeGitHub>,
+  run: { runUrl: string; attempt: number } = { runUrl: RUN_URL, attempt: 2 },
+  scheduled: Partial<Parameters<typeof build>[1]> = {},
+) {
+  const built = build(result({ ...run, ...(scheduled.event ? { event: scheduled.event } : {}) }), {
+    ...run,
+    ...scheduled,
+  });
+  if (!('request' in built)) throw new Error(built.problem);
+  return finishCheckRun({
+    request: built.request,
+    scheduled: { event: 'pr', commit: COMMIT, prHead: undefined, ...run, ...scheduled },
     appId: APP,
     token: TOKEN,
     repository: 'owner/repo',
-    fetch: async (url, init) => {
-      asked.push({ url, init });
-      const page = pages[Number(new URL(url).searchParams.get('page')) - 1] ?? [];
-      return new Response(options.body ?? JSON.stringify({ total_count: total, check_runs: page }), {
-        status: options.status ?? 200,
-      });
-    },
+    fetch: github.fetch,
   });
-  return { owned, asked };
 }
 
-test("a run's finish posts only while its own start is the newest on the commit, so an older run never overrides a newer one", async () => {
-  // The owning run: its start is the newest; an earlier run's green below it does not matter.
-  const own = await owns([[listed(5, 'completed', NEWER), listed(10, 'queued', OWN)]]);
-  expect(own.owned).toEqual({ owned: true });
-  expect(own.asked).toHaveLength(1);
-  expect(own.asked[0]?.url).toBe(
+test("a run's finish completes its own start, so a newer start always stays the commit's newest Check", async () => {
+  const github = fakeGitHub([
+    start(5, NEWER, { status: 'completed', conclusion: 'success' }),
+    start(10, OWN),
+  ]);
+  expect(await finish(github)).toEqual({ id: 10 });
+  expect(github.asked[0]?.url).toBe(
     `https://api.github.com/repos/owner/repo/commits/${COMMIT}/check-runs?check_name=Check&app_id=${APP}&filter=all&per_page=100&page=1`,
   );
-  expect(new Headers(own.asked[0]?.init.headers).get('authorization')).toBe(`Bearer ${TOKEN}`);
-  // A pull request's run reads the check runs on the head it posts on.
-  const merged = await owns([[listed(10, 'queued', OWN)]], { scheduled: { prHead: HEAD } });
-  expect(merged.owned).toEqual({ owned: true });
+  // It updates the start it found, keeps the start's commit and never creates a check run.
+  expect(github.writes()).toHaveLength(1);
+  expect(github.writes()[0]?.method).toBe('PATCH');
+  expect(github.writes()[0]?.url).toBe('https://api.github.com/repos/owner/repo/check-runs/10');
+  expect(github.writes()[0]?.body).not.toHaveProperty('head_sha');
+  expect(github.newestCheck()).toMatchObject({ id: 10, status: 'completed', conclusion: 'success' });
+  // A pull request's run reads and completes its start on the head it posts on.
+  const merged = fakeGitHub([start(10, OWN, { head_sha: HEAD })]);
+  expect(await finish(merged, undefined, { prHead: HEAD })).toEqual({ id: 10 });
   expect(merged.asked[0]?.url).toContain(`/commits/${HEAD}/check-runs?`);
-  // An older fast-tier run finishing after the integration run's start is refused, and so is
-  // attempt 1 of a run after attempt 2 started.
+  expect(merged.newestCheck(HEAD)).toMatchObject({ id: 10, conclusion: 'success' });
+});
+
+test("an older run's finish after a newer start creates no check run and never posts its pass as the newest", async () => {
+  // An older fast-tier run after the integration run's start, and attempt 2 of a run after attempt 3 started.
   for (const newer of [NEWER, `${RUN_URL} attempt 3`]) {
-    const older = await owns([[listed(10, 'queued', OWN), listed(12, 'queued', newer)]]);
-    expect(older.owned, newer).toEqual({
+    const github = fakeGitHub([start(10, OWN), start(12, newer)]);
+    expect(await finish(github), newer).toEqual({
       problem: `a newer run (${newer}) owns Check on ${COMMIT}; this run's verdict no longer counts`,
     });
+    expect(github.writes(), newer).toEqual([]);
+    expect(github.newestCheck(), newer).toMatchObject({ id: 12, status: 'queued' });
   }
-  // A verdict an older run posted after this run's start never takes the commit from it.
-  expect((await owns([[listed(10, 'queued', OWN), listed(11, 'completed', NEWER)]])).owned).toEqual({
-    owned: true,
-  });
-  // No start of this run on the commit: the scheduler never accepted it, so it owns nothing.
-  expect((await owns([[]])).owned).toHaveProperty('problem');
-  expect((await owns([[listed(4, 'queued', null)]])).owned).toHaveProperty('problem');
+  // A newer start that lands between the ownership read and the write: the older run completes its
+  // own, older check run, so the newer run's queued Check stays the newest.
+  const runs = [start(10, OWN)];
+  const raced = fakeGitHub(runs, { beforeWrite: () => runs.push(start(12, NEWER)) });
+  expect(await finish(raced)).toEqual({ id: 10 });
+  expect(raced.writes().map(({ method }) => method)).toEqual(['PATCH']);
+  expect(raced.newestCheck()).toMatchObject({ id: 12, status: 'queued', conclusion: null });
+});
+
+test("a completed newer start still blocks an older run's finish, so finishing the newest run never revives an older one", async () => {
+  const github = fakeGitHub([start(10, OWN), start(12, NEWER)]);
+  expect(await finish(github, NEWER_RUN)).toEqual({ id: 12 });
+  expect(github.newestCheck()).toMatchObject({ id: 12, status: 'completed', conclusion: 'success' });
+  expect(await finish(github)).toHaveProperty('problem');
+  expect(github.writes()).toHaveLength(1);
+  expect(github.newestCheck()).toMatchObject({ id: 12, external_id: NEWER });
+});
+
+test('a run without its own start on the commit refuses to finish and writes nothing', async () => {
+  for (const runs of [
+    [],
+    [start(4, null)],
+    // Another App's check run with this run's identity is no start of it.
+    [start(10, OWN, { app: { id: OTHER_APP } })],
+    // A start of this run on another commit.
+    [start(10, OWN, { head_sha: HEAD })],
+  ]) {
+    const github = fakeGitHub(runs);
+    expect(await finish(github), JSON.stringify(runs)).toHaveProperty('problem');
+    expect(github.writes(), JSON.stringify(runs)).toEqual([]);
+  }
 });
 
 test('the ownership read follows every page and refuses an answer it cannot read', async () => {
-  const older = Array.from({ length: 100 }, (_, index) => listed(index + 1, 'queued', NEWER));
-  const paged = await owns([older, [listed(200, 'queued', OWN)]]);
-  expect(paged.owned).toEqual({ owned: true });
-  expect(paged.asked.map(({ url }) => new URL(url).searchParams.get('page'))).toEqual(['1', '2']);
-  const newerOnLastPage = await owns([
-    [listed(150, 'queued', OWN), ...older.slice(1)],
-    [listed(300, 'queued', NEWER)],
-  ]);
-  expect(newerOnLastPage.owned).toHaveProperty('problem');
-  // Another app's check run counts for nothing, even when GitHub's filter let it through.
+  const older = Array.from({ length: 100 }, (_, index) => start(index + 1, NEWER));
+  const paged = fakeGitHub([...older, start(200, OWN)]);
+  expect(await finish(paged)).toEqual({ id: 200 });
   expect(
-    (await owns([[listed(10, 'queued', OWN), { ...listed(12, 'queued', NEWER), app: { id: OTHER_APP } }]]))
-      .owned,
-  ).toEqual({ owned: true });
-  for (const unreadable of [
-    { status: 500 },
-    { status: 401, body: JSON.stringify({ message: `Bad credentials ${TOKEN}` }) },
-    { body: 'not json' },
-    { body: JSON.stringify({ total_count: 1, check_runs: [{ id: 'ten' }] }) },
-    // GitHub promises a second page that never comes.
-    { body: JSON.stringify({ total_count: 2, check_runs: [listed(10, 'queued', OWN)] }) },
-  ]) {
-    const refused = await owns([[listed(10, 'queued', OWN)]], unreadable);
-    expect(refused.owned, JSON.stringify(unreadable)).toHaveProperty('problem');
-    expect(JSON.stringify(refused.owned)).not.toContain(TOKEN);
-  }
-  const thrown = await checkOwnership({
-    scheduled: { runUrl: RUN_URL, attempt: 2, event: 'pr', commit: COMMIT, prHead: undefined },
-    appId: APP,
-    token: TOKEN,
-    repository: 'owner/repo',
-    fetch: () => Promise.reject(new TypeError('network down')),
+    paged.asked
+      .filter(({ method }) => method === 'GET')
+      .map(({ url }) => new URL(url).searchParams.get('page')),
+  ).toEqual(['1', '2']);
+  const newerOnLastPage = fakeGitHub([start(150, OWN), ...older.slice(1), start(300, NEWER)]);
+  expect(await finish(newerOnLastPage)).toHaveProperty('problem');
+  // Another app's check run counts for nothing, even when GitHub's filter let it through.
+  expect(await finish(fakeGitHub([start(10, OWN), start(12, NEWER, { app: { id: OTHER_APP } })]))).toEqual({
+    id: 10,
   });
-  expect(thrown).toEqual({ problem: 'the check runs could not be read (TypeError)' });
+  for (const unreadable of [
+    { listStatus: 500 },
+    { listStatus: 401, listBody: JSON.stringify({ message: `Bad credentials ${TOKEN}` }) },
+    { listBody: 'not json' },
+    { listBody: JSON.stringify({ total_count: 1, check_runs: [{ id: 'ten' }] }) },
+    // GitHub promises a second page that never comes.
+    { listBody: JSON.stringify({ total_count: 2, check_runs: [start(10, OWN)] }) },
+  ]) {
+    const github = fakeGitHub([start(10, OWN)], unreadable);
+    const refused = await finish(github);
+    expect(refused, JSON.stringify(unreadable)).toHaveProperty('problem');
+    expect(JSON.stringify(refused)).not.toContain(TOKEN);
+    expect(github.writes(), JSON.stringify(unreadable)).toEqual([]);
+  }
+  const thrown = fakeGitHub([]);
+  thrown.fetch = () => Promise.reject(new TypeError('network down'));
+  expect(await finish(thrown)).toEqual({ problem: 'the check runs could not be read (TypeError)' });
 });
 
-test('a full run, which posts no start, posts its verdict without an ownership read', async () => {
-  const full = await owns([[listed(12, 'queued', NEWER)]], { scheduled: { event: 'full' } });
-  expect(full.owned).toEqual({ owned: true });
-  expect(full.asked).toHaveLength(0);
+test("a finish refuses GitHub's answer when it is not this run's start from the configured App", async () => {
+  for (const answered of [{ id: 11 }, { app: { id: OTHER_APP } }]) {
+    const github = fakeGitHub([start(10, OWN)]);
+    const fetch = github.fetch;
+    const completed = start(10, OWN, { status: 'completed', conclusion: 'success' });
+    github.fetch = (url, init) =>
+      init.method === 'PATCH'
+        ? Promise.resolve(Response.json({ ...completed, ...answered }))
+        : fetch(url, init);
+    expect(await finish(github), JSON.stringify(answered)).toHaveProperty('problem');
+  }
+});
+
+test('a full run, which posts no start, creates its verdict without an ownership read', async () => {
+  const github = fakeGitHub([start(12, NEWER)]);
+  expect(await finish(github, undefined, { event: 'full' })).toEqual({ id: 13 });
+  expect(github.asked.map(({ method, url }) => `${method} ${url}`)).toEqual([
+    'POST https://api.github.com/repos/owner/repo/check-runs',
+  ]);
 });
 
 test('a handed-over result is read only from a regular file, and no message shows what an unreadable one holds', () => {

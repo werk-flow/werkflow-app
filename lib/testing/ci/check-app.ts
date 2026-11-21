@@ -206,11 +206,15 @@ const postedSchema = z.object({
   app: z.object({ id: z.number() }),
 });
 
-/** The posted check run's id, or why GitHub's answer is not the check run asked for, from the configured App. */
-function confirmPosted(
+/**
+ * The written check run's id, or why GitHub's answer is not the check run asked for, from the
+ * configured App. An update must answer with the check run it updated.
+ */
+function confirmWritten(
   answer: unknown,
   request: CheckRunRequest,
   appId: number,
+  updated: number | null,
 ): { id: number } | { problem: string } {
   const posted = postedSchema.safeParse(answer);
   if (!posted.success) return { problem: 'GitHub answered with no check run' };
@@ -220,8 +224,13 @@ function confirmPosted(
       problem: `the token belongs to App ${app.id}, not the configured App ${appId}; the gates ignore its check run ${id}`,
     };
   const asked = request.status === 'completed' ? request.conclusion : null;
-  if (name !== request.name || head_sha !== request.head_sha || conclusion !== asked)
-    return { problem: `GitHub holds check run ${id} with another name, commit or conclusion` };
+  if (
+    (updated !== null && id !== updated) ||
+    name !== request.name ||
+    head_sha !== request.head_sha ||
+    conclusion !== asked
+  )
+    return { problem: `GitHub holds check run ${id} with another id, name, commit or conclusion` };
   return { id };
 }
 
@@ -233,6 +242,13 @@ const githubHeaders = (token: string) => ({
   'X-GitHub-Api-Version': '2022-11-28',
 });
 
+type GitHubAccess = {
+  appId: number;
+  token: string;
+  repository: string;
+  fetch: (url: string, init: RequestInit) => Promise<Response>;
+};
+
 const PAGE_SIZE = 100;
 /** More check runs of one name on one commit than this is no state the publisher decides on. */
 const MAX_PAGES = 10;
@@ -242,7 +258,6 @@ const listedSchema = z.object({
   check_runs: z.array(
     z.object({
       id: z.number(),
-      status: z.string(),
       external_id: z.string().nullable(),
       app: z.object({ id: z.number() }).nullable(),
     }),
@@ -250,27 +265,18 @@ const listedSchema = z.object({
 });
 
 /**
- * Whether the scheduled run still owns its commit's `Check`, read before its verdict is posted. A
- * run owns it while its own start, the queued check run `start` posted, is the configured App's
- * newest start on the commit; GitHub numbers check runs in creation order. Once a newer run started,
- * an older run's verdict would replace the newer run's queued check, so it is refused. Only starts
- * decide: a verdict an older run posted after a newer start (it read before that start landed)
- * never takes the commit from the newer run, whose own verdict then posts last. A full run posts no
- * start and needs no read. An answer that cannot be read completely refuses.
+ * The id of the scheduled run's own start on its commit, while that start is the configured App's
+ * newest `Check` there; GitHub numbers check runs in creation order. Every App `Check` on a commit is
+ * a start: `finish` only completes its own start, so a completed start still counts, and finishing
+ * the newest run never makes an older run's queued start current. Once a newer run started, the
+ * older run is refused. An answer that cannot be read completely refuses.
  */
-export async function checkOwnership(input: {
-  scheduled: ScheduledRun;
-  appId: number;
-  token: string;
-  repository: string;
-  fetch: (url: string, init: RequestInit) => Promise<Response>;
-}): Promise<{ owned: true } | { problem: string }> {
+async function ownStartOf(
+  input: GitHubAccess & { scheduled: ScheduledRun },
+): Promise<{ id: number } | { problem: string }> {
   const { scheduled, appId } = input;
-  if (scheduled.event === 'full') return { owned: true };
   const head = headOf(scheduled);
   if ('problem' in head) return head;
-  if (!REPOSITORY.test(input.repository))
-    return { problem: `GITHUB_REPOSITORY ${input.repository} is no owner/name` };
   const runs: z.infer<typeof listedSchema>['check_runs'] = [];
   for (let page = 1; ; page += 1) {
     if (page > MAX_PAGES) return { problem: `more than ${MAX_PAGES * PAGE_SIZE} Check runs on ${head.head}` };
@@ -302,36 +308,38 @@ export async function checkOwnership(input: {
     }
   }
   const [newestStart] = runs
-    .filter((run) => run.app?.id === appId && run.status === 'queued')
+    .filter((run) => run.app?.id === appId)
     .toSorted((one, other) => other.id - one.id);
   if (!newestStart) return { problem: `no start of this run on ${head.head}` };
-  if (newestStart.external_id === runIdentityOf(scheduled)) return { owned: true };
+  if (newestStart.external_id === runIdentityOf(scheduled)) return { id: newestStart.id };
   return {
     problem: `a newer run (${newestStart.external_id ?? 'unnamed'}) owns Check on ${head.head}; this run's verdict no longer counts`,
   };
 }
 
 /**
- * Posts the check run as the configured App and confirms GitHub holds it from that App. The token
- * goes only into the request's header; no message names it or GitHub's answer body.
+ * Creates the check run, or updates check run `updated`, as the configured App and confirms GitHub
+ * holds it from that App. The token goes only into the request's header; no message names it or
+ * GitHub's answer body.
  */
-export async function postCheckRun(input: {
-  request: CheckRunRequest;
-  appId: number;
-  token: string;
-  repository: string;
-  fetch: (url: string, init: RequestInit) => Promise<Response>;
-}): Promise<{ id: number } | { problem: string }> {
+async function writeCheckRun(
+  input: GitHubAccess & { request: CheckRunRequest; updated: number | null },
+): Promise<{ id: number } | { problem: string }> {
   if (!REPOSITORY.test(input.repository))
     return { problem: `GITHUB_REPOSITORY ${input.repository} is no owner/name` };
+  // An update keeps the check run's commit; GitHub takes no head_sha on it.
+  const { head_sha, ...update } = input.request;
   let response: Response;
   try {
-    response = await input.fetch(`https://api.github.com/repos/${input.repository}/check-runs`, {
-      method: 'POST',
-      headers: { ...githubHeaders(input.token), 'Content-Type': 'application/json' },
-      body: JSON.stringify(input.request),
-      signal: AbortSignal.timeout(60_000),
-    });
+    response = await input.fetch(
+      `https://api.github.com/repos/${input.repository}/check-runs${input.updated === null ? '' : `/${input.updated}`}`,
+      {
+        method: input.updated === null ? 'POST' : 'PATCH',
+        headers: { ...githubHeaders(input.token), 'Content-Type': 'application/json' },
+        body: JSON.stringify(input.updated === null ? { head_sha, ...update } : update),
+        signal: AbortSignal.timeout(60_000),
+      },
+    );
   } catch (error) {
     return { problem: `the request failed (${error instanceof Error ? error.name : 'unknown error'})` };
   }
@@ -339,7 +347,32 @@ export async function postCheckRun(input: {
     return {
       problem: `GitHub answered ${response.status} (request ${response.headers.get('x-github-request-id') ?? 'unknown'})`,
     };
-  // An unreadable body is no check run, and confirmPosted says so.
+  // An unreadable body is no check run, and confirmWritten says so.
   const answer: unknown = await response.json().catch(() => null);
-  return confirmPosted(answer, input.request, input.appId);
+  return confirmWritten(answer, input.request, input.appId, input.updated);
+}
+
+/** Posts a new check run as the configured App: a run's start, before any job. */
+export function postCheckRun(
+  input: GitHubAccess & { request: CheckRunRequest },
+): Promise<{ id: number } | { problem: string }> {
+  return writeCheckRun({ ...input, updated: null });
+}
+
+/**
+ * Posts a run's verdict. A run's `Check` completes the run's own start, found by ownStartOf, and
+ * never creates a check run: the start was created before any newer run's start, so a newer start
+ * stays the commit's newest `Check` even when it lands between the read and the update. Without its
+ * own start as the newest, it writes nothing. A full run posts no start, so its
+ * `Full run / Check` is created.
+ */
+export async function finishCheckRun(
+  input: GitHubAccess & { request: CheckRunRequest; scheduled: ScheduledRun },
+): Promise<{ id: number } | { problem: string }> {
+  if (input.scheduled.event === 'full') return postCheckRun(input);
+  if (!REPOSITORY.test(input.repository))
+    return { problem: `GITHUB_REPOSITORY ${input.repository} is no owner/name` };
+  const start = await ownStartOf(input);
+  if ('problem' in start) return start;
+  return writeCheckRun({ ...input, updated: start.id });
 }
