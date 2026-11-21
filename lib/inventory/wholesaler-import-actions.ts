@@ -179,7 +179,7 @@ export async function previewWholesalerPrices(
 ): Promise<ActionResult<{ prices: WholesalerPricePreview }>> {
   const parsed = previewWholesalerPricesInputSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const auth = await resolveImportManager();
+  const auth = await resolveManagerContext();
   if (!auth.success) return auth;
 
   const { data, error } = await createSupabaseAdminClient().rpc(
