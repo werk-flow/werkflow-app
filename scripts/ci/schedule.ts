@@ -29,13 +29,15 @@ import { lsRemoteCommit } from '../../lib/testing/ci/superseded';
 //               the PR's head (refs/pull/<n>/head), and the head commit the run tests.
 //   It prints {"start": [...], "stop": [...], "unanswered": [...], "wakeAt": "<ISO time>"}:
 //     release   Dispatch the release on GitHub Actions, which decides like a scheduled run:
-//               gh workflow run release.yml --ref main -f scheduled=true. Never on a branch.
+//               gh workflow run release.yml --ref main -f scheduled=true. Never on a branch. Named
+//               only while release.yml has no `schedule` trigger: GitHub's cron and hold start it
+//               otherwise, and one weekday never gets two releases.
 //     nightly   A full run of main's head: CI_EVENT=full CI_FULL_REASON='Nightly run'.
 //     full      A full run of main's head: CI_EVENT=full CI_FULL_REASON='Full run on main'.
 //     midnight  bun scripts/ci/job.ts midnight in that run, then its browser shards after Fast.
 //     stop      End every job of that run: a newer push superseded it.
-//   After starting a release or a nightly, record its slot:
-//   bun scripts/ci/schedule.ts started <release|nightly> <slot> --state <file>
+//   After starting releases or nightlies, record their slots in one call, one call at a time per
+//   state file: bun scripts/ci/schedule.ts started <release|nightly> <slot> [...] --state <file>
 //   An unreadable state exits 1 without an answer. Work the scheduler could not decide is listed
 //   in `unanswered`, and then it exits 1 after printing the rest.
 const repository = resolve(import.meta.dir, '../..');
@@ -51,7 +53,7 @@ const { positionals, values } = parseArgs({
 });
 const usage =
   'Usage: bun scripts/ci/schedule.ts due --state <file> [--ledger <file>] [--run <dir>]... [--pr-run <id>,<ref>,<commit>]...\n' +
-  '       bun scripts/ci/schedule.ts started <release|nightly> <slot> --state <file>';
+  '       bun scripts/ci/schedule.ts started <release|nightly> <slot> [<release|nightly> <slot>]... --state <file>';
 const statePath = values.state;
 if (!statePath) throw new Error(usage);
 
@@ -62,17 +64,22 @@ function readState(path: string): ScheduleState {
   return parsed.data;
 }
 
-const [command, work, slot] = positionals;
+const [command, ...pairs] = positionals;
 if (command === 'started') {
-  const name = CLOCK_WORK_NAMES.find((candidate) => candidate === work);
-  const started = new Date(slot ?? '');
-  if (!name || Number.isNaN(started.getTime()) || positionals.length !== 3) throw new Error(usage);
+  if (!pairs.length || pairs.length % 2) throw new Error(usage);
   const state = readState(statePath);
-  const recorded = state[name];
-  // A late confirmation of an older slot never hides a newer one.
-  if (!recorded || new Date(recorded) < started) state[name] = started.toISOString();
-  writeFileSync(`${statePath}.next`, `${JSON.stringify(state, null, 2)}\n`);
-  renameSync(`${statePath}.next`, statePath);
+  for (let index = 0; index < pairs.length; index += 2) {
+    const name = CLOCK_WORK_NAMES.find((candidate) => candidate === pairs[index]);
+    const started = new Date(pairs[index + 1] ?? '');
+    if (!name || Number.isNaN(started.getTime())) throw new Error(usage);
+    const recorded = state[name];
+    // A late confirmation of an older slot never hides a newer one.
+    if (!recorded || new Date(recorded) < started) state[name] = started.toISOString();
+  }
+  // Written whole, then renamed: a reader never sees half a state.
+  const next = `${statePath}.${process.pid}.next`;
+  writeFileSync(next, `${JSON.stringify(state, null, 2)}\n`);
+  renameSync(next, statePath);
   process.exit(0);
 }
 if (command !== 'due' || positionals.length !== 1) throw new Error(usage);
@@ -133,12 +140,31 @@ const held = (values.run ?? []).map((run) => {
   return { run, until: heldUntil(plan.plan) };
 });
 
+/** Whether release.yml has a `schedule` trigger, or why it cannot be read. */
+function releaseOnCron(): boolean | { unreadable: string } {
+  try {
+    const workflow: unknown = Bun.YAML.parse(
+      readFileSync(join(repository, '.github/workflows/release.yml'), 'utf8'),
+    );
+    const triggers =
+      typeof workflow === 'object' && workflow !== null && 'on' in workflow ? workflow.on : undefined;
+    if (typeof triggers !== 'object' || triggers === null)
+      return { unreadable: 'release.yml names no triggers' };
+    return 'schedule' in triggers && Array.isArray(triggers.schedule) && triggers.schedule.length > 0;
+  } catch (error) {
+    return {
+      unreadable: `release.yml cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 const now = new Date();
 const ledger = values.ledger === undefined ? [] : readLedger(values.ledger);
 const answer = scheduleDue({
   now,
   state: readState(statePath),
   fullRun,
+  releaseOnCron: releaseOnCron(),
   fullRunning: 'unreadable' in ledger ? ledger : fullRunsInLedger(ledger, now).some((run) => !run.ended),
   held,
   prRuns,

@@ -25,6 +25,7 @@ function due(now: string, state: ScheduleState = {}, extra: Partial<Parameters<t
     now: at(now),
     state,
     fullRun: () => ({ run: false, reason: 'main has its full run.' }),
+    releaseOnCron: false,
     fullRunning: false,
     held: [],
     prRuns: [],
@@ -230,6 +231,9 @@ function schedulerFixture(folder: string): {
     join(root, 'scripts/ci/full-run.ts'),
     "console.info(process.env.FULL_RUN_ANSWER);\nprocess.exit(Number(process.env.FULL_RUN_EXIT ?? '0'));\n",
   );
+  // A release GitHub's cron does not start: the runner dispatches it.
+  mkdirSync(join(root, '.github/workflows'), { recursive: true });
+  writeFileSync(join(root, '.github/workflows/release.yml'), 'on:\n  workflow_dispatch:\n');
   const git = (...args: string[]) =>
     execFileSync('git', ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', ...args], {
       cwd: root,
@@ -261,9 +265,11 @@ test('the CLI answers from its state, the full-run rule, held runs and moved pul
   try {
     const { root, run } = schedulerFixture(folder);
     const state = join(folder, 'state.json');
-    // Both clock works started a slot later than any due one, so only the rest decides.
-    for (const work of ['release', 'nightly'])
-      expect(run('started', work, '2100-01-01T00:00:00Z', '--state', state).status).toBe(0);
+    // Both clock works started a slot later than any due one, in one call, so only the rest decides.
+    expect(
+      run('started', 'release', '2100-01-01T00:00:00Z', 'nightly', '2100-01-01T00:00:00Z', '--state', state)
+        .status,
+    ).toBe(0);
     // A late confirmation of an older slot keeps the newer one.
     expect(run('started', 'release', '2099-01-01T00:00:00Z', '--state', state).status).toBe(0);
     expect(JSON.parse(readFileSync(state, 'utf8'))).toEqual({
@@ -385,4 +391,37 @@ test('a due nightly waits while a full run runs, and starts when the ledger cann
     ['nightly 2026-11-21T23:15:00.000Z'],
     [{ work: 'nightly', reason: 'Whether a full run runs is unknown: ledger.jsonl:3 is no JSON' }],
   ]);
+});
+
+test("while GitHub's cron starts the release, the scheduler never names it, so a weekday gets one release", () => {
+  const monday = '2026-11-23T02:30:00Z';
+  const state = { nightly: '2026-11-22T23:15:00.000Z' };
+  expect(started(due(monday, state))).toEqual(['release 2026-11-23T02:30:00.000Z']);
+  const onCron = due(monday, state, { releaseOnCron: true });
+  expect([onCron.start, onCron.unanswered]).toEqual([[], []]);
+  // The nightly's next slot, not Tuesday's release, wakes the runner.
+  expect(onCron.wakeAt).toBe('2026-11-23T23:15:00.000Z');
+  const unknown = due(monday, state, { releaseOnCron: { unreadable: 'release.yml names no triggers' } });
+  expect([unknown.start, unknown.unanswered]).toEqual([
+    [],
+    [{ work: 'release', reason: 'release.yml names no triggers' }],
+  ]);
+});
+
+test("the CLI reads release.yml's cron: with one it never names the release", () => {
+  const folder = mkdtempSync(join(tmpdir(), 'ci-schedule-'));
+  try {
+    const { root, run } = schedulerFixture(folder);
+    copyFileSync(
+      join(repository, '.github/workflows/release.yml'),
+      join(root, '.github/workflows/release.yml'),
+    );
+    // No state: every clock work has a missed slot, and only the nightly may be named.
+    const answer = run('due', '--state', join(folder, 'state.json'));
+    expect(answer.status, answer.stderr).toBe(0);
+    expect(JSON.parse(answer.stdout)).toMatchObject({ unanswered: [] });
+    expect(answer.stdout).not.toContain('"work":"release"');
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });

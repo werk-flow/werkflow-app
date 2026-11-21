@@ -128,6 +128,12 @@ export function scheduleDue(input: {
   state: ScheduleState;
   /** `bun scripts/ci/full-run.ts due` on main's head, or why it gave no answer. */
   fullRun: () => FullRunDecision | { unreadable: string };
+  /**
+   * Whether GitHub's schedule starts the release (a `schedule` trigger in release.yml), or why
+   * release.yml cannot say. Only without one does the runner dispatch it, so one weekday never
+   * gets two releases.
+   */
+  releaseOnCron: boolean | { unreadable: string };
   /** Whether a full run runs now (`fullRunsInLedger`), or why the ledger cannot say; then the nightly starts. */
   fullRunning: boolean | { unreadable: string };
   /** The runs that wait for their browser shards, with `heldUntil` of each one's plan. */
@@ -139,6 +145,11 @@ export function scheduleDue(input: {
   const answer: ScheduleAnswer = { start: [], stop: [], unanswered: [], wakeAt: '' };
   const wakes: number[] = [];
   for (const work of CLOCK_WORK_NAMES) {
+    if (work === 'release' && input.releaseOnCron !== false) {
+      if (input.releaseOnCron !== true)
+        answer.unanswered.push({ work, reason: input.releaseOnCron.unreadable });
+      continue;
+    }
     const recorded = input.state[work];
     const { due, next } = clockSlot(work, input.now, recorded ? new Date(recorded) : undefined);
     wakes.push(next.getTime());
