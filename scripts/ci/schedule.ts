@@ -24,7 +24,8 @@ import { lsRemoteCommit } from '../../lib/testing/ci/superseded';
 //     --ledger  The runner's ledger (CI_LEDGER): a nightly waits while a full run in it runs, and
 //               scripts/ci/full-run.ts due reads it.
 //     --run     A run's results directory (CI_RESULTS_DIR) whose browser shards wait: due once its
-//               plan's midnight hold ended and the run has no midnight.json yet.
+//               plan's midnight hold ended and the run has no midnight.json yet. A merge queue
+//               run's directory too (scripts/ci/queue.ts): its runner waits and starts nothing.
 //     --pr-run  A pull request run in progress: the runner's id for it, the ref on origin that holds
 //               the PR's head (refs/pull/<n>/head), and the head commit the run tests.
 //   It prints {"start": [...], "stop": [...], "unanswered": [...], "wakeAt": "<ISO time>"}:

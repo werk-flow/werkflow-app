@@ -1,14 +1,18 @@
 // The merge queue's git, GitHub and runner calls (lib/testing/ci/queue.ts decides). git builds the
 // batch with plumbing only, so the queue's checkout never changes; `gh` reads and merges the PRs.
+// Once .github/scripts/check-app.json names the CI App, a PR's `Check` is the App's check run and
+// the `Queue` mark goes through the publisher as the App's check run (lib/testing/ci/check-app.ts).
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { appCheckStateOf } from '../../lib/testing/ci/check-app';
 import {
   integrationEnvironment,
   PULLS_QUERY,
   pullsFromGitHub,
   type QueueAdapter,
+  type QueuedPull,
   type Verdict,
   verdictOf,
 } from '../../lib/testing/ci/queue';
@@ -105,17 +109,42 @@ export function runIntegration(
 /** The runner's ledger when the queue is given one, read-only; undefined without one. */
 const ledgerOf = (path: string | undefined): Ledger | undefined => (path ? readLedger(path) : undefined);
 
-/** The status call that marks `head` for the queue. */
-const queueStatus = (head: string, state: 'success' | 'failure', description: string): string[] => [
-  'api',
-  `repos/{owner}/{repo}/statuses/${head}`,
-  '-f',
-  `state=${state}`,
-  '-f',
-  `context=${QUEUE_STATUS}`,
-  '-f',
-  `description=${description.slice(0, 140)}`,
-];
+type Mark = { head: string; state: 'success' | 'failure'; description: string; runUrl: string };
+
+/**
+ * Marks a PR head `Queue`. Without a CI App, a commit status with the queue's `gh` token. With one,
+ * the App's check run through `publisher`: the trusted publisher's `queue` mode, as the user that
+ * holds the App's token, so the queue never holds it. A publisher that fails throws.
+ */
+export function markQueue(
+  options: { repository: string; appId: number | null; publisher?: string | undefined },
+  mark: Mark,
+  gh: (...args: string[]) => string,
+): void {
+  if (options.appId === null) {
+    gh(
+      'api',
+      `repos/{owner}/{repo}/statuses/${mark.head}`,
+      '-f',
+      `state=${mark.state}`,
+      '-f',
+      `context=${QUEUE_STATUS}`,
+      '-f',
+      `description=${mark.description.slice(0, 140)}`,
+    );
+    return;
+  }
+  if (!options.publisher) throw new Error('The CI App is configured, but the queue has no --publisher.');
+  const published = spawnSync(options.publisher, ['queue', mark.state], {
+    cwd: options.repository,
+    env: { ...process.env, CI_RUN_URL: mark.runUrl, CI_COMMIT: mark.head },
+    stdio: 'inherit',
+  });
+  if (published.status !== 0)
+    throw new Error(
+      `The publisher did not post Queue ${mark.state} on ${mark.head} (${published.error?.message ?? published.signal ?? `exit ${published.status}`}).`,
+    );
+}
 
 /** `gh pr view --json state,mergeCommit`: GitHub's word on whether a PR merged, and as which commit. */
 const mergedPullSchema = z.object({
@@ -130,6 +159,10 @@ export function createQueueAdapter(options: {
   workDir: string;
   runUrlBase: string;
   ledger?: string;
+  /** The CI App's id from .github/scripts/check-app.json, or null while none exists. */
+  appId: number | null;
+  /** Runs the publisher's `queue` mode as the App's user; required once an App is configured. */
+  publisher?: string;
 }): QueueAdapter {
   const git = gitIn(options.repository);
   const gh = (...args: string[]): string =>
@@ -141,6 +174,27 @@ export function createQueueAdapter(options: {
   let nameWithOwner: string[] | undefined;
   const repositoryName = (): string[] =>
     (nameWithOwner ??= gh('api', 'repos/{owner}/{repo}', '--jq', '.full_name').trim().split('/'));
+  const { appId } = options;
+  /** A queued PR's `Check` from the App's check runs on its head; other PRs keep GitHub's status. */
+  const withAppCheck = (pull: QueuedPull): QueuedPull =>
+    appId === null || pull.queuedAt === null
+      ? pull
+      : {
+          ...pull,
+          check: appCheckStateOf(
+            JSON.parse(
+              gh(
+                'api',
+                '--paginate',
+                '--slurp',
+                `repos/{owner}/{repo}/commits/${pull.headSha}/check-runs?check_name=Check&app_id=${appId}&filter=all&per_page=100`,
+              ),
+            ),
+            appId,
+          ),
+        };
+  const mark = (pull: QueuedPull, state: Mark['state'], description: string, runUrl: string) =>
+    markQueue(options, { head: pull.headSha, state, description, runUrl }, gh);
   return {
     main: async () => {
       git('fetch', '--quiet', '--no-tags', 'origin', `+refs/heads/main:${QUEUE_REFS}/main`);
@@ -163,7 +217,7 @@ export function createQueueAdapter(options: {
             ...['owner', 'name'].flatMap((field, index) => ['-f', `${field}=${repositoryName()[index]}`]),
           ),
         ),
-      ),
+      ).map(withAppCheck),
     squash: async (parent, pull) => {
       git('fetch', '--quiet', '--no-tags', 'origin', pull.headSha);
       const squashed = squashCommit(
@@ -188,7 +242,7 @@ export function createQueueAdapter(options: {
       return verdict;
     },
     land: async (pull, proof) => {
-      gh(...queueStatus(pull.headSha, 'success', `Passed in ${proof.runUrl}`));
+      mark(pull, 'success', `Passed in ${proof.runUrl}`, proof.runUrl);
       gh('pr', 'merge', String(pull.number), '--squash', '--match-head-commit', pull.headSha);
       console.info(`[queue] #${pull.number}: merged`);
     },
@@ -198,8 +252,8 @@ export function createQueueAdapter(options: {
       );
       return merged.state === 'MERGED' ? (merged.mergeCommit?.oid ?? null) : null;
     },
-    withdraw: async (pull) => {
-      gh(...queueStatus(pull.headSha, 'failure', 'Not merged; the queue tests it again'));
+    withdraw: async (pull, proof) => {
+      mark(pull, 'failure', 'Not merged; the queue tests it again', proof.runUrl);
       console.info(`[queue] #${pull.number}: Queue withdrawn`);
     },
     proven: async (tree) => {

@@ -3,10 +3,10 @@
 // wrote for that run.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runIntegration, squashCommit } from '../../../scripts/ci/queue-adapter';
+import { markQueue, runIntegration, squashCommit } from '../../../scripts/ci/queue-adapter';
 import type { QueuedPull } from './queue';
 
 let folder = '';
@@ -136,4 +136,55 @@ test('a runner that leaves no Check result, or one still running, gives no verdi
     runUrl: 'queue/3',
     detail: 'Check did not finish',
   });
+});
+
+test('with a CI App the Queue mark goes only through the publisher as the App; without one it is a commit status', () => {
+  const head = 'c'.repeat(40);
+  const mark = { head, state: 'success' as const, description: 'Passed in queue/9', runUrl: 'queue/9' };
+  const called = join(folder, 'publisher.log');
+  const publisher = join(folder, 'publisher');
+  writeFileSync(
+    publisher,
+    `#!/usr/bin/env bash\nprintf '%s|%s|%s\\n' "$*" "$CI_RUN_URL" "$CI_COMMIT" >> "${called}"\nexit "\${PUBLISHER_EXIT:-0}"\n`,
+  );
+  chmodSync(publisher, 0o755);
+  const statuses: string[][] = [];
+  const gh = (...args: string[]) => {
+    statuses.push(args);
+    return '';
+  };
+
+  markQueue({ repository, appId: 4242, publisher }, mark, gh);
+  markQueue({ repository, appId: 4242, publisher }, { ...mark, state: 'failure' }, gh);
+  expect(readFileSync(called, 'utf8')).toBe(`queue success|queue/9|${head}\nqueue failure|queue/9|${head}\n`);
+  expect(statuses).toEqual([]);
+
+  // A configured App never falls back to the queue's own token.
+  expect(() => markQueue({ repository, appId: 4242, publisher: undefined }, mark, gh)).toThrow(
+    'no --publisher',
+  );
+  process.env.PUBLISHER_EXIT = '1';
+  try {
+    expect(() => markQueue({ repository, appId: 4242, publisher }, mark, gh)).toThrow(
+      `The publisher did not post Queue success on ${head} (exit 1).`,
+    );
+  } finally {
+    delete process.env.PUBLISHER_EXIT;
+  }
+  expect(statuses).toEqual([]);
+
+  markQueue({ repository, appId: null, publisher }, mark, gh);
+  expect(statuses).toEqual([
+    [
+      'api',
+      `repos/{owner}/{repo}/statuses/${head}`,
+      '-f',
+      'state=success',
+      '-f',
+      'context=Queue',
+      '-f',
+      'description=Passed in queue/9',
+    ],
+  ]);
+  expect(readFileSync(called, 'utf8').split('\n')).toHaveLength(4);
 });

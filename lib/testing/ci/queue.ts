@@ -19,7 +19,10 @@ export type QueuedPull = {
   isDraft: boolean;
   /** When its thread asked GitHub to merge it (`gh pr merge --squash --auto`): its place in the queue. Null: not queued. */
   queuedAt: string | null;
-  /** The PR's own `Check` on its head, the fast tier: `SUCCESS`, `PENDING`, `FAILURE`, `ERROR`, or `MISSING`. */
+  /**
+   * The PR's own `Check` on its head, the fast tier: `SUCCESS`, `PENDING`, `FAILURE`, `ERROR`, or
+   * `MISSING`. The commit status until the CI App exists, then only the App's newest check run.
+   */
   check: string;
   /** GitHub's merge state: `DIRTY` conflicts with main; `BEHIND` lacks main while the ruleset requires an up-to-date branch. */
   mergeState: string;
@@ -53,7 +56,7 @@ export type QueueAdapter = {
   /** The PR's merge commit when GitHub reports it merged, otherwise null. */
   mergeCommit(pull: QueuedPull): Promise<string | null>;
   /** Marks the head as no longer passed, after a merge that did not happen, so no later merge takes the mark. */
-  withdraw(pull: QueuedPull): Promise<void>;
+  withdraw(pull: QueuedPull, proof: Verdict): Promise<void>;
   /** Whether the runner's ledger proves `tree` green: a passed Check of a CI runner is its newest run's last receipt. */
   proven(tree: string): Promise<boolean>;
   /** Tells the PR's thread that its batch failed on it, and takes it out of the queue. */
@@ -439,7 +442,7 @@ async function landOne(
   } catch (error) {
     problem = `main could not be read after merging #${pull.number}${refusal}: ${message(error)}`;
   }
-  await adapter.withdraw(pull);
+  await adapter.withdraw(pull, proof);
   return problem;
 }
 

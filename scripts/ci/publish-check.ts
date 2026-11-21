@@ -4,6 +4,7 @@ import {
   checkRunOf,
   finishCheckRun,
   postCheckRun,
+  queueCheckRunOf,
   queuedCheckRunOf,
   readCheckApp,
   readHandoff,
@@ -14,7 +15,7 @@ import { repository } from './run';
 
 // Posts a run's `Check`, a full run's `Full run / Check`, as a check run of the CI App
 // (lib/testing/ci/check-app.ts).
-// Usage: bun scripts/ci/publish-check.ts <start|finish>
+// Usage: bun scripts/ci/publish-check.ts <start|finish|queue <success|failure>>
 //   start   When the scheduler accepts the run or a rerun attempt, before it waits or any job
 //           starts, and for a pull request also on `ready_for_review` itself: a queued check run,
 //           which withdraws every earlier result of that check on the commit. A full run posts none.
@@ -25,6 +26,10 @@ import { repository } from './run';
 //           ends late never replaces the integration run's queued Check. Check runs carry the run's
 //           URL and attempt as `external_id`, by which finish finds its start. A full run, which has
 //           no start, creates its `Full run / Check`.
+//   queue   The merge queue's mark on a PR head, which the queue asks for through its --publisher
+//           (scripts/ci/queue.ts): `Queue` passed right before it merges the PR, failed when that
+//           merge did not happen. It needs CI_RUN_URL, CI_COMMIT (the PR's head), CI_CHECK_APP_TOKEN
+//           and GITHUB_REPOSITORY only.
 // Run it from a trusted copy, never from the checkout under test: a checkout of `main` that no job
 // writes, as an operating-system user that holds the App's key and token and that no job runs as.
 // Each run's results directory is writable only by that run's jobs. Code under test then reaches
@@ -52,7 +57,12 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-if (mode !== 'start' && mode !== 'finish') fail('Usage: bun scripts/ci/publish-check.ts <start|finish>');
+const queueState = mode === 'queue' ? process.argv[3] : undefined;
+if (
+  (mode !== 'start' && mode !== 'finish' && mode !== 'queue') ||
+  (mode === 'queue' && queueState !== 'success' && queueState !== 'failure')
+)
+  fail('Usage: bun scripts/ci/publish-check.ts <start|finish|queue <success|failure>>');
 const app = readCheckApp(join(repository, CHECK_APP_CONFIG));
 if ('problem' in app) fail(app.problem);
 if (app.appId === null) fail(`${CHECK_APP_CONFIG} names no CI App yet, so there is no App to post as.`);
@@ -63,6 +73,22 @@ const commit = environment.CI_COMMIT;
 const directory = environment.CI_RESULTS_DIR;
 const token = environment.CI_CHECK_APP_TOKEN;
 const repositoryName = environment.GITHUB_REPOSITORY;
+if (mode === 'queue') {
+  if (!runUrl || !commit || !token || !repositoryName)
+    fail('CI_RUN_URL, CI_COMMIT (the PR head), CI_CHECK_APP_TOKEN and GITHUB_REPOSITORY are required.');
+  const mark = queueCheckRunOf({ runUrl, head: commit, passed: queueState === 'success', now: new Date() });
+  if ('problem' in mark) fail(`No check run is posted: ${mark.problem}.`);
+  const posted = await postCheckRun({
+    request: mark.request,
+    appId: app.appId,
+    token,
+    repository: repositoryName,
+    fetch,
+  });
+  if ('problem' in posted) fail(`The check run Queue was not posted: ${posted.problem}.`);
+  console.info(`[ci] Queue on ${commit}: ${queueState}, check run ${posted.id} of App ${app.appId}`);
+  process.exit(0);
+}
 if (
   !runUrl ||
   !Number.isSafeInteger(attempt) ||

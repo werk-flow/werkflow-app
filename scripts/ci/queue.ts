@@ -1,9 +1,10 @@
 // One tick of the batching merge queue (owner decision D2; lib/testing/ci/queue.ts decides,
 // scripts/ci/queue-adapter.ts acts). A CI runner calls it in a loop, one tick at a time, from a
-// clean clone of werkflow-app whose `gh` may merge PRs and set commit statuses.
+// clean clone of werkflow-app on main's head whose `gh` may merge PRs and set commit statuses.
 //
 // Usage: bun scripts/ci/queue.ts --runner <executable> --work-dir <dir> --run-url-base <url>
-//                                [--ledger <file>] [--max-batch <1-4>] [--dry-run [--prs <n,...>]]
+//                                [--ledger <file>] [--publisher <executable>] [--max-batch <1-4>]
+//                                [--dry-run [--prs <n,...>]]
 //   --runner        Runs one integration run of a commit, every job of its plan through
 //                   `bun scripts/ci/job.ts`, in checkouts of that commit, ending with `job.ts check`.
 //                   It takes the runner's own variables (CI_PRODUCER, CI_LEDGER) and these, the same
@@ -11,12 +12,22 @@
 //                   CI_RESULTS_DIR, CI_PRS, SHRINK_ONLY_GROWTH_APPROVED. The commit is
 //                   CI_QUEUE_COMMIT; fetch it with
 //                   `git fetch "$CI_QUEUE_REPOSITORY" "refs/ci-queue/runs/$CI_QUEUE_COMMIT"`.
-//                   Its exit code decides nothing: the queue reads the run's results.
+//                   Its exit code decides nothing: the queue reads the run's results. It posts no
+//                   `Check`: its commit exists only in the queue's clone, and the queue's verdict
+//                   reaches GitHub as `Queue`. Held browser shards start once, as for any held run:
+//                   from the orchestrator's `bun scripts/ci/schedule.ts due --run "$CI_RESULTS_DIR"`;
+//                   the runner waits for them and never starts them itself. A queue run is never a
+//                   `--pr-run`: the queue cancels its own superseded entries.
 //   --work-dir      Holds one results directory per run.
 //   --run-url-base  Each run's CI_RUN_URL is <base>/<time>-<commit>.
 //   --ledger        The runner's CI_LEDGER, read only. A pass counts only when the ledger holds it as
 //                   its tree's pass, and a batch's first PR is named only on a main tree it proves
 //                   green. Without it neither proof exists: a failure of the first PR needs a person.
+//   --publisher     Required once .github/scripts/check-app.json names the CI App: an executable that
+//                   runs `bun scripts/ci/publish-check.ts queue <success|failure>` from the trusted
+//                   copy as the App's user, with the CI_RUN_URL and CI_COMMIT the queue passes.
+//                   `Queue` is then the App's check run, and a PR's `Check` only the App's. Before the
+//                   App exists, `Queue` is a commit status of `gh` and `Check` the commit status.
 //   --max-batch     The most PRs in a batch, default 4. 1 while the ruleset requires up-to-date branches.
 //   --dry-run       Builds, tests and decides, but never sets a status, merges, comments or
 //                   turns auto-merge off. --prs names the PRs to rehearse with, in order.
@@ -26,6 +37,7 @@
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { CHECK_APP_CONFIG, readCheckApp } from '../../lib/testing/ci/check-app';
 import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
 import { createQueueAdapter } from './queue-adapter';
 import { repository } from './run';
@@ -39,6 +51,7 @@ const { values } = parseArgs({
     'dry-run': { type: 'boolean', default: false },
     prs: { type: 'string' },
     ledger: { type: 'string' },
+    publisher: { type: 'string' },
   },
 });
 const maxBatch = Number(values['max-batch']);
@@ -49,6 +62,14 @@ if (!Number.isInteger(maxBatch) || maxBatch < 1 || maxBatch > MAX_BATCH)
   throw new Error(`--max-batch takes 1 to ${MAX_BATCH}.`);
 if (only && (!values['dry-run'] || only.some((number) => !Number.isInteger(number) || number < 1)))
   throw new Error('--prs takes PR numbers, and only with --dry-run: a live tick lands only queued PRs.');
+
+// The App this clone's main names: the tick reads `Check` and posts `Queue` as that App, or as before.
+const app = readCheckApp(join(repository, CHECK_APP_CONFIG));
+if ('problem' in app) throw new Error(app.problem);
+if (app.appId !== null && !values.publisher)
+  throw new Error(
+    `${CHECK_APP_CONFIG} names CI App ${app.appId}: the queue needs --publisher to post Queue as it.`,
+  );
 
 const workDir = resolve(values['work-dir']);
 mkdirSync(workDir, { recursive: true });
@@ -70,6 +91,8 @@ try {
     workDir,
     runUrlBase: values['run-url-base'],
     ...(values.ledger ? { ledger: resolve(values.ledger) } : {}),
+    appId: app.appId,
+    ...(values.publisher ? { publisher: resolve(values.publisher) } : {}),
   });
   const outcome = await runQueueTick(adapter, {
     maxBatch,

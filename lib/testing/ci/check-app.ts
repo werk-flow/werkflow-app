@@ -32,7 +32,8 @@ function checkRunName(event: CiEvent): 'Check' | 'Full run / Check' {
 
 /** The body of GitHub's "create a check run" request: queued when a run is accepted, completed at its end. */
 type CheckRunRequest = {
-  name: 'Check' | 'Full run / Check';
+  /** `Queue`: the merge queue's mark on a PR head (queueCheckRunOf). */
+  name: 'Check' | 'Full run / Check' | 'Queue';
   head_sha: string;
   details_url?: string;
   /** The run's identity (runIdentityOf): which run a check run on the commit belongs to. */
@@ -167,6 +168,87 @@ function checkVerdict(check: CiResult): { passed: boolean; summary: string } {
     };
   if (check.status === 'failed') return { passed: false, summary: 'Check failed; the run names each job.' };
   return { passed: true, summary: check.planReason || 'Every job the plan runs passed.' };
+}
+
+/**
+ * The merge queue's mark on a PR head once the App exists (scripts/ci/queue.ts): `Queue` passed right
+ * before the queue merges the PR, failed when that merge did not happen. The ruleset pins `Queue` to
+ * the App as it pins `Check`, so no other token's mark lets a PR merge. The queue's own run is on a
+ * batch commit that exists only in the queue's clone, so this mark is how its verdict reaches GitHub.
+ */
+export function queueCheckRunOf(input: {
+  /** The queue's integration run that proved the head, or the run whose landing failed. */
+  runUrl: string;
+  head: string;
+  passed: boolean;
+  now: Date;
+}): { request: CheckRunRequest } | { problem: string } {
+  if (!SHA.test(input.head)) return { problem: `${input.head} is no commit id` };
+  const at = input.now.toISOString();
+  return {
+    request: {
+      name: 'Queue',
+      head_sha: input.head,
+      status: 'completed',
+      started_at: at,
+      completed_at: at,
+      conclusion: input.passed ? 'success' : 'failure',
+      ...detailsOf(input.runUrl),
+      external_id: input.runUrl,
+      output: input.passed
+        ? {
+            title: 'Passed',
+            summary: `The merge queue's integration run passed this head on main.
+
+Run: ${input.runUrl}`,
+          }
+        : {
+            title: 'Not merged',
+            summary: `The queue did not merge this head; it tests it again.
+
+Run: ${input.runUrl}`,
+          },
+    },
+  };
+}
+
+/** The configured App's newest check run in `runs`: GitHub numbers check runs in creation order. */
+const newestAppRun = <Run extends { id: number; app: { id: number } | null }>(
+  runs: readonly Run[],
+  appId: number,
+): Run | undefined =>
+  runs.filter((run) => run.app?.id === appId).toSorted((one, other) => other.id - one.id)[0];
+
+const appCheckPageSchema = z.object({
+  total_count: z.number(),
+  check_runs: z.array(
+    z.object({
+      id: z.number(),
+      status: z.string(),
+      conclusion: z.string().nullable(),
+      app: z.object({ id: z.number() }).nullable(),
+    }),
+  ),
+});
+
+/**
+ * A PR head's `Check` as the merge queue reads it once the App exists: the App's newest `Check`
+ * check run, which the ruleset pinned to the App reads too. A commit status or another app's check
+ * run counts for nothing. `pages` is `gh api --paginate --slurp` of
+ * `commits/<head>/check-runs?check_name=Check&app_id=<id>&filter=all`; a truncated list throws.
+ */
+export function appCheckStateOf(
+  pages: unknown,
+  appId: number,
+): 'SUCCESS' | 'PENDING' | 'FAILURE' | 'MISSING' {
+  const answers = z.array(appCheckPageSchema).min(1).parse(pages);
+  const runs = answers.flatMap((answer) => answer.check_runs);
+  const total = answers[0]?.total_count;
+  if (runs.length !== total) throw new Error(`GitHub listed ${runs.length} of ${total} Check runs.`);
+  const newest = newestAppRun(runs, appId);
+  if (!newest) return 'MISSING';
+  if (newest.status !== 'completed') return 'PENDING';
+  return newest.conclusion === 'success' ? 'SUCCESS' : 'FAILURE';
 }
 
 /** A result file is at most this large; a larger one is no result. */
@@ -307,9 +389,7 @@ async function ownStartOf(
       break;
     }
   }
-  const [newestStart] = runs
-    .filter((run) => run.app?.id === appId)
-    .toSorted((one, other) => other.id - one.id);
+  const newestStart = newestAppRun(runs, appId);
   if (!newestStart) return { problem: `no start of this run on ${head.head}` };
   if (newestStart.external_id === runIdentityOf(scheduled)) return { id: newestStart.id };
   return {
