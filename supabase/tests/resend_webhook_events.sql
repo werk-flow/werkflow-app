@@ -1,4 +1,4 @@
--- Resend's delivery signals (20261215100009_mark_bounced_billing_mails.sql,
+-- Resend's delivery signals (20261221100009_mark_bounced_billing_mails.sql,
 -- werk-flow/werkflow-planning#496): no client role reads or writes
 -- resend_webhook_events or runs its functions, including the organization's
 -- own Admin; the service role writes only through them; a Svix id is recorded
