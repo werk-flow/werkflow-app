@@ -2,6 +2,7 @@
 // and only while Boat would still stop and erase it by itself; every other machine of the checkout
 // is deleted. Prevents a start per run (decision 15, werk-flow/werkflow-planning#294).
 import { afterAll, beforeAll, expect, setSystemTime, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -627,4 +628,28 @@ test("a checkout's machine records each run's cost there for the CI cost report,
   ]);
   await withMachine(machine, new AbortController().signal, async () => 0);
   expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toHaveLength(1);
+});
+
+test("a run's cost record names the commit packing read, though HEAD moved or the checkout changed since", async () => {
+  const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', ...args], {
+      cwd: checkout,
+      encoding: 'utf8',
+    }).trim();
+  git('init', '--quiet');
+  git('commit', '--quiet', '--allow-empty', '-m', 'packed');
+  const packed = git('rev-parse', 'HEAD');
+  // A commit lands while the machine starts, and a file changes while the run runs.
+  git('commit', '--quiet', '--allow-empty', '-m', 'later');
+  const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
+  const machine = { id: 'bx_kept0001', client: boat.client, log: () => undefined, repository: checkout };
+  await withMachine(
+    machine,
+    new AbortController().signal,
+    async () => writeFileSync(join(checkout, 'work.ts'), 'in progress'),
+    undefined,
+    packed,
+  );
+  expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toMatchObject([{ head: packed }]);
 });

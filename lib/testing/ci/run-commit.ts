@@ -4,7 +4,7 @@
 // scheduler's report. The executor decides where a job runs: a process in its own checkout now, a
 // container later. Each job takes `scripts/ci/prepare.ts for <job>`, then `scripts/ci/job.ts <job>`.
 // This module decides; it starts nothing itself.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runPlanOf } from './check';
 import { CI_DAG, type CiEvent, type CiJob } from './dag';
@@ -39,6 +39,15 @@ export function claimMainRun(
     const owner = readFileSync(claim, 'utf8');
     return owner === runUrl ? { claimed: true } : { owner };
   }
+}
+
+/**
+ * Gives up `runUrl`'s claim of main's run of `commit` when that run never started, such as when its
+ * queued Check could not be posted: the next starter of the commit claims it. Another run's claim stays.
+ */
+export function releaseMainRun(folder: string, commit: string, runUrl: string): void {
+  const claim = join(folder, commit);
+  if (existsSync(claim) && readFileSync(claim, 'utf8') === runUrl) rmSync(claim);
 }
 
 /** One job, or one shard of a sharded job. */
@@ -116,8 +125,11 @@ export type RunCommitDeps = {
 };
 
 export type RunCommitOutcome = {
-  /** 0 when the run's Check passed. */
-  exitCode: number;
+  /**
+   * 0 when the run's Check passed, 1 when it failed, 2 when the run never started because its queued
+   * Check could not be posted: nothing ran, so the run is still owed.
+   */
+  exitCode: 0 | 1 | 2;
   units: { unit: Unit; state: UnitState }[];
   scheduler: Partial<Record<CiJob, { result: SchedulerResult }>>;
 };
@@ -226,9 +238,10 @@ async function planRun(input: RunCommitInput, deps: RunCommitDeps, signal: Abort
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
- * Starts one job or shard; the promise settles once its state and receipts are final. With a
- * ledger, the start receipt goes in before the job begins, and a start that cannot be recorded
- * fails the job unstarted. The end receipt follows the executor's verdict.
+ * Starts one job or shard; the promise settles once its state and receipts are final. A job passes
+ * only when the executor saw it pass and its result is its own of this run, attempt and Plan, with a
+ * ledger or without one. With a ledger, the start receipt goes in before the job begins, and a start
+ * that cannot be recorded fails the job unstarted; the end receipt follows the job's state.
  */
 async function startUnit(
   input: RunCommitInput,
@@ -245,9 +258,9 @@ async function startUnit(
     listGrowthApproved: input.env.SHRINK_ONLY_GROWTH_APPROVED === 'true',
     plan: context.owner,
   };
-  const start = append ? startReceipt(run, unit, new Date(deps.now())) : undefined;
+  const start = startReceipt(run, unit, new Date(deps.now()));
   try {
-    if (start) append?.(start);
+    append?.(start);
   } catch (error) {
     deps.log(`[run] ${name}: not started, its start could not reach the ledger: ${message(error)}`);
     context.states.set(name, 'failed');
@@ -264,11 +277,13 @@ async function startUnit(
       return signal.aborted ? 'cancelled' : 'failed';
     },
   );
-  if (append && start) {
-    const end = endReceipt(start, deps.readResult(unit), state === 'passed', new Date(deps.now()));
-    if (end.problem) deps.log(`[run] ${name}: its ledger receipt fails it: ${end.problem}`);
-    // A job whose own result does not stand fails here too, so nothing that needs it starts.
-    if (end.problem && state === 'passed') state = 'failed';
+  const end = endReceipt(start, deps.readResult(unit), state === 'passed', new Date(deps.now()));
+  // A job whose own result does not stand fails, so nothing that needs it starts.
+  if (end.problem && state === 'passed') {
+    deps.log(`[run] ${name}: exited 0, but its result fails it: ${end.problem}`);
+    state = 'failed';
+  }
+  if (append) {
     try {
       append(end.receipt);
     } catch (error) {
@@ -424,7 +439,7 @@ export async function runCommit(
   const { input, deps } = withLedgerBoundary(given, dependencies);
   if (deps.publish && !(await deps.publish('start'))) {
     deps.log('[run] The queued Check could not be posted, so the run does not start.');
-    return { exitCode: 1, units: [], scheduler: {} };
+    return { exitCode: 2, units: [], scheduler: {} };
   }
   const planned = await planRun(input, deps, signal);
   const states = await runUnits(input, deps, signal, planned);

@@ -30,6 +30,7 @@ afterEach(() => rmSync(stub, { recursive: true, force: true }));
 const RUN_URL = 'https://ci.test/run/7';
 const COMMIT = 'a'.repeat(40);
 const HEAD = 'b'.repeat(40);
+const TREE = 'c'.repeat(40);
 
 function result(overrides: Partial<CiResult>): CiResult {
   return {
@@ -61,6 +62,7 @@ const build = (
   checkRunOf({
     check,
     plan: result({ job: 'plan', startedAt: '2026-11-21T08:00:00.000Z' }),
+    tree: TREE,
     scheduled: { runUrl: RUN_URL, attempt: 2, event: 'pr', commit: COMMIT, prHead: undefined, ...scheduled },
     now: new Date('2026-11-21T10:00:00.000Z'),
   });
@@ -90,6 +92,8 @@ test('a check run passes only a finished, passed Check of this run from a CI run
   expect(conclusion(result({ status: 'failed' }))).toBe('failure');
   expect(conclusion(result({ status: 'running', completedAt: null }))).toBe('failure');
   expect(conclusion(result({ producer: null }))).toBe('failure');
+  // A pass of the scheduled run and commit from another tree than the runner checked out never succeeds.
+  expect(conclusion(result({ tree: 'd'.repeat(40) }))).toBe('failure');
   const full = build(result({ event: 'full' }), { event: 'full' });
   expect('request' in full && full.request.name).toBe('Full run / Check');
 });
@@ -480,7 +484,7 @@ test("the publisher posts nothing for another run's Check and prints no token", 
   const results = join(stub, 'results');
   mkdirSync(results);
   writeFileSync(join(results, 'check.json'), JSON.stringify(result({ runUrl: 'https://ci.test/run/6' })));
-  const finish = (script: string) =>
+  const finish = (script: string, env: Record<string, string> = {}) =>
     spawnSync(process.execPath, [script, 'finish'], {
       encoding: 'utf8',
       env: {
@@ -491,8 +495,10 @@ test("the publisher posts nothing for another run's Check and prints no token", 
         CI_RUN_ATTEMPT: '2',
         CI_EVENT: 'pr',
         CI_COMMIT: COMMIT,
+        CI_TREE: TREE,
         CI_CHECK_APP_TOKEN: TOKEN,
         GITHUB_REPOSITORY: 'owner/repo',
+        ...env,
       },
     });
   // With an App configured, it reads the result and refuses it before any request.
@@ -502,6 +508,10 @@ test("the publisher posts nothing for another run's Check and prints no token", 
     'No check run is posted: the Check result is of the pr run https://ci.test/run/6',
   );
   expect(foreign.stdout + foreign.stderr).not.toContain(TOKEN);
+  // Without the scheduled tree, a finish cannot tell the tested tree, so it posts nothing.
+  const treeless = finish(publisherCopy(`{"appId": ${APP}}`), { CI_TREE: '' });
+  expect(treeless.status).toBe(1);
+  expect(treeless.stderr).toContain('CI_TREE');
   // Without one, it stops at its configuration.
   const unconfigured = finish(publisherCopy('{"appId": null}'));
   expect(unconfigured.status).toBe(1);

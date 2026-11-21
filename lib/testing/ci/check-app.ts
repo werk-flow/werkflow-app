@@ -106,11 +106,14 @@ export function queuedCheckRunOf(
 
 /**
  * The check run for this run's Check result, or why none may be posted. It passes only a complete,
- * passed Check of the scheduled run and attempt from a CI runner; any other Check of that attempt
- * posts a failure. A result of another run, attempt, event or commit posts nothing.
+ * passed Check of the scheduled run and attempt from a CI runner, on the tree the runner checked out;
+ * any other Check of that attempt posts a failure. A result of another run, attempt, event or commit
+ * posts nothing.
  */
 export function checkRunOf(input: {
   check: CiResult | { unreadable: string };
+  /** CI_TREE: the tree of the commit the runner checked out. */
+  tree: string;
   /** The run's plan result: its start is the run's start. Another run's plan is ignored. */
   plan: CiResult | { unreadable: string };
   scheduled: ScheduledRun;
@@ -132,13 +135,13 @@ export function checkRunOf(input: {
     };
   const head = headOf(scheduled);
   if ('problem' in head) return head;
-  const verdict = checkVerdict(check);
+  const verdict = checkVerdict(check, input.tree);
   const plan = input.plan;
   const ownPlan =
     !('unreadable' in plan) &&
     plan.runUrl === runUrl &&
     plan.attempt === scheduled.attempt &&
-    plan.tree === check.tree &&
+    plan.tree === input.tree &&
     plan.event === check.event;
   return {
     request: {
@@ -158,9 +161,11 @@ export function checkRunOf(input: {
   };
 }
 
-function checkVerdict(check: CiResult): { passed: boolean; summary: string } {
+function checkVerdict(check: CiResult, tree: string): { passed: boolean; summary: string } {
   if (check.status === 'running' || check.completedAt === null)
     return { passed: false, summary: 'Check did not finish.' };
+  if (check.tree !== tree)
+    return { passed: false, summary: `Check ran on tree ${check.tree}, not on the scheduled tree ${tree}.` };
   if (check.producer === null)
     return {
       passed: false,

@@ -2,7 +2,6 @@
 // scripts/ci-cost.ts can count Boat beside CI (council round 2, R2-9; werk-flow/werkflow-planning#503).
 // A record holds synthetic metadata only: the machine's id, the run's times, Boat's usage counter, the
 // commit it tested and the report folders it returned. Recording never fails a run.
-import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from '../../zod';
@@ -45,14 +44,13 @@ function reportFolders(repository: string): Set<string> {
  */
 type BoatRunStart = { startedAt: string; head: string | null; reports: ReadonlySet<string> };
 
-/** The run's start, or undefined when the checkout's reports cannot be read: the record is best effort. */
-export function boatRunStart(repository: string): BoatRunStart | undefined {
+/**
+ * The run's start with `head`, the commit packing read (`testedCommit`), or undefined when the
+ * checkout's reports cannot be read: the record is best effort.
+ */
+export function boatRunStart(repository: string, head: string | null): BoatRunStart | undefined {
   try {
-    return {
-      startedAt: new Date().toISOString(),
-      head: headOf(repository),
-      reports: reportFolders(repository),
-    };
+    return { startedAt: new Date().toISOString(), head, reports: reportFolders(repository) };
   } catch (error) {
     console.warn(
       `[verify] The Boat run's cost is not recorded: ${error instanceof Error ? error.message : String(error)}`,
@@ -62,14 +60,12 @@ export function boatRunStart(repository: string): BoatRunStart | undefined {
 }
 
 /**
- * The commit the checkout's run tests, or null when it tests more than a commit (changed or untracked
- * files) or git cannot say: such a run counts to no PR.
+ * The commit a run tests, from the HEAD and the changed or untracked files its packing read, so a
+ * commit made during the run is never recorded in its place. Null when it tests more than a commit,
+ * or `head` is no commit id: such a run counts to no PR.
  */
-function headOf(repository: string): string | null {
-  const git = (...args: string[]) => spawnSync('git', args, { cwd: repository, encoding: 'utf8' });
-  const head = git('rev-parse', 'HEAD');
-  const status = git('status', '--porcelain');
-  return head.status === 0 && status.status === 0 && status.stdout.trim() === '' ? head.stdout.trim() : null;
+export function testedCommit(head: string, changed: readonly string[]): string | null {
+  return changed.length === 0 && /^[0-9a-f]{40}$/.test(head) ? head : null;
 }
 
 /**

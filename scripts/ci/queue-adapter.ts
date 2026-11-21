@@ -148,7 +148,7 @@ export function runIntegration(
  * Starts main's run after a landing (`mainRunOf` in lib/testing/ci/queue.ts) through the main
  * runner, and waits for it. Its exit code decides nothing for the queue; the run posts its own Check.
  * True once the run is paid: the runner ran (exit 0 or 1), or another run of the commit started
- * (3). False when it could not start or refused before anything ran (2).
+ * (3). False when it could not start or refused before anything ran (2), its queued Check unposted too.
  */
 export function runMain(
   options: { repository: string; mainRunner: string; workDir: string; runUrlBase: string },

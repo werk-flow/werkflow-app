@@ -261,9 +261,11 @@ export async function withMachine<T>(
   work: () => Promise<T>,
   /** True when it kept the machine, else why not. */
   keep: (result: T) => Promise<true | string> = async () => 'the run keeps no machine',
+  /** The commit the run tests, as its packing read it (`testedCommit`); null when unknown. */
+  head: string | null = null,
 ): Promise<T> {
   let returned: { result: T } | undefined;
-  const started = machine.repository ? boatRunStart(machine.repository) : undefined;
+  const started = machine.repository ? boatRunStart(machine.repository, head) : undefined;
   try {
     returned = { result: await work() };
   } finally {

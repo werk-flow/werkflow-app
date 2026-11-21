@@ -17,6 +17,7 @@ import { CI_EVENTS } from '../../lib/testing/ci/dag';
 import { positiveIntegerSchema, readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
 import {
   claimMainRun,
+  releaseMainRun,
   RUN_COMMIT_LOCK,
   runCommit,
   type RunCommitInput,
@@ -51,13 +52,14 @@ import { repository } from './run';
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.
 //   CI_PUBLISHER    An executable that runs `bun scripts/ci/publish-check.ts <start|finish>` from the
 //                   trusted copy as the CI App's user; it gets CI_RUN_URL, CI_RUN_ATTEMPT, CI_EVENT,
-//                   CI_COMMIT, CI_PR_HEAD_SHA, CI_RESULTS_DIR and GITHUB_REPOSITORY. The run posts
+//                   CI_COMMIT, CI_TREE, CI_PR_HEAD_SHA, CI_RESULTS_DIR and GITHUB_REPOSITORY. The run posts
 //                   `start` before Plan and starts nothing when that fails, and `finish` after Check.
 //                   Refused for a queue run, whose commit is not on GitHub.
 //   GH_TOKEN        Plan and Fast read GitHub with it; SIBLING_REPOSITORIES_TOKEN reaches only Fast's clone.
 // Exit 0: Check passed. 1: it failed or did not run. 2: refused before anything ran: a missing or
 // unreadable variable, an attempt that does not count up, a results directory another run-commit
-// holds, or an `origin` or commit git cannot fetch. 3: nothing ran because another `main` run of the
+// holds, an `origin` or commit git cannot fetch, or a queued Check the publisher could not post; a
+// main run then gives up its claim of the commit. 3: nothing ran because another `main` run of the
 // commit started already (the ledger holds its Plan, or it claimed the commit on this host).
 // Passed jobs' workspaces are removed at the end; a failed job's stays with its log.
 
@@ -239,8 +241,9 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const)
 
 // The same on this host before any Plan wrote: the first starter claims the commit, atomically, as
 // the last step before the run starts, so a run that never started claims nothing.
+const mainRuns = join(workRoot, 'main-runs');
 if (event === 'main') {
-  const claimed = claimMainRun(join(workRoot, 'main-runs'), commit, runUrl);
+  const claimed = claimMainRun(mainRuns, commit, runUrl);
   if ('unwritable' in claimed) refuse(claimed.unwritable);
   if ('owner' in claimed) refuse(`main's run of ${commit} started already: ${claimed.owner}.`, 3);
 }
@@ -265,6 +268,7 @@ try {
                 CI_RUN_ATTEMPT: String(attempt.data),
                 CI_EVENT: event,
                 CI_COMMIT: commit,
+                CI_TREE: tree,
                 CI_RESULTS_DIR: resultsDir,
               },
             });
@@ -289,13 +293,17 @@ try {
     controller.signal,
   );
   exitCode = outcome.exitCode;
+  // Its queued Check could not be posted, so nothing ran: the run is still owed, and its claim goes.
+  if (exitCode === 2 && event === 'main') releaseMainRun(mainRuns, commit, runUrl);
   for (const { unit, state } of outcome.units) {
     const folder = jobs.workspace(unit);
     if (state === 'passed') rmSync(folder, { recursive: true, force: true });
     else if (existsSync(folder)) log(`[run] ${unitName(unit)} ${state}: its workspace stays at ${folder}`);
   }
   if (exitCode === 0) rmSync(root, { recursive: true, force: true });
-  log(`[run] ${event} run of ${commit}: Check ${exitCode === 0 ? 'passed' : 'failed'}`);
+  log(
+    `[run] ${event} run of ${commit}: ${exitCode === 2 ? 'not started' : `Check ${exitCode === 0 ? 'passed' : 'failed'}`}`,
+  );
 } finally {
   release();
 }

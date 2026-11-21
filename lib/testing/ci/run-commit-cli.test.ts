@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { CiResult } from './results';
-import { claimMainRun, RUN_COMMIT_LOCK } from './run-commit';
+import { claimMainRun, releaseMainRun, RUN_COMMIT_LOCK } from './run-commit';
 
 const repository = resolve(import.meta.dir, '../../..');
 const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim();
@@ -138,4 +138,17 @@ test('the first run claims a main commit on this host; the same run claims it ag
   });
   writeFileSync(join(folder, 'file'), '');
   expect('unwritable' in claimMainRun(join(folder, 'file'), head, 'https://ci.example/runs/1')).toBe(true);
+});
+
+test("a run that never started releases its own claim of a main commit, never another run's", () => {
+  const claims = join(folder, 'main-runs');
+  expect(claimMainRun(claims, head, 'https://ci.example/runs/1')).toEqual({ claimed: true });
+  releaseMainRun(claims, head, 'https://ci.example/runs/2');
+  expect(claimMainRun(claims, head, 'https://ci.example/runs/2')).toEqual({
+    owner: 'https://ci.example/runs/1',
+  });
+  // Its queued Check could not be posted, so nothing ran: any run of the commit may start it now.
+  releaseMainRun(claims, head, 'https://ci.example/runs/1');
+  expect(claimMainRun(claims, head, 'https://ci.example/runs/2')).toEqual({ claimed: true });
+  releaseMainRun(join(folder, 'missing'), head, 'https://ci.example/runs/2');
 });

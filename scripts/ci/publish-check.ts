@@ -39,6 +39,8 @@ import { repository } from './run';
 //   CI_RUN_ATTEMPT      The run's attempt, 1 for the first; check.json must be of it. Required.
 //   CI_EVENT            The run's event (lib/testing/ci/dag.ts); only `full` posts `Full run / Check`. Required.
 //   CI_COMMIT           The commit the runner checked out for the run. Required.
+//   CI_TREE             finish: that commit's tree; a passing check.json of another tree posts a
+//                       failure. Required for finish.
 //   CI_PR_HEAD_SHA      pr: the pull request's head when the runner checked out a merge commit on top
 //                       of it, as for job.ts. The check run goes on that head.
 //   CI_RESULTS_DIR      finish: the run's results directory; check.json is the verdict and must be of
@@ -71,6 +73,7 @@ const attempt = Number(environment.CI_RUN_ATTEMPT);
 const event = CI_EVENTS.find((name) => name === environment.CI_EVENT);
 const commit = environment.CI_COMMIT;
 const directory = environment.CI_RESULTS_DIR;
+const tree = environment.CI_TREE;
 const token = environment.CI_CHECK_APP_TOKEN;
 const repositoryName = environment.GITHUB_REPOSITORY;
 if (mode === 'queue') {
@@ -95,21 +98,22 @@ if (
   attempt < 1 ||
   !event ||
   !commit ||
-  (mode === 'finish' && !directory) ||
+  (mode === 'finish' && (!directory || !tree || !/^[0-9a-f]{40}$/.test(tree))) ||
   !token ||
   !repositoryName
 )
   fail(
-    `CI_RUN_URL, CI_RUN_ATTEMPT (1 or more), CI_EVENT (${CI_EVENTS.join('|')}), CI_COMMIT, CI_CHECK_APP_TOKEN, GITHUB_REPOSITORY and, to finish, CI_RESULTS_DIR are required.`,
+    `CI_RUN_URL, CI_RUN_ATTEMPT (1 or more), CI_EVENT (${CI_EVENTS.join('|')}), CI_COMMIT, CI_CHECK_APP_TOKEN, GITHUB_REPOSITORY and, to finish, CI_RESULTS_DIR and CI_TREE (a tree id) are required.`,
   );
 
 const scheduled = { runUrl, attempt, event, commit, prHead: environment.CI_PR_HEAD_SHA || undefined };
 const built =
-  mode === 'start' || !directory
+  mode === 'start' || !directory || !tree
     ? queuedCheckRunOf(scheduled)
     : checkRunOf({
         check: readHandoff(join(directory, resultFileName('check', null))),
         plan: readHandoff(join(directory, resultFileName('plan', null))),
+        tree,
         scheduled,
         now: new Date(),
       });

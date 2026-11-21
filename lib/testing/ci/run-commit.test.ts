@@ -400,6 +400,20 @@ test('a job that passed but left a result that is not its own fails, and nothing
   expect(report(w).browser).toEqual({ result: 'skipped' });
 });
 
+test("without a ledger too, a job that passed but left another attempt's result fails, and nothing that needs it starts", async () => {
+  const w = world({
+    isolated: false,
+    written: { fast: (unit, at, own) => result(unit, at, { ...own, attempt: 2 }) },
+    exits: { check: 1 },
+  });
+  const outcome = await runCommit(input(), w.deps, new AbortController().signal);
+  expect(w.ledger).toEqual([]);
+  expect(outcome.units.find((entry) => entry.unit.job === 'fast')?.state).toBe('failed');
+  expect(started(w)).not.toContain('jobs:browser-1');
+  expect(report(w).fast).toEqual({ result: 'failure' });
+  expect(report(w).browser).toEqual({ result: 'skipped' });
+});
+
 test('an executor that runs jobs as the orchestrator user keeps no ledger: no job sees it and nothing is appended', async () => {
   const w = world({ isolated: false });
   await runCommit(input(), w.deps, new AbortController().signal);
@@ -476,7 +490,7 @@ test('a Check that exited 0 passes the run only with its completed passing resul
   expect(await passes({ checkOverrides: { job: 'fast' } })).toBe(false);
 });
 
-test('the queued Check is posted before Plan, and a run whose start post failed runs nothing', async () => {
+test('the queued Check is posted before Plan, and a run whose start post failed runs nothing and exits as not run', async () => {
   const posts: string[] = [];
   const w = world({ publish: (mode) => (posts.push(`${mode}:${started(w).length}`), true) });
   await runCommit(input(), w.deps, new AbortController().signal);
@@ -484,6 +498,7 @@ test('the queued Check is posted before Plan, and a run whose start post failed 
 
   const refused = world({ publish: () => false });
   const refusedRun = await runCommit(input(), refused.deps, new AbortController().signal);
-  expect(refusedRun.exitCode, refused.log.join('\n')).toBe(1);
+  // 2, not run: the queue keeps an owed main run until a run of it starts (scripts/ci/queue.ts).
+  expect(refusedRun.exitCode, refused.log.join('\n')).toBe(2);
   expect(started(refused)).toEqual([]);
 });

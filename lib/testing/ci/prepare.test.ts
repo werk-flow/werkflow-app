@@ -192,6 +192,36 @@ test("the stack's environment is recorded and cached, and a later job takes it w
   expect(read('env')).toBe('');
 });
 
+test('the trusted siblings step, run from outside the tested checkout, clones both beside CI_CHECKOUT', () => {
+  // git as a stub that records each clone and makes its destination, so no network is used.
+  const tools = join(stub, 'tools');
+  mkdirSync(tools);
+  writeFileSync(
+    join(tools, 'git'),
+    `#!/usr/bin/env bash\necho "$* config:\${GIT_CONFIG_KEY_0:-none}" >> "$STUB/git.calls"\nmkdir -p "\${@: -1}"\n`,
+  );
+  chmodSync(join(tools, 'git'), 0o755);
+  // The step runs in the repository folder, as from the trusted copy; the checkout is another one.
+  const checkout = join(stub, 'jobs', 'fast', 'checkout');
+  mkdirSync(checkout, { recursive: true });
+  const ran = prepare('siblings', {
+    PATH: `${tools}:${stub}:${process.env.PATH}`,
+    CI_CHECKOUT: checkout,
+    SIBLING_REPOSITORIES_TOKEN: 'sibling-token',
+  });
+  expect(ran.passed, ran.output).toBe(true);
+  const parent = join(stub, 'jobs', 'fast');
+  expect(read('git.calls').trim().split('\n')).toEqual([
+    `clone --quiet --depth 1 https://github.com/werk-flow/werkflow-website ${join(parent, 'werkflow-website')} config:none`,
+    `clone --quiet --depth 1 https://github.com/werk-flow/werkflow-business ${join(parent, 'werkflow-business')} config:http.https://github.com/.extraheader`,
+  ]);
+  // Nothing lands beside the folder the step ran in, and the token is in no argument.
+  expect(existsSync(join(stub, 'werkflow-website'))).toBe(false);
+  expect(existsSync(join(stub, 'werkflow-business'))).toBe(false);
+  expect(read('git.calls')).not.toContain('sibling-token');
+  expect(read('env')).toBe('');
+});
+
 test('each sibling clone in place is kept and each missing one made; without the token business is marked unreadable', () => {
   // The trusted step cloned both: nothing more to do, and nothing marked.
   mkdirSync(join(stub, 'werkflow-website'));
