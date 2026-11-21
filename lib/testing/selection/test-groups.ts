@@ -71,10 +71,8 @@ function declaredTiming(files: readonly string[]): GroupTimingRequirements {
   };
 }
 
-// Prefixes describe ownership, not proof that a change cannot affect another area. A changed file
-// under a prefix selects the browser groups of its scope; a product file no prefix owns selects the
-// core set (group-selection.ts). An entry ending in "/" owns a directory, any other one obvious shared
-// file (a hook, a skeleton, an API route); every entry exists on disk (test-scope-prefixes.test.ts).
+// Ownership, not proof of isolation: a changed file selects its scope's browser groups, an unowned one the
+// core set (group-selection.ts); "/" owns a directory, else one file; test-scope-prefixes.test.ts checks.
 export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   customers: [
     'lib/clients/',
@@ -295,10 +293,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['layout:field-time', 'layout/surfaces-field-time.spec.ts', ['time', 'personnel']],
   // The screens outside the app shell with their own sessions (standalone-route-inventory.ts).
   ['layout:standalone', 'layout/standalone-screens.spec.ts', ['standalone']],
-  // Reference screenshots of every page family.
   ['visual', 'visual/references.spec.ts', ['*']],
-  // Acceptance captures by what they drive, so a changed helper selects the groups importing it: rounds'
-  // pages, dialogs and screens (tests/audit/support/acceptance-rounds.ts), then the open sets.
+  // Acceptance captures by what they drive (tests/audit/support/acceptance-rounds.ts), then the open sets.
   ['visual:acceptance:pages', 'visual/acceptance-pages.spec.ts', ['*']],
   ['visual:acceptance:calendar', 'visual/acceptance-calendar.spec.ts', ['planning']],
   ['visual:acceptance:customers', 'visual/acceptance-customers.spec.ts', ['customers']],
