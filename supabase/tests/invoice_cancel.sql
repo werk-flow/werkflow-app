@@ -305,6 +305,19 @@ begin
     or v_document.metadata ->> 'invoiceId' is distinct from v_answer ->> 'stornoId' then
     raise exception 'the cancel answered % with the Stornorechnung''s original %', v_answer, to_jsonb(v_document);
   end if;
+  -- The Stornorechnung names the job, but its original is linked to the customer alone: a job link
+  -- would open it to every employee assigned there (guard_invoice_original_links).
+  if (select count(*) from public.document_links link where link.document_id = v_document.id) <> 1
+    or not exists (select 1 from public.document_links link where link.document_id = v_document.id
+      and link.client_id = '38080000-0000-4000-8000-000000000020'
+      and num_nonnulls(link.job_id, link.project_id, link.employee_id, link.request_id, link.equipment_id,
+        link.service_case_id, link.maintenance_coverage_id) = 0) then
+    raise exception 'the Stornorechnung''s original is not linked to its customer alone';
+  end if;
+  perform pg_temp.expect_refusal('link the Stornorechnung''s original to its job', format(
+    'insert into public.document_links (organization_id, document_id, job_id, created_by) values (%L, %L, %L, %L)',
+    '38080000-0000-4000-8000-000000000010', v_document.id, '38080000-0000-4000-8000-000000000050',
+    '38080000-0000-4000-8000-000000000002'), 'document_is_invoice_original');
   -- A retry under the same key registers nothing: it answers the first cancel and its registered original.
   if pg_temp.cancel('38080000-0000-4000-8000-000000000001', '38080000-0000-4000-8000-000000000010', 'corrected',
       '38080000-0000-4000-8000-000000000302', 'Menge falsch', true, '38080000-0000-4000-8000-000000000402')

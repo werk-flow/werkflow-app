@@ -66,18 +66,21 @@ alter table public.invoice_events add constraint invoice_events_type_check
 -- cancels (it raises app.invoice_cancel to that id for its transaction), and
 -- never changes. Inside that call, and once an issued Stornorechnung names
 -- the invoice, its status alone turns from Ausgestellt to Storniert; the
--- cancel's actor and time are in its history. Nothing else of an issued
--- invoice changes.
+-- cancel's actor and time are in its history. Every other rule of R4's guard
+-- stays: a work or person reference clears only when its target is gone,
+-- only register_invoice_original names the original, a draft names none.
+-- Security definer as there; no role executes it.
 create or replace function app_private.guard_issued_invoice()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path to ''
 as $$
 declare
   v_free constant text[] := array[
     'job_id', 'project_id', 'service_case_id', 'created_by', 'updated_by', 'issued_by', 'original_document_id'
   ];
+  v_registering constant boolean := coalesce(current_setting('app.invoice_original_write', true), '') = 'on';
   v_cancelling constant text := coalesce(current_setting('app.invoice_cancel', true), '');
 begin
   if tg_op = 'INSERT' then
@@ -94,12 +97,17 @@ begin
     end if;
     raise exception 'invoice_issued';
   end if;
+  perform set_config('app.invoice_original_write', 'off', true);
   if (new.cancels_invoice_id, new.cancellation_reason, new.corrects_invoice_id)
     is distinct from (old.cancels_invoice_id, old.cancellation_reason, old.corrects_invoice_id)
   then
     raise exception 'invoice_link_fixed';
   end if;
   if old.status = 'entwurf' then
+    -- A draft has no original; only the registration names one, on an issued invoice.
+    if new.original_document_id is not null then
+      raise exception 'invoice_issued';
+    end if;
     return new;
   end if;
   if old.status = 'ausgestellt' and new.status = 'storniert' and old.id::text = v_cancelling
@@ -113,14 +121,22 @@ begin
     return new;
   end if;
   if to_jsonb(new) - v_free is distinct from to_jsonb(old) - v_free
-    or (new.job_id is not null and new.job_id is distinct from old.job_id)
-    or (new.project_id is not null and new.project_id is distinct from old.project_id)
-    or (new.service_case_id is not null and new.service_case_id is distinct from old.service_case_id)
-    or (new.created_by is not null and new.created_by is distinct from old.created_by)
-    or (new.updated_by is not null and new.updated_by is distinct from old.updated_by)
-    or (new.issued_by is not null and new.issued_by is distinct from old.issued_by)
-    or (old.original_document_id is not null
-      and new.original_document_id is distinct from old.original_document_id)
+    or (new.job_id is distinct from old.job_id and (new.job_id is not null or exists (
+      select 1 from public.jobs job where job.id = old.job_id and job.organization_id = old.organization_id)))
+    or (new.project_id is distinct from old.project_id and (new.project_id is not null or exists (
+      select 1 from public.projects project
+      where project.id = old.project_id and project.organization_id = old.organization_id)))
+    or (new.service_case_id is distinct from old.service_case_id and (new.service_case_id is not null or exists (
+      select 1 from public.service_cases service_case
+      where service_case.id = old.service_case_id and service_case.organization_id = old.organization_id)))
+    or (new.created_by is distinct from old.created_by and (new.created_by is not null
+      or exists (select 1 from auth.users person where person.id = old.created_by)))
+    or (new.updated_by is distinct from old.updated_by and (new.updated_by is not null
+      or exists (select 1 from auth.users person where person.id = old.updated_by)))
+    or (new.issued_by is distinct from old.issued_by and (new.issued_by is not null
+      or exists (select 1 from auth.users person where person.id = old.issued_by)))
+    or (new.original_document_id is distinct from old.original_document_id
+      and (old.original_document_id is not null or new.original_document_id is null or not v_registering))
   then
     raise exception 'invoice_issued';
   end if;
