@@ -66,7 +66,9 @@ test('an unreadable measurement input warns and records unknown, so it never fai
     CI_FIRST_ATTEMPT_CLASS: 'transient',
     CI_JOB_STARTED_AT: 'soon',
   });
-  expect(unknown).toEqual({ prs: [], attempt: 1, firstAttemptClass: null, runnerStartedAt: null });
+  expect(unknown).toEqual({ prs: [], attempt: null, firstAttemptClass: null, runnerStartedAt: null });
+  // An unset CI_RUN_ATTEMPT still means the first attempt.
+  expect(measurementInputs({}).attempt).toBe(1);
   expect(warnings.map((warning) => warning.split(' ')[0])).toEqual([
     'CI_PRS',
     'CI_RUN_ATTEMPT',

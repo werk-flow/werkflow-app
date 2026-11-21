@@ -697,6 +697,7 @@ test('the planner log prints every reason and file name as one JSON string, so a
       tooling: { everyGroup: undefined, browser: undefined, fast: {}, invoices: undefined, lintOnly: [] },
     },
     { [`ui:${forged}`]: `Tailwind scans ${forged}\r::warning::also` },
+    `The renderer, the invoice core or their dependencies changed (${forged})`,
   );
   expect(lines.length).toBeGreaterThan(0);
   for (const line of lines) {
@@ -704,6 +705,9 @@ test('the planner log prints every reason and file name as one JSON string, so a
     expect(line.trimStart().startsWith('::')).toBe(false);
   }
   expect(lines.join('\n')).toContain(JSON.stringify(`own test (${forged})`));
+  expect(lines.at(-1)).toContain(
+    `E-invoices: ${JSON.stringify(`The renderer, the invoice core or their dependencies changed (${forged})`)}`,
+  );
 });
 
 test('support only a wall-clock group imports still runs the critical journeys, never the wall-clock group', () => {

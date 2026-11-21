@@ -457,11 +457,14 @@ async function browser(): Promise<boolean> {
 /**
  * A full run's failed groups that no plan of the trees landed since the previous full run selected
  * (lib/testing/ci/full-run.ts), or undefined when the runner keeps no ledger, which alone holds
- * those plans. A measurement: what it cannot read warns and stays unknown, never failing Check.
+ * those plans, or when a result cannot be read, which may hold failures. A measurement: what it
+ * cannot read warns and stays unknown, never failing Check.
  */
 function fullRunMisses(results: readonly (CiResult | { unreadable: string })[]): string[] | undefined {
   if (ci.event !== 'full' || !ledgerPath || !producer) return undefined;
   try {
+    const unreadable = results.flatMap((entry) => ('unreadable' in entry ? [entry.unreadable] : []));
+    if (unreadable.length) throw new Error(unreadable.join('; '));
     const ledger = readLedger(ledgerPath);
     if ('unreadable' in ledger) throw new Error(ledger.unreadable);
     const history = git(
@@ -485,7 +488,7 @@ function fullRunMisses(results: readonly (CiResult | { unreadable: string })[]):
     return unselectedFailures(failed, landedSelections(ledger, landed));
   } catch (error) {
     console.info(
-      `::warning title=Measurement::The full run's unselected failures cannot be counted (${error instanceof Error ? error.message : String(error)}), so the result records them as unknown.`,
+      `::warning title=Measurement::The full run's unselected failures cannot be counted (${JSON.stringify(error instanceof Error ? error.message : String(error))}), so the result records them as unknown.`,
     );
     return undefined;
   }

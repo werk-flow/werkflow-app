@@ -53,7 +53,8 @@ export function pullRequestsOf(value: string | undefined): number[] | { unreadab
 /** The runner's measurement inputs to a job (scripts/ci/job.ts names them), and a warning for each it could not read. */
 export function measurementInputs(environment: Readonly<Record<string, string | undefined>>): {
   prs: number[];
-  attempt: number;
+  /** Null when CI_RUN_ATTEMPT cannot be read: unknown, never a first attempt. */
+  attempt: number | null;
   firstAttemptClass: FailureClass | null;
   runnerStartedAt: string | null;
   warnings: string[];
@@ -71,7 +72,7 @@ export function measurementInputs(environment: Readonly<Record<string, string | 
     warnings.push(`CI_JOB_STARTED_AT "${environment.CI_JOB_STARTED_AT}" is no ISO time`);
   return {
     prs: 'unreadable' in prs ? [] : prs,
-    attempt: attempt.success ? attempt.data : 1,
+    attempt: attempt.success ? attempt.data : null,
     firstAttemptClass: failureClass.success ? failureClass.data : null,
     runnerStartedAt: startedAt.success ? startedAt.data : null,
     warnings,

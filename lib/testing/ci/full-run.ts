@@ -88,21 +88,28 @@ export function fullRunDue(input: {
 
 /**
  * The full runs a runner's ledger holds: one per run of event `full`, started at its first
- * receipt, ended by its final Check, and left out once `FULL_RUN_STALE_MS` passed without one.
+ * receipt. Its newest receipt decides whether it ended: a final Check ends it, and a rerun's later
+ * receipt runs it again. One whose newest receipt is `FULL_RUN_STALE_MS` old without ending is left out.
  */
 export function fullRunsInLedger(ledger: readonly CiResult[], now: Date): FullRun[] {
-  const runs = new Map<string, FullRun>();
+  const runs = new Map<string, { run: FullRun; newest: CiResult }>();
   for (const receipt of ledger) {
     if (receipt.event !== 'full' || receipt.runUrl === null) continue;
     const startedAt = new Date(receipt.startedAt);
-    const run = runs.get(receipt.runUrl) ?? { commit: receipt.commit, startedAt, ended: false };
-    if (startedAt < run.startedAt) run.startedAt = startedAt;
-    if (receipt.job === 'check' && receipt.status !== 'running') run.ended = true;
-    runs.set(receipt.runUrl, run);
+    const known = runs.get(receipt.runUrl);
+    if (!known) {
+      runs.set(receipt.runUrl, { run: { commit: receipt.commit, startedAt, ended: false }, newest: receipt });
+      continue;
+    }
+    if (startedAt < known.run.startedAt) known.run.startedAt = startedAt;
+    // A job's start and end share their start time, so the later one in the ledger is newer.
+    if (receipt.startedAt >= known.newest.startedAt) known.newest = receipt;
   }
-  return [...runs.values()].filter(
-    (run) => run.ended || now.getTime() - run.startedAt.getTime() < FULL_RUN_STALE_MS,
-  );
+  return [...runs.values()].flatMap(({ run, newest }) => {
+    const ended = newest.job === 'check' && newest.status !== 'running';
+    const stale = now.getTime() - Date.parse(newest.startedAt) >= FULL_RUN_STALE_MS;
+    return ended || !stale ? [{ ...run, ended }] : [];
+  });
 }
 
 /**

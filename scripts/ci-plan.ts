@@ -148,14 +148,14 @@ const fast = fastTierPlan({
   tailwindScans: await tailwindScan(read('app/globals.css'), repository),
 });
 
-for (const line of planLog(plan, fast.reasons)) console.info(line);
 const invoices = eInvoiceReason({
   graph: qualification.graph,
   changedFiles: flag === '--base' ? change?.files : [],
+  lintOnly: plan.tooling.lintOnly,
   fullReason: plan.fullReason,
   toolingReason: plan.tooling.invoices,
 });
-console.info(`[ci-plan] E-invoices: ${invoices ?? 'no change reaches them'}.`);
+for (const line of planLog(plan, fast.reasons, invoices)) console.info(line);
 const now = new Date();
 const proofMinutes = process.env.MIDNIGHT_PROOF_MINUTES;
 const holdUntil = proofMinutes

@@ -22,12 +22,14 @@ const DEPENDENCY_INPUTS = ['package.json', 'bun.lock', 'bunfig.toml', 'tsconfig.
  * `invoices` job (`toolingReason`) checks them, and so does a code change beside an unresolved
  * import of the check. Otherwise a change to
  * what the check and the renderer import, to a file of the invoice core or the renderer, or to the
- * dependencies selects it. Documentation never does.
+ * dependencies selects it. Documentation and a lint-only dependency change never do.
  */
 export function eInvoiceReason(input: {
   graph: ReadonlyMap<string, readonly string[]>;
   /** The files the change touches, or undefined when the diff could not be read. */
   changedFiles: readonly string[] | undefined;
+  /** The dependency files whose change moves only lint and type packages (ci-plan.ts `tooling.lintOnly`): no rendered byte. */
+  lintOnly: readonly string[];
   /** Why the browser plan runs every group (ci-plan.ts), or undefined. */
   fullReason: string | undefined;
   /** Why a changed tooling input runs the `invoices` job (ci-plan.ts `tooling.invoices`), or undefined. */
@@ -36,7 +38,7 @@ export function eInvoiceReason(input: {
   if (input.changedFiles === undefined) return 'The diff against the base could not be read';
   if (input.fullReason !== undefined) return input.fullReason;
   if (input.toolingReason !== undefined) return input.toolingReason;
-  const code = input.changedFiles.filter((file) => !isDocsFile(file));
+  const code = input.changedFiles.filter((file) => !isDocsFile(file) && !input.lintOnly.includes(file));
   const reached = closure(input.graph, [E_INVOICE_CHECK, E_INVOICE_WRITER]);
   if (reached.unresolved && code.length) return 'The e-invoice check has an unresolved import';
   const file = code.find(

@@ -86,8 +86,8 @@ const ciResultSchema = z.object({
   // or reuse decision reads them.
   /** The pull requests the run serves: a PR run's one, an integration batch's, a push's landed ones; none for a full run. */
   prs: z.array(positiveIntegerSchema).optional(),
-  /** The run's attempt, 1 for the first; a rerun of its failed jobs counts up (CI_RUN_ATTEMPT). */
-  attempt: positiveIntegerSchema.optional(),
+  /** The run's attempt, 1 for the first; a rerun of its failed jobs counts up (CI_RUN_ATTEMPT). Null: unreadable. */
+  attempt: positiveIntegerSchema.nullable().optional(),
   cost: jobCostSchema.optional(),
   /** On a rerun: the class the failed first attempt of this job was given (CI_FIRST_ATTEMPT_CLASS). */
   firstAttemptClass: failureClassSchema.nullable().optional(),

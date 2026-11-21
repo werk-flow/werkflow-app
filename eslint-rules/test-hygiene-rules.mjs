@@ -505,9 +505,13 @@ function throwsWhenTrue(statement) {
  * Known limits, each with 0 occurrences on 2026-11-21:
  * - A controlled clock exempts more than it controls: `page.clock.setFixedTime()` exempts the
  *   page's `performance.now()`, `page.clock.install()` exempts reads on a page of another browser
- *   context, and real time restored after `setSystemTime` keeps the exemption.
- * - A count read through a nested property (`sample.dimensions.rows`) falls back to the whole
- *   object, so a timestamp beside it reports the count.
+ *   context, real time restored after `setSystemTime` keeps the exemption, and a hook that
+ *   installs the page clock exempts the page reads before its `install()` too.
+ * - A count read through a nested property (`sample.dimensions.rows`) or supplied through an
+ *   object spread (`{ takenAt: Date.now(), ...counts }`) falls back to the whole object, so a
+ *   timestamp beside it reports the count.
+ * - Only a clock read inside the assertion counts as the later reading: an ordering of two
+ *   readings held in variables (`expect(before).toBeLessThan(after + 250)`) reports as a limit.
  * - A deadline held in an object property (`window.deadline = Date.now() + 250`) is not read as a
  *   deadline.
  */
@@ -762,15 +766,34 @@ const noFixedTimeLimitRule = {
             (readsClock(value.right) && !readsTime(value.left));
           return value.operator === '+' && fixedSum ? '+' : null;
         };
+        /** Whether `root` itself calls an uncontrolled clock, not through a variable: it reads the clock last. */
+        const readsClockNow = (root) => {
+          const stack = [root];
+          while (stack.length) {
+            const node = stack.pop();
+            if (isDurationClockRead(node) && !controlledRead(node)) return true;
+            for (const [key, value] of Object.entries(node)) {
+              if (key === 'parent') continue;
+              if (Array.isArray(value))
+                stack.push(...value.filter((item) => item && typeof item.type === 'string'));
+              else if (value && typeof value.type === 'string') stack.push(value);
+            }
+          }
+          return false;
+        };
         // Held below a deadline, a clock reading has an upper limit on its distance from the start
-        // the deadline counts from; so has a start pushed back, held below a clock reading. The
-        // other two orders set a lower limit, which a slower machine always meets.
-        for (const { node, limited, bound } of comparisons)
+        // the deadline counts from; so has a clock reading pushed back, held below a start. The
+        // other two orders set a lower limit, which a slower machine always meets. So does either
+        // order when only the bound reads the clock in the assertion itself: that reading is the
+        // later one, as in `expect(before).toBeLessThan(Date.now() + 250)`.
+        for (const { node, limited, bound } of comparisons) {
+          const ordering = readsClockNow(bound) && !readsClockNow(limited);
           if (
-            (readsClock(limited) && (!alwaysTime(bound) || offsetOf(bound) === '+')) ||
-            (offsetOf(limited) === '-' && readsClock(bound))
+            (readsClock(limited) && (!alwaysTime(bound) || (offsetOf(bound) === '+' && !ordering))) ||
+            (offsetOf(limited) === '-' && readsClock(bound) && !ordering)
           )
             context.report({ node, messageId: 'limit' });
+        }
       },
     };
   },

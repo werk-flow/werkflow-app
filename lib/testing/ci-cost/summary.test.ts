@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { CiJob } from '../ci/dag';
 import { type CiResult, resultFileName } from '../ci/results';
-import { summarizeCost } from './summary';
+import { formatCost, summarizeCost } from './summary';
 
 const repository = resolve(import.meta.dir, '../../..');
 const T0 = Date.parse('2026-11-21T08:00:00.000Z');
@@ -473,4 +473,35 @@ test('a first-attempt Check answers to the first attempt’s Plan, not to a reru
     { job: 'check', from: 21, to: 22, endOnly: true, extra: { attempt: 2 } },
   ]);
   expect(summarizeCost(receipts).firstAttemptFailures).toEqual({});
+});
+
+test('a failed job of an unknown attempt counts as no first-attempt failure', () => {
+  const receipts = receiptsOf({ runUrl: run(1), event: 'pr', tree: tree('a'), prs: [12] }, [
+    { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'fast', 'check']) },
+    { job: 'fast', from: 1, to: 10, status: 'failed', extra: { attempt: null } },
+    { job: 'check', from: 10, to: 11, status: 'failed', endOnly: true, extra: { attempt: null } },
+  ]);
+  expect(summarizeCost(receipts).firstAttemptFailures).toEqual({});
+});
+
+test('a full run whose final Check measured no selection misses leaves them unknown, never none', () => {
+  const fullRun = (number: number, check: Partial<CiResult>): CiResult[] =>
+    receiptsOf({ runUrl: run(number), event: 'full', tree: tree(String(number)), prs: [] }, [
+      { job: 'plan', from: 0, to: 1, extra: planned(['plan', 'check']) },
+      { job: 'check', from: 1, to: 2, endOnly: true, extra: check },
+    ]);
+  const measured = summarizeCost(fullRun(1, { unselectedFailures: [] }));
+  expect(measured.unselectedFailures).toEqual([]);
+  expect(formatCost(measured)).toContain('no plan selected: none.');
+  const unknown = summarizeCost([...fullRun(1, { unselectedFailures: ['golden:p2-03'] }), ...fullRun(2, {})]);
+  expect(unknown.unselectedFailures).toBeUndefined();
+  expect(formatCost(unknown)).toContain('no plan selected: unknown');
+  // A rerun's final Check answers for the run, not the first attempt's.
+  const rerun = [
+    ...fullRun(1, { unselectedFailures: ['golden:p2-03'] }),
+    ...receiptsOf({ runUrl: run(1), event: 'full', tree: tree('1'), prs: [] }, [
+      { job: 'check', from: 5, to: 6, endOnly: true, extra: { attempt: 2 } },
+    ]),
+  ];
+  expect(summarizeCost(rerun).unselectedFailures).toBeUndefined();
 });
