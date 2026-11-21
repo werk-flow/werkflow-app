@@ -5,6 +5,10 @@ import Stripe from 'stripe';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { failedPaymentMethodType } from '@/lib/werkflow-billing/payment-method';
 import { type StripeInvoiceForIssue, stripeInvoiceForIssue } from '@/lib/werkflow-billing/stripe-invoice';
+import {
+  subscriptionCalls,
+  type StripeSubscriptionGateway,
+} from '@/lib/werkflow-billing/stripe-subscriptions';
 
 // The one gateway every call of WerkFlow's own billing to Stripe goes through
 // (werk-flow/werkflow-planning#250, epic #245). Live Stripe is PROD: a live key
@@ -47,6 +51,8 @@ export type StripeGateway = {
    * or at all.
    */
   readInvoiceForIssue(invoiceId: string): Promise<StripeInvoiceForIssue>;
+  /** An organization's customer, Checkout and subscription (werk-flow/werkflow-planning#248). */
+  subscriptions: StripeSubscriptionGateway;
   /** Each read below answers Stripe's current object, or throws `stripe_read_failed`. */
   readInvoice(invoiceId: string): Promise<StripeBillingInvoice>;
   /** Null for a deleted customer. */
@@ -136,7 +142,9 @@ async function read<T>(call: () => Promise<T>): Promise<T> {
 }
 
 /** The reads a signal handler makes instead of trusting the event body. */
-function billingReads(client: Stripe): Omit<StripeGateway, 'verifySignal' | 'readInvoiceForIssue'> {
+function billingReads(
+  client: Stripe,
+): Omit<StripeGateway, 'verifySignal' | 'readInvoiceForIssue' | 'subscriptions'> {
   return {
     readInvoice: (invoiceId) =>
       read(async () => {
@@ -293,6 +301,7 @@ export function resolveStripeGateway(
       verifySignal: signalVerifier(client.webhooks, webhookSecret),
       ...billingReads(client),
       readInvoiceForIssue: invoiceReader(client),
+      subscriptions: subscriptionCalls(client),
     },
   };
 }
