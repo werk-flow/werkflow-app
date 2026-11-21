@@ -27,6 +27,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   close_time_session_for_member_removal: 'remove_member_with_time_capture',
   convert_client_request_to_job: 'convert_client_request_to_job_with_visit_assessment',
   create_maintenance_plan: 'create_maintenance_plan_with_due_work',
+  create_organization_with_id: 'create_organization_from_subscription',
   delete_organization: 'delete_organization_with_files',
   create_payroll_mapping_version: 'confirm_payroll_mapping_version',
   create_payroll_mapping_version_p1_23_base: 'create_payroll_mapping_version',
@@ -57,6 +58,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   unlink_installed_equipment_document: 'update_document_links',
   unlink_maintenance_coverage_document: 'update_document_links',
   unlink_service_case_document: 'update_document_links',
+  werkflow_subscription_holds: 'record_werkflow_subscription_state',
   withdraw_work_handover_p1_17_inner: 'withdraw_work_handover',
   // The weekly numbers, one function per rule so a later start page reuses them.
   berlin_day_end_or_now: 'count_overdue_items_at',
@@ -71,6 +73,8 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
 const KEPT_FOR_DEPLOYED_BUILD: Readonly<Record<string, string>> = {
   complete_maintenance_due_work:
     'the deployed production build completes maintenance through it; complete_maintenance_visit replaced it, so drop it in the first migration after the next production release',
+  create_organization_with_defaults:
+    'the deployed production build creates organizations through it; create_organization_from_subscription replaced it (werk-flow/werkflow-planning#248), so drop it in the first migration after the next production release',
   import_inventory_row:
     'the deployed production build books CSV rows through it; drop it in the first migration after the release that ships book_inventory_import (werk-flow/werkflow-planning#371)',
   list_maintenance_workspace_page:

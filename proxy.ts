@@ -162,7 +162,7 @@ export const config = {
     '/meldungen',
     '/support/:path*',
     '/onboarding/:path*',
-    '/upgrade',
+    '/upgrade/:path*',
     '/kennzahlen',
     '/verify',
     '/forgot-password',
