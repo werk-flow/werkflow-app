@@ -118,15 +118,16 @@ create temp table issued_lines on commit drop as
 select line.* from public.invoice_lines line join issued on issued.id = line.invoice_id;
 grant select on issued, issued_lines to service_role;
 
--- With p_original, the Stornorechnung's issue registers the original the server stored under that document id.
+-- With p_original, the Stornorechnung's issue registers the original the server stored under that document id,
+-- named per document as the server names it per number.
 create function pg_temp.cancel(p_actor uuid, p_org uuid, p_name text, p_attempt uuid, p_reason text, p_correct boolean,
   p_original uuid default null)
 returns jsonb language sql as $$
   select public.cancel_invoice(p_actor, p_org, pg_temp.id(p_name), p_attempt, p_reason, p_correct,
     public.get_invoice_settings(p_org) ->> 'nextInvoiceNumber', (now() at time zone 'Europe/Berlin')::date,
     p_original,
-    case when p_original is not null then p_org || '/' || p_original || '/Stornorechnung.pdf' end,
-    case when p_original is not null then 'Stornorechnung.pdf' end,
+    case when p_original is not null then p_org || '/' || p_original || '/Stornorechnung-' || p_original || '.pdf' end,
+    case when p_original is not null then 'Stornorechnung-' || p_original || '.pdf' end,
     case when p_original is not null then 4096 end,
     case when p_original is not null then repeat('d', 64) end)
 $$;
@@ -390,6 +391,46 @@ select pg_temp.expect_refusal('a Stornorechnung draft with an original written u
     where set_config('app.invoice_cancel', %3$L, true) is not null$insert$,
   '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020', pg_temp.id('kept'),
   '38080000-0000-4000-8000-000000000401'), 'invoice_issued');
+
+-- A cancel that fails late leaves nothing: the Stornorechnung's original names a document id already in
+-- use, so its registration fails inside issue_invoice, after the series gave out the number. The number
+-- stays free, „kept“ stays Ausgestellt, and no Stornorechnung, correction or history stays; a retry under
+-- the same key with a fresh document id cancels under that same number (rolled back again here).
+do $$
+declare
+  v_next integer := (select next_number from public.invoice_settings
+    where organization_id = '38080000-0000-4000-8000-000000000010');
+  v_number text := public.get_invoice_settings('38080000-0000-4000-8000-000000000010') ->> 'nextInvoiceNumber';
+  v_retry jsonb;
+begin
+  perform pg_temp.expect_refusal('a cancel whose original''s registration fails', format(
+    'select pg_temp.cancel(%L, %L, ''kept'', %L, ''Menge falsch'', true, %L)',
+    '38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
+    '38080000-0000-4000-8000-000000000303', '38080000-0000-4000-8000-000000000401'), '23505');
+  if (select next_number from public.invoice_settings
+      where organization_id = '38080000-0000-4000-8000-000000000010') is distinct from v_next
+    or (select status from public.invoices where id = pg_temp.id('kept')) is distinct from 'ausgestellt'
+    or exists (select 1 from public.invoices where invoice_number = v_number
+      and organization_id = '38080000-0000-4000-8000-000000000010')
+    or exists (select 1 from public.invoices where organization_id = '38080000-0000-4000-8000-000000000010'
+      and pg_temp.id('kept') in (cancels_invoice_id, corrects_invoice_id))
+    or exists (select 1 from public.invoice_events where invoice_id = pg_temp.id('kept') and event_type = 'cancelled')
+    or exists (select 1 from public.invoice_events where attempt_key = '38080000-0000-4000-8000-000000000303') then
+    raise exception 'a cancel that failed in its original''s registration left part of itself';
+  end if;
+  begin
+    v_retry := pg_temp.cancel('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
+      'kept', '38080000-0000-4000-8000-000000000303', 'Menge falsch', true, '38080000-0000-4000-8000-000000000403');
+    if v_retry ->> 'stornoNumber' is distinct from v_number
+      or v_retry ->> 'originalDocumentId' is distinct from '38080000-0000-4000-8000-000000000403' then
+      raise exception 'the retry after a failed registration answered %', v_retry;
+    end if;
+    raise exception 'retry_rolled_back';
+  exception when others then
+    if sqlerrm is distinct from 'retry_rolled_back' then raise; end if;
+  end;
+end;
+$$;
 
 -- The guard's one exception is narrow. Inside a cancel of „kept“ (the flag cancel_invoice raises), with
 -- its issued Stornorechnung beside it, only its status may change; the bare transition passes.

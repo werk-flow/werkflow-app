@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import { resolveManagerContext } from '@/lib/org/manager-context';
@@ -123,19 +124,26 @@ export async function cancelInvoice(rawInput: CancelInvoiceInput): Promise<Cance
     if (original.grossCents < 0) return { success: false, error: 'invoice_not_cancellable' };
     if (!original.issue) return { success: false, error: 'invoice_not_issued' };
 
+    const { issue } = original;
     // Storniert already: the function answers a retry of the same press with its first cancel, else
     // refuses, both before it compares a number, so the original's own stands in.
-    if (original.status !== 'ausgestellt') {
-      const { invoiceNumber, issueDate } = original.issue;
-      return await cancelChecked(context, input, { number: invoiceNumber, issueDate }, null);
-    }
-    const storno = stornoOf({ ...original, ...original.issue }, input.reason);
-    return await issueUnderCheckedNumber(
-      context.orgId,
-      { ...storno, recipient: original.recipient },
-      original.issue.snapshot,
-      (next, stored) => cancelChecked(context, input, next, stored),
-    );
+    const result =
+      original.status !== 'ausgestellt'
+        ? await cancelChecked(
+            context,
+            input,
+            { number: issue.invoiceNumber, issueDate: issue.issueDate },
+            null,
+          )
+        : await issueUnderCheckedNumber(
+            context.orgId,
+            { ...stornoOf({ ...original, ...issue }, input.reason), recipient: original.recipient },
+            issue.snapshot,
+            (next, stored) => cancelChecked(context, input, next, stored),
+          );
+    // The page the dialog leaves renders Storniert into this response, so Back after „Korrigieren“ shows it.
+    if (result.success) revalidatePath(`/rechnungen/${input.invoiceId}`);
+    return result;
   } catch (error) {
     logError('cancelInvoice: unexpected error', error);
     return { success: false, error: 'unexpected_error' };

@@ -7,8 +7,9 @@
 --    most one of each, and a link never changes after insert.
 -- 2. guard_issued_invoice: an issued invoice takes exactly one change, its
 --    status from Ausgestellt to Storniert, only inside cancel_invoice for that
---    invoice and once its issued Stornorechnung exists. Only cancel_invoice
---    writes a link. Every other column stays refused as before.
+--    invoice and once its issued Stornorechnung exists. A link must name the
+--    invoice the transaction cancels (app.invoice_cancel), which only
+--    cancel_invoice sets. Every other column stays refused as before.
 -- 3. cancel_invoice: in one transaction it copies the original into a
 --    Stornorechnung with every line negated, issues it through issue_invoice
 --    (the next number of the same series, under the series' row lock), marks
@@ -62,8 +63,8 @@ alter table public.invoice_events add constraint invoice_events_type_check
   check (event_type in ('created', 'saved', 'deleted', 'issued', 'original_registered', 'cancelled')) not valid;
 
 -- 2. As in 20261219120000_issue_invoices_with_gapless_numbers.sql, with two
--- additions. A link is inserted only by cancel_invoice, for the invoice it
--- cancels (it raises app.invoice_cancel to that id for its transaction), on a
+-- additions. A link is inserted only for the invoice the transaction cancels
+-- (app.invoice_cancel, which only cancel_invoice raises, to that id), on a
 -- new draft without an original, and never changes. Inside that call, and once an issued Stornorechnung names
 -- the invoice, its status alone turns from Ausgestellt to Storniert; the
 -- cancel's actor and time are in its history. Every other rule of R4's guard
@@ -249,6 +250,21 @@ begin
       where storno.id = (v_earlier.payload ->> 'stornoId')::uuid and storno.organization_id = p_organization_id
     ));
   end if;
+  -- The invoice's work before the invoice: deleting a work locks its row, then clears the invoice's
+  -- reference, and the Stornorechnung and correction take this key share for the same reference below,
+  -- so taking it only after the invoice's lock could deadlock with that deletion. The read without a
+  -- lock names the work; after the invoice's lock a reference is the same or, its work deleted, cleared.
+  select * into v_original from public.invoices invoice
+  where invoice.id = p_invoice_id and invoice.organization_id = p_organization_id;
+  perform 1 from public.projects project
+  where project.id = v_original.project_id and project.organization_id = p_organization_id
+  for key share;
+  perform 1 from public.service_cases service_case
+  where service_case.id = v_original.service_case_id and service_case.organization_id = p_organization_id
+  for key share;
+  perform 1 from public.jobs job
+  where job.id = v_original.job_id and job.organization_id = p_organization_id
+  for key share;
   select * into v_original from public.invoices invoice
   where invoice.id = p_invoice_id and invoice.organization_id = p_organization_id
   for update;

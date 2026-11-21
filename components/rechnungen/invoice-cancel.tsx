@@ -123,9 +123,9 @@ function useCancelInvoice({ invoice, mode, onClose }: CancelDialogProps) {
         variant: result.originalFiled ? 'success' : 'info',
         message: `Rechnung ${invoice.invoiceNumber} ist storniert. Stornorechnung ${result.stornoNumber} ist ${filed}.`,
       });
-      // Closed and refreshed first: Back returns to the invoice as Storniert, without a pending dialog.
+      // The action's response already renders this page Storniert, so Back from the draft shows it so,
+      // without a pending dialog.
       onClose();
-      router.refresh();
       if (result.correctionId) router.push(`/rechnungen/${result.correctionId}`);
     });
   };

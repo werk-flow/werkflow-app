@@ -4,7 +4,10 @@
 // issued; a checked one is issued under the caller's own organization, and
 // its original, rendered as a corrected invoice (384) naming the cancelled
 // one, is stored and passed to the one cancel call, which registers and files
-// it. An original no cancel registered is discarded.
+// it. An original no cancel registered is discarded. A cancel that went
+// through revalidates the cancelled invoice's route, so Back after
+// „Korrigieren“ shows it Storniert without Realtime; a refusal revalidates
+// nothing.
 // supabase/tests/invoice_cancel.sql proves the function.
 import assert from 'node:assert/strict';
 import { mock, setSystemTime } from 'bun:test';
@@ -43,6 +46,18 @@ const today = '2037-11-20';
 setSystemTime(new Date(`${today}T10:00:00.000Z`));
 
 const world = installActionWorld({});
+// The world ignores revalidation; this fixture records it.
+const revalidatedPaths: string[] = [];
+mock.module('next/cache', () => ({
+  updateTag: () => {},
+  revalidatePath: (path: string) => revalidatedPaths.push(path),
+  revalidateTag: () => {},
+  cacheTag: () => {},
+  cacheLife: () => {},
+  unstable_cache: () => {
+    throw new Error('unexpected unstable_cache');
+  },
+}));
 const { cancelInvoice } = await import('@/lib/invoices/cancel-actions');
 
 const snapshot = (vatId: string) => ({
@@ -220,6 +235,9 @@ assert.deepEqual(
   'a refused Stornorechnung reached the cancel',
 );
 
+// No refusal above revalidated a route.
+assert.deepEqual(revalidatedPaths, []);
+
 // A checked Stornorechnung: issued under the caller's organization, its original filed as a 384.
 let cancelled = false;
 let registeredOriginal: unknown = null;
@@ -266,6 +284,8 @@ assert.deepEqual(
     ['cancel_invoice', ORGANIZATION_A, CALLER_ID],
   ],
 );
+// The cancelled invoice's route renders again, Storniert.
+assert.deepEqual(revalidatedPaths, [`/rechnungen/${invoiceId}`]);
 const cancelArgs = world.rpcCalls[2]?.args;
 assert.equal(cancelArgs?.p_invoice_id, invoiceId);
 assert.equal(cancelArgs?.p_attempt_key, attemptKey);
@@ -328,9 +348,10 @@ assert.equal(world.rpcCalls.filter((call) => call.name === 'cancel_invoice').len
 assert.deepEqual(discarded, [stored[0]?.path, stored[1]?.path]);
 stored.length = 0;
 discarded.length = 0;
-// A third move is answered, not retried for ever.
+// A third move is answered, not retried for ever, and revalidates nothing.
 cancelled = false;
 numberMoves = 3;
+revalidatedPaths.length = 0;
 assert.deepEqual(await cancelInvoice({ ...input, attemptKey: crypto.randomUUID() }), {
   success: false,
   error: 'invoice_number_moved',
@@ -339,9 +360,12 @@ assert.deepEqual(
   discarded,
   stored.map((object) => object.path),
 );
+assert.deepEqual(revalidatedPaths, []);
 
 // „Korrigieren“ answers the new draft.
 cancelled = false;
 numberMoves = 0;
 const corrected = await cancelInvoice({ ...input, attemptKey: crypto.randomUUID(), correct: true });
 assert.ok(corrected.success && corrected.correctionId === correctionId, JSON.stringify(corrected));
+// The page „Korrigieren“ leaves for the draft renders again, so Back shows the invoice Storniert.
+assert.deepEqual(revalidatedPaths, [`/rechnungen/${invoiceId}`]);
