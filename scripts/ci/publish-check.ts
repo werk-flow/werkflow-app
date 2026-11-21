@@ -15,7 +15,9 @@ import { repository } from './run';
 // (lib/testing/ci/check-app.ts).
 // Usage: bun scripts/ci/publish-check.ts <start|finish>
 //   start   When the scheduler accepts the run, before it waits or any job starts: a queued check
-//           run, which withdraws every earlier result of that check on the commit.
+//           run, which withdraws every earlier result of that check on the commit. A full run posts
+//           none. The scheduler also stops an older run of the same head before it accepts a newer
+//           one, so no superseded run posts a verdict after the newer run's start.
 //   finish  After `bun scripts/ci/job.ts check`: the run's verdict from check.json.
 // Run it from a trusted copy, never from the checkout under test: a checkout of `main` that no job
 // writes, as an operating-system user that holds the App's key and token and that no job runs as.
@@ -79,6 +81,10 @@ const built =
         scheduled,
         now: new Date(),
       });
+if (built === undefined) {
+  console.info('[ci] A full run posts no queued check run; its Check posts at the end.');
+  process.exit(0);
+}
 if ('problem' in built) fail(`No check run is posted: ${built.problem}.`);
 const posted = await postCheckRun({
   request: built.request,

@@ -6,7 +6,7 @@
 // The file holds exactly {"appId": <id>} or {"appId": null}, spaces aside: both readers match the
 // text with the same pattern, so no JSON parser's leniency decides which App counts. Fifteen digits
 // at most keep the id a safe integer.
-import { closeSync, constants, existsSync, fstatSync, openSync, readFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import { z } from 'zod';
 import type { CiEvent } from './dag';
 import { type CiResult, parseResult } from './results';
@@ -72,11 +72,15 @@ const detailsOf = (runUrl: string) => (runUrl.startsWith('https://') ? { details
 /**
  * The queued check run the scheduler posts when it accepts a run, before any job starts. GitHub
  * reads the newest check run of a name, so it withdraws every earlier result on the commit: a
- * draft's green fast tier never stands for the integration run that a ready PR waits for.
+ * draft's green fast tier never stands for the integration run that a ready PR waits for. A full
+ * run posts none (undefined): no earlier result on main needs withdrawing, and a queued
+ * `Full run / Check` that a dead run left behind would read as a full run still running and hold
+ * main's next full runs back (.github/scripts/main-full-run.sh).
  */
 export function queuedCheckRunOf(
   scheduled: ScheduledRun,
-): { request: CheckRunRequest } | { problem: string } {
+): { request: CheckRunRequest } | { problem: string } | undefined {
+  if (scheduled.event === 'full') return undefined;
   const head = headOf(scheduled);
   if ('problem' in head) return head;
   return {
@@ -169,10 +173,17 @@ export function readHandoff(path: string): CiResult | { unreadable: string } {
   let descriptor: number | undefined;
   try {
     descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    const stat = fstatSync(descriptor);
-    if (!stat.isFile() || stat.size > MAX_RESULT_BYTES)
-      return { unreadable: `${path} is no regular file of at most 1 MiB` };
-    return parseResult(readFileSync(descriptor, 'utf8')) ?? { unreadable: `${path} is no valid result` };
+    if (!fstatSync(descriptor).isFile()) return { unreadable: `${path} is no regular file` };
+    // One byte past the limit at most, so a file that grows while it is read is still refused.
+    const buffer = Buffer.alloc(MAX_RESULT_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const read = readSync(descriptor, buffer, length, buffer.length - length, null);
+      if (read === 0) break;
+      length += read;
+    }
+    if (length > MAX_RESULT_BYTES) return { unreadable: `${path} is larger than 1 MiB` };
+    return parseResult(buffer.toString('utf8', 0, length)) ?? { unreadable: `${path} is no valid result` };
   } catch {
     return { unreadable: `${path} cannot be opened as a regular file` };
   } finally {

@@ -386,11 +386,11 @@ test("an accepted run first withdraws every earlier result on its head, so a dra
       },
     },
   });
-  const full = queuedCheckRunOf({ ...scheduled, event: 'full' });
-  expect('request' in full && full.request.name).toBe('Full run / Check');
+  // A dead full run's queued check would hold main's full runs back, so a full run posts none.
+  expect(queuedCheckRunOf({ ...scheduled, event: 'full' })).toBeUndefined();
   expect(queuedCheckRunOf({ ...scheduled, prHead: HEAD })).toHaveProperty('problem');
   const pr = queuedCheckRunOf({ ...scheduled, event: 'pr', prHead: HEAD });
-  expect('request' in pr && pr.request.head_sha).toBe(HEAD);
+  expect(pr && 'request' in pr && pr.request.head_sha).toBe(HEAD);
 });
 
 test('a handed-over result is read only from a regular file, and no message shows what an unreadable one holds', () => {
@@ -407,7 +407,7 @@ test('a handed-over result is read only from a regular file, and no message show
   const malformed = join(results, 'malformed.json');
   writeFileSync(malformed, `{"job": "${secret}"}`);
   const large = join(results, 'large.json');
-  writeFileSync(large, ' '.repeat(1024 * 1024 + 1));
+  writeFileSync(large, `${JSON.stringify(result({}))}${' '.repeat(1024 * 1024)}`);
   const pipe = join(results, 'pipe.json');
   expect(spawnSync('mkfifo', [pipe]).status).toBe(0);
   for (const path of [linked, malformed, large, pipe, join(results, 'missing.json')]) {
@@ -467,7 +467,7 @@ test('the publisher posts as the configured App and fails when GitHub holds the 
     commit: COMMIT,
     prHead: undefined,
   });
-  if (!('request' in queued)) throw new Error(queued.problem);
+  if (!queued || !('request' in queued)) throw new Error('no queued check run');
   expect((await post({ ...answer(APP), conclusion: null }, 201, queued.request)).posted).toEqual({ id: 77 });
   expect((await post(answer(APP), 201, queued.request)).posted).toHaveProperty('problem');
 });
