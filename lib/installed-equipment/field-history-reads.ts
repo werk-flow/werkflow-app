@@ -15,13 +15,16 @@ import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/qu
 import { isExportableRevision } from '@/lib/work-artifacts/field-visibility';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { readOpenFindingRows } from './open-findings-reads';
 
 // What the technician of a job reads about one Anlage of that job on the
 // phone (werk-flow/werkflow-planning#468): its customer-safe history and the
-// documents linked to it. A visit shows its date, outcome, and the defects and
-// measurements of its customer-facing evidence; a replacement names the
-// Vorgänger and the Nachfolger. No coverage, triage, commercial context,
-// internal note, reason, person, price or cost leaves this module.
+// documents linked to it. A visit shows its date, outcome, the defects and
+// measurements of its customer-facing evidence, and the Mängel it left that
+// no later visit closed yet (werk-flow/werkflow-planning#484), never their
+// next step or owner; a replacement names the Vorgänger and the Nachfolger. No
+// coverage, triage, commercial context, internal note, reason, person, price
+// or cost leaves this module.
 
 type Enums = Database['public']['Enums'];
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
@@ -56,6 +59,8 @@ export type FieldHistoryVisit = {
     unit: Enums['work_artifact_measurement_unit'];
     location: string | null;
   }>;
+  /** The Mängel this visit left that no later completed visit closed yet. */
+  openFindings: string[];
 };
 
 type FieldHistoryReplacement = {
@@ -488,13 +493,17 @@ export async function getFieldEquipmentHistory(
     const older = before === null ? keys : keys.filter((key) => cursorOf(key) < before);
     const pageKeys = older.slice(0, FIELD_HISTORY_PAGE_SIZE);
     const replacedIds = pageKeys.flatMap((key) => (key.kind === 'replacement' ? [key.predecessorId] : []));
-    const [evidenceOf, successors] = await Promise.all([
+    const [evidenceOf, successors, openFindingRows] = await Promise.all([
       readVisitEvidence(
         scope,
         pageKeys.flatMap((key) => (key.kind === 'visit' ? [key.dueWorkId] : [])),
       ),
       readSuccessors(scope, replacedIds),
+      readOpenFindingRows(scope.admin, scope.organizationId, scope.equipment.id),
     ]);
+    // Only the Mängel themselves reach the technician.
+    const openFindingsOf = (dueWorkId: string) =>
+      openFindingRows.flatMap((row) => (row.maintenance_due_work_id === dueWorkId ? row.defects : []));
     const known = new Map([...chain, ...successors].map((row) => [row.id, row]));
     const label = (id: string | undefined): FieldHistoryEquipment | null => {
       const row = id ? known.get(id) : undefined;
@@ -519,6 +528,7 @@ export async function getFieldEquipmentHistory(
                 outcome: key.outcome,
                 equipment,
                 ...evidenceOf(key.dueWorkId),
+                openFindings: openFindingsOf(key.dueWorkId),
               },
             ]
           : [];
