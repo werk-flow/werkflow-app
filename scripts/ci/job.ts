@@ -221,6 +221,8 @@ function runPlan(): RunPlan {
   // runner. The children read it there: Fast's migration-order gate off GitHub Actions.
   if (own.result.base) environment.CI_BASE_SHA = own.result.base;
   result.base = own.result.base;
+  // Check passes this result only under the Plan it names (lib/testing/ci/check.ts).
+  result.planIdentity = own.identity;
   return own.plan;
 }
 

@@ -14,7 +14,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { type CiResult, readLedger, readResult, resultFileName } from './results';
+import { type CiResult, readLedger, readResult, resultFileName, type RunPlan } from './results';
 import { plannedWork } from './run-plan';
 
 const repository = resolve(import.meta.dir, '../../..');
@@ -48,7 +48,8 @@ const git = (root: string, ...args: string[]): string =>
  * A clean repository with this checkout's job.ts and run.ts and its lib, whose verify.ts is a fake
  * gate: it writes the environment it sees to $ENV_DUMP_DIR/<group list>.json and passes every group.
  * The build's package scripts call it too. Its ci-plan.ts selects the migration-order gate in Fast,
- * one SQL group and one component area, and can append a receipt to a ledger while it plans.
+ * one SQL group and one component area, unless PLAN_OUTPUT replaces that selection, and can append
+ * a receipt to a ledger while it plans.
  */
 function fixture(folder: string): string {
   const root = join(folder, 'repository');
@@ -78,7 +79,8 @@ console.info('[verify] passed in 0.1 min (fake): ' + report);
     `import { appendFileSync } from 'node:fs';
 // PLAN_APPENDS: another run appends this receipt line to the file PLAN_LEDGER while the planner runs.
 if (process.env.PLAN_APPENDS) appendFileSync(process.env.PLAN_LEDGER, process.env.PLAN_APPENDS + '\\n');
-appendFileSync(process.env.GITHUB_OUTPUT, 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=sql:grants\\nselected_lint=\\nselected_static=static:migration-order\\nselected_unit=\\nselected_sql=sql:grants\\nselected_components=ui:contracts:work\\ncomponent_shards=[{"shard":1,"groups":"ui:contracts:work"}]\\nselected_invoices=\\n');
+// PLAN_OUTPUT replaces the selection below.
+appendFileSync(process.env.GITHUB_OUTPUT, process.env.PLAN_OUTPUT ?? 'browser=false\\nfull=false\\nfull_reason=\\nshards=[]\\nmidnight_until=\\nstatic=static:migration-order\\nsql=sql:grants\\nselected_lint=\\nselected_static=static:migration-order\\nselected_unit=\\nselected_sql=sql:grants\\nselected_components=ui:contracts:work\\ncomponent_shards=[{"shard":1,"groups":"ui:contracts:work"}]\\nselected_invoices=\\n');
 `,
   );
   writeFileSync(
@@ -492,6 +494,81 @@ test('a push runs its jobs when the integration pass of its tree diffed against 
       expect(plan).toMatchObject({ status: 'passed', reusedFrom: null });
       expect('plan' in plan && plan.plan?.jobs).toEqual(['plan', 'fast', 'sql', 'components', 'check']);
     }
+  });
+});
+
+/** The planner's outputs as `$GITHUB_OUTPUT` lines, for the fixture's PLAN_OUTPUT. */
+const plannerLines = (outputs: Record<string, string>): string =>
+  Object.entries(outputs)
+    .map(([key, value]) => `${key}=${value}\n`)
+    .join('');
+
+/**
+ * An integration run of the fixture, `https://ci.example/runs/1`, whose attempt 1 planned against
+ * `base` (only Fast, unless `plan` says otherwise), and whose planner selects only Fast.
+ */
+function integrationAttempt(root: string, folder: string, base: string, plan?: RunPlan) {
+  const run = join(folder, 'run');
+  const dumps = join(folder, 'dumps');
+  mkdirSync(dumps);
+  const runUrl = 'https://ci.example/runs/1';
+  writePlan(root, run, { runUrl, base, ...(plan ? { plan } : {}) });
+  return {
+    CI_EVENT: 'integration',
+    CI_RESULTS_DIR: run,
+    CI_PRODUCER: 'mac-standin',
+    CI_LEDGER: join(folder, 'ledger.jsonl'),
+    CI_RUN_URL: runUrl,
+    ENV_DUMP_DIR: dumps,
+    PLAN_OUTPUT: plannerLines({
+      ...EMPTY_OUTPUTS,
+      static: 'static:migration-order',
+      selected_static: 'static:migration-order',
+    }),
+  };
+}
+
+test("an attempt that plans again never passes Check on an earlier Plan's result", () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    // Two bases of one tree: attempt 1 planned against A, attempt 2 plans against B.
+    git(root, 'commit', '--quiet', '--allow-empty', '--message', 'base B');
+    const [baseA, baseB] = [git(root, 'rev-parse', 'HEAD~1'), git(root, 'rev-parse', 'HEAD')];
+    const integration = integrationAttempt(root, folder, baseA);
+    expect(runJob(root, 'fast', { ...integration, CI_RUN_ATTEMPT: '1' })).toBe(0);
+    // Attempt 1's Fast result stays in the run's folder. A Check that passed on it would let a push
+    // on B reuse the run without anything having run against B.
+    const second = { ...integration, CI_RUN_ATTEMPT: '2' };
+    expect(runJob(root, 'plan', { ...second, CI_BASE_SHA: baseB })).toBe(0);
+    expect(readResult(join(integration.CI_RESULTS_DIR, resultFileName('plan', null)))).toMatchObject({
+      base: baseB,
+      plan: { jobs: ['plan', 'fast', 'check'] },
+    });
+    expect(runJob(root, 'check', second)).toBe(1);
+  });
+});
+
+test("a rerun of the failed jobs keeps its Plan, so Check passes on the first attempt's results", () => {
+  inFolder((folder) => {
+    const root = fixture(folder);
+    const head = git(root, 'rev-parse', 'HEAD');
+    const integration = integrationAttempt(root, folder, head, {
+      jobs: ['plan', 'fast', 'components', 'check'],
+      skips: { sql: 'None.', invoices: 'None.', midnight: 'None.', browser: 'None.' },
+      shards: [],
+      outputs: {
+        ...EMPTY_OUTPUTS,
+        selected_static: 'static:migration-order',
+        selected_components: 'ui:contracts:work',
+        component_shards: '[{"shard":1,"groups":"ui:contracts:work"}]',
+      },
+    });
+    expect(runJob(root, 'fast', { ...integration, CI_RUN_ATTEMPT: '1' })).toBe(0);
+    // Attempt 1's components shard failed, and attempt 2 reruns only it: Fast's result is attempt
+    // 1's, the shard's attempt 2's, both under attempt 1's Plan.
+    const second = { ...integration, CI_RUN_ATTEMPT: '2' };
+    expect(runJob(root, 'components', { ...second, CI_SHARD: '1' })).toBe(0);
+    expect(runJob(root, 'check', second)).toBe(0);
   });
 });
 

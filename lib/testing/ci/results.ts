@@ -40,6 +40,21 @@ export type RunPlan = z.infer<typeof runPlanSchema>;
 /** A PR number or an attempt: a positive safe integer, so a measurement input that passes it parses as a receipt. */
 export const positiveIntegerSchema = z.number().int().positive();
 
+/**
+ * The Plan a job ran under (`planIdentityOf` in lib/testing/ci/check.ts): its run, attempt, start,
+ * base and a digest of its decision. A replanned attempt has another identity, a rerun of failed
+ * jobs under the same Plan the same one.
+ */
+const planIdentitySchema = z.object({
+  runUrl: z.string().min(1).nullable(),
+  attempt: positiveIntegerSchema.nullable(),
+  startedAt: z.string().datetime(),
+  base: z.string().nullable(),
+  /** SHA-256 of the Plan's decision (`plan`), keys sorted. */
+  digest: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type PlanIdentity = z.infer<typeof planIdentitySchema>;
+
 /** The failure classes of docs/technical/testing.md, "Failures". `transient` is retired. */
 export const failureClassSchema = z.enum(INCIDENT_CLASSES).exclude(['transient']);
 export type FailureClass = z.infer<typeof failureClassSchema>;
@@ -93,6 +108,12 @@ const ciResultSchema = z.object({
    * Plan's receipt in the ledger (lib/testing/ci/reuse.ts). Absent on older Checks, which no push reuses.
    */
   planStartedAt: z.string().datetime().optional(),
+  /**
+   * Every job's but Plan's and Check's: the Plan it ran under. Check passes a planned job only by a
+   * result that names the run's current Plan, so an attempt that planned again never stands on an
+   * earlier Plan's result. Absent on older results, which never pass Check.
+   */
+  planIdentity: planIdentitySchema.optional(),
   // Measurement (lib/testing/ci/measurement.ts, summed by scripts/ci-cost.ts). Optional: receipts written before it hold none, and no gate
   // or reuse decision reads them.
   /** The pull requests the run serves: a PR run's one, an integration batch's, a push's landed ones; none for a full run. */
