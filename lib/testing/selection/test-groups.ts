@@ -455,6 +455,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['job-plan-bridge', ['job_plan_bridge.sql'], ['work', 'planning']],
   ['responsibility-delegation-end', ['responsibility_delegation_end.sql'], ['personnel']],
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
+  ['on-call-shifts', ['on_call_shifts.sql'], ['service', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
