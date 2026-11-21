@@ -1,7 +1,7 @@
-// The CI pipeline as data: its jobs, what each needs, and which events run it
-// (docs/technical/testing.md, "CI"). scripts/ci/job.ts runs each job's body;
-// .github/workflows/ci.yml and the stand-in runner schedule the jobs by this
-// table, and dag.test.ts keeps ci.yml in step with it.
+// The CI pipeline as data: its jobs, what each needs, which events run it, the environment it takes
+// and how long it may run (docs/technical/testing.md, "CI"). scripts/ci/job.ts runs each job's body
+// and scripts/ci/prepare.ts its environment; .github/workflows/ci.yml and scripts/ci/run-commit.ts
+// schedule the jobs by this table, and dag.test.ts keeps ci.yml and its actions in step with it.
 
 /**
  * - `pr`: a pull request's own run, draft or ready: the fast tier.
@@ -25,11 +25,43 @@ export const CI_JOBS = [
 ] as const;
 export type CiJob = (typeof CI_JOBS)[number];
 
+/**
+ * The environment steps of scripts/ci/prepare.ts, which every runner takes before a job body: the
+ * composites of .github/actions call them on GitHub Actions, scripts/ci/run-commit.ts everywhere else.
+ * - `install`: the pinned Bun and Node, and the locked dependencies.
+ * - `siblings`: the sibling clones beside the checkout that docs:check reads.
+ * - `approval`: the owner's `approved: list growth` label of the run's pull requests.
+ * - `stack-environment`: the stack's environment file, starting the stack only when it is missing.
+ * - `stack`: a fresh stack with every committed migration, published on loopback only.
+ * - `env`: .env.local pointed at the stack.
+ * - `playwright`, `playwright-packages`: the host Chromium, then its missing system packages.
+ */
+export const PREPARE_STEPS = [
+  'install',
+  'siblings',
+  'approval',
+  'stack-environment',
+  'stack',
+  'env',
+  'playwright',
+  'playwright-packages',
+] as const;
+export type PrepareStep = (typeof PREPARE_STEPS)[number];
+
+/** The tools CI pins: scripts/ci/prepare.ts refuses others, and the actions' versions and cache keys name the same. */
+export const CI_TOOLS = { bun: '1.4.4', nodeMajor: 22, supabaseCli: '2.116.0' } as const;
+
 type CiJobSpec = {
   /** The job's name in ci.yml; a browser shard's name adds its number. */
   name: string;
   needs: readonly CiJob[];
   events: readonly CiEvent[];
+  /** The steps of scripts/ci/prepare.ts the job takes before its body, in order. */
+  prepare: readonly PrepareStep[];
+  /** Its whole time, setup included, as ci.yml's `timeout-minutes`; every runner ends it then. */
+  timeoutMinutes: number;
+  /** Whether it reads GitHub with the run's token (GH_TOKEN): the queue's runs, open PRs' migrations, labels. */
+  githubToken: boolean;
   /**
    * Whether a passed result for an identical tree, group list and list-growth approval stands for
    * a new run of the job. The fast tier's static gates read facts outside the tree (open PRs'
@@ -42,21 +74,80 @@ type CiJobSpec = {
 const AFTER_REVIEW: readonly CiEvent[] = ['integration', 'main', 'full'];
 
 export const CI_DAG: Readonly<Record<CiJob, CiJobSpec>> = {
-  plan: { name: 'Plan', needs: [], events: CI_EVENTS, reusable: false },
-  fast: { name: 'Fast', needs: ['plan'], events: CI_EVENTS, reusable: false },
-  sql: { name: 'SQL', needs: ['plan'], events: CI_EVENTS, reusable: true },
-  components: { name: 'Component contracts', needs: ['plan'], events: CI_EVENTS, reusable: true },
+  plan: {
+    name: 'Plan',
+    needs: [],
+    events: CI_EVENTS,
+    reusable: false,
+    prepare: ['install'],
+    timeoutMinutes: 10,
+    githubToken: true,
+  },
+  fast: {
+    name: 'Fast',
+    needs: ['plan'],
+    events: CI_EVENTS,
+    reusable: false,
+    prepare: ['install', 'siblings', 'approval', 'stack-environment'],
+    timeoutMinutes: 30,
+    githubToken: true,
+  },
+  sql: {
+    name: 'SQL',
+    needs: ['plan'],
+    events: CI_EVENTS,
+    reusable: true,
+    prepare: ['install', 'stack', 'env'],
+    timeoutMinutes: 20,
+    githubToken: false,
+  },
+  components: {
+    name: 'Component contracts',
+    needs: ['plan'],
+    events: CI_EVENTS,
+    reusable: true,
+    prepare: ['install', 'playwright', 'playwright-packages'],
+    timeoutMinutes: 20,
+    githubToken: false,
+  },
   // The reference invoices through Mustang and veraPDF, when the plan selects them. Every tool is
   // pinned by checksum or digest, so a pass of the tree stands.
-  invoices: { name: 'E-invoices', needs: ['plan'], events: CI_EVENTS, reusable: true },
-  midnight: { name: 'Midnight wait', needs: ['plan'], events: AFTER_REVIEW, reusable: false },
+  invoices: {
+    name: 'E-invoices',
+    needs: ['plan'],
+    events: CI_EVENTS,
+    reusable: true,
+    prepare: ['install'],
+    timeoutMinutes: 20,
+    githubToken: false,
+  },
+  midnight: {
+    name: 'Midnight wait',
+    needs: ['plan'],
+    events: AFTER_REVIEW,
+    reusable: false,
+    prepare: ['install'],
+    timeoutMinutes: 110,
+    githubToken: false,
+  },
   // A shard serves the fast job's build, so it needs that job instead of polling for it.
-  browser: { name: 'Browser', needs: ['plan', 'fast', 'midnight'], events: AFTER_REVIEW, reusable: true },
+  browser: {
+    name: 'Browser',
+    needs: ['plan', 'fast', 'midnight'],
+    events: AFTER_REVIEW,
+    reusable: true,
+    prepare: ['install', 'stack', 'env', 'playwright', 'playwright-packages'],
+    timeoutMinutes: 45,
+    githubToken: false,
+  },
   check: {
     name: 'Check',
     needs: ['plan', 'fast', 'sql', 'components', 'invoices', 'midnight', 'browser'],
     events: CI_EVENTS,
     reusable: false,
+    prepare: ['install'],
+    timeoutMinutes: 10,
+    githubToken: false,
   },
 };
 

@@ -3,7 +3,14 @@
 // Each case drives runQueueTick through a fake GitHub, git and runner.
 import { expect, test } from 'bun:test';
 import { type Fake, fakeWorld, pull, sha } from '../fixtures/merge-queue-world';
-import { needsAttention, pickBatch, type QueuedPull, runQueueTick, supersession } from './queue';
+import {
+  mainRunAfter,
+  needsAttention,
+  pickBatch,
+  type QueuedPull,
+  runQueueTick,
+  supersession,
+} from './queue';
 import type { CiResult } from './results';
 import { passedTree, provenTree, reusableReceipt } from './reuse';
 
@@ -634,4 +641,21 @@ test('a dry run tests and decides like a live tick but never lands or tells a PR
   expect(world.landed).toEqual([]);
   expect(world.rejected).toEqual([]);
   expect(world.main().commit).toBe(sha('main'));
+});
+
+test("main's run follows every live landing or partial stop once, on main's head with the tick's base, and never a dry run", async () => {
+  const landed = await runQueueTick(fakeWorld([pull(1), pull(2)]).adapter, LIVE);
+  expect(landed.landing).toEqual([1, 2]);
+  expect(mainRunAfter(landed, sha('head'))).toEqual({ commit: sha('head'), base: landed.base, prs: [1, 2] });
+  // A merge that may have landed is a partial stop without a landing: main's run still starts when main moved.
+  const partial = {
+    ...landed,
+    landing: [],
+    stops: [{ kind: 'partial' as const, detail: 'may have landed' }],
+  };
+  expect(mainRunAfter(partial, sha('head'))?.prs).toEqual([]);
+  expect(mainRunAfter(partial, partial.base)).toBeUndefined();
+  expect(mainRunAfter({ ...landed, dryRun: true }, sha('head'))).toBeUndefined();
+  const idle = await runQueueTick(fakeWorld([]).adapter, LIVE);
+  expect(mainRunAfter(idle, sha('head'))).toBeUndefined();
 });

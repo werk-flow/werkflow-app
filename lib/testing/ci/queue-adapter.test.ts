@@ -11,6 +11,7 @@ import {
   markQueue,
   readQueueState,
   runIntegration,
+  runMain,
   squashCommit,
   writeQueueState,
 } from '../../../scripts/ci/queue-adapter';
@@ -333,4 +334,37 @@ test("the queue's state survives between ticks; a missing file is clear and a da
       writeFileSync(path, damaged);
       readQueueState(path);
     }, damaged).toThrow();
+});
+
+test("main's run gets main's head, the tick's base and the landed PRs, in a results directory of its own", () => {
+  const mainRunner = join(folder, 'main-runner');
+  writeFileSync(
+    mainRunner,
+    `#!/usr/bin/env bash\nenv | grep -E '^CI_(EVENT|COMMIT|BASE_SHA|PRS|RUN_URL|RESULTS_DIR)=' | sort > "${join(folder, 'main-env')}"\nexit 1\n`,
+  );
+  chmodSync(mainRunner, 0o755);
+  const workDir = join(folder, 'work');
+  runMain(
+    { repository, mainRunner, workDir, runUrlBase: 'https://ci.example/queue' },
+    {
+      commit: 'c'.repeat(40),
+      base: 'b'.repeat(40),
+      prs: [7, 9],
+    },
+  );
+  const env = Object.fromEntries(
+    readFileSync(join(folder, 'main-env'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
+  );
+  expect(env).toMatchObject({
+    CI_EVENT: 'main',
+    CI_COMMIT: 'c'.repeat(40),
+    CI_BASE_SHA: 'b'.repeat(40),
+    CI_PRS: '7,9',
+  });
+  const id = env.CI_RUN_URL?.replace('https://ci.example/queue/', '') ?? '';
+  expect(id).toEndWith(`-main-${'c'.repeat(12)}`);
+  expect(env.CI_RESULTS_DIR).toBe(join(workDir, id));
 });

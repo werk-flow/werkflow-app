@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { type FullRunDecision, fullRunsInLedger } from '../../lib/testing/ci/full-run';
 import { readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
+import { RUN_COMMIT_LOCK } from '../../lib/testing/ci/run-commit';
 import {
   CLOCK_WORK_NAMES,
   heldUntil,
@@ -26,6 +27,7 @@ import { lsRemoteCommit } from '../../lib/testing/ci/superseded';
 //     --run     A run's results directory (CI_RESULTS_DIR) whose browser shards wait: due once its
 //               plan's midnight hold ended and the run has no midnight.json yet. A merge queue
 //               run's directory too (scripts/ci/queue.ts): its runner waits and starts nothing.
+//               Never due while scripts/ci/run-commit.ts holds the run: it starts its own held shards.
 //     --pr-run  A pull request run in progress: the runner's id for it, the ref on origin that holds
 //               the PR's head (refs/pull/<n>/head), and the head commit the run tests.
 //   It prints {"start": [...], "stop": [...], "unanswered": [...], "wakeAt": "<ISO time>"}:
@@ -139,7 +141,9 @@ function remoteHead(ref: string): string | undefined {
 }
 
 const held = (values.run ?? []).map((run) => {
-  if (existsSync(join(run, resultFileName('midnight', null)))) return { run, until: undefined };
+  // A run's held shards have one starter: the run-commit that holds the run, or this answer.
+  if (existsSync(join(run, RUN_COMMIT_LOCK)) || existsSync(join(run, resultFileName('midnight', null))))
+    return { run, until: undefined };
   const plan = readResult(join(run, resultFileName('plan', null)));
   if ('unreadable' in plan) return { run, until: { unreadable: plan.unreadable } };
   if (!plan.plan) return { run, until: { unreadable: 'its plan result holds no plan' } };

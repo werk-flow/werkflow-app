@@ -57,6 +57,8 @@ export function measurementInputs(environment: Readonly<Record<string, string | 
   attempt: number | null;
   firstAttemptClass: FailureClass | null;
   runnerStartedAt: string | null;
+  /** False when CI_MACHINE_START is `false`: the job ran on the orchestrator's own host. */
+  machineStart: boolean;
   warnings: string[];
 } {
   const warnings: string[] = [];
@@ -70,11 +72,15 @@ export function measurementInputs(environment: Readonly<Record<string, string | 
   const startedAt = z.string().datetime().safeParse(environment.CI_JOB_STARTED_AT);
   if (environment.CI_JOB_STARTED_AT && !startedAt.success)
     warnings.push(`CI_JOB_STARTED_AT "${environment.CI_JOB_STARTED_AT}" is no ISO time`);
+  const machineStart = environment.CI_MACHINE_START;
+  if (machineStart && machineStart !== 'true' && machineStart !== 'false')
+    warnings.push(`CI_MACHINE_START "${machineStart}" is neither true nor false`);
   return {
     prs: 'unreadable' in prs ? [] : prs,
     attempt: attempt.success ? attempt.data : null,
     firstAttemptClass: failureClass.success ? failureClass.data : null,
     runnerStartedAt: startedAt.success ? startedAt.data : null,
+    machineStart: machineStart !== 'false',
     warnings,
   };
 }

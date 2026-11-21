@@ -237,6 +237,39 @@ export function integrationEnvironment(run: {
 }
 
 /**
+ * main's run after a live tick that landed a PR or stopped partway (`partial`): one run of main's head
+ * with the tick's base, main before the batch. It reuses the batch's pass only for the landing the
+ * queue tested, and otherwise runs its jobs. Undefined for a dry run, or when main did not move.
+ */
+export function mainRunAfter(
+  outcome: QueueOutcome,
+  head: string,
+): { commit: string; base: string; prs: number[] } | undefined {
+  const moved = outcome.landing.length > 0 || outcome.stops.some((stop) => stop.kind === 'partial');
+  return !outcome.dryRun && moved && head !== outcome.base
+    ? { commit: head, base: outcome.base, prs: [...outcome.landing] }
+    : undefined;
+}
+
+/** The environment of main's run after a landing, on top of the runner's own. */
+export function mainEnvironment(run: {
+  commit: string;
+  base: string;
+  prs: readonly number[];
+  runUrl: string;
+  resultsDir: string;
+}): Record<string, string> {
+  return {
+    CI_EVENT: 'main',
+    CI_COMMIT: run.commit,
+    CI_BASE_SHA: run.base,
+    CI_RUN_URL: run.runUrl,
+    CI_RESULTS_DIR: run.resultsDir,
+    CI_PRS: run.prs.join(','),
+  };
+}
+
+/**
  * One tick of the queue. A frozen queue does nothing. A live tick first withdraws a mark an earlier
  * tick left pending, merged or not; a withdrawal that fails freezes the queue. A live run without a
  * verdict is retried once, on the next tick, and the same work's second needs a person. A live tick ends by

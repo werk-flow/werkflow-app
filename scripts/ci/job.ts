@@ -103,6 +103,8 @@ import { repository, run, step, verify } from './run';
 //   CI_FIRST_ATTEMPT_CLASS  On a rerun: the class the job's failed first attempt was given
 //                   (docs/technical/testing.md, "Failures").
 //   CI_JOB_STARTED_AT  When the runner began this job, before its checkout and setup, as an ISO time.
+//   CI_MACHINE_START  `false` when the job ran on the orchestrator's own host, as scripts/ci/run-commit.ts
+//                   runs Plan and Check: it started no machine. Otherwise each CI job is one machine start.
 // On GitHub Actions (GITHUB_ACTIONS=true and GH_TOKEN) without CI_LEDGER, plan asks the Actions API
 // for a green merge-queue run of the commit; a configured ledger is the only reuse source. plan writes
 // its outputs to $GITHUB_OUTPUT.
@@ -140,8 +142,8 @@ if (ledgerPath && !environment.CI_RUN_URL) throw new Error('A run with CI_LEDGER
 const measured = measurementInputs(environment);
 for (const warning of measured.warnings)
   console.info(`::warning title=Measurement::${warning}, so the result records it as unknown.`);
-/** One machine start per job process on a CI runner, whatever its checkout holds. */
-const machineStart = producer !== null;
+/** One machine start per job process on a CI runner, whatever its checkout holds, unless it ran on the orchestrator's host. */
+const machineStart = producer !== null && measured.machineStart;
 // One one-time-code secret for the job's build and its test server, unless the runner gives one.
 const otpSecret = environment.EMAIL_OTP_HASH_SECRET || randomBytes(32).toString('hex');
 // The commit is read once and the tree from it, so a moving HEAD cannot pair one commit's plan with

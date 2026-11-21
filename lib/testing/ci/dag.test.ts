@@ -4,7 +4,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { readWorkflow } from '../ci-workflow';
-import { CI_DAG, CI_JOBS } from './dag';
+import { CI_DAG, CI_JOBS, CI_TOOLS, type PrepareStep, PREPARE_STEPS } from './dag';
 
 const ci = readWorkflow('ci.yml');
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -108,4 +108,77 @@ test('a retarget to main runs the PR; an edit that keeps the base runs no job, c
   // Every other job starts only from Plan's jobs, which a skipped Plan leaves empty.
   for (const job of CI_JOBS.filter((name) => name !== 'plan' && name !== 'check'))
     expect(ci.text('jobs', job, 'if')).toContain("fromJSON(needs.plan.outputs.jobs || '[]')");
+});
+
+const root = resolve(import.meta.dir, '../../..');
+const PREPARE_CALL = /^bun scripts\/ci\/prepare\.ts ([a-z-]+)$/;
+
+/** Whether a step's `if` can hold under these action inputs; clauses on anything else may hold. */
+function mayRun(condition: unknown, inputs: Readonly<Record<string, string>>): boolean {
+  if (typeof condition !== 'string') return true;
+  return condition.split(' && ').every((clause) => {
+    const match = /^inputs\.([a-z-]+) (==|!=) '([^']*)'$/.exec(clause.trim());
+    if (!match) return true;
+    const [, name = '', operator, value] = match;
+    return (inputs[name] === value) === (operator === '==');
+  });
+}
+
+/** The prepare.ts steps a list of workflow or action steps calls, composites expanded, in order. */
+function prepareCalls(steps: unknown, inputs: Readonly<Record<string, string>> = {}): string[] {
+  return asList(steps)
+    .filter(isRecord)
+    .filter((step) => mayRun(step.if, inputs))
+    .flatMap((step) => {
+      if (typeof step.run === 'string') {
+        const call = PREPARE_CALL.exec(step.run.trim())?.[1];
+        return call ? [call] : [];
+      }
+      const action =
+        typeof step.uses === 'string' ? /^\.\/\.github\/actions\/([a-z-]+)$/.exec(step.uses)?.[1] : undefined;
+      if (!action) return [];
+      const composite: unknown = Bun.YAML.parse(
+        readFileSync(resolve(root, '.github/actions', action, 'action.yml'), 'utf8'),
+      );
+      if (!isRecord(composite) || !isRecord(composite.runs)) return [];
+      const declared = isRecord(composite.inputs) ? composite.inputs : {};
+      const given = isRecord(step.with) ? step.with : {};
+      const values = Object.fromEntries(
+        Object.entries(declared).map(([name, input]) => [
+          name,
+          String(given[name] ?? (isRecord(input) ? (input.default ?? '') : '')),
+        ]),
+      );
+      return prepareCalls(composite.runs.steps, values);
+    });
+}
+
+// A runner off GitHub takes the same environment as ci.yml by construction: scripts/ci/run-commit.ts
+// runs `prepare.ts for <job>`, which takes these lists (C1 of council round 2, werk-flow/werkflow-planning#503).
+test('every ci.yml job calls exactly its prepare steps of the DAG, in order, through its actions', () => {
+  for (const job of CI_JOBS)
+    expect(prepareCalls(ci.at('jobs', job, 'steps')), job).toEqual([...CI_DAG[job].prepare]);
+  const used = new Set<PrepareStep>(CI_JOBS.flatMap((job) => CI_DAG[job].prepare));
+  expect(PREPARE_STEPS.filter((step) => !used.has(step))).toEqual([]);
+});
+
+test("every runner ends a job at ci.yml's timeout, and only the DAG's GitHub jobs get the token", () => {
+  for (const job of CI_JOBS) {
+    expect(ci.at('jobs', job, 'timeout-minutes'), job).toBe(CI_DAG[job].timeoutMinutes);
+    const steps = asList(ci.at('jobs', job, 'steps')).filter(isRecord);
+    const token = [ci.at('jobs', job, 'env'), ...steps.map((step) => step.env)].some(
+      (env) => isRecord(env) && env.GH_TOKEN === '${{ github.token }}',
+    );
+    expect(token, job).toBe(CI_DAG[job].githubToken);
+  }
+});
+
+test('prepare.ts pins the tools the actions install and key their caches by', () => {
+  const action = (name: string) => readFileSync(resolve(root, '.github/actions', name, 'action.yml'), 'utf8');
+  expect(action('setup')).toContain(`bun-version: ${CI_TOOLS.bun}\n`);
+  expect(action('setup')).toContain(`node-version: ${CI_TOOLS.nodeMajor}\n`);
+  expect(action('supabase-cli')).toContain(`version: ${CI_TOOLS.supabaseCli}\n`);
+  expect(action('supabase-cli')).toContain(`key: supabase-cli-${CI_TOOLS.supabaseCli}-`);
+  for (const key of ['supabase-environment-v1-', 'supabase-images-v3-ghcr-'])
+    expect(action('local-stack')).toContain(`key: ${key}${CI_TOOLS.supabaseCli}-`);
 });

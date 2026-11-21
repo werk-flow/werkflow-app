@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { appCheckStateOf } from '../../lib/testing/ci/check-app';
 import {
   integrationEnvironment,
+  mainEnvironment,
   type QueueAdapter,
   type QueuedPull,
   type QueueState,
@@ -121,6 +122,31 @@ export function runIntegration(
       results: files.filter((file) => file.endsWith('.json')).map(result),
       ledger: ledgerOf(options.ledger),
     },
+  );
+}
+
+/**
+ * Starts main's run after a landing (`mainRunAfter` in lib/testing/ci/queue.ts) through the main
+ * runner, and waits for it. Its exit code decides nothing for the queue; the run posts its own Check.
+ */
+export function runMain(
+  options: { repository: string; mainRunner: string; workDir: string; runUrlBase: string },
+  run: { commit: string; base: string; prs: readonly number[] },
+): void {
+  const id = `${new Date().toISOString().replace(/[-:.]/g, '')}-main-${run.commit.slice(0, 12)}`;
+  const environment = mainEnvironment({
+    ...run,
+    runUrl: `${options.runUrlBase}/${id}`,
+    resultsDir: join(options.workDir, id),
+  });
+  console.info(`[queue] main's run ${environment.CI_RUN_URL} of ${run.commit}, base ${run.base}`);
+  const ran = spawnSync(options.mainRunner, [], {
+    cwd: options.repository,
+    env: { ...process.env, ...environment },
+    stdio: 'inherit',
+  });
+  console.info(
+    `[queue] main's runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}`,
   );
 }
 

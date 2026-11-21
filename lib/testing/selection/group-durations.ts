@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import type { CiResult } from '../ci/results';
 
 /**
  * The recorded seconds each browser group and component area takes, which the CI plan packs shards
  * by (ci-plan.ts). They decide only where a group runs, never whether it runs, so a stale value
- * costs wall clock and no coverage. `bun scripts/refresh-group-durations.ts` rewrites the file from
- * verification reports.
+ * costs wall clock and no coverage. `bun scripts/refresh-group-durations.ts` rewrites the file from a
+ * CI runner's ledger or from verification reports.
  */
 export const GROUP_DURATIONS_FILE = 'lib/testing/selection/group-durations.json';
 
@@ -30,6 +31,46 @@ const median = (values: readonly number[]): number => {
   const sorted = [...values].sort((left, right) => left - right);
   return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0;
 };
+
+/**
+ * The group results of the newest `last` full runs in a CI runner's ledger: what each browser and
+ * component shard reported, on that runner's machines. Only a completed receipt of a CI runner
+ * counts, and only a passed group's seconds reach the durations (`refreshGroupDurations`).
+ */
+export function ledgerGroupResults(
+  ledger: readonly CiResult[],
+  last: number,
+): { results: { groupId: string; status: string; durationMs: number }[]; runs: string[]; dates: string[] } {
+  const shards = ledger.filter(
+    (receipt) =>
+      receipt.event === 'full' &&
+      (receipt.job === 'browser' || receipt.job === 'components') &&
+      receipt.status !== 'running' &&
+      receipt.producer !== null &&
+      receipt.runUrl !== null,
+  );
+  const started = new Map<string, string>();
+  for (const receipt of shards)
+    if (receipt.runUrl && (started.get(receipt.runUrl) ?? receipt.startedAt) >= receipt.startedAt)
+      started.set(receipt.runUrl, receipt.startedAt);
+  const runs = [...started]
+    .toSorted(([, left], [, right]) => left.localeCompare(right))
+    .slice(-last)
+    .map(([runUrl]) => runUrl);
+  return {
+    results: shards
+      .filter((receipt) => receipt.runUrl !== null && runs.includes(receipt.runUrl))
+      .flatMap((receipt) =>
+        receipt.groups.map((group) => ({
+          groupId: group.id,
+          status: group.outcome,
+          durationMs: group.durationMs,
+        })),
+      ),
+    runs,
+    dates: runs.flatMap((runUrl) => started.get(runUrl)?.slice(0, 10) ?? []),
+  };
+}
 
 /**
  * The durations after `results`: each registered group takes the median of its passed results, or
