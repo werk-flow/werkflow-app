@@ -4,7 +4,6 @@ import { cookies } from 'next/headers';
 import type { ActionResult } from '@/lib/action-result';
 import { z } from '@/lib/zod';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { isUserSubscribed } from '@/lib/subscription/helpers';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { generateUniqueOrgCode } from './generate-code';
@@ -61,12 +60,6 @@ export async function createOrganization(name: string): Promise<CreateOrganizati
     return { success: false, error: 'not_authenticated' };
   }
 
-  // Verify subscription is active
-  const subscribed = await isUserSubscribed(user.id);
-  if (!subscribed) {
-    return { success: false, error: 'subscription_required' };
-  }
-
   // Use admin client for database operations (bypasses RLS)
   const admin = createSupabaseAdminClient();
 
@@ -93,12 +86,15 @@ export async function createOrganization(name: string): Promise<CreateOrganizati
 
     const uniqueCode = await generateUniqueOrgCode();
 
-    // One transaction: the organization, its settings with the first break
-    // policy entry, and through the insert triggers the owner membership, the
-    // owner's personnel record and the inventory defaults, or nothing.
+    // One transaction: the organization of the caller's paid Checkout, with the
+    // id its Stripe customer names (werk-flow/werkflow-planning#248), its
+    // settings with the first break policy entry, through the insert triggers
+    // the owner membership, the owner's personnel record and the inventory
+    // defaults, and the linked subscription, or nothing. Without a held
+    // reservation it refuses with subscription_required.
     const { data: organizationId, error: createError } = await admin.rpc(
-      'create_organization_with_defaults',
-      rpcArgs('create_organization_with_defaults', {
+      'create_organization_from_subscription',
+      rpcArgs('create_organization_from_subscription', {
         p_admin_id: user.id,
         p_name: normalizedName,
         p_unique_code: uniqueCode,
@@ -108,6 +104,9 @@ export async function createOrganization(name: string): Promise<CreateOrganizati
     if (createError || !organizationId) {
       if (createError?.message.includes('name_taken')) {
         return { success: false, error: 'name_taken' };
+      }
+      if (createError?.message.includes('subscription_required')) {
+        return { success: false, error: 'subscription_required' };
       }
       logError('createOrganization: organization write failed', createError);
       if (createError?.message.includes('member_creation_failed')) {

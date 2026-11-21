@@ -20,6 +20,7 @@ const valuesSchema = z
         equipmentNumber: z.string().min(1),
         caseNumber: z.string().min(1),
         offerId: uuidSchema,
+        invoiceId: uuidSchema,
       })
       .strict()
       .optional(),

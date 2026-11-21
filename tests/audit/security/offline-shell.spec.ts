@@ -175,7 +175,7 @@ test('an organization switch deletes what the worker cached and keeps the offlin
 
   await test.step('the admin works in a second organization with a filled shell', async () => {
     await page.goto('/dashboard');
-    await createAdditionalOrganization(page, secondOrganization);
+    await createAdditionalOrganization(page, secondOrganization, world.users.admin.email);
     await waitForOfflineShell(page);
     await plantOwnedCache(page, world.users.admin.email);
   });

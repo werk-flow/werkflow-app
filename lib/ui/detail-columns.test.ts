@@ -85,6 +85,7 @@ const VARIANT_PAGES: Readonly<Record<string, string>> = {
 /** Detail routes without page columns, with the reason. */
 const SINGLE_COLUMN_DETAILS: Readonly<Partial<Record<(typeof DYNAMIC_PHONE_ROUTES)[number], string>>> = {
   '/angebote/[offerId]': 'the offer header is one card of facts until its positions come',
+  '/rechnungen/[invoiceId]': 'the draft editor is one form, its lines need the full width',
   '/auftraege/[jobNumber]/uebergabe': 'the handover workspace is one column',
   '/auftraege/projekt/[projectNumber]/uebergabe': 'the handover workspace is one column',
   '/auftraege/projekt/[projectNumber]/[jobNumber]': 'the job detail page of /auftraege/[jobNumber]',

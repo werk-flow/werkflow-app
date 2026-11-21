@@ -129,6 +129,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'no session: Resend proves itself with the Svix signature over svix-id, svix-timestamp and the raw body with RESEND_WEBHOOK_SECRET, verified before anything is parsed or stored; a missing, forged, stale or altered signature answers 401 and touches nothing; without a usable secret nothing runs and it answers 503; a recorded svix-id is a replay and dispatches nothing; the owning ledger, found by the provider message id, changes its own rows before the signal is recorded; the record keeps ids, type, time and ledger only; the body is empty, no-store',
     mustCall: ['resendWebhookSecret', 'verifyResendSignature', 'receiveResendSignal'],
   },
+  'app/upgrade/bestaetigt/route.ts': {
+    authorization:
+      "verified cookie identity; reads only the caller's own open reservation and re-reads its customer's newest subscription from Stripe, recorded as its signal would; takes nothing from the query string; redirects only to fixed paths, private no-store",
+    mustCall: ['getAuthenticatedUser', 'readOpenReservation', 'readNewestSubscription', 'recordSubscription'],
+  },
   'app/api/csp-report/route.ts': {
     authorization:
       'unauthenticated by design: receives the browser reports of the enforced script policy, reads and writes nothing, bounds the body, and logs a redacted summary without script samples or query strings',
