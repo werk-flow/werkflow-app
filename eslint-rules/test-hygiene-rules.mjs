@@ -499,8 +499,17 @@ function throwsWhenTrue(statement) {
  * neither a clock nor a date. Comparing a clock reading with another, or with an instant, orders
  * events and passes. So does a read of a clock the test controls: the page's clock after
  * `page.clock.install` in a function the page runs, and `Date` after `setSystemTime`, in the test
- * or before each test of its group. The measured scenarios own timing and judge it outside the
- * test (docs/technical/testing.md, "Deadlines and measured scenarios").
+ * or before each test of its group. A `.length` is a count. The measured scenarios own timing and
+ * judge it outside the test (docs/technical/testing.md, "Deadlines and measured scenarios").
+ *
+ * Known limits, each with 0 occurrences on 2026-11-21:
+ * - A controlled clock exempts more than it controls: `page.clock.setFixedTime()` exempts the
+ *   page's `performance.now()`, `page.clock.install()` exempts reads on a page of another browser
+ *   context, and real time restored after `setSystemTime` keeps the exemption.
+ * - A count read through a nested property (`sample.dimensions.rows`) falls back to the whole
+ *   object, so a timestamp beside it reports the count.
+ * - A deadline held in an object property (`window.deadline = Date.now() + 250`) is not read as a
+ *   deadline.
  */
 const noFixedTimeLimitRule = {
   meta: {
@@ -670,14 +679,17 @@ const noFixedTimeLimitRule = {
             visited.add(node);
             if (read(node) || (node.type === 'Identifier' && names.has(variableOf.get(node)))) found = true;
             // `sample.rowCount` reads only what the literal behind `sample` puts there, when it says.
-            const held =
+            const named =
               node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier'
-                ? propertyOf(node.object, node.property.name)
-                : undefined;
+                ? node.property.name
+                : null;
+            const held = named === null ? undefined : propertyOf(node.object, named);
             if (held) {
               stack.push(...held);
               continue;
             }
+            // A length is a count, never a time: `samples.length` of `[Date.now()]`.
+            if (named === 'length') continue;
             for (const [key, value] of Object.entries(node)) {
               if (key === 'parent') continue;
               if (Array.isArray(value)) stack.push(...value);
@@ -692,19 +704,30 @@ const noFixedTimeLimitRule = {
         const readsTime = (root) =>
           reads(root, (node) => isDurationClockRead(node) || isInstant(node), instants);
         // To a fixed point: `const now = Date.now(); const elapsed = now - start` reads the clock twice removed.
-        /** Whether every value an expression can take reads time: each branch of `a ? b : c` and `a ?? b`. */
-        const alwaysTime = (node) => {
+        /**
+         * Whether every value an expression can take reads time: each branch of `a ? b : c` and
+         * `a ?? b`, and each value the literal behind `limits.bound` puts there. A node met again
+         * adds no value: `limits = { bound: limits.bound }`.
+         */
+        const alwaysTime = (node, seen = new Set()) => {
           const value = unwrapped(node);
+          if (seen.has(value)) return true;
+          seen.add(value);
+          const always = (inner) => alwaysTime(inner, seen);
           if (value.type === 'ConditionalExpression')
-            return alwaysTime(value.consequent) && alwaysTime(value.alternate);
-          if (value.type === 'LogicalExpression') return alwaysTime(value.left) && alwaysTime(value.right);
-          return readsTime(value);
+            return always(value.consequent) && always(value.alternate);
+          if (value.type === 'LogicalExpression') return always(value.left) && always(value.right);
+          const held =
+            value.type === 'MemberExpression' && !value.computed && value.property.type === 'Identifier'
+              ? propertyOf(value.object, value.property.name)
+              : undefined;
+          return held ? held.every(always) : readsTime(value);
         };
         // A variable holds a duration when any write reads a clock, but counts as a time bound only
         // when every write does: `let limit = Date.now(); limit = 250` is a fixed limit.
         const holds = {
           clocked: (values) => values.some(readsClock),
-          instants: (values) => values.length > 0 && values.every(alwaysTime),
+          instants: (values) => values.length > 0 && values.every((value) => alwaysTime(value)),
         };
         for (const [names, held] of [
           [clocked, holds.clocked],
