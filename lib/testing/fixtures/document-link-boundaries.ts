@@ -44,16 +44,16 @@ world.rpc = ({ name, args }) =>
   name === 'update_document_links' && args.p_document_id === invoiceOriginalId
     ? { data: null, error: { message: 'document_is_invoice_original' } }
     : name === 'update_document_links'
-    ? {
-        data: [
-          {
-            added_count: Array.isArray(args.p_add_job_ids) ? args.p_add_job_ids.length : 0,
-            removed_count: Array.isArray(args.p_remove_link_ids) ? args.p_remove_link_ids.length : 0,
-          },
-        ],
-        error: null,
-      }
-    : { data: null, error: { message: `${name} is outside this fixture` } };
+      ? {
+          data: [
+            {
+              added_count: Array.isArray(args.p_add_job_ids) ? args.p_add_job_ids.length : 0,
+              removed_count: Array.isArray(args.p_remove_link_ids) ? args.p_remove_link_ids.length : 0,
+            },
+          ],
+          error: null,
+        }
+      : { data: null, error: { message: `${name} is outside this fixture` } };
 
 const { linkDocumentsToTarget, unlinkDocument, updateDocumentLinks } = await import(
   '@/lib/documents/actions'
@@ -111,6 +111,11 @@ assert.deepEqual(await updateDocumentLinks({ documentId: invoiceOriginalId, addJ
   error: 'document_is_invoice_original',
 });
 assert.deepEqual(
-  world.rpcCalls.map(({ name, args }) => [name, args.p_organization_id, args.p_document_id, args.p_add_job_ids]),
+  world.rpcCalls.map(({ name, args }) => [
+    name,
+    args.p_organization_id,
+    args.p_document_id,
+    args.p_add_job_ids,
+  ]),
   [['update_document_links', ORGANIZATION_A, invoiceOriginalId, [ownJobId]]],
 );
