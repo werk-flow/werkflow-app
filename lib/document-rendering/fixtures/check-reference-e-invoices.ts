@@ -48,19 +48,18 @@ function capture(command: string, args: readonly string[]): { status: number; ou
   return { status: result.status ?? 1, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
 }
 
-const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
-
 /** Mustang's jar in a cache outside the checkout, downloaded when it is missing or its checksum differs. */
 async function mustangJar(): Promise<string> {
   const folder = join(repository, 'node_modules/.cache/mustang');
   const jar = join(folder, `Mustang-CLI-${MUSTANG_VERSION}.jar`);
-  if (existsSync(jar) && sha256(readFileSync(jar)) === MUSTANG_SHA256) return jar;
+  if (existsSync(jar) && createHash('sha256').update(readFileSync(jar)).digest('hex') === MUSTANG_SHA256)
+    return jar;
   const response = await fetch(
     `https://repo1.maven.org/maven2/org/mustangproject/Mustang-CLI/${MUSTANG_VERSION}/Mustang-CLI-${MUSTANG_VERSION}.jar`,
   );
   if (!response.ok) throw new Error(`Mustang's download answered ${response.status}.`);
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const digest = sha256(bytes);
+  const digest = createHash('sha256').update(bytes).digest('hex');
   if (digest !== MUSTANG_SHA256)
     throw new Error(`Mustang's jar has the SHA-256 ${digest}, not the pinned one.`);
   mkdirSync(folder, { recursive: true });
@@ -141,7 +140,7 @@ const verapdf = (name: string): { status: number; output: string } =>
 const say = (text: string): void => void process.stdout.write(`${text}\n`);
 const complain = (text: string): void => void process.stderr.write(`${text}\n`);
 let failed = false;
-const refuse = (message: string): void => {
+const failCheck = (message: string): void => {
   failed = true;
   complain(`::error::${message}`);
 };
@@ -152,7 +151,7 @@ for (const file of readdirSync(join(pdfs, 'valid'))
   const name = `valid/${file}`;
   if (mustang(name)) say(`Mustang accepts ${name}`);
   else {
-    refuse(`Mustang refuses ${name}`);
+    failCheck(`Mustang refuses ${name}`);
     for (const line of readFileSync(reportOf(name), 'utf8').split('\n'))
       if (/<error|status=/.test(line)) complain(line.slice(0, 400));
   }
@@ -160,7 +159,7 @@ for (const file of readdirSync(join(pdfs, 'valid'))
   if (pdfa.status === 0) say(`veraPDF accepts ${name}`);
   else {
     complain(pdfa.output);
-    refuse(`veraPDF refuses ${name} as PDF/A-3b`);
+    failCheck(`veraPDF refuses ${name} as PDF/A-3b`);
   }
 }
 
@@ -169,7 +168,7 @@ mustang('broken/xml-changed-after-embedding.pdf');
 const changedXml = readFileSync(reportOf('broken/xml-changed-after-embedding.pdf'), 'utf8');
 if (changedXml.includes('<xml>') && changedXml.includes('BR-CO-15'))
   say('Mustang refuses broken/xml-changed-after-embedding.pdf with BR-CO-15, as it must');
-else refuse('Mustang did not refuse the invoice whose XML was changed after embedding');
+else failCheck('Mustang did not refuse the invoice whose XML was changed after embedding');
 
 const withoutIntent = verapdf('broken/without-output-intent.pdf');
 say(withoutIntent.output);
@@ -180,6 +179,6 @@ if (
     .some((line) => line.startsWith('FAIL /data/broken/without-output-intent.pdf'))
 )
   say('veraPDF refuses broken/without-output-intent.pdf, as it must');
-else refuse(`veraPDF did not refuse the PDF without output intent (exit ${withoutIntent.status})`);
+else failCheck(`veraPDF did not refuse the PDF without output intent (exit ${withoutIntent.status})`);
 
 process.exitCode = failed ? 1 : 0;
