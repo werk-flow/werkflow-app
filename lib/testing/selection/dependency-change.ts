@@ -33,7 +33,7 @@ export const LINT_AND_TYPE_PACKAGES =
  * each of its names: the one it is installed as, an `npm:` alias's target, and the lock's resolved name.
  */
 const RUNTIME_DEVELOPMENT_PACKAGES =
-  /^(@playwright\/.+|playwright(-[a-z]+)?|@axe-core\/playwright|tailwindcss|@tailwindcss\/.+|supabase)$/;
+  /^(@playwright\/.+|playwright(-.+)?|@axe-core\/playwright|tailwindcss|@tailwindcss\/.+|supabase)$/;
 const RUNTIME_SECTIONS = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const;
 const SECTIONS = [...RUNTIME_SECTIONS, 'devDependencies'] as const;
 
@@ -123,13 +123,14 @@ export function packageJsonChange(before: string, after: string): DependencyChan
 const requirements = z.record(z.string(), z.unknown()).optional();
 /**
  * A resolved package: `[name@version, registry, metadata, integrity]`. Another shape could hide what
- * the package installs, so it makes the lock unreadable.
+ * the package installs, so it makes the lock unreadable. The metadata keeps every field, so any
+ * change to it, such as `bin`, moves the package.
  */
 const packageEntrySchema = z
   .tuple([
     z.string(),
     z.unknown(),
-    z.object({
+    z.looseObject({
       dependencies: requirements,
       optionalDependencies: requirements,
       peerDependencies: requirements,
@@ -218,9 +219,9 @@ function rootsByKey(lock: Lock): Map<string, Set<string>> {
       owners.set(key, (owners.get(key) ?? new Set()).add(root));
       const entry = lock.packages[key];
       if (!entry) continue;
-      const { peerDependencies, ...installed } = entry[2];
+      const { dependencies, optionalDependencies, peerDependencies } = entry[2];
       const names = [
-        ...Object.values(installed).flatMap((deps) => Object.keys(deps ?? {})),
+        ...Object.keys({ ...dependencies, ...optionalDependencies }),
         ...Object.keys(peerDependencies ?? {}).filter(
           (name) => !UNLOADED_PEERS[resolvedName(entry)]?.includes(name),
         ),

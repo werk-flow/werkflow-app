@@ -165,6 +165,13 @@ test("a root package's range counts by its section, and a package moved into the
     change({ dependencies: { react: '19.0.0' }, devDependencies: { eslint: '^9', supertool: '^6.1' } })
       .effect,
   ).toBe('tooling');
+  // Every `playwright-` package loads in the browser groups, however many hyphens its name has.
+  expect(
+    change({
+      dependencies: { react: '19.0.0' },
+      devDependencies: { eslint: '^9', supertool: '^6', 'playwright-aws-lambda': '^0.11' },
+    }).effect,
+  ).toBe('every-group');
   // An alias counts by its target too.
   expect(
     change({
@@ -238,6 +245,13 @@ test("the repository's own lock classifies a moved package by its real installer
   expect(lockfileChange(real, bump('playwright-core')).effect).toBe('every-group');
   expect(lockfileChange(real, bump('tailwindcss')).effect).toBe('every-group');
   expect(lockfileChange(real, bump('fake-indexeddb')).effect).toBe('tooling');
+  // Any change to an entry's metadata moves its package, not only its version or dependency maps.
+  const bin = '"bin": { "next": "dist/bin/next" }';
+  expect(real).toContain(bin);
+  expect(lockfileChange(real, real.replace(bin, '"bin": { "next": "dist/bin/next-moved" }'))).toEqual({
+    effect: 'every-group',
+    reason: 'bun.lock: next through runtime dependency next',
+  });
 });
 
 test('a lint or type package is loaded only by the lint configuration, its rules, the knip configuration, the static gate scripts and unit tests', () => {
