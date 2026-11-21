@@ -102,6 +102,7 @@ type Delivery = {
   attemptKey: string;
   state: 'sending' | 'sent' | 'failed';
   attempt: number;
+  failureCode: string | null;
   stored: Record<'recipient' | 'subject' | 'text' | 'senderName' | 'fromHeader' | 'replyTo', unknown>;
 };
 const deliveries: Delivery[] = [];
@@ -111,6 +112,7 @@ const payloadOf = (delivery: Delivery, claimed: boolean) => ({
   deliveryId: delivery.id,
   claimed,
   state: delivery.state,
+  failureCode: delivery.failureCode,
   attempt: delivery.attempt,
   ...delivery.stored,
   storagePath: originalPath,
@@ -136,6 +138,7 @@ world.rpc = ({ name, args }) => {
       attemptKey: String(args.p_attempt_key),
       state: 'sending',
       attempt: 1,
+      failureCode: null,
       stored: {
         recipient: args.p_recipient_email,
         subject: args.p_email_subject,
@@ -154,12 +157,15 @@ world.rpc = ({ name, args }) => {
     if (delivery.state !== 'failed' || delivery.attempt !== args.p_expected_attempt) {
       return { data: payloadOf(delivery, false), error: null };
     }
-    Object.assign(delivery, { state: 'sending', attempt: delivery.attempt + 1 });
+    Object.assign(delivery, { state: 'sending', attempt: delivery.attempt + 1, failureCode: null });
     return { data: payloadOf(delivery, true), error: null };
   }
   assert.equal(name, 'settle_document_delivery');
   const settles = delivery.state === 'sending' && delivery.attempt === args.p_attempt;
-  if (settles) delivery.state = args.p_outcome === 'sent' ? 'sent' : 'failed';
+  if (settles) {
+    delivery.state = args.p_outcome === 'sent' ? 'sent' : 'failed';
+    delivery.failureCode = typeof args.p_failure_code === 'string' ? args.p_failure_code : null;
+  }
   return { data: settles, error: null };
 };
 // The table rows the server reads directly: a retry's recipient, a limited press's recorded result.
@@ -170,7 +176,7 @@ const syncTable = () => {
     attempt_key: delivery.attemptKey,
     created_by: CALLER_ID,
     state: delivery.state,
-    failure_code: null,
+    failure_code: delivery.failureCode,
     recipient_email: delivery.stored.recipient,
   }));
 };
@@ -288,8 +294,15 @@ Object.assign(process.env, { VERCEL_ENV: 'preview', RESEND_API_KEY: 're_test_syn
 globalThis.fetch = Object.assign(async () => new Response('Service Unavailable', { status: 503 }), {
   preconnect: realFetch.preconnect,
 });
-const failed = await send(crypto.randomUUID());
+const failedKey = crypto.randomUUID();
+const failed = await send(failedKey);
 assert.deepEqual(failed, { success: true, state: 'failed', failureCode: 'email_provider_503' });
+// The same press again after a lost answer reports the recorded failure with its code, and sends nothing.
+assert.deepEqual(await send(failedKey), {
+  success: true,
+  state: 'failed',
+  failureCode: 'email_provider_503',
+});
 const failedDelivery = deliveries.at(-1);
 assert.ok(failedDelivery && failedDelivery.state === 'failed');
 assert.equal(mailsOf(failedDelivery.id).length, 0);

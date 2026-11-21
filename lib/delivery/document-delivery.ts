@@ -53,6 +53,7 @@ const payloadSchema = z.object({
   deliveryId: uuidSchema,
   claimed: z.boolean(),
   state: z.enum(DELIVERY_STATES),
+  failureCode: z.string().nullable(),
   attempt: z.number().int().positive(),
   recipient: z.string(),
   subject: z.string(),
@@ -165,17 +166,19 @@ async function sendClaimed(
   if (answer.error) return refusal(answer.error, 'send_failed', logLabel);
   const payload = payloadSchema.safeParse(answer.data);
   if (!payload.success) return refusal(null, 'send_failed', logLabel);
-  if (!payload.data.claimed) return { success: true, state: payload.data.state, failureCode: null };
+  if (!payload.data.claimed) {
+    return { success: true, state: payload.data.state, failureCode: payload.data.failureCode };
+  }
   return transmit(caller, payload.data);
 }
 
 /**
  * The recorded result of an earlier press under the same attempt key, so a
  * repeated press the limit refuses still answers what happened; null when
- * the caller made no such press or the read failed.
+ * the caller made no such press; a failed read is the send's own failure.
  */
 async function recordedOutcome(caller: DeliveryCaller, attemptKey: string): Promise<DeliveryOutcome | null> {
-  const { data } = await loggedRead(
+  const { data, error } = await loggedRead(
     'sendDocument: earlier delivery read failed',
     createSupabaseAdminClient()
       .from('document_deliveries')
@@ -185,6 +188,7 @@ async function recordedOutcome(caller: DeliveryCaller, attemptKey: string): Prom
       .eq('created_by', caller.userId)
       .maybeSingle(),
   );
+  if (error) return SEND_UNAVAILABLE;
   const state = z.enum(DELIVERY_STATES).safeParse(data?.state);
   return state.success ? { success: true, state: state.data, failureCode: data?.failure_code ?? null } : null;
 }

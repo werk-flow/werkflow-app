@@ -190,7 +190,8 @@ revoke all on function app_private.lock_delivery_document(uuid, text, uuid, uuid
 grant execute on function app_private.lock_delivery_document(uuid, text, uuid, uuid) to service_role;
 
 -- What the server needs to send a delivery: its stored content, the
--- attachment's storage path, file name, type and hash, and the attempt to settle.
+-- attachment's storage path, file name, type and hash, and the attempt to
+-- settle; an unclaimed answer reports the recorded state and failure code.
 create function app_private.delivery_payload(
   p_delivery public.document_deliveries,
   p_document public.documents,
@@ -206,6 +207,7 @@ as $$
     'deliveryId', p_delivery.id,
     'claimed', p_claimed,
     'state', p_delivery.state,
+    'failureCode', p_delivery.failure_code,
     'attempt', p_delivery.attempts,
     'recipient', p_delivery.recipient_email,
     'subject', p_delivery.email_subject,
