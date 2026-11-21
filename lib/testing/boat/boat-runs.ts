@@ -42,8 +42,16 @@ function reportFolders(repository: string): Set<string> {
 /** A run's start: when its machine was ready, and the report folders the checkout held then. */
 type BoatRunStart = { startedAt: string; reports: ReadonlySet<string> };
 
-export function boatRunStart(repository: string): BoatRunStart {
-  return { startedAt: new Date().toISOString(), reports: reportFolders(repository) };
+/** The run's start, or undefined when the checkout's reports cannot be read: the record is best effort. */
+export function boatRunStart(repository: string): BoatRunStart | undefined {
+  try {
+    return { startedAt: new Date().toISOString(), reports: reportFolders(repository) };
+  } catch (error) {
+    console.warn(
+      `[verify] The Boat run's cost is not recorded: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
 }
 
 /** The checkout's commit, or null when git cannot say. */

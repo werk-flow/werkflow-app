@@ -3,6 +3,7 @@
 // DAG's needs, the ledger out of the jobs' reach, the held shards started by their own run only, and
 // a Check that runs whatever happened before it.
 import { expect, test } from 'bun:test';
+import { planIdentityOf } from './check';
 import type { CiJob } from './dag';
 import type { CiResult, RunPlan } from './results';
 import {
@@ -78,15 +79,6 @@ const input = (overrides: Partial<RunCommitInput['run']> = {}, parallel = 4): Ru
   parallel,
 });
 
-/** The Plan a job's result names once it read the plan, as job.ts writes it. */
-const IDENTITY: CiResult['planIdentity'] = {
-  runUrl: RUN_URL,
-  attempt: 1,
-  startedAt: new Date(START).toISOString(),
-  base: 'b'.repeat(40),
-  digest: '0'.repeat(64),
-};
-
 function result(unit: Unit, at: number, overrides: Partial<CiResult> = {}): CiResult {
   return {
     version: 1,
@@ -106,7 +98,6 @@ function result(unit: Unit, at: number, overrides: Partial<CiResult> = {}): CiRe
     startedAt: new Date(at).toISOString(),
     completedAt: new Date(at + 1000).toISOString(),
     attempt: 1,
-    ...(unit.job === 'plan' ? {} : { planIdentity: IDENTITY }),
     ...overrides,
   };
 }
@@ -132,6 +123,10 @@ type WorldOptions = {
   publish?: (mode: 'start' | 'finish') => boolean;
   /** Called when a job starts, before it ends. */
   onStart?: (unit: Unit) => void;
+  /** Whether the executor runs jobs where they cannot write the ledger; default true. */
+  isolated?: boolean;
+  /** What Check writes as its result. */
+  checkWrites?: CiResult['status'];
 };
 
 function world(options: WorldOptions = {}): World {
@@ -142,7 +137,8 @@ function world(options: WorldOptions = {}): World {
   const log: string[] = [];
   let active = 0;
   let peak = 0;
-  const watchers = new Map<string, () => void>();
+  // The Plan every job's result names, as job.ts records it once it read the plan.
+  let identity: CiResult['planIdentity'];
   const outcome = (unit: Unit): ExecutorOutcome => {
     const code = options.exits?.[unitName(unit)] ?? 0;
     return { exitCode: code, detail: `exit ${code}` };
@@ -150,13 +146,16 @@ function world(options: WorldOptions = {}): World {
   const host: Executor = {
     run: async (task) => {
       starts.push({ place: 'host', task, at: clock });
-      if (task.unit.job === 'plan' && options.plan !== null)
-        results.set(
-          'plan',
-          result(task.unit, clock, { plan: options.plan ?? PLAN, ...options.planOverrides }),
-        );
+      if (task.unit.job === 'plan' && options.plan !== null) {
+        const plan = result(task.unit, clock, { plan: options.plan ?? PLAN, ...options.planOverrides });
+        results.set('plan', plan);
+        identity = planIdentityOf(plan, plan.plan ?? PLAN);
+      }
+      if (task.unit.job === 'check' && options.checkWrites)
+        results.set('check', result(task.unit, clock, { status: options.checkWrites }));
       return outcome(task.unit);
     },
+    isolatesJobs: true,
   };
   const jobs: Executor = {
     run: async (task, signal) => {
@@ -168,9 +167,8 @@ function world(options: WorldOptions = {}): World {
       results.set(
         name,
         options.written?.[name]?.(task.unit, started) ??
-          result(task.unit, started, { status: 'running', completedAt: null }),
+          result(task.unit, started, { status: 'running', completedAt: null, planIdentity: identity }),
       );
-      watchers.get(name)?.();
       options.onStart?.(task.unit);
       // Let the other units start, so the run's parallelism shows.
       await new Promise((resolve) => setImmediate(resolve));
@@ -178,9 +176,16 @@ function world(options: WorldOptions = {}): World {
       if (signal.aborted) return { exitCode: null, detail: 'stopped' };
       const ended = outcome(task.unit);
       if (!options.written?.[name])
-        results.set(name, result(task.unit, started, { status: ended.exitCode === 0 ? 'passed' : 'failed' }));
+        results.set(
+          name,
+          result(task.unit, started, {
+            status: ended.exitCode === 0 ? 'passed' : 'failed',
+            planIdentity: identity,
+          }),
+        );
       return ended;
     },
+    isolatesJobs: options.isolated ?? true,
   };
   return {
     starts,
@@ -201,10 +206,7 @@ function world(options: WorldOptions = {}): World {
         clock += ms;
       },
       log: (line) => log.push(line),
-      watchResult: (unit, changed) => {
-        watchers.set(unitName(unit), changed);
-        return () => watchers.delete(unitName(unit));
-      },
+      writeResult: (unit, written) => results.set(unitName(unit), written),
     },
   };
 }
@@ -304,30 +306,85 @@ test('the executor never runs more jobs at once than the runner allows', async (
   expect(started(w)).toHaveLength(7);
 });
 
-test("a job's start and end reach the ledger through the orchestrator, and another run's result never does", async () => {
+test("a job's start reaches the ledger before it runs, and its end only as its own result of this run and Plan", async () => {
+  const seenAtStart: string[] = [];
   const w = world({
     written: {
       sql: (unit, at) =>
         result(unit, at, { runUrl: 'https://ci.example/runs/other', status: 'running', completedAt: null }),
       'components-1': (unit, at) => result(unit, at, { attempt: 2, status: 'running', completedAt: null }),
-      // Before job.ts read its plan, its result is no start receipt yet.
-      invoices: (unit, at) =>
-        result(unit, at, { status: 'running', completedAt: null, planIdentity: undefined }),
+      // Before job.ts read its plan, its result names no Plan.
+      invoices: (unit, at) => result(unit, at, { status: 'running', completedAt: null }),
     },
     exits: { sql: 1, 'components-1': 1, check: 1 },
     plan: { ...PLAN, jobs: [...PLAN.jobs, 'invoices'], skips: { midnight: 'No hold.' } },
+    onStart: (unit) => {
+      if (unit.job === 'sql')
+        seenAtStart.push(
+          ...w.ledger.filter((receipt) => receipt.job === 'sql').map((receipt) => receipt.status),
+        );
+    },
   });
   await runCommit(input(), w.deps, new AbortController().signal);
-  const fast = w.ledger.filter((receipt) => receipt.job === 'fast').map((receipt) => receipt.status);
-  expect(fast).toEqual(['running', 'passed']);
-  expect(w.ledger.filter((receipt) => receipt.job === 'sql' || receipt.job === 'components')).toEqual([]);
-  // A job that died before it read its plan still withdraws an earlier pass by its last result.
-  expect(w.ledger.filter((receipt) => receipt.job === 'invoices').map((receipt) => receipt.status)).toEqual([
-    'running',
+  // The start is the orchestrator's, appended before the job ran, with its planned groups and Plan.
+  expect(seenAtStart).toEqual(['running']);
+  const sqlStart = w.ledger.find((receipt) => receipt.job === 'sql');
+  // The planned groups and steps, as job.ts records them (plannedGroups in run-plan.ts).
+  expect(sqlStart?.groups.map((group) => [group.id, group.outcome])).toEqual([
+    ['sql:grants', 'not-run'],
+    ['step:types', 'not-run'],
+    ['step:seed', 'not-run'],
   ]);
-  expect(w.log.some((line) => line.includes('sql: no result of this run to forward'))).toBe(true);
+  expect(sqlStart?.planIdentity).toBeDefined();
+  const statuses = (job: CiJob) =>
+    w.ledger.filter((receipt) => receipt.job === job).map((receipt) => receipt.status);
+  expect(statuses('fast')).toEqual(['running', 'passed']);
+  // Another run's, another attempt's or a Plan-less result never reaches the ledger: the start ends failed.
+  for (const job of ['sql', 'components', 'invoices'] as const)
+    expect([job, statuses(job)]).toEqual([job, ['running', 'failed']]);
+  expect(w.ledger.find((receipt) => receipt.job === 'sql' && receipt.status === 'failed')?.runUrl).toBe(
+    RUN_URL,
+  );
   // Plan and Check append their own receipts on the host (scripts/ci/job.ts).
-  expect(w.ledger.filter((receipt) => receipt.job === 'plan' || receipt.job === 'check')).toEqual([]);
+  expect(statuses('plan')).toEqual([]);
+});
+
+test('a job that wrote a pass but did not pass reaches the ledger failed', async () => {
+  const w = world({
+    written: { sql: (unit, at) => result(unit, at, { status: 'passed' }) },
+    exits: { sql: 1, check: 1 },
+  });
+  await runCommit(input(), w.deps, new AbortController().signal);
+  expect(w.ledger.filter((receipt) => receipt.job === 'sql').map((receipt) => receipt.status)).toEqual([
+    'running',
+    'failed',
+  ]);
+});
+
+test('an executor that runs jobs as the orchestrator user keeps no ledger: no job sees it and nothing is appended', async () => {
+  const w = world({ isolated: false });
+  await runCommit(input(), w.deps, new AbortController().signal);
+  expect(w.starts.map((entry) => entry.task.env.CI_LEDGER)).toEqual(w.starts.map(() => undefined));
+  expect(w.ledger).toEqual([]);
+  expect(w.log.some((line) => line.includes('keeps no ledger and reuses nothing'))).toBe(true);
+});
+
+test('a Check that wrote a pass but did not pass is set failed, in its result and the ledger, before its verdict is posted', async () => {
+  const posted: string[] = [];
+  const w = world({
+    checkWrites: 'passed',
+    exits: { check: 1 },
+    publish: (mode) => {
+      const check = w.deps.readResult({ job: 'check', shard: null });
+      posted.push(`${mode}:${'unreadable' in check ? 'none' : check.status}`);
+      return true;
+    },
+  });
+  await runCommit(input(), w.deps, new AbortController().signal);
+  expect(posted).toEqual(['start:none', 'finish:failed']);
+  expect(w.ledger.filter((receipt) => receipt.job === 'check').map((receipt) => receipt.status)).toEqual([
+    'failed',
+  ]);
 });
 
 test('a receipt that cannot reach the ledger fails its job', async () => {

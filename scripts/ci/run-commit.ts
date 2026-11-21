@@ -8,9 +8,10 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
+  readFileSync,
   renameSync,
   rmSync,
-  watch,
+  writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { CI_EVENTS } from '../../lib/testing/ci/dag';
@@ -34,9 +35,13 @@ import { repository } from './run';
 //   CI_RUN_ATTEMPT  1 for a run's first attempt (also when unset). A rerun keeps CI_RUN_URL and
 //                   CI_RESULTS_DIR and counts this up; the earlier attempt's results move to
 //                   attempt-<n>/ in the results directory, and the rerun plans and runs every job anew.
-//   CI_LEDGER       The runner's ledger. Only Plan and Check, on this host, see it: the orchestrator
-//                   appends every other job's receipts itself. Keep it where no job's user can write it.
-//   CI_WORK_ROOT    A folder for the jobs' workspaces and the host's stack lock. Required.
+//   CI_LEDGER       The runner's ledger, kept only when the executor runs jobs where they cannot write
+//                   it. The process executor runs them as this user, so with it the run keeps no
+//                   ledger and runs every job; main runs are still deduplicated by it. With an
+//                   isolating executor only Plan and Check, on this host, see it, and the orchestrator
+//                   appends every other job's start before it begins and its end after.
+//   CI_WORK_ROOT    A folder for the jobs' workspaces, the host's stack lock and its claims of main
+//                   runs; one per host, shared by every run-commit there. Required.
 //   CI_PARALLEL     The most jobs at once, default 2.
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.
 //   CI_PUBLISHER    An executable that runs `bun scripts/ci/publish-check.ts <start|finish>` from the
@@ -110,6 +115,17 @@ if (event === 'main' && ledger && existsSync(ledger)) {
             receipt.runUrl !== runUrl,
         );
   if (earlier) refuse(`main's run of ${commit} started already: ${earlier.runUrl}.`);
+}
+// The same on this host before any Plan wrote: the first starter claims the commit, atomically.
+if (event === 'main') {
+  const claim = join(workRoot, 'main-runs', commit);
+  mkdirSync(join(workRoot, 'main-runs'), { recursive: true });
+  try {
+    writeFileSync(claim, runUrl, { flag: 'wx' });
+  } catch {
+    const owner = readFileSync(claim, 'utf8');
+    if (owner !== runUrl) refuse(`main's run of ${commit} started already: ${owner}.`);
+  }
 }
 
 // One orchestrator per results directory, for the run's whole life. scripts/ci/schedule.ts never
@@ -261,11 +277,11 @@ try {
           });
         }),
       log,
-      watchResult: (unit, changed) => {
-        const file = resultFileName(unit.job, unit.shard);
-        const watcher = watch(resultsDir, (_event, name) => name === file && changed());
-        return () => watcher.close();
-      },
+      writeResult: (unit, result) =>
+        writeFileSync(
+          join(resultsDir, resultFileName(unit.job, unit.shard)),
+          `${JSON.stringify(result, null, 2)}\n`,
+        ),
     },
     controller.signal,
   );

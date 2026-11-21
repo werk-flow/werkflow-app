@@ -21,6 +21,13 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(checkout, { recursive: true, force: true }));
 
+/** A run's start in a checkout whose reports can be read. */
+function started(): NonNullable<ReturnType<typeof boatRunStart>> {
+  const start = boatRunStart(checkout);
+  if (!start) throw new Error('The test checkout has unreadable reports.');
+  return start;
+}
+
 const run = (machine: string, minute: number, dollars: number | null): Omit<BoatRun, 'version'> => ({
   machine,
   startedAt: new Date(Date.UTC(2026, 10, 21, 8, minute)).toISOString(),
@@ -49,18 +56,18 @@ test('a run is recorded with its commit and the report folders it returned, and 
   );
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim();
   mkdirSync(join(checkout, '.agent-logs/verification/earlier'), { recursive: true });
-  const started = boatRunStart(checkout);
+  const start = started();
   mkdirSync(join(checkout, '.agent-logs/verification/returned'));
-  recordBoatRun(checkout, { machine: 'bx_aaaaaaaa', started, usage: { seconds: 300, dollars: 0.05 } });
+  recordBoatRun(checkout, { machine: 'bx_aaaaaaaa', started: start, usage: { seconds: 300, dollars: 0.05 } });
   const runs = readBoatRuns(join(checkout, BOAT_RUNS_FILE));
   if ('unreadable' in runs) throw new Error(runs.unreadable);
-  expect(runs.map((run) => run.completedAt >= started.startedAt)).toEqual([true]);
-  expect(runs.map((run) => ({ ...run, completedAt: started.startedAt }))).toEqual([
+  expect(runs.map((run) => run.completedAt >= start.startedAt)).toEqual([true]);
+  expect(runs.map((run) => ({ ...run, completedAt: start.startedAt }))).toEqual([
     {
       version: 1,
       machine: 'bx_aaaaaaaa',
-      startedAt: started.startedAt,
-      completedAt: started.startedAt,
+      startedAt: start.startedAt,
+      completedAt: start.startedAt,
       head,
       reports: ['returned'],
       usage: { seconds: 300, dollars: 0.05 },
@@ -70,19 +77,27 @@ test('a run is recorded with its commit and the report folders it returned, and 
 });
 
 test('a record that cannot be written only warns, and one without a usable machine id is never written', () => {
-  const started = boatRunStart(checkout);
+  const start = started();
   writeFileSync(join(checkout, '.agent-logs'), 'a file where the folder belongs');
-  expect(() => recordBoatRun(checkout, { machine: 'bx_aaaaaaaa', started, usage: undefined })).not.toThrow();
+  expect(() =>
+    recordBoatRun(checkout, { machine: 'bx_aaaaaaaa', started: start, usage: undefined }),
+  ).not.toThrow();
   rmSync(join(checkout, '.agent-logs'));
-  recordBoatRun(checkout, { machine: '/home/someone', started, usage: undefined });
+  recordBoatRun(checkout, { machine: '/home/someone', started: start, usage: undefined });
   expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toEqual([]);
   // Outside git, the run's commit is unknown, never a guess.
-  recordBoatRun(checkout, { machine: 'bx_aaaaaaaa', started, usage: undefined });
+  recordBoatRun(checkout, { machine: 'bx_aaaaaaaa', started: start, usage: undefined });
   expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toMatchObject([{ head: null, usage: null }]);
 });
 
+test('a checkout whose reports cannot be read records no start, and its run goes on', () => {
+  mkdirSync(join(checkout, '.agent-logs'));
+  writeFileSync(join(checkout, '.agent-logs/verification'), 'a file where the folder belongs');
+  expect(boatRunStart(checkout)).toBeUndefined();
+});
+
 test('one unreadable line makes the whole file unreadable, so no run is silently left out', () => {
-  recordBoatRun(checkout, { machine: 'bx_aaaaaaaa', started: boatRunStart(checkout), usage: undefined });
+  recordBoatRun(checkout, { machine: 'bx_aaaaaaaa', started: started(), usage: undefined });
   writeFileSync(join(checkout, BOAT_RUNS_FILE), `${readFileSync(join(checkout, BOAT_RUNS_FILE), 'utf8')}{\n`);
   expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toEqual({
     unreadable: `${join(checkout, BOAT_RUNS_FILE)}:2 is no JSON`,

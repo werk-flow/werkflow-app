@@ -7,6 +7,7 @@
 import { runPlanOf } from './check';
 import { CI_DAG, type CiEvent, type CiJob } from './dag';
 import type { CiResult, RunPlan } from './results';
+import { endReceipt, type ReceiptRun, startReceipt } from './run-commit-receipts';
 import { jobShards } from './run-plan';
 import { heldUntil } from './schedule';
 
@@ -36,7 +37,14 @@ export type ExecutorTask = {
 export type ExecutorOutcome = { exitCode: number | null; detail: string };
 
 /** Runs one job start. It ends the job at its timeout or when `signal` aborts, and then resolves. */
-export type Executor = { run(task: ExecutorTask, signal: AbortSignal): Promise<ExecutorOutcome> };
+export type Executor = {
+  run(task: ExecutorTask, signal: AbortSignal): Promise<ExecutorOutcome>;
+  /**
+   * Whether its jobs run where they cannot write the orchestrator's files: as another user, or in a
+   * container. Only then does the run keep a ledger (scripts/ci/job.ts, CI_LEDGER).
+   */
+  isolatesJobs: boolean;
+};
 
 type UnitState = 'waiting' | 'running' | 'passed' | 'failed' | 'skipped' | 'cancelled';
 type SchedulerResult = 'success' | 'failure' | 'cancelled' | 'skipped';
@@ -69,6 +77,8 @@ export type RunCommitDeps = {
   readResult(unit: Unit): CiResult | { unreadable: string };
   /** Appends a receipt to the runner's ledger; absent without one. Throws when it cannot. */
   appendReceipt?: ((receipt: CiResult) => void) | undefined;
+  /** Overwrites a job's result in the run's results directory. */
+  writeResult(unit: Unit, result: CiResult): void;
   /**
    * Posts the run's `Check` through the CI App's publisher (scripts/ci/publish-check.ts): `start`
    * before Plan, `finish` after Check. Absent when the runner posts no Check, such as for a queue
@@ -79,11 +89,6 @@ export type RunCommitDeps = {
   /** Resolves after `ms`, or at once when `signal` aborts. */
   sleep(ms: number, signal: AbortSignal): Promise<void>;
   log(line: string): void;
-  /**
-   * Calls `changed` whenever the job's result file changes, until the returned function stops it.
-   * A missed change costs only the start receipt's timing: the end forwards whatever the job wrote.
-   */
-  watchResult(unit: Unit, changed: () => void): () => void;
 };
 
 export type RunCommitOutcome = {
@@ -167,83 +172,26 @@ function schedulerReport(
   return report;
 }
 
-/**
- * Forwards a job's receipts to the ledger, which the job never sees: its start once its result shows
- * it running (`seen`, on each change of the file), and its end when it stopped. Only a result of this run, attempt, commit, tree and unit,
- * written after the job started, counts; anything else stays out of the ledger, and Check fails the
- * run on it.
- */
-function receiptForwarder(
-  input: RunCommitInput,
-  deps: RunCommitDeps,
-  unit: Unit,
-  startedAt: number,
-): { seen(): void; end(): void } {
-  const append = deps.appendReceipt;
-  let started = false;
-  // A start receipt that could not reach the ledger fails the job when it ends, not the orchestrator.
-  let failure: unknown;
-  const own = (): CiResult | undefined => {
-    const result = deps.readResult(unit);
-    if ('unreadable' in result) return undefined;
-    const run = input.run;
-    const matches =
-      result.job === unit.job &&
-      result.shard === unit.shard &&
-      result.event === run.event &&
-      result.commit === run.commit &&
-      result.tree === run.tree &&
-      result.runUrl === run.runUrl &&
-      result.attempt === run.attempt &&
-      (result.producer === null || result.producer === run.producer) &&
-      Date.parse(result.startedAt) >= startedAt;
-    return matches ? result : undefined;
-  };
-  return {
-    seen: () => {
-      if (!append || started || failure !== undefined) return;
-      const result = own();
-      // job.ts's start receipt: running, with its planned groups and the Plan it runs under. Its
-      // first write before it read the plan is no receipt yet.
-      if (result?.status !== 'running' || result.planIdentity === undefined) return;
-      try {
-        append(result);
-        started = true;
-      } catch (error) {
-        failure = error;
-      }
-    },
-    end: () => {
-      if (!append) return;
-      if (failure !== undefined) throw failure;
-      const result = own();
-      if (!result) {
-        deps.log(`[run] ${unitName(unit)}: no result of this run to forward to the ledger`);
-        return;
-      }
-      if (result.status !== 'running' || !started) append(result);
-    },
-  };
-}
+type Planned = { passed: boolean; units: Unit[]; owner?: ReceiptRun['plan'] };
 
-/** Plan on the host, and the jobs and shards its plan runs; none when the plan cannot be used. */
-async function planRun(
-  input: RunCommitInput,
-  deps: RunCommitDeps,
-  signal: AbortSignal,
-): Promise<{ passed: boolean; plan?: RunPlan; units: Unit[] }> {
+/**
+ * Plan on the host, and the jobs and shards its plan runs. None run when Plan failed, or its plan is
+ * not this run's and attempt's.
+ */
+async function planRun(input: RunCommitInput, deps: RunCommitDeps, signal: AbortSignal): Promise<Planned> {
   const planUnit: Unit = { job: 'plan', shard: null };
   const outcome = await deps.host.run(taskOf(input, planUnit), signal);
   deps.log(`[run] plan: ${outcome.detail}`);
   const { event, tree, runUrl, producer, attempt } = input.run;
   const planned = runPlanOf({ tree, event, runUrl, producer }, deps.readResult(planUnit));
   let problem: string | undefined;
-  if ('problem' in planned) problem = planned.problem;
+  if (outcome.exitCode !== 0) problem = 'Plan did not pass';
+  else if ('problem' in planned) problem = planned.problem;
   else if (planned.result.attempt !== attempt)
     problem = `the plan is of attempt ${planned.result.attempt}, not ${attempt}`;
   else
     try {
-      return { passed: outcome.exitCode === 0, plan: planned.plan, units: plannedUnits(planned.plan) };
+      return { passed: true, units: plannedUnits(planned.plan), owner: planned };
     } catch (error) {
       problem = error instanceof Error ? error.message : String(error);
     }
@@ -251,43 +199,59 @@ async function planRun(
   return { passed: false, units: [] };
 }
 
-/** Starts one job or shard; the promise settles once its state and receipts are final. */
-function startUnit(
+const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/**
+ * Starts one job or shard; the promise settles once its state and receipts are final. With a
+ * ledger, the start receipt goes in before the job begins, and a start that cannot be recorded
+ * fails the job unstarted. The end receipt follows the executor's verdict.
+ */
+async function startUnit(
   input: RunCommitInput,
   deps: RunCommitDeps,
   unit: Unit,
   signal: AbortSignal,
-  states: Map<string, UnitState>,
+  context: { states: Map<string, UnitState>; owner: ReceiptRun['plan'] },
 ): Promise<void> {
   const name = unitName(unit);
-  states.set(name, 'running');
+  context.states.set(name, 'running');
+  const run: ReceiptRun = {
+    ...input.run,
+    listGrowthApproved: input.env.SHRINK_ONLY_GROWTH_APPROVED === 'true',
+    plan: context.owner,
+  };
+  const start = startReceipt(run, unit, new Date(deps.now()));
+  try {
+    deps.appendReceipt?.(start);
+  } catch (error) {
+    deps.log(`[run] ${name}: not started, its start could not reach the ledger: ${message(error)}`);
+    context.states.set(name, 'failed');
+    return;
+  }
   deps.log(`[run] ${name}: started`);
-  const forwarder = receiptForwarder(input, deps, unit, deps.now());
-  const unwatch = deps.appendReceipt ? deps.watchResult(unit, forwarder.seen) : undefined;
-  const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-  return deps.jobs
-    .run(taskOf(input, unit), signal)
-    .then(
-      (outcome): UnitState => {
-        deps.log(`[run] ${name}: ${outcome.detail}`);
-        return signal.aborted ? 'cancelled' : outcome.exitCode === 0 ? 'passed' : 'failed';
-      },
-      (error: unknown): UnitState => {
-        deps.log(`[run] ${name}: the executor failed: ${message(error)}`);
-        return signal.aborted ? 'cancelled' : 'failed';
-      },
-    )
-    .then((state) => {
-      unwatch?.();
-      try {
-        forwarder.end();
-        states.set(name, state);
-      } catch (error) {
-        // A receipt that cannot reach the ledger fails the job, as job.ts fails on it.
-        deps.log(`[run] ${name}: its receipt could not reach the ledger: ${message(error)}`);
-        states.set(name, 'failed');
-      }
-    });
+  const state: UnitState = await deps.jobs.run(taskOf(input, unit), signal).then(
+    (outcome) => {
+      deps.log(`[run] ${name}: ${outcome.detail}`);
+      return signal.aborted ? 'cancelled' : outcome.exitCode === 0 ? 'passed' : 'failed';
+    },
+    (error: unknown) => {
+      deps.log(`[run] ${name}: the executor failed: ${message(error)}`);
+      return signal.aborted ? 'cancelled' : 'failed';
+    },
+  );
+  if (deps.appendReceipt) {
+    const end = endReceipt(start, deps.readResult(unit), state === 'passed', new Date(deps.now()));
+    if (end.problem) deps.log(`[run] ${name}: its ledger receipt fails it: ${end.problem}`);
+    try {
+      deps.appendReceipt(end.receipt);
+    } catch (error) {
+      // A receipt that cannot reach the ledger fails the job, as job.ts fails on it.
+      deps.log(`[run] ${name}: its receipt could not reach the ledger: ${message(error)}`);
+      context.states.set(name, 'failed');
+      return;
+    }
+  }
+  context.states.set(name, state);
 }
 
 /**
@@ -328,11 +292,12 @@ async function runUnits(
   input: RunCommitInput,
   deps: RunCommitDeps,
   signal: AbortSignal,
-  planned: { plan?: RunPlan; units: Unit[] },
+  planned: Planned,
 ): Promise<Map<string, UnitState>> {
-  const { units } = planned;
+  const { units, owner } = planned;
   const states = new Map<string, UnitState>(units.map((unit) => [unitName(unit), 'waiting']));
-  const hold = planned.plan ? heldUntil(planned.plan) : undefined;
+  if (!owner) return states;
+  const hold = heldUntil(owner.plan);
   const running = new Map<string, Promise<void>>();
   let announced = false;
   for (;;) {
@@ -347,7 +312,7 @@ async function runUnits(
       else if (admitted === 'start' && running.size < input.parallel)
         running.set(
           name,
-          startUnit(input, deps, unit, signal, states).then(() => {
+          startUnit(input, deps, unit, signal, { states, owner }).then(() => {
             running.delete(name);
           }),
         );
@@ -368,12 +333,45 @@ async function runUnits(
   }
 }
 
-/** Runs one commit's CI run: Plan, the plan's jobs through the executor, then Check. */
-export async function runCommit(
+/**
+ * A Check whose process failed after it wrote a pass is a failure: its result is set failed, and so
+ * is its receipt, so neither the publisher, the queue nor a later push takes the pass.
+ */
+function settleCheck(input: RunCommitInput, deps: RunCommitDeps, exitCode: number | null): void {
+  const unit: Unit = { job: 'check', shard: null };
+  const written = deps.readResult(unit);
+  if (exitCode === 0 || 'unreadable' in written || written.status !== 'passed') return;
+  if (written.runUrl !== input.run.runUrl || written.attempt !== input.run.attempt) return;
+  deps.log('[run] check: it wrote a pass, but did not pass; its result is set failed.');
+  const failed: CiResult = { ...written, status: 'failed' };
+  deps.writeResult(unit, failed);
+  deps.appendReceipt?.(failed);
+}
+
+/**
+ * The run's dependencies with the ledger only when no job can write it: an executor that runs jobs
+ * as the orchestrator's own user keeps no ledger, so every run executes in full (scripts/ci/job.ts).
+ */
+function withLedgerBoundary(
   input: RunCommitInput,
   deps: RunCommitDeps,
+): { input: RunCommitInput; deps: RunCommitDeps } {
+  if (deps.jobs.isolatesJobs || (!input.env.CI_LEDGER && !deps.appendReceipt)) return { input, deps };
+  deps.log(
+    '[run] The executor runs jobs as this user, who could write the ledger, so this run keeps no ledger and reuses nothing.',
+  );
+  const env = { ...input.env };
+  delete env.CI_LEDGER;
+  return { input: { ...input, env }, deps: { ...deps, appendReceipt: undefined } };
+}
+
+/** Runs one commit's CI run: Plan, the plan's jobs through the executor, then Check. */
+export async function runCommit(
+  given: RunCommitInput,
+  dependencies: RunCommitDeps,
   signal: AbortSignal,
 ): Promise<RunCommitOutcome> {
+  const { input, deps } = withLedgerBoundary(given, dependencies);
   if (deps.publish && !(await deps.publish('start'))) {
     deps.log('[run] The queued Check could not be posted, so the run does not start.');
     return { exitCode: 1, units: [], scheduler: {} };
@@ -388,6 +386,11 @@ export async function runCommit(
     new AbortController().signal,
   );
   deps.log(`[run] check: ${checkOutcome.detail}`);
+  try {
+    settleCheck(input, deps, checkOutcome.exitCode);
+  } catch (error) {
+    deps.log(`[run] check: its failure could not be recorded: ${message(error)}`);
+  }
   if (deps.publish && !(await deps.publish('finish')))
     deps.log('[run] The Check verdict could not be posted.');
   return {

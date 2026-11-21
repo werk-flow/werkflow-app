@@ -20,7 +20,7 @@ const saved = { ...process.env };
 const RECORD = (script: string) => `
 import { appendFileSync, writeFileSync } from 'node:fs';
 const job = process.argv.at(-1);
-const seen = Object.entries(process.env).filter(([name]) => /^(CI_|GH_TOKEN|SIBLING_|SHRINK_|EMAIL_)/.test(name)).sort();
+const seen = Object.entries(process.env).filter(([name]) => /^(CI_|GH_TOKEN|SIBLING_|SHRINK_|EMAIL_|GITHUB_ENV)/.test(name)).sort();
 writeFileSync(process.env.RECORD_DIR + '/${script}-' + job + '.env', seen.map(([name, value]) => name + '=' + value).join('\\n'));
 `;
 const PREPARE = `${RECORD('prepare')}
@@ -107,10 +107,14 @@ const task = (
 test("a job's body sees only its task's variables and what its environment steps passed on", async () => {
   const run = await executor().run(task('fast', { GH_TOKEN: 'job-token' }), new AbortController().signal);
   expect(run.exitCode, run.detail).toBe(0);
+  // Only the trusted copy's sibling step holds the token; the tested commit's steps (its install
+  // scripts included) and its body never do.
+  expect(recorded('prepare-siblings.env').SIBLING_REPOSITORIES_TOKEN).toBe('sibling-token');
   const prepare = recorded('prepare-fast.env');
   const body = recorded('job-fast.env');
-  expect(prepare.SIBLING_REPOSITORIES_TOKEN).toBe('sibling-token');
+  expect(prepare.SIBLING_REPOSITORIES_TOKEN).toBeUndefined();
   expect(body.SIBLING_REPOSITORIES_TOKEN).toBeUndefined();
+  expect(body.GITHUB_ENV).toBeUndefined();
   for (const seen of [prepare, body]) {
     expect(seen.CI_LEDGER).toBeUndefined();
     expect(seen.CI_PUBLISHER).toBeUndefined();
@@ -141,4 +145,14 @@ test("only a stack the job started is stopped, and the host's stack lock passes 
   expect(readFileSync(join(folder, 'supabase.calls'), 'utf8')).toBe('supabase stop --no-backup\n');
   expect(existsSync(join(folder, 'stack.lock'))).toBe(false);
   expect(recorded('job-browser.env').CI_STACK_STARTED).toBeUndefined();
+});
+
+test('a stack lock whose holder died is taken over, and the job runs', async () => {
+  // A process id no live process holds: the newest one, released.
+  const dead = execFileSync('bash', ['-c', 'true & echo $!'], { encoding: 'utf8' }).trim();
+  writeFileSync(join(folder, 'stack.lock'), dead);
+  const run = await executor().run(task('sql'), new AbortController().signal);
+  expect(run.exitCode, run.detail).toBe(0);
+  expect(existsSync(join(folder, 'stack.lock'))).toBe(false);
+  expect(existsSync(join(folder, 'stack.lock.takeover'))).toBe(false);
 });

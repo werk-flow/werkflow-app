@@ -3,13 +3,15 @@
 // Once .github/scripts/check-app.json names the CI App, a PR's `Check` is the App's check run and
 // the `Queue` mark goes through the publisher as the App's check run (lib/testing/ci/check-app.ts).
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { appCheckStateOf } from '../../lib/testing/ci/check-app';
 import {
   integrationEnvironment,
   mainEnvironment,
+  type MainFollowUp,
+  mainFollowUpSchema,
   type QueueAdapter,
   type QueuedPull,
   type QueueState,
@@ -29,6 +31,22 @@ const QUEUE_REFS = 'refs/ci-queue';
 
 /** The queue's state between ticks, in its work directory: a pending `Queue` mark or a freeze. */
 export const QUEUE_STATE_FILE = 'queue-state.json';
+/** main's run a landing still owes (`mainFollowUp`), until it started. */
+const MAIN_FOLLOW_UP_FILE = 'main-follow-up.json';
+
+/** The owed main run in `workDir`, or undefined. A damaged file throws, so the tick stops for a person. */
+export function readMainFollowUp(workDir: string): MainFollowUp | undefined {
+  const path = join(workDir, MAIN_FOLLOW_UP_FILE);
+  return existsSync(path) ? mainFollowUpSchema.parse(JSON.parse(readFileSync(path, 'utf8'))) : undefined;
+}
+
+/** Saves an owed main run durably, or clears it with undefined. */
+export function saveMainFollowUp(workDir: string, followUp: MainFollowUp | undefined): void {
+  const path = join(workDir, MAIN_FOLLOW_UP_FILE);
+  if (!followUp) return rmSync(path, { force: true });
+  writeFileSync(`${path}.tmp`, `${JSON.stringify(mainFollowUpSchema.parse(followUp))}\n`, { flush: true });
+  renameSync(`${path}.tmp`, path);
+}
 
 type Git = (...args: string[]) => string;
 
@@ -102,10 +120,13 @@ export function runIntegration(
   mkdirSync(options.resultsDir, { recursive: true });
   git('update-ref', ref, run.tip.commit);
   try {
+    // A queue run posts no Check, so its runner never gets the main run's publisher.
+    const inherited = { ...process.env };
+    delete inherited.CI_PUBLISHER;
     const environment = integrationEnvironment({ ...run, ...options });
     const ran = spawnSync(options.runner, [], {
       cwd: options.repository,
-      env: { ...process.env, ...environment },
+      env: { ...inherited, ...environment },
       stdio: 'inherit',
     });
     console.info(`[queue] runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}`);

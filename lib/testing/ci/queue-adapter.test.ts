@@ -10,8 +10,10 @@ import {
   createQueueAdapter,
   markQueue,
   readQueueState,
+  readMainFollowUp,
   runIntegration,
   runMain,
+  saveMainFollowUp,
   squashCommit,
   writeQueueState,
 } from '../../../scripts/ci/queue-adapter';
@@ -367,4 +369,30 @@ test("main's run gets main's head, the tick's base and the landed PRs, in a resu
   const id = env.CI_RUN_URL?.replace('https://ci.example/queue/', '') ?? '';
   expect(id).toEndWith(`-main-${'c'.repeat(12)}`);
   expect(env.CI_RESULTS_DIR).toBe(join(workDir, id));
+});
+
+test('an owed main run survives between ticks until it is cleared, and a damaged record stops the tick', () => {
+  const workDir = join(folder, 'work');
+  mkdirSync(workDir);
+  expect(readMainFollowUp(workDir)).toBeUndefined();
+  saveMainFollowUp(workDir, { base: 'b'.repeat(40), prs: [7] });
+  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7] });
+  saveMainFollowUp(workDir, undefined);
+  expect(readMainFollowUp(workDir)).toBeUndefined();
+  writeFileSync(join(workDir, 'main-follow-up.json'), '{"base":"main"}');
+  expect(() => readMainFollowUp(workDir)).toThrow();
+});
+
+test("a queue run's runner never gets the main run's Check publisher", () => {
+  process.env.CI_PUBLISHER = '/publish-check-hook';
+  try {
+    const seen = join(folder, 'publisher');
+    integration(
+      `printf '%s' "\${CI_PUBLISHER:-none}" > "${seen}"; receipt check passed '"2026-11-21T09:00:00Z"'`,
+      'queue/9',
+    );
+    expect(readFileSync(seen, 'utf8')).toBe('none');
+  } finally {
+    delete process.env.CI_PUBLISHER;
+  }
 });

@@ -28,7 +28,9 @@ import { CI_DAG, CI_JOBS, CI_TOOLS, PREPARE_STEPS, type PrepareStep } from '../.
 //   GITHUB_OUTPUT  playwright: `missing` and `key` of Chromium's system packages, for the cache.
 //   CI_EVENT, CI_PRS, CI_BASE_SHA, GITHUB_REPOSITORY  approval (scripts/ci/job.ts names them).
 //   SIBLING_REPOSITORIES_TOKEN  siblings: reads the private werkflow-business. Without it the clone
-//                  is left out and docs:check says so. Only the clone sees it, never the job body.
+//                  is left out and docs:check says so. Only the clone sees it, never the job body. A
+//                  runner off GitHub runs this step from its trusted copy before the job's own steps,
+//                  which then find the clones and skip it.
 //   CI_CACHE_DIR   Off GitHub Actions, optional: a folder the runner keeps across jobs for the
 //                  stack's environment and Chromium's system packages, in place of GitHub's caches.
 //   CI_REPLACE_STACK=1  stack: stops a running stack of the project first, its volumes included.
@@ -84,6 +86,12 @@ function install(): void {
 /** The clones docs:check reads beside the checkout (docs/README.md, "Sibling repositories"). */
 function siblings(): void {
   const parent = resolve(checkout, '..');
+  // scripts/ci/process-executor.ts clones them first with the trusted copy of this step, so the
+  // tested commit's steps never hold the token.
+  if (existsSync(join(parent, SIBLINGS.website))) {
+    console.info('[prepare] The sibling repositories are cloned already.');
+    return;
+  }
   sh('git', [
     'clone',
     '--quiet',

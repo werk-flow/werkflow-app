@@ -45,28 +45,55 @@ const alive = (pid: number): boolean => {
   }
 };
 
-/** Waits for the host's stack lock; a lock whose process died is taken over. Resolves to its release. */
+const holderOf = (path: string): number | undefined => {
+  try {
+    const holder = Number(readFileSync(path, 'utf8'));
+    return Number.isInteger(holder) && holder > 0 ? holder : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Creates `path` holding this process's id, or returns false when it exists. */
+function create(path: string): boolean {
+  try {
+    const held = openSync(path, 'wx');
+    writeFileSync(held, String(process.pid));
+    closeSync(held);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'EEXIST') return false;
+    throw error;
+  }
+}
+
+/**
+ * Waits for the host's stack lock and resolves to its release. A lock whose process died is taken
+ * over under a second lock, one taker at a time, and only while it still names that dead process:
+ * two runners that both read the dead holder never both take it.
+ */
 async function lockStack(
   path: string,
   signal: AbortSignal,
   log: (line: string) => void,
 ): Promise<() => void> {
+  const takeover = `${path}.takeover`;
   for (let announced = false; ; ) {
     signal.throwIfAborted();
-    try {
-      const held = openSync(path, 'wx');
-      writeFileSync(held, String(process.pid));
-      closeSync(held);
-      return () => rmSync(path, { force: true });
-    } catch (error) {
-      if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
-    }
-    const holder = Number(readFileSync(path, 'utf8'));
-    if (!Number.isInteger(holder) || !alive(holder)) {
-      rmSync(path, { force: true });
+    if (create(path)) return () => rmSync(path, { force: true });
+    const holder = holderOf(path);
+    if (holder !== undefined && !alive(holder) && create(takeover)) {
+      try {
+        if (holderOf(path) === holder) rmSync(path, { force: true });
+      } finally {
+        rmSync(takeover, { force: true });
+      }
       continue;
     }
-    if (!announced) log(`[run] waiting for the host's stack, which process ${holder} holds`);
+    // A takeover lock whose taker died is taken over the same way, by its own dead holder.
+    const taker = holderOf(takeover);
+    if (taker !== undefined && !alive(taker)) rmSync(takeover, { force: true });
+    if (!announced) log(`[run] waiting for the host's stack, which process ${holder ?? 'unknown'} holds`);
     announced = true;
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, 5_000);
@@ -143,50 +170,25 @@ export function processExecutor(
   const origin = originOf(options.source);
   return {
     workspace,
+    // Every job runs as this process's user, who can write the ledger, so a run keeps none
+    // (lib/testing/ci/run-commit.ts).
+    isolatesJobs: false,
     async run(task, signal) {
-      const began = Date.now();
       const name = unitName(task.unit);
       const folder = workspace(task.unit);
       const checkout = join(folder, 'werkflow-app');
       const log = join(folder, `${name}.log`);
-      const ended = AbortSignal.any([signal, AbortSignal.timeout(task.timeoutMs)]);
+      const passed = join(folder, `${name}.env`);
       mkdirSync(folder, { recursive: true });
       const host = hostEnvironment();
-      const run = (command: string, args: readonly string[], env: Record<string, string> = {}) =>
-        runGroup(command, args, { cwd: checkout, env: { ...host, ...env }, log }, ended);
+      const steps = CI_DAG[task.unit.job].prepare;
+      let release: (() => void) | undefined;
+      let began = Date.now();
+      let ended = signal;
       const fail = (detail: string) => ({
         exitCode: null,
         detail: `${detail} after ${minutes(Date.now() - began)}${ended.aborted && !signal.aborted ? ', its timeout' : ''}; log ${log}`,
       });
-      if (!existsSync(checkout)) {
-        if (
-          (await runGroup(
-            'git',
-            ['clone', '--quiet', '--shared', '--no-checkout', options.source, checkout],
-            { cwd: folder, env: host, log },
-            ended,
-          )) !== 0
-        )
-          return fail('the clone failed');
-        // The job reads `origin` as on GitHub Actions: the source's view of GitHub's branches, and
-        // GitHub itself for a newer head (job.ts) or an open PR's migrations.
-        const steps: (readonly string[])[] = [
-          ['fetch', '--quiet', '--no-tags', options.source, '+refs/remotes/origin/*:refs/remotes/origin/*'],
-          ...(origin ? [['remote', 'set-url', 'origin', origin]] : []),
-          ['checkout', '--quiet', '--detach', options.commit],
-        ];
-        for (const args of steps) if ((await run('git', args)) !== 0) return fail(`git ${args[0]} failed`);
-      }
-      const env: Record<string, string> = {
-        ...task.env,
-        // The runner began the job here, before its checkout and setup (lib/testing/ci/measurement.ts).
-        CI_JOB_STARTED_AT: new Date(began).toISOString(),
-        CI_MACHINE_START: String(options.machineStart),
-      };
-      const steps = CI_DAG[task.unit.job].prepare;
-      const stack = steps.includes('stack') || steps.includes('stack-environment');
-      let release: (() => void) | undefined;
-      const passed = join(folder, `${name}.env`);
       // Only a stack this job started is stopped (prepare.ts reports it), before the host's lock
       // passes on: the next job's stack starts fresh, and a stack this job did not start stays.
       const freeStack = async (): Promise<void> => {
@@ -202,24 +204,64 @@ export function processExecutor(
         release = undefined;
       };
       try {
-        if (stack) release = await lockStack(options.stackLock, ended, options.log);
+        // The host's one stack first: a job's time, as ci.yml's timeout counts it, starts once it runs.
+        if (steps.includes('stack') || steps.includes('stack-environment'))
+          release = await lockStack(options.stackLock, signal, options.log);
+        began = Date.now();
+        ended = AbortSignal.any([signal, AbortSignal.timeout(task.timeoutMs)]);
+        const run = (
+          command: string,
+          args: readonly string[],
+          env: Readonly<Record<string, string | undefined>> = {},
+        ) => runGroup(command, args, { cwd: checkout, env: { ...host, ...env }, log }, ended);
+        if (!existsSync(checkout)) {
+          if (
+            (await runGroup(
+              'git',
+              ['clone', '--quiet', '--shared', '--no-checkout', options.source, checkout],
+              { cwd: folder, env: host, log },
+              ended,
+            )) !== 0
+          )
+            return fail('the clone failed');
+          // The job reads `origin` as on GitHub Actions: the source's view of GitHub's branches, and
+          // GitHub itself for a newer head (job.ts) or an open PR's migrations.
+          const gitSteps: (readonly string[])[] = [
+            ['fetch', '--quiet', '--no-tags', options.source, '+refs/remotes/origin/*:refs/remotes/origin/*'],
+            ...(origin ? [['remote', 'set-url', 'origin', origin]] : []),
+            ['checkout', '--quiet', '--detach', options.commit],
+          ];
+          for (const args of gitSteps)
+            if ((await run('git', args)) !== 0) return fail(`git ${args[0]} failed`);
+        }
+        const env: Record<string, string> = {
+          ...task.env,
+          // The runner began the job here, before its checkout and setup (lib/testing/ci/measurement.ts).
+          CI_JOB_STARTED_AT: new Date(began).toISOString(),
+          CI_MACHINE_START: String(options.machineStart),
+          GITHUB_ENV: passed,
+        };
         writeFileSync(passed, '');
+        // The sibling clones take a token, so the trusted copy's prepare.ts clones them; the tested
+        // commit's steps, its install scripts included, never see it and find the clones in place.
+        if (steps.includes('siblings')) {
+          const trusted = join(options.source, 'scripts/ci/prepare.ts');
+          const cloned = await run(process.execPath, [trusted, 'siblings'], { ...env, ...task.prepareEnv });
+          if (cloned !== 0) return fail(`the sibling clones ended with ${cloned ?? 'a stop'}`);
+        }
         const prepared = await run(process.execPath, ['scripts/ci/prepare.ts', 'for', task.unit.job], {
           ...env,
-          ...task.prepareEnv,
-          GITHUB_ENV: passed,
           ...(options.replaceStack ? { CI_REPLACE_STACK: '1' } : {}),
         });
         if (prepared !== 0) return fail(`its environment steps ended with ${prepared ?? 'a stop'}`);
         const setup = Date.now() - began;
         // Fast reads only the stack's environment file, so only a job that uses the stack keeps it.
         if (!steps.includes('stack')) await freeStack();
-        const variables = exported(passed);
+        // The body gets what the steps passed on, never the file they wrote it to.
+        const variables: Record<string, string> = { ...env, ...exported(passed) };
         delete variables.CI_STACK_STARTED;
-        const code = await run(process.execPath, ['scripts/ci/job.ts', task.unit.job], {
-          ...env,
-          ...variables,
-        });
+        delete variables.GITHUB_ENV;
+        const code = await run(process.execPath, ['scripts/ci/job.ts', task.unit.job], variables);
         return code === null
           ? fail('the job was stopped')
           : {

@@ -33,42 +33,48 @@ const median = (values: readonly number[]): number => {
 };
 
 /**
- * The group results of the newest `last` full runs in a CI runner's ledger: what each browser and
- * component shard reported, on that runner's machines. Only a completed receipt of a CI runner
- * counts, and only a passed group's seconds reach the durations (`refreshGroupDurations`).
+ * The group results of the newest `last` ended full runs in a CI runner's ledger: what each browser
+ * and component shard reported on that runner's machines. A run counts once its final Check ended,
+ * and each shard once, by its newest completed receipt, so a rerun adds no second sample. Only a
+ * CI runner's receipts count, and only a passed group's seconds reach the durations
+ * (`refreshGroupDurations`).
  */
 export function ledgerGroupResults(
   ledger: readonly CiResult[],
   last: number,
 ): { results: { groupId: string; status: string; durationMs: number }[]; runs: string[]; dates: string[] } {
-  const shards = ledger.filter(
+  const full = ledger.filter(
     (receipt) =>
       receipt.event === 'full' &&
-      (receipt.job === 'browser' || receipt.job === 'components') &&
-      receipt.status !== 'running' &&
       receipt.producer !== null &&
-      receipt.runUrl !== null,
+      receipt.runUrl !== null &&
+      receipt.completedAt !== null,
   );
-  const started = new Map<string, string>();
-  for (const receipt of shards)
-    if (receipt.runUrl && (started.get(receipt.runUrl) ?? receipt.startedAt) >= receipt.startedAt)
-      started.set(receipt.runUrl, receipt.startedAt);
-  const runs = [...started]
+  const ended = new Map<string, string>();
+  for (const receipt of full)
+    if (receipt.job === 'check' && receipt.runUrl) ended.set(receipt.runUrl, receipt.startedAt);
+  const runs = [...ended]
     .toSorted(([, left], [, right]) => left.localeCompare(right))
     .slice(-last)
     .map(([runUrl]) => runUrl);
+  const newest = new Map<string, CiResult>();
+  for (const receipt of full) {
+    if (receipt.job !== 'browser' && receipt.job !== 'components') continue;
+    if (!receipt.runUrl || !runs.includes(receipt.runUrl)) continue;
+    const key = `${receipt.runUrl} ${receipt.job} ${receipt.shard}`;
+    const known = newest.get(key);
+    if (!known || known.startedAt <= receipt.startedAt) newest.set(key, receipt);
+  }
   return {
-    results: shards
-      .filter((receipt) => receipt.runUrl !== null && runs.includes(receipt.runUrl))
-      .flatMap((receipt) =>
-        receipt.groups.map((group) => ({
-          groupId: group.id,
-          status: group.outcome,
-          durationMs: group.durationMs,
-        })),
-      ),
+    results: [...newest.values()].flatMap((receipt) =>
+      receipt.groups.map((group) => ({
+        groupId: group.id,
+        status: group.outcome,
+        durationMs: group.durationMs,
+      })),
+    ),
     runs,
-    dates: runs.flatMap((runUrl) => started.get(runUrl)?.slice(0, 10) ?? []),
+    dates: runs.flatMap((runUrl) => ended.get(runUrl)?.slice(0, 10) ?? []),
   };
 }
 

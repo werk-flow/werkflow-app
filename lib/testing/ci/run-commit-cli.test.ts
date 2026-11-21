@@ -72,6 +72,15 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
       `main's run of ${head} started already: https://ci.example/runs/1`,
       undefined,
     ],
+    // The same on one host before either Plan wrote: the first claims the commit.
+    [
+      { CI_EVENT: 'main' },
+      `main's run of ${head} started already: https://ci.example/runs/3`,
+      () => {
+        mkdirSync(join(folder, 'work/main-runs'), { recursive: true });
+        writeFileSync(join(folder, 'work/main-runs', head), 'https://ci.example/runs/3');
+      },
+    ],
     [{}, 'another run-commit holds this run', () => writeFileSync(join(results, RUN_COMMIT_LOCK), '')],
     [
       { CI_RUN_ATTEMPT: '2' },
@@ -86,8 +95,9 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
     const refused = runCommit(env);
     expect([cause, refused.status]).toEqual([cause, 2]);
     expect(refused.stderr).toContain(cause);
-    // A refusal leaves another orchestrator's lock alone and starts no workspace.
-    expect([cause, existsSync(join(folder, 'work'))]).toEqual([cause, false]);
+    // A refusal starts no workspace.
+    expect([cause, existsSync(join(folder, 'work', 'host'))]).toEqual([cause, false]);
+    rmSync(join(folder, 'work'), { recursive: true, force: true });
   }
   expect(readdirSync(results)).toEqual(['fast.json']);
 });

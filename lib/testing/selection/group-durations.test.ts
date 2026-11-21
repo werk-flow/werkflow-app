@@ -51,7 +51,7 @@ test('the default for a group without a record is the upper quartile of the reco
   expect(refreshed.defaultSeconds).toBe(70);
 });
 
-test("a ledger refresh takes the newest full runs' completed shards of a CI runner, and nothing else", () => {
+test('a ledger refresh takes each shard of the newest ended full runs once, from a CI runner, and nothing else', () => {
   const receipt = (overrides: Partial<CiResult>): CiResult => ({
     version: 1,
     job: 'browser',
@@ -71,40 +71,46 @@ test("a ledger refresh takes the newest full runs' completed shards of a CI runn
     completedAt: '2026-11-20T01:30:00.000Z',
     ...overrides,
   });
+  const check = (runUrl: string, startedAt: string, event: CiResult['event'] = 'full'): CiResult =>
+    receipt({ job: 'check', shard: null, groups: [], runUrl, startedAt, status: 'failed', event });
   const ledger = [
     receipt({
       runUrl: 'run-1',
       startedAt: '2026-11-19T01:00:00.000Z',
       groups: [{ id: 'golden:gg-00', outcome: 'passed', durationMs: 1 }],
     }),
-    receipt({}),
+    check('run-1', '2026-11-19T02:00:00.000Z'),
+    // A shard of run 2 that a rerun of the same shard replaced: only the newer one counts.
+    receipt({ groups: [{ id: 'golden:gg-00', outcome: 'passed', durationMs: 90_000 }] }),
+    receipt({ startedAt: '2026-11-20T03:00:00.000Z', attempt: 2 }),
     receipt({
       job: 'components',
       groups: [{ id: 'ui:contracts:work', outcome: 'passed', durationMs: 20_000 }],
     }),
+    check('run-2', '2026-11-20T04:00:00.000Z'),
     receipt({
       runUrl: 'run-3',
       startedAt: '2026-11-21T01:00:00.000Z',
       groups: [{ id: 'golden:gg-00', outcome: 'failed', durationMs: 3_000 }],
     }),
-    // Not a full run's shard, still running, or a workstation's: none counts.
+    check('run-3', '2026-11-21T02:00:00.000Z'),
+    // Still running, not a full run, or a workstation's: none counts.
     receipt({
-      event: 'integration',
       runUrl: 'run-4',
+      startedAt: '2026-11-22T01:00:00.000Z',
       groups: [{ id: 'golden:p1-04', outcome: 'passed', durationMs: 9 }],
     }),
     receipt({
-      runUrl: 'run-3',
-      status: 'running',
-      completedAt: null,
-      groups: [{ id: 'golden:p1-04', outcome: 'not-run', durationMs: 0 }],
-    }),
-    receipt({
-      producer: null,
+      event: 'integration',
       runUrl: 'run-5',
       groups: [{ id: 'golden:p1-04', outcome: 'passed', durationMs: 9 }],
     }),
-    receipt({ job: 'check', runUrl: 'run-3', groups: [] }),
+    check('run-5', '2026-11-22T02:00:00.000Z', 'integration'),
+    receipt({
+      producer: null,
+      runUrl: 'run-6',
+      groups: [{ id: 'golden:p1-04', outcome: 'passed', durationMs: 9 }],
+    }),
   ];
   const newest = ledgerGroupResults(ledger, 2);
   expect(newest.runs).toEqual(['run-2', 'run-3']);

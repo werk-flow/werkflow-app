@@ -236,19 +236,32 @@ export function integrationEnvironment(run: {
   };
 }
 
+/** main's run a landing owes: the tick's base, main before the batch, and the PRs it landed. */
+export const mainFollowUpSchema = z
+  .object({ base: z.string().regex(/^[0-9a-f]{40}$/), prs: z.array(z.number().int().positive()) })
+  .strict();
+export type MainFollowUp = z.infer<typeof mainFollowUpSchema>;
+
 /**
- * main's run after a live tick that landed a PR or stopped partway (`partial`): one run of main's head
- * with the tick's base, main before the batch. It reuses the batch's pass only for the landing the
- * queue tested, and otherwise runs its jobs. Undefined for a dry run, or when main did not move.
+ * The main run a live tick owes when it landed a PR or stopped partway (`partial`), or undefined for
+ * a dry run or a tick that moved nothing. The queue saves it before it reads main, so a read that
+ * fails leaves it for the next tick.
  */
-export function mainRunAfter(
-  outcome: QueueOutcome,
+export function mainFollowUp(outcome: QueueOutcome): MainFollowUp | undefined {
+  const moved = outcome.landing.length > 0 || outcome.stops.some((stop) => stop.kind === 'partial');
+  return !outcome.dryRun && moved ? { base: outcome.base, prs: [...outcome.landing] } : undefined;
+}
+
+/**
+ * main's run of its head for an owed follow-up: diffed against the tick's base, so it reuses the
+ * batch's pass only for the landing the queue tested, and otherwise runs its jobs. Undefined when
+ * main did not move, as when a merge that may have landed did not.
+ */
+export function mainRunOf(
+  followUp: MainFollowUp,
   head: string,
 ): { commit: string; base: string; prs: number[] } | undefined {
-  const moved = outcome.landing.length > 0 || outcome.stops.some((stop) => stop.kind === 'partial');
-  return !outcome.dryRun && moved && head !== outcome.base
-    ? { commit: head, base: outcome.base, prs: [...outcome.landing] }
-    : undefined;
+  return head === followUp.base ? undefined : { commit: head, ...followUp };
 }
 
 /** The environment of main's run after a landing, on top of the runner's own. */
