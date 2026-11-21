@@ -876,8 +876,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9271, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 26273, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8731, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 23774, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -1033,6 +1033,24 @@
           },
           "runKeys": ["2026-11-20T105334831Z-6a1656"],
           "reason": "Owner-approved one-time change: werk-flow/werkflow-planning#17, Owner queue 4 (owner decision 2026-11-20). werk-flow/werkflow-app#485 adds the two Rechnungen routes, and Turbopack's production chunker re-packs the shared (app) layout's unchanged client code into 23 chunks instead of main's 21 (diagnosis in #485's Verification, 'Lab payload regression'). The layout gains only the Receipt icon, the moved ReceiptText and the lazy invoice skeleton loader; no invoice code reaches field workers. The action's route payload names the two extra chunks: 25,593 to 26,273 decoded bytes on Boat, head cb34906a."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9271, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 26273, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8731, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23774, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-21T055532764Z-a59c9e"],
+          "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
         }
       ]
     },
@@ -1149,8 +1167,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9271, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 26272, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8732, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 23773, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -1340,6 +1358,24 @@
           },
           "runKeys": ["2026-11-20T105334831Z-6a1656"],
           "reason": "Owner-approved one-time change: werk-flow/werkflow-planning#17, Owner queue 4 (owner decision 2026-11-20). werk-flow/werkflow-app#485 adds the two Rechnungen routes, and Turbopack's production chunker re-packs the shared (app) layout's unchanged client code into 23 chunks instead of main's 21 (diagnosis in #485's Verification, 'Lab payload regression'). The layout gains only the Receipt icon, the moved ReceiptText and the lazy invoice skeleton loader; no invoice code reaches field workers. The action's route payload names the two extra chunks: 25,592 to 26,272 decoded bytes on Boat, head cb34906a."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9271, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 26272, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8732, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23773, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-21T055532764Z-a59c9e"],
+          "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
         }
       ]
     },
