@@ -279,7 +279,7 @@ export function createQueueAdapter(options: {
       return merged.state === 'MERGED' ? (merged.mergeCommit?.oid ?? null) : null;
     },
     withdraw: async (pending) => {
-      mark(pending.head, 'failure', 'Not merged; the queue tests it again', pending.runUrl);
+      mark(pending.head, 'failure', 'Withdrawn: a queue pass counts only for its own merge', pending.runUrl);
       console.info(`[queue] #${pending.pull}: Queue withdrawn on ${pending.head}`);
     },
     state: async () => readQueueState(stateFile),

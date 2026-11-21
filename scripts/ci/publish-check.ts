@@ -27,8 +27,8 @@ import { repository } from './run';
 //           URL and attempt as `external_id`, by which finish finds its start. A full run, which has
 //           no start, creates its `Full run / Check`.
 //   queue   The merge queue's mark on a PR head, which the queue asks for through its --publisher
-//           (scripts/ci/queue.ts): `Queue` passed right before it merges the PR, failed when that
-//           merge did not happen. It needs CI_RUN_URL, CI_COMMIT (the PR's head), CI_CHECK_APP_TOKEN
+//           (scripts/ci/queue.ts): `Queue` passed right before it merges the PR, failed once that
+//           merge happened or did not. It needs CI_RUN_URL, CI_COMMIT (the PR's head), CI_CHECK_APP_TOKEN
 //           and GITHUB_REPOSITORY only.
 // Run it from a trusted copy, never from the checkout under test: a checkout of `main` that no job
 // writes, as an operating-system user that holds the App's key and token and that no job runs as.

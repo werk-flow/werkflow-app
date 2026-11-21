@@ -234,3 +234,9 @@ The stand-in has no merge queue, so the ruleset requires an up-to-date branch, a
 A `Queue` success that outlived a merge would let GitHub's auto-merge take the PR on any later `main` (werk-flow/werkflow-planning#509). Before it marks a PR, the queue turns the PR's auto-merge off, so only the queue's own merge can use the mark; when it cannot, it posts no mark. A mark whose merge did not happen is withdrawn, and a withdrawal that fails freezes the queue until a person clears it.
 
 Item 1 lands up to 4 PRs one squash merge at a time, so the batch's own `main` commits are not tested one by one; the batch's tip is. When a landing stops partway, `main`'s own run of that commit runs its jobs, since no pass of that tree exists unless a run tested it. The next tick starts from that `main`, and the release still needs a green full run on its exact commit.
+
+## Amendment 2026-11-21: a landed head's mark and a failed read
+
+GitHub reads a head's checks for a merge whose test merge commit has none. So once strict is off, a `Queue` success left on a merged head would pass that same head onto a later `main` without a queue run, for example when a change lands again after a revert. The queue withdraws every mark after its merge too, before it clears the mark or lands the next PR, and a tick withdraws a mark a crashed tick left whether its PR merged or not. A withdrawal that fails freezes the queue.
+
+A read or call that fails between two merges stops the landing as a `partial` landing with the last merge the queue confirmed, and the tick needs a person. `main` still moved, so its run of `main`'s head starts as after any landing.

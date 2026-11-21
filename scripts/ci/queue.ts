@@ -20,8 +20,9 @@
 //                   `--pr-run`: the queue cancels its own superseded entries.
 //   --work-dir      Holds one results directory per run, and the queue's state between ticks
 //                   (queue-state.json): the `Queue` success it is about to post, saved before it
-//                   posts it. A tick starts by settling a saved mark: done when the PR merged as
-//                   main's head, otherwise withdrawn. A withdrawal that fails freezes the queue.
+//                   posts it, and cleared once it was withdrawn after the merge or its failure. A
+//                   tick starts by withdrawing a saved mark, merged or not. A withdrawal that fails
+//                   freezes the queue.
 //   --run-url-base  Each run's CI_RUN_URL is <base>/<time>-<commit>.
 //   --ledger        The runner's CI_LEDGER, read only. With it, a pass counts only when the ledger
 //                   holds it as its tree's pass, so main's push reuses it; without it, the run's own
@@ -38,9 +39,12 @@
 // Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base, or a
 // landing that stopped after part of the tested prefix: main's own run of that commit runs its jobs).
 // Exit 2: it needs a person: a run without a verdict, a first PR failing on an unproven main, a
-// landing that broke, a frozen queue, a refused option or configuration, or an error. Stop the
-// loop. A frozen queue lands nothing until a person confirms on GitHub that the named PR merged or
-// that its head's newest `Queue` is no success, then deletes queue-state.json.
+// landing that broke (a failed read between merges included), a frozen queue, a refused option or
+// configuration, or an error. Stop the loop. A tick that exits 2 after a merge still moved main: it
+// logs a `partial` stop with the last merge it confirmed, and the runner starts main's run of
+// main's head as after any landing, whatever the exit. A frozen queue lands nothing until a person
+// confirms on GitHub that the named head's newest `Queue` is no success, merged or not, then
+// deletes queue-state.json.
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -127,7 +131,7 @@ try {
   for (const stop of outcome.stops) console.info(`[queue] ${stop.kind}: ${stop.detail}`);
   if (outcome.stops.some((stop) => stop.kind === 'frozen'))
     console.error(
-      `[queue] The queue is frozen. Once GitHub shows the PR merged or its head's newest Queue is no success, delete ${join(workDir, QUEUE_STATE_FILE)} and restart the loop.`,
+      `[queue] The queue is frozen. Once GitHub shows that the head's newest Queue is no success, merged or not, delete ${join(workDir, QUEUE_STATE_FILE)} and restart the loop.`,
     );
   const landing = outcome.landing.map((number) => `#${number}`).join(', ') || 'nothing';
   console.info(`[queue] ${outcome.dryRun ? 'would land' : 'landed'} ${landing}`);

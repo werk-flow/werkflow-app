@@ -172,7 +172,7 @@ function checkVerdict(check: CiResult): { passed: boolean; summary: string } {
 
 /**
  * The merge queue's mark on a PR head once the App exists (scripts/ci/queue.ts): `Queue` passed right
- * before the queue merges the PR, failed when that merge did not happen. The ruleset pins `Queue` to
+ * before the queue merges the PR, failed once that merge happened or did not. The ruleset pins `Queue` to
  * the App as it pins `Check`, so no other token's mark lets a PR merge. The queue's own run is on a
  * batch commit that exists only in the queue's clone, so this mark is how its verdict reaches GitHub.
  */
@@ -203,8 +203,8 @@ export function queueCheckRunOf(input: {
 Run: ${input.runUrl}`,
           }
         : {
-            title: 'Not merged',
-            summary: `The queue did not merge this head; it tests it again.
+            title: 'Withdrawn',
+            summary: `The queue's pass counts only for its own merge of this head. Any other merge of it needs a new queue run.
 
 Run: ${input.runUrl}`,
           },
