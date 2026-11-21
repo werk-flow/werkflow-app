@@ -465,7 +465,10 @@ test('a first-attempt Check answers to the first attempt’s Plan, not to a reru
       job: 'plan',
       from: 20,
       to: 21,
-      extra: { attempt: 2, ...planned(['plan', 'check'], { reused: [{ job: 'sql', shard: null, runUrl: run(9) }] }) },
+      extra: {
+        attempt: 2,
+        ...planned(['plan', 'check'], { reused: [{ job: 'sql', shard: null, runUrl: run(9) }] }),
+      },
     },
     { job: 'check', from: 21, to: 22, endOnly: true, extra: { attempt: 2 } },
   ]);
