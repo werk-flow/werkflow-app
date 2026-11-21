@@ -143,6 +143,18 @@ function reusedTreePlan(passedTree: string): RunPlan {
   };
 }
 
+/** Why the SQL and e-invoice jobs skip when the planner selected nothing for them. */
+function emptySelectionSkips(outputs: Readonly<Record<string, string>>): Partial<Record<CiJob, string>> {
+  const skips: Partial<Record<CiJob, string>> = {};
+  if (!groupList(outputs.selected_sql).length)
+    skips.sql =
+      "The plan selects no SQL group: no change reaches the schema, an assertion, the generated types or the SQL job's scripts (lib/testing/selection/fast-tier.ts).";
+  if (!groupList(outputs.selected_invoices).length)
+    skips.invoices =
+      'The plan selects no e-invoice check: no change reaches the invoice core, the renderer, what they import or the dependencies (lib/testing/selection/e-invoice-selection.ts).';
+  return skips;
+}
+
 /**
  * The run's plan. A push to main whose tree an integration run passed runs no job and cites that
  * run. Otherwise every job of the event runs, except a job whose selection is empty, a midnight
@@ -179,7 +191,7 @@ export function planRun(input: {
           listGrowthApproved: input.listGrowthApproved,
         })
       : undefined;
-  const skips: Partial<Record<CiJob, string>> = {};
+  const skips = emptySelectionSkips(outputs);
   const reusedJobs: NonNullable<RunPlan['reused']> = [];
   /** The planned shards that no passed result stands for, and why the job skips when none is left. */
   const shardsToRun = (job: CiJob, planned: CiShard[], none: string): CiShard[] => {
@@ -208,12 +220,6 @@ export function planRun(input: {
     componentShards,
     'The plan selects no component area: no change reaches a contract, its bundle or a stylesheet (lib/testing/selection/fast-tier.ts).',
   );
-  if (!groupList(outputs.selected_sql).length)
-    skips.sql =
-      "The plan selects no SQL group: no change reaches the schema, an assertion, the generated types or the SQL job's scripts (lib/testing/selection/fast-tier.ts).";
-  if (!groupList(outputs.selected_invoices).length)
-    skips.invoices =
-      'The plan selects no e-invoice check: no change reaches the invoice core, the renderer, what they import or the dependencies (lib/testing/selection/e-invoice-selection.ts).';
   for (const job of WORK_JOBS) {
     if (skips[job] || job === 'browser' || job === 'components') continue;
     const receipt = reusedBy(job);
