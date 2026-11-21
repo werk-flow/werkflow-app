@@ -966,8 +966,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8731, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 23774, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 22010, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -1159,6 +1159,24 @@
           },
           "runKeys": ["2026-11-21T055532764Z-a59c9e"],
           "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8731, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23774, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 22010, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-21T090946906Z-ec017e"],
+          "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
         }
       ]
     },
@@ -1275,8 +1293,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8732, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 23773, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8465, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 22009, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -1501,6 +1519,24 @@
             "rows": null
           },
           "runKeys": ["2026-11-21T055532764Z-a59c9e"],
+          "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8732, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23773, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8465, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 22009, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-21T090946906Z-ec017e"],
           "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
         }
       ]
