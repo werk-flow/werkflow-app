@@ -118,7 +118,14 @@ const newerHead = supersedingHead({
   headRef: environment.CI_PR_HEAD_REF,
   testedHead: environment.CI_PR_HEAD_SHA || commit,
   remoteHead: (ref) => {
-    const answer = spawnSync('git', ['ls-remote', 'origin', ref], { cwd: repository, encoding: 'utf8' });
+    // An unanswered question runs the job: no credential prompt, and at most a minute.
+    const answer = spawnSync('git', ['ls-remote', 'origin', ref], {
+      cwd: repository,
+      encoding: 'utf8',
+      env: { ...environment, GIT_TERMINAL_PROMPT: '0' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+    });
     return answer.status === 0 ? lsRemoteCommit(answer.stdout, ref) : undefined;
   },
 });

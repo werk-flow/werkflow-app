@@ -140,10 +140,15 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       'if (elapsed > 250) throw new Error("slow");',
       'const took = await page.evaluate(() => performance.now() - window.started);',
       'expect(took).toBeLessThan(2_000);',
+      'const deadline = Date.now() + 250;',
+      'expect(Date.now()).toBeLessThan(deadline);',
+      'expect(started).toBeGreaterThan(Date.now() - 250);',
+      'const { tookMs } = await page.evaluate(() => ({ tookMs: performance.now() - window.started, rows: 2 }));',
+      'expect(tookMs).toBeLessThan(250);',
     ].join('\n');
     for (const file of [CONTRACT, SPEC, SUPPORT, UNIT])
       expect(await reported('no-fixed-time-limit', source, file), file).toEqual([
-        4, 5, 6, 7, 8, 9, 10, 11, 13,
+        4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 16, 18,
       ]);
   });
 
@@ -158,8 +163,6 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       'expect(after - before).toBeLessThanOrEqual(Date.now() - before);',
       'expect(after - before).toBeGreaterThanOrEqual(0);',
       'expect(rows.length).toBeLessThan(250);',
-      'const deadline = Date.now() + 5_000;',
-      'if (Date.now() > deadline) throw new Error("missing");',
       "test('clocked', async ({ page }) => {",
       '  await page.clock.install();',
       '  const age = await page.evaluate(() => Date.now() - Number(localStorage.getItem("at")));',
@@ -169,28 +172,45 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       '  test.beforeEach(() => setSystemTime(new Date("2026-03-02T08:00:00Z")));',
       "  test('aged', () => { expect(Date.now() - opened).toBeLessThan(60_000); });",
       '});',
+      'const sample = await page.evaluate(() => ({ takenAt: Date.now(), rowCount: rows.length }));',
+      'expect(sample.rowCount).toBeLessThan(100);',
+      'const { rowCount } = await page.evaluate(() => ({ takenAt: Date.now(), rowCount: rows.length }));',
+      'expect(rowCount).toBeLessThan(100);',
     ].join('\n');
     expect(await reported('no-fixed-time-limit', source, CONTRACT)).toEqual([]);
   });
 
-  test('a seeded fixed limit fails the lint of a real contract, and the declared measurements keep theirs', async () => {
-    const contract = 'tests/ui-contracts/problem-report.spec.ts';
-    const seeded = `${readFileSync(resolve(repositoryRoot, contract), 'utf8')}
-test('seeded', async ({ page }) => {
+  test("a controlled clock covers only its own reads: the page's in a page function, Date after setSystemTime", async () => {
+    const source = [
+      "test('page clock', async ({ page }) => {",
+      '  await page.clock.install();',
+      '  const started = performance.now();',
+      '  await page.clock.fastForward("11:00");',
+      '  expect(performance.now() - started).toBeLessThan(250);',
+      '  expect(await page.evaluate(() => Date.now() - window.opened)).toBeLessThan(120_000);',
+      '});',
+      "test('system time', () => {",
+      '  setSystemTime(new Date("2026-03-02T08:00:00Z"));',
+      '  const started = performance.now();',
+      '  expect(performance.now() - started).toBeLessThan(250);',
+      '  expect(Date.now() - opened).toBeLessThan(60_000);',
+      '});',
+    ].join('\n');
+    expect(await reported('no-fixed-time-limit', source, CONTRACT)).toEqual([5, 11]);
+  });
+
+  test('a seeded fixed limit fails the lint of a real contract and of a shared session helper', async () => {
+    const seed = `
+export async function seeded(page) {
   const started = Date.now();
   await page.getByRole('main').click();
   expect(Date.now() - started).toBeLessThan(250);
-});
+}
 `;
-    expect(await reported('no-fixed-time-limit', seeded, contract)).toHaveLength(1);
-    for (const file of [
-      'tests/golden/support/browser-observation.ts',
-      'tests/golden/support/scenario-measurement.ts',
-    ])
-      expect(
-        effectiveLintRules(await eslint.calculateConfigForFile(file))['test-hygiene/no-fixed-time-limit'],
-        file,
-      ).toBeUndefined();
+    for (const file of ['tests/ui-contracts/problem-report.spec.ts', 'tests/golden/support/sessions.ts']) {
+      const source = `${readFileSync(resolve(repositoryRoot, file), 'utf8')}${seed}`;
+      expect(await reported('no-fixed-time-limit', source, file), file).toHaveLength(1);
+    }
   });
 });
 

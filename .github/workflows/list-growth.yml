@@ -35,7 +35,15 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          run="$(gh run list --workflow ci.yml --event pull_request --commit "$SHA" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          # A title or body edit starts a ci.yml run without a Check job (ci.yml, `on`): the newest run
+          # with one holds the Fast job whose rerun reports Check again.
+          run=""
+          for candidate in $(gh run list --workflow ci.yml --event pull_request --commit "$SHA" --limit 20 --json databaseId --jq '.[].databaseId'); do
+            if test "$(gh run view "$candidate" --json jobs --jq 'any(.jobs[]; .name == "Check")')" = true; then
+              run="$candidate"
+              break
+            fi
+          done
           if test -z "$run"; then
             echo "No CI run on $SHA yet. Its Fast job reads the labels when it starts."
             exit 0

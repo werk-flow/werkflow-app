@@ -407,16 +407,70 @@ function isInstant(node) {
   return path?.join('.') === 'Date.parse' || (path?.length !== 1 && path?.at(-1) === 'getTime');
 }
 
-/** A call that puts the clock under the test's control: Playwright's `page.clock`, bun:test's `setSystemTime`, fake timers. */
-function controlsClock(node) {
-  if (node.type !== 'CallExpression') return false;
+/**
+ * What a call puts under the test's control: `page` for Playwright's `page.clock`, whose clock the
+ * page's scripts read, `process` for bun:test's `setSystemTime` and fake timers, which pin the test
+ * process's `Date`. Null for any other call.
+ */
+function controlledClock(node) {
+  if (node.type !== 'CallExpression') return null;
   const path = calleePath(node.callee);
   const name = path?.at(-1);
-  return (
-    (path?.at(-2) === 'clock' && ['install', 'setFixedTime', 'setSystemTime'].includes(name)) ||
-    name === 'setSystemTime' ||
-    name === 'useFakeTimers'
-  );
+  if (path?.at(-2) === 'clock' && ['install', 'setFixedTime', 'setSystemTime'].includes(name)) return 'page';
+  return name === 'setSystemTime' || name === 'useFakeTimers' ? 'process' : null;
+}
+
+/** The calls whose function argument runs in the browser page, on the page's clock. */
+const BROWSER_CALLS = new Set([
+  'evaluate',
+  'evaluateHandle',
+  'waitForFunction',
+  'addInitScript',
+  '$eval',
+  '$$eval',
+]);
+
+/** Whether a node runs inside a function the test hands to the browser page. */
+function inBrowserCallback(node) {
+  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+    const call = ancestor.parent;
+    if (
+      FUNCTION_TYPES.has(ancestor.type) &&
+      call?.type === 'CallExpression' &&
+      call.arguments.includes(ancestor) &&
+      BROWSER_CALLS.has(calleePath(call.callee)?.at(-1))
+    )
+      return true;
+  }
+  return false;
+}
+
+/** The properties named `key` of every object literal in a subtree: what `value.key` may read. */
+function propertyValues(root, key) {
+  const values = [];
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node || typeof node.type !== 'string') continue;
+    if (node.type === 'Property' && node.parent?.type === 'ObjectExpression' && keyName(node) === key)
+      values.push(node.value);
+    for (const [name, value] of Object.entries(node)) {
+      if (name === 'parent') continue;
+      if (Array.isArray(value)) stack.push(...value);
+      else if (value && typeof value.type === 'string') stack.push(value);
+    }
+  }
+  return values;
+}
+
+/** An expression without the wrappers that keep its value: `await`, `!`, `as`, `?.`. */
+function unwrapped(node) {
+  let current = node;
+  while (
+    ['AwaitExpression', 'TSNonNullExpression', 'TSAsExpression', 'ChainExpression'].includes(current.type)
+  )
+    current = current.type === 'AwaitExpression' ? current.argument : current.expression;
+  return current;
 }
 
 /** The matchers that hold a value below a bound, and those that hold it above one. */
@@ -447,16 +501,16 @@ function throwsWhenTrue(statement) {
 }
 
 /**
- * A test that is no declared timed measurement holds no wall-clock duration
- * below a fixed number: `expect(elapsed).toBeLessThan(250)`,
- * `expect(Date.now() - start < 250).toBe(true)`, `if (elapsed > 250) throw`.
- * A duration is a value computed from a clock read, directly or through
- * variables; a bound is fixed when it reads neither a clock nor a date.
- * Comparing a clock reading with another, or with an instant, orders events and
- * passes, and so does a test that controls its clock (`page.clock.install`,
- * `setSystemTime`), itself or before each test of its group. The measured
- * scenarios own timing (docs/technical/testing.md, "Deadlines and measured
- * scenarios"), and the lint config exempts their files.
+ * A test holds no wall-clock duration below a fixed number:
+ * `expect(elapsed).toBeLessThan(250)`, `expect(Date.now() - start < 250).toBe(true)`,
+ * `expect(Date.now()).toBeLessThan(deadline)` with `deadline = Date.now() + 250`,
+ * `if (elapsed > 250) throw`. A duration is a value computed from a clock read, directly, through
+ * variables or through the property of an object that holds it; a bound is fixed when it reads
+ * neither a clock nor a date. Comparing a clock reading with another, or with an instant, orders
+ * events and passes. So does a read of a clock the test controls: the page's clock after
+ * `page.clock.install` in a function the page runs, and `Date` after `setSystemTime`, in the test
+ * or before each test of its group. The measured scenarios own timing and judge it outside the
+ * test (docs/technical/testing.md, "Deadlines and measured scenarios").
  */
 const noFixedTimeLimitRule = {
   meta: {
@@ -464,20 +518,15 @@ const noFixedTimeLimitRule = {
     schema: [],
     messages: {
       limit:
-        'A test that is no timed measurement holds no wall-clock duration below a fixed number: it then passes or fails by the speed of the machine it runs on. Assert the outcome, drive a clock the test controls (page.clock, setSystemTime, an injected clock), or measure through a registered scenario (docs/technical/testing.md, "Deadlines and measured scenarios").',
+        'A test holds no wall-clock duration below a fixed number: it then passes or fails by the speed of the machine it runs on. Assert the outcome, drive a clock the test controls (page.clock, setSystemTime, an injected clock), or measure through a registered scenario (docs/technical/testing.md, "Deadlines and measured scenarios").',
     },
   },
   create(context) {
     const { sourceCode } = context;
     /** Each comparison to judge once every variable is known: the side held below the bound, and the bound. */
     const comparisons = [];
-    /** The functions, or the whole file, in which the test controls the clock. */
+    /** Where the test controls a clock, and which: the function, or the whole file, and `page` or `process`. */
     const controlled = [];
-    const underControlledClock = (node) => {
-      for (let ancestor = node; ancestor; ancestor = ancestor.parent)
-        if (controlled.includes(ancestor)) return true;
-      return false;
-    };
     const below = (node, limited, bound) => comparisons.push({ node, limited, bound });
     /** `a < b` read as "a is held below b" when `holds` is true, or as a failure condition when false. */
     const relational = (node, expression, holds) => {
@@ -489,6 +538,18 @@ const noFixedTimeLimitRule = {
         less === holds ? [expression.left, expression.right] : [expression.right, expression.left];
       below(node, small, large);
     };
+    /** A clock read whose clock the test controls at that point. */
+    const controlledRead = (node) =>
+      controlled.some(({ region, clock }) => {
+        let inside = false;
+        for (let ancestor = node; ancestor && !inside; ancestor = ancestor.parent)
+          inside = ancestor === region;
+        if (!inside) return false;
+        const browser = inBrowserCallback(node);
+        return clock === 'page'
+          ? browser
+          : !browser && isClockRead(node) && calleePath(node.callee)?.[0] === 'Date';
+      });
     return {
       CallExpression(node) {
         if (node.callee.type !== 'MemberExpression' || node.callee.property.type !== 'Identifier') return;
@@ -517,16 +578,17 @@ const noFixedTimeLimitRule = {
         if (throwsWhenTrue(node)) relational(node, node.test, false);
       },
       'CallExpression:exit'(node) {
-        if (!controlsClock(node)) return;
-        let owner = node.parent;
-        while (owner && !FUNCTION_TYPES.has(owner.type)) owner = owner.parent;
+        const clock = controlledClock(node);
+        if (!clock) return;
+        let region = node.parent;
+        while (region && !FUNCTION_TYPES.has(region.type)) region = region.parent;
         // A clock installed before each test controls every test of the enclosing group.
-        const hook = owner?.parent;
+        const hook = region?.parent;
         if (hook?.type === 'CallExpression' && calleePath(hook.callee)?.at(-1) === 'beforeEach') {
-          owner = hook.parent;
-          while (owner && !FUNCTION_TYPES.has(owner.type)) owner = owner.parent;
+          region = hook.parent;
+          while (region && !FUNCTION_TYPES.has(region.type)) region = region.parent;
         }
-        controlled.push(owner ?? sourceCode.ast);
+        controlled.push({ region: region ?? sourceCode.ast, clock });
       },
       'Program:exit'() {
         if (!comparisons.length) return;
@@ -534,6 +596,25 @@ const noFixedTimeLimitRule = {
         for (const scope of sourceCode.scopeManager.scopes)
           for (const reference of scope.references)
             if (reference.resolved) variableOf.set(reference.identifier, reference.resolved);
+        // What each variable holds: a destructured property holds only that property of the value.
+        const writesOf = new Map();
+        for (const scope of sourceCode.scopeManager.scopes)
+          for (const variable of scope.variables)
+            writesOf.set(
+              variable,
+              variable.references.flatMap(({ identifier, writeExpr }) => {
+                if (!writeExpr) return [];
+                const property = identifier.parent;
+                const key =
+                  property?.type === 'Property' &&
+                  property.value === identifier &&
+                  property.parent?.type === 'ObjectPattern'
+                    ? keyName(property)
+                    : null;
+                const values = key === null ? [] : propertyValues(writeExpr, key);
+                return values.length ? values : [writeExpr];
+              }),
+            );
         const clocked = new Set();
         const instants = new Set();
         /** Whether `root` reads what `read` names, directly or through a variable in `names`. */
@@ -544,6 +625,16 @@ const noFixedTimeLimitRule = {
             const node = stack.pop();
             if (!node || typeof node.type !== 'string') continue;
             if (read(node) || (node.type === 'Identifier' && names.has(variableOf.get(node)))) found = true;
+            // `sample.rowCount` reads only what the literal behind `sample` puts there, when it says.
+            const holder =
+              node.type === 'MemberExpression' && !node.computed ? variableOf.get(node.object) : null;
+            const held = holder
+              ? (writesOf.get(holder) ?? []).flatMap((value) => propertyValues(value, node.property.name))
+              : [];
+            if (held.length) {
+              stack.push(...held);
+              continue;
+            }
             for (const [key, value] of Object.entries(node)) {
               if (key === 'parent') continue;
               if (Array.isArray(value)) stack.push(...value);
@@ -552,17 +643,11 @@ const noFixedTimeLimitRule = {
           }
           return found;
         };
-        const readsClock = (root) => reads(root, isDurationClockRead, clocked);
+        const readsClock = (root) =>
+          reads(root, (node) => isDurationClockRead(node) && !controlledRead(node), clocked);
         /** A clock reading or an instant: the bound of an ordering, never a fixed limit. */
         const readsTime = (root) =>
           reads(root, (node) => isDurationClockRead(node) || isInstant(node), instants);
-        const writes = sourceCode.scopeManager.scopes.flatMap((scope) =>
-          scope.variables.flatMap((variable) =>
-            variable.references.flatMap((reference) =>
-              reference.writeExpr ? [{ variable, value: reference.writeExpr }] : [],
-            ),
-          ),
-        );
         // To a fixed point: `const now = Date.now(); const elapsed = now - start` reads the clock twice removed.
         for (const [names, read] of [
           [clocked, readsClock],
@@ -570,14 +655,34 @@ const noFixedTimeLimitRule = {
         ])
           for (let grown = true; grown; ) {
             grown = false;
-            for (const { variable, value } of writes) {
-              if (names.has(variable) || !read(value)) continue;
+            for (const [variable, values] of writesOf) {
+              if (names.has(variable) || !values.some(read)) continue;
               names.add(variable);
               grown = true;
             }
           }
+        /** A clock reading moved by a fixed amount, `Date.now() + 250`: a deadline, or a start pushed back. */
+        const offsetClock = (node) => {
+          const value = unwrapped(node);
+          if (value.type !== 'BinaryExpression' || (value.operator !== '+' && value.operator !== '-'))
+            return false;
+          return (
+            (readsClock(value.left) && !readsTime(value.right)) ||
+            (value.operator === '+' && readsClock(value.right) && !readsTime(value.left))
+          );
+        };
+        const deadlines = new Set(
+          [...writesOf].filter(([, values]) => values.some(offsetClock)).map(([variable]) => variable),
+        );
+        const isDeadline = (node) => {
+          const value = unwrapped(node);
+          return offsetClock(value) || (value.type === 'Identifier' && deadlines.has(variableOf.get(value)));
+        };
         for (const { node, limited, bound } of comparisons)
-          if (readsClock(limited) && !readsTime(bound) && !underControlledClock(node))
+          if (
+            (readsClock(limited) && (!readsTime(bound) || isDeadline(bound))) ||
+            (isDeadline(limited) && readsClock(bound))
+          )
             context.report({ node, messageId: 'limit' });
       },
     };

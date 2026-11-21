@@ -224,6 +224,8 @@ jobs:
           path: .agent-logs/e-invoices
           retention-days: 14
           if-no-files-found: ignore
+          # A rerun of the job keeps its own attempt's folder beside the earlier ones.
+          overwrite: true
 
   sql:
     name: SQL
