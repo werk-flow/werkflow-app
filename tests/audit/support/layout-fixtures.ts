@@ -233,6 +233,20 @@ export async function prepareLayoutDetails(world: TestWorld): Promise<LayoutDeta
     )
     .throwOnError();
   if (!offerId) throw new Error('Layout offer fixture returned no saved record.');
+  const { data: invoiceId } = await server
+    .rpc(
+      'create_invoice',
+      rpcArgs('create_invoice', {
+        p_actor_id: world.users.admin.id,
+        p_organization_id: world.orgId,
+        p_attempt_key: randomUUID(),
+        p_client_id: clientId,
+        p_work_kind: null,
+        p_work_id: null,
+      }),
+    )
+    .throwOnError();
+  if (!invoiceId) throw new Error('Layout invoice fixture returned no saved record.');
   const result = {
     clientId,
     requestId,
@@ -244,6 +258,7 @@ export async function prepareLayoutDetails(world: TestWorld): Promise<LayoutDeta
     equipmentNumber: equipmentRow.equipment_number,
     caseNumber: serviceRow.case_number,
     offerId,
+    invoiceId,
   };
   saveAuditCheckpoint('layout.details', result);
   return result;

@@ -63,7 +63,8 @@ const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     'Redeems an invite code for the verified user; the code names the organization.',
   check_user_exists_by_email:
     'Global account lookup by email for the invite flow; returns no organization data.',
-  create_organization_with_defaults: 'Creates a new organization with the verified user as its first admin.',
+  create_organization_from_subscription:
+    "Creates the organization the verified user's own paid Checkout reserved, with that user as its first admin.",
   consume_rate_limit: 'Counts attempts per keyed subject hash; the limits are global, not per organization.',
   transition_email_change:
     "Changes the verified user's own email-change state, which belongs to no organization.",

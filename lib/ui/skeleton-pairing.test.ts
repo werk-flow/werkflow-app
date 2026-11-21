@@ -199,7 +199,8 @@ describe('skeleton pairing (design canon, Loading states)', () => {
       const rendersSkeleton = [...sources.values()].some(
         (source) =>
           (consumers.some((name) => source.includes(`columns={${name}`)) &&
-            /Skeleton(Rows|Table)\b/.test(source)) ||
+            // SearchableListSkeleton (components/shared/) renders SkeletonTable from its columns.
+            /(Skeleton(Rows|Table)|SearchableListSkeleton)\b/.test(source)) ||
           hasCustomRowSkeleton(source, identifier),
       );
       expect({ rendersHeader, rendersSkeleton }).toEqual({

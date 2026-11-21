@@ -56,6 +56,13 @@ export const DIALOG_INVENTORY = {
   'components/angebote/create-offer-dialog.tsx#CreateOfferDialog|Angebot anlegen': {
     audits: [{ route: '/angebote', role: 'admin', opener: 'commercial.offer' }],
   },
+  'components/rechnungen/create-invoice-dialog.tsx#CreateInvoiceDialog|Rechnung erstellen': {
+    audits: [{ route: '/rechnungen', role: 'admin', opener: 'commercial.invoice' }],
+  },
+  'components/rechnungen/invoice-header.tsx#DeleteInvoiceDraftButton|{`Entwurf für „${invoice.client.name}“ löschen?`}':
+    {
+      audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-delete' }],
+    },
   "components/angebote/leistungen/leistung-dialog.tsx#LeistungDialog|{entry ? 'Leistung bearbeiten' : 'Leistung anlegen'}":
     {
       audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung' }],
