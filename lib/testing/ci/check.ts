@@ -1,9 +1,12 @@
 // `Check`, the one required status (scripts/ci/job.ts check). It fails closed: a job the plan runs
-// passes only with a complete passed result of this tree, and a job it skips only with the plan's
-// reason for the skip.
+// passes only with a complete passed result of this tree that ran under this Plan, and a job it
+// skips only with the plan's reason for the skip.
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
+import { canonicalize } from '../../format/canonical-json';
 import { CI_JOBS, type CiEvent } from './dag';
-import type { CiResult, CiShard, RunPlan } from './results';
+import type { CiResult, CiShard, PlanIdentity, RunPlan } from './results';
 import { jobShards, missingPlannerOutputs, plannedGroups } from './run-plan';
 
 /** Each job's state as the scheduler reports it: ci.yml's `toJSON(needs)`. */
@@ -23,6 +26,19 @@ export function parseScheduler(json: string | undefined): z.infer<typeof schedul
  */
 export type CiRun = { tree: string; event: CiEvent; runUrl: string | null; producer: string | null };
 
+/** The identity of a Plan's result: the field every later job records and Check compares. */
+export function planIdentityOf(result: CiResult, plan: RunPlan): PlanIdentity {
+  return {
+    runUrl: result.runUrl,
+    attempt: result.attempt ?? null,
+    startedAt: result.startedAt,
+    base: result.base,
+    digest: createHash('sha256')
+      .update(JSON.stringify(canonicalize(plan)))
+      .digest('hex'),
+  };
+}
+
 /**
  * This run's plan, or why a job may not run by it: the plan must be of the run's tree, event and run,
  * completed and passed. Every job after Plan and `Check` take the plan only through this.
@@ -30,7 +46,7 @@ export type CiRun = { tree: string; event: CiEvent; runUrl: string | null; produ
 export function runPlanOf(
   run: CiRun,
   plan: CiResult | { unreadable: string },
-): { result: CiResult; plan: RunPlan } | { problem: string } {
+): { result: CiResult; plan: RunPlan; identity: PlanIdentity } | { problem: string } {
   if ('unreadable' in plan) return { problem: plan.unreadable };
   if (plan.status !== 'passed' || !plan.plan || plan.completedAt === null)
     return { problem: `the plan ${plan.status === 'passed' ? 'is incomplete' : `is ${plan.status}`}` };
@@ -42,7 +58,7 @@ export function runPlanOf(
     return { problem: 'it ran outside CI or on a checkout that differs from its commit' };
   const missing = missingPlannerOutputs(plan.plan.outputs);
   if (missing.length) return { problem: `the plan holds no ${missing.join(', ')}` };
-  return { result: plan, plan: plan.plan };
+  return { result: plan, plan: plan.plan, identity: planIdentityOf(plan, plan.plan) };
 }
 
 export type CheckInput = {
@@ -117,6 +133,13 @@ export function checkRun(input: CheckInput): { passed: boolean; lines: string[] 
         (id) => !result?.groups.some((group) => group.id === id && group.outcome === 'passed'),
       );
       if (!result) fail(`${label}: no result`);
+      // A rerun of failed jobs keeps its Plan, so its earlier results still count; an attempt that
+      // planned again counts only results of its own Plan.
+      else if (result.planIdentity === undefined) fail(`${label}: the result names no Plan`);
+      else if (!isDeepStrictEqual(result.planIdentity, ownPlan.identity))
+        fail(
+          `${label}: it ran under the Plan of attempt ${result.planIdentity.attempt ?? 'unknown'} started ${result.planIdentity.startedAt} on base ${result.planIdentity.base}, not this run's Plan`,
+        );
       else if (result.status === 'running' || result.completedAt === null)
         fail(`${label}: the result is incomplete`);
       else if (result.status !== 'passed') fail(`${label}: failed`);

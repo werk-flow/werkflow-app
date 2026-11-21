@@ -1,5 +1,7 @@
 name: Setup
-description: Bun, Node and the locked dependencies, with the Bun package cache.
+description: >-
+  Bun, Node and the locked dependencies, with the Bun package cache. The install is
+  scripts/ci/prepare.ts install, which every other runner takes too.
 runs:
   using: composite
   steps:
@@ -21,5 +23,5 @@ runs:
 
     - name: Install dependencies
       shell: bash
-      run: bun install --frozen-lockfile
+      run: bun scripts/ci/prepare.ts install
 
