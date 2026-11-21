@@ -1,5 +1,5 @@
 -- A completed maintenance visit gives a filed Servicebericht
--- (migration 20261218091104_file_a_service_report_for_a_completed_visit.sql):
+-- (migration 20261219113104_file_a_service_report_for_a_completed_visit.sql):
 -- * The report registers a filed PDF document of category report without a
 --   retention class, linked to the visit job, the visit's Anlage and the
 --   customer, with its audit event and report number 1.
