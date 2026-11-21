@@ -296,6 +296,24 @@ begin
 end;
 $$;
 
+-- A filed ten-year invoice document of the first invoice, linked to its customer
+-- only, written directly: everything the registration leaves but its history entry.
+insert into public.documents (
+  id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by,
+  document_date, retention_class, metadata
+) values (
+  '38060000-0000-4000-8000-000000000305', '38060000-0000-4000-8000-000000000010',
+  '38060000-0000-4000-8000-000000000010/38060000-0000-4000-8000-000000000305/Rechnung direkt.pdf',
+  'Rechnung direkt.pdf', 'Rechnung direkt.pdf', 'invoice', 4096, '38060000-0000-4000-8000-000000000002',
+  (select issue_date from public.invoices where id = pg_temp.id('first')), 'ten_years',
+  jsonb_build_object('invoiceId', pg_temp.id('first'), 'contentHash', repeat('d', 64))
+);
+insert into public.document_links (organization_id, document_id, client_id, created_by) values
+('38060000-0000-4000-8000-000000000010', '38060000-0000-4000-8000-000000000305',
+ '38060000-0000-4000-8000-000000000020', '38060000-0000-4000-8000-000000000002');
+select public.file_document('38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
+  '38060000-0000-4000-8000-000000000305');
+
 -- An issued invoice refuses every change and delete, through the app's functions and directly.
 select pg_temp.expect_refusal(label, statement, refusal)
 from (values
@@ -338,7 +356,18 @@ from (values
   ('issue a draft with an original directly', format(
     'update public.invoices set status = ''ausgestellt'', invoice_number = ''X-1'', issue_date = current_date,
       issued_at = now(), issue_snapshot = ''{}'', original_document_id = %L where id = %L',
-    '38060000-0000-4000-8000-000000000304', pg_temp.id('empty')), 'invoice_issued')
+    '38060000-0000-4000-8000-000000000304', pg_temp.id('empty')), 'invoice_issued'),
+  -- The guard checks the document, not a session setting: a direct write that
+  -- raises the registration's former flag names neither a work's plan nor a
+  -- filed invoice document without the registration's history entry.
+  ('name a work''s plan under the old flag', format(
+    'with flag as (select set_config(''app.invoice_original_write'', ''on'', true))
+      update public.invoices set original_document_id = %L where id = %L and exists (select 1 from flag)',
+    '38060000-0000-4000-8000-000000000310', pg_temp.id('first')), 'invoice_issued'),
+  ('name a filed invoice document without its registration', format(
+    'with flag as (select set_config(''app.invoice_original_write'', ''on'', true))
+      update public.invoices set original_document_id = %L where id = %L and exists (select 1 from flag)',
+    '38060000-0000-4000-8000-000000000305', pg_temp.id('first')), 'invoice_issued')
 ) as cases(label, statement, refusal);
 -- A deleted work clears its reference only.
 reset role;
@@ -416,9 +445,6 @@ begin
   end if;
   if (select original_document_id from public.invoices where id = pg_temp.id('first')) is distinct from v_document.id then
     raise exception 'the invoice does not name its original';
-  end if;
-  if current_setting('app.invoice_original_write', true) is distinct from 'off' then
-    raise exception 'the registration left its original write open';
   end if;
 end;
 $$;

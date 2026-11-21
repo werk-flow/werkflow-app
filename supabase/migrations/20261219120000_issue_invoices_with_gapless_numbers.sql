@@ -188,11 +188,14 @@ alter table public.invoice_events add constraint invoice_events_type_check
   check (event_type in ('created', 'saved', 'deleted', 'issued', 'original_registered')) not valid;
 
 -- An issued invoice keeps every value. A work or person reference clears only
--- when its target is gone, as its foreign key's set null does; the original is
--- set once, only by register_invoice_original (it raises
--- app.invoice_original_write for its one update). It is never deleted while
--- its organization exists. Security definer: service_role cannot read
--- auth.users, whose rows the person references name; no role executes it.
+-- when its target is gone, as its foreign key's set null does. The original is
+-- set once, to what register_invoice_original leaves: a filed ten-year invoice
+-- document of this invoice dated its Rechnungsdatum, linked to its customer
+-- only, with the registration's history entry. The guard checks that document,
+-- not who writes, so no session setting and no direct write names another. It
+-- is never deleted while its organization exists. Security definer:
+-- service_role cannot read auth.users, whose rows the person references name;
+-- no role executes it.
 create function app_private.guard_issued_invoice()
 returns trigger
 language plpgsql
@@ -203,7 +206,6 @@ declare
   v_free constant text[] := array[
     'job_id', 'project_id', 'service_case_id', 'created_by', 'updated_by', 'issued_by', 'original_document_id'
   ];
-  v_registering constant boolean := coalesce(current_setting('app.invoice_original_write', true), '') = 'on';
 begin
   if tg_op = 'DELETE' then
     if old.status = 'entwurf' or not exists (
@@ -213,7 +215,6 @@ begin
     end if;
     raise exception 'invoice_issued';
   end if;
-  perform set_config('app.invoice_original_write', 'off', true);
   if old.status = 'entwurf' then
     -- A draft has no original; only the registration names one, on an issued invoice.
     if new.original_document_id is not null then
@@ -236,8 +237,24 @@ begin
       or exists (select 1 from auth.users person where person.id = old.updated_by)))
     or (new.issued_by is distinct from old.issued_by and (new.issued_by is not null
       or exists (select 1 from auth.users person where person.id = old.issued_by)))
-    or (new.original_document_id is distinct from old.original_document_id
-      and (old.original_document_id is not null or new.original_document_id is null or not v_registering))
+    or (new.original_document_id is distinct from old.original_document_id and (
+      old.original_document_id is not null or new.original_document_id is null
+      or not exists (
+        select 1 from public.documents document
+        where document.id = new.original_document_id and document.organization_id = old.organization_id
+          and document.filed_at is not null and document.category = 'invoice'
+          and document.retention_class = 'ten_years' and document.document_date = old.issue_date
+          and document.metadata ->> 'invoiceId' = old.id::text)
+      or not exists (
+        select 1 from public.invoice_events event
+        where event.organization_id = old.organization_id and event.invoice_id = old.id
+          and event.event_type = 'original_registered' and event.attempt_key = new.original_document_id)
+      or exists (
+        select 1 from public.document_links link
+        where link.document_id = new.original_document_id and link.organization_id = old.organization_id
+          and (link.client_id is distinct from old.client_id or num_nonnulls(link.job_id, link.project_id,
+            link.employee_id, link.request_id, link.equipment_id, link.service_case_id,
+            link.maintenance_coverage_id) > 0))))
   then
     raise exception 'invoice_issued';
   end if;
@@ -482,10 +499,7 @@ begin
       'contentHash', p_content_hash, 'clientId', v_invoice.client_id)
   );
   perform public.file_document(p_actor_id, p_organization_id, p_document_id);
-  perform set_config('app.invoice_original_write', 'on', true);
-  update public.invoices invoice set original_document_id = p_document_id
-  where invoice.id = v_invoice.id and invoice.organization_id = p_organization_id;
-  perform set_config('app.invoice_original_write', 'off', true);
+  -- The history entry comes first: guard_issued_invoice names no original without it.
   insert into public.invoice_events (
     organization_id, invoice_id, event_type, status, version, payload, actor_id, attempt_key
   ) values (
@@ -493,6 +507,8 @@ begin
     jsonb_build_object('documentId', p_document_id, 'contentHash', p_content_hash),
     p_actor_id, p_document_id
   );
+  update public.invoices invoice set original_document_id = p_document_id
+  where invoice.id = v_invoice.id and invoice.organization_id = p_organization_id;
   return jsonb_build_object('documentId', p_document_id, 'replay', false, 'contentHash', p_content_hash);
 end;
 $$;
