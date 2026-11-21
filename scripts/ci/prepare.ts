@@ -90,19 +90,17 @@ function install(): void {
 function siblings(): void {
   const parent = resolve(checkout, '..');
   // scripts/ci/process-executor.ts clones them first with the trusted copy of this step, so the
-  // tested commit's steps never hold the token.
-  if (existsSync(join(parent, SIBLINGS.website))) {
-    console.info('[prepare] The sibling repositories are cloned already.');
-    return;
-  }
-  sh('git', [
-    'clone',
-    '--quiet',
-    '--depth',
-    '1',
-    `https://github.com/werk-flow/${SIBLINGS.website}`,
-    join(parent, SIBLINGS.website),
-  ]);
+  // tested commit's steps never hold the token: each clone in place is kept, each missing one made.
+  if (!existsSync(join(parent, SIBLINGS.website)))
+    sh('git', [
+      'clone',
+      '--quiet',
+      '--depth',
+      '1',
+      `https://github.com/werk-flow/${SIBLINGS.website}`,
+      join(parent, SIBLINGS.website),
+    ]);
+  if (existsSync(join(parent, SIBLINGS.business))) return;
   const token = process.env.SIBLING_REPOSITORIES_TOKEN;
   if (!token) {
     console.info(

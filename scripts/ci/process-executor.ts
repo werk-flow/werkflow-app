@@ -5,7 +5,16 @@
 // workspace on the orchestrator's host. A job's clone shares the source's objects read-only and has
 // its own .git, so no job writes the orchestrator's hooks, refs or configuration.
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { CI_DAG } from '../../lib/testing/ci/dag';
 import { type Executor, type Unit, unitName } from '../../lib/testing/ci/run-commit';
@@ -54,16 +63,21 @@ const holderOf = (path: string): number | undefined => {
   }
 };
 
-/** Creates `path` holding this process's id, or returns false when it exists. */
+/**
+ * Creates `path` holding this process's id, or returns false when it exists. The id is written to a
+ * file of its own first and linked into place, so a lock is never seen empty or half written.
+ */
 function create(path: string): boolean {
+  const own = `${path}.${process.pid}`;
+  writeFileSync(own, String(process.pid));
   try {
-    const held = openSync(path, 'wx');
-    writeFileSync(held, String(process.pid));
-    closeSync(held);
+    linkSync(own, path);
     return true;
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'EEXIST') return false;
     throw error;
+  } finally {
+    rmSync(own, { force: true });
   }
 }
 
@@ -130,14 +144,16 @@ function runGroup(
         if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error;
       }
     };
+    let escalation: ReturnType<typeof setTimeout> | undefined;
     const stop = (): void => {
       signalGroup('SIGTERM');
-      setTimeout(() => signalGroup('SIGKILL'), 10_000).unref();
+      escalation = setTimeout(() => signalGroup('SIGKILL'), 10_000);
     };
     signal.addEventListener('abort', stop, { once: true });
     child.once('error', () => resolve(null));
     child.once('close', (code) => {
       signal.removeEventListener('abort', stop);
+      clearTimeout(escalation);
       // A stopped command never passes, whatever it exited with, and nothing of its group outlives it.
       if (signal.aborted) {
         signalGroup('SIGKILL');

@@ -4,6 +4,8 @@
 // scheduler's report. The executor decides where a job runs: a process in its own checkout now, a
 // container later. Each job takes `scripts/ci/prepare.ts for <job>`, then `scripts/ci/job.ts <job>`.
 // This module decides; it starts nothing itself.
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { runPlanOf } from './check';
 import { CI_DAG, type CiEvent, type CiJob } from './dag';
 import type { CiResult, RunPlan } from './results';
@@ -16,6 +18,28 @@ import { heldUntil } from './schedule';
  * orchestrator per run, and scripts/ci/schedule.ts never names a run that holds it.
  */
 export const RUN_COMMIT_LOCK = 'run-commit.lock';
+
+/**
+ * Claims main's run of `commit` on this host for `runUrl`, atomically: a file named by the commit in
+ * `folder` holds the first claimant's run. The same run claims again on a rerun or retry; any other
+ * learns the owner and runs nothing.
+ */
+export function claimMainRun(
+  folder: string,
+  commit: string,
+  runUrl: string,
+): { claimed: true } | { owner: string } | { unwritable: string } {
+  const claim = join(folder, commit);
+  try {
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(claim, runUrl, { flag: 'wx' });
+    return { claimed: true };
+  } catch (error) {
+    if (!existsSync(claim)) return { unwritable: `${claim} cannot be written: ${message(error)}` };
+    const owner = readFileSync(claim, 'utf8');
+    return owner === runUrl ? { claimed: true } : { owner };
+  }
+}
 
 /** One job, or one shard of a sharded job. */
 export type Unit = { job: CiJob; shard: number | null };
@@ -230,7 +254,7 @@ async function startUnit(
     return;
   }
   deps.log(`[run] ${name}: started`);
-  const state: UnitState = await deps.jobs.run(taskOf(input, unit), signal).then(
+  let state: UnitState = await deps.jobs.run(taskOf(input, unit), signal).then(
     (outcome) => {
       deps.log(`[run] ${name}: ${outcome.detail}`);
       return signal.aborted ? 'cancelled' : outcome.exitCode === 0 ? 'passed' : 'failed';
@@ -243,6 +267,8 @@ async function startUnit(
   if (append && start) {
     const end = endReceipt(start, deps.readResult(unit), state === 'passed', new Date(deps.now()));
     if (end.problem) deps.log(`[run] ${name}: its ledger receipt fails it: ${end.problem}`);
+    // A job whose own result does not stand fails here too, so nothing that needs it starts.
+    if (end.problem && state === 'passed') state = 'failed';
     try {
       append(end.receipt);
     } catch (error) {
@@ -360,6 +386,8 @@ function checkPassed(input: RunCommitInput, deps: RunCommitDeps, exitCode: numbe
   return (
     exitCode === 0 &&
     !('unreadable' in written) &&
+    written.job === 'check' &&
+    written.shard === null &&
     written.status === 'passed' &&
     written.completedAt !== null &&
     written.runUrl === runUrl &&
@@ -408,12 +436,15 @@ export async function runCommit(
     new AbortController().signal,
   );
   deps.log(`[run] check: ${checkOutcome.detail}`);
+  let settled = true;
   try {
     settleCheck(input, deps, checkOutcome.exitCode);
   } catch (error) {
-    deps.log(`[run] check: its failure could not be recorded: ${message(error)}`);
+    // The publisher would post the pass Check wrote: it stays queued, never a success.
+    deps.log(`[run] check: its failure could not be recorded, so no verdict is posted: ${message(error)}`);
+    settled = false;
   }
-  if (deps.publish && !(await deps.publish('finish')))
+  if (settled && deps.publish && !(await deps.publish('finish')))
     deps.log('[run] The Check verdict could not be posted.');
   return {
     exitCode: checkPassed(input, deps, checkOutcome.exitCode) ? 0 : 1,

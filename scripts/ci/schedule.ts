@@ -141,7 +141,9 @@ function remoteHead(ref: string): string | undefined {
 }
 
 const held = (values.run ?? []).map((run) => {
-  // A run's held shards have one starter: the run-commit that holds the run, or this answer.
+  // A run's held shards have one starter: the run-commit that holds the run, or this answer. A
+  // run-commit that died leaves its lock, and the run waits for a person: remove the run's
+  // run-commit.lock once no run-commit runs it, and its held shards are due here again.
   if (existsSync(join(run, RUN_COMMIT_LOCK)) || existsSync(join(run, resultFileName('midnight', null))))
     return { run, until: undefined };
   const plan = readResult(join(run, resultFileName('plan', null)));

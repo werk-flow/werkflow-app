@@ -93,6 +93,22 @@ test('a ledger refresh takes each shard of the newest ended full runs once, from
       startedAt: '2026-11-21T01:00:00.000Z',
       groups: [{ id: 'golden:gg-00', outcome: 'failed', durationMs: 3_000 }],
     }),
+    // Run 3's shard 2 was rerun, and the rerun left only its start before the new Check ended: its
+    // earlier sample does not come back.
+    receipt({
+      runUrl: 'run-3',
+      shard: 2,
+      startedAt: '2026-11-21T00:30:00.000Z',
+      groups: [{ id: 'golden:p1-04', outcome: 'passed', durationMs: 5 }],
+    }),
+    receipt({
+      runUrl: 'run-3',
+      shard: 2,
+      startedAt: '2026-11-21T01:30:00.000Z',
+      status: 'running',
+      completedAt: null,
+      attempt: 2,
+    }),
     check('run-3', '2026-11-21T02:00:00.000Z'),
     // Run 7 ended once, but its rerun runs: it counts again only once its new Check ends.
     receipt({

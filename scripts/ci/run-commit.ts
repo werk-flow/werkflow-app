@@ -8,7 +8,6 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
-  readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -16,7 +15,13 @@ import {
 import { join, resolve } from 'node:path';
 import { CI_EVENTS } from '../../lib/testing/ci/dag';
 import { positiveIntegerSchema, readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
-import { RUN_COMMIT_LOCK, runCommit, type RunCommitInput, unitName } from '../../lib/testing/ci/run-commit';
+import {
+  claimMainRun,
+  RUN_COMMIT_LOCK,
+  runCommit,
+  type RunCommitInput,
+  unitName,
+} from '../../lib/testing/ci/run-commit';
 import { processExecutor } from './process-executor';
 import { repository } from './run';
 
@@ -52,19 +57,18 @@ import { repository } from './run';
 //   GH_TOKEN        Plan and Fast read GitHub with it; SIBLING_REPOSITORIES_TOKEN reaches only Fast's clone.
 // Exit 0: Check passed. 1: it failed or did not run. 2: refused before anything ran: a missing or
 // unreadable variable, an attempt that does not count up, a results directory another run-commit
-// holds, a second `main` run of a commit whose `main` Plan the ledger already holds, or an `origin`
-// or commit git cannot fetch.
+// holds, or an `origin` or commit git cannot fetch. 3: nothing ran because another `main` run of the
+// commit started already (the ledger holds its Plan, or it claimed the commit on this host).
 // Passed jobs' workspaces are removed at the end; a failed job's stays with its log.
 
 /** This run's lock once taken: a refusal after it releases it, so none is left behind. */
-const held: { release?: () => void; claim?: string } = {};
+const held: { release?: () => void } = {};
 
-function refuse(problem: string): never {
+/** Stops before anything ran: 2 for a refusal, 3 when another main run of the commit started. */
+function refuse(problem: string, code: 2 | 3 = 2): never {
   held.release?.();
-  // A run that never started holds no claim on its commit.
-  if (held.claim) rmSync(held.claim, { force: true });
   console.error(`[run] ${problem}`);
-  process.exit(2);
+  process.exit(code);
 }
 
 const environment = process.env;
@@ -116,19 +120,7 @@ if (event === 'main' && ledger && existsSync(ledger)) {
             receipt.commit === commit &&
             receipt.runUrl !== runUrl,
         );
-  if (earlier) refuse(`main's run of ${commit} started already: ${earlier.runUrl}.`);
-}
-// The same on this host before any Plan wrote: the first starter claims the commit, atomically.
-if (event === 'main') {
-  const claim = join(workRoot, 'main-runs', commit);
-  mkdirSync(join(workRoot, 'main-runs'), { recursive: true });
-  try {
-    writeFileSync(claim, runUrl, { flag: 'wx' });
-    held.claim = claim;
-  } catch {
-    const owner = readFileSync(claim, 'utf8');
-    if (owner !== runUrl) refuse(`main's run of ${commit} started already: ${owner}.`);
-  }
+  if (earlier) refuse(`main's run of ${commit} started already: ${earlier.runUrl}.`, 3);
 }
 
 // One orchestrator per results directory, for the run's whole life. scripts/ci/schedule.ts never
@@ -245,8 +237,14 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const)
     controller.abort();
   });
 
-// The run starts here: from now on its claim on a main commit stays, whatever happens.
-delete held.claim;
+// The same on this host before any Plan wrote: the first starter claims the commit, atomically, as
+// the last step before the run starts, so a run that never started claims nothing.
+if (event === 'main') {
+  const claimed = claimMainRun(join(workRoot, 'main-runs'), commit, runUrl);
+  if ('unwritable' in claimed) refuse(claimed.unwritable);
+  if ('owner' in claimed) refuse(`main's run of ${commit} started already: ${claimed.owner}.`, 3);
+}
+
 let exitCode = 1;
 try {
   const outcome = await runCommit(

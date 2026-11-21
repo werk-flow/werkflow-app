@@ -118,7 +118,8 @@ type WorldOptions = {
   /** A job's exit code; 0 when unlisted. */
   exits?: Partial<Record<string, number>>;
   /** What a job writes while it runs, in place of its own running result. */
-  written?: Partial<Record<string, (unit: Unit, at: number) => CiResult>>;
+  /** `own` is what job.ts records of its run: the run's attempt and the Plan it runs under. */
+  written?: Partial<Record<string, (unit: Unit, at: number, own: Partial<CiResult>) => CiResult>>;
   appendFails?: boolean;
   publish?: (mode: 'start' | 'finish') => boolean;
   /** Called when a job starts, before it ends. */
@@ -128,6 +129,8 @@ type WorldOptions = {
   /** What Check writes as its result: by default its exit's, as job.ts does; `nothing` writes none. */
   checkWrites?: CiResult['status'] | 'nothing';
   checkOverrides?: Partial<CiResult>;
+  /** Writing a result back fails. */
+  writeFails?: boolean;
 };
 
 function world(options: WorldOptions = {}): World {
@@ -147,15 +150,23 @@ function world(options: WorldOptions = {}): World {
   const host: Executor = {
     run: async (task) => {
       starts.push({ place: 'host', task, at: clock });
+      const attempt = Number(task.env.CI_RUN_ATTEMPT);
       if (task.unit.job === 'plan' && options.plan !== null) {
-        const plan = result(task.unit, clock, { plan: options.plan ?? PLAN, ...options.planOverrides });
+        const plan = result(task.unit, clock, {
+          attempt,
+          plan: options.plan ?? PLAN,
+          ...options.planOverrides,
+        });
         results.set('plan', plan);
         identity = planIdentityOf(plan, plan.plan ?? PLAN);
       }
       const ended = outcome(task.unit);
       const checkStatus = options.checkWrites ?? (ended.exitCode === 0 ? 'passed' : 'failed');
       if (task.unit.job === 'check' && checkStatus !== 'nothing')
-        results.set('check', result(task.unit, clock, { status: checkStatus, ...options.checkOverrides }));
+        results.set(
+          'check',
+          result(task.unit, clock, { attempt, status: checkStatus, ...options.checkOverrides }),
+        );
       return ended;
     },
     isolatesJobs: true,
@@ -167,10 +178,11 @@ function world(options: WorldOptions = {}): World {
       peak = Math.max(peak, active);
       const name = unitName(task.unit);
       const started = clock;
+      const own: Partial<CiResult> = { attempt: Number(task.env.CI_RUN_ATTEMPT), planIdentity: identity };
       results.set(
         name,
-        options.written?.[name]?.(task.unit, started) ??
-          result(task.unit, started, { status: 'running', completedAt: null, planIdentity: identity }),
+        options.written?.[name]?.(task.unit, started, own) ??
+          result(task.unit, started, { ...own, status: 'running', completedAt: null }),
       );
       options.onStart?.(task.unit);
       // Let the other units start, so the run's parallelism shows.
@@ -181,10 +193,7 @@ function world(options: WorldOptions = {}): World {
       if (!options.written?.[name])
         results.set(
           name,
-          result(task.unit, started, {
-            status: ended.exitCode === 0 ? 'passed' : 'failed',
-            planIdentity: identity,
-          }),
+          result(task.unit, started, { ...own, status: ended.exitCode === 0 ? 'passed' : 'failed' }),
         );
       return ended;
     },
@@ -209,7 +218,10 @@ function world(options: WorldOptions = {}): World {
         clock += ms;
       },
       log: (line) => log.push(line),
-      writeResult: (unit, written) => results.set(unitName(unit), written),
+      writeResult: (unit, written) => {
+        if (options.writeFails) throw new Error('the results directory is read-only');
+        results.set(unitName(unit), written);
+      },
     },
   };
 }
@@ -244,6 +256,9 @@ test('Plan and Check run on the host, every planned job and shard through the ex
 test('every job takes the attempt; only Plan and Check see the ledger; tokens reach only the jobs that read them', async () => {
   const w = world();
   await runCommit(input({ attempt: 3 }), w.deps, new AbortController().signal);
+  // The planned jobs ran too, not only Plan and Check.
+  expect(started(w)).toContain('jobs:fast');
+  expect(started(w)).toContain('jobs:browser-2');
   for (const { place, task } of w.starts) {
     const name = unitName(task.unit);
     expect([name, task.env.CI_RUN_ATTEMPT]).toEqual([name, '3']);
@@ -313,11 +328,19 @@ test("a job's start reaches the ledger before it runs, and its end only as its o
   const seenAtStart: string[] = [];
   const w = world({
     written: {
-      sql: (unit, at) =>
-        result(unit, at, { runUrl: 'https://ci.example/runs/other', status: 'running', completedAt: null }),
-      'components-1': (unit, at) => result(unit, at, { attempt: 2, status: 'running', completedAt: null }),
+      // Each differs from the job's own result in one field only.
+      sql: (unit, at, own) =>
+        result(unit, at, {
+          ...own,
+          runUrl: 'https://ci.example/runs/other',
+          status: 'running',
+          completedAt: null,
+        }),
+      'components-1': (unit, at, own) =>
+        result(unit, at, { ...own, attempt: 2, status: 'running', completedAt: null }),
       // Before job.ts read its plan, its result names no Plan.
-      invoices: (unit, at) => result(unit, at, { status: 'running', completedAt: null }),
+      invoices: (unit, at, own) =>
+        result(unit, at, { ...own, planIdentity: undefined, status: 'running', completedAt: null }),
     },
     exits: { sql: 1, 'components-1': 1, check: 1 },
     plan: { ...PLAN, jobs: [...PLAN.jobs, 'invoices'], skips: { midnight: 'No hold.' } },
@@ -354,7 +377,8 @@ test("a job's start reaches the ledger before it runs, and its end only as its o
 
 test('a job that wrote a pass but did not pass reaches the ledger failed', async () => {
   const w = world({
-    written: { sql: (unit, at) => result(unit, at, { status: 'passed' }) },
+    // Its own result in every field: only the executor's verdict differs.
+    written: { sql: (unit, at, own) => result(unit, at, { ...own, status: 'passed' }) },
     exits: { sql: 1, check: 1 },
   });
   await runCommit(input(), w.deps, new AbortController().signal);
@@ -362,6 +386,18 @@ test('a job that wrote a pass but did not pass reaches the ledger failed', async
     'running',
     'failed',
   ]);
+  expect(w.ledger.at(-1)?.planIdentity).toBeDefined();
+});
+
+test('a job that passed but left a result that is not its own fails, and nothing that needs it starts', async () => {
+  const w = world({
+    written: { fast: (unit, at, own) => result(unit, at, { ...own, attempt: 2 }) },
+    exits: { check: 1 },
+  });
+  const outcome = await runCommit(input(), w.deps, new AbortController().signal);
+  expect(outcome.units.find((entry) => entry.unit.job === 'fast')?.state).toBe('failed');
+  expect(started(w)).not.toContain('jobs:browser-1');
+  expect(report(w).browser).toEqual({ result: 'skipped' });
 });
 
 test('an executor that runs jobs as the orchestrator user keeps no ledger: no job sees it and nothing is appended', async () => {
@@ -388,6 +424,17 @@ test('a Check that wrote a pass but did not pass is set failed, in its result an
   expect(w.ledger.filter((receipt) => receipt.job === 'check').map((receipt) => receipt.status)).toEqual([
     'failed',
   ]);
+
+  // When the failure cannot be recorded, no verdict is posted: the queued Check never turns green.
+  const unposted: string[] = [];
+  const stuck = world({
+    checkWrites: 'passed',
+    exits: { check: 1 },
+    writeFails: true,
+    publish: (mode) => (unposted.push(mode), true),
+  });
+  await runCommit(input(), stuck.deps, new AbortController().signal);
+  expect(unposted).toEqual(['start']);
 });
 
 test('a receipt that cannot reach the ledger fails its job', async () => {
@@ -421,12 +468,12 @@ test('a Check that exited 0 passes the run only with its completed passing resul
     const w = world(options);
     return (await runCommit(input({ attempt: 2 }), w.deps, new AbortController().signal)).exitCode === 0;
   };
-  const plan = { planOverrides: { attempt: 2 } };
-  expect(await passes({ ...plan, checkOverrides: { attempt: 2 } })).toBe(true);
-  expect(await passes({ ...plan, checkWrites: 'nothing' })).toBe(false);
-  expect(await passes({ ...plan, checkWrites: 'running', checkOverrides: { attempt: 2 } })).toBe(false);
-  // A pass of the earlier attempt left in place never stands for this one.
-  expect(await passes({ ...plan, checkOverrides: { attempt: 1 } })).toBe(false);
+  expect(await passes({})).toBe(true);
+  expect(await passes({ checkWrites: 'nothing' })).toBe(false);
+  expect(await passes({ checkWrites: 'running' })).toBe(false);
+  // A pass of the earlier attempt left in place, or another job's result, never stands for this one.
+  expect(await passes({ checkOverrides: { attempt: 1 } })).toBe(false);
+  expect(await passes({ checkOverrides: { job: 'fast' } })).toBe(false);
 });
 
 test('the queued Check is posted before Plan, and a run whose start post failed runs nothing', async () => {

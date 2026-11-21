@@ -57,21 +57,23 @@ export function ledgerGroupResults(
     .toSorted(([, left], [, right]) => left - right)
     .slice(-last)
     .map(([runUrl]) => runUrl);
+  // The newest receipt of each shard first: a rerun that left only its start keeps the shard out.
   const shards = new Map<string, CiResult>();
   for (const [index, receipt] of full.entries()) {
     if (receipt.job !== 'browser' && receipt.job !== 'components') continue;
-    if (!runs.includes(receipt.runUrl) || receipt.completedAt === null) continue;
-    if (index > (newestOf.get(receipt.runUrl) ?? -1)) continue;
+    if (!runs.includes(receipt.runUrl) || index > (newestOf.get(receipt.runUrl) ?? -1)) continue;
     shards.set(`${receipt.runUrl} ${receipt.job} ${receipt.shard}`, receipt);
   }
   return {
-    results: [...shards.values()].flatMap((receipt) =>
-      receipt.groups.map((group) => ({
-        groupId: group.id,
-        status: group.outcome,
-        durationMs: group.durationMs,
-      })),
-    ),
+    results: [...shards.values()]
+      .filter((receipt) => receipt.completedAt !== null)
+      .flatMap((receipt) =>
+        receipt.groups.map((group) => ({
+          groupId: group.id,
+          status: group.outcome,
+          durationMs: group.durationMs,
+        })),
+      ),
     runs,
     dates: runs.flatMap((runUrl) => full[newestOf.get(runUrl) ?? -1]?.startedAt.slice(0, 10) ?? []),
   };

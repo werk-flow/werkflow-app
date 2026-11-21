@@ -348,8 +348,18 @@ test("main's run gets main's head, the tick's base and the landed PRs, in a resu
   const workDir = join(folder, 'work');
   const main = { commit: 'c'.repeat(40), base: 'b'.repeat(40), prs: [7, 9], id: 'tick-1' };
   const options = { repository, mainRunner, workDir, runUrlBase: 'https://ci.example/queue' };
-  // A runner that ran counts as started, whatever its exit; one that could not start does not.
+  // A runner that ran pays the run, passed or failed; one that could not start or refused does not,
+  // and one that found another run of the commit started does.
   expect(runMain({ ...options, mainRunner: join(folder, 'missing') }, main)).toBe(false);
+  for (const [code, paid] of [
+    [2, false],
+    [3, true],
+  ] as const) {
+    const exits = join(folder, `exits-${code}`);
+    writeFileSync(exits, `#!/usr/bin/env bash\nexit ${code}\n`);
+    chmodSync(exits, 0o755);
+    expect([code, runMain({ ...options, mainRunner: exits }, main)]).toEqual([code, paid]);
+  }
   expect(runMain(options, main)).toBe(true);
   const env = Object.fromEntries(
     readFileSync(join(folder, 'main-env'), 'utf8')

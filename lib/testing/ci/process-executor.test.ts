@@ -21,7 +21,7 @@ const RECORD = (script: string) => `
 import { appendFileSync, writeFileSync } from 'node:fs';
 const job = process.argv.at(-1);
 const seen = Object.entries(process.env).filter(([name]) => /^(CI_|GH_TOKEN|SIBLING_|SHRINK_|EMAIL_|GITHUB_ENV)/.test(name)).sort();
-writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/${script}-' + job + '.env', seen.map(([name, value]) => name + '=' + value).join('\\n'));
+writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/${script}-' + job + '.env', [...seen, ['CWD', process.cwd()]].map(([name, value]) => name + '=' + value).join('\\n'));
 `;
 const PREPARE = `${RECORD('prepare')}
 if (process.env.STARTS_STACK === '1') appendFileSync(process.env.GITHUB_ENV, 'CI_STACK_STARTED=1\\n');
@@ -38,6 +38,13 @@ beforeEach(() => {
   mkdirSync(join(source, 'scripts/ci'), { recursive: true });
   writeFileSync(join(source, 'scripts/ci/prepare.ts'), PREPARE);
   writeFileSync(join(source, 'scripts/ci/job.ts'), JOB);
+  // The tested commit's Bun configuration preloads a script into every Bun process run from its
+  // checkout; it records whether that process held the sibling token.
+  writeFileSync(join(source, 'bunfig.toml'), 'preload = ["./preload.ts"]\n');
+  writeFileSync(
+    join(source, 'preload.ts'),
+    `require('node:fs').appendFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/preload.log', (process.env.SIBLING_REPOSITORIES_TOKEN ? 'token' : 'none') + '\\n');\n`,
+  );
   const git = (...args: string[]) =>
     execFileSync(
       'git',
@@ -110,8 +117,17 @@ test("a job's body sees only its task's variables and what its environment steps
   const run = await executor().run(task('fast', { GH_TOKEN: 'job-token' }), new AbortController().signal);
   expect(run.exitCode, run.detail).toBe(0);
   // Only the trusted copy's sibling step holds the token; the tested commit's steps (its install
-  // scripts included) and its body never do.
-  expect(recorded('prepare-siblings.env').SIBLING_REPOSITORIES_TOKEN).toBe('sibling-token');
+  // scripts included) and its body never do. That step runs outside the tested checkout, so its Bun
+  // configuration never preloads code into the process that holds the token.
+  const siblings = recorded('prepare-siblings.env');
+  const clone = join(folder, 'work/fast/werkflow-app');
+  expect(siblings.SIBLING_REPOSITORIES_TOKEN).toBe('sibling-token');
+  expect(siblings.CWD).toBe(join(folder, 'work/fast'));
+  expect(siblings.CI_CHECKOUT).toBe(clone);
+  expect(readFileSync(join(folder, 'preload.log'), 'utf8').split('\n').filter(Boolean)).toEqual([
+    'none',
+    'none',
+  ]);
   const prepare = recorded('prepare-fast.env');
   const body = recorded('job-fast.env');
   expect(prepare.SIBLING_REPOSITORIES_TOKEN).toBeUndefined();
@@ -127,7 +143,6 @@ test("a job's body sees only its task's variables and what its environment steps
   expect(body.SHRINK_ONLY_GROWTH_APPROVED).toBe('true');
   // The job ran in its own clone of the commit, whose origin is GitHub without the credential and
   // whose origin/main is the trusted clone's.
-  const clone = join(folder, 'work/fast/werkflow-app');
   const cloneGit = (...args: string[]) => execFileSync('git', args, { cwd: clone, encoding: 'utf8' }).trim();
   expect(cloneGit('rev-parse', 'HEAD')).toBe(commit);
   expect(cloneGit('rev-parse', 'origin/main')).toBe(commit);

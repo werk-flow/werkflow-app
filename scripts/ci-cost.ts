@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { type BoatRun, readBoatRuns } from '../lib/testing/boat/boat-runs';
@@ -37,6 +37,8 @@ function receiptsOf(path: string): CiResult[] {
 }
 
 function boatRunsOf(path: string): BoatRun[] {
+  // A path given by name must exist: a mistyped one would report no Boat runs at all.
+  if (!existsSync(path)) throw new Error(`${path} does not exist.`);
   const runs = readBoatRuns(path);
   if ('unreadable' in runs) throw new Error(runs.unreadable);
   return runs;

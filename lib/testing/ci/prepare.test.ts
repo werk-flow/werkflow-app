@@ -191,3 +191,17 @@ test("the stack's environment is recorded and cached, and a later job takes it w
   expect(read('calls')).toBe('');
   expect(read('env')).toBe('');
 });
+
+test('each sibling clone in place is kept and each missing one made; without the token business is marked unreadable', () => {
+  // The trusted step cloned both: nothing more to do, and nothing marked.
+  mkdirSync(join(stub, 'werkflow-website'));
+  mkdirSync(join(stub, 'werkflow-business'));
+  expect(prepare('siblings', {}).passed).toBe(true);
+  expect(read('env')).toBe('');
+  // Only the website is in place and no token is given: the business clone is marked, not skipped silently.
+  rmSync(join(stub, 'werkflow-business'), { recursive: true });
+  const marked = prepare('siblings', {});
+  expect(marked.passed).toBe(true);
+  expect(read('env')).toBe('WERKFLOW_UNREADABLE_SIBLINGS=werkflow-business\n');
+  expect(existsSync(join(stub, 'werkflow-business'))).toBe(false);
+});

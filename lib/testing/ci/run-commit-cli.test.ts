@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { CiResult } from './results';
-import { RUN_COMMIT_LOCK } from './run-commit';
+import { claimMainRun, RUN_COMMIT_LOCK } from './run-commit';
 
 const repository = resolve(import.meta.dir, '../../..');
 const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim();
@@ -72,21 +72,7 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
       `main's run of ${head} started already: https://ci.example/runs/1`,
       undefined,
     ],
-    // The same on one host before either Plan wrote: the first claims the commit.
-    [
-      { CI_EVENT: 'main' },
-      `main's run of ${head} started already: https://ci.example/runs/3`,
-      () => {
-        mkdirSync(join(folder, 'work/main-runs'), { recursive: true });
-        writeFileSync(join(folder, 'work/main-runs', head), 'https://ci.example/runs/3');
-      },
-    ],
     [{}, 'another run-commit holds this run', () => writeFileSync(join(results, RUN_COMMIT_LOCK), '')],
-    [
-      { CI_EVENT: 'main' },
-      'another run-commit holds this run',
-      () => writeFileSync(join(results, RUN_COMMIT_LOCK), ''),
-    ],
     [
       { CI_RUN_ATTEMPT: '2' },
       'holds attempt 2; a rerun counts CI_RUN_ATTEMPT up',
@@ -98,12 +84,11 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
     mkdirSync(results, { recursive: true });
     prepare?.();
     const refused = runCommit(env);
-    expect([cause, refused.status]).toEqual([cause, 2]);
+    // 3: another main run of the commit started, so nothing ran; 2: any other refusal.
+    expect([cause, refused.status]).toEqual([cause, cause.startsWith("main's run") ? 3 : 2]);
     expect(refused.stderr).toContain(cause);
-    // A refusal starts no workspace, and a main run it refused leaves no claim of its own.
-    expect([cause, existsSync(join(folder, 'work', 'host'))]).toEqual([cause, false]);
-    if ('CI_EVENT' in env && env.CI_EVENT === 'main' && !cause.includes('runs/3'))
-      expect([cause, existsSync(join(folder, 'work/main-runs', head))]).toEqual([cause, false]);
+    // A refusal starts no workspace and claims no main commit.
+    expect([cause, existsSync(join(folder, 'work'))]).toEqual([cause, false]);
     rmSync(join(folder, 'work'), { recursive: true, force: true });
   }
   expect(readdirSync(results)).toEqual(['fast.json']);
@@ -142,4 +127,15 @@ test('the scheduler never names a held run its run-commit holds; that run starts
   expect(due()).toHaveLength(1);
   writeFileSync(join(run, RUN_COMMIT_LOCK), '');
   expect(due()).toEqual([]);
+});
+
+test('the first run claims a main commit on this host; the same run claims it again, any other learns the owner', () => {
+  const claims = join(folder, 'main-runs');
+  expect(claimMainRun(claims, head, 'https://ci.example/runs/1')).toEqual({ claimed: true });
+  expect(claimMainRun(claims, head, 'https://ci.example/runs/1')).toEqual({ claimed: true });
+  expect(claimMainRun(claims, head, 'https://ci.example/runs/2')).toEqual({
+    owner: 'https://ci.example/runs/1',
+  });
+  writeFileSync(join(folder, 'file'), '');
+  expect('unwritable' in claimMainRun(join(folder, 'file'), head, 'https://ci.example/runs/1')).toBe(true);
 });

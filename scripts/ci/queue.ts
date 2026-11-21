@@ -26,8 +26,9 @@
 //                   (`partial`), whatever the tick's exit: once, for main's head, with CI_EVENT=main,
 //                   CI_COMMIT, CI_BASE_SHA the tick's `base`, CI_PRS the landed PRs, and its own
 //                   CI_RUN_URL and CI_RESULTS_DIR in the work directory. The tick waits for it.
-//                   The tick saves the run it owes (main-follow-up.json) before it reads main, so a
-//                   read that fails leaves it owed, and the next tick starts it first.
+//                   The tick saves the run it owes (main-follow-up.json) before it reads main. It is
+//                   paid once the runner ran (exit 0 or 1) or found another run of that commit (3).
+//                   While it is owed, a tick starts it first and lands nothing, exit 2.
 //                   Pass scripts/ci/run-commit.ts; without the flag the runner starts that run itself.
 //   --work-dir      Holds one results directory per run, and the queue's state between ticks
 //                   (queue-state.json): the `Queue` success it is about to post, saved before it
@@ -152,38 +153,48 @@ try {
   const mainRunner = values['main-runner'] && resolve(values['main-runner']);
   const runUrlBase = values['run-url-base'];
   /**
-   * Starts main's run a landing owes, once, on a live tick only, and clears it once its runner
-   * started: a failed read of main or a runner that could not start leaves it owed.
+   * Starts main's run a landing owes, on a live tick only. True once it is paid: the runner ran
+   * (exit 0 or 1), another run of that commit started (3), or main did not move. A failed read of
+   * main, a runner that could not start or one that refused (2) leaves it owed.
    */
-  const followUp = async (): Promise<void> => {
+  const followUp = async (): Promise<boolean> => {
     const owed = mainRunner && !values['dry-run'] ? readMainFollowUp(workDir) : undefined;
-    if (!mainRunner || !owed) return;
+    if (!mainRunner || !owed) return true;
     const main = mainRunOf(owed, (await adapter.main()).commit);
-    if (!main || runMain({ repository, mainRunner, workDir, runUrlBase }, main))
-      saveMainFollowUp(workDir, undefined);
+    const paid = !main || runMain({ repository, mainRunner, workDir, runUrlBase }, main);
+    if (paid) saveMainFollowUp(workDir, undefined);
+    return paid;
   };
-  // A follow-up an earlier tick could not start goes first.
-  await followUp();
-  const outcome = await runQueueTick(adapter, {
-    maxBatch,
-    dryRun: values['dry-run'],
-    ...(only ? { only } : {}),
-  });
-  console.info(`[queue] ${JSON.stringify(outcome)}`);
-  for (const stop of outcome.stops) console.info(`[queue] ${stop.kind}: ${stop.detail}`);
-  if (outcome.stops.some((stop) => stop.kind === 'frozen'))
-    console.error(
-      `[queue] The queue is frozen. Once GitHub shows that the head's newest Queue is no success, merged or not, delete ${join(workDir, QUEUE_STATE_FILE)} and restart the loop.`,
-    );
-  const landing = outcome.landing.map((number) => `#${number}`).join(', ') || 'nothing';
-  console.info(`[queue] ${outcome.dryRun ? 'would land' : 'landed'} ${landing}`);
-  process.exitCode = needsAttention(outcome) ? 2 : 0;
-  // After every landing or partial stop, whatever the exit: main's run of main's head, once. It is
-  // saved first, so a read of main that fails leaves it for the next tick.
-  const owed = mainFollowUp(outcome, new Date().toISOString().replace(/[-:.]/g, ''));
-  if (mainRunner && owed) {
-    saveMainFollowUp(workDir, owed);
-    await followUp();
+  const unpaid = `[queue] main's run of the last landing did not start, so the queue lands nothing until it does (${join(workDir, 'main-follow-up.json')}).`;
+  // A follow-up an earlier tick could not start goes first; while it is owed, nothing lands.
+  if (!(await followUp())) {
+    console.error(unpaid);
+    process.exitCode = 2;
+  } else {
+    const outcome = await runQueueTick(adapter, {
+      maxBatch,
+      dryRun: values['dry-run'],
+      ...(only ? { only } : {}),
+    });
+    console.info(`[queue] ${JSON.stringify(outcome)}`);
+    for (const stop of outcome.stops) console.info(`[queue] ${stop.kind}: ${stop.detail}`);
+    if (outcome.stops.some((stop) => stop.kind === 'frozen'))
+      console.error(
+        `[queue] The queue is frozen. Once GitHub shows that the head's newest Queue is no success, merged or not, delete ${join(workDir, QUEUE_STATE_FILE)} and restart the loop.`,
+      );
+    const landing = outcome.landing.map((number) => `#${number}`).join(', ') || 'nothing';
+    console.info(`[queue] ${outcome.dryRun ? 'would land' : 'landed'} ${landing}`);
+    process.exitCode = needsAttention(outcome) ? 2 : 0;
+    // After every landing or partial stop, whatever the exit: main's run of main's head, once. It
+    // is saved first, so a read of main that fails leaves it for the next tick.
+    const owed = mainFollowUp(outcome, new Date().toISOString().replace(/[-:.]/g, ''));
+    if (mainRunner && owed) {
+      saveMainFollowUp(workDir, owed);
+      if (!(await followUp())) {
+        console.error(unpaid);
+        process.exitCode = 2;
+      }
+    }
   }
 } catch (error) {
   console.error(`[queue] the tick failed: ${error instanceof Error ? error.stack : String(error)}`);

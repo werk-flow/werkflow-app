@@ -147,7 +147,8 @@ export function runIntegration(
 /**
  * Starts main's run after a landing (`mainRunOf` in lib/testing/ci/queue.ts) through the main
  * runner, and waits for it. Its exit code decides nothing for the queue; the run posts its own Check.
- * False when the runner could not be started at all.
+ * True once the run is paid: the runner ran (exit 0 or 1), or another run of the commit started
+ * (3). False when it could not start or refused before anything ran (2).
  */
 export function runMain(
   options: { repository: string; mainRunner: string; workDir: string; runUrlBase: string },
@@ -168,7 +169,8 @@ export function runMain(
   console.info(
     `[queue] main's runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}`,
   );
-  return ran.error === undefined;
+  // 2: run-commit refused before anything ran. 3: another run of that main commit started.
+  return ran.error === undefined && (ran.status === 0 || ran.status === 1 || ran.status === 3);
 }
 
 /** The runner's ledger when the queue is given one, read-only; undefined without one. */

@@ -417,6 +417,10 @@ test('the script reads a ledger file and a results folder, and refuses an unread
 
     writeFileSync(join(runFolder, 'broken.json'), '{');
     expect(cost(join(folder, 'results')).status).not.toBe(0);
+    // A Boat record named by path must exist: a mistyped one would report no Boat runs at all.
+    const missingBoat = cost('--boat', join(folder, 'missing.jsonl'), ledger);
+    expect(missingBoat.status).not.toBe(0);
+    expect(missingBoat.stderr).toContain('missing.jsonl does not exist');
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
