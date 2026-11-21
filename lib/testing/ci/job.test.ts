@@ -384,7 +384,13 @@ function integrationPass(root: string, ledger: string, base: string, work: reado
       work: [...work],
     },
   });
-  const check = { ...start, job: 'check', status: 'passed', completedAt: '2026-11-20T20:30:00.000Z' };
+  const check = {
+    ...start,
+    job: 'check',
+    status: 'passed',
+    completedAt: '2026-11-20T20:30:00.000Z',
+    planStartedAt: start.startedAt,
+  };
   writeFileSync(ledger, [start, planned, check].map((receipt) => `${JSON.stringify(receipt)}\n`).join(''));
   return integration;
 }
@@ -532,6 +538,10 @@ test("off GitHub, Check fails without a scheduler report when this run's Plan is
     writePlan(root, rerun, { plan: { jobs: ['plan', 'check'], skips, shards: [], outputs: EMPTY_OUTPUTS } });
     // The earlier attempt's plan alone passes Check, so only the rerun's failed Plan can fail it.
     expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(0);
+    // Check names the Plan it verified the run by, so a push reuses the run only by that Plan.
+    expect(readResult(join(rerun, resultFileName('check', null)))).toMatchObject({
+      planStartedAt: planOf(root).startedAt,
+    });
     expect(runJob(root, 'plan', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);
     expect(readResult(join(rerun, resultFileName('plan', null)))).toMatchObject({ status: 'failed' });
     expect(runJob(root, 'check', { ...variables, CI_RESULTS_DIR: rerun })).toBe(1);

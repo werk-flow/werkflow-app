@@ -130,7 +130,10 @@ function passedTreeInLedger(ledger: Ledger, landing: Landing): string | undefine
   return last?.job === 'check' &&
     last.event === 'integration' &&
     provesItself(last) &&
-    plan?.base === landing.base &&
+    // The Plan the Check verified the run by, not another Plan of the run.
+    last.planStartedAt !== undefined &&
+    plan?.startedAt === last.planStartedAt &&
+    plan.base === landing.base &&
     plan.plan?.work !== undefined &&
     isDeepStrictEqual(plan.plan.work, landing.work)
     ? (last.runUrl ?? undefined)

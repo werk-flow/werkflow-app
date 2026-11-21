@@ -563,6 +563,8 @@ function check(): boolean {
   if (!('unreadable' in plan)) {
     result.planReason = plan.planReason;
     result.reusedFrom = plan.reusedFrom;
+    // A push reuses this run only by the Plan this Check verified it by (lib/testing/ci/reuse.ts).
+    result.planStartedAt = plan.startedAt;
   }
   const misses = fullRunMisses(results);
   if (misses) result.unselectedFailures = misses;

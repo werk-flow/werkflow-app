@@ -133,7 +133,8 @@ test("a run's verdict is its own finished Check, whatever the runner's exit code
 
 test("with the runner's ledger, a passed Check counts only once the ledger holds it as the landing's pass", () => {
   const ledger = join(folder, 'ledger.jsonl');
-  const passed = 'receipt check passed \'"2026-11-21T09:00:00Z"\'';
+  const passed =
+    'receipt check passed \'"2026-11-21T09:00:00Z"\' \',"planStartedAt":"2026-11-21T08:00:00Z"\'';
   expect(integration(passed, 'queue/4', ledger).kind).toBe('inconclusive');
   expect(integration(`${passed}; ledger`, 'queue/5', ledger).kind).toBe('passed');
 });

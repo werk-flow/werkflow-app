@@ -206,8 +206,15 @@ const planStart = (overrides: Partial<CiResult> = {}): CiResult =>
     completedAt: null,
     ...overrides,
   });
+/** A passed Check of the Plan that started at the fixture's start time. */
 const checkPass = (overrides: Partial<CiResult> = {}): CiResult =>
-  receipt({ job: 'check', event: 'integration', groups: [], ...overrides });
+  receipt({
+    job: 'check',
+    event: 'integration',
+    groups: [],
+    planStartedAt: '2026-11-20T20:00:00.000Z',
+    ...overrides,
+  });
 const fastFail = (overrides: Partial<CiResult> = {}): CiResult =>
   receipt({ job: 'fast', event: 'integration', status: 'failed', ...overrides });
 
@@ -350,6 +357,20 @@ const BOUND_CASES: Case[] = [
       planEnd({ attempt: 2, base: 'e'.repeat(40) }),
       checkPass({ attempt: 2 }),
     ],
+    expected: undefined,
+  },
+  {
+    name: "a rerun whose own Plan never reached the ledger, so its Check certified another Plan than the first attempt's",
+    ledger: [
+      ...planned(),
+      checkPass({ status: 'failed' }),
+      checkPass({ attempt: 2, planStartedAt: '2026-11-20T21:00:00.000Z' }),
+    ],
+    expected: undefined,
+  },
+  {
+    name: 'a Check that names no Plan',
+    ledger: [...planned(), checkPass({ planStartedAt: undefined })],
     expected: undefined,
   },
   {

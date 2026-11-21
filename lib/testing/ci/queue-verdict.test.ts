@@ -69,7 +69,7 @@ test("a pass needs a CI runner's passed plan of this run against the batch's bas
 });
 
 test("with a ledger, a pass counts only when the ledger holds the run as its landing's pass, so the push to main reuses it", () => {
-  const passed = result({});
+  const passed = result({ planStartedAt: PLAN.startedAt });
   expect(verdictOf(RUN, evidence(passed, { ledger: [START, PLAN, passed] })).kind).toBe('passed');
   // The push binds reuse to the plan's work: a plan that recorded none leaves the push to run.
   const unbound = result({ job: 'plan', plan: { jobs: [], skips: {}, shards: [], outputs: {} } });

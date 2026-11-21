@@ -381,6 +381,7 @@ function runReceipts(tree: string, runUrl: string, event: CiResult['event'], pas
       ...(job === 'plan' && ended
         ? { plan: { jobs: [], skips: {}, shards: [], outputs: {}, work: WORK } }
         : {}),
+      ...(job === 'check' ? { planStartedAt: '2026-11-21T08:00:00Z' } : {}),
     };
   };
   return [

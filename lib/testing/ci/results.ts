@@ -88,6 +88,11 @@ const ciResultSchema = z.object({
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().nullable(),
   plan: runPlanSchema.optional(),
+  /**
+   * Check's own: when the Plan it verified the run by started. A push reuses the run only by that
+   * Plan's receipt in the ledger (lib/testing/ci/reuse.ts). Absent on older Checks, which no push reuses.
+   */
+  planStartedAt: z.string().datetime().optional(),
   // Measurement (lib/testing/ci/measurement.ts, summed by scripts/ci-cost.ts). Optional: receipts written before it hold none, and no gate
   // or reuse decision reads them.
   /** The pull requests the run serves: a PR run's one, an integration batch's, a push's landed ones; none for a full run. */
