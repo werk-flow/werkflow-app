@@ -83,6 +83,10 @@ test('a tooling input takes every group of the kinds its CI jobs run, and select
   expect(action.reasons['ui:contracts:time']).toBe(reason);
   const everyJob = { ui: 'Tooling input changed: scripts/ci/job.ts', sql: 'x', static: 'x' };
   expect(selected(plan(['scripts/ci/job.ts'], { everyGroupOf: everyJob }))).toEqual(EVERYTHING);
+  // A lint or type package beside documentation still runs every static gate.
+  expect(
+    plan(['docs/README.md'], { everyGroupOf: { static: 'Lint or type packages moved' } }).static,
+  ).toEqual(EVERY_GATE);
 });
 
 test('a diff of documentation alone runs the gates that read it, the dependency audit, Lint and the unit suite, and no component or SQL group', () => {

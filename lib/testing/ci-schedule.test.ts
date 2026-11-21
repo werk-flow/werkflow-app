@@ -141,8 +141,11 @@ test('the nightly shares the release cron line, so the release usually reuses it
 test('main gets a full run after a tooling change or every 3 hours from 06:00 to 20:00 Berlin, and no job waits for it', () => {
   // GitHub starts scheduled runs hours late (#184), so ops/ci-alert.py in werk-flow/werkflow-planning
   // dispatches the workflow, and the workflow decides at once whether a full run is due.
-  expect(mainFullRunWorkflow).toMatch(/\non:\n {2}workflow_dispatch:\n\n/);
-  expect(mainFullRunWorkflow).not.toMatch(/\n {2}(schedule|push):/);
+  // A push to main asks too, so a tooling change's full run starts right after its merge.
+  expect(mainFullRunWorkflow).toMatch(
+    /\non:\n {2}workflow_dispatch:\n(?: {2}#.*\n)* {2}push:\n {4}branches: \[main\]\n\n/,
+  );
+  expect(mainFullRunWorkflow).not.toMatch(/\n {2}schedule:/);
   expect(mainFullRunWorkflow).not.toMatch(/\bsleep\b/);
   // Berlin's window and the interval (ops/ci-alert.py keeps the same three for its dispatches); the
   // repository's rule owns them (lib/testing/ci/full-run.ts), and the script asks it.

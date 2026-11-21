@@ -151,6 +151,23 @@ test("a red newest full run counts like a green one, and the head's own run is t
   expect(decide()).toBe(`scripts/ci/full-run.ts due --run ${head},${epoch(hoursBefore(NOON, 2))},ended`);
 });
 
+test('a cancelled or timed-out full run tested nothing, so an older one decides', () => {
+  const [head, second] = writeCommits(3);
+  writeFullRun(second ?? '', hoursBefore(NOON, 4), 'success');
+  for (const conclusion of ['cancelled', 'timed_out']) {
+    writeFileSync(
+      join(stub, `checks/${head}.json`),
+      JSON.stringify({
+        check_runs: [
+          { name: 'Full run / Check', status: 'completed', conclusion, started_at: hoursBefore(NOON, 1) },
+        ].map((entry) => ({ ...entry, app: { slug: 'github-actions' } })),
+      }),
+    );
+    writeFileSync(join(stub, 'bun.log'), '');
+    expect(decide()).toBe(`scripts/ci/full-run.ts due --run ${second},${epoch(hoursBefore(NOON, 4))},ended`);
+  }
+});
+
 test("main without a full run on its last 100 commits, or with only another app's, passes none", () => {
   const [head] = writeCommits(100);
   writeFullRun(head ?? '', hoursBefore(NOON, 1), 'success', 'some-app');

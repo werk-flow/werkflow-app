@@ -254,11 +254,14 @@ function toolingClass(input: {
     if (EVERY_GROUP_INPUTS.test(file)) tooling.everyGroup ??= `Every group runs for ${file}`;
     else if (dependency?.effect === 'every-group')
       tooling.everyGroup ??= `Every group runs for ${dependency.reason}`;
-    else if (dependency?.effect === 'lint-type') tooling.lintOnly.push(file);
-    else if (dependency) runs(`Tooling input changed: ${dependency.reason}`, CI_JOBS);
+    else if (dependency?.effect === 'lint-type') {
+      // A type package can break the type check, whatever else the diff holds.
+      tooling.lintOnly.push(file);
+      tooling.fast.static ??= `Lint or type packages moved: ${dependency.reason}`;
+    } else if (dependency) runs(`Tooling input changed: ${dependency.reason}`, CI_JOBS);
     else if (action !== undefined) {
       const jobs = input.actionJobs[action] ?? CI_JOBS;
-      runs(`Tooling input changed: ${file}, used by ${jobs.join(', ') || 'no CI job'}`, jobs);
+      runs(`Tooling input changed: ${file}, used by ${jobs.join(', ')}`, jobs);
     } else if (TOOLING_INPUTS.test(file) || runner.has(file)) runs(`Tooling input changed: ${file}`, CI_JOBS);
   }
   return tooling;
@@ -266,8 +269,9 @@ function toolingClass(input: {
 
 /**
  * The CI jobs of `ci.yml` that use each composite action under `.github/actions/`, directly or
- * through another action. `workflow` is ci.yml's text and `actions` each `action.yml` text by its
- * directory name; a text that is no workflow or action throws, so the plan stops.
+ * through another action; an action no CI job uses has no entry. `workflow` is ci.yml's text and
+ * `actions` each `action.yml` text by its directory name; a text that is no workflow or action, or a
+ * workflow without every CI job, throws, so the plan stops.
  */
 export function actionJobsOf(
   workflow: string,
@@ -288,7 +292,9 @@ export function actionJobsOf(
       uses(z.object({ runs: z.object({ steps: stepsSchema }) }).parse(Bun.YAML.parse(text)).runs.steps),
     ]),
   );
-  const users: Record<string, CiJob[]> = Object.fromEntries(Object.keys(actions).map((name) => [name, []]));
+  const missing = CI_JOBS.filter((job) => !jobs[job]);
+  if (missing.length) throw new Error(`ci.yml has no job ${missing.join(', ')}.`);
+  const users: Record<string, CiJob[]> = {};
   for (const job of CI_JOBS) {
     const pending = uses(jobs[job]?.steps);
     const seen = new Set<string>();

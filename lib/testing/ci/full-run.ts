@@ -1,19 +1,22 @@
 // When main needs a full run (owner decision D3, werk-flow/werkflow-planning#503), and what a full
 // run found that no plan had selected. scripts/ci/full-run.ts asks the rule for any runner; GitHub's
 // main-full-run.yml and the stand-in's scheduler both call it.
-import { z } from 'zod';
 import { formatBerlinLocalDateTime } from '../../date-time/berlin';
 import { isStep, plannedGroups } from './run-plan';
 import type { CiResult } from './results';
 
-/** A full run on a commit of main, as GitHub's check runs or a runner's ledger report it. */
+/**
+ * A full run on a commit of main, as GitHub's check runs or a runner's ledger report it: running,
+ * or ended with a verdict. A run that died or was cancelled tested nothing, so no adapter reports it.
+ */
 export type FullRun = { commit: string; startedAt: Date; ended: boolean };
 
 /** Daytime slots start from FIRST to LAST Berlin time, at most one per INTERVAL. */
 export const FULL_RUN_SLOTS = { first: '06:00', last: '20:00', intervalMs: 3 * 60 * 60 * 1000 };
 /**
  * A full run in a ledger without its final Check this long after its start has died with its
- * runner: its jobs' own timeouts and the midnight hold end a live one sooner.
+ * runner (its jobs' own timeouts and the midnight hold end a live one sooner), so it neither holds
+ * the next one back nor counts as tested.
  */
 const FULL_RUN_STALE_MS = 4 * 60 * 60 * 1000;
 
@@ -81,7 +84,7 @@ export function fullRunDue(input: {
 
 /**
  * The full runs a runner's ledger holds: one per run of event `full`, started at its first
- * receipt, ended by its final Check or by `FULL_RUN_STALE_MS`.
+ * receipt, ended by its final Check, and left out once `FULL_RUN_STALE_MS` passed without one.
  */
 export function fullRunsInLedger(ledger: readonly CiResult[], now: Date): FullRun[] {
   const runs = new Map<string, FullRun>();
@@ -93,60 +96,41 @@ export function fullRunsInLedger(ledger: readonly CiResult[], now: Date): FullRu
     if (receipt.job === 'check' && receipt.status !== 'running') run.ended = true;
     runs.set(receipt.runUrl, run);
   }
-  return [...runs.values()].map((run) => ({
-    ...run,
-    ended: run.ended || now.getTime() - run.startedAt.getTime() >= FULL_RUN_STALE_MS,
-  }));
-}
-
-const shardsSchema = z.array(z.object({ groups: z.string() }));
-
-/** Every group a plan's outputs select for its jobs; a malformed shard list selects none. */
-function selectedGroups(outputs: Readonly<Record<string, string>>): string[] {
-  const shardGroups = (key: string): string => {
-    try {
-      const shards = shardsSchema.safeParse(JSON.parse(outputs[key] ?? '[]'));
-      return shards.success ? shards.data.map((shard) => shard.groups).join(',') : '';
-    } catch {
-      return '';
-    }
-  };
-  return [
-    ...plannedGroups('fast', outputs),
-    ...plannedGroups('sql', outputs),
-    ...plannedGroups('components', outputs, shardGroups('component_shards')),
-    ...plannedGroups('browser', outputs, shardGroups('shards')),
-  ].filter((id) => !isStep(id));
-}
-
-/**
- * The plans of the trees that landed on main since the previous full run: the integration and
- * main runs' plans in the ledger whose tree is one of `landedTrees`. A pull request's own plan
- * runs no browser group (owner decision D1), so it never counts.
- */
-export function landedPlans(
-  ledger: readonly CiResult[],
-  landedTrees: ReadonlySet<string>,
-): Readonly<Record<string, string>>[] {
-  return ledger.flatMap((receipt) =>
-    receipt.job === 'plan' &&
-    (receipt.event === 'integration' || receipt.event === 'main') &&
-    receipt.status === 'passed' &&
-    receipt.plan &&
-    landedTrees.has(receipt.tree)
-      ? [receipt.plan.outputs]
-      : [],
+  return [...runs.values()].filter(
+    (run) => run.ended || now.getTime() - run.startedAt.getTime() < FULL_RUN_STALE_MS,
   );
 }
 
 /**
- * The groups a full run failed that no plan of `landedPlans` selected: the breaks only the full run
- * could find. Their count per full run is what justifies its cadence, or retires it.
+ * The groups CI selected on the trees that landed on main since the previous full run: each passed
+ * integration or main plan's selection of a landed tree, before reuse (the fast tier's lists and the
+ * browser shards still planned), and the groups of every integration or main browser shard that ran
+ * on one, which hold the shards a plan reused. A pull request's own run runs no browser group
+ * (owner decision D1), and a full run selects by no change, so neither counts.
  */
-export function unselectedFailures(
-  failed: readonly string[],
-  plans: readonly Readonly<Record<string, string>>[],
-): string[] {
-  const selected = new Set(plans.flatMap(selectedGroups));
+export function landedSelections(ledger: readonly CiResult[], landedTrees: ReadonlySet<string>): Set<string> {
+  const selected = new Set<string>();
+  for (const receipt of ledger) {
+    if ((receipt.event !== 'integration' && receipt.event !== 'main') || !landedTrees.has(receipt.tree))
+      continue;
+    if (receipt.job === 'browser') for (const group of receipt.groups) selected.add(group.id);
+    if (receipt.job !== 'plan' || receipt.status !== 'passed' || !receipt.plan) continue;
+    const outputs = receipt.plan.outputs;
+    for (const id of [
+      ...plannedGroups('fast', outputs),
+      ...plannedGroups('sql', outputs),
+      ...plannedGroups('components', outputs, outputs.selected_components),
+      ...receipt.plan.shards.flatMap((shard) => plannedGroups('browser', outputs, shard.groups)),
+    ])
+      selected.add(id);
+  }
+  return new Set([...selected].filter((id) => !isStep(id)));
+}
+
+/**
+ * The groups a full run failed that `landedSelections` lacks: the breaks only the full run could
+ * find. Their count per full run is what justifies its cadence, or retires it.
+ */
+export function unselectedFailures(failed: readonly string[], selected: ReadonlySet<string>): string[] {
   return [...new Set(failed)].filter((id) => !selected.has(id));
 }

@@ -211,6 +211,8 @@ test("a dependency change that moves only lint and type packages selects no grou
   const lintOnly = planFor(['package.json'], { dependencies: { 'package.json': lint } });
   expect([lintOnly.fullReason, lintOnly.tooling.browser, ids(lintOnly)]).toEqual([undefined, undefined, []]);
   expect(lintOnly.tooling.lintOnly).toEqual(['package.json']);
+  // Every static gate runs, even beside documentation alone: a type package can break the type check.
+  expect(lintOnly.tooling.fast).toEqual({ static: `Lint or type packages moved: ${lint.reason}` });
   // A development tool selects the dependency row's groups (the critical journeys) besides the sample.
   const tool: DependencyChange = { effect: 'tooling', reason: 'package.json: development tool knip' };
   expect(ids(planFor(['package.json'], { dependencies: { 'package.json': tool } }))).toContain(
@@ -260,6 +262,11 @@ test('the CI jobs of ci.yml that use each action, directly or through another ac
   expect(users['upload-evidence']).toEqual(users['ci-job']);
   expect(users.setup?.toSorted()).toEqual([...CI_JOBS].sort());
   expect(() => actionJobsOf('jobs: [', actions)).toThrow();
+  // A workflow whose jobs were renamed is no evidence that an action is unused.
+  expect(() => actionJobsOf('jobs:\n  build:\n    steps: []\n', actions)).toThrow('ci.yml has no job plan');
+  expect(
+    actionJobsOf(read('.github/workflows/ci.yml'), { ...actions, unused: 'runs:\n  steps: []\n' }).unused,
+  ).toBeUndefined();
 });
 
 test("the CI logic's own unit tests are no tooling input", () => {

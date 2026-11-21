@@ -6,11 +6,12 @@ import {
   type FullRun,
   fullRunDue,
   fullRunsInLedger,
-  landedPlans,
+  landedSelections,
   type Landed,
   unselectedFailures,
 } from './full-run';
 import type { CiResult } from './results';
+import { planRun } from './run-plan';
 
 const HISTORY = ['c3', 'c2', 'c1', 'c0'];
 // 12:00 Berlin in winter (UTC+1).
@@ -123,7 +124,7 @@ const receipt = (overrides: Partial<CiResult>): CiResult => ({
   ...overrides,
 });
 
-test("a ledger's full run runs until its final Check, or until it is stale", () => {
+test("a ledger's full run runs until its final Check, and a stale one without it is no full run", () => {
   const ledger = [
     receipt({ event: 'integration', runUrl: RUN(9) }),
     receipt({ runUrl: null }),
@@ -143,60 +144,98 @@ test("a ledger's full run runs until its final Check, or until it is stale", () 
     { commit: 'c'.repeat(40), startedAt: new Date('2026-11-21T09:00:00.000Z'), ended: false },
     { commit: 'd'.repeat(40), startedAt: new Date('2026-11-21T10:00:00.000Z'), ended: true },
   ]);
-  expect(fullRunsInLedger(ledger, new Date('2026-11-21T13:00:00Z'))[0]?.ended).toBe(true);
+  // A run whose runner died tested nothing: once stale it neither holds the next back nor counts.
+  expect(fullRunsInLedger(ledger, new Date('2026-11-21T13:00:00Z'))).toEqual([
+    { commit: 'd'.repeat(40), startedAt: new Date('2026-11-21T10:00:00.000Z'), ended: true },
+  ]);
 });
 
-test('a full-run failure counts as unselected unless a plan of a landed tree selected its group', () => {
+test('a full-run failure counts as unselected unless CI selected its group on a landed tree, reused shards included', () => {
   const landedTree = 'e'.repeat(40);
-  const outputs = (overrides: Record<string, string>): Record<string, string> => ({
+  const outputs: Record<string, string> = {
+    browser: 'true',
+    full: 'false',
+    full_reason: '',
+    tooling_reason: '',
+    shards: JSON.stringify([
+      { shard: 1, groups: 'golden:gg-00,golden:p1-21' },
+      { shard: 2, groups: 'audit:layout:job' },
+    ]),
+    midnight_until: '',
+    static: 'static:typecheck',
+    sql: 'sql:grants',
     selected_lint: 'static:lint',
     selected_static: 'static:typecheck',
     selected_unit: 'unit:all',
-    selected_sql: '',
-    shards: '[]',
-    component_shards: '[]',
-    ...overrides,
+    selected_sql: 'sql:grants',
+    selected_components: 'ui:contracts:work,ui:contracts:time',
+    component_shards: JSON.stringify([
+      { shard: 1, groups: 'ui:contracts:work' },
+      { shard: 2, groups: 'ui:contracts:time' },
+    ]),
+  };
+  // The integration run reuses the second component shard and the second browser shard.
+  const runPlan = planRun({
+    event: 'integration',
+    tree: landedTree,
+    listGrowthApproved: false,
+    outputs,
+    passedTree: undefined,
+    reused: (key) => (key.shard === 2 && key.job !== 'fast' ? RUN(7) : undefined),
   });
-  const plan = (
-    event: CiResult['event'],
-    tree: string,
-    planOutputs: Record<string, string>,
-    status: CiResult['status'] = 'passed',
-  ) =>
-    receipt({ event, tree, status, plan: { jobs: ['plan'], skips: {}, shards: [], outputs: planOutputs } });
+  expect(runPlan.outputs.component_shards).not.toContain('ui:contracts:time');
+  expect(runPlan.shards.map((shard) => shard.groups)).toEqual(['golden:gg-00,golden:p1-21']);
   const ledger = [
-    plan(
-      'integration',
-      landedTree,
-      outputs({ shards: '[{"shard":1,"groups":"golden:gg-00,golden:p1-21"}]' }),
-    ),
-    plan(
-      'main',
-      landedTree,
-      outputs({ selected_sql: 'sql:grants', component_shards: '[{"shard":1,"groups":"ui:contracts:work"}]' }),
-    ),
-    // A pull request's own plan runs no browser group, a failed plan none, another tree's none.
-    plan('pr', landedTree, outputs({ shards: '[{"shard":1,"groups":"audit:layout:work"}]' })),
-    plan('integration', landedTree, outputs({ shards: '[{"shard":1,"groups":"audit:visual"}]' }), 'failed'),
-    plan('integration', 'f'.repeat(40), outputs({ shards: '[{"shard":1,"groups":"audit:lab:office"}]' })),
-    plan('integration', landedTree, outputs({ shards: 'not json' })),
+    receipt({
+      event: 'integration',
+      runUrl: RUN(7),
+      job: 'browser',
+      shard: 2,
+      tree: landedTree,
+      groups: [{ id: 'audit:layout:job', outcome: 'passed', durationMs: 1 }],
+    }),
+    receipt({ event: 'integration', tree: landedTree, plan: runPlan }),
+    // A pull request's run, a failed plan, another tree's plan and a full run select nothing.
+    receipt({
+      event: 'pr',
+      tree: landedTree,
+      plan: { ...runPlan, outputs: { ...outputs, selected_sql: 'sql:pr-only' } },
+    }),
+    receipt({
+      event: 'integration',
+      tree: landedTree,
+      status: 'failed',
+      plan: { ...runPlan, outputs: { ...outputs, selected_sql: 'sql:failed-plan' } },
+    }),
+    receipt({
+      event: 'main',
+      tree: 'f'.repeat(40),
+      plan: { ...runPlan, outputs: { ...outputs, selected_sql: 'sql:other-tree' } },
+    }),
+    receipt({
+      event: 'full',
+      job: 'browser',
+      tree: landedTree,
+      groups: [{ id: 'audit:visual', outcome: 'failed', durationMs: 1 }],
+    }),
   ];
-  const plans = landedPlans(ledger, new Set([landedTree]));
-  expect(plans).toHaveLength(3);
+  const selected = landedSelections(ledger, new Set([landedTree]));
   expect(
     unselectedFailures(
       [
         'golden:p1-21',
+        'audit:layout:job',
+        'ui:contracts:time',
         'sql:grants',
-        'ui:contracts:work',
         'static:typecheck',
-        'audit:layout:work',
+        'sql:pr-only',
+        'sql:failed-plan',
+        'sql:other-tree',
         'audit:visual',
-        'audit:lab:office',
         'audit:performance:field',
         'audit:visual',
       ],
-      plans,
+      selected,
     ),
-  ).toEqual(['audit:layout:work', 'audit:visual', 'audit:lab:office', 'audit:performance:field']);
+  ).toEqual(['sql:pr-only', 'sql:failed-plan', 'sql:other-tree', 'audit:visual', 'audit:performance:field']);
 });

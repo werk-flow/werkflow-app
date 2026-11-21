@@ -62,6 +62,17 @@ test('a moved package counts by the strongest root package that installs it, nes
     effect: 'tooling',
     reason: 'bun.lock: supertool through development tool supertool',
   });
+  // A Playwright package counts by its own name and resolved name, whoever installs it.
+  const browserTool = lockfileChange(
+    BASE,
+    lock({
+      '@scope/tool':
+        '@scope/tool@1.0.0", "", { "dependencies": { "@scope/helper": "^1", "playwright-chromium": "^1" } }',
+      'playwright-chromium': 'playwright-chromium@1.62.0", "", {}',
+    }),
+  );
+  expect(browserTool.effect).toBe('every-group');
+  expect(moved('supertool', 'playwright-core@1.63.0", "", {}').effect).toBe('every-group');
   // A scoped package's nested scoped dependency resolves to its own nesting first.
   expect(moved('@scope/tool/@scope/helper', '@scope/helper@1.2.0", "", {}').effect).toBe('tooling');
   expect(moved('@scope/helper', '@scope/helper@1.0.1", "", {}')).toEqual({
@@ -80,7 +91,19 @@ test('a lock that cannot be read, a changed other workspace or an orphan package
     '"workspaces": {',
     '"workspaces": {\n    "packages/x": { "dependencies": { "a": "1" } },',
   );
-  expect(lockfileChange(BASE, workspace).reason).toBe('bun.lock: a workspace other than the root changed');
+  expect(lockfileChange(BASE, workspace).effect).toBe('every-group');
+  // The lock's settings resolve packages too: overrides, patches, its own versions.
+  for (const setting of [
+    '"overrides": { "debug": "4.2.0" },',
+    '"patchedDependencies": { "react@19.0.0": "patches/r.patch" },',
+  ])
+    expect(lockfileChange(BASE, BASE.replace('"packages": {', `${setting}\n  "packages": {`))).toEqual({
+      effect: 'every-group',
+      reason: 'bun.lock: its overrides, patches or other settings changed',
+    });
+  expect(lockfileChange(BASE, BASE.replace('"lockfileVersion": 1', '"lockfileVersion": 2')).effect).toBe(
+    'every-group',
+  );
   expect(lockfileChange(BASE, BASE)).toEqual({ effect: 'lint-type', reason: 'bun.lock: no package moved' });
 });
 
@@ -105,6 +128,13 @@ test("a root package's range counts by its section, and a package moved into the
     change({ dependencies: { react: '19.0.0' }, devDependencies: { eslint: '^9', supertool: '^6.1' } })
       .effect,
   ).toBe('tooling');
+  // An alias counts by its target too.
+  expect(
+    change({
+      dependencies: { react: '19.0.0' },
+      devDependencies: { eslint: '^9', supertool: '^6', pw: 'npm:playwright@1.62.0' },
+    }).effect,
+  ).toBe('every-group');
   expect(
     change({ dependencies: { react: '19.0.0', eslint: '^9' }, devDependencies: { supertool: '^6' } }),
   ).toEqual({

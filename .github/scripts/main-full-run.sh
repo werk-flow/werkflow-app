@@ -48,14 +48,15 @@ decide() {
   local list commit state="" started conclusion decision run=()
   # A failed request fails the decision: a missing check run could be the newest full run.
   list="$(commits)"
+  # A cancelled or timed-out full run tested nothing, so an older one decides.
   while read -r commit _; do
     state="$(full_run "$commit")"
-    test -z "$state" || break
+    read -r started conclusion <<< "${state:-0 none}"
+    case "$conclusion" in
+      running) run=(--run "${commit},${started},running") && break ;;
+      success | failure) run=(--run "${commit},${started},ended") && break ;;
+    esac
   done <<< "$list"
-  if test -n "$state"; then
-    read -r started conclusion <<< "$state"
-    run=(--run "${commit},${started},$(test "$conclusion" = running && echo running || echo ended)")
-  fi
   decision="$(bun scripts/ci/full-run.ts due "${run[@]}")"
   echo "::notice title=Full run on main::${decision}"
 }

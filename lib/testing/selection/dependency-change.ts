@@ -28,9 +28,12 @@ const strongest = (changes: readonly DependencyChange[]): DependencyChange | und
  */
 export const LINT_AND_TYPE_PACKAGES =
   /^(@types\/.+|eslint|eslint-config-.+|eslint-plugin-.+|@eslint\/.+|@eslint-community\/.+|knip|typescript7)$/;
-/** Development packages the browser groups, the build or the local stack load. */
+/**
+ * Development packages the browser groups, the build or the local stack load. A package counts by
+ * each of its names: the one it is installed as, an `npm:` alias's target, and the lock's resolved name.
+ */
 const RUNTIME_DEVELOPMENT_PACKAGES =
-  /^(@playwright\/.+|playwright|playwright-core|@axe-core\/playwright|tailwindcss|@tailwindcss\/.+|supabase)$/;
+  /^(@playwright\/.+|playwright(-[a-z]+)?|@axe-core\/playwright|tailwindcss|@tailwindcss\/.+|supabase)$/;
 const RUNTIME_SECTIONS = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const;
 const SECTIONS = [...RUNTIME_SECTIONS, 'devDependencies'] as const;
 
@@ -47,7 +50,10 @@ type Manifest = z.infer<typeof manifestSchema>;
 function rootEffect(name: string, manifests: readonly Manifest[]): DependencyChange {
   if (manifests.some((manifest) => RUNTIME_SECTIONS.some((section) => manifest[section]?.[name])))
     return { effect: 'every-group', reason: `runtime dependency ${name}` };
-  if (RUNTIME_DEVELOPMENT_PACKAGES.test(name))
+  const aliases = manifests.flatMap((manifest) =>
+    SECTIONS.flatMap((section) => /^npm:(@?[^@]+)@/.exec(manifest[section]?.[name] ?? '')?.[1] ?? []),
+  );
+  if ([name, ...aliases].some((identity) => RUNTIME_DEVELOPMENT_PACKAGES.test(identity)))
     return {
       effect: 'every-group',
       reason: `${name}, which the browser groups, the build or the stack load`,
@@ -122,11 +128,34 @@ const packageMetaSchema = z.object({
   peerDependencies: requirements,
 });
 
-/** `bun.lock` is JSON with trailing commas; TypeScript's config reader takes both. */
-function readLock(text: string): Lock | undefined {
+const fieldsSchema = z.record(z.string(), z.unknown());
+const without = (fields: Record<string, unknown>, keys: readonly string[]) =>
+  Object.fromEntries(Object.entries(fields).filter(([key]) => !keys.includes(key)));
+
+/**
+ * `bun.lock` with its `settings`: everything besides the resolved packages and the workspaces'
+ * dependency maps, such as `overrides`, `patchedDependencies` and the lock's versions. It is JSON
+ * with trailing commas; TypeScript's config reader takes both.
+ */
+function readLock(text: string): { lock: Lock; settings: string } | undefined {
   const read: { config?: unknown; error?: ts.Diagnostic } = ts.parseConfigFileTextToJson('bun.lock', text);
   const parsed = lockSchema.safeParse(read.config);
-  return read.error || !parsed.success ? undefined : parsed.data;
+  const fields = fieldsSchema.safeParse(read.config);
+  const workspaces = z.record(z.string(), fieldsSchema).safeParse(fields.data?.workspaces);
+  if (read.error || !parsed.success || !fields.success || !workspaces.success) return undefined;
+  const settings = {
+    ...without(fields.data, ['packages', 'workspaces']),
+    workspaces: Object.fromEntries(
+      Object.entries(workspaces.data).map(([name, entry]) => [name, without(entry, SECTIONS)]),
+    ),
+  };
+  return { lock: parsed.data, settings: JSON.stringify(settings) };
+}
+
+/** The names a lock entry's package goes by: its key's last segment and its resolved name. */
+function packageNames(key: string, entry: readonly unknown[] | undefined): string[] {
+  const resolved = typeof entry?.[0] === 'string' ? entry[0].slice(0, entry[0].lastIndexOf('@')) : '';
+  return [keySegments(key).at(-1) ?? '', resolved].filter(Boolean);
 }
 
 /** A lock key's package names: `@scope/a/b` is `@scope/a` with its nested `b`. */
@@ -174,12 +203,17 @@ function rootsByKey(lock: Lock): Map<string, Set<string>> {
 
 /**
  * What a `bun.lock` change runs: each resolved package that moved counts by the strongest root
- * package that installs it, in either version; type declarations count as lint and types. A moved package no root installs, a changed
- * workspace other than the root, or a lock that cannot be read runs every group.
+ * package that installs it, in either version; type declarations count as lint and types, and a
+ * package the browser, the build or the stack load runs every group whoever installs it. Changed
+ * settings, a moved package no root installs, a changed workspace other than the root, or a lock
+ * that cannot be read run every group.
  */
 export function lockfileChange(before: string, after: string): DependencyChange {
-  const [left, right] = [readLock(before), readLock(after)];
-  if (!left || !right) return unreadable('bun.lock');
+  const [leftRead, rightRead] = [readLock(before), readLock(after)];
+  if (!leftRead || !rightRead) return unreadable('bun.lock');
+  if (leftRead.settings !== rightRead.settings)
+    return { effect: 'every-group', reason: 'bun.lock: its overrides, patches or other settings changed' };
+  const [left, right] = [leftRead.lock, rightRead.lock];
   const workspaces = [...new Set([...Object.keys(left.workspaces), ...Object.keys(right.workspaces)])];
   if (
     workspaces.some(
@@ -198,7 +232,13 @@ export function lockfileChange(before: string, after: string): DependencyChange 
     .filter((key) => JSON.stringify(left.packages[key]) !== JSON.stringify(right.packages[key]))
     .map((key): DependencyChange => {
       // Type declarations load nowhere at run time, whichever package declares them as a peer.
-      if (/^@types\//.test(keySegments(key).at(-1) ?? ''))
+      const names = [...packageNames(key, left.packages[key]), ...packageNames(key, right.packages[key])];
+      if (names.some((name) => RUNTIME_DEVELOPMENT_PACKAGES.test(name)))
+        return {
+          effect: 'every-group',
+          reason: `${key}, which the browser groups, the build or the stack load`,
+        };
+      if (names.every((name) => /^@types\//.test(name)))
         return { effect: 'lint-type', reason: `${key}, type declarations only` };
       const installers = new Set(owners.flatMap((map) => [...(map.get(key) ?? [])]));
       if (!installers.size)
