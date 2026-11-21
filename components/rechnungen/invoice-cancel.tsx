@@ -21,7 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { cancelInvoice } from '@/lib/invoices/cancel-actions';
-import { CANCELLATION_REASON_MAX_LENGTH } from '@/lib/invoices/cancel-model';
+import { CANCELLATION_REASON_MAX_LENGTH, cancellationReasonProblem } from '@/lib/invoices/cancel-model';
 import type { IssueFinding } from '@/lib/invoices/issue-model';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { IssueFindings } from './invoice-issue';
@@ -91,7 +91,7 @@ function useCancelInvoice({ invoice, mode, onClose }: CancelDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [findings, setFindings] = useState<IssueFinding[]>([]);
   const { run, isPending } = usePendingTask();
-  const reasonError = reason.trim() ? undefined : 'Gib den Grund der Stornierung an.';
+  const reasonError = cancellationReasonProblem(reason) ?? undefined;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();

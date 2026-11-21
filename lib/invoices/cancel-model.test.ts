@@ -3,7 +3,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import { EMPTY_COMPANY_PROFILE_DETAILS } from '@/lib/company-profile/profile';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
-import { negatedQuantity, stornoOf } from './cancel-model';
+import { cancelInvoiceSchema, cancellationReasonProblem, negatedQuantity, stornoOf } from './cancel-model';
 import { invoiceDraftOf, type IssueSnapshot } from './issue-model';
 import type { InvoiceLineValues } from './types';
 
@@ -14,6 +14,7 @@ Reflect.set(Error, 'prepareStackTrace', undefined);
 const { checkEn16931 } = await import('@/lib/invoicing/check-en16931').finally(() => {
   Reflect.set(Error, 'prepareStackTrace', prepareStackTrace);
 });
+const { calculatedInvoiceOf, renderInvoicePdf } = await import('./original');
 
 // The Stornorechnung cancel_invoice stores: every line negated by its
 // quantity. The database negates the stored amounts instead of computing them
@@ -56,7 +57,7 @@ const line = (
 });
 
 /** An issued invoice of these lines, its amounts computed by the core as at issue. */
-function issued(lines: InvoiceLineValues[]) {
+function issued(lines: InvoiceLineValues[], buyerReference = '') {
   const facts = {
     serviceStart: '2037-11-02',
     serviceEnd: '2037-11-06',
@@ -64,7 +65,7 @@ function issued(lines: InvoiceLineValues[]) {
     discountDays: 7,
     discountBasisPoints: 200,
     orderReference: 'BE-4711',
-    buyerReference: '',
+    buyerReference,
     openingText: 'Vielen Dank.',
     closingText: '',
     cancels: null,
@@ -99,6 +100,29 @@ describe('negatedQuantity', () => {
     ['0.000', '0.000'],
   ])('%p negates to %p', (quantity, negated) => {
     expect(negatedQuantity(quantity)).toBe(negated);
+  });
+});
+
+describe('the reason', () => {
+  const input = (reason: string) => ({
+    invoiceId: '98300000-0000-4000-8000-000000000001',
+    attemptKey: '98300000-0000-4000-8000-000000000002',
+    reason,
+    correct: false,
+  });
+
+  test.each([
+    ['a line break and a tab', 'Falsche Menge\nZeile 2\tabgerechnet', true],
+    ['a form feed', 'Falsche\fMenge', false],
+    ['a lone surrogate', 'Falsche Menge \uD800', false],
+    ['only spaces', '   ', false],
+  ])('with %s: the schema accepts it only when the invoice XML can carry it', (_case, reason, accepted) => {
+    expect(cancelInvoiceSchema.safeParse(input(reason)).success).toBe(accepted);
+    expect(cancellationReasonProblem(reason) === null).toBe(accepted);
+  });
+
+  test('the field names a control character in German', () => {
+    expect(cancellationReasonProblem('Falsche\u0007Menge')).toContain('Steuerzeichen');
   });
 });
 
@@ -157,5 +181,51 @@ describe('stornoOf', () => {
     expect(xml).not.toContain('<ram:DueDateDateTime>');
     const check = await checkEn16931(xml);
     expect(check.errors).toEqual([]);
+  });
+});
+
+describe("a Stornorechnung's head", () => {
+  const lines = [line('1.500', 'hour', 7200, 1900)];
+  const units = lines.map((entry) => entry.unit);
+
+  /** Whether the invoice's head leaves room for its lines, as the issue's and the cancel's render check it. */
+  async function headFits(
+    invoice: Parameters<typeof calculatedInvoiceOf>[0],
+    issue: { number: string; issueDate: string },
+  ): Promise<boolean> {
+    const calculated = calculatedInvoiceOf(invoice, SNAPSHOT, issue);
+    if (!calculated) throw new Error('no Leistungsdatum');
+    return renderInvoicePdf(
+      '98300000-0000-4000-8000-0000000000aa',
+      { calculated, units, snapshot: SNAPSHOT },
+      null,
+    ).then(
+      () => true,
+      (error: unknown) => {
+        if (error instanceof RangeError) return false;
+        throw error;
+      },
+    );
+  }
+
+  const ORIGINAL_ISSUE = { number: 'RE-2037-001', issueDate: '2037-11-10' };
+  const referenceOf = (words: number) => Array.from({ length: words }, () => 'Referenz').join(' ');
+
+  test('an original whose head is exactly at the limit can still be cancelled', async () => {
+    // The longest Referenz whose head still leaves room for the lines: one more word does not.
+    let fits = 0;
+    let tooTall = 400;
+    expect(await headFits(issued(lines, referenceOf(tooTall)), ORIGINAL_ISSUE)).toBe(false);
+    while (tooTall - fits > 1) {
+      const words = Math.floor((fits + tooTall) / 2);
+      if (await headFits(issued(lines, referenceOf(words)), ORIGINAL_ISSUE)) fits = words;
+      else tooTall = words;
+    }
+    expect(fits).toBeGreaterThan(0);
+    const original = issued(lines, referenceOf(fits));
+    expect(await headFits(original, ORIGINAL_ISSUE)).toBe(true);
+
+    const storno = stornoOf(original, 'Falscher Rechnungsempfänger');
+    expect(await headFits(storno, { number: 'RE-2037-002', issueDate: '2037-11-20' })).toBe(true);
   });
 });

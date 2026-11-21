@@ -432,22 +432,39 @@ select pg_temp.expect_refusal('cancel a credit', format(
 select pg_temp.expect_refusal('move the correction to another invoice',
   format('update public.invoices set corrects_invoice_id = %L where id = %L', pg_temp.id('kept'),
     pg_temp.id('correction')), 'invoice_link_fixed');
-select public.delete_invoice_draft('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
-  pg_temp.id('correction'), 1, gen_random_uuid());
 reset role;
 
--- An employee and another organization read neither the Stornorechnung nor the correction.
-create function pg_temp.invoices_seen_by(p_user uuid) returns bigint language plpgsql as $$
+-- An employee and another organization read neither the Stornorechnung nor the correction; the office reads both.
+create function pg_temp.invoices_seen_by(p_user uuid, p_id uuid default null) returns bigint
+language plpgsql as $$
 declare
   v_count bigint;
 begin
   perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
-  select count(*) into v_count from public.invoices where organization_id = '38080000-0000-4000-8000-000000000010';
+  select count(*) into v_count from public.invoices
+  where organization_id = '38080000-0000-4000-8000-000000000010' and (p_id is null or id = p_id);
   execute 'reset role';
   return v_count;
 end;
 $$;
+-- While the correction draft exists, so a policy that exposed only correction drafts would show here.
+do $$
+declare
+  v_correction uuid := (select id from ids where name = 'correction');
+begin
+  if pg_temp.invoices_seen_by('38080000-0000-4000-8000-000000000002', v_correction) is distinct from 1::bigint
+    or pg_temp.invoices_seen_by('38080000-0000-4000-8000-000000000003', v_correction) is distinct from 0::bigint
+    or pg_temp.invoices_seen_by('38080000-0000-4000-8000-000000000004', v_correction) is distinct from 0::bigint then
+    raise exception 'the correction draft''s read crossed a role or an organization';
+  end if;
+end;
+$$;
+set local role service_role;
+select public.delete_invoice_draft('38080000-0000-4000-8000-000000000002', '38080000-0000-4000-8000-000000000010',
+  pg_temp.id('correction'), 1, gen_random_uuid());
+reset role;
+
 do $$
 begin
   if pg_temp.invoices_seen_by('38080000-0000-4000-8000-000000000002') is distinct from 8::bigint

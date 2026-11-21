@@ -1,3 +1,4 @@
+import { carriesAsXml } from '@/lib/invoicing/xml-text';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import type { InvoiceDetail } from './types';
@@ -12,11 +13,26 @@ import type { InvoiceDetail } from './types';
 /** The longest reason the office gives for a Storno; it is printed on the Stornorechnung. */
 export const CANCELLATION_REASON_MAX_LENGTH = 500;
 
+/** What keeps the office's reason off the Stornorechnung, in the field's words; null when it can be printed. */
+export function cancellationReasonProblem(reason: string): string | null {
+  const text = reason.trim();
+  if (!text) return 'Gib den Grund der Stornierung an.';
+  // The reason becomes a note of the invoice's XML, which cannot carry a control character.
+  if (!carriesAsXml(text)) {
+    return 'Der Grund enthält ein unsichtbares Steuerzeichen, das auf keiner Rechnung stehen kann. Tippe ihn neu, statt ihn einzufügen.';
+  }
+  return null;
+}
+
 export const cancelInvoiceSchema = z.object({
   invoiceId: uuidSchema,
   /** One key per opening of the dialog: a retried press answers with the first Storno. */
   attemptKey: uuidSchema,
-  reason: z.string().trim().min(1).max(CANCELLATION_REASON_MAX_LENGTH),
+  reason: z
+    .string()
+    .trim()
+    .max(CANCELLATION_REASON_MAX_LENGTH)
+    .refine((reason) => cancellationReasonProblem(reason) === null),
   /** „Korrigieren“: also open a new draft prefilled from the cancelled invoice. */
   correct: z.boolean(),
 });
