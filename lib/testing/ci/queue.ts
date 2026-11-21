@@ -88,8 +88,9 @@ const isQueued = (pull: QueuedPull): boolean =>
   pull.mergeState !== 'BEHIND';
 
 /**
- * The batch: up to `maxBatch` queued PRs, oldest place first (ties by number). `only` names PRs for
- * a dry-run rehearsal, in its order, whatever their queue state.
+ * The batch: up to `maxBatch` queued PRs, oldest place first (ties by number), ending before a PR
+ * with list-growth approval, which runs alone. `only` names PRs for a dry-run rehearsal, in its
+ * order, whatever their queue state.
  */
 export function pickBatch(
   pulls: readonly QueuedPull[],
@@ -108,7 +109,12 @@ export function pickBatch(
             ? left.number - right.number
             : (left.queuedAt ?? '').localeCompare(right.queuedAt ?? ''),
         );
-  return ordered.slice(0, choice.maxBatch);
+  // A PR with the owner's list-growth approval runs alone, so a batch never borrows its waiver for
+  // another PR whose own approval may be gone.
+  const approved = ordered.findIndex((pull) => pull.listGrowthApproved);
+  return approved === 0
+    ? ordered.slice(0, 1)
+    : ordered.slice(0, approved === -1 ? choice.maxBatch : Math.min(approved, choice.maxBatch));
 }
 
 /** Why the PR as taken no longer stands for the PR now, or undefined. A superseded entry is cancelled. */
@@ -358,10 +364,19 @@ async function land(
 ): Promise<void> {
   let previous = base;
   for (const { pull, tree } of landing) {
-    if (!(await onBase(adapter, previous, outcome))) return;
-    const superseded = supersession(pull, await adapter.pulls());
+    let current = await onBase(adapter, previous, outcome);
+    const superseded = current ? supersession(pull, await adapter.pulls()) : undefined;
     if (superseded) {
       outcome.stops.push({ kind: 'superseded', detail: superseded });
+      current = false;
+    }
+    if (!current) {
+      // Landed PRs before it leave main on a prefix no run tested as a whole: a person checks it.
+      if (outcome.landing.length)
+        outcome.stops.push({
+          kind: 'landing-failed',
+          detail: `main holds the untested prefix ${outcome.landing.map((number) => `#${number}`).join(', ')} (${previous})`,
+        });
       return;
     }
     const head = await landOne(adapter, pull, tree, previous, proof);

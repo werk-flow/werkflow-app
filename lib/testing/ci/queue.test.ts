@@ -146,6 +146,13 @@ test('a batch takes at most four queued PRs by queue place; drafts, unqueued, un
   expect(pickBatch(pulls, { maxBatch: 1 }).map((entry) => entry.number)).toEqual([9]);
 });
 
+test('a PR with list-growth approval runs alone, so no batch borrows its waiver for another PR', () => {
+  const approved = { listGrowthApproved: true };
+  const numbers = (pulls: QueuedPull[]) => pickBatch(pulls, { maxBatch: 4 }).map((entry) => entry.number);
+  expect(numbers([pull(1), pull(2), pull(3, approved), pull(4)])).toEqual([1, 2]);
+  expect(numbers([pull(1, approved), pull(2), pull(3)])).toEqual([1]);
+});
+
 test('a rehearsal batch takes the named open PRs in their order, and refuses a PR that is not open against main', () => {
   const pulls = [pull(1), pull(2, { isDraft: true, queuedAt: null })];
   expect(pickBatch(pulls, { maxBatch: 4, only: [2, 1] }).map((entry) => entry.number)).toEqual([2, 1]);
@@ -356,7 +363,12 @@ test('each merge first checks main and the PR again: a PR taken out of the queue
   });
   const outcome = await runQueueTick(world.adapter, LIVE);
   expect(world.landed).toEqual([1]);
-  expect(outcome.stops).toEqual([{ kind: 'superseded', detail: '#2 left the queue' }]);
+  // main now holds #1 alone, a prefix no run tested as a whole: a person checks it.
+  expect(outcome.stops).toEqual([
+    { kind: 'superseded', detail: '#2 left the queue' },
+    { kind: 'landing-failed', detail: `main holds the untested prefix #1 (${world.main().commit})` },
+  ]);
+  expect(needsAttention(outcome)).toBe(true);
 });
 
 test('a dry run tests and decides like a live tick but never lands or tells a PR', async () => {
