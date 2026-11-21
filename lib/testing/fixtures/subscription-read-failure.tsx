@@ -24,7 +24,7 @@ for (const [modulePath, exportName] of [
   ['@/components/active-jobs-provider', 'ActiveJobsProvider'],
   ['@/components/clock-state-provider', 'ClockStateProvider'],
   ['@/components/sidebar/app-shell-skeleton', 'AppShellSkeleton'],
-  ['@/app/upgrade/simulate-payment-button', 'SimulatePaymentButton'],
+  ['@/app/upgrade/subscribe-button', 'SubscribeButton'],
 ] as const) {
   const leaf = ({ children }: { children?: ReactNode }): ReactNode => children;
   leaves.set(exportName, leaf);
@@ -60,12 +60,13 @@ mock.module('@/lib/time-tracking/clock-state-actions', () => ({
 }));
 console.error = () => undefined;
 
-// One database. The caller's own reads go through the server client: the
-// subscription row and the membership count. The layout's shell reads go
-// through the admin client. Every table read is counted.
+// One database. The membership count goes through the caller's server
+// client; the reservation and the layout's shell reads go through the admin
+// client. Every table read is counted.
 const failing = new Set<string>();
 const reads = new Map<string, number>();
-let subscriptionStatus: string | null = 'active';
+// The caller's open reservation: held (paid), not held, or none.
+let reservationHolds: boolean | null = true;
 const failure = { code: 'XX000', message: 'private' };
 const membershipRows = [
   {
@@ -79,12 +80,18 @@ const membershipRows = [
 function answer(table: string, shape: 'single' | 'many'): Promise<Record<string, unknown>> {
   reads.set(table, (reads.get(table) ?? 0) + 1);
   if (failing.has(table)) return Promise.resolve({ data: null, error: failure, count: null });
-  if (table === 'subscriptions') {
-    return Promise.resolve(
-      subscriptionStatus === null
-        ? { data: null, error: { code: 'PGRST116', message: 'no rows' } }
-        : { data: { user_id: userId, status: subscriptionStatus }, error: null },
-    );
+  if (table === 'werkflow_subscriptions') {
+    return Promise.resolve({
+      data:
+        reservationHolds === null
+          ? null
+          : {
+              organization_id: organizationId,
+              stripe_customer_id: 'cus_test_1',
+              holds_subscription: reservationHolds,
+            },
+      error: null,
+    });
   }
   if (table === 'profiles') {
     return Promise.resolve({
@@ -103,7 +110,7 @@ function answer(table: string, shape: 'single' | 'many'): Promise<Record<string,
 
 function tableQuery(table: string): Record<string, unknown> {
   const query: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'not', 'limit']) query[method] = () => query;
+  for (const method of ['select', 'eq', 'is', 'not', 'limit']) query[method] = () => query;
   query.maybeSingle = () => answer(table, 'single');
   query.single = () => answer(table, 'single');
   query.then = (
@@ -151,7 +158,7 @@ function propsOf(node: unknown, name: string): Record<string, unknown> | undefin
 
 // Unknown subscription status: the upgrade page fails into the error page. It
 // neither redirects nor offers the plan to a caller who may already pay.
-failing.add('subscriptions');
+failing.add('werkflow_subscriptions');
 await assert.rejects(UpgradePage(), isSubscriptionFailure);
 assert.deepEqual(redirects, []);
 
@@ -166,18 +173,18 @@ const shell = await render(() => providers);
 const reserve = propsOf(shell, 'OrganizationPageScope')?.children;
 assert.ok(isValidElement<{ children: ReactNode }>(reserve), 'the shell holds the clock dock reserve');
 assert.equal(reserve.props.children, 'Authorized page content');
-assert.equal(reads.get('subscriptions'), 1, 'only the upgrade page read the subscription');
+assert.equal(reads.get('werkflow_subscriptions'), 1, 'only the upgrade page read the subscription');
 assert.deepEqual(redirects, []);
 
 // The failure is not remembered: the next request reads again and sends the
 // subscribed caller on to organization creation, never to the offer.
-failing.delete('subscriptions');
+failing.delete('werkflow_subscriptions');
 await assert.rejects(UpgradePage(), /redirect:\/onboarding\/create-organization/);
-assert.equal(reads.get('subscriptions'), 2, 'the read after a failure goes to the database again');
+assert.equal(reads.get('werkflow_subscriptions'), 2, 'the read after a failure goes to the database again');
 assert.deepEqual(redirects, ['/onboarding/create-organization']);
 
-// A status read per request: a canceled subscription shows the offer on the next request.
-subscriptionStatus = 'canceled';
-assert.ok(isValidElement(await UpgradePage()), 'a caller without an active subscription sees the offer');
-assert.equal(reads.get('subscriptions'), 3);
+// A state read per request: a reservation that no longer holds shows the offer on the next request.
+reservationHolds = false;
+assert.ok(isValidElement(await UpgradePage()), 'a caller without a held subscription sees the offer');
+assert.equal(reads.get('werkflow_subscriptions'), 3);
 assert.deepEqual(redirects, ['/onboarding/create-organization']);

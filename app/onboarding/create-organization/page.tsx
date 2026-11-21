@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { isUserSubscribed, userHasOrganizations } from '@/lib/subscription/helpers';
+import { readOpenReservation, userHasOrganizations } from '@/lib/subscription/helpers';
 import { StandaloneTitle } from '@/components/shared/standalone-screen';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 
@@ -28,9 +28,9 @@ export default async function CreateOrganizationPage() {
     redirect('/dashboard');
   }
 
-  // If user is not subscribed, redirect to upgrade page
-  const subscribed = await isUserSubscribed(user.id);
-  if (!subscribed) {
+  // Only a paid Checkout's reservation creates an organization.
+  const reservation = await readOpenReservation(user.id);
+  if (!reservation?.holdsSubscription) {
     redirect('/upgrade');
   }
 

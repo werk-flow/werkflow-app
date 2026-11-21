@@ -51,7 +51,10 @@ type ExcludedTable =
   | 'werkflow_billing_mails'
   // WerkFlow's own invoices to the organization: WerkFlow's books, which the
   // Admin downloads on the billing page (werk-flow/werkflow-planning#252).
-  | 'werkflow_invoices';
+  | 'werkflow_invoices'
+  // WerkFlow's own billing state of the organization (Stripe ids and status),
+  // the contract's record, not the organization's work.
+  | 'werkflow_subscriptions';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;

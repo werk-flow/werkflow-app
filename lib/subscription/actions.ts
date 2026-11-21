@@ -1,67 +1,69 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
-import type { ActionFailure } from '@/lib/action-result';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { userHasOrganizations } from './helpers';
-import { getAuthenticatedUser } from '@/lib/data/cached';
-import { logError } from '@/lib/logging';
-import { consumeRateLimit } from '@/lib/security/rate-limit';
+import type { ActionResult } from '@/lib/action-result';
+import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolveActionContextFor } from '@/lib/org/action-context';
+import { openCheckout, type CheckoutFailureCode } from '@/lib/subscription/checkout';
+import { readOpenReservation, userHasOrganizations } from '@/lib/subscription/helpers';
+import { uuidSchema } from '@/lib/validation/uuid';
 
-/** A success redirects and never returns, so only a failure comes back. */
-export type SimulatePaymentResult = ActionFailure;
+// The monthly subscription starts in Stripe Checkout (werk-flow/werkflow-planning#248).
+// A success answers Checkout's URL, which the browser opens; Stripe's signals
+// then record the subscription (lib/werkflow-billing/signals/).
+
+export type StartCheckoutResult = ActionResult<
+  { checkoutUrl: string },
+  'not_authenticated' | 'not_a_member' | 'not_authorized' | 'organization_exists' | CheckoutFailureCode
+>;
 
 /**
- * Simulates a successful payment by activating the user's subscription.
- * This is a placeholder for actual Stripe integration.
+ * A Checkout for the caller's first organization, before it exists: the
+ * subscription reserves the organization's id, and the caller creates the
+ * organization after paying. A caller who already paid continues to that step.
  */
-export async function simulatePayment(): Promise<SimulatePaymentResult> {
+export async function startOrganizationCheckout(): Promise<StartCheckoutResult> {
   const user = await getAuthenticatedUser();
-  if (!user) {
-    return { success: false, error: 'not_authenticated' };
-  }
+  if (!user) return { success: false, error: 'not_authenticated' };
 
-  // Check if user already has organizations - if so, redirect to dashboard
-  let hasOrgs: boolean;
+  let reservation;
   try {
-    hasOrgs = await userHasOrganizations(user.id);
+    if (await userHasOrganizations(user.id)) return { success: false, error: 'organization_exists' };
+    reservation = await readOpenReservation(user.id);
   } catch {
-    return { success: false, error: 'subscription_activation_failed' };
-  }
-  if (hasOrgs) {
-    redirect('/dashboard');
+    return { success: false, error: 'checkout_failed' };
   }
 
-  // Activation runs once per account; repeated calls are automation. A
-  // limiter that cannot decide refuses with a retryable failure (rate-limit.ts).
-  const verdict = await consumeRateLimit({ action: 'subscription_activation_per_user', subject: user.id });
-  if (verdict === 'limited') {
-    return { success: false, error: 'too_many_attempts' };
-  }
-  if (verdict === 'unavailable') {
-    return { success: false, error: 'subscription_activation_failed' };
-  }
+  const outcome = await openCheckout({
+    organizationId: reservation?.organizationId ?? randomUUID(),
+    userId: user.id,
+    email: user.email ?? null,
+    name: null,
+    linked: false,
+  });
+  if (outcome.ok) return { success: true, checkoutUrl: outcome.url };
+  if (outcome.code === 'already_subscribed') redirect('/onboarding/create-organization');
+  return { success: false, error: outcome.code };
+}
 
-  // Use admin client for subscription operations (no INSERT/UPDATE policy)
-  const admin = createSupabaseAdminClient();
+/** A Checkout for an existing organization, which only its Admin starts. */
+export async function startSubscriptionCheckout(organizationId: string): Promise<StartCheckoutResult> {
+  const parsedOrganizationId = uuidSchema.safeParse(organizationId);
+  if (!parsedOrganizationId.success) return { success: false, error: 'not_a_member' };
+  const caller = await resolveActionContextFor(parsedOrganizationId.data);
+  if (!caller.success) return caller;
+  const { userId, orgId, role } = caller.context;
+  if (role !== 'admin') return { success: false, error: 'not_authorized' };
 
-  // Upsert subscription record with active status using admin client
-  const { error } = await admin.from('subscriptions').upsert(
-    {
-      user_id: user.id,
-      status: 'active',
-      plan_id: 'dev_plan', // Placeholder plan ID for development
-    },
-    {
-      onConflict: 'user_id',
-    },
-  );
-
-  if (error) {
-    logError('simulatePayment: subscription upsert failed', error);
-    return { success: false, error: 'subscription_activation_failed' };
-  }
-
-  // Redirect to organization creation page
-  redirect('/onboarding/create-organization');
+  const user = await getAuthenticatedUser();
+  const membership = (await getCachedMemberships(userId)).find((entry) => entry.orgId === orgId);
+  const outcome = await openCheckout({
+    organizationId: orgId,
+    userId,
+    email: user?.email ?? null,
+    name: membership?.name ?? null,
+    linked: true,
+  });
+  return outcome.ok ? { success: true, checkoutUrl: outcome.url } : { success: false, error: outcome.code };
 }
