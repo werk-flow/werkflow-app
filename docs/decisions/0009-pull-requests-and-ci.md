@@ -240,3 +240,7 @@ Item 1 lands up to 4 PRs one squash merge at a time, so the batch's own `main` c
 GitHub reads a head's checks for a merge whose test merge commit has none. So once strict is off, a `Queue` success left on a merged head would pass that same head onto a later `main` without a queue run, for example when a change lands again after a revert. The queue withdraws every mark after its merge too, before it clears the mark or lands the next PR, and a tick withdraws a mark a crashed tick left whether its PR merged or not. A withdrawal that fails freezes the queue.
 
 A read or call that fails between two merges stops the landing as a `partial` landing with the last merge the queue confirmed, and the tick needs a person. `main` still moved, so its run of `main`'s head starts as after any landing.
+
+## Amendment 2026-11-21: a merge whose `main` cannot be read
+
+When `main` cannot be read right after a merge, the queue asks GitHub for the PR's merge commit. A merged PR counts as landed with its tree unverified, and the `partial` stop names that commit. When GitHub cannot answer either, the `partial` stop says a merge may have landed. Either way the tick needs a person, and `main`'s run of `main`'s head starts as after any landing.

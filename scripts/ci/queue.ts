@@ -41,10 +41,11 @@
 // Exit 2: it needs a person: a run without a verdict, a first PR failing on an unproven main, a
 // landing that broke (a failed read between merges included), a frozen queue, a refused option or
 // configuration, or an error. Stop the loop. A tick that exits 2 after a merge still moved main: it
-// logs a `partial` stop with the last merge it confirmed, and the runner starts main's run of
-// main's head as after any landing, whatever the exit. A frozen queue lands nothing until a person
-// confirms on GitHub that the named head's newest `Queue` is no success, merged or not, then
-// deletes queue-state.json.
+// logs a `partial` stop with the last merge it confirmed, or with the merge commit GitHub reports
+// when main could not be read after a merge, or says a merge may have landed when GitHub could not
+// answer either. After any landing or `partial` stop the runner starts main's run of main's head,
+// whatever the exit. A frozen queue lands nothing until a person confirms on GitHub that the named
+// head's newest `Queue` is no success, merged or not, then deletes queue-state.json.
 import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';

@@ -2,184 +2,10 @@
 // main's tree equal to the tested tree after every merge, and names the PR that breaks a red batch.
 // Each case drives runQueueTick through a fake GitHub, git and runner.
 import { expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
-import {
-  type MainCommit,
-  needsAttention,
-  pickBatch,
-  type QueueAdapter,
-  type QueuedPull,
-  type QueueState,
-  runQueueTick,
-  supersession,
-  type Verdict,
-} from './queue';
+import { type Fake, fakeWorld, pull, sha } from '../fixtures/merge-queue-world';
+import { needsAttention, pickBatch, type QueuedPull, runQueueTick, supersession } from './queue';
 import type { CiResult } from './results';
 import { passedTree, provenTree, reusableReceipt } from './reuse';
-
-/** A fake commit id of the whole seed, so two children of one parent never share an id. */
-const sha = (seed: string): string => createHash('sha1').update(seed).digest('hex');
-
-function pull(number: number, overrides: Partial<QueuedPull> = {}): QueuedPull {
-  return {
-    number,
-    title: `PR ${number}`,
-    headSha: sha(`head-${number}`),
-    isDraft: false,
-    queuedAt: `2026-11-21T08:0${number}:00Z`,
-    check: 'SUCCESS',
-    mergeState: 'BLOCKED',
-    listGrowthApproved: false,
-    ...overrides,
-  };
-}
-
-type Fake = {
-  adapter: QueueAdapter;
-  /** The PR sets each integration run tested, in order. */
-  tested: number[][];
-  landed: number[];
-  rejected: number[];
-  withdrawn: number[];
-  /** The pending mark's PR when each merge was asked for: the mark is saved before it is posted. */
-  pendingAtLand: (number | null)[];
-  /** Whether the PR's auto-merge was still on when its `Queue` success and merge were asked for. */
-  autoMergeAtLand: boolean[];
-  /** The newest `Queue` on a head: success when the queue marked it, failure once withdrawn. */
-  queueOn: (head: string) => 'success' | 'failure' | undefined;
-  main: () => MainCommit;
-  state: () => QueueState;
-};
-
-/**
- * A fake world. A tree is the list of PRs squashed onto main. A run fails when its prefix holds a
- * PR of `breaks`, and `answer` can override a run's verdict. `afterRun` changes the world after
- * the n-th run (1-based). GitHub's merge squashes onto the current main, `mergeTree` may change
- * the tree it builds, `refuse` makes the merge throw without merging, and `lostAnswer` makes it
- * throw after merging. GitHub reports a merged PR's merge commit. `beforeLand` changes the world
- * before the n-th merge. The ledger proves main's tree unless `unprovenMain`. A PR of
- * `unchanged` holds only changes already in the batch, so its squash keeps the tree. The publisher
- * is down for PR n's first `failedWithdrawals[n]` withdrawals. GitHub refuses to turn off the auto-merge
- * of `stuckAutoMerge`. The queue's saved state starts as `state`.
- */
-function fakeWorld(
-  pulls: QueuedPull[],
-  options: {
-    breaks?: readonly number[];
-    answer?: (prs: readonly number[]) => Verdict['kind'] | undefined;
-    afterRun?: (run: number, world: { pulls: QueuedPull[]; pushMain: (tree: string) => void }) => void;
-    mergeTree?: (tree: string) => string;
-    refuse?: number;
-    lostAnswer?: number;
-    beforeLand?: (merge: number, world: { pulls: QueuedPull[]; pushMain: (tree: string) => void }) => void;
-    unprovenMain?: boolean;
-    unchanged?: readonly number[];
-    failedWithdrawals?: Readonly<Record<number, number>>;
-    stuckAutoMerge?: number;
-    state?: QueueState;
-  } = {},
-): Fake {
-  const commits = new Map<string, { parents: string[]; tree: string }>([
-    [sha('main'), { parents: [], tree: 'main' }],
-  ]);
-  let mainCommit = sha('main');
-  let open = [...pulls];
-  const tested: number[][] = [];
-  const landed: number[] = [];
-  const rejected: number[] = [];
-  const withdrawn: number[] = [];
-  const pendingAtLand: (number | null)[] = [];
-  const autoMergeAtLand: boolean[] = [];
-  let saved: QueueState = options.state ?? { pending: null, frozen: null };
-  const withdrawals = new Map<number, number>();
-  const queueMarks = new Map<string, 'success' | 'failure'>();
-  const mergeCommits = new Map<number, string>();
-  let merges = 0;
-  const commit = (parent: string, tree: string): string => {
-    const id = sha(`${parent}:${tree}`);
-    commits.set(id, { parents: [parent], tree });
-    return id;
-  };
-  const pushMain = (tree: string): void => {
-    mainCommit = commit(mainCommit, tree);
-  };
-  const main = (): MainCommit => ({
-    commit: mainCommit,
-    ...(commits.get(mainCommit) ?? { parents: [], tree: '' }),
-  });
-  const adapter: QueueAdapter = {
-    main: async () => main(),
-    pulls: async () => open,
-    squash: async (parent, entry) => {
-      if (entry.title.includes('conflict')) return undefined;
-      const before = `${commits.get(parent)?.tree}`;
-      const tree = options.unchanged?.includes(entry.number) ? before : `${before}+${entry.number}`;
-      return { commit: commit(parent, tree), tree };
-    },
-    integrationRun: async ({ tip, pulls: prefix }) => {
-      const prs = prefix.map((entry) => entry.number);
-      tested.push(prs);
-      const kind =
-        options.answer?.(prs) ??
-        (prs.some((number) => options.breaks?.includes(number)) ? 'failed' : 'passed');
-      options.afterRun?.(tested.length, {
-        pulls: open,
-        pushMain,
-      });
-      open = [...open];
-      return { kind, runUrl: `run-${tested.length}:${tip.tree}`, detail: kind };
-    },
-    disableAutoMerge: async (entry) => {
-      if (entry.number === options.stuckAutoMerge) throw new Error('GitHub refused');
-      open = open.map((candidate) =>
-        candidate.number === entry.number ? { ...candidate, queuedAt: null } : candidate,
-      );
-    },
-    land: async (entry) => {
-      pendingAtLand.push(saved.pending?.pull ?? null);
-      autoMergeAtLand.push(
-        open.some((candidate) => candidate.number === entry.number && candidate.queuedAt !== null),
-      );
-      queueMarks.set(entry.headSha, 'success');
-      options.beforeLand?.(++merges, { pulls: open, pushMain });
-      if (entry.number === options.refuse) throw new Error('Pull request is not mergeable');
-      const tree = `${main().tree}+${entry.number}`;
-      pushMain(options.mergeTree?.(tree) ?? tree);
-      landed.push(entry.number);
-      mergeCommits.set(entry.number, mainCommit);
-      open = open.filter((candidate) => candidate.number !== entry.number);
-      if (entry.number === options.lostAnswer) throw new Error('connection reset');
-    },
-    mergeCommit: async (number) => mergeCommits.get(number) ?? null,
-    reject: async (entry) => {
-      rejected.push(entry.number);
-    },
-    withdraw: async (mark) => {
-      const attempt = (withdrawals.get(mark.pull) ?? 0) + 1;
-      withdrawals.set(mark.pull, attempt);
-      if (attempt <= (options.failedWithdrawals?.[mark.pull] ?? 0)) throw new Error('publisher unavailable');
-      queueMarks.set(mark.head, 'failure');
-      withdrawn.push(mark.pull);
-    },
-    state: async () => saved,
-    saveState: async (state) => {
-      saved = state;
-    },
-    proven: async (tree) => tree === 'main' && !options.unprovenMain,
-  };
-  return {
-    adapter,
-    tested,
-    landed,
-    rejected,
-    withdrawn,
-    pendingAtLand,
-    autoMergeAtLand,
-    queueOn: (head) => queueMarks.get(head),
-    main,
-    state: () => saved,
-  };
-}
 
 const LIVE = { maxBatch: 4, dryRun: false };
 
@@ -443,19 +269,88 @@ test("a merge whose answer was lost lands when GitHub confirms the PR merged as 
   expect(world.main().tree).toBe('main+1+2');
 });
 
-test('a main that cannot be read after a merge stops the landing and withdraws the mark', async () => {
-  const world = fakeWorld([pull(1)]);
+/** Makes the n-th read of main fail, as `gh` losing its connection. */
+function failMainRead(world: Fake, failOn: number): void {
   const read = world.adapter.main;
   let reads = 0;
   world.adapter.main = async () => {
-    if (++reads === 3) throw new Error('fetch failed');
+    if (++reads === failOn) throw new Error('fetch failed');
     return read();
   };
+}
+
+test("a merge whose main cannot be read lands by GitHub's merge commit: the landing names it, unverified, and needs a person", async () => {
+  for (const batch of [[pull(1)], [pull(1), pull(2)]]) {
+    const world = fakeWorld(batch);
+    // main: the tick, #1's base, then main after #1.
+    failMainRead(world, 3);
+    const outcome = await runQueueTick(world.adapter, LIVE);
+    const prs = batch.map((entry) => `#${entry.number}`).join(', ');
+    expect(world.landed).toEqual([1]);
+    expect(outcome.landing).toEqual([1]);
+    expect(world.withdrawn).toEqual([1]);
+    expect(world.state()).toEqual({ pending: null, frozen: null });
+    expect(outcome.stops).toEqual([
+      { kind: 'landing-failed', detail: 'main could not be read after merging #1: fetch failed' },
+      {
+        kind: 'partial',
+        detail: `the landing stopped after #1 of ${prs}: GitHub reports #1 merged as ${world.main().commit}, whose tree the queue could not verify, so main's own run of it runs its jobs unless a run passed its exact tree, and the next tick starts from it`,
+      },
+    ]);
+    expect(needsAttention(outcome)).toBe(true);
+  }
+});
+
+test('a later merge whose main cannot be read records one partial stop, at its own merge commit', async () => {
+  const world = fakeWorld([pull(1), pull(2), pull(3)]);
+  // main: the tick, #1's base, main after #1, #2's base, then main after #2.
+  failMainRead(world, 5);
   const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(outcome.landing).toEqual([1, 2]);
+  expect(world.withdrawn).toEqual([1, 2]);
+  expect(outcome.stops).toEqual([
+    { kind: 'landing-failed', detail: 'main could not be read after merging #2: fetch failed' },
+    {
+      kind: 'partial',
+      detail: `the landing stopped after #1, #2 of #1, #2, #3: GitHub reports #2 merged as ${world.main().commit}, whose tree the queue could not verify, so main's own run of it runs its jobs unless a run passed its exact tree, and the next tick starts from it`,
+    },
+  ]);
+});
+
+test("a merge whose main and merge commit cannot be read records that it may have landed, so main's run still starts", async () => {
+  const world = fakeWorld([pull(1), pull(2)]);
+  failMainRead(world, 3);
+  world.adapter.mergeCommit = async () => {
+    throw new Error('gh: connection reset');
+  };
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(world.landed).toEqual([1]);
+  expect(outcome.landing).toEqual([]);
+  expect(world.withdrawn).toEqual([1]);
+  expect(world.state()).toEqual({ pending: null, frozen: null });
   expect(outcome.stops).toEqual([
     { kind: 'landing-failed', detail: 'main could not be read after merging #1: fetch failed' },
+    {
+      kind: 'partial',
+      detail:
+        "#1's merge may have landed after nothing of #1, #2: GitHub could not confirm it (gh: connection reset), so main's own run of main's head runs its jobs, and the next tick starts from main",
+    },
   ]);
+  expect(needsAttention(outcome)).toBe(true);
+});
+
+test('a refused merge whose main cannot be read lands nothing when GitHub reports the PR unmerged', async () => {
+  const world = fakeWorld([pull(1), pull(2)], { refuse: 1 });
+  failMainRead(world, 3);
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(outcome.landing).toEqual([]);
   expect(world.withdrawn).toEqual([1]);
+  expect(outcome.stops).toEqual([
+    {
+      kind: 'landing-failed',
+      detail: 'main could not be read after merging #1: Pull request is not mergeable: fetch failed',
+    },
+  ]);
   expect(needsAttention(outcome)).toBe(true);
 });
 

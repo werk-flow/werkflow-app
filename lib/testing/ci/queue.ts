@@ -100,9 +100,10 @@ export type QueueAdapter = {
 };
 
 /**
- * `partial`: the landing stopped after some PRs of the tested prefix. Under D2 a batch's own main
- * commits are not tested one by one; main's own run of that commit runs its jobs unless a run passed
- * its exact tree, and the next tick starts from that main.
+ * `partial`: the landing stopped after some PRs of the tested prefix, or after a merge whose main
+ * could not be read, so main may have moved. Under D2 a batch's own main commits are not tested one
+ * by one; main's own run of that commit runs its jobs unless a run passed its exact tree, and the
+ * next tick starts from that main.
  */
 type StopKind =
   | 'idle'
@@ -476,7 +477,7 @@ async function onBase(adapter: QueueAdapter, base: string, outcome: QueueOutcome
  * withdrawn too, after it counts as landed: a success left on a merged head would pass that head
  * again onto a later main. A freeze stops the landing, and so does a read or call that throws,
  * which needs a person. A landing that stops after some PRs records where main stands: the last
- * merge the queue confirmed.
+ * merge the queue confirmed, or a merge GitHub reports whose tree the queue could not verify.
  */
 async function land(
   adapter: QueueAdapter,
@@ -487,11 +488,17 @@ async function land(
 ): Promise<void> {
   let previous = base;
   let landedTree: string | undefined;
+  let unverified = false;
   for (const { pull, tree } of landing) {
     try {
       const head = await landNext(adapter, pull, tree, previous, proof, outcome);
       if (typeof head === 'string') {
         if (head) outcome.stops.push({ kind: 'landing-failed', detail: head });
+        break;
+      }
+      if ('problem' in head) {
+        unverified = true;
+        await landedUnverified(adapter, pull, landing, head, proof, outcome);
         break;
       }
       outcome.landing.push(pull.number);
@@ -504,7 +511,7 @@ async function land(
       break;
     }
   }
-  if (landedTree !== undefined && outcome.landing.length < landing.length)
+  if (!unverified && landedTree !== undefined && outcome.landing.length < landing.length)
     stoppedPartway(landing, previous, landedTree, outcome);
 }
 
@@ -516,13 +523,67 @@ async function landNext(
   previous: string,
   proof: Verdict,
   outcome: QueueOutcome,
-): Promise<MainCommit | string> {
+): Promise<MainCommit | Unverified | string> {
   if (!(await onBase(adapter, previous, outcome))) return '';
   const superseded = supersession(pull, await adapter.pulls());
   if (!superseded) return landOne(adapter, pull, tree, previous, proof, outcome);
   outcome.stops.push({ kind: 'superseded', detail: superseded });
   await withdrawPending(adapter, markOf(pull, proof), outcome);
   return '';
+}
+
+const prs = (numbers: readonly number[]): string => numbers.map((number) => `#${number}`).join(', ');
+
+/**
+ * A merge after which main could not be read: GitHub's merge commit for the PR when it reports one,
+ * otherwise why a merge may still have landed.
+ */
+type Unverified = { problem: string } & ({ mergeCommit: string } | { unconfirmed: string });
+
+/**
+ * Records a merge whose main could not be read, and withdraws its mark. A PR GitHub reports merged
+ * counts as landed, its tree unverified; otherwise the merge may have landed. Either way main may
+ * have moved, so the `partial` stop has main's own run start, and the tick needs a person.
+ */
+async function landedUnverified(
+  adapter: QueueAdapter,
+  pull: QueuedPull,
+  landing: readonly BatchEntry[],
+  merge: Unverified,
+  proof: Verdict,
+  outcome: QueueOutcome,
+): Promise<void> {
+  const all = prs(landing.map((entry) => entry.pull.number));
+  outcome.stops.push({ kind: 'landing-failed', detail: merge.problem });
+  if ('mergeCommit' in merge) {
+    outcome.landing.push(pull.number);
+    outcome.stops.push({
+      kind: 'partial',
+      detail: `the landing stopped after ${prs(outcome.landing)} of ${all}: GitHub reports #${pull.number} merged as ${merge.mergeCommit}, whose tree the queue could not verify, so main's own run of it runs its jobs unless a run passed its exact tree, and the next tick starts from it`,
+    });
+  } else
+    outcome.stops.push({
+      kind: 'partial',
+      detail: `#${pull.number}'s merge may have landed after ${prs(outcome.landing) || 'nothing'} of ${all}: ${merge.unconfirmed}, so main's own run of main's head runs its jobs, and the next tick starts from main`,
+    });
+  await withdrawPending(adapter, markOf(pull, proof), outcome);
+}
+
+/** After main could not be read: GitHub's word on whether the PR merged. Only a refused merge GitHub reports unmerged did not land. */
+async function mergeAfterUnreadMain(
+  adapter: QueueAdapter,
+  pull: QueuedPull,
+  problem: string,
+  refused: boolean,
+): Promise<Unverified | string> {
+  try {
+    const mergeCommit = await adapter.mergeCommit(pull.number);
+    if (mergeCommit) return { problem, mergeCommit };
+    if (refused) return problem;
+    return { problem, unconfirmed: 'GitHub reports it unmerged although it accepted the merge' };
+  } catch (error) {
+    return { problem, unconfirmed: `GitHub could not confirm it (${message(error)})` };
+  }
 }
 
 /**
@@ -537,7 +598,6 @@ function stoppedPartway(
   outcome: QueueOutcome,
 ): void {
   const tested = outcome.runs.find((run) => run.tree === tree && run.verdict.kind === 'passed');
-  const prs = (numbers: readonly number[]) => numbers.map((number) => `#${number}`).join(', ');
   const after = `the landing stopped after ${prs(outcome.landing)} of ${prs(landing.map((entry) => entry.pull.number))}: main's ${main}`;
   outcome.stops.push({
     kind: 'partial',
@@ -553,7 +613,8 @@ function stoppedPartway(
  * pending before it is posted. Every outcome but the tested tree on `previous` withdraws it here,
  * and a withdrawal that fails freezes the queue; `land` withdraws a merged PR's. After a merge
  * error the PR counts as landed only when GitHub reports it merged as main's new head: another
- * commit may have put the same tree onto `previous`.
+ * commit may have put the same tree onto `previous`. When main cannot be read after the merge, the
+ * mark stays for `land`, which records the merge as unverified.
  */
 async function landOne(
   adapter: QueueAdapter,
@@ -562,7 +623,7 @@ async function landOne(
   previous: string,
   proof: Verdict,
   outcome: QueueOutcome,
-): Promise<MainCommit | string> {
+): Promise<MainCommit | Unverified | string> {
   try {
     await adapter.disableAutoMerge(pull);
   } catch (error) {
@@ -593,7 +654,10 @@ async function landOne(
         problem = `GitHub could not confirm #${pull.number} merged${refusal}: ${message(error)}`;
       }
   } catch (error) {
-    problem = `main could not be read after merging #${pull.number}${refusal}: ${message(error)}`;
+    const unread = `main could not be read after merging #${pull.number}${refusal}: ${message(error)}`;
+    const merge = await mergeAfterUnreadMain(adapter, pull, unread, refusal !== '');
+    if (typeof merge !== 'string') return merge;
+    problem = merge;
   }
   await withdrawPending(adapter, mark, outcome);
   return problem;
