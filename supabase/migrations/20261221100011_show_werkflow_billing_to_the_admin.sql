@@ -28,14 +28,20 @@ alter table public.werkflow_invoices
   ) not valid;
 
 -- @destructive: after release 55088f06: the replacement below keeps every argument of this one in place and defaults the three new ones, so that build's calls resolve to it
-drop function public.issue_werkflow_invoice(
+drop function if exists public.issue_werkflow_invoice(
   uuid, text, text, text, text, date, jsonb, text, bigint, bigint, bigint, bigint, bigint, text, text, integer, text
 );
 
 -- Records one issued original. 'issued' when this call wrote it,
--- 'already_issued' when the Stripe invoice has its row already (a replayed or
--- concurrent delivery); the stored row then stays as it is. Refuses an
--- organization that does not exist.
+-- 'already_issued' when the Stripe invoice has its original already (a
+-- replayed or concurrent delivery); the stored row then stays as it is.
+-- Refuses an organization that does not exist. Where the refund Storno
+-- (werk-flow/werkflow-planning#491) has added stripe_credit_note_id, a Stripe
+-- invoice id is unique for the original alone, so the conflict target is that
+-- partial index; before it, the id's unique constraint.
+do $migration$
+begin
+  execute format($function$
 create function public.issue_werkflow_invoice(
   p_organization_id uuid,
   p_stripe_invoice_id text,
@@ -78,11 +84,24 @@ begin
     p_file_key, p_file_sha256, p_file_size_bytes, p_rules_release, coalesce(p_line_names, '{}'),
     p_service_start, p_service_end
   )
-  on conflict (stripe_invoice_id) do nothing;
+  on conflict (stripe_invoice_id) %s do nothing;
 
   return case when found then 'issued' else 'already_issued' end;
 end;
-$$;
+$$
+$function$,
+    case
+      when exists (
+        select 1 from pg_attribute
+        where attrelid = 'public.werkflow_invoices'::regclass
+          and attname = 'stripe_credit_note_id'
+          and not attisdropped
+      ) then 'where stripe_credit_note_id is null'
+      else ''
+    end
+  );
+end;
+$migration$;
 
 revoke all on function public.issue_werkflow_invoice(
   uuid, text, text, text, text, date, jsonb, text, bigint, bigint, bigint, bigint, bigint, text, text, integer, text,
