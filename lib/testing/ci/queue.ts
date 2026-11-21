@@ -282,9 +282,17 @@ async function bisect(
     }
     const pulls = prefix.map((entry) => entry.pull);
     const verdict = await adapter.integrationRun({ tip, base, pulls });
+    // A PR that repeats changes already in the batch keeps the tree; a second run of a tree that
+    // answers otherwise than its first is a flake and proves neither answer.
+    const contradicted = outcome.runs.find(
+      (run) => run.tree === tip.tree && run.verdict.kind !== verdict.kind,
+    );
     outcome.runs.push({ prs: pulls.map((pull) => pull.number), tree: tip.tree, verdict });
-    if (verdict.kind === 'inconclusive') {
-      outcome.stops.push({ kind: 'inconclusive', detail: `${verdict.runUrl}: ${verdict.detail}` });
+    if (verdict.kind === 'inconclusive' || contradicted) {
+      const detail = contradicted
+        ? `tree ${tip.tree} ${contradicted.verdict.kind} in ${contradicted.verdict.runUrl} but ${verdict.kind} in ${verdict.runUrl}`
+        : `${verdict.runUrl}: ${verdict.detail}`;
+      outcome.stops.push({ kind: 'inconclusive', detail });
       break;
     }
     verdicts.set(length, verdict);

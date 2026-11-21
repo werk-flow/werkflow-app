@@ -50,7 +50,8 @@ type Fake = {
  * PR of `breaks`, and `answer` can override a run's verdict. `afterRun` changes the world after
  * the n-th run (1-based). GitHub's merge squashes onto the current main, `mergeTree` may change
  * the tree it builds, and `refuse` makes the merge throw without merging. `beforeLand` changes the
- * world before the n-th merge. The ledger proves main's tree unless `unprovenMain`.
+ * world before the n-th merge. The ledger proves main's tree unless `unprovenMain`. A PR of
+ * `unchanged` holds only changes already in the batch, so its squash keeps the tree.
  */
 function fakeWorld(
   pulls: QueuedPull[],
@@ -62,6 +63,7 @@ function fakeWorld(
     refuse?: number;
     beforeLand?: (merge: number, world: { pulls: QueuedPull[]; pushMain: (tree: string) => void }) => void;
     unprovenMain?: boolean;
+    unchanged?: readonly number[];
   } = {},
 ): Fake {
   const commits = new Map<string, { parents: string[]; tree: string }>([
@@ -91,7 +93,8 @@ function fakeWorld(
     pulls: async () => open,
     squash: async (parent, entry) => {
       if (entry.title.includes('conflict')) return undefined;
-      const tree = `${commits.get(parent)?.tree}+${entry.number}`;
+      const before = `${commits.get(parent)?.tree}`;
+      const tree = options.unchanged?.includes(entry.number) ? before : `${before}+${entry.number}`;
       return { commit: commit(parent, tree), tree };
     },
     integrationRun: async ({ tip, pulls: prefix }) => {
@@ -237,6 +240,24 @@ test('a run without a verdict (a cancelled worker, a missing result) lands nothi
 test('a bisection run without a verdict stops the search, names no PR and lands nothing, not even a proved prefix', async () => {
   const world = fakeWorld([pull(1), pull(2), pull(3), pull(4)], {
     answer: (prs) => (prs.length === 4 ? 'failed' : prs.length === 2 ? 'passed' : 'inconclusive'),
+  });
+  const outcome = await runQueueTick(world.adapter, LIVE);
+  expect(world.tested).toEqual([
+    [1, 2, 3, 4],
+    [1, 2],
+    [1, 2, 3],
+  ]);
+  expect(outcome.culprit).toBe(null);
+  expect(world.rejected).toEqual([]);
+  expect(world.landed).toEqual([]);
+  expect(needsAttention(outcome)).toBe(true);
+});
+
+test('a tree that passed and failed in one tick is no verdict: nobody is named and its pass lands nothing', async () => {
+  // #3 repeats #2's change, so [1, 2] and [1, 2, 3] are one tree, and its second run contradicts its first.
+  const world = fakeWorld([pull(1), pull(2), pull(3), pull(4)], {
+    unchanged: [3],
+    answer: (prs) => (prs.length === 2 ? 'passed' : 'failed'),
   });
   const outcome = await runQueueTick(world.adapter, LIVE);
   expect(world.tested).toEqual([

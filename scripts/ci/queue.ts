@@ -52,7 +52,9 @@ if (only && (!values['dry-run'] || only.some((number) => !Number.isInteger(numbe
 
 const workDir = resolve(values['work-dir']);
 mkdirSync(workDir, { recursive: true });
-// One tick at a time: a second tick would test against a main the first is about to move.
+// One tick at a time: a second tick would test against a main the first is about to move. The lock
+// guards this work directory only, so one queue loop runs per repository; a tick that lands onto a
+// main another moved stops after that merge (landing-failed).
 const lock = join(workDir, 'queue.lock');
 let held: number;
 try {
