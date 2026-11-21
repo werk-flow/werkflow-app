@@ -99,7 +99,8 @@ type StripeBillingDispute = {
 };
 
 type StripeGatewayResult =
-  { ok: true; gateway: StripeGateway } | { ok: false; code: StripeConfigurationFailure };
+  | { ok: true; gateway: StripeGateway }
+  | { ok: false; code: StripeConfigurationFailure };
 
 type StripeEnvironment = Readonly<Record<string, string | undefined>>;
 
