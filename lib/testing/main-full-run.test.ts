@@ -168,6 +168,15 @@ test('a cancelled or timed-out full run tested nothing, so an older one decides'
   }
 });
 
+test('an older full run still running reaches the rule beside the newest ended one', () => {
+  const [, second, , fourth] = writeCommits(5);
+  writeFullRun(second ?? '', hoursBefore(NOON, 4), 'success');
+  writeFullRun(fourth ?? '', hoursBefore(NOON, 1), 'running');
+  expect(decide()).toBe(
+    `scripts/ci/full-run.ts due --run ${second},${epoch(hoursBefore(NOON, 4))},ended --run ${fourth},${epoch(hoursBefore(NOON, 1))},running`,
+  );
+});
+
 test("main without a full run on its last 100 commits, or with only another app's, passes none", () => {
   const [head] = writeCommits(100);
   writeFullRun(head ?? '', hoursBefore(NOON, 1), 'success', 'some-app');

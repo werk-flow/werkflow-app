@@ -6,11 +6,12 @@
 # A full run is ci.yml called from a job named `Full run` (nightly.yml, release.yml and
 # main-full-run.yml). Its jobs show on their commit as the check runs `Full run / …`.
 #
-# `decide` finds the newest full run on main's last commits and asks the repository's rule,
-# scripts/ci/full-run.ts (lib/testing/ci/full-run.ts), which writes run=true|false and reason to
-# $GITHUB_OUTPUT: at once after a tooling change, otherwise in a daytime slot every 3 hours, and
-# never while a full run runs, for a commit that has one, or when only documentation landed. It
-# needs a checkout of GITHUB_SHA with its history and the installed dependencies.
+# `decide` finds the newest full run on main's last commits, and any older one still running, and
+# asks the repository's rule, scripts/ci/full-run.ts (lib/testing/ci/full-run.ts), which writes
+# run=true|false and reason to $GITHUB_OUTPUT: at once after a tooling change, otherwise in a
+# daytime slot every 3 hours, and never while a full run runs, for a commit that has one, or when
+# only documentation landed. It needs a checkout of GITHUB_SHA with its history and the installed
+# dependencies.
 # `context` prints the alert's detail: the groups that this run's
 # failed jobs report, and the commits since the newest green full run.
 # Needs GH_TOKEN, GITHUB_REPOSITORY and GITHUB_SHA; `context` also GITHUB_RUN_ID and GITHUB_SERVER_URL.
@@ -45,16 +46,17 @@ passed() {
 }
 
 decide() {
-  local list commit state="" started conclusion decision run=()
+  local list commit state="" started conclusion decision run=() newest=""
   # A failed request fails the decision: a missing check run could be the newest full run.
   list="$(commits)"
-  # A cancelled or timed-out full run tested nothing, so an older one decides.
+  # A cancelled or timed-out full run tested nothing, so an older one decides. Past the newest
+  # ended one, a full run still running on an older commit holds the next back too.
   while read -r commit _; do
     state="$(full_run "$commit")"
     read -r started conclusion <<< "${state:-0 none}"
     case "$conclusion" in
-      running) run=(--run "${commit},${started},running") && break ;;
-      success | failure) run=(--run "${commit},${started},ended") && break ;;
+      running) run+=(--run "${commit},${started},running") && break ;;
+      success | failure) test -n "$newest" || { newest="$commit" && run+=(--run "${commit},${started},ended"); } ;;
     esac
   done <<< "$list"
   decision="$(bun scripts/ci/full-run.ts due "${run[@]}")"

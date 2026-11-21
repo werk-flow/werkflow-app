@@ -54,7 +54,7 @@ export type CiPlan = {
  * (dependency-change.ts).
  */
 const EVERY_GROUP_INPUTS =
-  /^(next\.config\.ts|postcss\.config\.mjs|tsconfig\.json|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|patches\/.+)$/;
+  /^(next\.config\.ts|postcss\.config\.mjs|tsconfig\.json|playwright[^/]*\.config\.ts|supabase\/config\.toml|patches\/.+)$/;
 /**
  * The CI workflow, its job bodies and logic (scripts/ci/, lib/testing/ci/, without their tests) and
  * Bun's test configuration. With `runnerModules` they are the tooling inputs: a change to one runs
@@ -473,14 +473,24 @@ function shardsOf(groupIds: readonly string[], durations: GroupDurations): CiSha
   ];
   const target = { visual: wanted(visual), rest: wanted(rest) };
   if (target.visual + target.rest <= MAX_SHARDS) return numbered(packed(target.visual, target.rest));
+  // Every feasible split of the slots; the shortest longest shard wins, then the fewest shards.
   const longest = (shards: string[][]): number =>
     Math.max(...shards.map((ids) => ids.reduce((sum, id) => sum + seconds(id), 0)));
-  const lowest = visual.length ? 1 : 0;
-  const highest = Math.min(target.visual, MAX_SHARDS - (rest.length ? 1 : 0));
-  const splits = Array.from({ length: highest - lowest + 1 }, (_, index) =>
-    packed(lowest + index, Math.min(target.rest, MAX_SHARDS - lowest - index)),
+  const least = { visual: visual.length ? 1 : 0, rest: rest.length ? 1 : 0 };
+  const range = (from: number, to: number): number[] =>
+    Array.from({ length: Math.max(0, to - from + 1) }, (_, index) => from + index);
+  const splits = range(least.visual, Math.min(visual.length, MAX_SHARDS - least.rest)).flatMap(
+    (visualCount) =>
+      range(least.rest, Math.min(rest.length, MAX_SHARDS - visualCount)).map((restCount) =>
+        packed(visualCount, restCount),
+      ),
   );
-  return numbered(splits.reduce((best, split) => (longest(split) < longest(best) ? split : best)));
+  return numbered(
+    splits.reduce((best, split) => {
+      const [left, right] = [longest(split), longest(best)];
+      return left < right || (left === right && split.length < best.length) ? split : best;
+    }),
+  );
 }
 
 /** The selected component areas in at most `COMPONENT_SHARDS` jobs, packed like the browser shards. */
@@ -499,15 +509,17 @@ const numbered = (shards: readonly string[][]): CiShard[] =>
   shards.map((groups, index) => ({ shard: index + 1, groups: groups.join(',') }));
 
 /**
- * The planner's log lines. Every reason and file name prints as one JSON string, so a newline or a
+ * The planner's log lines. Every group id, reason and file name prints as one JSON string, so a newline or a
  * leading `::` in a changed path can neither start a log line nor a workflow command.
  */
 export function planLog(plan: CiPlan, fastReasons: Readonly<Record<string, string>>): string[] {
   return [
     `[ci-plan] ${plan.fullReason ? `Full run: ${JSON.stringify(plan.fullReason)}` : plan.tooling.browser ? `Tooling sample: ${JSON.stringify(plan.tooling.browser)}` : 'Selection by diff'}; ${plan.browser.length} browser groups in ${plan.shards.length} shards.`,
-    ...plan.browser.map((entry) => `  ${entry.id} | ${JSON.stringify(entry.reason)}`),
-    ...plan.shards.map((shard) => `  shard ${shard.shard}: ${shard.groups}`),
+    ...plan.browser.map((entry) => `  ${JSON.stringify(entry.id)} | ${JSON.stringify(entry.reason)}`),
+    ...plan.shards.map((shard) => `  shard ${shard.shard}: ${JSON.stringify(shard.groups)}`),
     `[ci-plan] Fast tier: ${Object.keys(fastReasons).length} groups.`,
-    ...Object.entries(fastReasons).map(([id, reason]) => `  ${id} | ${JSON.stringify(reason)}`),
+    ...Object.entries(fastReasons).map(
+      ([id, reason]) => `  ${JSON.stringify(id)} | ${JSON.stringify(reason)}`,
+    ),
   ];
 }

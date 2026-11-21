@@ -101,6 +101,8 @@ test('an unreadable diff and an every-group input run every browser group except
     ['tsconfig.json', {}],
     ['playwright.config.ts', {}],
     ['playwright.visual.config.ts', {}],
+    ['playwright-ci.config.ts', {}],
+    ['playwright.ci.smoke.config.ts', {}],
     ['supabase/config.toml', {}],
     ['patches/@supabase%2Fssr@0.7.0.patch', {}],
     ['package.json', { 'package.json': runtime }],
@@ -528,6 +530,26 @@ test('a full run of the registered groups fills the job budget by their recorded
     expect(seconds(ids)).toBeLessThanOrEqual(seconds(others.flat()) / others.length + longest);
 });
 
+test('a capped plan takes the split of the shards whose longest shard is shortest, among every feasible split', () => {
+  const visual = Array.from({ length: 5 }, (_, index) =>
+    group(`audit:visual:set-${index}`, `tests/audit/visual/set-${index}.spec.ts`, ['*']),
+  );
+  const others = Array.from({ length: 9 }, (_, index) =>
+    group(`audit:other:${index}`, `tests/audit/other/${index}.spec.ts`, ['*']),
+  );
+  const recorded: GroupDurations = {
+    source: 'test',
+    defaultSeconds: 450,
+    groups: Object.fromEntries(visual.map((entry) => [entry.id, 700])),
+  };
+  const { shards } = planFor(undefined, { groups: [...visual, ...others], durations: recorded });
+  expect(shards).toHaveLength(MAX_SHARDS);
+  const load = (ids: string): number =>
+    ids.split(',').reduce((sum, id) => sum + (recorded.groups[id] ?? recorded.defaultSeconds), 0);
+  // Five visual shards of 700 s and three of 1,350 s beat four and four (1,400 s).
+  expect(Math.max(...shards.map((shard) => load(shard.groups)))).toBe(1350);
+});
+
 test('shards hold every selected group once and never exceed the job budget', () => {
   const many = Array.from({ length: 100 }, (_, index) =>
     group(`audit:many:${index}`, `tests/audit/many/${index}.spec.ts`, ['*']),
@@ -659,11 +681,11 @@ test('the planner log prints every reason and file name as one JSON string, so a
   const lines = planLog(
     {
       fullReason: `Tooling input changed: ${forged}`,
-      browser: [{ id: 'golden:gg-00', reason: `own test (${forged})` }],
-      shards: [{ shard: 1, groups: 'golden:gg-00' }],
+      browser: [{ id: `golden:${forged}`, reason: `own test (${forged})` }],
+      shards: [{ shard: 1, groups: `golden:${forged}` }],
       tooling: { everyGroup: undefined, browser: undefined, fast: {}, lintOnly: [] },
     },
-    { 'ui:contracts:work': `Tailwind scans ${forged}\r::warning::also` },
+    { [`ui:${forged}`]: `Tailwind scans ${forged}\r::warning::also` },
   );
   expect(lines.length).toBeGreaterThan(0);
   for (const line of lines) {

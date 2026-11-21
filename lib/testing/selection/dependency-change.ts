@@ -48,7 +48,11 @@ type Manifest = z.infer<typeof manifestSchema>;
 
 /** What a move of the root package `name` runs, read from both versions of its manifest. */
 function rootEffect(name: string, manifests: readonly Manifest[]): DependencyChange {
-  if (manifests.some((manifest) => RUNTIME_SECTIONS.some((section) => manifest[section]?.[name])))
+  if (
+    manifests.some((manifest) =>
+      RUNTIME_SECTIONS.some((section) => Object.hasOwn(manifest[section] ?? {}, name)),
+    )
+  )
     return { effect: 'every-group', reason: `runtime dependency ${name}` };
   const aliases = manifests.flatMap((manifest) =>
     SECTIONS.flatMap((section) => /^npm:(@?[^@]+)@/.exec(manifest[section]?.[name] ?? '')?.[1] ?? []),
@@ -116,17 +120,28 @@ export function packageJsonChange(before: string, after: string): DependencyChan
   return withFile('package.json', strongest([...changes, ...roots]));
 }
 
+const requirements = z.record(z.string(), z.unknown()).optional();
+/**
+ * A resolved package: `[name@version, registry, metadata, integrity]`. Another shape could hide what
+ * the package installs, so it makes the lock unreadable.
+ */
+const packageEntrySchema = z
+  .tuple([
+    z.string(),
+    z.unknown(),
+    z.object({
+      dependencies: requirements,
+      optionalDependencies: requirements,
+      peerDependencies: requirements,
+    }),
+  ])
+  .rest(z.unknown());
+type PackageEntry = z.infer<typeof packageEntrySchema>;
 const lockSchema = z.object({
   workspaces: z.record(z.string(), manifestSchema),
-  packages: z.record(z.string(), z.array(z.unknown())),
+  packages: z.record(z.string(), packageEntrySchema),
 });
 type Lock = z.infer<typeof lockSchema>;
-const requirements = z.record(z.string(), z.unknown()).optional();
-const packageMetaSchema = z.object({
-  dependencies: requirements,
-  optionalDependencies: requirements,
-  peerDependencies: requirements,
-});
 
 const fieldsSchema = z.record(z.string(), z.unknown());
 const without = (fields: Record<string, unknown>, keys: readonly string[]) =>
@@ -152,10 +167,12 @@ function readLock(text: string): { lock: Lock; settings: string } | undefined {
   return { lock: parsed.data, settings: JSON.stringify(settings) };
 }
 
+/** The name a lock entry's package resolved to, without its version. */
+const resolvedName = (entry: PackageEntry): string => entry[0].slice(0, entry[0].lastIndexOf('@'));
+
 /** The names a lock entry's package goes by: its key's last segment and its resolved name. */
-function packageNames(key: string, entry: readonly unknown[] | undefined): string[] {
-  const resolved = typeof entry?.[0] === 'string' ? entry[0].slice(0, entry[0].lastIndexOf('@')) : '';
-  return [keySegments(key).at(-1) ?? '', resolved].filter(Boolean);
+function packageNames(key: string, entry: PackageEntry | undefined): string[] {
+  return [keySegments(key).at(-1) ?? '', entry ? resolvedName(entry) : ''].filter(Boolean);
 }
 
 /** A lock key's package names: `@scope/a/b` is `@scope/a` with its nested `b`. */
@@ -180,9 +197,9 @@ function resolveKey(lock: Lock, from: string, name: string): string | undefined 
 }
 
 /**
- * Peers a package declares without loading them: the quarantine report's parser declares `eslint`,
- * yet never imports it (node_modules/@typescript-eslint/parser/dist). Every other peer counts as
- * loaded by its declarer.
+ * Peers a package declares without loading them, by the name it resolved to, never the name it is
+ * installed as: the quarantine report's parser declares `eslint`, yet never imports it
+ * (node_modules/@typescript-eslint/parser/dist). Every other peer counts as loaded by its declarer.
  */
 const UNLOADED_PEERS: Readonly<Record<string, readonly string[]>> = {
   '@typescript-eslint/parser': ['eslint'],
@@ -199,12 +216,13 @@ function rootsByKey(lock: Lock): Map<string, Set<string>> {
       if (seen.has(key)) continue;
       seen.add(key);
       owners.set(key, (owners.get(key) ?? new Set()).add(root));
-      const meta = packageMetaSchema.safeParse(lock.packages[key]?.[2]);
-      const { peerDependencies, ...installed } = meta.success ? meta.data : {};
+      const entry = lock.packages[key];
+      if (!entry) continue;
+      const { peerDependencies, ...installed } = entry[2];
       const names = [
         ...Object.values(installed).flatMap((deps) => Object.keys(deps ?? {})),
         ...Object.keys(peerDependencies ?? {}).filter(
-          (name) => !UNLOADED_PEERS[keySegments(key).at(-1) ?? '']?.includes(name),
+          (name) => !UNLOADED_PEERS[resolvedName(entry)]?.includes(name),
         ),
       ];
       for (const name of names) {

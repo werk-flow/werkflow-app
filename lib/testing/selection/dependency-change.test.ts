@@ -78,6 +78,17 @@ test('a moved package counts by the strongest root package that installs it, nes
     ['minimatch@9.0.0', 'minimatch@9.0.1'],
   ] as const)
     expect(lockfileChange(peerEslint, peerEslint.replace(from, to)).effect).toBe('every-group');
+  // The parser's unloaded eslint peer is exempt by the package it resolves to, never by its key:
+  // another runtime package installed as `@typescript-eslint/parser` loads its eslint peer.
+  const aliasedParser = lock({
+    '@typescript-eslint/parser': 'runtime-lib@1.0.0", "", { "peerDependencies": { "eslint": "^9" } }',
+  }).replace(
+    '"dependencies": { "react": "19.0.0", }',
+    '"dependencies": { "react": "19.0.0", "@typescript-eslint/parser": "npm:runtime-lib@1.0.0", }',
+  );
+  expect(lockfileChange(aliasedParser, aliasedParser.replace('eslint@9.0.0', 'eslint@9.1.0')).effect).toBe(
+    'every-group',
+  );
   // A Playwright package counts by its own name and resolved name, whoever installs it.
   const browserTool = lockfileChange(
     BASE,
@@ -121,6 +132,16 @@ test('a lock that cannot be read, a changed other workspace or an orphan package
     'every-group',
   );
   expect(lockfileChange(BASE, BASE)).toEqual({ effect: 'lint-type', reason: 'bun.lock: no package moved' });
+  // A package entry of a shape the classifier does not know could hide what it installs.
+  for (const entry of [
+    'eslint@9.1.0", "", null',
+    'eslint@9.1.0", "", { "dependencies": null }',
+    'eslint@9.1.0", "", { "dependencies": ["debug"] }',
+  ])
+    expect([entry, moved('eslint', entry)]).toEqual([
+      entry,
+      { effect: 'every-group', reason: 'bun.lock cannot be read' },
+    ]);
 });
 
 test("a root package's range counts by its section, and a package moved into the runtime dependencies runs every group", () => {
@@ -157,6 +178,13 @@ test("a root package's range counts by its section, and a package moved into the
     effect: 'every-group',
     reason: 'package.json: runtime dependency eslint',
   });
+  // A runtime dependency counts by its key, whatever its range says.
+  expect(
+    change({
+      dependencies: { react: '19.0.0', 'left-pad': '' },
+      devDependencies: { eslint: '^9', supertool: '^6' },
+    }),
+  ).toEqual({ effect: 'every-group', reason: 'package.json: runtime dependency left-pad' });
   const scripts = packageJsonChange(
     before,
     before.replace('bun scripts/lint.ts', 'bun scripts/lint.ts --fix'),

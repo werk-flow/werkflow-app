@@ -37,7 +37,7 @@ const berlinClock = (at: Date): string => formatBerlinLocalDateTime(at).slice(11
 
 /**
  * Whether main's head needs a full run now. Requests coalesce: a head that has a full run, or a
- * full run still running, starts none. Nothing untested landed when the changes since the newest
+ * full run still running on one of its commits, starts none. Nothing untested landed when the changes since the newest
  * full run are documentation only. A tooling input that landed (a sample or every group in its
  * plan) starts one at once, by day or night; otherwise a daytime slot starts one at most every
  * 3 hours. A diff that cannot be read counts as a tooling change.
@@ -55,10 +55,11 @@ export function fullRunDue(input: {
     return { run: true, reason: `No full run on the last ${input.history.length} commits of main.` };
   if (behind === 0) return { run: false, reason: `${commit} already has a full run.` };
   const runs = input.runs.filter((run) => run.commit === commit);
-  if (runs.some((run) => !run.ended))
+  const active = input.runs.find((run) => !run.ended && input.history.includes(run.commit));
+  if (active)
     return {
       run: false,
-      reason: `The full run on ${commit} is still running; a later request takes the newer commits.`,
+      reason: `The full run on ${active.commit} is still running; a later request takes the newer commits.`,
     };
   const landed = input.landedSince(commit);
   if (landed && !landed.files.length)

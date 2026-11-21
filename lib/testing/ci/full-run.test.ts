@@ -44,6 +44,22 @@ test('requests for a commit that has a full run, or while the newest one runs, s
   });
   expect(running.run).toBe(false);
   expect(running.reason).toContain('still running');
+  // A full run still running on an older commit holds the next back too, whatever ended since.
+  const older = decide([
+    ended('c2', hoursBefore(NOON, 4)),
+    { commit: 'c0', startedAt: hoursBefore(NOON, 1), ended: false },
+  ]);
+  expect(older).toEqual({
+    run: false,
+    reason: 'The full run on c0 is still running; a later request takes the newer commits.',
+  });
+  // One on a commit outside main's history is none of main's.
+  expect(
+    decide([
+      ended('c2', hoursBefore(NOON, 4)),
+      { commit: 'x9', startedAt: hoursBefore(NOON, 1), ended: false },
+    ]).run,
+  ).toBe(true);
   expect(decide([]).reason).toBe('No full run on the last 4 commits of main.');
   expect(decide([]).run).toBe(true);
 });
