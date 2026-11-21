@@ -37,9 +37,12 @@ jobs:
         run: |
           # A title or body edit starts a ci.yml run without a Check job (ci.yml, `on`): the newest run
           # with one holds the Fast job whose rerun reports Check again.
+          # Standalone assignments, so a failed API call fails the step instead of reading as no run.
+          runs="$(gh api --paginate "repos/$GH_REPO/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$SHA&per_page=100" --jq '.workflow_runs[].id')"
           run=""
-          for candidate in $(gh api --paginate "repos/$GH_REPO/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$SHA&per_page=100" --jq '.workflow_runs[].id'); do
-            if test "$(gh run view "$candidate" --json jobs --jq 'any(.jobs[]; .name == "Check")')" = true; then
+          for candidate in $runs; do
+            checked="$(gh run view "$candidate" --json jobs --jq 'any(.jobs[]; .name == "Check")')"
+            if test "$checked" = true; then
               run="$candidate"
               break
             fi

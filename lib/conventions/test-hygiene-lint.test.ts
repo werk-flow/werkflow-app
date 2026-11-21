@@ -147,12 +147,13 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       'const { tookMs } = await page.evaluate(() => ({ tookMs: performance.now() - window.started, rows: 2 }));',
       'expect(tookMs).toBeLessThan(250);',
       'let bound = Date.now();',
-      'bound = 250;',
+      'bound = 0;',
       'expect(performance.now() - start).toBeLessThan(bound);',
+      'expect(performance.now() - start).toBeLessThan(isCI ? 250 : Date.now());',
     ].join('\n');
     for (const file of [CONTRACT, SPEC, SUPPORT, UNIT])
       expect(await reported('no-fixed-time-limit', source, file), file).toEqual([
-        4, 5, 6, 7, 8, 9, 10, 11, 13, 16, 17, 19, 22,
+        4, 5, 6, 7, 8, 9, 10, 11, 13, 16, 17, 19, 22, 23,
       ]);
   });
 
@@ -170,6 +171,9 @@ describe('test-hygiene/no-fixed-time-limit', () => {
       'await going.then(() => { returnedAt = Date.now(); });',
       'expect(returnedAt).toBeGreaterThanOrEqual(after);',
       'expect(rows.length).toBeLessThan(250);',
+      'let counted = { rows: 0 };',
+      'counted = { rows: counted.rows + 1 };',
+      'expect(counted.rows).toBeLessThan(100);',
       "test('clocked', async ({ page }) => {",
       '  await page.clock.install();',
       '  const age = await page.evaluate(() => Date.now() - Number(localStorage.getItem("at")));',

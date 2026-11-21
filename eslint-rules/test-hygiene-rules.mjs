@@ -445,6 +445,14 @@ function inBrowserCallback(node) {
   return false;
 }
 
+/** An initial value that only marks "not yet": `0`, `null`, `undefined`. */
+function placeholder(value) {
+  return (
+    (value.type === 'Literal' && (value.value === 0 || value.value === null)) ||
+    (value.type === 'Identifier' && value.name === 'undefined')
+  );
+}
+
 /** An expression without the wrappers that keep its value: `await`, `!`, `as`, `?.`. */
 function unwrapped(node) {
   let current = node;
@@ -632,6 +640,10 @@ const noFixedTimeLimitRule = {
           if (writing.has(variable)) return writing.get(variable) ?? [];
           writing.set(variable, undefined);
           const values = (assigned.get(variable) ?? []).flatMap(({ identifier, writeExpr }) => {
+            // An initial placeholder (`let returnedAt = 0`, `null`) is no value the variable holds.
+            const initial =
+              identifier.parent?.type === 'VariableDeclarator' && identifier.parent.init === writeExpr;
+            if (initial && placeholder(writeExpr)) return [];
             const property = identifier.parent;
             const key =
               property?.type === 'Property' &&
@@ -650,9 +662,12 @@ const noFixedTimeLimitRule = {
         const reads = (root, read, names) => {
           let found = false;
           const stack = [root];
+          // A property read can lead back to a node already read: `sample = { rows: sample.rows + 1 }`.
+          const visited = new Set();
           while (stack.length && !found) {
             const node = stack.pop();
-            if (!node || typeof node.type !== 'string') continue;
+            if (!node || typeof node.type !== 'string' || visited.has(node)) continue;
+            visited.add(node);
             if (read(node) || (node.type === 'Identifier' && names.has(variableOf.get(node)))) found = true;
             // `sample.rowCount` reads only what the literal behind `sample` puts there, when it says.
             const held =
@@ -677,18 +692,19 @@ const noFixedTimeLimitRule = {
         const readsTime = (root) =>
           reads(root, (node) => isDurationClockRead(node) || isInstant(node), instants);
         // To a fixed point: `const now = Date.now(); const elapsed = now - start` reads the clock twice removed.
+        /** Whether every value an expression can take reads time: each branch of `a ? b : c` and `a ?? b`. */
+        const alwaysTime = (node) => {
+          const value = unwrapped(node);
+          if (value.type === 'ConditionalExpression')
+            return alwaysTime(value.consequent) && alwaysTime(value.alternate);
+          if (value.type === 'LogicalExpression') return alwaysTime(value.left) && alwaysTime(value.right);
+          return readsTime(value);
+        };
         // A variable holds a duration when any write reads a clock, but counts as a time bound only
-        // when every write does: `let limit = Date.now(); limit = 250` is a fixed limit. A
-        // placeholder (`let returnedAt = 0`, `null`) is no value.
-        const placeholder = (value) =>
-          (value.type === 'Literal' && (value.value === 0 || value.value === null)) ||
-          (value.type === 'Identifier' && value.name === 'undefined');
+        // when every write does: `let limit = Date.now(); limit = 250` is a fixed limit.
         const holds = {
           clocked: (values) => values.some(readsClock),
-          instants: (values) => {
-            const real = values.filter((value) => !placeholder(value));
-            return real.length > 0 && real.every(readsTime);
-          },
+          instants: (values) => values.length > 0 && values.every(alwaysTime),
         };
         for (const [names, held] of [
           [clocked, holds.clocked],
@@ -728,7 +744,7 @@ const noFixedTimeLimitRule = {
         // other two orders set a lower limit, which a slower machine always meets.
         for (const { node, limited, bound } of comparisons)
           if (
-            (readsClock(limited) && (!readsTime(bound) || offsetOf(bound) === '+')) ||
+            (readsClock(limited) && (!alwaysTime(bound) || offsetOf(bound) === '+')) ||
             (offsetOf(limited) === '-' && readsClock(bound))
           )
             context.report({ node, messageId: 'limit' });
