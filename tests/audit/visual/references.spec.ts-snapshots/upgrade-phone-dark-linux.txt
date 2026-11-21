@@ -1,13 +1,7 @@
-WerkFlow Pro
-Erstelle deine Organisation und starte durch
-Pro Plan
-Alles was du brauchst, um dein Team zu verwalten
-Unbegrenzte Organisationen
-Unbegrenzte Mitarbeiter
-Vollständige Admin-Kontrolle
-E-Mail-Einladungen
-Prioritäts-Support
-Entwicklungsmodus
-Klicke unten, um die Zahlung zu simulieren
-Zahlung simulieren / Fortfahren
-Dies ist eine Entwicklungsumgebung. Keine echte Zahlung erforderlich.
+WerkFlow abonnieren
+Schließ das Abo ab, danach legst du deine Organisation an.
+Monatliches Abo
+Du zahlst sicher über Stripe.
+Per SEPA-Lastschrift oder Karte
+Den Preis siehst du vor dem Abschluss
+Weiter zur Zahlung
