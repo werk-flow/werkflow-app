@@ -88,6 +88,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   company_document_profile_events: 'Firmenangaben_Ereignisse',
   company_document_profiles: 'Firmenangaben',
   document_audit_events: 'Dokumente_Protokoll',
+  document_deliveries: 'Dokumente_Versand',
+  document_delivery_events: 'Dokumente_Versand_Verlauf',
   document_folders: 'Dokumente_Ordner',
   document_links: 'Dokumente_Verknüpfungen',
   document_versions: 'Dokumente_Versionen',

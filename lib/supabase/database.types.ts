@@ -1303,6 +1303,161 @@ export type Database = {
           },
         ];
       };
+      document_deliveries: {
+        Row: {
+          attachment_content_hash: string;
+          attempt_key: string;
+          attempts: number;
+          channel: string;
+          created_at: string;
+          created_by: string | null;
+          document_id: string;
+          email_subject: string | null;
+          failure_code: string | null;
+          id: string;
+          invoice_id: string | null;
+          message_text: string | null;
+          note: string;
+          organization_id: string;
+          provider_message_id: string | null;
+          recipient_email: string | null;
+          reply_to: string | null;
+          sender_name: string | null;
+          sent_at: string | null;
+          state: string;
+          subject_kind: string;
+          updated_at: string;
+        };
+        Insert: {
+          attachment_content_hash: string;
+          attempt_key: string;
+          attempts?: number;
+          channel: string;
+          created_at?: string;
+          created_by?: string | null;
+          document_id: string;
+          email_subject?: string | null;
+          failure_code?: string | null;
+          id?: string;
+          invoice_id?: string | null;
+          message_text?: string | null;
+          note?: string;
+          organization_id: string;
+          provider_message_id?: string | null;
+          recipient_email?: string | null;
+          reply_to?: string | null;
+          sender_name?: string | null;
+          sent_at?: string | null;
+          state: string;
+          subject_kind: string;
+          updated_at?: string;
+        };
+        Update: {
+          attachment_content_hash?: string;
+          attempt_key?: string;
+          attempts?: number;
+          channel?: string;
+          created_at?: string;
+          created_by?: string | null;
+          document_id?: string;
+          email_subject?: string | null;
+          failure_code?: string | null;
+          id?: string;
+          invoice_id?: string | null;
+          message_text?: string | null;
+          note?: string;
+          organization_id?: string;
+          provider_message_id?: string | null;
+          recipient_email?: string | null;
+          reply_to?: string | null;
+          sender_name?: string | null;
+          sent_at?: string | null;
+          state?: string;
+          subject_kind?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_deliveries_document_fk";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_document_fk";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_invoice_fk";
+            columns: ["invoice_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_deliveries_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      document_delivery_events: {
+        Row: {
+          actor_id: string | null;
+          attempt: number;
+          created_at: string;
+          delivery_id: string;
+          event_type: string;
+          failure_code: string | null;
+          id: string;
+          organization_id: string;
+          state: string;
+        };
+        Insert: {
+          actor_id?: string | null;
+          attempt: number;
+          created_at?: string;
+          delivery_id: string;
+          event_type: string;
+          failure_code?: string | null;
+          id?: string;
+          organization_id: string;
+          state: string;
+        };
+        Update: {
+          actor_id?: string | null;
+          attempt?: number;
+          created_at?: string;
+          delivery_id?: string;
+          event_type?: string;
+          failure_code?: string | null;
+          id?: string;
+          organization_id?: string;
+          state?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "document_delivery_events_delivery_fk";
+            columns: ["delivery_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "document_deliveries";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_delivery_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       document_folders: {
         Row: {
           created_at: string;
@@ -19008,6 +19163,15 @@ export type Database = {
             };
             Returns: Json;
           };
+      list_document_deliveries: {
+        Args: {
+          p_limit: number;
+          p_organization_id: string;
+          p_subject_id: string;
+          p_subject_kind: string;
+        };
+        Returns: Json;
+      };
       list_document_page: {
         Args: { p_filters: Json; p_organization_id: string };
         Returns: Json;
@@ -19772,6 +19936,18 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      record_manual_delivery: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_document_id: string;
+          p_note: string;
+          p_organization_id: string;
+          p_subject_id: string;
+          p_subject_kind: string;
+        };
+        Returns: string;
+      };
       record_organization_export_download: {
         Args: {
           p_actor_id: string;
@@ -20394,6 +20570,22 @@ export type Database = {
         };
         Returns: undefined;
       };
+      request_document_delivery: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_document_id: string;
+          p_email_subject: string;
+          p_message_text: string;
+          p_organization_id: string;
+          p_recipient_email: string;
+          p_reply_to: string;
+          p_sender_name: string;
+          p_subject_id: string;
+          p_subject_kind: string;
+        };
+        Returns: Json;
+      };
       reschedule_planning_series: {
         Args: {
           p_actor_id: string;
@@ -20460,6 +20652,14 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: undefined;
+      };
+      retry_document_delivery: {
+        Args: {
+          p_actor_id: string;
+          p_delivery_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
       };
       return_work_handover_for_correction: {
         Args: {
@@ -21416,6 +21616,18 @@ export type Database = {
           p_template_id: string;
         };
         Returns: undefined;
+      };
+      settle_document_delivery: {
+        Args: {
+          p_actor_id: string;
+          p_attempt: number;
+          p_delivery_id: string;
+          p_failure_code?: string;
+          p_organization_id: string;
+          p_outcome: string;
+          p_provider_message_id?: string;
+        };
+        Returns: boolean;
       };
       settle_werkflow_billing_mail: {
         Args: {

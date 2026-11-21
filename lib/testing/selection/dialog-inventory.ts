@@ -63,6 +63,12 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-delete' }],
     },
+  'components/rechnungen/invoice-delivery-dialogs.tsx#SendInvoiceEmailDialog|Rechnung per E-Mail senden': {
+    audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-send' }],
+  },
+  'components/rechnungen/invoice-delivery-dialogs.tsx#ManualDeliveryDialog|Als manuell versendet markieren': {
+    audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-sent-manually' }],
+  },
   'components/rechnungen/invoice-issue.tsx#IssueInvoiceButton|Rechnung ausstellen?': {
     audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-issue' }],
   },

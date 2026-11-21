@@ -1,10 +1,12 @@
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 
+import { InvoiceDeliverySection } from '@/components/rechnungen/invoice-delivery-section';
 import { InvoiceEditor } from '@/components/rechnungen/invoice-editor';
 import { DeleteInvoiceDraftButton, InvoiceFacts } from '@/components/rechnungen/invoice-header';
 import { IssuedInvoiceOriginal } from '@/components/rechnungen/invoice-issue';
 import { InvoiceStatusBadge } from '@/components/rechnungen/invoices-list';
-import { InvoicePageSkeleton } from '@/components/rechnungen/invoices-skeleton';
+import { InvoiceDeliverySkeleton, InvoicePageSkeleton } from '@/components/rechnungen/invoices-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -19,7 +21,7 @@ const BREADCRUMBS = [{ label: 'Rechnungen', href: '/rechnungen' }];
 
 /** One invoice on its own route, so two drafts open in two tabs. */
 export default async function InvoicePage({ params }: { params: Promise<{ invoiceId: string }> }) {
-  const { membership } = await resolvePageMembership();
+  const { user, membership } = await resolvePageMembership();
   if (!membership || !isManagerRole(membership.role)) redirect('/dashboard');
   const invoiceId = uuidSchema.safeParse((await params).invoiceId);
   const invoice = !invoiceId.success
@@ -61,6 +63,14 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
           <PageBody>
             <div className="space-y-8">
               {invoice.status !== 'entwurf' && <IssuedInvoiceOriginal invoice={invoice} />}
+              {invoice.status === 'ausgestellt' && invoice.original?.filed && (
+                <Suspense fallback={<InvoiceDeliverySkeleton />}>
+                  <InvoiceDeliverySection
+                    caller={{ userId: user.id, orgId: membership.orgId, isManagerOrAbove: true }}
+                    invoice={invoice}
+                  />
+                </Suspense>
+              )}
               <InvoiceFacts invoice={invoice} />
               <InvoiceEditor key={invoice.id} invoice={invoice} />
             </div>

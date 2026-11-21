@@ -66,7 +66,7 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - **Organization cookie.** A hint: the server accepts it only for a current member and sets it for no one else.
 - **Joining.** Join codes are cryptographically random. A code creates a join request, never a membership; only an Admin or Büro approval in that organization creates it, in one database function. A signed-in user gets limited join attempts per hour.
 - **Cross-organization writes.** A write that names another record checks that it belongs to the caller's organization and, where it applies, to the same person.
-- **Abuse limits.** Invite mail, invite redemption, join codes, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
+- **Abuse limits.** Invite mail, document mail, invite redemption, join codes, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
 
 ### Database
 
@@ -92,7 +92,7 @@ Buckets are private. Server code authorizes the target and signs a short-lived U
 
 ### Mail and providers
 
-The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold only fixed error codes and status numbers. `lib/usage-statistics/capture.ts` alone sends PostHog personless server events for organizations in `POSTHOG_ORGANIZATION_IDS`; its test fails on other properties or senders.
+The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold only fixed error codes and status numbers. Business documents go through `lib/delivery/document-delivery.ts`: recorded first, the attachment hash-checked. `lib/usage-statistics/capture.ts` alone sends PostHog personless server events for organizations in `POSTHOG_ORGANIZATION_IDS`; its test fails on other properties or senders.
 
 ### Browser
 
@@ -167,7 +167,7 @@ List each owner-accepted residual exposure until it closes.
 | --- | --- | --- |
 | Customer contacts, sites, work records, signatures | Organization operations, restricted by role and assignment. | Keep business history and the explicit trash and version behavior. The owner sets contractual retention and deletion rules before client data is imported. Add no guessed automatic deletion period. |
 | Personnel, sickness, time, payroll and organization exports | Employment operations, through personnel access classes and releases. An export is a copy outside the app's access control. | The owner decides lawful purpose, recipients and retention. Ending access does not authorize deleting employment or time history. Export archives: [due for deletion](document-storage-and-access.md#storage-cleanup) 7 days after their build began. |
-| Mail | Invitations and code delivery. No business documents. | The provider's mail metadata has its own lifecycle. |
+| Mail | Invitations, codes and the office's business documents (owner, 2026-11-15). | The provider's mail metadata has its own lifecycle. A delivery stays with its document. |
 | Logs, traces, test artifacts | Diagnosis and test evidence. Fixtures are synthetic. | Limit access and remove secrets from exported evidence. Ignored files are neither encrypted nor purged automatically. |
 | Backups and retained file versions | Recovery. Database backups hold no file bytes. | [The runbook](recovery-and-incidents.md) records coverage and accepted loss. Deleting a live record does not erase a backup. |
 

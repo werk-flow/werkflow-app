@@ -439,6 +439,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['offers', ['offers.sql', 'offers_concurrency.sql'], ['commercial', 'customers']],
   ['invoice-drafts', ['invoice_drafts.sql'], ['commercial', 'customers']],
   ['invoice-issue', ['invoice_issue.sql', 'invoice_issue_concurrency.sql'], ['commercial', 'documents']],
+  ['document-deliveries', ['document_deliveries.sql'], ['commercial', 'documents']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],

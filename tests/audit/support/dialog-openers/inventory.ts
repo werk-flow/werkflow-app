@@ -33,8 +33,19 @@ import {
 import { worldName } from '../../../../lib/testing/seed-world-plan';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
+import { issuedInvoiceForDelivery } from '../invoice-delivery-fixtures';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];
+
+/** An issued invoice that was never sent, opened unless it is the page already, and its „Versand“ action. */
+async function invoiceDeliveryButton(
+  { page, world }: SurfaceContext,
+  name: 'Per E-Mail senden' | 'Als manuell versendet markieren',
+): Promise<Locator> {
+  const { id } = await issuedInvoiceForDelivery(world, 'fresh');
+  if (!page.url().endsWith(`/rechnungen/${id}`)) await page.goto(`/rechnungen/${id}`);
+  return page.getByRole('main').getByRole('button', { name, exact: true });
+}
 
 function itemCreateLayer(page: Page): Locator {
   return inventoryDialogLayer(page, 'createItem');
@@ -327,6 +338,14 @@ export const COMMERCIAL_OPENERS = {
     trigger: async ({ page }) =>
       page.getByRole('main').getByRole('button', { name: 'Entwurf löschen', exact: true }),
     layer: (page) => page.getByRole('alertdialog', { name: /^Entwurf für „.+“ löschen\?$/ }),
+  },
+  'commercial.invoice-send': {
+    trigger: async (context) => invoiceDeliveryButton(context, 'Per E-Mail senden'),
+    layer: (page) => page.getByRole('dialog', { name: 'Rechnung per E-Mail senden', exact: true }),
+  },
+  'commercial.invoice-sent-manually': {
+    trigger: async (context) => invoiceDeliveryButton(context, 'Als manuell versendet markieren'),
+    layer: (page) => page.getByRole('dialog', { name: 'Als manuell versendet markieren', exact: true }),
   },
   'commercial.invoice-issue': {
     trigger: async ({ page }) =>

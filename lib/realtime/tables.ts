@@ -52,6 +52,7 @@ export const REALTIME_TABLES = [
   'client_site_roles',
   'offers',
   'invoices',
+  'document_deliveries',
   'site_access_proposals',
   'client_requests',
   'client_follow_ups',

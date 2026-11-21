@@ -24,7 +24,9 @@ type RateLimit = { maxAttempts: number; windowSeconds: number };
  *   send window per account stays in force beside this budget);
  * - the simulated payment runs once per account;
  * - the health check runs once a week per deployment, plus manual runs; one
- *   budget per backend, because only holders of its token reach the limiter.
+ *   budget per backend, because only holders of its token reach the limiter;
+ * - document mail: a busy office sends tens of invoices an hour, a property
+ *   manager receives a few a day from one company.
  */
 const RATE_LIMITS = {
   invite_send_per_organization: { maxAttempts: 100, windowSeconds: HOUR_SECONDS },
@@ -36,6 +38,8 @@ const RATE_LIMITS = {
   email_change_code_per_recipient: { maxAttempts: 10, windowSeconds: HOUR_SECONDS },
   subscription_activation_per_user: { maxAttempts: 10, windowSeconds: HOUR_SECONDS },
   health_check_per_backend: { maxAttempts: 30, windowSeconds: HOUR_SECONDS },
+  document_send_per_organization: { maxAttempts: 200, windowSeconds: HOUR_SECONDS },
+  document_send_per_recipient: { maxAttempts: 30, windowSeconds: HOUR_SECONDS },
 } as const satisfies Record<string, RateLimit>;
 
 type RateLimitAction = keyof typeof RATE_LIMITS;
