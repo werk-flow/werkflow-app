@@ -21,6 +21,7 @@ import {
   acknowledgedStart,
   acknowledgeStart,
   claimMainRun,
+  mainStartRecord,
   releaseMainRun,
   RUN_COMMIT_LOCK,
   runCommit,
@@ -28,7 +29,7 @@ import {
   runVariables,
   unitName,
 } from '../../lib/testing/ci/run-commit';
-import { jobUserProblem, processExecutor } from './process-executor';
+import { jobUserProblem, launcherProblem, processExecutor } from './process-executor';
 import { repository } from './run';
 
 // One CI run of one commit off GitHub Actions: Plan on this host, the plan's jobs through the process
@@ -48,6 +49,8 @@ import { repository } from './run';
 //                   (`<this user> ALL=(<job user>) NOPASSWD:SETENV: /usr/bin/env`). Required; refused
 //                   when it is this process's own user or root. It reads the trusted clone and writes
 //                   CI_CACHE_DIR; the run's results directory and workspaces are made writable to it.
+//   CI_SUDO         sudo's absolute path, default /usr/bin/sudo. Refused unless root owns it and every
+//                   folder above it, and no one else may write them.
 //   CI_JOB_GH_TOKEN A read-only GitHub token for the jobs that read GitHub (Plan, Fast), as their
 //                   GH_TOKEN. This process's own GH_TOKEN never reaches a job.
 //   CI_RUN_ATTEMPT  1 for a run's first attempt (also when unset). A rerun keeps CI_RUN_URL and
@@ -57,11 +60,12 @@ import { repository } from './run';
 //                   it and the orchestrator holds Plan's and Check's ledger work. The process executor
 //                   runs Plan and Check's job.ts, which append themselves, so with it the run keeps no
 //                   ledger and runs every job; main runs are still deduplicated by it.
-//   CI_WORK_ROOT    A folder for the jobs' workspaces, the host's stack lock and its claims of main
-//                   runs; one per host, shared by every run-commit there. Required.
-//   CI_START_ACK    A file the run writes durably once it started (after its queued Check, before
-//                   Plan), or once it found another main run of the commit started: the queue clears
-//                   an owed main run only by it.
+//   CI_WORK_ROOT    A folder only this user writes, for the jobs' workspaces, the host's stack lock,
+//                   the folder the token-holding steps run in (trusted/), and the claims and start
+//                   records of main runs (main-runs/); one per host, shared by every run-commit there.
+//                   Required. A main run writes its start record (main-runs/<commit>.started) durably
+//                   once its Plan's body launched, or once Plan ended before it; a second main run of
+//                   the commit and the queue's owed main run read that one record.
 //   CI_PARALLEL     The most jobs at once, default 2.
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.
 //   CI_PUBLISHER    An executable that runs `bun scripts/ci/publish-check.ts <start|finish>` from the
@@ -75,8 +79,8 @@ import { repository } from './run';
 // results directory another run-commit holds, an `origin` or commit git cannot fetch, a queued Check
 // the publisher could not post, or another main run of the commit that claimed it but has not
 // started; a main run then gives up its claim of the commit. 3: nothing ran because another `main`
-// run of the commit started already (the ledger holds its Plan, or its start on this host is
-// acknowledged); CI_START_ACK names that run.
+// run of the commit started already (the ledger holds its Plan, or its start record on this host
+// names it); the start record names that run.
 // Passed jobs' workspaces are removed at the end; a failed job's stays with its log.
 
 /** A stop before the run started: 2, or 3 when another main run of the commit started. */
@@ -124,7 +128,9 @@ async function main(): Promise<0 | 1 | 2 | 3> {
   if (userProblem || !jobUser) return refuse(userProblem ?? 'CI_JOB_USER is required.');
   const ledger = environment.CI_LEDGER && resolve(environment.CI_LEDGER);
   const producer = environment.CI_PRODUCER || null;
-  const startAck = environment.CI_START_ACK && resolve(environment.CI_START_ACK);
+  const sudo = environment.CI_SUDO || '/usr/bin/sudo';
+  const sudoProblem = launcherProblem(sudo);
+  if (sudoProblem) refuse(sudoProblem);
 
   const git = (...args: string[]): string => {
     try {
@@ -145,14 +151,10 @@ async function main(): Promise<0 | 1 | 2 | 3> {
   // started, or died before it, leaves the debt owed.
   const mainRuns = join(workRoot, 'main-runs');
   const claim = join(mainRuns, commit);
-  const startedMark = join(mainRuns, `${commit}.started`);
-  const startedElsewhere = (owner: string): never => {
-    if (startAck) acknowledgeStart(startAck, { commit, runUrl: owner });
-    return refuse(`main's run of ${commit} started already: ${owner}.`, 3);
-  };
+  const startRecord = mainStartRecord(workRoot, commit);
   const claimedElsewhere = (owner: string): never =>
-    acknowledgedStart(startedMark, commit) === owner
-      ? startedElsewhere(owner)
+    acknowledgedStart(startRecord, commit) === owner
+      ? refuse(`main's run of ${commit} started already: ${owner}.`, 3)
       : refuse(
           `main's run of ${commit}: ${owner} claimed it but has not started. Run again once it started, or remove ${claim} once it no longer runs.`,
         );
@@ -170,7 +172,11 @@ async function main(): Promise<0 | 1 | 2 | 3> {
                 receipt.runUrl !== null &&
                 receipt.runUrl !== runUrl,
             );
-      if (earlier?.runUrl) startedElsewhere(earlier.runUrl);
+      // Its Plan in the ledger proves it started: this host's start record of the commit names it.
+      if (earlier?.runUrl) {
+        acknowledgeStart(startRecord, { commit, runUrl: earlier.runUrl });
+        refuse(`main's run of ${commit} started already: ${earlier.runUrl}.`, 3);
+      }
     }
     const owner = existsSync(claim) ? readFileSync(claim, 'utf8') : undefined;
     if (owner !== undefined && owner !== runUrl) claimedElsewhere(owner);
@@ -240,7 +246,7 @@ async function main(): Promise<0 | 1 | 2 | 3> {
   }
   const tree = git('rev-parse', `${commit}^{tree}`);
   // The sudoers rule the jobs need, before anything starts.
-  if (spawnSync('sudo', ['-n', '-u', jobUser, '--', '/usr/bin/env', 'true']).status !== 0)
+  if (spawnSync(sudo, ['-n', '-u', jobUser, '--', '/usr/bin/env', 'true']).status !== 0)
     refuse(`sudo cannot run /usr/bin/env as ${jobUser} without a password; add the sudoers rule first.`);
 
   const runKey = `${createHash('sha256').update(runUrl).digest('hex').slice(0, 16)}-${attempt.data}`;
@@ -254,7 +260,9 @@ async function main(): Promise<0 | 1 | 2 | 3> {
       machineStart,
       replaceStack: environment.CI_DEDICATED_HOST === '1',
       stackLock: join(workRoot, 'stack.lock'),
+      trusted: join(workRoot, 'trusted'),
       jobUser,
+      sudo,
       log,
     });
   const jobs = executor(true);
@@ -314,9 +322,9 @@ async function main(): Promise<0 | 1 | 2 | 3> {
             return ran.status === 0;
           }
         : undefined,
+      // Once Plan's body launched: the one record a second main run and the queue read.
       acknowledgeStart: () => {
-        if (event === 'main') acknowledgeStart(startedMark, { commit, runUrl });
-        if (startAck) acknowledgeStart(startAck, { commit, runUrl });
+        if (event === 'main') acknowledgeStart(startRecord, { commit, runUrl });
         started = true;
       },
       now: () => Date.now(),

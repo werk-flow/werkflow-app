@@ -15,9 +15,9 @@
 //                   CI_RESULTS_DIR, CI_PRS, SHRINK_ONLY_GROWTH_APPROVED. The commit is
 //                   CI_QUEUE_COMMIT; fetch it with
 //                   `git fetch "$CI_QUEUE_REPOSITORY" "refs/ci-queue/runs/$CI_QUEUE_COMMIT"`.
-//                   Its exit code decides nothing: the queue reads the run's results. It posts no
-//                   `Check`: its commit exists only in the queue's clone, and the queue's verdict
-//                   reaches GitHub as `Queue`. Held browser shards start once: scripts/ci/run-commit.ts,
+//                   The queue reads the run's results, and a pass needs the runner's exit 0 too.
+//                   It posts no `Check`: its commit exists only in the queue's clone, and the
+//                   queue's verdict reaches GitHub as `Queue`. Held browser shards start once: scripts/ci/run-commit.ts,
 //                   the repository's runner, starts its own run's held shards, and the scheduler never
 //                   names a run it holds. A hand-written runner waits for them and never starts them;
 //                   the orchestrator's `bun scripts/ci/schedule.ts due --run "$CI_RESULTS_DIR"` does.
@@ -27,13 +27,16 @@
 //                   CI_COMMIT, CI_BASE_SHA the tick's `base`, CI_PRS the landed PRs, and its own
 //                   CI_RUN_URL and CI_RESULTS_DIR in the work directory. The tick waits for it.
 //                   The tick saves the run it owes (main-follow-up.json) before it asks GitHub for
-//                   each merge, and again with the PRs that landed before it reads main, so a tick
-//                   that dies after a merge leaves the run owed. It is paid only once the runner
-//                   acknowledged durably that the run started, or that another main run of that
-//                   commit started (the file CI_START_ACK names); its exit code decides nothing.
-//                   While it is owed, a tick starts it first, before it touches a pending `Queue`
-//                   mark, and lands nothing, exit 2.
-//                   Pass scripts/ci/run-commit.ts; without the flag the runner starts that run itself.
+//                   each merge, naming that merge's PR, and again with the PRs that landed before it
+//                   reads main, so a tick that dies after a merge leaves the run owed. Before it
+//                   reads main, a tick asks GitHub whether that PR merged: no answer, or a merge
+//                   main does not show yet, keeps the run owed; only an unmerged PR on an unmoved
+//                   main clears it. It is paid once the start record of main's run of the commit in
+//                   CI_WORK_ROOT names a run (scripts/ci/run-commit.ts writes it once Plan launched);
+//                   its exit code decides nothing. While it is owed, a tick starts it first, before
+//                   it touches a pending `Queue` mark, and lands nothing, exit 2.
+//                   Pass scripts/ci/run-commit.ts, with CI_WORK_ROOT (required) in the queue's
+//                   environment; without the flag the runner starts that run itself.
 //   --work-dir      Holds one results directory per run, and the queue's state between ticks
 //                   (queue-state.json): the `Queue` success it is about to post, saved before it
 //                   posts it, and cleared once it was withdrawn after the merge or its failure. A
@@ -74,7 +77,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { CHECK_APP_CONFIG, readCheckApp } from '../../lib/testing/ci/check-app';
 import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
-import { mainFollowUp, mainRunOf } from '../../lib/testing/ci/queue-main-run';
+import { mainFollowUp, mainRunOf, type MergeAnswer } from '../../lib/testing/ci/queue-main-run';
 import {
   createQueueAdapter,
   QUEUE_STATE_FILE,
@@ -146,6 +149,9 @@ try {
 }
 try {
   const mainRunner = values['main-runner'] && resolve(values['main-runner']);
+  // run-commit's work root, where main's runs record their start: the queue reads it there.
+  const workRoot = process.env.CI_WORK_ROOT ? resolve(process.env.CI_WORK_ROOT) : undefined;
+  if (mainRunner && !workRoot) throw new Error("--main-runner needs CI_WORK_ROOT, run-commit's work root.");
   // The id of main's run this tick may owe: saved before each merge is asked for, and again with
   // the PRs that landed once the tick ends.
   const tickId = new Date().toISOString().replace(/[-:.]/g, '');
@@ -160,16 +166,33 @@ try {
     ...(mainRunner ? { mainFollowUpId: tickId } : {}),
   });
   const runUrlBase = values['run-url-base'];
+  /** GitHub's word on whether `pull` merged; no answer when it cannot be read. */
+  const mergeAnswer = async (pull: number | null): Promise<MergeAnswer> => {
+    if (pull === null) return { unmerged: true };
+    try {
+      const merged = await adapter.mergeCommit(pull);
+      return merged ? { merged } : { unmerged: true };
+    } catch (error) {
+      return { unknown: message(error) };
+    }
+  };
   /**
-   * Starts main's run a landing owes, on a live tick only. True once it is paid: the runner
-   * acknowledged the run's start or another main run's of that commit (runMain), or main did not
-   * move. A failed read of main, or a runner that ended before an acknowledgement, leaves it owed.
+   * Starts main's run a landing owes, on a live tick only. True once it is paid: the start record
+   * of main's run of that commit names a run (runMain), or main did not move and GitHub reports the
+   * merge asked for last unmerged. GitHub is asked before main is read, so a merge it accepted shows
+   * in that read. No answer from GitHub, a merge main does not show yet, a failed read of main or a
+   * runner that ended before the record leaves it owed.
    */
   const followUp = async (): Promise<boolean> => {
     const owed = mainRunner && !values['dry-run'] ? readMainFollowUp(workDir) : undefined;
-    if (!mainRunner || !owed) return true;
-    const main = mainRunOf(owed, (await adapter.main()).commit);
-    const paid = !main || runMain({ repository, mainRunner, workDir, runUrlBase }, main);
+    if (!mainRunner || !workRoot || !owed) return true;
+    const merge = await mergeAnswer(owed.merging);
+    const main = mainRunOf(owed, (await adapter.main()).commit, merge);
+    if (main && 'unresolved' in main) {
+      console.error(`[queue] ${main.unresolved}`);
+      return false;
+    }
+    const paid = !main || runMain({ repository, mainRunner, workDir, runUrlBase, workRoot }, main);
     if (paid) saveMainFollowUp(workDir, undefined);
     return paid;
   };
@@ -196,15 +219,17 @@ try {
     process.exitCode = needsAttention(outcome) ? 2 : 0;
     // After every landing or partial stop, whatever the exit: main's run of main's head, once. It
     // is saved first, with the PRs that landed, so a read of main that fails leaves it for the next
-    // tick. A tick that is sure nothing landed drops what it saved before a merge GitHub refused.
-    const owed = mainFollowUp(outcome, tickId);
-    if (mainRunner && owed) {
-      saveMainFollowUp(workDir, owed);
+    // tick. A tick that saw nothing land clears what it saved before a merge only on GitHub's word
+    // that the merge did not land (followUp).
+    const saved = mainRunner ? readMainFollowUp(workDir) : undefined;
+    if (saved?.id === tickId) {
+      const owed = mainFollowUp(outcome, tickId, saved.merging);
+      if (owed) saveMainFollowUp(workDir, owed);
       if (!(await followUp())) {
         console.error(unpaid);
         process.exitCode = 2;
       }
-    } else if (mainRunner && readMainFollowUp(workDir)?.id === tickId) saveMainFollowUp(workDir, undefined);
+    }
   }
 } catch (error) {
   console.error(`[queue] the tick failed: ${error instanceof Error ? error.stack : String(error)}`);

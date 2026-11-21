@@ -19,6 +19,7 @@ import {
   unselectedFailures,
 } from '../../lib/testing/ci/full-run';
 import { jobCost, measurementInputs } from '../../lib/testing/ci/measurement';
+import { applyPassedVariables } from '../../lib/testing/ci/passed-variables';
 import { CI_EVENTS, CI_JOBS, type CiJob } from '../../lib/testing/ci/dag';
 import {
   type CiResult,
@@ -92,6 +93,9 @@ import { repository, run, step, verify } from './run';
 //   CI_PR_HEAD_SHA  pr: the head commit this run tests, when the checkout is a merge commit on top
 //                   of it. Defaults to the checkout's commit.
 //   SHRINK_ONLY_GROWTH_APPROVED  `true` with the owner's `approved: list growth` label.
+//   CI_PASSED_ENV   Off GitHub Actions: the file the job's environment steps wrote their `KEY=value`
+//                   lines to (GITHUB_ENV there). The job takes them in first, over its environment
+//                   (scripts/ci/process-executor.ts never launches it with them). Optional.
 //   MIDNIGHT_PROOF_MINUTES       plan: passed on to scripts/ci-plan.ts; names the wait a proof run.
 // Measurement inputs (lib/testing/ci/measurement.ts). Optional; no gate reads them, and an unreadable one
 // warns and is recorded as unknown, never failing the job. Reuse reads the attempt: an unreadable one
@@ -110,6 +114,8 @@ import { repository, run, step, verify } from './run';
 // its outputs to $GITHUB_OUTPUT.
 
 const environment = process.env;
+applyPassedVariables(environment);
+delete environment.CI_PASSED_ENV;
 // Read once, then removed from the environment every child inherits (run.ts, the test server, git).
 const ledgerPath = environment.CI_LEDGER;
 const producer = environment.CI_PRODUCER || null;

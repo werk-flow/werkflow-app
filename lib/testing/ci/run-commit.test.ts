@@ -131,6 +131,8 @@ type WorldOptions = {
   checkOverrides?: Partial<CiResult>;
   /** Writing a result back fails. */
   writeFails?: boolean;
+  /** Whether Plan reaches its body (its setup passed); default true. */
+  planLaunches?: boolean;
 };
 
 function world(options: WorldOptions = {}): World {
@@ -150,6 +152,15 @@ function world(options: WorldOptions = {}): World {
   const host: Executor = {
     run: async (task) => {
       starts.push({ place: 'host', task, at: clock });
+      // As the process executor: the task learns of its body's launch first, and a launch that
+      // cannot be recorded never starts the body.
+      if (task.unit.job === 'plan' && options.planLaunches === false)
+        return { exitCode: 1, detail: 'its environment steps failed' };
+      try {
+        task.onLaunch?.();
+      } catch (error) {
+        return { exitCode: null, detail: `its launch could not be recorded: ${String(error)}` };
+      }
       const attempt = Number(task.env.CI_RUN_ATTEMPT);
       if (task.unit.job === 'plan' && options.plan !== null) {
         const plan = result(task.unit, clock, {
@@ -503,18 +514,20 @@ test('the queued Check is posted before Plan, and a run whose start post failed 
   expect(started(refused)).toEqual([]);
 });
 
-// The queue clears an owed main run only on a durable acknowledgement that it started
-// (scripts/ci/queue-adapter.ts, runMain): every failure before it is a run that never started.
-test('a run acknowledges its start after the queued Check and before Plan; a failure before it is a run not started', async () => {
+// The queue clears an owed main run only by the run's start record (scripts/ci/queue-adapter.ts,
+// runMain), and a second main run of the commit stops by it: one record, written once Plan launched.
+test("a run records its start once Plan's body launched; a failure before it is a run not started", async () => {
   const order: string[] = [];
   const w = world({ publish: (mode) => (order.push(mode), true) });
   const run = await runCommit(
     input(),
-    { ...w.deps, acknowledgeStart: () => order.push(`acknowledged:${started(w).length}`) },
+    { ...w.deps, acknowledgeStart: () => order.push(`acknowledged:${started(w).join(',')}`) },
     new AbortController().signal,
   );
   expect(run.exitCode, w.log.join('\n')).toBe(0);
-  expect(order).toEqual(['start', 'acknowledged:0', 'finish']);
+  expect(order).toEqual(['start', 'acknowledged:host:plan', 'finish']);
+  // Only Plan's launch records it: once.
+  expect(order.filter((entry) => entry.startsWith('acknowledged'))).toHaveLength(1);
 
   const unposted = world({ publish: () => false });
   const acknowledged: string[] = [];
@@ -525,6 +538,7 @@ test('a run acknowledges its start after the queued Check and before Plan; a fai
   );
   expect(acknowledged).toEqual([]);
 
+  // A launch that cannot be recorded starts no Plan body, no job and no Check: the run never started.
   const unacknowledged = world();
   const refused = await runCommit(
     input(),
@@ -537,5 +551,19 @@ test('a run acknowledges its start after the queued Check and before Plan; a fai
     new AbortController().signal,
   );
   expect(refused.exitCode, unacknowledged.log.join('\n')).toBe(2);
-  expect(started(unacknowledged)).toEqual([]);
+  expect(started(unacknowledged)).toEqual(['host:plan']);
+});
+
+test('a Plan whose setup failed before its body is a started run: its start is recorded after it, and Check fails the run', async () => {
+  // Check finds no plan, so it fails, as job.ts check does.
+  const w = world({ planLaunches: false, exits: { check: 1 } });
+  const order: string[] = [];
+  const run = await runCommit(
+    input(),
+    { ...w.deps, acknowledgeStart: () => order.push(`acknowledged:${started(w).join(',')}`) },
+    new AbortController().signal,
+  );
+  expect(run.exitCode, w.log.join('\n')).toBe(1);
+  expect(order).toEqual(['acknowledged:host:plan']);
+  expect(started(w)).toEqual(['host:plan', 'host:check']);
 });

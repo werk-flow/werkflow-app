@@ -95,12 +95,13 @@ export type QueueAdapter = {
   /** Turns the PR's auto-merge off, so a green `Queue` alone never merges it. Throws when it cannot. */
   disableAutoMerge(pull: QueuedPull): Promise<void>;
   /**
-   * Saves durably that main's run after this tick's landing is owed: the tick's base and the PRs it
-   * may have landed once the next merge went through. Called before each merge is asked for, so a
-   * tick that dies after GitHub accepted it leaves the run to the next tick, which starts it before
-   * it touches the pending mark (scripts/ci/queue.ts). Throws when it cannot; nothing merges then.
+   * Saves durably that main's run after this tick's landing is owed: the tick's base, the PRs it
+   * may have landed once the next merge went through, and that merge's PR (`merging`). Called before
+   * each merge is asked for, so a tick that dies after GitHub accepted it leaves the run to the next
+   * tick, which asks GitHub about `merging` and starts the run before it touches the pending mark
+   * (scripts/ci/queue.ts). Throws when it cannot; nothing merges then.
    */
-  oweMainRun(followUp: { base: string; prs: readonly number[] }): Promise<void>;
+  oweMainRun(followUp: { base: string; prs: readonly number[]; merging: number }): Promise<void>;
   /** Marks the head as passed by the queue and squash-merges it on GitHub, only at that head. */
   land(pull: QueuedPull, proof: Verdict): Promise<void>;
   /** The PR's merge commit when GitHub reports it merged, otherwise null. */
@@ -723,7 +724,11 @@ async function landOne(
     return `#${pull.number}'s auto-merge could not be turned off (${message(error)}), so the queue posted no Queue success`;
   }
   try {
-    await adapter.oweMainRun({ base: outcome.base, prs: [...outcome.landing, pull.number] });
+    await adapter.oweMainRun({
+      base: outcome.base,
+      prs: [...outcome.landing, pull.number],
+      merging: pull.number,
+    });
   } catch (error) {
     return `main's run it would owe could not be saved before merging #${pull.number} (${message(error)}), so the queue posted no Queue success`;
   }

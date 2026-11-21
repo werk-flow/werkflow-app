@@ -18,6 +18,7 @@ import {
   writeQueueState,
 } from '../../../scripts/ci/queue-adapter';
 import type { QueuedPull } from './queue';
+import { acknowledgedStart, mainStartRecord } from './run-commit';
 
 let folder = '';
 let repository = '';
@@ -127,10 +128,16 @@ function integration(body: string, runUrl: string, ledger?: string) {
   );
 }
 
-test("a run's verdict is its own finished Check, whatever the runner's exit code", () => {
-  expect(integration('receipt check passed \'"2026-11-21T09:00:00Z"\'; exit 1', 'queue/1').kind).toBe(
-    'passed',
-  );
+// run-commit sets a Check that wrote a pass and then failed to failed; when that rewrite failed too,
+// the pass survives, and only the runner's exit tells.
+test("a run's verdict is its own finished Check, and a pass needs the runner's exit 0 too", () => {
+  const passed = 'receipt check passed \'"2026-11-21T09:00:00Z"\'';
+  expect(integration(`${passed}; exit 0`, 'queue/1').kind).toBe('passed');
+  expect(integration(`${passed}; exit 1`, 'queue/6')).toEqual({
+    kind: 'inconclusive',
+    runUrl: 'queue/6',
+    detail: 'Check wrote a pass, but the runner did not exit 0',
+  });
   expect(git('for-each-ref', 'refs/ci-queue')).toBe('');
 });
 
@@ -342,13 +349,14 @@ test("main's run gets main's head, the tick's base and the landed PRs, in a resu
   // A run that started acknowledges it, then fails: still paid.
   writeFileSync(
     mainRunner,
-    `#!/usr/bin/env bash\nenv | grep -E '^CI_(EVENT|COMMIT|BASE_SHA|PRS|RUN_URL|RESULTS_DIR|START_ACK)=' | sort > "${join(folder, 'main-env')}"\nprintf '{"commit":"%s","runUrl":"%s"}' "$CI_COMMIT" "$CI_RUN_URL" > "$CI_START_ACK"\nexit 1\n`,
+    `#!/usr/bin/env bash\nenv | grep -E '^CI_(EVENT|COMMIT|BASE_SHA|PRS|RUN_URL|RESULTS_DIR|WORK_ROOT)=' | sort > "${join(folder, 'main-env')}"\nmkdir -p "$CI_WORK_ROOT/main-runs"\nprintf '{"commit":"%s","runUrl":"%s"}' "$CI_COMMIT" "$CI_RUN_URL" > "$CI_WORK_ROOT/main-runs/$CI_COMMIT.started"\nexit 1\n`,
   );
   chmodSync(mainRunner, 0o755);
   const workDir = join(folder, 'work');
   mkdirSync(workDir);
   const main = { commit: 'c'.repeat(40), base: 'b'.repeat(40), prs: [7, 9], id: 'tick-1' };
-  const options = { repository, mainRunner, workDir, runUrlBase: 'https://ci.example/queue' };
+  const workRoot = join(folder, 'ci-work');
+  const options = { repository, mainRunner, workDir, runUrlBase: 'https://ci.example/queue', workRoot };
   // Only the run's durable start pays it: a runner that could not start, or ended with any exit
   // before it acknowledged a start (a preflight failure's 1, a 3 while the other run may still
   // refuse), leaves it owed.
@@ -376,8 +384,9 @@ test("main's run gets main's head, the tick's base and the landed PRs, in a resu
   const id = env.CI_RUN_URL?.replace('https://ci.example/queue/', '') ?? '';
   expect(id).toBe(`tick-1-main-${'c'.repeat(12)}`);
   expect(env.CI_RESULTS_DIR).toBe(join(workDir, id));
-  // The acknowledgement lives in the queue's own work directory, outside the jobs' results.
-  expect(env.CI_START_ACK).toBe(join(workDir, `${id}.started.json`));
+  // The runner's start record of the commit, the one its duplicate check reads too, pays the run.
+  expect(env.CI_WORK_ROOT).toBe(workRoot);
+  expect(acknowledgedStart(mainStartRecord(workRoot, 'c'.repeat(40)), 'c'.repeat(40))).toBe(env.CI_RUN_URL);
   // A run whose start was acknowledged is paid on a later tick without starting it again.
   rmSync(join(folder, 'main-env'));
   expect(runMain(options, main)).toBe(true);
@@ -388,20 +397,21 @@ test("with a main runner, the adapter saves main's run a merge would owe under t
   const workDir = join(folder, 'work');
   mkdirSync(workDir);
   const options = { repository, runner: '/bin/true', workDir, runUrlBase: 'queue', appId: null };
-  await createQueueAdapter(options).oweMainRun({ base: 'b'.repeat(40), prs: [7] });
+  await createQueueAdapter(options).oweMainRun({ base: 'b'.repeat(40), prs: [7], merging: 7 });
   expect(readMainFollowUp(workDir)).toBeUndefined();
   const adapter = createQueueAdapter({ ...options, mainFollowUpId: 'tick-1' });
-  await adapter.oweMainRun({ base: 'b'.repeat(40), prs: [7] });
-  await adapter.oweMainRun({ base: 'b'.repeat(40), prs: [7, 9] });
-  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7, 9], id: 'tick-1' });
+  await adapter.oweMainRun({ base: 'b'.repeat(40), prs: [7], merging: 7 });
+  await adapter.oweMainRun({ base: 'b'.repeat(40), prs: [7, 9], merging: 9 });
+  // The merge it asked for last stays named: the next tick asks GitHub about it before it clears the run.
+  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7, 9], id: 'tick-1', merging: 9 });
 });
 
 test('an owed main run survives between ticks until it is cleared, and a damaged record stops the tick', () => {
   const workDir = join(folder, 'work');
   mkdirSync(workDir);
   expect(readMainFollowUp(workDir)).toBeUndefined();
-  saveMainFollowUp(workDir, { base: 'b'.repeat(40), prs: [7], id: 'tick-1' });
-  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7], id: 'tick-1' });
+  saveMainFollowUp(workDir, { base: 'b'.repeat(40), prs: [7], id: 'tick-1', merging: 7 });
+  expect(readMainFollowUp(workDir)).toEqual({ base: 'b'.repeat(40), prs: [7], id: 'tick-1', merging: 7 });
   saveMainFollowUp(workDir, undefined);
   expect(readMainFollowUp(workDir)).toBeUndefined();
   writeFileSync(join(workDir, 'main-follow-up.json'), '{"base":"main"}');

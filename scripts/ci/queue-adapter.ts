@@ -21,7 +21,7 @@ import { verdictOf } from '../../lib/testing/ci/queue-verdict';
 import { PULLS_QUERY, pullsFromGitHub } from '../../lib/testing/ci/queue-github';
 import { type Ledger, readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
 import { provenTree } from '../../lib/testing/ci/reuse';
-import { acknowledgedStart } from '../../lib/testing/ci/run-commit';
+import { acknowledgedStart, mainStartRecord } from '../../lib/testing/ci/run-commit';
 import { migrationOrderProblems } from '../../lib/testing/local-stack/migration-order';
 
 /** The commit status the queue sets on a PR's head right before it merges it. The ruleset requires it (owner's step). */
@@ -109,7 +109,7 @@ export function squashCommit(
 
 /**
  * Runs the runner's integration run of a batch prefix and reads its verdict from the results it
- * wrote. The runner's exit code decides nothing: only this run's Check and job results count.
+ * wrote: this run's Check and job results, and a pass only with the runner's exit 0 as well.
  */
 export function runIntegration(
   options: { repository: string; runner: string; resultsDir: string; runUrl: string; ledger?: string },
@@ -119,6 +119,7 @@ export function runIntegration(
   const ref = `${QUEUE_REFS}/runs/${run.tip.commit}`;
   mkdirSync(options.resultsDir, { recursive: true });
   git('update-ref', ref, run.tip.commit);
+  let runnerPassed = false;
   try {
     // A queue run posts no Check, so its runner never gets the main run's publisher.
     const inherited = { ...process.env };
@@ -130,6 +131,7 @@ export function runIntegration(
       stdio: 'inherit',
     });
     console.info(`[queue] runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}`);
+    runnerPassed = ran.status === 0 && !ran.error;
   } finally {
     git('update-ref', '-d', ref);
   }
@@ -148,25 +150,26 @@ export function runIntegration(
       check: result(resultFileName('check', null)),
       results: files.filter((file) => file.endsWith('.json')).map(result),
       ledger: ledgerOf(options.ledger),
+      runnerPassed,
     },
   );
 }
 
 /**
- * Starts main's run after a landing (`mainRunOf` in lib/testing/ci/queue.ts) through the main
- * runner, and waits for it. True once the run is paid: the runner acknowledged durably that the run
- * started, or that another main run of the commit started (CI_START_ACK, written by
- * scripts/ci/run-commit.ts). Its exit code decides nothing: every failure before that
- * acknowledgement, whatever it exits with, leaves the run owed. A run acknowledged on an earlier tick
+ * Starts main's run after a landing (`mainRunOf` in lib/testing/ci/queue-main-run.ts) through the
+ * main runner, and waits for it. True once the run is paid: the start record of main's run of the
+ * commit in the runner's work root names a run (mainStartRecord, written by scripts/ci/run-commit.ts
+ * once that run's Plan launched), this one or another. Its exit code decides nothing: every failure
+ * before that record, whatever it exits with, leaves the run owed. A run recorded on an earlier tick
  * is paid without starting it again.
  */
 export function runMain(
-  options: { repository: string; mainRunner: string; workDir: string; runUrlBase: string },
+  options: { repository: string; mainRunner: string; workDir: string; runUrlBase: string; workRoot: string },
   run: { commit: string; base: string; prs: readonly number[]; id: string },
 ): boolean {
   const id = `${run.id}-main-${run.commit.slice(0, 12)}`;
-  const ack = join(options.workDir, `${id}.started.json`);
-  const paid = (): boolean => acknowledgedStart(ack, run.commit) !== undefined;
+  const paid = (): boolean =>
+    acknowledgedStart(mainStartRecord(options.workRoot, run.commit), run.commit) !== undefined;
   if (paid()) return true;
   const environment = mainEnvironment({
     ...run,
@@ -176,11 +179,11 @@ export function runMain(
   console.info(`[queue] main's run ${environment.CI_RUN_URL} of ${run.commit}, base ${run.base}`);
   const ran = spawnSync(options.mainRunner, [], {
     cwd: options.repository,
-    env: { ...process.env, ...environment, CI_START_ACK: ack },
+    env: { ...process.env, ...environment, CI_WORK_ROOT: options.workRoot },
     stdio: 'inherit',
   });
   console.info(
-    `[queue] main's runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}${paid() ? '' : ', before its start was acknowledged'}`,
+    `[queue] main's runner ended with ${ran.error?.message ?? ran.signal ?? `exit ${ran.status}`}${paid() ? '' : ', before its start was recorded'}`,
   );
   return paid();
 }
@@ -354,9 +357,9 @@ export function createQueueAdapter(options: {
       disableAutoMerge(pull.number);
       console.info(`[queue] #${pull.number}: auto-merge off`);
     },
-    oweMainRun: async ({ base, prs }) => {
+    oweMainRun: async ({ base, prs, merging }) => {
       if (options.mainFollowUpId)
-        saveMainFollowUp(options.workDir, { base, prs: [...prs], id: options.mainFollowUpId });
+        saveMainFollowUp(options.workDir, { base, prs: [...prs], id: options.mainFollowUpId, merging });
     },
     land: async (pull, proof) => {
       mark(pull.headSha, 'success', `Passed in ${proof.runUrl}`, proof.runUrl);

@@ -34,7 +34,7 @@ export type Fake = {
   /** Whether the PR's auto-merge was still on when its `Queue` success and merge were asked for. */
   autoMergeAtLand: boolean[];
   /** The main run the queue had saved as owed when each merge was asked for. */
-  owedAtLand: ({ base: string; prs: readonly number[] } | null)[];
+  owedAtLand: ({ base: string; prs: readonly number[]; merging: number } | null)[];
   /** The newest `Queue` on a head: success when the queue marked it, failure once withdrawn. */
   queueOn: (head: string) => 'success' | 'failure' | undefined;
   main: () => MainCommit;

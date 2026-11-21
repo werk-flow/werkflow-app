@@ -3,7 +3,7 @@
 // and a scheduler that never names a run its run-commit holds (scripts/ci/schedule.ts).
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { CiResult } from './results';
@@ -11,6 +11,7 @@ import {
   acknowledgedStart,
   acknowledgeStart,
   claimMainRun,
+  mainStartRecord,
   releaseMainRun,
   RUN_COMMIT_LOCK,
   runVariables,
@@ -38,7 +39,6 @@ function runCommit(env: Record<string, string>): { status: number | null; stderr
       CI_COMMIT: head,
       CI_WORK_ROOT: join(folder, 'work'),
       CI_JOB_USER: 'nobody',
-      CI_START_ACK: join(folder, 'started.json'),
       ...env,
     },
   });
@@ -106,31 +106,37 @@ test('a run refuses before it runs anything, with exit 2, on each broken precond
     expect([cause, refused.status]).toEqual([cause, cause.startsWith("main's run") ? 3 : 2]);
     expect(refused.stderr).toContain(cause);
     // A refusal starts no workspace and claims no main commit. Only another run's durable start
-    // pays an owed main run.
-    expect([cause, existsSync(join(folder, 'work'))]).toEqual([cause, false]);
-    expect([cause, acknowledgedStart(join(folder, 'started.json'), head)]).toEqual([
+    // pays an owed main run: the ledger's Plan of it becomes this host's start record of the commit.
+    const record = mainStartRecord(join(folder, 'work'), head);
+    expect([cause, acknowledgedStart(record, head)]).toEqual([
       cause,
       cause.startsWith("main's run") ? 'https://ci.example/runs/1' : undefined,
     ]);
+    rmSync(record, { force: true });
+    expect([
+      cause,
+      readdirSync(folder).includes('work') && readdirSync(join(folder, 'work', 'main-runs')).length,
+    ]).toEqual([cause, cause.startsWith("main's run") ? 0 : false]);
     rmSync(join(folder, 'work'), { recursive: true, force: true });
-    rmSync(join(folder, 'started.json'), { force: true });
   }
   expect(readdirSync(results)).toEqual(['fast.json']);
 });
 
 // Exit 3 tells the queue that another run pays its owed main run, so it needs that run's durable
 // start: a claim whose run has not started yet, or died before it, is a refusal, and the debt stays.
-test("a second main run of a commit exits 3 only once the claiming run's start is acknowledged", () => {
-  const claims = join(folder, 'work', 'main-runs');
-  claimMainRun(claims, head, 'https://ci.example/runs/1');
+// The one start record of the commit decides both, for this run and for the queue.
+test("a second main run of a commit exits 3 only once the claiming run's start is recorded", () => {
+  const work = join(folder, 'work');
+  claimMainRun(join(work, 'main-runs'), head, 'https://ci.example/runs/1');
   const unstarted = runCommit({ CI_EVENT: 'main' });
   expect(unstarted.status).toBe(2);
   expect(unstarted.stderr).toContain('https://ci.example/runs/1 claimed it but has not started');
-  expect(acknowledgedStart(join(folder, 'started.json'), head)).toBeUndefined();
-  acknowledgeStart(join(claims, `${head}.started`), { commit: head, runUrl: 'https://ci.example/runs/1' });
+  expect(acknowledgedStart(mainStartRecord(work, head), head)).toBeUndefined();
+  acknowledgeStart(mainStartRecord(work, head), { commit: head, runUrl: 'https://ci.example/runs/1' });
   const duplicate = runCommit({ CI_EVENT: 'main' });
   expect(duplicate.status).toBe(3);
-  expect(acknowledgedStart(join(folder, 'started.json'), head)).toBe('https://ci.example/runs/1');
+  expect(acknowledgedStart(mainStartRecord(work, head), head)).toBe('https://ci.example/runs/1');
+  expect(readdirSync(join(work, 'main-runs')).sort()).toEqual([head, `${head}.started`]);
 });
 
 test('the scheduler never names a held run its run-commit holds; that run starts its own held shards', () => {

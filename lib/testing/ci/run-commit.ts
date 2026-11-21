@@ -5,7 +5,7 @@
 // container later. Each job takes `scripts/ci/prepare.ts for <job>`, then `scripts/ci/job.ts <job>`.
 // This module decides; it starts nothing itself.
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { runPlanOf } from './check';
 import { CI_DAG, type CiEvent, type CiJob } from './dag';
@@ -51,17 +51,24 @@ export function releaseMainRun(folder: string, commit: string, runUrl: string): 
   if (existsSync(claim) && readFileSync(claim, 'utf8') === runUrl) rmSync(claim);
 }
 
+/**
+ * The one start record of main's run of `commit` on the host whose work root is `workRoot`: written
+ * once that run's Plan launched (runCommit, acknowledgeStart). A second starter of the commit exits 3
+ * only by it, and the queue clears an owed main run only by it (scripts/ci/queue-adapter.ts, runMain).
+ */
+export const mainStartRecord = (workRoot: string, commit: string): string =>
+  join(workRoot, 'main-runs', `${commit}.started`);
+
 const startAckSchema = z
   .object({ commit: z.string().regex(/^[0-9a-f]{40}$/), runUrl: z.string().min(1) })
   .strict();
 
 /**
  * Records durably at `path` that `runUrl`'s run of `commit` started: written to a flushed file of its
- * own and renamed into place, so a crash leaves it whole or absent. The queue clears an owed main run
- * only by it (scripts/ci/queue-adapter.ts, runMain), and a second starter of a main commit exits 3
- * only by its owner's.
+ * own and renamed into place, so a crash leaves it whole or absent.
  */
 export function acknowledgeStart(path: string, ack: { commit: string; runUrl: string }): void {
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(`${path}.tmp`, `${JSON.stringify(startAckSchema.parse(ack))}\n`, { flush: true });
   renameSync(`${path}.tmp`, path);
 }
@@ -126,6 +133,11 @@ export type ExecutorTask = {
   prepareEnv: Readonly<Record<string, string>>;
   /** The whole job, setup included, as ci.yml's `timeout-minutes`. */
   timeoutMs: number;
+  /**
+   * Called once the job's steps passed, right before its body is launched. A throw keeps the body
+   * from starting, and the job fails.
+   */
+  onLaunch?: (() => void) | undefined;
 };
 
 /** How a job start ended: its body's exit code, or null when it never got one (setup failed, killed). */
@@ -183,9 +195,10 @@ export type RunCommitDeps = {
    */
   publish?: ((mode: 'start' | 'finish') => Promise<boolean>) | undefined;
   /**
-   * Records durably that the run started, after its queued Check and before Plan: the queue clears
-   * an owed main run only by it (scripts/ci/queue-adapter.ts). Throws when it cannot; the run then
-   * does not start.
+   * Records durably that the run started, once Plan's body launched, or once Plan ended before its
+   * body (its setup failed: a run that started and fails). A second main run of the commit and the
+   * queue's owed main run read it (mainStartRecord). Throws when it cannot; Plan's body then does
+   * not start, and neither does the run.
    */
   acknowledgeStart?: (() => void) | undefined;
   now(): number;
@@ -197,7 +210,7 @@ export type RunCommitDeps = {
 export type RunCommitOutcome = {
   /**
    * 0 when the run's Check passed, 1 when it failed, 2 when the run never started because its queued
-   * Check could not be posted or its start could not be acknowledged: nothing ran, so the run is
+   * Check could not be posted or its start could not be recorded: no job body ran, so the run is
    * still owed.
    */
   exitCode: 0 | 1 | 2;
@@ -283,12 +296,38 @@ type Planned = { passed: boolean; units: Unit[]; owner?: ReceiptRun['plan'] };
 
 /**
  * Plan on the host, and the jobs and shards its plan runs. None run when Plan failed, or its plan is
- * not this run's and attempt's.
+ * not this run's and attempt's. The run's start is recorded once Plan's body launched, or once Plan
+ * ended before it; 'unrecorded' when that record failed, and the run did not start.
  */
-async function planRun(input: RunCommitInput, deps: RunCommitDeps, signal: AbortSignal): Promise<Planned> {
+async function planRun(
+  input: RunCommitInput,
+  deps: RunCommitDeps,
+  signal: AbortSignal,
+): Promise<Planned | 'unrecorded'> {
   const planUnit: Unit = { job: 'plan', shard: null };
-  const outcome = await deps.host.run(taskOf(input, planUnit), signal);
+  const start: { launched: boolean; failure?: string } = { launched: false };
+  const record = (): void => {
+    start.launched = true;
+    try {
+      deps.acknowledgeStart?.();
+    } catch (error) {
+      start.failure = message(error);
+      throw error;
+    }
+  };
+  const outcome = await deps.host.run({ ...taskOf(input, planUnit), onLaunch: record }, signal);
   deps.log(`[run] plan: ${outcome.detail}`);
+  // A Plan whose setup failed before its body is a run that started, and fails.
+  if (!start.launched)
+    try {
+      record();
+    } catch {
+      // Logged below.
+    }
+  if (start.failure !== undefined) {
+    deps.log(`[run] The run's start could not be recorded, so it does not start: ${start.failure}`);
+    return 'unrecorded';
+  }
   const { event, tree, runUrl, producer, attempt } = input.run;
   const planned = runPlanOf({ tree, event, runUrl, producer }, deps.readResult(planUnit));
   let problem: string | undefined;
@@ -512,13 +551,8 @@ export async function runCommit(
     deps.log('[run] The queued Check could not be posted, so the run does not start.');
     return { exitCode: 2, units: [], scheduler: {} };
   }
-  try {
-    deps.acknowledgeStart?.();
-  } catch (error) {
-    deps.log(`[run] The run's start could not be recorded, so it does not start: ${message(error)}`);
-    return { exitCode: 2, units: [], scheduler: {} };
-  }
   const planned = await planRun(input, deps, signal);
+  if (planned === 'unrecorded') return { exitCode: 2, units: [], scheduler: {} };
   const states = await runUnits(input, deps, signal, planned);
   const scheduler = schedulerReport(planned.passed, planned.units, states);
   // Check runs even after a cancellation, as on GitHub: a cancelled run reports a failed Check.

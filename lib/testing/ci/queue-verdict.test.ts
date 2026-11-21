@@ -57,6 +57,7 @@ const evidence = (check: RunEvidence['check'], changes: Partial<RunEvidence> = {
   check,
   results: [],
   ledger: undefined,
+  runnerPassed: true,
   ...changes,
 });
 
@@ -99,6 +100,14 @@ test("only the Check of this run's Plan and expected attempt passes a batch, and
   const earlierPlan = planIdentity && { ...planIdentity, startedAt: '2026-11-21T07:00:00.000Z' };
   for (const stale of [unplanned, { ...failedGroup, planIdentity: earlierPlan }])
     expect(verdictOf(RUN, evidence(failedCheck, { results: [stale] })).kind).toBe('inconclusive');
+});
+
+// A Check that wrote a pass and then failed is set failed by run-commit; when that rewrite failed
+// too, only the runner's exit tells, so a pass needs both.
+test("a Check's pass counts only when the runner exited 0 as well", () => {
+  const failedRunner = verdictOf(RUN, evidence(result({}), { runnerPassed: false }));
+  expect(failedRunner.kind).toBe('inconclusive');
+  expect(failedRunner.detail).toBe('Check wrote a pass, but the runner did not exit 0');
 });
 
 test("a pass needs a CI runner's passed plan of this run against the batch's base", () => {

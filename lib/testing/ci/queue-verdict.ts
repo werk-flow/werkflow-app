@@ -7,12 +7,16 @@ import { passedTree } from './reuse';
 
 type Evidence = CiResult | { unreadable: string };
 
-/** What the integration run `run` left: its plan, its Check, every job result, and the runner's ledger when the queue reads one. */
+/**
+ * What the integration run `run` left: its plan, its Check, every job result, the runner's ledger
+ * when the queue reads one, and whether the runner exited 0.
+ */
 export type RunEvidence = {
   plan: Evidence;
   check: Evidence;
   results: readonly Evidence[];
   ledger: Ledger | undefined;
+  runnerPassed: boolean;
 };
 
 /** The run the queue started: its commit, tree, base, URL and attempt (CI_RUN_ATTEMPT). */
@@ -58,8 +62,8 @@ const SETUP_STEPS: ReadonlySet<string> = new Set(['step:server']);
 
 /**
  * The verdict of the integration run `run`. Only a CI runner's finished plan of the batch's base
- * and Check of this run, its expected attempt and that plan count. A pass counts only when the ledger, if the queue reads one, holds it
- * as the pass of this landing (tree, base and the plan's work), so the push to main reuses it. A
+ * and Check of this run, its expected attempt and that plan count. A pass counts only when the
+ * runner exited 0 too, and when the ledger, if the queue reads one, holds it as the pass of this landing (tree, base and the plan's work), so the push to main reuses it. A
  * failed Check counts against the batch only when a CI runner's finished job of this run failed a
  * group beyond its setup; otherwise the run proved nothing.
  */
@@ -70,6 +74,10 @@ export function verdictOf(run: IntegrationRun, evidence: RunEvidence): Verdict {
   if (problem || 'unreadable' in plan || 'unreadable' in check)
     return verdict('inconclusive', problem ?? 'no Check result');
   const landing = { tree: run.tree, base: run.base, work: plan.plan?.work ?? [] };
+  // A Check that wrote a pass and then failed leaves the pass behind when the runner could not set
+  // it failed (lib/testing/ci/run-commit.ts): only the runner's exit tells.
+  if (check.status === 'passed' && !evidence.runnerPassed)
+    return verdict('inconclusive', 'Check wrote a pass, but the runner did not exit 0');
   if (check.status === 'passed')
     return ledger === undefined || passedTree(ledger, landing, () => undefined) === run.runUrl
       ? verdict('passed', 'Check passed')

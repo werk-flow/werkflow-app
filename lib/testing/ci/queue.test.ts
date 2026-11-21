@@ -50,8 +50,8 @@ test("main's run a landing owes is saved before each merge is asked for, and no 
   await runQueueTick(world.adapter, LIVE);
   expect(world.landed).toEqual([1, 2]);
   expect(world.owedAtLand).toEqual([
-    { base, prs: [1] },
-    { base, prs: [1, 2] },
+    { base, prs: [1], merging: 1 },
+    { base, prs: [1, 2], merging: 2 },
   ]);
 
   const unsaved = fakeWorld([pull(1), pull(2)], { owingFails: true });
@@ -664,9 +664,9 @@ test('a dry run tests and decides like a live tick but never lands or tells a PR
 test("main's run follows every live landing or partial stop once, on main's head with the tick's base, and never a dry run", async () => {
   const landed = await runQueueTick(fakeWorld([pull(1), pull(2)]).adapter, LIVE);
   expect(landed.landing).toEqual([1, 2]);
-  const owed = mainFollowUp(landed, 'tick-1');
-  expect(owed).toEqual({ base: landed.base, prs: [1, 2], id: 'tick-1' });
-  expect(owed && mainRunOf(owed, sha('head'))).toEqual({
+  const owed = mainFollowUp(landed, 'tick-1', 2);
+  expect(owed).toEqual({ base: landed.base, prs: [1, 2], id: 'tick-1', merging: 2 });
+  expect(owed && mainRunOf(owed, sha('head'), { merged: sha('head') })).toEqual({
     commit: sha('head'),
     base: landed.base,
     prs: [1, 2],
@@ -677,9 +677,31 @@ test("main's run follows every live landing or partial stop once, on main's head
   const partial = mainFollowUp(
     { ...landed, landing: [], stops: [{ kind: 'partial', detail: 'may have landed' }] },
     'tick-2',
+    1,
   );
-  expect(partial).toEqual({ base: landed.base, prs: [], id: 'tick-2' });
-  expect(partial && mainRunOf(partial, landed.base)).toBeUndefined();
-  expect(mainFollowUp({ ...landed, dryRun: true }, 'tick-3')).toBeUndefined();
-  expect(mainFollowUp(await runQueueTick(fakeWorld([]).adapter, LIVE), 'tick-4')).toBeUndefined();
+  expect(partial).toEqual({ base: landed.base, prs: [], id: 'tick-2', merging: 1 });
+  expect(partial && mainRunOf(partial, landed.base, { unmerged: true })).toBeUndefined();
+  expect(mainFollowUp({ ...landed, dryRun: true }, 'tick-3', 2)).toBeUndefined();
+  expect(mainFollowUp(await runQueueTick(fakeWorld([]).adapter, LIVE), 'tick-4', null)).toBeUndefined();
+});
+
+// A tick that restarts after a crash may read main before a merge GitHub accepted shows there. Only
+// GitHub's word that the last merge asked for did not land lets an unmoved main clear the debt.
+test('an owed main run clears on an unmoved main only once GitHub reports the merge it asked for unmerged', () => {
+  const owed = { base: sha('main'), prs: [7], id: 'tick-1', merging: 7 };
+  expect(mainRunOf(owed, sha('main'), { unknown: 'GitHub could not be read' })).toEqual({
+    unresolved: "GitHub could not say whether #7 merged (GitHub could not be read), so main's run stays owed",
+  });
+  expect(mainRunOf(owed, sha('main'), { merged: sha('merged-7') })).toEqual({
+    unresolved: `GitHub reports #7 merged as ${sha('merged-7')}, but main still reads ${sha('main')}, so main's run stays owed`,
+  });
+  expect(mainRunOf(owed, sha('main'), { unmerged: true })).toBeUndefined();
+  // Unknown keeps the debt even when main moved: it runs once GitHub answers.
+  expect(mainRunOf(owed, sha('head'), { unknown: 'timeout' })).toHaveProperty('unresolved');
+  expect(mainRunOf(owed, sha('head'), { unmerged: true })).toEqual({
+    commit: sha('head'),
+    base: sha('main'),
+    prs: [7],
+    id: 'tick-1',
+  });
 });

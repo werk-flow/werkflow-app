@@ -5,11 +5,20 @@
 // the job started is stopped before the host's stack lock passes on. A stub `sudo` records each call
 // and runs the command as this user.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { processExecutor } from '../../../scripts/ci/process-executor';
+import { launcherProblem, processExecutor } from '../../../scripts/ci/process-executor';
 import type { ExecutorTask } from './run-commit';
 
 let folder = '';
@@ -26,9 +35,13 @@ writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/${script}-' + job
 `;
 const PREPARE = `${RECORD('prepare')}
 if (process.env.STARTS_STACK === '1') appendFileSync(process.env.GITHUB_ENV, 'CI_STACK_STARTED=1\\n');
+if (process.env.PASS_PATH) appendFileSync(process.env.GITHUB_ENV, 'PATH=' + process.env.PASS_PATH + '\\n');
 appendFileSync(process.env.GITHUB_ENV, 'SHRINK_ONLY_GROWTH_APPROVED=true\\n');
 `;
-const JOB = `${RECORD('job')}
+// The body takes what the steps passed on as the real job.ts does (CI_PASSED_ENV), then records.
+const JOB = `const { applyPassedVariables } = await import(${JSON.stringify(join(import.meta.dir, 'passed-variables.ts'))});
+applyPassedVariables(process.env);
+${RECORD('job')}
 if (process.env.HANG === '1') await Bun.sleep(60_000);
 process.exit(Number(process.env.EXIT ?? '0'));
 `;
@@ -72,7 +85,7 @@ beforeEach(() => {
   // job user's home.
   writeFileSync(
     join(folder, 'bin/sudo'),
-    `#!/usr/bin/env bash\necho "$*" >> "${folder}/sudo.calls"\nwhile [ "$1" != "--" ]; do shift; done\nshift\nexport HOME="${folder}/job-home"\nexec "$@"\n`,
+    `#!/usr/bin/env bash\necho "$*" >> "${folder}/sudo.calls"\nenv | sort >> "${folder}/sudo.env"\nwhile [ "$1" != "--" ]; do shift; done\nshift\nexport HOME="${folder}/job-home"\nexec "$@"\n`,
   );
   chmodSync(join(folder, 'bin/sudo'), 0o755);
   mkdirSync(join(folder, 'job-home'));
@@ -105,11 +118,13 @@ const executor = () =>
   processExecutor({
     source,
     root: join(folder, 'work'),
+    trusted: join(folder, 'trusted'),
     commit,
     machineStart: true,
     replaceStack: false,
     stackLock: join(folder, 'stack.lock'),
     jobUser: 'nobody',
+    sudo: join(folder, 'bin/sudo'),
     log: () => undefined,
   });
 
@@ -133,7 +148,7 @@ test("a job's body sees only its task's variables and what its environment steps
   const siblings = recorded('prepare-siblings.env');
   const clone = join(folder, 'work/fast/werkflow-app');
   expect(siblings.SIBLING_REPOSITORIES_TOKEN).toBe('sibling-token');
-  expect(siblings.CWD).toBe(join(folder, 'work/fast'));
+  expect(siblings.CWD).toBe(join(folder, 'trusted'));
   expect(siblings.CI_CHECKOUT).toBe(clone);
   expect(readFileSync(join(folder, 'job-home/preload.log'), 'utf8').split('\n').filter(Boolean)).toEqual([
     'none',
@@ -155,7 +170,11 @@ test("a job's body sees only its task's variables and what its environment steps
     expect(seen.CI_MACHINE_START).toBe('true');
     expect(Number.isNaN(Date.parse(seen.CI_JOB_STARTED_AT ?? ''))).toBe(false);
   }
+  // The body takes what the steps passed on from the file, through job.ts: never through the
+  // launcher's environment.
   expect(body.SHRINK_ONLY_GROWTH_APPROVED).toBe('true');
+  expect(body.CI_PASSED_ENV).toBe(join(folder, 'work/fast/fast.env'));
+  expect(readFileSync(join(folder, 'sudo.env'), 'utf8')).not.toContain('SHRINK_ONLY_GROWTH_APPROVED');
   // The job ran in its own clone of the commit, whose origin is GitHub without the credential and
   // whose origin/main is the trusted clone's.
   const cloneGit = (...args: string[]) => execFileSync('git', args, { cwd: clone, encoding: 'utf8' }).trim();
@@ -205,6 +224,8 @@ test("an executor refuses a job user that is the orchestrator's own user, root o
         replaceStack: false,
         stackLock: join(folder, 'stack.lock'),
         jobUser,
+        sudo: join(folder, 'bin/sudo'),
+        trusted: join(folder, 'trusted'),
         log: () => undefined,
       }),
     ).toThrow(cause);
@@ -233,4 +254,75 @@ test('a stack lock whose holder died is taken over, and the job runs', async () 
   expect(run.exitCode, run.detail).toBe(0);
   expect(existsSync(join(folder, 'stack.lock'))).toBe(false);
   expect(existsSync(join(folder, 'stack.lock.takeover'))).toBe(false);
+});
+
+// A job's steps write GITHUB_ENV; a PATH there must not choose the sudo the orchestrator runs, nor
+// reach the launcher's environment at all.
+test("a PATH a job's steps pass on never chooses the sudo that launches its body", async () => {
+  const planted = join(folder, 'planted');
+  mkdirSync(planted);
+  writeFileSync(join(planted, 'sudo'), `#!/usr/bin/env bash\ntouch "${folder}/planted-sudo-ran"\nexit 0\n`);
+  chmodSync(join(planted, 'sudo'), 0o755);
+  const run = await executor().run(task('fast', { PASS_PATH: planted }), new AbortController().signal);
+  expect(run.exitCode, run.detail).toBe(0);
+  expect(existsSync(join(folder, 'planted-sudo-ran'))).toBe(false);
+  expect(readFileSync(join(folder, 'sudo.env'), 'utf8').split('\n')).not.toContain(`PATH=${planted}`);
+  // The body still ran, as the job user, with the PATH its steps passed on.
+  expect(recorded('job-home/job-fast.env').CWD).toBe(join(folder, 'work/fast/werkflow-app'));
+});
+
+test('an executor refuses a sudo that is no absolute path of a root-owned file no one else may write', () => {
+  expect(launcherProblem('sudo')).toBe('CI_SUDO sudo is no absolute path.');
+  expect(launcherProblem(join(folder, 'bin/sudo'))).toContain('is not owned by root');
+  expect(launcherProblem(join(folder, 'missing'))).toContain('cannot be read');
+  // A root-owned file in root-owned folders, writable by root alone: the host's own sudo passes.
+  expect(launcherProblem('/bin/sh')).toBeUndefined();
+});
+
+// The sibling step holds a token and runs as the orchestrator: from a folder no job can write, and
+// with Bun told to read no configuration or .env file there.
+test('the sibling step runs from a folder only the orchestrator writes, and Bun reads no local configuration there', async () => {
+  const trusted = join(folder, 'trusted');
+  mkdirSync(trusted, { mode: 0o777 });
+  chmodSync(trusted, 0o777);
+  writeFileSync(join(trusted, 'bunfig.toml'), 'preload = ["./planted.ts"]\n');
+  writeFileSync(
+    join(trusted, 'planted.ts'),
+    `require('node:fs').writeFileSync(${JSON.stringify(join(folder, 'planted-preload-ran'))}, '');\n`,
+  );
+  writeFileSync(join(trusted, '.env'), 'CI_PLANTED=1\n');
+  const run = await executor().run(task('fast'), new AbortController().signal);
+  expect(run.exitCode, run.detail).toBe(0);
+  expect(existsSync(join(folder, 'planted-preload-ran'))).toBe(false);
+  expect(recorded('prepare-siblings.env').CI_PLANTED).toBeUndefined();
+  expect(statSync(trusted).mode & 0o077).toBe(0);
+});
+
+test("a task learns of its body's launch after its steps, and a launch that cannot be recorded runs no body", async () => {
+  const seen: string[] = [];
+  const launched = await executor().run(
+    {
+      ...task('fast'),
+      onLaunch: () => {
+        seen.push(`prepare:${existsSync(join(folder, 'job-home/prepare-fast.env'))}`);
+        seen.push(`body:${existsSync(join(folder, 'job-home/job-fast.env'))}`);
+      },
+    },
+    new AbortController().signal,
+  );
+  expect(launched.exitCode, launched.detail).toBe(0);
+  expect(seen).toEqual(['prepare:true', 'body:false']);
+  rmSync(join(folder, 'job-home/job-fast.env'));
+  const refused = await executor().run(
+    {
+      ...task('sql'),
+      onLaunch: () => {
+        throw new Error('the work root is read-only');
+      },
+    },
+    new AbortController().signal,
+  );
+  expect(refused.exitCode, refused.detail).toBeNull();
+  expect(refused.detail).toContain('its launch could not be recorded: the work root is read-only');
+  expect(existsSync(join(folder, 'job-home/job-sql.env'))).toBe(false);
 });
