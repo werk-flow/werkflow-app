@@ -36,6 +36,21 @@ insert into public.jobs (id, organization_id, title, job_number, client_id, stat
 ('38060000-0000-4000-8000-000000000051', '38060000-0000-4000-8000-000000000010', 'Zähler tauschen',
  'I-81', '38060000-0000-4000-8000-000000000020', 'nicht_bearbeitet', '38060000-0000-4000-8000-000000000002');
 
+-- The field worker works on the second job, which the first invoice's original must never open to them.
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
+('38060000-0000-4000-8000-000000000010', '38060000-0000-4000-8000-000000000051',
+ '38060000-0000-4000-8000-000000000003', '38060000-0000-4000-8000-000000000002');
+-- A plan on that job, which the field worker reads.
+insert into public.documents (
+  id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by
+) values
+('38060000-0000-4000-8000-000000000310', '38060000-0000-4000-8000-000000000010',
+ '38060000-0000-4000-8000-000000000010/38060000-0000-4000-8000-000000000310/plan.pdf', 'plan.pdf', 'plan.pdf',
+ 'other', 10, '38060000-0000-4000-8000-000000000002');
+insert into public.document_links (organization_id, document_id, job_id, created_by) values
+('38060000-0000-4000-8000-000000000010', '38060000-0000-4000-8000-000000000310',
+ '38060000-0000-4000-8000-000000000051', '38060000-0000-4000-8000-000000000002');
+
 create function pg_temp.expect_refusal(p_label text, p_statement text, p_refusal text) returns void
 language plpgsql as $$
 begin
@@ -307,11 +322,34 @@ from (values
     quantity, unit, unit_price_cents, tax_category, tax_rate_basis_points, net_cents)
     values (%L, %L, 9, 'Nachtrag', 1, 'piece', 100, 'S', 1900, 100)$line$,
     '38060000-0000-4000-8000-000000000010', pg_temp.id('first')), 'invoice_issued'),
-  ('move the series', 'update public.invoice_settings set next_number = 1', 'invoice_numbers_fixed'),
-  ('change the prefix', 'update public.invoice_settings set number_prefix = ''X''', 'invoice_numbers_fixed')
+  ('move the series', 'update public.invoice_settings set next_number = 1
+    where organization_id = ''38060000-0000-4000-8000-000000000010''', 'invoice_numbers_fixed'),
+  ('change the prefix', 'update public.invoice_settings set number_prefix = ''X''
+    where organization_id = ''38060000-0000-4000-8000-000000000010''', 'invoice_numbers_fixed'),
+  -- A reference clears only when its target is gone: the foreign key's set null.
+  ('clear a live work', format('update public.invoices set job_id = null where id = %L', pg_temp.id('first')),
+    'invoice_issued'),
+  ('clear a live person', format('update public.invoices set issued_by = null where id = %L', pg_temp.id('first')),
+    'invoice_issued'),
+  -- Only register_invoice_original names the first original, after it filed it.
+  ('name an original directly', format('update public.invoices set original_document_id = %L where id = %L',
+    '38060000-0000-4000-8000-000000000304', pg_temp.id('first')), 'invoice_issued')
 ) as cases(label, statement, refusal);
 -- A deleted work clears its reference only.
-update public.invoices set job_id = null where id = pg_temp.id('first');
+reset role;
+do $$
+declare
+  v_before jsonb := to_jsonb((select invoice from public.invoices invoice where id = pg_temp.id('first')));
+  v_after jsonb;
+begin
+  delete from public.jobs where id = '38060000-0000-4000-8000-000000000050';
+  v_after := to_jsonb((select invoice from public.invoices invoice where id = pg_temp.id('first')));
+  if v_after ->> 'job_id' is not null or v_after - 'job_id' is distinct from v_before - 'job_id' then
+    raise exception 'deleting the work changed the issued invoice from % to %', v_before, v_after;
+  end if;
+end;
+$$;
+set local role service_role;
 
 -- After the first issue a save keeps the series and changes only the terms.
 select public.save_invoice_settings('38060000-0000-4000-8000-000000000001', '38060000-0000-4000-8000-000000000010',
@@ -354,7 +392,7 @@ declare
   v_document public.documents;
 begin
   select * into v_document from public.documents where id = '38060000-0000-4000-8000-000000000301';
-  if (v_first ->> 'replay')::boolean or v_document.category is distinct from 'invoice'
+  if (v_first ->> 'replay')::boolean is distinct from false or v_document.category is distinct from 'invoice'
     or v_document.retention_class is distinct from 'ten_years'
     or v_document.document_date is distinct from (now() at time zone 'Europe/Berlin')::date
     or v_document.mime_type is distinct from 'application/pdf'
@@ -367,15 +405,29 @@ begin
       is distinct from array['0:38060000-0000-4000-8000-000000000020'] then
     raise exception 'the original is linked to more than its customer';
   end if;
-  if not (v_again ->> 'replay')::boolean or v_again ->> 'documentId' is distinct from v_document.id::text
+  if (v_again ->> 'replay')::boolean is distinct from true or v_again ->> 'documentId' is distinct from v_document.id::text
     or exists (select 1 from public.documents where id = '38060000-0000-4000-8000-000000000302') then
     raise exception 'a second registration registered again: %', v_again;
   end if;
   if (select original_document_id from public.invoices where id = pg_temp.id('first')) is distinct from v_document.id then
     raise exception 'the invoice does not name its original';
   end if;
+  if current_setting('app.invoice_original_write', true) is distinct from 'off' then
+    raise exception 'the registration left its original write open';
+  end if;
 end;
 $$;
+
+-- A manager links no work, customer or person to the original: a work link
+-- would open it to every employee assigned to that work. Removal stays.
+select pg_temp.expect_refusal(label, format(
+  'select public.update_document_links(%L, %L, %L, null, %s, null, %s, null, null, null, null)',
+  '38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010',
+  '38060000-0000-4000-8000-000000000301', jobs, clients), 'document_is_invoice_original')
+from (values
+  ('link the original to a job', 'array[''38060000-0000-4000-8000-000000000051'']::uuid[]', 'null'),
+  ('link it to its customer again', 'null', 'array[''38060000-0000-4000-8000-000000000020'']::uuid[]')
+) as cases(label, jobs, clients);
 
 -- Filed, the original is never deleted or replaced, and the invoice keeps it.
 select pg_temp.expect_refusal(label, statement, refusal)
@@ -393,13 +445,25 @@ reset role;
 create function pg_temp.invoices_seen_by(p_user uuid) returns bigint language plpgsql as $$
 declare
   v_count bigint;
+  v_first uuid := pg_temp.id('first');
 begin
   perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
   select count(*) into v_count from public.invoices where organization_id = '38060000-0000-4000-8000-000000000010';
   perform pg_temp.expect_refusal('settings read', 'select count(*) from public.invoice_settings', '42501');
   perform pg_temp.expect_refusal('change an issued invoice',
-    'update public.invoices set order_reference = ''X''', '42501');
+    format('update public.invoices set order_reference = ''X'' where id = %L', v_first), '42501');
+  execute 'reset role';
+  return v_count;
+end;
+$$;
+create function pg_temp.document_seen_by(p_user uuid, p_document uuid) returns bigint language plpgsql as $$
+declare
+  v_count bigint;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  select count(*) into v_count from public.documents where id = p_document;
   execute 'reset role';
   return v_count;
 end;
@@ -410,6 +474,16 @@ begin
     or pg_temp.invoices_seen_by('38060000-0000-4000-8000-000000000003') is distinct from 0::bigint
     or pg_temp.invoices_seen_by('38060000-0000-4000-8000-000000000004') is distinct from 0::bigint then
     raise exception 'an invoice read crossed a role or an organization';
+  end if;
+  -- The refused link left the field worker on the second job without the
+  -- original, while they read that job's plan.
+  if pg_temp.document_seen_by('38060000-0000-4000-8000-000000000003', '38060000-0000-4000-8000-000000000310')
+      is distinct from 1::bigint
+    or pg_temp.document_seen_by('38060000-0000-4000-8000-000000000001', '38060000-0000-4000-8000-000000000301')
+      is distinct from 1::bigint
+    or pg_temp.document_seen_by('38060000-0000-4000-8000-000000000003', '38060000-0000-4000-8000-000000000301')
+      is distinct from 0::bigint then
+    raise exception 'the assigned field worker reads the original, or the reads prove nothing';
   end if;
 end;
 $$;

@@ -124,6 +124,12 @@ function getUpdateMessage(result: UpdateDocumentLinksResult): {
   }
 
   // The save is all or nothing: a failure changed no link.
+  if (result.error === 'document_is_invoice_original') {
+    return {
+      variant: 'error',
+      message: 'Eine ausgestellte Rechnung bleibt nur mit ihrem Kunden verknüpft. Weitere Verknüpfungen sind nicht möglich.',
+    };
+  }
   return {
     variant: 'error',
     message: 'Die Verknüpfungen konnten nicht aktualisiert werden.',

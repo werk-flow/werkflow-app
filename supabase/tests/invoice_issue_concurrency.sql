@@ -11,6 +11,11 @@
 -- organization through dblink connections and deletes it at the start (a run
 -- that broke off) and at the end. Deleting the organization is the one way an
 -- issued invoice goes. The main session only orchestrates and rolls back.
+--
+-- The series carries no year, so no number depends on the day the test runs;
+-- each issue names the Berlin day its own statement starts at, the day
+-- issue_invoice takes once the series' lock is held. A run across midnight or
+-- New Year changes no expected number. The yearly restart is in invoice_issue.sql.
 \connect postgres supabase_admin
 begin;
 set local search_path = public, extensions, pg_temp;
@@ -40,6 +45,9 @@ begin
   insert into public.organizations (id, name, admin_id, unique_code) values
   ('38070000-0000-4000-8000-000000000010', 'Haustechnik Sonnenberg Rechnungsrennen',
    '38070000-0000-4000-8000-000000000001', 'ISSRACE');
+  insert into public.invoice_settings (organization_id, number_prefix, number_with_year, number_min_digits,
+    next_number)
+  values ('38070000-0000-4000-8000-000000000010', 'RE-', false, 3, 1);
   insert into public.clients (id, organization_id, name, client_type, address) values
   ('38070000-0000-4000-8000-000000000020', '38070000-0000-4000-8000-000000000010',
    'Hausverwaltung Lindenhof GmbH', 'gewerblich', 'Hofweg 1, 10117 Berlin');
@@ -57,13 +65,14 @@ begin
 end $$
 $setup$);
 
--- An issue of p_draft checked under the p_sequence-th number of this year's series, on the Berlin day.
+-- An issue of p_draft checked under the series' p_sequence-th number, on the
+-- Berlin day the statement starts at.
 create function pg_temp.issue_statement(p_draft text, p_sequence integer) returns text language sql as $$
   select format($issue$select public.issue_invoice('38070000-0000-4000-8000-000000000001',
     '38070000-0000-4000-8000-000000000010', %L, 1, gen_random_uuid(),
     '{"organizationName":"Haustechnik Sonnenberg","profile":{},"files":{},"buyer":{}}', %L,
-    (now() at time zone 'Europe/Berlin')::date) ->> 'invoiceNumber'$issue$,
-    p_draft, 'RE-' || to_char(now() at time zone 'Europe/Berlin', 'YYYY') || '-' || lpad(p_sequence::text, 3, '0'));
+    (statement_timestamp() at time zone 'Europe/Berlin')::date) ->> 'invoiceNumber'$issue$,
+    p_draft, 'RE-' || lpad(p_sequence::text, 3, '0'));
 $$;
 
 -- The first issue holds its transaction open with its number taken.
@@ -93,7 +102,6 @@ select dblink_exec('issue_race_first', 'commit');
 
 do $$
 declare
-  v_year text := to_char(now() at time zone 'Europe/Berlin', 'YYYY');
   v_message text;
   v_second text;
   v_numbers text[];
@@ -112,8 +120,7 @@ begin
     select invoice_number from public.invoices where organization_id = '38070000-0000-4000-8000-000000000010'
       and invoice_number is not null
   $read$) as issued(invoice_number text);
-  if v_second is distinct from 'RE-' || v_year || '-002'
-    or v_numbers is distinct from array['RE-' || v_year || '-001', 'RE-' || v_year || '-002'] then
+  if v_second is distinct from 'RE-002' or v_numbers is distinct from array['RE-001', 'RE-002'] then
     raise exception 'two concurrent issues got % (the second, checked again, answered %)', v_numbers, v_second;
   end if;
 end $$;
@@ -126,13 +133,12 @@ select * from dblink('issue_race_first', pg_temp.issue_statement('38070000-0000-
 select dblink_exec('issue_race_first', 'rollback');
 do $$
 declare
-  v_year text := to_char(now() at time zone 'Europe/Berlin', 'YYYY');
   v_number text;
 begin
   select number into v_number
   from dblink('issue_race_second', pg_temp.issue_statement('38070000-0000-4000-8000-000000000103', 3))
     as third(number text);
-  if v_number is distinct from 'RE-' || v_year || '-003' then
+  if v_number is distinct from 'RE-003' then
     raise exception 'an issue after a rolled-back one got %, a number went missing', v_number;
   end if;
 end $$;
