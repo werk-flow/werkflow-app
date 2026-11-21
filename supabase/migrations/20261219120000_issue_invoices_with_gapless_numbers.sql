@@ -9,7 +9,8 @@
 -- 2. invoices: the Rechnungsdatum, who issued it, the snapshot the server
 --    checked (seller profile, letterhead files, Rechnungsempfänger) and the
 --    filed original. A guard refuses every later change and delete of an
---    issued invoice and its lines, whoever writes.
+--    issued invoice and its lines, whoever writes, but a deleted work's or
+--    person's set null and the original's registration.
 -- 3. issue_invoice: in one transaction it checks the draft is complete,
 --    takes the next number under the series' row lock, only when it is the
 --    number and day the server checked, stores the snapshot, sets
@@ -20,6 +21,9 @@
 --    the ten-year class, linked to the customer, once per invoice, and files
 --    it through file_document in the same transaction. issue_invoice calls
 --    it; „Beleg erstellen“ calls it for an original still pending.
+--    No link is added to a registered original afterwards
+--    (guard_invoice_original_links), so no work link opens it to that work's
+--    employees.
 -- 5. save_invoice_settings, get_invoice_settings; create_invoice takes the
 --    default terms; get_invoice answers the issue facts.
 --
@@ -29,7 +33,7 @@
 -- function checks the actor again under the access lock.
 --
 -- Expand-only: a new table, new nullable columns, a widened event check, new
--- functions; create_invoice and get_invoice keep their signatures.
+-- functions and triggers; create_invoice and get_invoice keep their signatures.
 --
 -- Prevention: Tier 1 (the guards, the issue checks, no client grant), Tier 2
 -- supabase/tests/invoice_issue.sql and invoice_issue_concurrency.sql.
@@ -183,19 +187,23 @@ alter table public.invoice_events drop constraint invoice_events_type_check;
 alter table public.invoice_events add constraint invoice_events_type_check
   check (event_type in ('created', 'saved', 'deleted', 'issued', 'original_registered')) not valid;
 
--- An issued invoice keeps every value. Only a deleted work or person clears
--- its reference (their foreign keys set null), and the original is set once.
--- It is never deleted while its organization exists.
+-- An issued invoice keeps every value. A work or person reference clears only
+-- when its target is gone, as its foreign key's set null does; the original is
+-- set once, only by register_invoice_original (it raises
+-- app.invoice_original_write for its one update). It is never deleted while
+-- its organization exists. Security definer: service_role cannot read
+-- auth.users, whose rows the person references name; no role executes it.
 create function app_private.guard_issued_invoice()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path to ''
 as $$
 declare
   v_free constant text[] := array[
     'job_id', 'project_id', 'service_case_id', 'created_by', 'updated_by', 'issued_by', 'original_document_id'
   ];
+  v_registering constant boolean := coalesce(current_setting('app.invoice_original_write', true), '') = 'on';
 begin
   if tg_op = 'DELETE' then
     if old.status = 'entwurf' or not exists (
@@ -205,18 +213,31 @@ begin
     end if;
     raise exception 'invoice_issued';
   end if;
+  perform set_config('app.invoice_original_write', 'off', true);
   if old.status = 'entwurf' then
+    -- A draft has no original; only the registration names one, on an issued invoice.
+    if new.original_document_id is not null then
+      raise exception 'invoice_issued';
+    end if;
     return new;
   end if;
   if to_jsonb(new) - v_free is distinct from to_jsonb(old) - v_free
-    or (new.job_id is not null and new.job_id is distinct from old.job_id)
-    or (new.project_id is not null and new.project_id is distinct from old.project_id)
-    or (new.service_case_id is not null and new.service_case_id is distinct from old.service_case_id)
-    or (new.created_by is not null and new.created_by is distinct from old.created_by)
-    or (new.updated_by is not null and new.updated_by is distinct from old.updated_by)
-    or (new.issued_by is not null and new.issued_by is distinct from old.issued_by)
-    or (old.original_document_id is not null
-      and new.original_document_id is distinct from old.original_document_id)
+    or (new.job_id is distinct from old.job_id and (new.job_id is not null or exists (
+      select 1 from public.jobs job where job.id = old.job_id and job.organization_id = old.organization_id)))
+    or (new.project_id is distinct from old.project_id and (new.project_id is not null or exists (
+      select 1 from public.projects project
+      where project.id = old.project_id and project.organization_id = old.organization_id)))
+    or (new.service_case_id is distinct from old.service_case_id and (new.service_case_id is not null or exists (
+      select 1 from public.service_cases service_case
+      where service_case.id = old.service_case_id and service_case.organization_id = old.organization_id)))
+    or (new.created_by is distinct from old.created_by and (new.created_by is not null
+      or exists (select 1 from auth.users person where person.id = old.created_by)))
+    or (new.updated_by is distinct from old.updated_by and (new.updated_by is not null
+      or exists (select 1 from auth.users person where person.id = old.updated_by)))
+    or (new.issued_by is distinct from old.issued_by and (new.issued_by is not null
+      or exists (select 1 from auth.users person where person.id = old.issued_by)))
+    or (new.original_document_id is distinct from old.original_document_id
+      and (old.original_document_id is not null or new.original_document_id is null or not v_registering))
   then
     raise exception 'invoice_issued';
   end if;
@@ -461,8 +482,10 @@ begin
       'contentHash', p_content_hash, 'clientId', v_invoice.client_id)
   );
   perform public.file_document(p_actor_id, p_organization_id, p_document_id);
+  perform set_config('app.invoice_original_write', 'on', true);
   update public.invoices invoice set original_document_id = p_document_id
   where invoice.id = v_invoice.id and invoice.organization_id = p_organization_id;
+  perform set_config('app.invoice_original_write', 'off', true);
   insert into public.invoice_events (
     organization_id, invoice_id, event_type, status, version, payload, actor_id, attempt_key
   ) values (
@@ -477,6 +500,46 @@ revoke all on function public.register_invoice_original(uuid, uuid, uuid, uuid, 
   from public, anon, authenticated;
 grant execute on function public.register_invoice_original(uuid, uuid, uuid, uuid, text, text, bigint, text)
   to service_role;
+
+-- An invoice's original keeps only the customer link its registration wrote:
+-- a work link would let every employee assigned to that work read it. So no
+-- link is added to a registered original and no link of it turns to another
+-- target, whoever writes; a removal, and a deleted target's set null, stay.
+-- The registration links before it names the original, in one transaction,
+-- so the refusal never meets it. Security definer as the personnel-document
+-- link guard: no role executes it.
+create function app_private.guard_invoice_original_links()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $$
+begin
+  if tg_op = 'UPDATE' and new.document_id = old.document_id
+    and (new.job_id is null or new.job_id is not distinct from old.job_id)
+    and (new.project_id is null or new.project_id is not distinct from old.project_id)
+    and (new.client_id is null or new.client_id is not distinct from old.client_id)
+    and (new.employee_id is null or new.employee_id is not distinct from old.employee_id)
+    and (new.request_id is null or new.request_id is not distinct from old.request_id)
+    and (new.equipment_id is null or new.equipment_id is not distinct from old.equipment_id)
+    and (new.service_case_id is null or new.service_case_id is not distinct from old.service_case_id)
+    and (new.maintenance_coverage_id is null
+      or new.maintenance_coverage_id is not distinct from old.maintenance_coverage_id)
+  then
+    return new;
+  end if;
+  if exists (
+    select 1 from public.invoices invoice
+    where invoice.original_document_id = new.document_id and invoice.organization_id = new.organization_id
+  ) then
+    raise exception 'document_is_invoice_original';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app_private.guard_invoice_original_links() from public, anon, authenticated, service_role;
+create trigger guard_invoice_original_links before insert or update on public.document_links
+  for each row execute function app_private.guard_invoice_original_links();
 
 -- 5. The organization's invoice settings with the number the next invoice
 -- issued today takes; an organization that saved none reads the defaults at
