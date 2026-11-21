@@ -373,12 +373,20 @@ begin
 end;
 $$;
 
--- Inside a cancel, the link goes on a new draft only: a complete issued Stornorechnung naming a filed
--- invoice document is refused, since only issue_invoice issues and only the registration names an original.
-select pg_temp.expect_refusal('an issued Stornorechnung with an original written under the cancel flag', format(
+-- Inside a cancel, the link goes on a new draft only, since only issue_invoice issues and only the
+-- registration names an original. Each half is refused on its own: an issued Stornorechnung without an
+-- original, and a draft that names a filed invoice document.
+select pg_temp.expect_refusal('an issued Stornorechnung written under the cancel flag', format(
   $insert$insert into public.invoices (organization_id, client_id, recipient_client_id, cancels_invoice_id,
-    cancellation_reason, status, invoice_number, issue_date, issued_at, issue_snapshot, original_document_id)
-    select %1$L, %2$L, %2$L, %3$L, 'Nochmal', 'ausgestellt', 'X-1', current_date, now(), '{}', %4$L
+    cancellation_reason, status, invoice_number, issue_date, issued_at, issue_snapshot)
+    select %1$L, %2$L, %2$L, %3$L, 'Nochmal', 'ausgestellt', 'X-1', current_date, now(), '{}'
+    where set_config('app.invoice_cancel', %3$L, true) is not null$insert$,
+  '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020', pg_temp.id('kept')),
+  'invoice_issued');
+select pg_temp.expect_refusal('a Stornorechnung draft with an original written under the cancel flag', format(
+  $insert$insert into public.invoices (organization_id, client_id, recipient_client_id, cancels_invoice_id,
+    cancellation_reason, original_document_id)
+    select %1$L, %2$L, %2$L, %3$L, 'Nochmal', %4$L
     where set_config('app.invoice_cancel', %3$L, true) is not null$insert$,
   '38080000-0000-4000-8000-000000000010', '38080000-0000-4000-8000-000000000020', pg_temp.id('kept'),
   '38080000-0000-4000-8000-000000000401'), 'invoice_issued');

@@ -220,10 +220,16 @@ describe("a Stornorechnung's head", () => {
     issued(lines, referenceOf(Math.floor(rows / 2)), referenceOf(Math.ceil(rows / 2)));
 
   test('a Stornorechnung under a longer number fits wherever its original fit', async () => {
+    const allowed = (rows: number) => {
+      const { orderReference, buyerReference } = originalOf(rows);
+      return Math.max(orderReference.length, buyerReference.length) <= INVOICE_REFERENCE_MAX_LENGTH;
+    };
     let rows = 2;
-    while (await headFits(originalOf(rows + 1), ORIGINAL_ISSUE)) rows += 1;
+    while (allowed(rows + 1) && (await headFits(originalOf(rows + 1), ORIGINAL_ISSUE))) rows += 1;
+    if (!allowed(rows + 1)) {
+      throw new Error('no original within INVOICE_REFERENCE_MAX_LENGTH reaches the head limit');
+    }
     const original = originalOf(rows);
-    expect(original.orderReference.length).toBeLessThanOrEqual(INVOICE_REFERENCE_MAX_LENGTH);
     // The original's head is at its limit, and the next number alone would push it over.
     expect(await headFits(original, NEXT_ISSUE)).toBe(false);
 

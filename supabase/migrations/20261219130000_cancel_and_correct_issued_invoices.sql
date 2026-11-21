@@ -68,8 +68,9 @@ alter table public.invoice_events add constraint invoice_events_type_check
 -- the invoice, its status alone turns from Ausgestellt to Storniert; the
 -- cancel's actor and time are in its history. Every other rule of R4's guard
 -- stays: a work or person reference clears only when its target is gone,
--- an original is named once and only when it is the invoice's filed ten-year
--- document with the registration's history, and a draft names none.
+-- an original is named once and only when it is the invoice's ten-year
+-- document, filed with its filing record, linked to its customer and to
+-- nothing else, with the registration's history, and a draft names none.
 -- Security definer as there; no role executes it.
 create or replace function app_private.guard_issued_invoice()
 returns trigger
@@ -152,6 +153,14 @@ begin
         select 1 from public.invoice_events event
         where event.organization_id = old.organization_id and event.invoice_id = old.id
           and event.event_type = 'original_registered' and event.attempt_key = new.original_document_id)
+      or not exists (
+        select 1 from public.document_audit_events audit
+        where audit.organization_id = old.organization_id and audit.document_id = new.original_document_id
+          and audit.event_type = 'filed')
+      or not exists (
+        select 1 from public.document_links link
+        where link.document_id = new.original_document_id and link.organization_id = old.organization_id
+          and link.client_id = old.client_id)
       or exists (
         select 1 from public.document_links link
         where link.document_id = new.original_document_id and link.organization_id = old.organization_id
