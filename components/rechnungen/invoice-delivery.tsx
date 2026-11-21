@@ -21,7 +21,7 @@ import {
   type DeliveryMailDefaults,
   type DeliveryState,
 } from '@/lib/delivery/delivery-types';
-import { deliveryFailureAdvice } from '@/lib/delivery/failure-advice';
+import { deliveryFailureAdvice, priorEmailAdvice } from '@/lib/delivery/failure-advice';
 import { retryWindowAt, retryWindowEnd } from '@/lib/delivery/retry-window';
 import { retryInvoiceDelivery } from '@/lib/invoices/delivery-actions';
 import { formatBerlinDateTime } from '@/lib/utils';
@@ -110,19 +110,6 @@ function DeliveryRow({ entry }: { entry: DeliveryEntry }) {
 }
 
 /**
- * The newest email that went out or may have (still sending, or unanswered),
- * so the dialog warns before a second one; a failed one never left.
- */
-function lastEmailSent(list: DeliveryList): string | null {
-  const last = list.entries.find((entry) => entry.channel === 'email' && entry.state !== 'failed');
-  if (!last) return null;
-  if (last.state === 'sending') {
-    return `Ob die E-Mail vom ${formatBerlinDateTime(last.createdAt)} an ${last.recipient ?? ''} rausging, ist unklar. Frag am besten beim Kunden nach, bevor du sie noch einmal sendest.`;
-  }
-  return `Zuletzt ging sie am ${formatBerlinDateTime(last.sentAt ?? last.createdAt)} an ${last.recipient ?? ''} raus.`;
-}
-
-/**
  * „Versand“ of an issued invoice: send it by email, mark it as sent by post
  * or by hand, and every delivery with its state, a failed one with „Erneut
  * senden“. Other sessions' sends arrive through Realtime.
@@ -179,7 +166,7 @@ export function InvoiceDeliveries({
           invoiceId={invoiceId}
           invoiceNumber={invoiceNumber}
           defaults={defaults}
-          sentBefore={lastEmailSent(list)}
+          sentBefore={priorEmailAdvice(list.entries)}
           onClose={() => setOpen(null)}
         />
       )}
