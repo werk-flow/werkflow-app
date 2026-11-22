@@ -6,7 +6,7 @@ import type { InvoiceLineValues, InvoiceTaxRate } from './types';
 
 // The catalog source of an invoice line: the Leistung or article it was
 // copied from with that day's price
-// (supabase/migrations/20261219110000_keep_the_catalog_source_of_invoice_lines.sql).
+// (supabase/migrations/20261219113106_keep_the_catalog_source_of_invoice_lines.sql).
 // The copied values are the line's own; the source only says where they came from.
 
 export const INVOICE_LINE_SOURCE_KINDS = ['leistung', 'article'] as const;

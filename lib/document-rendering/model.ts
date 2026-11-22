@@ -53,6 +53,13 @@ type TaxRateTotal = {
   grossCents: number;
 };
 
+export type DocumentTotals = {
+  byRate: TaxRateTotal[];
+  netCents: number;
+  vatCents: number;
+  grossCents: number;
+};
+
 export type BusinessDocument = {
   /** The document's date as `YYYY-MM-DD`; it also dates the PDF, so a render repeats byte for byte. */
   issuedOn: string;
@@ -66,12 +73,8 @@ export type BusinessDocument = {
   metaRows: Array<{ label: string; value: string }>;
   openingText: string;
   sections: DocumentSection[];
-  totals: {
-    byRate: TaxRateTotal[];
-    netCents: number;
-    vatCents: number;
-    grossCents: number;
-  };
+  /** Null for a document without amounts, such as a service report: no totals block prints. */
+  totals: DocumentTotals | null;
   closingText: string;
   /** Small print columns at the foot of each page; stationery carries its own, so they print only without it. */
   footerColumns: string[][];
