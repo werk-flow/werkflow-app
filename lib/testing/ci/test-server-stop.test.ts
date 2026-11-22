@@ -1,7 +1,8 @@
 // A browser job's test server (scripts/ci/job.ts) is stopped with every process it started, and its
 // port proven free, before the job returns: a runner that reuses the host starts the next job there.
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { assertAppPortFree } from '../runner/app-port';
 import { stopTestServer } from './test-server-stop';
@@ -65,6 +66,18 @@ test('a stopped test server takes the commands it started in their own groups wi
   await expect(assertAppPortFree(port)).resolves.toBeUndefined();
 });
 
+test('a stop waits for a descendant that releases the port shortly after the server group ended', async () => {
+  // A listener in a group of its own that closes its port half a second after the server died, as
+  // a descendant the test session stops can still be closing its socket.
+  const releasing = `const parent = process.ppid; const watch = setInterval(() => { if (process.ppid !== parent) { clearInterval(watch); setTimeout(() => process.exit(0), 500); } }, 20); ${LISTENER}`;
+  const groups = await startServer(`
+    require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(releasing)}], { stdio: ['ignore', 'inherit', 'ignore'], detached: true });
+    setInterval(() => {}, 1000);
+  `);
+  await stopTestServer(groups.server, groups.port);
+  await expect(assertAppPortFree(groups.port)).resolves.toBeUndefined();
+});
+
 test('a stop that leaves the port held fails and names the port', async () => {
   // A server that forgets its child: the listener's group outlives the server's.
   const groups = await startServer(`
@@ -74,4 +87,31 @@ test('a stop that leaves the port held fails and names the port', async () => {
   const { port } = groups;
   await expect(stopTestServer(groups.server, port)).rejects.toThrow(`Port ${port} is still held`);
   expect(groupListed(groups.server)).toBe(false);
+});
+
+test('a server whose group already ended is never signalled', async () => {
+  const exited = spawn(process.execPath, ['-e', ''], { stdio: 'ignore', detached: true });
+  const groupId = exited.pid;
+  if (groupId === undefined) throw new Error('The fake test server did not start.');
+  await new Promise((resolveExit) => exited.once('exit', resolveExit));
+  const free = createServer();
+  const port = await new Promise<number>((resolvePort) =>
+    free.listen(0, () => {
+      const address = free.address();
+      resolvePort(typeof address === 'object' && address !== null ? address.port : 0);
+    }),
+  );
+  await new Promise((resolveClose) => free.close(resolveClose));
+  const signals: (string | number | undefined)[] = [];
+  const kill = process.kill.bind(process);
+  const watched = spyOn(process, 'kill').mockImplementation((pid: number, signal?: string | number) => {
+    if (pid === -groupId) signals.push(signal);
+    return kill(pid, signal);
+  });
+  try {
+    await stopTestServer(groupId, port);
+  } finally {
+    watched.mockRestore();
+  }
+  expect(signals.filter((signal) => signal !== 0)).toEqual([]);
 });

@@ -9,7 +9,7 @@ function abortReason(signal: AbortSignal): Error {
 }
 
 /** Whether any process of the group still exists; a killed one counts until it has been reaped. */
-function groupExists(groupId: number): boolean {
+export function groupExists(groupId: number): boolean {
   try {
     process.kill(-groupId, 0);
     return true;
