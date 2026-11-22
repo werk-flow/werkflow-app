@@ -75,7 +75,7 @@ Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers
 - **Permission groups** keep selection by declared scope: each group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
-- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed. `audit:layout:<area>` also runs when its pages or dialogs render a changed file at most five areas render (`surface-closure.ts`).
+- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed. `audit:layout:<area>` runs when its pages or dialogs render a changed file at most five areas render (`surface-closure.ts`).
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed (`fast-tier.ts` in CI).
 - Groups whose own spec or support changed run first.
 - `test:verify` refuses to start while a group it would run has an unclassified latest failure.
@@ -95,15 +95,16 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every PR to `main` but a label change, each queue entry and each push; `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Jobs: `lib/testing/ci/dag.ts`; bodies: `bun scripts/ci/job.ts <job>`.
+`.github/workflows/ci.yml` runs on every PR to `main` but a label change, each queue entry and each push; `Check` is its required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Jobs: `lib/testing/ci/dag.ts`; bodies: `scripts/ci/job.ts`.
 
-- **Tiers.** A PR's run is the fast tier: Fast, SQL and Component contracts, each running what `fast-tier.ts` selects; an empty selection skips its job. The integration run adds browser shards (owner decision D1).
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run, or a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
-- **Reuse and Check.** A push whose tree an integration run passed runs no job; a CI runner's passed result stands for its job on an identical tree (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
-- **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
-- **Queue.** `health.yml`'s weekly `CI queue` job fails when the p90 runner wait exceeds its ceiling (`.github/scripts/ci-queue.sh`).
+- **Tiers.** A PR's run is the fast tier: Fast, SQL, Component contracts and E-invoices, each skipped on an empty selection. The integration run adds browser shards (owner decision D1).
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run or an every-group input (`toolingClass`); a tooling change runs a sample (owner decision D3).
+- **Reuse and Check.** A push whose exact landing an integration run passed runs no job; a CI runner's pass stands for its job on an identical tree and base (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
+- **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release, and on `main` when `bun scripts/ci/full-run.ts due` says so. `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
+- **Stand-in.** `scripts/ci/run-commit.ts` runs a commit (mirror: `CI_EXECUTOR=mirror`), `scripts/ci/queue.ts` the queue.
+- **Queue.** `health.yml`'s weekly `CI queue` job fails on a p90 runner wait over its ceiling (`.github/scripts/ci-queue.sh`).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
-- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun of failed jobs follows a local repeat's retry rules.
+- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Reruns of failed jobs follow the local retry rules.
 
 ## Commands
 
@@ -131,7 +132,7 @@ Browser groups run against the recorded production build on the checkout's [port
 
 ## Specs
 
-A browser group is one spec file with one disposable organization, a rough check that the [catalog](../product/user-flow-catalog.md) flows still work. Its tests share the world.
+A browser group is one spec file with one disposable organization, a rough check that the [catalog](../product/user-flow-catalog.md) flows work. Its tests share the world.
 
 - World and layout fixture names come from `worldName` (`lib/testing/seed-world-plan.ts`).
 - A helper goes into its area module under `tests/golden/support/steps/` or `db/`, or `shared` when two areas need it. Never re-export one module from another.
@@ -218,7 +219,7 @@ Check these before classifying.
 - Treat a review score or old report as acceptance.
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock.
 - Add a package script that builds or tests outside the workspace lock, or changes the shared stack's schema outside its exclusive lock.
-- Set a duration assertion in a unit test. Make a slow test cheaper.
+- Set a duration assertion outside a [measured scenario](#deadlines-and-measured-scenarios). Make a slow test cheaper.
 
 ## Verify your work
 

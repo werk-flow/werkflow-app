@@ -4,7 +4,7 @@
 import { expect, test } from 'bun:test';
 import type { CiEvent } from './dag';
 import type { ReuseKey } from './reuse';
-import { jobShards, midnightNotice, plannedGroups, planRun } from './run-plan';
+import { jobShards, midnightNotice, plannedGroups, plannedWork, planRun } from './run-plan';
 
 const TREE = 'a'.repeat(40);
 const SHARDS = [
@@ -29,6 +29,7 @@ const OUTPUTS = {
   selected_sql: 'sql:grants,sql:history',
   selected_components: 'ui:contracts:work,ui:contracts:reports,ui:contracts:shell',
   component_shards: JSON.stringify(COMPONENT_SHARDS),
+  selected_invoices: '',
 };
 const nothingReused = (): undefined => undefined;
 
@@ -43,11 +44,19 @@ const plan = (
   planRun({
     event,
     tree: TREE,
+    base: 'e'.repeat(40),
     listGrowthApproved: false,
     outputs: options.outputs ?? OUTPUTS,
     passedTree: options.passedTree,
     reused: options.reused ?? nothingReused,
   });
+
+test("every reuse key names the base the run's Plan diffed against", () => {
+  const keys: ReuseKey[] = [];
+  plan('integration', { reused: (key) => (keys.push(key), undefined) });
+  expect(keys.length).toBeGreaterThan(0);
+  expect(new Set(keys.map((key) => key.base))).toEqual(new Set(['e'.repeat(40)]));
+});
 
 test("a pull request's run plans no browser shard and no midnight wait, and says why", () => {
   const pr = plan('pr', { outputs: { ...OUTPUTS, midnight_until: '2026-11-20T23:10:00.000Z' } });
@@ -106,6 +115,7 @@ test('a push to main whose tree an integration run passed runs no job and cites 
     'full_reason',
     'midnight_until',
     'selected_components',
+    'selected_invoices',
     'selected_lint',
     'selected_sql',
     'selected_static',
@@ -114,12 +124,47 @@ test('a push to main whose tree an integration run passed runs no job and cites 
     'sql',
     'static',
   ]);
-  for (const job of ['fast', 'sql', 'components', 'midnight', 'browser'] as const)
+  for (const job of ['fast', 'sql', 'components', 'invoices', 'midnight', 'browser'] as const)
     expect(pushed.skips[job]).toBe('The integration run https://ci.example/runs/7 passed this exact tree.');
   // An empty run URL names no run: the push runs its jobs.
   expect(plan('main', { passedTree: '' }).jobs).toContain('fast');
   // Only a push reuses a whole run: a queue run of the same tree still runs.
   expect(plan('integration', { passedTree: 'https://ci.example/runs/7' }).jobs).toContain('browser');
+});
+
+test("a plan records its event's required work before reuse: every job's groups, each shard's included", () => {
+  const work = [
+    'browser:audit:lab:calendar',
+    'browser:audit:visual:one',
+    'browser:audit:visual:two',
+    'browser:golden:p1-01',
+    'browser:step:server',
+    'components:ui:contracts:reports',
+    'components:ui:contracts:shell',
+    'components:ui:contracts:work',
+    'fast:static:lint',
+    'fast:static:typecheck',
+    'fast:static:docs',
+    'fast:unit:all',
+    'fast:step:build',
+    'sql:sql:grants',
+    'sql:sql:history',
+    'sql:step:types',
+    'sql:step:seed',
+  ].toSorted();
+  expect(plannedWork('integration', OUTPUTS)).toEqual(work);
+  expect(plannedWork('main', OUTPUTS)).toEqual(work);
+  // A reused shard is still required work: reuse decides who ran it, not what the run needs.
+  const reusedShard = plan('integration', {
+    reused: (key) => (key.job === 'browser' && key.shard === 1 ? 'https://ci.example/runs/3' : undefined),
+  });
+  expect(reusedShard.work).toEqual(work);
+  // A pull request's run requires no browser group (owner decision D1).
+  expect(plannedWork('pr', OUTPUTS).some((entry) => entry.startsWith('browser:'))).toBe(false);
+  // A push that reuses a passed tree records the work that run stood for.
+  expect(plan('main', { passedTree: 'https://ci.example/runs/7' }).work).toEqual(work);
+  const withoutSql = Object.fromEntries(Object.entries(OUTPUTS).filter(([key]) => key !== 'selected_sql'));
+  expect(() => plannedWork('main', withoutSql)).toThrow('selected_sql');
 });
 
 test('a reused job and a reused shard do not run; the key carries the steps and the approval', () => {
@@ -141,6 +186,7 @@ test('a reused job and a reused shard do not run; the key carries the steps and 
     job: 'sql',
     shard: null,
     tree: TREE,
+    base: 'e'.repeat(40),
     groups: ['sql:grants', 'sql:history', 'step:types', 'step:seed'],
     listGrowthApproved: false,
   });
@@ -149,12 +195,19 @@ test('a reused job and a reused shard do not run; the key carries the steps and 
     job: 'components',
     shard: 2,
     tree: TREE,
+    base: 'e'.repeat(40),
     groups: ['ui:contracts:reports', 'ui:contracts:shell'],
     listGrowthApproved: false,
   });
   expect(keys.some((key) => key.job === 'fast')).toBe(false);
   // A shard's key carries its number, so a receipt of shard 2 never stands for shard 1.
   expect(keys.filter((key) => key.job === 'browser').map((key) => key.shard)).toEqual([1, 2]);
+  // The plan names each reuse with its run, so the cost summary counts the hits (lib/testing/ci-cost/summary.ts).
+  expect(run.reused).toEqual([
+    { job: 'browser', shard: 2, runUrl: 'https://ci.example/runs/3' },
+    { job: 'components', shard: 1, runUrl: 'https://ci.example/runs/3' },
+    { job: 'sql', shard: null, runUrl: 'https://ci.example/runs/3' },
+  ]);
 });
 
 test('every shard reused skips the browser job and its midnight hold', () => {
@@ -178,6 +231,7 @@ test('a planner answer without a required key plans nothing, so no gate goes mis
     'selected_sql',
     'selected_components',
     'component_shards',
+    'selected_invoices',
   ] as const) {
     const partial = Object.fromEntries(Object.entries(OUTPUTS).filter(([name]) => name !== key));
     expect(() => plan('integration', { outputs: partial })).toThrow(`The planner gave no ${key}`);
@@ -286,4 +340,23 @@ test('a docs-only plan keeps the static gates #567 selects for documentation, Li
     'unit:all',
     'step:build',
   ]);
+});
+
+test('the e-invoice check runs as its own job when the plan selects it, and is skipped with the reason otherwise', () => {
+  const selected = { ...OUTPUTS, selected_invoices: 'step:e-invoices' };
+  const run = plan('pr', { outputs: selected });
+  expect(run.jobs).toContain('invoices');
+  expect(plannedGroups('invoices', selected)).toEqual(['step:e-invoices']);
+  const none = plan('pr');
+  expect(none.jobs).not.toContain('invoices');
+  expect(none.skips.invoices).toContain('selects no e-invoice check');
+  const reused = plan('integration', {
+    outputs: selected,
+    reused: (key) =>
+      key.job === 'invoices' && key.groups.join() === 'step:e-invoices'
+        ? 'https://ci.example/runs/5'
+        : undefined,
+  });
+  expect(reused.jobs).not.toContain('invoices');
+  expect(reused.skips.invoices).toContain('https://ci.example/runs/5');
 });
