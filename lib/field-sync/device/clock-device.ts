@@ -25,7 +25,7 @@ import {
 } from './time-outbox';
 import { sendTimeOutbox } from './time-outbox-send';
 import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
-import { TODAY_WIPE_KEY } from './today-wipe';
+import { TODAY_WIPE_KEY, sharedWipeGeneration } from './today-wipe';
 import { markUnsentWork, untilNetworkReturns } from './sync-runner';
 import { KEPT_CLOCK_ACTION_PREFIX, UNSENT_MARK_PREFIX, keepClockAction } from './unsent-mark';
 import type { UnsentScope, UnsentSource } from './unsent-work';
@@ -113,13 +113,15 @@ export async function outboxChanged(): Promise<void> {
   await publish();
 }
 
+/** Ends this tab's hold after another tab's wipe, and tells every listener once. */
+function endHold(): void {
+  dropped = true;
+  for (const listener of listeners) listener(null, true);
+}
+
 function onStorage(event: StorageEvent): void {
   // Another tab's wipe, or its `localStorage.clear()` (no key), which took the signal with it.
-  if (event.key === TODAY_WIPE_KEY || event.key === null) {
-    dropped = true;
-    for (const listener of listeners) listener(null, true);
-    return;
-  }
+  if (event.key === TODAY_WIPE_KEY || event.key === null) return endHold();
   // eslint-disable-next-line no-restricted-syntax -- a failed read here is shown by the next action's own read; a storage event has no caller to tell
   if (event.key === OUTBOX_CHANGED_KEY) void publish().catch(() => undefined);
   // Another tab's page kept an action without signal: the next pass of this tab sends it too.
@@ -256,12 +258,19 @@ function waitsBehind(taken: KeptTakeIn, userId: string): boolean {
 
 /**
  * Makes `next` this tab's holder and tells `listener` what the outbox holds for it, now and after
- * every change. Returns the call that ends the listening. Throws when the device storage fails.
+ * every change. `pageSignal` is the wipe signal the page started under: a wipe another tab gave
+ * before this tab listened ends the hold as one it hears later does. Returns the call that ends
+ * the listening. Throws when the device storage fails.
  */
-export async function holdClock(next: OutboxHolder, listener: ViewListener): Promise<() => void> {
+export async function holdClock(
+  next: OutboxHolder,
+  listener: ViewListener,
+  pageSignal: string | null,
+): Promise<() => void> {
   if (listeners.size === 0) window.addEventListener('storage', onStorage);
   holder = next;
   listeners.add(listener);
+  if (sharedWipeGeneration() !== pageSignal) endHold();
   await takeInKept();
   await publish();
   return () => {
