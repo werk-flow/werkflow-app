@@ -80,7 +80,9 @@ case "$kind" in
 
   deploy-key)
     key="$RUNNER_TEMP/deploy-key"
-    # The umask creates the key 0600, so no reader sees it before ssh does.
+    # The umask creates the key 0600, so no reader sees it before ssh does. A redirection keeps an
+    # existing file's mode, so a key file left from an earlier run goes first.
+    rm -f "$key"
     (umask 077; printf '%s\n' "$value" > "$key")
     GIT_SSH_COMMAND="ssh -i ${key} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
       git ls-remote --exit-code "$argument" refs/heads/production > /dev/null 2>&1 \
