@@ -133,6 +133,16 @@ function referencesAny(node: ts.Node, names: ReadonlySet<string>): boolean {
   return ts.forEachChild(node, (child) => referencesAny(child, names) || undefined) ?? false;
 }
 
+const NOT_RUN = new Set(['skip', 'skipIf', 'todo', 'todoIf', 'if', 'failing', 'failingIf']);
+
+/** The names along a callee: `describe.skip` is `describe`, `skip`; `test.if(x)` is `test`, `if`. */
+function calleeNames(callee: ts.Expression): string[] {
+  if (ts.isIdentifier(callee)) return [callee.text];
+  if (ts.isCallExpression(callee)) return calleeNames(callee.expression);
+  if (ts.isPropertyAccessExpression(callee)) return [...calleeNames(callee.expression), callee.name.text];
+  return [];
+}
+
 /** The inline callbacks of the tests a file always runs and expects to pass: `test(...)`, `it(...)`, `test.each(...)(...)`. */
 function testCallbacks(source: ts.SourceFile): ts.Node[] {
   const callbacks: ts.Node[] = [];
@@ -150,6 +160,9 @@ function testCallbacks(source: ts.SourceFile): ts.Node[] {
           (argument) => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument),
         ),
       );
+    // Nothing inside a skipped, conditional or expected-to-fail registration runs or must pass:
+    // `describe.skip(…)`, `test.todo(…)`, `describe.if(…)(…)`, `test.failing(…)`.
+    if (ts.isCallExpression(node) && calleeNames(node.expression).some((name) => NOT_RUN.has(name))) return;
     ts.forEachChild(node, visit);
   };
   visit(source);
@@ -185,8 +198,8 @@ function withLocalHelpers(source: ts.SourceFile, covered: ReadonlySet<string>): 
 }
 
 /** Why a covered module's property test does not drive it through fast-check in a test, if it does not. */
-function coverageProblems(modulePath: string, propertyTest: string): string[] {
-  const source = parseProductSource(propertyTest);
+function coverageProblems(modulePath: string, propertyTest: string, text?: string): string[] {
+  const source = parseProductSource(propertyTest, text);
   const fastCheck = runtimeBindings(source, propertyTest, (target) => target === 'fast-check');
   const covered = runtimeBindings(source, propertyTest, (target) => target === stemOf(modulePath));
   const reaching = withLocalHelpers(source, covered);
@@ -211,8 +224,8 @@ function optionKey(property: ts.ObjectLiteralElementLike): string | undefined {
 }
 
 /** Run settings a property test sets itself, and failing cases that hide a property or name no issue. */
-function settingProblems(file: string): string[] {
-  const source = parseProductSource(file);
+function settingProblems(file: string, text?: string): string[] {
+  const source = parseProductSource(file, text);
   const lines = source.getFullText().split('\n');
   const fastCheck = runtimeBindings(source, file, (target) => target === 'fast-check');
   const problems: string[] = [];
@@ -329,6 +342,55 @@ describe('property test manifest', () => {
   });
 
   test('a property test takes the shared seed and run count, and a failing case is one counterexample with its issue', () => {
-    expect(listPropertyTests().flatMap(settingProblems)).toEqual([]);
+    expect(listPropertyTests().flatMap((file) => settingProblems(file))).toEqual([]);
+  });
+});
+
+describe('property test gate', () => {
+  const MODULE = 'lib/date-time/berlin.ts';
+  const FILE = 'lib/date-time/berlin.property.test.ts';
+  const header =
+    "import { describe, test } from 'bun:test';\nimport fc from 'fast-check';\nimport { addLocalDays } from './berlin';\n";
+  const property = "fc.assert(fc.property(fc.integer(), (n) => addLocalDays('2026-01-01', n) !== ''))";
+  const covers = (body: string): boolean => coverageProblems(MODULE, FILE, header + body).length === 0;
+
+  test('counts a property in a test, test.each or a running suite, through a local helper too', () => {
+    expect(covers(`test('x', () => { ${property}; });`)).toBe(true);
+    expect(covers(`describe('s', () => { test.each([1])('x %d', () => { ${property}; }); });`)).toBe(true);
+    expect(
+      covers(
+        "const next = (n: number) => addLocalDays('2026-01-01', n);\ntest('x', () => { fc.assert(fc.property(fc.integer(), (n) => next(n) !== '')); });",
+      ),
+    ).toBe(true);
+  });
+
+  test('never counts a property that does not run or is expected to fail', () => {
+    for (const body of [
+      `test.skip('x', () => { ${property}; });`,
+      `describe.skip('s', () => { test('x', () => { ${property}; }); });`,
+      `describe.if(false)('s', () => { test('x', () => { ${property}; }); });`,
+      `test.todo('x', () => { ${property}; });`,
+      `test.failing('x', () => { ${property}; });`,
+      `function unused() { ${property}; }\ntest('x', () => {});`,
+    ])
+      expect(covers(body)).toBe(false);
+  });
+
+  test('refuses a run setting of its own, an alias of fc.assert and a failing case that hides a property', () => {
+    const problems = (body: string): string[] => settingProblems(FILE, header + body);
+    expect(
+      problems(`test('x', () => { fc.assert(fc.property(fc.integer(), () => true), { 'numRuns': 0 }); });`),
+    ).not.toEqual([]);
+    expect(
+      problems(
+        `const check = fc.assert;\ntest('x', () => { check(fc.property(fc.integer(), () => true)); });`,
+      ),
+    ).not.toEqual([]);
+    expect(
+      problems(
+        `// known bug: werk-flow/werkflow-planning#1 probe\ntest.failing('x', () => { ${property}; });`,
+      ),
+    ).not.toEqual([]);
+    expect(problems(`test('x', () => { ${property}; });`)).toEqual([]);
   });
 });
