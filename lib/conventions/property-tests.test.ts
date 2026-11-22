@@ -228,6 +228,27 @@ function settingProblems(file: string): string[] {
       );
   }
   const visit = (node: ts.Node): void => {
+    // fast-check is used as `fc.<name>` only, and `fc.assert` only when called: an alias such as
+    // `const check = fc.assert` or `const { assert } = fc` would escape the option check above.
+    const parent = node.parent;
+    if (
+      ts.isIdentifier(node) &&
+      fastCheck.has(node.text) &&
+      parent &&
+      !ts.isImportClause(parent) &&
+      !ts.isImportSpecifier(parent) &&
+      !ts.isQualifiedName(parent) &&
+      !(ts.isPropertyAccessExpression(parent) && parent.expression === node)
+    )
+      problems.push(`${at(node)}: use fast-check only as \`fc.<name>\`, never aliased or passed on.`);
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      fastCheck.has(node.expression.text) &&
+      node.name.text === 'assert' &&
+      !(parent && ts.isCallExpression(parent) && parent.expression === node)
+    )
+      problems.push(`${at(node)}: call \`fc.assert\` directly, so its options are checked.`);
     if (ts.isPropertyAccessExpression(node) && node.name.text === 'failingIf')
       problems.push(
         `${at(node)}: an expected failure is an unconditional \`test.failing\` under its known-bug comment.`,
