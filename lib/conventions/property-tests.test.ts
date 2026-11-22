@@ -89,7 +89,8 @@ function runtimeBindings(
   // A server-only module loads after `mock.module('server-only', …)`: a top-level
   // `const { x } = await import('…')`, so the binding is the module's in the whole file.
   for (const statement of source.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
+    if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const))
+      continue;
     for (const declaration of statement.declarationList.declarations) {
       const loaded =
         declaration.initializer && ts.isAwaitExpression(declaration.initializer)
@@ -158,14 +159,40 @@ function testCallbacks(source: ts.SourceFile): ts.Node[] {
 const contains = (outer: ts.Node, inner: ts.Node): boolean =>
   outer.pos <= inner.pos && inner.end <= outer.end;
 
+/**
+ * The covered bindings and the file's own top-level helpers that reach one of them, directly or
+ * through another such helper: a property may call the module through `findingsFor(…)`.
+ */
+function withLocalHelpers(source: ts.SourceFile, covered: ReadonlySet<string>): Set<string> {
+  const helpers = new Map<string, ts.Node>();
+  for (const statement of source.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name) helpers.set(statement.name.text, statement);
+    if (ts.isVariableStatement(statement) && statement.declarationList.flags & ts.NodeFlags.Const)
+      for (const declaration of statement.declarationList.declarations)
+        if (ts.isIdentifier(declaration.name) && declaration.initializer)
+          helpers.set(declaration.name.text, declaration.initializer);
+  }
+  const reaching = new Set(covered);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [name, body] of helpers)
+      if (!reaching.has(name) && referencesAny(body, reaching)) {
+        reaching.add(name);
+        grew = true;
+      }
+  }
+  return reaching;
+}
+
 /** Why a covered module's property test does not drive it through fast-check in a test, if it does not. */
 function coverageProblems(modulePath: string, propertyTest: string): string[] {
   const source = parseProductSource(propertyTest);
   const fastCheck = runtimeBindings(source, propertyTest, (target) => target === 'fast-check');
   const covered = runtimeBindings(source, propertyTest, (target) => target === stemOf(modulePath));
+  const reaching = withLocalHelpers(source, covered);
   const callbacks = testCallbacks(source);
   const asserted = fastCheckCalls(source, fastCheck, 'assert').filter(
-    (call) => referencesAny(call, covered) && callbacks.some((callback) => contains(callback, call)),
+    (call) => referencesAny(call, reaching) && callbacks.some((callback) => contains(callback, call)),
   );
   if (fastCheck.size === 0) return [`${propertyTest} imports no fast-check.`];
   if (covered.size === 0) return [`${propertyTest} imports no value of ${modulePath}.`];
