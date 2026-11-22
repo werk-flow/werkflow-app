@@ -341,7 +341,7 @@ const command = (
   const errors: string[] = [];
   const ran = runCommitCommand({
     repository,
-    profile: () => profileOnMainIn(repository),
+    profile: () => profileOnMainIn(repository).profile,
     environment: { PATH: process.env.PATH, HOME: folder, ...environment },
     executors,
     signal: new AbortController().signal,
@@ -449,6 +449,53 @@ test('a run whose fetched main names no CI profile never starts, even with CI_PA
   expect(ran.code).toBe(2);
   expect(ran.errors.join('\n')).toContain("The CI profile switch on origin's main names no profile");
   expect(tasks).toEqual([]);
+});
+
+// A single-branch clone of another branch fetches only that branch with a plain `git fetch origin`,
+// so its origin/main stays where it was: the run fetches main by its own refspec before it reads.
+test("a single-branch clone of another branch reads the switch of origin's real main, not its stale origin/main", async () => {
+  const { clone: full } = trustedClone();
+  const origin = join(folder, 'origin');
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync(
+      'git',
+      ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', '-c', 'commit.gpgSign=false', ...args],
+      { cwd, encoding: 'utf8' },
+    ).trim();
+  rmSync(full, { recursive: true, force: true });
+  git(origin, 'branch', 'feature');
+  const clone = join(folder, 'single-branch');
+  git(folder, 'clone', '--quiet', '--single-branch', '--branch', 'feature', origin, clone);
+  // The clone's origin/main as an older fetch left it: the switch said local then.
+  git(clone, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  writeFileSync(join(origin, 'ci', 'profile.json'), '{ "profile": "fleet" }\n');
+  git(origin, 'commit', '--quiet', '-am', 'fleet');
+  const commit = git(clone, 'rev-parse', 'HEAD');
+  const tree = git(clone, 'rev-parse', 'HEAD^{tree}');
+  const read: string[] = [];
+  const ran = await runCommitCommand({
+    repository: clone,
+    profile: () => {
+      const active = profileOnMainIn(clone);
+      read.push(active.main, active.profile.name);
+      return active.profile;
+    },
+    environment: {
+      PATH: process.env.PATH,
+      HOME: folder,
+      CI_EVENT: 'main',
+      CI_COMMIT: commit,
+      CI_RUN_URL: 'https://ci.example/runs/local',
+      CI_RESULTS_DIR: join(folder, 'results'),
+      CI_WORK_ROOT: join(folder, 'work'),
+    },
+    executors: stubExecutors([], tree, false),
+    signal: new AbortController().signal,
+    log: () => undefined,
+    error: () => undefined,
+  });
+  expect(ran).toBe(0);
+  expect(read).toEqual([git(origin, 'rev-parse', 'main'), 'fleet']);
 });
 
 test("a main run whose commit's Plan another run left in the ledger exits 3, and the start record names that run", async () => {

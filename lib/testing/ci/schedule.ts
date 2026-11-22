@@ -103,6 +103,18 @@ export function heldUntil(plan: {
     : until;
 }
 
+/**
+ * Whether a parsed release.yml has a `schedule` trigger, or why it cannot say: `scheduleDue`'s
+ * `releaseOnCron`. scripts/ci/schedule.ts reads the file; the profiles' tests read the same answer.
+ */
+export function releaseOnCron(workflow: unknown): boolean | { unreadable: string } {
+  const triggers =
+    typeof workflow === 'object' && workflow !== null && 'on' in workflow ? workflow.on : undefined;
+  if (typeof triggers !== 'object' || triggers === null)
+    return { unreadable: 'release.yml names no triggers' };
+  return 'schedule' in triggers && Array.isArray(triggers.schedule) && triggers.schedule.length > 0;
+}
+
 /** What the runner starts now. */
 type Start =
   | { work: ClockWorkName; slot: string; reason: string }

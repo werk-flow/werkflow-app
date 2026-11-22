@@ -28,6 +28,18 @@ export type CiProfileName = (typeof CI_PROFILE_NAMES)[number];
  */
 type Executor = 'conductor' | 'fleet' | 'local';
 
+/**
+ * Where a profile's jobs run, as finely as the queue-wait check tells them apart: GitHub Actions
+ * jobs of this repository's ci.yml (`actions`), jobs of the CI mirror's own repository on GitHub
+ * (`mirror`), a Boat machine (`boat`), or one of the owner's machines (`local`).
+ */
+type ExecutorKind = 'actions' | 'mirror' | 'boat' | 'local';
+/**
+ * The kinds whose queue wait .github/scripts/ci-queue.sh observes: it reads the runs of ci.yml in
+ * the repository health.yml runs in, this one, so only the jobs GitHub Actions runs there.
+ */
+export const QUEUE_WAIT_OBSERVES: readonly ExecutorKind[] = ['actions'];
+
 /** Monday 0 to Sunday 6, as `getLocalWeekday` counts. */
 type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 const EVERY_DAY: readonly Weekday[] = [0, 1, 2, 3, 4, 5, 6];
@@ -46,18 +58,20 @@ type Placement = {
   executor: Executor;
   atOnce: AtOnce;
   /**
-   * What this placement does not yet cover, for the owner to see: set where the item's source cannot
-   * check this executor's work yet. Only a placeholder profile may carry one (profiles.test.ts).
+   * What this placement does not yet cover, per kind of executor, for the owner to see: set where
+   * the item's source cannot check that kind's work yet. profiles.test.ts allows a gap only where it
+   * names one: the queue-wait check's, for each kind of `runsOn` it does not observe.
    */
-  gap?: string;
+  gaps?: Readonly<Partial<Record<ExecutorKind, string>>>;
 };
 
 /**
- * The clock that fires a timed schedule, as its inventory item records it (inventory.ts):
+ * The dispatcher that fires a timed schedule, one of the clocks its inventory item records (inventory.ts):
  * - `workflow`: the `on.schedule` cron of the item's workflow, on GitHub.
  * - `conductor`: the conductor's clock, `CLOCK_WORK` (schedule.ts) or the full-run slots.
  * - `planned`: a clock no code fires yet; only a placeholder profile may plan one.
- * profiles.test.ts holds `timing` to that clock's own time.
+ * profiles.test.ts holds `timing` to that clock's own time, and the release's to the dispatcher
+ * `scheduleDue` leaves active.
  */
 type Clock = 'workflow' | 'conductor' | 'planned';
 type TimedPlacement = Placement & { clock: Clock; timing: Timing };
@@ -66,6 +80,8 @@ export type CiProfile = {
   name: CiProfileName;
   /** The machines the profile stands for. */
   machines: string;
+  /** The kinds of executor its jobs run on. */
+  runsOn: readonly ExecutorKind[];
   /** `placeholder` until its values are measured (werk-flow/werkflow-planning#503, P3). */
   values: 'in use' | 'placeholder';
   /** The most jobs one conductor runs at once, every run together: CI_PARALLEL's default. */
@@ -86,12 +102,33 @@ const nightly: Timing = {
   zone: BERLIN_TIME_ZONE,
   weekdays: CLOCK_WORK.nightly.weekdays,
 };
+/** release.yml's cron, Sunday to Thursday 17:00 Berlin: the evening before each weekday's release. */
+const releaseDispatch: Timing = {
+  kind: 'clock',
+  at: '17:00',
+  zone: BERLIN_TIME_ZONE,
+  weekdays: [0, 1, 2, 3, 6],
+};
 const healthWeekly: Timing = { kind: 'clock', at: '05:00', zone: 'UTC', weekdays: [0] };
+
+/**
+ * The queue-wait check covers only Actions-run jobs: it reads the waits of this repository's ci.yml
+ * jobs on GitHub (.github/scripts/ci-queue.sh) and passes when it finds none, so it says nothing of
+ * another kind's queue.
+ */
+const QUEUE_WAIT_GAPS = {
+  mirror:
+    "Not yet measured: the queue-wait check covers only Actions-run jobs of this repository's ci.yml, and a job the CI mirror runs is a run of the mirror's own repository (werk-flow/werkflow-planning#503).",
+  boat: 'Not yet measured: the queue-wait check covers only Actions-run jobs of ci.yml, and a Boat machine leaves no Actions job for it to read (werk-flow/werkflow-planning#503).',
+  local:
+    "Not yet measured: the local machines' queue wait has no evidence until a local executor records each job's wait and the check reads it (werk-flow/werkflow-planning#503, P3).",
+} as const satisfies Readonly<Partial<Record<ExecutorKind, string>>>;
 
 /** #582's design: a conductor, the CI mirror's machines, GitHub's workflows for the rest. */
 const FLEET: CiProfile = {
   name: 'fleet',
   machines: 'Boat or GitHub Actions: many machines and a conductor',
+  runsOn: ['actions', 'mirror', 'boat'],
   values: 'in use',
   jobsAtOnce: MIRROR_JOB_CAP,
   maxBatch: MAX_BATCH,
@@ -139,32 +176,23 @@ const FLEET: CiProfile = {
       clock: 'workflow',
       timing: { kind: 'clock', at: '05:15', zone: 'UTC', weekdays: EVERY_DAY },
     },
-    'health-ci-queue': { executor: 'fleet', atOnce: 1, clock: 'workflow', timing: healthWeekly },
-    'health-pr-asset-branches': { executor: 'fleet', atOnce: 1, clock: 'workflow', timing: healthWeekly },
-    'release-candidate': {
-      executor: 'conductor',
-      atOnce: 'all',
-      clock: 'conductor',
-      timing: {
-        kind: 'clock',
-        at: CLOCK_WORK.release.time,
-        zone: BERLIN_TIME_ZONE,
-        weekdays: CLOCK_WORK.release.weekdays,
-      },
+    // The queue-wait check covers only Actions-run jobs: those of ci.yml in this repository.
+    'health-ci-queue': {
+      executor: 'fleet',
+      atOnce: 1,
+      clock: 'workflow',
+      timing: healthWeekly,
+      gaps: { mirror: QUEUE_WAIT_GAPS.mirror, boat: QUEUE_WAIT_GAPS.boat },
     },
+    'health-pr-asset-branches': { executor: 'fleet', atOnce: 1, clock: 'workflow', timing: healthWeekly },
+    // release.yml's cron dispatches it while it has one; its hold waits for 03:30 (inventory.ts).
+    'release-candidate': { executor: 'fleet', atOnce: 'all', clock: 'workflow', timing: releaseDispatch },
     'list-growth': { executor: 'fleet', atOnce: 1 },
     'pr-screenshots': { executor: 'fleet', atOnce: 1 },
     'main-green-notice': { executor: 'fleet', atOnce: 1 },
     'merge-queue-notice': { executor: 'fleet', atOnce: 1 },
   },
 };
-
-/**
- * The queue-wait check reads only the waits of this repository's ci.yml jobs on GitHub
- * (.github/scripts/ci-queue.sh) and passes when it finds none, so it says nothing of a local machine's queue.
- */
-const QUEUE_WAIT_NOT_MEASURED =
-  "Not yet measured: the local machines' queue wait has no evidence until a local executor records each job's wait and the check reads it (werk-flow/werkflow-planning#503, P3).";
 
 /**
  * The owner's MacBook and PC: every unit in turn, at most two jobs at once, heavy schedules in a
@@ -175,6 +203,7 @@ const QUEUE_WAIT_NOT_MEASURED =
 const LOCAL: CiProfile = {
   name: 'local',
   machines: "The owner's MacBook and PC",
+  runsOn: ['local'],
   values: 'placeholder',
   jobsAtOnce: 2,
   maxBatch: MAX_BATCH,
@@ -210,23 +239,13 @@ const LOCAL: CiProfile = {
       clock: 'planned',
       timing: { kind: 'clock', at: '01:30', zone: BERLIN_TIME_ZONE, weekdays: EVERY_DAY },
     },
-    'release-candidate': {
-      executor: 'local',
-      atOnce: 1,
-      clock: 'conductor',
-      timing: {
-        kind: 'clock',
-        at: CLOCK_WORK.release.time,
-        zone: BERLIN_TIME_ZONE,
-        weekdays: CLOCK_WORK.release.weekdays,
-      },
-    },
+    'release-candidate': { executor: 'local', atOnce: 1, clock: 'workflow', timing: releaseDispatch },
     'health-ci-queue': {
       executor: 'local',
       atOnce: 1,
       clock: 'planned',
       timing: { kind: 'clock', at: '05:00', zone: BERLIN_TIME_ZONE, weekdays: [0] },
-      gap: QUEUE_WAIT_NOT_MEASURED,
+      gaps: { local: QUEUE_WAIT_GAPS.local },
     },
     'health-pr-asset-branches': {
       executor: 'local',
@@ -262,16 +281,25 @@ const PROFILE_FILE = 'ci/profile.json';
 const profileFileSchema = z.strictObject({ profile: z.enum(CI_PROFILE_NAMES) });
 /** GitHub's main as this clone fetched it last: the snapshot run-commit and the queue orchestrate from. */
 const FETCHED_MAIN = 'refs/remotes/origin/main';
+/**
+ * The refspec that fetches main whatever the clone's own fetch refspec maps: a single-branch clone
+ * of another branch would otherwise fetch fine and keep a stale or missing `origin/main`.
+ */
+export const MAIN_REFSPEC = `+refs/heads/main:${FETCHED_MAIN}`;
 /** The trusted clone the conductor's scripts run from (scripts/ci/run.ts `repository`). */
 const OWN_CLONE = resolve(import.meta.dir, '../../..');
 
+/** A profile with the commit of main whose switch named it: one snapshot of main for every reader. */
+export type ActiveProfile = { profile: CiProfile; main: string };
+
 /**
  * The profile `ci/profile.json` on this clone's fetched main names: the one way code picks a
- * profile. Fetch `origin` first, as run-commit and the queue do, so every clone that orchestrates
- * reads main's answer, not its own checkout's. A switch main lacks or names wrong throws, so a
- * conductor never guesses its profile.
+ * profile. Fetch `MAIN_REFSPEC` first, as run-commit and the queue do, so every clone that
+ * orchestrates reads main's answer, not its own checkout's. It reads the switch at one commit and
+ * returns that commit, so a caller that also acts on main can hold both to the same snapshot. A
+ * switch main lacks or names wrong throws, so a conductor never guesses its profile.
  */
-export function activeProfile(): CiProfile {
+export function activeProfile(): ActiveProfile {
   return profileOnMainIn(OWN_CLONE);
 }
 
@@ -279,11 +307,10 @@ export function activeProfile(): CiProfile {
  * `activeProfile` of another clone, for tests that build one. Only test files may call it
  * (lib/conventions/ci-profile-switch.test.ts): production code reads its own clone's main.
  */
-export function profileOnMainIn(clone: string): CiProfile {
-  const text = execFileSync('git', ['show', `${FETCHED_MAIN}:${PROFILE_FILE}`], {
-    cwd: clone,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  return CI_PROFILES[profileFileSchema.parse(JSON.parse(text)).profile];
+export function profileOnMainIn(clone: string): ActiveProfile {
+  const git = (...args: string[]): string =>
+    execFileSync('git', args, { cwd: clone, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const main = git('rev-parse', '--verify', '--quiet', `${FETCHED_MAIN}^{commit}`).trim();
+  const text = git('show', `${main}:${PROFILE_FILE}`);
+  return { profile: CI_PROFILES[profileFileSchema.parse(JSON.parse(text)).profile], main };
 }

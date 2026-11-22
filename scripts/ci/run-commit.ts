@@ -16,7 +16,7 @@ import {
 import { join, resolve } from 'node:path';
 import { CI_EVENTS } from '../../lib/testing/ci/dag';
 import { MIRROR_JOB_CAP } from '../../lib/testing/ci/mirror';
-import { activeProfile, type CiProfile } from '../../lib/testing/ci/profiles';
+import { activeProfile, type CiProfile, MAIN_REFSPEC } from '../../lib/testing/ci/profiles';
 import { positiveIntegerSchema, readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
 import {
   acknowledgedStart,
@@ -296,7 +296,9 @@ async function run(
 
   // The jobs read GitHub's branches through this clone's `origin`, and the run its CI profile from
   // the switch on that main, so every trusted clone applies main's profile, not its checkout's.
+  // Main by its own refspec: the clone's fetch refspec may map only another branch.
   git('fetch', '--quiet', '--no-tags', 'origin');
+  git('fetch', '--quiet', '--no-tags', 'origin', MAIN_REFSPEC);
   const active = ((): CiProfile => {
     try {
       return profile();
@@ -453,7 +455,7 @@ if (import.meta.main) {
   process.exit(
     await runCommitCommand({
       repository: ownRepository,
-      profile: activeProfile,
+      profile: () => activeProfile().profile,
       environment,
       executors: (setup) => {
         if (environment.CI_EXECUTOR === 'mirror') return onMirror(setup, environment);

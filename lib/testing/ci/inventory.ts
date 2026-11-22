@@ -33,12 +33,19 @@ type WorkflowCron = { workflow: string; cron: string; timezone?: typeof BERLIN_T
 type ConductorClock = ClockWorkName | 'full-run';
 
 /**
+ * A scheduled run that waits before it acts: the workflow job that holds, and the Berlin wall time
+ * it holds until. The cron dispatches the run, the hold decides when its work starts.
+ */
+type Hold = { job: string; until: string };
+
+/**
  * What fires a timed schedule: its workflow's cron on GitHub, the conductor's clock, or both where
  * they differ. A profile names the clock it uses (profiles.ts); one with neither cannot be written.
+ * A cron run that waits names its `hold` apart from its dispatch.
  */
 type TimeTrigger = { on: 'time' } & (
-  | { workflow: WorkflowCron; conductor?: ConductorClock }
-  | { workflow?: undefined; conductor: ConductorClock }
+  | { workflow: WorkflowCron; hold?: Hold; conductor?: ConductorClock }
+  | { workflow?: undefined; hold?: undefined; conductor: ConductorClock }
 );
 
 /** The GitHub event that dispatches a workflow, as its `on:` says. */
@@ -120,10 +127,13 @@ export const SCHEDULES = {
   'release-candidate': {
     runs: "The release's gate: a green full run on the exact commit it ships, its own when none is found.",
     sources: ['lib/testing/ci/schedule.ts', 'release.yml#hold', 'release.yml#candidate', 'release.yml#full'],
-    // The cron fires the evening before, and release.yml#hold waits for the conductor's 03:30.
+    // GitHub's cron dispatches the run at 17:00 the evening before, and release.yml#hold holds it
+    // until 03:30. The conductor's `release` clock dispatches it only while release.yml has no cron
+    // (scheduleDue), so one weekday never gets two releases.
     trigger: {
       on: 'time',
       workflow: { workflow: 'release.yml', cron: '0 17 * * 0-4', timezone: BERLIN_TIME_ZONE },
+      hold: { job: 'release.yml#hold', until: '03:30' },
       conductor: 'release',
     },
   },

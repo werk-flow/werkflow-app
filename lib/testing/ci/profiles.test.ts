@@ -1,13 +1,15 @@
 // Each CI profile places every inventory item on a clock that fires it, the fleet's values are
-// #582's own, the local profile's are marked placeholders with their gaps named, and only ci/profile.json on
-// the fetched main picks the active one (lib/testing/ci/profiles.ts).
+// #582's own, the local profile's are marked placeholders, each gap of the queue-wait check is
+// named per kind of executor, and only ci/profile.json on the fetched main picks the active one
+// (lib/testing/ci/profiles.ts).
 import { afterEach, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { BERLIN_TIME_ZONE } from '../../date-time/berlin';
-import { readWorkflow } from '../ci-workflow';
+import { z } from '../../zod';
+import { readWorkflow, workflowsFolder } from '../ci-workflow';
 import { CI_EVENTS, CI_JOBS } from './dag';
 import { FULL_RUN_SLOTS } from './full-run';
 import { INVENTORY_KEYS, SCHEDULE_NAMES, type ScheduleTrigger, SCHEDULES } from './inventory';
@@ -18,10 +20,11 @@ import {
   type CiProfile,
   placementOf,
   profileOnMainIn,
+  QUEUE_WAIT_OBSERVES,
   type Timing,
 } from './profiles';
 import { MAX_BATCH } from './queue';
-import { CLOCK_WORK, type ClockWorkName } from './schedule';
+import { CLOCK_WORK, type ClockWorkName, releaseOnCron, scheduleDue } from './schedule';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const WALL_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -138,9 +141,10 @@ test("the fleet profile is #582's design: the mirror's cap, batches of 4, and ev
   expect(fleet.jobsAtOnce).toBe(MIRROR_JOB_CAP);
   expect(fleet.maxBatch).toBe(MAX_BATCH);
   expect(fleet.jobs.browser.atOnce).toBe('all');
-  // The conductor fires the work it has a clock for; nightly.yml alone lists the quarantines.
+  // The conductor fires the work it has a clock for, release.yml's cron the release while it has
+  // one, and nightly.yml alone lists the quarantines.
   expect(fleet.schedules.nightly.clock).toBe('conductor');
-  expect(fleet.schedules['release-candidate'].clock).toBe('conductor');
+  expect(fleet.schedules['release-candidate'].clock).toBe('workflow');
   expect(fleet.schedules['main-full-run'].clock).toBe('conductor');
   expect(fleet.schedules['nightly-quarantine'].clock).toBe('workflow');
   expect(readWorkflow('date-lookahead.yml').at('jobs', 'leg', 'strategy', 'max-parallel')).toBe(
@@ -148,26 +152,65 @@ test("the fleet profile is #582's design: the mirror's cap, batches of 4, and ev
   );
 });
 
+// scheduleDue dispatches the release only while release.yml has no cron, so a profile that names
+// the conductor beside a cron claims a dispatch nobody makes, and the run waits in the hold instead.
+test("each profile names the release's active dispatcher: release.yml's cron while it has one, the conductor only without", () => {
+  const release = SCHEDULES['release-candidate'].trigger;
+  const onCron = releaseOnCron(
+    Bun.YAML.parse(readFileSync(join(repositoryRoot, workflowsFolder(), 'release.yml'), 'utf8')),
+  );
+  if (typeof onCron !== 'boolean') throw new Error(onCron.unreadable);
+  // Monday 03:30 Berlin, the release's slot: the conductor dispatches it now or never.
+  const answer = scheduleDue({
+    now: new Date('2026-11-23T02:30:00Z'),
+    state: {},
+    fullRun: () => ({ run: false, reason: 'main has its full run.' }),
+    releaseOnCron: onCron,
+    fullRunning: false,
+    held: [],
+    prRuns: [],
+    remoteHead: () => undefined,
+  });
+  const conductorDispatches = answer.start.some((start) => start.work === 'release');
+  expect(conductorDispatches).toBe(!onCron);
+  const active = conductorDispatches ? 'conductor' : 'workflow';
+  for (const profile of Object.values(CI_PROFILES))
+    expect(profile.schedules['release-candidate'].clock, profile.name).toBe(active);
+  if (active === 'workflow') {
+    // The cron dispatches at its own time; the hold, not the dispatch, waits for the decision.
+    expect<string>(release.workflow.cron).toBe(
+      z.string().parse(readWorkflow('release.yml').at('on', 'schedule', 0, 'cron')),
+    );
+    expect<string>(release.hold.until).toBe(CLOCK_WORK.release.time);
+  }
+});
+
 /** The schedules whose placement in `profile` carries a gap, as `schedule:<name>`. */
 const gapsOf = (profile: CiProfile): string[] =>
-  SCHEDULE_NAMES.filter((name) => profile.schedules[name].gap !== undefined).map(
+  SCHEDULE_NAMES.filter((name) => profile.schedules[name].gaps !== undefined).map(
     (name) => `schedule:${name}`,
   );
 
-test("the queue-wait check reads only GitHub's ci.yml, so a profile whose jobs run elsewhere names the gap", () => {
+test('the queue-wait check observes only the Actions jobs of ci.yml here, so each profile names a gap for every other kind it runs on', () => {
   const script = readFileSync(join(repositoryRoot, '.github/scripts/ci-queue.sh'), 'utf8');
-  expect(script).toContain('/actions/workflows/ci.yml/runs');
+  // Only this repository's ci.yml runs: not the CI mirror's repository, nor any machine off GitHub.
+  expect(script).toContain('repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs');
+  expect(readWorkflow('health.yml').text('jobs', 'ci-queue', 'steps', 1, 'run')).toContain(
+    'bash .github/scripts/ci-queue.sh',
+  );
+  expect(QUEUE_WAIT_OBSERVES).toEqual(['actions']);
   for (const profile of Object.values(CI_PROFILES)) {
-    const onGitHub = Object.values(profile.jobs).every(({ executor }) => executor !== 'local');
-    const placement = profile.schedules['health-ci-queue'];
-    expect(placement.gap === undefined, `${profile.name}: health-ci-queue claims no local queue`).toBe(
-      onGitHub,
-    );
-    // A gap is for the owner to see, and only a profile still waiting for measurements has one.
-    if (gapsOf(profile).length) expect(profile.values, profile.name).toBe('placeholder');
+    const unobserved = profile.runsOn.filter((kind) => !QUEUE_WAIT_OBSERVES.includes(kind));
+    const gaps = profile.schedules['health-ci-queue'].gaps ?? {};
+    expect(Object.keys(gaps).toSorted(), profile.name).toEqual(unobserved.toSorted());
+    for (const text of Object.values(gaps)) expect(text, profile.name).toStartWith('Not yet measured: ');
+    // A gap is allowed only where it is named: the queue-wait check's.
+    expect(gapsOf(profile), profile.name).toEqual(unobserved.length ? ['schedule:health-ci-queue'] : []);
   }
-  expect(gapsOf(CI_PROFILES.local)).toEqual(['schedule:health-ci-queue']);
-  expect(gapsOf(CI_PROFILES.fleet)).toEqual([]);
+  // The fleet's check covers only its Actions-run jobs; the mirror's and Boat's waits are not yet measured.
+  expect(CI_PROFILES.fleet.runsOn).toEqual(['actions', 'mirror', 'boat']);
+  expect(Object.keys(CI_PROFILES.fleet.schedules['health-ci-queue'].gaps ?? {})).toEqual(['mirror', 'boat']);
+  expect(Object.keys(CI_PROFILES.local.schedules['health-ci-queue'].gaps ?? {})).toEqual(['local']);
 });
 
 test('the local profile is marked a placeholder: one unit at a time, at most two jobs at once', () => {
@@ -204,12 +247,12 @@ const cloneWithMain = (text: string | undefined): string => {
 };
 
 test.each(CI_PROFILE_NAMES.map((name) => [name]))('a switch on main that names %s picks it', (name) => {
-  expect(profileOnMainIn(cloneWithMain(JSON.stringify({ profile: name }))).name).toBe(name);
+  expect(profileOnMainIn(cloneWithMain(JSON.stringify({ profile: name }))).profile.name).toBe(name);
 });
 
 test('the checked-in switch names a valid profile', () => {
   const checkedIn = readFileSync(join(repositoryRoot, 'ci', 'profile.json'), 'utf8');
-  expect(CI_PROFILE_NAMES).toContain(profileOnMainIn(cloneWithMain(checkedIn)).name);
+  expect(CI_PROFILE_NAMES).toContain(profileOnMainIn(cloneWithMain(checkedIn)).profile.name);
 });
 
 test("the switch is main's, not the checkout's: a switch only in the working tree throws", () => {

@@ -129,6 +129,24 @@ test("each timed schedule's workflow cron is a cron of that workflow, and every 
   expect([...actual].toSorted()).toEqual([...declared].sort());
 });
 
+test('a cron run that holds names its hold apart from its dispatch, and the hold job waits for that time', () => {
+  const holds = SCHEDULE_NAMES.flatMap((name) => {
+    const trigger: ScheduleTrigger = SCHEDULES[name].trigger;
+    return trigger.on === 'time' && trigger.hold ? [{ name, ...trigger.hold }] : [];
+  });
+  expect(holds.map(({ name }) => name)).toEqual(['release-candidate']);
+  for (const { name, job, until } of holds) {
+    const sources: readonly string[] = SCHEDULES[name].sources;
+    expect(sources, name).toContain(job);
+    const [file = '', jobName = ''] = job.split('#');
+    const runs = z
+      .array(stepSchema)
+      .parse(readWorkflow(file).at('jobs', jobName, 'steps'))
+      .flatMap((step) => (step.run ? [step.run] : []));
+    expect(runs, name).toContain(`bash .github/scripts/hold-until.sh ${until}`);
+  }
+});
+
 test('a timed schedule only the conductor fires has no cron of its own, so its workflow waits for a dispatch', () => {
   for (const name of SCHEDULE_NAMES) {
     const { sources } = SCHEDULES[name];

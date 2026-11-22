@@ -267,4 +267,4 @@ This narrows "a retry belongs to its work". The record holds every outstanding r
 
 ## Amendment 2026-11-22: two CI profiles
 
-The owner decided on 2026-11-22 (werk-flow/werkflow-planning#503) that CI keeps two profiles: `fleet` for Boat or GitHub Actions, and `mac` for one MacBook. Both run the same checks, jobs and schedules; only the executor, concurrency, batching and timing differ. `ci/profile.json` on `main` is the one switch. [Decision 0011](0011-ci-profiles.md) owns the rules.
+The owner decided on 2026-11-22 (werk-flow/werkflow-planning#503) that CI keeps two profiles: `fleet` for Boat or GitHub Actions, and `local` for the owner's MacBook and PC. Both run the same checks, jobs and schedules; only the executor, concurrency, batching and timing differ. `ci/profile.json` on `main` is the one switch. [Decision 0011](0011-ci-profiles.md) owns the rules.

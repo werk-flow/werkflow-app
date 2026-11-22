@@ -84,7 +84,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { CHECK_APP_CONFIG, readCheckApp } from '../../lib/testing/ci/check-app';
 import { activeProfile } from '../../lib/testing/ci/profiles';
-import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
+import { MAX_BATCH, mainWithSwitch, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
 import { mainFollowUp, mainRunOf, type MergeAnswer } from '../../lib/testing/ci/queue-main-run';
 import {
   createQueueAdapter,
@@ -221,12 +221,12 @@ try {
     console.error(unpaid);
     process.exitCode = 2;
   } else {
-    // The tick's main, fetched (adapter.main), holds the switch: every clone that ticks reads one
+    // One snapshot of main for the switch and the tick's base: every clone that ticks reads one
     // answer, and a missing or wrong switch fails the tick before it lands anything.
-    await adapter.main();
-    const { maxBatch } = activeProfile();
+    const { base, read } = await mainWithSwitch(() => adapter.main(), activeProfile);
     const outcome = await runQueueTick(adapter, {
-      maxBatch: maxBatchFlag === undefined ? maxBatch : Number(maxBatchFlag),
+      base,
+      maxBatch: maxBatchFlag === undefined ? read.profile.maxBatch : Number(maxBatchFlag),
       dryRun: values['dry-run'],
       ...(only ? { only } : {}),
     });
