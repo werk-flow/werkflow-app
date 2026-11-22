@@ -6,6 +6,8 @@ import {
   quantityThousandthsArbitrary,
 } from '@/lib/testing/invoice-arbitraries';
 import { saveInvoiceDraftSchema } from './action-schemas';
+import { draftFormOf, parseDraftForm } from './draft-form';
+import type { InvoiceDetail, InvoiceTerms } from './types';
 
 // Property tests (docs/technical/testing.md, "Property tests"). The save parses the server's own
 // limits again (docs/features/commercial-and-finance.md, "Invoice drafts"): a quantity with at most
@@ -13,17 +15,36 @@ import { saveInvoiceDraftSchema } from './action-schemas';
 // Zahlungsziel of 0 to 365 days, a Skonto with both percent and days within the Zahlungsziel, and
 // a service end on or after its start.
 
+const DETAIL: Omit<InvoiceDetail, keyof InvoiceTerms | 'lines'> = {
+  id: '00000000-0000-4000-8000-000000000001',
+  invoiceNumber: null,
+  status: 'entwurf',
+  version: 1,
+  client: { id: '00000000-0000-4000-8000-000000000003', name: 'Kunde' },
+  recipient: { id: '00000000-0000-4000-8000-000000000003', name: 'Kunde', address: null },
+  work: null,
+  lineNetCents: 0,
+  taxCents: 0,
+  grossCents: 0,
+};
+
 const IDS = {
   invoiceId: '00000000-0000-4000-8000-000000000001',
   attemptKey: '00000000-0000-4000-8000-000000000002',
 };
 
+/** What the editor sends: its parse of a stored draft's text, within the server's 500 lines. */
 const saveArbitrary = fc
   .tuple(
     invoiceTermsArbitrary,
-    fc.array(draftLineValuesArbitrary(quantityThousandthsArbitrary), { maxLength: 20 }),
+    fc.array(draftLineValuesArbitrary(quantityThousandthsArbitrary), { maxLength: 500 }),
   )
-  .map(([terms, lines]) => ({ ...IDS, expectedVersion: 1, terms, lines }));
+  .map(([terms, lines]) => {
+    const form = draftFormOf({ ...DETAIL, ...terms, lines: lines.map((line) => ({ ...line, netCents: 0 })) });
+    const parsed = parseDraftForm(form);
+    if (!parsed.ok) throw new Error(`the editor refuses its own draft: ${JSON.stringify(parsed.errors)}`);
+    return { ...IDS, expectedVersion: 1, terms: parsed.terms, lines: parsed.lines };
+  });
 
 type Save = typeof saveArbitrary extends fc.Arbitrary<infer T> ? T : never;
 
@@ -31,7 +52,11 @@ type Save = typeof saveArbitrary extends fc.Arbitrary<infer T> ? T : never;
 const violations: Array<[string, (save: Save) => Save | null]> = [
   [
     'a price in fractions of a cent',
-    (save) => withFirstLine(save, (line) => ({ ...line, unitPriceCents: line.unitPriceCents + 0.5 })),
+    (save) =>
+      withFirstLine(save, (line) => ({
+        ...line,
+        unitPriceCents: Math.min(line.unitPriceCents, 99_999_999) + 0.5,
+      })),
   ],
   [
     'a price above one million euros',
@@ -58,7 +83,10 @@ const violations: Array<[string, (save: Save) => Save | null]> = [
   ],
   [
     'Skonto days without a percentage',
-    (save) => ({ ...save, terms: { ...save.terms, discountDays: 1, discountBasisPoints: null } }),
+    (save) =>
+      save.terms.paymentDueDays < 1
+        ? null
+        : { ...save, terms: { ...save.terms, discountDays: 1, discountBasisPoints: null } },
   ],
   [
     'a service end before its start',
@@ -76,7 +104,7 @@ function withFirstLine(save: Save, change: (line: Save['lines'][number]) => obje
 }
 
 describe('The save of a draft', () => {
-  test('accepts every draft the editor can send', () => {
+  test('accepts every draft the editor sends, up to the server’s 500 lines', () => {
     fc.assert(
       fc.property(saveArbitrary, (save) => {
         expect(saveInvoiceDraftSchema.safeParse(save).success).toBe(true);
