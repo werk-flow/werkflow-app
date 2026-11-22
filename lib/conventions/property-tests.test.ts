@@ -112,14 +112,14 @@ function referencesAny(node: ts.Node, names: ReadonlySet<string>): boolean {
   return ts.forEachChild(node, (child) => referencesAny(child, names) || undefined) ?? false;
 }
 
-/** The inline callbacks of the tests a file registers: `test(...)`, `it(...)`, `test.each(...)(...)`, never a failing case. */
+/** The inline callbacks of the tests a file always runs and expects to pass: `test(...)`, `it(...)`, `test.each(...)(...)`. */
 function testCallbacks(source: ts.SourceFile): ts.Node[] {
   const callbacks: ts.Node[] = [];
   const registers = (callee: ts.Expression): boolean => {
     if (ts.isIdentifier(callee)) return callee.text === 'test' || callee.text === 'it';
     if (ts.isCallExpression(callee)) return registers(callee.expression);
     return (
-      ts.isPropertyAccessExpression(callee) && callee.name.text !== 'failing' && registers(callee.expression)
+      ts.isPropertyAccessExpression(callee) && callee.name.text === 'each' && registers(callee.expression)
     );
   };
   const visit = (node: ts.Node): void => {
@@ -181,6 +181,10 @@ function settingProblems(file: string): string[] {
       );
   }
   const visit = (node: ts.Node): void => {
+    if (ts.isPropertyAccessExpression(node) && node.name.text === 'failingIf')
+      problems.push(
+        `${at(node)}: an expected failure is an unconditional \`test.failing\` under its known-bug comment.`,
+      );
     if ((ts.isIdentifier(node) || ts.isStringLiteral(node)) && node.text === 'configureGlobal')
       problems.push(`${at(node)}: only scripts/unit-test-preload.ts configures fast-check.`);
     if (
