@@ -1,6 +1,6 @@
 # Set up a machine
 
-How to make a workstation or a headless Linux host ready for agent work, and which background jobs each machine runs. [Environments](environments.md) owns the backends, the env files and the worktree rules.
+How to make a workstation or a headless Linux host ready for agent work, which background jobs each machine runs, and who removes a finished worktree. [Environments](environments.md) owns the backends, the env files and how to work in a worktree.
 
 ## Set up a new machine
 
@@ -49,3 +49,18 @@ The notifier, `ops/notifier.py`, closes those gaps. It runs every 2 minutes on e
 4. **It makes sure the owner's decisions reach the owner.** A lead whose "Owner queue" comment has no question open in T3 is told to ask through the question tool.
 
 A lead that waits on purpose records it where T3 sees it: a question through the question tool, a snooze until a set time, or a `Waiting:` comment. The machine that reads GitHub posts one line a day on the coordination issue: wakes, repeat stalls, open owner questions with the oldest's age, and each machine's last pass. `tail ~/.local/state/notifier.log` shows each pass.
+
+## Remove a finished worktree
+
+T3 Code keeps a worktree after its thread is settled or deleted. Whoever settles a thread removes its worktree: a lead settles its finished children after it read their result ([`run-epic`](../../.claude/skills/run-epic/SKILL.md#5-merge-in-order)), and the coordinator settles finished top-level threads. A thread never removes the worktree it runs in.
+
+1. Settle the thread (`t3_thread_organize`, `action: "settle"`). Find its checkout path and branch with `t3_worktree_list` and its `threadId`.
+2. Keep the worktree, and say why in your status, while any of these holds:
+   - the branch's PR is still open;
+   - `git -C <path> status --porcelain` prints anything;
+   - `git log <branch> --not --remotes` lists commits, and the PR did not merge;
+   - another running thread works in the path.
+3. Otherwise run `git worktree remove <absolute path>`, never with `--force`: it refuses a dirty tree.
+4. When the PR merged or closed, run `git branch -D <branch>`.
+
+Remove a kept worktree once its reason ends, for example when the PR merges.
