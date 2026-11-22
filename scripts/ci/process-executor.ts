@@ -29,6 +29,8 @@ import {
 import { join } from 'node:path';
 import { partOf, partSteps } from '../../lib/testing/ci/dag';
 import { groupGone } from '../../lib/testing/local-stack/test-session';
+import { errorCode } from '../../lib/testing/runner/error-code';
+import { stopRecordedTestServer } from '../../lib/testing/ci/test-server-stop';
 import {
   type Executor,
   type Executors,
@@ -168,7 +170,7 @@ function runGroup(
   signal: AbortSignal,
 ): Promise<number | null> {
   if (signal.aborted) return Promise.resolve(null);
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const output = openSync(options.log, 'a');
     const child = spawn(command, args, {
       cwd: options.cwd,
@@ -178,12 +180,14 @@ function runGroup(
     });
     closeSync(output);
     // The whole group: a job's own children outlive it otherwise. A group that is gone already is
-    // no failure; a process the signal ended keeps a null exit code, so the code cannot tell.
+    // no failure; a process the signal ended keeps a null exit code, so the code cannot tell. Any
+    // other refusal (EPERM) fails the command once it closed, never this process.
+    let unsignalled: unknown;
     const signalGroup = (name: NodeJS.Signals): void => {
       try {
         if (child.pid !== undefined) process.kill(-child.pid, name);
       } catch (error) {
-        if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error;
+        if (errorCode(error) !== 'ESRCH') unsignalled ??= error;
       }
     };
     let refused = false;
@@ -210,13 +214,15 @@ function runGroup(
       signalGroup('SIGKILL');
       const exitCode = signal.aborted || refused ? null : code;
       const pid = child.pid;
+      if (unsignalled !== undefined) {
+        const reason = unsignalled instanceof Error ? unsignalled.message : String(unsignalled);
+        return reject(new Error(`process group ${pid ?? 'unknown'} could not be signalled: ${reason}`));
+      }
       if (pid === undefined) return resolve(exitCode);
-      resolve(
-        groupGone(pid).then((gone) => {
-          if (!gone) appendFileSync(options.log, `Process group ${pid} is still listed 5 s after SIGKILL.\n`);
-          return exitCode;
-        }),
-      );
+      groupGone(pid).then((gone) => {
+        if (!gone) appendFileSync(options.log, `Process group ${pid} is still listed 5 s after SIGKILL.\n`);
+        resolve(exitCode);
+      }, reject);
     });
   });
 }
@@ -374,15 +380,28 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
         // The task learns of the launch once the body's process exists: a body that never launched
         // is never reported launched. A launch that cannot be recorded ends the body at once.
         let unrecorded: string | undefined;
-        const code = await run(process.execPath, ['scripts/ci/job.ts', task.unit.job], variables, () => {
-          try {
-            task.onLaunch?.();
-          } catch (error) {
-            unrecorded = error instanceof Error ? error.message : String(error);
-            throw error;
-          }
-        });
+        let left: string | undefined;
+        let code: number | null;
+        try {
+          code = await run(process.execPath, ['scripts/ci/job.ts', task.unit.job], variables, () => {
+            try {
+              task.onLaunch?.();
+            } catch (error) {
+              unrecorded = error instanceof Error ? error.message : String(error);
+              throw error;
+            }
+          });
+        } finally {
+          // A browser job's test server leads a group of its own, which the job's group kill never
+          // reaches: a job killed before it stopped the server leaves it, and its port, to the next job.
+          left = await stopRecordedTestServer(checkout).then(
+            (stopped) => (stopped ? 'its test server outlived it and was stopped' : undefined),
+            (error: unknown) =>
+              `its test server outlived it and could not be stopped: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
         if (unrecorded !== undefined) return fail(`its launch could not be recorded: ${unrecorded}`);
+        if (left !== undefined) return fail(left);
         return code === null
           ? fail('the job was stopped')
           : {

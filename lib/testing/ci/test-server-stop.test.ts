@@ -2,7 +2,6 @@
 // port proven free, before the job returns: a runner that reuses the host starts the next job there.
 import { afterEach, expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { assertAppPortFree } from '../runner/app-port';
 import { stopTestServer } from './test-server-stop';
@@ -29,24 +28,14 @@ function groupListed(groupId: number): boolean {
   }
 }
 
-async function freePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
-  const address = server.address();
-  await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-  if (address === null || typeof address === 'string') throw new Error('No TCP port was assigned.');
-  return address.port;
-}
-
-/** Prints its pid, which leads its own group, once it holds the port. */
-const listener = (port: number): string =>
-  `require('node:net').createServer().listen(${port}, () => console.log(process.pid));`;
+/** Prints its pid, which leads its own group, and the port the system assigned it, once it holds it. */
+const LISTENER = `const server = require('node:net').createServer().listen(0, () => console.log(process.pid + ' ' + server.address().port));`;
 
 /**
  * Starts a fake test server as its own group, like job.ts does, and resolves once the listener it
  * started in a group of its own holds the port.
  */
-async function startServer(source: string): Promise<{ server: number; listener: number }> {
+async function startServer(source: string): Promise<{ server: number; listener: number; port: number }> {
   const child = spawn(process.execPath, ['-e', source], {
     stdio: ['ignore', 'pipe', 'ignore'],
     detached: true,
@@ -54,34 +43,35 @@ async function startServer(source: string): Promise<{ server: number; listener: 
   const server = child.pid;
   if (server === undefined) throw new Error('The fake test server did not start.');
   leftovers.push(server);
-  const listening = await new Promise<number>((resolveListening, reject) => {
-    child.stdout.once('data', (chunk: Buffer) => resolveListening(Number(chunk.toString())));
+  const [listening, port] = await new Promise<number[]>((resolveListening, reject) => {
+    child.stdout.once('data', (chunk: Buffer) => resolveListening(chunk.toString().split(' ').map(Number)));
     child.once('exit', (code) => reject(new Error(`The fake test server exited ${code}.`)));
   });
+  if (listening === undefined || port === undefined) throw new Error('The fake listener reported no port.');
   leftovers.push(listening);
-  return { server, listener: listening };
+  return { server, listener: listening, port };
 }
 
 test('a stopped test server takes the commands it started in their own groups with it, and frees its port', async () => {
-  const port = await freePort();
   // The real test session (scripts/test-server.ts): its command leads its own group, which the
   // server's SIGTERM never reaches directly.
   const groups = await startServer(`
     const { runSessionCommand, withTestSession } = require(${JSON.stringify(SESSION)});
-    await withTestSession((signal) => runSessionCommand([process.execPath, '-e', ${JSON.stringify(listener(port))}], { signal }));
+    await withTestSession((signal) => runSessionCommand([process.execPath, '-e', ${JSON.stringify(LISTENER)}], { signal }));
   `);
+  const { port } = groups;
   await stopTestServer(groups.server, port);
   expect([groupListed(groups.server), groupListed(groups.listener)]).toEqual([false, false]);
   await expect(assertAppPortFree(port)).resolves.toBeUndefined();
 });
 
 test('a stop that leaves the port held fails and names the port', async () => {
-  const port = await freePort();
   // A server that forgets its child: the listener's group outlives the server's.
   const groups = await startServer(`
-    require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(listener(port))}], { stdio: ['ignore', 'inherit', 'ignore'], detached: true });
+    require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(LISTENER)}], { stdio: ['ignore', 'inherit', 'ignore'], detached: true });
     setInterval(() => {}, 1000);
   `);
+  const { port } = groups;
   await expect(stopTestServer(groups.server, port)).rejects.toThrow(`Port ${port} is still held`);
   expect(groupListed(groups.server)).toBe(false);
 });

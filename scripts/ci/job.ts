@@ -46,7 +46,7 @@ import {
 } from '../../lib/testing/ci/run-plan';
 import { lsRemoteCommit, supersedingHead } from '../../lib/testing/ci/superseded';
 import { workspaceAppOrigin, workspacePorts } from '../../lib/testing/runner/app-port';
-import { stopTestServer } from '../../lib/testing/ci/test-server-stop';
+import { guardTestServer, recordTestServer } from '../../lib/testing/ci/test-server-stop';
 import { E_INVOICE_CHECK, E_INVOICE_STEP } from '../../lib/testing/selection/e-invoice-selection';
 import { repository, run, step, verify } from './run';
 
@@ -493,8 +493,11 @@ async function midnight(): Promise<boolean> {
   return true;
 }
 
-/** Serves the recorded build for the whole shard; the server proves it is this checkout's source and environment. */
-async function startTestServer(log: string): Promise<{ ready: boolean; stop: () => Promise<void> }> {
+/**
+ * Serves the recorded build for the whole shard; the server proves it is this checkout's source and
+ * environment. Its stop exists as soon as the server's process does; `ready` reports its start.
+ */
+function startTestServer(log: string, port: number): { ready: Promise<boolean>; stop: () => Promise<void> } {
   const output = openSync(log, 'w');
   const server = spawn(process.execPath, ['run', 'test:server', 'local', '--prebuilt'], {
     cwd: repository,
@@ -504,23 +507,34 @@ async function startTestServer(log: string): Promise<{ ready: boolean; stop: () 
   });
   closeSync(output);
   let exited = false;
+  let failure: Error | undefined;
   server.once('exit', () => (exited = true));
+  server.once('error', (error) => {
+    failure = error;
+    exited = true;
+  });
   // The whole group, even after the server itself exited: a runner that reuses this host starts the
   // next job on the same port.
-  const stop = (): Promise<void> => stopTestServer(server.pid, workspacePorts(repository).app);
-  const login = `${workspaceAppOrigin(repository)}/login`;
-  for (const deadline = Date.now() + 900_000; !exited && Date.now() < deadline; await Bun.sleep(5_000)) {
-    if (!readFileSync(log, 'utf8').includes('Serving the recorded local build')) continue;
-    if (
-      await fetch(login).then(
-        (response) => response.ok,
-        () => false,
+  const stop = guardTestServer(repository, server.pid, port);
+  const ready = async (): Promise<boolean> => {
+    if (server.pid !== undefined) recordTestServer(repository, server.pid, port);
+    const login = `${workspaceAppOrigin(repository)}/login`;
+    for (const deadline = Date.now() + 900_000; !exited && Date.now() < deadline; await Bun.sleep(5_000)) {
+      if (!readFileSync(log, 'utf8').includes('Serving the recorded local build')) continue;
+      if (
+        await fetch(login).then(
+          (response) => response.ok,
+          () => false,
+        )
       )
-    )
-      return { ready: true, stop };
-  }
-  console.error(readFileSync(log, 'utf8'));
-  return { ready: false, stop };
+        return true;
+    }
+    if (failure)
+      console.error(`::error title=Test server::The test server could not start: ${failure.message}`);
+    console.error(readFileSync(log, 'utf8'));
+    return false;
+  };
+  return { ready: ready(), stop };
 }
 
 async function browser(): Promise<boolean> {
@@ -533,16 +547,16 @@ async function browser(): Promise<boolean> {
     : (await step('step:server', buildCommands)).outcome === 'passed';
   mkdirSync(join(repository, '.agent-logs'), { recursive: true });
   // The server's output stays with the failure evidence under .agent-logs/.
-  const server = built ? await startTestServer(join(repository, '.agent-logs/test-server.log')) : undefined;
+  const port = workspacePorts(repository).app;
+  const server = built ? startTestServer(join(repository, '.agent-logs/test-server.log'), port) : undefined;
   let stopped = false;
   try {
-    record([
-      { id: 'step:server', outcome: server?.ready ? 'passed' : 'failed', durationMs: Date.now() - started },
-    ]);
+    const ready = (await server?.ready) ?? false;
+    record([{ id: 'step:server', outcome: ready ? 'passed' : 'failed', durationMs: Date.now() - started }]);
     // One worker: the stack, the server and a second browser outran a shared runner's four cores.
     // Untimed: a shared runner's load makes wall clock noise, so a wall-clock group of a full run
     // proves its steps and judges no timing. No other group's verdict changes.
-    if (server?.ready) recordVerify(await verify(verificationGroups(), ['--jobs', '1', '--untimed']));
+    if (ready) recordVerify(await verify(verificationGroups(), ['--jobs', '1', '--untimed']));
   } finally {
     stopped = await (server?.stop() ?? Promise.resolve()).then(
       () => true,

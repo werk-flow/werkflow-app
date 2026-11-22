@@ -3,7 +3,7 @@
 // in its own clone of the commit, its body never sees the orchestrator's variables or the sibling
 // token, the variables its environment steps pass on reach the body, a job ends at its timeout, and
 // only a stack the job started is stopped before the host's stack lock passes on.
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import {
   chmodSync,
   existsSync,
@@ -13,12 +13,14 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  watch,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { processExecutors } from '../../../scripts/ci/process-executor';
+import { assertAppPortFree } from '../runner/app-port';
 import type { ExecutorTask } from './run-commit';
 
 let folder = '';
@@ -39,14 +41,30 @@ if (process.env.STARTS_STACK === '1') appendFileSync(process.env.GITHUB_ENV, 'CI
 appendFileSync(process.env.GITHUB_ENV, 'SHRINK_ONLY_GROWTH_APPROVED=true\\n');
 if (process.env.REMOVE_CHECKOUT === '1' && job !== 'siblings') require('node:fs').rmSync(process.cwd(), { recursive: true });
 `;
+// Prints its pid and the port the system assigned it once it holds it.
+const LISTENER = `const server = require('node:net').createServer().listen(0, () => console.log(process.pid + ' ' + server.address().port));`;
 const JOB = `${RECORD('job')}
-if (process.env.HANG === '1') await Bun.sleep(60_000);
-// A child in the job's own group that would outlive the job: a test server left running.
+const { spawn } = require('node:child_process');
+const reported = (child) => new Promise((resolveReport) => child.stdout.once('data', (chunk) => resolveReport(chunk.toString().trim())));
+// A listener in the job's own group that would outlive the job: a test server left running.
 if (process.env.LEAVE_CHILD === '1') {
-  const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
-  writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/child.pid', String(child.pid));
+  const child = spawn(process.execPath, ['-e', ${JSON.stringify(LISTENER)}], { stdio: ['ignore', 'pipe', 'ignore'] });
+  writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/child', await reported(child));
   child.unref();
 }
+// A fake test server as browser() starts it: its own group, whose real test session runs the
+// listener in a group of its own. The job records it; SERVE=guarded also stops it on SIGTERM.
+if (process.env.SERVE) {
+  const stops = require(${JSON.stringify(join(import.meta.dir, 'test-server-stop.ts'))});
+  const session = ${JSON.stringify(join(import.meta.dir, '../local-stack/test-session.ts'))};
+  const source = 'const { runSessionCommand, withTestSession } = require(' + JSON.stringify(session) + '); await withTestSession((signal) => runSessionCommand([process.execPath, "-e", ' + JSON.stringify(${JSON.stringify(LISTENER)}) + '], { signal }));';
+  const server = spawn(process.execPath, ['-e', source], { stdio: ['ignore', 'pipe', 'ignore'], detached: true });
+  const [listener, port] = (await reported(server)).split(' ').map(Number);
+  if (process.env.SERVE === 'guarded') stops.guardTestServer(process.cwd(), server.pid, port);
+  stops.recordTestServer(process.cwd(), server.pid, port);
+  writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/server', [server.pid, listener, port].join(' '));
+}
+if (process.env.HANG === '1') await Bun.sleep(60_000);
 process.exit(Number(process.env.EXIT ?? '0'));
 `;
 
@@ -95,7 +113,26 @@ beforeEach(() => {
   process.env.GH_TOKEN = 'orchestrator-token';
 });
 
+// Process groups a failed test may leave behind.
+const leftovers: number[] = [];
+
+function groupListed(groupId: number): boolean {
+  try {
+    process.kill(-groupId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 afterEach(() => {
+  for (const groupId of leftovers.splice(0)) {
+    try {
+      process.kill(-groupId, 'SIGKILL');
+    } catch {
+      // The group already ended.
+    }
+  }
   for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name];
   Object.assign(process.env, saved);
   rmSync(folder, { recursive: true, force: true });
@@ -210,18 +247,62 @@ test('a job past its timeout is ended and gives no exit code', async () => {
   expect(run.detail).toContain('its timeout');
 });
 
-test('a job that exits normally leaves nothing of its process group running', async () => {
+test('a job that exits normally leaves nothing of its process group holding a port', async () => {
   const run = await executor().run(task('sql', { LEAVE_CHILD: '1' }), new AbortController().signal);
+  const [child, port] = readFileSync(join(folder, 'child'), 'utf8').split(' ').map(Number);
+  if (child === undefined || port === undefined) throw new Error('The job reported no listener.');
+  leftovers.push(child);
   expect(run.exitCode, run.detail).toBe(0);
-  const child = Number(readFileSync(join(folder, 'child.pid'), 'utf8'));
-  let running = true;
+  await expect(assertAppPortFree(port)).resolves.toBeUndefined();
+});
+
+/** Runs a browser-like job that starts a fake test server, and cancels it once the server holds its port. */
+async function cancelServingJob(serve: 'guarded' | 'unguarded') {
+  const controller = new AbortController();
+  const watcher = watch(folder, (_event, name) => {
+    if (name === 'server') controller.abort();
+  });
   try {
-    process.kill(child, 0);
-  } catch {
-    running = false;
+    const run = await executor().run(task('sql', { SERVE: serve, HANG: '1' }), controller.signal);
+    const [server, listener, port] = readFileSync(join(folder, 'server'), 'utf8').split(' ').map(Number);
+    if (server === undefined || listener === undefined || port === undefined)
+      throw new Error('The job reported no test server.');
+    leftovers.push(server, listener);
+    return { run, server, listener, port };
+  } finally {
+    watcher.close();
   }
-  if (running) process.kill(child, 'SIGKILL');
-  expect(running).toBe(false);
+}
+
+test('a cancelled job that cannot stop its test server has it stopped by the executor, its port freed, and never passes', async () => {
+  const { run, server, listener, port } = await cancelServingJob('unguarded');
+  expect(run.exitCode, run.detail).toBeNull();
+  expect(run.detail).toContain('its test server outlived it and was stopped');
+  expect([groupListed(server), groupListed(listener)]).toEqual([false, false]);
+  await expect(assertAppPortFree(port)).resolves.toBeUndefined();
+});
+
+test('a cancelled job stops its own test server before it exits', async () => {
+  const { run, server, listener, port } = await cancelServingJob('guarded');
+  expect(run.exitCode, run.detail).toBeNull();
+  expect(run.detail).not.toContain('its test server outlived it');
+  expect([groupListed(server), groupListed(listener)]).toEqual([false, false]);
+  await expect(assertAppPortFree(port)).resolves.toBeUndefined();
+});
+
+test('a process group the executor may not signal fails its job with the reason, never the executor', async () => {
+  const kill = process.kill.bind(process);
+  const refuse = spyOn(process, 'kill').mockImplementation((pid: number, signal?: string | number) => {
+    if (pid < 0 && signal === 'SIGKILL') throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+    return kill(pid, signal);
+  });
+  try {
+    const run = await executor().run(task('sql'), new AbortController().signal);
+    expect(run.exitCode, run.detail).toBeNull();
+    expect(run.detail).toContain('could not be signalled: kill EPERM');
+  } finally {
+    refuse.mockRestore();
+  }
 });
 
 test("only a stack the job started is stopped, and the host's stack lock passes on", async () => {
