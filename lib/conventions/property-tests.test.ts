@@ -86,6 +86,26 @@ function runtimeBindings(
     if (bindings && ts.isNamedImports(bindings))
       for (const element of bindings.elements) if (!element.isTypeOnly) names.add(element.name.text);
   }
+  // A server-only module loads after `mock.module('server-only', …)`: a top-level
+  // `const { x } = await import('…')`, so the binding is the module's in the whole file.
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      const loaded =
+        declaration.initializer && ts.isAwaitExpression(declaration.initializer)
+          ? declaration.initializer.expression
+          : undefined;
+      if (!loaded || !ts.isCallExpression(loaded) || loaded.expression.kind !== ts.SyntaxKind.ImportKeyword)
+        continue;
+      const [specifier] = loaded.arguments;
+      if (!specifier || !ts.isStringLiteral(specifier) || !matches(importTarget(file, specifier.text)))
+        continue;
+      if (ts.isIdentifier(declaration.name)) names.add(declaration.name.text);
+      if (ts.isObjectBindingPattern(declaration.name))
+        for (const element of declaration.name.elements)
+          if (ts.isIdentifier(element.name)) names.add(element.name.text);
+    }
+  }
   return names;
 }
 
