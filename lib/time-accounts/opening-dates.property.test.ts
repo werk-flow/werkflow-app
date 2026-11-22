@@ -20,12 +20,6 @@ function monthEndOf(localDate: string): string {
   return `${localDate.slice(0, 7)}-${pad(daysInMonth(year, month))}`;
 }
 
-const monthBefore = (localDate: string): string => {
-  const year = Number(localDate.slice(0, 4));
-  const month = Number(localDate.slice(5, 7));
-  return month === 1 ? `${year - 1}-12-01` : `${year}-${pad(month - 1)}-01`;
-};
-
 const todayArbitrary = berlinDateArbitrary.filter((date) => date >= '2011-01-01');
 
 describe('The earliest opening date', () => {
@@ -59,44 +53,73 @@ describe('An opening date correction', () => {
 });
 
 describe('The proposed start date', () => {
+  /** A date `months` whole months from a month's first day, as `YYYY-MM-01`. */
+  const monthsFrom = (localDate: string, months: number): string => {
+    const index = Number(localDate.slice(0, 4)) * 12 + Number(localDate.slice(5, 7)) - 1 + months;
+    return `${String(Math.floor(index / 12)).padStart(4, '0')}-${pad((index % 12) + 1)}-01`;
+  };
+
+  /**
+   * The first month a period can still close that needs an account, found month by month: a month
+   * after the last closed period, from the oldest month with recorded time or the current month on.
+   */
+  function firstEligibleMonth(setup: {
+    today: string;
+    latestClosedPeriodEnd: string | null;
+    earliestActivityDate: string | null;
+  }): string {
+    const current = monthStartOf(setup.today);
+    const firstNeeded =
+      setup.earliestActivityDate && monthStartOf(setup.earliestActivityDate) < current
+        ? monthStartOf(setup.earliestActivityDate)
+        : current;
+    let month = firstNeeded;
+    while (setup.latestClosedPeriodEnd !== null && month <= setup.latestClosedPeriodEnd)
+      month = monthsFrom(month, 1);
+    return month;
+  }
+
+  // Recorded time and the last close lie on both sides of each other and of today.
   const setupArbitrary = todayArbitrary.chain((today) =>
-    fc.record({
-      today: fc.constant(today),
-      // A closed period is a past month at most up to the current one.
-      latestClosedPeriodEnd: fc.option(berlinDateArbitrary.filter((date) => date <= today).map(monthEndOf), {
-        nil: null,
-      }),
-      earliestActivityDate: fc.option(berlinDateArbitrary, { nil: null }),
-    }),
+    fc
+      .option(
+        // A closed period is a past month at most up to the current one.
+        berlinDateArbitrary.filter((date) => date <= today).map(monthEndOf),
+        { nil: null },
+      )
+      .chain((latestClosedPeriodEnd) =>
+        fc.record({
+          today: fc.constant(today),
+          latestClosedPeriodEnd: fc.constant(latestClosedPeriodEnd),
+          earliestActivityDate: fc.option(
+            fc.oneof(
+              berlinDateArbitrary,
+              fc
+                .tuple(fc.integer({ min: -3, max: 3 }), fc.integer({ min: 0, max: 27 }))
+                .map(([months, day]) => {
+                  const month = monthsFrom(monthStartOf(latestClosedPeriodEnd ?? today), months);
+                  return `${month.slice(0, 8)}${pad(day + 1)}`;
+                }),
+            ),
+            { nil: null },
+          ),
+        }),
+      ),
   );
 
-  test('is the first day of a month after every closed period', () => {
+  test('is the first day of the oldest month after the last close that has recorded time or is current', () => {
     fc.assert(
       fc.property(setupArbitrary, (setup) => {
-        const start = suggestTimeAccountStartDate(setup);
-        expect(start).toBe(monthStartOf(start));
-        if (setup.latestClosedPeriodEnd) expect(start > setup.latestClosedPeriodEnd).toBe(true);
+        expect(suggestTimeAccountStartDate(setup)).toBe(firstEligibleMonth(setup));
       }),
-    );
-  });
-
-  test('leaves no month without a close before it that has recorded time or is the current month', () => {
-    fc.assert(
-      fc.property(setupArbitrary, (setup) => {
-        const start = suggestTimeAccountStartDate(setup);
-        const monthBeforeIsOpen =
-          setup.latestClosedPeriodEnd === null || monthBefore(start) > setup.latestClosedPeriodEnd;
-        // Unless the month before the proposal is closed, nothing before it needs an account:
-        // neither recorded time nor the current month.
-        if (monthBeforeIsOpen) {
-          expect(start <= monthStartOf(setup.today)).toBe(true);
-          if (setup.earliestActivityDate === null) expect(start).toBe(monthStartOf(setup.today));
-          else
-            expect(
-              start <= monthStartOf(setup.earliestActivityDate) || start === monthStartOf(setup.today),
-            ).toBe(true);
-        }
-      }),
+      {
+        examples: [
+          // Recorded time before the current month, no close: its month, not the current one.
+          [{ today: '2026-11-22', latestClosedPeriodEnd: null, earliestActivityDate: '2026-08-14' }],
+          // Recorded time starts months after the last close: that month, not the one after the close.
+          [{ today: '2026-11-22', latestClosedPeriodEnd: '2026-01-31', earliestActivityDate: '2026-05-03' }],
+        ],
+      },
     );
   });
 });

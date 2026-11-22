@@ -65,7 +65,9 @@ const findingsArbitrary = yearMonthArbitrary.chain(({ year, month }) => {
     period: fc.constant(period),
     intervals: activityIntervalsAround(turns[1] ?? 0),
     policy: policyArbitrary,
-    setup: fc.record({ hasCompletePolicy: fc.boolean(), hasAccount: fc.boolean() }),
+    // Days of the month without a policy version in force, by index, and whether an account exists.
+    daysWithoutPolicy: fc.array(fc.nat({ max: 30 }), { maxLength: 3 }),
+    hasAccount: fc.boolean(),
     sources: fc.array(
       fc.constantFrom('schedule' as const, 'employment_condition' as const, 'default' as const),
       {
@@ -116,14 +118,20 @@ function findingsFor(
   intervals: readonly TimeActivityInterval[] = drawn.intervals,
   calculation = calculationFor(drawn, []),
 ) {
-  const { period, policy, setup, requests } = drawn;
+  const { period, policy, hasAccount, requests } = drawn;
   const dates = monthDates(period);
   const targets = targetsFor(drawn);
+  const missing = new Set(drawn.daysWithoutPolicy.map((day) => dates[day % dates.length]));
+  const policiesByDate = new Map(dates.map((date) => [date, missing.has(date) ? null : policy]));
   const findingPayload: Array<Record<string, unknown>> = [];
   pushEmployeeFindings({
     employee: EMPLOYEE,
-    setupGaps: employeeSetupGaps(setup),
-    policiesByDate: new Map(dates.map((date) => [date, policy])),
+    // As the preparation derives them from the month's policy calendar and the account.
+    setupGaps: employeeSetupGaps({
+      hasCompletePolicy: dates.every((date) => policiesByDate.get(date)),
+      hasAccount,
+    }),
+    policiesByDate,
     calculation,
     intervals: [...intervals],
     targetsByDate: new Map(targets.map((target) => [target.localDate, target])),
@@ -174,22 +182,32 @@ function findingsFor(
   return findingPayload;
 }
 
-const kindsOf = (findings: ReadonlyArray<Record<string, unknown>>): unknown[] =>
-  findings.map((finding) => finding.finding_kind);
-
 describe('The findings of a person’s period', () => {
-  test('block the close for each setup gap, and name a missing Wochenplan from the targets alone', () => {
+  test('block the close for the person on each missing policy day, missing account and unplanned day', () => {
     fc.assert(
       fc.property(findingsArbitrary, (drawn) => {
-        const kinds = kindsOf(findingsFor(drawn));
-        const setupKinds = kinds.filter((kind) =>
-          ['missing_policy', 'missing_opening_balance', 'missing_schedule'].includes(String(kind)),
-        );
-        const everyDayPlanned = drawn.sources.every((source) => source === 'schedule');
-        expect(setupKinds).toEqual([
-          ...employeeSetupGaps(drawn.setup),
-          ...(everyDayPlanned ? [] : ['missing_schedule']),
-        ]);
+        const setupKinds = new Set(['missing_policy', 'missing_opening_balance', 'missing_schedule']);
+        const setup = findingsFor(drawn)
+          .filter((finding) => setupKinds.has(String(finding.finding_kind)))
+          .map(({ employee_record_id, finding_kind, severity }) => ({
+            employee_record_id,
+            finding_kind,
+            severity,
+          }))
+          .sort((left, right) => String(left.finding_kind).localeCompare(String(right.finding_kind)));
+        const expected = [
+          ...(drawn.daysWithoutPolicy.length > 0 ? ['missing_policy'] : []),
+          ...(drawn.hasAccount ? [] : ['missing_opening_balance']),
+          // „Arbeitsplan fehlt“ comes from the Wochenplan alone: a day whose target has another source.
+          ...(drawn.sources.every((source) => source === 'schedule') ? [] : ['missing_schedule']),
+        ]
+          .sort()
+          .map((finding_kind) => ({
+            employee_record_id: EMPLOYEE.id,
+            finding_kind,
+            severity: 'close_blocked',
+          }));
+        expect(setup).toEqual(expected);
       }),
     );
   });

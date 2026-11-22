@@ -13,7 +13,10 @@
     "lib/time-accounts/payroll-mapping.ts",
     "lib/time-accounts/period-daily-targets.ts",
     "lib/time-accounts/period-findings.ts",
+    "lib/time-accounts/period-policies.ts",
+    "lib/time-accounts/period-preparation.ts",
     "lib/time-accounts/period-results.ts",
+    "lib/time-accounts/period-sources.ts",
     "lib/time-accounts/policy-versions.ts"
   ],
   "exempt": {
@@ -31,10 +34,7 @@
     "lib/time-accounts/payroll-export-sources.ts": "Server reader of a closed period version's export sources.",
     "lib/time-accounts/payroll-mapping-server.ts": "Server read and save of a mapping version; the code rules live in payroll-mapping.ts.",
     "lib/time-accounts/period-finding-groups.ts": "Groups stored findings into cards with their fix links; it computes no time.",
-    "lib/time-accounts/period-policies.ts": "Server reader of policy versions per day; the in-force rule is versionInForce in policy-versions.ts.",
-    "lib/time-accounts/period-preparation.ts": "Server step that reads the sources and runs calculation.ts, period-daily-targets.ts and period-findings.ts per person.",
     "lib/time-accounts/period-school-minutes.ts": "Server reader that sums period-daily-targets.ts school minutes for the review.",
-    "lib/time-accounts/period-sources.ts": "Server reader of the period sources and their index; the month bounds come from prepareTimePeriod.",
     "lib/time-accounts/presentation.ts": "Labels and display formats; formatMinutes' round trip with the typed balance is a property of balance-input.",
     "lib/time-accounts/queries.ts": "Server readers of periods, results and settings; they compute no time.",
     "lib/time-accounts/read-support.ts": "Server read helpers: regions, profiles and names.",

@@ -301,6 +301,10 @@ describe('The Zeitkonto balance of a period', () => {
           const credited = result.activityBuckets.reduce((sum, bucket) => sum + bucket.creditedMinutes, 0);
           expect(result.targetMinutes).toBe(target);
           expect(result.creditedMinutes).toBe(credited);
+          // The period stores the opening, the events and the month's change beside the balance.
+          expect(result.previousBalanceMinutes).toBe(opening);
+          expect(result.accountEventMinutes).toBe(eventMinutes);
+          expect(result.periodDeltaMinutes).toBe(credited - target + eventMinutes);
           expect(result.closingBalanceMinutes).toBe(opening + credited - target + eventMinutes);
           expect(result.overtimeCandidateMinutes).toBe(Math.max(0, credited - target));
           expect(calculate(second, result.closingBalanceMinutes).closingBalanceMinutes).toBe(

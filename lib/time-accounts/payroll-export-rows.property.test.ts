@@ -3,12 +3,16 @@ import fc from 'fast-check';
 import type { Tables } from '@/lib/supabase/database.types';
 import { berlinMidnightMs } from '@/lib/testing/berlin-arbitraries';
 import { berlinMonth, yearMonthArbitrary } from '@/lib/testing/time-account-arbitraries';
+import { PAYROLL_CODE_ROWS } from './payroll-mapping';
 
 // Property tests (docs/technical/testing.md, "Property tests") of docs/features/time-tracking.md,
 // "Payroll export": one reproducible export per closed period version that covers the whole
 // workforce of that version. The rows do not depend on the order the sources are read in, a
 // day's credited minutes reach its sources without losing or adding a minute, and a correction
-// counts for the period exactly when it moved time between the month's Berlin midnights.
+// counts for the period exactly when it moved time between the month's Berlin midnights. Every
+// nonzero value of the version reaches the export with its classification, signed minutes, the
+// confirmed Lohnart code and the employee's payroll reference ("An Admin sees and edits the
+// Lohnart code of every classification before confirming").
 
 // payroll-export-rows reads server-only modules; the stub lets the unit tier import it.
 mock.module('server-only', () => ({}));
@@ -17,6 +21,10 @@ const { buildPayrollExportRows } = await import('./payroll-export-rows');
 type Sources = Parameters<typeof buildPayrollExportRows>[0];
 
 const EMPLOYEES = ['employee-1', 'employee-2', 'employee-3'];
+/** Every activity the code table gives credited time a code for. */
+const ACTIVITY_KINDS = PAYROLL_CODE_ROWS.flatMap((codeRow) =>
+  codeRow.activityKind ? [codeRow.activityKind] : [],
+);
 const CREATED = '2026-01-01T00:00:00Z';
 const ORG = 'org-1';
 
@@ -92,7 +100,7 @@ const dailyArbitrary = (dates: readonly string[]) =>
   fc.record({
     employee: fc.constantFrom(...EMPLOYEES),
     localDate: fc.constantFrom(...dates),
-    activityKind: fc.constantFrom('work' as const, 'travel' as const, 'callout' as const),
+    activityKind: fc.constantFrom(...ACTIVITY_KINDS),
     creditedMinutes: fc.nat({ max: 900 }),
     sourceSeconds: fc.nat({ max: 60_000 }),
     supplementMinutes: fc.array(fc.nat({ max: 120 }), { minLength: 5, maxLength: 5 }),
@@ -105,7 +113,17 @@ const exportArbitrary = yearMonthArbitrary.chain(({ year, month }) => {
   const turns = [berlinMidnightMs(period.start), berlinMidnightMs(period.endExclusive)];
   return fc.record({
     period: fc.constant(period),
-    results: fc.array(fc.integer({ min: -9_000, max: 9_000 }), { minLength: 12, maxLength: 12 }),
+    // One distinct confirmed code per classification of the mapping table.
+    codes: fc
+      .uniqueArray(fc.nat({ max: 9_999 }), {
+        minLength: PAYROLL_CODE_ROWS.length,
+        maxLength: PAYROLL_CODE_ROWS.length,
+      })
+      .map((numbers) => numbers.map((number) => `L${number}`)),
+    results: fc.array(fc.oneof(fc.constant(0), fc.integer({ min: -9_000, max: 9_000 })), {
+      minLength: 12,
+      maxLength: 12,
+    }),
     dailies: fc.array(dailyArbitrary(dates), { maxLength: 5 }),
     events: fc.array(
       fc.record({
@@ -175,17 +193,15 @@ function sourcesOf(drawn: Drawn): Sources {
       mapping_version_id: MAPPING_VERSION.id,
       organization_id: ORG,
     })),
-    codeMappings: [
-      {
-        activity_kind: null,
-        created_at: CREATED,
-        id: 'code-1',
-        mapping_version_id: MAPPING_VERSION.id,
-        organization_id: ORG,
-        output_code: 'SOLL',
-        value_kind: 'target',
-      },
-    ],
+    codeMappings: PAYROLL_CODE_ROWS.map((codeRow, index) => ({
+      activity_kind: codeRow.activityKind,
+      created_at: CREATED,
+      id: `code-${index}`,
+      mapping_version_id: MAPPING_VERSION.id,
+      organization_id: ORG,
+      output_code: drawn.codes[index] ?? '',
+      value_kind: codeRow.valueKind,
+    })),
     employeeResults: EMPLOYEES.map((employee, index) =>
       employeeResult(employee, drawn.results.slice(index * 4, index * 4 + 4)),
     ),
@@ -250,6 +266,70 @@ const periodOf = (drawn: Drawn) => ({
   period_end_date: drawn.period.end,
 });
 
+/** One value of the closed version as the export must carry it. */
+type ExportedValue = {
+  employeeRecordId: string;
+  externalEmployeeReference: string;
+  localDate: string;
+  valueKind: string;
+  outputCode: string;
+  minutes: number;
+};
+
+/** Every value the drawn version holds, each with the code its classification was confirmed with. */
+function versionValues(drawn: Drawn): ExportedValue[] {
+  const codeOf = (valueKind: string, activityKind: string | null = null): string =>
+    drawn.codes[
+      PAYROLL_CODE_ROWS.findIndex(
+        (codeRow) => codeRow.valueKind === valueKind && codeRow.activityKind === activityKind,
+      )
+    ] ?? 'no confirmed code';
+  const value = (
+    employee: string,
+    localDate: string,
+    valueKind: string,
+    minutes: number,
+    activityKind: string | null = null,
+  ): ExportedValue => ({
+    employeeRecordId: employee,
+    externalEmployeeReference: `PN-${EMPLOYEES.indexOf(employee) + 1}`,
+    localDate,
+    valueKind,
+    outputCode: codeOf(valueKind, activityKind),
+    minutes,
+  });
+  return [
+    ...drawn.dailies.flatMap((daily) => {
+      const [night = 0, holiday = 0, sickness = 0, sunday = 0, vacation = 0] = daily.supplementMinutes;
+      const on = (valueKind: string, minutes: number, activityKind: string | null = null) =>
+        value(daily.employee, daily.localDate, valueKind, minutes, activityKind);
+      return [
+        on('source_attendance', Math.round(daily.sourceSeconds / 60)),
+        on('effective_attendance', daily.creditedMinutes),
+        on('credited_activity', daily.creditedMinutes, daily.activityKind),
+        on('vacation', vacation),
+        on('sickness', sickness),
+        on('night_supplement', night),
+        on('sunday_supplement', sunday),
+        on('public_holiday_supplement', holiday),
+      ];
+    }),
+    ...EMPLOYEES.flatMap((employee, index) => {
+      const [closing = 0, overtime = 0, opening = 0, target = 0] = drawn.results.slice(
+        index * 4,
+        index * 4 + 4,
+      );
+      return [
+        value(employee, drawn.period.end, 'target', target),
+        value(employee, drawn.period.end, 'overtime', overtime),
+        value(employee, drawn.period.end, 'opening_balance', opening),
+        value(employee, drawn.period.end, 'closing_balance', closing),
+      ];
+    }),
+    ...drawn.events.map((event) => value(event.employee, drawn.period.start, event.kind, event.minutes)),
+  ];
+}
+
 describe('The rows of a payroll export', () => {
   test('do not depend on the order the closed period’s sources are read in', () => {
     fc.assert(
@@ -274,6 +354,34 @@ describe('The rows of a payroll export', () => {
         expect(buildPayrollExportRows(shuffled, periodOf(drawn))).toEqual(
           buildPayrollExportRows(sources, periodOf(drawn)),
         );
+      }),
+    );
+  });
+
+  test('carry every nonzero value with its classification, signed minutes, confirmed code and payroll reference', () => {
+    fc.assert(
+      fc.property(exportArbitrary, (drawn) => {
+        const key = (row: ExportedValue): string =>
+          JSON.stringify([
+            row.employeeRecordId,
+            row.externalEmployeeReference,
+            row.localDate,
+            row.valueKind,
+            row.outputCode,
+            row.minutes,
+          ]);
+        const exported = buildPayrollExportRows(sourcesOf(drawn), periodOf(drawn)).valueRows.map(key);
+        const values = versionValues(drawn);
+        for (const required of values.filter((row) => row.minutes !== 0).map(key)) {
+          expect(exported).toContain(required);
+          exported.splice(exported.indexOf(required), 1);
+        }
+        // A row left over may only be a zero value of the version, never an invented one.
+        const zeroValues = values.filter((row) => row.minutes === 0).map(key);
+        for (const row of exported) {
+          expect(zeroValues).toContain(row);
+          zeroValues.splice(zeroValues.indexOf(row), 1);
+        }
       }),
     );
   });
