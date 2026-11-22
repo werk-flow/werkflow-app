@@ -269,6 +269,9 @@ mock.module('@/lib/maintenance/actions', () => ({
   getMaintenanceWorkspace: seam('maintenance-workspace'),
   getMaintenanceEvidenceOptions: seam('maintenance-evidence-options'),
 }));
+mock.module('@/lib/service-reports/page-actions', () => ({
+  getCompletedVisitPage: seam('completed-maintenance-visits'),
+}));
 mock.module('@/lib/work-templates/actions', () => ({
   getWorkTemplates: seam('work-templates'),
   getWorkTemplate: seam('work-template-detail'),
@@ -483,6 +486,7 @@ const inputs: Record<string, unknown> = {
     planPage: 2,
     coveragePage: 3,
   },
+  'completed-maintenance-visits': { organizationId, page: 2 },
   'published-work-templates': { targetType: 'project' },
   'work-template-preview': { versionId: jobId, targetType: 'job', jobId },
   'approved-artifact-actions': { targetType: 'job', targetId: jobId },
@@ -523,6 +527,7 @@ const inputs: Record<string, unknown> = {
 };
 // What each reader receives: some take the bare identifier, the rest the validated object.
 const readerArguments: Record<string, unknown> = {
+  'completed-maintenance-visits': { page: 2 },
   'organization-member-options': organizationId,
   'profiles-by-ids': [jobId],
   'pending-sessions': organizationId,

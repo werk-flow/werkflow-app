@@ -7,9 +7,11 @@ import { CHANGED_CHECK_BASE } from '../lib/testing/runner/changed-check';
 
 // `bun run migrations:order`: static gate static:migration-order, also a step of `check:changed`.
 // CI checks out a pull request as its merge commit and a merge-queue entry as its commit on top of
-// the entries ahead of it, so there the first parent is the main the migration lands on.
+// the entries ahead of it, so there the first parent is the main the migration lands on. Another CI
+// runner's job sets CI_BASE_SHA to the landing base its plan recorded (scripts/ci/job.ts).
 const repositoryRoot = resolve(import.meta.dir, '..');
-const mainRef = process.env.GITHUB_ACTIONS === 'true' ? 'HEAD^1' : CHANGED_CHECK_BASE;
+const mainRef =
+  process.env.GITHUB_ACTIONS === 'true' ? 'HEAD^1' : process.env.CI_BASE_SHA || CHANGED_CHECK_BASE;
 const openPullRequests = openPullRequestMigrations(repositoryRoot);
 // The open pull requests only warn early: main's history, which the merge queue checks, holds the
 // version of every pull request merged or queued before this one.

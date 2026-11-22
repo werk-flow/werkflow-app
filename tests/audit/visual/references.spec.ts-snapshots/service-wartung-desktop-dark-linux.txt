@@ -39,4 +39,7 @@ Abdeckungen
 0
 Keine offenen Wartungsfälligkeiten
 Aktiviere einen Wartungsplan, damit Fälligkeiten für die nächsten 18 Monate erzeugt werden.
+Abgeschlossene Wartungsbesuche
+Noch keine abgeschlossenen Wartungsbesuche
+Schließe eine Fälligkeit mit ihrem Nachweis ab. Danach erstellst du hier den Servicebericht.
 Nicht eingestempelt

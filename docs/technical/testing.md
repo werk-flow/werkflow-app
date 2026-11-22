@@ -50,7 +50,7 @@ It survives your turn and the harness, keeps the whole log, and needs a reachabl
 
 ### Grow a shrink-only list
 
-CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. When an exception is right, open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. Changing it reruns Unit (`list-growth.yml`); if that fails, push a commit.
+CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. When an exception is right, open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. Changing it reruns Fast (`list-growth.yml`); if that fails, push a commit.
 
 ## When a proof is valid
 
@@ -58,7 +58,7 @@ A proof is a passing result whose fingerprint matches the current inputs; a late
 
 ## How selection works
 
-`bun run test:plan` prints each group with its reason and first file. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD`.
+`bun run test:plan` prints each group's reason and first file. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD`.
 
 Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
 
@@ -68,7 +68,7 @@ Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
 - Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed. `audit:layout:<area>` also runs when its pages or dialogs render a changed file at most five areas render (`surface-closure.ts`).
-- Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
+- Static gates run in every plan. Unit, SQL and component groups run when their inputs changed (`fast-tier.ts` in CI).
 - Groups whose own spec or support changed run first.
 - `test:verify` refuses to start while a group it would run has an unclassified latest failure.
 
@@ -87,14 +87,14 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every PR to `main`, except a label change, each queue entry and every push to `main`. `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
+`.github/workflows/ci.yml` runs on every PR to `main` but a label change, each queue entry and each push; `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Jobs: `lib/testing/ci/dag.ts`; bodies: `bun scripts/ci/job.ts <job>`.
 
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules: a PR's diff against its merge base, a queue entry's against its base, a push's against the previous `main` commit unless a green queue run passed that tree. Every group runs on an unreadable diff, a full run, and a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
-- **Drafts.** A draft PR runs no browser shard, and its `Check` fails while browser groups wait. `gh pr ready` runs them ([babysit a pull request](coderabbit.md#babysit-a-pull-request)).
-- **Full run and release gate.** A full run is `ci.yml` called with `full` from a `Full run` job, nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
-- **Shards.** Visual groups get their own shards; a full selection fills at most `MAX_SHARDS`, a PR's run starts four at once.
+- **Tiers.** A PR's run is the fast tier: Fast, SQL and Component contracts, each running what `fast-tier.ts` selects; an empty selection skips its job. The integration run adds browser shards (owner decision D1).
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run, or a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
+- **Reuse and Check.** A push whose tree an integration run passed runs no job; a CI runner's passed result stands for its job on an identical tree (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
+- **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
+- **Shards.** Groups pack longest-first by recorded duration (`group-durations.json`), visual groups apart, in at most `MAX_SHARDS`; component areas in two.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails when the p90 runner wait exceeds its ceiling (`.github/scripts/ci-queue.sh`).
-- **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun of failed jobs follows a local repeat's retry rules.
 
@@ -121,7 +121,7 @@ bun run test:audit:focused --grep "@ACCEPT <set>"                # acceptance ca
 
 A failed static gate, an input edited during the run, an interruption, or a failed changed-spec tier blocks later groups.
 
-Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree). Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI, `Midnight wait` holds shards from 22:55, one Browser timeout ahead. A shard still reaching it is blocked (harness, `midnight start window`); rerun it after 00:10 Berlin.
+Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree). Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI, `Midnight wait` holds shards from 22:25, a Fast and Browser timeout ahead. A shard still reaching it is blocked (harness, `midnight start window`); rerun it after 00:10 Berlin.
 
 ## Specs
 
