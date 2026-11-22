@@ -264,3 +264,7 @@ A retry record names the work its run tested: the base commit, the batch's PRs a
 ## Amendment 2026-11-21: every outstanding retry stays
 
 This narrows "a retry belongs to its work". The record holds every outstanding retry, one per work, and recording one work's retry never removes another's: otherwise a batch and its prefix that take turns ending without a verdict would retry forever. A retry stays until its work reaches a verdict or a tick settles. `lib/testing/ci/queue-retry.ts` owns the rule.
+
+## Amendment 2026-11-22: two CI profiles
+
+The owner decided on 2026-11-22 (werk-flow/werkflow-planning#503) that CI keeps two profiles: `fleet` for Boat or GitHub Actions, and `mac` for one MacBook. Both run the same checks, jobs and schedules; only the executor, concurrency, batching and timing differ. `ci/profile.json` on `main` is the one switch. [Decision 0011](0011-ci-profiles.md) owns the rules.

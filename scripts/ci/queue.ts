@@ -58,7 +58,8 @@
 //                   copy as the App's user, with the CI_RUN_URL and CI_COMMIT the queue passes.
 //                   `Queue` is then the App's check run, and a PR's `Check` only the App's. Before the
 //                   App exists, `Queue` is a commit status of `gh` and `Check` the commit status.
-//   --max-batch     The most PRs in a batch, default 4. 1 while the ruleset requires up-to-date branches.
+//   --max-batch     The most PRs in a batch, 1 to 4; default the active CI profile's `maxBatch`
+//                   (lib/testing/ci/profiles.ts). 1 while the ruleset requires up-to-date branches.
 //   --dry-run       Builds, tests and decides, but never sets a status, merges, comments or
 //                   turns auto-merge off. --prs names the PRs to rehearse with, in order.
 // Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base, a
@@ -81,6 +82,7 @@ import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { CHECK_APP_CONFIG, readCheckApp } from '../../lib/testing/ci/check-app';
+import { activeProfile } from '../../lib/testing/ci/profiles';
 import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
 import { mainFollowUp, mainRunOf, type MergeAnswer } from '../../lib/testing/ci/queue-main-run';
 import {
@@ -109,7 +111,7 @@ const { values } = (() => {
         'main-runner': { type: 'string' },
         'work-dir': { type: 'string' },
         'run-url-base': { type: 'string' },
-        'max-batch': { type: 'string', default: String(MAX_BATCH) },
+        'max-batch': { type: 'string', default: String(activeProfile().maxBatch) },
         'dry-run': { type: 'boolean', default: false },
         prs: { type: 'string' },
         ledger: { type: 'string' },
