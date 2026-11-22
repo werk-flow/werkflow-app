@@ -122,6 +122,16 @@ const employed = (drawn: Drawn, date: string): boolean =>
 const isSchoolDay = (spans: readonly ApprovedAbsenceSpan[], date: string): boolean =>
   spans.some((span) => span.startDate <= date && date <= span.endDate);
 
+/**
+ * werk-flow/werkflow-planning#523: a vacation or sickness the policy counts as informational brings
+ * a closure day's Wochenplan target back. The known-bug case below holds that class.
+ */
+const informationalOnDayOff = (drawn: Drawn, date: string): boolean =>
+  drawn.closures.includes(date) &&
+  isSchoolDay([...drawn.vacations, ...drawn.sickness], date) &&
+  (drawn.policy?.vacationTreatment === 'informational' ||
+    drawn.policy?.sicknessTreatment === 'informational');
+
 describe('The daily targets of a period', () => {
   test('give every day of the month one row, never more than the Wochenplan of its weekday', () => {
     fc.assert(
@@ -167,5 +177,57 @@ describe('The daily targets of a period', () => {
         }
       }),
     );
+  });
+
+  test('owe nothing on a closure day, whatever absence covers it', () => {
+    fc.assert(
+      fc.property(periodArbitrary, (drawn) => {
+        for (const day of resolveEmployeeDailyTargets(...argumentsFor(drawn)).dailyTargets)
+          if (drawn.closures.includes(day.localDate) && !informationalOnDayOff(drawn, day.localDate))
+            expect(day.targetMinutes).toBe(0);
+      }),
+    );
+  });
+
+  test('owe nothing on a Berufsschule day, and change no other day for it', () => {
+    fc.assert(
+      fc.property(periodArbitrary, (drawn) => {
+        const withSchool = resolveEmployeeDailyTargets(...argumentsFor(drawn)).dailyTargets;
+        const without = resolveEmployeeDailyTargets(...argumentsFor({ ...drawn, school: [] })).dailyTargets;
+        for (const [index, day] of withSchool.entries()) {
+          if (informationalOnDayOff(drawn, day.localDate)) continue;
+          if (isSchoolDay(drawn.school, day.localDate)) expect(day.targetMinutes).toBe(0);
+          else expect(day).toEqual(without[index] ?? day);
+        }
+      }),
+    );
+  });
+
+  // known bug: werk-flow/werkflow-planning#523 an informational sickness brings a closure day's Wochenplan target back
+  test.failing('owe nothing on a closure day an informational sickness covers', () => {
+    const policy: TimeAccountPolicy = {
+      id: 'policy-a',
+      version: 1,
+      effectiveFrom: '2000-01-01',
+      creditRules: [],
+      supplementRules: [],
+      nightWindow: null,
+      vacationTreatment: 'paid',
+      sicknessTreatment: 'informational',
+      warningRules: [],
+    };
+    const drawn: Drawn = {
+      dates: ['2026-12-23', '2026-12-24'],
+      weekMinutes: [480, 480, 480, 480, 480, 0, 0],
+      entryDate: null,
+      exitDate: null,
+      vacations: [],
+      sickness: [{ type: 'sickness', startDate: '2026-12-24', endDate: '2026-12-24', dayPortion: 'full' }],
+      school: [],
+      closures: ['2026-12-24'],
+      policy,
+    };
+    const [, closureDay] = resolveEmployeeDailyTargets(...argumentsFor(drawn)).dailyTargets;
+    expect(closureDay?.targetMinutes).toBe(0);
   });
 });
