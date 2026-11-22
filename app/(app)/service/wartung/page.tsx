@@ -3,10 +3,15 @@ import { redirect } from 'next/navigation';
 
 import { MaintenanceContentSkeleton } from '@/components/loading-states/maintenance-page-skeleton';
 import { MaintenanceContent, MaintenanceCreateButtons } from '@/components/service/maintenance-content';
+import { ServiceReportList } from '@/components/service/service-report-list';
+import { ServiceReportListSkeleton } from '@/components/service/service-report-list-skeleton';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getMaintenanceCatalogs, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
 import { parseMaintenanceWorkspaceQuery } from '@/lib/maintenance/workspace-page';
+import { getCompletedVisitPage } from '@/lib/service-reports/page-actions';
+import { SERVICE_REPORT_PAGE_PARAM } from '@/lib/service-reports/types';
+import { parseListPage } from '@/lib/ui/list-pagination';
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -63,8 +68,30 @@ export default function MaintenancePage({
       <Suspense fallback={<MaintenanceContentSkeleton />}>
         <MaintenanceWorkspace searchParams={searchParams} />
       </Suspense>
+      <section aria-labelledby="service-reports-heading" className="space-y-3">
+        <h3 id="service-reports-heading" className="text-base font-semibold">
+          Abgeschlossene Wartungsbesuche
+        </h3>
+        <Suspense fallback={<ServiceReportListSkeleton />}>
+          <CompletedVisits searchParams={searchParams} />
+        </Suspense>
+      </section>
     </div>
   );
+}
+
+/** The completed visits with their Servicebericht; the workspace answers a role or session failure. */
+async function CompletedVisits({ searchParams }: { searchParams: SearchParams }) {
+  const value = (await searchParams)[SERVICE_REPORT_PAGE_PARAM];
+  const result = await getCompletedVisitPage({
+    page: parseListPage(typeof value === 'string' ? value : undefined),
+  });
+  if (!result.success) {
+    return (
+      <RegionLoadError>Die abgeschlossenen Wartungsbesuche konnten nicht geladen werden.</RegionLoadError>
+    );
+  }
+  return <ServiceReportList initial={result.page} />;
 }
 
 async function MaintenanceActions({ searchParams }: { searchParams: SearchParams }) {

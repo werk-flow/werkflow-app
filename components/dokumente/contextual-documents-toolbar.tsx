@@ -9,6 +9,10 @@ type ContextualDocumentsToolbarProps = {
   /** An existing library document can be attached to this record. */
   canAttach: boolean;
   emphasizeUpload: boolean;
+  /** The upload dialog still downloads after the files were chosen. */
+  uploadPending: boolean;
+  /** The attach dialog still downloads after the press. */
+  attachPending: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
   onAttach: () => void;
   onFilesSelected: (files: FileList | null) => void;
@@ -18,6 +22,8 @@ type ContextualDocumentsToolbarProps = {
 export function ContextualDocumentsToolbar({
   canAttach,
   emphasizeUpload,
+  uploadPending,
+  attachPending,
   fileInputRef,
   onAttach,
   onFilesSelected,
@@ -25,7 +31,7 @@ export function ContextualDocumentsToolbar({
   return (
     <>
       {canAttach && (
-        <Button type="button" size="sm" variant="outline" onClick={onAttach}>
+        <Button type="button" size="sm" variant="outline" pending={attachPending} onClick={onAttach}>
           <LinkIcon className="size-4" />
           Verknüpfen
         </Button>
@@ -35,6 +41,7 @@ export function ContextualDocumentsToolbar({
         size="sm"
         variant={emphasizeUpload ? 'default' : 'outline'}
         className={emphasizeUpload ? undefined : 'min-h-11'}
+        pending={uploadPending}
         onClick={() => fileInputRef.current?.click()}
       >
         <Upload className="size-4" />
@@ -46,7 +53,11 @@ export function ContextualDocumentsToolbar({
         data-testid="document-upload-input"
         multiple
         className="hidden"
-        onChange={(event) => onFilesSelected(event.target.files)}
+        onChange={(event) => {
+          onFilesSelected(event.target.files);
+          // The same files chosen again, after a dialog that failed to download, still open it.
+          event.target.value = '';
+        }}
       />
     </>
   );

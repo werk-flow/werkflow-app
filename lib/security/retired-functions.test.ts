@@ -27,6 +27,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   close_time_session_for_member_removal: 'remove_member_with_time_capture',
   convert_client_request_to_job: 'convert_client_request_to_job_with_visit_assessment',
   create_maintenance_plan: 'create_maintenance_plan_with_due_work',
+  create_organization_with_id: 'create_organization_from_subscription',
   delete_organization: 'delete_organization_with_files',
   create_payroll_mapping_version: 'confirm_payroll_mapping_version',
   create_payroll_mapping_version_p1_23_base: 'create_payroll_mapping_version',
@@ -39,6 +40,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   get_user_admin_or_manager_org_ids: 'RLS policies',
   get_user_org_ids: 'RLS policies',
   link_maintenance_due_visit: 'create_maintenance_visit_job',
+  list_installed_equipment_lineage: 'list_open_maintenance_visit_findings',
   open_time_account: 'open_time_accounts',
   prepare_time_period_p1_23_base: 'prepare_time_period',
   publish_personnel_onboarding_template_base: 'publish_personnel_onboarding_template',
@@ -57,11 +59,16 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   unlink_installed_equipment_document: 'update_document_links',
   unlink_maintenance_coverage_document: 'update_document_links',
   unlink_service_case_document: 'update_document_links',
+  werkflow_subscription_holds: 'record_werkflow_subscription_state',
   withdraw_work_handover_p1_17_inner: 'withdraw_work_handover',
 };
 
 /** Function -> why it stays although the current build does not call it. */
 const KEPT_FOR_DEPLOYED_BUILD: Readonly<Record<string, string>> = {
+  complete_maintenance_due_work:
+    'the deployed production build completes maintenance through it; complete_maintenance_visit replaced it, so drop it in the first migration after the next production release',
+  create_organization_with_defaults:
+    'the deployed production build creates organizations through it; create_organization_from_subscription replaced it (werk-flow/werkflow-planning#248), so drop it in the first migration after the next production release',
   import_inventory_row:
     'the deployed production build books CSV rows through it; drop it in the first migration after the release that ships book_inventory_import (werk-flow/werkflow-planning#371)',
   list_maintenance_workspace_page:

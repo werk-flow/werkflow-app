@@ -8,6 +8,7 @@ import { ListRow } from '@/components/ui/list-row';
 import { ColumnsTableHeader } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { OFFER_STATUS_LABELS, type OfferListEntry, type OfferStatus } from '@/lib/offers/types';
+import { ClientRecipientLine } from '@/components/shared/client-recipient-line';
 import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import { cn, formatGermanDate } from '@/lib/utils';
 import { OFFER_COLUMNS } from './offers-columns';
@@ -19,18 +20,6 @@ export function OfferStatusBadge({ status }: { status: OfferStatus }) {
     <Badge variant={status === 'angenommen' ? 'success' : status === 'entwurf' ? 'outline' : 'secondary'}>
       {OFFER_STATUS_LABELS[status]}
     </Badge>
-  );
-}
-
-/** The customer, and the Rechnungsempfänger when another customer gets the invoice. */
-function ClientLine({ entry }: { entry: OfferListEntry }) {
-  return (
-    <>
-      <p className="truncate">{entry.clientName}</p>
-      {entry.recipientName && (
-        <p className="truncate text-xs text-muted-foreground">Rechnung an {entry.recipientName}</p>
-      )}
-    </>
   );
 }
 
@@ -64,7 +53,7 @@ export function OffersTable({ entries }: { entries: readonly OfferListEntry[] })
                 </Link>
               </TableCell>
               <TableCell className="max-w-0">
-                <ClientLine entry={entry} />
+                <ClientRecipientLine clientName={entry.clientName} recipientName={entry.recipientName} />
               </TableCell>
               <TableCell>
                 <OfferStatusBadge status={entry.status} />
@@ -97,7 +86,7 @@ export function OffersCards({
                 <OfferStatusBadge status={entry.status} />
               </div>
               <div className="text-xs text-muted-foreground">
-                <ClientLine entry={entry} />
+                <ClientRecipientLine clientName={entry.clientName} recipientName={entry.recipientName} />
               </div>
               <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground tabular-nums">
                 <span>{entry.offerNumber}</span>

@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { acceptanceSets } from '../../../tests/audit/support/acceptance-sets';
 import {
   interceptsRequest,
+  isAppPrefetch,
   isTargetPrefetch,
   navigationStart,
   standaloneTarget,
@@ -62,6 +63,11 @@ test('a loading capture holds the navigation of its target and every client read
   expect(interceptsRequest(plan, PREFETCH, TARGET)).toBeNull();
   expect(isTargetPrefetch(PREFETCH, TARGET)).toBe(true);
   expect(isTargetPrefetch(NAVIGATION, TARGET)).toBe(false);
+  // Any prefetch of the app holds the arming, the target's or another route's; a navigation does not.
+  expect(isAppPrefetch(PREFETCH, ORIGIN)).toBe(true);
+  expect(isAppPrefetch({ ...PREFETCH, url: `${ORIGIN}/service/bereitschaft?_rsc=p` }, ORIGIN)).toBe(true);
+  expect(isAppPrefetch(NAVIGATION, ORIGIN)).toBe(false);
+  expect(isAppPrefetch({ ...PREFETCH, url: 'https://other.example/auftraege?_rsc=p' }, ORIGIN)).toBe(false);
   // The navigation of another route, the document load and the CSP report pass.
   expect(interceptsRequest(plan, request('GET', '/dashboard?_rsc=x', { rsc: '1' }), TARGET)).toBeNull();
   expect(interceptsRequest(plan, request('GET', '/auftraege'), TARGET)).toBeNull();

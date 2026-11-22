@@ -39,6 +39,8 @@ export const equipmentFormSchema = z
     manufacturer: trimmedNullableText(160),
     model: trimmedNullableText(160),
     locationDetail: trimmedNullableText(300),
+    // installed_equipment_source_number_check; the database stores an empty value as none.
+    sourceNumber: trimmedNullableText(100),
     technicalNotes: trimmedNullableText(4000),
     installationDate: optionalDate,
     commissioningDate: optionalDate,

@@ -3,11 +3,13 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { componentAreaOwns, expandGroupAliases } from './component-areas';
 import {
   getGroupTimingRequirements,
   getTestGroups,
   isPerformanceSpec,
   listTestFiles,
+  TEST_SCOPE_PREFIXES,
   validateTestGroupInventory,
   type TestGroup,
 } from './test-groups';
@@ -259,5 +261,53 @@ describe('independent group registry', () => {
     // A static gate is selected without changed files, so every change plan and every CI run includes it.
     const plan = groupSelections({ mode: 'change', groups, changedFiles: [], unresolvedGroupIds: [] });
     expect(plan.get('static:format')).toEqual({ reason: 'Current policy check', changedFiles: [] });
+  });
+});
+
+describe('component contract areas', () => {
+  const root = resolve(import.meta.dir, '../../..');
+  const areas = getTestGroups(root).filter((entry) => entry.kind === 'ui');
+
+  test('every component contract belongs to exactly one area, and every area has real scopes and specs', () => {
+    const contracts = listTestFiles(root, 'tests/ui-contracts', /\.spec\.ts$/);
+    for (const contract of contracts)
+      expect(
+        areas.filter((area) => area.files.includes(contract)).map((area) => area.id),
+        `${contract}: add it to one area in componentAreas (test-groups.ts)`,
+      ).toHaveLength(1);
+    expect(areas.flatMap((area) => area.files).sort()).toEqual(contracts);
+    for (const area of areas) {
+      expect(area.files.length, area.id).toBeGreaterThan(0);
+      expect(area.id).toStartWith('ui:contracts:');
+    }
+    expect(areas.filter((area) => !area.scopes.includes('*')).length).toBeGreaterThan(areas.length / 2);
+    for (const scope of areas.flatMap((area) => area.scopes))
+      expect(scope === '*' || scope in TEST_SCOPE_PREFIXES, scope).toBe(true);
+  });
+
+  test('an area entry names one spec, or with a trailing dash every spec it starts', () => {
+    expect(componentAreaOwns('clock-', 'tests/ui-contracts/clock-unsent.spec.ts')).toBe(true);
+    expect(componentAreaOwns('options', 'tests/ui-contracts/options.spec.ts')).toBe(true);
+    expect(componentAreaOwns('options', 'tests/ui-contracts/planning-options.spec.ts')).toBe(false);
+    expect(componentAreaOwns('problem-report', 'tests/ui-contracts/problem-report-redraw.spec.ts')).toBe(
+      false,
+    );
+    expect(componentAreaOwns('customer-', 'tests/ui-contracts/customer.spec.ts')).toBe(false);
+  });
+
+  test('the former group id ui:contracts runs every component area, and other ids stay as given', () => {
+    const groups = getTestGroups(root);
+    expect(expandGroupAliases(['ui:contracts'], groups)).toEqual(areas.map((area) => area.id));
+    expect(expandGroupAliases(['unit:all', 'ui:contracts', 'sql:planning'], groups)).toEqual([
+      'unit:all',
+      ...areas.map((area) => area.id),
+      'sql:planning',
+    ]);
+    // An inherited name is no alias: it stays as given, so verify refuses it as unknown.
+    expect(expandGroupAliases(['constructor', 'toString'], groups)).toEqual(['constructor', 'toString']);
+    expect(expandGroupAliases(['ui:contracts:time', 'ui:contracts'], groups)).toEqual([
+      'ui:contracts:time',
+      ...areas.map((area) => area.id).filter((id) => id !== 'ui:contracts:time'),
+    ]);
   });
 });
