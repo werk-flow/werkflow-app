@@ -303,7 +303,9 @@ const tick = (...args: string[]) =>
   });
 
 test('every refusal before the tick exits 2, the code that stops the loop, and names its cause', () => {
-  const required = ['--runner', 'runner', '--run-url-base', 'queue'];
+  // --publisher too: with .github/scripts/check-app.json naming an App, the queue refuses without one
+  // before it reaches the refusals checked here.
+  const required = ['--runner', 'runner', '--run-url-base', 'queue', '--publisher', 'publisher'];
   const workDir = join(folder, 'work');
   const file = join(folder, 'file');
   writeFileSync(file, '');
@@ -341,7 +343,7 @@ test('a live tick without a main runner lands nothing while main-follow-up.json 
     process.execPath,
     [
       join(import.meta.dir, '../../../scripts/ci/queue.ts'),
-      ...['--runner', 'runner', '--run-url-base', 'queue', '--work-dir', workDir],
+      ...['--runner', 'runner', '--run-url-base', 'queue', '--publisher', 'publisher', '--work-dir', workDir],
     ],
     { encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } },
   );
