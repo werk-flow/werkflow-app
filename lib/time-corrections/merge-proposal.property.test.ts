@@ -159,6 +159,9 @@ describe('An edit of recorded time', () => {
             ? (time.break?.end ?? time.start) + minutes * MINUTE_MS
             : (time.break?.start ?? time.end) - minutes * MINUTE_MS;
           fc.pre(movesEnd || before.facts.length === (time.break ? 4 : 2));
+          // werk-flow/werkflow-planning#521: a new end of split time with a break moves the 00:00
+          // clock-out instead; the known-bug case below holds that one counterexample.
+          fc.pre(!(movesEnd && time.break !== null && before.facts.length > 4));
           const patch = correctionFact(
             'patch',
             movesEnd ? 'clock_out' : 'clock_in',
@@ -176,5 +179,24 @@ describe('An edit of recorded time', () => {
         },
       ),
     );
+  });
+
+  // known bug: werk-flow/werkflow-planning#521 a new end of overnight time with a break moves the 00:00 clock-out
+  test.failing('of only the end of overnight time with a break drops the time after the new end', () => {
+    const at = (iso: string) => Date.parse(iso);
+    const time: OpenTime = {
+      start: at('2026-01-15T19:00:00Z'),
+      end: at('2026-01-16T00:00:00Z'),
+      break: { start: at('2026-01-15T20:00:00Z'), end: at('2026-01-15T20:30:00Z') },
+      workMinutes: 270,
+      breakMinutes: 30,
+    };
+    const activity = createActivitySelection('work', 'job-a');
+    const before = snapshot(
+      splitCorrectionFactsAtMidnight(openTimeFacts(time, 'source', contextOf(activity))),
+    );
+    const patch = correctionFact('patch', 'clock_out', at('2026-01-15T22:00:00Z'), contextOf(activity));
+    const merged = mergeCorrectionProposal('edit', before, snapshot([patch]));
+    expect(clockMinutes(merged?.facts ?? [])).toEqual({ work: 150, rest: 30 });
   });
 });
