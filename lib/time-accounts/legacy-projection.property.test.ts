@@ -103,12 +103,13 @@ describe('Entries projected into a period', () => {
         expect(
           projected
             .filter((entry) => !entry.id.startsWith('entry-'))
-            .map((entry) => entry.timestamp)
+            .map((entry) => [entry.timestamp, entry.entryType, entry.jobId])
             .sort(),
         ).toEqual(
+          // The facts themselves, not only their times: a clock-out stays a clock-out on its job.
           corrected
             .filter(inWindow)
-            .map((entry) => entry.timestamp)
+            .map((entry) => [entry.timestamp, entry.entryType, entry.jobId])
             .sort(),
         );
       }),

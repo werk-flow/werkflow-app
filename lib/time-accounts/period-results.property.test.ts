@@ -87,6 +87,7 @@ describe('The Monatswerte of a prepared period', () => {
         ),
         ({ drawn, results, findings }) => {
           const rows = toPeriodResultRows(drawn.results, drawn.findings, drawn.names, new Map());
+          for (const row of rows) expect(row.employeeName).toBe(drawn.names.get(row.employeeRecordId) ?? '');
           expect(toPeriodResultRows(results, findings, drawn.names, new Map())).toEqual(rows);
           for (const [index, row] of rows.entries()) {
             const next = rows[index + 1];

@@ -22,7 +22,8 @@ const approvedInOrder = (entries: readonly TimeEntry[]): TimeEntry[] =>
     .filter((entry) => entry.status === 'approved')
     .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
-type Block = { startedAt: string; endedAt: string; isBreak: boolean };
+/** A rebuilt block: a break, or recorded work of a kind on a job or unallocated. */
+type Block = { startedAt: string; endedAt: string; kind: 'break' | 'work' | 'callout'; jobId: string | null };
 
 /**
  * Well-formed days of clock entries: one shift per Berlin day from the drawn date, each a clock-in,
@@ -39,6 +40,7 @@ const shiftDaysArbitrary = berlinDateArbitrary.chain((firstDay) =>
           work: fc.array(fc.integer({ min: 1, max: 200 }), { minLength: 1, maxLength: 4 }),
           breaks: fc.array(fc.integer({ min: 1, max: 60 }), { minLength: 3, maxLength: 3 }),
           jobId: fc.option(fc.constantFrom('job-1', 'job-2'), { nil: null }),
+          kind: fc.constantFrom('work' as const, 'callout' as const),
         }),
         { maxLength: 4 },
       ),
@@ -64,6 +66,7 @@ const shiftDaysArbitrary = berlinDateArbitrary.chain((firstDay) =>
         entryType: TimeEntry['entryType'],
         status: TimeEntry['status'],
         jobId: string | null,
+        activityKind?: 'work' | 'callout',
       ): string => {
         const timestamp = new Date(instant).toISOString();
         entries.push({
@@ -79,26 +82,32 @@ const shiftDaysArbitrary = berlinDateArbitrary.chain((firstDay) =>
           reviewedAt: null,
           createdAt: timestamp,
           updatedAt: timestamp,
+          ...(activityKind ? { activityKind } : {}),
         });
         return timestamp;
       };
       const blocks: Block[] = [];
       shifts.forEach((shift, index) => {
         let cursor = midnight(index) + shift.startMinute * MINUTE_MS;
-        let startedAt = add(cursor, 'clock_in', 'approved', shift.jobId);
+        let startedAt = add(cursor, 'clock_in', 'approved', shift.jobId, shift.kind);
         const open = openEnd && index === shifts.length - 1;
         shift.work.forEach((minutes, block) => {
           cursor += minutes * MINUTE_MS;
           if (block === shift.work.length - 1) {
             if (!open)
-              blocks.push({ startedAt, endedAt: add(cursor, 'clock_out', 'approved', null), isBreak: false });
+              blocks.push({
+                startedAt,
+                endedAt: add(cursor, 'clock_out', 'approved', null),
+                kind: shift.kind,
+                jobId: shift.jobId,
+              });
             return;
           }
           const breakStart = add(cursor, 'break_start', 'approved', null);
-          blocks.push({ startedAt, endedAt: breakStart, isBreak: false });
+          blocks.push({ startedAt, endedAt: breakStart, kind: shift.kind, jobId: shift.jobId });
           cursor += (shift.breaks[block] ?? 1) * MINUTE_MS;
-          startedAt = add(cursor, 'break_end', 'approved', shift.jobId);
-          blocks.push({ startedAt: breakStart, endedAt: startedAt, isBreak: true });
+          startedAt = add(cursor, 'break_end', 'approved', shift.jobId, shift.kind);
+          blocks.push({ startedAt: breakStart, endedAt: startedAt, kind: 'break', jobId: null });
         });
       });
       for (const extra of noise)
@@ -115,9 +124,20 @@ describe('Intervals rebuilt from clock entries', () => {
           buildLegacyIntervals(entries, 'record-1').map((interval) => ({
             startedAt: interval.startedAt,
             endedAt: interval.endedAt,
-            isBreak: interval.activityKind === 'break',
+            activityKind: interval.activityKind,
+            allocationKind: interval.activityKind === 'break' ? 'unallocated' : interval.allocationKind,
+            jobId: interval.jobId ?? null,
           })),
-        ).toEqual(blocks);
+        ).toEqual(
+          // Each recorded activity keeps its kind and its job, unallocated without one.
+          blocks.map(({ startedAt, endedAt, kind, jobId }) => ({
+            startedAt,
+            endedAt,
+            activityKind: kind,
+            allocationKind: kind !== 'break' && jobId ? 'job' : 'unallocated',
+            jobId,
+          })),
+        );
       }),
     );
   });
