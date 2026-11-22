@@ -250,6 +250,7 @@ function settingProblems(file: string, text?: string): string[] {
       parent &&
       !ts.isImportClause(parent) &&
       !ts.isImportSpecifier(parent) &&
+      !ts.isNamespaceImport(parent) &&
       !ts.isQualifiedName(parent) &&
       !(ts.isPropertyAccessExpression(parent) && parent.expression === node)
     )
@@ -392,5 +393,7 @@ describe('property test gate', () => {
       ),
     ).not.toEqual([]);
     expect(problems(`test('x', () => { ${property}; });`)).toEqual([]);
+    const namespaced = header.replace("import fc from 'fast-check';", "import * as fc from 'fast-check';");
+    expect(settingProblems(FILE, `${namespaced}test('x', () => { ${property}; });`)).toEqual([]);
   });
 });
