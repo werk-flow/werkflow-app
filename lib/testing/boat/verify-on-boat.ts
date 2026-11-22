@@ -38,6 +38,7 @@ import { type BoatKeyReading, RENEW_ADVICE, readBoatKey, withBoatKey } from './b
 import { type BoatUnavailable, retryingStart } from './boat-unavailable';
 import { type TransferContext, type TransferPolicy, transfer } from './boat-transfer';
 import { runScript, shellQuote, type Machine } from './boat-machine';
+import { testedCommit } from './boat-runs';
 import { acquireMachine, keepMachine, withMachine } from './machine-reuse';
 
 // `bun run test:verify` runs on a short-lived Boat machine when this workstation has a Boat key
@@ -367,7 +368,7 @@ export function tarPackArguments(version: string, archive: string, list: string)
 function packRun(
   repository: string,
   folder: string,
-): { head: string; bundle: boolean } | { refused: string } {
+): { head: string; tested: string | null; bundle: boolean } | { refused: string } {
   const list = (args: string[]) => git(repository, args).split('\0').filter(Boolean);
   const untracked = list(['ls-files', '--others', '--exclude-standard', '-z']);
   const secret = withheldFile(untracked);
@@ -391,12 +392,8 @@ function packRun(
   writeFileSync(join(folder, 'proof-environment'), proofEnvironmentDigest(repository));
   writeFileSync(join(folder, 'backend-values.json'), JSON.stringify(backendValueDigests(repository)));
   const head = git(repository, ['rev-parse', 'HEAD']).trim();
-  let pushed = true;
-  try {
-    git(repository, ['merge-base', '--is-ancestor', 'HEAD', 'origin/main']);
-  } catch {
-    pushed = false;
-  }
+  const isAncestor = ['merge-base', '--is-ancestor', 'HEAD', 'origin/main'];
+  const pushed = spawnSync('git', isAncestor, { cwd: repository, env: gitEnvironment() }).status === 0;
   if (!pushed) git(repository, ['bundle', 'create', join(folder, 'head.bundle'), 'HEAD', '^origin/main']);
   const exists = (file: string) => existsSync(resolve(repository, file));
   const version = execFileSync('tar', ['--version'], { encoding: 'utf8' });
@@ -416,7 +413,7 @@ function packRun(
   writeFileSync(join(folder, 'deleted.txt'), committed.filter((file) => !exists(file)).join('\n'));
   writeFileSync(join(folder, 'changed.json'), JSON.stringify(changed));
   tar('evidence', evidenceFiles(repository));
-  return { head, bundle: !pushed };
+  return { head, tested: testedCommit(head, changed), bundle: !pushed };
 }
 
 /**
@@ -796,5 +793,6 @@ export async function runOnBoat(input: {
       }
     },
     keep,
+    packed.tested,
   );
 }
