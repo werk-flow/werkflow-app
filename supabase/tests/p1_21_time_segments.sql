@@ -1434,9 +1434,11 @@ $$;
 
 -- An offline transition captured on a day of a closed period is refused with
 -- the closed-period error, before any window rule. Only an ended month
--- closes, so the captured time lies in last month. It runs after the cases
--- that move a session of this organization back 30 hours: on the 1st of a
--- month that start lies in last month, which the close would freeze.
+-- closes, so the captured time lies in last month, on its first day: older
+-- than the recording window on every date, so a window rule would refuse it
+-- too if it ran first. It runs after the cases that move a session of this
+-- organization back 30 hours: on the 1st of a month that start lies in last
+-- month, which the close would freeze.
 do $$
 declare
   v_org constant uuid := '21000000-0000-0000-0000-000000000710';
@@ -1444,7 +1446,7 @@ declare
   v_month_start constant date :=
     (date_trunc('month', (now() at time zone 'Europe/Berlin')) - interval '1 month')::date;
   v_month_end constant date := (v_month_start + interval '1 month - 1 day')::date;
-  v_captured_at constant timestamptz := (v_month_end + time '12:00') at time zone 'Europe/Berlin';
+  v_captured_at constant timestamptz := (v_month_start + time '12:00') at time zone 'Europe/Berlin';
   v_calculation uuid;
 begin
   v_calculation := public.prepare_time_period(
