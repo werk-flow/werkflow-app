@@ -30,11 +30,13 @@ import { join } from 'node:path';
 import { partOf, partSteps } from '../../lib/testing/ci/dag';
 import { groupGone } from '../../lib/testing/local-stack/test-session';
 import { errorCode } from '../../lib/testing/runner/error-code';
-import { stopRecordedTestServer } from '../../lib/testing/ci/test-server-stop';
+import { assertAppPortFree, workspacePorts } from '../../lib/testing/runner/app-port';
 import {
   type Executor,
   type Executors,
+  type ExecutorOutcome,
   type ExecutorSetup,
+  type ExecutorTask,
   type Unit,
   unitName,
 } from '../../lib/testing/ci/run-commit';
@@ -56,6 +58,8 @@ type ProcessExecutorOptions = {
   replaceStack: boolean;
   /** The host-wide lock of the one Supabase stack a host holds. */
   stackLock: string;
+  /** Shared by this run's executors on this host: why no further job of the run may start here. */
+  host: { unverified?: string };
   log(line: string): void;
 };
 
@@ -206,7 +210,8 @@ function runGroup(
     };
     signal.addEventListener('abort', stop, { once: true });
     child.once('error', () => resolve(null));
-    child.once('close', (code) => {
+    // Every error of the cleanup after the close rejects the command: it never stays pending.
+    const closed = async (code: number | null): Promise<number | null> => {
       signal.removeEventListener('abort', stop);
       clearTimeout(escalation);
       // Nothing of its group outlives it, on every path: the next job on this host would meet a
@@ -216,13 +221,14 @@ function runGroup(
       const pid = child.pid;
       if (unsignalled !== undefined) {
         const reason = unsignalled instanceof Error ? unsignalled.message : String(unsignalled);
-        return reject(new Error(`process group ${pid ?? 'unknown'} could not be signalled: ${reason}`));
+        throw new Error(`process group ${pid ?? 'unknown'} could not be signalled: ${reason}`);
       }
-      if (pid === undefined) return resolve(exitCode);
-      groupGone(pid).then((gone) => {
-        if (!gone) appendFileSync(options.log, `Process group ${pid} is still listed 5 s after SIGKILL.\n`);
-        resolve(exitCode);
-      }, reject);
+      if (pid !== undefined && !(await groupGone(pid)))
+        appendFileSync(options.log, `Process group ${pid} is still listed 5 s after SIGKILL.\n`);
+      return exitCode;
+    };
+    child.once('close', (code) => {
+      closed(code).then(resolve, reject);
     });
   });
 }
@@ -270,36 +276,64 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
     // Every job runs as this process's user, who can write the ledger and read every credential.
     isolatesJobs: false,
     async run(task, signal) {
-      const name = unitName(task.unit);
-      const folder = workspace(task.unit);
-      const checkout = join(folder, 'werkflow-app');
-      const log = join(folder, `${name}.log`);
-      const passed = join(folder, `${name}.env`);
-      mkdirSync(folder, { recursive: true });
-      const host = hostEnvironment();
-      // Fast's host part for the CI mirror takes only its host steps (lib/testing/ci/dag.ts).
-      const steps = partSteps(task.unit.job, partOf(task.env.CI_PART));
-      let release: (() => void) | undefined;
-      let began = Date.now();
-      let ended = signal;
-      const fail = (detail: string) => ({
-        exitCode: null,
-        detail: `${detail} after ${minutes(Date.now() - began)}${ended.aborted && !signal.aborted ? ', its timeout' : ''}; log ${log}`,
-      });
-      // Only a stack this job started is stopped (prepare.ts reports it), before the host's lock
-      // passes on: the next job's stack starts fresh, and a stack this job did not start stays.
-      const freeStack = async (): Promise<void> => {
-        if (!release) return;
-        if (exported(passed).CI_STACK_STARTED === '1')
-          await runGroup(
-            'supabase',
-            ['stop', '--no-backup'],
-            { cwd: checkout, env: host, log },
-            AbortSignal.timeout(120_000),
-          );
-        release();
-        release = undefined;
-      };
+      if (options.host.unverified !== undefined)
+        return { exitCode: null, detail: `not started: ${options.host.unverified}` };
+      return runJob(task, signal);
+    },
+  };
+
+  async function runJob(task: ExecutorTask, signal: AbortSignal): Promise<ExecutorOutcome> {
+    const name = unitName(task.unit);
+    const folder = workspace(task.unit);
+    const checkout = join(folder, 'werkflow-app');
+    const log = join(folder, `${name}.log`);
+    const passed = join(folder, `${name}.env`);
+    mkdirSync(folder, { recursive: true });
+    const host = hostEnvironment();
+    // Fast's host part for the CI mirror takes only its host steps (lib/testing/ci/dag.ts).
+    const steps = partSteps(task.unit.job, partOf(task.env.CI_PART));
+    let release: (() => void) | undefined;
+    // The app port a browser job's test server serves (scripts/ci/job.ts), once the checkout exists.
+    let port: number | undefined;
+    let held: string | undefined;
+    let began = Date.now();
+    let ended = signal;
+    const fail = (detail: string) => ({
+      exitCode: null,
+      detail: `${detail} after ${minutes(Date.now() - began)}${ended.aborted && !signal.aborted ? ', its timeout' : ''}; log ${log}`,
+    });
+    // Only a stack this job started is stopped (prepare.ts reports it), before the host's lock
+    // passes on: the next job's stack starts fresh, and a stack this job did not start stays.
+    // Every job that serves the app port holds the lock, so a port held now is what this job left,
+    // in its own group or one it started: never a server another job still runs. The executor
+    // signals nothing it did not start; a held port keeps the lock and refuses every further start.
+    const freeStack = async (): Promise<void> => {
+      if (!release) return;
+      if (exported(passed).CI_STACK_STARTED === '1')
+        await runGroup(
+          'supabase',
+          ['stop', '--no-backup'],
+          { cwd: checkout, env: host, log },
+          AbortSignal.timeout(120_000),
+        );
+      const probed = port;
+      const reason =
+        probed === undefined
+          ? undefined
+          : await assertAppPortFree(probed).then(
+              () => undefined,
+              (error: unknown) => (error instanceof Error ? error.message : String(error)),
+            );
+      if (reason !== undefined) {
+        held = `cleanup could not be verified: port ${probed} is still held`;
+        options.host.unverified = held;
+        options.log(`[run] ${name}: ${held}, so the host's stack lock stays taken: ${reason}`);
+        return;
+      }
+      release();
+      release = undefined;
+    };
+    const outcome = await (async (): Promise<ExecutorOutcome> => {
       try {
         // The host's one stack first: a job's time, as ci.yml's timeout counts it, starts once it runs.
         if (steps.includes('stack') || steps.includes('stack-environment'))
@@ -338,6 +372,7 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
           for (const args of gitSteps)
             if ((await run('git', args)) !== 0) return fail(`git ${args[0]} failed`);
         }
+        port = workspacePorts(checkout).app;
         const env: Record<string, string> = {
           ...task.env,
           // The runner began the job here, before its checkout and setup (lib/testing/ci/measurement.ts).
@@ -380,28 +415,15 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
         // The task learns of the launch once the body's process exists: a body that never launched
         // is never reported launched. A launch that cannot be recorded ends the body at once.
         let unrecorded: string | undefined;
-        let left: string | undefined;
-        let code: number | null;
-        try {
-          code = await run(process.execPath, ['scripts/ci/job.ts', task.unit.job], variables, () => {
-            try {
-              task.onLaunch?.();
-            } catch (error) {
-              unrecorded = error instanceof Error ? error.message : String(error);
-              throw error;
-            }
-          });
-        } finally {
-          // A browser job's test server leads a group of its own, which the job's group kill never
-          // reaches: a job killed before it stopped the server leaves it, and its port, to the next job.
-          left = await stopRecordedTestServer(checkout).then(
-            (stopped) => (stopped ? 'its test server outlived it and was stopped' : undefined),
-            (error: unknown) =>
-              `its test server outlived it and could not be stopped: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
+        const code = await run(process.execPath, ['scripts/ci/job.ts', task.unit.job], variables, () => {
+          try {
+            task.onLaunch?.();
+          } catch (error) {
+            unrecorded = error instanceof Error ? error.message : String(error);
+            throw error;
+          }
+        });
         if (unrecorded !== undefined) return fail(`its launch could not be recorded: ${unrecorded}`);
-        if (left !== undefined) return fail(left);
         return code === null
           ? fail('the job was stopped')
           : {
@@ -410,11 +432,16 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
             };
       } catch (error) {
         return fail(`the executor failed: ${error instanceof Error ? error.message : String(error)}`);
-      } finally {
-        await freeStack();
       }
-    },
-  };
+    })();
+    await freeStack();
+    return held === undefined
+      ? outcome
+      : {
+          exitCode: null,
+          detail: `${held} after it ended, so no further job of this run starts on this host (${outcome.detail})`,
+        };
+  }
 }
 
 /**
@@ -424,8 +451,11 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
  */
 export function processExecutors(setup: ExecutorSetup): Executors {
   const root = join(setup.workRoot, setup.runKey);
+  // Plan, Check and every job of the run share this host, so a host one of them left dirty refuses all.
+  const host = {};
   const executor = (machineStart: boolean) =>
     processExecutor({
+      host,
       source: setup.source,
       root,
       commit: setup.commit,

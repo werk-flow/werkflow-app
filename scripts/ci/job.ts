@@ -46,7 +46,7 @@ import {
 } from '../../lib/testing/ci/run-plan';
 import { lsRemoteCommit, supersedingHead } from '../../lib/testing/ci/superseded';
 import { workspaceAppOrigin, workspacePorts } from '../../lib/testing/runner/app-port';
-import { guardTestServer, recordTestServer } from '../../lib/testing/ci/test-server-stop';
+import { guardTestServer } from '../../lib/testing/ci/test-server-stop';
 import { E_INVOICE_CHECK, E_INVOICE_STEP } from '../../lib/testing/selection/e-invoice-selection';
 import { repository, run, step, verify } from './run';
 
@@ -515,9 +515,8 @@ function startTestServer(log: string, port: number): { ready: Promise<boolean>; 
   });
   // The whole group, even after the server itself exited: a runner that reuses this host starts the
   // next job on the same port.
-  const stop = guardTestServer(repository, server.pid, port);
+  const stop = guardTestServer(server.pid, port);
   const ready = async (): Promise<boolean> => {
-    if (server.pid !== undefined) recordTestServer(repository, server.pid, port);
     const login = `${workspaceAppOrigin(repository)}/login`;
     for (const deadline = Date.now() + 900_000; !exited && Date.now() < deadline; await Bun.sleep(5_000)) {
       if (!readFileSync(log, 'utf8').includes('Serving the recorded local build')) continue;

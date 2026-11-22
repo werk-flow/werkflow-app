@@ -3,7 +3,7 @@
 // in its own clone of the commit, its body never sees the orchestrator's variables or the sibling
 // token, the variables its environment steps pass on reach the body, a job ends at its timeout, and
 // only a stack the job started is stopped before the host's stack lock passes on.
-import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, expect, setSystemTime, spyOn, test } from 'bun:test';
 import {
   chmodSync,
   existsSync,
@@ -18,9 +18,9 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { processExecutors } from '../../../scripts/ci/process-executor';
-import { assertAppPortFree } from '../runner/app-port';
+import { assertAppPortFree, workspacePorts } from '../runner/app-port';
 import type { ExecutorTask } from './run-commit';
 
 let folder = '';
@@ -41,8 +41,8 @@ if (process.env.STARTS_STACK === '1') appendFileSync(process.env.GITHUB_ENV, 'CI
 appendFileSync(process.env.GITHUB_ENV, 'SHRINK_ONLY_GROWTH_APPROVED=true\\n');
 if (process.env.REMOVE_CHECKOUT === '1' && job !== 'siblings') require('node:fs').rmSync(process.cwd(), { recursive: true });
 `;
-// Prints its pid and the port the system assigned it once it holds it.
-const LISTENER = `const server = require('node:net').createServer().listen(0, () => console.log(process.pid + ' ' + server.address().port));`;
+// Prints its pid and its port once it holds it: LISTEN_PORT, or one the system assigns.
+const LISTENER = `const server = require('node:net').createServer().listen(Number(process.env.LISTEN_PORT ?? 0), () => console.log(process.pid + ' ' + server.address().port));`;
 const JOB = `${RECORD('job')}
 const { spawn } = require('node:child_process');
 const reported = (child) => new Promise((resolveReport) => child.stdout.once('data', (chunk) => resolveReport(chunk.toString().trim())));
@@ -52,17 +52,30 @@ if (process.env.LEAVE_CHILD === '1') {
   writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/child', await reported(child));
   child.unref();
 }
-// A fake test server as browser() starts it: its own group, whose real test session runs the
-// listener in a group of its own. The job records it; SERVE=guarded also stops it on SIGTERM.
-if (process.env.SERVE) {
+// The checkout's app port, which browser() serves.
+const appPort = require(${JSON.stringify(join(import.meta.dir, '../runner/app-port.ts'))}).workspacePorts(process.cwd()).app;
+// A fake test server as browser() starts it on the app port: its own group, whose real test session
+// runs the listener in a group of its own, and guardTestServer stops it on SIGTERM.
+if (process.env.SERVE === 'guarded') {
   const stops = require(${JSON.stringify(join(import.meta.dir, 'test-server-stop.ts'))});
   const session = ${JSON.stringify(join(import.meta.dir, '../local-stack/test-session.ts'))};
   const source = 'const { runSessionCommand, withTestSession } = require(' + JSON.stringify(session) + '); await withTestSession((signal) => runSessionCommand([process.execPath, "-e", ' + JSON.stringify(${JSON.stringify(LISTENER)}) + '], { signal }));';
-  const server = spawn(process.execPath, ['-e', source], { stdio: ['ignore', 'pipe', 'ignore'], detached: true });
+  const server = spawn(process.execPath, ['-e', source], { stdio: ['ignore', 'pipe', 'ignore'], detached: true, env: { ...process.env, LISTEN_PORT: String(appPort) } });
   const [listener, port] = (await reported(server)).split(' ').map(Number);
-  if (process.env.SERVE === 'guarded') stops.guardTestServer(process.cwd(), server.pid, port);
-  stops.recordTestServer(process.cwd(), server.pid, port);
+  stops.guardTestServer(server.pid, port);
   writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/server', [server.pid, listener, port].join(' '));
+}
+// A listener on the app port in a group of its own that outlives the job: a test server whose
+// controller died before it could stop it.
+if (process.env.ORPHAN === '1') {
+  const orphan = spawn(process.execPath, ['-e', ${JSON.stringify(LISTENER)}], { stdio: ['ignore', 'pipe', 'ignore'], detached: true, env: { ...process.env, LISTEN_PORT: String(appPort) } });
+  writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/orphan', await reported(orphan));
+  orphan.unref();
+}
+// A record naming a process group as ac8b5c162's test server record did: nothing may read it.
+if (process.env.FORGE_GROUP) {
+  require('node:fs').mkdirSync('.agent-logs', { recursive: true });
+  writeFileSync('.agent-logs/test-server.group', process.env.FORGE_GROUP + ' ' + appPort);
 }
 if (process.env.HANG === '1') await Bun.sleep(60_000);
 process.exit(Number(process.env.EXIT ?? '0'));
@@ -147,7 +160,7 @@ const recorded = (file: string): Record<string, string> =>
   );
 
 // The run's workspaces are <folder>/run, its trusted folder <folder>/trusted, the stack lock <folder>/stack.lock.
-const executor = () =>
+const executors = () =>
   processExecutors({
     source,
     commit,
@@ -155,7 +168,39 @@ const executor = () =>
     runKey: 'run',
     replaceStack: false,
     log: () => undefined,
-  }).jobs;
+  });
+
+/**
+ * A job's checkout as a linked worktree of the source, made before the job runs: the executor keeps
+ * it, and its app port is one of the worktree ports derived from its path (workspacePorts), never
+ * the main checkout's 3000 a clone serves.
+ */
+function worktreeFor(task: ExecutorTask): string {
+  const { job, shard } = task.unit;
+  const name = job === 'plan' || job === 'check' ? 'host' : shard === null ? job : `${job}-${shard}`;
+  const checkout = join(folder, 'run', name, 'werkflow-app');
+  if (!existsSync(checkout))
+    execFileSync('git', ['worktree', 'add', '--quiet', '--detach', checkout, commit], { cwd: source });
+  return checkout;
+}
+
+/** The run's job executor, every job in a worktree checkout. */
+const executor = () => {
+  const { jobs } = executors();
+  return {
+    run: (given: ExecutorTask, signal: AbortSignal) => {
+      worktreeFor(given);
+      return jobs.run(given, signal);
+    },
+  };
+};
+
+/** The app port of a job's worktree checkout, proven free before the job runs. */
+async function appPortOf(task: ExecutorTask): Promise<number> {
+  const port = workspacePorts(worktreeFor(task)).app;
+  await assertAppPortFree(port);
+  return port;
+}
 
 const task = (
   job: ExecutorTask['unit']['job'],
@@ -169,7 +214,11 @@ const task = (
 });
 
 test("a job's body sees only its task's variables and what its environment steps passed on", async () => {
-  const run = await executor().run(task('fast', { GH_TOKEN: 'job-token' }), new AbortController().signal);
+  // The one job that clones: it proves the clone's origin and commit.
+  const run = await executors().jobs.run(
+    task('fast', { GH_TOKEN: 'job-token' }),
+    new AbortController().signal,
+  );
   expect(run.exitCode, run.detail).toBe(0);
   // Only the trusted copy's sibling step holds the token; the tested commit's steps (its install
   // scripts included) and its body never do. That step runs outside the tested checkout, so its Bun
@@ -256,38 +305,70 @@ test('a job that exits normally leaves nothing of its process group holding a po
   await expect(assertAppPortFree(port)).resolves.toBeUndefined();
 });
 
-/** Runs a browser-like job that starts a fake test server, and cancels it once the server holds its port. */
-async function cancelServingJob(serve: 'guarded' | 'unguarded') {
+test('a cancelled job stops its own test server before it exits, and its app port is proven free', async () => {
+  const sql = task('sql', { SERVE: 'guarded', HANG: '1' });
+  const appPort = await appPortOf(sql);
   const controller = new AbortController();
   const watcher = watch(folder, (_event, name) => {
     if (name === 'server') controller.abort();
   });
   try {
-    const run = await executor().run(task('sql', { SERVE: serve, HANG: '1' }), controller.signal);
+    const run = await executor().run(sql, controller.signal);
     const [server, listener, port] = readFileSync(join(folder, 'server'), 'utf8').split(' ').map(Number);
     if (server === undefined || listener === undefined || port === undefined)
       throw new Error('The job reported no test server.');
     leftovers.push(server, listener);
-    return { run, server, listener, port };
+    expect(port).toBe(appPort);
+    expect(run.exitCode, run.detail).toBeNull();
+    expect(run.detail).not.toContain('cleanup could not be verified');
+    expect([groupListed(server), groupListed(listener)]).toEqual([false, false]);
+    await expect(assertAppPortFree(port)).resolves.toBeUndefined();
   } finally {
     watcher.close();
   }
-}
-
-test('a cancelled job that cannot stop its test server has it stopped by the executor, its port freed, and never passes', async () => {
-  const { run, server, listener, port } = await cancelServingJob('unguarded');
-  expect(run.exitCode, run.detail).toBeNull();
-  expect(run.detail).toContain('its test server outlived it and was stopped');
-  expect([groupListed(server), groupListed(listener)]).toEqual([false, false]);
-  await expect(assertAppPortFree(port)).resolves.toBeUndefined();
 });
 
-test('a cancelled job stops its own test server before it exits', async () => {
-  const { run, server, listener, port } = await cancelServingJob('guarded');
+test('a job that leaves its app port held fails, even with exit 0, and no further job of the run starts on the host', async () => {
+  const sql = task('sql', { ORPHAN: '1' });
+  const appPort = await appPortOf(sql);
+  const { jobs, host } = executors();
+  const run = await jobs.run(sql, new AbortController().signal);
+  const [orphan, port] = readFileSync(join(folder, 'orphan'), 'utf8').split(' ').map(Number);
+  if (orphan === undefined || port === undefined) throw new Error('The job reported no listener.');
+  leftovers.push(orphan);
+  expect(port).toBe(appPort);
+  expect(recorded('job-sql.env').CWD).toBe(join(folder, 'run/sql/werkflow-app'));
   expect(run.exitCode, run.detail).toBeNull();
-  expect(run.detail).not.toContain('its test server outlived it');
-  expect([groupListed(server), groupListed(listener)]).toEqual([false, false]);
-  await expect(assertAppPortFree(port)).resolves.toBeUndefined();
+  expect(run.detail).toContain(`cleanup could not be verified: port ${appPort} is still held`);
+  // The executor signals no group it did not start: the listener is still there.
+  expect(groupListed(orphan)).toBe(true);
+  // Nothing of the next jobs runs: not their steps, not their bodies, Check neither.
+  const components = task('components');
+  worktreeFor(components);
+  const next = await jobs.run(components, new AbortController().signal);
+  const check = await host.run(task('check'), new AbortController().signal);
+  for (const refused of [next, check]) {
+    expect(refused.exitCode, refused.detail).toBeNull();
+    expect(refused.detail).toBe(`not started: cleanup could not be verified: port ${appPort} is still held`);
+  }
+  expect(existsSync(join(folder, 'prepare-components.env'))).toBe(false);
+  expect(existsSync(join(folder, 'prepare-check.env'))).toBe(false);
+});
+
+test("the executor signals no process group a job's checkout names, only the job's own", async () => {
+  const sentinel = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1_000)'], {
+    stdio: 'ignore',
+    detached: true,
+  });
+  const groupId = sentinel.pid;
+  if (groupId === undefined) throw new Error('The sentinel did not start.');
+  leftovers.push(groupId);
+  const run = await executor().run(
+    task('sql', { FORGE_GROUP: String(groupId) }),
+    new AbortController().signal,
+  );
+  expect(run.exitCode, run.detail).toBe(0);
+  expect(groupListed(groupId)).toBe(true);
 });
 
 test('a process group the executor may not signal fails its job with the reason, never the executor', async () => {
@@ -302,6 +383,48 @@ test('a process group the executor may not signal fails its job with the reason,
     expect(run.detail).toContain('could not be signalled: kill EPERM');
   } finally {
     refuse.mockRestore();
+  }
+});
+
+test('a cleanup error after a command closed fails its job, and the command never stays pending', async () => {
+  // Once the body runs, its group reads as listed after SIGKILL, and its log cannot take the warning.
+  // Each such read moves the clock past groupGone's wait, so the wait ends at its next check.
+  let launched = false;
+  let clock = new Date('2026-03-02T08:00:00Z').getTime();
+  const kill = process.kill.bind(process);
+  const listed = spyOn(process, 'kill').mockImplementation((pid: number, signal?: string | number) => {
+    if (!launched || pid >= 0 || signal !== 0) return kill(pid, signal);
+    clock += 10_000;
+    setSystemTime(new Date(clock));
+    return true;
+  });
+  let escape = (): void => undefined;
+  const escaped = new Promise<'escaped'>((resolveEscape) => {
+    escape = () => resolveEscape('escaped');
+  });
+  process.once('unhandledRejection', escape);
+  try {
+    const run = executor().run(
+      {
+        ...task('sql'),
+        onLaunch: () => {
+          const log = join(folder, 'run/sql/sql.log');
+          rmSync(log);
+          mkdirSync(log);
+          setSystemTime(new Date(clock));
+          launched = true;
+        },
+      },
+      new AbortController().signal,
+    );
+    const outcome = await Promise.race([run, escaped]);
+    if (outcome === 'escaped') throw new Error('The cleanup error escaped, and the command stays pending.');
+    expect(outcome.exitCode, outcome.detail).toBeNull();
+    expect(outcome.detail).toContain('the executor failed: EISDIR');
+  } finally {
+    process.removeListener('unhandledRejection', escape);
+    listed.mockRestore();
+    setSystemTime();
   }
 });
 
