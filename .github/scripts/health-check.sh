@@ -62,11 +62,16 @@ case "$kind" in
     test "$status" = 200 || fail "${variable} was refused or unreachable (HTTP ${status})." ;;
 
   # libpq takes the password from PGPASSWORD, so psql's arguments hold the URL without it. The
-  # URL carries the password percent-encoded; PGPASSWORD takes it decoded.
+  # URL carries the password percent-encoded in its user info; PGPASSWORD takes it decoded, and
+  # printf -v keeps a decoded trailing newline. A password in the query would reach the arguments.
   database)
     address="$(sed -E 's#^([^:/]+://[^:/@]+):[^@]*@#\1@#' <<< "$value")"
+    if grep -qiE '[?&]password=' <<< "$address"; then
+      fail "${variable} carries its password in the query; put it in the user info."
+    fi
     password="$(sed -nE 's#^[^:/]+://[^:/@]+:([^@]*)@.*#\1#p' <<< "$value")"
-    password="$(printf '%b' "${password//%/\\x}")"
+    password="${password//\\/\\\\}"
+    printf -v password '%b' "${password//%/\\x}"
     PGPASSWORD="$password" psql "$address" --no-psqlrc --quiet --tuples-only --command 'select 1' > /dev/null 2>&1 \
       || fail "${variable} could not run select 1." ;;
 
