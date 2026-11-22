@@ -524,6 +524,21 @@ describe('the business document renderer', () => {
     ]);
   });
 
+  test('a document without totals prints no totals block and no amount', async () => {
+    const report: BusinessDocument = {
+      ...baseDocument([]),
+      title: 'Servicebericht',
+      openingText: 'Wartung durchgeführt.',
+      totals: null,
+    };
+    const pages = await readPages(await renderBusinessDocument(report));
+    const text = pages.flat().map((line) => line.text);
+    expect(text).toContain('Wartung durchgeführt.');
+    expect(text.some((line) => line.includes('€') || line.startsWith('USt.-Satz'))).toBe(false);
+    expect(text).not.toContain(TABLE_HEADER);
+    expectPageFrame(pages);
+  });
+
   test('the Musterangebot names the organization as sender and adds up', async () => {
     const offer = plainSample('Haustechnik Sonnenberg GmbH');
     for (const section of offer.sections) {
