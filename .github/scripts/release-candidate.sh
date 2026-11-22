@@ -10,8 +10,8 @@
 # repository's runs and check runs without a token, so a machine that holds none, such as a CI
 # runner's release user (werk-flow/werkflow-planning#517), decides too. GH_TOKEN, where set, goes
 # along as a header: GitHub allows 60 anonymous requests an hour per IP address, which other
-# tenants of a shared runner may spend. GITHUB_API_URL and GITHUB_REPOSITORY default to this
-# repository on github.com.
+# tenants of a shared runner may spend. Every request goes to this repository on api.github.com,
+# whatever the environment names, so no variable can send the token or the decision elsewhere.
 set -euo pipefail
 
 mode="$1"
@@ -19,7 +19,7 @@ case "$mode" in manual | scheduled | dry-run) ;; *) echo "::error::Unknown mode 
 source "$(dirname "${BASH_SOURCE[0]}")/check-app.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/curl-headers.sh"
 check_app_id || exit 1
-readonly api="${GITHUB_API_URL:-https://api.github.com}/repos/${GITHUB_REPOSITORY:-werk-flow/werkflow-app}"
+readonly api=https://api.github.com/repos/werk-flow/werkflow-app
 
 test "$GITHUB_REF" = refs/heads/main \
   || { echo "::error::A release starts on main, not ${GITHUB_REF}."; exit 1; }
@@ -103,27 +103,35 @@ runs="$(github_list "actions/runs?head_sha=${sha}&branch=main" workflow_runs \
     and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml"
       or .path == ".github/workflows/main-full-run.yml")
     and (.event == "schedule" or .event == "workflow_dispatch")) | .id')"
-# Each completed `Full run / Check` as `<completed_at> <conclusion> <url>`, one per line. Every
-# attempt of a run counts, so a rerun still running never hides its failed attempt.
+# A `Full run / Check` of the commit as `<completed_at> <conclusion> <url>`, given its `url`, or
+# nothing while it runs. A row without a status, or a completed one without a real end time, a
+# conclusion or a URL, could sort anywhere, so it stops the gate.
+readonly row='if .status == "completed" then
+    if (.completed_at | type) == "string"
+      and (.completed_at | try (fromdateiso8601 | todateiso8601) catch "") == .completed_at
+      and (.conclusion | type) == "string" and (.conclusion | test("^[a-z_]+$"))
+      and (.url | type) == "string" and (.url | test("^[^\\s]+$"))
+    then "\(.completed_at) \(.conclusion) \(.url)" else error("malformed") end
+  elif (.status | type) == "string" then empty else error("malformed") end'
+malformed() {
+  echo "::error::GitHub lists a ${1} on ${sha} without a valid status, end time, conclusion or URL; the release does not decide on it."
+  exit 1
+}
+# Every attempt of a run counts, so a rerun still running never hides its failed attempt.
 checks=""
 for run in $runs; do
-  checks+="$(github_list "actions/runs/${run}/jobs?filter=all" jobs \
-    | jq -r --arg sha "$sha" 'select(.head_sha == $sha and .name == "Full run / Check" and .status == "completed")
-      | "\(.completed_at) \(.conclusion) \(.html_url)"')"
+  list="$(github_list "actions/runs/${run}/jobs?filter=all" jobs)"
+  checks+="$(jq -r --arg sha "$sha" 'select(.head_sha == $sha and .name == "Full run / Check")
+    | . + {url: .html_url} | '"${row}" <<< "$list" 2> /dev/null)" || malformed "full-run job"
   checks+="
 "
 done
 if test -n "$CHECK_APP_ID"; then
-  checks+="$(github_list "commits/${sha}/check-runs?check_name=Full%20run%20%2F%20Check&filter=all&app_id=${CHECK_APP_ID}" check_runs \
-    | jq -r --arg sha "$sha" --argjson app "$CHECK_APP_ID" 'select(.app.id == $app and .head_sha == $sha
-      and .name == "Full run / Check" and .status == "completed")
-      | "\(.completed_at) \(.conclusion) \(.details_url // .html_url)"')"
+  list="$(github_list "commits/${sha}/check-runs?check_name=Full%20run%20%2F%20Check&filter=all&app_id=${CHECK_APP_ID}" check_runs)"
+  checks+="$(jq -r --arg sha "$sha" --argjson app "$CHECK_APP_ID" 'select(.app.id == $app and .head_sha == $sha
+    and .name == "Full run / Check") | . + {url: (.details_url // .html_url)} | '"${row}" <<< "$list" 2> /dev/null)" \
+    || malformed "CI App check run"
 fi
-# A completed check without an end time or conclusion could sort anywhere, so it stops the gate.
-malformed="$(printf '%s\n' "$checks" | sed '/^$/d' \
-  | grep -Ev '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z [a-z_]+ [^ ]+$' || true)"
-test -z "$malformed" \
-  || { echo "::error::A completed full run on ${sha} names no end time or conclusion: ${malformed}"; exit 1; }
 # The newest completed full run decides; a later failure replaces a pass, and so does one that
 # ended in the same second.
 latest="$(printf '%s\n' "$checks" | sed '/^$/d' | sort | awk '

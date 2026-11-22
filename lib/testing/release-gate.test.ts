@@ -51,7 +51,12 @@ beforeEach(() => {
 
 afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
-type Run = { conclusion: string; completed_at: string | null; app?: number; head_sha?: string };
+type Run = {
+  conclusion: string | null;
+  completed_at: string | null;
+  app?: number;
+  head_sha?: string;
+} & Record<string, unknown>;
 
 /** The CI App's `Full run / Check` runs on the commit, as GitHub lists them. */
 function appChecks(runs: readonly Run[], file = 'check-runs.json') {
@@ -72,9 +77,8 @@ function appChecks(runs: readonly Run[], file = 'check-runs.json') {
 
 type Job = Omit<Run, 'app'> & { status?: string };
 
-/** A nightly run on GitHub Actions whose `Full run / Check` jobs, one per attempt, ended as given. */
-function actionsChecks(jobs: readonly Job[]) {
-  const head_sha = jobs[0]?.head_sha ?? '@commit';
+/** A nightly run on GitHub Actions on `head_sha` whose `Full run / Check` jobs, one per attempt, ended as given. */
+function actionsChecks(jobs: readonly Job[], head_sha = jobs[0]?.head_sha ?? '@commit') {
   const nightly = {
     id: 1,
     head_sha,
@@ -158,6 +162,9 @@ test("another commit's full run is refused, from the CI App and from GitHub Acti
   rmSync(join(stub, 'check-runs.json'));
   actionsChecks([{ conclusion: 'success', completed_at: T, head_sha: other }]);
   expect(decide().outputs).toContain('verified=false');
+  // A job of another commit inside a run listed for this one counts for nothing either.
+  actionsChecks([{ conclusion: 'success', completed_at: T, head_sha: other }], '@commit');
+  expect(decide().outputs).toContain('verified=false');
 });
 
 test('a later failure replaces a pass, across sources and on a page the Link header names', () => {
@@ -232,12 +239,38 @@ test('a decoder that fails after part of a page fails the gate closed', () => {
   expectStopped(decide(), 'is not one');
 });
 
-test('a completed check without an end time stops the gate instead of sorting last', () => {
-  appChecks([
-    { conclusion: 'failure', completed_at: T },
-    { conclusion: 'success', completed_at: null },
-  ]);
-  expectStopped(decide(), 'names no end time or conclusion');
+test('a check without a status, a real end time, a conclusion or a URL stops the gate instead of sorting', () => {
+  const failure = { conclusion: 'failure', completed_at: T };
+  const malformed: Partial<Run>[] = [
+    { completed_at: null },
+    { completed_at: '2026-02-31T09:00:00Z' },
+    { completed_at: '2026-11-21T09:00:00+01:00' },
+    { conclusion: null },
+    { conclusion: 'success now' },
+    { details_url: null, html_url: null },
+    { status: null },
+    { status: undefined },
+  ];
+  for (const fields of malformed) {
+    appChecks([failure, { conclusion: 'success', completed_at: '2026-11-21T10:00:00Z', ...fields }]);
+    expectStopped(decide(), 'without a valid status, end time, conclusion or URL', JSON.stringify(fields));
+  }
+  rmSync(join(stub, 'check-runs.json'));
+  actionsChecks([failure, { conclusion: 'success', completed_at: '2026-02-30T10:00:00Z' }]);
+  expectStopped(decide(), 'GitHub lists a full-run job');
+});
+
+test('the gate reads only api.github.com and this repository, whatever the environment names', () => {
+  appChecks([{ conclusion: 'success', completed_at: T }]);
+  const result = decide('scheduled', {
+    GH_TOKEN: TOKEN,
+    GITHUB_API_URL: 'https://api.elsewhere.test',
+    GITHUB_REPOSITORY: 'someone/else',
+  });
+  expect(result.outputs).toContain('verified=true');
+  expect(result.urls.length).toBeGreaterThan(0);
+  for (const url of result.urls)
+    expect(url).toStartWith('https://api.github.com/repos/werk-flow/werkflow-app/');
 });
 
 test('a GH_TOKEN, where set, reaches only api.github.com, and only as a curl config, never as an argument', () => {
