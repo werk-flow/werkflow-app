@@ -71,7 +71,7 @@ import { repository as ownRepository } from './run';
 //                   (main-runs/<commit>.started) durably once its Plan's body launched, or once Plan's
 //                   setup failed before it; a second main run of the commit and the queue's owed main
 //                   run read that one record. A run through the process executor writes neither.
-//   CI_PARALLEL     The most jobs at once, default 2. On the mirror, 16: its own cap holds every
+//   CI_PARALLEL     The most jobs at once, default 2. On the mirror, 56: its own cap holds every
 //                   run of the host together.
 //   CI_EXECUTOR     `mirror` for the CI mirror; unset for the process executor.
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.

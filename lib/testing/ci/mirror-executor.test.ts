@@ -581,7 +581,7 @@ test("a host's mirror job cap holds every run together: a job beyond it waits fo
   holding = false;
   expect((await outcomes).map((outcome) => outcome?.exitCode)).toEqual([0, 0, 0]);
   expect(pushed()).toBe(cap + 1);
-  expect(MIRROR_JOB_CAP).toBe(16);
+  expect(MIRROR_JOB_CAP).toBe(56);
 });
 
 test("two runs of one commit push their own branches, and one run's cleanup leaves the other's branch", async () => {

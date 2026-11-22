@@ -6,7 +6,7 @@ name: CI mirror
 # commit's message holds the run, its source tree and its Plan (scripts/ci/mirror-job.ts). Every
 # other job of this file is skipped. The jobs, their names and timeouts are lib/testing/ci/dag.ts;
 # Plan and Check run on the orchestrator's host, which also holds the needs between jobs and the
-# cap of 16 mirror jobs at once. This workflow holds no secret and reads nothing of another repository.
+# cap of 56 mirror jobs at once (MIRROR_JOB_CAP). This workflow holds no secret and reads nothing of another repository.
 on:
   push:
     branches: ['ci/**']

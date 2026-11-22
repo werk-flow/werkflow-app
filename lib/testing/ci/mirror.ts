@@ -8,8 +8,12 @@ import type { CiResult, PlanIdentity } from './results';
 export const MIRROR_WORKFLOW = '.github/workflows/ci-mirror.yml';
 /** Where the pushed tree keeps the source's workflows, which tests and tools read (CI_WORKFLOWS_DIR). */
 export const HELD_WORKFLOWS = '.github/held-workflows';
-/** The most mirror jobs this host runs at once, every run together. */
-export const MIRROR_JOB_CAP = 16;
+/**
+ * The most mirror jobs this host runs at once, every run together. The mirror's GitHub Team plan runs
+ * 60 jobs at once; the other 4 stay free for the mirror work outside these slots (the daily date
+ * look-ahead's legs, the health jobs), so a run's jobs never queue behind them on GitHub.
+ */
+export const MIRROR_JOB_CAP = 56;
 /** A `ci/**` branch whose commit is older than this is swept. */
 const MIRROR_BRANCH_TTL_MS = 24 * 60 * 60_000;
 
