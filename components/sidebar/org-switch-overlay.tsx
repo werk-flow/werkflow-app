@@ -109,6 +109,11 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
       ),
   ],
   [
+    '/service/bereitschaft',
+    service(),
+    () => import('@/components/loading-states/on-call-skeletons').then((m) => service(m.OnCallWeekSkeleton)),
+  ],
+  [
     '/service/wartung',
     service(),
     () =>

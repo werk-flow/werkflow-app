@@ -389,3 +389,49 @@ test('the own open Aufgaben show their count and lead to the Aufgaben', async ({
   await page.evaluate(() => window.workerStartContract.setActionableCount(3));
   await expect(tasks).toContainText('3 offen');
 });
+
+test('„Bereitschaft jetzt“ follows the day, the clock and the Aufgaben, with who is on call and the own next shift', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.workerStartOnCall = {
+      shifts: [
+        {
+          id: '9b000000-0000-4000-8000-000000000041',
+          startsAt: '2026-11-17T16:00:00.000Z',
+          endsAt: '2026-11-18T06:00:00.000Z',
+          label: null,
+          handoverNote: '',
+          cancelledAt: null,
+          version: 1,
+          members: [{ employeeRecordId: 'er-1', name: 'Max Mustermann', phone: '0711 9876543' }],
+          history: [],
+        },
+      ],
+      ownNext: [
+        {
+          id: '9b000000-0000-4000-8000-000000000042',
+          startsAt: '2026-11-21T16:00:00.000Z',
+          endsAt: '2026-11-22T06:00:00.000Z',
+          label: null,
+          cancelledAt: null,
+        },
+      ],
+    };
+  });
+  await openStart(page, { stored: EMPTY_DAY }, '2026-11-17T17:00:00.000Z');
+  const onCall = MAIN(page).getByText('Bereitschaft jetzt', { exact: true });
+  await expect(onCall).toBeVisible();
+  await expect(MAIN(page)).toContainText('Max Mustermann');
+  await expect(MAIN(page).getByRole('link', { name: /0711 9876543/ })).toHaveAttribute(
+    'href',
+    'tel:07119876543',
+  );
+  await expect(MAIN(page).getByText('Deine nächste Bereitschaft')).toBeVisible();
+  // Below today's Einsätze, the clock and the Aufgaben: the day comes first on a field worker's phone.
+  const tasks = await MAIN(page).getByTestId('worker-start-tasks').boundingBox();
+  const card = await onCall.boundingBox();
+  expect(tasks && card && card.y > tasks.y).toBe(true);
+  // A field worker reads the card; planning stays with Admin and Büro.
+  await expect(MAIN(page).getByRole('link', { name: 'Bereitschaft planen' })).toHaveCount(0);
+});

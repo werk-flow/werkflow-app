@@ -96,6 +96,18 @@ export function isTargetPrefetch(
   );
 }
 
+/**
+ * Any route prefetch of the app. A held navigation arms only once none is in
+ * flight: another prefetch of the same area still running at the push can keep
+ * the client router from committing to the cached loading boundary.
+ */
+export function isAppPrefetch(request: ObservedRequest, origin: string): boolean {
+  return (
+    new URL(request.url).origin === origin &&
+    classifyRouteRequest({ method: request.method, requestHeaders: request.headers }) === 'prefetch'
+  );
+}
+
 /** Whether the plan intercepts this request of the page; every other request, a prefetch above all, passes. */
 export function interceptsRequest(
   plan: StatePlan,

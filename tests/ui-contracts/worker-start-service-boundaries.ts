@@ -1,11 +1,13 @@
 // Stand-ins for what the field worker's start page reads
 // (components/dashboard/worker-start-*): the phone's stored day and its saved
 // signal (E7's seam), the clock state and the attention counts the app layout
-// holds. The spec sets each through `window.workerStartContract`.
+// holds, and the on-call overview „Bereitschaft jetzt“ reads. The spec sets
+// each through `window.workerStartContract`.
 import { useSyncExternalStore } from 'react';
 
 import type { AttentionCounts } from '@/lib/attention/types';
 import type { StoredToday } from '@/lib/field-sync/device/today-store';
+import type { OnCallOverview } from '@/lib/on-call/types';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 
 type Scope = { userId: string; organizationId: string; role: 'employee' | 'buero' };
@@ -25,6 +27,8 @@ declare global {
   interface Window {
     /** What the device answers from the first read on; set before the bundle loads. */
     workerStartDevice?: DeviceAnswer;
+    /** What the on-call overview answers; set before the bundle loads. */
+    workerStartOnCall?: OnCallOverview;
     workerStartContract: {
       reads: number;
       device: DeviceAnswer;
@@ -77,6 +81,11 @@ window.workerStartContract = {
     changed();
   },
 };
+
+/** The background read `on-call-overview` (background-read-boundaries.ts). */
+export async function readOnCallOverviewContract(): Promise<{ success: true; overview: OnCallOverview }> {
+  return { success: true, overview: window.workerStartOnCall ?? { shifts: [], ownNext: [] } };
+}
 
 export async function readTodayOnDevice(): Promise<StoredToday | null> {
   window.workerStartContract.reads += 1;

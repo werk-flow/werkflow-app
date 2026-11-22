@@ -296,7 +296,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('offline-today.tsx'))
                 return { path: join(import.meta.dir, 'offline-today-service-boundaries.ts') };
             });
-            // The field worker's start page: its device day, saved signal, clock and counts answer from the spec.
+            // The field worker's start page: its device day, saved signal, clock, counts and the on-call
+            // card's organization answer from the spec.
             builder.onResolve(
               {
                 filter:
@@ -305,7 +306,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               (args) => {
                 if (
                   args.importer.endsWith('worker-start.tsx') ||
-                  args.importer.endsWith('worker-start-day.ts')
+                  args.importer.endsWith('worker-start-day.ts') ||
+                  args.importer.endsWith('on-call-now-card.tsx')
                 )
                   return { path: join(import.meta.dir, 'worker-start-service-boundaries.ts') };
               },

@@ -5,6 +5,7 @@ import { lazy, Suspense, type ComponentType, type ReactElement } from 'react';
 import { TodayRefreshOnStart } from '@/components/auftraege/work-pack/today-refresh-on-start';
 import { useClockState } from '@/components/clock-state-context';
 import { useOrganization } from '@/components/organization/organization-context';
+import { OnCallNowCard } from '@/components/on-call/on-call-now-card';
 import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import { SectionError } from '@/components/ui/section-error';
 import { useUserProfile } from '@/components/user/user-profile-context';
@@ -51,17 +52,19 @@ async function loadWorkerStartContent(): Promise<{
 const WorkerStartContent = lazy(loadWorkerStartContent);
 
 /**
- * The start page of a field worker (`employee`): today, the clock and the own Aufgaben. It also
- * mounts E7's refresh of the day the phone keeps, so the page references one client module for
- * the role: the phone header's link prefetches this page's code on every cold start.
+ * The start page of a field worker (`employee`): today, the clock and the own Aufgaben, then
+ * „Bereitschaft jetzt“, which every role's dashboard shows (on-call-now-card.tsx). It also mounts
+ * E7's refresh of the day the phone keeps, so the page references one client module for the role:
+ * the phone header's link prefetches this page's code on every cold start.
  */
 export function WorkerStart(): ReactElement {
   return (
-    <>
+    <div className="mx-auto max-w-3xl space-y-6">
       <TodayRefreshOnStart />
       <Suspense fallback={<WorkerStartSkeleton />}>
         <WorkerStartContent sources={SOURCES} />
       </Suspense>
-    </>
+      <OnCallNowCard />
+    </div>
   );
 }
