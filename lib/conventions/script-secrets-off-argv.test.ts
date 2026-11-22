@@ -77,6 +77,8 @@ function splitCommands(line: string): string[] {
   const keep = (text: string) => {
     if (command()?.hereString === 'none') current += text;
   };
+  // An escaped character is word text, so a `#` right after it (`prefix\ #$KEY`) starts no comment.
+  let escaped = -1;
   for (let index = 0; index < line.length; index += 1) {
     const character = line[index] ?? '';
     const pair = line.slice(index, index + 2);
@@ -94,10 +96,11 @@ function splitCommands(line: string): string[] {
     if (character === '\\') {
       keep('\\ ');
       index += 1;
+      escaped = index;
     } else if (
       level?.kind === 'command' &&
       character === '#' &&
-      (index === 0 || /[\s;|&()<>]/.test(line[index - 1] ?? ''))
+      (index === 0 || (index - 1 !== escaped && /[\s;|&()<>]/.test(line[index - 1] ?? '')))
     ) {
       break;
     } else if (pair === '$(' || (level?.kind === 'command' && (pair === '<(' || pair === '>('))) {
@@ -207,6 +210,7 @@ test('the scan names a credential in a program’s arguments and passes stdin, e
         'KEN" "$url"',
         'echo "done" \\\\',
         'curl -H "Authorization: Bearer $GH_TOKEN" "$url"',
+        'curl prefix\\ #$API_KEY "$url"',
       ].join('\n'),
     ),
   ).toEqual([
@@ -223,6 +227,7 @@ test('the scan names a credential in a program’s arguments and passes stdin, e
     '24: curl $GH_TOKEN',
     '25: curl $VERCEL_TOKEN',
     '28: curl $GH_TOKEN',
+    '29: curl $API_KEY',
   ]);
 });
 
