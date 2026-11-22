@@ -1,8 +1,9 @@
 // The work pack's history and documents of one Anlage over the in-memory
 // database (werk-flow/werkflow-planning#468). The employee assigned to the job
 // reads the customer-safe history of the job's Anlage and its Vorgänger, paged
-// newest first, and opens its ordinary manual; nothing internal or financial
-// reaches them. An employee not assigned to the job, an Anlage not linked to
+// newest first, with the open Mängel of a visit but never their next step or
+// owner (werk-flow/werkflow-planning#484), and opens its ordinary manual;
+// nothing internal or financial reaches them. An employee not assigned to the job, an Anlage not linked to
 // the job, and a job or Anlage of another organization read nothing.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
@@ -234,11 +235,34 @@ const world = installActionWorld({
 const unreachedStorage = () => {
   throw new Error('storage is outside this fixture');
 };
+// The open Mängel of the latest visit, with the office's next step, owner and reason.
+const openFinding = {
+  finding_id: id(75),
+  maintenance_due_work_id: id(70),
+  completed_on: '2026-10-01',
+  scope_outcome: 'partial',
+  maintenance_plan_id: id(76),
+  plan_number: 'WPL-1',
+  job_id: ownJobId,
+  defects: ['Brenner zündet verzögert'],
+  next_action: 'none',
+  owner_user_id: null,
+  target_date: null,
+  note: 'Interne Begründung',
+  recorded_at: '2026-10-01T10:00:00.000Z',
+};
 // The uploader's name resolves as in the database, so the projection must drop it.
-world.rpc = ({ name, args }) =>
-  name === 'list_profile_references'
-    ? listProfileReferencesInWorld(world, args)
-    : { data: null, error: null };
+world.rpc = ({ name, args }) => {
+  if (name === 'list_profile_references') return listProfileReferencesInWorld(world, args);
+  if (name === 'list_open_maintenance_visit_findings') {
+    const ownAnlage =
+      args.p_organization_id === ORGANIZATION_A &&
+      Array.isArray(args.p_equipment_ids) &&
+      args.p_equipment_ids.includes(equipmentId);
+    return { data: ownAnlage ? [openFinding] : [], error: null };
+  }
+  return { data: null, error: null };
+};
 mock.module('@/lib/storage/r2', () => ({
   copyStorageObject: unreachedStorage,
   createSignedDownloadUrl: async () => 'https://storage.example.test/download',
@@ -272,6 +296,7 @@ assert.deepEqual(latestVisit, {
   equipment: { equipmentNumber: 'ANL-2', name: 'Gasbrennwertkessel ANL-2', isPredecessor: false },
   defects: [{ description: 'Abgasrohr undicht', location: 'Heizraum', severity: 'high', state: 'open' }],
   measurements: [{ description: 'Abgasverlust', quantity: 6, unit: 'piece', location: null }],
+  openFindings: ['Brenner zündet verzögert'],
 });
 // The replacement takes effect on its Berlin day and names both devices, never its reason.
 assert.deepEqual(replacement, {
@@ -282,6 +307,11 @@ assert.deepEqual(replacement, {
   successor: { equipmentNumber: 'ANL-2', name: 'Gasbrennwertkessel ANL-2', isPredecessor: false },
 });
 assert.equal(predecessorVisit?.kind === 'visit' && predecessorVisit.equipment.isPredecessor, true);
+assert.deepEqual(
+  predecessorVisit?.kind === 'visit' && predecessorVisit.openFindings,
+  [],
+  'a visit whose Mängel a later visit closed shows none open',
+);
 const second = await history(ownJobId, equipmentId, first.page.nextCursor);
 assert.ok(second.success);
 assert.equal(second.page.nextCursor, null, 'the last page offers no next page');
@@ -300,6 +330,8 @@ for (const internal of [
   'Interne Zuständigkeit',
   'Interne Anmerkung',
   'Interner Austauschgrund',
+  'Interne Begründung',
+  'WPL-1',
 ]) {
   assert.ok(!serialized.includes(internal), `the history leaks "${internal}"`);
 }

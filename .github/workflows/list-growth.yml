@@ -1,8 +1,8 @@
 name: List growth
 
-# Reruns the head commit's Unit job, and with it Check, when the owner adds or removes the label
+# Reruns the head commit's Fast job, and with it Check, when the owner adds or removes the label
 # `approved: list growth` (docs/technical/testing.md, "Grow a shrink-only list"). ci.yml starts
-# no run on a label event, and its Unit job reads the label at run time. Every other label skips
+# no run on a label event, and its Fast job reads the label at run time. Every other label skips
 # this job, so it never touches CI.
 on:
   pull_request:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   rerun:
-    name: Rerun Unit
+    name: Rerun Fast
     if: "github.event.label.name == 'approved: list growth'"
     runs-on: ubuntu-24.04
     # A CI run in progress can take its own 45 min browser timeout after a runner queue.
@@ -28,7 +28,7 @@ jobs:
       actions: write
       pull-requests: read
     steps:
-      - name: Rerun the head commit's Unit job
+      - name: Rerun the head commit's Fast job
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -37,7 +37,7 @@ jobs:
         run: |
           run="$(gh run list --workflow ci.yml --event pull_request --commit "$SHA" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
           if test -z "$run"; then
-            echo "No CI run on $SHA yet. Its Unit job reads the labels when it starts."
+            echo "No CI run on $SHA yet. Its Fast job reads the labels when it starts."
             exit 0
           fi
           # A job reruns only in a completed run.
@@ -48,12 +48,12 @@ jobs:
             echo "The PR moved to $head. Its own CI run reads the labels."
             exit 0
           fi
-          job="$(gh run view "$run" --json jobs --jq '.jobs[] | select(.name == "Unit") | .databaseId')"
-          test -n "$job" || { echo "::error::CI run $run has no Unit job."; exit 1; }
+          job="$(gh run view "$run" --json jobs --jq '.jobs[] | select(.name == "Fast") | .databaseId')"
+          test -n "$job" || { echo "::error::CI run $run has no Fast job."; exit 1; }
           # A job's rerun also reruns the jobs that need it, so Check reports again on $SHA.
           # GitHub reruns a run only within 30 days of its start; a push starts a fresh one.
           gh run rerun "$run" --job "$job" || {
             echo "::error::CI run $run could not rerun. Push a commit, such as a merge of main, so a fresh CI run reads the label."
             exit 1
           }
-          echo "Reran Unit and Check in CI run $run: https://github.com/$GH_REPO/actions/runs/$run"
+          echo "Reran Fast and Check in CI run $run: https://github.com/$GH_REPO/actions/runs/$run"
