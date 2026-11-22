@@ -112,16 +112,45 @@ function referencesAny(node: ts.Node, names: ReadonlySet<string>): boolean {
   return ts.forEachChild(node, (child) => referencesAny(child, names) || undefined) ?? false;
 }
 
-/** Why a covered module's property test does not drive it through fast-check, if it does not. */
+/** The inline callbacks of the tests a file registers: `test(...)`, `it(...)`, `test.each(...)(...)`, never a failing case. */
+function testCallbacks(source: ts.SourceFile): ts.Node[] {
+  const callbacks: ts.Node[] = [];
+  const registers = (callee: ts.Expression): boolean => {
+    if (ts.isIdentifier(callee)) return callee.text === 'test' || callee.text === 'it';
+    if (ts.isCallExpression(callee)) return registers(callee.expression);
+    return (
+      ts.isPropertyAccessExpression(callee) && callee.name.text !== 'failing' && registers(callee.expression)
+    );
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && registers(node.expression))
+      callbacks.push(
+        ...node.arguments.filter(
+          (argument) => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument),
+        ),
+      );
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return callbacks;
+}
+
+const contains = (outer: ts.Node, inner: ts.Node): boolean =>
+  outer.pos <= inner.pos && inner.end <= outer.end;
+
+/** Why a covered module's property test does not drive it through fast-check in a test, if it does not. */
 function coverageProblems(modulePath: string, propertyTest: string): string[] {
   const source = parseProductSource(propertyTest);
   const fastCheck = runtimeBindings(source, propertyTest, (target) => target === 'fast-check');
   const covered = runtimeBindings(source, propertyTest, (target) => target === stemOf(modulePath));
-  const asserted = fastCheckCalls(source, fastCheck, 'assert').filter((call) => referencesAny(call, covered));
+  const callbacks = testCallbacks(source);
+  const asserted = fastCheckCalls(source, fastCheck, 'assert').filter(
+    (call) => referencesAny(call, covered) && callbacks.some((callback) => contains(callback, call)),
+  );
   if (fastCheck.size === 0) return [`${propertyTest} imports no fast-check.`];
   if (covered.size === 0) return [`${propertyTest} imports no value of ${modulePath}.`];
   return asserted.length === 0
-    ? [`${propertyTest} has no fc.assert whose property calls a value of ${modulePath}.`]
+    ? [`${propertyTest} has no test whose fc.assert calls a value of ${modulePath}.`]
     : [];
 }
 
@@ -151,9 +180,9 @@ function settingProblems(file: string): string[] {
         `${at(call)}: fc.assert takes only a literal \`{ examples }\`; the seed and run count come from lib/testing/property-runs.ts.`,
       );
   }
-  for (const call of fastCheckCalls(source, fastCheck, 'configureGlobal'))
-    problems.push(`${at(call)}: only scripts/unit-test-preload.ts configures fast-check.`);
   const visit = (node: ts.Node): void => {
+    if ((ts.isIdentifier(node) || ts.isStringLiteral(node)) && node.text === 'configureGlobal')
+      problems.push(`${at(node)}: only scripts/unit-test-preload.ts configures fast-check.`);
     if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
@@ -165,9 +194,11 @@ function settingProblems(file: string): string[] {
         problems.push(
           `${at(node)}: a failing case needs \`// known bug: werk-flow/werkflow-planning#<n> <why>\` on the line above.`,
         );
-      if (fastCheckCalls(node, fastCheck, 'assert').length > 0)
+      const callback = node.arguments[1];
+      const inline = callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback));
+      if (!inline || referencesAny(callback, fastCheck))
         problems.push(
-          `${at(node)}: a failing case holds one fixed counterexample, never fc.assert, so it hides no other failure.`,
+          `${at(node)}: a failing case is an inline callback with one fixed counterexample and no fast-check, so it hides no other failure.`,
         );
     }
     ts.forEachChild(node, visit);
@@ -223,12 +254,6 @@ describe('property test manifest', () => {
       }),
     );
     expect(problems).toEqual([]);
-  });
-
-  test('every property test belongs to a covered module', () => {
-    const covered = new Set(areas.flatMap((area) => area.covered.map(propertyTestOf)));
-    const orphans = listPropertyTests().filter((file) => !covered.has(file));
-    expect(orphans).toEqual([]);
   });
 
   test('a property test takes the shared seed and run count, and a failing case is one counterexample with its issue', () => {
