@@ -20,7 +20,8 @@ beforeAll(() => {
 });
 afterAll(() => {
   setSystemTime();
-  process.env.TZ = hostZone;
+  if (hostZone === undefined) delete process.env.TZ;
+  else process.env.TZ = hostZone;
 });
 
 const MINUTE_MS = 60_000;
