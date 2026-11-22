@@ -237,6 +237,9 @@ describe('The daily targets of a period', () => {
         for (const day of resolveEmployeeDailyTargets(...argumentsFor(drawn)).dailyTargets) {
           const allowed = allowedTargets(drawn, day.localDate);
           if (allowed) expect(allowed).toContain(day.targetMinutes);
+          // Where no sentence fixes the exact Soll, it still never exceeds the day's Wochenplan.
+          expect(day.targetMinutes).toBeGreaterThanOrEqual(0);
+          expect(day.targetMinutes).toBeLessThanOrEqual(planOf(drawn, day.localDate));
         }
       }),
     );
