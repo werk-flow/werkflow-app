@@ -1,6 +1,6 @@
 {
   "area": "Invoices",
-  "rule": "line amounts, VAT per rate rounded once, totals, payment terms and Skonto, the e-invoice's amounts, typed euro amounts",
+  "rule": "line amounts, VAT per rate rounded once, totals, payment terms and Skonto, the save's limits, the e-invoice's amounts, typed euro amounts",
   "roots": [
     "lib/invoicing",
     "lib/invoices",
@@ -13,6 +13,7 @@
     "lib/invoicing/calculate.ts",
     "lib/invoicing/to-en16931.ts",
     "lib/invoices/amounts.ts",
+    "lib/invoices/action-schemas.ts",
     "lib/invoices/draft-form.ts",
     "lib/price-catalog/money.ts",
     "lib/werkflow-billing/invoice-model.ts"
@@ -27,7 +28,6 @@
     "lib/invoicing/rules/compile.ts": "Build script that compiles the CEN rule stylesheet.",
     "lib/invoicing/rules/manifest.ts": "Hashes of the compiled CEN rules.",
     "lib/invoicing/sample-invoice.ts": "The fixed Musterrechnung; its amounts come from calculate.ts.",
-    "lib/invoices/action-schemas.ts": "Zod shapes of the save; amounts come from amounts.ts on the server.",
     "lib/invoices/actions.ts": "Server Actions: parse, authorize and save; amounts come from amounts.ts.",
     "lib/invoices/list-page.ts": "Search and page parameters of the invoice list.",
     "lib/invoices/reads.ts": "Server reader of stored drafts; it computes no amount.",

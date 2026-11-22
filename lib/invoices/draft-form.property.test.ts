@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
-import { berlinDateArbitrary } from '@/lib/testing/berlin-arbitraries';
-import { priceCentsArbitrary, priceQuantityArbitrary, quantityText } from '@/lib/testing/invoice-arbitraries';
+import {
+  draftLineValuesArbitrary,
+  invoiceTermsArbitrary,
+  quantityThousandthsArbitrary,
+} from '@/lib/testing/invoice-arbitraries';
 import { TERM_FIELD_IDS, draftFormOf, parseDraftForm } from './draft-form';
-import { INVOICE_TAX_RATES, type InvoiceDetail } from './types';
+import type { InvoiceDetail } from './types';
 
 // Property tests (docs/technical/testing.md, "Property tests"). The rules come from
 // docs/features/commercial-and-finance.md, "Invoice drafts": lines with a quantity of up to three
@@ -11,25 +14,15 @@ import { INVOICE_TAX_RATES, type InvoiceDetail } from './types';
 // optional Skonto in percent and days. The editor shows a stored draft and saves it unchanged.
 
 const lineArbitrary = fc
-  .record({
-    thousandths: fc.bigInt({ min: BigInt(-999_999_999_999), max: BigInt(999_999_999_999) }),
-    unitPriceCents: priceCentsArbitrary,
-    priceQuantity: priceQuantityArbitrary,
-    taxRateBasisPoints: fc.constantFrom(...INVOICE_TAX_RATES),
-    padded: fc.boolean(),
-  })
-  .map(({ thousandths, padded, ...line }) => ({
+  .tuple(draftLineValuesArbitrary(quantityThousandthsArbitrary), fc.boolean())
+  .map(([line, padded]) => ({
     ...line,
-    name: 'Heizkörper tauschen',
-    description: '',
-    quantity: padded ? paddedQuantity(thousandths) : quantityText(thousandths),
-    unit: 'piece',
+    quantity: padded ? paddedQuantity(line.quantity) : line.quantity,
     netCents: 0,
   }));
 
 /** A quantity as `numeric(12,3)` returns it: „1.500“. */
-function paddedQuantity(thousandths: bigint): string {
-  const text = quantityText(thousandths);
+function paddedQuantity(text: string): string {
   const [whole, fraction = ''] = text.split('.');
   return `${whole}.${fraction.padEnd(3, '0')}`;
 }
@@ -38,39 +31,8 @@ function paddedQuantity(thousandths: bigint): string {
 const canonical = (quantity: string): string =>
   quantity.includes('.') ? quantity.replace(/\.?0+$/, '') : quantity;
 
-/** Stored terms the save accepts: a service day or period, and a Skonto within the Zahlungsziel. */
-const termsArbitrary = fc
-  .record({
-    serviceStart: fc.option(berlinDateArbitrary, { nil: null }),
-    serviceLength: fc.integer({ min: 0, max: 60 }),
-    paymentDueDays: fc.integer({ min: 0, max: 365 }),
-    discount: fc.option(
-      fc.record({
-        basisPoints: fc.integer({ min: 1, max: 9999 }),
-        share: fc.double({ min: 0, max: 1, noNaN: true }),
-      }),
-      { nil: null },
-    ),
-  })
-  .filter(({ discount, paymentDueDays }) => discount === null || paymentDueDays >= 1)
-  .map(({ serviceStart, serviceLength, paymentDueDays, discount }) => ({
-    serviceStart,
-    serviceEnd: serviceStart === null ? null : addDays(serviceStart, serviceLength),
-    paymentDueDays,
-    discountDays: discount === null ? null : Math.max(1, Math.floor(discount.share * paymentDueDays)),
-    discountBasisPoints: discount === null ? null : discount.basisPoints,
-    orderReference: '',
-    buyerReference: '',
-    openingText: '',
-    closingText: '',
-  }));
-
-function addDays(date: string, days: number): string {
-  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
-}
-
 const detailArbitrary: fc.Arbitrary<InvoiceDetail> = fc
-  .tuple(termsArbitrary, fc.array(lineArbitrary, { minLength: 1, maxLength: 20 }))
+  .tuple(invoiceTermsArbitrary, fc.array(lineArbitrary, { minLength: 1, maxLength: 20 }))
   .map(([terms, lines]) => ({
     ...terms,
     id: '00000000-0000-4000-8000-000000000001',

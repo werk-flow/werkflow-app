@@ -1,7 +1,10 @@
 import fc from 'fast-check';
 import type { PriceQuantity } from '@/lib/inventory/line-amount';
+import { addLocalDays } from '@/lib/date-time/berlin';
 import type { InvoiceDraft, InvoiceTax } from '@/lib/invoicing/model';
 import { STANDARD_RATE_INVOICE } from '@/lib/invoicing/fixtures/reference-invoices';
+import { INVOICE_TAX_RATES, type InvoiceLineValues, type InvoiceTerms } from '@/lib/invoices/types';
+import { berlinDateArbitrary } from './berlin-arbitraries';
 
 /**
  * Inputs for property tests of invoice amounts, and an oracle for the one rounding rule of the
@@ -86,4 +89,49 @@ export const invoiceDraftArbitrary: fc.Arbitrary<InvoiceDraft> = fc
     ...STANDARD_RATE_INVOICE,
     paymentTerms: { dueInDays, discount: null },
     lines: lines.map((line, index) => ({ ...line, id: String(index + 1) })),
+  }));
+
+/** A draft line as the editor and the save send it, with quantities drawn from `thousandths`. */
+export function draftLineValuesArbitrary(thousandths: fc.Arbitrary<bigint>): fc.Arbitrary<InvoiceLineValues> {
+  return fc
+    .record({
+      thousandths,
+      unitPriceCents: priceCentsArbitrary,
+      priceQuantity: priceQuantityArbitrary,
+      taxRateBasisPoints: fc.constantFrom(...INVOICE_TAX_RATES),
+    })
+    .map(({ thousandths: quantity, ...line }) => ({
+      ...line,
+      name: 'Heizkörper tauschen',
+      description: '',
+      quantity: quantityText(quantity),
+      unit: 'piece',
+    }));
+}
+
+/** Draft terms the save accepts: an open, one-day or longer service, and a Skonto within the Zahlungsziel. */
+export const invoiceTermsArbitrary: fc.Arbitrary<InvoiceTerms> = fc
+  .record({
+    serviceStart: fc.option(berlinDateArbitrary, { nil: null }),
+    serviceLength: fc.integer({ min: 0, max: 60 }),
+    paymentDueDays: fc.integer({ min: 0, max: 365 }),
+    discount: fc.option(
+      fc.record({
+        basisPoints: fc.integer({ min: 1, max: 9999 }),
+        share: fc.double({ min: 0, max: 1, noNaN: true }),
+      }),
+      { nil: null },
+    ),
+  })
+  .filter(({ discount, paymentDueDays }) => discount === null || paymentDueDays >= 1)
+  .map(({ serviceStart, serviceLength, paymentDueDays, discount }) => ({
+    serviceStart,
+    serviceEnd: serviceStart === null ? null : addLocalDays(serviceStart, serviceLength),
+    paymentDueDays,
+    discountDays: discount === null ? null : Math.max(1, Math.floor(discount.share * paymentDueDays)),
+    discountBasisPoints: discount === null ? null : discount.basisPoints,
+    orderReference: '',
+    buyerReference: '',
+    openingText: '',
+    closingText: '',
   }));

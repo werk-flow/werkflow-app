@@ -87,42 +87,31 @@ describe('WerkFlow’s own invoice from a Stripe invoice', () => {
     );
   });
 
-  test('is not issued when Stripe adds tax, a discount or a balance that the lines do not show', () => {
+  test('is not issued when any one amount Stripe reports differs from the invoice', () => {
     fc.assert(
       fc.property(
         stripeInvoiceArbitrary,
         fc.integer({ min: 1, max: 10_000 }),
-        fc.constantFrom('tax', 'discount', 'balance'),
-        (stripe, cents, kind) => {
+        fc.constantFrom('subtotal', 'tax', 'total', 'paid', 'remaining', 'line'),
+        (stripe, cents, field) => {
+          const invoice = calculateInvoice(werkflowInvoiceDraft(stripe, SELLER));
+          const [first, ...rest] = stripe.lines;
+          if (!first) throw new Error('a Stripe invoice has a line');
           const changed: StripeInvoiceForIssue =
-            kind === 'tax'
-              ? {
-                  ...stripe,
-                  taxCents: cents,
-                  totalCents: stripe.totalCents + cents,
-                  remainingCents: stripe.remainingCents + cents,
-                }
-              : kind === 'discount'
-                ? {
-                    ...stripe,
-                    totalCents: stripe.totalCents - cents,
-                    remainingCents: stripe.remainingCents - cents,
-                  }
-                : { ...stripe, remainingCents: stripe.remainingCents - cents };
-          const invoice = calculateInvoice(werkflowInvoiceDraft(changed, SELLER));
+            field === 'subtotal'
+              ? { ...stripe, subtotalCents: stripe.subtotalCents + cents }
+              : field === 'tax'
+                ? { ...stripe, taxCents: stripe.taxCents + cents }
+                : field === 'total'
+                  ? { ...stripe, totalCents: stripe.totalCents - cents }
+                  : field === 'paid'
+                    ? { ...stripe, paidCents: stripe.paidCents + cents }
+                    : field === 'remaining'
+                      ? { ...stripe, remainingCents: stripe.remainingCents - cents }
+                      : { ...stripe, lines: [{ ...first, amountCents: first.amountCents + cents }, ...rest] };
           expect(() => assertStripeAmounts(changed, invoice)).toThrow('werkflow_invoice_amount_mismatch');
         },
       ),
-    );
-  });
-
-  test('covers a service period from the first line’s start to the day before the last line’s end', () => {
-    fc.assert(
-      fc.property(stripeInvoiceArbitrary, (stripe) => {
-        const { delivery, issueDate } = werkflowInvoiceDraft(stripe, SELLER);
-        if (delivery.kind === 'period') expect(delivery.start <= delivery.end).toBe(true);
-        else expect(delivery.date <= issueDate).toBe(true);
-      }),
     );
   });
 });

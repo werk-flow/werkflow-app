@@ -31,28 +31,28 @@ describe('An invoice', () => {
   test('totals the sum of its line amounts, each by the shared line rule', () => {
     fc.assert(
       fc.property(invoiceDraftArbitrary, (draft) => {
-        const { lines, totals } = calculateInvoice(draft);
-        lines.forEach((line) =>
-          expect(line.netCents).toBe(lineAmountCents(line.quantity, line.unitPriceCents, line.priceQuantity)),
+        const expected = draft.lines.map((line) =>
+          lineAmountCents(line.quantity, line.unitPriceCents, line.priceQuantity),
         );
-        expect(totals.lineNetCents).toBe(lines.reduce((sum, line) => sum + line.netCents, 0));
+        const { lines, totals } = calculateInvoice(draft);
+        expect(lines.map((line) => line.netCents)).toEqual(expected);
+        expect(totals.lineNetCents).toBe(expected.reduce((sum, net) => sum + net, 0));
       }),
     );
   });
 
-  test('has one VAT row per category and rate, whose bases add up to the net total', () => {
+  test('has one VAT row per category and rate of the draft’s lines, each the sum of those lines', () => {
     fc.assert(
       fc.property(invoiceDraftArbitrary, (draft) => {
-        const { lines, taxSubtotals, totals } = calculateInvoice(draft);
-        const keys = taxSubtotals.map((row) => rateKey(row.tax));
-        expect(new Set(keys).size).toBe(keys.length);
-        expect(new Set(keys)).toEqual(new Set(lines.map((line) => rateKey(line.tax))));
-        for (const row of taxSubtotals) {
-          const basis = lines
-            .filter((line) => rateKey(line.tax) === rateKey(row.tax))
-            .reduce((sum, line) => sum + line.netCents, 0);
-          expect(row.basisCents).toBe(basis);
+        const expected = new Map<string, number>();
+        for (const line of draft.lines) {
+          const net = lineAmountCents(line.quantity, line.unitPriceCents, line.priceQuantity);
+          expected.set(rateKey(line.tax), (expected.get(rateKey(line.tax)) ?? 0) + net);
         }
+        const { taxSubtotals, totals } = calculateInvoice(draft);
+        const rows = new Map(taxSubtotals.map((row) => [rateKey(row.tax), row.basisCents]));
+        expect(rows.size).toBe(taxSubtotals.length);
+        expect(rows).toEqual(expected);
         expect(taxSubtotals.reduce((sum, row) => sum + row.basisCents, 0)).toBe(totals.lineNetCents);
       }),
     );
@@ -61,13 +61,23 @@ describe('An invoice', () => {
   test('rounds VAT once per rate on the rate’s sum, half away from zero, and owes none on a zero rate or exemption', () => {
     fc.assert(
       fc.property(invoiceDraftArbitrary, (draft) => {
-        const { taxSubtotals, totals } = calculateInvoice(draft);
-        for (const row of taxSubtotals) {
-          const rate = row.tax.category === 'S' ? row.tax.rateBasisPoints : 0;
-          const expected = roundHalfAwayFromZero(BigInt(row.basisCents) * BigInt(rate), BigInt(10_000));
-          expect(row.taxCents).toBe(Number(expected));
-          if (row.tax.category !== 'S') expect(row.taxCents).toBe(0);
+        const expected = new Map<string, bigint>();
+        for (const line of draft.lines) {
+          const rate = line.tax.category === 'S' ? line.tax.rateBasisPoints : 0;
+          const net = lineAmountCents(line.quantity, line.unitPriceCents, line.priceQuantity);
+          const key = rateKey(line.tax);
+          expected.set(key, (expected.get(key) ?? BigInt(0)) + BigInt(net) * BigInt(rate));
         }
+        const { taxSubtotals, totals } = calculateInvoice(draft);
+        const tax = new Map(taxSubtotals.map((row) => [rateKey(row.tax), row.taxCents]));
+        expect(tax).toEqual(
+          new Map(
+            [...expected].map(([key, product]) => [
+              key,
+              Number(roundHalfAwayFromZero(product, BigInt(10_000))),
+            ]),
+          ),
+        );
         expect(totals.taxCents).toBe(taxSubtotals.reduce((sum, row) => sum + row.taxCents, 0));
       }),
     );

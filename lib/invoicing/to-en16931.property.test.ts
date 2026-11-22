@@ -18,6 +18,13 @@ function amountsOf(xml: string, name: string): number[] {
   );
 }
 
+/** The text of every `<ram:{name}>` quantity in document order. */
+function quantitiesOf(xml: string, name: string): string[] {
+  return [...xml.matchAll(new RegExp(`<ram:${name} unitCode="[^"]*">([^<]*)</ram:${name}>`, 'g'))].map(
+    ([, value = '']) => value,
+  );
+}
+
 const paidShareArbitrary = fc.double({ min: 0, max: 1, noNaN: true });
 
 describe('An e-invoice', () => {
@@ -32,6 +39,11 @@ describe('An e-invoice', () => {
           ...invoice.lines.map((line) => line.netCents),
           totals.lineNetCents,
         ]);
+        expect(amountsOf(xml, 'ChargeAmount')).toEqual(invoice.lines.map((line) => line.unitPriceCents));
+        expect(quantitiesOf(xml, 'BasisQuantity')).toEqual(
+          invoice.lines.map((line) => String(line.priceQuantity)),
+        );
+        expect(quantitiesOf(xml, 'BilledQuantity')).toEqual(invoice.lines.map((line) => line.quantity));
         expect(amountsOf(xml, 'BasisAmount')).toEqual(invoice.taxSubtotals.map((row) => row.basisCents));
         expect(amountsOf(xml, 'CalculatedAmount')).toEqual(invoice.taxSubtotals.map((row) => row.taxCents));
         expect(amountsOf(xml, 'TaxBasisTotalAmount')).toEqual([totals.lineNetCents]);
