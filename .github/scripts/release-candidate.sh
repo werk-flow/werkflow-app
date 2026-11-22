@@ -104,15 +104,17 @@ runs="$(github_list "actions/runs?head_sha=${sha}&branch=main" workflow_runs \
       or .path == ".github/workflows/main-full-run.yml")
     and (.event == "schedule" or .event == "workflow_dispatch")) | .id')"
 # A `Full run / Check` of the commit as `<completed_at> <conclusion> <url>`, given its `url`, or
-# nothing while it runs. A row without a status, or a completed one without a real end time, a
-# conclusion or a URL, could sort anywhere, so it stops the gate.
+# nothing while GitHub names it waiting or running. A row with any other status, or a completed
+# one without a real end time, a conclusion or a URL, could sort anywhere or hide a failure, so it
+# stops the gate.
 readonly row='if .status == "completed" then
     if (.completed_at | type) == "string"
       and (.completed_at | try (fromdateiso8601 | todateiso8601) catch "") == .completed_at
-      and (.conclusion | type) == "string" and (.conclusion | test("^[a-z_]+$"))
-      and (.url | type) == "string" and (.url | test("^[^\\s]+$"))
+      and (.conclusion | type) == "string" and (.conclusion | test("\\A[a-z_]+\\z"))
+      and (.url | type) == "string" and (.url | test("\\A\\S+\\z"))
     then "\(.completed_at) \(.conclusion) \(.url)" else error("malformed") end
-  elif (.status | type) == "string" then empty else error("malformed") end'
+  elif .status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested"
+    or .status == "pending" then empty else error("malformed") end'
 malformed() {
   echo "::error::GitHub lists a ${1} on ${sha} without a valid status, end time, conclusion or URL; the release does not decide on it."
   exit 1
