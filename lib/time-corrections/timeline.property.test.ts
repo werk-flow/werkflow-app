@@ -352,12 +352,28 @@ describe('A timeline of added time', () => {
           const next = facts[index + 1];
           return fact.entryType === 'clock_out' || !next
             ? []
-            : [{ from: fact.timestamp, to: next.timestamp, activity: fact.activity, jobId: fact.jobId }];
+            : [
+                {
+                  opens: fact.entryType,
+                  from: fact.timestamp,
+                  to: next.timestamp,
+                  activity: fact.activity,
+                  jobId: fact.jobId,
+                },
+              ];
         });
         expect(activities).toEqual(
-          planned.map((item) => {
+          planned.map((item, index) => {
             const activity = plannedActivity(item);
+            // A break starts as a break and the activity after it ends the break; anything else clocks in.
+            const opens =
+              item.row.kind === 'break'
+                ? 'break_start'
+                : planned[index - 1]?.row.kind === 'break'
+                  ? 'break_end'
+                  : 'clock_in';
             return {
+              opens,
               from: instantOf(localDate, item.from).toISOString(),
               to: instantOf(localDate, item.to).toISOString(),
               activity,

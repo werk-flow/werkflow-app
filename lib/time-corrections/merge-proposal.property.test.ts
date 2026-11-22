@@ -132,16 +132,27 @@ describe('A correction of recorded time', () => {
           'internal_activity',
         ),
         ({ before, activity }, kind) => {
-          const patch = correctionFact('patch', 'clock_in', 0, { activityKind: kind });
+          // The patch names another person, which a reclassification must not take over.
+          const patch = correctionFact('patch', 'clock_in', 0, {
+            activityKind: kind,
+            employeeRecordId: 'other-record',
+            userId: 'other',
+          });
           const merged = mergeCorrectionProposal('reclassify', before, snapshot([patch]));
           // Travel, standby and internal time need details the transition form cannot supply.
           const refused = kind !== activity.kind && ['travel', 'standby', 'internal_activity'].includes(kind);
           expect(merged === null).toBe(refused);
           if (!merged) return;
           expect(timeOf(merged.facts)).toEqual(timeOf(before.facts));
-          expect(merged.facts.map((fact) => [fact.userId, fact.activityKind])).toEqual(
-            before.facts.map((fact) => [fact.userId, kind]),
-          );
+          // The nested selection names the new activity, which the approved projection copies; work,
+          // call-out and travel keep the recorded job, any other activity has none.
+          const recordedJob = 'jobId' in activity ? (activity.jobId ?? null) : null;
+          const jobId = ['work', 'callout', 'travel'].includes(kind) ? recordedJob : null;
+          const selection = kind === activity.kind ? activity : createActivitySelection(kind, jobId);
+          expect(
+            merged.facts.map((fact) => [fact.userId, fact.employeeRecordId, fact.activityKind, fact.jobId]),
+          ).toEqual(before.facts.map((fact) => [fact.userId, fact.employeeRecordId, kind, jobId]));
+          for (const fact of merged.facts) expect<unknown>(fact.activity).toEqual(selection);
         },
       ),
     );
