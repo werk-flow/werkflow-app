@@ -515,7 +515,7 @@ function startTestServer(log: string, port: number): { ready: Promise<boolean>; 
   });
   // The whole group, even after the server itself exited: a runner that reuses this host starts the
   // next job on the same port.
-  const stop = guardTestServer(server.pid, port);
+  const { observe, stop } = guardTestServer(server.pid, port);
   const ready = async (): Promise<boolean> => {
     const login = `${workspaceAppOrigin(repository)}/login`;
     for (const deadline = Date.now() + 900_000; !exited && Date.now() < deadline; await Bun.sleep(5_000)) {
@@ -525,8 +525,12 @@ function startTestServer(log: string, port: number): { ready: Promise<boolean>; 
           (response) => response.ok,
           () => false,
         )
-      )
+      ) {
+        // The app answers: record its listener's group, which a server that missed its own
+        // cancellation would leave holding the port.
+        observe();
         return true;
+      }
     }
     if (failure)
       console.error(`::error title=Test server::The test server could not start: ${failure.message}`);
