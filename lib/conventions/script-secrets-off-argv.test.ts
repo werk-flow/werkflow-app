@@ -69,6 +69,9 @@ function splitCommands(line: string): string[] {
   const parts: string[] = [];
   const open: Level[] = [{ kind: 'command', hereString: 'none' }];
   let current = '';
+  // The outer command's text while a substitution is open: Bash reads the outer command on after
+  // its `)`, so `curl $(printf a)#$KEY` stays one curl command.
+  const outer: string[] = [];
   const cut = () => {
     parts.push(current);
     current = '';
@@ -100,11 +103,13 @@ function splitCommands(line: string): string[] {
     } else if (
       level?.kind === 'command' &&
       character === '#' &&
-      (index === 0 || (index - 1 !== escaped && /[\s;|&()<>]/.test(line[index - 1] ?? '')))
+      // A `)` before it closes a substitution or a subshell: `$(printf a)#$KEY` is one word.
+      (index === 0 || (index - 1 !== escaped && /[\s;|&(<>]/.test(line[index - 1] ?? '')))
     ) {
       break;
     } else if (pair === '$(' || (level?.kind === 'command' && (pair === '<(' || pair === '>('))) {
-      cut();
+      outer.push(current);
+      current = '';
       open.push({ kind: 'command', hereString: 'none' });
       index += 1;
     } else if (character === '`') cut();
@@ -119,14 +124,18 @@ function splitCommands(line: string): string[] {
       keep(character);
     } else if (character === ')') {
       cut();
-      if (open.length > 1) open.pop();
+      if (open.length > 1) {
+        open.pop();
+        current = outer.pop() ?? '';
+      }
     } else if (character === ';' || character === '|' || character === '&') {
       cut();
       if (level?.kind === 'command') level.hereString = 'none';
     } else keep(character);
   }
   cut();
-  return parts;
+  // A substitution still open at the line's end leaves its outer command unread otherwise.
+  return [...parts, ...outer];
 }
 
 /** Each simple command of the script's lines outside comments, with here-strings removed. */
@@ -211,6 +220,8 @@ test('the scan names a credential in a program’s arguments and passes stdin, e
         'echo "done" \\\\',
         'curl -H "Authorization: Bearer $GH_TOKEN" "$url"',
         'curl prefix\\ #$API_KEY "$url"',
+        'curl $(printf prefix)#$API_KEY "$url"',
+        'curl -H "Authorization: Bearer $GH_TOKEN" "$(',
       ].join('\n'),
     ),
   ).toEqual([
@@ -228,6 +239,8 @@ test('the scan names a credential in a program’s arguments and passes stdin, e
     '25: curl $VERCEL_TOKEN',
     '28: curl $GH_TOKEN',
     '29: curl $API_KEY',
+    '30: curl $API_KEY',
+    '31: curl $GH_TOKEN',
   ]);
 });
 
