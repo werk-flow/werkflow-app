@@ -19,6 +19,7 @@ import { join, resolve } from 'node:path';
 import { runCommitCommand } from '../../../scripts/ci/run-commit';
 import { processExecutors } from '../../../scripts/ci/process-executor';
 import { pull } from '../fixtures/merge-queue-world';
+import { profileOnMainIn } from './profiles';
 import { integrationEnvironment } from './queue';
 import { mainEnvironment } from './queue-main-run';
 import { type CiResult, readResult } from './results';
@@ -255,9 +256,10 @@ function trustedClone(): { clone: string; commit: string; tree: string } {
       ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', '-c', 'commit.gpgSign=false', ...args],
       { cwd, encoding: 'utf8' },
     ).trim();
-  mkdirSync(origin);
+  mkdirSync(join(origin, 'ci'), { recursive: true });
   git(origin, 'init', '--quiet', '--initial-branch=main');
   writeFileSync(join(origin, 'a.txt'), 'a\n');
+  writeFileSync(join(origin, 'ci', 'profile.json'), '{ "profile": "local" }\n');
   git(origin, 'add', '.');
   git(origin, 'commit', '--quiet', '-m', 'a');
   git(folder, 'clone', '--quiet', origin, clone);
@@ -339,6 +341,7 @@ const command = (
   const errors: string[] = [];
   const ran = runCommitCommand({
     repository,
+    profile: () => profileOnMainIn(repository),
     environment: { PATH: process.env.PATH, HOME: folder, ...environment },
     executors,
     signal: new AbortController().signal,
@@ -406,6 +409,46 @@ test('a main run through an executor that isolates nothing leaves no claim or st
   expect(tasks.map((task) => task.unit.job)).toEqual(['plan', 'check']);
   expect(acknowledgedStart(mainStartRecord(workRoot, commit), commit)).toBeUndefined();
   expect(existsSync(join(workRoot, 'main-runs'))).toBe(false);
+});
+
+// The switch is main's: a trusted clone reads it from origin's main once fetched, also when
+// CI_PARALLEL overrides the profile's default, and a main without a valid switch starts nothing.
+test('a run whose fetched main names no CI profile never starts, even with CI_PARALLEL set: exit 2', async () => {
+  const { clone, commit, tree } = trustedClone();
+  const origin = join(folder, 'origin');
+  writeFileSync(join(origin, 'ci', 'profile.json'), '{ "profile": "boat" }\n');
+  execFileSync(
+    'git',
+    [
+      '-c',
+      'user.name=ci',
+      '-c',
+      'user.email=ci@example.invalid',
+      '-c',
+      'commit.gpgSign=false',
+      'commit',
+      '--quiet',
+      '-am',
+      'boat',
+    ],
+    { cwd: origin },
+  );
+  const tasks: ExecutorTask[] = [];
+  const ran = await command(
+    clone,
+    {
+      CI_EVENT: 'main',
+      CI_COMMIT: commit,
+      CI_RUN_URL: 'https://ci.example/runs/local',
+      CI_RESULTS_DIR: join(folder, 'results'),
+      CI_WORK_ROOT: join(folder, 'work'),
+      CI_PARALLEL: '3',
+    },
+    stubExecutors(tasks, tree, false),
+  );
+  expect(ran.code).toBe(2);
+  expect(ran.errors.join('\n')).toContain("The CI profile switch on origin's main names no profile");
+  expect(tasks).toEqual([]);
 });
 
 test("a main run whose commit's Plan another run left in the ledger exits 3, and the start record names that run", async () => {

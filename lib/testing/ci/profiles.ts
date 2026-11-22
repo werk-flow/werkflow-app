@@ -2,10 +2,10 @@
 // A profile places every item of the inventory (inventory.ts): which machine runs it, how many of
 // its units at once, how a queue batches, and when a schedule fires. It never says what a run
 // tests: that stays the DAG's (dag.ts) and the planner's (ci-plan.ts), the same in both profiles.
-// ci/profile.json on main names the active profile, and only `activeProfile` reads it
-// (lib/conventions/ci-profile-switch.test.ts).
-import { readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+// ci/profile.json on main names the active profile, and only `activeProfile` reads it, from the
+// main this clone fetched last (lib/conventions/ci-profile-switch.test.ts).
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import { BERLIN_TIME_ZONE } from '../../date-time/berlin';
 import { z } from '../../zod';
 import { CI_EVENTS, CI_JOBS, type CiEvent, type CiJob } from './dag';
@@ -15,7 +15,7 @@ import { MIRROR_JOB_CAP } from './mirror';
 import { MAX_BATCH } from './queue';
 import { CLOCK_WORK } from './schedule';
 
-export const CI_PROFILE_NAMES = ['fleet', 'mac'] as const;
+export const CI_PROFILE_NAMES = ['fleet', 'local'] as const;
 export type CiProfileName = (typeof CI_PROFILE_NAMES)[number];
 
 /**
@@ -23,9 +23,10 @@ export type CiProfileName = (typeof CI_PROFILE_NAMES)[number];
  *   queue.ts, schedule.ts).
  * - `fleet`: one of many machines: a GitHub Actions runner, directly or through the CI mirror, or
  *   a Boat machine.
- * - `mac`: the one MacBook.
+ * - `local`: one of the owner's machines, the MacBook or the PC (a WSL distro); a pull request's
+ *   run goes start to finish on the one that claims it.
  */
-type Executor = 'conductor' | 'fleet' | 'mac';
+type Executor = 'conductor' | 'fleet' | 'local';
 
 /** Monday 0 to Sunday 6, as `getLocalWeekday` counts. */
 type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -41,8 +42,25 @@ export type Timing =
 
 /** `all` runs every unit at once: each shard, leg or job of the item on its own machine. */
 type AtOnce = number | 'all';
-type Placement = { executor: Executor; atOnce: AtOnce };
-type TimedPlacement = Placement & { timing: Timing };
+type Placement = {
+  executor: Executor;
+  atOnce: AtOnce;
+  /**
+   * What this placement does not yet cover, for the owner to see: set where the item's source cannot
+   * check this executor's work yet. Only a placeholder profile may carry one (profiles.test.ts).
+   */
+  gap?: string;
+};
+
+/**
+ * The clock that fires a timed schedule, as its inventory item records it (inventory.ts):
+ * - `workflow`: the `on.schedule` cron of the item's workflow, on GitHub.
+ * - `conductor`: the conductor's clock, `CLOCK_WORK` (schedule.ts) or the full-run slots.
+ * - `planned`: a clock no code fires yet; only a placeholder profile may plan one.
+ * profiles.test.ts holds `timing` to that clock's own time.
+ */
+type Clock = 'workflow' | 'conductor' | 'planned';
+type TimedPlacement = Placement & { clock: Clock; timing: Timing };
 
 export type CiProfile = {
   name: CiProfileName;
@@ -95,11 +113,18 @@ const FLEET: CiProfile = {
     full: { startedBy: 'conductor' },
   },
   schedules: {
-    nightly: { executor: 'conductor', atOnce: 'all', timing: nightly },
-    'nightly-quarantine': { executor: 'fleet', atOnce: 1, timing: nightly },
+    nightly: { executor: 'conductor', atOnce: 'all', clock: 'conductor', timing: nightly },
+    // The conductor's nightly lists no quarantines: only nightly.yml's own cron runs the list.
+    'nightly-quarantine': {
+      executor: 'fleet',
+      atOnce: 1,
+      clock: 'workflow',
+      timing: { kind: 'clock', at: '17:00', zone: BERLIN_TIME_ZONE, weekdays: EVERY_DAY },
+    },
     'main-full-run': {
       executor: 'conductor',
       atOnce: 'all',
+      clock: 'conductor',
       timing: {
         kind: 'slots',
         from: FULL_RUN_SLOTS.first,
@@ -107,17 +132,19 @@ const FLEET: CiProfile = {
         everyMinutes: FULL_RUN_SLOTS.intervalMs / 60_000,
       },
     },
-    // date-lookahead.yml's cron and max-parallel (profiles.test.ts reads both).
+    // date-lookahead.yml's max-parallel (profiles.test.ts reads it).
     'date-lookahead': {
       executor: 'fleet',
       atOnce: 7,
+      clock: 'workflow',
       timing: { kind: 'clock', at: '05:15', zone: 'UTC', weekdays: EVERY_DAY },
     },
-    'health-ci-queue': { executor: 'fleet', atOnce: 1, timing: healthWeekly },
-    'health-pr-asset-branches': { executor: 'fleet', atOnce: 1, timing: healthWeekly },
+    'health-ci-queue': { executor: 'fleet', atOnce: 1, clock: 'workflow', timing: healthWeekly },
+    'health-pr-asset-branches': { executor: 'fleet', atOnce: 1, clock: 'workflow', timing: healthWeekly },
     'release-candidate': {
       executor: 'conductor',
       atOnce: 'all',
+      clock: 'conductor',
       timing: {
         kind: 'clock',
         at: CLOCK_WORK.release.time,
@@ -133,49 +160,60 @@ const FLEET: CiProfile = {
 };
 
 /**
- * One MacBook: every unit in turn, at most two jobs at once, heavy schedules in a night window.
+ * The queue-wait check reads only the waits of this repository's ci.yml jobs on GitHub
+ * (.github/scripts/ci-queue.sh) and passes when it finds none, so it says nothing of a local machine's queue.
+ */
+const QUEUE_WAIT_NOT_MEASURED =
+  "Not yet measured: the local machines' queue wait has no evidence until a local executor records each job's wait and the check reads it (werk-flow/werkflow-planning#503, P3).";
+
+/**
+ * The owner's MacBook and PC: every unit in turn, at most two jobs at once, heavy schedules in a
+ * night window.
  * PLACEHOLDER: every value below waits for the measurements of P3 (werk-flow/werkflow-planning#503).
  * `jobsAtOnce` and `maxBatch` keep the defaults the scripts had before the profiles.
  */
-const MAC: CiProfile = {
-  name: 'mac',
-  machines: 'One MacBook',
+const LOCAL: CiProfile = {
+  name: 'local',
+  machines: "The owner's MacBook and PC",
   values: 'placeholder',
   jobsAtOnce: 2,
   maxBatch: MAX_BATCH,
   window: { from: '22:00', to: '06:00' },
   jobs: {
-    plan: { executor: 'mac', atOnce: 1 },
-    fast: { executor: 'mac', atOnce: 1 },
-    sql: { executor: 'mac', atOnce: 1 },
-    components: { executor: 'mac', atOnce: 1 },
-    invoices: { executor: 'mac', atOnce: 1 },
-    midnight: { executor: 'mac', atOnce: 1 },
-    browser: { executor: 'mac', atOnce: 1 },
-    check: { executor: 'mac', atOnce: 1 },
+    plan: { executor: 'local', atOnce: 1 },
+    fast: { executor: 'local', atOnce: 1 },
+    sql: { executor: 'local', atOnce: 1 },
+    components: { executor: 'local', atOnce: 1 },
+    invoices: { executor: 'local', atOnce: 1 },
+    midnight: { executor: 'local', atOnce: 1 },
+    browser: { executor: 'local', atOnce: 1 },
+    check: { executor: 'local', atOnce: 1 },
   },
   runs: {
-    pr: { startedBy: 'mac' },
-    integration: { startedBy: 'mac' },
-    main: { startedBy: 'mac' },
-    full: { startedBy: 'mac' },
+    pr: { startedBy: 'local' },
+    integration: { startedBy: 'local' },
+    main: { startedBy: 'local' },
+    full: { startedBy: 'local' },
   },
   schedules: {
     'main-full-run': {
-      executor: 'mac',
+      executor: 'local',
       atOnce: 1,
+      clock: 'planned',
       timing: { kind: 'slots', from: '22:00', to: '23:30', everyMinutes: 180 },
     },
-    nightly: { executor: 'mac', atOnce: 1, timing: nightly },
-    'nightly-quarantine': { executor: 'mac', atOnce: 1, timing: nightly },
+    nightly: { executor: 'local', atOnce: 1, clock: 'conductor', timing: nightly },
+    'nightly-quarantine': { executor: 'local', atOnce: 1, clock: 'planned', timing: nightly },
     'date-lookahead': {
-      executor: 'mac',
+      executor: 'local',
       atOnce: 1,
+      clock: 'planned',
       timing: { kind: 'clock', at: '01:30', zone: BERLIN_TIME_ZONE, weekdays: EVERY_DAY },
     },
     'release-candidate': {
-      executor: 'mac',
+      executor: 'local',
       atOnce: 1,
+      clock: 'conductor',
       timing: {
         kind: 'clock',
         at: CLOCK_WORK.release.time,
@@ -184,24 +222,27 @@ const MAC: CiProfile = {
       },
     },
     'health-ci-queue': {
-      executor: 'mac',
+      executor: 'local',
       atOnce: 1,
+      clock: 'planned',
       timing: { kind: 'clock', at: '05:00', zone: BERLIN_TIME_ZONE, weekdays: [0] },
+      gap: QUEUE_WAIT_NOT_MEASURED,
     },
     'health-pr-asset-branches': {
-      executor: 'mac',
+      executor: 'local',
       atOnce: 1,
+      clock: 'planned',
       timing: { kind: 'clock', at: '05:00', zone: BERLIN_TIME_ZONE, weekdays: [0] },
     },
-    'list-growth': { executor: 'mac', atOnce: 1 },
-    'pr-screenshots': { executor: 'mac', atOnce: 1 },
-    'main-green-notice': { executor: 'mac', atOnce: 1 },
-    'merge-queue-notice': { executor: 'mac', atOnce: 1 },
+    'list-growth': { executor: 'local', atOnce: 1 },
+    'pr-screenshots': { executor: 'local', atOnce: 1 },
+    'main-green-notice': { executor: 'local', atOnce: 1 },
+    'merge-queue-notice': { executor: 'local', atOnce: 1 },
   },
 };
 
 /** Both profiles by name. Code picks one only through `activeProfile`; tests read both. */
-export const CI_PROFILES: Readonly<Record<CiProfileName, CiProfile>> = { fleet: FLEET, mac: MAC };
+export const CI_PROFILES: Readonly<Record<CiProfileName, CiProfile>> = { fleet: FLEET, local: LOCAL };
 
 /** Where a profile places an inventory item: its machine, and the most of its units at once. */
 export function placementOf(profile: CiProfile, key: InventoryKey): Placement {
@@ -219,12 +260,30 @@ export function placementOf(profile: CiProfile, key: InventoryKey): Placement {
 /** The switch, a file of main, relative to the repository. */
 const PROFILE_FILE = 'ci/profile.json';
 const profileFileSchema = z.strictObject({ profile: z.enum(CI_PROFILE_NAMES) });
+/** GitHub's main as this clone fetched it last: the snapshot run-commit and the queue orchestrate from. */
+const FETCHED_MAIN = 'refs/remotes/origin/main';
+/** The trusted clone the conductor's scripts run from (scripts/ci/run.ts `repository`). */
+const OWN_CLONE = resolve(import.meta.dir, '../../..');
 
 /**
- * The profile `ci/profile.json` of `repository` names: the one way code picks a profile. A missing
- * or malformed file throws, so a conductor never guesses its profile.
+ * The profile `ci/profile.json` on this clone's fetched main names: the one way code picks a
+ * profile. Fetch `origin` first, as run-commit and the queue do, so every clone that orchestrates
+ * reads main's answer, not its own checkout's. A switch main lacks or names wrong throws, so a
+ * conductor never guesses its profile.
  */
-export function activeProfile(repository = resolve(import.meta.dir, '../../..')): CiProfile {
-  const text = readFileSync(join(repository, PROFILE_FILE), 'utf8');
+export function activeProfile(): CiProfile {
+  return profileOnMainIn(OWN_CLONE);
+}
+
+/**
+ * `activeProfile` of another clone, for tests that build one. Only test files may call it
+ * (lib/conventions/ci-profile-switch.test.ts): production code reads its own clone's main.
+ */
+export function profileOnMainIn(clone: string): CiProfile {
+  const text = execFileSync('git', ['show', `${FETCHED_MAIN}:${PROFILE_FILE}`], {
+    cwd: clone,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   return CI_PROFILES[profileFileSchema.parse(JSON.parse(text)).profile];
 }

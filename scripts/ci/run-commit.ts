@@ -16,7 +16,7 @@ import {
 import { join, resolve } from 'node:path';
 import { CI_EVENTS } from '../../lib/testing/ci/dag';
 import { MIRROR_JOB_CAP } from '../../lib/testing/ci/mirror';
-import { activeProfile } from '../../lib/testing/ci/profiles';
+import { activeProfile, type CiProfile } from '../../lib/testing/ci/profiles';
 import { positiveIntegerSchema, readLedger, readResult, resultFileName } from '../../lib/testing/ci/results';
 import {
   acknowledgedStart,
@@ -73,8 +73,10 @@ import { repository as ownRepository } from './run';
 //                   setup failed before it; a second main run of the commit and the queue's owed main
 //                   run read that one record. A run through the process executor writes neither.
 //   CI_PARALLEL     The most jobs at once. Its default is the active CI profile's `jobsAtOnce`
-//                   (lib/testing/ci/profiles.ts): 2 on the Mac, 56 on the fleet, where the
-//                   mirror's own cap holds every run of the host together.
+//                   (lib/testing/ci/profiles.ts): 2 in the local profile, 56 on the fleet, where the
+//                   mirror's own cap holds every run of the host together. The run reads the profile
+//                   from the switch on `origin`'s main once it fetched `origin`, also when
+//                   CI_PARALLEL is set, and refuses when main names none.
 //   CI_EXECUTOR     `mirror` for the CI mirror; unset for the process executor.
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.
 //   CI_PUBLISHER    An executable that runs `bun scripts/ci/publish-check.ts <start|finish>` from the
@@ -86,7 +88,7 @@ import { repository as ownRepository } from './run';
 // Exit 0: Check passed. 1: it failed. 2: the run never started: every failure before its start was
 // acknowledged, such as a missing or unreadable variable, a refused executor, an attempt that does
 // not count up, a results directory another run-commit holds, an `origin` or commit git cannot fetch,
-// a queued Check the publisher could not post, or another main run of the commit that claimed it but
+// a switch on main that names no CI profile, a queued Check the publisher could not post, or another main run of the commit that claimed it but
 // has not started; a main run then gives up its claim of the commit. 3: nothing ran because another
 // `main` run of the commit started already (the ledger holds its Plan, or its start record on this
 // host names it); the start record names that run. 4: Check ran, but the publisher did not post its
@@ -128,6 +130,8 @@ function refuse(problem: string, code: 2 | 3 = 2): never {
 type RunCommitCommand = {
   /** The trusted clone the run's checkouts come from. */
   repository: string;
+  /** The active CI profile, read once the run fetched `origin`: `activeProfile` of that clone. */
+  profile(): CiProfile;
   environment: Readonly<Record<string, string | undefined>>;
   executors(setup: ExecutorSetup): Executors;
   signal: AbortSignal;
@@ -158,7 +162,7 @@ export async function runCommitCommand(command: RunCommitCommand): Promise<0 | 1
 }
 
 async function run(
-  { repository, environment, executors, signal, log }: RunCommitCommand,
+  { repository, profile, environment, executors, signal, log }: RunCommitCommand,
   state: { started: boolean },
   undo: (() => void)[],
 ): Promise<0 | 1 | 2 | 3 | 4> {
@@ -173,11 +177,13 @@ async function run(
     );
   if (!/^[0-9a-f]{40}$/.test(commit)) refuse(`CI_COMMIT ${commit} is no full commit id.`);
   const attempt = positiveIntegerSchema.safeParse(Number(environment.CI_RUN_ATTEMPT || '1'));
-  const parallel = positiveIntegerSchema.safeParse(
-    Number(environment.CI_PARALLEL || activeProfile().jobsAtOnce),
-  );
+  // An override of the profile's default; the switch is still read once origin is fetched.
+  const parallelOverride = environment.CI_PARALLEL
+    ? positiveIntegerSchema.safeParse(Number(environment.CI_PARALLEL))
+    : undefined;
   if (!attempt.success) refuse(`CI_RUN_ATTEMPT ${environment.CI_RUN_ATTEMPT} is no attempt number.`);
-  if (!parallel.success) refuse(`CI_PARALLEL ${environment.CI_PARALLEL} is no number of jobs.`);
+  if (parallelOverride && !parallelOverride.success)
+    refuse(`CI_PARALLEL ${environment.CI_PARALLEL} is no number of jobs.`);
   const queueRun = Boolean(environment.CI_QUEUE_COMMIT);
   if (queueRun && environment.CI_PUBLISHER)
     refuse(
@@ -288,8 +294,19 @@ async function run(
     for (const file of left) renameSync(join(resultsDir, file), join(aside, file));
   }
 
-  // The jobs read GitHub's branches through this clone's `origin`.
+  // The jobs read GitHub's branches through this clone's `origin`, and the run its CI profile from
+  // the switch on that main, so every trusted clone applies main's profile, not its checkout's.
   git('fetch', '--quiet', '--no-tags', 'origin');
+  const active = ((): CiProfile => {
+    try {
+      return profile();
+    } catch (error) {
+      return refuse(
+        `The CI profile switch on origin's main names no profile: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  })();
+  const parallel = parallelOverride?.data ?? active.jobsAtOnce;
   const hasCommit = (): boolean =>
     spawnSync('git', ['cat-file', '-e', `${commit}^{commit}`], { cwd: repository }).status === 0;
   if (!hasCommit()) {
@@ -321,7 +338,7 @@ async function run(
       CI_RESULTS_DIR: resultsDir,
       ...(ledger && producer ? { CI_LEDGER: ledger } : {}),
     },
-    parallel: parallel.data,
+    parallel,
   };
 
   const publisher = environment.CI_PUBLISHER && resolve(environment.CI_PUBLISHER);
@@ -436,6 +453,7 @@ if (import.meta.main) {
   process.exit(
     await runCommitCommand({
       repository: ownRepository,
+      profile: activeProfile,
       environment,
       executors: (setup) => {
         if (environment.CI_EXECUTOR === 'mirror') return onMirror(setup, environment);

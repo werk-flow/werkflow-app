@@ -59,7 +59,8 @@
 //                   `Queue` is then the App's check run, and a PR's `Check` only the App's. Before the
 //                   App exists, `Queue` is a commit status of `gh` and `Check` the commit status.
 //   --max-batch     The most PRs in a batch, 1 to 4; default the active CI profile's `maxBatch`
-//                   (lib/testing/ci/profiles.ts). 1 while the ruleset requires up-to-date branches.
+//                   (lib/testing/ci/profiles.ts), read from the switch on main as the tick fetched
+//                   it, also when this flag is set. 1 while the ruleset requires up-to-date branches.
 //   --dry-run       Builds, tests and decides, but never sets a status, merges, comments or
 //                   turns auto-merge off. --prs names the PRs to rehearse with, in order.
 // Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base, a
@@ -111,7 +112,7 @@ const { values } = (() => {
         'main-runner': { type: 'string' },
         'work-dir': { type: 'string' },
         'run-url-base': { type: 'string' },
-        'max-batch': { type: 'string', default: String(activeProfile().maxBatch) },
+        'max-batch': { type: 'string' },
         'dry-run': { type: 'boolean', default: false },
         prs: { type: 'string' },
         ledger: { type: 'string' },
@@ -122,12 +123,12 @@ const { values } = (() => {
     return refuse(message(error));
   }
 })();
-const maxBatch = Number(values['max-batch']);
 const numbers = values.prs?.split(',');
 if (!values.runner || !values['work-dir'] || !values['run-url-base'])
   refuse('The queue needs --runner, --work-dir and --run-url-base.');
 // Decimal digits only: Number() reads `0x10` as 16 and `1e1` as 10.
-if (!/^[1-9][0-9]*$/.test(values['max-batch']) || maxBatch > MAX_BATCH)
+const maxBatchFlag = values['max-batch'];
+if (maxBatchFlag !== undefined && (!/^[1-9][0-9]*$/.test(maxBatchFlag) || Number(maxBatchFlag) > MAX_BATCH))
   refuse(`--max-batch takes 1 to ${MAX_BATCH}.`);
 if (numbers && (!values['dry-run'] || numbers.some((number) => !/^[1-9][0-9]{0,8}$/.test(number))))
   refuse('--prs takes PR numbers, and only with --dry-run: a live tick lands only queued PRs.');
@@ -220,8 +221,12 @@ try {
     console.error(unpaid);
     process.exitCode = 2;
   } else {
+    // The tick's main, fetched (adapter.main), holds the switch: every clone that ticks reads one
+    // answer, and a missing or wrong switch fails the tick before it lands anything.
+    await adapter.main();
+    const { maxBatch } = activeProfile();
     const outcome = await runQueueTick(adapter, {
-      maxBatch,
+      maxBatch: maxBatchFlag === undefined ? maxBatch : Number(maxBatchFlag),
       dryRun: values['dry-run'],
       ...(only ? { only } : {}),
     });

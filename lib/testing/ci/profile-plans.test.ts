@@ -4,6 +4,7 @@
 // once for both profiles: a profile only places them. Across those runs and a week of schedules,
 // each profile places every inventory item, and every plan is well formed.
 import { expect, test } from 'bun:test';
+import { resolve } from 'node:path';
 import {
   addLocalDays,
   formatBerlinLocalDateTime,
@@ -22,12 +23,14 @@ import {
 import { E_INVOICE_STEP, eInvoiceReason } from '../selection/e-invoice-selection';
 import { fastTierPlan } from '../selection/fast-tier';
 import type { GroupDurations } from '../selection/group-durations';
-import type { TestGroup } from '../selection/test-groups';
+import { getTestGroups, type TestGroup } from '../selection/test-groups';
 import { CI_DAG, CI_EVENTS, CI_JOBS, type CiEvent } from './dag';
 import { GROUP_KIND_JOBS, INVENTORY_KEYS, type InventoryKey, SCHEDULE_NAMES, SCHEDULES } from './inventory';
 import { CI_PROFILES, type CiProfile, placementOf, type Timing } from './profiles';
 import type { RunPlan } from './results';
-import { planRun } from './run-plan';
+import { isStep, planRun } from './run-plan';
+
+const repositoryRoot = resolve(import.meta.dir, '../../..');
 
 /** A planner group that keeps its registry kind. */
 type FixtureGroup = CiGroup & { kind: TestGroup['kind'] };
@@ -86,15 +89,18 @@ type DryRun = {
 function dryRun(input: {
   name: string;
   event: CiEvent;
+  /** The registry the planner reads: the fixture groups unless a case passes the real one. */
+  groups?: readonly FixtureGroup[];
   changedFiles?: readonly string[];
   fullRun?: string;
   at?: Date;
   passedTree?: string;
   raises?: readonly string[];
 }): DryRun {
+  const groups = input.groups ?? GROUPS;
   const changedFiles = input.fullRun === undefined ? input.changedFiles : [];
   const browser = ciPlan({
-    groups: GROUPS,
+    groups,
     changedFiles,
     fullRun: input.fullRun,
     runnerModules: runnerModules(GRAPH, []),
@@ -104,7 +110,7 @@ function dryRun(input: {
     durations: DURATIONS,
   });
   const fast = fastTierPlan({
-    groups: GROUPS,
+    groups,
     graph: GRAPH,
     changedFiles,
     fullReason: browser.fullReason,
@@ -122,7 +128,7 @@ function dryRun(input: {
   const hold =
     input.at && input.event !== 'pr' && browser.shards.length ? ciBrowserHoldUntil(input.at) : undefined;
   const outputs = plannerOutputs({
-    groups: GROUPS,
+    groups,
     plan: browser,
     fast,
     selectedInvoices: invoices ? E_INVOICE_STEP : '',
@@ -227,11 +233,11 @@ for (const profile of Object.values(CI_PROFILES))
     expect([...placed(profile)].toSorted()).toEqual([...INVENTORY_KEYS].sort());
   });
 
-test("the Mac profile's timed schedules fire inside its night window", () => {
-  const { window } = CI_PROFILES.mac;
-  if (!window) throw new Error('The Mac profile has no window.');
+test("the local profile's timed schedules fire inside its night window", () => {
+  const { window } = CI_PROFILES.local;
+  if (!window) throw new Error('The local profile has no window.');
   const outside = SCHEDULE_NAMES.flatMap((name) => {
-    const placement = CI_PROFILES.mac.schedules[name];
+    const placement = CI_PROFILES.local.schedules[name];
     if (!('timing' in placement)) return [];
     return firings(placement.timing)
       .map((at) => formatBerlinLocalDateTime(at).slice(11))
@@ -304,6 +310,38 @@ test("the full run's work holds every fixture group in the job its kind names, a
       ).toEqual([]);
   }
 });
+
+/** The real registry, as scripts/ci-plan.ts hands it to the planner. */
+const REGISTERED: readonly FixtureGroup[] = getTestGroups(repositoryRoot).map((registered) => ({
+  id: registered.id,
+  kind: registered.kind,
+  files: registered.files,
+  scopes: registered.scopes,
+  executionInputs: registered.files,
+  trigger: registered.changeTrigger,
+}));
+
+for (const profile of Object.values(CI_PROFILES))
+  test(`the ${profile.name} profile's full run of main does every registered group in the job its kind names, and nothing else`, () => {
+    const { plan } = dryRun({
+      name: `${profile.name} full run of the registry`,
+      event: 'full',
+      fullRun: 'Full run on main',
+      at: LATE_EVENING,
+      groups: REGISTERED,
+    });
+    const work = plan.work ?? [];
+    // Every job of a full run in the DAG runs, the midnight hold too, and the profile places each.
+    expect(plan.jobs).toEqual(CI_JOBS.filter((job) => CI_DAG[job].events.includes('full')));
+    for (const job of plan.jobs) expect(placementOf(profile, `job:${job}`), job).toBeDefined();
+    const expected = REGISTERED.flatMap(({ id, kind }) => {
+      const carrier = GROUP_KIND_JOBS[kind];
+      return typeof carrier === 'string' ? [`${carrier}:${id}`] : [];
+    });
+    expect(expected.length).toBeGreaterThan(0);
+    const groupWork = work.filter((entry) => !isStep(entry.slice(entry.indexOf(':') + 1)));
+    expect(groupWork.toSorted()).toEqual(expected.toSorted());
+  });
 
 test('the runs cover every kind of run', () => {
   expect([...new Set(RUNS.map((run) => run.event))].toSorted()).toEqual([...CI_EVENTS].sort());

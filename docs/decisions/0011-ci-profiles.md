@@ -34,3 +34,17 @@ CI may run on many machines or on one. The design of the CI hill climb assumes m
 
 - The measurements of the Mac's runs arrive: replace the placeholders.
 - A third kind of machine needs CI: add a profile, which must map the whole inventory too.
+
+## Amendment 2026-11-22: the local profile
+
+The owner decided on 2026-11-22 to rename the `mac` profile to `local`, which covers two machines. Where the text above says `mac`, the MacBook or the Mac, read `local` and its machines. fleet = Boat or Actions; local = the owner's MacBook and PC. The PC runs CI in a WSL distro. `ci/profile.json` names `local`, and its values stay placeholders.
+
+In the local profile, each pull request's run goes from start to finish on one machine. That machine claims the run on GitHub with a pending `Check` that names it, and the other machine skips a run that is claimed. The machines share no channel besides GitHub.
+
+## Amendment 2026-11-22: triggers, the switch on main, and gaps
+
+- **Triggers.** Each schedule of the inventory names the trigger that dispatches it: a workflow's cron or GitHub event, the conductor's clock (`CLOCK_WORK` or the full-run slots), or both where they differ. Each timed placement names the clock it uses, and its time must be that clock's. `inventory.test.ts` holds each trigger to its workflow, so a removed cron fails.
+- **Health checks.** `HEALTH_CHECKS` names each check of `health.yml` as keyed, which stays on GitHub's shared workflow, or key-free, which is an inventory item.
+- **The full run.** `profile-plans.test.ts` also plans a full run of the real registry and fails when its work misses a registered group.
+- **The switch on main.** `activeProfile` reads `ci/profile.json` from the `main` its clone fetched last, and takes no argument. Run-commit and the queue fetch first and read the switch even when `CI_PARALLEL` or `--max-batch` overrides its default, so every trusted clone applies `main`'s profile. Tests read a fixture clone's switch through `profileOnMainIn`, which the convention test allows only in test files.
+- **Planned clocks and gaps.** A placeholder profile marks a clock that no code fires yet as `planned`, and a placement its source cannot check yet with a `gap` for the owner. The queue-wait check reads only GitHub's `ci.yml`, so the local machines' queue wait is not yet measured.

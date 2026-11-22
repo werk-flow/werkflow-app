@@ -299,7 +299,15 @@ export function createQueueAdapter(options: {
   };
   return {
     main: async () => {
-      git('fetch', '--quiet', '--no-tags', 'origin', `+refs/heads/main:${QUEUE_REFS}/main`);
+      // origin/main too: the CI profile switch is read there (lib/testing/ci/profiles.ts).
+      git(
+        'fetch',
+        '--quiet',
+        '--no-tags',
+        'origin',
+        `+refs/heads/main:${QUEUE_REFS}/main`,
+        '+refs/heads/main:refs/remotes/origin/main',
+      );
       const [commit = '', ...parents] = git('rev-list', '--parents', '-n', '1', `${QUEUE_REFS}/main`).split(
         ' ',
       );
