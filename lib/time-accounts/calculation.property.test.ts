@@ -109,6 +109,13 @@ const monthTurnArbitrary = yearMonthArbitrary.chain(({ year, month }) => {
 /** A policy without supplement rules, for properties that read no supplement. */
 const creditOnly = (policy: TimeAccountPolicy): TimeAccountPolicy => ({ ...policy, supplementRules: [] });
 
+/** The same policy with every supplement rule and a night window on. */
+const allSupplements = (policy: TimeAccountPolicy): TimeAccountPolicy => ({
+  ...policy,
+  supplementRules: policy.supplementRules.map((rule) => ({ ...rule, enabled: true })),
+  nightWindow: policy.nightWindow ?? { start: '22:00', end: '06:00' },
+});
+
 const targetsArbitrary = (months: readonly BerlinMonth[]): fc.Arbitrary<DailyTargetInput[]> => {
   const dates = months.flatMap((month) => datesFrom(month.start, month.end));
   // One target per weekday position keeps the draw small; a month still mixes them.
@@ -272,6 +279,11 @@ describe('The Zeitkonto balance of a period', () => {
       targets: targetsArbitrary([drawn.first, drawn.second]),
       events: accountEventsArbitrary([drawn.first, drawn.second]),
       opening: fc.integer({ min: -60_000, max: 60_000 }),
+      // Public holidays around the turn, where the drawn activities lie.
+      holidays: fc.subarray([
+        ...datesFrom(drawn.first.start, drawn.first.end).slice(-3),
+        ...datesFrom(drawn.second.start, drawn.second.end).slice(0, 7),
+      ]),
     }),
   );
 
@@ -279,15 +291,17 @@ describe('The Zeitkonto balance of a period', () => {
     fc.assert(
       fc.property(
         balanceArbitrary,
-        ({ drawn: { first, second, intervals, policy }, targets, events, opening }) => {
+        ({ drawn: { first, second, intervals, policy }, targets, events, opening, holidays }) => {
+          // The drawn policy keeps its supplement rules: they classify time and credit none.
           const calculate = (period: { start: string; end: string }, previousBalanceMinutes: number) =>
             calculateEmployeePeriod(
               input(period, {
-                policy: creditOnly(policy),
+                policy,
                 activityIntervals: intervals,
                 dailyTargets: targets,
                 accountEvents: events,
                 previousBalanceMinutes,
+                publicHolidayDates: new Set(holidays),
               }),
             );
           const result = calculate(first, opening);
@@ -310,6 +324,44 @@ describe('The Zeitkonto balance of a period', () => {
           expect(calculate(second, result.closingBalanceMinutes).closingBalanceMinutes).toBe(
             calculate({ start: first.start, end: second.end }, opening).closingBalanceMinutes,
           );
+        },
+      ),
+    );
+  });
+
+  test('counts night, Sunday and holiday time as classifications only, so they change no credit, overtime or balance', () => {
+    fc.assert(
+      fc.property(
+        balanceArbitrary,
+        ({ drawn: { first, second, intervals, policy }, targets, events, opening, holidays }) => {
+          // Both months, so every drawn activity lies in the period.
+          const period = { start: first.start, end: second.end };
+          const [withSupplements, without] = [
+            allSupplements(policy),
+            { ...creditOnly(policy), nightWindow: null },
+          ].map((variant) =>
+            calculateEmployeePeriod(
+              input(period, {
+                policy: variant,
+                activityIntervals: intervals,
+                dailyTargets: targets,
+                accountEvents: events,
+                previousBalanceMinutes: opening,
+                publicHolidayDates: new Set(holidays),
+              }),
+            ),
+          );
+          if (!withSupplements || !without) throw new Error('two calculations expected');
+          fc.pre(withSupplements.supplementBuckets.some((bucket) => bucket.minutes > 0));
+          expect(without.supplementBuckets).toEqual([]);
+          const balance = (result: typeof without) => ({
+            activityBuckets: result.activityBuckets,
+            creditedMinutes: result.creditedMinutes,
+            overtimeCandidateMinutes: result.overtimeCandidateMinutes,
+            periodDeltaMinutes: result.periodDeltaMinutes,
+            closingBalanceMinutes: result.closingBalanceMinutes,
+          });
+          expect(balance(withSupplements)).toEqual(balance(without));
         },
       ),
     );

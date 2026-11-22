@@ -34,13 +34,17 @@ const spanArbitrary = (dates: readonly string[], type: ApprovedAbsenceSpan['type
       fc.nat({ max: 6 }),
       fc.constantFrom('full' as const, 'half_day' as const),
     )
-    .map(([startDate, days, dayPortion]) => ({
-      type,
-      startDate,
-      endDate: addDays(startDate, days),
-      // A Berufsschule day is always a full day (lib/personnel/school-days.ts).
-      dayPortion: type === 'school' ? ('full' as const) : dayPortion,
-    }));
+    .map(([startDate, days, drawnPortion]) => {
+      // A Berufsschule day is always a full day (lib/personnel/school-days.ts), and a half-day
+      // vacation or sickness covers one day only (lib/vacation/actions.ts, lib/sickness/actions.ts).
+      const dayPortion = type === 'school' ? ('full' as const) : drawnPortion;
+      return {
+        type,
+        startDate,
+        endDate: dayPortion === 'half_day' ? startDate : addDays(startDate, days),
+        dayPortion,
+      };
+    });
 
 type Drawn = {
   dates: string[];
@@ -251,7 +255,7 @@ describe('The daily targets of a period', () => {
     );
   });
 
-  test('credit a working Berufsschule day without other absence with its full Wochenplan target', () => {
+  test('credit a working Berufsschule day without other absence with its full Wochenplan target, a holiday or closure day nothing', () => {
     fc.assert(
       fc.property(periodArbitrary, (drawn) => {
         for (const day of resolveEmployeeDailyTargets(...argumentsFor(drawn)).dailyTargets) {
@@ -264,7 +268,10 @@ describe('The daily targets of a period', () => {
             !isDayOff(drawn, day.localDate)
           )
             expect(day.schoolMinutes).toBe(plan);
-          if (!isSchoolDay(drawn.school, day.localDate)) expect(day.schoolMinutes).toBe(0);
+          // A holiday or closure day keeps its own rule, also under an informational absence
+          // (werk-flow/werkflow-planning#523 concerns its Soll only).
+          if (!isSchoolDay(drawn.school, day.localDate) || isDayOff(drawn, day.localDate))
+            expect(day.schoolMinutes).toBe(0);
         }
       }),
     );

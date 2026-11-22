@@ -125,11 +125,12 @@ describe('Intervals rebuilt from clock entries', () => {
             startedAt: interval.startedAt,
             endedAt: interval.endedAt,
             activityKind: interval.activityKind,
-            allocationKind: interval.activityKind === 'break' ? 'unallocated' : interval.allocationKind,
+            allocationKind: interval.allocationKind,
             jobId: interval.jobId ?? null,
           })),
         ).toEqual(
-          // Each recorded activity keeps its kind and its job, unallocated without one.
+          // Each recorded activity keeps its kind and its job, unallocated without one; a break
+          // entry carries no job, so a break is unallocated.
           blocks.map(({ startedAt, endedAt, kind, jobId }) => ({
             startedAt,
             endedAt,

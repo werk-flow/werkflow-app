@@ -1,7 +1,9 @@
-import { mock } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import fc from 'fast-check';
+import { basename, resolve } from 'node:path';
 import { EMPTY_HOLIDAY_CALENDAR } from '@/lib/personnel/targets';
 import { berlinMidnightMs } from '@/lib/testing/berlin-arbitraries';
+import { PROPERTY_RUNS_VARIABLE, PROPERTY_SEED_VARIABLE } from '@/lib/testing/property-runs';
 import { type BerlinMonth, berlinMonth, yearMonthArbitrary } from '@/lib/testing/time-account-arbitraries';
 import { createInMemoryAdmin, type InMemoryTables } from './in-memory-admin';
 
@@ -305,16 +307,57 @@ export function seedPeriodWorld(world: PeriodWorld): void {
   seeded = { ...peopleTablesOf(world), ...policyTablesOf(world) };
 }
 
-// The period modules are server-only and read the calendar and absences through cached and
-// server readers; as in lib/planning/daily-targets-batching.test.ts, the stubs answer an empty
-// calendar and no absences, and the service-role client is the in-memory admin over the world.
-mock.module('server-only', () => ({}));
-mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => createInMemoryAdmin(seeded) }));
-mock.module('@/lib/data/cached', () => ({
-  getCachedOrganizationCalendar: async () => EMPTY_HOLIDAY_CALENDAR,
-}));
-mock.module('@/lib/vacation/server', () => ({ loadApprovedVacationSpansByRecord: async () => new Map() }));
-mock.module('@/lib/sickness/server', () => ({ loadActiveSicknessSpansByRecord: async () => new Map() }));
-mock.module('@/lib/personnel/school-day-server', () => ({
-  loadSchoolDaySpansByRecord: async () => new Map(),
-}));
+const OWN_PROCESS_FLAG = 'PERIOD_WORLD_OWN_PROCESS';
+
+/**
+ * Whether this process runs a period property file's properties. A `mock.module` stays registered
+ * for the rest of a `bun test` process: another file's stub would answer for the module under test
+ * (period-school-minutes.test.ts replaces period-policies.ts), and this world's stubs would answer
+ * for the files after it. So outside its own process the file registers one test that runs it in a
+ * `bun test` process of its own, with this run's seed and run count, and this returns false. Inside,
+ * it stubs the readers and returns true.
+ *
+ * The period modules are server-only and read the calendar and absences through cached and server
+ * readers; as in lib/planning/daily-targets-batching.test.ts, the stubs answer an empty calendar
+ * and no absences, and the service-role client is the in-memory admin over the world.
+ */
+export function inOwnPeriodProcess(file: string): boolean {
+  mock.module('server-only', () => ({}));
+  if (process.env[OWN_PROCESS_FLAG] !== '1') {
+    test(`${basename(file)} holds in a bun test process of its own`, async () => {
+      const { seed, numRuns } = fc.readConfigureGlobal();
+      if (seed === undefined || numRuns === undefined)
+        throw new Error('scripts/unit-test-preload.ts sets the seed and run count of every property.');
+      const child = Bun.spawn([process.execPath, 'test', file], {
+        cwd: resolve(import.meta.dir, '../../..'),
+        env: {
+          ...process.env,
+          [OWN_PROCESS_FLAG]: '1',
+          [PROPERTY_SEED_VARIABLE]: String(seed),
+          [PROPERTY_RUNS_VARIABLE]: String(numRuns),
+        },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(code, `${stdout}\n${stderr}`).toBe(0);
+    });
+    return false;
+  }
+  mock.module('@/lib/supabase/admin', () => ({
+    createSupabaseAdminClient: () => createInMemoryAdmin(seeded),
+  }));
+  mock.module('@/lib/data/cached', () => ({
+    getCachedOrganizationCalendar: async () => EMPTY_HOLIDAY_CALENDAR,
+  }));
+  mock.module('@/lib/vacation/server', () => ({ loadApprovedVacationSpansByRecord: async () => new Map() }));
+  mock.module('@/lib/sickness/server', () => ({ loadActiveSicknessSpansByRecord: async () => new Map() }));
+  mock.module('@/lib/personnel/school-day-server', () => ({
+    loadSchoolDaySpansByRecord: async () => new Map(),
+  }));
+  return true;
+}
