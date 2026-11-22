@@ -24,7 +24,7 @@
     "lib/time-corrections/read-actions.ts": "Server Action readers of corrections; the pending sum they return comes from provisional-summary.ts.",
     "lib/time-corrections/request-list.ts": "Reads and labels correction requests for the cards; their activities come from snapshot-segments.ts.",
     "lib/time-corrections/source-context.ts": "Reads a correction's source facts; a segment's facts come from segment-snapshot.ts.",
-    "lib/time-corrections/submission.ts": "Server-only steps between authorization and the database call; its time rules are merge-proposal.ts, calendar-proposal.ts and timeline-validation.ts.",
+    "lib/time-corrections/submission.ts": "Owns two time rules without a property test yet: a proposal's facts in time order (hasValidChronology, not exported, reached only after proposeSubmission's database reads) and the details added travel, standby or internal time needs (submissionShapeError). Its 'server-only' import throws under bun test before a mock can load, so a property test needs both rules moved into a module without it. timeline-submission.test.ts proves the details rule by one example; no test proves the order rule.",
     "lib/time-corrections/timeline-server.ts": "Reads recorded time for the timeline check; timeline-validation.ts decides it.",
     "lib/time-corrections/types.ts": "Types, labels and the fact-to-entry mapping that projection.property.test.ts drives through applyApprovedTimeCorrections.",
     "lib/time-corrections/validation.ts": "Zod input schemas and the kind-to-fact-count shape check; it computes no time, timeline-validation.ts checks the proposed times."

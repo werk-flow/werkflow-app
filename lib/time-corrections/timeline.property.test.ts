@@ -1,16 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
-import { berlinDateArbitrary, daysInMonth } from '@/lib/testing/berlin-arbitraries';
+import {
+  berlinDateArbitrary,
+  berlinDayLengthHours,
+  berlinMidnightMs,
+  daysInMonth,
+} from '@/lib/testing/berlin-arbitraries';
 import {
   DAY_MINUTES,
   MINUTE_MS,
-  clockMinutes,
   correctionStartArbitrary,
   oracleBerlinDate,
   oracleBerlinWallTime,
 } from '@/lib/testing/time-correction-arbitraries';
 import type { ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
-import type { TimeSegmentKind } from '@/lib/time-tracking/types';
+import type {
+  TimeActivitySelection,
+  TimeInternalActivity,
+  TimeSegmentKind,
+  TimeStandbyContext,
+  TimeTravelRole,
+  TimeTravelRoute,
+} from '@/lib/time-tracking/types';
 import {
   buildTimelineFacts,
   closedPeriodRowKeys,
@@ -19,11 +30,13 @@ import {
   resolveCorrectionTimeline,
   type CorrectionTimelineRow,
   type ResolvedTimelineSegment,
+  type TimelineRowErrors,
 } from './timeline';
 
 // Property tests (docs/technical/testing.md, "Property tests") of docs/features/time-tracking.md,
 // "Added time as a timeline" and "Closed periods": an end before its start is refused unless the
-// activity ends the next day, a break lies directly between two activities, a gap clocks out,
+// activity ends the next day, a break lies directly between two activities, a gap clocks out, each
+// activity keeps its times, its job and the details live capture asks for,
 // „Pause einfügen“ splits an activity around a 30-minute break, a proposal stays open at most 24
 // hours, and time that reaches into a closed period is marked.
 
@@ -128,92 +141,238 @@ describe('A row of added time', () => {
   });
 });
 
-/** Rows in order from a wall-time offset on a date, each after a gap of 0 to 3 hours, sometimes marked wrongly. */
-const timelineArbitrary = fc
+/** A Berlin date whose day and the two after it have 24 hours, so a wall minute is a real minute. */
+const plainDateArbitrary = berlinDateArbitrary.filter((localDate) =>
+  [localDate, nextDate(localDate), nextDate(nextDate(localDate))].every(
+    (date) => berlinDayLengthHours(date) === 24,
+  ),
+);
+
+/** What a row asks for besides its times, drawn for every kind; only the kinds that carry a detail keep it. */
+const detailsArbitrary = fc.record({
+  jobId: fc.constantFrom<string | null>('job-a', 'job-b', null),
+  travelRoute: fc.constantFrom<TimeTravelRoute>(
+    'company_to_site',
+    'home_to_site',
+    'site_to_site',
+    'site_to_company',
+    'other',
+    'unspecified',
+  ),
+  travelRole: fc.constantFrom<TimeTravelRole>('driver', 'passenger', 'unspecified'),
+  standbyContext: fc.constantFrom<TimeStandbyContext>('on_site', 'remote', 'unspecified'),
+  internalType: fc.constantFrom<TimeInternalActivity>('internal_work', 'meeting', 'training', 'other'),
+});
+
+/** A row as drawn: its form values and its minutes from midnight of the timeline's date. */
+type PlannedRow = { row: CorrectionTimelineRow; from: number; to: number };
+
+/** The form row of an activity from `from` to `to`, marked for the next day exactly when it crosses midnight. */
+function plannedRow(
+  key: string,
+  kind: TimeSegmentKind,
+  from: number,
+  to: number,
+  details: Partial<CorrectionTimelineRow> = {},
+): PlannedRow {
+  const row = newTimelineRow(key, {
+    ...details,
+    kind,
+    start: wallTimeOf(from),
+    end: wallTimeOf(to),
+    endsNextDay: Math.floor(to / DAY_MINUTES) > Math.floor(from / DAY_MINUTES),
+  });
+  return { row, from, to };
+}
+
+/**
+ * A timeline the form accepts: up to five activities in order, each after a gap of 0 to 60 minutes
+ * that stays on the day the previous activity ended, sometimes with a break directly between two
+ * activities, at most 24 hours from the first start to the last end.
+ */
+const validTimelineArbitrary = fc
   .tuple(
-    berlinDateArbitrary,
+    plainDateArbitrary,
     minuteOfDay,
     fc.array(
       fc.record({
-        kind: fc.oneof(activityKind, fc.constant<TimeSegmentKind>('break')),
-        gap: fc.oneof(fc.constant(0), fc.integer({ min: 1, max: 180 })),
-        minutes: fc.integer({ min: 1, max: 600 }),
-        mismarked: fc.integer({ min: 0, max: 9 }).map((draw) => draw === 0),
+        kind: activityKind,
+        details: detailsArbitrary,
+        gap: fc.oneof(fc.constant(0), fc.integer({ min: 1, max: 60 })),
+        minutes: fc.integer({ min: 1, max: 240 }),
+        breakAfter: fc.option(fc.integer({ min: 1, max: 60 }), { nil: null }),
       }),
       { minLength: 1, maxLength: 5 },
     ),
   )
   .map(([localDate, offset, draws]) => {
+    const planned: PlannedRow[] = [];
     let cursor = offset;
-    const rows = draws.map((draw, index): CorrectionTimelineRow => {
-      const start = cursor + draw.gap;
-      cursor = start + draw.minutes;
-      const crosses = Math.floor(cursor / DAY_MINUTES) > Math.floor(start / DAY_MINUTES);
-      return newTimelineRow(`row-${index}`, {
-        kind: draw.kind,
-        start: wallTimeOf(start),
-        end: wallTimeOf(cursor),
-        endsNextDay: crosses !== draw.mismarked,
-        jobId: index % 2 === 0 ? 'job' : null,
-      });
-    });
-    return { localDate, rows };
+    for (const [index, draw] of draws.entries()) {
+      const breakMinutes = draws[index - 1]?.breakAfter;
+      if (breakMinutes) {
+        planned.push(plannedRow(`break-${index}`, 'break', cursor, cursor + breakMinutes));
+        cursor += breakMinutes;
+      } else if (index > 0) {
+        // A row starts on the day the previous one ended: the form has no date per row.
+        cursor = Math.min(cursor + draw.gap, (Math.floor(cursor / DAY_MINUTES) + 1) * DAY_MINUTES - 1);
+      }
+      planned.push(plannedRow(`row-${index}`, draw.kind, cursor, cursor + draw.minutes, draw.details));
+      cursor += draw.minutes;
+    }
+    return { localDate, planned };
   });
 
-const minutesOfSegment = (segment: ResolvedTimelineSegment): number =>
-  (segment.endedAt.getTime() - segment.startedAt.getTime()) / MINUTE_MS;
+const rowsOf = (planned: readonly PlannedRow[]): CorrectionTimelineRow[] => planned.map(({ row }) => row);
+const instantOf = (localDate: string, minutes: number): Date =>
+  new Date(berlinMidnightMs(localDate) + minutes * MINUTE_MS);
+
+/** The activity a drawn row records: its job only for work, call-out and travel, and its kind's details. */
+function plannedActivity({ row }: PlannedRow): TimeActivitySelection {
+  const allocation = row.jobId
+    ? { allocationKind: 'job' as const, jobId: row.jobId }
+    : { allocationKind: 'unallocated' as const, jobId: null };
+  switch (row.kind) {
+    case 'work':
+    case 'callout':
+      return { kind: row.kind, ...allocation };
+    case 'travel':
+      return { kind: 'travel', ...allocation, travelRoute: row.travelRoute, travelRole: row.travelRole };
+    case 'break':
+      return { kind: 'break', allocationKind: 'none' };
+    case 'standby':
+      return { kind: 'standby', allocationKind: 'none', standbyContext: row.standbyContext };
+    case 'internal_activity':
+      return {
+        kind: 'internal_activity',
+        allocationKind: 'internal_activity',
+        internalType: row.internalType,
+      };
+  }
+}
+
+const OVERLAP = 'Die Tätigkeit beginnt vor dem Ende der vorherigen.';
+const LOOSE_BREAK = 'Eine Pause liegt direkt zwischen zwei Tätigkeiten.';
+const TOO_LONG = 'Ein Nachtrag umfasst höchstens 24 Stunden.';
+
+type Refusal = { planned: PlannedRow[]; index: number; field: keyof TimelineRowErrors; message: string };
+
+/** A row that starts 1 or more minutes before the previous row's end, on that end's day. */
+function withOverlap(planned: readonly PlannedRow[], draw: number): Refusal | null {
+  const candidates = planned.flatMap((current, index) => {
+    const previous = planned[index - 1];
+    return previous && previous.to % DAY_MINUTES > 0 ? [{ current, index, previous }] : [];
+  });
+  const picked = candidates[draw % Math.max(candidates.length, 1)];
+  if (!picked) return null;
+  const { current, index, previous } = picked;
+  const from = previous.to - 1 - (draw % (previous.to % DAY_MINUTES));
+  const moved = plannedRow(current.row.key, current.row.kind, from, current.to, current.row);
+  return { planned: planned.with(index, moved), index, field: 'start', message: OVERLAP };
+}
+
+/** A break that leaves a gap before the next activity, or a break before the first or after the last. */
+function withLooseBreak(planned: readonly PlannedRow[], draw: number): Refusal {
+  const index = planned.findIndex((item) => item.row.kind === 'break' && item.to - item.from > 1);
+  const shortened = planned[index];
+  if (shortened && draw % 3 === 0) {
+    const to = shortened.to - 1 - (draw % (shortened.to - shortened.from - 1));
+    const gapAfter = plannedRow(shortened.row.key, 'break', shortened.from, to);
+    return { planned: planned.with(index, gapAfter), index, field: 'kind', message: LOOSE_BREAK };
+  }
+  const first = planned[0];
+  const minutes = 1 + (draw % 60);
+  if (first && draw % 3 === 1 && first.from >= minutes) {
+    const before = plannedRow('loose-break', 'break', first.from - minutes, first.from);
+    return { planned: [before, ...planned], index: 0, field: 'kind', message: LOOSE_BREAK };
+  }
+  const end = planned.at(-1)?.to ?? 0;
+  const after = plannedRow('loose-break', 'break', end, end + minutes);
+  return { planned: [...planned, after], index: planned.length, field: 'kind', message: LOOSE_BREAK };
+}
+
+/** The last row ends 1 or more minutes past 24 hours after the first start. */
+function withTooLong(planned: readonly PlannedRow[], draw: number): Refusal | null {
+  const first = planned[0];
+  const last = planned.at(-1);
+  const index = planned.length - 1;
+  // The last row stays shorter than a day, so its end lies on the day after its start.
+  if (!first || !last || last.from - first.from < 2) return null;
+  const to = first.from + DAY_MINUTES + 1 + (draw % (last.from - first.from - 1));
+  const longer = plannedRow(last.row.key, last.row.kind, last.from, to, last.row);
+  return { planned: planned.with(index, longer), index, field: 'end', message: TOO_LONG };
+}
+
+const refusedTimelineArbitrary = fc
+  .tuple(validTimelineArbitrary, fc.constantFrom('overlap', 'loose break', 'too long'), fc.nat())
+  .map(([{ localDate, planned }, mistake, draw]) => {
+    const refusal =
+      mistake === 'overlap'
+        ? withOverlap(planned, draw)
+        : mistake === 'too long'
+          ? withTooLong(planned, draw)
+          : withLooseBreak(planned, draw);
+    return refusal && { localDate, ...refusal };
+  })
+  .filter((refused) => refused !== null);
 
 describe('A timeline of added time', () => {
-  test('that resolves holds its rows in order, at most 24 hours, each break between two activities', () => {
+  test('with activities in order, gaps and breaks between two activities resolves to exactly its times', () => {
     fc.assert(
-      fc.property(timelineArbitrary, ({ localDate, rows }) => {
-        const result = resolveCorrectionTimeline(localDate, rows);
-        if (!result.valid) return;
-        const { segments } = result;
-        expect(segments.map((segment) => segment.row)).toEqual(rows);
-        for (const [index, segment] of segments.entries()) {
-          expect(segment.endedAt.getTime()).toBeGreaterThan(segment.startedAt.getTime());
-          expect(oracleBerlinWallTime(segment.startedAt.getTime()).slice(11)).toBe(segment.row.start);
-          expect(oracleBerlinWallTime(segment.endedAt.getTime()).slice(11)).toBe(segment.row.end);
-          const previous = segments[index - 1];
-          if (previous)
-            expect(segment.startedAt.getTime()).toBeGreaterThanOrEqual(previous.endedAt.getTime());
-          if (segment.row.kind !== 'break') continue;
-          const next = segments[index + 1];
-          expect(previous?.row.kind !== 'break' && previous?.endedAt.getTime()).toBe(
-            segment.startedAt.getTime(),
-          );
-          expect(next?.row.kind !== 'break' && next?.startedAt.getTime()).toBe(segment.endedAt.getTime());
-        }
-        const first = segments[0];
-        const last = segments.at(-1);
-        if (first && last)
-          expect(last.endedAt.getTime() - first.startedAt.getTime()).toBeLessThanOrEqual(DAY_MS);
+      fc.property(validTimelineArbitrary, ({ localDate, planned }) => {
+        expect(resolveCorrectionTimeline(localDate, rowsOf(planned))).toEqual({
+          valid: true,
+          segments: planned.map(({ row, from, to }) => ({
+            row,
+            startedAt: instantOf(localDate, from),
+            endedAt: instantOf(localDate, to),
+          })),
+        });
       }),
     );
   });
 
-  test('records every minute as clock facts, and a gap between two activities clocks out', () => {
+  test('is refused at the row that overlaps, holds a loose break, or ends past 24 hours', () => {
     fc.assert(
-      fc.property(timelineArbitrary, ({ localDate, rows }) => {
-        const result = resolveCorrectionTimeline(localDate, rows);
-        if (!result.valid) return;
+      fc.property(refusedTimelineArbitrary, ({ localDate, planned, index, field, message }) => {
+        const result = resolveCorrectionTimeline(localDate, rowsOf(planned));
+        expect(result.valid ? 'resolved' : result.errors[index]?.[field]).toBe(message);
+      }),
+    );
+  });
+
+  test('records each activity with its times, job and details, and a gap between two activities clocks out', () => {
+    fc.assert(
+      fc.property(validTimelineArbitrary, ({ localDate, planned }) => {
+        const result = resolveCorrectionTimeline(localDate, rowsOf(planned));
+        if (!result.valid) throw new Error('A drawn timeline resolves.');
         const facts = buildTimelineFacts(result.segments, 'person-record');
-        const breaks = result.segments.filter((segment) => segment.row.kind === 'break');
-        const work = result.segments.filter((segment) => segment.row.kind !== 'break');
-        expect(clockMinutes(facts)).toEqual({
-          work: work.reduce((sum, segment) => sum + minutesOfSegment(segment), 0),
-          rest: breaks.reduce((sum, segment) => sum + minutesOfSegment(segment), 0),
+        // Read back as live capture: each fact but a clock-out opens an activity until the next fact.
+        const activities = facts.flatMap((fact, index) => {
+          const next = facts[index + 1];
+          return fact.entryType === 'clock_out' || !next
+            ? []
+            : [{ from: fact.timestamp, to: next.timestamp, activity: fact.activity, jobId: fact.jobId }];
         });
-        for (const [index, segment] of result.segments.entries()) {
-          const previous = result.segments[index - 1];
-          if (!previous || previous.endedAt.getTime() === segment.startedAt.getTime()) continue;
-          const clockOut = facts.find(
-            (fact) => fact.entryType === 'clock_out' && fact.timestamp === previous.endedAt.toISOString(),
-          );
-          expect(clockOut).toBeDefined();
-        }
-        expect(facts.at(-1)?.entryType).toBe('clock_out');
+        expect(activities).toEqual(
+          planned.map((item) => {
+            const activity = plannedActivity(item);
+            return {
+              from: instantOf(localDate, item.from).toISOString(),
+              to: instantOf(localDate, item.to).toISOString(),
+              activity,
+              jobId: 'jobId' in activity ? (activity.jobId ?? null) : null,
+            };
+          }),
+        );
+        expect(facts.map((fact) => [fact.activityKind, fact.employeeRecordId])).toEqual(
+          facts.map((fact) => [fact.activity.kind, 'person-record']),
+        );
+        const last = planned.at(-1);
+        expect(facts.at(-1)).toMatchObject({
+          entryType: 'clock_out',
+          timestamp: last && instantOf(localDate, last.to).toISOString(),
+        });
       }),
     );
   });

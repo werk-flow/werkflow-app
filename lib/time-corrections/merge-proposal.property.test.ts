@@ -51,6 +51,25 @@ const sourceArbitrary = fc
     };
   });
 
+/** Recorded work without a break from `start` to `end`, split at Berlin midnight. */
+function splitWorkSource(start: string, end: string) {
+  const [from, to] = [Date.parse(start), Date.parse(end)];
+  const time: OpenTime = {
+    start: from,
+    end: to,
+    break: null,
+    workMinutes: (to - from) / MINUTE_MS,
+    breakMinutes: 0,
+  };
+  const activity = createActivitySelection('work', 'job-a');
+  const facts = openTimeFacts(time, 'source', contextOf(activity));
+  return {
+    time,
+    activity,
+    before: { schemaVersion: 1 as const, facts: splitCorrectionFactsAtMidnight(facts) },
+  };
+}
+
 const snapshot = (facts: TimeCorrectionFact[]): TimeCorrectionSnapshot => ({ schemaVersion: 1, facts });
 const timeOf = (facts: readonly TimeCorrectionFact[]) =>
   facts.map(({ factId, entryType, timestamp }) => ({ factId, entryType, timestamp }));
@@ -154,11 +173,13 @@ describe('An edit of recorded time', () => {
         fc.integer({ min: 1, max: DAY_MINUTES }),
         fc.constantFrom(...ACTIVITIES),
         ({ before, time, activity }, movesEnd, minutes, proposedActivity) => {
-          // The new boundary keeps the break inside the time, as the form's order check does.
+          // The new boundary keeps the break inside the time, as the form's order check does. A new
+          // start stays before the next fact: the break, or the first 00:00 join of split time.
+          const nextAfterStart = before.facts[1];
+          if (!nextAfterStart) throw new Error('Recorded time has a start and an end.');
           const moved = movesEnd
             ? (time.break?.end ?? time.start) + minutes * MINUTE_MS
-            : (time.break?.start ?? time.end) - minutes * MINUTE_MS;
-          fc.pre(movesEnd || before.facts.length === (time.break ? 4 : 2));
+            : Date.parse(nextAfterStart.timestamp) - minutes * MINUTE_MS;
           // werk-flow/werkflow-planning#521: a new end of split time with a break moves the 00:00
           // clock-out instead; the known-bug case below holds that one counterexample.
           fc.pre(!(movesEnd && time.break !== null && before.facts.length > 4));
@@ -178,6 +199,17 @@ describe('An edit of recorded time', () => {
             expect(fact).toMatchObject(contextOf(activity));
         },
       ),
+      {
+        examples: [
+          // A shift from 20:00 to 02:00 Berlin, split at midnight, whose start moves to 21:00.
+          [
+            splitWorkSource('2026-01-15T19:00:00Z', '2026-01-16T01:00:00Z'),
+            false,
+            180,
+            createActivitySelection('work'),
+          ],
+        ],
+      },
     );
   });
 

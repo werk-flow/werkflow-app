@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
+import { berlinDateArbitrary, berlinMidnightMs } from '@/lib/testing/berlin-arbitraries';
 import {
   DAY_MINUTES,
   MINUTE_MS,
@@ -14,7 +15,8 @@ import type { TimeCorrectionRequest, TimeCorrectionSnapshot } from './types';
 
 // Property tests (docs/technical/testing.md, "Property tests") of docs/features/time-tracking.md,
 // "Correction lifecycle": the overview's „Vorgemerkte Zeit“ sums the pending corrections and manual
-// submissions and names the days they change. A withdrawn proposal leaves the sum of the others.
+// submissions and names the days they change, and a legacy time longer than a week by its first and
+// last day.
 
 type Revision = TimeCorrectionRequest['revision'];
 
@@ -62,6 +64,39 @@ function daysOf(time: Pick<OpenTime, 'start' | 'end'>): string[] {
   return days;
 }
 
+/** Unsplit legacy time without a break from `start` to `end`. */
+function legacyTime(start: string, end: string): OpenTime {
+  const [from, to] = [Date.parse(start), Date.parse(end)];
+  return { start: from, end: to, break: null, workMinutes: (to - from) / MINUTE_MS, breakMinutes: 0 };
+}
+
+/**
+ * Unsplit legacy time without a break, touching 1 to 15 Berlin days, often six to nine: from a
+ * minute of its first day to a minute of its last, or to the midnight that ends it.
+ */
+const legacyTimeArbitrary = fc
+  .tuple(
+    berlinDateArbitrary,
+    fc.oneof(fc.integer({ min: 5, max: 8 }), fc.integer({ min: 0, max: 14 })),
+    fc.integer({ min: 0, max: 23 * 60 - 1 }),
+    fc.integer({ min: 1, max: DAY_MINUTES }),
+  )
+  .map(([firstDay, extraDays, startMinute, endMinute]) => {
+    const dayAfter = (days: number): string =>
+      new Date(Date.parse(`${firstDay}T00:00:00Z`) + days * DAY_MINUTES * MINUTE_MS)
+        .toISOString()
+        .slice(0, 10);
+    const start = berlinMidnightMs(firstDay) + startMinute * MINUTE_MS;
+    const end = Math.min(
+      berlinMidnightMs(dayAfter(extraDays)) + endMinute * MINUTE_MS,
+      berlinMidnightMs(dayAfter(extraDays + 1)),
+    );
+    return end > start
+      ? { start, end, break: null, workMinutes: (end - start) / MINUTE_MS, breakMinutes: 0 }
+      : null;
+  })
+  .filter((time) => time !== null);
+
 const subjectTimes = (drawn: readonly Drawn[], side: 'before' | 'proposed'): OpenTime[] =>
   drawn.flatMap((request) => (request[side].subject ? [request[side].subject] : []));
 const sumOf = (times: readonly OpenTime[]): number => times.reduce((sum, time) => sum + time.workMinutes, 0);
@@ -83,22 +118,42 @@ describe('„Vorgemerkte Zeit“', () => {
     );
   });
 
-  test('of all pending corrections is the sum of its parts, so a withdrawal leaves the others', () => {
+  test('names the days of legacy time of up to a week one by one, and of a longer one its first and last day', () => {
     fc.assert(
       fc.property(
-        fc.array(requestArbitrary, { maxLength: 3 }),
-        fc.array(requestArbitrary, { minLength: 1, maxLength: 2 }),
-        (kept, withdrawn) => {
-          const summarize = (drawn: readonly Drawn[]) =>
-            summarizePendingCorrections(drawn.map(pendingRequest), 'person');
-          const all = summarize([...kept, ...withdrawn]);
-          const rest = summarize(kept);
-          const gone = summarize(withdrawn);
-          expect(all.beforeMinutes).toBe(rest.beforeMinutes + gone.beforeMinutes);
-          expect(all.proposedMinutes).toBe(rest.proposedMinutes + gone.proposedMinutes);
-          expect(all.days).toEqual([...new Set([...rest.days, ...gone.days])].sort());
+        legacyTimeArbitrary,
+        fc.option(openTimeArbitrary(DAY_MINUTES), { nil: null }),
+        (legacy, proposed) => {
+          const drawn: Drawn = {
+            before: { subject: legacy, other: null },
+            proposed: { subject: proposed, other: null },
+          };
+          const summary = summarizePendingCorrections([pendingRequest(drawn, 0)], 'person');
+          const legacyDays = daysOf(legacy);
+          const proposedDays = proposed ? daysOf(proposed) : [];
+          const first = legacyDays[0];
+          const last = legacyDays.at(-1);
+          if (!first || !last) throw new Error('Legacy time touches at least one day.');
+          const expected =
+            legacyDays.length <= 7
+              ? [...new Set([...legacyDays, ...proposedDays])].sort()
+              : [...proposedDays.filter((day) => day < first || day > last), { first, last }].sort(
+                  (left, right) =>
+                    (typeof left === 'string' ? left : left.first).localeCompare(
+                      typeof right === 'string' ? right : right.first,
+                    ),
+                );
+          expect(summary.days).toEqual(expected);
+          expect(summary.beforeMinutes).toBe(legacy.workMinutes);
         },
       ),
+      {
+        examples: [
+          // Monday 08:00 to Sunday 17:00 Berlin touches seven days, to the next Monday 07:00 eight.
+          [legacyTime('2026-11-09T07:00:00Z', '2026-11-15T16:00:00Z'), null],
+          [legacyTime('2026-11-09T07:00:00Z', '2026-11-16T06:00:00Z'), null],
+        ],
+      },
     );
   });
 

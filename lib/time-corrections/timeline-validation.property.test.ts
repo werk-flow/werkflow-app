@@ -111,6 +111,106 @@ describe('Open time over midnight', () => {
   });
 });
 
+/** The Berlin days open time touches, from its start's day to its last minute's, as [day start, next midnight]. */
+function berlinDaysOf(start: number, end: number): Array<{ dayStart: number; nextMidnight: number }> {
+  const days: Array<{ dayStart: number; nextMidnight: number }> = [];
+  for (let dayStart = berlinMidnightMs(oracleBerlinDate(start)); dayStart < end; ) {
+    const nextMidnight = dayStart + berlinDayLengthHours(oracleBerlinDate(dayStart)) * 60 * MINUTE_MS;
+    days.push({ dayStart, nextMidnight });
+    dayStart = nextMidnight;
+  }
+  return days;
+}
+
+/**
+ * Open time over midnight and recorded time inside one of its Berlin days, of at least a minute:
+ * overlapping the proposal's piece of that day by at least a minute, or a minute or more before
+ * or after it. Recorded time never touches the proposal, so no two clock facts share an instant.
+ */
+const overnightWithRecordedArbitrary = fc
+  .tuple(
+    upToADay.filter((time) => oracleBerlinDate(time.start) !== oracleBerlinDate(time.end - 1)),
+    fc.nat(),
+    fc.constantFrom('overlaps', 'before', 'after'),
+    fc.nat(),
+    fc.nat(),
+  )
+  .map(([time, dayDraw, placement, firstDraw, secondDraw]) => {
+    const days = berlinDaysOf(time.start, time.end);
+    const day = days[dayDraw % days.length];
+    if (!day) throw new Error('Open time touches at least one day.');
+    const pieceStart = Math.max(time.start, day.dayStart);
+    const pieceEnd = Math.min(time.end, day.nextMidnight);
+    const minuteIn = (from: number, to: number, draw: number): number =>
+      from + (draw % ((to - from) / MINUTE_MS + 1)) * MINUTE_MS;
+    if (placement === 'overlaps') {
+      const start = minuteIn(day.dayStart, pieceEnd - MINUTE_MS, firstDraw);
+      const end = minuteIn(Math.max(start, pieceStart) + MINUTE_MS, day.nextMidnight, secondDraw);
+      return { time, recorded: { start, end }, overlaps: true };
+    }
+    const [from, to] =
+      placement === 'before'
+        ? [day.dayStart, pieceStart - MINUTE_MS]
+        : [pieceEnd + MINUTE_MS, day.nextMidnight];
+    if (to - from < MINUTE_MS) return null;
+    const start = minuteIn(from, to - MINUTE_MS, firstDraw);
+    return { time, recorded: { start, end: minuteIn(start + MINUTE_MS, to, secondDraw) }, overlaps: false };
+  })
+  .filter((drawn) => drawn !== null);
+
+describe('Open time over midnight and recorded time', () => {
+  test('is refused as an overlap exactly when recorded time on either day overlaps it', () => {
+    fc.assert(
+      fc.property(overnightWithRecordedArbitrary, ({ time, recorded, overlaps }) => {
+        const entries = [
+          recordedEntry('recorded-in', 'clock_in', recorded.start),
+          recordedEntry('recorded-out', 'clock_out', recorded.end),
+        ];
+        const proposal = candidate(splitCorrectionFactsAtMidnight(openTimeFacts(time, 'shift')));
+        expect(validate([], proposal, entries)).toBe(overlaps ? 'correction_timeline_conflict' : null);
+      }),
+      {
+        examples: [
+          // 22:00 to 01:30 Berlin, recorded 21:00 to 22:30 the evening before.
+          [
+            {
+              time: {
+                start: Date.parse('2026-01-15T21:00:00Z'),
+                end: Date.parse('2026-01-16T00:30:00Z'),
+                break: null,
+                workMinutes: 210,
+                breakMinutes: 0,
+              },
+              recorded: {
+                start: Date.parse('2026-01-15T20:00:00Z'),
+                end: Date.parse('2026-01-15T21:30:00Z'),
+              },
+              overlaps: true,
+            },
+          ],
+          // The same shift, recorded 01:00 to 02:00 the morning after.
+          [
+            {
+              time: {
+                start: Date.parse('2026-01-15T21:00:00Z'),
+                end: Date.parse('2026-01-16T00:30:00Z'),
+                break: null,
+                workMinutes: 210,
+                breakMinutes: 0,
+              },
+              recorded: {
+                start: Date.parse('2026-01-16T00:00:00Z'),
+                end: Date.parse('2026-01-16T01:00:00Z'),
+              },
+              overlaps: true,
+            },
+          ],
+        ],
+      },
+    );
+  });
+});
+
 /** Recorded time inside one Berlin day: its date, start and end, and the day's next midnight. */
 const dayTimeArbitrary = berlinDateArbitrary.chain((localDate) => {
   const dayMinutes = berlinDayLengthHours(localDate) * 60;
