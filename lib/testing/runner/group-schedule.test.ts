@@ -14,6 +14,7 @@ import {
   overlapsNeighbours,
   runGroupSchedule,
 } from './group-schedule';
+import { workflowsFolder } from '../ci-workflow';
 
 const MINUTE_MS = 60_000;
 const WINDOW_MS = MIDNIGHT_START_WINDOW.leadMs + MIDNIGHT_START_WINDOW.trailMs;
@@ -136,7 +137,7 @@ test("a Browser job of an unheld plan never reaches a group inside the window, e
 });
 
 test('ci.yml keeps the timeouts the hold is built on', () => {
-  const workflow = readFileSync(resolve(import.meta.dir, '../../../.github/workflows/ci.yml'), 'utf8');
+  const workflow = readFileSync(resolve(import.meta.dir, '../../..', workflowsFolder(), 'ci.yml'), 'utf8');
   const timeoutOf = (job: string): number =>
     Number(new RegExp(`\\n  ${job}:\\n(?:    .*\\n|\\n)*?    timeout-minutes: (\\d+)`).exec(workflow)?.[1]);
   expect(timeoutOf('browser') * MINUTE_MS).toBe(CI_BROWSER_JOB_TIMEOUT_MS);
