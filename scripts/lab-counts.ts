@@ -359,10 +359,6 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
       if (!reference) throw new Error(`${stepId} has no reference in this context; calibrate it first.`);
       const target = required('--target');
       const stale = target === 'requests' ? staleLabShapes(reference, observation) : [];
-      if (stale.length)
-        console.log(
-          `${stepId}: the run moved the request count of ${stale.join(', ')}; accepted from it too.`,
-        );
       const written: LabReferences = {
         ...carried,
         steps: carried.steps.map((candidate) =>
@@ -378,6 +374,10 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
         ),
       };
       await writeReferences(written);
+      if (stale.length)
+        console.log(
+          `${stepId}: the run moved the request count of ${stale.join(', ')}; accepted from it with the same reason.`,
+        );
       await pruneCarryover(written);
       return;
     }

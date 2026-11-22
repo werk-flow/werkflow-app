@@ -118,7 +118,7 @@ export function checkLabEvidence(input: {
     for (const row of rows.filter(isFailingRow)) {
       const message =
         row.status === 'ratchet-pending'
-          ? `${stepId} ${row.target} fell to ${row.now}, below its floor ${row.floor} (reference ${row.reference}): lower the reference in this change with bun scripts/lab-counts.ts ratchet --run ${runKey}. A CI run key is not on your machine: run the group locally and ratchet that run; if it measures ${row.target} inside its tolerance, bun scripts/lab-counts.ts accept --run <that run> --step ${stepId} --target ${row.target} --reason "CI measured ${row.now}"`
+          ? `${stepId} ${row.target} fell to ${row.now}, below its floor ${row.floor} (reference ${row.reference}): lower the reference in this change with bun scripts/lab-counts.ts ratchet --run ${runKey}. A CI run key is not on your machine: run the group locally and ratchet that run; if it measures ${row.target} inside its tolerance, bun scripts/lab-counts.ts accept --run <that run> --step ${stepId} --target ${row.target} --reason "CI measured ${row.now}"${row.target === 'requests' ? '; that accept also takes each shape whose request count your run moved, so read the shapes it prints and name their change in the reason' : ''}`
           : row.status === 'shrank'
             ? `${stepId} ${row.target} shrank to ${row.now} below its floor ${row.floor}: confirm nothing is missing, then bun scripts/lab-counts.ts accept --run ${runKey} --step ${stepId} --target ${row.target.split('#')[0]} --reason "<what changed>"`
             : `${stepId} ${row.target} is ${row.status}: ${row.now ?? 'absent'} against reference ${row.reference ?? 'none'} (ceiling ${row.ceiling ?? '—'})`;
