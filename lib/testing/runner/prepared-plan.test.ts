@@ -9,7 +9,7 @@ import {
   writePreparedPlan,
   type PreparedPlan,
 } from './prepared-plan';
-import { selectedDiscoveryArguments } from './playwright-discovery';
+import { exactFileFilter, selectedDiscoveryArguments } from './playwright-discovery';
 import type { TestGroup } from '../selection/test-groups';
 
 test('discovery includes only selected files, without inherited setup journeys', () => {
@@ -92,4 +92,15 @@ test('a group run takes its identity and discovery from the plan and refuses a m
   expect(() => preparedGroupRun(plan, { groupId: 'golden:p1-06', suite: 'audit', target: 'local' })).toThrow(
     'no audit discovery',
   );
+});
+
+test('a spec file filter matches exactly that spec, whatever characters its name holds', () => {
+  const filter = new RegExp(exactFileFilter('tests/ui-contracts/calendar-a+b.spec.ts'));
+  expect(filter.test('/repo/tests/ui-contracts/calendar-a+b.spec.ts')).toBe(true);
+  expect(filter.test('/repo/tests/ui-contracts/calendar-ab.spec.ts')).toBe(false);
+  expect(
+    new RegExp(exactFileFilter('tests/ui-contracts/options.spec.ts')).test(
+      '/repo/tests/ui-contracts/options.spec.ts.bak',
+    ),
+  ).toBe(false);
 });

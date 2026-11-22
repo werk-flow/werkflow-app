@@ -27,6 +27,13 @@ export function resolveModuleFile(importer: string, specifier: string, host: Sou
   );
 }
 
+/** The product module a specifier names, written with its file extension or without one. */
+export function resolveProductModule(importer: string, specifier: string, host: SourceHost): string | null {
+  const exact = resolveSpecifier(importer, specifier);
+  if (exact !== null && /\.tsx?$/.test(exact) && host(exact) !== null) return exact;
+  return resolveModuleFile(importer, specifier, host);
+}
+
 /** The named, non-type bindings of an import or re-export declaration, as local name and exported name. */
 export function namedBindings(statement: ts.Statement): Array<{ local: string; exported: string }> {
   if (ts.isImportDeclaration(statement)) {

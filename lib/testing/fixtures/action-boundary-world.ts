@@ -70,11 +70,20 @@ function createAdminStandIn(world: ActionWorld, database: () => { from: (table: 
   world.adminClientRequests += 1;
   return {
     from: (table: string) => database().from(table),
-    rpc: async (name: string, args: FixtureRow = {}) => {
-      // A read function answers from the tables like a table read and is no recorded call.
-      if (name === 'read_open_absences') return readOpenAbsencesInWorld(world, args);
-      world.rpcCalls.push({ name, args });
-      return world.rpc({ name, args });
+    rpc: (name: string, args: FixtureRow = {}) => {
+      const outcome = (async (): Promise<RpcOutcome> => {
+        // A read function answers from the tables like a table read and is no recorded call.
+        if (name === 'read_open_absences') return readOpenAbsencesInWorld(world, args);
+        world.rpcCalls.push({ name, args });
+        return world.rpc({ name, args });
+      })();
+      // A paged read (readCompleteRows) asks a set-returning function for one range of its rows.
+      return Object.assign(outcome, {
+        range: async (from: number, to: number): Promise<RpcOutcome> => {
+          const result = await outcome;
+          return Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result;
+        },
+      });
     },
     functions: {
       invoke: async (name: string, options: { body: FixtureRow }) => {

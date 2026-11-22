@@ -413,6 +413,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   maintenance_due_work_id: 'Fällige Wartung (ID)',
   maintenance_plan_id: 'Wartungsplan-ID',
   maintenance_plan_revision_id: 'Wartungsplanfassung-ID',
+  maintenance_visit_finding_id: 'Befund-ID',
   managing_directors: 'Geschäftsführung oder Inhaber',
   manual_state: 'Manueller Status',
   manufacturer: 'Hersteller',

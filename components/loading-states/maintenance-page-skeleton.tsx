@@ -2,6 +2,7 @@
 
 import { ServiceToolbarSkeleton } from '@/components/loading-states/service-cases-page-skeleton';
 import { MaintenanceDueListSkeleton } from '@/components/service/maintenance-lists';
+import { ServiceReportListSkeleton } from '@/components/service/service-report-list-skeleton';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /**
@@ -37,6 +38,10 @@ export function MaintenancePageSkeleton() {
         }
       />
       <MaintenanceContentSkeleton />
+      <div className="space-y-3">
+        <Skeleton className="h-6 w-64" />
+        <ServiceReportListSkeleton />
+      </div>
     </div>
   );
 }
