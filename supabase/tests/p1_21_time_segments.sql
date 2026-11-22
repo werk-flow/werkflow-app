@@ -1082,52 +1082,6 @@ begin
 end;
 $$;
 
--- An offline transition captured on a day of a closed period is refused with
--- the closed-period error, before any window rule. Only an ended month
--- closes, so the captured time lies in last month.
-do $$
-declare
-  v_org constant uuid := '21000000-0000-0000-0000-000000000710';
-  v_admin constant uuid := '21000000-0000-0000-0000-000000000701';
-  v_month_start constant date :=
-    (date_trunc('month', (now() at time zone 'Europe/Berlin')) - interval '1 month')::date;
-  v_month_end constant date := (v_month_start + interval '1 month - 1 day')::date;
-  v_captured_at constant timestamptz := (v_month_end + time '12:00') at time zone 'Europe/Berlin';
-  v_calculation uuid;
-begin
-  v_calculation := public.prepare_time_period(
-    v_admin, v_org, v_month_start, v_month_end,
-    app_private.compute_p1_23_source_fingerprint(v_org, v_month_start, v_month_end),
-    (
-      select coalesce(jsonb_agg(jsonb_build_object(
-        'id', gen_random_uuid(), 'employee_record_id', employee.id,
-        'policy_version_id', null, 'previous_balance_minutes', 0, 'target_minutes', 0,
-        'source_seconds', 0, 'source_minutes', 0, 'credited_minutes', 0, 'vacation_minutes', 0,
-        'sickness_minutes', 0, 'account_event_minutes', 0, 'period_delta_minutes', 0,
-        'overtime_candidate_minutes', 0, 'closing_balance_minutes', 0, 'authoritative_targets', false)), '[]')
-      from public.employee_records employee
-      where employee.organization_id = v_org
-        and coalesce(employee.entry_date, v_month_start) <= v_month_end
-        and coalesce(employee.exit_date, v_month_end) >= v_month_start
-    ), '[]', '[]', '[]', '21000000-0000-0000-0000-000000000730', repeat('9', 64));
-  perform public.close_time_period(
-    v_admin, v_org, (select period_id from public.time_period_calculations where id = v_calculation),
-    '21000000-0000-0000-0000-000000000731', repeat('a', 64));
-  begin
-    perform public.transition_time_activity(
-      p_organization_id => v_org, p_actor_id => '21000000-0000-0000-0000-000000000702',
-      p_operation_id => '21000000-0000-0000-0000-000000000732',
-      p_request_hash => repeat('b', 64), p_action => 'start',
-      p_segment_kind => 'work', p_allocation_kind => 'unallocated',
-      p_captured_at => v_captured_at, p_sent_at => clock_timestamp()
-    );
-    raise exception 'an offline transition into a closed period was accepted';
-  exception when sqlstate 'WFP01' then
-    null;
-  end;
-end;
-$$;
-
 -- The clock never runs on a parked job: a clock-in, a switch and the resume
 -- after a break onto a parked job are refused and write nothing.
 reset role;
@@ -1475,6 +1429,56 @@ begin
       where session_id = v_session_id and event_type = 'recovery_required'
     ) <> 1
   then raise exception 'a marked session did not end through recovery as before'; end if;
+end;
+$$;
+
+-- An offline transition captured on a day of a closed period is refused with
+-- the closed-period error, before any window rule. Only an ended month
+-- closes, so the captured time lies in last month, on its first day: older
+-- than the recording window on every date, so a window rule would refuse it
+-- too if it ran first. It runs after the cases that move a session of this
+-- organization back 30 hours: on the 1st of a month that start lies in last
+-- month, which the close would freeze.
+do $$
+declare
+  v_org constant uuid := '21000000-0000-0000-0000-000000000710';
+  v_admin constant uuid := '21000000-0000-0000-0000-000000000701';
+  v_month_start constant date :=
+    (date_trunc('month', (now() at time zone 'Europe/Berlin')) - interval '1 month')::date;
+  v_month_end constant date := (v_month_start + interval '1 month - 1 day')::date;
+  v_captured_at constant timestamptz := (v_month_start + time '12:00') at time zone 'Europe/Berlin';
+  v_calculation uuid;
+begin
+  v_calculation := public.prepare_time_period(
+    v_admin, v_org, v_month_start, v_month_end,
+    app_private.compute_p1_23_source_fingerprint(v_org, v_month_start, v_month_end),
+    (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'id', gen_random_uuid(), 'employee_record_id', employee.id,
+        'policy_version_id', null, 'previous_balance_minutes', 0, 'target_minutes', 0,
+        'source_seconds', 0, 'source_minutes', 0, 'credited_minutes', 0, 'vacation_minutes', 0,
+        'sickness_minutes', 0, 'account_event_minutes', 0, 'period_delta_minutes', 0,
+        'overtime_candidate_minutes', 0, 'closing_balance_minutes', 0, 'authoritative_targets', false)), '[]')
+      from public.employee_records employee
+      where employee.organization_id = v_org
+        and coalesce(employee.entry_date, v_month_start) <= v_month_end
+        and coalesce(employee.exit_date, v_month_end) >= v_month_start
+    ), '[]', '[]', '[]', '21000000-0000-0000-0000-000000000730', repeat('9', 64));
+  perform public.close_time_period(
+    v_admin, v_org, (select period_id from public.time_period_calculations where id = v_calculation),
+    '21000000-0000-0000-0000-000000000731', repeat('a', 64));
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => v_org, p_actor_id => '21000000-0000-0000-0000-000000000702',
+      p_operation_id => '21000000-0000-0000-0000-000000000732',
+      p_request_hash => repeat('b', 64), p_action => 'start',
+      p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+      p_captured_at => v_captured_at, p_sent_at => clock_timestamp()
+    );
+    raise exception 'an offline transition into a closed period was accepted';
+  exception when sqlstate 'WFP01' then
+    null;
+  end;
 end;
 $$;
 
