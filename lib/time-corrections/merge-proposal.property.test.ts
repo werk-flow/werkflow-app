@@ -216,6 +216,11 @@ describe('An edit of recorded time', () => {
             ? editedMinutes(time.start, moved, time)
             : editedMinutes(moved, time.end, time);
           expect(clockMinutes(merged.facts)).toEqual({ work: minutesLeft, rest: time.breakMinutes });
+          // The edited boundary is the requested time; the other keeps the recorded one.
+          const instants = merged.facts.map((fact) => Date.parse(fact.timestamp));
+          expect([Math.min(...instants), Math.max(...instants)]).toEqual(
+            movesEnd ? [time.start, moved] : [moved, time.end],
+          );
           for (const fact of merged.facts.filter((item) => item.activityKind !== 'break'))
             expect(fact).toMatchObject(contextOf(activity));
         },
