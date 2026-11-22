@@ -2,12 +2,14 @@
 // and only while Boat would still stop and erase it by itself; every other machine of the checkout
 // is deleted. Prevents a start per run (decision 15, werk-flow/werkflow-planning#294).
 import { afterAll, beforeAll, expect, setSystemTime, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { z } from '../../zod';
 
 import { BoatError, boatClient } from './boat-api';
+import { BOAT_RUNS_FILE, readBoatRuns } from './boat-runs';
 import { MARK_IDLE, workstationLabel } from './machine-eviction';
 import { acquireMachine, keepMachine, reapIdleMachine, withMachine } from './machine-reuse';
 import { temporaryDirectory } from '../temporary-directory';
@@ -614,4 +616,40 @@ test('an idle record whose machine another workstation evicted frees nothing, so
   expect(boat.calls).toContain('DELETE /sandboxes/bx_otherws1');
   expect(boat.calls).not.toContain('DELETE /sandboxes/bx_gone0001');
   expect(readdirSync(records)).toEqual([]);
+});
+
+test("a checkout's machine records each run's cost there for the CI cost report, and a machine of none records nothing", async () => {
+  const checkout = temporaryDirectory('boat-checkout-');
+  const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
+  const machine = { id: 'bx_kept0001', client: boat.client, log: () => undefined };
+  await withMachine({ ...machine, repository: checkout }, new AbortController().signal, async () => 0);
+  expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toMatchObject([
+    { machine: 'bx_kept0001', usage: { seconds: 4, dollars: 0.001 }, reports: [] },
+  ]);
+  await withMachine(machine, new AbortController().signal, async () => 0);
+  expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toHaveLength(1);
+});
+
+test("a run's cost record names the commit packing read, though HEAD moved or the checkout changed since", async () => {
+  const checkout = temporaryDirectory('boat-checkout-');
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', ...args], {
+      cwd: checkout,
+      encoding: 'utf8',
+    }).trim();
+  git('init', '--quiet');
+  git('commit', '--quiet', '--allow-empty', '-m', 'packed');
+  const packed = git('rev-parse', 'HEAD');
+  // A commit lands while the machine starts, and a file changes while the run runs.
+  git('commit', '--quiet', '--allow-empty', '-m', 'later');
+  const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
+  const machine = { id: 'bx_kept0001', client: boat.client, log: () => undefined, repository: checkout };
+  await withMachine(
+    machine,
+    new AbortController().signal,
+    async () => writeFileSync(join(checkout, 'work.ts'), 'in progress'),
+    undefined,
+    packed,
+  );
+  expect(readBoatRuns(join(checkout, BOAT_RUNS_FILE))).toMatchObject([{ head: packed }]);
 });

@@ -92,7 +92,7 @@ export async function tailwindScan(
 }
 
 /** What running `roots` loads through imports, product code included, and whether an import was unresolved. */
-function closure(
+export function closure(
   graph: ReadonlyMap<string, readonly string[]>,
   roots: readonly string[],
 ): { files: Set<string>; unresolved: boolean } {
@@ -128,8 +128,9 @@ const GROUP_REGISTRIES = ['lib/testing/selection/test-groups.ts', 'lib/testing/s
 
 /**
  * Which component, unit, SQL and static groups a CI run needs for its diff, as `test:verify`
- * decides locally from their inputs. It fails open: an unreadable diff, a full run or a tooling
- * change (`fullReason`) takes every group. Component areas run for their own specs, and all of
+ * decides locally from their inputs. It fails open: an unreadable diff or a full run
+ * (`fullReason`) takes every group, and a tooling input every group of the kinds its jobs run
+ * (`everyGroupOf`). Component areas run for their own specs, and all of
  * them for a change the contract runner or bundle reaches, any stylesheet or file Tailwind scans,
  * the contracts' support, or an unresolved import. SQL groups run for their own files, and all of them for any other
  * change under `supabase/`, the generated types or the SQL job's scripts. The unit suite runs in
@@ -144,6 +145,8 @@ export function fastTierPlan(input: {
   changedFiles: readonly string[] | undefined;
   /** Why the browser plan runs every group (ci-plan.ts), or undefined. */
   fullReason: string | undefined;
+  /** The kinds a tooling input takes whole, with the reason (ci-plan.ts, `toolingClass`). */
+  everyGroupOf: Readonly<Partial<Record<'ui' | 'sql' | 'static', string>>>;
   /** The changed registries whose change stays inside their rows. */
   rowChanges: readonly string[];
   /** `tailwindScan` of `app/globals.css`; undefined counts every file as scanned. */
@@ -164,6 +167,8 @@ export function fastTierPlan(input: {
     for (const kind of ['ui', 'sql']) take(ofKind(kind), reason);
     take(gates, reason);
   } else {
+    for (const [kind, reason] of Object.entries(input.everyGroupOf))
+      take(kind === 'static' ? gates : ofKind(kind), reason);
     const docsOnly = changed.length > 0 && changed.every(isDocsFile);
     take(
       docsOnly ? gates.filter((group) => DOCS_GATES.includes(group.id)) : gates,

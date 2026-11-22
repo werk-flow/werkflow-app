@@ -156,7 +156,7 @@ async function isolatedTests(): Promise<void> {
   /** One clock start a page of this holder keeps without signal, taken into the outbox as its tab does. */
   async function keepStart(holder: OutboxHolder, views: (ClockDeviceView | null)[] = []): Promise<void> {
     operations += 1;
-    await holdClock(holder, (view) => views.push(view));
+    await holdClock(holder, (view) => views.push(view), '');
     const kept = keepClockAction(
       {
         ...holder,
@@ -267,7 +267,7 @@ async function isolatedTests(): Promise<void> {
       const key = 'werkflow:unsent:clock:000000000000001:1:from-a-newer-version';
       storage.set(key, '{"operationId":"x","kind":"new"}');
       const views: (ClockDeviceView | null)[] = [];
-      await holdClock(WORKER, (view) => views.push(view));
+      await holdClock(WORKER, (view) => views.push(view), '');
       keepClockAction(startAction('50000000-0000-4000-8000-0000000000d8'), ''); // the person's own tap, behind it
       expect((await takeInKept()).stops).toEqual([{ userId: null, at: 1 }]);
       await outboxChanged();
@@ -292,7 +292,7 @@ async function isolatedTests(): Promise<void> {
       verdict = ACCEPTED;
       const theirs = 'werkflow:unsent:clock:000000000000001:1:colleagues-newer-version';
       storage.set(theirs, JSON.stringify({ userId: COLLEAGUE.userId, version: 2 }));
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
 
       keepClockAction(startAction('50000000-0000-4000-8000-0000000000d7'), '');
       await sendOwnTimeEvents();
@@ -304,7 +304,7 @@ async function isolatedTests(): Promise<void> {
     });
 
     test('the page without signal takes the other tabs’ kept actions in before its own, so an earlier tap stays first', async () => {
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       keepClockAction(
         {
           ...WORKER,
@@ -333,7 +333,7 @@ async function isolatedTests(): Promise<void> {
     });
 
     test('two actions kept at once are two keys, so neither overwrites the other, and they are taken in in the order of their taps', async () => {
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       const action = (operation: string, capturedAt: string, kind: 'start' | 'end') => ({
         ...WORKER,
         operationId: operation,
@@ -415,7 +415,7 @@ async function isolatedTests(): Promise<void> {
 
     test('a sign-out counts an online call still open and every action kept behind it, never „nothing unsent“', async () => {
       sessionUserId = WORKER.userId;
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       let answer = (): void => undefined;
       const calling = callWhileKept(
         { ...startAction('50000000-0000-4000-8000-0000000000b2'), triedOnline: true },
@@ -487,7 +487,7 @@ async function isolatedTests(): Promise<void> {
     test('an action another tab kept is taken in and sent here, also when that tab closed before it sent', async () => {
       sessionUserId = WORKER.userId;
       verdict = ACCEPTED;
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       keepClockAction(startAction('50000000-0000-4000-8000-0000000000b1'), '');
       const key = [...storage.keys()].find((stored) => stored.startsWith('werkflow:unsent:clock:')) ?? null;
 
@@ -500,7 +500,7 @@ async function isolatedTests(): Promise<void> {
 
     test('an online call’s action is written down first and left to its page while the call runs; one kept behind it waits', async () => {
       sessionUserId = WORKER.userId;
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       const action = (operationId: string, capturedAt: string) => ({
         ...WORKER,
         operationId,
@@ -544,7 +544,7 @@ async function isolatedTests(): Promise<void> {
 
     test('the page without signal keeps its action behind an online call another tab still holds open', async () => {
       sessionUserId = WORKER.userId;
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       let answer = (): void => undefined;
       const calling = callWhileKept(
         { ...startAction('50000000-0000-4000-8000-0000000000b4'), triedOnline: true },
@@ -572,7 +572,7 @@ async function isolatedTests(): Promise<void> {
     test('neither a tap nor a send passes a kept action this version cannot read (S24)', async () => {
       sessionUserId = WORKER.userId;
       verdict = ACCEPTED;
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       // At 12:00 a newer version kept a break; 07:00 a start, and 13:00 an end an earlier path put into the outbox.
       storage.set('werkflow:unsent:clock:001794398400000:1:from-a-newer-version', '{"version":2}');
       const at = (time: string, id: string) =>
@@ -601,7 +601,7 @@ async function isolatedTests(): Promise<void> {
 
     test('an entry of a page that closed mid-call and is still young is taken in once it ages out, without another trigger', async () => {
       sessionUserId = WORKER.userId;
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       setSystemTime(new Date('2026-11-11T07:00:01.000Z'));
       // The page closed a second after its tap; this tab opens at once.
       storage.set(
@@ -640,7 +640,7 @@ async function isolatedTests(): Promise<void> {
 
     test('the action of a page that closed mid-call is taken in at the next start under the same operation id', async () => {
       sessionUserId = WORKER.userId;
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       // What a page left when it closed before the answer: the entry, and no lock any more.
       storage.set(
         'werkflow:unsent:clock:001762844400000:1:50000000-0000-4000-8000-0000000000a3',

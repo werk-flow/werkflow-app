@@ -1,5 +1,5 @@
 // Writes the reference invoices as ZUGFeRD PDFs for CI's Mustang and veraPDF
-// job (.github/workflows/e-invoice-checks.yml): each one to `<out>/valid/`,
+// check (check-reference-e-invoices.ts): each one to `<out>/valid/`,
 // two of them again with stationery, and the broken copies of the first to
 // `<out>/broken/`. Run it with
 // `bun --conditions=react-server lib/document-rendering/fixtures/write-reference-e-invoices.ts <out>`.

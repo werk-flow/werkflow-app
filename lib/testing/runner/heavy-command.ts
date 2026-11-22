@@ -21,6 +21,18 @@ import { type ShellWord, SCRIPT_FLAG, SHELLS, program, readShell } from '../../s
  * lint takes a heavy slot.
  */
 export const BROAD_LINT_FILES = 150;
+
+/** The old-space heap, in MiB, that a whole-repository lint or build needs. */
+const HEAVY_NODE_HEAP_MB = 4096;
+
+/**
+ * NODE_OPTIONS for a whole-repository lint or build: the caller's options plus a fixed heap.
+ * Node's default heap scales with the machine's memory (about 2 GiB in a 6 GiB container), so
+ * without it the same tree passes on a large runner and runs out of memory on a small one.
+ */
+export function withHeavyNodeHeap(nodeOptions: string | undefined): string {
+  return `${nodeOptions ?? ''} --max-old-space-size=${HEAVY_NODE_HEAP_MB}`.trim();
+}
 const LINTED = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 
 /** Runners that start their first operand as the program: `bunx tsc`, `node .../tsc`, `timeout 600 tsc`. */

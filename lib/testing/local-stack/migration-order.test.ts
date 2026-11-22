@@ -100,3 +100,33 @@ test('a branch migration that main already holds, as after a squash merge, passe
   git(root, 'checkout', '--quiet', 'feature');
   expect(problems(root)).toEqual([]);
 });
+
+test("a batch prefix's commit is checked against its parent without a checkout: a lower version after a higher one on the same object fails", () => {
+  const root = repository();
+  git(root, 'checkout', '--quiet', 'main');
+  // Two queued PRs squashed in landing order: the first adds the higher version, the second a lower
+  // one that changes the same table. Neither is on main before the batch.
+  addMigration(root, '20261027100000_job_due.sql', 'alter table public.jobs add column due date;\n', true);
+  const first = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  addMigration(
+    root,
+    '20261026120000_job_owner.sql',
+    'alter table public.jobs add column owner text;\n',
+    true,
+  );
+  const second = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  // The working tree moves away: the check reads only the commits.
+  git(root, 'checkout', '--quiet', 'feature');
+  expect(
+    migrationOrderProblems({ repositoryRoot: root, mainRef: first, head: second, openPullRequests: [] }),
+  ).toEqual([
+    expect.stringContaining(
+      `supabase/migrations/20261026120000_job_owner.sql changes what a migration with a higher version on ${first} also changes: 20261027100000_job_due.sql (public.jobs).`,
+    ),
+  ]);
+  const base = execFileSync('git', ['rev-parse', 'main~2'], { cwd: root, encoding: 'utf8' }).trim();
+  // Against main before the batch, neither migration conflicts with anything there.
+  expect(
+    migrationOrderProblems({ repositoryRoot: root, mainRef: base, head: second, openPullRequests: [] }),
+  ).toEqual([]);
+});
