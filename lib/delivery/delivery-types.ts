@@ -34,6 +34,11 @@ export type DeliveryEntry = {
   attempts: number;
   /** A stable code of the last failure, never provider text. */
   failureCode: string | null;
+  /**
+   * An attempt ended without the provider's answer, so it may have reached
+   * the customer; kept after later attempts.
+   */
+  outcomeUnknown: boolean;
   createdAt: string;
   sentAt: string | null;
   createdBy: string | null;

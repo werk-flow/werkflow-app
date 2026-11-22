@@ -54,6 +54,7 @@ export const COLUMN_LABELS_N_TO_Z = {
   original_start_local: 'Ursprünglicher Beginn',
   original_statement: 'Ursprüngliche Aussage',
   original_timestamp: 'Ursprünglicher Zeitpunkt',
+  outcome_unknown_at: 'Versandergebnis unklar seit',
   output_code: 'Lohnart',
   outstanding_work: 'Offene Arbeiten',
   overlap_reason: 'Grund der Überschneidung',

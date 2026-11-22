@@ -30,6 +30,7 @@ const listSchema = z.object({
         note: z.string(),
         attempts: z.number().int(),
         failureCode: z.string().nullable(),
+        outcomeUnknown: z.boolean(),
         createdAt: z.string(),
         sentAt: z.string().nullable(),
         createdBy: z.string().nullable(),

@@ -5,7 +5,9 @@
 -- organization are refused; only the issued invoice's own filed original is
 -- attached, never another organization's document; a repeated request sends
 -- nothing again; a failed attempt is retried once, a sent one never; manual
--- sending is recorded once; the history refuses changes.
+-- sending is recorded once; an attempt without the provider's answer marks
+-- the delivery for good, past a later failure of another kind; the history
+-- and that mark refuse changes.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 
@@ -398,16 +400,69 @@ begin
 end;
 $$;
 
+-- An unknown outcome stays on the delivery: an attempt without the
+-- provider's answer, then a retry that fails before the provider (the
+-- original unreadable), still lists the delivery as unknown; a taken-over
+-- unanswered attempt marks it too, a later send keeps the mark, and a
+-- failure the provider answered marks nothing.
+do $$
+declare
+  v_unknown uuid := (pg_temp.request('38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
+    'invoice', '38070000-0000-4000-8000-000000000301', '38070000-0000-4000-8000-000000000405') ->> 'deliveryId')::uuid;
+  v_refused uuid := (pg_temp.request('38070000-0000-4000-8000-000000000002', '38070000-0000-4000-8000-000000000010',
+    'invoice', '38070000-0000-4000-8000-000000000301', '38070000-0000-4000-8000-000000000406') ->> 'deliveryId')::uuid;
+  v_rows jsonb;
+begin
+  insert into ids values ('unknown', v_unknown);
+  if not public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
+      '38070000-0000-4000-8000-000000000010', v_unknown, 1, 'failed', null, 'email_provider_unreachable')
+    or (public.retry_document_delivery('38070000-0000-4000-8000-000000000002',
+      '38070000-0000-4000-8000-000000000010', v_unknown, 1) ->> 'claimed')::boolean is distinct from true
+    or not public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
+      '38070000-0000-4000-8000-000000000010', v_unknown, 2, 'failed', null, 'attachment_unavailable')
+    or not public.settle_document_delivery('38070000-0000-4000-8000-000000000002',
+      '38070000-0000-4000-8000-000000000010', v_refused, 1, 'failed', null, 'email_provider_503')
+  then
+    raise exception 'the unknown-outcome sequence did not settle';
+  end if;
+  v_rows := public.list_document_deliveries('38070000-0000-4000-8000-000000000010', 'invoice',
+    pg_temp.id('invoice'), 50) -> 'rows';
+  if (select (row_data ->> 'failureCode', (row_data ->> 'outcomeUnknown')::boolean)
+      from jsonb_array_elements(v_rows) row_data where row_data ->> 'id' = v_unknown::text)
+    is distinct from ('attachment_unavailable'::text, true)
+  then
+    raise exception 'a failure before the provider hid the earlier unknown outcome: %', v_rows;
+  end if;
+  if (select array_agg(row_data ->> 'id' order by row_data ->> 'id') from jsonb_array_elements(v_rows) row_data
+      where (row_data ->> 'outcomeUnknown')::boolean)
+    is distinct from (select array_agg(id::text order by id::text) from unnest(array[
+      v_unknown, pg_temp.id('delivery'), pg_temp.id('old'),
+      (select id from public.document_deliveries where attempt_key = '38070000-0000-4000-8000-000000000402')]) id)
+  then
+    raise exception 'the unknown outcomes list as %', v_rows;
+  end if;
+end;
+$$;
+
 reset role;
 
--- The history refuses changes, also to the table owner, whom no grant stops;
--- the organization's teardown removes its deliveries and their history.
+-- The history and an unknown outcome refuse changes, also to the table owner,
+-- whom no grant stops; the organization's teardown removes its deliveries and
+-- their history.
 select pg_temp.expect_refusal(label, statement, 'event_ledger_history_immutable')
 from (values
   ('a history change', format('update public.document_delivery_events set failure_code = ''x'' where delivery_id = %L',
     pg_temp.id('delivery'))),
   ('a history delete', format('delete from public.document_delivery_events where delivery_id = %L',
     pg_temp.id('delivery')))
+) as cases(label, statement);
+select pg_temp.expect_refusal(label, statement, 'delivery_outcome_unknown_kept')
+from (values
+  ('an unknown outcome cleared', format(
+    'update public.document_deliveries set outcome_unknown_at = null where id = %L', pg_temp.id('unknown'))),
+  ('an unknown outcome moved', format(
+    'update public.document_deliveries set outcome_unknown_at = now() - interval ''1 hour'' where id = %L',
+    pg_temp.id('unknown')))
 ) as cases(label, statement);
 set local role service_role;
 select public.record_manual_delivery('38070000-0000-4000-8000-000000000004', '38070000-0000-4000-8000-000000000011',
@@ -443,7 +498,7 @@ end;
 $$;
 do $$
 begin
-  if pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000002') is distinct from 4::bigint
+  if pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000002') is distinct from 6::bigint
     or pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000003') is distinct from 0::bigint
     or pg_temp.deliveries_seen_by('38070000-0000-4000-8000-000000000004') is distinct from 0::bigint then
     raise exception 'a delivery read crossed a role or an organization';

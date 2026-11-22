@@ -1320,6 +1320,7 @@ export type Database = {
           message_text: string | null;
           note: string;
           organization_id: string;
+          outcome_unknown_at: string | null;
           provider_message_id: string | null;
           recipient_email: string | null;
           reply_to: string | null;
@@ -1345,6 +1346,7 @@ export type Database = {
           message_text?: string | null;
           note?: string;
           organization_id: string;
+          outcome_unknown_at?: string | null;
           provider_message_id?: string | null;
           recipient_email?: string | null;
           reply_to?: string | null;
@@ -1370,6 +1372,7 @@ export type Database = {
           message_text?: string | null;
           note?: string;
           organization_id?: string;
+          outcome_unknown_at?: string | null;
           provider_message_id?: string | null;
           recipient_email?: string | null;
           reply_to?: string | null;

@@ -16,7 +16,11 @@ test('a mail the provider refused points to a new email, since the retry repeats
   expect(deliveryFailureAdvice('attachment_unavailable')).toBe('Das Original war gerade nicht lesbar.');
 });
 
-const email = (state: DeliveryEntry['state'], failureCode: string | null): DeliveryEntry => ({
+const email = (
+  state: DeliveryEntry['state'],
+  failureCode: string | null,
+  outcomeUnknown = false,
+): DeliveryEntry => ({
   id: '00000000-0000-4000-8000-000000000001',
   channel: 'email',
   state,
@@ -25,6 +29,7 @@ const email = (state: DeliveryEntry['state'], failureCode: string | null): Deliv
   note: '',
   attempts: 1,
   failureCode,
+  outcomeUnknown,
   createdAt: '2037-11-21T09:00:00.000Z',
   sentAt: state === 'sent' ? '2037-11-21T09:00:05.000Z' : null,
   createdBy: 'Erika Musterfrau',
@@ -35,7 +40,7 @@ const email = (state: DeliveryEntry['state'], failureCode: string | null): Deliv
 test('a new email is warned off an earlier one whose outcome is unknown, never off one known not to have left', () => {
   // The provider may have taken the mail without answering, or answered without an id.
   for (const code of ['email_provider_unreachable', 'email_provider_invalid_response']) {
-    const advice = priorEmailAdvice([email('failed', code)]);
+    const advice = priorEmailAdvice([email('failed', code, true)]);
     expect(advice).toContain('an erika.musterfrau@example.com rausging, ist unklar.');
     expect(advice).toContain('Frag am besten beim Kunden nach');
   }
@@ -48,4 +53,12 @@ test('a new email is warned off an earlier one whose outcome is unknown, never o
   expect(priorEmailAdvice([email('failed', 'email_provider_503'), email('sent', null)])).toContain(
     'Zuletzt ging sie am',
   );
+});
+
+test('an earlier attempt whose outcome is unknown still warns after a retry failed before the provider', () => {
+  // Attempt 1 got no answer; attempt 2 could not read the original and never reached the provider.
+  const advice = priorEmailAdvice([email('failed', 'attachment_unavailable', true)]);
+  expect(advice).toContain('an erika.musterfrau@example.com rausging, ist unklar.');
+  // A later attempt that went out reads as sent.
+  expect(priorEmailAdvice([email('sent', null, true)])).toContain('Zuletzt ging sie am');
 });

@@ -9,7 +9,10 @@
 --    (recipient, subject, text, sender name, Reply-To) and its state: sending,
 --    sent with the provider's message id, or failed with a stable code. The
 --    row id is the transport's idempotency key, and a retry sends the stored
---    content again, so a retried or replayed send delivers once.
+--    content again, so a retried or replayed send delivers once. An attempt
+--    that ended without the provider's answer marks the delivery for good
+--    (outcome_unknown_at), so a later failure of another kind still warns the
+--    office before a new email.
 -- 2. document_delivery_events: the append-only history of each delivery.
 -- 3. request_document_delivery, retry_document_delivery and
 --    settle_document_delivery: an email is recorded as sending before the
@@ -58,6 +61,10 @@ create table public.document_deliveries (
   attempts integer not null default 1,
   provider_message_id text,
   failure_code text,
+  -- When an attempt first ended without the provider's answer: it may have
+  -- taken the mail. Set by the call that settles or takes over that attempt,
+  -- never cleared, so a later failure before the provider does not hide it.
+  outcome_unknown_at timestamptz,
   attempt_key uuid not null,
   created_by uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now(),
@@ -91,6 +98,7 @@ create table public.document_deliveries (
     and provider_message_id ~ '^[A-Za-z0-9_.:-]{1,128}$'
   ),
   constraint document_deliveries_attempts_check check (attempts between 1 and 1000),
+  constraint document_deliveries_outcome_unknown_check check (outcome_unknown_at is null or channel = 'email'),
   constraint document_deliveries_invoice_fk foreign key (invoice_id, organization_id)
     references public.invoices (id, organization_id),
   constraint document_deliveries_document_fk foreign key (document_id, organization_id)
@@ -102,6 +110,23 @@ create index document_deliveries_invoice_idx on public.document_deliveries (invo
   where invoice_id is not null;
 create index document_deliveries_document_idx on public.document_deliveries (document_id, organization_id);
 create index document_deliveries_created_by_idx on public.document_deliveries (created_by);
+
+-- An unknown outcome stays marked, also against the table owner.
+create function app_private.refuse_delivery_outcome_unknown_change()
+returns trigger
+language plpgsql
+set search_path to ''
+as $$
+begin
+  raise exception 'delivery_outcome_unknown_kept' using errcode = '55000';
+end;
+$$;
+revoke all on function app_private.refuse_delivery_outcome_unknown_change() from public, anon, authenticated;
+create trigger document_deliveries_outcome_unknown_kept
+  before update on public.document_deliveries
+  for each row
+  when (old.outcome_unknown_at is not null and new.outcome_unknown_at is distinct from old.outcome_unknown_at)
+  execute function app_private.refuse_delivery_outcome_unknown_change();
 
 -- A manager's session hears of a change through the id, subject and state;
 -- the server reads and writes the rest.
@@ -303,7 +328,8 @@ grant execute on function public.request_document_delivery(uuid, uuid, uuid, tex
 -- has been sending for ten minutes (its process ended without an answer),
 -- and answers its payload with claimed true. A sent delivery, one that is
 -- sending now, or one whose attempt is no longer p_expected_attempt (a
--- repeated press) answers claimed false and is not sent again. A delivery
+-- repeated press) answers claimed false and is not sent again. Taking over
+-- an unanswered attempt marks the delivery's outcome unknown. A delivery
 -- requested 23 hours ago or earlier is not retried: the provider keeps the
 -- idempotency key 24 hours from the first attempt, so a later retry could
 -- deliver a mail whose acceptance was lost a second time. Refusals:
@@ -346,7 +372,12 @@ begin
   end if;
 
   update public.document_deliveries delivery
-  set state = 'sending', attempts = delivery.attempts + 1, failure_code = null, updated_at = now()
+  set state = 'sending', attempts = delivery.attempts + 1, failure_code = null,
+      outcome_unknown_at = case
+        when v_delivery.state = 'sending' then coalesce(delivery.outcome_unknown_at, now())
+        else delivery.outcome_unknown_at
+      end,
+      updated_at = now()
   where delivery.id = v_delivery.id and delivery.organization_id = p_organization_id
     and delivery.attempts = v_delivery.attempts
   returning * into v_delivery;
@@ -360,7 +391,9 @@ grant execute on function public.retry_document_delivery(uuid, uuid, uuid, integ
 
 -- Ends one attempt: sent with the provider's message id, or failed with a
 -- stable code. Only the attempt that is sending settles; a sent delivery
--- never changes, and a late answer of an older attempt answers false.
+-- never changes, and a late answer of an older attempt answers false. A
+-- failure without the provider's answer (lib/delivery/send-email.ts:
+-- unreachable, or an answer without a message id) marks the outcome unknown.
 create function public.settle_document_delivery(
   p_actor_id uuid,
   p_organization_id uuid,
@@ -389,6 +422,11 @@ begin
   set state = p_outcome,
       provider_message_id = p_provider_message_id,
       failure_code = p_failure_code,
+      outcome_unknown_at = case
+        when p_failure_code in ('email_provider_unreachable', 'email_provider_invalid_response')
+          then coalesce(delivery.outcome_unknown_at, now())
+        else delivery.outcome_unknown_at
+      end,
       sent_at = case when p_outcome = 'sent' then now() end,
       updated_at = now()
   where delivery.id = p_delivery_id and delivery.organization_id = p_organization_id
@@ -476,7 +514,8 @@ grant execute on function public.record_manual_delivery(uuid, uuid, uuid, text, 
 -- the page names what it leaves out. An email that is not sent may be retried
 -- from retryFrom (at once when failed, ten minutes after its attempt began
 -- when still sending) until retryUntil (23 hours after the request); the page
--- follows the clock, and retry_document_delivery decides.
+-- follows the clock, and retry_document_delivery decides. outcomeUnknown says
+-- an attempt may have reached the customer without an answer.
 create function public.list_document_deliveries(
   p_organization_id uuid,
   p_subject_kind text,
@@ -505,6 +544,7 @@ as $$
           'note', delivery.note,
           'attempts', delivery.attempts,
           'failureCode', delivery.failure_code,
+          'outcomeUnknown', delivery.outcome_unknown_at is not null,
           'createdAt', delivery.created_at,
           'sentAt', delivery.sent_at,
           'createdBy', nullif(btrim(concat_ws(' ', profile.first_name, profile.last_name)), ''),

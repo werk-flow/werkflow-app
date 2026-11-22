@@ -44,13 +44,14 @@ export function deliveryFailureAdvice(code: string | null, retryStep = ''): stri
 }
 
 /**
- * The newest email that went out or may have (still sending, or failed
- * without the provider's answer), so the form warns before a second one;
- * a failure known before the provider took the mail never left.
+ * The newest email that went out or may have (still sending, or any attempt
+ * ended without the provider's answer), so the form warns before a second
+ * one; a delivery whose every attempt failed before the provider took the
+ * mail never left.
  */
 export function priorEmailAdvice(entries: readonly DeliveryEntry[]): string | null {
   const last = entries.find(
-    (entry) => entry.channel === 'email' && (entry.state !== 'failed' || outcomeUnknown(entry.failureCode)),
+    (entry) => entry.channel === 'email' && (entry.state !== 'failed' || entry.outcomeUnknown),
   );
   if (!last) return null;
   if (last.state !== 'sent') {
