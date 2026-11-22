@@ -66,8 +66,14 @@ served() {
 if test "$(served || true)" = "$id"; then
   echo "Production already serves ${sha} (${id})."
 else
-  vercel_api -X POST "${api}/v10/projects/${VERCEL_PROJECT_ID}/promote/${id}?${team}" > /dev/null \
-    || { echo "::error::Vercel did not promote ${id}."; exit 1; }
+  # A refused promote may only mean the domain already serves this build while the optional lookup
+  # above failed: Vercel refuses to promote the current production deployment. Ask again with the
+  # normal retries, and fail only when the domain serves another build.
+  if ! vercel_api -X POST "${api}/v10/projects/${VERCEL_PROJECT_ID}/promote/${id}?${team}" > /dev/null; then
+    current="$(vercel_api "${api}/v4/aliases/${domain}?${team}" | jq -r '.deploymentId // empty')" || current=""
+    test "$current" = "$id" || { echo "::error::Vercel did not promote ${id}."; exit 1; }
+    echo "Vercel refused the promote, but ${domain} already serves ${id}."
+  fi
   # The promote answers before the domain moves; the smoke check expects it to serve the build.
   deadline=$((SECONDS + 300))
   until test "$(served || true)" = "$id"; do

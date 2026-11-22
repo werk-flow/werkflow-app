@@ -148,3 +148,23 @@ test('a refused promote fails the step instead of naming a deployment', () => {
   expect(result.output).toContain('Vercel did not promote dpl_new.');
   expect(result.lastLine).not.toBe('dpl_new');
 });
+
+test('a promote refused because production already serves the build passes when the alias, asked again, names it', () => {
+  // The optional first lookup fails, so the script promotes the build production serves already;
+  // Vercel refuses that, and the retried lookup shows the domain serves it.
+  const refusing = CURL_STUB.replace(
+    "'POST '*'/promote/'*)",
+    "'POST '*'/promote/'*) printf 409; exit 0 ;;\n  'never')",
+  ).replace(
+    "'GET '*'/v4/aliases/'*)",
+    '\'GET \'*\'/v4/aliases/\'*) if ! test -e "$STUB/looked"; then touch "$STUB/looked"; printf 503; exit 0; fi;',
+  );
+  writeFileSync(join(stub, 'curl'), refusing);
+  writeFileSync(join(stub, 'served'), 'dpl_new');
+  const result = promote('dpl_new', { dpl_new: 'READY' });
+  expect(result.status, result.output).toBe(0);
+  expect(result.output).toContain(
+    'Vercel refused the promote, but app.werk-flow.app already serves dpl_new.',
+  );
+  expect(result.lastLine).toBe('dpl_new');
+});
