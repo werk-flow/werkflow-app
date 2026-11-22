@@ -99,7 +99,7 @@ function splitCommands(line: string): string[] {
     else if (level?.kind === '"') {
       if (character === '"') open.pop();
       keep(character);
-    } else if (line.startsWith('<<<', index) && level) {
+    } else if (line.startsWith('<<<', index) && level?.kind === 'command') {
       level.hereString = 'before';
       index += 2;
     } else if (character === "'" || character === '"') {
@@ -110,7 +110,7 @@ function splitCommands(line: string): string[] {
       if (open.length > 1) open.pop();
     } else if (character === ';' || character === '|' || character === '&') {
       cut();
-      if (level) level.hereString = 'none';
+      if (level?.kind === 'command') level.hereString = 'none';
     } else keep(character);
   }
   cut();

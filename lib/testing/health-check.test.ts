@@ -40,7 +40,13 @@ afterEach(() => rmSync(stub, { recursive: true, force: true }));
 function check(kind: string, value: string, argument = '') {
   const result = spawnSync('bash', [script, 'dev', 'proof', kind, 'CREDENTIAL', argument], {
     encoding: 'utf8',
-    env: { PATH: `${stub}:${process.env.PATH ?? ''}`, STUB: stub, RUNNER_TEMP: stub, CREDENTIAL: value },
+    env: {
+      NODE_ENV: 'test',
+      PATH: `${stub}:${process.env.PATH ?? ''}`,
+      STUB: stub,
+      RUNNER_TEMP: stub,
+      CREDENTIAL: value,
+    },
   });
   const read = (name: string) => (existsSync(join(stub, name)) ? readFileSync(join(stub, name), 'utf8') : '');
   return {
