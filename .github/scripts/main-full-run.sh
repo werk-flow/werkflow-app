@@ -17,6 +17,7 @@
 # failed jobs report, and the commits since the newest green full run.
 # Needs GH_TOKEN, GITHUB_REPOSITORY and GITHUB_SHA; `context` also GITHUB_RUN_ID and GITHUB_SERVER_URL.
 set -euo pipefail
+source "$(dirname "$0")/curl-headers.sh"
 
 readonly DEPTH=100
 
@@ -82,7 +83,8 @@ context() {
     --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out") | .id')"
   for job in $jobs; do
     # gh refuses a log with terminal escape sequences, and every browser log has them.
-    if ! log="$(curl --fail --silent --show-error --location -H "Authorization: Bearer ${GH_TOKEN}" \
+    if ! log="$(curl --fail --silent --show-error --location \
+      --config <(curl_headers <<< "Authorization: Bearer ${GH_TOKEN}") \
       "${GITHUB_API_URL:-https://api.github.com}/repos/${GITHUB_REPOSITORY}/actions/jobs/${job}/logs")"; then
       unread+="- The log of job ${job} could not be read."$'\n'
       continue

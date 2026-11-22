@@ -9,11 +9,12 @@
 # API's read-only query endpoint and prints versions only, never a response body: the repository
 # is public. Needs SUPABASE_ACCESS_TOKEN and DEV_PROJECT_REF.
 set -euo pipefail
+source "$(dirname "$0")/curl-headers.sh"
 
 committed="$(ls supabase/migrations | sed -nE 's/^([0-9]{14})_.+\.sql$/\1/p' | sort -u)"
 test -n "$committed" || { echo "::error title=DEV migrations::supabase/migrations holds no migration."; exit 1; }
 if ! ledger="$(curl --fail --silent --max-time 60 -X POST \
-  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' \
+  --config <(curl_headers <<< "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}") -H 'Content-Type: application/json' \
   --data '{"query":"select version from supabase_migrations.schema_migrations order by version"}' \
   "https://api.supabase.com/v1/projects/${DEV_PROJECT_REF}/database/query/read-only" \
   | jq -r '.[].version' 2> /dev/null | sort -u)"; then
