@@ -182,6 +182,8 @@ export const COLUMN_LABELS_N_TO_Z = {
   renderer_version: 'Darstellungsversion',
   renewal_date: 'Verlängerungsdatum',
   renewal_due_date: 'Verlängerung fällig am',
+  replaces_report_id: 'Ersetzter Bericht (ID)',
+  report_number: 'Berichtsnummer',
   reported_by: 'Gemeldet von (ID)',
   request_fingerprint: 'Prüfsumme Antrag',
   request_hash: 'Hashwert Vorgang',

@@ -5885,6 +5885,75 @@ export type Database = {
           },
         ];
       };
+      maintenance_service_reports: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          document_id: string;
+          id: string;
+          maintenance_due_work_id: string;
+          organization_id: string;
+          replaces_report_id: string | null;
+          report_number: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          document_id: string;
+          id: string;
+          maintenance_due_work_id: string;
+          organization_id: string;
+          replaces_report_id?: string | null;
+          report_number: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          document_id?: string;
+          id?: string;
+          maintenance_due_work_id?: string;
+          organization_id?: string;
+          replaces_report_id?: string | null;
+          report_number?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_service_reports_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: true;
+            referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_reports_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: true;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_reports_maintenance_due_work_id_organi_fkey";
+            columns: ["maintenance_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_reports_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_reports_replaces_report_id_organizatio_fkey";
+            columns: ["replaces_report_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_service_reports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       maintenance_visit_finding_resolutions: {
         Row: {
           created_at: string;
@@ -20041,6 +20110,20 @@ export type Database = {
           org_id: string;
           org_name: string;
         }[];
+      };
+      register_maintenance_service_report: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_file_name: string;
+          p_maintenance_due_work_id: string;
+          p_organization_id: string;
+          p_replaces_report_id: string;
+          p_report_id: string;
+          p_size_bytes: number;
+          p_storage_path: string;
+        };
+        Returns: Json;
       };
       register_problem_report_file: {
         Args: {

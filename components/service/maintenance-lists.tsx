@@ -43,7 +43,8 @@ const MAINTENANCE_DUE_COLUMNS: readonly SkeletonColumn[] = [
 // breakpoint leaves sidebar tablets in the card layout until content fits.
 const DUE_GRID_COLUMNS = '@3xl/maintenance:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_10rem]';
 const COVERAGE_GRID_COLUMNS = '@3xl/maintenance:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_11rem_10rem]';
-const DUE_ROW_CLASS = cn(
+/** A due or completed visit row (date, plan, client, actions) inside a `@container/maintenance`. */
+export const DUE_ROW_CLASS = cn(
   'grid min-w-0 gap-3 @3xl/maintenance:items-center @3xl/maintenance:gap-4',
   DUE_GRID_COLUMNS,
 );
