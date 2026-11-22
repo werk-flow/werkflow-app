@@ -78,6 +78,8 @@ test('a connection string that could carry a credential elsewhere fails before p
     'postgresql://user@db.example.test/postgres?sslpassword=secret',
     'host=db.example.test user=user password=secret',
     'postgresql://user:se@cret@db.example.test/postgres',
+    'postgresql://:secret@db.example.test/postgres',
+    'postgresql://user:sec\nret@db.example.test/postgres',
   ]) {
     const result = check('database', value);
     expect(result.status, value).toBe(1);

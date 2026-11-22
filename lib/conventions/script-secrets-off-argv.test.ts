@@ -25,8 +25,9 @@ const PUBLIC_URLS: Readonly<Record<string, string>> = {
   GITHUB_SERVER_URL: 'GitHub’s web address, set by the runner.',
 };
 
-// Builtins run no program, so their arguments never show in /proc.
+// Builtins and the case keyword run no program, so their words never show in /proc.
 const BUILTINS = new Set([
+  'case',
   'test',
   '[',
   '[[',

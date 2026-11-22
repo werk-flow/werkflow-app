@@ -66,8 +66,9 @@ case "$kind" in
   # printf -v keeps a decoded trailing newline. Only a postgres URL with one `@` and a query of
   # the options below passes: any other form could carry a credential into the arguments.
   database)
-    grep -qE '^postgres(ql)?://[^@]*(@[^@]*)?$' <<< "$value" \
-      || fail "${variable} is no postgres:// URL with at most one @."
+    case "$value" in *$'\n'*) fail "${variable} holds a line break." ;; esac
+    grep -qE '^postgres(ql)?://([^:/@]+(:[^@]*)?@)?[^@]*$' <<< "$value" \
+      || fail "${variable} is no postgres:// URL with a user name before its one @."
     grep -qE '^[^?]*(\?((sslmode|connect_timeout|application_name)=[A-Za-z0-9_.-]*(&|$))*)?$' <<< "$value" \
       || fail "${variable} has a query option other than sslmode, connect_timeout or application_name."
     address="$(sed -E 's#^([^:/]+://[^:/@]+):[^@]*@#\1@#' <<< "$value")"
