@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { workflowsFolder } from './ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const alertScript = join(repositoryRoot, '.github/scripts/alert-issue.sh');
@@ -185,7 +186,7 @@ test('repeated handled failures keep one assigned issue open until the watcher c
 });
 
 test('the production alert workflow offers every title the production watcher and the Boat key check raise', () => {
-  const workflow = readFileSync(join(repositoryRoot, '.github/workflows/production-alert.yml'), 'utf8');
+  const workflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'production-alert.yml'), 'utf8');
   for (const title of [
     'CI alert: release',
     'Production alert: deploy',
@@ -306,7 +307,7 @@ test('an unreadable production flag fails the job instead of guessing', () => {
 });
 
 test('only the release, its missed-run alert and the health check can assign the owner', () => {
-  const workflows = join(repositoryRoot, '.github/workflows');
+  const workflows = join(repositoryRoot, workflowsFolder());
   const callers = readdirSync(workflows).filter((file) =>
     readFileSync(join(workflows, file), 'utf8').includes('AFFECTS_PRODUCTION'),
   );
@@ -317,7 +318,7 @@ test('only the release, its missed-run alert and the health check can assign the
 
 test('every caller of the health check names its environment first', () => {
   const callers = [
-    ...readdirSync(join(repositoryRoot, '.github/workflows')).map((file) => `.github/workflows/${file}`),
+    ...readdirSync(join(repositoryRoot, workflowsFolder())).map((file) => `${workflowsFolder()}/${file}`),
     ...readdirSync(join(repositoryRoot, '.github/scripts')).map((file) => `.github/scripts/${file}`),
   ];
   const calls = callers.flatMap((file) =>
@@ -327,7 +328,7 @@ test('every caller of the health check names its environment first', () => {
       ),
     ].map((call) => ({ file, environment: call[1] ?? '' })),
   );
-  expect(calls.filter((call) => call.file === '.github/workflows/health.yml').length).toBeGreaterThan(0);
+  expect(calls.filter((call) => call.file === `${workflowsFolder()}/health.yml`).length).toBeGreaterThan(0);
   expect(calls.filter((call) => call.file === '.github/scripts/release-smoke.sh')).toEqual([
     { file: '.github/scripts/release-smoke.sh', environment: 'prod' },
   ]);
