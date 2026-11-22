@@ -191,9 +191,9 @@ test('a held run whose commit production already passed ends quietly with nothin
   git('commit', '--allow-empty', '-qm', 'shipped by hand');
   git('update-ref', 'refs/remotes/origin/production', 'HEAD');
   git('checkout', '-q', held);
-  // The decision needs no full run here: a gh call would fail the run.
-  writeFileSync(join(stub, 'gh'), '#!/usr/bin/env bash\nexit 1\n');
-  chmodSync(join(stub, 'gh'), 0o755);
+  // The decision needs no full run here: a GitHub read would fail the run.
+  writeFileSync(join(stub, 'curl'), '#!/usr/bin/env bash\nexit 1\n');
+  chmodSync(join(stub, 'curl'), 0o755);
   const output = join(stub, 'output');
   for (const mode of ['scheduled', 'dry-run']) {
     writeFileSync(output, '');
