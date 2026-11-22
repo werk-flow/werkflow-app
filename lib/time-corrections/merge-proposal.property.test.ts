@@ -103,6 +103,17 @@ describe('A correction of recorded time', () => {
           expect(fact).toMatchObject({ userId: recorded.userId, activityKind: recorded.activityKind });
           const allocated = ['work', 'callout', 'travel'].includes(fact.activityKind ?? '');
           expect(fact.jobId).toBe(allocated ? jobId : recorded.jobId);
+          // The nested selection moves with the job; travel keeps its route and role.
+          expect<unknown>(fact.activity).toEqual(
+            allocated && recorded.activity
+              ? {
+                  ...recorded.activity,
+                  ...(jobId === null
+                    ? { allocationKind: 'unallocated', jobId: null }
+                    : { allocationKind: 'job', jobId }),
+                }
+              : recorded.activity,
+          );
         }
       }),
     );
@@ -123,11 +134,10 @@ describe('A correction of recorded time', () => {
         ({ before, activity }, kind) => {
           const patch = correctionFact('patch', 'clock_in', 0, { activityKind: kind });
           const merged = mergeCorrectionProposal('reclassify', before, snapshot([patch]));
-          if (!merged) {
-            expect(['travel', 'standby', 'internal_activity']).toContain(kind);
-            expect(kind).not.toBe(activity.kind);
-            return;
-          }
+          // Travel, standby and internal time need details the transition form cannot supply.
+          const refused = kind !== activity.kind && ['travel', 'standby', 'internal_activity'].includes(kind);
+          expect(merged === null).toBe(refused);
+          if (!merged) return;
           expect(timeOf(merged.facts)).toEqual(timeOf(before.facts));
           expect(merged.facts.map((fact) => [fact.userId, fact.activityKind])).toEqual(
             before.facts.map((fact) => [fact.userId, kind]),
