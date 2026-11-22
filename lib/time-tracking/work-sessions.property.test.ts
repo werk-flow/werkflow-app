@@ -26,6 +26,7 @@ describe('A recorded day’s sessions', () => {
         const work = calculateWorkSessions(shuffled);
         const breaks = calculateBreakSessions(shuffled);
         expect(work.map((session) => session.durationMinutes)).toEqual(day.runs);
+        expect(work.map((session) => session.jobId)).toEqual(day.runJobs);
         expect(work.some((session) => session.isOrphan)).toBe(false);
         expect(sum(breaks.map((session) => session.durationMinutes))).toBe(day.breakMinutes);
         expect(breaks).toHaveLength(day.breaks);

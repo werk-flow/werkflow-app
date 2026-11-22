@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, setSystemTime, test } from 'bun:test';
 import fc from 'fast-check';
+import { berlinOffsetMinutes } from '@/lib/testing/berlin-arbitraries';
 import { RECORDED_DAY_CLOCK, recordedDayArbitrary } from '@/lib/testing/time-entry-arbitraries';
 import type { TimeEntry, TimeEntryType } from './types';
 import type { TimeValidationCode } from './validation-messages';
@@ -10,10 +11,35 @@ import { validateDayEntrySequence, validateManualEntries } from './validation';
 // passes sequence and overlap checks; a break lies between two stretches of work; rejected entries
 // and pending deletions never count.
 
-beforeAll(() => setSystemTime(RECORDED_DAY_CLOCK));
-afterAll(() => setSystemTime());
+// Every process that validates runs in Europe/Berlin: the server through instrumentation.ts, a German
+// user's browser by its own zone. The tests pin it, so no host zone changes a result.
+const hostZone = process.env.TZ;
+beforeAll(() => {
+  setSystemTime(RECORDED_DAY_CLOCK);
+  process.env.TZ = 'Europe/Berlin';
+});
+afterAll(() => {
+  setSystemTime();
+  process.env.TZ = hostZone;
+});
 
 const MINUTE_MS = 60_000;
+
+/** The Berlin wall minute of an instant, by the EU rule. */
+const wallMinute = (instant: number): number =>
+  Math.floor((instant + berlinOffsetMinutes(instant) * MINUTE_MS) / MINUTE_MS);
+
+/**
+ * werk-flow/werkflow-planning#522: the minute check compares wall minutes, so two instants an hour
+ * apart in the repeated autumn hour count as one minute. The known-bug case below holds that class.
+ */
+const sharesRepeatedWallMinute = (instants: readonly number[], entries: readonly TimeEntry[]): boolean =>
+  instants.some((instant) =>
+    entries.some((entry) => {
+      const recorded = Date.parse(entry.timestamp);
+      return recorded !== instant && wallMinute(recorded) === wallMinute(instant);
+    }),
+  );
 
 function extra(
   base: TimeEntry,
@@ -113,9 +139,12 @@ describe('A manual pair of clock-in and clock-out', () => {
         const base = day.entries[index];
         const next = day.entries[index + 1];
         if (!base) throw new Error('index within the day');
+        // A gap between two entries of the day; after the last one the pair could leave the day.
+        if (!next) return;
         const from = Date.parse(base.timestamp);
-        const to = next ? Date.parse(next.timestamp) : from + 3 * MINUTE_MS;
+        const to = Date.parse(next.timestamp);
         fc.pre(to - from >= 3 * MINUTE_MS && base.entryType !== 'break_start');
+        fc.pre(!sharesRepeatedWallMinute([from + MINUTE_MS, to - MINUTE_MS], day.entries));
         const pair = [
           { entryType: 'clock_in' as const, timestamp: new Date(from + MINUTE_MS).toISOString() },
           { entryType: 'clock_out' as const, timestamp: new Date(to - MINUTE_MS).toISOString() },
@@ -151,5 +180,33 @@ describe('A manual pair of clock-in and clock-out', () => {
         });
       }),
     );
+  });
+
+  // known bug: werk-flow/werkflow-planning#522 the minute check compares wall minutes, which repeat in the autumn DST hour
+  test.failing('is taken an hour after a recorded entry in the repeated autumn hour', () => {
+    const entry = (id: string, entryType: TimeEntryType, timestamp: string): TimeEntry => ({
+      id,
+      userId: 'person',
+      organizationId: 'organization',
+      entryType,
+      timestamp,
+      isManual: false,
+      jobId: null,
+      status: 'approved',
+      reviewedBy: null,
+      reviewedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    // 02:10–02:59 in summer time, then the pair 02:30–02:59 in winter time, an hour later.
+    const recorded = [
+      entry('in', 'clock_in', '2026-10-25T00:10:00.000Z'),
+      entry('out', 'clock_out', '2026-10-25T00:59:00.000Z'),
+    ];
+    const pair = [
+      { entryType: 'clock_in' as const, timestamp: '2026-10-25T01:30:00.000Z' },
+      { entryType: 'clock_out' as const, timestamp: '2026-10-25T01:59:00.000Z' },
+    ];
+    expect(validateManualEntries(recorded, pair)).toEqual({ valid: true });
   });
 });

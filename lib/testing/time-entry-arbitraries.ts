@@ -24,22 +24,42 @@ export type RecordedDay = {
   breaks: number;
   /** Each work run in order, in minutes. */
   runs: number[];
+  /** The job each work run's start names, in order. */
+  runJobs: Array<string | null>;
 };
 
-type Session = { startGap: number; runs: number[]; breaks: number[] };
+const JOBS = ['job-a', 'job-b', null] as const;
+
+/**
+ * One session: the gap before it (0 lets it touch the session before), its work runs and the breaks
+ * between them, the job its starts name and the job its ends name, which may differ or be missing,
+ * as legacy entries wrote them, and for each break whether work resumes the legacy way, with a
+ * break end and a clock-in at the same minute.
+ */
+type Session = {
+  startGap: number;
+  runs: number[];
+  breaks: number[];
+  legacyResumes: boolean[];
+  startJob: string | null;
+  endJob: string | null;
+};
 
 const sessionArbitrary: fc.Arbitrary<Session> = fc
-  .tuple(
-    fc.integer({ min: 1, max: 120 }),
-    fc.array(fc.integer({ min: 1, max: 180 }), { minLength: 1, maxLength: 3 }),
-    fc.array(fc.integer({ min: 1, max: 45 }), { minLength: 2, maxLength: 2 }),
-  )
-  .map(([startGap, runs, breaks]) => ({ startGap, runs, breaks: breaks.slice(0, runs.length - 1) }));
+  .record({
+    startGap: fc.oneof(fc.constant(0), fc.integer({ min: 1, max: 120 })),
+    runs: fc.array(fc.integer({ min: 1, max: 180 }), { minLength: 1, maxLength: 3 }),
+    breaks: fc.array(fc.integer({ min: 1, max: 45 }), { minLength: 2, maxLength: 2 }),
+    legacyResumes: fc.array(fc.boolean(), { minLength: 2, maxLength: 2 }),
+    startJob: fc.constantFrom(...JOBS),
+    endJob: fc.constantFrom(...JOBS),
+  })
+  .map((session) => ({ ...session, breaks: session.breaks.slice(0, session.runs.length - 1) }));
 
 const sessionMinutes = (session: Session): number =>
   session.startGap + [...session.runs, ...session.breaks].reduce((sum, minutes) => sum + minutes, 0);
 
-function entry(id: number, entryType: TimeEntryType, instant: number): TimeEntry {
+function entry(id: number, entryType: TimeEntryType, instant: number, jobId: string | null): TimeEntry {
   const timestamp = new Date(instant).toISOString();
   return {
     id: `${timestamp}#${id}`,
@@ -48,7 +68,7 @@ function entry(id: number, entryType: TimeEntryType, instant: number): TimeEntry
     entryType,
     timestamp,
     isManual: false,
-    jobId: null,
+    jobId,
     status: 'approved',
     reviewedBy: null,
     reviewedAt: null,
@@ -71,16 +91,20 @@ export function recordedDayOn(localDate: string): fc.Arbitrary<RecordedDay> {
     const entries: TimeEntry[] = [];
     let cursor = berlinMidnightMs(localDate);
     const at = (minutes: number): number => (cursor += minutes * MINUTE_MS);
+    const add = (entryType: TimeEntryType, instant: number, jobId: string | null) =>
+      entries.push(entry(entries.length + 1, entryType, instant, jobId));
     for (const session of sessions) {
-      entries.push(entry(entries.length + 1, 'clock_in', at(session.startGap)));
+      add('clock_in', at(session.startGap), session.startJob);
       session.runs.forEach((run, index) => {
         const pause = session.breaks[index];
         if (pause === undefined) {
-          entries.push(entry(entries.length + 1, 'clock_out', at(run)));
+          add('clock_out', at(run), session.endJob);
           return;
         }
-        entries.push(entry(entries.length + 1, 'break_start', at(run)));
-        entries.push(entry(entries.length + 1, 'break_end', at(pause)));
+        add('break_start', at(run), session.endJob);
+        const resumed = at(pause);
+        add('break_end', resumed, session.startJob);
+        if (session.legacyResumes[index]) add('clock_in', resumed, session.startJob);
       });
     }
     const runs = sessions.flatMap((session) => session.runs);
@@ -93,6 +117,7 @@ export function recordedDayOn(localDate: string): fc.Arbitrary<RecordedDay> {
       workRuns: runs.length,
       breaks: pauses.length,
       runs,
+      runJobs: sessions.flatMap((session) => session.runs.map(() => session.startJob)),
     };
   });
 }

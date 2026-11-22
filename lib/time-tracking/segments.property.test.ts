@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 import { addLocalDays } from '@/lib/date-time/berlin';
 import {
+  berlinDateArbitrary,
   berlinMidnightMs,
   berlinMinuteInstantMsArbitrary,
   berlinOffsetMinutes,
@@ -20,6 +21,8 @@ import type { TimeSegmentKind } from './types';
 // only and keeps every minute; the parts of a day add up to its presence.
 
 const MINUTE_MS = 60_000;
+/** Every segment here is closed; the open tail's clock is pinned anyway, so no wall clock is read. */
+const NOW = new Date('2100-01-01T00:00:00Z');
 const KINDS: TimeSegmentKind[] = ['work', 'travel', 'break', 'standby', 'callout', 'internal_activity'];
 
 const oracleDate = (instant: number): string =>
@@ -55,6 +58,28 @@ const sessionArbitrary = fc
     });
   });
 
+/** Segments of known kinds and minutes that lie inside one Berlin day, so nothing is clipped. */
+const inDaySessionArbitrary = fc
+  .tuple(
+    berlinDateArbitrary,
+    fc.integer({ min: 0, max: 300 }),
+    fc.array(fc.tuple(fc.constantFrom(...KINDS), fc.integer({ min: 1, max: 120 })), {
+      minLength: 1,
+      maxLength: 8,
+    }),
+  )
+  .map(([date, offset, parts]) => {
+    let cursor = berlinMidnightMs(date) + offset * MINUTE_MS;
+    const minutesByKind = new Map<TimeSegmentKind, number>();
+    const segments = parts.map(([kind, minutes], index) => {
+      const fact = segment(kind, cursor, minutes, index);
+      cursor += minutes * MINUTE_MS;
+      minutesByKind.set(kind, (minutesByKind.get(kind) ?? 0) + minutes);
+      return fact;
+    });
+    return { date, segments, minutesByKind };
+  });
+
 const minutesOf = (slice: { startedAt: string; endedAt: string | null }): number =>
   (Date.parse(slice.endedAt ?? slice.startedAt) - Date.parse(slice.startedAt)) / MINUTE_MS;
 
@@ -67,7 +92,7 @@ describe('A session’s segments', () => {
         (start, minutes) => {
           const fact = segment('work', start, minutes, 0);
           const wide = { start: new Date(start - 4 * 86_400_000), end: new Date(start + 8 * 86_400_000) };
-          const slices = splitSegmentAtLocalDayBoundaries(fact, wide.start, wide.end);
+          const slices = splitSegmentAtLocalDayBoundaries(fact, wide.start, wide.end, NOW);
           expect(slices.reduce((sum, slice) => sum + minutesOf(slice), 0)).toBe(minutes);
           expect(slices[0]?.startedAt).toBe(fact.startedAt);
           expect(slices.at(-1)?.endedAt).toBe(fact.endedAt);
@@ -84,30 +109,40 @@ describe('A session’s segments', () => {
     );
   });
 
-  test('add up to the presence of a Berlin day, each minute in exactly one part', () => {
+  test('give each activity of a Berlin day its own minutes, and the day’s presence their sum', () => {
     fc.assert(
-      fc.property(sessionArbitrary, (segments) => {
-        const [first] = segments;
-        if (!first) throw new Error('a session has a segment');
-        const date = oracleDate(Date.parse(first.startedAt));
+      fc.property(inDaySessionArbitrary, ({ date, segments, minutesByKind }) => {
         const dayStart = new Date(berlinMidnightMs(date));
         const dayEnd = new Date(berlinMidnightMs(addLocalDays(date, 1)) - 1);
-        const totals = calculateTimeActivityTotals(segments, dayStart, dayEnd);
-        const parts =
-          totals.workMinutes +
-          totals.breakMinutes +
-          totals.travelMinutes +
-          totals.standbyMinutes +
-          totals.calloutMinutes +
-          totals.internalMinutes;
-        expect(parts).toBeCloseTo(totals.presenceMinutes, 9);
-        const inDay = segments.reduce((sum, fact) => {
-          const from = Math.max(Date.parse(fact.startedAt), dayStart.getTime());
-          const to = Math.min(Date.parse(fact.endedAt ?? fact.startedAt), dayEnd.getTime());
-          return sum + Math.max(0, to - from) / MINUTE_MS;
-        }, 0);
-        expect(totals.presenceMinutes).toBeCloseTo(inDay, 9);
+        const minutes = (kind: TimeSegmentKind): number => minutesByKind.get(kind) ?? 0;
+        expect(calculateTimeActivityTotals(segments, dayStart, dayEnd, NOW)).toEqual({
+          presenceMinutes: [...minutesByKind.values()].reduce((sum, value) => sum + value, 0),
+          workMinutes: minutes('work'),
+          breakMinutes: minutes('break'),
+          travelMinutes: minutes('travel'),
+          standbyMinutes: minutes('standby'),
+          calloutMinutes: minutes('callout'),
+          internalMinutes: minutes('internal_activity'),
+        });
       }),
+    );
+  });
+
+  test('count only the part of a segment over midnight that falls on the day', () => {
+    fc.assert(
+      fc.property(
+        berlinDateArbitrary,
+        fc.constantFrom(...KINDS),
+        fc.integer({ min: 1, max: 600 }),
+        fc.integer({ min: 1, max: 600 }),
+        (date, kind, before, after) => {
+          const midnight = berlinMidnightMs(date);
+          const fact = segment(kind, midnight - before * MINUTE_MS, before + after, 0);
+          const dayStart = new Date(midnight);
+          const dayEnd = new Date(berlinMidnightMs(addLocalDays(date, 1)) - 1);
+          expect(calculateTimeActivityTotals([fact], dayStart, dayEnd, NOW).presenceMinutes).toBe(after);
+        },
+      ),
     );
   });
 
@@ -120,14 +155,14 @@ describe('A session’s segments', () => {
         const dayStart = new Date(berlinMidnightMs(date));
         const dayEnd = new Date(berlinMidnightMs(addLocalDays(date, 1)) - 1);
         const sliced = segments.flatMap((fact) =>
-          splitSegmentAtLocalDayBoundaries(fact, new Date(0), new Date(8.64e15)).map((slice, index) => ({
+          splitSegmentAtLocalDayBoundaries(fact, new Date(0), new Date(8.64e15), NOW).map((slice, index) => ({
             ...fact,
             id: `${fact.id}-${index}`,
             ...slice,
           })),
         );
-        expect(calculateTimeActivityTotals(sliced, dayStart, dayEnd)).toEqual(
-          calculateTimeActivityTotals(segments, dayStart, dayEnd),
+        expect(calculateTimeActivityTotals(sliced, dayStart, dayEnd, NOW)).toEqual(
+          calculateTimeActivityTotals(segments, dayStart, dayEnd, NOW),
         );
       }),
     );

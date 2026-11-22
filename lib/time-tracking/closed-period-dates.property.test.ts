@@ -33,12 +33,16 @@ const recordedInstantArbitrary = fc.oneof(
   berlinDateArbitrary.map(berlinMidnightMs),
 );
 
-/** A closed month: its first and last Berlin date. */
-const closedMonthArbitrary: fc.Arbitrary<ClosedTimePeriod> = berlinDateArbitrary.map((date) => {
-  const startDate = `${date.slice(0, 7)}-01`;
+/** The closed month that holds a date: its first and last Berlin date. */
+function monthOf(date: string): ClosedTimePeriod {
   const nextMonth = new Date(Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)), 1));
-  return { startDate, endDate: addLocalDays(nextMonth.toISOString().slice(0, 10), -1) };
-});
+  return {
+    startDate: `${date.slice(0, 7)}-01`,
+    endDate: addLocalDays(nextMonth.toISOString().slice(0, 10), -1),
+  };
+}
+
+const closedMonthArbitrary: fc.Arbitrary<ClosedTimePeriod> = berlinDateArbitrary.map(monthOf);
 
 describe('A closed period', () => {
   test('holds every day from its first to its last date and neither neighbour', () => {
@@ -52,13 +56,26 @@ describe('A closed period', () => {
     );
   });
 
-  test('closes a date when any of the periods holds it, whatever their order', () => {
+  test('closes a date that one of several months holds, wherever it stands, and no date outside them', () => {
     fc.assert(
-      fc.property(fc.array(closedMonthArbitrary, { maxLength: 6 }), berlinDateArbitrary, (periods, date) => {
-        const closed = periods.some((period) => period.startDate <= date && date <= period.endDate);
-        expect(isDateInClosedPeriod(date, periods)).toBe(closed);
-        expect(isDateInClosedPeriod(date, [...periods].reverse())).toBe(closed);
-      }),
+      fc.property(
+        berlinDateArbitrary,
+        fc.array(closedMonthArbitrary, { maxLength: 5 }),
+        fc.boolean(),
+        fc.nat(),
+        (date, drawn, holds, position) => {
+          const others = drawn.filter((period) => period.startDate.slice(0, 7) !== date.slice(0, 7));
+          const own = monthOf(date);
+          const periods = holds
+            ? [
+                ...others.slice(0, position % (others.length + 1)),
+                own,
+                ...others.slice(position % (others.length + 1)),
+              ]
+            : others;
+          expect(isDateInClosedPeriod(date, periods)).toBe(holds);
+        },
+      ),
     );
   });
 
@@ -95,19 +112,18 @@ describe('A recorded entry’s day', () => {
     );
   });
 
-  test('is closed exactly when that day lies in a closed period', () => {
+  test('of an end at midnight on the first of a month is closed with the month before, not with the new one', () => {
     fc.assert(
-      fc.property(
-        recordedInstantArbitrary,
-        fc.constantFrom(...TIME_ENTRY_TYPES),
-        fc.array(closedMonthArbitrary, { maxLength: 4 }),
-        (instant, entryType, periods) => {
-          const entry = { timestamp: new Date(instant).toISOString(), entryType };
-          expect(isEntryInClosedPeriod(entry, periods)).toBe(
-            isDateInClosedPeriod(entryBusinessDate(entry), periods),
-          );
-        },
-      ),
+      fc.property(berlinDateArbitrary, fc.constantFrom('clock_out', 'break_end'), (date, entryType) => {
+        const first = `${date.slice(0, 7)}-01`;
+        const entry = { timestamp: new Date(berlinMidnightMs(first)).toISOString(), entryType };
+        const lastOfBefore = addLocalDays(first, -1);
+        expect(isEntryInClosedPeriod(entry, [monthOf(lastOfBefore)])).toBe(true);
+        expect(isEntryInClosedPeriod(entry, [monthOf(first)])).toBe(false);
+        const start = { timestamp: entry.timestamp, entryType: 'clock_in' as const };
+        expect(isEntryInClosedPeriod(start, [monthOf(first)])).toBe(true);
+        expect(isEntryInClosedPeriod(start, [monthOf(lastOfBefore)])).toBe(false);
+      }),
     );
   });
 });

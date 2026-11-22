@@ -1,9 +1,10 @@
 {
   "area": "Recorded time",
-  "rule": "breaks and the break rule, work and overtime against the target, sessions and shift ends, recovery after an open session, closed-period days, the Berlin week",
+  "rule": "breaks and the break rule in totals and calendar, work and overtime against the target, sessions and shift ends, recovery after an open session, closed-period days, the Berlin week",
   "roots": ["lib/time-tracking"],
   "covered": [
     "lib/time-tracking/activity-intervals.ts",
+    "lib/time-tracking/calendar-blocks.ts",
     "lib/time-tracking/canonical-clock-state.ts",
     "lib/time-tracking/closed-period-dates.ts",
     "lib/time-tracking/helpers.ts",
@@ -24,7 +25,6 @@
     "lib/time-tracking/approval-queue.ts": "Reads the pending approval queue; no time arithmetic.",
     "lib/time-tracking/break-policy-read.ts": "Reads the stored break rule; its steps live in settings.ts.",
     "lib/time-tracking/break-rule-form.ts": "The break-rule form's schema and messages; the property test of settings.ts draws rules within its limits.",
-    "lib/time-tracking/calendar-blocks.ts": "Lays recorded sessions out as calendar blocks; their break shares come from getAutomaticBreakRanges in settings.ts, whose property test proves they add up.",
     "lib/time-tracking/canonical-entries.ts": "Server reader that projects segments into entries; the projection lives in segments.ts.",
     "lib/time-tracking/change-request-map.ts": "Indexes change requests by entry id.",
     "lib/time-tracking/change-request-reader.ts": "Reads pending change requests; no time arithmetic.",
@@ -37,9 +37,9 @@
     "lib/time-tracking/clock-state-events.ts": "Which realtime events concern the clock.",
     "lib/time-tracking/closed-period-reads.ts": "Reads the closed periods; the date rule lives in closed-period-dates.ts.",
     "lib/time-tracking/closed-periods.ts": "Server-side closed-period precheck and failure mapping; the date rule lives in closed-period-dates.ts and the database refuses the write.",
-    "lib/time-tracking/effective-entries.ts": "Orders entries and drops rejected ones; the session and activity properties draw their entries in shuffled order through it.",
+    "lib/time-tracking/effective-entries.ts": "Orders entries and drops rejected ones; the session, activity and validation properties draw touching sessions and legacy resumes in shuffled order through it.",
     "lib/time-tracking/entry-edit-checks.ts": "Server refusals of an entry edit by role and ownership.",
-    "lib/time-tracking/entry-order.ts": "The canonical order of entries, exercised by the shuffled-order properties.",
+    "lib/time-tracking/entry-order.ts": "The canonical order of entries: touching sessions close before the next opens, exercised by the shuffled-order properties.",
     "lib/time-tracking/entry-read-actions.ts": "Server Actions that read entries.",
     "lib/time-tracking/entry-window-projections.ts": "Reads correction projections for a window; the projection rule lives in lib/time-corrections.",
     "lib/time-tracking/entry-write-actions.ts": "Server Actions that write entries; the rules live in validation.ts and the database.",
@@ -61,7 +61,7 @@
     "lib/time-tracking/state-client.ts": "Browser fetch of the clock state.",
     "lib/time-tracking/transition-core.ts": "Server path that records a transition; the database checks its offline-capture limits.",
     "lib/time-tracking/transition-hash.ts": "Hashes a transition request for idempotency.",
-    "lib/time-tracking/transition-pairs.ts": "Whether a break end is followed by a clock-in; exercised by the session and validation properties.",
+    "lib/time-tracking/transition-pairs.ts": "Whether a break end is followed by a clock-in; the generated days resume work that legacy way, and the session, activity and validation properties count it.",
     "lib/time-tracking/types.ts": "Types and labels of the time model.",
     "lib/time-tracking/validation-messages.ts": "German messages of validation failures."
   }
