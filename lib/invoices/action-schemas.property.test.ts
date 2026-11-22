@@ -112,6 +112,37 @@ describe('The save of a draft', () => {
     );
   });
 
+  test('accepts a draft of 500 lines from the editor, the most the server takes', () => {
+    const terms: InvoiceTerms = {
+      serviceStart: '2026-11-02',
+      serviceEnd: '2026-11-20',
+      paymentDueDays: 14,
+      discountDays: 7,
+      discountBasisPoints: 200,
+      orderReference: '',
+      buyerReference: '',
+      openingText: '',
+      closingText: '',
+    };
+    const line = {
+      name: 'Position',
+      description: '',
+      quantity: '999999999.999',
+      unit: 'piece',
+      unitPriceCents: 100_000_000,
+      priceQuantity: 1000 as const,
+      taxRateBasisPoints: 1900 as const,
+      netCents: 0,
+    };
+    const parsed = parseDraftForm(
+      draftFormOf({ ...DETAIL, ...terms, lines: Array.from({ length: 500 }, () => line) }),
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const save = { ...IDS, expectedVersion: 1, terms: parsed.terms, lines: parsed.lines };
+    expect(saveInvoiceDraftSchema.safeParse(save).success).toBe(true);
+  });
+
   test('refuses each broken rule on its own', () => {
     fc.assert(
       fc.property(saveArbitrary, fc.constantFrom(...violations), (save, [, violate]) => {
