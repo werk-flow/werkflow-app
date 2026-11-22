@@ -53,13 +53,13 @@ authorization() {
   test -z "${GH_TOKEN:-}" || curl_headers <<< "Authorization: Bearer ${GH_TOKEN}"
 }
 
-# Prints each element of the <key> list of a GitHub answer, one JSON object per line, across its
-# pages. <path> carries a query already. Anything but a whole 200 that holds the list fails and
-# says on stderr whether GitHub's rate limit refused it: a missing page could hold the newest,
-# failed run.
+# Prints each element of the <key> list of a GitHub answer, one JSON object per line, across the
+# pages its Link header names. <path> carries a query already. Anything but a whole 200 that is
+# one object holding the list fails, prints nothing of that page, and says on stderr whether
+# GitHub's rate limit refused it: a missing page could hold the newest, failed run.
 github_list() {
-  local path="$1" key="$2" page=1 status sent count work
-  work="$(mktemp -d)"
+  local path="$1" key="$2" page=1 status sent items work
+  work="$(mktemp -d)" || return 1
   while :; do
     sent=0
     status="$(curl --silent --show-error --max-time 30 --output "$work/body" --dump-header "$work/headers" \
@@ -74,13 +74,15 @@ github_list() {
       rm -rf "$work"
       return 1
     fi
-    if ! count="$(jq --arg key "$key" '.[$key] | if type == "array" then length else error end' "$work/body" 2> /dev/null)"; then
-      echo "::error::GitHub's answer to ${path} holds no ${key} list; the release does not decide without it." >&2
+    if ! items="$(jq -c --slurp --arg key "$key" \
+      'if length == 1 and (.[0][$key] | type) == "array" then .[0][$key][] else error("no list") end' \
+      "$work/body" 2> /dev/null)"; then
+      echo "::error::GitHub's answer to ${path} is not one ${key} list; the release does not decide without it." >&2
       rm -rf "$work"
       return 1
     fi
-    jq -c --arg key "$key" '.[$key][]' "$work/body"
-    if test "$count" -lt 100; then
+    test -z "$items" || printf '%s\n' "$items"
+    if ! tr -d '\r' < "$work/headers" | grep -qi '^link:.*rel="next"'; then
       rm -rf "$work"
       return 0
     fi
@@ -101,10 +103,11 @@ runs="$(github_list "actions/runs?head_sha=${sha}&branch=main" workflow_runs \
     and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml"
       or .path == ".github/workflows/main-full-run.yml")
     and (.event == "schedule" or .event == "workflow_dispatch")) | .id')"
-# Each completed `Full run / Check` as `<completed_at> <conclusion> <url>`, one per line.
+# Each completed `Full run / Check` as `<completed_at> <conclusion> <url>`, one per line. Every
+# attempt of a run counts, so a rerun still running never hides its failed attempt.
 checks=""
 for run in $runs; do
-  checks+="$(github_list "actions/runs/${run}/jobs?filter=latest" jobs \
+  checks+="$(github_list "actions/runs/${run}/jobs?filter=all" jobs \
     | jq -r --arg sha "$sha" 'select(.head_sha == $sha and .name == "Full run / Check" and .status == "completed")
       | "\(.completed_at) \(.conclusion) \(.html_url)"')"
   checks+="
@@ -116,6 +119,11 @@ if test -n "$CHECK_APP_ID"; then
       and .name == "Full run / Check" and .status == "completed")
       | "\(.completed_at) \(.conclusion) \(.details_url // .html_url)"')"
 fi
+# A completed check without an end time or conclusion could sort anywhere, so it stops the gate.
+malformed="$(printf '%s\n' "$checks" | sed '/^$/d' \
+  | grep -Ev '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z [a-z_]+ [^ ]+$' || true)"
+test -z "$malformed" \
+  || { echo "::error::A completed full run on ${sha} names no end time or conclusion: ${malformed}"; exit 1; }
 # The newest completed full run decides; a later failure replaces a pass, and so does one that
 # ended in the same second.
 latest="$(printf '%s\n' "$checks" | sed '/^$/d' | sort | awk '

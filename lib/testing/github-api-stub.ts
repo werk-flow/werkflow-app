@@ -3,8 +3,9 @@
 // It answers from files in $STUB: `actions/runs?` from runs.json, `/jobs?` from jobs.json and
 // `/check-runs?` from check-runs.json, whatever the query asks, so only the gate's own filters
 // choose. `@commit` in a file reads as $COMMIT, the commit under test. A page past the first answers
-// `<name>.<page>.json`, or empty lists. $STUB/github-status, when present, holds the status of every
-// answer, and $STUB/github-headers its header lines. Each URL lands in $STUB/curl.log, and each
+// `<name>.<page>.json`, or empty lists, and a page whose next file exists names it in a Link header.
+// $STUB/github-status, when present, holds the status of every answer, and $STUB/github-headers
+// its header lines. Each URL lands in $STUB/curl.log, and each
 // config curl read in $STUB/curl-config.
 export const GITHUB_CURL_STUB = `#!/usr/bin/env bash
 output=
@@ -34,6 +35,11 @@ else
 fi
 status=200
 test ! -f "$STUB/github-status" || status="$(cat "$STUB/github-status")"
-{ echo "HTTP/2 $status"; cat "$STUB/github-headers" 2> /dev/null || true; } > "$headers"
+{
+  echo "HTTP/2 $status"
+  cat "$STUB/github-headers" 2> /dev/null || true
+  next=$((\${page:-1} + 1))
+  test ! -f "$STUB/$name.$next.json" || echo "link: <\${url%&page=*}&page=$next>; rel=\\"next\\""
+} > "$headers"
 printf '%s' "$status"
 `;
