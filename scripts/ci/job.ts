@@ -45,7 +45,8 @@ import {
   planRun,
 } from '../../lib/testing/ci/run-plan';
 import { lsRemoteCommit, supersedingHead } from '../../lib/testing/ci/superseded';
-import { workspaceAppOrigin } from '../../lib/testing/runner/app-port';
+import { workspaceAppOrigin, workspacePorts } from '../../lib/testing/runner/app-port';
+import { stopTestServer } from '../../lib/testing/ci/test-server-stop';
 import { E_INVOICE_CHECK, E_INVOICE_STEP } from '../../lib/testing/selection/e-invoice-selection';
 import { repository, run, step, verify } from './run';
 
@@ -493,7 +494,7 @@ async function midnight(): Promise<boolean> {
 }
 
 /** Serves the recorded build for the whole shard; the server proves it is this checkout's source and environment. */
-async function startTestServer(log: string): Promise<{ ready: boolean; stop: () => void }> {
+async function startTestServer(log: string): Promise<{ ready: boolean; stop: () => Promise<void> }> {
   const output = openSync(log, 'w');
   const server = spawn(process.execPath, ['run', 'test:server', 'local', '--prebuilt'], {
     cwd: repository,
@@ -504,9 +505,9 @@ async function startTestServer(log: string): Promise<{ ready: boolean; stop: () 
   closeSync(output);
   let exited = false;
   server.once('exit', () => (exited = true));
-  const stop = (): void => {
-    if (!exited && server.pid) process.kill(-server.pid, 'SIGTERM');
-  };
+  // The whole group, even after the server itself exited: a runner that reuses this host starts the
+  // next job on the same port.
+  const stop = (): Promise<void> => stopTestServer(server.pid, workspacePorts(repository).app);
   const login = `${workspaceAppOrigin(repository)}/login`;
   for (const deadline = Date.now() + 900_000; !exited && Date.now() < deadline; await Bun.sleep(5_000)) {
     if (!readFileSync(log, 'utf8').includes('Serving the recorded local build')) continue;
@@ -533,6 +534,7 @@ async function browser(): Promise<boolean> {
   mkdirSync(join(repository, '.agent-logs'), { recursive: true });
   // The server's output stays with the failure evidence under .agent-logs/.
   const server = built ? await startTestServer(join(repository, '.agent-logs/test-server.log')) : undefined;
+  let stopped = false;
   try {
     record([
       { id: 'step:server', outcome: server?.ready ? 'passed' : 'failed', durationMs: Date.now() - started },
@@ -542,9 +544,15 @@ async function browser(): Promise<boolean> {
     // proves its steps and judges no timing. No other group's verdict changes.
     if (server?.ready) recordVerify(await verify(verificationGroups(), ['--jobs', '1', '--untimed']));
   } finally {
-    server?.stop();
+    stopped = await (server?.stop() ?? Promise.resolve()).then(
+      () => true,
+      (error: unknown) => {
+        console.error(`::error title=Test server::${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      },
+    );
   }
-  return everyGroupPassed();
+  return stopped && everyGroupPassed();
 }
 
 /**

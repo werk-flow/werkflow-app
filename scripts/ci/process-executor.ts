@@ -14,6 +14,7 @@
 // orchestrator's hooks, refs or configuration.
 import { spawn, spawnSync } from 'node:child_process';
 import {
+  appendFileSync,
   chmodSync,
   closeSync,
   existsSync,
@@ -27,6 +28,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { partOf, partSteps } from '../../lib/testing/ci/dag';
+import { groupGone } from '../../lib/testing/local-stack/test-session';
 import {
   type Executor,
   type Executors,
@@ -203,11 +205,18 @@ function runGroup(
     child.once('close', (code) => {
       signal.removeEventListener('abort', stop);
       clearTimeout(escalation);
-      // A stopped command never passes, whatever it exited with, and nothing of its group outlives it.
-      if (signal.aborted || refused) {
-        signalGroup('SIGKILL');
-        resolve(null);
-      } else resolve(code);
+      // Nothing of its group outlives it, on every path: the next job on this host would meet a
+      // server it left behind. A stopped command never passes, whatever it exited with.
+      signalGroup('SIGKILL');
+      const exitCode = signal.aborted || refused ? null : code;
+      const pid = child.pid;
+      if (pid === undefined) return resolve(exitCode);
+      resolve(
+        groupGone(pid).then((gone) => {
+          if (!gone) appendFileSync(options.log, `Process group ${pid} is still listed 5 s after SIGKILL.\n`);
+          return exitCode;
+        }),
+      );
     });
   });
 }

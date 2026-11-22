@@ -41,6 +41,12 @@ if (process.env.REMOVE_CHECKOUT === '1' && job !== 'siblings') require('node:fs'
 `;
 const JOB = `${RECORD('job')}
 if (process.env.HANG === '1') await Bun.sleep(60_000);
+// A child in the job's own group that would outlive the job: a test server left running.
+if (process.env.LEAVE_CHILD === '1') {
+  const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  writeFileSync((process.env.RECORD_DIR ?? process.env.HOME) + '/child.pid', String(child.pid));
+  child.unref();
+}
 process.exit(Number(process.env.EXIT ?? '0'));
 `;
 
@@ -202,6 +208,20 @@ test('a job past its timeout is ended and gives no exit code', async () => {
   const run = await executor().run(task('sql', { HANG: '1' }, 2_000), new AbortController().signal);
   expect(run.exitCode, run.detail).toBeNull();
   expect(run.detail).toContain('its timeout');
+});
+
+test('a job that exits normally leaves nothing of its process group running', async () => {
+  const run = await executor().run(task('sql', { LEAVE_CHILD: '1' }), new AbortController().signal);
+  expect(run.exitCode, run.detail).toBe(0);
+  const child = Number(readFileSync(join(folder, 'child.pid'), 'utf8'));
+  let running = true;
+  try {
+    process.kill(child, 0);
+  } catch {
+    running = false;
+  }
+  if (running) process.kill(child, 'SIGKILL');
+  expect(running).toBe(false);
 });
 
 test("only a stack the job started is stopped, and the host's stack lock passes on", async () => {
