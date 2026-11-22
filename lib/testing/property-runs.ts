@@ -25,6 +25,14 @@ function positiveInteger(name: string, value: string): number {
   return parsed;
 }
 
+/** A seed as fast-check reports it: any signed 32-bit integer, zero and negatives included. */
+function seedOf(value: string): number {
+  const parsed = Number(value);
+  if (!/^-?\d+$/.test(value) || parsed < -(2 ** 31) || parsed >= 2 ** 31)
+    throw new Error(`${PROPERTY_SEED_VARIABLE} must be a 32-bit integer or "random", got "${value}".`);
+  return parsed;
+}
+
 /**
  * The settings for this process. `WERKFLOW_PROPERTY_SEED` is an integer to replay a reported
  * failure, or `random` for a fresh seed; `WERKFLOW_PROPERTY_RUNS` raises or lowers the run count.
@@ -41,7 +49,7 @@ export function propertyRunSettings(
       ? PINNED_PROPERTY_SEED
       : seedValue === 'random'
         ? randomSeed()
-        : positiveInteger(PROPERTY_SEED_VARIABLE, seedValue);
+        : seedOf(seedValue);
   const numRuns =
     runsValue === undefined ? PINNED_PROPERTY_RUNS : positiveInteger(PROPERTY_RUNS_VARIABLE, runsValue);
   return { seed, numRuns };

@@ -19,6 +19,11 @@ describe('property run settings', () => {
     ).toEqual({ seed: 1_587_307_876, numRuns: 2000 });
   });
 
+  test('replay any seed fast-check reports, zero and negatives included', () => {
+    for (const seed of [0, -1, -(2 ** 31), 2 ** 31 - 1])
+      expect(propertyRunSettings({ WERKFLOW_PROPERTY_SEED: String(seed) }, noRandom).seed).toBe(seed);
+  });
+
   test('draw a fresh seed only when asked for one', () => {
     expect(propertyRunSettings({ WERKFLOW_PROPERTY_SEED: 'random' }, () => 42).seed).toBe(42);
   });
@@ -28,8 +33,7 @@ describe('property run settings', () => {
       expect(() => propertyRunSettings({ WERKFLOW_PROPERTY_RUNS: value }, noRandom)).toThrow(
         'positive integer',
       );
-    expect(() => propertyRunSettings({ WERKFLOW_PROPERTY_SEED: 'seed' }, noRandom)).toThrow(
-      'positive integer',
-    );
+    for (const seed of ['seed', '1.5', String(2 ** 31), '', '-'])
+      expect(() => propertyRunSettings({ WERKFLOW_PROPERTY_SEED: seed }, noRandom)).toThrow('32-bit integer');
   });
 });

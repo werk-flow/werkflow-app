@@ -4,6 +4,7 @@ import {
   berlinDateArbitrary,
   berlinDayLengthHours,
   berlinInstantMsArbitrary,
+  berlinMidnightMs,
   berlinMinuteInstantMsArbitrary,
   berlinOffsetMinutes,
   berlinTransitions,
@@ -50,6 +51,19 @@ function inSpringGap(wallTime: string): boolean {
 function inAutumnOverlap(wallTime: string): boolean {
   const { fallBack } = berlinTransitions(Number(wallTime.slice(0, 4)));
   return wallTime.slice(0, 10) === oracleWallTime(fallBack).slice(0, 10) && wallTime.slice(11, 13) === '02';
+}
+
+/** The minutes of an interval per Berlin date, cut at midnights the EU rule gives. */
+function oracleSplit(start: number, end: number): Array<{ localDate: string; minutes: number }> {
+  const shares: Array<{ localDate: string; minutes: number }> = [];
+  for (let cursor = start; cursor < end; ) {
+    const localDate = oracleWallTime(cursor).slice(0, 10);
+    const nextDate = new Date(Date.parse(`${localDate}T00:00:00Z`) + 24 * HOUR_MS).toISOString().slice(0, 10);
+    const shareEnd = Math.min(end, berlinMidnightMs(nextDate));
+    shares.push({ localDate, minutes: (shareEnd - cursor) / MINUTE_MS });
+    cursor = shareEnd;
+  }
+  return shares;
 }
 
 const intervalArbitrary = fc
@@ -132,19 +146,12 @@ describe('A Berlin day', () => {
 });
 
 describe('Time over midnight split by Berlin date', () => {
-  test('keeps every minute and gives each date its own share in date order', () => {
+  test('gives each Berlin date exactly the minutes between its midnights, in date order', () => {
     fc.assert(
       fc.property(intervalArbitrary, ({ start, end }) => {
-        const shares = splitTimedIntervalByBerlinDate(new Date(start), new Date(end));
-        expect(shares.reduce((sum, share) => sum + share.minutes, 0)).toBe((end - start) / MINUTE_MS);
-        expect(shares[0]?.localDate).toBe(formatBerlinLocalDate(new Date(start)));
-        expect(shares.at(-1)?.localDate).toBe(formatBerlinLocalDate(new Date(end - 1)));
-        shares.forEach((share, index) => {
-          expect(share.minutes).toBeGreaterThan(0);
-          expect(share.minutes).toBeLessThanOrEqual(berlinDayLengthHours(share.localDate) * 60);
-          const previous = shares[index - 1];
-          if (previous) expect(share.localDate).toBe(addLocalDays(previous.localDate, 1));
-        });
+        expect(splitTimedIntervalByBerlinDate(new Date(start), new Date(end))).toEqual(
+          oracleSplit(start, end),
+        );
       }),
     );
   });

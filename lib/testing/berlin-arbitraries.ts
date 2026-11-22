@@ -53,6 +53,12 @@ export function berlinDayLengthHours(localDate: string): 23 | 24 | 25 {
   return 24;
 }
 
+/** The UTC instant of Berlin midnight that starts a date; no switch falls within two hours before it. */
+export function berlinMidnightMs(localDate: string): number {
+  const utcMidnight = Date.parse(`${localDate}T00:00:00Z`);
+  return utcMidnight - berlinOffsetMinutes(utcMidnight - 2 * HOUR_MS) * MINUTE_MS;
+}
+
 const yearArbitrary = fc.integer({ min: FIRST_YEAR, max: LAST_YEAR });
 
 /** Any calendar date from 2000 to 2099 as `YYYY-MM-DD`. */
@@ -91,10 +97,7 @@ const nearTransitionArbitrary = fc
 /** Within three hours of a Berlin midnight, the year turn included. */
 const nearMidnightArbitrary = fc
   .tuple(berlinDateArbitrary, fc.integer({ min: -3 * HOUR_MS, max: 3 * HOUR_MS }))
-  .map(([localDate, offset]) => {
-    const utcMidnight = Date.parse(`${localDate}T00:00:00Z`);
-    return utcMidnight - berlinOffsetMinutes(utcMidnight - HOUR_MS) * MINUTE_MS + offset;
-  });
+  .map(([localDate, offset]) => berlinMidnightMs(localDate) + offset);
 
 /** Instants in milliseconds, with DST switches and Berlin midnights drawn often. */
 export const berlinInstantMsArbitrary: fc.Arbitrary<number> = fc.oneof(

@@ -9,14 +9,14 @@ import { parseProductSource, repositoryRoot } from './product-sources';
 // Tier 2 for the owner's decision of 2026-11-22: a rule whose mistake costs money (recorded time,
 // periods and payroll, invoices, Berlin dates) has a property test at the unit boundary. Each file
 // under lib/testing/property-test-areas/ names one area: its roots, the modules a property test
-// covers, and the modules exempt with the reason no such rule lives there. A new module under a
-// root fails here until the manifest classifies it, so a change of the list shows in review.
+// covers, and every other module under a root with the reason no such rule lives there. A new
+// module under a root fails here until the manifest classifies it, so the change shows in review.
 
 const MANIFEST_DIRECTORY = 'lib/testing/property-test-areas';
 const PROPERTY_TEST = /\.property\.test\.ts$/;
 const KNOWN_BUG = /^\s*known bug:\s*werk-flow\/werkflow-planning#\d+\s+\S/;
-/** Only scripts/unit-test-preload.ts sets these (lib/testing/property-runs.ts). */
-const RUN_SETTINGS = new Set(['seed', 'numRuns', 'configureGlobal']);
+/** The only option a property test passes to `fc.assert`; the seed and run count are shared (lib/testing/property-runs.ts). */
+const ASSERT_OPTIONS = new Set(['examples']);
 
 const areaSchema = z
   .object({
@@ -40,7 +40,7 @@ function readAreas(): Area[] {
     });
 }
 
-/** The `.ts` modules under a root folder or the root module itself, tests and declarations left out. */
+/** The source modules under a root folder, or the root module itself; tests and declarations left out. */
 function modulesUnder(root: string): string[] {
   const absolute = resolve(repositoryRoot, root);
   if (!existsSync(absolute)) return [];
@@ -51,30 +51,6 @@ function modulesUnder(root: string): string[] {
     .sort();
 }
 
-/** A Server Action, a server-only reader or a client module: I/O at the edge, never the rule itself. */
-function isBoundary(file: string): boolean {
-  if (file.endsWith('.tsx')) return true;
-  const source = parseProductSource(file);
-  const [first] = source.statements;
-  const directive =
-    first && ts.isExpressionStatement(first) && ts.isStringLiteral(first.expression)
-      ? first.expression.text
-      : '';
-  return (
-    directive === 'use server' ||
-    directive === 'use client' ||
-    importsOf(source).some((specifier) => specifier === 'server-only')
-  );
-}
-
-function importsOf(source: ts.SourceFile): string[] {
-  return source.statements.flatMap((statement) =>
-    ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
-      ? [statement.moduleSpecifier.text]
-      : [],
-  );
-}
-
 /** The repository path an import names, without extension, or the bare package name. */
 function importTarget(fromFile: string, specifier: string): string {
   if (specifier.startsWith('@/')) return specifier.slice(2);
@@ -82,7 +58,8 @@ function importTarget(fromFile: string, specifier: string): string {
   return specifier;
 }
 
-const propertyTestOf = (modulePath: string): string => modulePath.replace(/\.ts$/, '.property.test.ts');
+const stemOf = (modulePath: string): string => modulePath.replace(/\.tsx?$/, '');
+const propertyTestOf = (modulePath: string): string => `${stemOf(modulePath)}.property.test.ts`;
 
 function listPropertyTests(): string[] {
   return readdirSync(resolve(repositoryRoot, 'lib'), { recursive: true, encoding: 'utf8' })
@@ -91,35 +68,112 @@ function listPropertyTests(): string[] {
     .sort();
 }
 
-/** What a property test does that only the shared run settings may do, and failing tests without an issue. */
-function runSettingViolations(file: string): string[] {
-  const source = parseProductSource(file);
-  const text = source.getFullText();
-  const found: string[] = [];
+/** The local names a file binds to runtime values of the imports `matches` accepts; type-only bindings left out. */
+function runtimeBindings(
+  source: ts.SourceFile,
+  file: string,
+  matches: (target: string) => boolean,
+): Set<string> {
+  const names = new Set<string>();
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const clause = statement.importClause;
+    if (!clause || clause.isTypeOnly || !matches(importTarget(file, statement.moduleSpecifier.text)))
+      continue;
+    if (clause.name) names.add(clause.name.text);
+    const bindings = clause.namedBindings;
+    if (bindings && ts.isNamespaceImport(bindings)) names.add(bindings.name.text);
+    if (bindings && ts.isNamedImports(bindings))
+      for (const element of bindings.elements) if (!element.isTypeOnly) names.add(element.name.text);
+  }
+  return names;
+}
+
+/** Every call `<fast-check binding>.<method>(…)` of a file. */
+function fastCheckCalls(root: ts.Node, fastCheck: ReadonlySet<string>, method: string): ts.CallExpression[] {
+  const calls: ts.CallExpression[] = [];
   const visit = (node: ts.Node): void => {
-    const named =
-      (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) && ts.isIdentifier(node.name)
-        ? node.name.text
-        : ts.isPropertyAccessExpression(node)
-          ? node.name.text
-          : undefined;
-    if (named && RUN_SETTINGS.has(named))
-      found.push(
-        `${file}: sets \`${named}\`; the seed and run count come from lib/testing/property-runs.ts.`,
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      fastCheck.has(node.expression.expression.text) &&
+      node.expression.name.text === method
+    )
+      calls.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(root);
+  return calls;
+}
+
+function referencesAny(node: ts.Node, names: ReadonlySet<string>): boolean {
+  if (ts.isIdentifier(node) && names.has(node.text)) return true;
+  return ts.forEachChild(node, (child) => referencesAny(child, names) || undefined) ?? false;
+}
+
+/** Why a covered module's property test does not drive it through fast-check, if it does not. */
+function coverageProblems(modulePath: string, propertyTest: string): string[] {
+  const source = parseProductSource(propertyTest);
+  const fastCheck = runtimeBindings(source, propertyTest, (target) => target === 'fast-check');
+  const covered = runtimeBindings(source, propertyTest, (target) => target === stemOf(modulePath));
+  const asserted = fastCheckCalls(source, fastCheck, 'assert').filter((call) => referencesAny(call, covered));
+  if (fastCheck.size === 0) return [`${propertyTest} imports no fast-check.`];
+  if (covered.size === 0) return [`${propertyTest} imports no value of ${modulePath}.`];
+  return asserted.length === 0
+    ? [`${propertyTest} has no fc.assert whose property calls a value of ${modulePath}.`]
+    : [];
+}
+
+/** An option key as written, quoted or not; undefined for a spread or a computed key. */
+function optionKey(property: ts.ObjectLiteralElementLike): string | undefined {
+  if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return undefined;
+  const { name } = property;
+  return ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)
+    ? name.text
+    : undefined;
+}
+
+/** Run settings a property test sets itself, and failing cases that hide a property or name no issue. */
+function settingProblems(file: string): string[] {
+  const source = parseProductSource(file);
+  const lines = source.getFullText().split('\n');
+  const fastCheck = runtimeBindings(source, file, (target) => target === 'fast-check');
+  const problems: string[] = [];
+  const at = (node: ts.Node): string =>
+    `${file}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}`;
+  for (const call of fastCheckCalls(source, fastCheck, 'assert')) {
+    const options = call.arguments[1];
+    if (!options) continue;
+    const keys = ts.isObjectLiteralExpression(options) ? options.properties.map(optionKey) : [undefined];
+    if (keys.some((key) => key === undefined || !ASSERT_OPTIONS.has(key)))
+      problems.push(
+        `${at(call)}: fc.assert takes only a literal \`{ examples }\`; the seed and run count come from lib/testing/property-runs.ts.`,
       );
-    if (ts.isPropertyAccessExpression(node) && node.name.text === 'failing') {
+  }
+  for (const call of fastCheckCalls(source, fastCheck, 'configureGlobal'))
+    problems.push(`${at(call)}: only scripts/unit-test-preload.ts configures fast-check.`);
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'failing'
+    ) {
       const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line;
-      const above = text.split('\n')[line - 1] ?? '';
-      const comment = /^\s*\/\/(.*)$/.exec(above)?.[1] ?? '';
+      const comment = /^\s*\/\/(.*)$/.exec(lines[line - 1] ?? '')?.[1] ?? '';
       if (!KNOWN_BUG.test(comment))
-        found.push(
-          `${file}:${line + 1}: a failing case needs \`// known bug: werk-flow/werkflow-planning#<n> <why>\` on the line above.`,
+        problems.push(
+          `${at(node)}: a failing case needs \`// known bug: werk-flow/werkflow-planning#<n> <why>\` on the line above.`,
+        );
+      if (fastCheckCalls(node, fastCheck, 'assert').length > 0)
+        problems.push(
+          `${at(node)}: a failing case holds one fixed counterexample, never fc.assert, so it hides no other failure.`,
         );
     }
     ts.forEachChild(node, visit);
   };
   visit(source);
-  return found;
+  return problems;
 }
 
 const areas = readAreas();
@@ -150,7 +204,7 @@ describe('property test manifest', () => {
       const listed = new Set([...area.covered, ...Object.keys(area.exempt)]);
       return area.roots
         .flatMap(modulesUnder)
-        .filter((modulePath) => !listed.has(modulePath) && !isBoundary(modulePath))
+        .filter((modulePath) => !listed.has(modulePath))
         .map(
           (modulePath) =>
             `${modulePath} lies in the area "${area.area}" (${area.rule}). Write ${propertyTestOf(modulePath)} and list the module under "covered" in ${area.manifest}, or list it under "exempt" with why no such rule lives there.`,
@@ -163,15 +217,9 @@ describe('property test manifest', () => {
     const problems = areas.flatMap((area) =>
       area.covered.flatMap((modulePath) => {
         const propertyTest = propertyTestOf(modulePath);
-        if (!existsSync(resolve(repositoryRoot, propertyTest)))
-          return [`${modulePath} is covered in ${area.manifest}, but ${propertyTest} does not exist.`];
-        const source = parseProductSource(propertyTest);
-        const targets = importsOf(source).map((specifier) => importTarget(propertyTest, specifier));
-        const missing: string[] = [];
-        if (!targets.includes('fast-check')) missing.push('imports no fast-check');
-        if (!targets.includes(modulePath.replace(/\.ts$/, ''))) missing.push(`never imports ${modulePath}`);
-        if (!source.getFullText().includes('fc.assert(')) missing.push('asserts no property with fc.assert');
-        return missing.map((reason) => `${propertyTest} ${reason}.`);
+        return existsSync(resolve(repositoryRoot, propertyTest))
+          ? coverageProblems(modulePath, propertyTest)
+          : [`${modulePath} is covered in ${area.manifest}, but ${propertyTest} does not exist.`];
       }),
     );
     expect(problems).toEqual([]);
@@ -183,7 +231,7 @@ describe('property test manifest', () => {
     expect(orphans).toEqual([]);
   });
 
-  test('a property test takes the shared seed and run count, and a failing case names its issue', () => {
-    expect(listPropertyTests().flatMap(runSettingViolations)).toEqual([]);
+  test('a property test takes the shared seed and run count, and a failing case is one counterexample with its issue', () => {
+    expect(listPropertyTests().flatMap(settingProblems)).toEqual([]);
   });
 });

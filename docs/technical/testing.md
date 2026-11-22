@@ -20,11 +20,11 @@ A useful test survives an equivalent implementation. Check a regression test aga
 
 ### Property tests
 
-Money, time and date rules get fast-check property tests of their spec's invariants.
+Money, time and date rules get property tests of their spec's invariants.
 
-1. List the module in `lib/testing/property-test-areas/` and write `<module>.property.test.ts` (`lib/conventions/property-tests.test.ts`).
-2. Set no seed or run count. `bun run test:properties` draws a fresh seed; `WERKFLOW_PROPERTY_SEED=<seed>` replays one. Keep each counterexample in `examples`.
-3. A found bug stays `test.failing` under `// known bug: werk-flow/werkflow-planning#<n> <why>`.
+1. List the module in `lib/testing/property-test-areas/`; write `<module>.property.test.ts` (`lib/conventions/property-tests.test.ts`).
+2. Set no seed or run count. `bun run test:properties` draws a fresh seed; `WERKFLOW_PROPERTY_SEED=<seed>` replays one. Keep counterexamples in `examples`.
+3. Found bugs' counterexamples stay `test.failing` cases, no `fc.assert`, under `// known bug: werk-flow/werkflow-planning#<n> <why>`.
 
 ### Write a spec that stands alone
 
