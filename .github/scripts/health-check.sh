@@ -80,8 +80,8 @@ case "$kind" in
 
   deploy-key)
     key="$RUNNER_TEMP/deploy-key"
-    printf '%s\n' "$value" > "$key"
-    chmod 600 "$key"
+    # The umask creates the key 0600, so no reader sees it before ssh does.
+    (umask 077; printf '%s\n' "$value" > "$key")
     GIT_SSH_COMMAND="ssh -i ${key} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
       git ls-remote --exit-code "$argument" refs/heads/production > /dev/null 2>&1 \
       || { rm -f "$key"; fail "${variable} could not read the production branch over SSH."; }

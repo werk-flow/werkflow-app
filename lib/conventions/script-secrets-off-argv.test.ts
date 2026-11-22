@@ -61,7 +61,9 @@ type Level = { kind: 'command'; hereString: 'none' | 'before' | 'in' } | { kind:
  * The line cut where a command ends: at a pipe, a list operator, or the bounds of a command or
  * process substitution. Inside quotes these characters are argument text, except where a
  * double-quoted `$(` or backtick opens a command. A here-string operand goes to stdin, so it is
- * left out, but a command substituted inside it still counts.
+ * left out, but a command substituted inside it still counts. Text Bash never expands turns into
+ * spaces: single-quoted text and an escaped character. An unquoted `#` at a word start ends the
+ * line as a comment.
  */
 function splitCommands(line: string): string[] {
   const parts: string[] = [];
@@ -81,7 +83,7 @@ function splitCommands(line: string): string[] {
     const level = open.at(-1);
     if (level?.kind === "'") {
       if (character === "'") open.pop();
-      keep(character);
+      keep(character === "'" ? character : ' ');
       continue;
     }
     if (level?.kind === 'command' && level.hereString !== 'none' && /\s/.test(character)) {
@@ -90,8 +92,14 @@ function splitCommands(line: string): string[] {
     }
     if (level?.kind === 'command' && level.hereString === 'before') level.hereString = 'in';
     if (character === '\\') {
-      keep(pair);
+      keep('\\ ');
       index += 1;
+    } else if (
+      level?.kind === 'command' &&
+      character === '#' &&
+      (index === 0 || /[\s;|&()<>]/.test(line[index - 1] ?? ''))
+    ) {
+      break;
     } else if (pair === '$(' || (level?.kind === 'command' && (pair === '<(' || pair === '>('))) {
       cut();
       open.push({ kind: 'command', hereString: 'none' });
@@ -192,6 +200,13 @@ test('the scan names a credential in a program’s arguments and passes stdin, e
         'curl -H "x-note: <<< here" -H "Authorization: Bearer $VERCEL_TOKEN" "$url"',
         'jq . <<< "$(curl -H "Authorization: Bearer $GH_TOKEN" "$url")" | sort',
         'read -r token <<< $HEALTH_CHECK_TOKEN; curl "$url"',
+        `grep -F '$API_KEY' "$file"; grep -F \\$API_KEY "$file"; grep -F "\\$API_KEY" "$file"`,
+        'grep -c x "$file" # not $API_KEY',
+        'curl -H "x-note: # $GH_TOKEN" "$url"',
+        'curl -H "Authorization: Bearer $VERCEL_TO\\',
+        'KEN" "$url"',
+        'echo "done" \\\\',
+        'curl -H "Authorization: Bearer $GH_TOKEN" "$url"',
       ].join('\n'),
     ),
   ).toEqual([
@@ -205,6 +220,9 @@ test('the scan names a credential in a program’s arguments and passes stdin, e
     '18: curl $VERCEL_TOKEN',
     '19: curl $VERCEL_TOKEN',
     '20: curl $GH_TOKEN',
+    '24: curl $GH_TOKEN',
+    '25: curl $VERCEL_TOKEN',
+    '28: curl $GH_TOKEN',
   ]);
 });
 
