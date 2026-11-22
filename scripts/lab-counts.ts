@@ -18,6 +18,7 @@ import {
   migrateLabReferences,
   ratchetLabReference,
   stabilityOfCounts,
+  staleLabShapes,
   type LabReferences,
 } from '../lib/testing/lab-counts';
 import { calibrateLabStep, gateLabMetric, rejectLabMetric, ungateLabMetric } from '../lib/testing/lab-gate';
@@ -46,6 +47,7 @@ import { readRunManifest, runDirectory } from '../tests/golden/support/run-state
 //   bun scripts/lab-counts.ts calibrate --runs <five keys> --reason "<basis>"
 //   bun scripts/lab-counts.ts ratchet --run <key>
 //   bun scripts/lab-counts.ts accept --run <key> --step <id> --target <metric or shape> --reason "<what changed>"
+//     (accepting `requests` also accepts each gated shape whose request count the run moved)
 //   bun scripts/lab-counts.ts ungate --runs <keys> --step <id> --metric <m> --reason "<the two values it took>"
 //   bun scripts/lab-counts.ts migrate-history --reason "<why the stored values are the reviewed ones>"   (once)
 //   bun scripts/lab-counts.ts rekey-workload --from <digest> --reason "<why the seeded rows stay the same>"
@@ -355,6 +357,12 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
       const carried = carriedReferences(references);
       const reference = findLabReference(carried, observation);
       if (!reference) throw new Error(`${stepId} has no reference in this context; calibrate it first.`);
+      const target = required('--target');
+      const stale = target === 'requests' ? staleLabShapes(reference, observation) : [];
+      if (stale.length)
+        console.log(
+          `${stepId}: the run moved the request count of ${stale.join(', ')}; accepted from it too.`,
+        );
       const written: LabReferences = {
         ...carried,
         steps: carried.steps.map((candidate) =>
@@ -362,7 +370,7 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
             ? acceptLabChange({
                 reference,
                 observation,
-                target: required('--target'),
+                target,
                 runKey: run.runKey,
                 reason: required('--reason'),
               })
