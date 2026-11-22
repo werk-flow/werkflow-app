@@ -88,7 +88,10 @@ export type CiProfile = {
   jobsAtOnce: number;
   /** The most pull requests in one queue batch: scripts/ci/queue.ts --max-batch's default. */
   maxBatch: number;
-  /** The Berlin hours its timed schedules fire in, or undefined for any hour. */
+  /**
+   * The Berlin hours its scheduled work starts in, or undefined for any hour. A cron that only
+   * dispatches a hold (release.yml at 17:00) starts its work when the hold ends, which is what counts.
+   */
   window: { from: string; to: string } | undefined;
   jobs: Readonly<Record<CiJob, Placement>>;
   /** Who starts each kind of run. */
