@@ -11,6 +11,8 @@ set -euo pipefail
 
 mode="$1"
 case "$mode" in manual | scheduled | dry-run) ;; *) echo "::error::Unknown mode ${mode}."; exit 1 ;; esac
+source "$(dirname "${BASH_SOURCE[0]}")/check-app.sh"
+check_app_id || exit 1
 
 test "$GITHUB_REF" = refs/heads/main \
   || { echo "::error::A release starts on main, not ${GITHUB_REF}."; exit 1; }
@@ -43,18 +45,34 @@ git merge-base --is-ancestor origin/production "$sha" \
 # job is `Full run / Check` (.github/workflows/nightly.yml). Only a nightly, release or
 # main-full-run run on main counts: their workflow files come from the commit itself, so no
 # other branch can stand in for one, and no pull request starts them. The newest completed full
-# run decides; a later failure replaces a pass.
+# run decides; a later failure replaces a pass, and so does one that ended in the same second. A
+# runner off GitHub Actions posts a full run's `Full run / Check` as the CI App (check-app.sh,
+# scripts/ci/publish-check.ts), which only that runner can; another app's check run or a commit
+# status of that name counts for nothing.
 runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}&branch=main&per_page=100" \
   --jq '.workflow_runs[] | select(.head_branch == "main"
     and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml"
       or .path == ".github/workflows/main-full-run.yml")
     and (.event == "schedule" or .event == "workflow_dispatch")) | .id')"
 # A failed request stops the gate: a missing run could be the newest, failed one.
-latest="$(for run in $runs; do
-  gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
-    --jq '.jobs[] | select(.name == "Full run / Check" and .status == "completed") | "\(.completed_at) \(.conclusion) \(.html_url)"' \
-    || exit 1
-done | sort | tail -n 1)"
+app_checks=""
+if test -n "$CHECK_APP_ID"; then
+  app_checks="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?check_name=Full%20run%20%2F%20Check&filter=all&app_id=${CHECK_APP_ID}&per_page=100" \
+    --jq '.check_runs[] | select(.app.id == '"${CHECK_APP_ID}"' and .name == "Full run / Check" and .status == "completed")
+      | "\(.completed_at) \(.conclusion) \(.details_url // .html_url)"')"
+fi
+latest="$({
+  for run in $runs; do
+    gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
+      --jq '.jobs[] | select(.name == "Full run / Check" and .status == "completed") | "\(.completed_at) \(.conclusion) \(.html_url)"' \
+      || exit 1
+  done
+  printf '%s\n' "$app_checks"
+} | sed '/^$/d' | sort | awk '
+  # Among the runs that ended last, a non-success wins: a tie never lets a pass hide a later failure.
+  $1 != last { last = $1; pick = $0; next }
+  $2 != "success" { pick = $0 }
+  END { if (last != "") print pick }')"
 echo "Newest full run on ${sha}: ${latest:-none}"
 conclusion="$(echo "$latest" | cut -d ' ' -f 2)"
 

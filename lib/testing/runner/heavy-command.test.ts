@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
-import { BROAD_LINT_FILES, heavyCommandRefusal, lintedFileCount } from './heavy-command';
+import { BROAD_LINT_FILES, heavyCommandRefusal, lintedFileCount, withHeavyNodeHeap } from './heavy-command';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const refusal = (command: string) => heavyCommandRefusal(command, repositoryRoot);
@@ -183,4 +183,18 @@ test('bun run typecheck, lint and build take a heavy slot', () => {
     'await acquireHeavySlot(',
   );
   expect(readFileSync(resolve(repositoryRoot, 'scripts/lint.ts'), 'utf8')).toContain('runInHeavySlot(');
+});
+
+// Node's default heap follows the machine's memory: a 6 GiB runner ran out of memory linting a tree
+// a 16 GB runner passed. Lint and build set the heap themselves, so no runner has to.
+test('lint and build fix their Node heap instead of inheriting the machine default', () => {
+  expect(withHeavyNodeHeap(undefined)).toBe('--max-old-space-size=4096');
+  expect(withHeavyNodeHeap('--enable-source-maps')).toBe('--enable-source-maps --max-old-space-size=4096');
+  for (const script of ['scripts/lint.ts', 'scripts/build.ts'])
+    expect([
+      script,
+      readFileSync(resolve(repositoryRoot, script), 'utf8').includes(
+        'withHeavyNodeHeap(process.env.NODE_OPTIONS)',
+      ),
+    ]).toEqual([script, true]);
 });

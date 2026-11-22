@@ -13,8 +13,9 @@ import { z } from '../lib/zod';
 
 // The `Plan` job of .github/workflows/date-lookahead.yml: which dates this run looks at, as one matrix.
 // SHARDS and SQL are the outputs of scripts/ci-plan.ts --full; OPEN_ALERT is the body of the open alert
-// issue, if any; ASKED_DATE narrows the run to one date. It writes `legs` to $GITHUB_OUTPUT. It runs on
-// a GitHub-hosted runner: it reads the runner agent's journal to learn how far a leg may shift its clock.
+// issue, if any; ASKED_DATE narrows the run to one date. It writes `legs`, and `browser` when a leg
+// serves the app, to $GITHUB_OUTPUT. It runs on a GitHub-hosted runner: it reads the runner agent's
+// journal to learn how far a leg may shift its clock.
 const input = z
   .object({
     SHARDS: z.string(),
@@ -69,4 +70,7 @@ for (const day of days.filter((day) => day.browser && !browserLegFits(day, expir
   console.info(
     `  ${day.date} ${day.label}: no browser groups; the runner would be shut down past the expiry`,
   );
-appendFileSync(input.GITHUB_OUTPUT, `legs=${JSON.stringify(legs)}\n`);
+appendFileSync(
+  input.GITHUB_OUTPUT,
+  `legs=${JSON.stringify(legs)}\nbrowser=${legs.some((leg) => leg.browser)}\n`,
+);
