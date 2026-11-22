@@ -40,7 +40,6 @@ const BUILTINS = new Set([
 ]);
 
 const REFERENCE = /\$\{?(!?)([A-Za-z_][A-Za-z0-9_]*)/g;
-const HERE_STRING = /<<<\s*(?:"(?:[^"\\]|\\.)*"|'[^']*'|\S+)/g;
 const KEYWORD = /^(?:(?:if|then|elif|else|while|until|do|time|!|\{)\s+)+/;
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)\+?=("(?:[^"\\]|\\.)*"|'[^']*'|\([^)]*\)?|\S*)\s*/;
 
@@ -54,46 +53,65 @@ function referencesCredential(text: string, credentials: ReadonlySet<string>): s
     .map(([, indirect, name]) => `$${indirect}${name}`);
 }
 
+/** A command list, with where its here-string operand stands, or a quoted word. */
+type Level = { kind: 'command'; hereString: 'none' | 'before' | 'in' } | { kind: '"' | "'" };
+
 /**
  * The line cut where a command ends: at a pipe, a list operator, or the bounds of a command or
  * process substitution. Inside quotes these characters are argument text, except where a
- * double-quoted `$(` or backtick opens a command.
+ * double-quoted `$(` or backtick opens a command. A here-string operand goes to stdin, so it is
+ * left out, but a command substituted inside it still counts.
  */
 function splitCommands(line: string): string[] {
   const parts: string[] = [];
-  // What each open level is: a command list, a double-quoted or a single-quoted word.
-  const open: ('command' | '"' | "'")[] = ['command'];
+  const open: Level[] = [{ kind: 'command', hereString: 'none' }];
   let current = '';
   const cut = () => {
     parts.push(current);
     current = '';
   };
+  const command = () => open.findLast((level) => level.kind === 'command');
+  const keep = (text: string) => {
+    if (command()?.hereString === 'none') current += text;
+  };
   for (let index = 0; index < line.length; index += 1) {
     const character = line[index] ?? '';
     const pair = line.slice(index, index + 2);
     const level = open.at(-1);
-    if (level === "'") {
+    if (level?.kind === "'") {
       if (character === "'") open.pop();
-      current += character;
-    } else if (character === '\\') {
-      current += pair;
+      keep(character);
+      continue;
+    }
+    if (level?.kind === 'command' && level.hereString !== 'none' && /\s/.test(character)) {
+      if (level.hereString === 'in') level.hereString = 'none';
+      continue;
+    }
+    if (level?.kind === 'command' && level.hereString === 'before') level.hereString = 'in';
+    if (character === '\\') {
+      keep(pair);
       index += 1;
-    } else if (pair === '$(' || (level === 'command' && (pair === '<(' || pair === '>('))) {
+    } else if (pair === '$(' || (level?.kind === 'command' && (pair === '<(' || pair === '>('))) {
       cut();
-      open.push('command');
+      open.push({ kind: 'command', hereString: 'none' });
       index += 1;
     } else if (character === '`') cut();
-    else if (level === '"') {
+    else if (level?.kind === '"') {
       if (character === '"') open.pop();
-      current += character;
+      keep(character);
+    } else if (line.startsWith('<<<', index) && level) {
+      level.hereString = 'before';
+      index += 2;
     } else if (character === "'" || character === '"') {
-      open.push(character);
-      current += character;
+      open.push({ kind: character });
+      keep(character);
     } else if (character === ')') {
       cut();
       if (open.length > 1) open.pop();
-    } else if (character === ';' || character === '|' || character === '&') cut();
-    else current += character;
+    } else if (character === ';' || character === '|' || character === '&') {
+      cut();
+      if (level) level.hereString = 'none';
+    } else keep(character);
   }
   cut();
   return parts;
@@ -104,7 +122,7 @@ function commands(script: string): { number: number; text: string }[] {
   return logicalLines(script)
     .filter(({ text }) => !text.trimStart().startsWith('#'))
     .flatMap(({ number, text }) =>
-      splitCommands(text.replace(HERE_STRING, ''))
+      splitCommands(text)
         .map((command) => ({ number, text: command.trim().replace(KEYWORD, '') }))
         .filter((command) => command.text !== ''),
     );
@@ -170,6 +188,9 @@ test('the scan names a credential in a program’s arguments and passes stdin, e
         'bash health-check.sh prod check endpoint HEALTH_CHECK_TOKEN "$HEALTH_URL"',
         'curl -H "Cookie: locale=de; session=$GH_TOKEN" "$APP_URL"',
         'jq -r \'.a | .b\' "$file"; echo "$(curl -H \'x: y\' "$VERCEL_TOKEN")"',
+        'curl -H "x-note: <<< here" -H "Authorization: Bearer $VERCEL_TOKEN" "$url"',
+        'jq . <<< "$(curl -H "Authorization: Bearer $GH_TOKEN" "$url")" | sort',
+        'read -r token <<< $HEALTH_CHECK_TOKEN; curl "$url"',
       ].join('\n'),
     ),
   ).toEqual([
@@ -181,6 +202,8 @@ test('the scan names a credential in a program’s arguments and passes stdin, e
     '9: curl $auth',
     '17: curl $GH_TOKEN',
     '18: curl $VERCEL_TOKEN',
+    '19: curl $VERCEL_TOKEN',
+    '20: curl $GH_TOKEN',
   ]);
 });
 

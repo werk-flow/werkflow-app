@@ -63,12 +63,14 @@ case "$kind" in
 
   # libpq takes the password from PGPASSWORD, so psql's arguments hold the URL without it. The
   # URL carries the password percent-encoded in its user info; PGPASSWORD takes it decoded, and
-  # printf -v keeps a decoded trailing newline. A password in the query would reach the arguments.
+  # printf -v keeps a decoded trailing newline. Only a postgres URL with one `@` and a query of
+  # the options below passes: any other form could carry a credential into the arguments.
   database)
+    grep -qE '^postgres(ql)?://[^@]*(@[^@]*)?$' <<< "$value" \
+      || fail "${variable} is no postgres:// URL with at most one @."
+    grep -qE '^[^?]*(\?((sslmode|connect_timeout|application_name)=[A-Za-z0-9_.-]*(&|$))*)?$' <<< "$value" \
+      || fail "${variable} has a query option other than sslmode, connect_timeout or application_name."
     address="$(sed -E 's#^([^:/]+://[^:/@]+):[^@]*@#\1@#' <<< "$value")"
-    if grep -qiE '[?&]password=' <<< "$address"; then
-      fail "${variable} carries its password in the query; put it in the user info."
-    fi
     password="$(sed -nE 's#^[^:/]+://[^:/@]+:([^@]*)@.*#\1#p' <<< "$value")"
     password="${password//\\/\\\\}"
     printf -v password '%b' "${password//%/\\x}"
