@@ -9,7 +9,7 @@ function abortReason(signal: AbortSignal): Error {
 }
 
 /** Whether any process of the group still exists; a killed one counts until it has been reaped. */
-function groupExists(groupId: number): boolean {
+export function groupExists(groupId: number): boolean {
   try {
     process.kill(-groupId, 0);
     return true;
@@ -42,9 +42,9 @@ async function terminateTree(child: ChildProcess): Promise<void> {
     console.warn(`[werkflow-test] Process group ${groupId} is still listed 5 s after SIGKILL.`);
 }
 
-/** Resolves once no process of the group is left, or with false after 5 s. */
-export async function groupGone(groupId: number): Promise<boolean> {
-  const deadline = Date.now() + 5_000;
+/** Resolves once no process of the group is left, or with false after `withinMs`. */
+export async function groupGone(groupId: number, withinMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + withinMs;
   while (groupExists(groupId)) {
     if (Date.now() > deadline) return false;
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));

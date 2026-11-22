@@ -1,5 +1,6 @@
 import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { partOf, partUnitFiles } from '../lib/testing/ci/dag';
 import { runWatchedUnitTests } from '../lib/testing/runner/unit-run-watchdog';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 import { UNIT_PROGRESS_DEADLINE_MS, UNIT_RUN_DEADLINE_MS, UNIT_TEST_TIMEOUT_MS } from './unit-test-timeout';
@@ -14,11 +15,15 @@ import { UNIT_PROGRESS_DEADLINE_MS, UNIT_RUN_DEADLINE_MS, UNIT_TEST_TIMEOUT_MS }
 // directory order from the file system, which differs between ext4, APFS and
 // NTFS; the whole suite therefore runs in one sorted order on every machine.
 const repositoryRoot = resolve(import.meta.dir, '..');
+// On the CI mirror Fast's two parts each run their own files (CI_PART, lib/testing/ci/dag.ts).
 const sortedTestFiles = (): string[] =>
-  readdirSync(resolve(repositoryRoot, 'lib'), { recursive: true, encoding: 'utf8' })
-    .filter((name) => /\.test\.(?:ts|tsx|mjs)$/.test(name))
-    .map((name) => `./lib/${name}`)
-    .sort();
+  partUnitFiles(
+    readdirSync(resolve(repositoryRoot, 'lib'), { recursive: true, encoding: 'utf8' })
+      .filter((name) => /\.test\.(?:ts|tsx|mjs)$/.test(name))
+      .map((name) => `./lib/${name}`)
+      .sort(),
+    partOf(process.env.CI_PART, 'fast'),
+  );
 await withWorkspaceTestLock({ operation: 'unit suite' }, async () => {
   const argumentsToRun = process.argv.slice(2);
   const { exitCode, stopped } = await runWatchedUnitTests(

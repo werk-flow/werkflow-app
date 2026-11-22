@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { z } from '../zod';
 
 import { configuredMcpServers, productionMcpRefusal, supabaseProjectRefs } from './production-access';
+import { workflowsFolder } from '../testing/ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const PROD = 'prodprodprodprodprod';
@@ -42,7 +43,7 @@ test('the cloud-backend table of the environments doc yields both Supabase refs'
   expect(refs?.production).toMatch(/^[a-z]{20}$/);
   expect(refs?.dev).toMatch(/^[a-z]{20}$/);
   // The other homes of the production ref agree with the doc the guard reads.
-  for (const file of ['eslint.config.mjs', '.github/workflows/release.yml'])
+  for (const file of ['eslint.config.mjs', `${workflowsFolder()}/release.yml`])
     expect(readFileSync(resolve(repositoryRoot, file), 'utf8'), file).toContain(
       refs?.production ?? 'missing',
     );
