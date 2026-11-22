@@ -1,0 +1,101 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Angebote
+Rechnungen
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+Problem melden
+F2
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Rechnungen
+Rechnungsentwurf
+Entwurf
+Entwurf löschen
+Kunde
+Familie Hoffmann
+Rechnungsempfänger
+Familie Hoffmann
+Lindenstraße 4, 71032 Böblingen
+Abrechnen für
+Ohne Bezug
+Positionen
+Position hinzufügen
+1
+.
+Bezeichnung
+*
+Pflichtfeld
+Beschreibung
+Menge
+*
+Pflichtfeld
+Einheit
+Stück
+Einzelpreis netto
+*
+Pflichtfeld
+USt.
+19 %
+Netto:
+329,00 €
+2
+.
+Bezeichnung
+*
+Pflichtfeld
+Beschreibung
+Menge
+*
+Pflichtfeld
+Einheit
+Stunde
+Einzelpreis netto
+*
+Pflichtfeld
+USt.
+19 %
+Netto:
+108,00 €
+3
+.
+Bezeichnung
+*
+Pflichtfeld
+Beschreibung
+Menge
+*
+Pflichtfeld
+Einheit
+Pauschal
+Einzelpreis netto
+*
+Pflichtfeld
+USt.
+19 %
+Netto:
+28,00 €
+Summe netto
+465,00 €
+USt.
+19 %
+auf
+465,00 €
+88,35 €
+Gesamt brutto
+553,35 €
+Nicht eingestempelt

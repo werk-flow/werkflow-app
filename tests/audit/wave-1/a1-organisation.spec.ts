@@ -42,7 +42,7 @@ import {
   requestMemberRemovalFromRow,
   signOutViaUi,
   signUpViaUi,
-  simulatedPaymentButton,
+  payForNewOrganization,
   withdrawJoinRequestButton,
 } from '../../golden/support/steps/organization';
 import {
@@ -87,10 +87,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
       await upgradeChoiceLink(page).click();
       await expect(page).toHaveURL(/\/upgrade/);
     }
-    if (/\/upgrade/.test(page.url())) {
-      await simulatedPaymentButton(page).click();
-      await expect(page).toHaveURL(/\/onboarding\/create-organization/);
-    }
+    await payForNewOrganization(page, email);
 
     await createOrganizationInOnboarding(page, organizationName);
     await expect(visibleText(page, organizationName)).toBeVisible();
@@ -181,7 +178,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     await test.step('Admin legt eine zweite Organisation an, der Handwerker tritt per Code bei', async () => {
       await createCustomer(adminPage, primaryOrganizationCustomer);
       await adminPage.goto('/dashboard');
-      await createAdditionalOrganization(adminPage, secondaryOrganizationName);
+      await createAdditionalOrganization(adminPage, secondaryOrganizationName, world.users.admin.email);
       await expect(visibleText(adminPage, secondaryOrganizationName)).toBeVisible();
       const secondaryOrganization = await readOrganizationCode(adminPage);
       expect(secondaryOrganization.name).toBe(secondaryOrganizationName);

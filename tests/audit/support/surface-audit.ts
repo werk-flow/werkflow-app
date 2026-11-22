@@ -13,7 +13,7 @@ import {
   expectTouchTargets,
   nextFrames,
 } from './layout-measure';
-import { expectKeyboardPath } from './keyboard-path';
+import { expectOpeningFocus, expectTabCycle } from './keyboard-path';
 import { openLayerAt } from './open-layer';
 import type { SurfaceContext } from './surface-fixtures';
 import { openSurface, surfaceDestination } from './surface-routes';
@@ -146,8 +146,11 @@ async function auditDialog(
   };
   // The keyboard path at the trigger's own width: first focus, the Tab cycle,
   // Escape and focus return.
-  const first = await openLayerAt(context, opener, opener.viewport?.width ?? DESKTOP.width, { fresh: false });
-  await expectKeyboardPath(page, first.layer, label);
+  const first = await openLayerAt(context, opener, opener.viewport?.width ?? DESKTOP.width, {
+    fresh: false,
+    onOpened: (layer) => expectOpeningFocus(layer, label),
+  });
+  await expectTabCycle(page, first.layer, label);
   await dismissDialog(first.layer);
   const returned = opener.returnFocus?.(context) ?? first.trigger;
   await softly(`${label}: Escape returns focus to the trigger`, () => expect(returned).toBeFocused());

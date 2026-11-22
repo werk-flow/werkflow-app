@@ -360,6 +360,9 @@ export async function completeExecutionAsManager(
   const dialog = workLifecycleDialog(page);
   const exception = dialog.getByRole('checkbox', { name: LIFECYCLE_COPY.managerException });
   const reason = dialog.locator('#work-transition-reason');
+  // The card's dialogs load on demand: read the optional exception only once
+  // the dialog's own save button shows that its form has rendered.
+  await expect(workTransitionSave(dialog)).toBeVisible();
   if (options.managerException === 'use') {
     if (await exception.isVisible()) await exception.check();
     await reason.fill(options.reason);

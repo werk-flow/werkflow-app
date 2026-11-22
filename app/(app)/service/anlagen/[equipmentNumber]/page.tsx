@@ -4,6 +4,7 @@ import { EquipmentDetailContent } from '@/components/service/equipment-detail-co
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { getEquipmentDocuments } from '@/lib/documents/actions';
 import { getInstalledEquipmentDetailByNumber } from '@/lib/installed-equipment/actions';
+import { getEquipmentOpenFindings } from '@/lib/installed-equipment/open-findings-reads';
 
 type InstalledEquipmentDetailPageProps = {
   params: Promise<{ equipmentNumber: string }>;
@@ -28,12 +29,16 @@ export default async function InstalledEquipmentDetailPage({ params }: Installed
       </RegionLoadError>
     );
   }
-  const documentsResult = await getEquipmentDocuments(detailResult.equipment.id);
+  const [documentsResult, openFindingsResult] = await Promise.all([
+    getEquipmentDocuments(detailResult.equipment.id),
+    getEquipmentOpenFindings({ equipmentId: detailResult.equipment.id }),
+  ]);
   return (
     <EquipmentDetailContent
       initial={detailResult.equipment}
       documents={documentsResult.success ? documentsResult.documents : []}
       documentsLoadFailed={!documentsResult.success}
+      openFindings={openFindingsResult.success ? openFindingsResult.findings : null}
     />
   );
 }

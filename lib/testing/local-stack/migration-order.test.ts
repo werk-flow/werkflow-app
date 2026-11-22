@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { migrationOrderProblems } from './migration-order';
+import { type OpenMigration, migrationOrderProblems } from './migration-order';
 
 const directories: string[] = [];
 afterEach(() => {
@@ -18,57 +18,91 @@ function git(root: string, ...args: string[]): void {
   );
 }
 
-function addMigration(root: string, name: string, commit: boolean): void {
-  writeFileSync(join(root, 'supabase/migrations', name), 'select 1;\n');
+function addMigration(root: string, name: string, sql: string, commit: boolean): void {
+  writeFileSync(join(root, 'supabase/migrations', name), sql);
   if (!commit) return;
   git(root, 'add', '.');
   git(root, 'commit', '--quiet', '--no-verify', '-m', name);
 }
 
-/** A feature branch cut from main before main merged its newest migration, 20261025100000_second.sql. */
+/**
+ * A feature branch cut from main before main merged two newer migrations: one on jobs, one that
+ * replaces the function close_period.
+ */
 function repository(): string {
   const root = mkdtempSync(join(tmpdir(), 'werkflow-migration-order-'));
   directories.push(root);
   git(root, 'init', '--quiet', '--initial-branch=main');
   mkdirSync(join(root, 'supabase/migrations'), { recursive: true });
-  addMigration(root, '20261020100000_first.sql', true);
+  addMigration(root, '20261020100000_first.sql', 'create table jobs (id int);\n', true);
   git(root, 'branch', 'feature');
-  addMigration(root, '20261025100000_second.sql', true);
+  addMigration(root, '20261025100000_job_note.sql', 'alter table jobs add column note text;\n', true);
+  addMigration(
+    root,
+    '20261026100000_close_period.sql',
+    'create or replace function close_period() returns void language sql as $$ select 1 $$;\n',
+    true,
+  );
   git(root, 'checkout', '--quiet', 'feature');
   return root;
 }
 
-const problems = (root: string, now: string): string[] =>
-  migrationOrderProblems({ repositoryRoot: root, mainRef: 'main', now: new Date(now) });
+const problems = (root: string, openPullRequests: readonly OpenMigration[] | null = []): string[] =>
+  migrationOrderProblems({ repositoryRoot: root, mainRef: 'main', openPullRequests });
 
-test('a committed migration older than main newest fails and names a current version to rename it to', () => {
+test('a migration older than main newest that changes other objects passes without a rename', () => {
   const root = repository();
-  addMigration(root, '20261022120000_stale_change.sql', true);
-  expect(problems(root, '2026-10-29T12:00:00.000Z')).toEqual([
-    'supabase/migrations/20261022120000_stale_change.sql sorts at or before 20261025100000_second.sql, the newest migration on main, so supabase db push would refuse it after the merge. Rename it to supabase/migrations/20261029120000_stale_change.sql (docs/technical/environments.md, "The migration rule").',
+  addMigration(root, '20261022120000_add_visits.sql', 'create table visits (id int);\n', true);
+  expect(problems(root)).toEqual([]);
+});
+
+test('a migration older than a main migration that changes the same object fails, names both, and the rename clears the newest conflict', () => {
+  const root = repository();
+  addMigration(root, '20261022120000_job_due.sql', 'alter table public.jobs add column due date;\n', false);
+  expect(problems(root)).toEqual([
+    'supabase/migrations/20261022120000_job_due.sql changes what a migration with a higher version on main also changes: 20261025100000_job_note.sql (public.jobs). DEV and PROD applied that one first and a fresh database applies it after, so their schemas could differ. Rename it to supabase/migrations/20261025100001_job_due.sql (docs/technical/environments.md, "The migration rule").',
   ]);
 });
 
-test('an uncommitted migration with the version of main newest fails, and the rename sorts after it', () => {
+test('an opaque statement conflicts with every newer main migration', () => {
   const root = repository();
-  addMigration(root, '20261025100000_same_version.sql', false);
-  expect(problems(root, '2026-10-24T08:00:00.000Z')).toEqual([
-    expect.stringContaining('Rename it to supabase/migrations/20261025100001_same_version.sql'),
+  addMigration(root, '20261025120000_backfill.sql', 'do $$ begin perform 1; end $$;\n', false);
+  expect(problems(root)).toEqual([
+    expect.stringContaining(
+      '20261026100000_close_period.sql (a statement it cannot read ("do $$ begin perform 1; end $$")). DEV and PROD',
+    ),
+  ]);
+  expect(problems(root)[0]).toContain('Rename it to supabase/migrations/20261026100001_backfill.sql');
+});
+
+test('a version main already holds fails, and the rename skips every taken version', () => {
+  const root = repository();
+  addMigration(root, '20261025100000_same_version.sql', 'create table visits (id int);\n', false);
+  expect(problems(root, [{ pullRequest: 7, name: '20261025100001_other.sql' }])).toEqual([
+    'supabase/migrations/20261025100000_same_version.sql has the version of 20261025100000_job_note.sql on main; the ledger keeps one row per version. Rename it to supabase/migrations/20261025100002_same_version.sql (docs/technical/environments.md, "The migration rule").',
   ]);
 });
 
-test('a migration newer than main newest passes', () => {
+test('a version another open pull request holds fails; the same file in an open pull request is this one', () => {
   const root = repository();
-  addMigration(root, '20261026100000_newer.sql', false);
-  expect(problems(root, '2026-10-29T12:00:00.000Z')).toEqual([]);
+  addMigration(root, '20261027100000_visits.sql', 'create table visits (id int);\n', true);
+  expect(
+    problems(root, [
+      { pullRequest: 12, name: '20261027100000_visits.sql' },
+      { pullRequest: 13, name: '20261027100000_offers.sql' },
+    ]),
+  ).toEqual([expect.stringContaining('has the version of 20261027100000_offers.sql in #13;')]);
+  expect(problems(root, [{ pullRequest: 12, name: '20261027100000_visits.sql' }])).toEqual([]);
+  // GitHub unreadable: main's own history still decides.
+  expect(problems(root, null)).toEqual([]);
 });
 
 test('a branch migration that main already holds, as after a squash merge, passes', () => {
   const root = repository();
-  addMigration(root, '20261022120000_merged.sql', true);
+  addMigration(root, '20261022120000_merged.sql', 'alter table jobs add column due date;\n', true);
   git(root, 'checkout', '--quiet', 'main');
-  addMigration(root, '20261022120000_merged.sql', true);
-  addMigration(root, '20261026100000_later.sql', true);
+  addMigration(root, '20261022120000_merged.sql', 'alter table jobs add column due date;\n', true);
+  addMigration(root, '20261028100000_later.sql', 'alter table jobs add column later int;\n', true);
   git(root, 'checkout', '--quiet', 'feature');
-  expect(problems(root, '2026-10-29T12:00:00.000Z')).toEqual([]);
+  expect(problems(root)).toEqual([]);
 });
