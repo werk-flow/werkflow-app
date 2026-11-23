@@ -5,7 +5,7 @@ import {
   FAILED_REGION_SELECTOR,
   SKELETON_SELECTOR,
   interceptsRequest,
-  isAppPrefetch,
+  isRouteLoad,
   isTargetPrefetch,
   navigationStart,
   stateCapturePlan,
@@ -84,16 +84,16 @@ async function appRouter(page: Page, method: 'prefetch' | 'push', url: string): 
 
 /** The requests of a page in flight, watched from before its document opens. */
 type InFlight = {
-  /** The app's route prefetches still in flight, those started before any helper ran included. */
-  appPrefetches: (origin: string) => number;
+  /** The app's route prefetches and script chunks still in flight, those started before any helper ran included. */
+  routeLoads: (origin: string) => number;
   stop: () => void;
 };
 
 /**
  * Watches every request of the page until `stop`. Started before the page
- * opens, it also sees a prefetch that a link or an earlier step started
- * before a held navigation began to listen. A new document ends the requests
- * of the one it replaces, which may report no end of their own.
+ * opens, it also sees a prefetch or chunk that a link or an earlier step
+ * started before a held navigation began to listen. A new document ends the
+ * requests of the one it replaces, which may report no end of their own.
  */
 function watchInFlight(page: Page): InFlight {
   const pending = new Set<Request>();
@@ -115,8 +115,7 @@ function watchInFlight(page: Page): InFlight {
   page.on('requestfailed', ended);
   page.on('framenavigated', committed);
   return {
-    appPrefetches: (origin) =>
-      [...pending].filter((request) => isAppPrefetch(observed(request), origin)).length,
+    routeLoads: (origin) => [...pending].filter((request) => isRouteLoad(observed(request), origin)).length,
     stop: () => {
       page.off('request', started);
       page.off('requestfinished', ended);
@@ -129,7 +128,8 @@ function watchInFlight(page: Page): InFlight {
 /**
  * Navigates on the client to the target while its server render is held, so
  * the route's `loading.tsx` stays on screen. The prefetch passes first: it
- * brings the loading boundary that the navigation shows at once.
+ * brings the loading boundary that the navigation shows at once, and the
+ * push waits for the chunks that boundary imports.
  */
 async function navigateHeld(
   page: Page,
@@ -140,15 +140,16 @@ async function navigateHeld(
   const target = { origin: new URL(page.url()).origin, path };
   // A prefetch in flight, one a link started before this call included, can
   // own a segment the target shares, so the target's prefetch starts only
-  // once none is.
+  // once no prefetch or chunk is loading.
   await expect
-    .poll(() => inFlight.appPrefetches(target.origin), {
-      message: 'no prefetch of the app is in flight before the target route is prefetched',
+    .poll(() => inFlight.routeLoads(target.origin), {
+      message: 'no prefetch or chunk of the app is in flight before the target route is prefetched',
     })
     .toBe(0);
   // router.prefetch returns before the browser starts the request: wait until the
-  // target's prefetch started and no prefetch of the app is in flight again, the
-  // target's and any other a link started meanwhile.
+  // target's prefetch started, and no prefetch or chunk of the app is in flight
+  // again: the target's prefetch, the chunks its loading boundary imports, and
+  // any other a link started meanwhile.
   let seen = 0;
   const started = (request: Request): void => {
     if (isTargetPrefetch(observed(request), target)) seen += 1;
@@ -157,8 +158,8 @@ async function navigateHeld(
   try {
     await appRouter(page, 'prefetch', path);
     await expect
-      .poll(() => seen > 0 && inFlight.appPrefetches(target.origin) === 0, {
-        message: 'the prefetch of the target route and every other prefetch finished',
+      .poll(() => seen > 0 && inFlight.routeLoads(target.origin) === 0, {
+        message: 'the prefetch of the target route, its chunks and every other prefetch finished',
       })
       .toBe(true);
   } finally {
@@ -290,13 +291,13 @@ export async function withStandaloneLoading(
   try {
     // A page of the area links to its other pages, so the target's loading
     // boundary may be prefetched already and a second prefetch sends nothing:
-    // ask for it, then wait until the network is quiet and no prefetch of the
-    // app is in flight instead of for a request.
+    // ask for it, then wait until the network is quiet and no prefetch or
+    // chunk of the app is in flight instead of for a request.
     await appRouter(page, 'prefetch', route.to.address);
     await page.waitForLoadState('networkidle');
     const origin = new URL(page.url()).origin;
     await expect
-      .poll(() => inFlight.appPrefetches(origin), { message: 'no prefetch of the app is in flight' })
+      .poll(() => inFlight.routeLoads(origin), { message: 'no prefetch or chunk of the app is in flight' })
       .toBe(0);
     await interception.arm();
     await appRouter(page, 'push', route.to.address);
