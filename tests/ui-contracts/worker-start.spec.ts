@@ -435,3 +435,23 @@ test('„Bereitschaft jetzt“ follows the day, the clock and the Aufgaben, with
   // A field worker reads the card; planning stays with Admin and Büro.
   await expect(MAIN(page).getByRole('link', { name: 'Bereitschaft planen' })).toHaveCount(0);
 });
+
+test('„Bereitschaft jetzt“ whose first read fails shows its failure with a retry, never a lasting skeleton', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.workerStartOnCallFails = true;
+  });
+  await openStart(page, { stored: EMPTY_DAY }, '2026-11-17T17:00:00.000Z');
+  const failure = MAIN(page)
+    .getByRole('alert')
+    .filter({ hasText: 'Die Bereitschaft konnte nicht geladen werden' });
+  await expect(failure).toBeVisible();
+
+  await page.evaluate(() => {
+    window.workerStartOnCallFails = false;
+  });
+  await failure.getByRole('button', { name: 'Erneut laden' }).click();
+  await expect(MAIN(page).getByText('Gerade hat niemand Bereitschaft.')).toBeVisible();
+  await expect(failure).toHaveCount(0);
+});
