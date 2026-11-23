@@ -1,28 +1,38 @@
 /**
  * Auth-config parity check and one-way template sync: prod -> dev.
  *
- * Background (2026-08-20): the environment split replicated the database
- * byte-exactly, but Supabase auth EMAIL TEMPLATES are project configuration,
- * not schema. Dev therefore shipped with the default confirmation-link
- * template while the app's signup flow expects the 6-digit OTP ({{ .Token }})
- * that prod's customized template sends. This script closes that class of gap
- * and doubles as the parity check that the split's acceptance was missing.
+ * Supabase auth email templates are project configuration, not schema, so no
+ * migration carries them (decision 0003). This script compares the complete
+ * auth configuration of both projects and, with --apply, copies PROD's mail
+ * fields to DEV.
  *
- * Usage (requires SUPABASE_ACCESS_TOKEN, a Supabase PAT, in the environment):
- *   bun scripts/sync-dev-auth-from-prod.ts           # diff only, read-only
- *   bun scripts/sync-dev-auth-from-prod.ts --apply   # also PATCH dev's mailer_* fields to prod's values
+ *   bun scripts/sync-dev-auth-from-prod.ts           # compare only, read-only
+ *   bun scripts/sync-dev-auth-from-prod.ts --apply   # also PATCH DEV's mail fields to PROD's values
  *
- * Prod is only ever read. Only dev is written, and only `mailer_*` fields
- * (templates, subjects, OTP expiry, autoconfirm). Deliberately environment-
- * specific fields (site_url, uri_allow_list, SMTP credentials) are reported
- * as expected divergences and never synced.
+ * PROD is only ever read, with the read-only PROD token that only the PROD
+ * inspection job holds (.github/workflows/prod-inspect.yml, input `auth`); on a
+ * workstation the run fails and names the job. DEV is read and written with
+ * SUPABASE_ACCESS_TOKEN, and only `mailer_*` fields and SYNC_EXTRA are written.
+ * Environment-specific fields (site_url, uri_allow_list, SMTP credentials) are
+ * reported as expected divergences and never synced. The job's log is public,
+ * so the output names fields only, never a value or a response body.
+ *
+ * Exit 0: no unexpected divergence, or applied and verified. Exit 2: a compare
+ * found unexpected divergences. Exit 1: the run failed.
  */
 
-import { isJsonRecord } from '../lib/supabase/json';
+import { resolve } from 'node:path';
 
-const PROD_REF = 'jbgaqpdjauzoocplgdsn';
-const DEV_REF = 'mbkkzuqjbdvzelqvuzcn';
-const API = 'https://api.supabase.com/v1/projects';
+import { supabaseProjectRefs } from '../lib/security/production-access';
+import {
+  InspectionFailure,
+  PROD_DENIED,
+  failureMessage,
+  patchProject,
+  projectTokens,
+  readProject,
+} from '../lib/security/production-inspection';
+import { z } from '../lib/zod';
 
 const EXPECTED_DIVERGENT = new Set([
   'site_url',
@@ -45,104 +55,73 @@ const SYNC_EXTRA = new Set([
   'smtp_admin_email',
 ]);
 
-const SECRET_PATTERN = /(pass|secret|key|token)/i;
+const label = '[auth-sync]';
+const configSchema = z.record(z.string(), z.unknown());
+const differs = (left: unknown, right: unknown) =>
+  JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
 
-const token = process.env.SUPABASE_ACCESS_TOKEN;
-if (!token) {
-  console.error(
-    'SUPABASE_ACCESS_TOKEN is not set. Export the Supabase PAT first (see docs/technical/environments.md, onboarding step 1).',
-  );
-  process.exit(1);
-}
+async function main(): Promise<number> {
+  const refs = supabaseProjectRefs(resolve(import.meta.dir, '..'));
+  if (!refs) throw new InspectionFailure('docs/technical/environments.md names no Supabase project refs.');
+  const tokens = projectTokens(process.env);
+  const prodCall = {
+    ref: refs.production,
+    token: tokens.production,
+    denied: PROD_DENIED,
+    path: 'config/auth',
+  };
+  const devCall = { ref: refs.dev, token: tokens.dev, path: 'config/auth' };
+  const readDev = () => readProject({ ...devCall, schema: configSchema });
+  const [prod, dev] = await Promise.all([readProject({ ...prodCall, schema: configSchema }), readDev()]);
 
-const headers = {
-  Authorization: `Bearer ${token}`,
-  'Content-Type': 'application/json',
-};
+  const keys = [...new Set([...Object.keys(prod), ...Object.keys(dev)])].sort();
+  const divergent = keys.filter((key) => differs(prod[key], dev[key]));
+  const expected = divergent.filter((key) => EXPECTED_DIVERGENT.has(key));
+  const unexpected = divergent.filter((key) => !EXPECTED_DIVERGENT.has(key));
+  console.log(`${label} Compared ${keys.length} fields of the Auth configuration.`);
+  console.log(`${label} Expected environment-specific divergences: ${expected.join(', ') || 'none'}.`);
+  console.log(`${label} Unexpected divergences: ${unexpected.join(', ') || 'none'}.`);
 
-async function getAuthConfig(ref: string): Promise<Record<string, unknown>> {
-  const response = await fetch(`${API}/${ref}/config/auth`, { headers });
-  if (!response.ok) {
-    throw new Error(`GET auth config for ${ref} failed: ${response.status} ${await response.text()}`);
+  if (!process.argv.includes('--apply')) {
+    if (unexpected.length > 0)
+      console.log(`${label} Read-only run. Apply copies the mail fields from PROD to DEV.`);
+    return unexpected.length === 0 ? 0 : 2;
   }
-  const config: unknown = await response.json();
-  if (!isJsonRecord(config)) throw new Error(`GET auth config for ${ref} returned no JSON object.`);
-  return config;
-}
 
-function displayValue(key: string, value: unknown): string {
-  if (value === null || value === undefined || value === '') return '<empty>';
-  if (SECRET_PATTERN.test(key)) return '<redacted>';
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
-  return text.length > 120 ? `${text.slice(0, 117)}… (${text.length} chars)` : text;
-}
-
-const apply = process.argv.includes('--apply');
-
-const [prod, dev] = await Promise.all([getAuthConfig(PROD_REF), getAuthConfig(DEV_REF)]);
-
-const allKeys = [...new Set([...Object.keys(prod), ...Object.keys(dev)])].sort();
-const divergent: string[] = [];
-const expected: string[] = [];
-
-for (const key of allKeys) {
-  const prodValue = JSON.stringify(prod[key] ?? null);
-  const devValue = JSON.stringify(dev[key] ?? null);
-  if (prodValue === devValue) continue;
-  const line = `  ${key}: prod=${displayValue(key, prod[key])} | dev=${displayValue(key, dev[key])}`;
-  (EXPECTED_DIVERGENT.has(key) ? expected : divergent).push(line);
-}
-
-console.log(`Auth config comparison (${allKeys.length} fields):`);
-console.log(`\nExpected environment-specific divergences (${expected.length}):`);
-for (const line of expected) console.log(line);
-console.log(`\nUNEXPECTED divergences (${divergent.length}):`);
-for (const line of divergent) console.log(line.length > 0 ? line : '  none');
-if (divergent.length === 0) console.log('  none — dev matches prod outside the expected fields.');
-
-if (!apply) {
-  console.log(
-    '\nRead-only run. Re-run with --apply to sync mailer_* fields (templates, subjects, OTP expiry) prod -> dev.',
-  );
-  process.exit(divergent.length === 0 ? 0 : 2);
-}
-
-const mailerPatch: Record<string, unknown> = {};
-for (const key of Object.keys(prod)) {
   // *_custom_contents are derived bookkeeping (which fields are customized);
   // the API rejects them in a PATCH, which silently voids the whole payload.
-  if (key.endsWith('_custom_contents')) continue;
-  const inScope = key.startsWith('mailer_') || SYNC_EXTRA.has(key);
-  if (inScope && JSON.stringify(prod[key]) !== JSON.stringify(dev[key])) {
-    mailerPatch[key] = prod[key];
+  const patch = Object.fromEntries(
+    Object.keys(prod)
+      .filter((key) => !key.endsWith('_custom_contents'))
+      .filter((key) => key.startsWith('mailer_') || SYNC_EXTRA.has(key))
+      .filter((key) => differs(prod[key], dev[key]))
+      .map((key) => [key, prod[key]]),
+  );
+  const fields = Object.keys(patch);
+  if (fields.length === 0) {
+    console.log(`${label} Nothing to apply: the mail fields already match PROD.`);
+    return 0;
+  }
+  console.log(`${label} Patching ${fields.length} fields of DEV: ${fields.join(', ')}.`);
+  await patchProject({ ...devCall, patch, schema: z.unknown() });
+
+  // The config propagates asynchronously; an immediate re-read can be stale.
+  await new Promise((done) => setTimeout(done, 8000));
+  const after = await readDev();
+  const still = fields.filter((key) => differs(after[key], prod[key]));
+  if (still.length > 0) {
+    console.error(`${label} Still divergent after the PATCH: ${still.join(', ')}.`);
+    return 1;
+  }
+  console.log(`${label} Applied and verified: DEV's mail fields match PROD.`);
+  return 0;
+}
+
+if (import.meta.main) {
+  try {
+    process.exitCode = await main();
+  } catch (error) {
+    console.error(`${label} unverified: ${failureMessage(error)}`);
+    process.exitCode = 1;
   }
 }
-
-if (Object.keys(mailerPatch).length === 0) {
-  console.log('\nNothing to apply: all mailer_* fields already match prod.');
-  process.exit(0);
-}
-
-console.log(
-  `\nPatching dev with ${Object.keys(mailerPatch).length} mailer_* fields: ${Object.keys(mailerPatch).join(', ')}`,
-);
-const patchResponse = await fetch(`${API}/${DEV_REF}/config/auth`, {
-  method: 'PATCH',
-  headers,
-  body: JSON.stringify(mailerPatch),
-});
-if (!patchResponse.ok) {
-  throw new Error(`PATCH dev auth config failed: ${patchResponse.status} ${await patchResponse.text()}`);
-}
-
-// The config propagates asynchronously; an immediate re-read can be stale.
-await new Promise((resolve) => setTimeout(resolve, 8000));
-const devAfter = await getAuthConfig(DEV_REF);
-const stillDifferent = Object.keys(mailerPatch).filter(
-  (key) => JSON.stringify(devAfter[key]) !== JSON.stringify(prod[key]),
-);
-if (stillDifferent.length > 0) {
-  console.error(`Verification failed — still divergent after PATCH: ${stillDifferent.join(', ')}`);
-  process.exit(1);
-}
-console.log('Applied and verified: dev mailer configuration now matches prod.');
