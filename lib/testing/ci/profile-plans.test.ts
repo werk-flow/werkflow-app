@@ -228,7 +228,9 @@ function placed(profile: CiProfile): Set<InventoryKey> {
     if (
       trigger.on === 'event'
         ? raised.has(trigger.event)
-        : 'timing' in placement && firings(placement.timing).length
+        : 'timing' in placement
+          ? firings(placement.timing).length > 0
+          : 'clock' in placement && placement.clock === 'dispatch'
     )
       place(`schedule:${name}`);
   }

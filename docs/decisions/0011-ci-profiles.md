@@ -45,3 +45,23 @@ CI may run on many machines or on few. The design of the CI hill climb assumes m
 - The measurements of the local runs arrive: replace the placeholders.
 - A local executor or a queue-wait record off GitHub Actions exists: close its gap.
 - A third kind of machine needs CI: add a profile, which must map the whole inventory too.
+
+## Amendment 2026-11-23: GitHub Actions is the CI home again
+
+The owner decided on 2026-11-23 that CI runs on GitHub Actions again: `ci/profile.json` names `fleet`. Rule 7's last line no longer holds. The `local` profile stays maintained (rule 1) and frozen as a fallback; [ci-local-fallback.md](../technical/ci-local-fallback.md) holds its state, what stays open and the switch back. The machine runner is kept under the tag `archive/local-runner-2026-11-23`.
+
+Under `fleet`, GitHub Actions starts every run and schedule. ci.yml's `pull_request`, `merge_group` and `push` events start the PR, queue and `main` runs. Each trigger of a workflow that calls ci.yml starts a full run, its `workflow_dispatch` included. ci.yml's own `workflow_dispatch` is the midnight proof, a path for branches only that selects the full tier. nightly.yml's cron runs the nightly, release.yml's cron the release, and main's full run starts only by `workflow_dispatch`: by day from `ci-alert.timer` (werkflow-planning `ops/ci-alert.py`), or by a person. No conductor's clock fires anything. `profiles.test.ts` fails on a trigger that no placement names.
+
+Switch to `fleet`:
+
+1. Pause merges: turn auto-merge off on every open PR. Stop each machine runner, so it claims nothing new.
+2. Let every active run end or cancel it, and check that no lease under `refs/leases/ci/` is still held.
+3. Enable the CI workflow: `gh workflow enable ci.yml -R werk-flow/werkflow-app`.
+4. In the `main` ruleset, have the owner set:
+   - the merge queue on, merging by squash, build concurrency 1, group size 1 to 4, 5 minutes' wait for a group, and "all entries must pass" (ALLGREEN);
+   - a check timeout of 165 minutes;
+   - `Check` required, from GitHub Actions;
+   - "Require branches to be up to date before merging" off;
+   - `Queue` not required.
+5. Enabling `ci.yml` starts no run for a PR that is already open. Start one for the PR that sets `ci/profile.json` to `fleet`: `gh pr update-branch <number> -R werk-flow/werkflow-app`, or close and reopen the PR.
+6. Merge that PR only with a green `Check` from GitHub Actions on its head. Then resume merges.
