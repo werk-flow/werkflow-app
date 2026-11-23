@@ -19,6 +19,14 @@ Write each test at its boundary while you build the behavior.
 
 A useful test survives an equivalent implementation. Check a regression test against the broken case. Keep catalog-clause coverage when moving an assertion. A runner test that enforces an author rule opens with `// Rule test:`.
 
+### Property tests
+
+Money, time and date rules get property tests of their spec's invariants.
+
+1. List the module in `lib/testing/property-test-areas/`; write `<module>.property.test.ts` (`lib/conventions/property-tests.test.ts`).
+2. Set no seed or run count. `bun run test:properties` draws a fresh seed; `WERKFLOW_PROPERTY_SEED=<seed>` replays one. Keep counterexamples in `examples`.
+3. Found bugs' counterexamples stay `test.failing` cases, no `fc.assert`, under `// known bug: werk-flow/werkflow-planning#<n> <why>`.
+
 ### Write a spec that stands alone
 
 1. Seed each test's preconditions through the helpers in `tests/golden/support/db/`. Drive the claimed operation through the real UI.
@@ -42,7 +50,7 @@ Only a child thread and a PR watch wake a thread when they end; a shell run neve
 bun scripts/run-notified.ts --began "[verify] starting " -- bun run test:verify --mode release
 ```
 
-It survives your turn and the harness, keeps the whole log, and needs a reachable thread. After your turn, one wake reports every unreported exit code.
+It needs a reachable thread. After your turn, one wake reports every unreported exit code.
 
 - `--began` is log text only real work prints. The script returns on it, or with an ended command's exit code. Exit 75: not proven running; never report it as running.
 - A lead may end its turn after `began work`.
@@ -55,11 +63,11 @@ CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/t
 
 ## When a proof is valid
 
-A proof is a passing result whose fingerprint matches the current inputs; a later failure on the same inputs replaces it. Product code, migrations, generated types and `app/globals.css` are not browser-group inputs: selection covers them, and a selected group needs a pass on the current content of its selecting files. Code compares by token stream without comments, so a comment edit keeps a proof.
+A proof is a passing result whose fingerprint matches the current inputs; a later failure on the same inputs replaces it. Product code, migrations, generated types and `app/globals.css` are not browser-group inputs: selection covers them, and a selected group needs a pass on the current content of its selecting files. A comment edit keeps a proof.
 
 ## How selection works
 
-`bun run test:plan` prints each group's reason and first file. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD`.
+Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD`.
 
 Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
 
@@ -94,7 +102,6 @@ After a failed release run, pass every failed group with `--group` before the ne
 - **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run or an every-group input (`toolingClass`); a tooling change runs a sample (owner decision D3).
 - **Reuse and Check.** A push whose exact landing an integration run passed runs no job; a CI runner's pass stands for its job on an identical tree and base (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
 - **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release, and on `main` when `bun scripts/ci/full-run.ts due` says so. `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
-- **Shards.** Groups pack longest-first by recorded duration (`group-durations.json`), visual groups apart, in at most `MAX_SHARDS`; component areas in two.
 - **Stand-in.** `scripts/ci/run-commit.ts` runs a commit (mirror: `CI_EXECUTOR=mirror`), `scripts/ci/queue.ts` the queue.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails on a p90 runner wait over its ceiling (`.github/scripts/ci-queue.sh`).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
@@ -106,7 +113,6 @@ After a failed release run, pass every failed group with `--group` before the ne
 bun run test:verify --group <ids> --fresh      # run groups even with a proof
 bun run test:runs list|classify|cleanup|prune|recover-interrupted
 bun run test:verify --target cloud             # canary groups against DEV (after env:dev and test:server cloud)
-bun run test:golden:focused --grep "<titles>"  # focused fresh-world run; test:audit:focused likewise
 bun run test:diagnostic --grep "<title>" --reuse-run <run-key>   # replay on a retained world
 bun run test:diagnostic:audit --fresh-for <run-key>              # the failed group on a fresh world
 WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep "@AUDIT-VISUAL rendered references"
