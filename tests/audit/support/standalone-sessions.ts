@@ -3,6 +3,7 @@ import type {
   StandaloneScreen,
   StandaloneSession,
 } from '../../../lib/testing/selection/standalone-route-inventory';
+import { PROBE_PATH } from '../../../app/offline/return-to-app';
 import { TEST_SUPPORT_USER } from '../../../lib/testing/support-user';
 import { seedProblemReport, seedTriagedProblemReport } from '../../golden/support/db/problem-reports';
 import { createAdminClient } from '../../golden/support/db/shared';
@@ -10,7 +11,7 @@ import { signInSupportUser } from '../../golden/support/support-session';
 import { goldenTestEmail } from '../../golden/support/seed';
 import { settled } from '../../golden/support/steps/interaction';
 import { openPage } from '../../golden/support/streamed-content';
-import { simulatedPaymentButton, signUpViaUi } from '../../golden/support/steps/organization';
+import { payForNewOrganization, signUpViaUi } from '../../golden/support/steps/organization';
 import type { TestWorld } from '../../golden/support/world';
 
 // The sessions of the screens outside the app shell
@@ -95,9 +96,7 @@ async function prepareSession(
   }
   const { email } = await signUpNewcomer(page, world);
   if (session === 'subscriber') {
-    await page.goto('/upgrade');
-    await simulatedPaymentButton(page).click();
-    await expect(page).toHaveURL(/\/onboarding\/create-organization/);
+    await payForNewOrganization(page, email);
   }
   if (session === 'prestart') await makePrestartMember(world, email);
   return email;
@@ -146,6 +145,10 @@ export async function openStandaloneScreen(input: {
     timezoneId: 'Europe/Berlin',
   });
   try {
+    if (input.screen.unreachable)
+      await context.route(`**${PROBE_PATH}`, (route) =>
+        route.request().method() === 'HEAD' ? route.abort('internetdisconnected') : route.continue(),
+      );
     const page = await openPage(context);
     const email = await prepareSession(page, input.world, input.screen.session, input.baseURL);
     const path = await resolvePath(input.world, input.screen.path);

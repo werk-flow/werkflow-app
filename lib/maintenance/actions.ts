@@ -74,6 +74,12 @@ function maintenanceFailureCode(error: { message?: string } | null, fallback: st
     'maintenance_due_evidence_required',
     'maintenance_due_evidence_mismatch',
     'maintenance_due_visit_missed_not_allowed',
+    'maintenance_next_action_required',
+    'maintenance_next_action_not_allowed',
+    'maintenance_next_action_owner_invalid',
+    'maintenance_next_action_date_invalid',
+    'maintenance_defect_required',
+    'maintenance_return_date_taken',
   ];
   return known.find((value) => error?.message?.includes(value)) ?? fallback;
 }
@@ -450,27 +456,44 @@ export async function recordMaintenanceVisitMissed(input: unknown): Promise<Main
   return { success: true };
 }
 
+/**
+ * „Wartung abschließen“. A partial or unresolved visit also records its
+ * Mängel and next action: the owner's follow-up in Aufgaben and, for a
+ * Rückkehr, a return due item. One database call. Office roles only.
+ */
 export async function completeMaintenanceDueWork(input: unknown): Promise<MaintenanceActionResult> {
   const parsed = maintenanceCompletionSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const context = await requireServiceManager();
   if ('success' in context) return context;
-  const { error } = await context.admin.rpc('complete_maintenance_due_work', {
-    p_organization_id: context.organizationId,
-    p_maintenance_due_work_id: parsed.data.dueWorkId,
-    p_expected_version: parsed.data.expectedVersion,
-    p_scope_outcome: parsed.data.scopeOutcome,
-    p_completed_on: parsed.data.completedOn,
-    p_work_artifact_revision_ids: parsed.data.workArtifactRevisionIds,
-    p_reason: parsed.data.reason,
-    p_actor_id: context.actorId,
-    p_idempotency_key: parsed.data.idempotencyKey,
-  });
-  if (error)
-    return {
-      success: false,
-      error: maintenanceFailureCode(error, 'maintenance_completion_failed'),
-    };
+  const completion = parsed.data;
+  const { error } = await context.admin.rpc(
+    'complete_maintenance_visit',
+    rpcArgs('complete_maintenance_visit', {
+      p_organization_id: context.organizationId,
+      p_maintenance_due_work_id: completion.dueWorkId,
+      p_expected_version: completion.expectedVersion,
+      p_scope_outcome: completion.scopeOutcome,
+      p_completed_on: completion.completedOn,
+      p_work_artifact_revision_ids: completion.workArtifactRevisionIds,
+      p_reason: completion.reason,
+      p_defects: completion.defects,
+      p_next_action: completion.nextAction,
+      p_next_action_owner_id: completion.nextActionOwnerId,
+      p_next_action_target_date: completion.nextActionTargetDate,
+      p_next_action_note: completion.nextActionNote || null,
+      p_actor_id: context.actorId,
+      p_idempotency_key: completion.idempotencyKey,
+    }),
+  );
+  if (error) {
+    const code = maintenanceFailureCode(error, 'maintenance_completion_failed');
+    // A known refusal is the user's case; anything else is a failure to diagnose.
+    if (code === 'maintenance_completion_failed') {
+      logError('completeMaintenanceDueWork: complete_maintenance_visit failed', error);
+    }
+    return { success: false, error: code };
+  }
   refreshMaintenancePaths();
   captureUsage(context.organizationId, 'maintenance_visit', 'completed');
   return { success: true };

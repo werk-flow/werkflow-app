@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFEmbeddedPage, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 
@@ -10,6 +11,7 @@ import type {
   DocumentImage,
   DocumentPosition,
   DocumentSection,
+  DocumentTotals,
   StationeryFile,
 } from './model';
 import {
@@ -64,13 +66,15 @@ type FlowItem = {
 
 type PlacedPage = { header: number | null; items: Array<{ item: FlowItem; top: number }> };
 
-// Read once per server instance; `new URL(…, import.meta.url)` lets the bundler trace the files.
+// Read once per server instance, by a path from the app root. In a Server Action, Turbopack's
+// production build turns `new URL(…, import.meta.url)` into an object readFile refuses
+// (ERR_INVALID_ARG_TYPE); the build traces the joined path (audit:wave-3:document-pdfs).
 let fontBytes: Promise<[Uint8Array, Uint8Array]> | null = null;
 
 function loadFontBytes(): Promise<[Uint8Array, Uint8Array]> {
   fontBytes ??= Promise.all([
-    readFile(new URL('./fonts/Geist-Regular.ttf', import.meta.url)),
-    readFile(new URL('./fonts/Geist-SemiBold.ttf', import.meta.url)),
+    readFile(join(process.cwd(), 'lib/document-rendering/fonts/Geist-Regular.ttf')),
+    readFile(join(process.cwd(), 'lib/document-rendering/fonts/Geist-SemiBold.ttf')),
   ]).catch((error: unknown) => {
     fontBytes = null;
     throw error;
@@ -317,8 +321,7 @@ function paragraphFlow(text: string, font: PDFFont, width: number, spaceBefore: 
 }
 
 /** Net, VAT and gross per tax rate and in total, kept together on one page. */
-function totalsFlow(document: BusinessDocument, fonts: Fonts): FlowItem[] {
-  const { totals } = document;
+function totalsFlow(totals: DocumentTotals, fonts: Fonts): FlowItem[] {
   const rows = [
     { cells: ['USt.-Satz', 'Netto', 'USt.', 'Brutto'], font: fonts.bold, size: 8 },
     ...totals.byRate.map((rate) => ({
@@ -635,7 +638,7 @@ function documentFlow(
     ...paragraphFlow(document.openingText, fonts.regular, width, 0),
     { height: 10, keepWithNext: true, bindsNext: true, inTable: false, draw: () => undefined },
     ...document.sections.flatMap((section) => sectionFlow(section, fonts, textWidth)),
-    ...totalsFlow(document, fonts),
+    ...(document.totals ? totalsFlow(document.totals, fonts) : []),
     ...paragraphFlow(document.closingText, fonts.regular, width, 18),
   ];
 }

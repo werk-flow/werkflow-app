@@ -109,6 +109,22 @@ test('a job option leads with its number, as the trigger and the field steps nam
   ]);
 });
 
+test("an invoice's work picker offers only the chosen customer's jobs, before the page boundary", async () => {
+  calls.length = 0;
+  const clientId = '11111111-1111-4111-8111-111111111111';
+  await readEntityOptions({ organizationId, kind: 'jobs', purpose: 'invoice-work', clientId });
+  const paged = calls.find((call) => call.method === 'range');
+  expect(
+    calls.some(
+      (call) =>
+        call.query === paged?.query &&
+        call.method === 'eq' &&
+        call.args[0] === 'client_id' &&
+        call.args[1] === clientId,
+    ),
+  ).toBe(true);
+});
+
 test('a time correction marks the jobs the caller is assigned to, and only those', async () => {
   const marks = async () => {
     const result = await readEntityOptions({ organizationId, kind: 'jobs', purpose: 'time-correction' });
@@ -131,6 +147,7 @@ test("an employee cannot reach a manager's kind or purpose, and no read starts",
     { kind: 'coverages' },
     { kind: 'jobs', purpose: 'project-jobs' },
     { kind: 'jobs', purpose: 'equipment-work' },
+    { kind: 'jobs', purpose: 'invoice-work' },
   ] as const) {
     calls.length = 0;
     rpcs.length = 0;

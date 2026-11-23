@@ -19,8 +19,12 @@
 // (sign-out-clears-tab-state.test.ts, werk-flow/werkflow-app#232).
 import { describe, expect, test } from 'bun:test';
 import ts from 'typescript';
-import { resolveSpecifier } from './action-prechecks-scan';
-import { moduleSpecifierOf, repositorySources, resolveModuleFile, type SourceHost } from './module-imports';
+import {
+  moduleSpecifierOf,
+  repositorySources,
+  resolveProductModule,
+  type SourceHost,
+} from './module-imports';
 import { listProductSources, parseProductSource } from './product-sources';
 
 /** The cache clear every sign-out, switch and deletion imports statically. */
@@ -39,6 +43,8 @@ const UNSENT_WORK_MODULES: readonly string[] = [
   'components/clock-offline.tsx',
   'components/clock-unsent-events.tsx',
   'components/clock-unsent-list.tsx',
+  'components/clock-unsent-replacement.tsx',
+  'components/clock-unsent-set-aside.tsx',
   'components/shared/unsent-work-prompt.tsx',
   'lib/field-sync/device/clock-device.ts',
   'lib/field-sync/device/clock-outbox.ts',
@@ -49,6 +55,7 @@ const UNSENT_WORK_MODULES: readonly string[] = [
   'lib/field-sync/device/time-outbox-send.ts',
   'lib/field-sync/device/time-outbox-store.ts',
   'lib/field-sync/device/time-outbox.ts',
+  'lib/field-sync/device/time-outbox-replacement.ts',
   'lib/field-sync/device/unsent-work.ts',
 ];
 
@@ -59,13 +66,6 @@ function isOfflineModule(file: string): boolean {
     file === 'components/shared/ios-install-hint.tsx' ||
     UNSENT_WORK_MODULES.includes(file)
   );
-}
-
-/** The product module a specifier names, with or without its file extension. */
-function resolveTarget(importer: string, specifier: string, host: SourceHost): string | null {
-  const exact = resolveSpecifier(importer, specifier);
-  if (exact !== null && /\.tsx?$/.test(exact) && host(exact) !== null) return exact;
-  return resolveModuleFile(importer, specifier, host);
 }
 
 /** The offline modules a product module imports or re-exports statically; type-only imports leave no code. */
@@ -80,7 +80,7 @@ function staticOfflineImports(file: string, host: SourceHost): string[] {
     )
     .flatMap((statement) => {
       const specifier = moduleSpecifierOf(statement);
-      const target = specifier === null ? null : resolveTarget(file, specifier, host);
+      const target = specifier === null ? null : resolveProductModule(file, specifier, host);
       return target !== null && isOfflineModule(target) ? [`${file} -> ${target}`] : [];
     });
 }
@@ -160,7 +160,9 @@ function uncaughtOfflineLoads(file: string, host: SourceHost): string[] {
     if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const [specifier] = node.arguments;
       const target =
-        specifier && ts.isStringLiteralLike(specifier) ? resolveTarget(file, specifier.text, host) : null;
+        specifier && ts.isStringLiteralLike(specifier)
+          ? resolveProductModule(file, specifier.text, host)
+          : null;
       // The iOS hint's load failing shows nothing by design; every other offline module's failure must reach the person.
       if (target !== null && isCaughtLoadTarget(target) && !caught(node, source))
         found.push(`${file}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`);
@@ -183,7 +185,7 @@ function lazyCacheClearLoads(file: string, host: SourceHost): string[] {
       if (
         specifier &&
         ts.isStringLiteralLike(specifier) &&
-        resolveTarget(file, specifier.text, host) === CACHE_CLEAR_MODULE
+        resolveProductModule(file, specifier.text, host) === CACHE_CLEAR_MODULE
       )
         found.push(`${file}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`);
     }

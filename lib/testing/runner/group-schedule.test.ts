@@ -4,14 +4,19 @@ import { resolve } from 'node:path';
 import {
   changedTestsFirstBlock,
   ciBrowserHoldUntil,
+  ciBrowserStartWaitMs,
   CI_BROWSER_JOB_TIMEOUT_MS,
+  CI_JOB_STOP_GRACE_MS,
+  CI_FAST_JOB_TIMEOUT_MS,
   CI_MIDNIGHT_HOLD_MAX_MS,
   holdOutsideMidnightWindow,
   MIDNIGHT_START_WINDOW,
   midnightProofHoldUntil,
   midnightStartWaitMs,
+  overlapsNeighbours,
   runGroupSchedule,
 } from './group-schedule';
+import { workflowsFolder } from '../ci-workflow';
 
 const MINUTE_MS = 60_000;
 const WINDOW_MS = MIDNIGHT_START_WINDOW.leadMs + MIDNIGHT_START_WINDOW.trailMs;
@@ -108,8 +113,9 @@ test('a CI run that starts inside the window holds until it closes, so no group 
   }
 });
 
-test('a CI run holds from one Browser job timeout before the window, for at most the longest hold', () => {
-  const opening = SUMMER_MIDNIGHT - MIDNIGHT_START_WINDOW.leadMs - CI_BROWSER_JOB_TIMEOUT_MS;
+test('a CI run holds from one Fast and one Browser job timeout before the window, for at most the longest hold', () => {
+  const opening =
+    SUMMER_MIDNIGHT - MIDNIGHT_START_WINDOW.leadMs - CI_FAST_JOB_TIMEOUT_MS - CI_BROWSER_JOB_TIMEOUT_MS;
   const closes = SUMMER_MIDNIGHT + MIDNIGHT_START_WINDOW.trailMs;
   expect(ciBrowserHoldUntil(new Date(opening - 1))).toBeUndefined();
   expect(ciBrowserHoldUntil(new Date(opening))?.getTime()).toBe(closes);
@@ -118,24 +124,51 @@ test('a CI run holds from one Browser job timeout before the window, for at most
   expect(ciBrowserHoldUntil(new Date(closes))).toBeUndefined();
 });
 
-test('a Browser job that starts unheld never reaches a group inside the window before its timeout', () => {
+test("a Browser job of an unheld plan never reaches a group inside the window, even after Fast's whole timeout", () => {
   // Every minute of the days around both daylight-saving changes.
   for (const firstDay of ['2026-03-27T00:00:00Z', '2026-10-23T00:00:00Z']) {
     const first = Date.parse(firstDay);
     for (let start = first; start < first + 4 * 24 * 60 * MINUTE_MS; start += MINUTE_MS) {
       if (ciBrowserHoldUntil(new Date(start))) continue;
       // The job's last instant counts: a group that reaches the window then would be blocked.
-      for (const elapsed of [0, CI_BROWSER_JOB_TIMEOUT_MS / 3, CI_BROWSER_JOB_TIMEOUT_MS - 1])
+      const latest = CI_FAST_JOB_TIMEOUT_MS + CI_BROWSER_JOB_TIMEOUT_MS - 1;
+      for (const elapsed of [0, CI_BROWSER_JOB_TIMEOUT_MS / 3, latest])
         expect(midnightStartWaitMs(new Date(start + elapsed))).toBe(0);
     }
   }
 });
 
+test('a Browser job starts later than Fast allows only when it ends, stop grace included, before the window opens, else once it closes', () => {
+  // A job stopped at its timeout may run CI_JOB_STOP_GRACE_MS longer before SIGKILL.
+  expect(CI_JOB_STOP_GRACE_MS).toBe(10_000);
+  const opening =
+    SUMMER_MIDNIGHT - MIDNIGHT_START_WINDOW.leadMs - CI_BROWSER_JOB_TIMEOUT_MS - CI_JOB_STOP_GRACE_MS;
+  const closes = SUMMER_MIDNIGHT + MIDNIGHT_START_WINDOW.trailMs;
+  expect(ciBrowserStartWaitMs(new Date(opening - 1))).toBe(0);
+  expect(ciBrowserStartWaitMs(new Date(opening))).toBe(closes - opening);
+  expect(ciBrowserStartWaitMs(new Date(closes - 1))).toBe(1);
+  expect(ciBrowserStartWaitMs(new Date(closes))).toBe(0);
+  // Every minute of the days around both daylight-saving changes: a job that may start reaches no
+  // group inside the window before its timeout, and a waiting one starts as the window closes.
+  for (const firstDay of ['2026-03-27T00:00:00Z', '2026-10-23T00:00:00Z']) {
+    const first = Date.parse(firstDay);
+    for (let start = first; start < first + 4 * 24 * 60 * MINUTE_MS; start += MINUTE_MS) {
+      const waitMs = ciBrowserStartWaitMs(new Date(start));
+      const startsAt = start + waitMs;
+      if (waitMs) expect(midnightStartWaitMs(new Date(startsAt - 1))).toBeGreaterThan(0);
+      const latest = CI_BROWSER_JOB_TIMEOUT_MS + CI_JOB_STOP_GRACE_MS - 1;
+      for (const elapsed of [0, CI_BROWSER_JOB_TIMEOUT_MS / 3, latest])
+        expect(midnightStartWaitMs(new Date(startsAt + elapsed))).toBe(0);
+    }
+  }
+});
+
 test('ci.yml keeps the timeouts the hold is built on', () => {
-  const workflow = readFileSync(resolve(import.meta.dir, '../../../.github/workflows/ci.yml'), 'utf8');
+  const workflow = readFileSync(resolve(import.meta.dir, '../../..', workflowsFolder(), 'ci.yml'), 'utf8');
   const timeoutOf = (job: string): number =>
     Number(new RegExp(`\\n  ${job}:\\n(?:    .*\\n|\\n)*?    timeout-minutes: (\\d+)`).exec(workflow)?.[1]);
   expect(timeoutOf('browser') * MINUTE_MS).toBe(CI_BROWSER_JOB_TIMEOUT_MS);
+  expect(timeoutOf('fast') * MINUTE_MS).toBe(CI_FAST_JOB_TIMEOUT_MS);
   expect(timeoutOf('midnight') * MINUTE_MS).toBeGreaterThan(CI_MIDNIGHT_HOLD_MAX_MS);
 });
 
@@ -146,8 +179,8 @@ test('a midnight proof holds for the asked minutes and never on a branch that sh
   expect(proof('7').getTime()).toBe(now.getTime() + 7 * MINUTE_MS);
   for (const ref of ['main', 'production'])
     expect(() => proof('7', ref)).toThrow(`A midnight proof run never runs on ${ref}.`);
-  for (const minutes of ['0', '-1', '1.5', 'soon', '76'])
-    expect(() => proof(minutes)).toThrow('A midnight proof holds 1 to 75 minutes.');
+  for (const minutes of ['0', '-1', '1.5', 'soon', '106'])
+    expect(() => proof(minutes)).toThrow('A midnight proof holds 1 to 105 minutes.');
 });
 
 test('independent groups overlap within two slots; freshness and database gates remain exclusive', async () => {
@@ -266,4 +299,11 @@ test('a failed changed-spec group blocks the later tier for this attempt and nam
   expect(changedTestsFirstBlock(['golden:p1-13', 'audit:wave-2:p1-13'])).toBe(
     'Changed-spec tier failed (audit:wave-2:p1-13, golden:p1-13); the groups selected only by product scope wait for its repair.',
   );
+});
+
+test('static gates and the unit suite overlap; SQL, component contracts and exclusive browser groups run alone', () => {
+  for (const kind of ['static', 'unit', 'audit', 'golden'])
+    expect(overlapsNeighbours(kind, false)).toBe(true);
+  for (const kind of ['audit', 'golden']) expect(overlapsNeighbours(kind, true)).toBe(false);
+  for (const kind of ['sql', 'ui', 'canary']) expect(overlapsNeighbours(kind, false)).toBe(false);
 });

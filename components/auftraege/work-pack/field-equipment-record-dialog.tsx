@@ -194,6 +194,16 @@ function VisitEntry({ visit }: { visit: FieldHistoryVisit }): ReactElement {
       {visit.equipment.isPredecessor && (
         <p className="text-xs text-muted-foreground">{equipmentLabel(visit.equipment)}</p>
       )}
+      {visit.openFindings.length > 0 && (
+        <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2">
+          <p className="font-medium">Offene Mängel</p>
+          <ul className="list-disc space-y-1 pl-5">
+            {visit.openFindings.map((defect, index) => (
+              <li key={index}>{defect}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {visit.defects.length > 0 && (
         <ul className="space-y-1">
           {visit.defects.map((defect, index) => (
@@ -219,7 +229,7 @@ function VisitEntry({ visit }: { visit: FieldHistoryVisit }): ReactElement {
           ))}
         </ul>
       )}
-      {visit.defects.length === 0 && visit.measurements.length === 0 && (
+      {visit.defects.length === 0 && visit.measurements.length === 0 && visit.openFindings.length === 0 && (
         <EmptyState size="compact" title="Keine Mängel oder Messungen im Nachweis." />
       )}
     </div>

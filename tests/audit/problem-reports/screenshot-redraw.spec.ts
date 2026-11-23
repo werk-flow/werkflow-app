@@ -97,7 +97,8 @@ async function redraw(page: Page): Promise<{ markup: string; png: string }> {
     const [pageModule, catalogModule, screenshotModule] = loaded;
     if (!isPageModule(pageModule) || !isCatalogModule(catalogModule) || !isScreenshotModule(screenshotModule))
       throw new Error('The redraw bundle is incomplete.');
-    const clone = pageModule.redrawPage(document, catalogModule.loadUiStringCatalog(), Math.random).root;
+    // Pinned, as fake-text.ts asks of tests: every fake letter is b, a, B or A, every fake digit 0 or 1.
+    const clone = pageModule.redrawPage(document, catalogModule.loadUiStringCatalog(), () => 0).root;
     const blob = await screenshotModule.redrawScreenshot();
     const bytes = new Uint8Array(await blob.arrayBuffer());
     let binary = '';
@@ -127,10 +128,19 @@ test.describe('Report screenshot redraw @AUDIT-SECURITY-PROBLEM-REPORT-REDRAW', 
           const name = `redraw-${target.name}-${viewport.name}.png`;
           writeFileSync(resolve(artifactsDirectory(), name), Buffer.from(png, 'base64'));
           await testInfo.attach(name, { body: Buffer.from(png, 'base64'), contentType: 'image/png' });
-          for (const [field, value] of Object.entries(values))
+          for (const [field, value] of Object.entries(values)) {
+            // With the pinned source a fake text can never spell this value, so finding it means the
+            // redraw kept it. A free random source once spelled the postal code inside a fake email.
+            expect(
+              [...value].some(
+                (character) => /[\p{L}\p{Nd}]/u.test(character) && !'abAB01'.includes(character),
+              ),
+              `the seeded ${field} holds a letter or digit the pinned fake text never draws`,
+            ).toBe(true);
             expect(markup, `the seeded ${field} is not in the redrawn ${target.name} page`).not.toContain(
               value,
             );
+          }
           expect(markup, 'the redraw keeps no link').not.toContain('href=');
         });
       }

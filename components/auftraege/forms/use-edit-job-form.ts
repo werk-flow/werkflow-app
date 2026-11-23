@@ -51,6 +51,8 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
     ...clientProjectLink,
     jobNumber: fields.jobNumber,
     setJobNumber: fields.setJobNumber,
+    sourceNumber: fields.sourceNumber,
+    setSourceNumber: fields.setSourceNumber,
     title: fields.title,
     setTitle: fields.setTitle,
     description: fields.description,
@@ -106,6 +108,7 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
 /** The job's own fields as the dialog edits them. */
 function useEditJobDraftFields() {
   const [jobNumber, setJobNumber] = useState('');
+  const [sourceNumber, setSourceNumber] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [clientId, setClientId] = useState<string>('');
@@ -125,6 +128,8 @@ function useEditJobDraftFields() {
   return {
     jobNumber,
     setJobNumber,
+    sourceNumber,
+    setSourceNumber,
     title,
     setTitle,
     description,
@@ -240,6 +245,7 @@ function useRefillEditJobDraftOnOpen({
     initializedJobIdRef.current = job.id;
 
     fields.setJobNumber(job.jobNumber ?? '');
+    fields.setSourceNumber(job.sourceNumber ?? '');
     fields.setTitle(job.title);
     fields.setDescription(job.description ?? '');
     fields.setProjectId(job.projectId ?? '');

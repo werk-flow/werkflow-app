@@ -12,6 +12,7 @@ Aufträge
 Dokumente
 Inventar
 Angebote
+Rechnungen
 Service
 Arbeitsvorlagen
 Mitarbeiter
@@ -25,6 +26,7 @@ Service
 Servicefälle
 Anlagen & Geräte
 Wartung
+Bereitschaft
 Servicefälle
 SRV-2026-001
 Neu

@@ -2,15 +2,15 @@
 // traces and screenshots only when the run or its group did not pass, so diagnosis and
 // classification work at home while a passed plan's download stays small.
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { resultFiles } from './result-files';
+import { temporaryDirectory } from '../temporary-directory';
 
 /** Writes `files`, path to content, into a fresh checkout and returns it. */
 function checkout(files: Record<string, string>): string {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-result-files-'));
+  const repository = temporaryDirectory('boat-result-files-');
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(join(repository, dirname(path)), { recursive: true });
     writeFileSync(join(repository, path), content);

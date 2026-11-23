@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Glob } from 'bun';
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { SESSION_CANCELLED_MESSAGE } from '../local-stack/test-session';
 import { createGroupQualification, directGroupRetryProblem } from './group-qualification';
@@ -13,6 +12,7 @@ import {
 } from './group-evidence';
 import { BROWSER_INPUT_DRIFT_MESSAGE } from './test-evidence';
 import type { TestGroup } from '../selection/test-groups';
+import { temporaryDirectory } from '../temporary-directory';
 
 const groups: [TestGroup, TestGroup] = [
   {
@@ -101,7 +101,7 @@ test('real freshness helper imports stay independent of scenario references', ()
 });
 
 test('a browser proof covers its spec, the test support it imports and the dependency manifests, never product code', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-group-qualification-'));
+  const root = temporaryDirectory('werkflow-group-qualification-');
   const sources: Record<string, string> = {
     'tests/people.spec.ts':
       "import './support/people'; import '../lib/personnel/rule'; export const people = true;",
@@ -118,91 +118,79 @@ test('a browser proof covers its spec, the test support it imports and the depen
     'package.json': '{}',
     'bun.lock': '{}',
   };
-  try {
-    for (const [file, contents] of Object.entries(sources)) {
-      mkdirSync(dirname(join(root, file)), { recursive: true });
-      writeFileSync(join(root, file), contents);
-    }
-    const snapshot: InputSnapshot = {
-      version: 1,
-      environment: hashValue('local'),
-      files: Object.fromEntries(
-        Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)]),
-      ),
-    };
-    const original = createGroupQualification(root, groups, snapshot).qualify(groups[0]);
-    expect(original.inputs).toEqual([
-      'bun.lock',
-      'lib/testing/people-fixture.ts',
-      'package.json',
-      'tests/people.spec.ts',
-      'tests/support/people.ts',
-    ]);
-    expect(original.executionInputs).toEqual([
-      'lib/testing/people-fixture.ts',
-      'tests/people.spec.ts',
-      'tests/support/people.ts',
-    ]);
-    const fingerprintAfter = (file: string, environment = snapshot.environment): string =>
-      createGroupQualification(root, groups, {
-        ...snapshot,
-        environment,
-        files: { ...snapshot.files, [file]: hashValue(`changed ${file}`) },
-      }).qualify(groups[0]).fingerprint;
-    for (const file of [
-      'lib/personnel/rule.ts',
-      'lib/supabase/database.types.ts',
-      'components/ui/button.tsx',
-      'app/globals.css',
-      'supabase/migrations/20261001000000_people.sql',
-      'tests/inventory.spec.ts',
-      'lib/testing/unreached-helper.ts',
-    ]) {
-      expect([file, fingerprintAfter(file)]).toEqual([file, original.fingerprint]);
-    }
-    for (const file of [
-      'tests/people.spec.ts',
-      'tests/support/people.ts',
-      'lib/testing/people-fixture.ts',
-      'package.json',
-      'bun.lock',
-    ]) {
-      expect([file, fingerprintAfter(file) === original.fingerprint]).toEqual([file, false]);
-    }
-    expect(fingerprintAfter('lib/personnel/rule.ts', hashValue('cloud'))).not.toBe(original.fingerprint);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  for (const [file, contents] of Object.entries(sources)) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), contents);
   }
+  const snapshot: InputSnapshot = {
+    version: 1,
+    environment: hashValue('local'),
+    files: Object.fromEntries(Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)])),
+  };
+  const original = createGroupQualification(root, groups, snapshot).qualify(groups[0]);
+  expect(original.inputs).toEqual([
+    'bun.lock',
+    'lib/testing/people-fixture.ts',
+    'package.json',
+    'tests/people.spec.ts',
+    'tests/support/people.ts',
+  ]);
+  expect(original.executionInputs).toEqual([
+    'lib/testing/people-fixture.ts',
+    'tests/people.spec.ts',
+    'tests/support/people.ts',
+  ]);
+  const fingerprintAfter = (file: string, environment = snapshot.environment): string =>
+    createGroupQualification(root, groups, {
+      ...snapshot,
+      environment,
+      files: { ...snapshot.files, [file]: hashValue(`changed ${file}`) },
+    }).qualify(groups[0]).fingerprint;
+  for (const file of [
+    'lib/personnel/rule.ts',
+    'lib/supabase/database.types.ts',
+    'components/ui/button.tsx',
+    'app/globals.css',
+    'supabase/migrations/20261001000000_people.sql',
+    'tests/inventory.spec.ts',
+    'lib/testing/unreached-helper.ts',
+  ]) {
+    expect([file, fingerprintAfter(file)]).toEqual([file, original.fingerprint]);
+  }
+  for (const file of [
+    'tests/people.spec.ts',
+    'tests/support/people.ts',
+    'lib/testing/people-fixture.ts',
+    'package.json',
+    'bun.lock',
+  ]) {
+    expect([file, fingerprintAfter(file) === original.fingerprint]).toEqual([file, false]);
+  }
+  expect(fingerprintAfter('lib/personnel/rule.ts', hashValue('cloud'))).not.toBe(original.fingerprint);
 });
 
 test('an unresolved import in test support widens a browser proof to all test code, not to product code', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-unresolved-support-'));
+  const root = temporaryDirectory('werkflow-unresolved-support-');
   const sources: Record<string, string> = {
     'tests/people.spec.ts': "import './support/missing-module';",
     'tests/inventory.spec.ts': 'export const inventory = true;',
     'lib/testing/helper.ts': 'export const helper = true;',
     'lib/personnel/rule.ts': 'export const rule = 1;',
   };
-  try {
-    for (const [file, contents] of Object.entries(sources)) {
-      mkdirSync(dirname(join(root, file)), { recursive: true });
-      writeFileSync(join(root, file), contents);
-    }
-    const snapshot: InputSnapshot = {
-      version: 1,
-      environment: hashValue('local'),
-      files: Object.fromEntries(
-        Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)]),
-      ),
-    };
-    expect(createGroupQualification(root, groups, snapshot).qualify(groups[0]).inputs).toEqual([
-      'lib/testing/helper.ts',
-      'tests/inventory.spec.ts',
-      'tests/people.spec.ts',
-    ]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  for (const [file, contents] of Object.entries(sources)) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), contents);
   }
+  const snapshot: InputSnapshot = {
+    version: 1,
+    environment: hashValue('local'),
+    files: Object.fromEntries(Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)])),
+  };
+  expect(createGroupQualification(root, groups, snapshot).qualify(groups[0]).inputs).toEqual([
+    'lib/testing/helper.ts',
+    'tests/inventory.spec.ts',
+    'tests/people.spec.ts',
+  ]);
 });
 
 test('a failed group may run again after any source change; a repeat on the identical tree needs a diagnosis', () => {
@@ -218,7 +206,7 @@ test('a failed group may run again after any source change; a repeat on the iden
 });
 
 test('editing a registered browser spec invalidates convention-unit proof without coupling another browser group', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-unit-filesystem-inputs-'));
+  const root = temporaryDirectory('werkflow-unit-filesystem-inputs-');
   const unit: TestGroup = {
     id: 'unit:all',
     kind: 'unit',
@@ -241,42 +229,36 @@ test('editing a registered browser spec invalidates convention-unit proof withou
     'lib/testing/conventions.test.ts': 'export const filesystemCensus = true;',
     'supabase/tests/inventory.sql': 'select true;',
   };
-  try {
-    for (const [file, contents] of Object.entries(sources)) {
-      mkdirSync(dirname(join(root, file)), { recursive: true });
-      writeFileSync(join(root, file), contents);
-    }
-    const snapshot: InputSnapshot = {
-      version: 1,
-      environment: hashValue('local'),
-      files: Object.fromEntries(
-        Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)]),
-      ),
-    };
-    const before = createGroupQualification(root, registered, snapshot);
-    expect(before.qualify(unit).inputs).toContain('tests/inventory.spec.ts');
-    const sqlEdit = {
-      ...snapshot,
-      files: { ...snapshot.files, 'supabase/tests/inventory.sql': hashValue('changed assertion') },
-    };
-    expect(createGroupQualification(root, registered, sqlEdit).qualify(unit).fingerprint).not.toBe(
-      before.qualify(unit).fingerprint,
-    );
-    const edited = {
-      ...snapshot,
-      files: { ...snapshot.files, 'tests/inventory.spec.ts': hashValue('broken browser convention') },
-    };
-    const after = createGroupQualification(root, registered, edited);
-    expect(after.qualify(unit).fingerprint).not.toBe(before.qualify(unit).fingerprint);
-    expect(after.qualify(groups[0]).fingerprint).toBe(before.qualify(groups[0]).fingerprint);
-    expect(after.qualify(groups[1]).fingerprint).not.toBe(before.qualify(groups[1]).fingerprint);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  for (const [file, contents] of Object.entries(sources)) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), contents);
   }
+  const snapshot: InputSnapshot = {
+    version: 1,
+    environment: hashValue('local'),
+    files: Object.fromEntries(Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)])),
+  };
+  const before = createGroupQualification(root, registered, snapshot);
+  expect(before.qualify(unit).inputs).toContain('tests/inventory.spec.ts');
+  const sqlEdit = {
+    ...snapshot,
+    files: { ...snapshot.files, 'supabase/tests/inventory.sql': hashValue('changed assertion') },
+  };
+  expect(createGroupQualification(root, registered, sqlEdit).qualify(unit).fingerprint).not.toBe(
+    before.qualify(unit).fingerprint,
+  );
+  const edited = {
+    ...snapshot,
+    files: { ...snapshot.files, 'tests/inventory.spec.ts': hashValue('broken browser convention') },
+  };
+  const after = createGroupQualification(root, registered, edited);
+  expect(after.qualify(unit).fingerprint).not.toBe(before.qualify(unit).fingerprint);
+  expect(after.qualify(groups[0]).fingerprint).toBe(before.qualify(groups[0]).fingerprint);
+  expect(after.qualify(groups[1]).fingerprint).not.toBe(before.qualify(groups[1]).fingerprint);
 });
 
 test('suite configuration, the component runner and lint rule modules qualify only the kind that executes them', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-kind-owned-inputs-'));
+  const root = temporaryDirectory('werkflow-kind-owned-inputs-');
   const timing = { requireFreshness: false, requireReadiness: false, exclusive: false } as const;
   const audit: TestGroup = {
     id: 'audit:wave-1:a1',
@@ -325,42 +307,36 @@ test('suite configuration, the component runner and lint rule modules qualify on
     'bunfig.toml': '[test]',
     'lib/example.test.ts': 'export const example = true;',
   };
-  try {
-    for (const [file, contents] of Object.entries(sources)) {
-      mkdirSync(dirname(join(root, file)), { recursive: true });
-      writeFileSync(join(root, file), contents);
-    }
-    const snapshot: InputSnapshot = {
-      version: 1,
-      environment: hashValue('local'),
-      files: Object.fromEntries(
-        Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)]),
-      ),
-    };
-    const qualification = createGroupQualification(root, registered, snapshot);
-    const golden = qualification.qualify(groups[0]).inputs;
-    expect(golden).toContain('playwright.config.ts');
-    for (const file of [
-      'playwright.audit.config.ts',
-      'tests/ui-contracts/run.ts',
-      'lib/testing/runner/workspace-test-lock.ts',
-      'eslint-rules/ui-rules.mjs',
-      'bunfig.toml',
-    ])
-      expect(golden).not.toContain(file);
-    expect(qualification.qualify(audit).inputs).toContain('playwright.audit.config.ts');
-    expect(qualification.qualify(audit).inputs).not.toContain('playwright.config.ts');
-    const component = qualification.qualify(ui).inputs;
-    expect(component).toContain('tests/ui-contracts/run.ts');
-    expect(component).toContain('lib/testing/runner/workspace-test-lock.ts');
-    expect(qualification.qualify(lint).inputs).toContain('eslint-rules/ui-rules.mjs');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  for (const [file, contents] of Object.entries(sources)) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), contents);
   }
+  const snapshot: InputSnapshot = {
+    version: 1,
+    environment: hashValue('local'),
+    files: Object.fromEntries(Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)])),
+  };
+  const qualification = createGroupQualification(root, registered, snapshot);
+  const golden = qualification.qualify(groups[0]).inputs;
+  expect(golden).toContain('playwright.config.ts');
+  for (const file of [
+    'playwright.audit.config.ts',
+    'tests/ui-contracts/run.ts',
+    'lib/testing/runner/workspace-test-lock.ts',
+    'eslint-rules/ui-rules.mjs',
+    'bunfig.toml',
+  ])
+    expect(golden).not.toContain(file);
+  expect(qualification.qualify(audit).inputs).toContain('playwright.audit.config.ts');
+  expect(qualification.qualify(audit).inputs).not.toContain('playwright.config.ts');
+  const component = qualification.qualify(ui).inputs;
+  expect(component).toContain('tests/ui-contracts/run.ts');
+  expect(component).toContain('lib/testing/runner/workspace-test-lock.ts');
+  expect(qualification.qualify(lint).inputs).toContain('eslint-rules/ui-rules.mjs');
 });
 
 test('canary support changes qualify providers and actual importers without invalidating unrelated browser groups', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-provider-inputs-'));
+  const root = temporaryDirectory('werkflow-provider-inputs-');
   const canary: TestGroup = {
     ...groups[0],
     id: 'canary:security',
@@ -378,30 +354,24 @@ test('canary support changes qualify providers and actual importers without inva
     [helper]: 'export const receiver = true;',
     'unknown-runtime.ts': 'export const shared = true;',
   };
-  try {
-    for (const [file, contents] of Object.entries(sources)) {
-      mkdirSync(dirname(join(root, file)), { recursive: true });
-      writeFileSync(join(root, file), contents);
-    }
-    const snapshot: InputSnapshot = {
-      version: 1,
-      environment: hashValue('local'),
-      files: Object.fromEntries(
-        Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)]),
-      ),
-    };
-    const before = createGroupQualification(root, registered, snapshot);
-    const after = createGroupQualification(root, registered, {
-      ...snapshot,
-      files: { ...snapshot.files, [helper]: hashValue('repaired receiver') },
-    });
-    expect(after.qualify(groups[0]).fingerprint).toBe(before.qualify(groups[0]).fingerprint);
-    expect(after.qualify(groups[1]).fingerprint).not.toBe(before.qualify(groups[1]).fingerprint);
-    expect(after.qualify(canary).fingerprint).not.toBe(before.qualify(canary).fingerprint);
-    expect(after.qualify(groups[0]).inputs).not.toContain('unknown-runtime.ts');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  for (const [file, contents] of Object.entries(sources)) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), contents);
   }
+  const snapshot: InputSnapshot = {
+    version: 1,
+    environment: hashValue('local'),
+    files: Object.fromEntries(Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)])),
+  };
+  const before = createGroupQualification(root, registered, snapshot);
+  const after = createGroupQualification(root, registered, {
+    ...snapshot,
+    files: { ...snapshot.files, [helper]: hashValue('repaired receiver') },
+  });
+  expect(after.qualify(groups[0]).fingerprint).toBe(before.qualify(groups[0]).fingerprint);
+  expect(after.qualify(groups[1]).fingerprint).not.toBe(before.qualify(groups[1]).fingerprint);
+  expect(after.qualify(canary).fingerprint).not.toBe(before.qualify(canary).fingerprint);
+  expect(after.qualify(groups[0]).inputs).not.toContain('unknown-runtime.ts');
 });
 
 test('one matching diagnosed environment recovery permits one further attempt', () => {
@@ -497,7 +467,7 @@ test('returning to a failed tree cannot hide that failure behind a pass on anoth
 });
 
 test('performance contract, reference, profile and validator edits invalidate prior evidence', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-performance-inputs-'));
+  const root = temporaryDirectory('werkflow-performance-inputs-');
   const measured: TestGroup = {
     ...groups[0],
     id: 'audit:performance:calendar',
@@ -519,33 +489,27 @@ test('performance contract, reference, profile and validator edits invalidate pr
     'lib/testing/performance-context.ts': 'export const protocol = 1;',
     'lib/testing/performance-baselines.json': '{}',
   };
-  try {
-    for (const [file, contents] of Object.entries(sources)) {
-      mkdirSync(dirname(join(root, file)), { recursive: true });
-      writeFileSync(join(root, file), contents);
-    }
-    const snapshot: InputSnapshot = {
-      version: 1,
-      environment: hashValue('local'),
-      files: Object.fromEntries(
-        Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)]),
-      ),
-    };
-    const before = createGroupQualification(root, [measured], snapshot).qualify(measured);
-    for (const file of Object.keys(sources)) {
-      expect(before.inputs).toContain(file);
-      const changed = { ...snapshot, files: { ...snapshot.files, [file]: hashValue(`changed ${file}`) } };
-      expect(createGroupQualification(root, [measured], changed).qualify(measured).fingerprint).not.toBe(
-        before.fingerprint,
-      );
-    }
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  for (const [file, contents] of Object.entries(sources)) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), contents);
+  }
+  const snapshot: InputSnapshot = {
+    version: 1,
+    environment: hashValue('local'),
+    files: Object.fromEntries(Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)])),
+  };
+  const before = createGroupQualification(root, [measured], snapshot).qualify(measured);
+  for (const file of Object.keys(sources)) {
+    expect(before.inputs).toContain(file);
+    const changed = { ...snapshot, files: { ...snapshot.files, [file]: hashValue(`changed ${file}`) } };
+    expect(createGroupQualification(root, [measured], changed).qualify(measured).fingerprint).not.toBe(
+      before.fingerprint,
+    );
   }
 });
 
 test('reference edits spare ordinary freshness journeys but still qualify measured groups', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-reference-ownership-'));
+  const root = temporaryDirectory('werkflow-reference-ownership-');
   const ordinary: TestGroup = { ...groups[0], files: ['tests/golden/ordinary.spec.ts'] };
   const measured: TestGroup = { ...groups[1], files: ['tests/audit/measured.spec.ts'] };
   const sources: Record<string, string> = {
@@ -558,38 +522,32 @@ test('reference edits spare ordinary freshness journeys but still qualify measur
       "import './performance-baselines.json'; import './responsiveness-tolerance';",
     'lib/testing/performance-baselines.json': '{}',
   };
-  try {
-    for (const [file, contents] of Object.entries(sources)) {
-      mkdirSync(dirname(join(root, file)), { recursive: true });
-      writeFileSync(join(root, file), contents);
-    }
-    const snapshot: InputSnapshot = {
-      version: 1,
-      environment: hashValue('local'),
-      files: Object.fromEntries(
-        Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)]),
-      ),
-    };
-    const definitions = [ordinary, measured];
-    const before = createGroupQualification(root, definitions, snapshot);
-    const after = createGroupQualification(root, definitions, {
-      ...snapshot,
-      files: { ...snapshot.files, 'lib/testing/performance-baselines.json': hashValue('new reference') },
-    });
-    expect(after.qualify(ordinary).fingerprint).toBe(before.qualify(ordinary).fingerprint);
-    expect(after.qualify(measured).fingerprint).not.toBe(before.qualify(measured).fingerprint);
-    const newDeadline = createGroupQualification(root, definitions, {
-      ...snapshot,
-      files: { ...snapshot.files, 'lib/testing/responsiveness-tolerance.ts': hashValue('new deadline') },
-    });
-    expect(newDeadline.qualify(ordinary).fingerprint).not.toBe(before.qualify(ordinary).fingerprint);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  for (const [file, contents] of Object.entries(sources)) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), contents);
   }
+  const snapshot: InputSnapshot = {
+    version: 1,
+    environment: hashValue('local'),
+    files: Object.fromEntries(Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)])),
+  };
+  const definitions = [ordinary, measured];
+  const before = createGroupQualification(root, definitions, snapshot);
+  const after = createGroupQualification(root, definitions, {
+    ...snapshot,
+    files: { ...snapshot.files, 'lib/testing/performance-baselines.json': hashValue('new reference') },
+  });
+  expect(after.qualify(ordinary).fingerprint).toBe(before.qualify(ordinary).fingerprint);
+  expect(after.qualify(measured).fingerprint).not.toBe(before.qualify(measured).fingerprint);
+  const newDeadline = createGroupQualification(root, definitions, {
+    ...snapshot,
+    files: { ...snapshot.files, 'lib/testing/responsiveness-tolerance.ts': hashValue('new deadline') },
+  });
+  expect(newDeadline.qualify(ordinary).fingerprint).not.toBe(before.qualify(ordinary).fingerprint);
 });
 
 test('pilot evidence changes with orchestration even without a test import; unchanged pilot evidence stays reusable', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-pilot-inputs-'));
+  const root = temporaryDirectory('werkflow-pilot-inputs-');
   const pilot: TestGroup = { ...groups[0], id: 'golden:p1-24a' };
   const registered = [pilot, groups[1]];
   const sources = {
@@ -597,33 +555,27 @@ test('pilot evidence changes with orchestration even without a test import; unch
     'tests/inventory.spec.ts': 'export const inventory = true;',
     'lib/testing/selection/group-selection.ts': 'export const policy = 1;',
   };
-  try {
-    for (const [file, contents] of Object.entries(sources)) {
-      mkdirSync(dirname(join(root, file)), { recursive: true });
-      writeFileSync(join(root, file), contents);
-    }
-    const snapshot: InputSnapshot = {
-      version: 1,
-      environment: hashValue('local'),
-      files: Object.fromEntries(
-        Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)]),
-      ),
-    };
-    const before = createGroupQualification(root, registered, snapshot);
-    const changed = {
-      ...snapshot,
-      files: {
-        ...snapshot.files,
-        'lib/testing/selection/group-selection.ts': hashValue('export const policy = 2;'),
-      },
-    };
-    const after = createGroupQualification(root, registered, changed);
-    expect(after.qualify(pilot).fingerprint).not.toBe(before.qualify(pilot).fingerprint);
-    expect(after.qualify(groups[1]).fingerprint).toBe(before.qualify(groups[1]).fingerprint);
-    expect(createGroupQualification(root, registered, changed).qualify(pilot).fingerprint).toBe(
-      after.qualify(pilot).fingerprint,
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  for (const [file, contents] of Object.entries(sources)) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), contents);
   }
+  const snapshot: InputSnapshot = {
+    version: 1,
+    environment: hashValue('local'),
+    files: Object.fromEntries(Object.entries(sources).map(([file, contents]) => [file, hashValue(contents)])),
+  };
+  const before = createGroupQualification(root, registered, snapshot);
+  const changed = {
+    ...snapshot,
+    files: {
+      ...snapshot.files,
+      'lib/testing/selection/group-selection.ts': hashValue('export const policy = 2;'),
+    },
+  };
+  const after = createGroupQualification(root, registered, changed);
+  expect(after.qualify(pilot).fingerprint).not.toBe(before.qualify(pilot).fingerprint);
+  expect(after.qualify(groups[1]).fingerprint).toBe(before.qualify(groups[1]).fingerprint);
+  expect(createGroupQualification(root, registered, changed).qualify(pilot).fingerprint).toBe(
+    after.qualify(pilot).fingerprint,
+  );
 });

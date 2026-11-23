@@ -7,6 +7,7 @@ import {
   HEALTH_CHECK_TOKEN_HEADER,
   type HealthDependencies,
 } from '../../supabase/functions/health/handler';
+import { workflowsFolder } from '../testing/ci-workflow';
 
 // The edge functions (docs/technical/environments.md#credentials). The deploy
 // steps turn JWT verification off by name, so every named function must check
@@ -15,7 +16,7 @@ import {
 // report names checks, never a value or a provider body.
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
-const DEPLOY_WORKFLOWS = ['.github/workflows/staging.yml', '.github/workflows/release.yml'];
+const DEPLOY_WORKFLOWS = [`${workflowsFolder()}/staging.yml`, `${workflowsFolder()}/release.yml`];
 // The guard each function's handler calls before it acts: the secret-key check or the health token.
 const CALLER_GUARDS = ['createMailAuthorizer', 'hasToken('];
 

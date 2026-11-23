@@ -4,11 +4,11 @@
 // (werk-flow/werkflow-planning#414).
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { mainWipeScript } from './main-wipe-script';
+import { temporaryDirectory } from '../temporary-directory';
 
 const SCRIPT = 'scripts/boat/wipe-machine.sh';
 
@@ -29,7 +29,7 @@ function commitScript(clone: string, text: string): void {
 
 /** A remote whose main holds the wipe script, and a checkout on a branch cut from it. */
 function checkoutBehindMain() {
-  const root = mkdtempSync(join(tmpdir(), 'boat-main-wipe-'));
+  const root = temporaryDirectory('boat-main-wipe-');
   const origin = join(root, 'origin.git');
   const checkout = join(root, 'checkout');
   git(root, 'init', '-q', '--bare', '-b', 'main', origin);
@@ -66,7 +66,7 @@ test("a wipe script that cannot be fetched or read is refused with git's reason"
   git(checkout, 'remote', 'set-url', 'origin', join(root, 'gone.git'));
   expect(() => mainWipeScript(checkout)).toThrow(/^origin\/main's wipe script cannot be read: fatal: /);
   // Main without the script: the read fails, not the fetch.
-  const bare = mkdtempSync(join(tmpdir(), 'boat-main-wipe-'));
+  const bare = temporaryDirectory('boat-main-wipe-');
   git(bare, 'init', '-q', '--bare', '-b', 'main', join(bare, 'origin.git'));
   git(bare, 'clone', '-q', join(bare, 'origin.git'), join(bare, 'checkout'));
   writeFileSync(join(bare, 'checkout', 'README'), 'no script');

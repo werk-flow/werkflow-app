@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { JobPickerModal } from '@/components/job-picker-modal';
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import {
   ACTIVITY_OPTIONS,
   TimeActivityJobField,
