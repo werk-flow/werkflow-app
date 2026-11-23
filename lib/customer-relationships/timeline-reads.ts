@@ -177,6 +177,8 @@ async function readTimelineRequestSources(
     .eq('organization_id', orgId)
     .eq('client_id', clientId)
     .not('converted_at', 'is', null)
+    // A conversion into an offer is no work: its `converted` request event names the offer.
+    .is('converted_offer_id', null)
     .order('converted_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(sourceLimit);
