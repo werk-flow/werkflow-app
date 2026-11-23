@@ -21,6 +21,7 @@ import {
   containerExecutors,
   type SlotShell,
   stageInputs,
+  verifiedReset,
 } from '../../../scripts/ci/container-executor';
 import type { SlotConfig } from './container-slot';
 import type { CiResult } from './results';
@@ -315,4 +316,23 @@ test('S25: the trusted docs check counts only with its report, writes nothing in
   expect(() => businessProblems(source, bundles, checkout)).toThrow('gave no report');
   bundle('setInterval(() => undefined, 1000);');
   expect(() => businessProblems(source, bundles, checkout, 300)).toThrow('gave no report');
+});
+
+test('a slot reset counts only once the boundary probe passed on the slot it left, after the image was checked', async () => {
+  const calls: string[] = [];
+  const steps = (probe: string | undefined, status = 0) => ({
+    reset: () => (calls.push('reset'), { status, stderr: 'colima: no space left' }),
+    image: async () => (calls.push('image'), { id: 'sha256:trusted' }),
+    probe: async () => (calls.push('probe'), probe),
+  });
+  expect(await verifiedReset(steps(undefined), 'sha256:trusted')).toEqual({ clean: true });
+  expect(calls).toEqual(['reset', 'image', 'probe']);
+  const breached = await verifiedReset(steps('probe: the job reaches AGENTS_IP:54321'), 'sha256:trusted');
+  expect(breached).toEqual({
+    clean: false,
+    reason: "the slot's boundary does not hold: probe: the job reaches AGENTS_IP:54321",
+  });
+  calls.length = 0;
+  expect(await verifiedReset(steps(undefined, 1), 'sha256:trusted')).toMatchObject({ clean: false });
+  expect(calls).toEqual(['reset']);
 });

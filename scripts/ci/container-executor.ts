@@ -388,6 +388,31 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
 }
 
 /**
+ * A slot reset that counts (scripts/ci/machine-runner.ts): the machine's reset command exited 0,
+ * the image is the one verified at start, and the boundary probe passes on the slot as it now is.
+ * A reset may build the slot anew (the Mac's new VM), so its boundary is proven again each time.
+ */
+export async function verifiedReset(
+  steps: {
+    reset(): { status: number | null; stderr: string };
+    image(): Promise<{ id: string } | { problem: string }>;
+    probe(): Promise<string | undefined>;
+  },
+  imageId: string,
+): Promise<{ clean: true } | { clean: false; reason: string }> {
+  const reset = steps.reset();
+  if (reset.status !== 0)
+    return { clean: false, reason: `the slot reset failed: ${reset.stderr.trim().slice(-800)}` };
+  const image = await steps.image();
+  if ('problem' in image) return { clean: false, reason: image.problem };
+  if (image.id !== imageId) return { clean: false, reason: `the reset loaded ${image.id}, not ${imageId}` };
+  const problem = await steps.probe();
+  return problem === undefined
+    ? { clean: true }
+    : { clean: false, reason: `the slot's boundary does not hold: ${problem}` };
+}
+
+/**
  * Removes every container and every volume on the slot's daemon, its Supabase stack's database
  * included, then shows them gone; the pinned image stays. The daemon serves CI alone, one run at a time, so whatever it holds is a run's: a job's
  * container, its staging, its Supabase stack, also one a job started before it could record it. One

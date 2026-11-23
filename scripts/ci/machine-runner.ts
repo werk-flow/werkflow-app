@@ -50,7 +50,7 @@ import { RUNNER_PULLS_QUERY, runnerPullsFromGitHub } from '../../lib/testing/ci/
 import { activeProfile, MAIN_REFSPEC } from '../../lib/testing/ci/profiles';
 import { resultFileName } from '../../lib/testing/ci/results';
 import { z } from '../../lib/zod';
-import { clearSlot, slotShell } from './container-executor';
+import { clearSlot, slotShell, verifiedReset } from './container-executor';
 import {
   endProcessGroup,
   runCommitSignal,
@@ -144,9 +144,12 @@ const imageId = inspected.id;
 /** The slot as run-commit gets it: the image by its id, never by a tag a job could move. */
 const slot = { ...config.slot, image: imageId };
 
-// The boundary, before any claim: a job of this slot reads none of this side's files and reaches
-// none of its ports. Each sentinel holds a random token; the probe looks for it.
-{
+/**
+ * The boundary, after every reset and so before any claim: a job of this slot reads none of this
+ * side's files, reaches no Windows and none of its ports. Each sentinel holds a random token; the
+ * probe looks for it. Undefined when it holds, otherwise the probe's answer.
+ */
+async function probeBoundary(): Promise<string | undefined> {
   const token = randomBytes(24).toString('hex');
   const name = `.werkflow-ci-probe-${token.slice(0, 12)}`;
   const probed = await withSentinels(
@@ -157,10 +160,9 @@ const slot = { ...config.slot, image: imageId };
         timeoutMs: 300_000,
       }),
   );
-  if (probed.code !== 0)
-    throw new Error(
-      `The slot's boundary does not hold, so the runner claims nothing: ${probed.stderr.trim() || probed.stdout.trim()}`,
-    );
+  return probed.code === 0
+    ? undefined
+    : probed.stderr.trim() || probed.stdout.trim() || `exit ${probed.code}`;
 }
 
 mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
@@ -340,22 +342,26 @@ function startWatchdog(group: number, stopBy: number, runDir: string): void {
 }
 
 /**
- * Resets the slot between runs with the machine's `reset` command (ci/slot): its Docker state and
- * its user's writable state wiped, the trusted image loaded again. Then the image's id must be the
- * one verified at start. The reset's duration is logged.
+ * Resets the slot with the machine's `reset` command (ci/slot), at start and after every run, and
+ * verifies it: the image's id, then the boundary probe (`verifiedReset`). The reset's duration is logged.
  */
 async function resetSlot(): Promise<{ clean: true } | { clean: false; reason: string }> {
-  const began = Date.now();
   const [program, ...args] = config.reset;
-  const reset = program ? exec(program, args, {}, 20 * 60_000) : undefined;
-  log(`[runner] the slot reset took ${Math.round((Date.now() - began) / 1_000)} s`);
-  if (!reset || reset.status !== 0)
-    return { clean: false, reason: `the slot reset failed: ${(reset?.stderr ?? '').trim().slice(-800)}` };
-  const image = await inspectImage();
-  if ('problem' in image) return { clean: false, reason: image.problem };
-  return image.id === imageId
-    ? { clean: true }
-    : { clean: false, reason: `the reset loaded ${image.id}, not ${imageId}` };
+  return verifiedReset(
+    {
+      reset: () => {
+        const began = Date.now();
+        const reset = program
+          ? exec(program, args, {}, 20 * 60_000)
+          : { status: 1, stderr: 'no reset command' };
+        log(`[runner] the slot reset took ${Math.round((Date.now() - began) / 1_000)} s`);
+        return reset;
+      },
+      image: inspectImage,
+      probe: probeBoundary,
+    },
+    imageId,
+  );
 }
 
 const alive = (group: number): boolean => {
@@ -567,7 +573,9 @@ if (leftOver !== undefined)
   throw new Error(`The slot cannot be emptied, so the runner claims nothing: ${leftOver}`);
 const startReset = await resetSlot();
 if (!startReset.clean)
-  throw new Error(`The slot cannot be reset, so the runner claims nothing: ${startReset.reason}`);
+  throw new Error(
+    `The slot cannot be reset and shown bounded, so the runner claims nothing: ${startReset.reason}`,
+  );
 // The watchdog must reach the slot on its own: the same detached spawn and environment, a no-op.
 const probed = await new Promise<number | null>((done) =>
   spawnTracked(

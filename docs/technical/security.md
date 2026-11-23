@@ -137,7 +137,7 @@ On an unchanged tree, an exception matching no finding passes with a note: remov
 
 ## Known residual exposure
 
-List each owner-accepted residual exposure until closed.
+List each owner-accepted residual exposure until it closes.
 
 - The script policy allows `'unsafe-inline'`, so injected inline scripts run: a per-request nonce needs per-request rendering, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
 - No edge rate limit covers every request; the app and Supabase Auth limit only their own operations. Edge limiting is the owner's Vercel plan decision.
@@ -147,9 +147,9 @@ List each owner-accepted residual exposure until closed.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
 - Organization deletion removes stored files after the rows; a file whose delete fails or cannot be rechecked stays under its prefix, logged, unreachable through the app.
 - Dev tools' minimatch (GHSA-g3hv-75wg-m249) and picomatch (GHSA-fc5q-39xc-vjpf) are reviewed exceptions (`lib/security/dependency-exceptions.json`).
-- A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to its readers (owner decision, werk-flow/werkflow-planning#241).
-- Unverified without a stronger read token: the R2 buckets' CORS rules and the Vercel environment scopes.
-- PC agents can read the CI key ([accepted](machine-setup.md#run-ci-on-the-owners-machines)).
+- A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
+- Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
+- [CI key](machine-setup.md#run-ci-on-the-owners-machines).
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
 - Unsent work outlives sign-out, readable to whoever unlocks the phone's browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them, an [unreadable draft](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-stored-records-stay-readable) until its person deletes it.
 
