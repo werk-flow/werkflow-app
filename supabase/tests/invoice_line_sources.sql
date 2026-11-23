@@ -1,5 +1,5 @@
 -- An invoice line keeps the Leistung or article it came from
--- (migration 20261221100014_keep_the_catalog_source_of_invoice_lines.sql).
+-- (migration 20270111100000_keep_the_catalog_source_of_invoice_lines.sql).
 begin;
 
 insert into auth.users (
