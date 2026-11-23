@@ -285,9 +285,15 @@ export async function withStandaloneLoading(
   capture: () => Promise<void>,
 ): Promise<void> {
   const inFlight = watchInFlight(page);
-  await page.goto(route.from);
-  await settled(page);
-  const interception = await interceptFor(page, stateCapturePlan('loading', 'page'), route.to.path);
+  let interception: Interception;
+  try {
+    await page.goto(route.from);
+    await settled(page);
+    interception = await interceptFor(page, stateCapturePlan('loading', 'page'), route.to.path);
+  } catch (error) {
+    inFlight.stop();
+    throw error;
+  }
   try {
     // A page of the area links to its other pages, so the target's loading
     // boundary may be prefetched already and a second prefetch sends nothing:
