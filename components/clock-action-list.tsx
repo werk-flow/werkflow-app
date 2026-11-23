@@ -11,7 +11,7 @@ import {
   Square,
 } from 'lucide-react';
 
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { TimeActivityStatusNotice } from '@/components/time-activity-status-notice';
 import { useBanner } from '@/components/ui/banner';

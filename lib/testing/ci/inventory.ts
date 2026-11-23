@@ -101,7 +101,7 @@ export const SCHEDULES = {
       'main-full-run.yml#full',
       'main-full-run.yml#alert',
     ],
-    // main-full-run.yml has no cron: the conductor's slots dispatch it.
+    // main-full-run.yml has no cron: the conductor's slots or a manual dispatch start it.
     trigger: { on: 'time', conductor: 'full-run' },
   },
   'date-lookahead': {
