@@ -6,8 +6,8 @@
 //   2. It retries what it could not deliver: Check completions and alerts.
 //   3. While a run goes, it renews the run's lease ref (lease.ts) and stops the run when it outran its
 //      ceiling, its PR's head moved or its lease was lost. A stopped run's Check ends cancelled.
-//   4. When a run ended, it re-reads the PR's head, approval and the active profile, marks the lease
-//      done and only then completes the attempt's own Check with the verdict.
+//   4. When a run ended, its verdict is queued; each delivery re-reads lease, head, approval and
+//      profile, marks the lease done and only then completes the attempt's own Check.
 //   5. While idle and clean, it resizes the slot to the window's size (only between runs), takes the
 //      eligible PRs in order, claims the first it can, admits it by the window, and starts it.
 // A restarted runner takes a new generation and never resumes a run of an older one.
@@ -28,24 +28,17 @@ import {
 import { asked, byQueuePlace, upToDate } from './queue';
 import type { RunPlan } from './results';
 import { jobShards } from './run-plan';
-import { admitRun, resolveWindow } from './windows';
+import { admitRun, nextOffEdge, resolveWindow } from './windows';
 
 /** How often the runner ticks. */
 export const TICK_MS = 60_000;
 /** Beyond a run's expected time, so it still ends inside its window (windows.ts, admitRun). */
 const RESERVE_MS = 120_000;
-/**
- * After SIGTERM, a stopped run's process group gets SIGKILL this late: run-commit stops each job's
- * container meanwhile (60 s of grace, then docker kills it).
- */
+/** After SIGTERM, a stopped run's process group gets SIGKILL this late (run-commit stops its jobs meanwhile). */
 export const KILL_AFTER_MS = 2 * 60_000;
 /** The time a stopped run takes to end at most: the SIGKILL, and the slot's whole teardown. */
 const STOP_MS = KILL_AFTER_MS + TEARDOWN_MS;
-/**
- * How long before the window turns off a run is stopped: two ticks, so one slow tick still stops it
- * in time, and the stop itself. The watchdog (scripts/ci/machine-watchdog.ts) stops it at the same
- * instant if the runner does not.
- */
+/** How long before the window turns off a run is stopped, by the runner or else its watchdog: two ticks and the stop. */
 export const EDGE_MARGIN_MS = 2 * TICK_MS + STOP_MS;
 /** A job's staging and handoff beyond its own timeout, for the run's ceiling. */
 const STAGE_MS = 20 * 60_000;
@@ -118,7 +111,7 @@ const currentSchema = z.strictObject({
   /** The run's process group, so a stop or a restarted runner can end it. */
   processGroup: z.number().int().positive().nullable(),
 });
-type CurrentRun = z.infer<typeof currentSchema>;
+export type CurrentRun = z.infer<typeof currentSchema>;
 
 /** A `Check` completion still owed: its delivery failed and is retried every tick. */
 const completionSchema = z.strictObject({
@@ -209,8 +202,8 @@ type RunControl = {
   status(run: CurrentRun): Promise<RunStatus>;
   /** Ends the run's process group, its job and staging containers and any Supabase stack, and verifies it. */
   stop(run: CurrentRun): Promise<Cleanup>;
-  /** Whether the slot holds no container of a run. */
-  clean(): Promise<Cleanup>;
+  /** Empties the slot and verifies it; after `run`'s end it records the verified teardown for its watchdog. */
+  clean(run?: CurrentRun): Promise<Cleanup>;
 };
 
 export type RunnerPorts = {
@@ -294,18 +287,6 @@ function eligiblePulls(pulls: readonly RunnerPull[], parked: readonly string[]):
     ...open.filter(asked).toSorted(byQueuePlace),
     ...open.filter((pull) => !asked(pull)).toSorted((left, right) => left.number - right.number),
   ];
-}
-
-/** The next instant the window turns off, from `now`; null when none lies ahead or the file holds. */
-export function nextOffEdge(windowFile: unknown, now: number): number | null {
-  let at = now;
-  for (let step = 0; step < 64; step++) {
-    const window = resolveWindow(windowFile, new Date(at));
-    if (window.kind === 'off') return at;
-    if (window.kind !== 'open' || window.until === null) return null;
-    at = window.until.getTime();
-  }
-  return null;
 }
 
 const stopByOf = (edge: number | null): number | null => (edge === null ? null : edge - EDGE_MARGIN_MS);
@@ -404,6 +385,15 @@ const owe = (state: RunnerState, run: CurrentRun, kind: Completion['kind'], reas
   ],
 });
 
+/** The window file now; a file that cannot be read is a text, which holds (windows.ts). */
+function readWindows(ports: RunnerPorts): unknown {
+  try {
+    return ports.windows();
+  } catch (error) {
+    return `The window file cannot be read: ${message(error)}`;
+  }
+}
+
 /**
  * One tick of the runner. It saves its state after every step that changes it, so a runner that
  * dies between steps restarts from what it did.
@@ -424,12 +414,7 @@ async function step(ports: RunnerPorts): Promise<string> {
   state = await deliver(ports, state);
   const now = ports.now();
   // A file that cannot be read holds admission, while a running run keeps its admitted edge.
-  let windowFile: unknown;
-  try {
-    windowFile = ports.windows();
-  } catch (error) {
-    windowFile = `The window file cannot be read: ${message(error)}`;
-  }
+  const windowFile = readWindows(ports);
   const window = resolveWindow(windowFile, new Date(now));
   if (window.kind === 'hold')
     state = alertOnce(state, `hold:${window.reason}`, { kind: 'hold', detail: window.reason });
@@ -546,7 +531,7 @@ async function finish(
 ): Promise<string> {
   let state: RunnerState = { ...initial, current: null };
   const now = ports.now();
-  const cleanup = await ports.runs.clean();
+  const cleanup = await ports.runs.clean(run);
   if (!cleanup.clean)
     state = alertOnce({ ...state, dirty: cleanup.reason }, `dirty:${cleanup.reason}`, {
       kind: 'dirty',
@@ -642,8 +627,8 @@ async function startPull(
 ): Promise<string | undefined> {
   const { config } = ports;
   let state = ports.load();
-  const fits = (kind: RunKind): boolean =>
-    admitRun(windowFile, new Date(ports.now()), {
+  const fits = (kind: RunKind, file: unknown = windowFile): boolean =>
+    admitRun(file, new Date(ports.now()), {
       expectedMs: expectedMs(config, state, kind),
       reserveMs: RESERVE_MS,
     }).admit;
@@ -667,12 +652,19 @@ async function startPull(
     ports.save(await settleStart(ports, state, starting));
     return undefined;
   }
-  // The window is read again at launch: a run that no longer fits does not start.
-  if (!fits(state.fullHeads.includes(pull.headSha) ? 'full' : 'selected')) {
+  // The window file is read again at launch, and the slot must still have its size: a run that no
+  // longer fits does not start, and the run's edge, its watchdog's too, comes from this read.
+  const now = ports.now();
+  const launchFile = readWindows(ports);
+  const launchWindow = resolveWindow(launchFile, new Date(now));
+  if (
+    launchWindow.kind !== 'open' ||
+    launchWindow.size !== state.size ||
+    !fits(state.fullHeads.includes(pull.headSha) ? 'full' : 'selected', launchFile)
+  ) {
     ports.save(await settleStart(ports, state, starting, checkRun));
     return undefined;
   }
-  const now = ports.now();
   const runDir = `${config.stateDir}/runs/${name}`;
   const current: CurrentRun = {
     pull: pull.number,
@@ -684,7 +676,7 @@ async function startPull(
     held: claimed.held,
     checkRun,
     startedAt: now,
-    stopBy: stopByOf(nextOffEdge(windowFile, now)),
+    stopBy: stopByOf(nextOffEdge(launchFile, now)),
     processGroup: null,
   };
   // Saved before the start, so a runner that dies during it still knows the run to end.
@@ -753,6 +745,10 @@ async function settleStart(
   known?: number,
 ): Promise<RunnerState> {
   const checkRun = known ?? (await ports.checks.find(starting));
+  // An empty lookup may be GitHub's lag: the intent stays, and its lease with it, until the Check
+  // is found or the lease expired.
+  if (checkRun === null && seconds(ports.now()) <= starting.held.lease.expiresAt + LEASE_MARGIN_S)
+    return state;
   await release(ports.refs, starting.head, starting.held).catch(() => false);
   if (checkRun === null) return { ...state, starting: null };
   const completion: Completion = {

@@ -291,3 +291,15 @@ export function admitRun(
       }
     : { admit: false, retryAt: null, reason: `${why}; no window ahead is ${minutes} min long.` };
 }
+
+/** The next instant the window turns off, from `now`; null when none lies ahead or the file holds. */
+export function nextOffEdge(windowFile: unknown, now: number): number | null {
+  let at = now;
+  for (let step = 0; step < 64; step++) {
+    const window = resolveWindow(windowFile, new Date(at));
+    if (window.kind === 'off') return at;
+    if (window.kind !== 'open' || window.until === null) return null;
+    at = window.until.getTime();
+  }
+  return null;
+}

@@ -37,9 +37,10 @@ export interface LeaseRefs {
   read(sha: string): Promise<RefValue | null>;
   /**
    * Points the head's lease ref at a new commit with `message`, only while it is `expected` (null:
-   * absent), in one atomic push. The new value, or null when the ref was another.
+   * absent), in one atomic push. The new value, or null when the ref was another. `deadlineMs` bounds
+   * the push and the read that settles an answer it lost; past it the swap throws.
    */
-  swap(sha: string, expected: string | null, message: string): Promise<RefValue | null>;
+  swap(sha: string, expected: string | null, message: string, deadlineMs?: number): Promise<RefValue | null>;
   /** Deletes the head's lease ref, only while it is `expected`. */
   remove(sha: string, expected: string): Promise<boolean>;
 }
@@ -50,6 +51,8 @@ export type ClaimResult =
 
 /** Seconds by which a machine distrusts an expiry, against clock skew between the machines. */
 export const LEASE_MARGIN_S = 60;
+/** The least time a verdict's swap to `done` may take, with the read that settles a lost answer. */
+const DONE_SWAP_MIN_MS = 30_000;
 
 const MACHINE = /^[a-z0-9-]{1,20}$/;
 const COUNT = '(0|[1-9][0-9]{0,15})';
@@ -134,9 +137,12 @@ export async function markDone(
   held: HeldLease,
   now: number,
 ): Promise<HeldLease | 'stale'> {
-  if (now + LEASE_MARGIN_S >= held.lease.expiresAt) return 'stale';
+  // The swap and its recovery from a lost answer must end while the lease still holds, by this
+  // machine's clock less the margin; with less time left the caller releases instead.
+  const leftMs = (held.lease.expiresAt - LEASE_MARGIN_S - now) * 1_000;
+  if (leftMs < DONE_SWAP_MIN_MS) return 'stale';
   const lease: Lease = { ...held.lease, state: 'done' };
-  const swapped = await refs.swap(sha, held.oid, formatLease(lease));
+  const swapped = await refs.swap(sha, held.oid, formatLease(lease), leftMs);
   return swapped === null ? 'stale' : { oid: swapped.oid, lease };
 }
 
@@ -147,7 +153,8 @@ export async function release(refs: LeaseRefs, sha: string, held: HeldLease): Pr
 
 /** Whether `value` is a lease of this exact attempt. */
 
-function writeDurably(file: string, text: string): void {
+/** Writes `file` whole or not at all, durably: temp file, fsync, rename, folder fsync. */
+export function writeDurably(file: string, text: string): void {
   const temp = `${file}.${process.pid}.tmp`;
   const handle = openSync(temp, 'w');
   try {

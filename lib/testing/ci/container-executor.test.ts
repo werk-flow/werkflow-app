@@ -91,8 +91,10 @@ function fakeSlot(
       return ok();
     }
     if (argv[0] === 'test') return files.has(argv[2] ?? '') ? ok() : { code: 1, stdout: '', stderr: '' };
-    if (argv[0] === 'sh' && argv[3] === 'read') {
-      const text = files.get(argv[4] ?? '');
+    // The job's Supabase stack left its database volume behind.
+    if (argv.join(' ') === 'docker volume ls --quiet') return ok('supabase_db_data');
+    if (argv[2] === 'sh' && argv[5] === 'read') {
+      const text = files.get(argv[6] ?? '');
       return text === undefined ? { code: 1, stdout: '', stderr: '' } : ok(text);
     }
     return ok();
@@ -150,6 +152,10 @@ test("Plan's own result from its container is kept in the run's results, and the
   const outcome = await executors(slot.shell).host.run(planTask(results), new AbortController().signal);
   expect(outcome.exitCode).toBe(0);
   expect(JSON.parse(readFileSync(join(results, 'plan.json'), 'utf8')).runUrl).toBe(RUN_URL);
+  // S22: after the job the slot's every container and volume, its stack's database too, are gone.
+  expect(slot.commands.map((command) => command.join(' '))).toContain(
+    ['docker', 'volume', 'rm', '--force', 'supabase_db_data'].join(' '),
+  );
   expect(slot.commands.flat().join(' ')).not.toContain(TOKEN);
 });
 
@@ -241,13 +247,13 @@ test('S19: the slot counts as empty only once every container and volume on its 
       }
     return ok();
   };
-  expect(await clearSlot(shell, SLOT, true)).toBeUndefined();
+  expect(await clearSlot(shell, SLOT)).toBeUndefined();
   expect([containers.size, volumes.size]).toEqual([0, 0]);
   containers.add('stage');
   faults.stuck = true;
-  expect(await clearSlot(shell, SLOT, true)).toContain('stage');
+  expect(await clearSlot(shell, SLOT)).toContain('stage');
   faults.listFails = true;
-  expect(await clearSlot(shell, SLOT, false)).toContain('daemon down');
+  expect(await clearSlot(shell, SLOT)).toContain('daemon down');
 });
 
 test("CR 187: a launch that cannot be recorded at the job's end fails the job and still empties the slot first", async () => {

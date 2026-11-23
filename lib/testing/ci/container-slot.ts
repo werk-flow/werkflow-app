@@ -56,8 +56,6 @@ export const keptOf = (config: SlotConfig, runKey: string, unit: Unit): string =
   `${runFolder(config, runKey)}/${unitName(unit)}`;
 /** The folder Fast writes its build tar into and a browser shard reads it from. */
 const buildFolder = (config: SlotConfig, runKey: string): string => `${runFolder(config, runKey)}/build`;
-/** The run's own Bun cache: no run reads what another run's code wrote. */
-const bunCache = (runKey: string): string => `werkflow-ci-bun-${runKey}`;
 
 /** The job's container: named after the run and the unit, so a stop names exactly it. */
 export const containerName = (runKey: string, unit: Unit): string =>
@@ -141,8 +139,8 @@ export function jobEnvironment(
  * The command that runs one job in its container until it ends, attached so its exit is the job's.
  * The workspace is mounted at its own path, as the job's Supabase stack mounts paths of it through
  * the slot's socket; `--network host` keeps the stack's fixed ports reachable; the git cache is read
- * only, the build folder writable only for Fast. The Bun cache is the run's own volume; Playwright's
- * browsers are in the image.
+ * only, the build folder writable only for Fast. Nothing else persists: Bun installs into the
+ * container, and Playwright's browsers are in the image.
  */
 export function jobCommand(
   config: SlotConfig,
@@ -166,8 +164,6 @@ export function jobCommand(
     '--volume',
     `${gitCache(config)}:${gitCache(config)}:ro`,
     ...(usesBuild(job.unit) ? ['--volume', `${build}:${build}${job.unit.job === 'fast' ? '' : ':ro'}`] : []),
-    '--volume',
-    `${bunCache(job.runKey)}:/home/runner/.bun/install/cache`,
     ...(config.containerUser === 'root' ? ['--user', '0'] : []),
     ...Object.entries(job.environment).flatMap(([name, value]) => ['--env', `${name}=${value}`]),
     '--workdir',
@@ -213,6 +209,9 @@ export function stageCommand(
  * way), and copies at most READ_LIMIT_BYTES + 1 bytes from it. The caller refuses a longer answer.
  */
 export const readCommand = (path: string): string[] => [
+  // The deadline lives on the slot too: an open that blocks (a FIFO) dies there.
+  'timeout',
+  '60',
   'sh',
   '-c',
   'exec 3< "$1" && test -f /proc/$$/fd/3 && test "$(readlink /proc/$$/fd/3)" = "$1" && exec head -c "$2" <&3',

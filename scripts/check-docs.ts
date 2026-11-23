@@ -81,8 +81,22 @@ function pointsIntoMissingSibling(path: string): boolean {
   uncheckedSiblingLinks.set(sibling, (uncheckedSiblingLinks.get(sibling) ?? 0) + 1);
   return true;
 }
+// The trusted mode (WERKFLOW_DOCS_ROOT): a link target outside the staged repositories is a
+// problem, never checked or read.
+const stagedRoots = process.env.WERKFLOW_DOCS_ROOT
+  ? [repoRoot, ...SIBLING_REPOSITORIES.map((sibling) => join(workspaceRoot, sibling))]
+  : null;
+function outsideStaged(path: string): boolean {
+  const resolved = resolve(path);
+  if (!stagedRoots || stagedRoots.some((root) => resolved === root || resolved.startsWith(root + sep)))
+    return false;
+  problems.push(`trusted: a link resolves to ${resolved}, outside the staged repositories`);
+  return true;
+}
+const existsStaged = (path: string): boolean => !outsideStaged(path) && existsSync(path);
 const anchorCache = new Map<string, Set<string>>();
 function headingAnchors(path: string): Set<string> {
+  if (outsideStaged(path)) return new Set();
   const cached = anchorCache.get(path);
   if (cached) return cached;
   const anchors = markdownHeadingAnchors(readFileSync(path, 'utf8'));
@@ -118,7 +132,7 @@ for (const path of docPaths) {
       const resolved = resolveWorkspaceLink(workspace, file, target);
       return isDecision && deletedDocTargets.some((target) => resolved.startsWith(target)) ? null : resolved;
     },
-    exists: existsSync,
+    exists: existsStaged,
     inMissingSibling: pointsIntoMissingSibling,
     anchors: headingAnchors,
   });
@@ -170,7 +184,7 @@ for (const path of guidanceFiles) {
       reference.kind === 'link'
         ? resolveWorkspaceLink(workspace, join(repoRoot, path), reference.target)
         : join(repoRoot, reference.target);
-    if (!existsSync(target) && !pointsIntoMissingSibling(target))
+    if (!existsStaged(target) && !pointsIntoMissingSibling(target))
       problems.push(`guidance: ${path} references ${reference.target}, which does not exist`);
   }
 }
@@ -222,7 +236,7 @@ const usedDeadCitations = new Set<string>();
 for (const file of citedFiles) {
   for (const citation of findDocCitations(read(file))) {
     const target = join(repoRoot, citation.path);
-    const problem = !existsSync(target)
+    const problem = !existsStaged(target)
       ? 'does not exist'
       : citation.anchor !== null && !headingAnchors(target).has(citation.anchor)
         ? `has no heading #${citation.anchor}`

@@ -97,6 +97,10 @@ type Faults = {
   noVerdict: boolean;
   /** Milliseconds the next Check start takes on GitHub. */
   startDelay: number;
+  /** Lookups of a start by its URL that come back empty first, as GitHub's lag. */
+  findLag: number;
+  /** Runs while the next Check start is on its way. */
+  onStart: (() => void) | null;
 };
 
 const noFaults = (): Faults => ({
@@ -107,6 +111,8 @@ const noFaults = (): Faults => ({
   lostStart: false,
   noVerdict: false,
   startDelay: 0,
+  findLag: 0,
+  onStart: null,
 });
 
 /** The machine's GitHub ports over the shared world; every call fails while the world is offline. */
@@ -132,6 +138,8 @@ function githubPorts(
           const id = world.github.checkRuns.length + 1;
           world.github.checkRuns.push({ id, head: sha, runUrl, conclusion: null });
           world.clock.now += faults.startDelay;
+          faults.onStart?.();
+          faults.onStart = null;
           if (faults.lostStart) {
             faults.lostStart = false;
             throw new Error('the answer was lost');
@@ -139,7 +147,13 @@ function githubPorts(
           return id;
         }),
       find: ({ runUrl }) =>
-        online(() => world.github.checkRuns.find((run) => run.runUrl === runUrl)?.id ?? null),
+        online(() => {
+          if (faults.findLag > 0) {
+            faults.findLag--;
+            return null;
+          }
+          return world.github.checkRuns.find((run) => run.runUrl === runUrl)?.id ?? null;
+        }),
       complete: (completion) =>
         online(() => {
           if (faults.complete > 0) {

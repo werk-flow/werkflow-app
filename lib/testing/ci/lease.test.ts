@@ -2,7 +2,7 @@
 // marks its verdict (decision 0011, rule 3). The fake ref store swaps atomically, as
 // `git push --force-with-lease` does on GitHub.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -15,6 +15,7 @@ import {
   nextGeneration,
   parseLease,
   release,
+  writeDurably,
 } from './lease';
 
 const SHA = 'a'.repeat(40);
@@ -81,6 +82,26 @@ test("a dead owner's late verdict is stale: its done swap fails once another att
   if (!next.claimed) throw new Error('the takeover must win');
   expect(await markDone(refs, SHA, dead.held, 1_100)).toBe('stale');
   expect(await markDone(refs, SHA, next.held, 1_000 + TTL + LEASE_MARGIN_S + 2)).not.toBe('stale');
+});
+
+test('S6, S16: the swap to done gets the lease time left less the margin as its deadline, and is not tried with too little', async () => {
+  const { refs } = fakeRefs();
+  const deadlines: (number | undefined)[] = [];
+  const timed: LeaseRefs = {
+    ...refs,
+    swap: (sha, expected, message, deadlineMs) => {
+      deadlines.push(deadlineMs);
+      return refs.swap(sha, expected, message);
+    },
+  };
+  const held = await claim(timed, SHA, me('mac'), 1_000, TTL);
+  if (!held.claimed) throw new Error('the claim must win');
+  deadlines.length = 0;
+  // 25 s left past the margin: too little for the swap and its recovery, so no swap at all.
+  expect(await markDone(timed, SHA, held.held, 1_000 + TTL - LEASE_MARGIN_S - 25)).toBe('stale');
+  expect(deadlines).toEqual([]);
+  expect(await markDone(timed, SHA, held.held, 1_000 + TTL - LEASE_MARGIN_S - 300)).not.toBe('stale');
+  expect(deadlines).toEqual([300_000]);
 });
 
 test("a verdict is refused within the margin of its own expiry by the poster's clock", async () => {
@@ -150,4 +171,13 @@ test('a generation file that holds no generation fails loudly instead of restart
     writeFileSync(file, text);
     expect(() => nextGeneration(file), JSON.stringify(text)).toThrow();
   }
+});
+
+test('S17: the runner state is written whole or not at all: a write that cannot finish keeps the previous state', () => {
+  const file = join(directory, 'state.json');
+  writeDurably(file, '{"queued":"verdict"}\n');
+  chmodSync(directory, 0o500);
+  expect(() => writeDurably(file, '{"queued":"nothing"}\n')).toThrow();
+  chmodSync(directory, 0o700);
+  expect(readFileSync(file, 'utf8')).toBe('{"queued":"verdict"}\n');
 });

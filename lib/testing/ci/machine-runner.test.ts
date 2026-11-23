@@ -21,7 +21,6 @@ import {
   EDGE_MARGIN_MS,
   KILL_AFTER_MS,
   machineConfigSchema,
-  nextOffEdge,
   percentile,
   recover,
   runnerStateSchema,
@@ -30,7 +29,7 @@ import {
 import { endProcessGroup } from '../../../scripts/ci/machine-watchdog';
 import { runnerPullsFromGitHub } from './machine-pulls';
 import type { RunPlan } from './results';
-import { MAC_STANDING, PC_STANDING, resolveWindow } from './windows';
+import { MAC_STANDING, nextOffEdge, PC_STANDING, resolveWindow } from './windows';
 
 test('F1: two runners against one queue never run the same PR, and a loser leaves no Check behind', async () => {
   const shared = world({ pulls: [pull(1), pull(2)] });
@@ -568,4 +567,34 @@ test("CR 132: a clock that stepped back past a run's start still owes its verdic
   await tick(pc.ports);
   expect(() => runnerStateSchema.parse(pc.state())).not.toThrow();
   expect(shared.github.checkRuns[0]?.conclusion).toBe('success');
+});
+
+test('S18: a start intent whose lookup comes back empty is kept and reconciled on a later tick, not dropped', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  pc.faults.lostStart = true;
+  pc.faults.findLag = 1;
+  await tick(pc.ports);
+  expect(pc.state().starting).not.toBeNull();
+  expect(leaseOf(shared.github, head(1))?.state).toBe('held');
+  await tick(pc.ports);
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('cancelled');
+  // Attempt 1's lease was handed back, so the same tick could claim the head anew.
+  expect(leaseOf(shared.github, head(1))?.attempt).toBe(2);
+});
+
+test('S19: the window file is read again right before launch, and a window that turned off starts no run', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  pc.faults.onStart = () => {
+    shared.windows = {
+      timezone: BERLIN_TIME_ZONE,
+      standing: [
+        { days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], from: '00:00', to: '00:00', size: 'off' },
+      ],
+    };
+  };
+  await tick(pc.ports);
+  expect(pc.started).toEqual([]);
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('cancelled');
 });

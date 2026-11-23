@@ -6,7 +6,7 @@
   "windowsFile": "/home/ci/ci-runner/windows.json",
   "appKeyFile": "/home/ci/ci-runner/key/ci-app.pem",
   "slot": {
-    "prefix": ["wsl.exe", "-d", "werkflow-ci", "-u", "cirunner", "--"],
+    "prefix": ["wsl.exe", "-d", "werkflow-ci", "-u", "cirunner", "--exec"],
     "dockerHost": "unix:///run/user/1002/docker.sock",
     "socket": "/run/user/1002/docker.sock",
     "root": "/home/cirunner/ci",

@@ -60,9 +60,9 @@ Install the runner, or move it to a new reviewed commit `<commit>`. Run each ste
    cd ~/ci-runner/werkflow-app && git fetch origin && git checkout --detach <commit> && bun install --frozen-lockfile
    ```
 
-4. Prepare the slot and build the image there. `$SLOT` is `colima ssh --profile ci --` on the Mac and `wsl.exe -d werkflow-ci -u cirunner --` on the PC:
+4. Prepare the slot and build the image there. `$SLOT` is `colima ssh --profile ci --` on the Mac and `wsl.exe -d werkflow-ci -u cirunner --exec` on the PC. `--exec` hands each argument on as it is; `--` would pass them through the distribution's shell, which splits and expands them.
    - **Mac, first install only:** `colima start --profile ci --cpu 4 --memory 6 --mount "$HOME/.colima-ci-empty"` after `mkdir ~/.colima-ci-empty`, so no folder of the Mac is mounted. Then `$SLOT sh -c 'sudo install -d -o "$(id -un)" /var/lib/werkflow-ci'`.
-   - **PC, first install only:** `$SLOT mkdir -p /home/cirunner/ci`.
+   - **PC, first install only:** `$SLOT mkdir -p /home/cirunner/ci`. Check that arguments arrive intact: `$SLOT sh -c 'printf "<%s>" "$@"' x 'a b' '"q"' '$HOME'` prints `<a b><"q"><$HOME>`.
    - **First install only, the stack's ports:** the Supabase stack's ports 54321–54327 must lie outside the range outgoing connections take, in the network the jobs use. The runner's probe checks it and refuses to start otherwise; no job changes it.
      - **Mac:** `$SLOT sudo sh -c 'echo "net.ipv4.ip_local_port_range = 55000 65000" > /etc/sysctl.d/90-werkflow-ci.conf && sysctl --system'`.
      - **PC:** the rootless Docker's own network namespace. Add `~/.config/systemd/user/docker.service.d/ports.conf` for user `cirunner` in `werkflow-ci`, holding `[Service]` and `ExecStartPost=/bin/sh -c 'nsenter -U --preserve-credentials -n -t "$(cat %t/dockerd-rootless/child_pid)" sysctl -w net.ipv4.ip_local_port_range="55000 65000"'`. Then `$SLOT systemctl --user daemon-reload` and `$SLOT systemctl --user restart docker`.
@@ -70,7 +70,7 @@ Install the runner, or move it to a new reviewed commit `<commit>`. Run each ste
 
      ```bash
      git archive HEAD ci/image | $SLOT sh -c 'rm -rf ~/ci-image && mkdir -p ~/ci-image && tar -x -C ~/ci-image'
-     $SLOT env DOCKER_HOST=unix:///run/user/1002/docker.sock docker build --build-arg TRUSTED_COMMIT=$(git rev-parse HEAD) -t werkflow-ci:<commit> ci-image/ci/image   # PC
+     $SLOT env DOCKER_HOST=unix:///run/user/1002/docker.sock docker build --build-arg TRUSTED_COMMIT=$(git rev-parse HEAD) -t werkflow-ci:<commit> /home/cirunner/ci-image/ci/image   # PC
      $SLOT docker build --build-arg TRUSTED_COMMIT=$(git rev-parse HEAD) -t werkflow-ci:<commit> ci-image/ci/image   # Mac
      ```
 

@@ -335,7 +335,7 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
       if (!launched && (await shell(['test', '-e', marker], { timeoutMs: COMMAND_MS })).code === 0)
         recordLaunch();
       // Every container the job left, its Supabase stack too, goes before the next job.
-      const left = await clearSlot(shell, slot, false);
+      const left = await clearSlot(shell, slot);
       if (left !== undefined) unverified = left;
       const text = await read(`${workspace}/results/${resultFileName(task.unit.job, task.unit.shard)}`);
       // The workspace moves aside, so the next job of the run gets the one path empty.
@@ -386,16 +386,12 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
 }
 
 /**
- * Removes every container on the slot's daemon, and with `volumes` every volume, then shows them
- * gone. The daemon serves CI alone, one run at a time, so whatever it holds is a run's: a job's
+ * Removes every container and every volume on the slot's daemon, its Supabase stack's database
+ * included, then shows them gone; the pinned image stays. The daemon serves CI alone, one run at a time, so whatever it holds is a run's: a job's
  * container, its staging, its Supabase stack, also one a job started before it could record it. One
  * deadline covers the whole teardown. Undefined once the slot is empty, otherwise why not.
  */
-export async function clearSlot(
-  shell: SlotShell,
-  slot: SlotConfig,
-  volumes: boolean,
-): Promise<string | undefined> {
+export async function clearSlot(shell: SlotShell, slot: SlotConfig): Promise<string | undefined> {
   const deadline = Date.now() + TEARDOWN_MS;
   const ids = async (...args: string[]): Promise<string[]> => {
     const listed = await shell(docker(slot, ...args), { timeoutMs: Math.max(1_000, deadline - Date.now()) });
@@ -413,12 +409,9 @@ export async function clearSlot(
   try {
     const containers = await ids('ps', '--all', '--quiet');
     if (containers.length) await remove('rm', '--force', ...containers);
-    const listedVolumes = volumes ? await ids('volume', 'ls', '--quiet') : [];
+    const listedVolumes = await ids('volume', 'ls', '--quiet');
     if (listedVolumes.length) await remove('volume', 'rm', '--force', ...listedVolumes);
-    const left = [
-      ...(await ids('ps', '--all', '--quiet')),
-      ...(volumes ? await ids('volume', 'ls', '--quiet') : []),
-    ];
+    const left = [...(await ids('ps', '--all', '--quiet')), ...(await ids('volume', 'ls', '--quiet'))];
     return left.length ? `the slot still holds ${left.join(', ')}` : undefined;
   } catch (error) {
     return `the slot could not be shown empty: ${message(error)}`;

@@ -15,7 +15,7 @@
 // as docs/technical/machine-setup.md ("Run CI on the owner's machines") says.
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -32,10 +32,11 @@ import {
 } from '../../lib/testing/ci/check-app';
 import { installationToken } from '../../lib/testing/ci/check-app-token';
 import { docker, IMAGE_COMMIT_LABEL, probeCommand } from '../../lib/testing/ci/container-slot';
-import { nextGeneration, type RefValue } from '../../lib/testing/ci/lease';
+import { nextGeneration, type RefValue, writeDurably } from '../../lib/testing/ci/lease';
 import {
   type Completion,
   EMPTY_STATE,
+  type CurrentRun,
   type MachineConfig,
   machineConfigSchema,
   recover,
@@ -50,7 +51,7 @@ import { activeProfile, MAIN_REFSPEC } from '../../lib/testing/ci/profiles';
 import { resultFileName } from '../../lib/testing/ci/results';
 import { z } from '../../lib/zod';
 import { clearSlot, slotShell } from './container-executor';
-import { endProcessGroup, runCommitSignal } from './machine-watchdog';
+import { endProcessGroup, runCommitSignal, TEARDOWN_RECORD, watchdogEnvironment } from './machine-watchdog';
 
 const exitSchema = z.object({ exitCode: z.number().int().nullable() });
 
@@ -62,13 +63,18 @@ const log = (line: string): void => console.info(`[${new Date().toISOString()}] 
 const wait = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
 /** A command's result in the trusted checkout. */
-function exec(command: string, args: readonly string[], env: Record<string, string> = {}) {
+function exec(
+  command: string,
+  args: readonly string[],
+  env: Record<string, string> = {},
+  timeoutMs = 120_000,
+) {
   return spawnSync(command, args, {
     cwd: trusted,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 ** 2,
     // Every read and write of GitHub or the slot has a deadline: none may hold a tick.
-    timeout: 120_000,
+    timeout: Math.max(1, timeoutMs),
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...env },
   });
 }
@@ -184,8 +190,11 @@ const pushAuth = (): Record<string, string> => ({
 });
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 const leaseRef = (sha: string): string => `refs/leases/ci/${sha}`;
-const remoteOid = (sha: string): string | null =>
-  run('git', ['ls-remote', 'origin', leaseRef(sha)], pushAuth()).split('\t')[0] || null;
+const remoteOid = (sha: string, timeoutMs?: number): string | null => {
+  const listed = exec('git', ['ls-remote', 'origin', leaseRef(sha)], pushAuth(), timeoutMs);
+  if (listed.status !== 0) throw new Error(`git ls-remote ${leaseRef(sha)} failed: ${listed.stderr.trim()}`);
+  return listed.stdout.split('\t')[0] || null;
+};
 
 const refs: RunnerPorts['refs'] = {
   async read(sha) {
@@ -194,7 +203,8 @@ const refs: RunnerPorts['refs'] = {
     run('git', ['fetch', '--quiet', '--no-tags', 'origin', leaseRef(sha)], pushAuth());
     return { oid, message: run('git', ['log', '-1', '--format=%B', oid]) };
   },
-  async swap(sha, expected, message): Promise<RefValue | null> {
+  async swap(sha, expected, message, deadlineMs = 120_000): Promise<RefValue | null> {
+    const deadline = Date.now() + deadlineMs;
     const oid = run(
       'git',
       ['commit-tree', EMPTY_TREE, ...(expected ? ['-p', expected] : []), '-m', message],
@@ -216,10 +226,12 @@ const refs: RunnerPorts['refs'] = {
         `--force-with-lease=${leaseRef(sha)}:${expected ?? ''}`,
       ],
       pushAuth(),
+      deadline - Date.now(),
     );
     if (pushed.status === 0) return { oid, message };
-    // A lost answer: the ref holds this push's commit, so the swap happened.
-    const now = remoteOid(sha);
+    // A lost answer: the ref holds this push's commit, so the swap happened. The read keeps to the
+    // same deadline; past it the swap throws and the lease is handed back.
+    const now = remoteOid(sha, deadline - Date.now());
     if (now === oid) return { oid, message };
     if (/rejected|stale info/.test(`${pushed.stdout}${pushed.stderr}`)) return null;
     throw new Error(`The lease ref ${leaseRef(sha)} could not be pushed: ${pushed.stderr.trim()}`);
@@ -301,6 +313,16 @@ const alive = (group: number): boolean => {
   }
 };
 const children = new Map<number, ChildProcess>();
+/** The slot shown empty after `current`'s run, recorded for its watchdog, which only this record spares. */
+const verified = (current: CurrentRun | undefined, left: string | undefined) => {
+  if (left !== undefined) return { clean: false as const, reason: left };
+  if (current)
+    writeFileSync(
+      join(current.runDir, TEARDOWN_RECORD),
+      `${JSON.stringify({ at: new Date().toISOString() })}\n`,
+    );
+  return { clean: true as const };
+};
 const ended = (runDir: string): void => {
   const exit = join(runDir, 'exit.json');
   if (!existsSync(exit)) writeFileSync(exit, JSON.stringify({ exitCode: null }));
@@ -420,7 +442,7 @@ const ports: RunnerPorts = {
             cwd: trusted,
             detached: true,
             stdio: 'ignore',
-            env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH, HOME: process.env.HOME },
+            env: watchdogEnvironment(process.env),
           },
         ).unref();
       return { processGroup: child.pid };
@@ -443,19 +465,17 @@ const ports: RunnerPorts = {
       const gone =
         current.processGroup === null ||
         (await endProcessGroup(current.processGroup, runCommitSignal(current.processGroup), wait));
-      const left = await clearSlot(shell, slot, true);
-      // The run counts as ended, so its watchdog leaves the slot to the next run.
+      const left = await clearSlot(shell, slot);
       ended(current.runDir);
       if (!gone)
         return {
           clean: false,
-          reason: `run-commit's process group ${current.processGroup} outlived SIGKILL`,
+          reason: `run-commit's process group ${current.processGroup} keeps members past SIGKILL`,
         };
-      return left === undefined ? { clean: true } : { clean: false, reason: left };
+      return verified(current, left);
     },
-    async clean() {
-      const left = await clearSlot(shell, slot, true);
-      return left === undefined ? { clean: true } : { clean: false, reason: left };
+    async clean(current) {
+      return verified(current, await clearSlot(shell, slot));
     },
   },
   nextAttempt: () => nextGeneration(join(config.stateDir, 'attempt')),
@@ -467,10 +487,8 @@ const ports: RunnerPorts = {
     existsSync(stateFile)
       ? runnerStateSchema.parse(JSON.parse(readFileSync(stateFile, 'utf8')))
       : EMPTY_STATE,
-  save: (state: RunnerState) => {
-    writeFileSync(`${stateFile}.tmp`, `${JSON.stringify(state, null, 2)}\n`);
-    renameSync(`${stateFile}.tmp`, stateFile);
-  },
+  // Written as the attempt counter is: whole or not at all, and durable before the next step.
+  save: (state: RunnerState) => writeDurably(stateFile, `${JSON.stringify(state, null, 2)}\n`),
   alert: async ({ detail }) => {
     // The existing ci-alert issues: one per machine, kept open with each new alert as a comment.
     const answer = exec(
@@ -498,9 +516,18 @@ const ports: RunnerPorts = {
 const recovered = await recover(ports);
 if (recovered) log(recovered);
 // The slot starts empty, or the runner does not start: a list or removal that fails is never ignored.
-const leftOver = await clearSlot(shell, slot, true);
+const leftOver = await clearSlot(shell, slot);
 if (leftOver !== undefined)
   throw new Error(`The slot cannot be emptied, so the runner claims nothing: ${leftOver}`);
+// The watchdog must reach the slot on its own: the same detached spawn and environment, a no-op.
+const probe = spawn(
+  process.execPath,
+  [join(trusted, 'scripts/ci/machine-watchdog.ts'), '--probe', '--slot', JSON.stringify(slot)],
+  { cwd: trusted, detached: true, stdio: 'ignore', env: watchdogEnvironment(process.env) },
+);
+const probed = await new Promise<number | null>((done) => probe.once('exit', done));
+if (probed !== 0)
+  throw new Error('The watchdog cannot reach the slot on its own, so the runner claims nothing.');
 
 let stopping = false;
 for (const signal of ['SIGINT', 'SIGTERM'] as const)

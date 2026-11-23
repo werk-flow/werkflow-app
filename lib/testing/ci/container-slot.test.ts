@@ -4,10 +4,10 @@
 // the start probe fails when a job can see the runner's side.
 import { afterAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { slotEnvironment } from '../../../scripts/ci/container-executor';
+import { slotEnvironment, slotShell } from '../../../scripts/ci/container-executor';
 import {
   jobCommand,
   jobEnvironment,
@@ -18,7 +18,7 @@ import {
 } from './container-slot';
 
 const SLOT: SlotConfig = {
-  prefix: ['wsl.exe', '-d', 'werkflow-ci', '-u', 'cirunner', '--'],
+  prefix: ['wsl.exe', '-d', 'werkflow-ci', '-u', 'cirunner', '--exec'],
   dockerHost: 'unix:///run/user/1002/docker.sock',
   socket: '/run/user/1002/docker.sock',
   root: '/home/cirunner/ci',
@@ -104,7 +104,8 @@ test("F12, F14: a job runs the image by its id, at the run's one workspace path,
   expect(command('sql')[command('sql').indexOf('--workdir') + 1]).toBe(`${WORKSPACE}/werkflow-app`);
   expect(command('sql').slice(-3)).toEqual(['sha256:abc', 'werkflow-ci-job', 'sql']);
   // The run's own Bun cache; no shared cache a job could write for a later run.
-  expect(volumes(command('sql'))).toContain(`werkflow-ci-bun-${RUN_KEY}:/home/runner/.bun/install/cache`);
+  // S22: no named volume at all: nothing a job writes outlives it but its workspace.
+  expect(volumes(command('sql')).every((volume) => volume.startsWith('/'))).toBe(true);
   expect(volumes(command('sql')).some((volume) => volume.includes('playwright'))).toBe(false);
   for (const argv of [
     command('fast'),
@@ -116,6 +117,25 @@ test("F12, F14: a job runs the image by its id, at the run's one workspace path,
     }),
   ])
     expect(argv.join(' ')).not.toMatch(/TOKEN|ghp_/);
+});
+
+test('S26: an argv with spaces, quotes and sh -c positional parameters reaches the slot intact through the prefix', async () => {
+  // A prefix that prints each argument it gets, NUL-terminated, as `wsl.exe … --exec` hands them on.
+  const shell = slotShell({ ...SLOT, prefix: ['printf', '%s\\0'] });
+  const argv = ['sh', '-c', 'test -f "$1" && cat "$1"', 'read', '/slot/a b/"quoted" $HOME.json', "it's"];
+  const answer = await shell(argv);
+  expect(answer.stdout.split('\0').slice(0, -1)).toEqual(argv);
+  // The PC's prefix hands its arguments on without the distribution's shell.
+  const pc: unknown = JSON.parse(
+    readFileSync(resolve(import.meta.dir, '../../../ci/machines/pc.example.json'), 'utf8'),
+  );
+  expect(pc).toMatchObject({
+    slot: { prefix: ['wsl.exe', '-d', 'werkflow-ci', '-u', 'cirunner', '--exec'] },
+  });
+});
+
+test('S11: a read back from the slot has its deadline on the slot itself', () => {
+  expect(readCommand('/slot/x.json').slice(0, 3)).toEqual(['timeout', '60', 'sh']);
 });
 
 test('F9, S21: a read back from the slot opens a file once and copies it only when it is a regular file reached by no link, capped', () => {
