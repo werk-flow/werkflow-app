@@ -92,6 +92,7 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The script reads GitHub anonymously; the job token only lifts the shared runner's rate limit.
       - name: Decide the release
         id: candidate
         env:
@@ -187,12 +188,8 @@ jobs:
           SHA: ${{ needs.candidate.outputs.sha }}
         run: git push origin "${SHA}:refs/heads/production"
 
-      # Vercel builds production from the production branch. After an Instant Rollback it
-      # stops assigning the domain to new production builds, so the release promotes explicitly.
-      # A failed build gets one redeploy, whose own id the step then waits for: a rerun of this
-      # workflow pushes the same commit, which starts no build, and lands here too. A refused API
-      # call fails the step with Vercel's reason (.github/scripts/vercel-api.sh), never leaves an
-      # empty id or state to poll.
+      # Waits for the production build, redeploys a failed one once, and promotes it unless it
+      # serves already (.github/scripts/release-promote.sh). Its last line is the deployment id.
       - name: Promote the production build
         id: promote
         env:
@@ -200,47 +197,8 @@ jobs:
           SHA: ${{ needs.candidate.outputs.sha }}
         run: |
           set -o pipefail
-          source .github/scripts/vercel-api.sh
-          vercel() { npx --yes vercel@65 "$@" --scope werkflows-projects --token "$VERCEL_TOKEN"; }
-          team="teamId=${VERCEL_TEAM_ID}"
-          query="projectId=${VERCEL_PROJECT_ID}&${team}&target=production&limit=20"
-          deadline=$((SECONDS + 1800))
-          id=""
-          redeployed=false
-          while :; do
-            if test -z "$id"; then
-              id="$(vercel_api "https://api.vercel.com/v6/deployments?${query}" \
-                | jq -r --arg sha "$SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')"
-            fi
-            # The production build may not be listed yet; keep polling with an empty state.
-            state=""
-            if test -n "$id"; then
-              state="$(vercel_api "https://api.vercel.com/v13/deployments/${id}?${team}" | jq -r .readyState)"
-            fi
-            case "$state" in
-              READY) break ;;
-              ERROR | CANCELED)
-                if $redeployed; then echo "::error::The production build of ${SHA} failed twice (${id})."; exit 1; fi
-                echo "::warning::Production build ${id} ended ${state}; redeploying it once."
-                url="$(vercel redeploy "$id" --target production --no-wait | tail -n 1)"
-                id="$(vercel_api "https://api.vercel.com/v13/deployments/${url#https://}?${team}" | jq -r '.id | strings')"
-                test -n "$id" || { echo "::error::Vercel's answer names no redeploy of ${SHA}."; exit 1; }
-                redeployed=true ;;
-            esac
-            test $SECONDS -lt $deadline || { echo "::error::No ready production build of ${SHA} after 30 minutes."; exit 1; }
-            sleep 15
-          done
-          # Vercel may already have assigned the domain to this build, and promoting the current
-          # production deployment fails with 409. A lookup that fails promotes as before.
-          # Optional lookup: no rate-limit retries, so a 429 here never spends the job's time before the promote.
-          served="$(VERCEL_API_RETRY_SECONDS=0 vercel_api "https://api.vercel.com/v4/aliases/app.werk-flow.app?${team}" | jq -r .deploymentId)" || true
-          if test "$served" = "$id"; then
-            echo "Production already serves ${SHA} (${id})."
-          else
-            vercel promote "$id" --yes
-            echo "Production serves ${SHA} (${id})."
-          fi
-          echo "deployment=$id" >> "$GITHUB_OUTPUT"
+          bash .github/scripts/release-promote.sh "$SHA" | tee "$RUNNER_TEMP/promote.log"
+          echo "deployment=$(tail -n 1 "$RUNNER_TEMP/promote.log")" >> "$GITHUB_OUTPUT"
 
   smoke:
     name: Check production

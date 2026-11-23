@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 import { workflowsFolder } from './ci-workflow';
+import { GITHUB_CURL_STUB } from './github-api-stub';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const alertScript = join(repositoryRoot, '.github/scripts/alert-issue.sh');
@@ -11,7 +12,8 @@ const candidateScript = join(repositoryRoot, '.github/scripts/release-candidate.
 const TITLE = 'CI alert: nightly';
 const RUN_URL = 'https://github.test/owner/repo/actions/runs/7';
 
-// Answers like gh: `--jq` runs through real jq, so the scripts' own filters are under test.
+// Answers like gh for the alert: `--jq` runs through real jq, so the script's own filters are under test.
+// The release decision reads GitHub through curl (GITHUB_CURL_STUB).
 const GH_STUB = `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$STUB/gh.log"
 filter=.
@@ -23,23 +25,22 @@ done
 case "$*" in
   'issue list'*) cat "$STUB/issues.json" ;;
   *'/jobs?'*) jq -r "$filter" "$STUB/jobs.json" ;;
-  *'actions/runs?'*) jq -r "$filter" "$STUB/runs.json" ;;
 esac
 `;
 
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'ci-alert-'));
+  stub = temporaryDirectory('ci-alert-');
   writeFileSync(join(stub, 'gh'), GH_STUB);
+  writeFileSync(join(stub, 'curl'), GITHUB_CURL_STUB);
   chmodSync(join(stub, 'gh'), 0o755);
+  chmodSync(join(stub, 'curl'), 0o755);
   writeFileSync(join(stub, 'gh.log'), '');
   writeFileSync(join(stub, 'output'), '');
   writeOpenIssues([]);
   writeJobs([]);
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 function writeOpenIssues(issues: { number: number; title: string }[]) {
   writeFileSync(join(stub, 'issues.json'), JSON.stringify(issues));
@@ -371,7 +372,13 @@ function revParse(cwd: string, ref: string) {
   return spawnSync('git', ['rev-parse', ref], { cwd, encoding: 'utf8' }).stdout.trim();
 }
 
-const NIGHTLY_RUN = { id: 3, head_branch: 'main', path: '.github/workflows/nightly.yml', event: 'schedule' };
+const NIGHTLY_RUN = {
+  id: 3,
+  head_sha: '@commit',
+  head_branch: 'main',
+  path: '.github/workflows/nightly.yml',
+  event: 'schedule',
+};
 
 /** Runs the release decision on a repository whose main is `ahead` of production. */
 function decide(mode: string, ahead: boolean, fullRunConclusion: string, run: object = NIGHTLY_RUN) {
@@ -389,13 +396,14 @@ function decide(mode: string, ahead: boolean, fullRunConclusion: string, run: ob
   writeJobs([
     {
       name: 'Full run / Check',
+      head_sha: '@commit',
       status: 'completed',
       completed_at: '2026-11-06T09:00:00Z',
       conclusion: fullRunConclusion,
       html_url: 'https://github.test/job',
     },
   ]);
-  const result = bash(repository, candidateScript, [mode]);
+  const result = bash(repository, candidateScript, [mode], { COMMIT: revParse(repository, 'HEAD') });
   expect(result.status).toBe(0);
   return {
     sha: revParse(repository, 'HEAD'),
@@ -454,7 +462,7 @@ test('a green full run on main from main-full-run.yml counts for the release', (
   const fullRun = (path: string, branch = 'main', event = 'workflow_dispatch') => {
     writeFileSync(join(stub, 'output'), '');
     rmSync(join(stub, 'repository'), { recursive: true, force: true });
-    return decide('scheduled', true, 'success', { id: 3, head_branch: branch, path, event }).outputs;
+    return decide('scheduled', true, 'success', { ...NIGHTLY_RUN, head_branch: branch, path, event }).outputs;
   };
   expect(fullRun('.github/workflows/main-full-run.yml')).toContain('verified=true');
   expect(fullRun('.github/workflows/ci.yml')).toContain('verified=false');

@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import type { FullRunDecision } from './full-run';
 import { supersedingHead } from './superseded';
+import { ciBrowserStartWaitMs } from '../runner/group-schedule';
 import {
   addLocalDays,
   formatBerlinLocalDate,
@@ -90,7 +91,8 @@ export function clockSlot(
 /**
  * When a run's held browser shards may start: the plan's `midnight_until` for a run whose plan holds
  * the `midnight` job that has not started yet. The runner starts that job, and the shards behind it,
- * at this time instead of a machine waiting for it (scripts/ci/job.ts midnight).
+ * at this time instead of a machine waiting for it (scripts/ci/job.ts midnight). A hold that ended
+ * long ago is due only while the shards may start (`scheduleDue`).
  */
 export function heldUntil(plan: {
   jobs: readonly string[];
@@ -101,6 +103,18 @@ export function heldUntil(plan: {
   return Number.isNaN(until.getTime())
     ? { unreadable: 'the plan runs the midnight job but sets no readable midnight_until' }
     : until;
+}
+
+/**
+ * Whether a parsed release.yml has a `schedule` trigger, or why it cannot say: `scheduleDue`'s
+ * `releaseOnCron`. scripts/ci/schedule.ts reads the file; the profiles' tests read the same answer.
+ */
+export function releaseOnCron(workflow: unknown): boolean | { unreadable: string } {
+  const triggers =
+    typeof workflow === 'object' && workflow !== null && 'on' in workflow ? workflow.on : undefined;
+  if (typeof triggers !== 'object' || triggers === null)
+    return { unreadable: 'release.yml names no triggers' };
+  return 'schedule' in triggers && Array.isArray(triggers.schedule) && triggers.schedule.length > 0;
 }
 
 /** What the runner starts now. */
@@ -120,7 +134,8 @@ export type ScheduleAnswer = {
 };
 
 /**
- * Everything due at `now`. A due nightly waits while a full run runs, and a missed one waits for
+ * Everything due at `now`. A held run's shards are due once its hold ended and the midnight start
+ * rule lets a Browser job start now (ciBrowserStartWaitMs). A due nightly waits while a full run runs, and a missed one waits for
  * the next slot when that is near (`NIGHTLY_CATCH_UP_CUTOFF_MS`); it skips a head the full-run rule
  * says already has a full run. A nightly that starts now is main's full run too, so the full-run
  * rule starts no second one beside it. A pull request run stops only when its PR's head moved
@@ -186,13 +201,19 @@ export function scheduleDue(input: {
     if (until === undefined) continue;
     if (!(until instanceof Date))
       answer.unanswered.push({ work: 'midnight', reason: `${run}: ${until.unreadable}` });
-    else if (until.getTime() <= input.now.getTime())
-      answer.start.push({
-        work: 'midnight',
-        run,
-        reason: `The midnight start window closed at ${until.toISOString()}; its browser shards follow.`,
-      });
-    else wakes.push(until.getTime());
+    else if (until.getTime() > input.now.getTime()) wakes.push(until.getTime());
+    else {
+      // A hold asked about long after it ended, as in the next night's window: the shards that would
+      // follow now could reach a group inside it, so the run waits for the start rule's next start.
+      const waitMs = ciBrowserStartWaitMs(input.now);
+      if (waitMs) wakes.push(input.now.getTime() + waitMs);
+      else
+        answer.start.push({
+          work: 'midnight',
+          run,
+          reason: `The midnight start window closed at ${until.toISOString()}; its browser shards follow.`,
+        });
+    }
   }
   for (const { run, headRef, testedHead } of input.prRuns) {
     const newer = supersedingHead({ event: 'pr', headRef, testedHead, remoteHead: input.remoteHead });

@@ -1,17 +1,16 @@
 import { expect, setSystemTime, spyOn, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeJsonAtomically } from './file-lock';
 import { groupResultSchema, type GroupResult } from '../evidence/group-evidence';
 import { PREPARED_PLAN_ENV } from './prepared-plan';
 import { summarizeCampaign } from '../evidence/campaign-summary';
 import { withVerificationReport } from './verification-lifecycle';
+import { temporaryDirectory } from '../temporary-directory';
 
 for (const phase of ['preflight', 'discovery', 'prepared plan', 'group execution']) {
   test(`${phase} failure finalizes the published report, blocked scope, cost and process cleanup`, async () => {
-    const prefix = join(tmpdir(), 'werkflow-report-');
-    const directory = mkdtempSync(prefix);
+    const directory = temporaryDirectory('werkflow-report-');
     const reportPath = join(directory, 'report.json');
     const report: {
       status: 'running' | 'passed' | 'failed';
@@ -90,8 +89,6 @@ for (const phase of ['preflight', 'discovery', 'prepared plan', 'group execution
       expect(process.listenerCount('SIGTERM')).toBe(terminateListeners);
     } finally {
       setSystemTime();
-      expect(directory.startsWith(prefix)).toBe(true);
-      rmSync(directory, { recursive: true, force: true });
     }
   });
 }

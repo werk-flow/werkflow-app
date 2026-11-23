@@ -1,6 +1,5 @@
-import { afterEach, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { expect, test } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   availableStorageProblem,
@@ -10,6 +9,7 @@ import {
   prunableRunKeys,
   type RetentionRun,
 } from './run-retention';
+import { temporaryDirectory } from '../temporary-directory';
 
 const now = Date.parse('2026-09-14T12:00:00.000Z');
 const old = '2026-09-12T10:00:00.000Z';
@@ -118,14 +118,8 @@ test('a failed run is prunable only once its failure is classified and its world
   ]);
 });
 
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
-
 test('pruning weighs the directories of the named runs; the run guard checks free space', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-run-retention-'));
-  directories.push(root);
+  const root = temporaryDirectory('werkflow-run-retention-');
   mkdirSync(join(root, 'run-a/playwright/results'), { recursive: true });
   mkdirSync(join(root, 'run-a/active'), { recursive: true });
   mkdirSync(join(root, 'run-a/state'), { recursive: true });
@@ -140,8 +134,7 @@ test('pruning weighs the directories of the named runs; the run guard checks fre
 });
 
 test('a file that vanishes between listing and stat weighs nothing', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-run-retention-'));
-  directories.push(root);
+  const root = temporaryDirectory('werkflow-run-retention-');
   expect(fileSizeOrZero(join(root, 'run-b/active/run-manifest.json.1.abc.tmp'))).toBe(0);
   writeFileSync(join(root, 'present'), Buffer.alloc(7));
   expect(fileSizeOrZero(join(root, 'present'))).toBe(7);

@@ -1,7 +1,6 @@
-import { afterEach, expect, spyOn, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   StackHeldError,
@@ -10,6 +9,7 @@ import {
   stackLockDirectory,
   withStackLock,
 } from './stack-lock';
+import { temporaryDirectory } from '../temporary-directory';
 
 const holder = (token: string, mode: 'shared' | 'exclusive', startedAt: string) => ({
   token,
@@ -20,14 +20,8 @@ const holder = (token: string, mode: 'shared' | 'exclusive', startedAt: string) 
   startedAt,
 });
 
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
-
 function repository(): string {
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'werkflow-stack-lock-')));
-  directories.push(directory);
+  const directory = realpathSync(temporaryDirectory('werkflow-stack-lock-'));
   execFileSync('git', ['init', '--quiet'], { cwd: directory });
   return directory;
 }

@@ -1,12 +1,12 @@
 // Rule test: the production smoke check counts a build's server errors from Vercel's request
 // counts, and a response that holds no counts fails it instead of passing as zero errors.
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { z } from '../zod';
+import { temporaryDirectory } from './temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const smokeScript = join(repositoryRoot, '.github/scripts/release-smoke.sh');
@@ -48,7 +48,7 @@ let stub = '';
 const NOW_SECONDS = Date.UTC(2026, 10, 8, 13, 37, 42) / 1000;
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'release-smoke-'));
+  stub = temporaryDirectory('release-smoke-');
   for (const [name, body] of [
     ['curl', CURL_STUB],
     ['sleep', '#!/usr/bin/env bash\n'],
@@ -58,8 +58,6 @@ beforeEach(() => {
     chmodSync(join(stub, name), 0o755);
   }
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 /** Runs the smoke check of the served build against a metrics answer, or a failed request without one. */
 function smoke(metrics: unknown) {
