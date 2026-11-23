@@ -19,9 +19,11 @@
 
 -- p_recipient_client_id null follows the default rule
 -- (app_private.default_billing_recipient), so a changed Einsatzort derives
--- the recipient again; a named customer stays until changed. A kept archived
--- recipient and a kept responsible member who left the office stay valid, so
--- an unrelated change still saves. A call under the attempt key of an earlier
+-- the recipient again; a named customer stays until changed. A newly named
+-- responsible person is an Admin or Büro member of the organization: the name
+-- grants no access, so a suspended member may stay responsible. A kept
+-- archived recipient and a kept responsible member who left the office stay
+-- valid, so an unrelated change still saves. A call under the attempt key of an earlier
 -- change of this offer returns that change's version and writes nothing; a
 -- save that changes nothing returns the version and writes nothing.
 -- Refusals: invalid_input, not_authorized, offer_not_found,
@@ -104,7 +106,6 @@ begin
     perform 1 from public.organization_members member
     where member.organization_id = p_organization_id and member.user_id = p_owner_user_id
       and member.role = any (array['admin'::public.org_role, 'buero'::public.org_role])
-      and app_private.p1_24_has_effective_access(member.organization_id, member.user_id)
     for share;
     if not found then raise exception 'owner_not_found'; end if;
   end if;

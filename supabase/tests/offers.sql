@@ -310,13 +310,10 @@ create function pg_temp.save_header(
   select public.update_offer(p_actor, '38040000-0000-4000-8000-000000000010', p_offer, p_version, p_key,
     p_title, p_site, p_contact, p_recipient, '2037-06-30', 'Hallo', 'Viele Grüße', p_owner);
 $$;
-grant execute on function pg_temp.save_header(uuid, uuid, integer, uuid, text, uuid, uuid, uuid, uuid)
-  to service_role;
 create function pg_temp.header_events() returns bigint language sql as $$
   select count(*) from public.offer_events
   where organization_id = '38040000-0000-4000-8000-000000000010' and event_type = 'changed';
 $$;
-grant execute on function pg_temp.header_events() to service_role;
 
 -- A save writes the header and its history row with each changed field in
 -- one call: the Garage has no Rechnungsempfänger, so the default recipient
@@ -397,8 +394,13 @@ begin
   select * into v_offer from public.offers where id = (select first_offer from ids);
   if v_offer.recipient_client_id is distinct from '38040000-0000-4000-8000-000000000021'::uuid
     or v_offer.recipient_is_default is distinct from false or v_offer.site_id is not null
-    or v_offer.version is distinct from 3 then
+    or v_offer.contact_id is not null or v_offer.version is distinct from 3 then
     raise exception 'the named recipient saved as %', to_jsonb(v_offer);
+  end if;
+  if (select payload -> 'contact_id' from public.offer_events
+      where offer_id = v_offer.id and event_type = 'changed' and version = 3)
+    is distinct from '{"old": "38040000-0000-4000-8000-000000000040", "new": null}'::jsonb then
+    raise exception 'the history of the cleared contact is missing';
   end if;
   if pg_temp.save_header('38040000-0000-4000-8000-000000000002', (select first_offer from ids), 3,
       gen_random_uuid(), 'Heizungstausch Altbau', null, null, '38040000-0000-4000-8000-000000000021',

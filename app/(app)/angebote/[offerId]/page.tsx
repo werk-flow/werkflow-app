@@ -33,7 +33,7 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
     offer && offer !== 'failed' && offer.status === 'entwurf'
       ? await getManagerAssigneeOptions(createSupabaseAdminClient(), membership.orgId)
       : null;
-  if (offer === 'failed' || (owners && !owners.success)) {
+  if (offer === 'failed') {
     return (
       <RegionLoadError title="Das Angebot konnte nicht geladen werden">
         Das Angebot ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
@@ -73,6 +73,12 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
           }
         />
       </div>
+      {owners && !owners.success && (
+        // The offer stays on screen; only its editing waits for the office's members.
+        <RegionLoadError title="Bearbeiten ist gerade nicht möglich">
+          Die Personen des Büros konnten nicht geladen werden. Versuche es in einem Moment erneut.
+        </RegionLoadError>
+      )}
       <OfferHeaderFacts offer={offer} />
     </div>
   );

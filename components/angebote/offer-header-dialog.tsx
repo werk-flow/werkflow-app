@@ -169,9 +169,10 @@ function OfferHeaderDialog({
         setError(result ? describeFailure(result.error, HEADER_FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
         return;
       }
-      await settle(since);
+      // A refresh that never lands keeps its own warning banner instead of a success.
+      const confirmed = await settle.confirmChange(since);
       onClose();
-      showBanner({ variant: 'success', message: 'Angebot gespeichert.' });
+      if (confirmed) showBanner({ variant: 'success', message: 'Angebot gespeichert.' });
     });
   };
 
@@ -249,6 +250,7 @@ function OfferHeaderFields({
         <RecipientField
           offer={offer}
           recipient={form.recipient}
+          siteId={form.siteId}
           onChange={(recipient) => setForm({ ...form, recipient })}
           disabled={pending}
         />
@@ -328,14 +330,18 @@ function ownerOptions(owners: readonly ManagerAssigneeOption[], current: OfferDe
 function RecipientField({
   offer,
   recipient,
+  siteId,
   onChange,
   disabled,
 }: {
   offer: OfferDetail;
   recipient: HeaderForm['recipient'];
+  /** The chosen Einsatzort: the saved default names its recipient only while it stays. */
+  siteId: string;
   onChange: (recipient: HeaderForm['recipient']) => void;
   disabled: boolean;
 }) {
+  const savedDefault = offer.recipient.isDefault && siteId === (offer.site?.id ?? '');
   const search = useJobEntityOptions(
     { kind: 'clients', purpose: 'customer-work' },
     recipient ? [recipient.id] : [],
@@ -348,7 +354,7 @@ function RecipientField({
       description={
         recipient
           ? undefined
-          : `Der Rechnungsempfänger des Einsatzorts, sonst der Kunde${offer.recipient.isDefault ? `, zurzeit ${offer.recipient.name}` : ''}.`
+          : `Der Rechnungsempfänger des Einsatzorts, sonst der Kunde${savedDefault ? `, zurzeit ${offer.recipient.name}` : ''}.`
       }
     >
       <SearchableSelect
