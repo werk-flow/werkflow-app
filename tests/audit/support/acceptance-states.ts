@@ -86,6 +86,8 @@ async function appRouter(page: Page, method: 'prefetch' | 'push', url: string): 
 type InFlight = {
   /** The app's route prefetches and script chunks still in flight, those started before any helper ran included. */
   routeLoads: (origin: string) => number;
+  /** Whether the current document sent a prefetch of the target, a link's before any helper ran included. */
+  targetPrefetched: (target: { origin: string; path: string }) => boolean;
   stop: () => void;
 };
 
@@ -97,10 +99,14 @@ type InFlight = {
  */
 function watchInFlight(page: Page): InFlight {
   const pending = new Set<Request>();
+  let sent: Request[] = [];
   let documentRequested = false;
   const started = (request: Request): void => {
     if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequested = true;
-    else pending.add(request);
+    else {
+      pending.add(request);
+      sent.push(request);
+    }
   };
   const ended = (request: Request): void => {
     pending.delete(request);
@@ -109,6 +115,7 @@ function watchInFlight(page: Page): InFlight {
     if (frame !== page.mainFrame() || !documentRequested) return;
     documentRequested = false;
     pending.clear();
+    sent = [];
   };
   page.on('request', started);
   page.on('requestfinished', ended);
@@ -116,6 +123,7 @@ function watchInFlight(page: Page): InFlight {
   page.on('framenavigated', committed);
   return {
     routeLoads: (origin) => [...pending].filter((request) => isRouteLoad(observed(request), origin)).length,
+    targetPrefetched: (target) => sent.some((request) => isTargetPrefetch(observed(request), target)),
     stop: () => {
       page.off('request', started);
       page.off('requestfinished', ended);
@@ -146,25 +154,17 @@ async function navigateHeld(
       message: 'no prefetch or chunk of the app is in flight before the target route is prefetched',
     })
     .toBe(0);
-  // router.prefetch returns before the browser starts the request: wait until the
-  // target's prefetch started, and no prefetch or chunk of the app is in flight
-  // again: the target's prefetch, the chunks its loading boundary imports, and
-  // any other a link started meanwhile.
-  let seen = 0;
-  const started = (request: Request): void => {
-    if (isTargetPrefetch(observed(request), target)) seen += 1;
-  };
-  page.on('request', started);
-  try {
-    await appRouter(page, 'prefetch', path);
-    await expect
-      .poll(() => seen > 0 && inFlight.routeLoads(target.origin) === 0, {
-        message: 'the prefetch of the target route, its chunks and every other prefetch finished',
-      })
-      .toBe(true);
-  } finally {
-    page.off('request', started);
-  }
+  // router.prefetch returns before the browser starts the request, and sends
+  // none when a link already prefetched the target: wait until this document
+  // sent the target's prefetch, and no prefetch or chunk of the app is in
+  // flight again: the target's prefetch, the chunks its loading boundary
+  // imports, and any other a link started meanwhile.
+  await appRouter(page, 'prefetch', path);
+  await expect
+    .poll(() => inFlight.targetPrefetched(target) && inFlight.routeLoads(target.origin) === 0, {
+      message: 'the prefetch of the target route, its chunks and every other prefetch finished',
+    })
+    .toBe(true);
   await interception.arm();
   await appRouter(page, 'push', path);
 }
