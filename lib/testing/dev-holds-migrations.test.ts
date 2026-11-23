@@ -35,6 +35,14 @@ printf '%s' "$(cat "$STUB/status")"
 exit "$(cat "$STUB/exit")"
 `;
 
+// Every other program the script starts records the token its environment holds in
+// $STUB/children, then runs the real program (the stub folder is PATH's first entry).
+const CHILDREN = ['dirname', 'ls', 'sed', 'sort', 'mktemp', 'jq', 'comm', 'wc', 'paste', 'tr', 'rm'];
+const CHILD_STUB = `#!/usr/bin/env bash
+printf '%s %s\\n' "\${0##*/}" "\${SUPABASE_ACCESS_TOKEN-unset}" >> "$STUB/children"
+PATH="\${PATH#*:}" exec "\${0##*/}" "$@"
+`;
+
 let stub = '';
 let checkout = '';
 
@@ -43,6 +51,10 @@ beforeEach(() => {
   checkout = temporaryDirectory('dev-holds-checkout-');
   writeFileSync(join(stub, 'curl'), CURL_STUB);
   chmodSync(join(stub, 'curl'), 0o755);
+  for (const child of CHILDREN) {
+    writeFileSync(join(stub, child), CHILD_STUB);
+    chmodSync(join(stub, child), 0o755);
+  }
   mkdirSync(join(checkout, 'supabase/migrations'), { recursive: true });
   for (const version of VERSIONS)
     writeFileSync(join(checkout, `supabase/migrations/${version}_change.sql`), '');
@@ -74,6 +86,7 @@ function check(status: string, body: string, { exit = 0, trace = false } = {}) {
     arguments: read('arguments'),
     config: read('config'),
     environment: read('environment'),
+    children: read('children'),
   };
 }
 
@@ -89,6 +102,9 @@ test('a ledger that holds every committed version passes, and the token reaches 
   expect(result.arguments).toContain('https://api.supabase.com/v1/projects/devref/database/query/read-only');
   expect(result.arguments).not.toContain(TOKEN);
   expect(result.environment).toBe('unset');
+  const children = result.children.trim().split('\n');
+  expect(children.map((line) => line.split(' ')[0])).toContain('dirname');
+  expect(children.filter((line) => !line.endsWith(' unset'))).toEqual([]);
   expect(result.config).toContain(`Authorization: Bearer ${TOKEN}`);
 });
 

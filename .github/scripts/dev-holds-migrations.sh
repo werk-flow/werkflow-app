@@ -11,9 +11,10 @@
 # Anything but a list of 14-digit versions applies nothing to PROD.
 # Needs SUPABASE_ACCESS_TOKEN and DEV_PROJECT_REF.
 set -euo pipefail
-source "$(dirname "$0")/curl-headers.sh"
-# The token stays a shell variable but leaves the environment, so curl gets it only from its config.
+# The token stays a shell variable but leaves the environment before any child starts, so curl
+# gets it only from its config.
 export -n SUPABASE_ACCESS_TOKEN
+source "$(dirname "$0")/curl-headers.sh"
 
 fail() {
   echo "::error title=DEV migrations::$1"
