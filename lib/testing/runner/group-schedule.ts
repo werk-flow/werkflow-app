@@ -64,6 +64,16 @@ export function ciBrowserHoldUntil(now: Date): Date | undefined {
   return waitMs ? new Date(now.getTime() + waitMs) : undefined;
 }
 
+/**
+ * Milliseconds until a CI Browser job may start now: zero when it ends by its timeout before the
+ * window opens, else the wait until the window closes. Plan's hold covers shards that start as soon
+ * as Fast passes; a runner that starts them one after another asks this before each start
+ * (lib/testing/ci/run-commit.ts), so a late shard waits instead of blocking its groups.
+ */
+export function ciBrowserStartWaitMs(now: Date): number {
+  return waitUntilWindowCloses(now, MIDNIGHT_START_WINDOW.leadMs + CI_BROWSER_JOB_TIMEOUT_MS);
+}
+
 /** The hold of a CI proof run (`midnight_proof_minutes` in ci.yml), which pretends the window is open. Never on a branch that ships. */
 export function midnightProofHoldUntil(input: { now: Date; minutes: string; ref: string }): Date {
   if (input.ref === 'main' || input.ref === 'production')
@@ -78,8 +88,9 @@ export function midnightProofHoldUntil(input: { now: Date; minutes: string; ref:
 /**
  * Holds a browser group until the midnight window closes; the signal cancels the wait. A CI job's
  * timeout counts the wait as work, so in CI the group is blocked at once instead: the shard ends
- * with a classified result, never a cancellation. `ciBrowserHoldUntil` keeps a run's shards out of
- * the window; this block is left for a shard that started late, after a queue or a manual rerun.
+ * with a classified result, never a cancellation. `ciBrowserHoldUntil` and `ciBrowserStartWaitMs`
+ * keep a run's shards out of the window; this block is left for a shard that started late, after a
+ * GitHub runner queue or a manual rerun.
  * Returns the block reason, if any.
  */
 export async function holdOutsideMidnightWindow(input: {

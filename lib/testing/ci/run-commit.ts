@@ -12,6 +12,7 @@ import { runPlanOf } from './check';
 import { CI_DAG, type CiEvent, type CiJob } from './dag';
 import type { CiResult, RunPlan } from './results';
 import { endReceipt, type ReceiptRun, startReceipt } from './run-commit-receipts';
+import { ciBrowserStartWaitMs } from '../runner/group-schedule';
 import { jobShards } from './run-plan';
 import { heldUntil } from './schedule';
 
@@ -467,10 +468,16 @@ async function startUnit(
   context.states.set(name, state);
 }
 
+/** A unit that starts later at the earliest, and why; no job machine waits for it. */
+type Deferred = { waitMs: number; why: string };
+
 /**
  * Whether a waiting unit starts now. The run's own held shards start here and nowhere else: the
  * scheduler never names a run its orchestrator holds (scripts/ci/schedule.ts), and job.ts midnight
- * fails before the hold ends. Returns the wait until the hold ends for a midnight job held now.
+ * fails before the hold ends. Returns the wait until the hold ends for a midnight job held now. A
+ * browser shard that could still reach a group inside the midnight start window before its timeout
+ * waits until the window closes: Plan's hold assumed every shard starts right after Fast, and a
+ * runner with fewer slots than units starts the later shards hours after Plan.
  */
 function admit(
   unit: Unit,
@@ -481,7 +488,7 @@ function admit(
     now: number;
   },
   log: (line: string) => void,
-): 'start' | 'wait' | number {
+): 'start' | 'wait' | Deferred {
   const name = unitName(unit);
   const ready = readiness(unit, context.units, context.states);
   if (ready === 'skip') {
@@ -489,7 +496,16 @@ function admit(
     log(`[run] ${name}: skipped, a job it needs did not pass`);
     return 'wait';
   }
-  if (ready === 'wait' || unit.job !== 'midnight') return ready;
+  if (ready === 'wait') return ready;
+  if (unit.job === 'browser') {
+    const waitMs = ciBrowserStartWaitMs(new Date(context.now));
+    if (!waitMs) return 'start';
+    return {
+      waitMs,
+      why: `${name} could reach a group inside the midnight start window (23:40 to 00:10 Berlin) before its timeout, so it starts once the window closes`,
+    };
+  }
+  if (unit.job !== 'midnight') return ready;
   const { hold } = context;
   if (!(hold instanceof Date)) {
     context.states.set(name, 'skipped');
@@ -497,7 +513,7 @@ function admit(
     return 'wait';
   }
   const left = hold.getTime() - context.now;
-  return left > 0 ? left : 'start';
+  return left > 0 ? { waitMs: left, why: 'The browser shards wait for the midnight hold' } : 'start';
 }
 
 /** Runs the units by their needs, at most `parallel` at once, until none can start any more. */
@@ -512,7 +528,7 @@ async function runUnits(
   if (!owner) return states;
   const hold = heldUntil(owner.plan);
   const running = new Map<string, Promise<void>>();
-  let announced = false;
+  const announced = new Set<string>();
   for (;;) {
     let holdWait: number | undefined;
     for (const unit of units) {
@@ -521,8 +537,14 @@ async function runUnits(
       if (signal.aborted) states.set(name, 'cancelled');
       if (states.get(name) !== 'waiting') continue;
       const admitted = admit(unit, { units, states, hold, now: deps.now() }, deps.log);
-      if (typeof admitted === 'number') holdWait = admitted;
-      else if (admitted === 'start' && running.size < input.parallel)
+      if (typeof admitted === 'object') {
+        holdWait = Math.min(holdWait ?? admitted.waitMs, admitted.waitMs);
+        if (!announced.has(admitted.why))
+          deps.log(
+            `[run] ${admitted.why}: ${Math.ceil(admitted.waitMs / 60_000)} min; no job machine waits.`,
+          );
+        announced.add(admitted.why);
+      } else if (admitted === 'start' && running.size < input.parallel)
         running.set(
           name,
           startUnit(input, deps, unit, signal, { states, owner }).then(() => {
@@ -533,14 +555,7 @@ async function runUnits(
     if (holdWait === undefined && running.size === 0) return states;
     const wake = new AbortController();
     const waits = [...running.values()];
-    if (holdWait !== undefined) {
-      if (!announced)
-        deps.log(
-          `[run] The browser shards wait ${Math.ceil(holdWait / 60_000)} min for the midnight hold; no job machine waits.`,
-        );
-      announced = true;
-      waits.push(deps.sleep(holdWait, AbortSignal.any([wake.signal, signal])));
-    }
+    if (holdWait !== undefined) waits.push(deps.sleep(holdWait, AbortSignal.any([wake.signal, signal])));
     await Promise.race(waits);
     wake.abort();
   }
