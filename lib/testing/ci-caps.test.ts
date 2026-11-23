@@ -12,15 +12,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 test('a newer push to a pull request cancels its older run, and nothing else cancels a run', () => {
   const ci = readWorkflow('ci.yml');
-  // The whole key: an ordinary push to a PR (first attempt, synchronize) keys `ci-<number>-diff`,
-  // since the rerun and edit suffixes fall back to an empty string; any other fallback, such as a
-  // run id, would give each push its own key and stop the cancelling.
+  // The whole key: an ordinary push to a PR (first attempt) keys `ci-<number>-diff`, since the
+  // rerun suffix falls back to an empty string; any other fallback, such as a run id, would give
+  // each push its own key and stop the cancelling.
   expect(ci.text('concurrency', 'group')).toBe(
     [
       'ci-${{ github.event.pull_request.number || github.sha }}',
       "-${{ inputs.full && 'full' || 'diff' }}",
       "${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}",
-      "${{ github.event.action == 'edited' && !github.event.changes.base && format('-edit-{0}', github.run_id) || '' }}",
     ].join(''),
   );
   expect(ci.text('concurrency', 'cancel-in-progress')).toBe("${{ github.event_name == 'pull_request' }}");
