@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import ts from 'typescript';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 // Tier 2 inventory for route handlers (SI-001, SI-007, SI-013). A route handler
 // gets no framework authentication or CSRF check, so every one that exists
@@ -118,6 +118,16 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'problemReportWriteBackSchema',
       'writeBackProblemReport',
     ],
+  },
+  'app/api/stripe/webhook/route.ts': {
+    authorization:
+      'no session: Stripe proves itself with the Stripe-Signature header over the raw body and STRIPE_WEBHOOK_SECRET, verified before anything is parsed or stored; a missing, forged or stale signature answers 400 and records nothing; without a key accepted for this environment nothing runs and it answers 503; one database call records and claims the event id, so a replay changes nothing; the body is empty, no-store',
+    mustCall: ['resolveStripeGateway', 'verifySignal', 'receiveSignal'],
+  },
+  'app/upgrade/bestaetigt/route.ts': {
+    authorization:
+      "verified cookie identity; reads only the caller's own open reservation and re-reads its customer's newest subscription from Stripe, recorded as its signal would; takes nothing from the query string; redirects only to fixed paths, private no-store",
+    mustCall: ['getAuthenticatedUser', 'readOpenReservation', 'readNewestSubscription', 'recordSubscription'],
   },
   'app/api/csp-report/route.ts': {
     authorization:
@@ -396,19 +406,15 @@ describe('planted violations', () => {
   });
 
   test('a route.js handler joins the inventory', () => {
-    const root = mkdtempSync(join(tmpdir(), 'route-inventory-'));
-    try {
-      for (const [folder, name] of [
-        ['app/api/a', 'route.js'],
-        ['app/api/b', 'route.ts'],
-        ['app/c', 'page.tsx'],
-      ] as const) {
-        mkdirSync(join(root, folder), { recursive: true });
-        writeFileSync(join(root, folder, name), '');
-      }
-      expect(listRouteHandlers(root)).toEqual(['app/api/a/route.js', 'app/api/b/route.ts']);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
+    const root = temporaryDirectory('route-inventory-');
+    for (const [folder, name] of [
+      ['app/api/a', 'route.js'],
+      ['app/api/b', 'route.ts'],
+      ['app/c', 'page.tsx'],
+    ] as const) {
+      mkdirSync(join(root, folder), { recursive: true });
+      writeFileSync(join(root, folder, name), '');
     }
+    expect(listRouteHandlers(root)).toEqual(['app/api/a/route.js', 'app/api/b/route.ts']);
   });
 });

@@ -208,11 +208,24 @@ export async function buildCanonicalClockState(
   };
 }
 
+/**
+ * Whether an open session needs the recovery the office reviews: the database
+ * flagged it, or it has been open longer than the threshold. The clock and the
+ * sign-out both end such a session with `recover_end`, never as a normal end.
+ */
+export function sessionNeedsRecovery(
+  session: Pick<OpenSession, 'status' | 'started_at'>,
+  now: Date,
+): boolean {
+  return (
+    session.status === 'recovery_required' ||
+    now.getTime() - new Date(session.started_at).getTime() > UNUSUALLY_LONG_SESSION_MS
+  );
+}
+
 function sessionRecoveryReason(session: OpenSession, now: Date): string | null {
   if (session.status === 'recovery_required') return session.recovery_reason;
-  return now.getTime() - new Date(session.started_at).getTime() > UNUSUALLY_LONG_SESSION_MS
-    ? 'unusually_long'
-    : null;
+  return sessionNeedsRecovery(session, now) ? 'unusually_long' : null;
 }
 
 /** The settings and today's totals of a clock state, after the organization's break mode. */

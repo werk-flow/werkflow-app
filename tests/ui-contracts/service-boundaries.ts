@@ -109,6 +109,14 @@ export function initializeServiceBoundaries(): void {
       ) {
         return browserFetch(input, init);
       }
+      // The offline retry's contract answers its connection check at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'offline-retry' &&
+        input === '/manifest.webmanifest' &&
+        init?.method === 'HEAD'
+      ) {
+        return browserFetch(input, init);
+      }
       if (input !== '/auth/callback') throw new Error('Unexpected request in isolated UI contracts.');
       window.uiContractServices.callbackCalls += 1;
       if (window.uiContractServices.callbackFailure)
@@ -162,13 +170,14 @@ export function createSupabaseBrowserClient() {
   };
 }
 
-export async function simulatePayment(): Promise<{
-  success: boolean;
-  error?: string;
-}> {
+export async function startOrganizationCheckout(): Promise<{ success: false; error: string }> {
   const failure = window.uiContractServices.paymentFailure;
   if (failure === 'thrown') throw new Error('Simulated payment connection failure.');
-  return failure === 'returned' ? { success: false, error: 'not_authenticated' } : { success: true };
+  return { success: false, error: 'checkout_failed' };
+}
+
+export async function startSubscriptionCheckout(): Promise<{ success: false; error: string }> {
+  return startOrganizationCheckout();
 }
 
 export async function clearEmailChangeChallengeBeforeSignOut(): Promise<{

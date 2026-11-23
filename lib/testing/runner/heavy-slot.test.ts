@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir, totalmem } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   HEAVY_SLOT_VARIABLE,
@@ -13,22 +13,19 @@ import {
   type HeavySlot,
 } from './heavy-slot';
 import type { RoomReading } from './machine-room';
+import { temporaryDirectory } from '../temporary-directory';
 
 const GIB = 1024 ** 3;
 
-const directories: string[] = [];
 const processes: ChildProcess[] = [];
 const slots: HeavySlot[] = [];
 afterEach(() => {
   for (const slot of slots.splice(0)) slot.release();
   for (const child of processes.splice(0)) child.kill('SIGKILL');
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
 function slotDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-heavy-slot-'));
-  directories.push(directory);
-  return directory;
+  return temporaryDirectory('werkflow-heavy-slot-');
 }
 
 /** A process that runs until it is killed: a slot's owner in a test. */
@@ -98,6 +95,24 @@ test('the only heavy command without measured room may take slot 0 alone', () =>
   const offer = offeredHeavySlots(pcRoom(3), [], 2);
   expect(offer).toMatchObject({ slots: [0], admitted: true, measured: false });
   expect(offer.reason).toContain('It is the only heavy command, so it runs without measured room.');
+});
+
+test('above the normal load line the only heavy command takes slot 0 alone, however much memory is free', () => {
+  // 2026-11-17, the VM at load 74: two checks that start together both see no heavy command running.
+  const vm = (load: number): RoomReading => ({
+    room: {
+      available: 26 * GIB,
+      floor: 3.2 * GIB,
+      blocked: null,
+      alerted: false,
+      load,
+      cores: 16,
+      normalLoad: 24,
+    },
+  });
+  expect(offeredHeavySlots(vm(74), [], 6)).toMatchObject({ slots: [0], admitted: true, measured: false });
+  expect(offeredHeavySlots(vm(74), [0], 6)).toMatchObject({ slots: [], admitted: false });
+  expect(offeredHeavySlots(vm(10), [], 6).slots).toEqual([0, 1, 2, 3, 4, 5]);
 });
 
 test('a machine without the load watch keeps the count from total memory as its only limit', () => {

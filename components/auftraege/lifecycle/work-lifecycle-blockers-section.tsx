@@ -12,7 +12,7 @@ import {
   type WorkBlocker,
   type WorkLifecycleSnapshot,
 } from '@/lib/work-lifecycle/types';
-import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
+import type { WorkLifecycleDialogOpener } from './work-lifecycle-dialog-state';
 
 function formatReviewDate(value: string | null): string {
   return value ? formatBerlin(value, 'numericDate') : 'Ohne Datum';
@@ -25,18 +25,18 @@ type WorkLifecycleBlockersSectionProps = {
   ownerNames: Map<string, string>;
   ownOwnerId: string | null;
   rowBusy: { isBusy: (id: string) => boolean };
-  setDialog: (dialog: WorkLifecycleDialogState | null) => void;
+  openDialog: WorkLifecycleDialogOpener;
 };
 
 /** Continue a parked target, or edit and resolve a blocker. */
 function BlockerRowActions({
   blocker,
   rowBusy,
-  setDialog,
+  openDialog,
 }: {
   blocker: WorkBlocker;
   rowBusy: WorkLifecycleBlockersSectionProps['rowBusy'];
-  setDialog: WorkLifecycleBlockersSectionProps['setDialog'];
+  openDialog: WorkLifecycleBlockersSectionProps['openDialog'];
 }) {
   return (
     <div className="flex items-center gap-1">
@@ -47,7 +47,7 @@ function BlockerRowActions({
           size="sm"
           variant="outline"
           disabled={rowBusy.isBusy(blocker.id)}
-          onClick={() => setDialog({ type: 'unpark', blocker })}
+          {...openDialog({ type: 'unpark', blocker })}
         >
           Weiterplanen
         </Button>
@@ -58,7 +58,7 @@ function BlockerRowActions({
             size="sm"
             variant="ghost"
             disabled={rowBusy.isBusy(blocker.id)}
-            onClick={() => setDialog({ type: 'blocker', blocker })}
+            {...openDialog({ type: 'blocker', blocker })}
           >
             Bearbeiten
           </Button>
@@ -67,7 +67,7 @@ function BlockerRowActions({
             size="sm"
             variant="outline"
             disabled={rowBusy.isBusy(blocker.id)}
-            onClick={() => setDialog({ type: 'resolve-blocker', blocker })}
+            {...openDialog({ type: 'resolve-blocker', blocker })}
           >
             Lösen
           </Button>
@@ -84,14 +84,14 @@ export function WorkLifecycleBlockersSection({
   ownerNames,
   ownOwnerId,
   rowBusy,
-  setDialog,
+  openDialog,
 }: WorkLifecycleBlockersSectionProps) {
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-x-2">
         <h3 className="text-sm font-medium">Blocker & Parkplatz</h3>
         {!readOnly && (isManager || snapshot.targetType === 'job') && (
-          <Button type="button" size="sm" variant="ghost" onClick={() => setDialog({ type: 'blocker' })}>
+          <Button type="button" size="sm" variant="ghost" {...openDialog({ type: 'blocker' })}>
             <Plus className="size-4" />
             Blocker hinzufügen
           </Button>
@@ -127,7 +127,7 @@ export function WorkLifecycleBlockersSection({
                   (blocker.kind === 'blocker' &&
                     ownOwnerId !== null &&
                     blocker.responsible_employee_record_id === ownOwnerId)) && (
-                  <BlockerRowActions blocker={blocker} rowBusy={rowBusy} setDialog={setDialog} />
+                  <BlockerRowActions blocker={blocker} rowBusy={rowBusy} openDialog={openDialog} />
                 )}
             </div>
           </div>
@@ -139,10 +139,10 @@ export function WorkLifecycleBlockersSection({
 
 type WorkLifecycleResolvedBlockersProps = {
   snapshot: WorkLifecycleSnapshot;
-  setDialog: (dialog: WorkLifecycleDialogState | null) => void;
+  openDialog: WorkLifecycleDialogOpener;
 };
 
-export function WorkLifecycleResolvedBlockers({ snapshot, setDialog }: WorkLifecycleResolvedBlockersProps) {
+export function WorkLifecycleResolvedBlockers({ snapshot, openDialog }: WorkLifecycleResolvedBlockersProps) {
   return (
     <FormDisclosure label="Gelöste Blocker">
       <div className="space-y-2 pt-3">
@@ -161,7 +161,7 @@ export function WorkLifecycleResolvedBlockers({ snapshot, setDialog }: WorkLifec
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => setDialog({ type: 'reopen-blocker', blocker })}
+              {...openDialog({ type: 'reopen-blocker', blocker })}
             >
               Wieder öffnen
             </Button>

@@ -3,7 +3,7 @@
 import { ParkingCircle } from 'lucide-react';
 import { useState } from 'react';
 
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import type { LiveClockState } from '@/lib/time-tracking/types';
@@ -16,7 +16,7 @@ import {
 } from '@/lib/work-lifecycle/types';
 import { WorkLifecycleCompletionGateList } from './work-lifecycle-completion-gate-list';
 import { failingCompletionGates, runningClockOwner } from './work-lifecycle-completion-gates';
-import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
+import type { WorkLifecycleDialogOpener } from './work-lifecycle-dialog-state';
 
 type WorkLifecycleTransitionActionsProps = {
   snapshot: WorkLifecycleSnapshot;
@@ -28,7 +28,7 @@ type WorkLifecycleTransitionActionsProps = {
   canStart: boolean;
   parking: WorkBlocker | undefined;
   pendingState: WorkExecutionState | null;
-  setDialog: (dialog: WorkLifecycleDialogState | null) => void;
+  openDialog: WorkLifecycleDialogOpener;
   /** Completes execution without the dialog; resolves with the refusal sentence or null. */
   completeExecution: () => Promise<string | null>;
   /** Reads the card's snapshot again. */
@@ -44,22 +44,17 @@ const COMPLETION_BLOCKED_REASON_ID = 'field-completion-blocked-reason';
 function ManagerTransitionActions({
   snapshot,
   parking,
-  setDialog,
-}: Pick<WorkLifecycleTransitionActionsProps, 'snapshot' | 'parking' | 'setDialog'>) {
+  openDialog,
+}: Pick<WorkLifecycleTransitionActionsProps, 'snapshot' | 'parking' | 'openDialog'>) {
   return (
     <>
       {snapshot.targetType === 'project' && !snapshot.isLegacy && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => setDialog({ type: 'clear-project-override' })}
-        >
+        <Button type="button" size="sm" variant="outline" {...openDialog({ type: 'clear-project-override' })}>
           Automatisch ableiten
         </Button>
       )}
       {!parking && !isTerminalWorkExecutionState(snapshot.executionState) && (
-        <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ type: 'parking' })}>
+        <Button type="button" size="sm" variant="outline" {...openDialog({ type: 'parking' })}>
           <ParkingCircle className="size-4" />
           Parken
         </Button>
@@ -82,12 +77,12 @@ function transitionButtons({
   transitions,
   fieldMode,
   pendingState,
-  setDialog,
+  openDialog,
   primaryTransition,
   blockedReasonId,
 }: Pick<
   WorkLifecycleTransitionActionsProps,
-  'snapshot' | 'transitions' | 'fieldMode' | 'pendingState' | 'setDialog'
+  'snapshot' | 'transitions' | 'fieldMode' | 'pendingState' | 'openDialog'
 > & {
   primaryTransition: WorkExecutionState | null;
   /** The id of the text that says why a step waits, or undefined when it may proceed. */
@@ -106,7 +101,7 @@ function transitionButtons({
         className={fieldMode ? 'min-h-11' : undefined}
         disabled={reasonId !== undefined || pendingState !== null}
         aria-describedby={reasonId}
-        onClick={() => setDialog({ type: 'transition', state })}
+        {...openDialog({ type: 'transition', state })}
       >
         {workTransitionActionLabel(snapshot.executionState, state)}
       </Button>
@@ -184,7 +179,7 @@ export function FieldTransitionActions({
   canStart,
   parking,
   pendingState,
-  setDialog,
+  openDialog,
   completeExecution,
   refresh,
 }: FieldTransitionActionsProps) {
@@ -217,7 +212,7 @@ export function FieldTransitionActions({
           transitions,
           fieldMode: true,
           pendingState,
-          setDialog,
+          openDialog,
           primaryTransition,
           blockedReasonId,
         })}
@@ -229,7 +224,7 @@ export function FieldTransitionActions({
           </Button>
         )}
         {isManager && (
-          <ManagerTransitionActions snapshot={snapshot} parking={parking} setDialog={setDialog} />
+          <ManagerTransitionActions snapshot={snapshot} parking={parking} openDialog={openDialog} />
         )}
       </div>
       {startBlocked && (
@@ -261,10 +256,10 @@ export function WorkLifecycleTransitionActions({
   isManager,
   parking,
   pendingState,
-  setDialog,
+  openDialog,
 }: Pick<
   WorkLifecycleTransitionActionsProps,
-  'snapshot' | 'transitions' | 'isManager' | 'parking' | 'pendingState' | 'setDialog'
+  'snapshot' | 'transitions' | 'isManager' | 'parking' | 'pendingState' | 'openDialog'
 >) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -273,11 +268,13 @@ export function WorkLifecycleTransitionActions({
         transitions,
         fieldMode: false,
         pendingState,
-        setDialog,
+        openDialog,
         primaryTransition: null,
         blockedReasonId: () => undefined,
       })}
-      {isManager && <ManagerTransitionActions snapshot={snapshot} parking={parking} setDialog={setDialog} />}
+      {isManager && (
+        <ManagerTransitionActions snapshot={snapshot} parking={parking} openDialog={openDialog} />
+      )}
     </div>
   );
 }

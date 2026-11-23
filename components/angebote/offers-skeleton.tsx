@@ -1,7 +1,7 @@
 'use client';
 
+import { SearchableListSkeleton } from '@/components/shared/searchable-list-skeleton';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
 import { OFFER_COLUMNS } from './offers-columns';
 
 // Content-only skeletons: the Angebote layout keeps the h1 and the area nav on screen.
@@ -18,24 +18,9 @@ const OFFER_FACTS = [
   'Schluss',
 ] as const;
 
-/** Toolbar, count and rows. Loaded rows open their offer, so skeleton rows hover too. */
+/** Toolbar, count and rows of the list. */
 export function OffersListSkeleton() {
-  return (
-    <>
-      <div className="mb-4 flex flex-col gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Skeleton className="h-8 w-full sm:w-48" />
-          <div className="flex min-w-0 items-center gap-2 sm:flex-1 sm:justify-end">
-            <Skeleton className="h-8 min-w-0 flex-1 sm:max-w-xs" />
-            <Skeleton className="size-8" />
-          </div>
-        </div>
-        <Skeleton className="h-4 w-24" />
-      </div>
-      <SkeletonList interactive className="md:hidden" />
-      <SkeletonTable columns={OFFER_COLUMNS} interactive className="hidden md:block" />
-    </>
-  );
+  return <SearchableListSkeleton columns={OFFER_COLUMNS} />;
 }
 
 export function OffersPageSkeleton() {

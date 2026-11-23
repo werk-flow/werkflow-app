@@ -63,7 +63,8 @@ const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     'Redeems an invite code for the verified user; the code names the organization.',
   check_user_exists_by_email:
     'Global account lookup by email for the invite flow; returns no organization data.',
-  create_organization_with_defaults: 'Creates a new organization with the verified user as its first admin.',
+  create_organization_from_subscription:
+    "Creates the organization the verified user's own paid Checkout reserved, with that user as its first admin.",
   consume_rate_limit: 'Counts attempts per keyed subject hash; the limits are global, not per organization.',
   transition_email_change:
     "Changes the verified user's own email-change state, which belongs to no organization.",
@@ -82,6 +83,10 @@ const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
   complete_storage_purge: 'Removes, by id, only the entries the scheduled purge just claimed and deleted.',
   list_problem_reports_due_for_retention:
     'The scheduled retention run has no caller and spans every organization; each listed report names its organization, which the deletion call passes.',
+  claim_werkflow_billing_signal:
+    'Records a Stripe event id that Stripe signed; the ledger holds no organization data, and a handler finds the organization from the Stripe customer.',
+  settle_werkflow_billing_signal:
+    'Settles, by its Stripe event id, only the signal the same request just claimed.',
 };
 
 const ORGANIZATION_ARGUMENT_NAMES = ['p_organization_id', 'p_org_id', 'organization_id', 'org_id'];

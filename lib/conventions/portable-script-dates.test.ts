@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { repositoryRoot } from './product-sources';
+import { logicalLines } from './shell-lines';
 
 // Tier 2 for portable script dates (werk-flow/werkflow-planning#303). Unit tests run these
 // scripts on every developer's Mac, where BSD date refuses GNU's `--utc`, `--date` and `-d`:
@@ -20,31 +21,6 @@ const LINUX_RUNNER_ONLY: Readonly<Record<string, string>> = {
 // `date` as a command, after a line start, whitespace, `(`, `;`, `|`, `&` or a backtick, with
 // the options that follow it up to the first word that is no option.
 const DATE_CALL = /(?:^|[\s(;|&`])date((?:\s+-[^\s)"'`;|&]*)*)(?=[\s)"'`;|&]|$)/g;
-
-/**
- * The script's commands with each `\\` line continuation joined, numbered by their first line. A
- * full-line comment never continues: Bash ignores its trailing `\\` and runs the next line alone.
- */
-function logicalLines(script: string): { number: number; text: string }[] {
-  const lines: { number: number; text: string }[] = [];
-  let pending: { number: number; text: string } | undefined;
-  for (const [index, line] of script.split('\n').entries()) {
-    if (!pending && line.trimStart().startsWith('#')) {
-      lines.push({ number: index + 1, text: line });
-      continue;
-    }
-    const current = pending
-      ? { number: pending.number, text: `${pending.text} ${line}` }
-      : { number: index + 1, text: line };
-    if (current.text.endsWith('\\')) pending = { number: current.number, text: current.text.slice(0, -1) };
-    else {
-      lines.push(current);
-      pending = undefined;
-    }
-  }
-  if (pending) lines.push(pending);
-  return lines;
-}
 
 /** Each `<line>: date <option name>` that BSD date may not know, outside comments. */
 function gnuOnlyDateOptions(script: string): string[] {

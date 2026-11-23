@@ -10,10 +10,14 @@ type CreateJobNumberOptions = {
   isActive: boolean;
 };
 
-/** The job number field: follows a changing suggestion until the user types their own. */
+/**
+ * The job's numbers: the job number follows a changing suggestion until the
+ * user types their own; the number in the previous system starts empty.
+ */
 export function useCreateJobNumber({ initialJobNumber, isActive }: CreateJobNumberOptions) {
   const previousInitialJobNumberRef = useRef(initialJobNumber ?? '');
   const [jobNumber, setJobNumber] = useState(initialJobNumber ?? '');
+  const [sourceNumber, setSourceNumber] = useState('');
 
   useEffect(() => {
     const previousInitialJobNumber = previousInitialJobNumberRef.current;
@@ -35,5 +39,5 @@ export function useCreateJobNumber({ initialJobNumber, isActive }: CreateJobNumb
     setJobNumber((currentJobNumber) => currentJobNumber || suggestion),
   );
 
-  return { jobNumber, setJobNumber };
+  return { jobNumber, setJobNumber, sourceNumber, setSourceNumber };
 }

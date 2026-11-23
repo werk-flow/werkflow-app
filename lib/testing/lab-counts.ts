@@ -250,15 +250,18 @@ function missingRow(target: string, bound: number, informational: boolean): LabR
 
 /**
  * The encoded and decoded byte rows of one shape that has a reference. When the
- * shape made a different number of requests than its reference, its byte sums
- * are printed without failing; a missing measurement still fails.
+ * shape made more requests than its reference, its byte sums are printed without
+ * failing: an extra request's bytes follow timing. With fewer requests no timing
+ * explains more bytes, so growth past the ceiling still fails (2026-11-19: main's
+ * field scripts made 41 requests instead of 42 and grew past their ceiling
+ * unjudged). A missing measurement always fails.
  */
 function byteRows(
   shape: string,
   observed: LabPayload,
   reference: PayloadReference,
   ungated: boolean,
-  requestCountDiffers: boolean,
+  requestCount: 'fewer' | 'same' | 'more',
 ): LabRow[] {
   const rows: LabRow[] = [];
   const bytes: [string, number | null, ByteReference | null, boolean][] = [
@@ -278,13 +281,15 @@ function byteRows(
     }
     const { ceiling, floor } = byteBounds(bound);
     const status: LabRowStatus =
-      informational || requestCountDiffers
+      informational || requestCount === 'more'
         ? 'ungated'
         : now > ceiling
           ? 'grew'
-          : now < floor
-            ? 'shrank'
-            : 'within';
+          : requestCount === 'fewer'
+            ? 'ungated'
+            : now < floor
+              ? 'shrank'
+              : 'within';
     rows.push({ target: `${shape}#${field}`, reference: bound.reference, now, ceiling, floor, status });
   }
   return rows;
@@ -334,10 +339,11 @@ function payloadRows(
       status: 'ungated',
     },
   ];
-  // The bytes sum the shape's requests, so they follow that count's timing too: with another
-  // count than the reference's they print, and the step's `requests` count judges the change.
+  // The bytes sum the shape's requests, so they follow that count's timing too: with more
+  // requests than the reference's they print, and the step's `requests` count judges the change.
+  const count = observed.requests - reference.requests.reference;
   rows.push(
-    ...byteRows(shape, observed, reference, ungated, observed.requests !== reference.requests.reference),
+    ...byteRows(shape, observed, reference, ungated, count < 0 ? 'fewer' : count > 0 ? 'more' : 'same'),
   );
   if (reference.rows && observed.rows === null)
     rows.push(missingRow(`${shape}#rows`, reference.rows.reference, ungated));

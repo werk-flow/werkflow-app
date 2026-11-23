@@ -12,11 +12,14 @@ import type { InventoryImportRow } from '@/lib/inventory/action-inputs';
 import {
   importRowEffect,
   importRowProblem,
+  type ImportPriceChange,
   type ImportRowOutcome,
   type ImportTotals,
   type InventoryImportMode,
 } from '@/lib/inventory/csv-import';
+import { formatPriceChange } from '@/lib/inventory/article-terms-format';
 import { formatInventoryQuantity, getInventoryUnitLabel } from '@/lib/inventory/types';
+import { formatGermanDate } from '@/lib/utils';
 
 // A preview of a large file reveals its rows in steps, so the dialog stays responsive.
 const ROWS_PER_STEP = 100;
@@ -62,12 +65,23 @@ function OutcomeRow({
             {matched}
           </p>
           {effect && <p className="text-sm">{effect}</p>}
+          {row.unit &&
+            row.priceChanges.map((change) => (
+              <p key={change.kind} className="text-sm">
+                {importPriceChangeText(change, row.unit ?? '')}
+              </p>
+            ))}
           {problem && <p className="text-sm text-destructive">{problem}</p>}
         </div>
         <Badge variant={badge.variant}>{badge.label}</Badge>
       </div>
     </ListRow>
   );
+}
+
+/** „Einkaufspreis: 4,00 € je m → 4,50 € je m ab 17.11.2026“. */
+function importPriceChangeText(change: ImportPriceChange, unit: string): string {
+  return `${formatPriceChange(change.kind, change.old, change.new, unit)} ab ${formatGermanDate(change.validFrom)}`;
 }
 
 /** The counts of an import's preview or result, one figure per label. */
@@ -133,6 +147,7 @@ export function ImportTotalsSummary({ totals, mode }: { totals: ImportTotals; mo
         counts={[
           { label: 'Neue Artikel', value: totals.created },
           { label: 'Vorhandene Artikel', value: totals.matched },
+          { label: 'Geänderte Preise', value: totals.pricesChanged },
           { label: 'Abgelehnt', value: totals.rejected },
         ]}
       />

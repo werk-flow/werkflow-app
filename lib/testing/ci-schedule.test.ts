@@ -1,11 +1,15 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
+import { FULL_RUN_SLOTS } from './ci/full-run';
+import { CLOCK_WORK } from './ci/schedule';
+import { workflowsFolder } from './ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const holdScript = join(repositoryRoot, '.github/scripts/hold-until.sh');
+const holdSource = readFileSync(holdScript, 'utf8');
 const candidateScript = join(repositoryRoot, '.github/scripts/release-candidate.sh');
 const HOUR = 3600;
 const LEG = 345 * 60;
@@ -24,22 +28,23 @@ const SLOWEST_FULL_RUN_MINUTES = 62;
 // From a green full run to a promoted build: under 7 minutes in the releases so far.
 const SHIP_MINUTES = 10;
 
-const releaseWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/release.yml'), 'utf8');
-const nightlyWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/nightly.yml'), 'utf8');
-const mainFullRunWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/main-full-run.yml'), 'utf8');
+const releaseWorkflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'release.yml'), 'utf8');
+const nightlyWorkflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'nightly.yml'), 'utf8');
+const mainFullRunWorkflow = readFileSync(
+  join(repositoryRoot, workflowsFolder(), 'main-full-run.yml'),
+  'utf8',
+);
 const mainFullRunScript = readFileSync(join(repositoryRoot, '.github/scripts/main-full-run.sh'), 'utf8');
 
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'ci-schedule-'));
+  stub = temporaryDirectory('ci-schedule-');
   writeFileSync(join(stub, 'date'), '#!/usr/bin/env bash\necho "$NOW"\n');
   writeFileSync(join(stub, 'sleep'), '#!/usr/bin/env bash\necho "$1" > "$STUB/slept"\n');
   chmodSync(join(stub, 'date'), 0o755);
   chmodSync(join(stub, 'sleep'), 0o755);
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 /** The seconds one leg of the hold sleeps when it starts at `instant`. */
 function secondsHeldFrom(instant: string) {
@@ -127,8 +132,19 @@ test('the release waits for its hold, and only a schedule event holds', () => {
   expect(holdSteps.match(/if: github\.event_name == 'schedule'/g)).toHaveLength(2);
   // A skipped job would skip the gate jobs behind it, so the job itself always runs.
   expect(holdSteps).not.toMatch(/\n {4}if:/);
-  expect(releaseWorkflow).toContain("github.event_name == 'schedule' && 'scheduled'");
-  expect(releaseWorkflow).toContain('needs: [hold, candidate, full, release, smoke, proof]');
+  // The CI scheduler's dispatch (scripts/ci/schedule.ts) decides as a scheduled run, without the hold.
+  expect(releaseWorkflow).toContain("(github.event_name == 'schedule' || inputs.scheduled) && 'scheduled'");
+  expect(releaseWorkflow).toContain('needs: [hold, candidate, full, dev, release, smoke, proof]');
+});
+
+test("the CI scheduler dispatches the release when the held run decides, on the cron's weekdays, and goes on as late as a held run would", () => {
+  expect(CLOCK_WORK.release.time).toBe(RELEASE_DECIDES);
+  // The cron fires Sunday to Thursday evenings, so the release decides Monday to Friday (0 is Monday).
+  expect(releaseWorkflow).toContain("- cron: '0 17 * * 0-4'");
+  expect(CLOCK_WORK.release.weekdays).toEqual([0, 1, 2, 3, 4]);
+  // hold-until.sh lets a run go on at once while 03:30 is more than WINDOW ahead: up to 24 h - WINDOW late.
+  const window = Number(/WINDOW=\$\(\((\d+) \* 3600\)\)/.exec(holdSource)?.[1]);
+  expect(CLOCK_WORK.release.lateMs).toBe((24 - window) * HOUR * 1000);
 });
 
 test('the nightly shares the release cron line, so the release usually reuses its run', () => {
@@ -137,19 +153,17 @@ test('the nightly shares the release cron line, so the release usually reuses it
   expect(nightlyWorkflow).toMatch(/- cron: '\d+ \d+ \* \* \*'\n {6}timezone: Europe\/Berlin/);
 });
 
-test('main gets a full run every 3 hours from 06:00 to 20:00 Berlin, and no job waits for it', () => {
+test('main gets a full run after a tooling change or every 3 hours from 06:00 to 20:00 Berlin, and no job waits for it', () => {
   // GitHub starts scheduled runs hours late (#184), so ops/ci-alert.py in werk-flow/werkflow-planning
   // dispatches the workflow, and the workflow decides at once whether a full run is due.
   expect(mainFullRunWorkflow).toMatch(/\non:\n {2}workflow_dispatch:\n\n/);
   expect(mainFullRunWorkflow).not.toMatch(/\n {2}(schedule|push):/);
   expect(mainFullRunWorkflow).not.toMatch(/\bsleep\b/);
-  // Berlin's window and the interval (ops/ci-alert.py keeps the same three for its dispatches).
-  const window = /readonly FIRST=(\d\d:\d\d) LAST=(\d\d:\d\d) INTERVAL=\$\(\((\d+) \* 3600\)\)/.exec(
-    mainFullRunScript,
-  );
-  expect(window?.slice(1)).toEqual(['06:00', '20:00', '3']);
-  expect(mainFullRunScript).toContain('ZoneInfo("Europe/Berlin")');
-  // The decision ends in seconds.
+  // Berlin's window and the interval (ops/ci-alert.py keeps the same three for its dispatches); the
+  // repository's rule owns them (lib/testing/ci/full-run.ts), and the script asks it.
+  expect(FULL_RUN_SLOTS).toEqual({ first: '06:00', last: '20:00', intervalMs: 3 * 3600 * 1000 });
+  expect(mainFullRunScript).toContain('bun scripts/ci/full-run.ts due');
+  // The decision ends in minutes.
   expect(mainFullRunWorkflow).toMatch(
     /\n {2}decide:\n {4}name: Decide\n {4}runs-on: .+\n {4}timeout-minutes: 5\n/,
   );
@@ -175,9 +189,9 @@ test('a held run whose commit production already passed ends quietly with nothin
   git('commit', '--allow-empty', '-qm', 'shipped by hand');
   git('update-ref', 'refs/remotes/origin/production', 'HEAD');
   git('checkout', '-q', held);
-  // The decision needs no full run here: a gh call would fail the run.
-  writeFileSync(join(stub, 'gh'), '#!/usr/bin/env bash\nexit 1\n');
-  chmodSync(join(stub, 'gh'), 0o755);
+  // The decision needs no full run here: a GitHub read would fail the run.
+  writeFileSync(join(stub, 'curl'), '#!/usr/bin/env bash\nexit 1\n');
+  chmodSync(join(stub, 'curl'), 0o755);
   const output = join(stub, 'output');
   for (const mode of ['scheduled', 'dry-run']) {
     writeFileSync(output, '');

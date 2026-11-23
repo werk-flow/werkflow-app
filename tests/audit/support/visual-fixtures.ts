@@ -58,6 +58,7 @@ export type VisualDetails = {
   equipmentNumber: string;
   caseNumber: string;
   offerId: string;
+  invoiceId: string;
 };
 
 const DOCUMENTS = [
@@ -361,6 +362,48 @@ async function seedVisualWorld(world: TestWorld): Promise<void> {
     })
     .throwOnError();
 
+  // Fixed dates and amounts, so the reference stays the same in every year.
+  const { data: invoice } = await admin
+    .from('invoices')
+    .insert({
+      organization_id: orgId,
+      client_id: family.clientId,
+      recipient_client_id: family.clientId,
+      service_start: '2037-01-12',
+      service_end: '2037-01-12',
+      opening_text: 'Vielen Dank für deinen Auftrag. Wir berechnen dir:',
+      line_net_cents: 46500,
+      tax_cents: 8835,
+      gross_cents: 55335,
+      created_by: world.users.buero.id,
+      updated_by: world.users.buero.id,
+      updated_at: '2037-01-15T10:00:00Z',
+    })
+    .select('id')
+    .single()
+    .throwOnError();
+  await admin
+    .from('invoice_lines')
+    .insert(
+      [
+        ['Umwälzpumpe tauschen', 1, 'piece', 32900, 32900],
+        ['Monteurstunde', 1.5, 'hour', 7200, 10800],
+        ['Anfahrtspauschale', 1, 'flat_rate', 2800, 2800],
+      ].map(([name, quantity, unit, price, net], index) => ({
+        organization_id: orgId,
+        invoice_id: invoice.id,
+        position: index + 1,
+        name: String(name),
+        quantity: Number(quantity),
+        unit: String(unit),
+        unit_price_cents: Number(price),
+        tax_category: 'S',
+        tax_rate_basis_points: 1900,
+        net_cents: Number(net),
+      })),
+    )
+    .throwOnError();
+
   for (const [index, name] of DOCUMENTS.entries()) {
     await admin
       .from('documents')
@@ -415,12 +458,20 @@ async function readVisualDetails(world: TestWorld): Promise<VisualDetails> {
     .eq('title', VISUAL_NAMES.offer)
     .single()
     .throwOnError();
+  const { data: invoice } = await admin
+    .from('invoices')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('client_id', client.id)
+    .single()
+    .throwOnError();
   return {
     familyClientId: client.id,
     requestId: request.id,
     equipmentNumber: equipment.equipment_number,
     caseNumber: serviceCase.case_number,
     offerId: offer.id,
+    invoiceId: invoice.id,
   };
 }
 

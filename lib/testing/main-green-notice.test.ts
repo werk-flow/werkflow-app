@@ -1,18 +1,10 @@
 // When main turns green again, each open PR whose Check failed gets one comment, so its watching
 // thread wakes (.github/workflows/main-green-notice.yml).
-import { afterEach, beforeEach, expect, test } from 'bun:test';
-import {
-  chmodSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { beforeEach, expect, test } from 'bun:test';
+import { chmodSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readWorkflow } from './ci-workflow';
+import { temporaryDirectory } from './temporary-directory';
 
 const notice = readWorkflow('main-green-notice.yml');
 const STEP = 'Comment on PRs with a failed Check';
@@ -48,12 +40,10 @@ fi
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'main-green-notice-'));
+  stub = temporaryDirectory('main-green-notice-');
   writeFileSync(join(stub, 'gh'), GH_STUB);
   chmodSync(join(stub, 'gh'), 0o755);
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 const write = (file: string, value: unknown) => writeFileSync(join(stub, file), JSON.stringify(value));
 const read = (file: string): string =>
@@ -101,7 +91,10 @@ function notify() {
 }
 
 test('only a successful push run of CI on main starts it', () => {
-  expect(notice.at('on')).toEqual({ workflow_run: { workflows: ['CI'], types: ['completed'] } });
+  // The branch filter keeps every PR and queue run of CI from starting a run that only skips.
+  expect(notice.at('on')).toEqual({
+    workflow_run: { workflows: ['CI'], types: ['completed'], branches: ['main'] },
+  });
   expect(notice.text('jobs', 'notice', 'if').replace(/\s+/g, ' ')).toBe(
     "github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success'",
   );

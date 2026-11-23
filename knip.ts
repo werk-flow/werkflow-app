@@ -41,6 +41,18 @@ const config: KnipConfig = {
     'lib/testing/fixtures/*.{ts,tsx}',
     'scripts/*.ts!',
     'scripts/migration/*.ts!',
+    // Run by .github/scripts/main-full-run.sh and the stand-in's scheduler.
+    'scripts/ci/full-run.ts!',
+    // Run by a CI runner's orchestrator, which starts what it names.
+    'scripts/ci/schedule.ts!',
+    // Run by a runner off GitHub Actions after its Check, to post it as the CI App.
+    'scripts/ci/publish-check.ts!',
+    // Run in a loop by the stand-in runner: the merge queue.
+    'scripts/ci/queue.ts!',
+    // Run by a runner off GitHub Actions for each commit's run, and by the queue as its runner.
+    'scripts/ci/run-commit.ts!',
+    // Run by the CI mirror's workflow (ci/mirror/workflow.yml), which knip does not read.
+    'scripts/ci/mirror-job.ts!',
     // Run on a Boat machine by scripts/boat/remote-verify.sh, or by package scripts.
     'scripts/boat/*.ts!',
     // Agent hooks run by path from the agent settings.
@@ -64,9 +76,8 @@ const config: KnipConfig = {
     // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
     // the offer calculation imports it. Remove this entry with that import.
     'lib/price-catalog/leistung-prices.ts!',
-    // The E7 ↔ E8 seam (werk-flow/werkflow-planning#22): `onTodaySaved` exists
-    // before E8's worker start imports it. Remove this entry with that import.
-    'lib/field-sync/device/today-refresh.ts!',
+    // Run by path: CI's e-invoice check (scripts/ci/job.ts) and the writer it starts.
+    'lib/document-rendering/fixtures/{check,write}-reference-e-invoices.ts',
     // Recompiles the vendored EN 16931 rules (`bun run rules:en16931`); the
     // package script makes it an entry of the first pass only.
     'lib/invoicing/rules/compile.ts!',
@@ -104,7 +115,7 @@ const config: KnipConfig = {
   // POSIX mkfifo lets its test wait on the wake itself (lib/testing/notified-run.test.ts);
   // the runner's openssl reads its agent's certificate expiry (scripts/date-lookahead-plan.ts);
   // macOS xattr marks a file the Boat pack must strip (lib/testing/boat/verify-on-boat.test.ts).
-  ignoreBinaries: ['flock', 'mkfifo', 'openssl', 't3', 'xattr'],
+  ignoreBinaries: ['flock', 'jq', 'mkfifo', 'openssl', 't3', 'xattr'],
 };
 
 export default config;

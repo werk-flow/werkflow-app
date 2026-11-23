@@ -5,11 +5,13 @@ import type { LiveClockState } from '@/lib/time-tracking/types';
 import {
   removeKeptActions,
   removeUnreadableKeptActions,
+  setAsideUnreadableKeptAction,
   stopFor,
   takeInKeptClockActions,
   unreadableKeptActions,
   untilOwnCallAnswers,
   type DeferredTakeIn,
+  type SetAsideOutcome,
   type KeptClockAction,
   type KeptTakeIn,
 } from './kept-clock-actions';
@@ -23,7 +25,7 @@ import {
 } from './time-outbox';
 import { sendTimeOutbox } from './time-outbox-send';
 import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
-import { TODAY_WIPE_KEY } from './today-wipe';
+import { TODAY_WIPE_KEY, sharedWipeGeneration } from './today-wipe';
 import { markUnsentWork, untilNetworkReturns } from './sync-runner';
 import { KEPT_CLOCK_ACTION_PREFIX, UNSENT_MARK_PREFIX, keepClockAction } from './unsent-mark';
 import type { UnsentScope, UnsentSource } from './unsent-work';
@@ -111,13 +113,15 @@ export async function outboxChanged(): Promise<void> {
   await publish();
 }
 
+/** Ends this tab's hold after another tab's wipe, and tells every listener once. */
+function endHold(): void {
+  dropped = true;
+  for (const listener of listeners) listener(null, true);
+}
+
 function onStorage(event: StorageEvent): void {
   // Another tab's wipe, or its `localStorage.clear()` (no key), which took the signal with it.
-  if (event.key === TODAY_WIPE_KEY || event.key === null) {
-    dropped = true;
-    for (const listener of listeners) listener(null, true);
-    return;
-  }
+  if (event.key === TODAY_WIPE_KEY || event.key === null) return endHold();
   // eslint-disable-next-line no-restricted-syntax -- a failed read here is shown by the next action's own read; a storage event has no caller to tell
   if (event.key === OUTBOX_CHANGED_KEY) void publish().catch(() => undefined);
   // Another tab's page kept an action without signal: the next pass of this tab sends it too.
@@ -194,6 +198,21 @@ export async function removeShownTimeEvents(
 }
 
 /**
+ * Sets aside the unreadable kept action under `key` that this tab's holder was shown (decision record
+ * 0010, "an unreadable clock record set aside"), then takes in and sends what it held back. Under the
+ * take-in's lock, so no take-in reads the store while the record moves. Throws when the device
+ * storage fails; the stop then stays.
+ */
+export async function setAsideShownStop(key: string): Promise<SetAsideOutcome> {
+  const current = clockHolder();
+  if (!current) return 'gone';
+  const outcome = await exclusively(TAKE_IN_LOCK, () => setAsideUnreadableKeptAction(key, current.userId));
+  if (outcome === 'set_aside') await takeInAndSend();
+  await outboxChanged();
+  return outcome;
+}
+
+/**
  * Keeps one clock action of the page without signal behind every action other tabs kept before it:
  * those are taken in first, under the same lock, so an earlier tap never ends up behind a later one.
  * When an online call is still open, the action joins the kept store behind it instead. Throws when
@@ -239,12 +258,19 @@ function waitsBehind(taken: KeptTakeIn, userId: string): boolean {
 
 /**
  * Makes `next` this tab's holder and tells `listener` what the outbox holds for it, now and after
- * every change. Returns the call that ends the listening. Throws when the device storage fails.
+ * every change. `pageSignal` is the wipe signal the page started under: a wipe another tab gave
+ * before this tab listened ends the hold as one it hears later does. Returns the call that ends
+ * the listening. Throws when the device storage fails.
  */
-export async function holdClock(next: OutboxHolder, listener: ViewListener): Promise<() => void> {
+export async function holdClock(
+  next: OutboxHolder,
+  listener: ViewListener,
+  pageSignal: string | null,
+): Promise<() => void> {
   if (listeners.size === 0) window.addEventListener('storage', onStorage);
   holder = next;
   listeners.add(listener);
+  if (sharedWipeGeneration() !== pageSignal) endHold();
   await takeInKept();
   await publish();
   return () => {
@@ -388,8 +414,11 @@ export const timeUnsentSource: UnsentSource = {
       ids.push(...(await readTimeOutbox(holder)).events.map((event) => event.operationId));
     // An online call still open, and what was kept behind it, are unsent too until the call answers.
     ids.push(...(await deferredInScope(deferred, scope ?? 'session')).map((action) => action.operationId));
-    // A kept action this version cannot read that may be the person's: no session ends over it unasked.
-    const unreadable = unreadableKeptActions(await signedInUserId()).map(({ key }) => key);
+    // A kept action this version cannot read, or one the person set aside, that may be the person's:
+    // no session ends over it unasked.
+    const records = unreadableKeptActions(await signedInUserId());
+    const unreadable = records.filter((record) => !record.setAside).map(({ key }) => key);
+    const setAside = records.filter((record) => record.setAside).map(({ key }) => key);
     return [
       { label: 'Stempelzeiten', count: ids.length, ids },
       {
@@ -397,11 +426,12 @@ export const timeUnsentSource: UnsentSource = {
         count: unreadable.length,
         ids: unreadable,
       },
+      { label: 'Beiseitegelegte Stempelzeiten', count: setAside.length, ids: setAside },
     ].filter((item) => item.count > 0);
   },
   flush: sendOwnTimeEvents,
   async discard(scope, ids) {
-    // The shown stops go first: what they held can then be taken in and discarded with them.
+    // The shown stops and set-aside records go first: what the stops held can then be taken in and discarded with them.
     removeUnreadableKeptActions(ids);
     await removeShownKeptActions(scope, ids);
     // The session ends: no server state to go on from, and what stays is asked about again. Only a

@@ -29,6 +29,7 @@ import {
   type EquipmentState,
 } from '@/lib/installed-equipment/types';
 import type { OrganizationDocument } from '@/lib/documents/types';
+import type { EquipmentOpenFinding } from '@/lib/installed-equipment/open-findings-reads';
 import {
   EquipmentDataSection,
   EquipmentDetailHeader,
@@ -36,6 +37,7 @@ import {
 } from './equipment-detail-sections';
 import { EquipmentDetailSidebar } from './equipment-detail-sidebar';
 import { EquipmentFormDialog } from './equipment-form-dialog';
+import { EquipmentOpenFindingsSection } from './equipment-open-findings';
 import { EquipmentPredecessorHistorySection } from './equipment-predecessor-history';
 import { EquipmentArchiveDialog, EquipmentCorrectionDialog } from './equipment-reason-confirm-dialogs';
 import { EquipmentSourceDialog } from './equipment-source-dialog';
@@ -188,6 +190,7 @@ type EquipmentDetailRegionProps = {
   dialogs: EquipmentDialogs;
   documents: OrganizationDocument[];
   documentsLoadFailed: boolean;
+  openFindings: EquipmentOpenFinding[] | null;
   terminalEvent: EquipmentDetail['events'][number] | undefined;
   transitionStates: EquipmentState[];
   onChangeState: () => void;
@@ -226,6 +229,7 @@ function EquipmentDetailRegion({
   dialogs,
   documents,
   documentsLoadFailed,
+  openFindings,
   terminalEvent,
   transitionStates,
   onChangeState,
@@ -259,6 +263,8 @@ function EquipmentDetailRegion({
           <EquipmentDataSection item={item} detailsBusy={busy.isBusy('details')} />
 
           <EquipmentDocuments item={item} documents={documents} loadFailed={documentsLoadFailed} />
+
+          <EquipmentOpenFindingsSection equipmentId={item.id} initial={openFindings} />
 
           <EquipmentHistorySection events={item.events} sourceBusy={busy.isBusy('source')} />
           {/* Another Anlage starts the paging over; the section itself drops older
@@ -301,12 +307,15 @@ type EquipmentDetailContentProps = {
   initial: EquipmentDetail;
   documents: OrganizationDocument[];
   documentsLoadFailed: boolean;
+  /** The open Mängel the page read; null when that read failed. */
+  openFindings: EquipmentOpenFinding[] | null;
 };
 
 export function EquipmentDetailContent({
   initial,
   documents,
   documentsLoadFailed,
+  openFindings,
 }: EquipmentDetailContentProps): ReactElement {
   const actions = useEquipmentDetailActions(initial);
   const { busy, live, item, clearReason } = actions;
@@ -335,6 +344,7 @@ export function EquipmentDetailContent({
         dialogs={dialogs}
         documents={documents}
         documentsLoadFailed={documentsLoadFailed}
+        openFindings={openFindings}
         terminalEvent={terminalEvent}
         transitionStates={transitionStates}
         onChangeState={openStatusDialog}

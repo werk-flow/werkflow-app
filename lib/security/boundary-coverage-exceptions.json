@@ -18,7 +18,6 @@
     "lib/settings/email-change-actions.ts#savePendingNewEmailVerification": "Stores the session user's own pending new address in the email change wizard.",
     "lib/sickness/actions.ts#getOwnSicknessReports": "Reads the caller's own sickness reports in the active organization.",
     "lib/sickness/actions.ts#reportOwnSickness": "Records a sickness report for the caller's own employee record.",
-    "lib/subscription/actions.ts#simulatePayment": "Simulates the session user's own payment before any organization exists.",
     "lib/time-tracking/clock-state-actions.ts#clockOutBeforeSignOut": "Closes the session user's own open clock sessions before sign-out.",
     "lib/vacation/actions.ts#createVacationRequest": "Files a vacation request for the caller's own employee record.",
     "lib/vacation/actions.ts#getOwnVacationOverview": "Reads the caller's own vacation balance and requests in the active organization.",
