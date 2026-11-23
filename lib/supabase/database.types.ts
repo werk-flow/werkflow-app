@@ -21037,11 +21037,7 @@ export type Database = {
         Returns: Json;
       };
       search_customer_sites_and_contacts: {
-        Args: {
-          p_limit: number;
-          p_organization_id: string;
-          p_search: string;
-        };
+        Args: { p_limit: number; p_organization_id: string; p_search: string };
         Returns: Json;
       };
       search_equipment_options: {
