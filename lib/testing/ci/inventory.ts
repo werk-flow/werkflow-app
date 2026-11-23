@@ -50,7 +50,8 @@ type TimeTrigger = { on: 'time' } & (
 
 /** The GitHub event that dispatches a workflow, as its `on:` says. */
 type GitHubEvent =
-  | { workflow: string; on: 'pull_request'; branches: readonly string[]; types: readonly string[] }
+  /** No `branches`: every base, as a stacked PR's. */
+  | { workflow: string; on: 'pull_request'; branches?: readonly string[]; types: readonly string[] }
   | {
       workflow: string;
       on: 'workflow_run';
@@ -146,7 +147,6 @@ export const SCHEDULES = {
       github: {
         workflow: 'list-growth.yml',
         on: 'pull_request',
-        branches: ['main'],
         types: ['labeled', 'unlabeled'],
       },
     },

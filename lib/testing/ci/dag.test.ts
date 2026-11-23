@@ -1,9 +1,9 @@
 // ci.yml schedules exactly the jobs of lib/testing/ci/dag.ts, with their names and needs, runs each
 // body through scripts/ci/job.ts, and starts a job only when the plan runs it.
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { readWorkflow } from '../ci-workflow';
+import { readWorkflow, workflowsFolder } from '../ci-workflow';
 import { CI_DAG, CI_JOBS, CI_TOOLS, type PrepareStep, PREPARE_STEPS } from './dag';
 
 const ci = readWorkflow('ci.yml');
@@ -12,18 +12,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const asList = (value: unknown): unknown[] =>
   Array.isArray(value) ? value : value === undefined ? [] : [value];
 
-/** An `edited` event that kept the base: a title or body edit, which changes no tested input. */
-const KEPT_BASE = "github.event.action == 'edited' && !github.event.changes.base";
-
 test('ci.yml holds exactly the DAG jobs, with their names and needs', () => {
   const jobs = ci.at('jobs');
   if (!isRecord(jobs)) throw new Error('ci.yml has no jobs');
   expect(Object.keys(jobs).sort()).toEqual([...CI_JOBS].sort());
   for (const job of CI_JOBS) {
-    const name = ci
-      .text('jobs', job, 'name')
-      .replace(' ${{ matrix.shard }}', '')
-      .replace(`\${{ ${KEPT_BASE} && 'Ignored edit' || 'Check' }}`, 'Check');
+    const name = ci.text('jobs', job, 'name').replace(' ${{ matrix.shard }}', '');
     expect(name).toBe(CI_DAG[job].name);
     expect(asList(ci.at('jobs', job, 'needs')).sort()).toEqual([...CI_DAG[job].needs].sort());
   }
@@ -42,9 +36,7 @@ test("each job body is one call of scripts/ci/job.ts, and a job starts only when
 });
 
 test('Check runs after every other job, always, and passes it the scheduler results', () => {
-  expect(ci.at('jobs', 'check', 'if')).toBe(
-    "always() && (github.event.action != 'edited' || github.event.changes.base)",
-  );
+  expect(ci.at('jobs', 'check', 'if')).toBe('always()');
   const body = asList(ci.at('jobs', 'check', 'steps'))
     .filter(isRecord)
     .at(-1);
@@ -52,7 +44,7 @@ test('Check runs after every other job, always, and passes it the scheduler resu
 });
 
 test('the events map to the DAG events, and a draft becoming ready starts no second run (D1)', () => {
-  expect(ci.at('on', 'pull_request', 'types')).toEqual(['opened', 'synchronize', 'reopened', 'edited']);
+  expect(ci.at('on', 'pull_request', 'types')).toEqual(['opened', 'synchronize', 'reopened']);
   expect(ci.at('on', 'merge_group', 'types')).toEqual(['checks_requested']);
   const event = ci.text('env', 'CI_EVENT');
   for (const mapping of [
@@ -97,17 +89,37 @@ test("the browser and component jobs run one job per shard of the plan, each pas
   }
 });
 
-// A stacked PR gets its run when GitHub retargets it to main (werk-flow/werkflow-planning#507). Any
-// other edit must neither cancel the head's run nor leave a skipped `Check`, which counts as passed.
-test('a retarget to main runs the PR; an edit that keeps the base runs no job, cancels nothing and reports no Check', () => {
-  expect(ci.text('concurrency', 'group')).toEndWith(
-    `\${{ ${KEPT_BASE} && format('-edit-{0}', github.run_id) || '' }}`,
-  );
-  expect(ci.at('jobs', 'plan', 'if')).toBe("github.event.action != 'edited' || github.event.changes.base");
-  expect(ci.text('jobs', 'check', 'name')).toBe(`\${{ ${KEPT_BASE} && 'Ignored edit' || 'Check' }}`);
-  // Every other job starts only from Plan's jobs, which a skipped Plan leaves empty.
-  for (const job of CI_JOBS.filter((name) => name !== 'plan' && name !== 'check'))
-    expect(ci.text('jobs', job, 'if')).toContain("fromJSON(needs.plan.outputs.jobs || '[]')");
+// GitHub counts only the newest run of a workflow on a commit, so a run that an unchanged head
+// starts displaces the head's Check: a body edit's run left #592's green Check "Expected" and the PR
+// outside the queue (2026-11-23). A workflow that reports `Check` therefore starts only on a new
+// head, and a stacked PR runs against its own base, so its head holds a Check before GitHub
+// retargets it to main.
+test('a workflow that reports Check starts on a new head only, and a pull request runs on any base', () => {
+  const owners = readdirSync(resolve(root, workflowsFolder()))
+    .filter((file) => file.endsWith('.yml'))
+    .filter((file) => {
+      const jobs = readWorkflow(file).at('jobs');
+      return isRecord(jobs) && Object.values(jobs).some((job) => isRecord(job) && job.name === 'Check');
+    });
+  expect(owners).toEqual(['ci.yml']);
+  for (const file of owners) {
+    const workflow = readWorkflow(file);
+    const on = workflow.at('on');
+    expect(isRecord(on) ? Object.keys(on).sort() : on, file).toEqual([
+      'merge_group',
+      'pull_request',
+      'push',
+      'workflow_call',
+      'workflow_dispatch',
+    ]);
+    expect(asList(workflow.at('on', 'pull_request', 'types')), file).toSatisfy((types) =>
+      types.every((type) => ['opened', 'synchronize', 'reopened'].includes(String(type))),
+    );
+    expect(workflow.at('on', 'pull_request', 'branches'), file).toBeUndefined();
+    // A skipped Check counts as passed, and a name GitHub may leave unevaluated never reads `Check`.
+    expect(workflow.text('jobs', 'check', 'if'), file).toStartWith('always()');
+    expect(workflow.text('jobs', 'check', 'name'), file).toBe('Check');
+  }
 });
 
 const root = resolve(import.meta.dir, '../../..');

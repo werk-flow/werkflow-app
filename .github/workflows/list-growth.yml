@@ -5,8 +5,8 @@ name: List growth
 # no run on a label event, and its Fast job reads the label at run time. Every other label skips
 # this job, so it never touches CI.
 on:
+  # Any base, as ci.yml: a stacked PR's run reads the label too.
   pull_request:
-    branches: [main]
     types: [labeled, unlabeled]
 
 permissions: {}
@@ -35,18 +35,9 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # A title or body edit starts a ci.yml run without a Check job (ci.yml, `on`): the newest run
-          # with one holds the Fast job whose rerun reports Check again.
-          # Standalone assignments, so a failed API call fails the step instead of reading as no run.
-          runs="$(gh api --paginate "repos/$GH_REPO/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$SHA&per_page=100" --jq '.workflow_runs[].id')"
-          run=""
-          for candidate in $runs; do
-            checked="$(gh run view "$candidate" --json jobs --jq 'any(.jobs[]; .name == "Check")')"
-            if test "$checked" = true; then
-              run="$candidate"
-              break
-            fi
-          done
+          # The newest run counts for Check on the commit. A standalone assignment, so a failed API
+          # call fails the step instead of reading as no run.
+          run="$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$SHA&per_page=1" --jq '.workflow_runs[0].id // empty')"
           if test -z "$run"; then
             echo "No CI run on $SHA yet. Its Fast job reads the labels when it starts."
             exit 0
