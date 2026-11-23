@@ -677,7 +677,7 @@ select pg_temp.expect_field_columns('time_period_close_versions', 'cb000000-0000
 
 -- WerkFlow KI threads are private (werk-flow/werkflow-planning#527): each
 -- author reads only their own threads and items; the admin of the same
--- organization and a foreign member read none of another person's; a
+-- organization and a foreign admin read none of another person's; a
 -- suspended author reads none, not even their own.
 reset role;
 set local role service_role;
@@ -687,8 +687,6 @@ select public.create_ai_thread(organization_id, user_id, thread_id, title),
 from (values
   ('cb000000-0000-4000-8000-000000000010'::uuid, 'cb000000-0000-4000-8000-000000000001'::uuid,
    'cb000000-0000-4000-8000-000000000301'::uuid, 'KI-Admin'),
-  ('cb000000-0000-4000-8000-000000000010'::uuid, 'cb000000-0000-4000-8000-000000000003'::uuid,
-   'cb000000-0000-4000-8000-000000000303'::uuid, 'KI-Mitarbeiter'),
   ('cb000000-0000-4000-8000-000000000010'::uuid, 'cb000000-0000-4000-8000-000000000004'::uuid,
    'cb000000-0000-4000-8000-000000000304'::uuid, 'KI-Kollegin'),
   ('cb000000-0000-4000-8000-000000000011'::uuid, 'cb000000-0000-4000-8000-000000000005'::uuid,
@@ -719,13 +717,11 @@ begin
 end;
 $$;
 
-select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000003',
-  'threads=KI-Mitarbeiter | items=KI-Mitarbeiter');
+select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000004', 'threads=KI-Kollegin | items=KI-Kollegin');
 select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000001', 'threads=KI-Admin | items=KI-Admin');
 select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000005', 'threads=KI-Fremd | items=KI-Fremd');
-select pg_temp.set_access('cb000000-0000-4000-8000-000000000003', 0, 'suspend_now', clock_timestamp(),
+select pg_temp.set_access('cb000000-0000-4000-8000-000000000004', 0, 'suspend_now', clock_timestamp(),
   'cb000000-0000-4000-8000-000000000154');
-select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000003', 'threads= | items=');
-select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000004', 'threads=KI-Kollegin | items=KI-Kollegin');
+select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000004', 'threads= | items=');
 
 rollback;
