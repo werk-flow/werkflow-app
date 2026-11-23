@@ -10,7 +10,9 @@ import {
   REQUEST_URGENCY_LABELS,
   REQUEST_URGENCY_ORDER,
   REQUEST_ATTACHED_LABEL,
+  REQUEST_CONVERTED_LABEL,
   describeAttachedRequestEvent,
+  describeConvertedRequestEvent,
   isCallbackOverdue,
   requestEquipmentOptions,
   requestUrgencyToJobPriority,
@@ -48,6 +50,7 @@ const requestRow: ClientRequestRow = {
   closed_at: '2026-10-02T08:00:00.000Z',
   converted_job_id: 'job-1',
   converted_project_id: 'project-1',
+  converted_offer_id: null,
   converted_by: 'user-4',
   converted_at: '2026-10-03T08:00:00.000Z',
   created_by: 'user-1',
@@ -118,6 +121,7 @@ describe('toClientRequest', () => {
       closedAt: '2026-10-02T08:00:00.000Z',
       convertedJobId: 'job-1',
       convertedProjectId: 'project-1',
+      convertedOfferId: null,
       convertedBy: 'user-4',
       convertedAt: '2026-10-03T08:00:00.000Z',
       createdBy: 'user-1',
@@ -215,5 +219,46 @@ describe('a request added to existing work names that work and links to it', () 
       });
     }
     expect(REQUEST_ATTACHED_LABEL).toBe('Zu bestehender Arbeit hinzugefügt');
+  });
+});
+
+describe('a converted request names the work or offer it became and links to it', () => {
+  test('a job, project or offer reads by its kind and number and opens its detail page', () => {
+    expect(
+      describeConvertedRequestEvent({ target: 'job', jobId: 'job-1', jobNumber: 'A-2026-0042' }),
+    ).toEqual({
+      label: 'In Auftrag A-2026-0042 umgewandelt',
+      href: '/auftraege/A-2026-0042',
+    });
+    expect(
+      describeConvertedRequestEvent({
+        target: 'project',
+        projectId: 'project-1',
+        projectNumber: 'P-2026-0007',
+      }),
+    ).toEqual({ label: 'In Projekt P-2026-0007 umgewandelt', href: '/auftraege/projekt/P-2026-0007' });
+    expect(
+      describeConvertedRequestEvent({
+        target: 'offer',
+        offerId: '41932400-0000-0000-0000-000000000090',
+        offerNumber: 'ANG-2026-001',
+        attemptKey: '41932400-0000-0000-0000-0000000000e1',
+      }),
+    ).toEqual({
+      label: 'In Angebot ANG-2026-001 umgewandelt',
+      href: '/angebote/41932400-0000-0000-0000-000000000090',
+    });
+  });
+
+  test('a payload without a readable work or offer keeps the general label and links nowhere', () => {
+    for (const payload of [
+      null,
+      {},
+      { target: 'offer', offerId: 'offer-1' },
+      { target: 'job', jobNumber: 'A-1' },
+    ]) {
+      expect(describeConvertedRequestEvent(payload)).toEqual({ label: REQUEST_CONVERTED_LABEL, href: null });
+    }
+    expect(REQUEST_CONVERTED_LABEL).toBe('Anfrage in Arbeit überführt');
   });
 });

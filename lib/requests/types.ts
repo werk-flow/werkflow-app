@@ -59,6 +59,7 @@ export type ClientRequest = {
   closedAt: string | null;
   convertedJobId: string | null;
   convertedProjectId: string | null;
+  convertedOfferId: string | null;
   convertedBy: string | null;
   convertedAt: string | null;
   createdBy: string | null;
@@ -221,6 +222,12 @@ export type ConvertRequestResult =
   | PlanningWarningFailure
   | ActionResult<{ target: 'project'; projectId: string; projectNumber: string | null }>;
 
+/** The offer draft a request became. */
+export type ConvertRequestToOfferResult = ActionResult<{ offerId: string; offerNumber: string }>;
+
+/** The detail page of an offer. */
+export const offerDetailHref = (offerId: string): string => `/angebote/${encodeURIComponent(offerId)}`;
+
 /** The kinds of existing work a request can be attached to. */
 export const WORK_TARGET_KINDS = ['job', 'project', 'service_case'] as const;
 export type WorkTargetKind = (typeof WORK_TARGET_KINDS)[number];
@@ -303,6 +310,36 @@ export function describeAttachedRequestEvent(payload: unknown): { label: string;
   };
 }
 
+/** The history label of a conversion whose work the event does not name. */
+export const REQUEST_CONVERTED_LABEL = 'Anfrage in Arbeit überführt';
+
+// The 'converted' history row as the conversion functions write it.
+const convertedPayloadSchema = z.discriminatedUnion('target', [
+  z.object({ target: z.literal('job'), jobId: z.string().min(1), jobNumber: workNumberSchema }),
+  z.object({ target: z.literal('project'), projectId: z.string().min(1), projectNumber: workNumberSchema }),
+  z.object({ target: z.literal('offer'), offerId: z.string().min(1), offerNumber: z.string().min(1) }),
+]);
+
+/** The `converted` request event as one line naming the work or offer, and its detail page. */
+export function describeConvertedRequestEvent(payload: unknown): { label: string; href: string | null } {
+  const parsed = convertedPayloadSchema.safeParse(payload);
+  if (!parsed.success) return { label: REQUEST_CONVERTED_LABEL, href: null };
+  const event = parsed.data;
+  if (event.target === 'offer') {
+    return { label: `In Angebot ${event.offerNumber} umgewandelt`, href: offerDetailHref(event.offerId) };
+  }
+  const work =
+    event.target === 'job'
+      ? { kind: event.target, id: event.jobId, number: event.jobNumber ?? null }
+      : { kind: event.target, id: event.projectId, number: event.projectNumber ?? null };
+  return {
+    label: work.number
+      ? `In ${WORK_TARGET_KIND_LABELS[work.kind]} ${work.number} umgewandelt`
+      : REQUEST_CONVERTED_LABEL,
+    href: requestWorkHref(work),
+  };
+}
+
 // ============================================
 // Converters
 // ============================================
@@ -335,6 +372,7 @@ export function toClientRequest(row: ClientRequestRow): ClientRequest {
     closedAt: row.closed_at,
     convertedJobId: row.converted_job_id,
     convertedProjectId: row.converted_project_id,
+    convertedOfferId: row.converted_offer_id,
     convertedBy: row.converted_by,
     convertedAt: row.converted_at,
     createdBy: row.created_by,

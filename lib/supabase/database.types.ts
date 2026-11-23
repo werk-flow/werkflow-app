@@ -676,6 +676,7 @@ export type Database = {
           converted_at: string | null;
           converted_by: string | null;
           converted_job_id: string | null;
+          converted_offer_id: string | null;
           converted_project_id: string | null;
           created_at: string;
           created_by: string | null;
@@ -712,6 +713,7 @@ export type Database = {
           converted_at?: string | null;
           converted_by?: string | null;
           converted_job_id?: string | null;
+          converted_offer_id?: string | null;
           converted_project_id?: string | null;
           created_at?: string;
           created_by?: string | null;
@@ -748,6 +750,7 @@ export type Database = {
           converted_at?: string | null;
           converted_by?: string | null;
           converted_job_id?: string | null;
+          converted_offer_id?: string | null;
           converted_project_id?: string | null;
           created_at?: string;
           created_by?: string | null;
@@ -1369,6 +1372,7 @@ export type Database = {
           id: string;
           job_id: string | null;
           maintenance_coverage_id: string | null;
+          offer_id: string | null;
           organization_id: string;
           project_id: string | null;
           request_id: string | null;
@@ -1384,6 +1388,7 @@ export type Database = {
           id?: string;
           job_id?: string | null;
           maintenance_coverage_id?: string | null;
+          offer_id?: string | null;
           organization_id: string;
           project_id?: string | null;
           request_id?: string | null;
@@ -1399,6 +1404,7 @@ export type Database = {
           id?: string;
           job_id?: string | null;
           maintenance_coverage_id?: string | null;
+          offer_id?: string | null;
           organization_id?: string;
           project_id?: string | null;
           request_id?: string | null;
@@ -16628,6 +16634,7 @@ export type Database = {
           converted_at: string | null;
           converted_by: string | null;
           converted_job_id: string | null;
+          converted_offer_id: string | null;
           converted_project_id: string | null;
           created_at: string;
           created_by: string | null;
@@ -16928,6 +16935,47 @@ export type Database = {
         SetofOptions: {
           from: "*";
           to: "jobs";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      convert_client_request_to_offer: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_contact_id: string;
+          p_organization_id: string;
+          p_request_id: string;
+          p_site_id: string;
+          p_title: string;
+        };
+        Returns: {
+          client_id: string;
+          closing_text: string;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          job_id: string | null;
+          offer_number: string;
+          opening_text: string;
+          organization_id: string;
+          owner_user_id: string | null;
+          project_id: string | null;
+          recipient_client_id: string;
+          recipient_is_default: boolean;
+          request_id: string | null;
+          site_id: string | null;
+          status: string;
+          title: string;
+          updated_at: string;
+          updated_by: string | null;
+          valid_until: string;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "offers";
           isOneToOne: true;
           isSetofReturn: false;
         };
@@ -17239,6 +17287,7 @@ export type Database = {
           converted_at: string | null;
           converted_by: string | null;
           converted_job_id: string | null;
+          converted_offer_id: string | null;
           converted_project_id: string | null;
           created_at: string;
           created_by: string | null;
@@ -19703,6 +19752,7 @@ export type Database = {
           converted_at: string | null;
           converted_by: string | null;
           converted_job_id: string | null;
+          converted_offer_id: string | null;
           converted_project_id: string | null;
           created_at: string;
           created_by: string | null;
@@ -20378,6 +20428,7 @@ export type Database = {
           converted_at: string | null;
           converted_by: string | null;
           converted_job_id: string | null;
+          converted_offer_id: string | null;
           converted_project_id: string | null;
           created_at: string;
           created_by: string | null;
@@ -22245,6 +22296,7 @@ export type Database = {
           converted_at: string | null;
           converted_by: string | null;
           converted_job_id: string | null;
+          converted_offer_id: string | null;
           converted_project_id: string | null;
           created_at: string;
           created_by: string | null;

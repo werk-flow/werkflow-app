@@ -3,7 +3,7 @@ import 'server-only';
 import type { ActionResult } from '@/lib/action-result';
 import type { ClientManagerContext } from '@/lib/clients/manager-access';
 import { logError } from '@/lib/logging';
-import { describeAttachedRequestEvent } from '@/lib/requests/types';
+import { describeAttachedRequestEvent, describeConvertedRequestEvent } from '@/lib/requests/types';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import { describeMasterDataEvent, roleEventSiteClientId } from './master-data-events';
 import { customerJobHref, firstRelation, profileName } from './relationship-labels';
@@ -18,7 +18,6 @@ const REQUEST_EVENT_LABELS: Record<string, string> = {
   closed: 'Anfrage geschlossen',
   reopened: 'Anfrage wieder geöffnet',
   linked: 'Anfrage verknüpft',
-  converted: 'Anfrage in Arbeit überführt',
 };
 
 const FOLLOW_UP_EVENT_LABELS: Record<string, string> = {
@@ -173,7 +172,9 @@ async function readTimelineRequestSources(
     .limit(sourceLimit);
   const convertedRequestsQuery = admin
     .from('client_requests')
-    .select('id,request_number,summary,converted_at,converted_by,converted_job_id,converted_project_id')
+    .select(
+      'id,request_number,summary,converted_at,converted_by,converted_job_id,converted_project_id,converted_offer_id',
+    )
     .eq('organization_id', orgId)
     .eq('client_id', clientId)
     .not('converted_at', 'is', null)
@@ -464,17 +465,29 @@ function addRequestItems(add: AddTimelineItem, sources: TimelineSources): void {
       metadata: {
         convertedJobId: request.converted_job_id,
         convertedProjectId: request.converted_project_id,
+        convertedOfferId: request.converted_offer_id,
       },
     });
   }
+}
+
+/** An addition or conversion names the work or offer it led to and links to it. */
+function requestEventOutcome(
+  eventType: string,
+  payload: unknown,
+): { label: string; href: string | null } | null {
+  if (eventType === 'attached') {
+    const { label, workHref } = describeAttachedRequestEvent(payload);
+    return { label, href: workHref };
+  }
+  return eventType === 'converted' ? describeConvertedRequestEvent(payload) : null;
 }
 
 function addRequestEventItems(add: AddTimelineItem, sources: TimelineSources): void {
   for (const event of sources.requestEventsResult.data ?? []) {
     const request = firstRelation(event.client_requests);
     if (!request) continue;
-    const attached =
-      event.event_type === 'attached' ? describeAttachedRequestEvent(event.event_payload) : null;
+    const outcome = requestEventOutcome(event.event_type, event.event_payload);
     add({
       kind: 'request_event',
       category: 'work',
@@ -483,8 +496,8 @@ function addRequestEventItems(add: AddTimelineItem, sources: TimelineSources): v
       actorId: event.created_by,
       actorName: null,
       reference: request.request_number ?? request.summary,
-      detail: attached?.label ?? eventLabel(REQUEST_EVENT_LABELS, event.event_type),
-      sourceHref: attached?.workHref ?? `/anfragen/${event.request_id}`,
+      detail: outcome?.label ?? eventLabel(REQUEST_EVENT_LABELS, event.event_type),
+      sourceHref: outcome?.href ?? `/anfragen/${event.request_id}`,
       sourceAvailable: true,
       currentStateOnly: false,
       metadata: {
