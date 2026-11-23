@@ -811,6 +811,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "client_requests_converted_offer_fk";
+            columns: ["converted_offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offers";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
             foreignKeyName: "client_requests_converted_project_id_fkey";
             columns: ["converted_project_id"];
             isOneToOne: false;
@@ -1465,6 +1472,13 @@ export type Database = {
             columns: ["maintenance_coverage_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "maintenance_coverages";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "document_links_offer_fk";
+            columns: ["offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offers";
             referencedColumns: ["id", "organization_id"];
           },
           {
