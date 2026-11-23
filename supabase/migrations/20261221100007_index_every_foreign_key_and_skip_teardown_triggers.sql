@@ -45,6 +45,12 @@ create index inventory_items_created_by_fk_idx on public.inventory_items (create
 create index inventory_locations_created_by_fk_idx on public.inventory_locations (created_by);
 create index inventory_movements_actor_id_fk_idx on public.inventory_movements (actor_id);
 create index inventory_movements_project_id_fk_idx on public.inventory_movements (project_id);
+create index inventory_supplier_catalog_articles_import_fk_idx on public.inventory_supplier_catalog_articles (import_id, organization_id);
+create index inventory_supplier_catalog_import_lines_import_fk_idx on public.inventory_supplier_catalog_import_lines (import_id, organization_id);
+create index inventory_supplier_catalog_imports_organization_id_fk_idx on public.inventory_supplier_catalog_imports (organization_id);
+create index inventory_supplier_catalog_imports_supplier_fk_idx on public.inventory_supplier_catalog_imports (supplier_id, organization_id);
+create index inventory_supplier_rebate_groups_import_fk_idx on public.inventory_supplier_rebate_groups (import_id, organization_id);
+create index invoice_lines_organization_id_fk_idx on public.invoice_lines (organization_id);
 create index job_assignments_organization_id_fk_idx on public.job_assignments (organization_id);
 create index job_instruction_item_evidence_fulfillments_requirement_fk_idx on public.job_instruction_item_evidence_fulfillments (evidence_requirement_id);
 create index job_material_lines_created_by_fk_idx on public.job_material_lines (created_by);
@@ -58,6 +64,7 @@ create index leistung_price_versions_created_by_fk_idx on public.leistung_price_
 create index leistung_price_versions_organization_id_leistung_id_fk_idx on public.leistung_price_versions (organization_id, leistung_id);
 create index leistungen_created_by_fk_idx on public.leistungen (created_by);
 create index leistungen_updated_by_fk_idx on public.leistungen (updated_by);
+create index on_call_shift_members_shift_fk_idx on public.on_call_shift_members (shift_id, organization_id);
 create index organization_export_events_organization_id_export_id_fk_idx on public.organization_export_events (organization_id, export_id);
 create index organization_export_files_organization_id_export_id_fk_idx on public.organization_export_files (organization_id, export_id);
 create index organization_export_files_organization_id_part_id_fk_idx on public.organization_export_files (organization_id, part_id);
@@ -72,6 +79,7 @@ create index time_account_opening_corrections_created_by_fk_idx on public.time_a
 create index time_account_opening_corrections_opening_org_fk_idx on public.time_account_opening_corrections (organization_id, opening_event_id);
 create index time_account_opening_corrections_reversal_org_fk_idx on public.time_account_opening_corrections (organization_id, reversal_event_id);
 create index time_account_opening_corrections_reversed_org_fk_idx on public.time_account_opening_corrections (organization_id, reversed_event_id);
+create index werkflow_subscriptions_reserved_by_fk_idx on public.werkflow_subscriptions (reserved_by);
 create index work_artifact_draft_operations_revision_fk_idx on public.work_artifact_draft_operations (organization_id, revision_id);
 create index work_blockers_organization_id_fk_idx on public.work_blockers (organization_id);
 create index work_dependencies_organization_id_fk_idx on public.work_dependencies (organization_id);
