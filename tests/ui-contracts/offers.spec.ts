@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { textInDom, visibleText } from '../golden/support/steps/shared';
 import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fixture';
 
 // „Angebot anlegen“ (docs/features/commercial-and-finance.md): the submit
@@ -58,4 +59,33 @@ test('a header save without title sends nothing, and a refused save keeps the in
   await expect(dialog.getByText(/Jemand hat das Angebot gerade geändert/)).toBeVisible();
   await expect(title).toHaveValue('Austausch Gas-Brennwerttherme');
   await expect(save).toBeEnabled();
+});
+
+// A save whose answer was lost: the page renders that save, and the repeated
+// press of the unchanged form answers the same version. The page already
+// shows it, so the dialog closes with its success at once instead of waiting
+// for a further change and reporting a refresh that never comes.
+test('a retried header save the page already shows confirms at once', async ({ page }) => {
+  await openContractFixture(page, 'offers');
+  await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Angebotskopf bearbeiten' });
+  const save = dialog.getByRole('button', { name: 'Speichern', exact: true });
+
+  await dialog.getByRole('textbox', { name: 'Titel' }).fill('Austausch Gas-Brennwerttherme');
+  await save.click();
+  await expectHeldWrite(page, 'update-offer');
+  await answerHeldWrite(page, 'answer_lost');
+  await expect(
+    dialog.getByText('Das Angebot konnte nicht gespeichert werden. Bitte versuche es erneut.'),
+  ).toBeVisible();
+  await page.evaluate(() => window.uiContractOfferServerRender?.(2));
+
+  await save.click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  const [first, retry] = await page.evaluate(() => window.uiContractWrites.calls.map((call) => call.input));
+  expect(retry).toEqual(first);
+  await answerHeldWrite(page, null);
+  await expect(dialog).toBeHidden();
+  await expect(visibleText(page, 'Angebot gespeichert.', true)).toBeVisible();
+  await expect(textInDom(page, 'noch nicht aktualisiert')).toHaveCount(0);
 });

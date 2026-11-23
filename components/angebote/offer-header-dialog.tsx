@@ -172,8 +172,12 @@ function OfferHeaderDialog({
         setError(result ? describeFailure(result.error, HEADER_FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
         return;
       }
-      // A save that changed nothing keeps the version; a refresh that never lands keeps its warning.
-      const confirmed = result.version === expectedVersion || (await settle.confirmChange(since));
+      // A save that changed nothing keeps the version, and a retry after a lost answer can name the
+      // version the page already shows; only another version waits, and its missing refresh warns.
+      const confirmed =
+        result.version === expectedVersion ||
+        result.version === offer.version ||
+        (await settle.confirmChange(since));
       onClose();
       if (confirmed) showBanner({ variant: 'success', message: 'Angebot gespeichert.' });
     });
