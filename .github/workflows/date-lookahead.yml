@@ -40,6 +40,7 @@ jobs:
       issues: read # keep the browser legs of the dates the open alert names
     outputs:
       legs: ${{ steps.legs.outputs.legs }}
+      browser: ${{ steps.legs.outputs.browser }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -63,9 +64,45 @@ jobs:
             --jq '.[] | select(.title == env.TITLE) | .body')"
           OPEN_ALERT="$open_alert" bun scripts/date-lookahead-plan.ts
 
+  # The app's one production build, on the real clock as a deployed build is, which every browser
+  # leg serves: only the running app reads the shifted date. As in ci.yml, every job runs in the same
+  # workspace path, which the build receipt binds, and the app reads its one-time-code secret at run
+  # time, so the build carries none.
+  build:
+    name: Build
+    needs: plan
+    if: needs.plan.outputs.browser == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # The stack's URL and keys are the CLI's fixed defaults, so the build needs no stack.
+      - uses: ./.github/actions/local-stack
+        with:
+          environment-only: 'true'
+      # A tar keeps the symbolic links Next writes under .next/node_modules.
+      - name: Build the app
+        run: |
+          bun run build
+          tar --create --file "$RUNNER_TEMP/build.tar" --exclude=.next/cache .next
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build
+          path: ${{ runner.temp }}/build.tar
+          # A rerun of failed legs, possible for 30 days, reuses this artifact; a full rerun replaces it.
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: true
+
   leg:
     name: ${{ matrix.name }}
-    needs: plan
+    # A failed build fails each browser leg at its download; the suite legs still run.
+    needs: [plan, build]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -89,10 +126,15 @@ jobs:
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/local-stack
       - uses: ./.github/actions/playwright
-      # Built on the real clock, as a deployed build is: only the running app reads the shifted date.
-      - name: Build the app
+      # The Build job's build, unpacked before the clock moves.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: matrix.browser
-        run: bun run build
+        with:
+          name: build
+          path: ${{ runner.temp }}
+      - name: Unpack the build
+        if: matrix.browser
+        run: tar --extract --file "$RUNNER_TEMP/build.tar"
       - name: Shift the clock
         run: bash .github/scripts/shift-clock.sh set "$INSTANT"
       - name: Start the test server
@@ -130,7 +172,7 @@ jobs:
 
   alert:
     name: Alert
-    needs: [plan, leg]
+    needs: [plan, build, leg]
     # Only main's whole plan speaks for the look-ahead; one asked date proves nothing about the rest,
     # and a run a person cancelled says nothing. Nothing needs this job.
     if: ${{ !cancelled() && ((github.ref == 'refs/heads/main' && !inputs.date) || inputs.alert_proof) }}

@@ -96,6 +96,27 @@ export function isTargetPrefetch(
   );
 }
 
+/**
+ * A request that brings a route's data or code: any route prefetch of the app,
+ * or a script chunk of the app, such as the one a prefetched loading boundary
+ * imports. A held navigation pushes only once none is in flight. A prefetch of
+ * the same area still running can keep the client router from committing to
+ * the cached loading boundary. A chunk that lands a few milliseconds after the
+ * push leaves the router suspended on the held response, so the boundary never
+ * shows (reproduced with chunks released 2 to 4 ms after the push).
+ */
+export function isRouteLoad(request: ObservedRequest, origin: string): boolean {
+  const url = new URL(request.url);
+  if (url.origin !== origin) return false;
+  if (
+    request.method === 'GET' &&
+    url.pathname.startsWith('/_next/static/chunks/') &&
+    url.pathname.endsWith('.js')
+  )
+    return true;
+  return classifyRouteRequest({ method: request.method, requestHeaders: request.headers }) === 'prefetch';
+}
+
 /** Whether the plan intercepts this request of the page; every other request, a prefetch above all, passes. */
 export function interceptsRequest(
   plan: StatePlan,

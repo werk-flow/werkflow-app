@@ -1,0 +1,286 @@
+name: CI mirror
+
+# The CI mirror's one workflow (scripts/ci/mirror-executor.ts). The orchestrator places it, from its
+# own trusted copy, as the only workflow of each tree it pushes, and pushes one parentless commit
+# per job start to `ci/<commit>-<run key>/<job>`: the branch's last segment picks the job, and the
+# commit's message holds the run, its source tree and its Plan (scripts/ci/mirror-job.ts). Every
+# other job of this file is skipped. The jobs, their names and timeouts are lib/testing/ci/dag.ts;
+# Plan and Check run on the orchestrator's host, which also holds the needs between jobs and the
+# cap of 56 mirror jobs at once (MIRROR_JOB_CAP). This workflow holds no secret and reads nothing of another repository.
+on:
+  push:
+    branches: ['ci/**']
+
+permissions:
+  contents: read
+
+# A new push of the same branch replaces the run in progress.
+concurrency:
+  group: ci-mirror-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The tests and tools that read the source's workflows find them here (lib/testing/ci-workflow.ts).
+  CI_WORKFLOWS_DIR: .github/held-workflows
+
+jobs:
+  fast:
+    name: Fast
+    if: endsWith(github.ref_name, '/fast')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Record the job's start
+        run: echo "CI_JOB_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
+        with:
+          version: 2.116.0
+      - id: run
+        name: Read the run
+        run: bun scripts/ci/mirror-job.ts fast
+      - name: Prepare the job
+        run: bun scripts/ci/prepare.ts for fast
+      - name: Run the job
+        run: bun scripts/ci/job.ts fast
+      - name: Keep the result
+        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-result-${{ steps.run.outputs.unit }}
+          path: ${{ steps.run.outputs.result }}
+          retention-days: 1
+          if-no-files-found: ignore
+      - name: Keep the evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidence-fast
+          path: .agent-logs/
+          retention-days: 1
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+  sql:
+    name: SQL
+    if: endsWith(github.ref_name, '/sql')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Record the job's start
+        run: echo "CI_JOB_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
+        with:
+          version: 2.116.0
+      - id: run
+        name: Read the run
+        run: bun scripts/ci/mirror-job.ts sql
+      - name: Prepare the job
+        run: bun scripts/ci/prepare.ts for sql
+      - name: Run the job
+        run: bun scripts/ci/job.ts sql
+      - name: Keep the result
+        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-result-${{ steps.run.outputs.unit }}
+          path: ${{ steps.run.outputs.result }}
+          retention-days: 1
+          if-no-files-found: ignore
+      - name: Keep the evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidence-sql
+          path: .agent-logs/
+          retention-days: 1
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+  components:
+    name: Component contracts
+    if: contains(github.ref_name, '/components-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Record the job's start
+        run: echo "CI_JOB_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - id: run
+        name: Read the run
+        run: bun scripts/ci/mirror-job.ts components
+      - name: Prepare the job
+        run: bun scripts/ci/prepare.ts for components
+      - name: Run the job
+        run: bun scripts/ci/job.ts components
+      - name: Keep the result
+        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-result-${{ steps.run.outputs.unit }}
+          path: ${{ steps.run.outputs.result }}
+          retention-days: 1
+          if-no-files-found: ignore
+      - name: Keep the evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidence-components
+          path: .agent-logs/
+          retention-days: 1
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+  invoices:
+    name: E-invoices
+    if: endsWith(github.ref_name, '/invoices')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Record the job's start
+        run: echo "CI_JOB_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - id: run
+        name: Read the run
+        run: bun scripts/ci/mirror-job.ts invoices
+      - name: Prepare the job
+        run: bun scripts/ci/prepare.ts for invoices
+      - name: Run the job
+        run: bun scripts/ci/job.ts invoices
+      - name: Keep the result
+        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-result-${{ steps.run.outputs.unit }}
+          path: ${{ steps.run.outputs.result }}
+          retention-days: 1
+          if-no-files-found: ignore
+      - name: Keep the evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidence-invoices
+          path: .agent-logs/
+          retention-days: 1
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+  # On GitHub's machines the job waits for the plan's hold itself (scripts/ci/job.ts midnight).
+  midnight:
+    name: Midnight wait
+    if: endsWith(github.ref_name, '/midnight')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    steps:
+      - name: Record the job's start
+        run: echo "CI_JOB_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - id: run
+        name: Read the run
+        run: bun scripts/ci/mirror-job.ts midnight
+      - name: Prepare the job
+        run: bun scripts/ci/prepare.ts for midnight
+      - name: Run the job
+        run: bun scripts/ci/job.ts midnight
+      - name: Keep the result
+        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-result-${{ steps.run.outputs.unit }}
+          path: ${{ steps.run.outputs.result }}
+          retention-days: 1
+          if-no-files-found: ignore
+
+  # A shard builds its own server: each job start is a run of its own, with no Fast build beside it.
+  browser:
+    name: Browser
+    if: contains(github.ref_name, '/browser-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Record the job's start
+        run: echo "CI_JOB_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      # The stack's images, Chromium, the build and a capture group's screenshots outgrow the
+      # runner's free disk; the image's unused toolchains hold far more than the shard needs.
+      - name: Free the runner's disk
+        run: |
+          df --human-readable /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df --human-readable /
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
+        with:
+          version: 2.116.0
+      - id: run
+        name: Read the run
+        run: bun scripts/ci/mirror-job.ts browser
+      - name: Prepare the job
+        run: bun scripts/ci/prepare.ts for browser
+      - name: Run the job
+        run: bun scripts/ci/job.ts browser
+      - name: Keep the result
+        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-result-${{ steps.run.outputs.unit }}
+          path: ${{ steps.run.outputs.result }}
+          retention-days: 1
+          if-no-files-found: ignore
+      - name: Keep the evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidence-browser
+          path: .agent-logs/
+          retention-days: 1
+          if-no-files-found: ignore
+          include-hidden-files: true

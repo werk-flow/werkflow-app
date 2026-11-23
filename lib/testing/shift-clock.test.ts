@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const script = '.github/scripts/shift-clock.sh';
@@ -33,7 +33,7 @@ esac`,
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'shift-clock-'));
+  stub = temporaryDirectory('shift-clock-');
   for (const [name, body] of Object.entries(STUBS)) {
     writeFileSync(join(stub, name), `#!/usr/bin/env bash\n${body}\n`);
     chmodSync(join(stub, name), 0o755);
@@ -42,8 +42,6 @@ beforeEach(() => {
   writeFileSync(join(stub, 'uptime'), String(UPTIME));
   writeFileSync(join(stub, 'postgres-refusals'), '0');
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 function clocksShow(values: { shell: number; bun: number; postgres: number | string }) {
   writeFileSync(join(stub, 'shell-clock'), String(values.shell));

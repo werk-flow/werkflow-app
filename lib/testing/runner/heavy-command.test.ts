@@ -2,11 +2,11 @@
 // heavy slot (lib/testing/runner/heavy-slot.ts) or on Boat; a direct run is refused with the sanctioned command.
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { z } from 'zod';
-import { BROAD_LINT_FILES, heavyCommandRefusal, lintedFileCount } from './heavy-command';
+import { BROAD_LINT_FILES, heavyCommandRefusal, lintedFileCount, withHeavyNodeHeap } from './heavy-command';
+import { temporaryDirectory } from '../temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const refusal = (command: string) => heavyCommandRefusal(command, repositoryRoot);
@@ -146,17 +146,13 @@ test('targeted runs, information flags and mentions as data pass', () => {
 });
 
 test('outside a WerkFlow checkout a plain tsc and eslint pass', () => {
-  const folder = mkdtempSync(join(tmpdir(), 'werkflow-heavy-command-'));
-  try {
-    expect(heavyCommandRefusal('tsc --noEmit', folder)).toBeUndefined();
-    expect(heavyCommandRefusal('eslint .', folder)).toBeUndefined();
-    expect(refusal(`cd ${folder} && tsc --noEmit`)).toBeUndefined();
-    expect(refusal(`bash -c "cd ${folder} && tsc --noEmit"`)).toBeUndefined();
-    // Inside a nested shell, its cd stays there.
-    expect(refusal(`bash -c "cd ${folder}" && tsc --noEmit`)).toContain('bun run typecheck');
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
+  const folder = temporaryDirectory('werkflow-heavy-command-');
+  expect(heavyCommandRefusal('tsc --noEmit', folder)).toBeUndefined();
+  expect(heavyCommandRefusal('eslint .', folder)).toBeUndefined();
+  expect(refusal(`cd ${folder} && tsc --noEmit`)).toBeUndefined();
+  expect(refusal(`bash -c "cd ${folder} && tsc --noEmit"`)).toBeUndefined();
+  // Inside a nested shell, its cd stays there.
+  expect(refusal(`bash -c "cd ${folder}" && tsc --noEmit`)).toContain('bun run typecheck');
 });
 
 test('the hook refuses with exit 2 and the reason, and passes a sanctioned call', () => {
@@ -183,4 +179,18 @@ test('bun run typecheck, lint and build take a heavy slot', () => {
     'await acquireHeavySlot(',
   );
   expect(readFileSync(resolve(repositoryRoot, 'scripts/lint.ts'), 'utf8')).toContain('runInHeavySlot(');
+});
+
+// Node's default heap follows the machine's memory: a 6 GiB runner ran out of memory linting a tree
+// a 16 GB runner passed. Lint and build set the heap themselves, so no runner has to.
+test('lint and build fix their Node heap instead of inheriting the machine default', () => {
+  expect(withHeavyNodeHeap(undefined)).toBe('--max-old-space-size=4096');
+  expect(withHeavyNodeHeap('--enable-source-maps')).toBe('--enable-source-maps --max-old-space-size=4096');
+  for (const script of ['scripts/lint.ts', 'scripts/build.ts'])
+    expect([
+      script,
+      readFileSync(resolve(repositoryRoot, script), 'utf8').includes(
+        'withHeavyNodeHeap(process.env.NODE_OPTIONS)',
+      ),
+    ]).toEqual([script, true]);
 });

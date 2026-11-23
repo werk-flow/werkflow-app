@@ -4,7 +4,8 @@ import ts from 'typescript';
 import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 import { changeTrigger, type ChangeTrigger } from './change-triggers';
-import { MAINTENANCE_VISIT_SQL_FILES } from './maintenance-visit-sql-files';
+import { componentAreaGroups } from './component-areas';
+import { MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES } from './maintenance-visit-sql-files';
 
 export interface TestGroup {
   readonly id: string;
@@ -411,7 +412,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
-  ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, ['service', 'work', 'attention']],
+  ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES],
   [
     'inventory-ledger',
     [
@@ -455,6 +456,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['job-plan-bridge', ['job_plan_bridge.sql'], ['work', 'planning']],
   ['responsibility-delegation-end', ['responsibility_delegation_end.sql'], ['personnel']],
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
+  ['on-call-shifts', ['on_call_shifts.sql'], ['service', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
@@ -551,15 +553,8 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
     timing: declaredTiming([`tests/audit/${file}`]),
     changeTrigger: changeTrigger(repositoryRoot, `audit:${id}`, [`tests/audit/${file}`]),
   }));
+  groups.push(...componentAreaGroups(listTestFiles(repositoryRoot, 'tests/ui-contracts', /\.spec\.ts$/)));
   groups.push(
-    {
-      id: 'ui:contracts',
-      kind: 'ui',
-      files: listTestFiles(repositoryRoot, 'tests/ui-contracts', /\.spec\.ts$/),
-      scopes: ['*'],
-      isolation: 'process',
-      timing: untimed,
-    },
     {
       id: 'unit:all',
       kind: 'unit',
