@@ -11,6 +11,7 @@ import {
   ciPlan,
   componentShards,
   planLog,
+  plannerOutputs,
   REGISTRY_ROWS,
   runnerModules,
   scriptsCiRuns,
@@ -170,23 +171,16 @@ const output = process.env.GITHUB_OUTPUT;
 if (output)
   appendFileSync(
     output,
-    [
-      `browser=${plan.shards.length ? 'true' : 'false'}`,
-      `full=${plan.fullReason ? 'true' : 'false'}`,
-      `full_reason=${(plan.fullReason ?? '').replace(/\s+/g, ' ')}`,
-      `tooling_reason=${(plan.fullReason ? '' : (plan.tooling.browser ?? '')).replace(/\s+/g, ' ')}`,
-      `shards=${JSON.stringify(plan.shards)}`,
-      `midnight_until=${midnightUntil}`,
-      // The static and SQL jobs take every group of their kind, so a new group joins CI by registration.
-      `static=${groups.filter((group) => group.kind === 'static' && group.id !== 'static:lint').map((group) => group.id)}`,
-      `sql=${groups.filter((group) => group.kind === 'sql').map((group) => group.id)}`,
-      `selected_components=${fast.components}`,
-      `component_shards=${JSON.stringify(componentShards(fast.components, durations))}`,
-      `selected_unit=${fast.unit}`,
-      `selected_sql=${fast.sql}`,
-      `selected_static=${fast.static}`,
-      `selected_lint=${fast.lint}`,
-      `selected_invoices=${invoices ? E_INVOICE_STEP : ''}`,
-      '',
-    ].join('\n'),
+    `${Object.entries(
+      plannerOutputs({
+        groups,
+        plan,
+        fast,
+        selectedInvoices: invoices ? E_INVOICE_STEP : '',
+        midnightUntil,
+        componentShards: componentShards(fast.components, durations),
+      }),
+    )
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n')}\n`,
   );
