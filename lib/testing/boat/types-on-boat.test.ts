@@ -2,8 +2,7 @@
 // this tree's schema (CI, a Boat machine, or a shared stack whose ledger matches the tree), and
 // never falls back to the shared stack when Boat is unavailable.
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import {
@@ -13,6 +12,8 @@ import {
   typesOnBoat,
   typesUnavailableNotice,
 } from './types-on-boat';
+import { temporaryDirectory } from '../temporary-directory';
+import { workflowsFolder } from '../ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const noDrift = { stackOnly: [], treeOnly: [], changed: [], unverified: [], unknownVersions: [] };
@@ -46,55 +47,50 @@ test('without a usable key the types come back as Boat unavailable, never from t
 
 // CI's SQL job checks out the pull request merged with main, so its file may be another tree's.
 test("CI's file is accepted only for the tree it was generated from", () => {
-  const repository = mkdtempSync(join(tmpdir(), 'types-from-ci-'));
-  const artifact = mkdtempSync(join(tmpdir(), 'types-artifact-'));
-  try {
-    const write = (path: string, text: string) => {
-      mkdirSync(join(repository, path, '..'), { recursive: true });
-      writeFileSync(join(repository, path), text);
-    };
-    write('supabase/migrations/20260101000000_first.sql', 'select 1;\n');
-    write('supabase/config.toml', '[db]\nport = 54322\n');
-    write('bun.lock', '{}\n');
-    write('.prettierrc.json', '{}\n');
-    write('scripts/generate-supabase-types.ts', '// generator\n');
-    write(
-      'lib/supabase/database.types.ts',
-      'export type Database = {\n  // Allows to automatically instantiate createClient with right options\n  __InternalSupabase: {\n    PostgrestVersion: "13";\n  };\n  public: {};\n};\n',
-    );
-    writeFileSync(join(artifact, 'database.types.ts'), 'export type Database = { generated: true };\n');
-    expect(acceptedCiTypes(artifact, repository)).toEqual({
-      unavailable: "CI's database-types artifact is incomplete.",
-    });
-    writeFileSync(join(artifact, 'inputs.sha256'), `${typesInputDigest(repository)}\n`);
-    expect(acceptedCiTypes(artifact, repository)).toEqual({
-      types: 'export type Database = { generated: true };\n',
-    });
-    // Main's newer migration in CI's merge commit, absent here; then a changed statement; then the pinned tools.
-    const before = typesInputDigest(repository);
-    write('supabase/migrations/20260102000000_from_main.sql', 'select 2;\n');
-    const refused = acceptedCiTypes(artifact, repository);
-    expect('unavailable' in refused && refused.unavailable).toContain('another tree than this one');
-    rmSync(join(repository, 'supabase/migrations/20260102000000_from_main.sql'));
-    expect(typesInputDigest(repository)).toBe(before);
-    write('supabase/migrations/20260101000000_first.sql', 'select 3;\n');
-    expect(typesInputDigest(repository)).not.toBe(before);
-    write('supabase/migrations/20260101000000_first.sql', 'select 1;\n');
-    write('bun.lock', '{"changed": true}\n');
-    expect(typesInputDigest(repository)).not.toBe(before);
-    write('bun.lock', '{}\n');
-    // A generation rewrites the types below the header: the check that follows takes the same file.
-    write(
-      'lib/supabase/database.types.ts',
-      'export type Database = {\n  // Allows to automatically instantiate createClient with right options\n  __InternalSupabase: {\n    PostgrestVersion: "13";\n  };\n  public: { generated: true };\n};\n',
-    );
-    expect(typesInputDigest(repository)).toBe(before);
-    write('lib/supabase/database.types.ts', 'export type Database = { public: {} };\n');
-    expect(typesInputDigest(repository)).not.toBe(before);
-  } finally {
-    rmSync(repository, { recursive: true, force: true });
-    rmSync(artifact, { recursive: true, force: true });
-  }
+  const repository = temporaryDirectory('types-from-ci-');
+  const artifact = temporaryDirectory('types-artifact-');
+  const write = (path: string, text: string) => {
+    mkdirSync(join(repository, path, '..'), { recursive: true });
+    writeFileSync(join(repository, path), text);
+  };
+  write('supabase/migrations/20260101000000_first.sql', 'select 1;\n');
+  write('supabase/config.toml', '[db]\nport = 54322\n');
+  write('bun.lock', '{}\n');
+  write('.prettierrc.json', '{}\n');
+  write('scripts/generate-supabase-types.ts', '// generator\n');
+  write(
+    'lib/supabase/database.types.ts',
+    'export type Database = {\n  // Allows to automatically instantiate createClient with right options\n  __InternalSupabase: {\n    PostgrestVersion: "13";\n  };\n  public: {};\n};\n',
+  );
+  writeFileSync(join(artifact, 'database.types.ts'), 'export type Database = { generated: true };\n');
+  expect(acceptedCiTypes(artifact, repository)).toEqual({
+    unavailable: "CI's database-types artifact is incomplete.",
+  });
+  writeFileSync(join(artifact, 'inputs.sha256'), `${typesInputDigest(repository)}\n`);
+  expect(acceptedCiTypes(artifact, repository)).toEqual({
+    types: 'export type Database = { generated: true };\n',
+  });
+  // Main's newer migration in CI's merge commit, absent here; then a changed statement; then the pinned tools.
+  const before = typesInputDigest(repository);
+  write('supabase/migrations/20260102000000_from_main.sql', 'select 2;\n');
+  const refused = acceptedCiTypes(artifact, repository);
+  expect('unavailable' in refused && refused.unavailable).toContain('another tree than this one');
+  rmSync(join(repository, 'supabase/migrations/20260102000000_from_main.sql'));
+  expect(typesInputDigest(repository)).toBe(before);
+  write('supabase/migrations/20260101000000_first.sql', 'select 3;\n');
+  expect(typesInputDigest(repository)).not.toBe(before);
+  write('supabase/migrations/20260101000000_first.sql', 'select 1;\n');
+  write('bun.lock', '{"changed": true}\n');
+  expect(typesInputDigest(repository)).not.toBe(before);
+  write('bun.lock', '{}\n');
+  // A generation rewrites the types below the header: the check that follows takes the same file.
+  write(
+    'lib/supabase/database.types.ts',
+    'export type Database = {\n  // Allows to automatically instantiate createClient with right options\n  __InternalSupabase: {\n    PostgrestVersion: "13";\n  };\n  public: { generated: true };\n};\n',
+  );
+  expect(typesInputDigest(repository)).toBe(before);
+  write('lib/supabase/database.types.ts', 'export type Database = { public: {} };\n');
+  expect(typesInputDigest(repository)).not.toBe(before);
 });
 
 test('the notice says nothing was written and names the way through CI', () => {
@@ -110,7 +106,7 @@ test('the machine and CI leave the generated file where the workstation reads it
   const remote = read('scripts/boat/remote-verify.sh');
   expect(remote).toContain('bun run types:generate -- --local && mkdir -p .agent-logs/types/generated');
   expect(remote).toContain('cp lib/supabase/database.types.ts .agent-logs/types/generated/');
-  const ci = read('.github/workflows/ci.yml');
+  const ci = read(`${workflowsFolder()}/ci.yml`);
   expect(ci).toContain('WERKFLOW_TYPES_ARTIFACT: ${{ runner.temp }}/database-types/database.types.ts');
   expect(ci).toContain('name: database-types');
 });

@@ -1,6 +1,4 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   PREPARED_PLAN_ENV,
@@ -9,8 +7,9 @@ import {
   writePreparedPlan,
   type PreparedPlan,
 } from './prepared-plan';
-import { selectedDiscoveryArguments } from './playwright-discovery';
+import { exactFileFilter, selectedDiscoveryArguments } from './playwright-discovery';
 import type { TestGroup } from '../selection/test-groups';
+import { temporaryDirectory } from '../temporary-directory';
 
 test('discovery includes only selected files, without inherited setup journeys', () => {
   const common = {
@@ -64,18 +63,14 @@ const plan: PreparedPlan = {
 };
 
 test('a prepared plan round-trips through its file and the environment names it', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'prepared-plan-'));
-  try {
-    const path = join(directory, 'prepared-plan.json');
-    writePreparedPlan(path, plan);
-    expect(readPreparedPlan({})).toBeNull();
-    expect(readPreparedPlan({ [PREPARED_PLAN_ENV]: path })).toEqual(plan);
-    expect(() => readPreparedPlan({ [PREPARED_PLAN_ENV]: join(directory, 'missing.json') })).toThrow(
-      'missing file',
-    );
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const directory = temporaryDirectory('prepared-plan-');
+  const path = join(directory, 'prepared-plan.json');
+  writePreparedPlan(path, plan);
+  expect(readPreparedPlan({})).toBeNull();
+  expect(readPreparedPlan({ [PREPARED_PLAN_ENV]: path })).toEqual(plan);
+  expect(() => readPreparedPlan({ [PREPARED_PLAN_ENV]: join(directory, 'missing.json') })).toThrow(
+    'missing file',
+  );
 });
 
 test('a group run takes its identity and discovery from the plan and refuses a mismatch', () => {
@@ -92,4 +87,15 @@ test('a group run takes its identity and discovery from the plan and refuses a m
   expect(() => preparedGroupRun(plan, { groupId: 'golden:p1-06', suite: 'audit', target: 'local' })).toThrow(
     'no audit discovery',
   );
+});
+
+test('a spec file filter matches exactly that spec, whatever characters its name holds', () => {
+  const filter = new RegExp(exactFileFilter('tests/ui-contracts/calendar-a+b.spec.ts'));
+  expect(filter.test('/repo/tests/ui-contracts/calendar-a+b.spec.ts')).toBe(true);
+  expect(filter.test('/repo/tests/ui-contracts/calendar-ab.spec.ts')).toBe(false);
+  expect(
+    new RegExp(exactFileFilter('tests/ui-contracts/options.spec.ts')).test(
+      '/repo/tests/ui-contracts/options.spec.ts.bak',
+    ),
+  ).toBe(false);
 });

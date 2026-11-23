@@ -1,27 +1,14 @@
-import { afterEach, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 
 // Chromium's system packages in CI (.github/actions/playwright/system-packages.sh), run against
 // stand-in sudo, timeout, apt-get, dpkg and bunx: a cached install never reaches the package
 // mirror, and a stalled mirror ends the step after a bounded fresh attempt with its own cause,
 // instead of holding the job until its timeout cancels it.
 const script = resolve(import.meta.dir, '../../.github/actions/playwright/system-packages.sh');
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
 
 type Mirror = {
   /** How many apt-get calls stall (time out) before the mirror answers. */
@@ -43,8 +30,7 @@ function run(
   outputs: string;
   debs: string[];
 } {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-playwright-packages-'));
-  directories.push(root);
+  const root = temporaryDirectory('werkflow-playwright-packages-');
   const bin = join(root, 'bin');
   const debs = join(root, 'debs');
   mkdirSync(bin);

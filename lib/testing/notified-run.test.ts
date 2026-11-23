@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   closeSync,
@@ -6,7 +6,6 @@ import {
   createReadStream,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -14,7 +13,6 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   deliverWake,
@@ -32,17 +30,7 @@ import {
   type WakeDependencies,
 } from './notified-run';
 import { errorCode } from './runner/error-code';
-
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
-
-function temporaryDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'notified-run-'));
-  directories.push(directory);
-  return directory;
-}
+import { temporaryDirectory } from './temporary-directory';
 
 function runRecord(
   directory: string,
@@ -124,7 +112,7 @@ test('a signal death reports the shell exit code', () => {
 });
 
 test('the notice names the exit code, the signal and the log', () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
   const record = runRecord(directory, directory, {
     outcome: { exitCode: 143, signal: 'SIGTERM', endedAt: '2026-11-06T10:05:00.000Z' },
   });
@@ -134,14 +122,14 @@ test('the notice names the exit code, the signal and the log', () => {
 });
 
 test('a run without an outcome never claims an exit code', () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
   const message = wakeMessage([runRecord(directory, directory, { outcome: null })]);
   expect(message).toContain('exit code is unknown');
   expect(message).not.toContain('exit code 0');
 });
 
 test('a wake stops at the first attempt that goes through', async () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
   const answers = ['server restarting', null];
   const sent: string[] = [];
   const failure = await deliverWake(
@@ -157,7 +145,7 @@ test('a wake stops at the first attempt that goes through', async () => {
 });
 
 test('a wake that never goes through returns its failure and writes each attempt to the log', async () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
   const record = runRecord(directory, directory);
   const failure = await deliverWake(() => 'Thread gone', [record], noWait);
   expect(failure).toBe('Thread gone');
@@ -167,8 +155,8 @@ test('a wake that never goes through returns its failure and writes each attempt
 });
 
 test('an unheard entry exists until a wake went through', () => {
-  const directory = temporaryDirectory();
-  const unheard = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
+  const unheard = temporaryDirectory('notified-run-');
   const record = runRecord(directory, unheard);
   saveRecord(record);
   expect(readRecord(record.unheardPath).outcome?.exitCode, 'the unheard entry keeps the outcome').toBe(3);
@@ -180,8 +168,8 @@ test('an unheard entry exists until a wake went through', () => {
 });
 
 test('the next run resends an unheard run, which then leaves the list', () => {
-  const directory = temporaryDirectory();
-  const unheard = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
+  const unheard = temporaryDirectory('notified-run-');
   const record = runRecord(directory, unheard, { wake: 'failed', wakeError: 'server down' });
   saveRecord(record);
   const sent: string[] = [];
@@ -199,8 +187,8 @@ test('the next run resends an unheard run, which then leaves the list', () => {
 });
 
 test('a run that stays unheard is printed with its log and stays on the list', () => {
-  const directory = temporaryDirectory();
-  const unheard = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
+  const unheard = temporaryDirectory('notified-run-');
   const record = runRecord(directory, unheard, { wake: 'failed' });
   saveRecord(record);
   const lines = resendUnheardRuns(
@@ -215,8 +203,8 @@ test('a run that stays unheard is printed with its log and stays on the list', (
 });
 
 test('a killed supervisor leaves a run that the next run reports as unknown', () => {
-  const directory = temporaryDirectory();
-  const unheard = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
+  const unheard = temporaryDirectory('notified-run-');
   saveRecord(runRecord(directory, unheard, { outcome: null }));
   const sent: string[] = [];
   resendUnheardRuns(
@@ -231,8 +219,8 @@ test('a killed supervisor leaves a run that the next run reports as unknown', ()
 });
 
 test('a run still under its supervisor is left alone', () => {
-  const directory = temporaryDirectory();
-  const unheard = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
+  const unheard = temporaryDirectory('notified-run-');
   const record = runRecord(directory, unheard, { outcome: null });
   saveRecord(record);
   const lines = resendUnheardRuns(
@@ -247,8 +235,8 @@ test('a run still under its supervisor is left alone', () => {
 });
 
 test('an unreadable entry is reported and stops no other run', () => {
-  const directory = temporaryDirectory();
-  const unheard = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
+  const unheard = temporaryDirectory('notified-run-');
   writeFileSync(join(unheard, 'broken.json'), '{');
   const record = runRecord(directory, unheard, { wake: 'failed' });
   saveRecord(record);
@@ -263,8 +251,10 @@ test('an unreadable entry is reported and stops no other run', () => {
 });
 
 test('a failed wake is resent even when another process took the supervisor pid', () => {
-  const unheard = temporaryDirectory();
-  saveRecord(runRecord(temporaryDirectory(), unheard, { wake: 'failed', wakeError: 'Thread gone' }));
+  const unheard = temporaryDirectory('notified-run-');
+  saveRecord(
+    runRecord(temporaryDirectory('notified-run-'), unheard, { wake: 'failed', wakeError: 'Thread gone' }),
+  );
   const sent: string[] = [];
   const send = (_thread: string, message: string): string | null => {
     sent.push(message);
@@ -275,10 +265,16 @@ test('a failed wake is resent even when another process took the supervisor pid'
 });
 
 test('a record whose supervisor has not saved its pid yet is starting, not dead, for a minute', () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const startedAt = '2026-11-06T10:00:00.000Z';
   const started = Date.parse(startedAt);
-  saveRecord(runRecord(temporaryDirectory(), unheard, { startedAt, supervisorPid: null, outcome: null }));
+  saveRecord(
+    runRecord(temporaryDirectory('notified-run-'), unheard, {
+      startedAt,
+      supervisorPid: null,
+      outcome: null,
+    }),
+  );
   const sent: string[] = [];
   const send = (_thread: string, message: string): string | null => {
     sent.push(message);
@@ -293,14 +289,16 @@ test('a record whose supervisor has not saved its pid yet is starting, not dead,
 });
 
 test('the next run drops a run its thread heard, and resends the rest as one wake per thread', () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const dead: Partial<RunRecord> = { wake: 'failed' };
-  const heard = runRecord(temporaryDirectory(), unheard, dead, 'run-1');
+  const heard = runRecord(temporaryDirectory('notified-run-'), unheard, dead, 'run-1');
   markHeard(heard, 'thread-1');
   saveRecord(heard);
-  saveRecord(runRecord(temporaryDirectory(), unheard, dead, 'run-2'));
-  saveRecord(runRecord(temporaryDirectory(), unheard, dead, 'run-3'));
-  saveRecord(runRecord(temporaryDirectory(), unheard, { ...dead, thread: 'thread-2' }, 'run-4'));
+  saveRecord(runRecord(temporaryDirectory('notified-run-'), unheard, dead, 'run-2'));
+  saveRecord(runRecord(temporaryDirectory('notified-run-'), unheard, dead, 'run-3'));
+  saveRecord(
+    runRecord(temporaryDirectory('notified-run-'), unheard, { ...dead, thread: 'thread-2' }, 'run-4'),
+  );
   const sent: string[] = [];
   const lines = resendUnheardRuns(
     unheard,
@@ -318,7 +316,7 @@ test('the next run drops a run its thread heard, and resends the rest as one wak
 });
 
 test('no unheard directory means nothing to resend', () => {
-  expect(resendUnheardRuns(join(temporaryDirectory(), 'missing'), () => null)).toEqual([]);
+  expect(resendUnheardRuns(join(temporaryDirectory('notified-run-'), 'missing'), () => null)).toEqual([]);
 });
 
 /** A supervisor's world: sends are recorded, the thread is busy for its first `busyChecks` looks. */
@@ -346,7 +344,7 @@ function wakeWorld(busyChecks: number, changes: Partial<WakeDependencies> = {}) 
 /** An ended run of `thread-1` whose supervisor waits to settle its wake. */
 function endedRun(unheard: string, entryName: string, exitCode = 1): RunRecord {
   const record = runRecord(
-    temporaryDirectory(),
+    temporaryDirectory('notified-run-'),
     unheard,
     { outcome: { exitCode, signal: null, endedAt: '2026-11-06T10:00:30.000Z' } },
     entryName,
@@ -356,7 +354,7 @@ function endedRun(unheard: string, entryName: string, exitCode = 1): RunRecord {
 }
 
 test('an idle thread is woken at once', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const record = endedRun(unheard, 'run-1', 3);
   const { sent, dependencies } = wakeWorld(0);
   await settleWake(record.recordPath, dependencies);
@@ -367,7 +365,7 @@ test('an idle thread is woken at once', async () => {
 });
 
 test('a run its own thread heard in the foreground wakes nobody', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const record = endedRun(unheard, 'run-1');
   markHeard(record, 'thread-1');
   const { sent, dependencies } = wakeWorld(0);
@@ -378,7 +376,7 @@ test('a run its own thread heard in the foreground wakes nobody', async () => {
 });
 
 test('a run heard by another thread or outside T3 still wakes its own thread', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const record = endedRun(unheard, 'run-1');
   markHeard(record, 'thread-2');
   markHeard(record, undefined);
@@ -388,7 +386,7 @@ test('a run heard by another thread or outside T3 still wakes its own thread', a
 });
 
 test('runs that end one after another during one turn give one wake once the turn ended', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const records: RunRecord[] = [];
   const supervisors: Promise<void>[] = [];
   let looks = 0;
@@ -422,7 +420,7 @@ test('runs that end one after another during one turn give one wake once the tur
 });
 
 test('the one wake after a turn leaves out the runs the thread heard', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const [heard, first, second] = ['run-1', 'run-2', 'run-3'].map((name) => endedRun(unheard, name));
   if (!heard || !first || !second) throw new Error('Three runs were made.');
   markHeard(heard, 'thread-1');
@@ -436,7 +434,7 @@ test('the one wake after a turn leaves out the runs the thread heard', async () 
 
 // The race of 2026-11-07: the run ends while the foreground `--wait` still reports it.
 test('a run the thread hears while its wake waits for the turn to end wakes nobody', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const record = endedRun(unheard, 'run-1');
   let looks = 0;
   const { sent, dependencies } = wakeWorld(0, {
@@ -452,7 +450,7 @@ test('a run the thread hears while its wake waits for the turn to end wakes nobo
 });
 
 test('a thread busy past the longest wait still gets its wake', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const record = endedRun(unheard, 'run-1');
   let clock = 0;
   const { sent, dependencies } = wakeWorld(Number.POSITIVE_INFINITY, {
@@ -468,7 +466,7 @@ test('a thread busy past the longest wait still gets its wake', async () => {
 });
 
 test('a run the thread hears while a failed wake waits for its retry gets no wake', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const record = endedRun(unheard, 'run-1');
   const sent: string[] = [];
   let attempts = 0;
@@ -507,7 +505,7 @@ async function stuckHolder(record: RunRecord): Promise<void> {
 }
 
 test('the send lock of a killed supervisor holds no wake back', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const killed = endedRun(unheard, 'run-1', 4);
   const record = endedRun(unheard, 'run-2', 5);
   await stuckHolder(killed);
@@ -519,7 +517,7 @@ test('the send lock of a killed supervisor holds no wake back', async () => {
 });
 
 test('a send lock left empty by a crash holds no wake back', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   await stuckHolder(endedRun(unheard, 'run-1', 4));
   const [lock = ''] = readdirSync(unheard).filter((name) => name.endsWith('.send-lock'));
   writeFileSync(join(unheard, lock), '');
@@ -531,7 +529,7 @@ test('a send lock left empty by a crash holds no wake back', async () => {
 
 // A directory in the lock's place fails every read (EISDIR), whatever the process's privileges.
 test('a send lock that cannot be read is not taken over, so a live holder keeps its single wake', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   await stuckHolder(endedRun(unheard, 'run-1', 4));
   const [lock = ''] = readdirSync(unheard).filter((name) => name.endsWith('.send-lock'));
   rmSync(join(unheard, lock));
@@ -550,17 +548,26 @@ test('a send lock that cannot be read is not taken over, so a live holder keeps 
 });
 
 test('a resend leaves a thread to the supervisor that holds its send lock, whose wake carries every orphaned run once', async () => {
-  const unheard = temporaryDirectory();
+  const unheard = temporaryDirectory('notified-run-');
   const orphan = runRecord(
-    temporaryDirectory(),
+    temporaryDirectory('notified-run-'),
     unheard,
     { supervisorPid: 999_999, outcome: { exitCode: 7, signal: null, endedAt: '2026-11-06T10:00:30.000Z' } },
     'run-0',
   );
   saveRecord(orphan);
   const failedWake = { exitCode: 8, signal: null, endedAt: '2026-11-06T10:00:30.000Z' };
-  saveRecord(runRecord(temporaryDirectory(), unheard, { wake: 'failed', outcome: failedWake }, 'run-a'));
-  saveRecord(runRecord(temporaryDirectory(), unheard, { supervisorPid: 999_999, outcome: null }, 'run-b'));
+  saveRecord(
+    runRecord(temporaryDirectory('notified-run-'), unheard, { wake: 'failed', outcome: failedWake }, 'run-a'),
+  );
+  saveRecord(
+    runRecord(
+      temporaryDirectory('notified-run-'),
+      unheard,
+      { supervisorPid: 999_999, outcome: null },
+      'run-b',
+    ),
+  );
   const record = endedRun(unheard, 'run-1', 5);
   const sent: string[] = [];
   const send = (_thread: string, message: string): string | null => {
@@ -692,7 +699,7 @@ function onlyRecordPath(directory: string): string {
 
 // Rule test: a harness stops a task by walking its process tree, which `detached` alone does not escape.
 test('the real script keeps its supervisor out of the process tree and wakes an idle thread with the exit code', async () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
   const { wakeFile, idleFile, env } = fakeT3(directory);
   writeFileSync(idleFile, '');
   namedPipe(wakeFile);
@@ -725,7 +732,7 @@ test('the real script keeps its supervisor out of the process tree and wakes an 
 // The thread stays busy in both heard tests, so the detached supervisor can only settle the run
 // as heard itself; the in-process settleWake then makes the decision it would make once idle.
 test('the real script sends no wake for a refusal its foreground reported', async () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
   const { wakeFile, env } = fakeT3(directory);
   const command = join(directory, 'command.sh');
   writeFileSync(command, '#!/bin/sh\necho refused\nexit 2\n', { mode: 0o755 });
@@ -743,7 +750,7 @@ test('the real script sends no wake for a refusal its foreground reported', asyn
 
 // The race: the run ends while its thread's `--wait` watches it, in a turn that is still running.
 test('the real script sends no wake for a run its busy thread heard through --wait', async () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
   const { wakeFile, env } = fakeT3(directory);
   const release = namedPipe(join(directory, 'release'));
   const command = heldCommand(directory, release, 4);
@@ -770,7 +777,7 @@ test('the real script sends no wake for a run its busy thread heard through --wa
 });
 
 test('a wait on a run whose supervisor died fails instead of waiting on', async () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('notified-run-');
   const finished = spawn('true', []);
   await exited(finished);
   const record = runRecord(directory, directory, { outcome: null, supervisorPid: finished.pid ?? null });

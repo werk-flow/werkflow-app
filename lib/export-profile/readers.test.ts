@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { zipArchive } from '../testing/fixtures/export-profile-world';
 import { delimitedRows, detectDelimiter } from './delimited-text';
@@ -9,6 +8,7 @@ import { profileExportFolder } from './profile-export';
 import { xmlRecords } from './xml-records';
 import { decodeXmlEntities } from './xml-text';
 import { ExportFormatError, openZip } from './zip-archive';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 function formatErrorCode(run: () => unknown): string | null {
   try {
@@ -119,25 +119,21 @@ describe('incomplete input is unreadable, never a quiet partial profile', () => 
   });
 
   test('a .csv whose separator cannot be told apart is reported, and one without any is one column', () => {
-    const folder = mkdtempSync(join(tmpdir(), 'export-profile-csv-'));
-    try {
-      writeFileSync(join(folder, 'mehrdeutig.csv'), 'id,name\n1,"Jane\n');
-      writeFileSync(join(folder, 'zoll.csv'), 'Name\n5" Rohr, "Bogen\n');
-      writeFileSync(join(folder, 'zerfasert.tsv'), 'Nr\tName\n1\tA\nnur Text\nnoch Text\n');
-      writeFileSync(join(folder, 'einspaltig.csv'), 'Name\n"Meier, Max"\n"Kurz"\n');
-      const profile = profileExportFolder(folder, { maskLabels: false });
-      expect(profile.unreadable.map((file) => [file.file, file.reason])).toEqual([
-        ['mehrdeutig.csv', 'delimiter_ambiguous'],
-        ['zerfasert.tsv', 'delimiter_ambiguous'],
-        ['zoll.csv', 'delimiter_ambiguous'],
-      ]);
-      expect(profile.unreadable[0]?.advice).toContain('ask Willert');
-      expect(profile.tables.map((table) => [table.file, table.columns.length])).toEqual([
-        ['einspaltig.csv', 1],
-      ]);
-      expect(profile.files.tableFiles).toBe(1);
-    } finally {
-      rmSync(folder, { recursive: true, force: true });
-    }
+    const folder = temporaryDirectory('export-profile-csv-');
+    writeFileSync(join(folder, 'mehrdeutig.csv'), 'id,name\n1,"Jane\n');
+    writeFileSync(join(folder, 'zoll.csv'), 'Name\n5" Rohr, "Bogen\n');
+    writeFileSync(join(folder, 'zerfasert.tsv'), 'Nr\tName\n1\tA\nnur Text\nnoch Text\n');
+    writeFileSync(join(folder, 'einspaltig.csv'), 'Name\n"Meier, Max"\n"Kurz"\n');
+    const profile = profileExportFolder(folder, { maskLabels: false });
+    expect(profile.unreadable.map((file) => [file.file, file.reason])).toEqual([
+      ['mehrdeutig.csv', 'delimiter_ambiguous'],
+      ['zerfasert.tsv', 'delimiter_ambiguous'],
+      ['zoll.csv', 'delimiter_ambiguous'],
+    ]);
+    expect(profile.unreadable[0]?.advice).toContain('ask Willert');
+    expect(profile.tables.map((table) => [table.file, table.columns.length])).toEqual([
+      ['einspaltig.csv', 1],
+    ]);
+    expect(profile.files.tableFiles).toBe(1);
   });
 });

@@ -1,30 +1,18 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import {
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import { mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { decideOutputFolder, selfCheckOutput } from './output-safety';
 import { exportLabel, maskShape, type PersonalDataKind } from './personal-data';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 let workspace = '';
 
 beforeAll(() => {
-  workspace = mkdtempSync(join(tmpdir(), 'export-profile-safety-'));
+  workspace = temporaryDirectory('export-profile-safety-');
   mkdirSync(join(workspace, 'export'));
   mkdirSync(join(workspace, 'home'));
   mkdirSync(join(workspace, 'repository', '.git'), { recursive: true });
   mkdirSync(join(workspace, 'repository', 'exports', 'willert'), { recursive: true });
-});
-
-afterAll(() => {
-  rmSync(workspace, { recursive: true, force: true });
 });
 
 const decide = (input: string, requestedOutput: string | null) =>
