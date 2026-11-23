@@ -129,7 +129,7 @@ test('a ledger without a committed version names it and fails', () => {
 test('a refused read names its status and cause', () => {
   const body = JSON.stringify({ message: `${BODY_MARKER} ${TOKEN}` });
   for (const [status, cause] of [
-    ['401', 'Replace the repository secret SUPABASE_DEV_READ_TOKEN.'],
+    ['401', 'expired, revoked or malformed. Replace the repository secret SUPABASE_DEV_READ_TOKEN.'],
     [
       '403',
       'needs the permission database_read on project devref. Fix the token behind the repository secret SUPABASE_DEV_READ_TOKEN.',
