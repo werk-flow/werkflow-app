@@ -8,6 +8,8 @@
 # message on stderr and returns 1, so no caller reads an id or a state out of a refusal. The
 # caller decides whether that fails its step. The repository is public: it prints those two
 # fields only, never a header, the token or the rest of the body.
+source "$(dirname "${BASH_SOURCE[0]}")/curl-headers.sh"
+
 vercel_api() {
   local work status sent reason retry_after pause delay=60 start
   start="$(date +%s)"
@@ -15,7 +17,7 @@ vercel_api() {
   while :; do
     sent=0
     status="$(curl --silent --show-error --max-time 60 --output "$work/body" --dump-header "$work/headers" \
-      --write-out '%{http_code}' -H "Authorization: Bearer ${VERCEL_TOKEN}" "$@")" || sent=$?
+      --write-out '%{http_code}' --config <(curl_headers <<< "Authorization: Bearer ${VERCEL_TOKEN}") "$@")" || sent=$?
     if test "$sent" != 0; then
       echo "Vercel's answer did not arrive (HTTP ${status:-000}, curl exit ${sent})." >&2
       rm -rf "$work"

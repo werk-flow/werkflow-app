@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readlinkSync } from 'node:fs';
+import { readFileSync, readlinkSync } from 'node:fs';
 import { getSpawnFailureDetail } from './spawn-result';
 
 export type AppListener = {
@@ -85,4 +85,68 @@ export function getAppListener(port: number): AppListener | null {
   if (!workingDirectory || !details || !Number.isFinite(startedAt))
     throw new Error(`Listener process ${processId} disappeared during inspection.`);
   return { processId, command: details.slice(24).trim(), workingDirectory, startedAt };
+}
+
+/** A process group, named by its leader's start so a group id the system reused never matches it. */
+export type ListenerGroup = { groupId: number; leaderStart: string };
+
+/**
+ * The group id and start of a running process, or undefined once it is gone. Linux reads
+ * /proc/<pid>/stat, whose start counts clock ticks since boot; macOS reads `ps`, to the second.
+ */
+function processIdentity(processId: number): { groupId: number; start: string } | undefined {
+  if (process.platform === 'darwin') {
+    const details = inspect(
+      'ps',
+      ['-o', 'pgid=', '-o', 'lstart=', '-p', String(processId)],
+      `process ${processId}`,
+    ).trim();
+    const match = /^(\d+)\s+(\S.*)$/.exec(details);
+    if (!match?.[1] || !match[2]) return undefined;
+    return { groupId: Number(match[1]), start: match[2] };
+  }
+  let stat: string;
+  try {
+    stat = readFileSync(`/proc/${processId}/stat`, 'utf8');
+  } catch {
+    return undefined;
+  }
+  // The fields after the command name in parentheses start at field 3: pgrp is field 5, starttime 22.
+  const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+  const groupId = Number(fields[2]);
+  const start = fields[19];
+  if (!Number.isInteger(groupId) || groupId < 1 || !start) return undefined;
+  return { groupId, start };
+}
+
+/** The process group of a port's one listener, or null when nothing listens; throws when unreadable. */
+export function getListenerGroup(port: number): ListenerGroup | null {
+  const listener = getAppListener(port);
+  if (!listener) return null;
+  const groupId = processIdentity(listener.processId)?.groupId;
+  if (groupId === undefined)
+    throw new Error(`Listener process ${listener.processId} disappeared during inspection.`);
+  if (groupId === processIdentity(process.pid)?.groupId)
+    throw new Error(`Listener process ${listener.processId} shares this process's group.`);
+  const leader = processIdentity(groupId);
+  if (leader?.groupId !== groupId) throw new Error(`Process group ${groupId} has no running leader.`);
+  return { groupId, leaderStart: leader.start };
+}
+
+/** Whether the group's leader is still the process recorded; false when its start cannot be read. */
+export function isRecordedGroup(group: ListenerGroup): boolean {
+  const leader = processIdentity(group.groupId);
+  return leader?.groupId === group.groupId && leader.start === group.leaderStart;
+}
+
+/** Names a port's current listener with its process, group and command, for a failure message. */
+export function describeListener(port: number): string {
+  try {
+    const listener = getAppListener(port);
+    if (!listener) return `No process listens on port ${port} now.`;
+    const groupId = processIdentity(listener.processId)?.groupId ?? 'unknown';
+    return `Listener: pid ${listener.processId}, pgid ${groupId}, command ${listener.command}.`;
+  } catch (error) {
+    return `The listener could not be inspected: ${error instanceof Error ? error.message : String(error)}`;
+  }
 }

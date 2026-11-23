@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { BROWSER_INPUT_DRIFT_MESSAGE } from './test-evidence';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   sourceImportGraph,
@@ -20,6 +19,7 @@ import {
   type GroupResult,
   type InputSnapshot,
 } from './group-evidence';
+import { temporaryDirectory } from '../temporary-directory';
 
 const groups: [EvidenceGroup, EvidenceGroup] = [
   { id: 'people', files: ['tests/people.ts'], sourcePrefixes: ['lib/people'] },
@@ -252,17 +252,13 @@ function withImportFiles<T>(
   sources: Readonly<Record<string, string>>,
   check: (root: string, files: string[]) => T,
 ): T {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-import-graph-'));
-  try {
-    for (const [file, contents] of Object.entries(sources)) {
-      const path = join(root, file);
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, contents);
-    }
-    return check(root, Object.keys(sources));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  const root = temporaryDirectory('werkflow-import-graph-');
+  for (const [file, contents] of Object.entries(sources)) {
+    const path = join(root, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, contents);
   }
+  return check(root, Object.keys(sources));
 }
 
 test('application and test imports cannot turn isolated research into unqualified runtime inputs', () => {

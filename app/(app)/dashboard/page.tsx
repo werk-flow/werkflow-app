@@ -6,7 +6,7 @@ import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberCount, getCachedMemberships } from '@/lib/data/cached';
 import { TodayRefreshOnStart } from '@/components/auftraege/work-pack/today-refresh-on-start';
 import { UrlFlashBanner } from '@/components/ui/banner';
-import { OrgInfoCard } from '@/components/dashboard/org-info-card';
+import { DashboardCards } from '@/components/dashboard/dashboard-cards';
 import { OfficeStart } from '@/components/dashboard/office-start';
 import { DashboardContentSkeleton } from '@/components/loading-states/dashboard-content-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
@@ -14,11 +14,12 @@ import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { isManagerRole } from '@/lib/roles';
 
 async function DashboardData({ activeOrgId }: { activeOrgId: string | null }) {
-  if (!activeOrgId) return <OrgInfoCard initialMemberCount={null} />;
+  if (!activeOrgId) return <DashboardCards initialMemberCount={null} />;
   // The reader logged a failure and cached nothing; the card shows the failure with a retry.
   const memberCount = await getCachedMemberCount(activeOrgId).catch(() => null);
 
-  return <OrgInfoCard initialMemberCount={memberCount} />;
+  // „Bereitschaft jetzt“ reads in the browser: the clock actions render this page again and change no shift.
+  return <DashboardCards initialMemberCount={memberCount} />;
 }
 
 export default async function DashboardPage() {
@@ -73,7 +74,7 @@ export default async function DashboardPage() {
         />
       </Suspense>
 
-      <PageBody>
+      <PageBody className="space-y-4">
         {/* The office start reads in the browser: every clock action renders this page again. */}
         {role && isManagerRole(role) ? (
           <OfficeStart />

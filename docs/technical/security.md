@@ -123,6 +123,7 @@ On an unchanged tree, an exception matching no finding passes with a note: remov
 - Cache a permission fact across requests, or an authenticated response at the CDN.
 - Add a retry or a cookie fallback that turns a failed identity check into access.
 - Write to PROD outside the `release` workflow.
+- Pass a secret as a program argument in a script: other local users read it in `/proc` (`curl-headers.sh`).
 - Read PROD data in an agent session: results reach the model provider ([which tool reaches what](environments.md#which-tool-reaches-what)).
 - Start a sign-in or run the Vercel CLI as an agent: the owner cannot tell who asked, and the token reaches PROD (`refuse-account-sign-in.ts`). Sign-ins are owner steps: numbered steps (machine, window, command, what the owner sees) under "Owner queue" on your epic or issue, then the question tool; keep working.
 
@@ -141,7 +142,6 @@ List each owner-accepted residual exposure until it closes.
 - The script policy allows `'unsafe-inline'`, so injected inline scripts run: a per-request nonce needs per-request rendering, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
 - No edge rate limit covers every request; the app and Supabase Auth limit only their own operations. Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive a deleted row's identity, never its content.
-- `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once (beta; closes with werk-flow/werkflow-planning#248).
 - The code step keeps the address up to one hour in an httpOnly cookie scoped to `/verify`.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.

@@ -14,7 +14,7 @@ import { drawBusinessDocument } from './render';
 // `factur-x.xml` (relationship `Alternative`). A person reads the pages, a
 // machine reads the XML; both come from the same invoice. The same input
 // gives the same bytes. Mustang and veraPDF check the reference invoices in
-// CI (.github/workflows/e-invoice-checks.yml). Nothing checks PDF/A at run
+// CI (fixtures/check-reference-e-invoices.ts). Nothing checks PDF/A at run
 // time, so an invoice draws only what the renderer can vouch for (`pdfaSafe`).
 
 /** The Factur-X profile the XML follows; the XMP names it, Mustang compares it with the XML. */

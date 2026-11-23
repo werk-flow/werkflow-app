@@ -2,6 +2,7 @@
 
 import { useLiveAttentionOverview } from '@/components/aufgaben/use-aufgaben-overview';
 import { useOrganization } from '@/components/organization/organization-context';
+import { OnCallNowCard } from '@/components/on-call/on-call-now-card';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
@@ -41,18 +42,21 @@ function useOverdueMaintenanceCount() {
 }
 
 /**
- * What needs Büro and Admin now: the Aufgaben sections without personnel
+ * The start page of Büro and Admin: „Bereitschaft jetzt“ as every role sees
+ * it, then what needs them now (the Aufgaben sections without personnel
  * approvals, each with its count and first items, and the überfällig
- * maintenance. Admin first sees what needs the owner's decision, from the
- * same two reads. It reads in the browser, because every clock action renders
- * the dashboard's server component again.
+ * maintenance). Between the two, Admin sees what needs the owner's decision,
+ * from the same two reads. It reads in the browser, because every clock
+ * action renders the dashboard's server component again, and it is that
+ * render's one client component for them.
  */
 export function OfficeStart() {
   const { activeOrg } = useOrganization();
   const attention = useLiveAttentionOverview();
   const maintenance = useOverdueMaintenanceCount();
   return (
-    <div className="space-y-10">
+    <div className="mx-auto max-w-3xl space-y-6">
+      <OnCallNowCard />
       {activeOrg?.role === 'admin' && <OwnerStartView attention={attention} maintenance={maintenance} />}
       <OfficeStartView attention={attention} maintenance={maintenance} />
     </div>

@@ -259,7 +259,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
     const screenshot = puts.find((put) => put.kind === 'screenshot');
     if (!screenshot) throw new Error('No screenshot reached storage.');
-    // Every pixel well inside the drawn box, and the probe just outside it.
+    // Every colour of a pixel well inside the drawn box, each once, and the probe just outside it.
+    // The page names each colour once, so a check of every pixel moves a few colours, not a
+    // third of a million pixels, between the page and the test.
     const { inner, probe } = await page.evaluate(
       async (bytes) => {
         const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
@@ -277,9 +279,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
           Math.floor(image.width * 0.58),
           Math.floor(image.height * 0.58),
         ).data;
-        const inner: number[][] = [];
+        const colours = new Set<number>();
         for (let index = 0; index < data.length; index += 4)
-          inner.push([data[index] ?? -1, data[index + 1] ?? -1, data[index + 2] ?? -1]);
+          colours.add(((data[index] ?? 0) << 16) | ((data[index + 1] ?? 0) << 8) | (data[index + 2] ?? 0));
+        const inner = [...colours].map((colour) => [(colour >> 16) & 255, (colour >> 8) & 255, colour & 255]);
         return { inner, probe: [...context.getImageData(2, 2, 1, 1).data.slice(0, 3)] };
       },
       [...screenshot.body],

@@ -1,11 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { SENSITIVE_VALUES, writeSyntheticExport } from '../testing/fixtures/export-profile-world';
 import { selfCheckOutput } from './output-safety';
 import { profileExportFolder, type ExportProfile, type TableProfile } from './profile-export';
 import { renderProfile } from './profile-report';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 let workspace = '';
@@ -13,14 +13,10 @@ let exportFolder = '';
 let profile: ExportProfile;
 
 beforeAll(() => {
-  workspace = mkdtempSync(join(tmpdir(), 'export-profile-'));
+  workspace = temporaryDirectory('export-profile-');
   exportFolder = join(workspace, 'export');
   writeSyntheticExport(exportFolder);
   profile = profileExportFolder(exportFolder, { maskLabels: false });
-});
-
-afterAll(() => {
-  rmSync(workspace, { recursive: true, force: true });
 });
 
 function tableNamed(file: string, table: string | null = null): TableProfile {
