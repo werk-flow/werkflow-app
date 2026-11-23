@@ -6,7 +6,8 @@ type SetCapture = OpenSet['captures'][number];
  * werk-flow/werkflow-planning#380 part 2 of 2026-11-23: the page of a draft
  * offer with „Bearbeiten“ and the dialog „Angebotskopf bearbeiten“, for Admin
  * and Büro. The page before the change is `offers-2026-11-14`'s
- * `<role>-angebot`. Each opens the layout world's draft offer.
+ * `<role>-angebot`. Each opens the layout world's draft offer; the
+ * error capture fails the dialog's own reads, so it shows its failed region.
  */
 function roleCaptures(role: 'admin' | 'buero'): SetCapture[] {
   const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
@@ -17,6 +18,14 @@ function roleCaptures(role: 'admin' | 'buero'): SetCapture[] {
       role,
       route: '/angebote/[offerId]',
       view: { kind: 'dialog', opener: 'commercial.offer-header' },
+      ...both,
+    },
+    {
+      id: `${role}-kopf-error`,
+      role,
+      route: '/angebote/[offerId]',
+      view: { kind: 'dialog', opener: 'commercial.offer-header' },
+      state: 'error',
       ...both,
     },
   ];
