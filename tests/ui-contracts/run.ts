@@ -264,6 +264,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.includes('/components/auftraege/handover/'))
                 return { path: join(import.meta.dir, 'work-handover-service-boundaries.ts') };
             });
+            // The WerkFlow KI card switches through a held stand-in and re-reads it on refresh.
+            builder.onResolve({ filter: /^(?:@\/lib\/ai\/settings-actions|next\/navigation)$/ }, (args) => {
+              if (args.path === '@/lib/ai/settings-actions' || args.importer.endsWith('ai-settings-card.tsx'))
+                return { path: join(import.meta.dir, 'ai-settings-service-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/qualifications\/actions$/ }, () => ({
               path: join(import.meta.dir, 'qualification-service-boundaries.ts'),
             }));

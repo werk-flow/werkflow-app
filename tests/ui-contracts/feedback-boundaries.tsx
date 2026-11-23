@@ -8,6 +8,7 @@ import { WorkArtifactsSection } from '@/components/auftraege/artifacts/work-arti
 import { JobMaterialsSection } from '@/components/inventar/job-materials-section';
 import { EntryDetailsDialog } from '@/components/kalender/entry-details-dialog';
 import { ClientRelationsSection } from '@/components/kunden/client-relations-section';
+import { AiSettingsCard } from '@/components/settings/ai-settings-card';
 import { QualificationManagementSection } from '@/components/mitarbeiter/qualification-management-section';
 import { TeamManagementSection } from '@/components/mitarbeiter/team-management-section';
 import { ServiceCaseEvidenceLink } from '@/components/service/service-case-evidence-link';
@@ -50,6 +51,7 @@ const FEEDBACK_FIXTURES = [
   'work-artifact-report',
   'correction-timeline',
   'work-artifact-customer-decision',
+  'ai-settings',
 ] as const;
 export type FeedbackFixtureName = (typeof FEEDBACK_FIXTURES)[number];
 
@@ -75,6 +77,12 @@ const readClientRelations = () => structuredClone(window.uiContractClientRelatio
 const readClientSiteRoles = () => window.uiContractClientSiteRoles;
 const readQualifications = () => structuredClone(window.uiContractQualifications);
 const readTimeAccounts = () => structuredClone(window.uiContractTimeAccounts);
+const readAiSwitch = () => structuredClone(window.uiContractAiSwitch);
+
+function AiSettingsHost(): React.JSX.Element {
+  const state = useRouteProps(readAiSwitch);
+  return <AiSettingsCard state={state} />;
+}
 
 function TimeAccountOpeningHost(): React.JSX.Element {
   const accounts = useRouteProps(readTimeAccounts);
@@ -393,6 +401,8 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
       );
     case 'work-artifact-customer-decision':
       return <CustomerDecisionHost />;
+    case 'ai-settings':
+      return <AiSettingsHost />;
   }
 }
 

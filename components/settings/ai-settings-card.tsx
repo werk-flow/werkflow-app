@@ -74,15 +74,17 @@ function AiSwitch({ initialEnabled }: { initialEnabled: boolean }) {
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <Checkbox
-          checked={enabled}
-          disabled={isPending}
-          onCheckedChange={(checked) => void toggle(checked === true)}
-        />
-        {AI_PRODUCT_NAME} in dieser Organisation nutzen
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <Checkbox
+            checked={enabled}
+            disabled={isPending}
+            onCheckedChange={(checked) => void toggle(checked === true)}
+          />
+          {AI_PRODUCT_NAME} in dieser Organisation nutzen
+        </label>
         <InlinePending active={isPending} label={`${AI_PRODUCT_NAME} wird umgeschaltet`} />
-      </label>
+      </div>
       <p className="text-sm text-muted-foreground">
         {enabled
           ? `Alle Mitglieder können ${AI_PRODUCT_NAME} nutzen, sobald sie verfügbar ist.`
