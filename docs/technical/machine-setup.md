@@ -14,7 +14,7 @@ How to make a workstation or a headless Linux host ready for agent work, and whi
 6. Run `bunx playwright install --with-deps chromium` once.
 7. CodeRabbit: `curl -fsSL https://cli.coderabbit.ai/install.sh | sh`. The owner signs in once with `coderabbit auth login`. `bun run review:doctor` confirms both. Agents install CodeRabbit only here.
 8. Install the [background jobs](#background-jobs); `bun run room` prints numbers.
-9. Verify: `bunx supabase projects list` shows only WerkFlow App Dev, `bun run prod:inspect` fails and names the PROD inspection job, `bun scripts/check-r2.ts` passes, and `WERKFLOW_VERIFY_LOCAL=1 bun run test:verify --group golden:gg-00` passes beside `bun run test:server local`.
+9. Verify: `bun run migrations:check` passes, `bun run prod:inspect` fails and names the PROD inspection job, `bun scripts/check-r2.ts` passes, and `WERKFLOW_VERIFY_LOCAL=1 bun run test:verify --group golden:gg-00` passes beside `bun run test:server local`.
 10. Store the "Setup worktree" action of `t3.json` in this machine's T3 Code settings: T3 Code does not run it from `t3.json` alone, and setting `scripts` through the project API does not start it either. On a headless host, put it in `projectScriptOverrides` and in `projectSettingsOverrides.<project>.defaultProjectScripts` of `~/.t3/userdata/settings.json`, then run `t3 service restart`. Verify: a thread launched there gets `.t3/setup-done` and `.env.local` in its worktree.
 
 ### A headless Linux host
