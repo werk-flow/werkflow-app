@@ -1,27 +1,32 @@
 // Rule test: the production smoke check counts a build's server errors from Vercel's request
 // counts, and a response that holds no counts fails it instead of passing as zero errors.
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { z } from '../zod';
+import { temporaryDirectory } from './temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const smokeScript = join(repositoryRoot, '.github/scripts/release-smoke.sh');
 const SERVED = 'dpl_served';
+const VERCEL_TOKEN = 'vercel-token-value';
+const HEALTH_CHECK_TOKEN = 'health-check-token-value';
 
 // Answers like Vercel, the login page and the health function; the metrics answer comes from
 // $STUB/metrics.json, and its absence fails the request as `curl --fail` does. The metrics
-// query it received lands in $STUB/query.json.
+// query it received lands in $STUB/query.json. Each call's arguments land in $STUB/arguments,
+// and the configs it read in $STUB/config.
 const CURL_STUB = `#!/usr/bin/env bash
 output=
 data=
 previous=
+printf '%s\\n' "$*" >> "$STUB/arguments"
 for argument in "$@"; do
   if test "$previous" = --output; then output="$argument"; fi
   if test "$previous" = --data; then data="$argument"; fi
+  if test "$previous" = --config; then cat "$argument" >> "$STUB/config"; fi
   previous="$argument"
 done
 url="\${!#}"
@@ -43,7 +48,7 @@ let stub = '';
 const NOW_SECONDS = Date.UTC(2026, 10, 8, 13, 37, 42) / 1000;
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'release-smoke-'));
+  stub = temporaryDirectory('release-smoke-');
   for (const [name, body] of [
     ['curl', CURL_STUB],
     ['sleep', '#!/usr/bin/env bash\n'],
@@ -53,8 +58,6 @@ beforeEach(() => {
     chmodSync(join(stub, name), 0o755);
   }
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 /** Runs the smoke check of the served build against a metrics answer, or a failed request without one. */
 function smoke(metrics: unknown) {
@@ -68,12 +71,12 @@ function smoke(metrics: unknown) {
       PATH: `${stub}:${process.env.PATH}`,
       STUB: stub,
       RUNNER_TEMP: stub,
-      VERCEL_TOKEN: 'token',
+      VERCEL_TOKEN,
       VERCEL_TEAM_ID: 'team_a',
       VERCEL_PROJECT_ID: 'prj_a',
       APP_URL: 'https://app.example.test',
       HEALTH_URL: 'https://functions.example.test/health',
-      HEALTH_CHECK_TOKEN: 'health',
+      HEALTH_CHECK_TOKEN,
     },
   });
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
@@ -150,4 +153,19 @@ test('the wait and the counted window are named as they run', () => {
   expect(smoke({ summary: [row('200', 1)] }).output).toContain(
     `Waiting 5 minutes, then counting the server errors of ${SERVED} in the last 15 minutes.`,
   );
+});
+
+// Any local user of a shared runner reads a program's arguments in /proc/<pid>/cmdline, so the
+// tokens reach curl as a config on a file descriptor, never as an argument.
+test('the tokens reach curl in its config, never in its arguments', () => {
+  expect(smoke({ summary: [row('200', 1)] }).status).toBe(0);
+  const argumentsSent = readFileSync(join(stub, 'arguments'), 'utf8');
+  expect(argumentsSent).not.toContain(VERCEL_TOKEN);
+  expect(argumentsSent).not.toContain(HEALTH_CHECK_TOKEN);
+  expect(readFileSync(join(stub, 'config'), 'utf8').split('\n')).toEqual([
+    `header = "Authorization: Bearer ${VERCEL_TOKEN}"`,
+    `header = "x-health-check-token: ${HEALTH_CHECK_TOKEN}"`,
+    `header = "Authorization: Bearer ${VERCEL_TOKEN}"`,
+    '',
+  ]);
 });

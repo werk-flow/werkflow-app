@@ -2,11 +2,11 @@
 // locally with one line saying so; type-aware lint and the browser groups still go to Boat.
 import { expect, spyOn, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { cheapLocalReason, cheapPlanReason, prepareAndRun } from './verify-on-boat';
+import { temporaryDirectory } from '../temporary-directory';
 
 const plan = (...runs: string[]) =>
   [
@@ -83,7 +83,7 @@ test('a cheap plan that reads the drifted shared stack goes to Boat with one lin
 });
 
 test('a cheap plan prints its reason and runs locally before anything is packed or a machine starts', async () => {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-plan-'));
+  const repository = temporaryDirectory('boat-plan-');
   mkdirSync(join(repository, 'scripts'));
   writeFileSync(
     join(repository, 'scripts', 'verify.ts'),
@@ -115,7 +115,7 @@ test('a cheap plan prints its reason and runs locally before anything is packed 
  * reads do not, as when another agent classifies a failed run between two reads. `reads` counts them.
  */
 function refusingRepository(firstOnly: string) {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-refused-'));
+  const repository = temporaryDirectory('boat-refused-');
   const git = (...args: string[]) => execFileSync('git', args, { cwd: repository });
   git('init', '-q');
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'empty');

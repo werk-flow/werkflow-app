@@ -204,3 +204,67 @@ GitHub Actions has been blocked for the organization since 2026-11-14, and a sta
 With D1, a push to `main` whose tree a passed integration run tested runs no job, and its `Check` cites that run; this extends item 3 of the amendment "a merge queue". A CI runner's passed SQL, component or browser-shard result also stands for the same job on a byte-identical tree. `lib/testing/ci/dag.ts` holds the jobs, and `scripts/ci/job.ts` runs each job's body on any runner. [testing.md](../technical/testing.md#ci) owns the rules.
 
 A browser shard now starts after the Fast job, whose 30-minute timeout the midnight hold adds to its lead, so the longest hold grows from about 75 to 105 minutes. When GitHub's merge queue returns, its check timeout from the amendment "a merge queue" needs about 165 minutes instead of 150.
+
+## Amendment 2026-11-20: a tooling change runs a sample, then a full run of `main`
+
+The first round of external CI reviews found that a tooling input sent almost half of all merged PRs to a full browser plan (werk-flow/werkflow-planning#503). The owner decided on 2026-11-20 (D3), which narrows "a changed tooling input runs every browser group" in rule 2:
+
+1. A change to the CI workflow, its actions, its job bodies, the runner or selection modules, or a development tool runs its affected groups, the runner pilots and at least one group of every shard kind (visual, layout, lab, critical). A full run of `main` starts right after it lands.
+2. Every group still runs for `supabase/config.toml`, `next.config.ts`, `playwright*.config.ts` and a runtime or Playwright dependency change.
+3. Daytime full runs on `main` keep the 3-hour bound, but skip a slot when nothing untested landed since the last one.
+4. The release still needs a green full run on its exact commit.
+
+[testing.md](../technical/testing.md#ci) owns the rules.
+
+## Amendment 2026-11-21: limits stay the repository's on every runner
+
+The stand-in runner needed threefold test and Playwright timeouts as an owner exception on 2026-11-16, while tests still held wall-clock limits that a slower machine missed. Every runner runs the limits the repository sets. No timeout or budget factor carries over to a new runner without its own decision. A test holds no wall-clock duration below a fixed number outside a measured scenario, and `test-hygiene/no-fixed-time-limit` fails on one (werk-flow/werkflow-planning#507).
+
+## Amendment 2026-11-21: the stand-in's own merge queue
+
+The stand-in has no merge queue, so the ruleset requires an up-to-date branch, and every merge makes each other ready PR fetch `main` and run again (werk-flow/werkflow-planning#503). The owner decided on 2026-11-20 (D2):
+
+1. Our own merge queue lands PRs in batches of up to 4 and bisects a failed batch, so the failure names its PR. When Actions returns, GitHub's merge queue with group size 4 replaces it.
+2. The owner turns off "require branches to be up to date" only after the queue is built, tested on the stand-in and in use.
+
+`bun scripts/ci/queue.ts` is that queue (werk-flow/werkflow-planning#509). A thread queues its PR with `gh pr merge <n> --squash --auto`. The queue squashes up to four queued PRs onto `main` in queue order and runs the integration run once on the tip. On green it lands them through GitHub's own squash merge, never a bypass, and only when `main` has not moved and its tree after each merge equals the tested one. A PR with `approved: list growth` runs in a batch of its own, so a batch never borrows another PR's waiver; this narrows item 2 of the amendment "a merge queue". Before each merge it marks the PR's head `Queue`: a commit status until the CI App exists, then the App's check run (`scripts/ci/publish-check.ts queue`). Once the ruleset requires `Queue`, pinned to the App like `Check`, no PR merges outside the queue. `lib/testing/ci/queue.ts` owns the rules.
+
+## Amendment 2026-11-21: the queue's mark and a partial landing
+
+A `Queue` success that outlived a merge would let GitHub's auto-merge take the PR on any later `main` (werk-flow/werkflow-planning#509). Before it marks a PR, the queue turns the PR's auto-merge off, so only the queue's own merge can use the mark; when it cannot, it posts no mark. A mark whose merge did not happen is withdrawn, and a withdrawal that fails freezes the queue until a person clears it.
+
+Item 1 lands up to 4 PRs one squash merge at a time, so the batch's own `main` commits are not tested one by one; the batch's tip is. When a landing stops partway, `main`'s own run of that commit runs its jobs, since no pass of that tree exists unless a run tested it. The next tick starts from that `main`, and the release still needs a green full run on its exact commit.
+
+## Amendment 2026-11-21: a landed head's mark and a failed read
+
+GitHub reads a head's checks for a merge whose test merge commit has none. So once strict is off, a `Queue` success left on a merged head would pass that same head onto a later `main` without a queue run, for example when a change lands again after a revert. The queue withdraws every mark after its merge too, before it clears the mark or lands the next PR, and a tick withdraws a mark a crashed tick left whether its PR merged or not. A withdrawal that fails freezes the queue.
+
+A read or call that fails between two merges stops the landing as a `partial` landing with the last merge the queue confirmed, and the tick needs a person. `main` still moved, so its run of `main`'s head starts as after any landing.
+
+## Amendment 2026-11-21: a merge whose `main` cannot be read
+
+When `main` cannot be read right after a merge, the queue asks GitHub for the PR's merge commit. A merged PR counts as landed with its tree unverified, and the `partial` stop names that commit. When GitHub cannot answer either, the `partial` stop says a merge may have landed. Either way the tick needs a person, and `main`'s run of `main`'s head starts as after any landing.
+
+## Amendment 2026-11-21: reuse binds to the landing, and the queue retries before it blames
+
+The second round of external CI reviews found that a same-tree pass could stand for a push with another base or plan, that a batch could hide a migration-order conflict between its own PRs, and that a setup failure or a single flaky run could name an innocent PR (werk-flow/werkflow-planning#503):
+
+1. A push reuses an integration pass only for the same landing: the same tree, base commit and planned work, in that run's newest attempt. On GitHub Actions, only a queue run of the same commit counts. This narrows item 3 of the amendment "a merge queue" and the reuse of the amendment "browser groups run once, in the queue".
+2. The queue checks each PR's migrations against the batch prefix it lands on, and leaves a PR that would land out of order for a later tick.
+3. A run without a verdict, a browser setup failure alone included, gets one retry on the next tick; a second needs a person. A red batch whose shorter prefixes passed runs once more before its last PR is named.
+4. While `main` requires up-to-date branches, the queue updates the oldest queued PR that is behind `main`, one at a time.
+5. The nightly full run skips a head that already has a full run.
+
+`lib/testing/ci/reuse.ts`, `scripts/ci/queue.ts` and `lib/testing/ci/schedule.ts` own the rules.
+
+## Amendment 2026-11-21: a retry belongs to its work
+
+A retry record names the work its run tested: the base commit, the batch's PRs at their heads, and the tree. Only that work's second run without a verdict needs a person; other work gets its own retry. Each record keeps the verdicts of the records before it, so a tree that answered otherwise on the same base before the retries is still a contradiction for a person. A tick that settles clears the record. `lib/testing/ci/queue-retry.ts` owns the rule.
+
+## Amendment 2026-11-21: every outstanding retry stays
+
+This narrows "a retry belongs to its work". The record holds every outstanding retry, one per work, and recording one work's retry never removes another's: otherwise a batch and its prefix that take turns ending without a verdict would retry forever. A retry stays until its work reaches a verdict or a tick settles. `lib/testing/ci/queue-retry.ts` owns the rule.
+
+## Amendment 2026-11-22: two CI profiles
+
+The owner decided on 2026-11-22 (werk-flow/werkflow-planning#503) that CI keeps two profiles: `fleet` for Boat or GitHub Actions, and `local` for the owner's MacBook and PC. Both run the same checks, jobs and schedules; only the executor, concurrency, batching and timing differ. `ci/profile.json` on `main` is the one switch. [Decision 0011](0011-ci-profiles.md) owns the rules.

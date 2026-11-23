@@ -1,7 +1,7 @@
-// `Check` fails closed: a missing, cancelled, failed or incomplete job fails it, and a skipped job
-// passes only with the plan's reason (lib/testing/ci/check.ts).
+// `Check` fails closed: a missing, cancelled, failed or incomplete job fails it, a result of another
+// Plan fails it, and a skipped job passes only with the plan's reason (lib/testing/ci/check.ts).
 import { expect, test } from 'bun:test';
-import { checkRun, parseScheduler, runPlanOf } from './check';
+import { checkRun, parseScheduler, planIdentityOf, runPlanOf } from './check';
 import type { CiJob } from './dag';
 import type { CiResult, RunPlan } from './results';
 import { jobShards, plannedGroups } from './run-plan';
@@ -45,10 +45,14 @@ const EMPTY_OUTPUTS = {
   selected_sql: '',
   selected_components: '',
   component_shards: '[]',
+  selected_invoices: '',
 };
 const RUN_PLAN: RunPlan = {
   jobs: ['plan', 'fast', 'sql', 'components', 'browser', 'check'],
-  skips: { midnight: 'No browser shard waits for the midnight start window.' },
+  skips: {
+    invoices: 'The plan selects no e-invoice check.',
+    midnight: 'No browser shard waits for the midnight start window.',
+  },
   shards: [
     { shard: 1, groups: 'golden:p1-01' },
     { shard: 2, groups: 'audit:lab:calendar' },
@@ -69,9 +73,16 @@ const RUN_PLAN: RunPlan = {
 };
 const RUN = { tree: TREE, event: 'integration', runUrl: null, producer: null } as const;
 const plan = result('plan', { plan: RUN_PLAN });
-/** A passed result of the job that holds every group the plan gives it. */
+/** The results, each naming `owner` as the Plan it ran under. */
+function boundTo(owner: CiResult, results: readonly CiResult[]): CiResult[] {
+  if (!owner.plan) throw new Error('A Plan result holds its plan.');
+  const identity = planIdentityOf(owner, owner.plan);
+  return results.map((entry) => ({ ...entry, planIdentity: identity }));
+}
+/** A passed result of the job under `plan` that holds every group the plan gives it. */
 const passed = (job: CiJob, shard: number | null = null): CiResult =>
   result(job, {
+    planIdentity: planIdentityOf(plan, RUN_PLAN),
     shard,
     groups: plannedGroups(
       job,
@@ -214,7 +225,10 @@ test('a push whose tree already passed checks only its plan, and says which run 
     plan: {
       jobs: ['plan', 'check'],
       skips: Object.fromEntries(
-        (['fast', 'sql', 'components', 'midnight', 'browser'] as const).map((job) => [job, 'Tree passed.']),
+        (['fast', 'sql', 'components', 'invoices', 'midnight', 'browser'] as const).map((job) => [
+          job,
+          'Tree passed.',
+        ]),
       ),
       shards: [],
       outputs: EMPTY_OUTPUTS,
@@ -313,7 +327,11 @@ const CI_RUN = {
 const ciPlan = result('plan', { plan: RUN_PLAN, runUrl: CI_RUN.runUrl, producer: CI_RUN.producer });
 
 test('a job takes a plan only of its own run and event, completed, passed and with a producer on a CI runner', () => {
-  expect(runPlanOf(CI_RUN, ciPlan)).toEqual({ result: ciPlan, plan: RUN_PLAN });
+  expect(runPlanOf(CI_RUN, ciPlan)).toEqual({
+    result: ciPlan,
+    plan: RUN_PLAN,
+    identity: planIdentityOf(ciPlan, RUN_PLAN),
+  });
   const refused: [string, CiResult | { unreadable: string }][] = [
     ['a stale plan of the same tree from another run', { ...ciPlan, runUrl: 'https://ci.example/runs/1' }],
     ['a plan without a run', { ...ciPlan, runUrl: null }],
@@ -347,7 +365,63 @@ test('a job takes a plan only of its own run and event, completed, passed and wi
 
 test('Check refuses a stale plan of the same tree from another run', () => {
   const stale = { ...ciPlan, runUrl: 'https://ci.example/runs/1' };
-  const results = passing.map((entry) => ({ ...entry, runUrl: CI_RUN.runUrl }));
+  const results = boundTo(
+    ciPlan,
+    passing.map((entry) => ({ ...entry, runUrl: CI_RUN.runUrl })),
+  );
   expect(checkRun({ run: CI_RUN, plan: ciPlan, results, scheduler: undefined }).passed).toBe(true);
   expect(checkRun({ run: CI_RUN, plan: stale, results, scheduler: undefined }).passed).toBe(false);
+});
+
+test('a planned e-invoice check holds Check until its step passed, so a red Mustang or veraPDF result cannot merge', () => {
+  const withInvoices: RunPlan = {
+    ...RUN_PLAN,
+    jobs: [...RUN_PLAN.jobs, 'invoices'],
+    skips: { midnight: 'No browser shard waits for the midnight start window.' },
+    outputs: { ...RUN_PLAN.outputs, selected_invoices: 'step:e-invoices' },
+  };
+  const invoicePlan = result('plan', { plan: withInvoices });
+  const step = (outcome: 'passed' | 'failed') =>
+    result('invoices', {
+      status: outcome,
+      groups: [{ id: 'step:e-invoices', outcome, durationMs: 1 }],
+    });
+  const verdict = (results: CiResult[]) =>
+    checkRun({
+      run: RUN,
+      plan: invoicePlan,
+      results: boundTo(invoicePlan, [...passing, ...results]),
+      scheduler: undefined,
+    });
+  expect(verdict([]).lines).toContain('FAILED invoices: no result');
+  expect(verdict([step('failed')]).lines).toContain('FAILED invoices: failed');
+  expect(verdict([step('passed')]).passed).toBe(true);
+});
+
+test('a result of another Plan of the run fails Check, whatever differs, and so does a result that names no Plan', () => {
+  const replanned: [string, CiResult][] = [
+    ['another base', { ...plan, base: 'e'.repeat(40) }],
+    ['another attempt', { ...plan, attempt: 2, startedAt: '2026-11-20T21:00:00.000Z' }],
+    ['another decision', { ...plan, plan: { ...RUN_PLAN, skips: { ...RUN_PLAN.skips, sql: 'None.' } } }],
+  ];
+  for (const [name, other] of replanned) {
+    const verdict = checkRun({ run: RUN, plan: other, results: passing, scheduler: undefined });
+    expect([name, verdict.passed]).toEqual([name, false]);
+    expect(verdict.lines).toContain(
+      `FAILED fast: it ran under the Plan of attempt unknown started ${plan.startedAt} on base ${plan.base}, not this run's Plan`,
+    );
+  }
+  const unbound = [...passing.slice(1), { ...passed('fast'), planIdentity: undefined }];
+  expect(checkRun({ run: RUN, plan, results: unbound, scheduler: undefined }).lines).toContain(
+    'FAILED fast: the result names no Plan',
+  );
+});
+
+test("a rerun of failed jobs keeps its Plan, so Check passes on the first attempt's results beside the rerun's", () => {
+  const first = result('plan', { plan: RUN_PLAN, attempt: 1 });
+  const results = boundTo(first, [
+    ...passing.slice(0, 5).map((entry) => ({ ...entry, attempt: 1 })),
+    { ...passed('browser', 2), attempt: 2 },
+  ]);
+  expect(checkRun({ run: RUN, plan: first, results, scheduler: undefined }).passed).toBe(true);
 });

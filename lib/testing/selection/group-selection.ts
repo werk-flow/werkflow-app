@@ -19,7 +19,8 @@ type SelectableGroup = {
 type GroupSelection = { reason: string; changedFiles: readonly string[] };
 
 const MEASURED_GROUP_PREFIX = 'audit:performance:';
-const RUNNER_PILOTS = new Set(['golden:p1-24a', 'audit:wave-3:p1-24a']);
+/** The browser groups that prove the runner itself: a runner or tooling change runs them. */
+export const RUNNER_PILOTS: ReadonlySet<string> = new Set(['golden:p1-24a', 'audit:wave-3:p1-24a']);
 const ORCHESTRATION_INPUTS =
   /^lib\/testing\/(selection\/(group-selection|test-groups)|evidence\/(group-(qualification|evidence)|campaign-summary|browser-group-evidence)|runner\/(group-(schedule|recovery)|verification-lifecycle|prepared-plan|run-policy|playwright-discovery|backend-health)|publication\/release-breaker|runs\/run-retention|local-stack\/(owned-world-lifecycle|local-stack-startup))\.ts$/;
 
