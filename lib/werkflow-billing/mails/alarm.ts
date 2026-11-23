@@ -9,7 +9,8 @@ export type BillingAlarmKind =
   | 'debit_reversed'
   | 'mandate_inactive'
   | 'mail_failed'
-  | 'invoice_check_failed';
+  | 'invoice_check_failed'
+  | 'mail_bounced';
 
 export type BillingAlarmFacts = readonly (readonly [label: string, value: string])[];
 
@@ -38,6 +39,11 @@ const ALARM_COPY: Record<BillingAlarmKind, { title: string; what: string; next: 
     title: 'Rechnungsprüfung fehlgeschlagen',
     what: 'Eine Stripe-Rechnung hat die Prüfung nicht bestanden oder die Prüfung war nicht erreichbar. Sie liegt noch nicht als WerkFlow-Original vor.',
     next: 'Prüfe die Rechnung in Stripe. Stripe stellt das Signal erneut zu, bis die Prüfung klappt.',
+  },
+  mail_bounced: {
+    title: 'Abrechnungsmail kam nicht an',
+    what: 'Eine Abrechnungsmail an einen Kunden kam als unzustellbar zurück, oder der Empfänger hat sie als Spam gemeldet.',
+    next: 'Prüfe die E-Mail-Adresse des Kunden in Stripe und informiere ihn auf einem anderen Weg.',
   },
 };
 

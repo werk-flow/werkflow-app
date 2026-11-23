@@ -8,6 +8,7 @@ import { RUN_COMMIT_LOCK } from '../../lib/testing/ci/run-commit';
 import {
   CLOCK_WORK_NAMES,
   heldUntil,
+  releaseOnCron,
   type ScheduleState,
   scheduleDue,
   scheduleStateSchema,
@@ -156,17 +157,12 @@ const held = (values.run ?? []).map((run) => {
   return { run, until: heldUntil(plan.plan) };
 });
 
-/** Whether release.yml has a `schedule` trigger, or why it cannot be read. */
-function releaseOnCron(): boolean | { unreadable: string } {
+/** Whether release.yml has a `schedule` trigger (`releaseOnCron`), or why it cannot be read. */
+function releaseYmlOnCron(): boolean | { unreadable: string } {
   try {
-    const workflow: unknown = Bun.YAML.parse(
-      readFileSync(join(repository, workflowsFolder(), 'release.yml'), 'utf8'),
+    return releaseOnCron(
+      Bun.YAML.parse(readFileSync(join(repository, workflowsFolder(), 'release.yml'), 'utf8')),
     );
-    const triggers =
-      typeof workflow === 'object' && workflow !== null && 'on' in workflow ? workflow.on : undefined;
-    if (typeof triggers !== 'object' || triggers === null)
-      return { unreadable: 'release.yml names no triggers' };
-    return 'schedule' in triggers && Array.isArray(triggers.schedule) && triggers.schedule.length > 0;
   } catch (error) {
     return {
       unreadable: `release.yml cannot be read: ${error instanceof Error ? error.message : String(error)}`,
@@ -180,7 +176,7 @@ const answer = scheduleDue({
   now,
   state: readState(statePath),
   fullRun,
-  releaseOnCron: releaseOnCron(),
+  releaseOnCron: releaseYmlOnCron(),
   fullRunning: 'unreadable' in ledger ? ledger : fullRunsInLedger(ledger, now).some((run) => !run.ended),
   held,
   prRuns,
