@@ -65,7 +65,7 @@ export type Database = {
           {
             foreignKeyName: "ai_organization_settings_organization_id_fkey";
             columns: ["organization_id"];
-            isOneToOne: false;
+            isOneToOne: true;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
@@ -16329,85 +16329,6 @@ export type Database = {
       };
     };
     Functions: {
-      append_ai_thread_item: {
-        Args: {
-          p_body: Json;
-          p_idempotency_key: string;
-          p_kind: Database["public"]["Enums"]["ai_thread_item_kind"];
-          p_organization_id: string;
-          p_status: Database["public"]["Enums"]["ai_thread_item_status"];
-          p_thread_id: string;
-          p_user_id: string;
-        };
-        Returns: {
-          item_id: string;
-          item_sequence: number;
-        }[];
-      };
-      create_ai_thread: {
-        Args: {
-          p_organization_id: string;
-          p_thread_id: string;
-          p_title: string;
-          p_user_id: string;
-        };
-        Returns: string;
-      };
-      record_ai_run_attempt: {
-        Args: {
-          p_cache_read_tokens: number;
-          p_cache_write_tokens: number;
-          p_cost_micro_usd: number;
-          p_idempotency_key: string;
-          p_input_tokens: number;
-          p_model_id: string;
-          p_organization_id: string;
-          p_outcome: string;
-          p_output_tokens: number;
-          p_prompt_version: string;
-          p_run_id: string;
-        };
-        Returns: string;
-      };
-      reserve_ai_run: {
-        Args: {
-          p_idempotency_key: string;
-          p_organization_id: string;
-          p_reserve_micro_usd: number;
-          p_thread_id: string;
-          p_user_id: string;
-        };
-        Returns: {
-          run_id: string;
-          verdict: string;
-        }[];
-      };
-      set_ai_organization_enabled: {
-        Args: {
-          p_actor_id: string;
-          p_enabled: boolean;
-          p_organization_id: string;
-        };
-        Returns: boolean;
-      };
-      settle_ai_run: {
-        Args: {
-          p_organization_id: string;
-          p_run_id: string;
-          p_status: Database["public"]["Enums"]["ai_run_status"];
-        };
-        Returns: number;
-      };
-      update_ai_thread_item: {
-        Args: {
-          p_body: Json;
-          p_item_id: string;
-          p_organization_id: string;
-          p_status: Database["public"]["Enums"]["ai_thread_item_status"];
-          p_user_id: string;
-        };
-        Returns: undefined;
-      };
       abandon_supplier_catalog_import: {
         Args: {
           p_actor_id: string;
@@ -16579,6 +16500,21 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: Json;
+      };
+      append_ai_thread_item: {
+        Args: {
+          p_body: Json;
+          p_idempotency_key: string;
+          p_kind: Database["public"]["Enums"]["ai_thread_item_kind"];
+          p_organization_id: string;
+          p_status: Database["public"]["Enums"]["ai_thread_item_status"];
+          p_thread_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          item_id: string;
+          item_sequence: number;
+        }[];
       };
       apply_problem_report_retention: {
         Args: { p_organization_id: string; p_report_id: string };
@@ -17466,6 +17402,15 @@ export type Database = {
           p_organization_id: string;
           p_reason: string;
           p_request_hash: string;
+        };
+        Returns: string;
+      };
+      create_ai_thread: {
+        Args: {
+          p_organization_id: string;
+          p_thread_id: string;
+          p_title: string;
+          p_user_id: string;
         };
         Returns: string;
       };
@@ -20224,6 +20169,22 @@ export type Database = {
         Args: { p_organization_id: string; p_user_id: string };
         Returns: Json;
       };
+      record_ai_run_attempt: {
+        Args: {
+          p_cache_read_tokens: number;
+          p_cache_write_tokens: number;
+          p_cost_micro_usd: number;
+          p_idempotency_key: string;
+          p_input_tokens: number;
+          p_model_id: string;
+          p_organization_id: string;
+          p_outcome: string;
+          p_output_tokens: number;
+          p_prompt_version: string;
+          p_run_id: string;
+        };
+        Returns: string;
+      };
       record_client_communication_exception: {
         Args: {
           p_actor_id: string;
@@ -20966,6 +20927,19 @@ export type Database = {
         };
         Returns: string[];
       };
+      reserve_ai_run: {
+        Args: {
+          p_idempotency_key: string;
+          p_organization_id: string;
+          p_reserve_micro_usd: number;
+          p_thread_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          run_id: string;
+          verdict: string;
+        }[];
+      };
       reserve_payroll_export: {
         Args: {
           p_actor_id: string;
@@ -21432,6 +21406,14 @@ export type Database = {
           p_search?: string;
         };
         Returns: Json;
+      };
+      set_ai_organization_enabled: {
+        Args: {
+          p_actor_id: string;
+          p_enabled: boolean;
+          p_organization_id: string;
+        };
+        Returns: boolean;
       };
       set_apprentice_warning_enabled: {
         Args: {
@@ -21962,6 +21944,14 @@ export type Database = {
         };
         Returns: undefined;
       };
+      settle_ai_run: {
+        Args: {
+          p_organization_id: string;
+          p_run_id: string;
+          p_status: Database["public"]["Enums"]["ai_run_status"];
+        };
+        Returns: number;
+      };
       settle_werkflow_billing_mail: {
         Args: {
           p_failure_code?: string;
@@ -22440,6 +22430,16 @@ export type Database = {
           p_target_type: string;
         };
         Returns: number;
+      };
+      update_ai_thread_item: {
+        Args: {
+          p_body: Json;
+          p_item_id: string;
+          p_organization_id: string;
+          p_status: Database["public"]["Enums"]["ai_thread_item_status"];
+          p_user_id: string;
+        };
+        Returns: undefined;
       };
       update_client_contact: {
         Args: {
