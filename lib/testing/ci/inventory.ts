@@ -50,7 +50,8 @@ type TimeTrigger = { on: 'time' } & (
 
 /** The GitHub event that dispatches a workflow, as its `on:` says. */
 type GitHubEvent =
-  | { workflow: string; on: 'pull_request'; branches: readonly string[]; types: readonly string[] }
+  /** No `branches`: every base, as a stacked PR's. */
+  | { workflow: string; on: 'pull_request'; branches?: readonly string[]; types: readonly string[] }
   | {
       workflow: string;
       on: 'workflow_run';
@@ -146,7 +147,6 @@ export const SCHEDULES = {
       github: {
         workflow: 'list-growth.yml',
         on: 'pull_request',
-        branches: ['main'],
         types: ['labeled', 'unlabeled'],
       },
     },
@@ -188,6 +188,15 @@ export const SCHEDULES = {
         branches: ['gh-readonly-queue/**'],
         types: ['completed'],
       },
+    },
+  },
+  'retarget-notice': {
+    runs: 'Asks a PR whose base changed for a new head, so CI runs on the new base.',
+    sources: ['retarget-notice.yml#notice'],
+    trigger: {
+      on: 'event',
+      event: 'pull-request-retargeted',
+      github: { workflow: 'retarget-notice.yml', on: 'pull_request', types: ['edited'] },
     },
   },
 } as const satisfies Record<string, ScheduleItem>;
@@ -245,6 +254,9 @@ export const OUTSIDE_INVENTORY: Readonly<Record<string, string>> = {
   'staging.yml#migrate': 'Migrates DEV after a merge.',
   'staging.yml#deploy': 'Deploys staging after a merge.',
   'production-alert.yml#alert': "Writes the production watcher's alerts.",
+  'prod-inspect.yml#inspect': "Reads PROD's structure with a read-only token, which only main may hold.",
+  'prod-inspect.yml#auth': "Reads PROD's auth settings and copies mailer fields to DEV, when dispatched.",
+  'prod-inspect.yml#report': "Reports the inspection's failure.",
 };
 
 /** One item of the inventory: a job, a kind of run, or a schedule. */

@@ -29,7 +29,7 @@ Both run Micro compute, whose latency rises steeply with concurrency, accepted w
 
 No migration carries auth settings, mail templates, SMTP or rate limits. Both projects carry the same posture.
 
-- After every auth change on the production dashboard, run `bun scripts/sync-dev-auth-from-prod.ts`. It prints the difference; `--apply` copies the mail fields from PROD to DEV.
+- After an auth change on PROD's dashboard, run the [PROD inspection](#which-tool-reaches-what) with `-f auth=compare`; `apply` copies the mail fields to DEV.
 - `bun run auth:check` compares DEV's Auth configuration with the reviewed posture in `lib/security/supabase-project-checks.ts`. Change a setting and its posture entry together.
 - Not adopted, each an owner decision: point-in-time recovery, database network restrictions, Supabase branching, GitHub's deploy integration. Signup CAPTCHA turns on when public sign-up opens.
 - Owner duties no API covers: Supabase account MFA and a second organization owner.
@@ -45,6 +45,8 @@ This table is the one home of every deployment and workflow credential. No check
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging and release: deploy the edge functions; release reads DEV's ledger | 2027-10-26 | Supabase account settings, Access Tokens; `gh secret set`; revoke the old one. |
+| `PROD_INSPECT_SUPABASE_TOKEN`, `DEV_INSPECT_SUPABASE_TOKEN`, `DEV_AUTH_SYNC_SUPABASE_TOKEN` | Environment `production` | The [PROD inspection](#which-tool-reaches-what) | One year | Scoped, read only: PROD Database, Advisors, Auth config; DEV Database, Auth config. The third: DEV Auth config and Project settings write. `gh secret set --env production`. |
+| `werkflow-workstation-dev` | Workstations | DEV only | One year | [Machine setup](machine-setup.md#set-up-a-new-machine), step 2 |
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
 | `werkflow app prod-watch` | The owner's PC: `~/.config/werkflow/prod-watch.env`, mode 600 | The [production watcher](recovery-and-incidents.md#monitoring), which checks it | 2027-11-07 | Vercel Tokens: same name, team-scoped (`werkflows-projects`, also werkflow-website), 1 year; set the file's `VERCEL_TOKEN=`. |
 | Boat API key | `~/.config/werkflow/boat-api-key`, [mode 600](boat-verification.md#the-key-contract) | [Boat](boat-verification.md) | `boat-api-key.expires` | [Renew](boat-verification.md#renew-the-key) |
@@ -53,7 +55,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `DEV_DATABASE_URL` | GitHub repository secret | Staging: `supabase db push` | With its password | DEV Database settings: reset the password; `gh secret set` the new connection string. |
 | `PROD_DATABASE_URL` | GitHub environment `production` | Release: `supabase db push` | With its password | As for DEV, with `gh secret set --env production`. |
 | `PRODUCTION_DEPLOY_KEY` | GitHub environment `production`; its public half is a write deploy key of this repository | Release: advances `production` | Never | `ssh-keygen -t ed25519`, add the public key as a deploy key with write access, `gh secret set PRODUCTION_DEPLOY_KEY --env production`, delete the old deploy key. |
-| `HEALTH_CHECK_TOKEN` | GitHub repository secret, Vercel (both rows), Supabase secrets of DEV and PROD | The health endpoints and the weekly run | Never | One new value (`openssl rand -hex 32`) in one sitting: `gh secret set`, both Vercel rows, `supabase secrets set` on both projects, then redeploy both. |
+| `HEALTH_CHECK_TOKEN` | GitHub repository secret, Vercel (both rows), Supabase secrets of DEV and PROD | The health endpoints and the weekly run | Never | One new value (`openssl rand -hex 32`) in one sitting: `gh secret set`, both Vercel rows, `supabase secrets set` on DEV, PROD's dashboard, then redeploy both. |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | GitHub repository secret; Vercel project, Deployment Protection | The weekly run past staging's protection | Never | Vercel project settings, Deployment Protection, Protection Bypass for Automation: regenerate, then `gh secret set`. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Vercel | Supabase clients | Never | Supabase API keys: create one, set it in Vercel, redeploy, delete the old one. |
 | `SUPABASE_SECRET_KEY` | Vercel | Admin client, edge-function calls | Never | As above. The functions accept every secret key of their project. |
@@ -65,10 +67,10 @@ This table is the one home of every deployment and workflow credential. No check
 | `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `POSTHOG_PROJECT_API_KEY`, `POSTHOG_ORGANIZATION_IDS` | Vercel | [Usage statistics](security.md#mail-and-providers) | Never | Rotate in PostHog, redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
-| `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key per project, `supabase secrets set --project-ref <ref> RESEND_API_KEY` or Vercel, delete the old one. |
+| `RESEND_API_KEY`, `FROM_EMAIL` | Supabase secrets, one key per project; Vercel | Mail functions; `lib/delivery/send-email.ts` | Never | Resend, API keys: a sending key per project, `supabase secrets set RESEND_API_KEY` on DEV, PROD's dashboard, or Vercel, delete the old one. |
 | `WERKFLOW_ALARM_EMAIL`, `WERKFLOW_BILLING_REPLY_TO`, `RESEND_WEBHOOK_SECRET` | Vercel | Alarm, reply-to, webhook | Never | Set, redeploy. |
 
-The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the owner's local Supabase and R2 admin tokens in the env backups, and `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name.
+The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the workstation tokens, and `WERKFLOW_DATANORM_TOKEN`, whose failure fails the next Vercel build by name.
 
 ## The local test stack
 
@@ -96,15 +98,15 @@ bun run env:prod   # PRODUCTION (loud warning; no tests)
 
 ## Which tool reaches what
 
-Agents never read PROD data through any tool: every tool result goes to the model provider. Metadata is allowed: `bun run prod:inspect`, and through the Vercel MCP connector Vercel's deployment state and `vercel.request.count` counts. Hooks enforce this in Claude Code and Codex; the [backlog](enforcement-ladder-backlog.md) records the other shell and `env:prod` paths. `.claude/hooks/refuse-production-mcp.ts` refuses an MCP tool that reaches the production Supabase project, or returns Vercel's logs, build events or traces. Preview runtime logs pass. No agent starts any sign-in ([security](security.md#never)). `.claude/hooks/refuse-account-sign-in.ts` refuses every Vercel CLI call, which acts for the whole account, and the sign-in commands of the CLIs it lists; the [backlog](enforcement-ladder-backlog.md) records the rest. Keep the `Supabase project` row's shape: the MCP hook reads the production ref there. After a change to `.codex/hooks.json`, the owner trusts it with `/hooks` in Codex on each machine; Codex skips an untrusted hook.
+Agents never read PROD data through any tool: every tool result goes to the model provider. Metadata is allowed: the PROD inspection's log, and through the Vercel MCP connector Vercel's deployment state and `vercel.request.count` counts. Hooks enforce this in Claude Code and Codex; the [backlog](enforcement-ladder-backlog.md) records the other shell and `env:prod` paths. `.claude/hooks/refuse-production-mcp.ts` refuses an MCP tool that reaches the production Supabase project, or returns Vercel's logs, build events or traces. Preview runtime logs pass. No agent signs in ([security](security.md#never)): `.claude/hooks/refuse-account-sign-in.ts` refuses the sign-in commands it lists and every Vercel CLI call; the [backlog](enforcement-ladder-backlog.md) records the rest. Keep the `Supabase project` row's shape: the MCP hook reads the production ref there.
 
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
 | claude.ai Supabase connector | no | no | Organization-wide, so Claude Code denies it (`deniedMcpServers` in `~/.claude/settings.json`). |
 | MCP server `supabase` | never | read and write | `https://mcp.supabase.com/mcp?project_ref=mbkkzuqjbdvzelqvuzcn` |
 | Supabase CLI (`bunx supabase`) | never link or push | yes | The repository links to the DEV ref only. |
-| `bun run prod:inspect` | structure only | compared | Read-only query endpoint with the owner's token. Run it from an up-to-date `main`. |
-| Management API | through `prod:inspect` only | yes | DEV configuration and the `*:check` scripts. |
+| PROD inspection (`prod-inspect.yml`) | structure only | compared | Paused while GitHub Actions is off. |
+| Management API | through the PROD inspection only | yes | DEV configuration and the `*:check` scripts. |
 | R2 tokens | prod bucket only | dev bucket only | Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
 | Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP cannot reach it. |
 | Vercel MCP connector | metadata and counts only | yes | Deployment state, aliases and `vercel.request.count` counts by route, status, error code, deployment or Server Action. The MCP hook refuses a decrypted environment value. |
@@ -121,7 +123,7 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 7. Never edit the `*baseline*` repair migrations.
 8. A Realtime transport change has no expand step: pause writes, drain requests from the old app, change the database, deploy the compatible app, make open tabs reload, verify an authorized receiver, then reopen writes.
 
-Between releases, merged migrations wait on DEV. `migrations:check`, `types:check` and `realtime:check` each compare one thing against the committed files, never whole schemas or function bodies; `lib/testing/local-stack/migration-targets.ts` names what the order gate misses. When parity matters, run `bun run prod:inspect`: it compares every app object's definition by hash and fails on drift once both ledgers match.
+Between releases, merged migrations wait on DEV. `migrations:check`, `types:check` and `realtime:check` each compare one thing against the committed files, never whole schemas or function bodies; `lib/testing/local-stack/migration-targets.ts` names what the order gate misses. The [PROD inspection](#which-tool-reaches-what) compares every app object's definition by hash and fails on drift once both ledgers match.
 
 ## Work in a worktree
 
@@ -137,7 +139,6 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 ## Work on production
 
-- Reads: metadata only, through `bun run prod:inspect`.
 - A production-local session is the owner's: `bun run env:prod`, do the task, `bun run env:dev`. No tests or bulk scripts in between.
 - Owner demo data: `bun scripts/seed-demo-data.ts --target local|dev|prod` (PROD adds `--confirm-prod`) recreates the demo organizations, never the beta partner's; `local` also creates the owner. Each run generates the members' password. To sign in to `bun run dev` as one, seed DEV with your own `DEMO_MEMBER_PASSWORD` and run `bun run env:dev` first; PROD refuses one.
 

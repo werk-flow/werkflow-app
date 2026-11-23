@@ -1,0 +1,134 @@
+name: PROD inspection
+
+# The one place that reads PROD through the Management API
+# (docs/technical/environments.md#which-tool-reaches-what). Daily, `bun run prod:inspect`
+# (scripts/inspect-production.ts) checks PROD's migration ledger, its schema against DEV's and its
+# advisors. By hand, the `auth` input also compares PROD's Auth configuration with DEV's, or copies
+# its mail fields to DEV (scripts/sync-dev-auth-from-prod.ts).
+#
+# PROD is read with the read-only token PROD_INSPECT_SUPABASE_TOKEN, DEV with the read-only
+# DEV_INSPECT_SUPABASE_TOKEN; only `auth: apply` gets DEV_AUTH_SYNC_SUPABASE_TOKEN, which may write
+# DEV's Auth configuration. All three are secrets of the environment
+# `production`, which only main may use; the job never gets the repository's SUPABASE_ACCESS_TOKEN,
+# which release uses to deploy to PROD. No workstation holds a token that reaches PROD, so on a
+# workstation both scripts fail and name this workflow. Each secret reaches only the step that runs
+# a script, never the install. The environment records no deployment: nothing ships. The
+# repository is public and so is this log: the scripts print versions, object names, advisor lint
+# names and field names, never a value, an advisor's text or a response body.
+#
+# A failed or cancelled inspection opens or updates "CI alert: PROD inspection", a failed auth run
+# "CI alert: PROD auth sync"; each assigns the owner, and the next green run of the same check
+# closes it (.github/scripts/alert-issue.sh).
+on:
+  schedule:
+    # 06:00 UTC, after the weekday release.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      auth:
+        description: 'Auth configuration: skip, compare PROD with DEV, or apply (copy the mail fields to DEV)'
+        type: choice
+        default: skip
+        options:
+          - skip
+          - compare
+          - apply
+
+permissions: {}
+
+concurrency:
+  group: prod-inspect
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Inspect PROD
+    # The PROD token lives in this environment only, and only main may use it, so a run off main
+    # skips this job instead of failing it.
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      deployment: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # No step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Inspect PROD's structure
+        env:
+          PROD_INSPECT_SUPABASE_TOKEN: ${{ secrets.PROD_INSPECT_SUPABASE_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.DEV_INSPECT_SUPABASE_TOKEN }}
+        run: bun run prod:inspect
+
+  auth:
+    name: Compare or sync the Auth configuration
+    if: github.ref == 'refs/heads/main' && (inputs.auth == 'compare' || inputs.auth == 'apply')
+    environment:
+      name: production
+      deployment: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Compare or sync the Auth configuration
+        env:
+          PROD_INSPECT_SUPABASE_TOKEN: ${{ secrets.PROD_INSPECT_SUPABASE_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.DEV_INSPECT_SUPABASE_TOKEN }}
+          # Only an apply writes DEV, so only an apply gets the token that may.
+          DEV_AUTH_SYNC_SUPABASE_TOKEN: ${{ inputs.auth == 'apply' && secrets.DEV_AUTH_SYNC_SUPABASE_TOKEN || '' }}
+          AUTH: ${{ inputs.auth }}
+        run: |
+          if test "$AUTH" = apply; then
+            SUPABASE_ACCESS_TOKEN="$DEV_AUTH_SYNC_SUPABASE_TOKEN" bun scripts/sync-dev-auth-from-prod.ts --apply
+          else
+            bun scripts/sync-dev-auth-from-prod.ts
+          fi
+
+  report:
+    name: Report
+    needs: [inspect, auth]
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read # name the failed steps
+      contents: read
+      issues: write # open, update or close the alert issues
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      AFFECTS_PRODUCTION: true
+      ALERT_DETAIL: >-
+        The failed step's log names each problem: a pending or unknown migration version, an
+        object that differs from DEV, an advisor lint, an Auth field, or a call that failed with
+        its HTTP status. HTTP 401 or 403 means PROD_INSPECT_SUPABASE_TOKEN or
+        DEV_INSPECT_SUPABASE_TOKEN is missing, expired or lacks that permission;
+        docs/technical/environments.md#credentials names both.
+    steps:
+      # Only the script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Open, update or close the inspection alert
+        env:
+          TITLE: 'CI alert: PROD inspection'
+          RESULT: ${{ needs.inspect.result }}
+        run: bash .github/scripts/alert-issue.sh run "$TITLE" "$RESULT"
+      # A run without the auth sync says nothing about it, so only a run of it opens or closes its alert.
+      - name: Open, update or close the auth sync alert
+        if: ${{ !cancelled() && needs.auth.result != 'skipped' }}
+        env:
+          TITLE: 'CI alert: PROD auth sync'
+          RESULT: ${{ needs.auth.result }}
+        run: bash .github/scripts/alert-issue.sh run "$TITLE" "$RESULT"
