@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { OfferHeaderFacts } from '@/components/angebote/offer-header-facts';
 import { OfferStatusBadge } from '@/components/angebote/offers-list';
 import { OfferDetailSkeleton } from '@/components/angebote/offers-skeleton';
@@ -9,9 +10,11 @@ import { RegionLoadError } from '@/components/shared/region-load-error';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { SubpageHeader } from '@/components/shared/subpage-header';
 import { logError } from '@/lib/logging';
+import { getManagerAssigneeOptions } from '@/lib/members/profile-name';
 import { readOffer } from '@/lib/offers/reads';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { uuidSchema } from '@/lib/validation/uuid';
 
 /** One offer on its own route, so two offers open in two tabs. */
@@ -25,7 +28,12 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
         logError('angebot.read_failed', error);
         return 'failed' as const;
       });
-  if (offer === 'failed') {
+  // Only a draft's header changes; its picker offers the office's members as responsible.
+  const owners =
+    offer && offer !== 'failed' && offer.status === 'entwurf'
+      ? await getManagerAssigneeOptions(createSupabaseAdminClient(), membership.orgId)
+      : null;
+  if (offer === 'failed' || (owners && !owners.success)) {
     return (
       <RegionLoadError title="Das Angebot konnte nicht geladen werden">
         Das Angebot ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
@@ -57,7 +65,12 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
           description={
             <span className="wrap-anywhere">{`${offer.offerNumber} · für ${offer.client.name}`}</span>
           }
-          actions={<OfferStatusBadge status={offer.status} />}
+          actions={
+            <div className="flex items-center gap-2">
+              <OfferStatusBadge status={offer.status} />
+              {owners?.success && <EditOfferHeaderButton offer={offer} owners={owners.options} />}
+            </div>
+          }
         />
       </div>
       <OfferHeaderFacts offer={offer} />

@@ -22660,6 +22660,24 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      update_offer: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_closing_text: string;
+          p_contact_id: string;
+          p_expected_version: number;
+          p_offer_id: string;
+          p_opening_text: string;
+          p_organization_id: string;
+          p_owner_user_id: string;
+          p_recipient_client_id: string;
+          p_site_id: string;
+          p_title: string;
+          p_valid_until: string;
+        };
+        Returns: number;
+      };
       update_planning_occurrence: {
         Args: {
           p_actor_id: string;
