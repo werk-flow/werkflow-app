@@ -6,7 +6,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { containerExecutors, type SlotShell } from '../../../scripts/ci/container-executor';
+import {
+  clearRun,
+  containerExecutors,
+  type SlotShell,
+  stageInputs,
+} from '../../../scripts/ci/container-executor';
 import type { SlotConfig } from './container-slot';
 import type { CiResult } from './results';
 import type { ExecutorTask } from './run-commit';
@@ -100,6 +105,8 @@ function executors(shell: SlotShell) {
       shell,
       generation: 7,
       snapshot: async () => ({ labels: {}, openMigrations: [] }),
+      businessCheck: () => [],
+      siblings: () => undefined,
       // The launch poll and the stop's retry return at once: the job's end decides.
       sleep: () => new Promise((done) => setImmediate(done)),
     },
@@ -171,4 +178,63 @@ test("a stopped run stops the job's container through docker's stop, and the job
       (command) => command.join(' ') === `docker stop --time 60 werkflow-ci-${RUN_KEY}-plan`,
     ),
   ).toBe(true);
+});
+
+test("F15: werkflow-business never enters a job's inputs: this side checks it, and the job is told it is unreadable", async () => {
+  const folder = join(root, 'stage-fast');
+  const task: ExecutorTask = { ...planTask(join(root, 'results-own')), unit: { job: 'fast', shard: null } };
+  const options = {
+    snapshot: async () => ({ labels: {}, openMigrations: [] }),
+    siblings: (_task: ExecutorTask, checkout: string) => {
+      for (const sibling of ['werkflow-website', 'werkflow-business']) {
+        mkdirSync(join(checkout, '..', sibling), { recursive: true });
+        writeFileSync(join(checkout, '..', sibling, 'AGENTS.md'), 'private content');
+      }
+    },
+  };
+  let checked = '';
+  await stageInputs({
+    source,
+    commit: COMMIT,
+    task,
+    folder,
+    options: { ...options, businessCheck: (checkout) => ((checked = checkout), []) },
+  });
+  expect(existsSync(join(folder, 'inputs', 'werkflow-business'))).toBe(false);
+  expect(existsSync(join(folder, 'inputs', 'werkflow-website', 'AGENTS.md'))).toBe(true);
+  expect(readFileSync(join(folder, 'inputs', 'job.env'), 'utf8')).toBe(
+    'WERKFLOW_UNREADABLE_SIBLINGS=werkflow-business\n',
+  );
+  // The trusted check reads the PR's files as data, at the commit under test.
+  expect(readFileSync(join(checked, 'file'), 'utf8')).toBe('x');
+  await expect(
+    stageInputs({
+      source,
+      commit: COMMIT,
+      task,
+      folder,
+      options: { ...options, businessCheck: () => ['a link into werkflow-business broke'] },
+    }),
+  ).rejects.toThrow('werkflow-business');
+});
+
+test('F4: a stopped run counts as clean only once its job and staging containers and every Supabase stack are gone', async () => {
+  const containers = new Set([`werkflow-ci-${RUN_KEY}-fast`, `werkflow-ci-${RUN_KEY}-stage`]);
+  const stacks = new Set(['supabase_db']);
+  let stuck = false;
+  const shell: SlotShell = async (argv) => {
+    const line = argv.join(' ');
+    const ok = (stdout = '') => ({ code: 0, stdout, stderr: '' });
+    if (line.includes(`label=org.werkflow.ci-run=${RUN_KEY}`)) return ok([...containers].join('\n'));
+    if (line.includes('label=com.supabase.cli.project')) return ok([...stacks].join('\n'));
+    if (argv.includes('rm') && !stuck) {
+      for (const name of argv) containers.delete(name);
+      stacks.clear();
+    }
+    return ok();
+  };
+  expect(await clearRun(shell, SLOT, RUN_KEY)).toBeUndefined();
+  containers.add(`werkflow-ci-${RUN_KEY}-stage`);
+  stuck = true;
+  expect(await clearRun(shell, SLOT, RUN_KEY)).toContain(`werkflow-ci-${RUN_KEY}-stage`);
 });

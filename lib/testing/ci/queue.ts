@@ -164,16 +164,17 @@ export function needsAttention(outcome: QueueOutcome): boolean {
   );
 }
 
+type Placed = Pick<QueuedPull, 'number' | 'isDraft' | 'queuedAt' | 'mergeState'>;
 /** Whether the PR asked to merge: ready, and auto-merge on. */
-export const asked = (pull: QueuedPull): boolean => !pull.isDraft && pull.queuedAt !== null;
+export const asked = (pull: Placed): boolean => !pull.isDraft && pull.queuedAt !== null;
 
 /** Whether GitHub would merge the PR onto main as it is: neither conflicting nor behind. */
-const upToDate = (pull: QueuedPull): boolean => pull.mergeState !== 'DIRTY' && pull.mergeState !== 'BEHIND';
-
+export const upToDate = (pull: Placed): boolean =>
+  pull.mergeState !== 'DIRTY' && pull.mergeState !== 'BEHIND';
 const isQueued = (pull: QueuedPull): boolean => asked(pull) && pull.check === 'SUCCESS' && upToDate(pull);
 
 /** Oldest place in the queue first, ties by number. */
-export const byQueuePlace = (left: QueuedPull, right: QueuedPull): number =>
+export const byQueuePlace = (left: Placed, right: Placed): number =>
   left.queuedAt === right.queuedAt
     ? left.number - right.number
     : (left.queuedAt ?? '').localeCompare(right.queuedAt ?? '');

@@ -480,6 +480,17 @@ export function postCheckRun(
 }
 
 /**
+ * Completes check run `id`, the start a machine runner created for its attempt: the machine's lease
+ * ref (lease.ts) decides beforehand that this attempt may write it, so no read of the newest start
+ * stands between the decision and the write.
+ */
+export function completeCheckRun(
+  input: GitHubAccess & { request: CheckRunRequest; id: number },
+): Promise<{ id: number } | { problem: string }> {
+  return writeCheckRun({ ...input, updated: input.id });
+}
+
+/**
  * Posts a run's verdict. A run's `Check` completes the run's own start, found by ownStartOf, and
  * never creates a check run: the start was created before any newer run's start, so a newer start
  * stays the commit's newest `Check` even when it lands between the read and the update. Without its

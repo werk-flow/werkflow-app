@@ -4,7 +4,7 @@
   "trustedCheckout": "/home/ci/ci-runner/werkflow-app",
   "stateDir": "/home/ci/ci-runner/state",
   "windowsFile": "/home/ci/ci-runner/windows.json",
-  "appKeyFile": "/home/ci/ci-runner/ci-app.pem",
+  "appKeyFile": "/home/ci/ci-runner/key/ci-app.pem",
   "slot": {
     "prefix": ["wsl.exe", "-d", "werkflow-ci", "-u", "cirunner", "--"],
     "dockerHost": "unix:///run/user/1002/docker.sock",
@@ -13,7 +13,8 @@
     "image": "werkflow-ci:COMMIT",
     "containerUser": "root"
   },
+  "probePorts": ["AGENTS_IP:54321", "AGENTS_IP:3000"],
   "sizes": { "full": { "resize": null } },
-  "seedSeconds": { "full": 1800, "selected": 1500 },
+  "seedSeconds": { "full": 12600, "selected": 3600 },
   "leaseTtlSeconds": 600
 }

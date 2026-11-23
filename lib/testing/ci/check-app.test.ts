@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import {
   cancelledCheckRunOf,
   CHECK_APP_CONFIG,
+  completeCheckRun,
   checkRunOf,
   finishCheckRun,
   postCheckRun,
@@ -544,4 +545,43 @@ test('a run a machine runner stopped ends as cancelled on its own start, never a
       output: { title: 'Cancelled', summary: `The window turns off.\n\nRun: ${RUN_URL}` },
     },
   });
+});
+
+test("F1: a machine runner completes its attempt's own check run by its id, with no read of the newest start between", async () => {
+  const scheduled = {
+    runUrl: RUN_URL,
+    attempt: 1,
+    event: 'integration' as const,
+    commit: COMMIT,
+    prHead: undefined,
+  };
+  const built = cancelledCheckRunOf({
+    scheduled,
+    startedAt: new Date('2026-11-23T02:00:00Z'),
+    now: new Date('2026-11-23T02:30:00Z'),
+    reason: 'Stopped.',
+  });
+  if ('problem' in built) throw new Error(built.problem);
+  const calls: { url: string; method: string }[] = [];
+  const posted = await completeCheckRun({
+    request: built.request,
+    id: 77,
+    appId: APP,
+    token: TOKEN,
+    repository: 'werk-flow/werkflow-app',
+    fetch: async (url, init) => {
+      calls.push({ url, method: init.method ?? 'GET' });
+      return Response.json({
+        id: 77,
+        name: 'Check',
+        head_sha: COMMIT,
+        conclusion: 'cancelled',
+        app: { id: APP },
+      });
+    },
+  });
+  expect(posted).toEqual({ id: 77 });
+  expect(calls).toEqual([
+    { url: 'https://api.github.com/repos/werk-flow/werkflow-app/check-runs/77', method: 'PATCH' },
+  ]);
 });

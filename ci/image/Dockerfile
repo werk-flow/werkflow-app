@@ -37,8 +37,10 @@ RUN set -eu; \
     curl -fsSL "https://github.com/supabase/cli/releases/download/v2.116.0/supabase_2.116.0_linux_$TARGETARCH.tar.gz" -o /tmp/supabase.tar.gz; \
     echo "$sum  /tmp/supabase.tar.gz" | sha256sum -c -; \
     tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin supabase; rm /tmp/supabase.tar.gz
-# Chromium's system packages, for Playwright 1.62.1.
-RUN apt-get update && npx --yes playwright@1.62.1 install-deps chromium && rm -rf /var/lib/apt/lists/*
+# Chromium and its system packages, for Playwright 1.62.1, in the image: no job writes a browser
+# that a later run starts.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN apt-get update && npx --yes playwright@1.62.1 install --with-deps chromium && rm -rf /var/lib/apt/lists/*
 RUN userdel -r ubuntu 2>/dev/null; groupadd -g "$DOCKER_SOCKET_GID" dockersock \
     && useradd -m -u "$RUNNER_UID" -s /bin/bash runner \
     && usermod -aG docker,dockersock runner && echo 'runner ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/runner
@@ -54,8 +56,8 @@ RUN set -eu; \
     ln -s /usr/local/bin/bun /usr/local/bin/bunx; rm -rf /tmp/bun.zip "/tmp/bun-linux-$arch"
 COPY --chmod=0755 stage.sh /usr/local/bin/werkflow-ci-stage
 COPY --chmod=0755 job.sh /usr/local/bin/werkflow-ci-job
+COPY --chmod=0755 probe.sh /usr/local/bin/werkflow-ci-probe
 USER runner
 ENV CI=true
 WORKDIR /home/runner
-RUN mkdir -p /home/runner/.bun/install/cache /home/runner/.cache/ms-playwright \
-    && git config --global --add safe.directory '*'
+RUN mkdir -p /home/runner/.bun/install/cache && git config --global --add safe.directory '*'

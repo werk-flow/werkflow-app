@@ -272,6 +272,25 @@ test("a job's steps and body get only the host variables a job needs, never the 
   }
 });
 
+// F11: the shared process executor passes no Node option of the orchestrator's shell; the machine
+// runner's containers set their own heap (lib/testing/ci/container-slot.ts).
+test("a job gets no NODE_OPTIONS of the orchestrator's environment", async () => {
+  process.env.NODE_OPTIONS = '--max-old-space-size=123';
+  try {
+    const run = await executor().run(task('fast'), new AbortController().signal);
+    expect(run.exitCode, run.detail).toBe(0);
+    for (const file of ['prepare-fast', 'job-fast'])
+      expect([
+        file,
+        readFileSync(join(folder, `${file}.names`), 'utf8')
+          .split('\n')
+          .includes('NODE_OPTIONS'),
+      ]).toEqual([file, false]);
+  } finally {
+    delete process.env.NODE_OPTIONS;
+  }
+});
+
 // run-commit.ts refuses it for every run that holds what a job must not reach (isolationProblem).
 test('the process executor says it isolates no job', () => {
   const executors = processExecutors({

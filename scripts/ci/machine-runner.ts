@@ -1,24 +1,29 @@
 #!/usr/bin/env bun
 // The machine runner of the owner's machines (lib/testing/ci/machine-runner.ts decides; this file
-// acts): a user service on the MacBook (launchd) and on the PC (the agents' WSL distribution) that
-// claims pull requests and runs their PR runs, every 60 s, until it is stopped.
+// acts): a user service on the MacBook (launchd) and on the PC (a systemd user unit in the agents'
+// WSL distribution) that claims pull requests and runs their integration runs, every 60 s, until it
+// is stopped.
 // Usage: bun scripts/ci/machine-runner.ts --config <machine config file>
-// It runs only from the configuration's `trustedCheckout`, a clean clone at a reviewed commit, and
-// refuses an image built from another commit. It holds the credentials: its `gh` login reads
-// GitHub, files the alerts and clones the private sibling, and the CI App's key (`appKeyFile`) mints
-// the token its Check check runs are posted with. Each run is `scripts/ci/run-commit.ts` with the
-// container executor (CI_EXECUTOR=container), which keeps every credential out of the job
-// containers. Install and operate it as docs/technical/testing.md ("Run CI on the owner's
-// machines") says.
+// It runs only from the configuration's `trustedCheckout`, a clean clone at a reviewed commit, only
+// while main's CI profile is `local`, only with an image built from that commit (run by its
+// immutable id), and only once a probe job showed that the slot cannot read this side's files or
+// reach its ports. It holds the credentials: its `gh` login reads GitHub, pushes the lease refs
+// (`refs/leases/ci/<sha>`), files the alerts and clones the private sibling; the CI App's key
+// (`appKeyFile`) mints the token its Check check runs are written with. Each run is
+// `scripts/ci/run-commit.ts` with the container executor (CI_EXECUTOR=container), beside a watchdog
+// (scripts/ci/machine-watchdog.ts) that stops it before the window turns off. Install and operate it
+// as docs/technical/machine-setup.md ("Run CI on the owner's machines") says.
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
   CHECK_APP_CONFIG,
   cancelledCheckRunOf,
   checkRunOf,
-  finishCheckRun,
+  completeCheckRun,
   postCheckRun,
   queuedCheckRunOf,
   readCheckApp,
@@ -27,49 +32,36 @@ import {
 } from '../../lib/testing/ci/check-app';
 import { installationToken } from '../../lib/testing/ci/check-app-token';
 import {
+  docker,
   IMAGE_COMMIT_LABEL,
   listCommand,
   otherGenerations,
-  stopCommand,
+  probeCommand,
+  stackListCommand,
 } from '../../lib/testing/ci/container-slot';
+import { nextGeneration, type RefValue } from '../../lib/testing/ci/lease';
 import {
-  claim,
-  heartbeat,
-  type LeaseApi,
-  type LeaseCheckRun,
-  nextGeneration,
-  postVerdict,
-} from '../../lib/testing/ci/lease';
-import {
+  type Completion,
   type CurrentRun,
   EMPTY_STATE,
+  endProcessGroup,
   type MachineConfig,
   machineConfigSchema,
   recover,
-  type RunLease,
   type RunnerPorts,
   type RunnerState,
   runnerStateSchema,
-  stopProcessGroup,
   TICK_MS,
   tick,
 } from '../../lib/testing/ci/machine-runner';
-import { PULLS_QUERY, pullsFromGitHub } from '../../lib/testing/ci/queue-github';
+import { RUNNER_PULLS_QUERY, runnerPullsFromGitHub } from '../../lib/testing/ci/machine-pulls';
+import { activeProfile, MAIN_REFSPEC } from '../../lib/testing/ci/profiles';
 import { resultFileName } from '../../lib/testing/ci/results';
+import { runKeyOf } from '../../lib/testing/ci/run-commit';
 import { z } from '../../lib/zod';
-import { slotShell } from './container-executor';
+import { clearRun, clearStacks, slotShell } from './container-executor';
+import { runCommitSignal } from './machine-watchdog';
 
-const checkRunListSchema = z.object({
-  check_runs: z.array(
-    z.object({
-      id: z.number(),
-      status: z.string(),
-      conclusion: z.string().nullable(),
-      app: z.object({ id: z.number() }).nullable(),
-      output: z.object({ title: z.string().nullable() }),
-    }),
-  ),
-});
 const exitSchema = z.object({ exitCode: z.number().int().nullable() });
 
 const { values } = parseArgs({ options: { config: { type: 'string' } } });
@@ -77,10 +69,20 @@ if (!values.config) throw new Error('Usage: bun scripts/ci/machine-runner.ts --c
 const config: MachineConfig = machineConfigSchema.parse(JSON.parse(readFileSync(values.config, 'utf8')));
 const trusted = resolve(config.trustedCheckout);
 const log = (line: string): void => console.info(`[${new Date().toISOString()}] ${line}`);
+const wait = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
+/** A command's result in the trusted checkout. */
+function exec(command: string, args: readonly string[], env: Record<string, string> = {}) {
+  return spawnSync(command, args, {
+    cwd: trusted,
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 ** 2,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...env },
+  });
+}
 /** A command's output, or a throw that names it. */
-function run(command: string, args: readonly string[], cwd = trusted): string {
-  const answer = spawnSync(command, args, { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 ** 2 });
+function run(command: string, args: readonly string[], env: Record<string, string> = {}): string {
+  const answer = exec(command, args, env);
   if (answer.status !== 0)
     throw new Error(`${command} ${args.slice(0, 3).join(' ')} failed: ${answer.stderr.trim()}`);
   return answer.stdout.trim();
@@ -92,6 +94,13 @@ if (relative(trusted, resolve(import.meta.dir, '../..')) !== '')
 if (run('git', ['status', '--porcelain']) !== '')
   throw new Error(`${trusted} has changes; the runner runs only a clean commit.`);
 const trustedCommit = run('git', ['rev-parse', 'HEAD']);
+/** main's CI profile, from the switch on main as just fetched (profiles.ts). */
+function profileName(): string {
+  run('git', ['fetch', '--quiet', '--no-tags', 'origin', MAIN_REFSPEC]);
+  return activeProfile().profile.name;
+}
+if (profileName() !== 'local')
+  throw new Error("main's CI profile is not local, so the machine runner does not start.");
 const app = readCheckApp(join(trusted, CHECK_APP_CONFIG));
 if ('problem' in app) throw new Error(app.problem);
 if (app.appId === null) throw new Error(`${CHECK_APP_CONFIG} names no CI App, so no Check can be posted.`);
@@ -102,19 +111,56 @@ if ((statSync(config.appKeyFile).mode & 0o077) !== 0)
 const privateKey = readFileSync(config.appKeyFile, 'utf8');
 
 const shell = slotShell(config.slot);
-const image = await shell([
-  ...(config.slot.dockerHost === null ? [] : ['env', `DOCKER_HOST=${config.slot.dockerHost}`]),
-  'docker',
-  'image',
-  'inspect',
-  '--format',
-  `{{ index .Config.Labels "${IMAGE_COMMIT_LABEL}" }}`,
-  config.slot.image,
-]);
-if (image.code !== 0 || image.stdout.trim() !== trustedCommit)
-  throw new Error(
-    `${config.slot.image} is not built from ${trustedCommit} (${image.stdout.trim() || image.stderr.trim()}); rebuild it as docs/technical/testing.md says.`,
+/** The image's immutable id and its label, through the slot. */
+async function inspectImage(): Promise<{ id: string; commit: string } | { problem: string }> {
+  const answer = await shell(
+    docker(
+      config.slot,
+      'image',
+      'inspect',
+      '--format',
+      `{{.Id}} {{ index .Config.Labels "${IMAGE_COMMIT_LABEL}" }}`,
+      config.slot.image,
+    ),
+    { timeoutMs: 60_000 },
   );
+  const [id, commit] = answer.stdout.trim().split(' ');
+  if (answer.code !== 0 || !id?.startsWith('sha256:') || !commit)
+    return { problem: `${config.slot.image} cannot be inspected on the slot: ${answer.stderr.trim()}` };
+  return { id, commit };
+}
+const inspected = await inspectImage();
+if ('problem' in inspected) throw new Error(inspected.problem);
+if (inspected.commit !== trustedCommit)
+  throw new Error(
+    `${config.slot.image} is built from ${inspected.commit}, not ${trustedCommit}; rebuild it as machine-setup.md says.`,
+  );
+const imageId = inspected.id;
+/** The slot as run-commit gets it: the image by its id, never by a tag a job could move. */
+const slot = { ...config.slot, image: imageId };
+
+// The boundary, before any claim: a job of this slot reads none of this side's files and reaches
+// none of its ports. Each sentinel holds a random token; the probe looks for it.
+{
+  const token = randomBytes(24).toString('hex');
+  const sentinels = [
+    join(dirname(config.appKeyFile), '.werkflow-ci-probe'),
+    join(trusted, '.git', 'werkflow-ci-probe'),
+    join(homedir(), '.werkflow-ci-probe'),
+  ];
+  for (const path of sentinels) writeFileSync(path, `${token}\n`, { mode: 0o600 });
+  const probed = await shell(
+    probeCommand(slot, { image: imageId, token, sentinels, ports: config.probePorts }),
+    {
+      timeoutMs: 300_000,
+    },
+  );
+  for (const path of sentinels) rmSync(path, { force: true });
+  if (probed.code !== 0)
+    throw new Error(
+      `The slot's boundary does not hold, so the runner claims nothing: ${probed.stderr.trim() || probed.stdout.trim()}`,
+    );
+}
 
 mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
 const generation = nextGeneration(join(config.stateDir, 'generation'));
@@ -128,127 +174,134 @@ async function appToken(): Promise<string> {
     cachedToken = await installationToken({ appId, privateKey, repository: config.repository, nowS, fetch });
   return cachedToken.token;
 }
-const headers = async () => ({
-  Accept: 'application/vnd.github+json',
-  Authorization: `Bearer ${await appToken()}`,
-  'X-GitHub-Api-Version': '2022-11-28',
-});
+const access = async () => ({ appId, token: await appToken(), repository: config.repository, fetch });
 
-const scheduledOf = (run: { head: string; runUrl: string }): ScheduledRun => ({
-  runUrl: run.runUrl,
+const scheduledOf = (head: string, runUrl: string): ScheduledRun => ({
+  runUrl,
   attempt: 1,
-  event: 'pr',
-  commit: run.head,
+  event: 'integration',
+  commit: head,
   prHead: undefined,
 });
 
-/** The lease's GitHub calls for one run: its start is the run's queued Check (lease.ts). */
-function leaseApi(scheduled: ScheduledRun): LeaseApi {
-  return {
-    async checkRuns(sha) {
-      const runs: LeaseCheckRun[] = [];
-      for (let page = 1; page <= 10; page++) {
-        const response = await fetch(
-          `https://api.github.com/repos/${config.repository}/commits/${sha}/check-runs?check_name=Check&app_id=${appId}&filter=all&per_page=100&page=${page}`,
-          { headers: await headers(), signal: AbortSignal.timeout(60_000) },
-        );
-        if (!response.ok) throw new Error(`GitHub answered ${response.status} to the check run list.`);
-        const answer = checkRunListSchema.parse(await response.json());
-        // A cancelled run left the head without a verdict: it neither holds nor settles it.
-        for (const checkRun of answer.check_runs)
-          if (checkRun.app?.id === appId && checkRun.conclusion !== 'cancelled')
-            runs.push({
-              id: checkRun.id,
-              completed: checkRun.status === 'completed',
-              title: checkRun.output.title,
-            });
-        if (answer.check_runs.length < 100) return runs;
-      }
-      throw new Error(`More than 1000 Check runs on ${sha}.`);
-    },
-    async start(sha, title) {
-      const queued = queuedCheckRunOf({ ...scheduled, commit: sha });
-      if (!queued || 'problem' in queued)
-        throw new Error(`No start can be posted: ${queued?.problem ?? 'a full run'}`);
-      const posted = await postCheckRun({
-        request: { ...queued.request, output: { ...queued.request.output, title } },
-        appId,
-        token: await appToken(),
-        repository: config.repository,
-        fetch,
+/** Git's credentials for a push: the `gh` login's token as a header, never in an argument or a file. */
+const pushAuth = (): Record<string, string> => ({
+  GIT_CONFIG_COUNT: '1',
+  GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+  GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${run('gh', ['auth', 'token'])}`).toString('base64')}`,
+});
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+const leaseRef = (sha: string): string => `refs/leases/ci/${sha}`;
+const remoteOid = (sha: string): string | null =>
+  run('git', ['ls-remote', 'origin', leaseRef(sha)], pushAuth()).split('\t')[0] || null;
+
+const refs: RunnerPorts['refs'] = {
+  async read(sha) {
+    const oid = remoteOid(sha);
+    if (oid === null) return null;
+    run('git', ['fetch', '--quiet', '--no-tags', 'origin', leaseRef(sha)], pushAuth());
+    return { oid, message: run('git', ['log', '-1', '--format=%B', oid]) };
+  },
+  async swap(sha, expected, message): Promise<RefValue | null> {
+    const oid = run(
+      'git',
+      ['commit-tree', EMPTY_TREE, ...(expected ? ['-p', expected] : []), '-m', message],
+      {
+        GIT_AUTHOR_NAME: `machine runner ${config.machine}`,
+        GIT_AUTHOR_EMAIL: 'machine-runner@users.noreply.github.com',
+        GIT_COMMITTER_NAME: `machine runner ${config.machine}`,
+        GIT_COMMITTER_EMAIL: 'machine-runner@users.noreply.github.com',
+      },
+    );
+    const pushed = exec(
+      'git',
+      [
+        'push',
+        '--quiet',
+        '--porcelain',
+        'origin',
+        `${oid}:${leaseRef(sha)}`,
+        `--force-with-lease=${leaseRef(sha)}:${expected ?? ''}`,
+      ],
+      pushAuth(),
+    );
+    if (pushed.status === 0) return { oid, message };
+    // A lost answer: the ref holds this push's commit, so the swap happened.
+    const now = remoteOid(sha);
+    if (now === oid) return { oid, message };
+    if (/rejected|stale info/.test(`${pushed.stdout}${pushed.stderr}`)) return null;
+    throw new Error(`The lease ref ${leaseRef(sha)} could not be pushed: ${pushed.stderr.trim()}`);
+  },
+  async remove(sha, expected) {
+    return (
+      exec(
+        'git',
+        ['push', '--quiet', 'origin', `--force-with-lease=${leaseRef(sha)}:${expected}`, `:${leaseRef(sha)}`],
+        pushAuth(),
+      ).status === 0
+    );
+  },
+  async list() {
+    return run('git', ['ls-remote', 'origin', 'refs/leases/ci/*'], pushAuth())
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [oid = '', ref = ''] = line.split('\t');
+        return { oid, sha: ref.slice('refs/leases/ci/'.length) };
       });
-      if ('problem' in posted) throw new Error(`The start was not posted: ${posted.problem}`);
-      return posted.id;
-    },
-    async renew(checkRun, title) {
-      const response = await fetch(
-        `https://api.github.com/repos/${config.repository}/check-runs/${checkRun}`,
-        {
-          method: 'PATCH',
-          headers: { ...(await headers()), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ output: { title, summary: `Run: ${scheduled.runUrl}` } }),
-          signal: AbortSignal.timeout(60_000),
-        },
-      );
-      if (!response.ok) throw new Error(`GitHub answered ${response.status} to the lease's renewal.`);
-    },
-    wait: (ms) => new Promise((done) => setTimeout(done, ms)),
-  };
-}
-
-/** Completes the run's own start with `request`, only while its lease holds (lease.ts, postVerdict). */
-const complete = async (current: CurrentRun, now: number, built: ReturnType<typeof checkRunOf>) =>
-  'problem' in built
-    ? built
-    : postVerdict(leaseApi(scheduledOf(current)), current.head, current.held, now, async () =>
-        finishCheckRun({
-          request: built.request,
-          scheduled: scheduledOf(current),
-          appId,
-          token: await appToken(),
-          repository: config.repository,
-          fetch,
-        }),
-      );
-
-const lease: RunLease = {
-  claim: (pending, now) =>
-    claim(
-      leaseApi(scheduledOf({ head: pending.pull.headSha, runUrl: pending.runUrl })),
-      pending.pull.headSha,
-      { machine: config.machine, generation: pending.generation },
-      now,
-      config.leaseTtlSeconds,
-    ),
-  heartbeat: (current, now) =>
-    heartbeat(leaseApi(scheduledOf(current)), current.head, current.held, now, config.leaseTtlSeconds),
-  verdict: (current, now) =>
-    complete(
-      current,
-      now,
-      checkRunOf({
-        check: readHandoff(join(current.runDir, 'results', resultFileName('check', null))),
-        plan: readHandoff(join(current.runDir, 'results', resultFileName('plan', null))),
-        tree: run('git', ['rev-parse', `${current.head}^{tree}`]),
-        scheduled: scheduledOf(current),
-        now: new Date(),
-      }),
-    ),
-  cancel: (current, now, reason) =>
-    complete(
-      current,
-      now,
-      cancelledCheckRunOf({
-        scheduled: scheduledOf(current),
-        startedAt: new Date(current.startedAt),
-        now: new Date(),
-        reason,
-      }),
-    ),
+  },
 };
 
-/** The run-commit processes this runner started, by process group. */
+const checks: RunnerPorts['checks'] = {
+  async start({ head, runUrl }) {
+    const queued = queuedCheckRunOf(scheduledOf(head, runUrl));
+    if (!queued || 'problem' in queued)
+      throw new Error(`No start can be posted: ${queued?.problem ?? 'a full run'}`);
+    const posted = await postCheckRun({ request: queued.request, ...(await access()) });
+    if ('problem' in posted) throw new Error(`The start was not posted: ${posted.problem}`);
+    return posted.id;
+  },
+  async complete(completion: Completion) {
+    const scheduled = scheduledOf(completion.head, completion.runUrl);
+    const cancelled = (reason: string) =>
+      cancelledCheckRunOf({ scheduled, startedAt: new Date(completion.startedAt), now: new Date(), reason });
+    const built =
+      completion.kind === 'cancelled'
+        ? cancelled(completion.reason)
+        : checkRunOf({
+            check: readHandoff(join(completion.runDir, 'results', resultFileName('check', null))),
+            plan: readHandoff(join(completion.runDir, 'results', resultFileName('plan', null))),
+            tree: run('git', ['rev-parse', `${completion.head}^{tree}`]),
+            scheduled,
+            now: new Date(),
+          });
+    // A verdict that cannot be built from the run's results is no verdict: the Check ends cancelled.
+    const request = 'problem' in built ? cancelled(`No verdict: ${built.problem}`) : built;
+    if ('problem' in request) throw new Error(request.problem);
+    const summary = `${request.request.output.summary}\nList growth approved: ${completion.approval ? 'yes' : 'no'}`;
+    const posted = await completeCheckRun({
+      request: { ...request.request, output: { ...request.request.output, summary } },
+      id: completion.checkRun,
+      ...(await access()),
+    });
+    if ('problem' in posted) throw new Error(posted.problem);
+  },
+};
+
+const alive = (group: number): boolean => {
+  try {
+    process.kill(-group, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 const children = new Map<number, ChildProcess>();
+const runKeyOfRun = (current: CurrentRun): string => runKeyOf(current.runUrl, 1);
+const ended = (runDir: string): void => {
+  const exit = join(runDir, 'exit.json');
+  if (!existsSync(exit)) writeFileSync(exit, JSON.stringify({ exitCode: null }));
+};
 
 const ports: RunnerPorts = {
   config,
@@ -262,9 +315,10 @@ const ports: RunnerPorts = {
       return text;
     }
   },
+  profile: async () => profileName(),
   pulls: async () => {
     const [owner, name] = config.repository.split('/');
-    return pullsFromGitHub(
+    return runnerPullsFromGitHub(
       JSON.parse(
         run('gh', [
           'api',
@@ -272,7 +326,7 @@ const ports: RunnerPorts = {
           '--paginate',
           '--slurp',
           '-f',
-          `query=${PULLS_QUERY}`,
+          `query=${RUNNER_PULLS_QUERY}`,
           '-f',
           `owner=${owner}`,
           '-f',
@@ -282,9 +336,25 @@ const ports: RunnerPorts = {
     );
   },
   main: async () => run('gh', ['api', `repos/${config.repository}/commits/main`, '--jq', '.sha']),
-  lease,
+  head: async (sha, base) => {
+    run('git', ['fetch', '--quiet', '--no-tags', 'origin', sha, base]);
+    return {
+      upToDate: exec('git', ['merge-base', '--is-ancestor', base, sha]).status === 0,
+      snapshotReader:
+        exec('git', ['cat-file', '-e', `${sha}:lib/testing/ci/github-snapshot.ts`]).status === 0,
+    };
+  },
+  image: async () => {
+    const now = await inspectImage();
+    if ('problem' in now) return now.problem;
+    return now.id === imageId && now.commit === trustedCommit
+      ? undefined
+      : `${config.slot.image} changed on the slot since the runner verified ${imageId}; restart the runner after a rebuild.`;
+  },
+  refs,
+  checks,
   runs: {
-    async start({ pull, base, runUrl, runDir, generation: runGeneration }) {
+    async start({ pull, base, runUrl, runDir, stopBy }) {
       mkdirSync(join(runDir, 'results'), { recursive: true });
       // The private sibling through the runner's own login; only the trusted sibling step sees it.
       const siblingToken = run('gh', ['auth', 'token']);
@@ -297,11 +367,12 @@ const ports: RunnerPorts = {
           PATH: process.env.PATH,
           HOME: process.env.HOME,
           ...(process.env.WSL_INTEROP ? { WSL_INTEROP: process.env.WSL_INTEROP } : {}),
-          CI_EVENT: 'pr',
+          // The integration run of the PR's up-to-date head: the browser groups the plan selects
+          // included, as the queue's integration run tests a landing (lib/testing/ci/dag.ts).
+          CI_EVENT: 'integration',
           CI_COMMIT: pull.headSha,
           CI_BASE_SHA: base,
           CI_PRS: String(pull.number),
-          CI_PR_HEAD_REF: `refs/pull/${pull.number}/head`,
           CI_RESULTS_DIR: join(runDir, 'results'),
           CI_RUN_URL: runUrl,
           CI_RUN_ATTEMPT: '1',
@@ -311,8 +382,8 @@ const ports: RunnerPorts = {
           CI_PARALLEL: '1',
           CI_DEDICATED_HOST: '1',
           CI_EXECUTOR: 'container',
-          CI_CONTAINER_SLOT: JSON.stringify(config.slot),
-          CI_CONTAINER_GENERATION: String(runGeneration),
+          CI_CONTAINER_SLOT: JSON.stringify(slot),
+          CI_CONTAINER_GENERATION: String(generation),
           SHRINK_ONLY_GROWTH_APPROVED: String(pull.listGrowthApproved),
           GITHUB_REPOSITORY: config.repository,
           SIBLING_REPOSITORIES_TOKEN: siblingToken,
@@ -325,48 +396,86 @@ const ports: RunnerPorts = {
         writeFileSync(join(runDir, 'exit.json'), JSON.stringify({ exitCode: code }));
         if (child.pid !== undefined) children.delete(child.pid);
       });
-      if (child.pid !== undefined) children.set(child.pid, child);
-      return { processGroup: child.pid ?? null };
+      if (child.pid === undefined) return { processGroup: null };
+      children.set(child.pid, child);
+      // The window's watchdog: a process of its own, which stops the run at its stop-by instant
+      // even when this runner hangs, dies or cannot reach GitHub.
+      if (stopBy !== null)
+        spawn(
+          process.execPath,
+          [
+            join(trusted, 'scripts/ci/machine-watchdog.ts'),
+            '--at',
+            String(stopBy),
+            '--group',
+            String(child.pid),
+            '--run-key',
+            runKeyOf(runUrl, 1),
+            '--run-dir',
+            runDir,
+            '--slot',
+            JSON.stringify(slot),
+          ],
+          {
+            cwd: trusted,
+            detached: true,
+            stdio: 'ignore',
+            env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH, HOME: process.env.HOME },
+          },
+        ).unref();
+      return { processGroup: child.pid };
     },
     async status(current) {
       const exit = join(current.runDir, 'exit.json');
       const plan = readHandoff(join(current.runDir, 'results', resultFileName('plan', null)));
-      const full = 'unreadable' in plan || !plan.plan ? null : plan.plan.outputs.full === 'true';
-      if (existsSync(exit)) {
-        const { exitCode } = exitSchema.parse(JSON.parse(readFileSync(exit, 'utf8')));
-        return { state: 'ended', exitCode, full };
-      }
-      // Alive while its process group lives: the heartbeat renews from that liveness alone.
+      const planned = 'unreadable' in plan || !plan.plan ? null : plan.plan;
+      if (existsSync(exit))
+        return {
+          state: 'ended',
+          exitCode: exitSchema.parse(JSON.parse(readFileSync(exit, 'utf8'))).exitCode,
+          full: planned ? planned.outputs.full === 'true' : null,
+        };
       return current.processGroup !== null && alive(current.processGroup)
-        ? { state: 'running' }
-        : { state: 'ended', exitCode: null, full };
+        ? { state: 'running', plan: planned }
+        : { state: 'ended', exitCode: null, full: null };
     },
     async stop(current) {
-      if (current.processGroup === null) return;
-      // SIGTERM: run-commit stops every job's container (60 s of grace), then ends; SIGKILL after
-      // KILL_AFTER_MS, and then the run's job containers are stopped by their names.
-      const group = current.processGroup;
-      // A recorded group whose leader is no longer run-commit was reused by another process: never signal it.
-      const signal = (pid: number, name: 'SIGTERM' | 'SIGKILL' | 0): boolean =>
-        leadsRunCommit(group) && signalGroup(pid, name);
-      stopProcessGroup(
-        group,
-        signal,
-        (ms, act) => void setTimeout(act, ms).unref(),
-        () => {
-          void (async () => {
-            const listed = await shell(listCommand(config.slot));
-            for (const name of listed.stdout.split('\n').map((line) => line.trim().split(' ')[0] ?? ''))
-              if (
-                name.startsWith('werkflow-ci-') &&
-                !otherGenerations(listed.stdout, generation).includes(name)
-              )
-                await shell(stopCommand(config.slot, name));
-          })();
-        },
-      );
+      const gone =
+        current.processGroup === null ||
+        (await endProcessGroup(current.processGroup, runCommitSignal(current.processGroup), wait));
+      const left = await clearRun(shell, slot, runKeyOfRun(current));
+      // The run counts as ended, so its watchdog leaves the slot to the next run.
+      ended(current.runDir);
+      if (!gone)
+        return {
+          clean: false,
+          reason: `run-commit's process group ${current.processGroup} outlived SIGKILL`,
+        };
+      return left === undefined ? { clean: true } : { clean: false, reason: left };
+    },
+    async clean() {
+      const listed = await shell(listCommand(slot), { timeoutMs: 120_000 });
+      if (listed.code !== 0)
+        return { clean: false, reason: `the slot cannot be listed: ${listed.stderr.trim()}` };
+      const names = listed.stdout
+        .split('\n')
+        .map((line) => line.trim().split(' ')[0] ?? '')
+        .filter(Boolean);
+      if (names.length) await shell(docker(slot, 'rm', '--force', ...names), { timeoutMs: 120_000 });
+      const stacks = await clearStacks(shell, slot);
+      const again = await shell(listCommand(slot), { timeoutMs: 120_000 });
+      const stackList = await shell(stackListCommand(slot), { timeoutMs: 120_000 });
+      if (
+        again.code !== 0 ||
+        again.stdout.trim() !== '' ||
+        stackList.stdout.trim() !== '' ||
+        stacks !== undefined
+      )
+        return { clean: false, reason: stacks ?? `containers stay on the slot: ${again.stdout.trim()}` };
+      return { clean: true };
     },
   },
+  nextAttempt: () => nextGeneration(join(config.stateDir, 'attempt')),
   resize: async (command) => {
     const [program, ...args] = command;
     if (program) run(program, args);
@@ -381,7 +490,7 @@ const ports: RunnerPorts = {
   },
   alert: async ({ detail }) => {
     // The existing ci-alert issues: one per machine, kept open with each new alert as a comment.
-    const answer = spawnSync(
+    const answer = exec(
       'bash',
       [
         join(trusted, '.github/scripts/alert-issue.sh'),
@@ -390,45 +499,26 @@ const ports: RunnerPorts = {
         detail,
       ],
       {
-        cwd: trusted,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          GH_REPO: config.repository,
-          ALERT_RUN: `https://github.com/${config.repository}/pulls`,
-        },
+        GH_REPO: config.repository,
+        ALERT_RUN: `https://github.com/${config.repository}/pulls`,
       },
     );
-    log(`[alert] ${detail}${answer.status === 0 ? '' : ` (not filed: ${answer.stderr.trim()})`}`);
+    log(
+      `[alert] ${detail}${answer.status === 0 ? '' : ` (not delivered, retried next tick: ${answer.stderr.trim()})`}`,
+    );
+    return answer.status === 0;
   },
   log,
 };
 
-/** Signals a process group by its negative id; false when it is gone. */
-function signalGroup(pid: number, name: 'SIGTERM' | 'SIGKILL' | 0): boolean {
-  try {
-    process.kill(pid, name);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const alive = (group: number): boolean => signalGroup(-group, 0);
-
-/** Whether process `pid` still runs scripts/ci/run-commit.ts. */
-function leadsRunCommit(pid: number): boolean {
-  const answer = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' });
-  return answer.status === 0 && answer.stdout.includes('scripts/ci/run-commit.ts');
-}
-
-// A restart never resumes: the older generation's run ends, and so do its job containers.
+// A restart never resumes: the older generation's run ends, and so do its containers.
 const recovered = await recover(ports);
 if (recovered) log(recovered);
-const listed = await shell(listCommand(config.slot));
-for (const name of otherGenerations(listed.stdout, generation)) {
-  await shell(stopCommand(config.slot, name));
-  log(`stopped ${name}, a job container of an older generation`);
+const listed = await shell(listCommand(slot), { timeoutMs: 120_000 });
+const older = otherGenerations(listed.stdout, generation);
+if (older.length) {
+  await shell(docker(slot, 'rm', '--force', ...older), { timeoutMs: 120_000 });
+  log(`removed ${older.join(', ')}, containers of an older generation`);
 }
 
 let stopping = false;
@@ -437,15 +527,14 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const)
     stopping = true;
     log(`${signal}: the run ends as cancelled, then the runner stops`);
   });
-log(`machine runner ${config.machine}, generation ${generation}, at ${trustedCommit}`);
+log(`machine runner ${config.machine}, generation ${generation}, at ${trustedCommit}, image ${imageId}`);
 while (!stopping) {
   try {
     log(await tick(ports));
   } catch (error) {
     log(`the tick failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-  for (let waited = 0; waited < TICK_MS && !stopping; waited += 1_000)
-    await new Promise((done) => setTimeout(done, 1_000));
+  for (let waited = 0; waited < TICK_MS && !stopping; waited += 1_000) await wait(1_000);
 }
 const left = await recover(ports);
 if (left) log(left);

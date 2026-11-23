@@ -49,3 +49,7 @@ CI may run on many machines or on few. The design of the CI hill climb assumes m
 ## Amendment 2026-11-23: a local executor runs PR runs
 
 The container executor (`scripts/ci/container-executor.ts`) and the machine runner ([machine-runner.md](../technical/machine-setup.md#run-ci-on-the-owners-machines)) run each ready PR's run on the owner's machines: every job in a container of its own, the claim and the verdict on the CI App's `Check`. The revisit trigger for a local executor stays open for the rest: the queue host, the schedules' clocks and a queue-wait record off GitHub Actions.
+
+## Amendment 2026-11-23: the claim is a lease ref, the verdict an integration run
+
+Rule 3's claim is the ref `refs/leases/ci/<sha>`, swapped atomically with `git push --force-with-lease`; the pending `Check` only shows it. A machine posts `Check` only from the integration run of a head up to date with `main`, so the browser groups the plan selects are in it ([machine-setup.md](../technical/machine-setup.md#run-ci-on-the-owners-machines)).

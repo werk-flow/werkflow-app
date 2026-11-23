@@ -5,6 +5,7 @@
 // per job or a machine of its own, for CI; the process executor, which isolates nothing, for local
 // and test runs only. Each job takes `scripts/ci/prepare.ts for <job>`, then `scripts/ci/job.ts <job>`.
 // This module decides; it starts nothing itself.
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -120,6 +121,10 @@ export function runVariables(
   if (environment.CI_JOB_GH_TOKEN) variables.GH_TOKEN = environment.CI_JOB_GH_TOKEN;
   return variables;
 }
+
+/** A run's key, unique per run URL and attempt: its workspaces and job containers carry it. */
+export const runKeyOf = (runUrl: string, attempt: number): string =>
+  `${createHash('sha256').update(runUrl).digest('hex').slice(0, 16)}-${attempt}`;
 
 /** One job, or one shard of a sharded job. */
 export type Unit = { job: CiJob; shard: number | null };

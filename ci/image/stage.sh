@@ -1,12 +1,12 @@
 #!/bin/bash
-# Makes one CI job's workspace on the slot (scripts/ci/container-executor.ts): the trusted side's
-# inputs from the tar on standard input (the sibling clones, the results so far, the GitHub
-# snapshot and the variables the sibling step passed on), then a clone of the commit under test from
-# the slot's git cache of GitHub, with `origin` set to GitHub as on GitHub Actions.
-# Usage: werkflow-ci-stage <workspace> <git cache> <commit> <GitHub URL>
+# Makes a run's one workspace on the slot (scripts/ci/container-executor.ts): the trusted side's
+# inputs from the tar on standard input (the public sibling clone, the results so far, the GitHub
+# snapshot and the variables the trusted sibling step passed on), then a clone of the commit under
+# test from the slot's git cache of GitHub, with `origin` set to GitHub as on GitHub Actions.
+# Usage: werkflow-ci-stage <workspace> <build folder> <git cache> <commit> <GitHub URL>
 set -euo pipefail
-workspace=$1 cache=$2 commit=$3 url=$4
-mkdir -p "$workspace"
+workspace=$1 build=$2 cache=$3 commit=$4 url=$5
+mkdir -p "$workspace" "$build"
 tar -x -C "$workspace" -f -
 mkdir -p "$workspace/results" "$workspace/tmp" "$workspace/cache" "$(dirname "$cache")"
 # One stage at a time updates the cache.

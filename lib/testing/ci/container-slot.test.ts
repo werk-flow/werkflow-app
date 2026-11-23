@@ -1,12 +1,19 @@
 // No credential enters a job container of the owner's machines (container-slot.ts): the job's
 // environment is an allowlist, a token-shaped value fails the job, the docker command names nothing
-// of the runner's environment, and the slot's commands run without the runner's variables.
-import { expect, test } from 'bun:test';
+// of the runner's environment and runs the image by its id, reads back from the slot are bounded, and
+// the start probe fails when a job can see the runner's side.
+import { afterAll, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { slotEnvironment } from '../../../scripts/ci/container-executor';
 import {
   jobCommand,
   jobEnvironment,
   otherGenerations,
+  READ_LIMIT_BYTES,
+  readCommand,
   type SlotConfig,
   stageCommand,
 } from './container-slot';
@@ -16,19 +23,23 @@ const SLOT: SlotConfig = {
   dockerHost: 'unix:///run/user/1002/docker.sock',
   socket: '/run/user/1002/docker.sock',
   root: '/home/cirunner/ci',
-  image: 'werkflow-ci:abc',
+  image: 'sha256:abc',
   containerUser: 'root',
 };
 const TOKEN = `ghp_${'x'.repeat(36)}`;
-const WORKSPACE = '/home/cirunner/ci/runs/0123456789abcdef-1/fast';
+const RUN_KEY = '0123456789abcdef-1';
+const WORKSPACE = `/home/cirunner/ci/runs/${RUN_KEY}/app`;
 const START = { jobStartedAt: '2026-11-23T02:00:00.000Z', machineStart: true };
+const scratch = mkdtempSync(join(tmpdir(), 'container-slot-'));
+afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
-test("a job container's environment is the allowlist: the runner's tokens never pass", () => {
+test("a job container's environment is the allowlist: the runner's tokens never pass, and Node's heap is set", () => {
   const environment = jobEnvironment(
+    SLOT,
     {
       unit: { job: 'fast', shard: null },
       env: {
-        CI_EVENT: 'pr',
+        CI_EVENT: 'integration',
         CI_RUN_URL: 'https://github.com/werk-flow/werkflow-app/commit/abc#run',
         GITHUB_REPOSITORY: 'werk-flow/werkflow-app',
         GH_TOKEN: TOKEN,
@@ -40,7 +51,7 @@ test("a job container's environment is the allowlist: the runner's tokens never 
         CI_PUBLISHER: '/trusted/publish',
       },
     },
-    WORKSPACE,
+    RUN_KEY,
     START,
   );
   for (const name of [
@@ -53,53 +64,100 @@ test("a job container's environment is the allowlist: the runner's tokens never 
     'CI_PUBLISHER',
   ])
     expect(environment).not.toHaveProperty(name);
-  expect(environment.CI_EVENT).toBe('pr');
   expect(environment.CI_RESULTS_DIR).toBe(`${WORKSPACE}/results`);
   expect(environment.WERKFLOW_GITHUB_SNAPSHOT).toBe(`${WORKSPACE}/github-snapshot.json`);
+  // F11: the heap reaches the job from its container, not through the shared process executor.
+  expect(environment.NODE_OPTIONS).toBe('--max-old-space-size=4096');
 });
 
 test('a token-shaped value under an allowed name fails the job instead of entering it', () => {
   expect(() =>
     jobEnvironment(
+      SLOT,
       { unit: { job: 'plan', shard: null }, env: { CI_FULL_REASON: `see ${TOKEN}` } },
-      WORKSPACE,
+      RUN_KEY,
       START,
     ),
   ).toThrow('CI_FULL_REASON holds a credential');
 });
 
-test("the job's docker command mounts only its workspace, the socket and the caches, and names no token", () => {
-  const environment = jobEnvironment(
-    { unit: { job: 'sql', shard: null }, env: { CI_EVENT: 'pr' } },
-    WORKSPACE,
-    START,
-  );
-  const command = jobCommand(SLOT, {
-    name: 'werkflow-ci-x-sql',
-    generation: 3,
-    workspace: WORKSPACE,
-    environment,
-    unit: { job: 'sql', shard: null },
-  });
-  expect(command.slice(0, 3)).toEqual(['env', 'DOCKER_HOST=unix:///run/user/1002/docker.sock', 'docker']);
-  const volumes = command.flatMap((argument, index) => (command[index - 1] === '--volume' ? [argument] : []));
-  expect(volumes).toEqual([
-    '/run/user/1002/docker.sock:/var/run/docker.sock',
-    `${WORKSPACE}:${WORKSPACE}`,
-    '/home/cirunner/ci/git/werkflow-app.git:/home/cirunner/ci/git/werkflow-app.git:ro',
-    'werkflow-ci-bun-cache:/home/runner/.bun/install/cache',
-    'werkflow-ci-playwright-cache:/home/runner/.cache/ms-playwright',
-  ]);
-  expect(command.join(' ')).not.toMatch(/TOKEN|ghp_/);
-  expect(command).toContain('org.werkflow.ci-generation=3');
-  expect(command.slice(-2)).toEqual(['werkflow-ci-job', 'sql']);
-  expect(
+test("F12, F14: a job runs the image by its id, at the run's one workspace path, and only Fast writes the build a browser shard reads", () => {
+  const command = (job: 'fast' | 'browser' | 'sql') =>
+    jobCommand(SLOT, {
+      runKey: RUN_KEY,
+      generation: 3,
+      environment: jobEnvironment(
+        SLOT,
+        { unit: { job, shard: job === 'browser' ? 1 : null }, env: { CI_EVENT: 'integration' } },
+        RUN_KEY,
+        START,
+      ),
+      unit: { job, shard: job === 'browser' ? 1 : null },
+      image: 'sha256:abc',
+    });
+  const volumes = (argv: string[]) =>
+    argv.flatMap((argument, index) => (argv[index - 1] === '--volume' ? [argument] : []));
+  const build = `/home/cirunner/ci/runs/${RUN_KEY}/build`;
+  expect(volumes(command('fast'))).toContain(`${build}:${build}`);
+  expect(volumes(command('browser'))).toContain(`${build}:${build}:ro`);
+  expect(volumes(command('sql')).some((volume) => volume.startsWith(build))).toBe(false);
+  expect(command('browser')).toContain(`CI_BUILD_TAR=${build}/build.tar`);
+  expect(command('sql')).toContain(`--workdir`);
+  expect(command('sql')[command('sql').indexOf('--workdir') + 1]).toBe(`${WORKSPACE}/werkflow-app`);
+  expect(command('sql').slice(-3)).toEqual(['sha256:abc', 'werkflow-ci-job', 'sql']);
+  // The run's own Bun cache; no shared cache a job could write for a later run.
+  expect(volumes(command('sql'))).toContain(`werkflow-ci-bun-${RUN_KEY}:/home/runner/.bun/install/cache`);
+  expect(volumes(command('sql')).some((volume) => volume.includes('playwright'))).toBe(false);
+  for (const argv of [
+    command('fast'),
     stageCommand(SLOT, {
-      workspace: WORKSPACE,
+      runKey: RUN_KEY,
+      generation: 3,
       commit: 'a'.repeat(40),
       repository: 'werk-flow/werkflow-app',
-    }).join(' '),
-  ).not.toMatch(/TOKEN|ghp_/);
+      image: 'sha256:abc',
+    }),
+  ])
+    expect(argv.join(' ')).not.toMatch(/TOKEN|ghp_/);
+});
+
+test('F9: a read back from the slot takes only a regular file within its size limit, never a link or a device', () => {
+  const file = join(scratch, 'result.json');
+  writeFileSync(file, '{"status":"passed"}');
+  const link = join(scratch, 'link.json');
+  symlinkSync('/etc/hostname', link);
+  const large = join(scratch, 'large.json');
+  writeFileSync(large, Buffer.alloc(READ_LIMIT_BYTES + 1, 'x'));
+  const read = (path: string) =>
+    spawnSync(readCommand(path)[0] ?? 'sh', readCommand(path).slice(1), { encoding: 'utf8' });
+  expect(read(file)).toMatchObject({ status: 0, stdout: '{"status":"passed"}' });
+  for (const path of [link, large, '/dev/zero', join(scratch, 'missing.json')])
+    expect(read(path).status).not.toBe(0);
+});
+
+test('F3: the start probe fails when a job, or a container through its socket, reads a sentinel of the runner, and passes otherwise', () => {
+  const bin = join(scratch, 'bin');
+  spawnSync('mkdir', ['-p', bin]);
+  const host = join(scratch, 'host');
+  // A fake docker: `run … /:/host … -c <script>` runs the script with /host as the fake slot root.
+  writeFileSync(
+    join(bin, 'docker'),
+    `#!/bin/bash\nscript="\${@: -1}"\nexec bash -c "\${script//\\/host/${host.replaceAll('/', '\\/')}}"\n`,
+  );
+  chmodSync(join(bin, 'docker'), 0o755);
+  spawnSync('mkdir', ['-p', join(host, 'etc'), join(host, 'home/owner')]);
+  const probe = resolve(import.meta.dir, '../../../ci/image/probe.sh');
+  const run = (sentinel: string) =>
+    spawnSync('bash', [probe, 'secret-token', sentinel, ''], {
+      encoding: 'utf8',
+      env: { NODE_ENV: 'test', PATH: `${bin}:${process.env.PATH}`, WERKFLOW_PROBE_IMAGE: 'sha256:abc' },
+    });
+  expect(run('/home/owner/.werkflow-ci-probe').status).toBe(0);
+  writeFileSync(join(host, 'home/owner/.werkflow-ci-probe'), 'secret-token\n');
+  expect(run('/home/owner/.werkflow-ci-probe').status).toBe(1);
+  const own = join(scratch, 'own-sentinel');
+  writeFileSync(own, 'secret-token\n');
+  expect(run(own).status).toBe(1);
 });
 
 test("the slot's commands run without the runner's variables, and WSL forwards none", () => {
@@ -119,7 +177,7 @@ test("the slot's commands run without the runner's variables, and WSL forwards n
   });
 });
 
-test('a restart stops exactly the job containers of other generations', () => {
+test('a restart stops exactly the containers of other generations', () => {
   expect(otherGenerations('werkflow-ci-a-fast 2\nwerkflow-ci-b-plan 3\n\n', 3)).toEqual([
     'werkflow-ci-a-fast',
   ]);

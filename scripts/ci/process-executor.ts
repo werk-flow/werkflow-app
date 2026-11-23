@@ -68,13 +68,12 @@ type Host = { unverified?: string; readonly refused: AbortController };
 
 /**
  * The host variables a job's tools need: NODE_ENV, the user, shell, temporary folder, locale and time
- * zone, Node's options (the machine runner's container sets its heap), the Docker socket the Supabase
- * CLI reaches, and where Bun and Playwright live. A job gets these and its
+ * zone, the Docker socket the Supabase CLI reaches, and where Bun and Playwright live. A job gets these and its
  * task's variables, never the rest of this process's environment: a credential in the owner's shell
  * that no refusal names stays out of every job.
  */
 const FOR_JOBS =
-  /^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|TERM|TZ|LANG|LANGUAGE|LC_[A-Z]+|NODE_OPTIONS|DOCKER_HOST|XDG_RUNTIME_DIR|BUN_INSTALL|PLAYWRIGHT_BROWSERS_PATH)$/;
+  /^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|TERM|TZ|LANG|LANGUAGE|LC_[A-Z]+|DOCKER_HOST|XDG_RUNTIME_DIR|BUN_INSTALL|PLAYWRIGHT_BROWSERS_PATH)$/;
 
 /** The host variables of FOR_JOBS from this process's environment, and nothing else. */
 function hostEnvironment(): NodeJS.ProcessEnv {

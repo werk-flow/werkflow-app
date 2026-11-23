@@ -1,161 +1,151 @@
-// The machine claim (decision 0011, rule 3): a local machine owns a head's run through the CI App's
-// `Check` check run on that head, the only channel the machines share. The claim is the run's start
-// (`publish-check start`, a queued `Check`); its output title carries the lease
-// (`lease:v1 m=<machine> g=<generation> exp=<epoch s>`), because `external_id` stays the run's
-// identity, which `finishCheckRun` matches. GitHub numbers check runs in creation order, so the newest
-// App `Check` is one fact every machine reads alike:
-//   - completed: the head has its verdict, and nobody claims it;
-//   - queued with a lease: that lease holds the head until its `exp` plus the margin;
-//   - queued without one (a start from another scheduler, a hand-made run): nobody may take it over.
-// A claimer creates its start, waits the settle delay and proceeds only while its start is the newest.
-// A run whose start is no longer the newest stops at its next heartbeat, and `finishCheckRun` refuses
-// its verdict.
+// The machine claim (decision 0011, rule 3): a local machine owns a head's run through one Git ref on
+// GitHub, `refs/leases/ci/<sha>`, the only channel the machines share. GitHub's check runs have no
+// compare-and-swap; a ref push with `--force-with-lease` does, as the workspace's other leases use
+// it (docs/technical/machine-setup.md, "Background jobs"). The ref points at an empty commit whose
+// message is the lease: `lease:v1 m=<machine> g=<generation> attempt=<n> exp=<epoch s>
+// state=<held|done|released> approval=<0|1>`.
+//   - Claim: create the ref where it is absent, or swap it from a value that lets go: a held lease
+//     past its `exp` plus the margin, a released one, or a done one of another approval.
+//   - Heartbeat: swap from the value last read to a new `exp`; an expired lease is never renewed.
+//   - Verdict: swap to `done` first; only then is the attempt's own `Check` check run completed.
+//   - Release: swap to `released`; the check run then completes as cancelled.
+// The App's `Check` check run stays the visible status and the verdict, never the owner.
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export type Lease = { machine: string; generation: number; expiresAt: number };
+type LeaseState = 'held' | 'done' | 'released';
 
-/** A lease this machine holds: the lease and the id of the `Check` check run that carries it. */
-export type HeldLease = { checkRun: number; lease: Lease };
+export type Lease = {
+  machine: string;
+  generation: number;
+  attempt: number;
+  expiresAt: number;
+  state: LeaseState;
+  /** The owner's `approved: list growth` as the run saw it: a done lease of another approval lets go. */
+  approval: boolean;
+};
 
-/** One App `Check` check run on a head, as the lease reads it. */
-export type LeaseCheckRun = { id: number; completed: boolean; title: string | null };
+/** A lease this machine holds: the lease and the ref's commit it last wrote. */
+export type HeldLease = { oid: string; lease: Lease };
 
-/** Every GitHub call the lease makes, so its storage can change behind it. */
-export interface LeaseApi {
-  /** The configured App's `Check` check runs on the head, completely or not at all, in any order. */
-  checkRuns(sha: string): Promise<readonly LeaseCheckRun[]>;
-  /** The run's start (`publish-check start`) with this output title; the created check run's id. */
-  start(sha: string, title: string): Promise<number>;
-  /** Rewrites check run `checkRun`'s output title in place (PATCH); it stays queued. */
-  renew(checkRun: number, title: string): Promise<void>;
-  /** Waits `ms` milliseconds. */
-  wait(ms: number): Promise<void>;
+/** The head's lease ref as read: its commit and that commit's message. */
+export type RefValue = { oid: string; message: string };
+
+/** Every GitHub call the lease makes. */
+export interface LeaseRefs {
+  /** The head's lease ref, or null when it is absent. */
+  read(sha: string): Promise<RefValue | null>;
+  /**
+   * Points the head's lease ref at a new commit with `message`, only while it is `expected` (null:
+   * absent), in one atomic push. The new value, or null when the ref was another.
+   */
+  swap(sha: string, expected: string | null, message: string): Promise<RefValue | null>;
+  /** Deletes the head's lease ref, only while it is `expected`. */
+  remove(sha: string, expected: string): Promise<boolean>;
 }
 
 export type ClaimResult =
   | { claimed: true; held: HeldLease }
-  | { claimed: false; reason: 'held' | 'foreign-pending' | 'verdict' | 'lost-race' };
+  | { claimed: false; reason: 'held' | 'foreign' | 'verdict' | 'lost-race' };
 
 /** Seconds by which a machine distrusts an expiry, against clock skew between the machines. */
 export const LEASE_MARGIN_S = 60;
-/** How long a claimer waits after its start before it reads whether it won. */
-export const SETTLE_MS = 10_000;
-/** The lease title's limit, so it stays one short line in GitHub's checks view. */
-export const TITLE_LIMIT = 140;
 
 const MACHINE = /^[a-z0-9-]{1,20}$/;
-const LEASE_TITLE =
-  /^lease:v1 m=([a-z0-9-]{1,20}) g=(0|[1-9][0-9]{0,15}) exp=(0|[1-9][0-9]{0,15})(?: [\s\S]*)?$/;
+const COUNT = '(0|[1-9][0-9]{0,15})';
+const LEASE_MESSAGE = new RegExp(
+  `^lease:v1 m=([a-z0-9-]{1,20}) g=${COUNT} attempt=${COUNT} exp=${COUNT} state=(held|done|released) approval=([01])\\s*$`,
+);
+const STATES: readonly LeaseState[] = ['held', 'done', 'released'];
 
-function leasePrefix(lease: Lease): string {
+export function formatLease(lease: Lease): string {
   if (!MACHINE.test(lease.machine)) throw new Error(`lease machine id must match ${MACHINE}`);
-  for (const value of [lease.generation, lease.expiresAt])
+  for (const value of [lease.generation, lease.attempt, lease.expiresAt])
     if (!Number.isSafeInteger(value) || value < 0)
-      throw new Error('lease generation and expiry must be non-negative safe integers');
-  return `lease:v1 m=${lease.machine} g=${lease.generation} exp=${lease.expiresAt}`;
+      throw new Error('lease generation, attempt and expiry must be non-negative safe integers');
+  return `lease:v1 m=${lease.machine} g=${lease.generation} attempt=${lease.attempt} exp=${lease.expiresAt} state=${lease.state} approval=${lease.approval ? 1 : 0}`;
 }
 
-/**
- * The lease's title: its prefix, then as many whole characters of the note as fit in 140 UTF-16
- * code units. The note is cut, never the prefix, and no character is split.
- */
-export function formatLease(lease: Lease, note: string): string {
-  let title = leasePrefix(lease);
-  let separator = ' ';
-  for (const character of note) {
-    if (title.length + separator.length + character.length > TITLE_LIMIT) break;
-    title += separator + character;
-    separator = '';
-  }
-  return title;
-}
-
-export function parseLease(title: string): Lease | undefined {
-  const match = LEASE_TITLE.exec(title);
+export function parseLease(message: string): Lease | undefined {
+  const match = LEASE_MESSAGE.exec(message);
   if (match === null) return undefined;
-  const [, machine, generation, expiresAt] = match;
-  if (machine === undefined || generation === undefined || expiresAt === undefined) return undefined;
-  const lease = { machine, generation: Number(generation), expiresAt: Number(expiresAt) };
-  return Number.isSafeInteger(lease.generation) && Number.isSafeInteger(lease.expiresAt) ? lease : undefined;
+  const [, machine, generation, attempt, expiresAt, state, approval] = match;
+  const known = STATES.find((candidate) => candidate === state);
+  if (machine === undefined || known === undefined) return undefined;
+  const lease = {
+    machine,
+    generation: Number(generation),
+    attempt: Number(attempt),
+    expiresAt: Number(expiresAt),
+    state: known,
+    approval: approval === '1',
+  };
+  return [lease.generation, lease.attempt, lease.expiresAt].every(Number.isSafeInteger) ? lease : undefined;
 }
-
-type Holder =
-  | { kind: 'none' }
-  | { kind: 'verdict' }
-  | { kind: 'foreign-pending' }
-  | { kind: 'lease'; checkRun: number; lease: Lease };
-
-async function holderOn(api: LeaseApi, sha: string): Promise<Holder> {
-  const newest = (await api.checkRuns(sha)).toSorted((one, other) => other.id - one.id)[0];
-  if (newest === undefined) return { kind: 'none' };
-  if (newest.completed) return { kind: 'verdict' };
-  const lease = newest.title === null ? undefined : parseLease(newest.title);
-  return lease === undefined ? { kind: 'foreign-pending' } : { kind: 'lease', checkRun: newest.id, lease };
-}
-
-const holds = (holder: Holder, held: HeldLease) =>
-  holder.kind === 'lease' &&
-  holder.checkRun === held.checkRun &&
-  holder.lease.machine === held.lease.machine &&
-  holder.lease.generation === held.lease.generation;
-
-const titleOf = (lease: Lease) => formatLease(lease, `Waiting or running on ${lease.machine}`);
 
 /**
- * Claims the head for `me` (`now` is this machine's epoch seconds): refuses a head with a verdict, a
- * start without a lease, or another lease within its `exp` plus the margin; otherwise starts, waits
- * the settle delay and proceeds only while its start is the head's newest `Check`.
+ * Claims the head for `me` (`now` is this machine's epoch seconds): creates the ref where it is
+ * absent, or takes it over from a value that lets go. A ref whose message is no lease is never taken.
  */
 export async function claim(
-  api: LeaseApi,
+  refs: LeaseRefs,
   sha: string,
-  me: Pick<Lease, 'machine' | 'generation'>,
+  me: Pick<Lease, 'machine' | 'generation' | 'attempt' | 'approval'>,
   now: number,
   ttlS: number,
 ): Promise<ClaimResult> {
-  const before = await holderOn(api, sha);
-  if (before.kind === 'verdict' || before.kind === 'foreign-pending')
-    return { claimed: false, reason: before.kind };
-  if (before.kind === 'lease' && now <= before.lease.expiresAt + LEASE_MARGIN_S)
-    return { claimed: false, reason: 'held' };
-  const lease = { ...me, expiresAt: now + ttlS };
-  const held = { checkRun: await api.start(sha, titleOf(lease)), lease };
-  await api.wait(SETTLE_MS);
-  return holds(await holderOn(api, sha), held)
-    ? { claimed: true, held }
-    : { claimed: false, reason: 'lost-race' };
+  const current = await refs.read(sha);
+  if (current !== null) {
+    const lease = parseLease(current.message);
+    if (lease === undefined) return { claimed: false, reason: 'foreign' };
+    if (lease.state === 'held' && now <= lease.expiresAt + LEASE_MARGIN_S)
+      return { claimed: false, reason: 'held' };
+    if (lease.state === 'done' && lease.approval === me.approval)
+      return { claimed: false, reason: 'verdict' };
+  }
+  const lease: Lease = { ...me, expiresAt: now + ttlS, state: 'held' };
+  const swapped = await refs.swap(sha, current?.oid ?? null, formatLease(lease));
+  return swapped === null
+    ? { claimed: false, reason: 'lost-race' }
+    : { claimed: true, held: { oid: swapped.oid, lease } };
 }
 
-/** Renews the lease in place, then returns it while its start is still the newest, else `lost`. */
+/** Renews the lease from the value this machine wrote last; `lost` once it expired or another value took its place. */
 export async function heartbeat(
-  api: LeaseApi,
+  refs: LeaseRefs,
   sha: string,
   held: HeldLease,
   now: number,
   ttlS: number,
 ): Promise<HeldLease | 'lost'> {
-  const renewed = { checkRun: held.checkRun, lease: { ...held.lease, expiresAt: now + ttlS } };
-  await api.renew(held.checkRun, titleOf(renewed.lease));
-  return holds(await holderOn(api, sha), renewed) ? renewed : 'lost';
+  if (now > held.lease.expiresAt) return 'lost';
+  const lease = { ...held.lease, expiresAt: now + ttlS };
+  const swapped = await refs.swap(sha, held.oid, formatLease(lease));
+  return swapped === null ? 'lost' : { oid: swapped.oid, lease };
 }
 
 /**
- * Posts the run's verdict through `finish` (`finishCheckRun`, which itself refuses a start that is
- * not the newest) only while this lease holds the head and stays valid past `now` plus the margin by
- * this machine's clock. Otherwise it posts nothing: `stale`.
+ * Marks the attempt's verdict as the head's, only while this lease is the ref's value and stays valid
+ * past `now` plus the margin; the caller completes the check run only after `done`. `stale` otherwise.
  */
-export async function postVerdict(
-  api: LeaseApi,
+export async function markDone(
+  refs: LeaseRefs,
   sha: string,
   held: HeldLease,
   now: number,
-  finish: () => Promise<{ id: number } | { problem: string }>,
-): Promise<'posted' | 'stale' | { problem: string }> {
-  if (!holds(await holderOn(api, sha), held) || now + LEASE_MARGIN_S >= held.lease.expiresAt) return 'stale';
-  const finished = await finish();
-  return 'problem' in finished ? finished : 'posted';
+): Promise<HeldLease | 'stale'> {
+  if (now + LEASE_MARGIN_S >= held.lease.expiresAt) return 'stale';
+  const lease: Lease = { ...held.lease, state: 'done' };
+  const swapped = await refs.swap(sha, held.oid, formatLease(lease));
+  return swapped === null ? 'stale' : { oid: swapped.oid, lease };
 }
+
+/** Hands the head back: `released` while this lease is still the ref's value; false when another took it. */
+export async function release(refs: LeaseRefs, sha: string, held: HeldLease): Promise<boolean> {
+  return (await refs.swap(sha, held.oid, formatLease({ ...held.lease, state: 'released' }))) !== null;
+}
+
+/** Whether `value` is a lease of this exact attempt. */
 
 function writeDurably(file: string, text: string): void {
   const temp = `${file}.${process.pid}.tmp`;
@@ -190,8 +180,9 @@ function readGeneration(file: string): number {
 }
 
 /**
- * This machine's next run generation. It is durable before it is returned (temp file, fsync,
- * rename, directory fsync), so a crash anywhere in between returns nothing and never reuses one.
+ * The next number of a durable counter: this machine's generations, or its attempts. It is durable
+ * before it is returned (temp file, fsync, rename, directory fsync), so a crash anywhere in between
+ * returns nothing and never reuses one.
  */
 export function nextGeneration(file: string): number {
   const next = readGeneration(file) + 1;

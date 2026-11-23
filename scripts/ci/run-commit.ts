@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import {
   appendFileSync,
   closeSync,
@@ -30,11 +29,18 @@ import {
   RUN_COMMIT_LOCK,
   runCommit,
   type RunCommitInput,
+  runKeyOf,
   type RunCommitOutcome,
   runVariables,
 } from '../../lib/testing/ci/run-commit';
 import { slotConfigSchema } from '../../lib/testing/ci/container-slot';
-import { containerExecutors, githubSnapshot, slotShell } from './container-executor';
+import {
+  businessProblems,
+  containerExecutors,
+  githubSnapshot,
+  slotShell,
+  trustedSiblings,
+} from './container-executor';
 import { mirrorExecutors } from './mirror-executor';
 import { githubMirrorApi } from './mirror-api';
 import { mirrorIdentity, pushMirrorCommit } from './mirror-push';
@@ -198,7 +204,7 @@ async function run(
     );
   const ledger = environment.CI_LEDGER && resolve(environment.CI_LEDGER);
   const producer = environment.CI_PRODUCER || null;
-  const runKey = `${createHash('sha256').update(runUrl).digest('hex').slice(0, 16)}-${attempt.data}`;
+  const runKey = runKeyOf(runUrl, attempt.data);
   const { host, jobs, release } = executors({
     source: repository,
     commit,
@@ -465,6 +471,9 @@ function onContainers(
     shell: slotShell(slot),
     generation,
     snapshot: async (task) => githubSnapshot(setup.source, setup.commit, task),
+    businessCheck: (checkout) =>
+      businessProblems(setup.source, join(setup.workRoot, 'trusted-bundles'), checkout),
+    siblings: (task, checkout, exported) => trustedSiblings(setup.source, task, checkout, exported),
     sleep: (ms, signal) =>
       new Promise((resolveSleep) => {
         const timer = setTimeout(resolveSleep, ms);

@@ -4,19 +4,24 @@
   "trustedCheckout": "/Users/ci/ci-runner/werkflow-app",
   "stateDir": "/Users/ci/ci-runner/state",
   "windowsFile": "/Users/ci/ci-runner/windows.json",
-  "appKeyFile": "/Users/ci/ci-runner/ci-app.pem",
+  "appKeyFile": "/Users/ci/ci-runner/key/ci-app.pem",
   "slot": {
-    "prefix": [],
+    "prefix": ["colima", "ssh", "--profile", "ci", "--"],
     "dockerHost": null,
     "socket": "/var/run/docker.sock",
-    "root": "/Users/ci/ci-runner/slot",
+    "root": "/var/lib/werkflow-ci",
     "image": "werkflow-ci:COMMIT",
     "containerUser": "image"
   },
+  "probePorts": ["host.lima.internal:54321", "host.lima.internal:3000"],
   "sizes": {
-    "4/6": { "resize": ["sh", "-c", "colima stop && colima start --cpu 4 --memory 6"] },
-    "8/8": { "resize": ["sh", "-c", "colima stop && colima start --cpu 8 --memory 8"] }
+    "4/6": {
+      "resize": ["sh", "-c", "colima stop --profile ci && colima start --profile ci --cpu 4 --memory 6"]
+    },
+    "8/8": {
+      "resize": ["sh", "-c", "colima stop --profile ci && colima start --profile ci --cpu 8 --memory 8"]
+    }
   },
-  "seedSeconds": { "full": 1500, "selected": 1200 },
+  "seedSeconds": { "full": 10800, "selected": 2400 },
   "leaseTtlSeconds": 600
 }
