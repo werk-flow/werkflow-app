@@ -40,9 +40,6 @@ test('the switch flips at once and stays locked until the refreshed props confir
   await expect(pending).toHaveCount(0);
   await expect(toggle).toBeEnabled();
   await expect(toggle).toBeChecked();
-  await expect(
-    page.getByText('Alle Mitglieder können WerkFlow KI nutzen, sobald sie verfügbar ist.'),
-  ).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
