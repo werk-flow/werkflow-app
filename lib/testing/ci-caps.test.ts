@@ -12,23 +12,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 test('a newer push to a pull request cancels its older run, and nothing else cancels a run', () => {
   const ci = readWorkflow('ci.yml');
-  // The key of an ordinary push to a PR is `ci-<number>-diff`: every other part is guarded by a
-  // condition false on a first attempt of a synchronize event, so no run id or commit enters it.
-  const parts = ci
-    .text('concurrency', 'group')
-    .split(/(\$\{\{.*?\}\})/)
-    .filter(Boolean);
-  expect(parts.slice(0, 4)).toEqual([
-    'ci-',
-    '${{ github.event.pull_request.number || github.sha }}',
-    '-',
-    "${{ inputs.full && 'full' || 'diff' }}",
-  ]);
-  const guards = [
-    "github.run_attempt != '1' && ",
-    "github.event.action == 'edited' && !github.event.changes.base && ",
-  ];
-  expect(parts.slice(4).map((part, index) => part.startsWith(`\${{ ${guards[index]}`))).toEqual([true, true]);
+  // The whole key: an ordinary push to a PR (first attempt, synchronize) keys `ci-<number>-diff`,
+  // since the rerun and edit suffixes fall back to an empty string; any other fallback, such as a
+  // run id, would give each push its own key and stop the cancelling.
+  expect(ci.text('concurrency', 'group')).toBe(
+    [
+      'ci-${{ github.event.pull_request.number || github.sha }}',
+      "-${{ inputs.full && 'full' || 'diff' }}",
+      "${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}",
+      "${{ github.event.action == 'edited' && !github.event.changes.base && format('-edit-{0}', github.run_id) || '' }}",
+    ].join(''),
+  );
   expect(ci.text('concurrency', 'cancel-in-progress')).toBe("${{ github.event_name == 'pull_request' }}");
 });
 
