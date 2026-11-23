@@ -1418,7 +1418,7 @@ $$;
 
 -- A deleted visit outside an organization's deletion still projects the
 -- remaining plan onto its job: the delete side of the trigger skips only an
--- organization being deleted (20261221100007).
+-- organization being deleted (20261221100013).
 reset role;
 do $$
 declare

@@ -102,7 +102,7 @@ $$;
 alter table public.documents disable trigger "AA_test_nested_history_edit";
 
 -- A forged organization-deletion marker allows no nested delete while the
--- organization still exists (the guard's teardown fast path, 20261221100007).
+-- organization still exists (the guard's teardown fast path, 20261221100013).
 create temporary table ledger_probe (id integer);
 create function pg_temp.attempt_nested_history_delete() returns trigger language plpgsql as $$
 begin
