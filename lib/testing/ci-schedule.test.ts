@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 import { FULL_RUN_SLOTS } from './ci/full-run';
 import { CLOCK_WORK } from './ci/schedule';
 import { workflowsFolder } from './ci-workflow';
@@ -39,14 +39,12 @@ const mainFullRunScript = readFileSync(join(repositoryRoot, '.github/scripts/mai
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'ci-schedule-'));
+  stub = temporaryDirectory('ci-schedule-');
   writeFileSync(join(stub, 'date'), '#!/usr/bin/env bash\necho "$NOW"\n');
   writeFileSync(join(stub, 'sleep'), '#!/usr/bin/env bash\necho "$1" > "$STUB/slept"\n');
   chmodSync(join(stub, 'date'), 0o755);
   chmodSync(join(stub, 'sleep'), 0o755);
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 /** The seconds one leg of the hold sleeps when it starts at `instant`. */
 function secondsHeldFrom(instant: string) {

@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir, totalmem } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   HEAVY_SLOT_VARIABLE,
@@ -13,22 +13,19 @@ import {
   type HeavySlot,
 } from './heavy-slot';
 import type { RoomReading } from './machine-room';
+import { temporaryDirectory } from '../temporary-directory';
 
 const GIB = 1024 ** 3;
 
-const directories: string[] = [];
 const processes: ChildProcess[] = [];
 const slots: HeavySlot[] = [];
 afterEach(() => {
   for (const slot of slots.splice(0)) slot.release();
   for (const child of processes.splice(0)) child.kill('SIGKILL');
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
 function slotDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-heavy-slot-'));
-  directories.push(directory);
-  return directory;
+  return temporaryDirectory('werkflow-heavy-slot-');
 }
 
 /** A process that runs until it is killed: a slot's owner in a test. */

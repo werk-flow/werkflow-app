@@ -2,9 +2,9 @@
 // hand-out, sends the bearer secret only in its header and prints the scrubbed
 // copy, a screenshot path or a code, never the secret or another word of an answer.
 import { afterAll, beforeEach, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 const SCRIPT = resolve(import.meta.dir, '../../scripts/report-thread.ts');
 const SECRET = `${'h'.repeat(40)}-handout-secret`;
@@ -42,7 +42,7 @@ let home = '';
 beforeEach(() => {
   seen = [];
   answer = () => Response.json(COPY);
-  home = mkdtempSync(join(tmpdir(), 'report-thread-home-'));
+  home = temporaryDirectory('report-thread-home-');
   writeSecretFile();
 });
 
@@ -58,7 +58,8 @@ function writeSecretFile(mode = 0o600): void {
 
 async function helper(args: string[], stdin = ''): Promise<{ code: number; stdout: string; stderr: string }> {
   const child = Bun.spawn(['bun', SCRIPT, ...args], {
-    env: { ...process.env, HOME: home },
+    // The screenshot folder lands in the test's own home, which is removed after the test.
+    env: { ...process.env, HOME: home, TMPDIR: home },
     stdin: new TextEncoder().encode(stdin),
     stdout: 'pipe',
     stderr: 'pipe',
@@ -110,7 +111,7 @@ test('the hand-out switched off on the server answers as off', async () => {
 });
 
 test('a machine without the secret file is off and sends nothing', async () => {
-  home = mkdtempSync(join(tmpdir(), 'report-thread-home-'));
+  home = temporaryDirectory('report-thread-home-');
   expect((await helper(['hand-out', REPORT_ID])).code).toBe(2);
   expect(seen).toEqual([]);
 });

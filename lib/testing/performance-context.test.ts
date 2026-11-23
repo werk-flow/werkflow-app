@@ -1,10 +1,10 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getMeasuredScenario } from './measured-scenarios';
 import { performanceProviderDigest, samePerformanceContext, workloadDigest } from './performance-context';
 import { performanceContextFixture } from './fixtures/performance';
+import { temporaryDirectory } from './temporary-directory';
 
 test('local WSL transport changes preserve provider comparison identity while different stacks do not', () => {
   const provider = (providerOrigin: string, localProjectId = 'werkflow-app'): string =>
@@ -77,43 +77,39 @@ test('logical local identity never accepts a hosted, spoofed or differently rout
 });
 
 test('repeated fixed-date workloads have stable identity while changed dates or counts cannot compare', () => {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-workload-identity-'));
+  const root = temporaryDirectory('werkflow-workload-identity-');
   const evidence = join(root, 'evidence');
-  try {
-    mkdirSync(join(root, 'tests/audit/support'), { recursive: true });
-    mkdirSync(join(root, 'lib/testing'), { recursive: true });
-    writeFileSync(join(root, 'tests/audit/support/seed-publication.ts'), 'publication receiver v1');
-    writeFileSync(join(root, 'lib/testing/fixture-publication.ts'), 'publication ordering v1');
-    mkdirSync(evidence);
-    writeFileSync(
-      join(root, 'tests/audit/support/performance-profile.ts'),
-      'export const anchor = "2026-06-15";',
-    );
-    const workload = {
-      businessDate: '2026-06-15',
-      counts: { occurrences: 1760, timeEntries: 132 },
-      window: { from: '2026-05-31', to: '2026-07-13' },
-    };
-    const archive = (value: unknown): void => {
-      writeFileSync(join(evidence, 'performance-workload.json'), JSON.stringify(value));
-    };
-    const scenario = getMeasuredScenario('calendar.board.cold-open');
-    archive(workload);
-    const first = workloadDigest(root, scenario, evidence);
-    archive({ ...workload });
-    expect(workloadDigest(root, scenario, evidence)).toBe(first);
-    archive({ ...workload, businessDate: '2026-06-16' });
-    expect(workloadDigest(root, scenario, evidence)).not.toBe(first);
-    archive({ ...workload, counts: { ...workload.counts, timeEntries: 144 } });
-    expect(workloadDigest(root, scenario, evidence)).not.toBe(first);
-    archive({ ...workload, window: { ...workload.window, to: '2026-07-14' } });
-    expect(workloadDigest(root, scenario, evidence)).not.toBe(first);
-    expect(() => workloadDigest(root, scenario)).toThrow('actual counts and business date');
-    archive(workload);
-    expect(workloadDigest(root, scenario, evidence)).toBe(first);
-    writeFileSync(join(root, 'lib/testing/fixture-publication.ts'), 'publication ordering v2');
-    expect(workloadDigest(root, scenario, evidence)).not.toBe(first);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  mkdirSync(join(root, 'tests/audit/support'), { recursive: true });
+  mkdirSync(join(root, 'lib/testing'), { recursive: true });
+  writeFileSync(join(root, 'tests/audit/support/seed-publication.ts'), 'publication receiver v1');
+  writeFileSync(join(root, 'lib/testing/fixture-publication.ts'), 'publication ordering v1');
+  mkdirSync(evidence);
+  writeFileSync(
+    join(root, 'tests/audit/support/performance-profile.ts'),
+    'export const anchor = "2026-06-15";',
+  );
+  const workload = {
+    businessDate: '2026-06-15',
+    counts: { occurrences: 1760, timeEntries: 132 },
+    window: { from: '2026-05-31', to: '2026-07-13' },
+  };
+  const archive = (value: unknown): void => {
+    writeFileSync(join(evidence, 'performance-workload.json'), JSON.stringify(value));
+  };
+  const scenario = getMeasuredScenario('calendar.board.cold-open');
+  archive(workload);
+  const first = workloadDigest(root, scenario, evidence);
+  archive({ ...workload });
+  expect(workloadDigest(root, scenario, evidence)).toBe(first);
+  archive({ ...workload, businessDate: '2026-06-16' });
+  expect(workloadDigest(root, scenario, evidence)).not.toBe(first);
+  archive({ ...workload, counts: { ...workload.counts, timeEntries: 144 } });
+  expect(workloadDigest(root, scenario, evidence)).not.toBe(first);
+  archive({ ...workload, window: { ...workload.window, to: '2026-07-14' } });
+  expect(workloadDigest(root, scenario, evidence)).not.toBe(first);
+  expect(() => workloadDigest(root, scenario)).toThrow('actual counts and business date');
+  archive(workload);
+  expect(workloadDigest(root, scenario, evidence)).toBe(first);
+  writeFileSync(join(root, 'lib/testing/fixture-publication.ts'), 'publication ordering v2');
+  expect(workloadDigest(root, scenario, evidence)).not.toBe(first);
 });
