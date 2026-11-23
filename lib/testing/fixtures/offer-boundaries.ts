@@ -106,7 +106,7 @@ refuseForeignIds(
     [foreignOfferId, 'offer_not_found'],
     [foreignClientId, 'recipient_not_found'],
   ]),
-  2,
+  { version: 2, updatedAt: '2026-11-23T08:00:00.123456+00:00' },
 );
 await assertRefused(
   world,
@@ -130,7 +130,12 @@ await assertRefused(
   'none',
 );
 world.rpcCalls.length = 0;
-assert.deepEqual(await updateOffer(header), { success: true, version: 2 });
+assert.deepEqual(await updateOffer(header), {
+  success: true,
+  offerId: ownOfferId,
+  version: 2,
+  updatedAt: '2026-11-23T08:00:00.123456+00:00',
+});
 assert.deepEqual(
   world.rpcCalls.map((call) => [
     call.name,

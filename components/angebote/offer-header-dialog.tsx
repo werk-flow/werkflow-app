@@ -27,6 +27,7 @@ import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { describeFailure } from '@/lib/action-messages';
 import type { ManagerAssigneeOption } from '@/lib/members/profile-name';
 import { updateOffer } from '@/lib/offers/actions';
+import { ownWrites } from '@/lib/realtime/own-writes';
 import type { OfferDetail } from '@/lib/offers/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
@@ -140,7 +141,8 @@ function OfferHeaderDialog({
   onClose: () => void;
 }) {
   const { showBanner } = useBanner();
-  const settle = useSettleOnChange(offer);
+  // The saved header is on screen once the page renders the version the save answered.
+  const settle = useSettleOnChange(offer.version);
   const [expectedVersion] = useState(offer.version);
   const [form, setFormState] = useState(() => formOf(offer));
   // A changed form gets a new key: only a repeat of the same press answers from the first save.
@@ -162,15 +164,16 @@ function OfferHeaderDialog({
     void run(async () => {
       setError(null);
       const since = settle.markChange();
-      const result = await updateOffer(headerInput(offer.id, expectedVersion, attemptKey, form)).catch(
-        () => null,
-      );
+      // Recorded, so this tab skips the Realtime echo of its own save (lib/realtime/own-writes.ts).
+      const result = await ownWrites
+        .track(updateOffer(headerInput(offer.id, expectedVersion, attemptKey, form)))
+        .catch(() => null);
       if (!result?.success) {
         setError(result ? describeFailure(result.error, HEADER_FAILURE_MESSAGES, SAVE_FAILED) : SAVE_FAILED);
         return;
       }
-      // A refresh that never lands keeps its own warning banner instead of a success.
-      const confirmed = await settle.confirmChange(since);
+      // A save that changed nothing keeps the version; a refresh that never lands keeps its warning.
+      const confirmed = result.version === expectedVersion || (await settle.confirmChange(since));
       onClose();
       if (confirmed) showBanner({ variant: 'success', message: 'Angebot gespeichert.' });
     });
@@ -248,9 +251,7 @@ function OfferHeaderFields({
           />
         </div>
         <RecipientField
-          offer={offer}
           recipient={form.recipient}
-          siteId={form.siteId}
           onChange={(recipient) => setForm({ ...form, recipient })}
           disabled={pending}
         />
@@ -328,20 +329,14 @@ function ownerOptions(owners: readonly ManagerAssigneeOption[], current: OfferDe
  * Einsatzort's Rechnungsempfänger, else the customer, as the offer's create does.
  */
 function RecipientField({
-  offer,
   recipient,
-  siteId,
   onChange,
   disabled,
 }: {
-  offer: OfferDetail;
   recipient: HeaderForm['recipient'];
-  /** The chosen Einsatzort: the saved default names its recipient only while it stays. */
-  siteId: string;
   onChange: (recipient: HeaderForm['recipient']) => void;
   disabled: boolean;
 }) {
-  const savedDefault = offer.recipient.isDefault && siteId === (offer.site?.id ?? '');
   const search = useJobEntityOptions(
     { kind: 'clients', purpose: 'customer-work' },
     recipient ? [recipient.id] : [],
@@ -351,11 +346,8 @@ function RecipientField({
     <Field
       label="Rechnungsempfänger"
       htmlFor="offer-recipient"
-      description={
-        recipient
-          ? undefined
-          : `Der Rechnungsempfänger des Einsatzorts, sonst der Kunde${savedDefault ? `, zurzeit ${offer.recipient.name}` : ''}.`
-      }
+      // The save derives the default for the chosen Einsatzort on that day, so no name stands here.
+      description={recipient ? undefined : 'Der Rechnungsempfänger des Einsatzorts, sonst der Kunde.'}
     >
       <SearchableSelect
         value={recipient?.id ?? ''}

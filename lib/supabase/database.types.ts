@@ -22676,7 +22676,7 @@ export type Database = {
           p_title: string;
           p_valid_until: string;
         };
-        Returns: number;
+        Returns: Json;
       };
       update_planning_occurrence: {
         Args: {

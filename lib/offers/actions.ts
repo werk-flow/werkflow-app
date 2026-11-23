@@ -8,6 +8,7 @@ import { resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
+import { z } from '@/lib/zod';
 import {
   createOfferSchema,
   updateOfferSchema,
@@ -74,11 +75,16 @@ export async function createOffer(rawInput: CreateOfferInput): Promise<ActionRes
   }
 }
 
+const savedHeaderSchema = z.object({ version: z.number().int().positive(), updatedAt: z.string() });
+
 /**
  * Saves the header of an offer in „Entwurf“ that is still at the version the
- * form was filled from, and answers the version after the save.
+ * form was filled from. The answer names the offer, its version and its
+ * transaction stamp, so the saving tab knows the Realtime echo of this save.
  */
-export async function updateOffer(rawInput: UpdateOfferInput): Promise<ActionResult<{ version: number }>> {
+export async function updateOffer(
+  rawInput: UpdateOfferInput,
+): Promise<ActionResult<{ offerId: string; version: number; updatedAt: string }>> {
   const parsed = updateOfferSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
@@ -106,12 +112,13 @@ export async function updateOffer(rawInput: UpdateOfferInput): Promise<ActionRes
         p_owner_user_id: input.ownerUserId,
       }),
     );
-    if (error || typeof data !== 'number') {
+    const saved = savedHeaderSchema.safeParse(data);
+    if (error || !saved.success) {
       return updateRefusal(error, 'save_failed', 'updateOffer: update_offer failed');
     }
     // The page renders the saved header into this answer; another session hears it through Realtime.
     revalidatePath(`/angebote/${input.offerId}`);
-    return { success: true, version: data };
+    return { success: true, offerId: input.offerId, ...saved.data };
   } catch (error) {
     logError('updateOffer: unexpected error', error);
     return { success: false, error: 'unexpected_error' };

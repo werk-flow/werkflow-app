@@ -1,31 +1,36 @@
 -- The office changes the header of an offer in „Entwurf“
 -- (werk-flow/werkflow-planning#380, part 2).
 --
--- update_offer saves title, Einsatzort and Ansprechpartner of the offer's
--- customer, the Rechnungsempfänger, validity, opening and closing text and the
--- responsible member in one call, against the version the form was filled
--- from, and writes the `changed` history row with each changed field in the
--- same call. The customer and the work an offer was written for stay as they
--- are: no form changes them here.
+-- 1. update_offer saves title, Einsatzort and Ansprechpartner of the offer's
+--    customer, the Rechnungsempfänger, validity, opening and closing text and
+--    the responsible member in one call, against the version the form was
+--    filled from, and writes the `changed` history row with each changed field
+--    in the same call. The customer and the work an offer was written for stay
+--    as they are: no form changes them here.
+-- 2. offers carries its transaction's start time in updated_at on every
+--    update, so the saving tab knows the Realtime echo of its own save
+--    (lib/realtime/own-writes.ts, TRANSACTION_STAMPED_TABLES).
 --
 -- Division of work: the server action in lib/offers/actions.ts establishes
 -- identity, the manager role and the organization, and passes them; the
 -- function checks the actor again under the access lock
 -- (app_private.lock_office_actor of 20261210130000).
 --
--- Expand-only: one new function.
+-- Expand-only: one new function and one trigger.
 --
 -- Prevention: Tier 2 supabase/tests/offers.sql.
 
--- p_recipient_client_id null follows the default rule
+-- 1. p_recipient_client_id null follows the default rule
 -- (app_private.default_billing_recipient), so a changed Einsatzort derives
 -- the recipient again; a named customer stays until changed. A newly named
--- responsible person is an Admin or Büro member of the organization: the name
--- grants no access, so a suspended member may stay responsible. A kept
+-- responsible person is an Admin or Büro member of the organization: the
+-- name grants no access, so a suspended member may stay responsible. A kept
 -- archived recipient and a kept responsible member who left the office stay
--- valid, so an unrelated change still saves. A call under the attempt key of an earlier
--- change of this offer returns that change's version and writes nothing; a
--- save that changes nothing returns the version and writes nothing.
+-- valid, so an unrelated change still saves. A call under the attempt key of
+-- an earlier change of this offer returns that change's version and writes
+-- nothing; a save that changes nothing returns the version and writes
+-- nothing. The answer is {version, updatedAt}: the offer's version and its
+-- transaction stamp after the call.
 -- Refusals: invalid_input, not_authorized, offer_not_found,
 -- offer_not_editable (no longer „Entwurf“), offer_changed (another save
 -- came first), site_not_found and contact_not_found (not the offer's
@@ -45,7 +50,7 @@ create function public.update_offer(
   p_closing_text text,
   p_owner_user_id uuid
 )
-returns integer
+returns jsonb
 language plpgsql
 security invoker
 set search_path to ''
@@ -75,7 +80,7 @@ begin
   where event.organization_id = p_organization_id and event.attempt_key = p_attempt_key
     and event.offer_id = p_offer_id and event.actor_id = p_actor_id and event.event_type = 'changed';
   if found then
-    return v_replayed;
+    return jsonb_build_object('version', v_replayed, 'updatedAt', v_old.updated_at);
   end if;
   if v_old.status <> 'entwurf' then raise exception 'offer_not_editable'; end if;
   if v_old.version <> p_expected_version then raise exception 'offer_changed'; end if;
@@ -129,7 +134,7 @@ begin
       'valid_until', 'opening_text', 'closing_text', 'owner_user_id']) field
   where (old_row -> field) is distinct from (new_row -> field);
   if v_changes = '{}' then
-    return v_old.version;
+    return jsonb_build_object('version', v_old.version, 'updatedAt', v_old.updated_at);
   end if;
 
   update public.offers offer set
@@ -137,19 +142,24 @@ begin
     recipient_client_id = v_new.recipient_client_id, recipient_is_default = v_new.recipient_is_default,
     valid_until = v_new.valid_until, opening_text = v_new.opening_text,
     closing_text = v_new.closing_text, owner_user_id = v_new.owner_user_id,
-    version = offer.version + 1, updated_by = p_actor_id, updated_at = now()
+    version = offer.version + 1, updated_by = p_actor_id
   where offer.organization_id = p_organization_id and offer.id = p_offer_id
-    and offer.version = p_expected_version;
+    and offer.version = p_expected_version
+  returning offer.updated_at into v_new.updated_at;
   insert into public.offer_events (
     organization_id, offer_id, event_type, status, version, payload, actor_id, attempt_key
   ) values (
     p_organization_id, p_offer_id, 'changed', v_old.status, v_old.version + 1, v_changes,
     p_actor_id, p_attempt_key
   );
-  return v_old.version + 1;
+  return jsonb_build_object('version', v_old.version + 1, 'updatedAt', v_new.updated_at);
 end;
 $$;
 revoke all on function public.update_offer(uuid, uuid, uuid, integer, uuid, text, uuid, uuid, uuid, date, text, text, uuid)
   from public, anon, authenticated;
 grant execute on function public.update_offer(uuid, uuid, uuid, integer, uuid, text, uuid, uuid, uuid, date, text, text, uuid)
   to service_role;
+
+-- 2. The transaction stamp of every offer update.
+create trigger offers_updated_at before update on public.offers
+  for each row execute function public.update_updated_at_column();

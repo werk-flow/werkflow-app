@@ -307,8 +307,8 @@ create function pg_temp.save_header(
   p_actor uuid, p_offer uuid, p_version integer, p_key uuid, p_title text, p_site uuid, p_contact uuid,
   p_recipient uuid, p_owner uuid
 ) returns integer language sql as $$
-  select public.update_offer(p_actor, '38040000-0000-4000-8000-000000000010', p_offer, p_version, p_key,
-    p_title, p_site, p_contact, p_recipient, '2037-06-30', 'Hallo', 'Viele Grüße', p_owner);
+  select (public.update_offer(p_actor, '38040000-0000-4000-8000-000000000010', p_offer, p_version, p_key,
+    p_title, p_site, p_contact, p_recipient, '2037-06-30', 'Hallo', 'Viele Grüße', p_owner) ->> 'version')::integer;
 $$;
 create function pg_temp.header_events() returns bigint language sql as $$
   select count(*) from public.offer_events

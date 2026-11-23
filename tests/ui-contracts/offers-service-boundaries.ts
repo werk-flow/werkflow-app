@@ -18,9 +18,13 @@ export async function createOffer(): Promise<{ success: false; error: string }> 
 
 export async function updateOffer(
   input: unknown,
-): Promise<{ success: true; version: number } | { success: false; error: string }> {
+): Promise<
+  { success: true; offerId: string; version: number; updatedAt: string } | { success: false; error: string }
+> {
   const refusal = await holdWrite('update-offer', input);
-  return refusal ? { success: false, error: refusal } : { success: true, version: 2 };
+  return refusal
+    ? { success: false, error: refusal }
+    : { success: true, offerId: 'contract-offer', version: 2, updatedAt: '2026-11-23T08:00:00.000000+00:00' };
 }
 
 export function useRouter(): { push: () => void } {
