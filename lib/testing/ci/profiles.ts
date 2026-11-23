@@ -181,13 +181,12 @@ const FLEET: CiProfile = {
   schedules: {
     nightly: { executor: 'fleet', atOnce: 'all', clock: 'workflow', timing: nightlyCron },
     'nightly-quarantine': { executor: 'fleet', atOnce: 1, clock: 'workflow', timing: nightlyCron },
-    // No daytime full run: release.yml runs its own full run of the commit before it decides.
     'main-full-run': {
       executor: 'fleet',
       atOnce: 'all',
       clock: 'dispatch',
       dispatchedBy:
-        'A person, or an agent working a `ci-alert` issue, with `gh workflow run main-full-run.yml`.',
+        "By day, ci-alert.timer (werkflow-planning's ops/ci-alert.py); or a person, with `gh workflow run main-full-run.yml`.",
     },
     // date-lookahead.yml's max-parallel (profiles.test.ts reads it).
     'date-lookahead': {

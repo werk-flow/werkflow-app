@@ -4,7 +4,7 @@ CI runs on the `fleet` profile, on GitHub Actions ([decision 0011](../decisions/
 
 ## Where the work is
 
-- **The runner:** the tag `archive/local-runner-2026-11-23` at commit `64d200b6a39ba258d1c09e5b456bfa15aec38ac7`. It holds the machine runner with the claim as a lease ref (P5) and the machine windows (P8). Its closed PR, #603, holds the security model, the review ledger and the open risks.
+- **The runner:** the tag `archive/local-runner-2026-11-23`. It holds the machine runner with the claim as a lease ref (P5) and the machine windows (P8). Its closed PR, #603, holds the security model, the review ledger and the open risks.
 - **The install steps:** `docs/technical/machine-setup.md`, section "Run CI on the owner's machines", at that tag.
 - **The archive:** werk-flow/werkflow-planning#546, folder `ops/ci-local-fallback/`: the design, the progress of each part, the measurements and the council's reviews.
 
@@ -21,7 +21,7 @@ The `local` profile's CI is removed from all three machines. The archive paths b
 ### 1. The Mac
 
 - **Removed:** the Colima profile `ci` and its disk, the stand-in's launchd jobs, its work roots and its private `R` folder.
-- **Archive:** `ops/ci-local-fallback/mac-standin/`.
+- **Archive:** `ops/ci-local-fallback/mac-standin/` (planning PR pending).
 - **Rebuild, then switch on:**
   1. Create the Colima profile `ci` without host mounts.
   2. Check out the restored runner's reviewed commit as the trusted checkout, and build the image.
@@ -33,8 +33,8 @@ The `local` profile's CI is removed from all three machines. The archive paths b
 ### 2. The PC
 
 - **Removed:** the WSL distribution `werkflow-ci`, unregistered.
-- **Archive:** `ops/ci-local-fallback/pc-workbench/`: `rootless-slot.sh`, the `wsl.conf`, the image recipe and the measurement drivers.
-- **Stays:** `ci-alert.timer`, which watches the Actions alerts.
+- **Archive:** `ops/ci-local-fallback/pc-workbench/` (planning PR pending): `rootless-slot.sh`, the `wsl.conf`, the image recipe and the measurement drivers.
+- **Stays:** `ci-alert.timer` (werkflow-planning `ops/ci-alert.py`), which watches the Actions alerts and dispatches main's daytime full run.
 - **Rebuild, then switch on:**
   1. Import the official Ubuntu 24.04 root file system as `werkflow-ci`, after you check its SHA256 sum and GPG signature.
   2. Write the locked-down `wsl.conf`, then run `wsl.exe --terminate werkflow-ci`, never `--shutdown`.
@@ -47,7 +47,7 @@ The `local` profile's CI is removed from all three machines. The archive paths b
 ### 3. The VM
 
 - **Removed:** the conductor, the users `werkflowci` and `werkflowci-publisher`, and every `werkflow-ci-*` and `werkflowci-*` unit.
-- **Archive:** `ops/ci-local-fallback/vm/`, and #546's `vm-orchestrator/`: the isolation's `apply.sh`, `verify.sh` and `rollback.sh`.
+- **Archive:** `ops/ci-local-fallback/vm/` (planning PR pending), and #546's `vm-orchestrator/`: the isolation's `apply.sh`, `verify.sh` and `rollback.sh`.
 - **Kept installed and disabled:** `werkflow-release@` and `werkflow-dev-deploy`.
 - **Keys:** every VM key is deleted. The release and DEV paths come back only as in [Put the VM release and DEV keys back](#put-the-vm-release-and-dev-keys-back).
 - **Never** enable a VM timer while its GitHub twin, `release.yml` or `staging.yml`, is enabled.
@@ -72,21 +72,24 @@ The runner serves PR integration runs only. Before `local` can carry CI unattend
 
 ## Put the VM release and DEV keys back
 
-The VM release path is the unit `werkflow-release@` (werk-flow/werkflow-planning#517). It runs the same release gates as `release.yml`, and the CI lead and the owner approved it as the release route for when Actions cannot run `release.yml`. AGENTS.md lets PROD change only through the `release` workflow. So turning the VM path on is an owner item: it needs the owner's explicit decision at that time, and it runs under the existing release hold. An agent never turns it on alone. Where the VM only supplies the clock, it dispatches `release.yml`.
+For releases the VM is dispatch-only: when Actions works but needs a clock, the VM dispatches `release.yml`. The `werkflow-release@` path (werk-flow/werkflow-planning#517), which writes PROD through its own script, stays off. It could be used only after the owner changes AGENTS.md's rule "Never write to PROD outside the `release` workflow" and that rule's enforcement.
 
-The VM's release and DEV tokens and its `werkflow-vm-release` deploy key are deleted; their units stay installed and disabled. With the owner's decision:
+The VM's release and DEV tokens and its `werkflow-vm-release` deploy key are deleted; their units stay installed and disabled. The steps below restore the VM's credentials for the release dispatch and the DEV deploy, never for `werkflow-release@`:
 
 1. Follow the phase 2 runbook `ops/release-credentials.md` in werkflow-planning: four `request_secret` cards with file delivery, a one-hour timeout and the hint "paste". `ops/release-credential-install.sh` installs them.
 2. Run `ops/release-deploy-key.sh` for a new deploy key. The owner adds it to this repository with write access.
 3. Plan about 15 minutes with the owner.
-4. Before you enable a VM timer, disable its workflow and drain it. The drain holds only when this command succeeds and prints `0`, so no run is queued, pending, waiting, requested or in progress:
+4. The release dispatch keeps `release.yml` enabled. For the DEV deploy, disable `staging.yml` and drain it before you enable `werkflow-dev-deploy.timer`. The drain reads every page of each status that is not completed. It holds only when the command exits 0 and prints nothing:
 
    ```bash
-   gh run list -R werk-flow/werkflow-app --workflow <file> --limit 200 --json status,conclusion \
-     --jq '[.[] | select(.status != "completed")] | length'
+   (set -euo pipefail
+    for status in requested queued pending waiting in_progress action_required; do
+      gh api --paginate "repos/werk-flow/werkflow-app/actions/workflows/<file>/runs?status=$status&per_page=100" \
+        --jq '.workflow_runs[] | "\(.id) \(.status)"'
+    done)
    ```
 
-   A failed listing counts as not drained. Then enable `werkflow-dev-deploy.timer` after `staging.yml`, or `werkflow-release.timer` after `release.yml`. Never run both paths at once.
+   A failed or partial query counts as not drained. Never run a VM path and its GitHub workflow at once.
 
 ## Switch back from `fleet` to `local`
 
@@ -102,6 +105,6 @@ The VM's release and DEV tokens and its `werkflow-vm-release` deploy key are del
    - turn on "Require branches to be up to date before merging".
 8. Start both runners. Watch the first PR a machine claims until its App-owned `Check` reaches its verdict.
 9. Resume merges.
-10. For the DEV deploy and, by the owner's explicit decision, the release, follow [Put the VM release and DEV keys back](#put-the-vm-release-and-dev-keys-back).
+10. For the DEV deploy and the release dispatch, follow [Put the VM release and DEV keys back](#put-the-vm-release-and-dev-keys-back).
 
 If Actions is already completely unavailable, the runner's PR and the profile switch cannot get a `Check` from it. Landing them then needs another trusted `Check`, which is the owner's decision.

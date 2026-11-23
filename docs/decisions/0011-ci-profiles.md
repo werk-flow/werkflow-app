@@ -48,9 +48,9 @@ CI may run on many machines or on few. The design of the CI hill climb assumes m
 
 ## Amendment 2026-11-23: GitHub Actions is the CI home again
 
-The owner decided on 2026-11-23 that CI runs on GitHub Actions again: `ci/profile.json` names `fleet`. Rule 7's last line no longer holds. The `local` profile stays maintained (rule 1) and frozen as a fallback; [ci-local-fallback.md](../technical/ci-local-fallback.md) holds its state, what stays open and the switch back. The machine runner is kept under the tag `archive/local-runner-2026-11-23`, at commit `64d200b6a39ba258d1c09e5b456bfa15aec38ac7`.
+The owner decided on 2026-11-23 that CI runs on GitHub Actions again: `ci/profile.json` names `fleet`. Rule 7's last line no longer holds. The `local` profile stays maintained (rule 1) and frozen as a fallback; [ci-local-fallback.md](../technical/ci-local-fallback.md) holds its state, what stays open and the switch back. The machine runner is kept under the tag `archive/local-runner-2026-11-23`.
 
-Under `fleet`, GitHub Actions starts every run and schedule. ci.yml's `pull_request`, `merge_group` and `push` events start the PR, queue and `main` runs. Each trigger of a workflow that calls ci.yml starts a full run, its `workflow_dispatch` included. ci.yml's own `workflow_dispatch` is the midnight proof, a path for branches only that selects the full tier. nightly.yml's cron runs the nightly, release.yml's cron the release, and main's full run starts only by `workflow_dispatch`. No conductor's clock fires anything. `profiles.test.ts` fails on a trigger that no placement names.
+Under `fleet`, GitHub Actions starts every run and schedule. ci.yml's `pull_request`, `merge_group` and `push` events start the PR, queue and `main` runs. Each trigger of a workflow that calls ci.yml starts a full run, its `workflow_dispatch` included. ci.yml's own `workflow_dispatch` is the midnight proof, a path for branches only that selects the full tier. nightly.yml's cron runs the nightly, release.yml's cron the release, and main's full run starts only by `workflow_dispatch`: by day from `ci-alert.timer` (werkflow-planning `ops/ci-alert.py`), or by a person. No conductor's clock fires anything. `profiles.test.ts` fails on a trigger that no placement names.
 
 Switch to `fleet`:
 
