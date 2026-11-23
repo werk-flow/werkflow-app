@@ -1,5 +1,7 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
+
 import type { ActionResult } from '@/lib/action-result';
 import { isAiReleasedFor } from '@/lib/ai/release-gate';
 import { logError } from '@/lib/logging';
@@ -9,7 +11,8 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
 export type SetAiEnabledResult = ActionResult<
-  { enabled: boolean },
+  // The row id and write stamp name the save's own Realtime echo (lib/realtime/own-writes.ts).
+  { enabled: boolean; id: string; updatedAt: string },
   'not_authenticated' | 'not_a_member' | 'invalid_input' | 'not_authorized' | 'not_released' | 'update_failed'
 >;
 
@@ -43,5 +46,9 @@ export async function setAiEnabled(input: {
     logError('setAiEnabled: switch write failed', error);
     return { success: false, error: 'update_failed' };
   }
-  return { success: true, enabled: data };
+  const saved = data[0];
+  if (!saved) return { success: false, error: 'update_failed' };
+  // The response renders the settings page, so the card's props carry the saved switch.
+  revalidatePath('/einstellungen/organisation');
+  return { success: true, enabled: saved.enabled, id: saved.id, updatedAt: saved.updated_at };
 }

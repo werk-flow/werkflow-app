@@ -25,6 +25,8 @@ create type public.ai_run_status as enum ('reserved', 'succeeded', 'failed', 'ca
 
 create table public.ai_organization_settings (
   organization_id uuid primary key references public.organizations (id) on delete cascade,
+  -- The row id a save returns, so the saving tab knows the Realtime echo as its own.
+  id uuid not null unique default gen_random_uuid(),
   enabled boolean not null default false,
   -- The one constant of the default budget: EUR 50 a month (owner, O3).
   monthly_budget_micro_eur bigint not null default 50000000 check (monthly_budget_micro_eur > 0),
@@ -160,7 +162,7 @@ grant select on table public.ai_threads, public.ai_thread_items to authenticated
 create policy ai_organization_settings_select_admin on public.ai_organization_settings
   for select to authenticated
   using (organization_id in (select app_private.get_user_admin_org_ids((select auth.uid()))));
-grant select (organization_id, enabled, updated_at) on table public.ai_organization_settings to authenticated;
+grant select (id, organization_id, enabled, updated_at) on table public.ai_organization_settings to authenticated;
 grant select on table public.ai_organization_settings, public.ai_threads, public.ai_thread_items,
   public.ai_runs, public.ai_run_attempts to service_role;
 
@@ -435,13 +437,15 @@ begin
 end;
 $$;
 
--- The admin's switch. Only an admin with effective access sets it.
+-- The admin's switch. Only an admin with effective access sets it. Returns
+-- the row's id and write stamp, which name the save's Realtime echo.
 create function public.set_ai_organization_enabled(
   p_organization_id uuid,
   p_actor_id uuid,
   p_enabled boolean
 )
-returns boolean language plpgsql security definer set search_path = '' as $$
+returns table (id uuid, enabled boolean, updated_at timestamptz)
+language plpgsql security definer set search_path = '' as $$
 begin
   if p_enabled is null then raise exception 'ai_setting_invalid'; end if;
   if not exists (
@@ -452,11 +456,12 @@ begin
     raise exception 'ai_setting_not_admin';
   end if;
 
-  insert into public.ai_organization_settings (organization_id, enabled, updated_by, updated_at)
-  values (p_organization_id, p_enabled, p_actor_id, now())
-  on conflict (organization_id) do update
-    set enabled = excluded.enabled, updated_by = excluded.updated_by, updated_at = excluded.updated_at;
-  return p_enabled;
+  return query
+    insert into public.ai_organization_settings as settings (organization_id, enabled, updated_by, updated_at)
+    values (p_organization_id, p_enabled, p_actor_id, now())
+    on conflict (organization_id) do update
+      set enabled = excluded.enabled, updated_by = excluded.updated_by, updated_at = excluded.updated_at
+    returning settings.id, settings.enabled, settings.updated_at;
 end;
 $$;
 
@@ -487,20 +492,26 @@ grant execute on function public.set_ai_organization_enabled(uuid, uuid, boolean
 create function app_private.delete_expired_ai_thread_items()
 returns void language plpgsql security definer set search_path = '' as $$
 declare
+  v_cutoff timestamptz := now() - interval '12 months';
   v_thread_id uuid;
 begin
-  delete from public.ai_thread_items item where item.created_at < now() - interval '12 months';
-  -- Each candidate takes the thread row lock an append takes, then a fresh
-  -- statement checks it is still empty, so an append that committed while
-  -- the job waited keeps its thread.
+  -- Thread before items, the order of an append and of a member's or the
+  -- organization's deletion, so the job never deadlocks with them. A thread
+  -- another transaction holds waits for the next day's run. After the lock,
+  -- fresh statements see an append that committed meanwhile.
   for v_thread_id in
     select thread.id from public.ai_threads thread
-    where thread.created_at < now() - interval '12 months'
-      and not exists (select 1 from public.ai_thread_items item where item.thread_id = thread.id)
+    where exists (
+        select 1 from public.ai_thread_items item
+        where item.thread_id = thread.id and item.created_at < v_cutoff
+      )
+      or (thread.created_at < v_cutoff
+        and not exists (select 1 from public.ai_thread_items item where item.thread_id = thread.id))
+    for update skip locked
   loop
-    perform 1 from public.ai_threads thread where thread.id = v_thread_id for update;
+    delete from public.ai_thread_items item where item.thread_id = v_thread_id and item.created_at < v_cutoff;
     delete from public.ai_threads thread
-    where thread.id = v_thread_id
+    where thread.id = v_thread_id and thread.created_at < v_cutoff
       and not exists (select 1 from public.ai_thread_items item where item.thread_id = v_thread_id);
   end loop;
 end;

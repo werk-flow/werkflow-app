@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRef, useState } from 'react';
 
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,7 +48,11 @@ export function AiSettingsCard({
             Die Einstellung ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
           </RegionLoadError>
         ) : state.released ? (
-          <AiSwitch organizationId={organizationId} serverEnabled={state.enabled} />
+          <AiSwitch
+            organizationId={organizationId}
+            serverEnabled={state.enabled}
+            serverStamp={state.updatedAt}
+          />
         ) : (
           <p className="text-sm text-muted-foreground">
             {AI_PRODUCT_NAME} ist für deine Organisation noch nicht freigeschaltet.
@@ -60,18 +63,28 @@ export function AiSettingsCard({
   );
 }
 
-function AiSwitch({ organizationId, serverEnabled }: { organizationId: string; serverEnabled: boolean }) {
-  const router = useRouter();
-  const settleOnChange = useSettleOnChange(serverEnabled);
+function AiSwitch({
+  organizationId,
+  serverEnabled,
+  serverStamp,
+}: {
+  organizationId: string;
+  serverEnabled: boolean;
+  serverStamp: string | null;
+}) {
+  // Every save writes a new stamp, so the rendered props settle a save even
+  // when another admin set the switch back before they landed.
+  const settleOnChange = useSettleOnChange(serverStamp);
+  const sinceRef = useRef<number | undefined>(undefined);
   // The value the admin asked for, shown until the refreshed props carry it.
   const [requested, setRequested] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending, isSettling } = useServerAction(setAiEnabled, {
+    // The action revalidates, so its response renders the new props; the
+    // mark taken before the call catches a render that lands first.
     settle: async (result) => {
       if (!result.success) return;
-      const since = settleOnChange.markChange();
-      router.refresh();
-      await settleOnChange(since);
+      await settleOnChange(sinceRef.current);
       setRequested(null);
     },
   });
@@ -82,6 +95,7 @@ function AiSwitch({ organizationId, serverEnabled }: { organizationId: string; s
   async function toggle(next: boolean) {
     setRequested(next);
     setError(null);
+    sinceRef.current = settleOnChange.markChange();
     try {
       const result = await run({ organizationId, enabled: next });
       if (!result.success) {

@@ -1,8 +1,7 @@
 -- WerkFlow KI storage (migration 20270110100000, werk-flow/werkflow-planning#527):
 -- client roles reach no function and write no table; items take the thread's
 -- next sequence once per idempotency key; a reservation refuses when the
--- organization is off, over its budget or undecidable; the cost ledger refuses
--- UPDATE and DELETE; the daily job deletes only items older than 12 months and
+-- organization is off, over its budget or undecidable; the daily job deletes only items older than 12 months and
 -- the threads they leave empty, and the ledger keeps its cost. Author-only
 -- reads are in client_read_boundaries.sql. Runs in one transaction and rolls back.
 begin;
@@ -277,39 +276,9 @@ begin
 end;
 $$;
 
--- The ledger refuses UPDATE and DELETE: service_role holds no privilege, and
--- even the table owner meets the guard.
-do $$
-begin
-  begin
-    update public.ai_run_attempts set cost_micro_usd = 0 where organization_id = 'ae000000-0000-4000-8000-000000000010';
-    raise exception 'service_role updated the cost ledger';
-  exception when insufficient_privilege then null;
-  end;
-  begin
-    delete from public.ai_run_attempts where organization_id = 'ae000000-0000-4000-8000-000000000010';
-    raise exception 'service_role deleted from the cost ledger';
-  exception when insufficient_privilege then null;
-  end;
-end;
-$$;
 reset role;
-do $$
-begin
-  begin
-    update public.ai_run_attempts set cost_micro_usd = 0 where organization_id = 'ae000000-0000-4000-8000-000000000010';
-    raise exception 'The owner updated the cost ledger';
-  exception when others then
-    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
-  end;
-  begin
-    delete from public.ai_run_attempts where organization_id = 'ae000000-0000-4000-8000-000000000010';
-    raise exception 'The owner deleted from the cost ledger';
-  exception when others then
-    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
-  end;
-end;
-$$;
+
+-- The ledger's denials are proved in security_boundaries.sql.
 
 -- Boundaries of the budget: a hold lapses 15 minutes after its run began
 -- while its recorded cost still counts, and an attempt of the previous

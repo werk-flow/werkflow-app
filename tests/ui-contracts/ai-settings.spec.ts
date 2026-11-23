@@ -3,7 +3,7 @@ import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fi
 
 // The admin's WerkFlow KI switch is a micro-toggle: it flips in the first
 // frame while the write is open, marked unconfirmed (lib/ui/unconfirmed.ts),
-// stays pending and locked until the refreshed props carry the new value,
+// stays pending and locked until the rendered props carry a new write stamp,
 // stays quiet once confirmed, and turns back with the reason when refused.
 test.beforeEach(async ({ page }) => {
   await openContractFixture(page, 'ai-settings');
@@ -43,6 +43,33 @@ test('the switch flips at once and stays locked until the refreshed props confir
   await expect(group).not.toHaveAttribute('data-unconfirmed');
   await expect(toggle).toBeEnabled();
   await expect(toggle).toBeChecked();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('a save settles at once when another admin set the switch back before the render landed', async ({
+  page,
+}) => {
+  const toggle = page.getByRole('checkbox', {
+    name: 'WerkFlow KI in dieser Organisation nutzen',
+    exact: true,
+  });
+  await toggle.click();
+  await expectHeldWrite(page, 'set-ai-enabled');
+  await answerHeldWrite(page, null);
+  // Another admin's later save: off again, with a newer stamp.
+  await page.evaluate(() => {
+    window.uiContractAiSwitch = {
+      released: true,
+      enabled: false,
+      updatedAt: '2026-11-23T10:00:30.000000+00:00',
+    };
+  });
+  await releaseRefresh(page);
+  await expect(page.getByRole('status', { name: 'WerkFlow KI wird umgeschaltet', exact: true })).toHaveCount(
+    0,
+  );
+  await expect(toggle).toBeEnabled();
+  await expect(toggle).not.toBeChecked();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 

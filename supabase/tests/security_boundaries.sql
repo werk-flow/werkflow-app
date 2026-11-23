@@ -1264,4 +1264,65 @@ begin
 end;
 $$;
 
+-- The WerkFlow KI cost ledger (werk-flow/werkflow-planning#527) refuses UPDATE
+-- and DELETE: service_role holds no privilege, and the owner meets the history
+-- guard. Only the organization's deletion cascades through it.
+insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
+('5e270000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated',
+ 'authenticated', 'ai-ledger-admin@example.test', '', now(), '{}', '{"first_name":"Ledger","last_name":"KI"}',
+ now(), now());
+insert into public.organizations (id, name, admin_id, unique_code) values
+('5e270000-0000-4000-8000-000000000010', 'KI ledger SQL', '5e270000-0000-4000-8000-000000000001', 'AILEDG');
+insert into public.ai_runs (id, organization_id, idempotency_key, reserved_micro_usd) values
+('5e270000-0000-4000-8000-000000000020', '5e270000-0000-4000-8000-000000000010', 'ledger-run', 100);
+insert into public.ai_run_attempts (organization_id, run_id, idempotency_key, model_id, prompt_version,
+  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, outcome) values
+('5e270000-0000-4000-8000-000000000010', '5e270000-0000-4000-8000-000000000020', 'ledger-run:1', 'claude-haiku',
+ 'prompt-v1', 1, 1, 0, 0, 77, 'succeeded');
+set local role service_role;
+do $$
+begin
+  begin
+    update public.ai_run_attempts set cost_micro_usd = 0
+    where organization_id = '5e270000-0000-4000-8000-000000000010';
+    raise exception 'service-role AI cost ledger update was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.ai_run_attempts where organization_id = '5e270000-0000-4000-8000-000000000010';
+    raise exception 'service-role AI cost ledger delete was accepted';
+  exception when insufficient_privilege then null;
+  end;
+end;
+$$;
+reset role;
+do $$
+begin
+  begin
+    update public.ai_run_attempts set cost_micro_usd = 0
+    where organization_id = '5e270000-0000-4000-8000-000000000010';
+    raise exception 'privileged AI cost ledger update was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  begin
+    delete from public.ai_run_attempts where organization_id = '5e270000-0000-4000-8000-000000000010';
+    raise exception 'privileged AI cost ledger delete was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  if (select cost_micro_usd from public.ai_run_attempts
+      where organization_id = '5e270000-0000-4000-8000-000000000010') is distinct from 77::bigint
+  then raise exception 'the AI cost ledger row changed despite the denials'; end if;
+end;
+$$;
+delete from public.organizations where id = '5e270000-0000-4000-8000-000000000010';
+do $$
+begin
+  if exists (select 1 from public.ai_run_attempts where organization_id = '5e270000-0000-4000-8000-000000000010')
+  then raise exception 'the organization''s deletion left AI cost ledger rows'; end if;
+end;
+$$;
+
 rollback;
