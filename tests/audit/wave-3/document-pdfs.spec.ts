@@ -1,8 +1,8 @@
 import { seedRuleReadyCompanyProfile } from '../../golden/support/db/company-profile';
 import {
-  getFiledServiceReportCount,
+  getServiceReportDocuments,
   seedCompletedMaintenanceVisit,
-} from '../../golden/support/db/service-reports';
+} from '../../golden/support/db/maintenance-visits';
 import { expect, test } from '../support/fixtures';
 import {
   COMPLETED_VISITS_PATH,
@@ -12,13 +12,15 @@ import {
   serviceReportFiledBanner,
 } from '../support/service-report-steps';
 
-// The PDFs the server renders, in the production build. Their fonts, colour
-// profile and compiled EN 16931 rules are files the server reads at run time.
-// Bun's unit tests read them from the source tree, so only the built app shows
-// whether the bundler kept a path the server can read and the build traced
-// the files. A route handler and a Server Action are bundled differently, so
-// both are driven. The layout and the rules themselves are proven below the
-// browser (lib/document-rendering/, lib/invoicing/check-en16931.test.ts).
+// The PDFs the server renders, run in the production bundle. Their fonts,
+// colour profile and compiled EN 16931 rules are files the server reads at run
+// time; Bun's unit tests read them unbundled, so only the bundled app shows
+// whether the bundler kept a path the server can read. A route handler and a
+// Server Action are bundled differently, so both are driven. The local server
+// runs beside the source tree, so whether a deployment carries the files is
+// the build trace's question (the routes' and /service/wartung's .nft.json).
+// The layout and the rules themselves are proven below the browser
+// (lib/document-rendering/, lib/invoicing/check-en16931.test.ts).
 
 const SAMPLE_PDFS = [
   { route: '/api/musterangebot', name: 'Musterangebot' },
@@ -47,7 +49,7 @@ test.describe('Document PDFs in the built app @AUDIT-W3-DOCUMENT-PDFS @AUDIT-W3'
     world,
     businessDate,
   }) => {
-    const planNumber = await seedCompletedMaintenanceVisit({
+    const visit = await seedCompletedMaintenanceVisit({
       orgId: world.orgId,
       actorId: world.users.admin.id,
       customerName: `Hausverwaltung Lindenhof GmbH ${world.runId}`,
@@ -57,11 +59,14 @@ test.describe('Document PDFs in the built app @AUDIT-W3-DOCUMENT-PDFS @AUDIT-W3'
 
     await test.step('„Servicebericht erstellen“ renders, files and offers the report', async () => {
       await bueroPage.goto(COMPLETED_VISITS_PATH);
-      const row = completedVisitRow(bueroPage, planNumber);
+      const row = completedVisitRow(bueroPage, visit.planNumber);
       await createServiceReportButton(row).click();
       await expect(serviceReportFiledBanner(bueroPage)).toBeVisible();
       await expect(downloadServiceReportButton(row)).toBeVisible();
-      expect(await getFiledServiceReportCount(world.orgId)).toBe(1);
+      const [report, ...others] = await getServiceReportDocuments(world.orgId, visit.dueWorkId);
+      expect(others, 'one Servicebericht for the visit').toHaveLength(0);
+      expect(report?.mimeType).toBe('application/pdf');
+      expect(report?.filedAt, 'the Servicebericht is filed').not.toBeNull();
     });
   });
 });

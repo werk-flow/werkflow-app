@@ -2,12 +2,12 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { addLocalMonthsClamped } from '../../../../lib/date-time/berlin';
 import type { DialogOpenerId } from '../../../../lib/testing/selection/dialog-inventory';
 import { seedCustomer } from '../../../golden/support/db/customers';
+import { seedMaintenanceVisitJob } from '../../../golden/support/db/maintenance-visits';
 import {
   seedInstalledEquipment,
   seedInstalledEquipmentReplacement,
   seedMaintenanceCoverage,
   seedMaintenancePlan,
-  seedMaintenanceVisitLink,
   seedServiceCase,
   seedServiceCaseJobLink,
 } from '../../../golden/support/db/service';
@@ -140,42 +140,15 @@ function prepareMaintenanceVisit({ world, businessDate }: SurfaceContext): Promi
     const names = serviceAuditNames(world);
     const actor = { orgId: world.orgId, actorId: world.users.admin.id };
     const { clientId, siteId } = await seedServiceCustomer(world, names.visitClient);
-    const equipment = await seedInstalledEquipment({
+    await seedMaintenanceVisitJob({
       ...actor,
       clientId,
       siteId,
-      name: names.maintenanceEquipment,
-    });
-    const template = await seedPublishedWorkTemplate({
-      ...actor,
-      name: `${names.maintenanceTemplate} Besuch`,
-      targetType: 'job',
-      items: [{ content: 'Anlage fachgerecht warten' }],
-    });
-    const plan = await seedMaintenancePlan({
-      ...actor,
-      clientId,
-      siteId,
-      templateVersionId: template.versionId,
-      equipmentIds: [equipment.id],
-      effectiveFromDate: businessDate,
-      firstDueDate: businessDate,
-      intervalMonths: 12,
-      businessDate,
-    });
-    const jobId = await seedJob({
-      ...actor,
+      equipmentName: names.maintenanceEquipment,
+      templateName: `${names.maintenanceTemplate} Besuch`,
       jobNumber: names.visitJobNumber,
-      title: 'Wartungsbesuch',
-      clientId,
-      siteId,
-    });
-    await seedMaintenanceVisitLink({ ...actor, planId: plan.id, jobId });
-    await seedWorkReportDraft({
-      ...actor,
-      jobId,
-      title: 'Wartungsbericht',
       performedWork: 'Brenner geprüft, Umwälzpumpe läuft nicht an.',
+      businessDate,
     });
     return names.visitJobNumber;
   });
