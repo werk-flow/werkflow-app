@@ -10,7 +10,6 @@ import {
   existsSync,
   linkSync,
   mkdirSync,
-  mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -19,7 +18,6 @@ import {
   writeFileSync,
   writeSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
 import {
@@ -29,6 +27,7 @@ import {
   referencePathProblem,
   updateFolder,
 } from './reference-updates';
+import { temporaryDirectory } from '../temporary-directory';
 
 const SNAPSHOTS = 'tests/audit/visual/references.spec.ts-snapshots';
 
@@ -62,7 +61,7 @@ test('only a .png or .txt file directly in an audit snapshot folder is a referen
 });
 
 test('the machine collects only the references the update rewrote or wrote', () => {
-  const repository = mkdtempSync(join(tmpdir(), 'reference-collect-'));
+  const repository = temporaryDirectory('reference-collect-');
   write(repository, `${SNAPSHOTS}/same.png`, 'same');
   write(repository, `${SNAPSHOTS}/changed.png`, 'old');
   write(repository, 'tests/audit/visual/references.spec.ts', 'spec');
@@ -81,7 +80,7 @@ test('the machine collects only the references the update rewrote or wrote', () 
 });
 
 test('an update that rewrote nothing collects nothing and succeeds', () => {
-  const repository = mkdtempSync(join(tmpdir(), 'reference-collect-'));
+  const repository = temporaryDirectory('reference-collect-');
   write(repository, `${SNAPSHOTS}/same.png`, 'same');
   const folder = join(repository, '.agent-logs/visual-reference-updates/run');
   expect(collectReferenceUpdates(repository, referenceHashes(repository), folder)).toEqual([]);
@@ -89,7 +88,7 @@ test('an update that rewrote nothing collects nothing and succeeds', () => {
 });
 
 test('a collection that fails leaves no folder to come back, not even part of one', () => {
-  const repository = mkdtempSync(join(tmpdir(), 'reference-collect-'));
+  const repository = temporaryDirectory('reference-collect-');
   write(repository, `${SNAPSHOTS}/changed.png`, 'new');
   // The update folder's parent is a file, so publishing the set fails after the copies were made.
   write(repository, '.agent-logs/visual-reference-updates', 'not a folder');
@@ -101,8 +100,8 @@ test('a collection that fails leaves no folder to come back, not even part of on
 
 test('rewritten references are placed in the checkout, and any bad entry refuses the whole set', () => {
   const placed = (build: (update: string, repository: string) => void) => {
-    const repository = mkdtempSync(join(tmpdir(), 'reference-apply-'));
-    const update = mkdtempSync(join(tmpdir(), 'reference-update-'));
+    const repository = temporaryDirectory('reference-apply-');
+    const update = temporaryDirectory('reference-update-');
     write(repository, `${SNAPSHOTS}/kept.png`, 'old');
     write(update, `${SNAPSHOTS}/kept.png`, 'new');
     build(update, repository);
@@ -137,7 +136,7 @@ test('rewritten references are placed in the checkout, and any bad entry refuses
   // A destination reached through a symbolic link in the checkout is never written through.
   expect(
     placed((update, repository) => {
-      const outside = mkdtempSync(join(tmpdir(), 'reference-outside-'));
+      const outside = temporaryDirectory('reference-outside-');
       mkdirSync(join(repository, 'tests/audit/layout'), { recursive: true });
       symlinkSync(outside, join(repository, 'tests/audit/layout/linked.spec.ts-snapshots'));
       write(update, 'tests/audit/layout/linked.spec.ts-snapshots/a.png', 'x');
@@ -158,8 +157,8 @@ test('rewritten references are placed in the checkout, and any bad entry refuses
 });
 
 test('a reference changed in the checkout during the run keeps its local version; the others are placed', () => {
-  const repository = mkdtempSync(join(tmpdir(), 'reference-apply-'));
-  const update = mkdtempSync(join(tmpdir(), 'reference-update-'));
+  const repository = temporaryDirectory('reference-apply-');
+  const update = temporaryDirectory('reference-update-');
   write(repository, `${SNAPSHOTS}/unchanged.png`, 'old');
   write(repository, `${SNAPSHOTS}/edited.png`, 'old');
   write(repository, `${SNAPSHOTS}/removed.png`, 'old');
@@ -185,8 +184,8 @@ test('a reference changed in the checkout during the run keeps its local version
 });
 
 test('a reference changed here while the update is placed keeps its local version', () => {
-  const repository = mkdtempSync(join(tmpdir(), 'reference-apply-'));
-  const update = mkdtempSync(join(tmpdir(), 'reference-update-'));
+  const repository = temporaryDirectory('reference-apply-');
+  const update = temporaryDirectory('reference-update-');
   for (const name of ['edited.png', 'removed.png']) write(repository, `${SNAPSHOTS}/${name}`, 'old');
   const before = referenceHashes(repository);
   for (const name of ['edited.png', 'removed.png', 'created.txt'])
@@ -221,8 +220,8 @@ test('a failed update run publishes its references in the folder the workstation
 });
 
 test('a write through a descriptor opened before the replacement is recoverable', () => {
-  const repository = mkdtempSync(join(tmpdir(), 'reference-apply-'));
-  const update = mkdtempSync(join(tmpdir(), 'reference-update-'));
+  const repository = temporaryDirectory('reference-apply-');
+  const update = temporaryDirectory('reference-update-');
   write(repository, `${SNAPSHOTS}/a.png`, 'old');
   write(update, `${SNAPSHOTS}/a.png`, 'boat');
   const before = referenceHashes(repository);
@@ -244,8 +243,8 @@ test('a write through a descriptor opened before the replacement is recoverable'
 
 test('a recovery folder that exists or is reached through a symbolic link refuses the set before anything moves', () => {
   const refused = (prepare: (repository: string) => void) => {
-    const repository = mkdtempSync(join(tmpdir(), 'reference-apply-'));
-    const update = mkdtempSync(join(tmpdir(), 'reference-update-'));
+    const repository = temporaryDirectory('reference-apply-');
+    const update = temporaryDirectory('reference-update-');
     write(repository, `${SNAPSHOTS}/a.png`, 'old');
     write(update, `${SNAPSHOTS}/a.png`, 'boat');
     prepare(repository);
@@ -256,7 +255,7 @@ test('a recovery folder that exists or is reached through a symbolic link refuse
     expect(readFileSync(join(repository, SNAPSHOTS, 'a.png'), 'utf8')).toBe('old');
     return repository;
   };
-  const outside = mkdtempSync(join(tmpdir(), 'reference-outside-'));
+  const outside = temporaryDirectory('reference-outside-');
   refused((repository) => {
     mkdirSync(join(repository, '.agent-logs'));
     symlinkSync(outside, join(repository, '.agent-logs/replaced'));

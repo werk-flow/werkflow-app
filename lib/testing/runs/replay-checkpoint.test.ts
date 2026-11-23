@@ -1,6 +1,5 @@
-import { afterEach, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { expect, test } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateRawSync } from 'node:zlib';
 import {
@@ -10,6 +9,7 @@ import {
   retainedTestStages,
   traceStages,
 } from './replay-checkpoint';
+import { temporaryDirectory } from '../temporary-directory';
 
 /** A minimal archive in the layout Playwright writes: local headers, central directory, end record. */
 function zipOf(entries: { name: string; text: string; deflate: boolean }[]): Buffer {
@@ -99,14 +99,8 @@ test('only top-level stages count, a retried inner check does not fail its stage
   expect(traceStages(`${setupOnly}\nnot json`)).toEqual({ completed: [], failed: null, bodyStarted: false });
 });
 
-let scratch: string | undefined;
-afterEach(() => {
-  if (scratch) rmSync(scratch, { recursive: true, force: true });
-  scratch = undefined;
-});
-
 function resultsWith(traces: { directory: string; name?: string }[]): string {
-  scratch = mkdtempSync(join(tmpdir(), 'replay-checkpoint-'));
+  const scratch = temporaryDirectory('replay-checkpoint-');
   for (const trace of traces) {
     const directory = join(scratch, trace.directory);
     mkdirSync(directory);

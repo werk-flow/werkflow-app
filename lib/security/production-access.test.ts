@@ -1,13 +1,13 @@
 // Rule test: an agent's MCP tool never reaches the production Supabase project, and no MCP tool
 // returns production log text.
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { z } from '../zod';
 
 import { configuredMcpServers, productionMcpRefusal, supabaseProjectRefs } from './production-access';
+import { temporaryDirectory } from '../testing/temporary-directory';
 import { workflowsFolder } from '../testing/ci-workflow';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
@@ -256,7 +256,7 @@ test('deployment metadata, aggregated counts and preview logs pass', () => {
 });
 
 test('servers come from every Claude Code and Codex scope, keyed as in tool names', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'mcp-config-'));
+  const dir = temporaryDirectory('mcp-config-');
   writeFileSync(
     join(dir, 'claude.json'),
     JSON.stringify({
@@ -294,7 +294,7 @@ test('servers come from every Claude Code and Codex scope, keyed as in tool name
 
 test('the hook refuses PROD MCP calls with the reason and lets DEV calls through', () => {
   const production = supabaseProjectRefs(repositoryRoot)?.production ?? 'missing';
-  const home = mkdtempSync(join(tmpdir(), 'mcp-hook-'));
+  const home = temporaryDirectory('mcp-hook-');
   mkdirSync(join(home, 'project'));
   writeFileSync(
     join(home, '.claude.json'),
@@ -390,7 +390,7 @@ test('the Codex hook command refuses a PROD call from a subfolder of the reposit
 
 // Both agents block only on exit 2; any other failure of the guard would let the call through.
 test('both registered hook commands refuse when the guard itself fails', () => {
-  const bin = mkdtempSync(join(tmpdir(), 'broken-bun-'));
+  const bin = temporaryDirectory('broken-bun-');
   writeFileSync(join(bin, 'bun'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
   for (const file of ['.claude/settings.json', '.codex/hooks.json']) {
     const result = runGuard(registeredGuard(file), {

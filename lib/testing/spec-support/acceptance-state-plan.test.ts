@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { acceptanceSets } from '../../../tests/audit/support/acceptance-sets';
 import {
   interceptsRequest,
-  isAppPrefetch,
+  isRouteLoad,
   isTargetPrefetch,
   navigationStart,
   standaloneTarget,
@@ -63,11 +63,22 @@ test('a loading capture holds the navigation of its target and every client read
   expect(interceptsRequest(plan, PREFETCH, TARGET)).toBeNull();
   expect(isTargetPrefetch(PREFETCH, TARGET)).toBe(true);
   expect(isTargetPrefetch(NAVIGATION, TARGET)).toBe(false);
-  // Any prefetch of the app holds the arming, the target's or another route's; a navigation does not.
-  expect(isAppPrefetch(PREFETCH, ORIGIN)).toBe(true);
-  expect(isAppPrefetch({ ...PREFETCH, url: `${ORIGIN}/service/bereitschaft?_rsc=p` }, ORIGIN)).toBe(true);
-  expect(isAppPrefetch(NAVIGATION, ORIGIN)).toBe(false);
-  expect(isAppPrefetch({ ...PREFETCH, url: 'https://other.example/auftraege?_rsc=p' }, ORIGIN)).toBe(false);
+  // Any prefetch of the app holds the push, the target's or another route's, and so does
+  // every script chunk of the app, such as the one the prefetched loading boundary imports.
+  // A navigation, a read, a stylesheet and another origin do not.
+  expect(isRouteLoad(PREFETCH, ORIGIN)).toBe(true);
+  expect(isRouteLoad({ ...PREFETCH, url: `${ORIGIN}/service/bereitschaft?_rsc=p` }, ORIGIN)).toBe(true);
+  expect(isRouteLoad(request('GET', '/_next/static/chunks/1ayzboy3p4vqq.js'), ORIGIN)).toBe(true);
+  expect(isRouteLoad(NAVIGATION, ORIGIN)).toBe(false);
+  expect(isRouteLoad(BACKGROUND_READ, ORIGIN)).toBe(false);
+  expect(isRouteLoad(request('GET', '/_next/static/chunks/361w87mea3yxc.css'), ORIGIN)).toBe(false);
+  expect(isRouteLoad({ ...PREFETCH, url: 'https://other.example/auftraege?_rsc=p' }, ORIGIN)).toBe(false);
+  expect(
+    isRouteLoad(
+      { method: 'GET', url: 'https://other.example/_next/static/chunks/a.js', headers: {} },
+      ORIGIN,
+    ),
+  ).toBe(false);
   // The navigation of another route, the document load and the CSP report pass.
   expect(interceptsRequest(plan, request('GET', '/dashboard?_rsc=x', { rsc: '1' }), TARGET)).toBeNull();
   expect(interceptsRequest(plan, request('GET', '/auftraege'), TARGET)).toBeNull();
