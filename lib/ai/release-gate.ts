@@ -9,6 +9,8 @@ import { isUuid } from '@/lib/validation/uuid';
  * admin then switches it on or off (`ai_organization_settings`).
  */
 export function isAiReleasedFor(organizationId: string): boolean {
-  const entries = (process.env.AI_ORGANIZATION_IDS ?? '').split(',').map((entry) => entry.trim().toLowerCase());
+  const entries = (process.env.AI_ORGANIZATION_IDS ?? '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase());
   return entries.filter(isUuid).includes(organizationId.toLowerCase());
 }

@@ -53,7 +53,10 @@ assert.deepEqual(world.rpcCalls.at(-1)?.args, {
 // A malformed input and an unreleased organization write nothing.
 signInAs(world, 'admin');
 const calls = world.rpcCalls.length;
-assert.deepEqual(await setAiEnabled(JSON.parse('{"enabled":"ja"}')), { success: false, error: 'invalid_input' });
+assert.deepEqual(await setAiEnabled(JSON.parse('{"enabled":"ja"}')), {
+  success: false,
+  error: 'invalid_input',
+});
 assert.equal(world.rpcCalls.length, calls);
 process.env.AI_ORGANIZATION_IDS = ORGANIZATION_B;
 await assertRefused({ success: false, error: 'not_released' });

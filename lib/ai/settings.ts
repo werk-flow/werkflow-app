@@ -12,7 +12,9 @@ export type AiOrganizationSwitch = { released: false } | { released: true; enabl
  * organization and its admin switched it on. A failed read is a failure,
  * never "off".
  */
-export async function readAiOrganizationSwitch(organizationId: string): Promise<AiOrganizationSwitch | 'load_failed'> {
+export async function readAiOrganizationSwitch(
+  organizationId: string,
+): Promise<AiOrganizationSwitch | 'load_failed'> {
   if (!isAiReleasedFor(organizationId)) return { released: false };
   const { data, error } = await createSupabaseAdminClient()
     .from('ai_organization_settings')

@@ -9,7 +9,12 @@ import { z } from '@/lib/zod';
 
 export type SetAiEnabledResult = ActionResult<
   { enabled: boolean },
-  'not_authenticated' | 'org_not_found' | 'invalid_input' | 'not_authorized' | 'not_released' | 'update_failed'
+  | 'not_authenticated'
+  | 'org_not_found'
+  | 'invalid_input'
+  | 'not_authorized'
+  | 'not_released'
+  | 'update_failed'
 >;
 
 const setAiEnabledSchema = z.object({ enabled: z.boolean() });
