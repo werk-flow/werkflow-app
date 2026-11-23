@@ -51,7 +51,7 @@ import {
   mirrorJobName,
   staleBranches,
 } from '../../lib/testing/ci/mirror';
-import { mirrorMessage, mirrorVariables } from '../../lib/testing/ci/mirror-message';
+import { mirrorMessage, mirrorVariables, parseMirrorDeferral } from '../../lib/testing/ci/mirror-message';
 import { type CiResult, parseResult, readResult, resultFileName } from '../../lib/testing/ci/results';
 import {
   type Executor,
@@ -59,6 +59,7 @@ import {
   type Executors,
   type ExecutorSetup,
   type ExecutorTask,
+  startDeferral,
   unitName,
 } from '../../lib/testing/ci/run-commit';
 import { plannedGroups } from '../../lib/testing/ci/run-plan';
@@ -291,8 +292,14 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     }
   }
 
-  /** The job's result from its mirror run, refused unless it is this run's own. */
-  async function resultOf(run: MirrorRun, expected: ExpectedResult): Promise<CiResult | { refused: string }> {
+  /**
+   * The job's result from its mirror run, refused unless it is this run's own, or the deferral a
+   * Browser job left in its place (parseMirrorDeferral).
+   */
+  async function resultOf(
+    run: MirrorRun,
+    expected: ExpectedResult,
+  ): Promise<CiResult | { refused: string } | { deferredAt: Date }> {
     const name = unitName(expected);
     const artifacts = (await api.artifacts(run.id)).filter(
       (artifact) => artifact.name === `ci-result-${name}`,
@@ -307,6 +314,8 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       return { refused: message(error) };
     }
     const result = parseResult(text);
+    const deferredAt = result ? undefined : parseMirrorDeferral(text);
+    if (deferredAt) return { deferredAt };
     if (!result) return { refused: 'the artifact holds no valid result' };
     const foreign = foreignResult(result, expected);
     return foreign ? { refused: foreign } : result;
@@ -347,6 +356,26 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     }
   }
 
+  /**
+   * The deferral a mirror job reported at its own start, after GitHub queued it: it counts only when
+   * the job did not pass, it checked between the push and now, and the start rule defers a start
+   * then, so a tree that claims one where none applies fails. The retry is the rule's own.
+   */
+  function deferralOf(
+    task: ExecutorTask,
+    deferredAt: Date,
+    run: { pushedAt: number; passed: boolean },
+  ): ExecutorOutcome {
+    const at = deferredAt.getTime();
+    const deferred =
+      !run.passed && at >= run.pushedAt && at <= options.now() ? startDeferral(task.unit, at) : undefined;
+    if (!deferred) return { exitCode: 1, detail: `its deferral at ${deferredAt.toISOString()} is refused` };
+    return {
+      ...deferred,
+      detail: `${deferred.detail}; the mirror job started at ${deferredAt.toISOString()}, after a queue`,
+    };
+  }
+
   /** Runs one job start on the mirror and returns its outcome with its own result. */
   async function onMirror(
     task: ExecutorTask,
@@ -357,6 +386,13 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     const name = unitName(task.unit);
     const held = await slot(signal);
     if (!held) return { exitCode: null, detail: 'stopped before a mirror slot was free' };
+    // The wait for a slot may have run into the midnight start window: nothing is pushed, and the
+    // slot passes on at once.
+    const deferred = startDeferral(task.unit, options.now());
+    if (deferred) {
+      held.release();
+      return deferred;
+    }
     /** The push, once tried: from then on a run may go on the mirror until it is known ended. */
     let pushed: { branch: string; commit: string; at: number } | undefined;
     let known: MirrorRun | undefined;
@@ -438,6 +474,7 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
         return { exitCode: null, detail: `the mirror run ran ${jobs.map((job) => job.name).join(', ')}` };
       const passed = finished.conclusion === 'success' && ran[0]?.conclusion === 'success';
       const own = await resultOf(finished, expected);
+      if ('deferredAt' in own) return deferralOf(task, own.deferredAt, { pushedAt: pushed.at, passed });
       if ('refused' in own) return { exitCode: 1, detail: `its result is refused: ${own.refused}` };
       // A rerun on the mirror keeps the run's id and its artifacts: the run is read again after them.
       if (!firstAttempt(await api.run(finished.id)))
@@ -503,7 +540,9 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       ]);
       if (!host) {
         if (tree.result) replaceResult(target, tree.result);
-        return { exitCode: tree.exitCode, detail: tree.detail };
+        return tree.retryAt === undefined
+          ? { exitCode: tree.exitCode, detail: tree.detail }
+          : { exitCode: null, detail: tree.detail, retryAt: tree.retryAt };
       }
       const detail = `${tree.detail}; host part: ${host.detail}`;
       if (!tree.result || !host.result)

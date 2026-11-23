@@ -6,6 +6,7 @@ import {
   ciBrowserHoldUntil,
   ciBrowserStartWaitMs,
   CI_BROWSER_JOB_TIMEOUT_MS,
+  CI_JOB_STOP_GRACE_MS,
   CI_FAST_JOB_TIMEOUT_MS,
   CI_MIDNIGHT_HOLD_MAX_MS,
   holdOutsideMidnightWindow,
@@ -137,8 +138,11 @@ test("a Browser job of an unheld plan never reaches a group inside the window, e
   }
 });
 
-test('a Browser job starts later than Fast allows only when it ends before the window opens, else once it closes', () => {
-  const opening = SUMMER_MIDNIGHT - MIDNIGHT_START_WINDOW.leadMs - CI_BROWSER_JOB_TIMEOUT_MS;
+test('a Browser job starts later than Fast allows only when it ends, stop grace included, before the window opens, else once it closes', () => {
+  // A job stopped at its timeout may run CI_JOB_STOP_GRACE_MS longer before SIGKILL.
+  expect(CI_JOB_STOP_GRACE_MS).toBe(10_000);
+  const opening =
+    SUMMER_MIDNIGHT - MIDNIGHT_START_WINDOW.leadMs - CI_BROWSER_JOB_TIMEOUT_MS - CI_JOB_STOP_GRACE_MS;
   const closes = SUMMER_MIDNIGHT + MIDNIGHT_START_WINDOW.trailMs;
   expect(ciBrowserStartWaitMs(new Date(opening - 1))).toBe(0);
   expect(ciBrowserStartWaitMs(new Date(opening))).toBe(closes - opening);
@@ -152,7 +156,8 @@ test('a Browser job starts later than Fast allows only when it ends before the w
       const waitMs = ciBrowserStartWaitMs(new Date(start));
       const startsAt = start + waitMs;
       if (waitMs) expect(midnightStartWaitMs(new Date(startsAt - 1))).toBeGreaterThan(0);
-      for (const elapsed of [0, CI_BROWSER_JOB_TIMEOUT_MS / 3, CI_BROWSER_JOB_TIMEOUT_MS - 1])
+      const latest = CI_BROWSER_JOB_TIMEOUT_MS + CI_JOB_STOP_GRACE_MS - 1;
+      for (const elapsed of [0, CI_BROWSER_JOB_TIMEOUT_MS / 3, latest])
         expect(midnightStartWaitMs(new Date(startsAt + elapsed))).toBe(0);
     }
   }

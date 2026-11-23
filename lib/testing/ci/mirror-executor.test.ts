@@ -9,13 +9,14 @@ import * as fs from 'node:fs';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { MirrorApi, MirrorJob, MirrorRun } from '../../../scripts/ci/mirror-api';
-import { mirrorExecutors } from '../../../scripts/ci/mirror-executor';
+import { mirrorExecutors, type MirrorOptions } from '../../../scripts/ci/mirror-executor';
 import { DEFAULT_MIRROR_IDENTITY, pushMirrorCommit } from '../../../scripts/ci/mirror-push';
+import { takeLock } from '../../../scripts/ci/process-executor';
+import { type Fake, fakeMirror as fakeMirrorOf, git, type Scenario } from '../fixtures/fake-mirror-api';
 import { planIdentityOf } from './check';
-import { CI_DAG, CI_JOBS, partGroups } from './dag';
+import { partGroups } from './dag';
 import { HELD_WORKFLOWS, MIRROR_JOB_CAP, MIRROR_WORKFLOW, mirrorBranch } from './mirror';
-import { parseMirrorMessage } from './mirror-message';
+import { mirrorDeferral, parseMirrorMessage } from './mirror-message';
 import { type CiResult, type RunPlan, readResult, resultFileName } from './results';
 import type { Executors, ExecutorTask, Unit } from './run-commit';
 import { plannedGroups } from './run-plan';
@@ -56,21 +57,6 @@ let commit = '';
 let tree = '';
 let planResult: CiResult;
 const saved = { ...process.env };
-
-const git = (cwd: string, ...args: string[]): string =>
-  execFileSync(
-    'git',
-    [
-      '-c',
-      'user.name=Owner',
-      '-c',
-      'user.email=owner@example.invalid',
-      '-c',
-      'commit.gpgSign=false',
-      ...args,
-    ],
-    { cwd, encoding: 'utf8' },
-  ).trim();
 
 // Fast's host part runs these through the process executor: prepare.ts does nothing, and job.ts
 // records its environment and writes the host part's result the test placed in HOME.
@@ -133,14 +119,6 @@ afterEach(() => {
   rmSync(folder, { recursive: true, force: true });
 });
 
-const unitOf = (branch: string): Unit => {
-  const name = branch.split('/').at(-1) ?? '';
-  const [job = '', shard] = name.split('-');
-  const known = CI_JOBS.find((candidate) => candidate === job);
-  if (!known) throw new Error(`no job in ${branch}`);
-  return { job: known, shard: shard === undefined ? null : Number(shard) };
-};
-
 /** The result a mirror job writes for `unit`: this run's own, passed, on the source tree. */
 function mirrorResult(unit: Unit, overrides: Partial<CiResult> = {}): CiResult {
   const now = NOW;
@@ -162,159 +140,9 @@ function mirrorResult(unit: Unit, overrides: Partial<CiResult> = {}): CiResult {
   };
 }
 
-type Scenario = {
-  /** The pushed commit's tree as the API reports it, when it lies. */
-  tree?: string;
-  conclusion?: string;
-  /** Holds a run in progress while it returns true for the run's id. */
-  running?: (id: number) => boolean;
-  attempt?: number;
-  /** The branch cannot be read once it exists, as when the API fails right after a push. */
-  unreadableBranch?: boolean;
-  cancelFails?: () => boolean;
-  /** The mirror reruns the job once its result artifact was downloaded. */
-  rerunAfterDownload?: boolean;
-  otherJobRan?: boolean;
-  /** The result file the artifact holds, or the files it holds. */
-  result?: (unit: Unit) => CiResult;
-  files?: (unit: Unit, result: CiResult) => Record<string, string>;
-  onRunsOf?: () => void;
-  /** Told each time the mirror starts a run of a push, with the number of runs so far and its branch. */
-  onRun?: (runs: number, branch: string) => void;
-  /** Holds back the run of a push to `branch` while it returns false, as a mirror slow to start it. */
-  startsRun?: (branch: string) => boolean;
-};
-
-type Fake = {
-  api: MirrorApi;
-  cancelled: number[];
-  deleted: string[];
-};
-
-function fakeMirror(scenario: Scenario = {}): Fake {
-  const runs = new Map<string, MirrorRun & { unit: Unit }>();
-  const fake = { cancelled: new Array<number>(), deleted: new Array<string>() };
-  let nextId = 1;
-  const branchHead = (branch: string): string | undefined => {
-    const head = spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], {
-      cwd: remote,
-      encoding: 'utf8',
-    });
-    return head.status === 0 ? head.stdout.trim() : undefined;
-  };
-  const runById = (id: number) => {
-    const found = [...runs.values()].find((run) => run.id === id);
-    if (!found) throw new Error(`no run ${id}`);
-    return found;
-  };
-  const settle = (run: MirrorRun) => {
-    if (run.status !== 'completed' && !(scenario.running?.(run.id) ?? false)) {
-      run.status = 'completed';
-      run.conclusion = scenario.conclusion ?? 'success';
-    }
-    return { ...run };
-  };
-  const zipOf = (files: Record<string, string>): Uint8Array => {
-    const zipFolder = mkdtempSync(join(folder, 'zip-'));
-    for (const [name, text] of Object.entries(files)) writeFileSync(join(zipFolder, name), text);
-    execFileSync('zip', [
-      '-q',
-      '-j',
-      join(zipFolder, 'out.zip'),
-      ...Object.keys(files).map((name) => join(zipFolder, name)),
-    ]);
-    return new Uint8Array(readFileSync(join(zipFolder, 'out.zip')));
-  };
-  const api: MirrorApi = {
-    async branchHead(branch) {
-      const head = branchHead(branch);
-      if (head && scenario.unreadableBranch) throw new Error('GitHub GET /git/ref answered 502.');
-      return head;
-    },
-    async commit(sha) {
-      return {
-        tree: scenario.tree ?? git(remote, 'rev-parse', `${sha}^{tree}`),
-        committedAt: new Date(git(remote, 'log', '-1', '--format=%cI', sha)),
-      };
-    },
-    async runsOf(branch, sha) {
-      scenario.onRunsOf?.();
-      if (!runs.has(branch) && branchHead(branch) === sha && (scenario.startsRun?.(branch) ?? true)) {
-        runs.set(branch, {
-          id: nextId++,
-          path: MIRROR_WORKFLOW,
-          head_sha: sha,
-          head_branch: branch,
-          event: 'push',
-          status: 'queued',
-          conclusion: null,
-          run_attempt: scenario.attempt ?? 1,
-          unit: unitOf(branch),
-        });
-        scenario.onRun?.(runs.size, branch);
-      }
-      const run = runs.get(branch);
-      return run ? [settle(run)] : [];
-    },
-    run: async (id) => settle(runById(id)),
-    async jobs(id) {
-      const run = runById(id);
-      return Object.values(CI_DAG)
-        .filter((spec) => spec.name !== 'Plan' && spec.name !== 'Check')
-        .map(
-          (spec): MirrorJob =>
-            spec.name === CI_DAG[run.unit.job].name
-              ? { name: spec.name, status: 'completed', conclusion: run.conclusion }
-              : {
-                  name: spec.name,
-                  status: 'completed',
-                  conclusion: scenario.otherJobRan ? 'success' : 'skipped',
-                },
-        );
-    },
-    async artifacts(id) {
-      const run = runById(id);
-      const name = run.unit.shard === null ? run.unit.job : `${run.unit.job}-${run.unit.shard}`;
-      return [{ id: id * 10, name: `ci-result-${name}`, expired: false, workflow_run: { id } }];
-    },
-    async download(artifactId) {
-      const run = runById(artifactId / 10);
-      if (scenario.rerunAfterDownload) run.run_attempt = 2;
-      const result = (scenario.result ?? mirrorResult)(run.unit);
-      const files = scenario.files?.(run.unit, result) ?? {
-        [resultFileName(run.unit.job, run.unit.shard)]: JSON.stringify(result),
-      };
-      return zipOf(files);
-    },
-    async cancel(id) {
-      if (scenario.cancelFails?.()) throw new Error('GitHub POST /actions/runs/cancel answered 500.');
-      fake.cancelled.push(id);
-      const run = runById(id);
-      run.status = 'completed';
-      run.conclusion = 'cancelled';
-    },
-    async ciBranches() {
-      const listed = git(
-        remote,
-        'for-each-ref',
-        '--format=%(refname:lstrip=2) %(objectname)',
-        'refs/heads/ci/',
-      );
-      return listed
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => {
-          const [name = '', sha = ''] = line.split(' ');
-          return { name, sha };
-        });
-    },
-    async deleteBranch(branch) {
-      fake.deleted.push(branch);
-      git(remote, 'update-ref', '-d', `refs/heads/${branch}`);
-    },
-  };
-  return { ...fake, api };
-}
+/** The fake mirror of this test's folders, whose jobs return mirrorResult unless the scenario says otherwise. */
+const fakeMirror = (scenario: Scenario = {}): Fake =>
+  fakeMirrorOf(scenario, { folder, remote, result: mirrorResult });
 
 const RUN_KEY = '0123456789abcdef-1';
 const executorsOf = (
@@ -322,6 +150,7 @@ const executorsOf = (
   jobCap = MIRROR_JOB_CAP,
   log: (line: string) => void = () => undefined,
   runKey = RUN_KEY,
+  overrides: Partial<MirrorOptions> = {},
 ): Executors =>
   mirrorExecutors(
     { source, commit, workRoot: join(folder, 'work'), runKey, replaceStack: false, log },
@@ -336,6 +165,7 @@ const executorsOf = (
       sleep: () => new Promise((resolve) => setImmediate(resolve)),
       pollMs: 1,
       jobCap,
+      ...overrides,
     },
   );
 
@@ -774,4 +604,79 @@ test("a dead holder's push still in flight keeps its slot until it landed and it
   expect(next.exitCode, next.detail).toBe(0);
   // The dead holder's run started first and was cancelled before the slot's next job pushed.
   expect(dead.fake.cancelled).toEqual([1]);
+});
+
+const BROWSER: Unit = { job: 'browser', shard: 1 };
+/** Winter Berlin times in UTC: 22:54 is admitted, 23:05 is past the cutoff, 00:10 the window closes. */
+const ADMITTED = Date.parse('2026-11-21T21:54:00Z');
+const CLOSES = Date.parse('2026-11-21T23:10:00Z');
+
+test('a shard admitted at 22:54 whose mirror slot frees at 23:05 Berlin pushes nothing, frees the slot and runs at 00:10', async () => {
+  let clock = ADMITTED;
+  const slots = join(folder, 'work', 'mirror-slots');
+  mkdirSync(slots, { recursive: true });
+  const busy = takeLock(join(slots, 'slot-0'));
+  if (!('release' in busy)) throw new Error('The test could not take the only slot.');
+  const fake = fakeMirror();
+  const executors = executorsOf(fake, 1, () => undefined, RUN_KEY, {
+    now: () => clock,
+    // Another run's job ends at 23:05 and frees the only slot.
+    sleep: async () => {
+      clock = Date.parse('2026-11-21T22:05:00Z');
+      busy.release();
+    },
+  });
+  const deferred = await executors.jobs.run(task(BROWSER), new AbortController().signal);
+  expect([deferred.exitCode, deferred.retryAt], deferred.detail).toEqual([null, CLOSES]);
+  expect(deferred.detail).toContain('midnight start window');
+  expect(existsSync(join(slots, 'slot-0'))).toBe(false);
+  expect(git(remote, 'for-each-ref', 'refs/heads/ci/')).toBe('');
+  clock = CLOSES;
+  const ran = await executors.jobs.run(task(BROWSER), new AbortController().signal);
+  expect(ran.exitCode, ran.detail).toBe(0);
+  expect(readResult(join(results, 'browser-1.json'))).toMatchObject({ job: 'browser', status: 'passed' });
+});
+
+test('a mirror job that GitHub started at 23:41 Berlin defers to 00:10; a deferral the start rule does not back fails', async () => {
+  const deferredBy = (at: string): Scenario => ({
+    conclusion: 'failure',
+    files: (unit) => ({
+      [resultFileName(unit.job, unit.shard)]: mirrorDeferral('browser', new Date(at)) ?? '',
+    }),
+  });
+  // Pushed at 22:50, queued on GitHub, its job started at 23:41 and the run was read at 23:45.
+  let clock = Date.parse('2026-11-21T21:50:00Z');
+  const read = Date.parse('2026-11-21T22:45:00Z');
+  const mirror = fakeMirror({ ...deferredBy('2026-11-21T22:41:00Z'), running: () => clock < read });
+  const queued = executorsOf(mirror, MIRROR_JOB_CAP, () => undefined, RUN_KEY, {
+    now: () => clock,
+    sleep: async () => {
+      clock = read;
+    },
+  });
+  // A Browser job's own 45 min timeout: the mirror may hold it queued for 30 min beyond it.
+  const deferred = await queued.jobs.run(
+    { ...task(BROWSER), timeoutMs: 45 * 60_000 },
+    new AbortController().signal,
+  );
+  expect([deferred.exitCode, deferred.retryAt], deferred.detail).toEqual([null, CLOSES]);
+  expect(deferred.detail).toContain('the mirror job started at 2026-11-21T22:41:00.000Z');
+  expect(existsSync(join(results, 'browser-1.json'))).toBe(false);
+  // A tree that claims a deferral at noon, or at a time before its push, runs nothing and fails.
+  const noon = Date.parse('2026-11-21T11:00:00Z');
+  const forged = executorsOf(
+    fakeMirror({
+      conclusion: 'failure',
+      files: (unit) => ({
+        [resultFileName(unit.job, unit.shard)]: JSON.stringify({ deferredAt: '2026-11-21T10:00:00.000Z' }),
+      }),
+    }),
+    MIRROR_JOB_CAP,
+    () => undefined,
+    RUN_KEY,
+    { now: () => noon },
+  );
+  const refused = await forged.jobs.run(task(BROWSER), new AbortController().signal);
+  expect([refused.exitCode, refused.retryAt], refused.detail).toEqual([1, undefined]);
+  expect(refused.detail).toContain('is refused');
 });

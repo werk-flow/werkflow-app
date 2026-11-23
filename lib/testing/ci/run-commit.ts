@@ -143,8 +143,39 @@ export type ExecutorTask = {
   onLaunch?: (() => void) | undefined;
 };
 
-/** How a job start ended: its body's exit code, or null when it never got one (setup failed, killed). */
-export type ExecutorOutcome = { exitCode: number | null; detail: string };
+/**
+ * A job start the executor did not begin because startDeferral defers it at the moment its timeout
+ * would start: nothing of the job ran, so it neither passed nor failed. runCommit starts it again
+ * at `retryAt` (epoch ms).
+ */
+export type ExecutorDeferral = { exitCode: null; detail: string; retryAt: number };
+
+/**
+ * How a job start ended: its body's exit code, or null when it never got one (setup failed, killed),
+ * or its deferral.
+ */
+export type ExecutorOutcome =
+  | { exitCode: number | null; detail: string; retryAt?: undefined }
+  | ExecutorDeferral;
+
+/**
+ * Whether a job whose timeout starts at `now` (epoch ms) must not begin yet, and until when: a
+ * browser shard that could reach a group inside the midnight start window before its timeout and
+ * the stop's grace end (ciBrowserStartWaitMs). runCommit asks it before it hands a shard over; an
+ * executor asks again once the shard's timeout would start, after it waited for a slot or the
+ * host's stack, and returns the deferral instead of starting the shard.
+ */
+export function startDeferral(unit: Unit, now: number): ExecutorDeferral | undefined {
+  if (unit.job !== 'browser') return undefined;
+  const waitMs = ciBrowserStartWaitMs(new Date(now));
+  if (!waitMs) return undefined;
+  return {
+    exitCode: null,
+    retryAt: now + waitMs,
+    detail:
+      'not started, its timeout could reach a group inside the midnight start window (23:40 to 00:10 Berlin); it starts once the window closes',
+  };
+}
 
 /** Runs one job start. It ends the job at its timeout or when `signal` aborts, and then resolves. */
 export type Executor = {
@@ -413,14 +444,16 @@ const message = (error: unknown): string => (error instanceof Error ? error.mess
  * Starts one job or shard; the promise settles once its state and receipts are final. A job passes
  * only when the executor saw it pass and its result is its own of this run, attempt and Plan, with a
  * ledger or without one. With a ledger, the start receipt goes in before the job begins, and a start
- * that cannot be recorded fails the job unstarted; the end receipt follows the job's state.
+ * that cannot be recorded fails the job unstarted; the end receipt follows the job's state. A start
+ * the executor deferred waits again until its `retryAt`: its running start receipt withdraws an
+ * earlier pass until the next start ends it.
  */
 async function startUnit(
   input: RunCommitInput,
   deps: RunCommitDeps,
   unit: Unit,
   signal: AbortSignal,
-  context: { states: Map<string, UnitState>; owner: ReceiptRun['plan'] },
+  context: { states: Map<string, UnitState>; retryAt: Map<string, number>; owner: ReceiptRun['plan'] },
 ): Promise<void> {
   const name = unitName(unit);
   context.states.set(name, 'running');
@@ -442,13 +475,22 @@ async function startUnit(
   let state: UnitState = await deps.jobs.run(taskOf(input, unit), signal).then(
     (outcome) => {
       deps.log(`[run] ${name}: ${outcome.detail}`);
-      return signal.aborted ? 'cancelled' : outcome.exitCode === 0 ? 'passed' : 'failed';
+      if (signal.aborted) return 'cancelled';
+      if (outcome.retryAt !== undefined) {
+        context.retryAt.set(name, outcome.retryAt);
+        return 'waiting';
+      }
+      return outcome.exitCode === 0 ? 'passed' : 'failed';
     },
     (error: unknown) => {
       deps.log(`[run] ${name}: the executor failed: ${message(error)}`);
       return signal.aborted ? 'cancelled' : 'failed';
     },
   );
+  if (state === 'waiting') {
+    context.states.set(name, state);
+    return;
+  }
   const end = endReceipt(start, deps.readResult(unit), state === 'passed', new Date(deps.now()));
   // A job whose own result does not stand fails, so nothing that needs it starts.
   if (end.problem && state === 'passed') {
@@ -476,14 +518,16 @@ type Deferred = { waitMs: number; why: string };
  * scheduler never names a run its orchestrator holds (scripts/ci/schedule.ts), and job.ts midnight
  * fails before the hold ends. Returns the wait until the hold ends for a midnight job held now. A
  * browser shard that could still reach a group inside the midnight start window before its timeout
- * waits until the window closes: Plan's hold assumed every shard starts right after Fast, and a
- * runner with fewer slots than units starts the later shards hours after Plan.
+ * waits until the window closes (startDeferral): Plan's hold assumed every shard starts right after
+ * Fast, and a runner with fewer slots than units starts the later shards hours after Plan. A unit
+ * its executor deferred waits until the executor's `retryAt`.
  */
 function admit(
   unit: Unit,
   context: {
     units: readonly Unit[];
     states: Map<string, UnitState>;
+    retryAt: ReadonlyMap<string, number>;
     hold: ReturnType<typeof heldUntil>;
     now: number;
   },
@@ -497,14 +541,11 @@ function admit(
     return 'wait';
   }
   if (ready === 'wait') return ready;
-  if (unit.job === 'browser') {
-    const waitMs = ciBrowserStartWaitMs(new Date(context.now));
-    if (!waitMs) return 'start';
-    return {
-      waitMs,
-      why: `${name} could reach a group inside the midnight start window (23:40 to 00:10 Berlin) before its timeout, so it starts once the window closes`,
-    };
-  }
+  const retryAt = context.retryAt.get(name);
+  if (retryAt !== undefined && retryAt > context.now)
+    return { waitMs: retryAt - context.now, why: `${name}: its executor deferred it` };
+  const deferred = startDeferral(unit, context.now);
+  if (deferred) return { waitMs: deferred.retryAt - context.now, why: `${name}: ${deferred.detail}` };
   if (unit.job !== 'midnight') return ready;
   const { hold } = context;
   if (!(hold instanceof Date)) {
@@ -528,6 +569,7 @@ async function runUnits(
   if (!owner) return states;
   const hold = heldUntil(owner.plan);
   const running = new Map<string, Promise<void>>();
+  const retryAt = new Map<string, number>();
   const announced = new Set<string>();
   for (;;) {
     let holdWait: number | undefined;
@@ -536,7 +578,7 @@ async function runUnits(
       if (states.get(name) !== 'waiting') continue;
       if (signal.aborted) states.set(name, 'cancelled');
       if (states.get(name) !== 'waiting') continue;
-      const admitted = admit(unit, { units, states, hold, now: deps.now() }, deps.log);
+      const admitted = admit(unit, { units, states, retryAt, hold, now: deps.now() }, deps.log);
       if (typeof admitted === 'object') {
         holdWait = Math.min(holdWait ?? admitted.waitMs, admitted.waitMs);
         if (!announced.has(admitted.why))
@@ -547,7 +589,7 @@ async function runUnits(
       } else if (admitted === 'start' && running.size < input.parallel)
         running.set(
           name,
-          startUnit(input, deps, unit, signal, { states, owner }).then(() => {
+          startUnit(input, deps, unit, signal, { states, retryAt, owner }).then(() => {
             running.delete(name);
           }),
         );

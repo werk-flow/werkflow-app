@@ -279,6 +279,8 @@ test('each mirror job reads its run, then takes prepare.ts and job.ts for its jo
       `bun scripts/ci/job.ts ${job}`,
     ]);
     const kept = stepsOf(job).find((step) => step.name === 'Keep the result');
+    // Kept whenever the first step named it, so a Browser job's deferral reaches the orchestrator too.
+    expect(kept?.if, job).toBe("${{ !cancelled() && steps.run.outputs.result != '' }}");
     expect(isRecord(kept?.with) ? kept.with : undefined, job).toMatchObject({
       name: 'ci-result-${{ steps.run.outputs.unit }}',
       path: '${{ steps.run.outputs.result }}',

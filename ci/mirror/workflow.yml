@@ -7,6 +7,8 @@ name: CI mirror
 # other job of this file is skipped. The jobs, their names and timeouts are lib/testing/ci/dag.ts;
 # Plan and Check run on the orchestrator's host, which also holds the needs between jobs and the
 # cap of 56 mirror jobs at once (MIRROR_JOB_CAP). This workflow holds no secret and reads nothing of another repository.
+# A job keeps its result whenever its first step named one: a Browser job that started too late for
+# the midnight start window leaves its deferral there and fails at once (scripts/ci/mirror-job.ts).
 on:
   push:
     branches: ['ci/**']
@@ -52,7 +54,7 @@ jobs:
       - name: Run the job
         run: bun scripts/ci/job.ts fast
       - name: Keep the result
-        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.run.outputs.result != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-result-${{ steps.run.outputs.unit }}
@@ -97,7 +99,7 @@ jobs:
       - name: Run the job
         run: bun scripts/ci/job.ts sql
       - name: Keep the result
-        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.run.outputs.result != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-result-${{ steps.run.outputs.unit }}
@@ -139,7 +141,7 @@ jobs:
       - name: Run the job
         run: bun scripts/ci/job.ts components
       - name: Keep the result
-        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.run.outputs.result != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-result-${{ steps.run.outputs.unit }}
@@ -181,7 +183,7 @@ jobs:
       - name: Run the job
         run: bun scripts/ci/job.ts invoices
       - name: Keep the result
-        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.run.outputs.result != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-result-${{ steps.run.outputs.unit }}
@@ -224,7 +226,7 @@ jobs:
       - name: Run the job
         run: bun scripts/ci/job.ts midnight
       - name: Keep the result
-        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.run.outputs.result != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-result-${{ steps.run.outputs.unit }}
@@ -268,7 +270,7 @@ jobs:
       - name: Run the job
         run: bun scripts/ci/job.ts browser
       - name: Keep the result
-        if: ${{ !cancelled() && steps.run.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.run.outputs.result != '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-result-${{ steps.run.outputs.unit }}

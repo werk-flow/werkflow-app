@@ -3,10 +3,10 @@
 // the later steps, and refuses a commit that runs another job or no mirror run at all.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { mirrorMessage, type MirrorRun } from './mirror-message';
+import { mirrorMessage, type MirrorRun, parseMirrorDeferral } from './mirror-message';
 
 const SCRIPT = resolve(import.meta.dir, '../../../scripts/ci/mirror-job.ts');
 let folder = '';
@@ -35,9 +35,13 @@ function checkout(message: string): string {
   return root;
 }
 
+/** Noon Berlin: the midnight start rule lets every job start. */
+const NOON = '2026-11-21T11:00:00.000Z';
+
 function run(
   root: string,
   job: string,
+  now = NOON,
 ): { status: number | null; output: string; env: string; outputs: string } {
   const env = join(folder, 'env');
   const outputs = join(folder, 'outputs');
@@ -52,6 +56,7 @@ function run(
       GITHUB_ENV: env,
       GITHUB_OUTPUT: outputs,
       RUNNER_TEMP: join(folder, 'temp'),
+      MIRROR_JOB_NOW: now,
     },
   });
   return {
@@ -93,4 +98,25 @@ test('a mirror job refuses a commit that runs another job, a shard that does not
   const plain = run(checkout('A feature\n'), 'browser');
   expect([plain.status, plain.env]).toEqual([1, '']);
   expect(plain.output).toContain('no CI mirror run');
+});
+
+test('a Browser job that GitHub started at 23:41 Berlin runs nothing and leaves its deferral as its result', () => {
+  const ran = run(checkout(mirrorMessage(RUN)), 'browser', '2026-11-21T22:41:00.000Z');
+  expect(ran.status, ran.output).toBe(1);
+  expect(ran.output).toContain('browser-3 started where its timeout could reach the midnight start window');
+  const results = join(folder, 'temp/ci-results');
+  // The result step keeps the deferral; no later step runs, so the job gets no variables or Plan.
+  expect(ran.outputs).toBe(`unit=browser-3\nresult=${join(results, 'browser-3.json')}\n`);
+  expect(parseMirrorDeferral(readFileSync(join(results, 'browser-3.json'), 'utf8'))?.toISOString()).toBe(
+    '2026-11-21T22:41:00.000Z',
+  );
+  expect(ran.env).toBe('');
+  expect(existsSync(join(results, 'plan.json'))).toBe(false);
+  // Any other job starts then: only a Browser job's groups wait for the window.
+  const sql = run(
+    checkout(mirrorMessage({ ...RUN, job: 'sql', shard: null })),
+    'sql',
+    '2026-11-21T22:41:00.000Z',
+  );
+  expect(sql.status, sql.output).toBe(0);
 });

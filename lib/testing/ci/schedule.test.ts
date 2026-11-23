@@ -186,6 +186,22 @@ test('held browser shards start when the midnight window closes, and the schedul
   ]);
 });
 
+test("a hold that ended a night ago is not due inside the next night's cutoff: the scheduler wakes at the rule's next start", () => {
+  // Held until 00:10 Berlin on 21 November, asked again at 23:41 Berlin that night.
+  const plan = {
+    jobs: ['plan', 'fast', 'midnight', 'browser', 'check'],
+    outputs: { midnight_until: '2026-11-20T23:10:00.000Z' },
+  };
+  const held = [{ run: 'run-1', until: heldUntil(plan) }];
+  const state = { release: '2026-11-20T02:30:00.000Z', nightly: '2026-11-20T23:15:00.000Z' };
+  const late = due('2026-11-21T22:41:00Z', state, { held });
+  expect([late.start, late.wakeAt]).toEqual([[], '2026-11-21T23:10:00.000Z']);
+  // 22:54:50 Berlin is the latest start whose timeout and stop grace end before 23:40.
+  expect(due('2026-11-21T21:54:49Z', state, { held }).start.map((start) => start.work)).toEqual(['midnight']);
+  expect(due('2026-11-21T21:54:50Z', state, { held }).start).toEqual([]);
+  expect(due('2026-11-21T23:10:00Z', state, { held }).start.map((start) => start.work)).toEqual(['midnight']);
+});
+
 test('a run without a midnight job is never held, and one whose hold cannot be read is unanswered', () => {
   expect(
     heldUntil({ jobs: ['plan', 'fast', 'browser', 'check'], outputs: { midnight_until: '' } }),

@@ -146,6 +146,8 @@ type WorldOptions = {
    * shard fails.
    */
   groups?: Partial<Record<string, number>>;
+  /** A job's first start the executor defers, as a slot or the stack freed too late: its `retryAt`. */
+  deferOnce?: Partial<Record<string, number>>;
 };
 
 const GROUP_MINUTES = 10;
@@ -198,9 +200,15 @@ function world(options: WorldOptions = {}): World {
     },
     isolatesJobs: true,
   };
+  const deferred = new Set<string>();
   const jobs: Executor = {
     run: async (task, signal) => {
       starts.push({ place: 'jobs', task, at: clock });
+      const retryAt = options.deferOnce?.[unitName(task.unit)];
+      if (retryAt !== undefined && !deferred.has(unitName(task.unit))) {
+        deferred.add(unitName(task.unit));
+        return { exitCode: null, detail: 'not started, deferred', retryAt };
+      }
       active += 1;
       peak = Math.max(peak, active);
       const name = unitName(task.unit);
@@ -387,11 +395,22 @@ test.each([
       w.log.join('\n'),
     ).toEqual(['passed', 'passed', 'passed', 'passed']);
     expect(report(w).browser).toEqual({ result: 'success' });
-    expect(w.log).toContain(
-      '[run] browser-3 could reach a group inside the midnight start window (23:40 to 00:10 Berlin) before its timeout, so it starts once the window closes: 40 min; no job machine waits.',
-    );
   },
 );
+
+test('a start the executor deferred is neither a pass nor a failure: the shard starts again at its retry time and passes', async () => {
+  const retryAt = START + 90 * MINUTE;
+  const w = world({ deferOnce: { 'browser-1': retryAt } });
+  const outcome = await runCommit(input({}, 1), w.deps, new AbortController().signal);
+  const browser1 = w.starts
+    .filter((entry) => unitName(entry.task.unit) === 'browser-1')
+    .map((entry) => entry.at);
+  expect(browser1).toHaveLength(2);
+  expect(browser1.at(-1)).toBe(retryAt);
+  expect(outcome.units.find((entry) => unitName(entry.unit) === 'browser-1')?.state).toBe('passed');
+  expect(report(w).browser).toEqual({ result: 'success' });
+  expect(outcome.exitCode, w.log.join('\n')).toBe(0);
+});
 
 test('a serial run planned inside the window holds its shards until 00:10 Berlin as before, and they start one after another', async () => {
   const midnight = Date.parse('2026-11-24T23:00:00Z');

@@ -31,12 +31,14 @@ import { partOf, partSteps } from '../../lib/testing/ci/dag';
 import { groupGone } from '../../lib/testing/local-stack/test-session';
 import { errorCode } from '../../lib/testing/runner/error-code';
 import { awaitAppPortFree, workspacePorts } from '../../lib/testing/runner/app-port';
+import { CI_JOB_STOP_GRACE_MS } from '../../lib/testing/runner/group-schedule';
 import {
   type Executor,
   type Executors,
   type ExecutorOutcome,
   type ExecutorSetup,
   type ExecutorTask,
+  startDeferral,
   type Unit,
   unitName,
 } from '../../lib/testing/ci/run-commit';
@@ -216,7 +218,7 @@ function runGroup(
     let escalation: ReturnType<typeof setTimeout> | undefined;
     const stop = (): void => {
       signalGroup('SIGTERM');
-      escalation = setTimeout(() => signalGroup('SIGKILL'), 10_000);
+      escalation = setTimeout(() => signalGroup('SIGKILL'), CI_JOB_STOP_GRACE_MS);
     };
     signal.addEventListener('abort', stop, { once: true });
     child.once('error', () => resolve(null));
@@ -365,6 +367,14 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
           const taken = await lockStack(options.stackLock, signal, options.host, options.log);
           if ('refused' in taken) return { exitCode: null, detail: `not started: ${taken.refused}` };
           release = taken.release;
+        }
+        // The wait for the stack may have run into the midnight start window: the job starts later,
+        // and the stack passes on at once, since nothing of the job ran.
+        const deferred = startDeferral(task.unit, Date.now());
+        if (deferred) {
+          release?.();
+          release = undefined;
+          return deferred;
         }
         began = Date.now();
         ended = AbortSignal.any([signal, AbortSignal.timeout(task.timeoutMs)]);
