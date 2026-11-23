@@ -12,9 +12,23 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 test('a newer push to a pull request cancels its older run, and nothing else cancels a run', () => {
   const ci = readWorkflow('ci.yml');
-  expect(ci.text('concurrency', 'group')).toStartWith(
-    'ci-${{ github.event.pull_request.number || github.sha }}',
-  );
+  // The key of an ordinary push to a PR is `ci-<number>-diff`: every other part is guarded by a
+  // condition false on a first attempt of a synchronize event, so no run id or commit enters it.
+  const parts = ci
+    .text('concurrency', 'group')
+    .split(/(\$\{\{.*?\}\})/)
+    .filter(Boolean);
+  expect(parts.slice(0, 4)).toEqual([
+    'ci-',
+    '${{ github.event.pull_request.number || github.sha }}',
+    '-',
+    "${{ inputs.full && 'full' || 'diff' }}",
+  ]);
+  const guards = [
+    "github.run_attempt != '1' && ",
+    "github.event.action == 'edited' && !github.event.changes.base && ",
+  ];
+  expect(parts.slice(4).map((part, index) => part.startsWith(`\${{ ${guards[index]}`))).toEqual([true, true]);
   expect(ci.text('concurrency', 'cancel-in-progress')).toBe("${{ github.event_name == 'pull_request' }}");
 });
 
@@ -26,23 +40,25 @@ test('a run starts at most the planned browser shards at once, and the date look
   expect(lookahead.at('concurrency')).toEqual({ group: 'date-lookahead', 'cancel-in-progress': false });
 });
 
-test('a scheduled nightly skips a head that already has a green full run, and starts when the decision fails', () => {
+test('a scheduled nightly skips only on a successful decision that found a green full run', () => {
   const nightly = readWorkflow('nightly.yml');
   expect(nightly.at('jobs', 'decide', 'if')).toBe("github.event_name == 'schedule'");
-  expect(nightly.step('decide', 'Decide whether the head has a full run').run).toBe(
-    'bash .github/scripts/main-full-run.sh decide',
-  );
+  expect(nightly.at('jobs', 'decide', 'outputs')).toEqual({
+    head_has_full_run: '${{ steps.decide.outputs.head_has_full_run }}',
+  });
+  expect(nightly.step('decide', 'Decide whether the head has a full run')).toMatchObject({
+    id: 'decide',
+    run: 'bash .github/scripts/full-run-verdict.sh head',
+  });
   expect(nightly.at('jobs', 'full', 'needs')).toBe('decide');
   expect(nightly.text('jobs', 'full', 'if')).toBe(
-    "${{ !cancelled() && !inputs.alert_proof && needs.decide.outputs.head_has_full_run != 'true' }}",
+    "${{ !cancelled() && !inputs.alert_proof && !(needs.decide.result == 'success' && needs.decide.outputs.head_has_full_run == 'true') }}",
   );
-  // A skipped full run proved nothing, so the alert neither opens nor closes the issue.
-  expect(nightly.text('jobs', 'alert', 'if')).toContain("needs.decide.outputs.head_has_full_run != 'true'");
 });
 
-test('every job that runs on a runner has its own timeout, so a hung job never runs for 6 hours unnoticed', () => {
+test('every job of every workflow (.yml or .yaml) that runs on a runner has its own timeout, so a hung job never runs for 6 hours unnoticed', () => {
   const folder = resolve(import.meta.dir, '../..', workflowsFolder());
-  const files = readdirSync(folder).filter((file) => file.endsWith('.yml'));
+  const files = readdirSync(folder).filter((file) => /\.ya?ml$/.test(file));
   expect(files.length).toBeGreaterThan(0);
   for (const file of files) {
     const jobs = readWorkflow(file).at('jobs');

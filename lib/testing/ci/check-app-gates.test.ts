@@ -34,7 +34,13 @@ afterEach(() => rmSync(stub, { recursive: true, force: true }));
 function gates(config: string | undefined) {
   const scripts = join(stub, 'scripts');
   mkdirSync(scripts, { recursive: true });
-  for (const name of ['check-app.sh', 'curl-headers.sh', 'release-candidate.sh', 'main-full-run.sh'])
+  for (const name of [
+    'check-app.sh',
+    'curl-headers.sh',
+    'full-run-verdict.sh',
+    'release-candidate.sh',
+    'main-full-run.sh',
+  ])
     copyFileSync(join(repositoryRoot, '.github/scripts', name), join(scripts, name));
   rmSync(join(scripts, 'check-app.json'), { force: true });
   if (config !== undefined) writeFileSync(join(scripts, 'check-app.json'), config);
@@ -317,7 +323,7 @@ test("main's full-run decision counts the configured App's full run and refuses 
   const counted = fullRunDecision(`{"appId": ${APP}}`, [fromApp(APP)]);
   expect(counted.status).toBe(0);
   // c0 has the same answer as c1: the stub lists the check runs for every commit, so c0 decides first.
-  expect(counted.rule).toBe(`scripts/ci/full-run.ts due --run ${'c0'.padEnd(40, '0')},${started},tested`);
+  expect(counted.rule).toBe(`scripts/ci/full-run.ts due --run ${'c0'.padEnd(40, '0')},${started},ended`);
   expect(fullRunDecision(`{"appId": ${APP}}`, [fromApp(OTHER_APP)]).rule).toBe('scripts/ci/full-run.ts due');
   expect(fullRunDecision('{"appId": null}', [fromApp(APP)]).rule).toBe('scripts/ci/full-run.ts due');
   // GitHub Actions stays trusted with or without the App.
