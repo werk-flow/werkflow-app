@@ -311,7 +311,7 @@ export function describeAttachedRequestEvent(payload: unknown): { label: string;
 }
 
 /** The history label of a conversion whose work the event does not name. */
-export const REQUEST_CONVERTED_LABEL = 'Anfrage in Arbeit überführt';
+const REQUEST_CONVERTED_LABEL = 'Anfrage in Arbeit überführt';
 
 // The 'converted' history row as the conversion functions write it.
 const convertedPayloadSchema = z.discriminatedUnion('target', [

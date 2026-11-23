@@ -10,7 +10,6 @@ import {
   REQUEST_URGENCY_LABELS,
   REQUEST_URGENCY_ORDER,
   REQUEST_ATTACHED_LABEL,
-  REQUEST_CONVERTED_LABEL,
   describeAttachedRequestEvent,
   describeConvertedRequestEvent,
   isCallbackOverdue,
@@ -257,8 +256,10 @@ describe('a converted request names the work or offer it became and links to it'
       { target: 'offer', offerId: 'offer-1' },
       { target: 'job', jobNumber: 'A-1' },
     ]) {
-      expect(describeConvertedRequestEvent(payload)).toEqual({ label: REQUEST_CONVERTED_LABEL, href: null });
+      expect(describeConvertedRequestEvent(payload)).toEqual({
+        label: 'Anfrage in Arbeit überführt',
+        href: null,
+      });
     }
-    expect(REQUEST_CONVERTED_LABEL).toBe('Anfrage in Arbeit überführt');
   });
 });
