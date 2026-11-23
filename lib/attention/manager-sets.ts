@@ -2,7 +2,7 @@ import 'server-only';
 
 // The pending office sets of a manager's attention derivation, read in one
 // call (read_manager_attention_sets, migration
-// 20261218090004_hold_overdue_jobs_in_aufgaben.sql): the open requests, the
+// 20261231090000_hold_overdue_jobs_in_aufgaben.sql): the open requests, the
 // field workers' open access proposals, and the open jobs whose visits are
 // over. `./actions` starts the read once per derivation and hands the promise
 // to every derivation that needs it, so the access proposal and overdue job
