@@ -1,6 +1,5 @@
-import { afterEach, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { expect, test } from 'bun:test';
+import { writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import {
@@ -14,18 +13,9 @@ import {
   type StartKind,
   waitForAdmission,
 } from './machine-room';
+import { temporaryDirectory } from '../temporary-directory';
 
 const GIB = 1024 ** 3;
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
-function temporaryDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-machine-room-'));
-  directories.push(directory);
-  return directory;
-}
-
 // A quiet PC: 15-minute load 2 on 14 cores, under the watch's normal line of 1.5 per core.
 const watched = (
   available: number,
@@ -225,7 +215,7 @@ test('a wait for room returns once memory and load both hold', async () => {
 
 // `bun run room --wait` fails only on a refusal waiting cannot change: a thread on a machine without the watch.
 test('the room wait on a machine without the watch admits a heavy command, a setup and a device, and fails a thread', () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('werkflow-machine-room-');
   const wait = (start: StartKind) =>
     spawnSync(process.execPath, [resolve(import.meta.dir, '../../../scripts/room.ts'), '--wait', start], {
       encoding: 'utf8',
@@ -277,7 +267,7 @@ function watchAnswering(
   stderr = '',
   source = WATCH_SOURCE,
 ): RoomReading {
-  const script = join(temporaryDirectory(), 'workstation-load.py');
+  const script = join(temporaryDirectory('werkflow-machine-room-'), 'workstation-load.py');
   writeFileSync(script, source);
   const calls: string[][] = [];
   const reading = readMachineRoom(
@@ -355,9 +345,12 @@ test('the normal load line is read from the watch, and without one only a thread
 });
 
 test('a missing, stopped, failing or unreadable watch is no reading, never an empty room', () => {
-  const missing = readMachineRoom({ WERKFLOW_LOAD_WATCH: join(temporaryDirectory(), 'absent.py') }, () => {
-    throw new Error('A missing watch is never run.');
-  });
+  const missing = readMachineRoom(
+    { WERKFLOW_LOAD_WATCH: join(temporaryDirectory('werkflow-machine-room-'), 'absent.py') },
+    () => {
+      throw new Error('A missing watch is never run.');
+    },
+  );
   expect(fixOf(missing).unwatched).toStartWith('no load watch at ');
 
   // The checkout is there but the timer is not installed: "alerted" would stay false forever.
@@ -386,10 +379,10 @@ test('a missing, stopped, failing or unreadable watch is no reading, never an em
 });
 
 test('a machine without python3, or without ps, is an unwatched machine and never a crash', () => {
-  const script = join(temporaryDirectory(), 'workstation-load.py');
+  const script = join(temporaryDirectory('werkflow-machine-room-'), 'workstation-load.py');
   writeFileSync(script, '');
   const path = process.env.PATH;
-  process.env.PATH = temporaryDirectory();
+  process.env.PATH = temporaryDirectory('werkflow-machine-room-');
   try {
     const reading = readMachineRoom({ WERKFLOW_LOAD_WATCH: script });
     expect(fixOf(reading).unwatched).toStartWith('the load watch gave no reading (exit null: ');
@@ -401,7 +394,7 @@ test('a machine without python3, or without ps, is an unwatched machine and neve
 });
 
 test('the fix names the install of the machine it runs on', () => {
-  const absent = { WERKFLOW_LOAD_WATCH: join(temporaryDirectory(), 'absent.py') };
+  const absent = { WERKFLOW_LOAD_WATCH: join(temporaryDirectory('werkflow-machine-room-'), 'absent.py') };
   const never = (): never => {
     throw new Error('A missing watch is never run.');
   };
@@ -426,7 +419,7 @@ test('the process table is every pid with its parent and resident bytes', () => 
 });
 
 test('a running heavy command is the whole process tree of the pid its slot file names', () => {
-  const directory = temporaryDirectory();
+  const directory = temporaryDirectory('werkflow-machine-room-');
   writeFileSync(join(directory, 'slot-0'), '500\n'); // check:changed with tsc and eslint below it
   writeFileSync(join(directory, 'slot-1'), '900\n'); // its owner was killed: no such process
   writeFileSync(join(directory, 'slot-2'), ''); // released

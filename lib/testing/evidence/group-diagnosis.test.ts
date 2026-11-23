@@ -1,6 +1,5 @@
-import { afterEach, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { expect, test } from 'bun:test';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { groupAttemptKey, INPUT_DRIFT_REASON } from './group-evidence';
 import {
@@ -10,6 +9,7 @@ import {
   recoveredGroupAttempts,
   undiagnosedAttemptProblem,
 } from './group-diagnosis';
+import { temporaryDirectory } from '../temporary-directory';
 
 type Report = Parameters<typeof diagnosableGroupAttempt>[0][number];
 type Result = Report['results'][number];
@@ -38,11 +38,6 @@ const reports: Report[] = [
     ],
   },
 ];
-
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
 
 test('a diagnosis names the latest executed failure of a group without a browser run', () => {
   // Blocked and drift-voided results are no attempts, so the failure in report-b is the one diagnosed.
@@ -81,8 +76,7 @@ test('probe: a failed attempt named by its report stays classifiable after a lat
 });
 
 test('the diagnosis is stored beside its report, replaces an earlier one of the attempt, and only environment recovers', () => {
-  const archive = mkdtempSync(join(tmpdir(), 'group-diagnosis-'));
-  directories.push(archive);
+  const archive = temporaryDirectory('group-diagnosis-');
   for (const report of reports) {
     mkdirSync(join(archive, report.id));
     writeFileSync(join(archive, report.id, 'report.json'), JSON.stringify(report));
