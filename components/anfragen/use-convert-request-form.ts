@@ -340,17 +340,26 @@ async function convertRequest(
   return { kind: 'converted', message: 'Anfrage wurde in ein Projekt umgewandelt.' };
 }
 
-/**
- * A template belongs to one target kind, so switching the target clears it.
- * An offer is for the request's customer, so it takes that customer back.
- */
-function resetFieldsForTarget(target: ConversionTarget, fields: ConversionFields, request: ClientRequest) {
-  fields.setTemplateVersionId('');
+/** The conversion target. A template belongs to one target kind, so switching the target clears it. */
+function useConversionTarget(
+  fields: ConversionFields,
+  request: ClientRequest,
+): { target: ConversionTarget; changeTarget: (target: ConversionTarget) => void } {
+  const [target, setTarget] = useState<ConversionTarget>('job');
+  // An offer goes to the request's customer as it is now, with its site and
+  // contact: after a switch from work, and after a refresh that changed the
+  // customer while the dialog is open. Set during render, never in an effect.
   if (target === 'offer' && fields.clientId !== (request.clientId ?? '')) {
     fields.setClientId(request.clientId ?? '');
     fields.setSiteId(request.siteId ?? '');
     fields.setContactId(request.contactId ?? '');
   }
+  const changeTarget = (nextTarget: ConversionTarget) => {
+    if (nextTarget === target) return;
+    setTarget(nextTarget);
+    fields.setTemplateVersionId('');
+  };
+  return { target, changeTarget };
 }
 
 /** Form state of the conversion dialog: prefill, number suggestion, validation and submit. */
@@ -368,8 +377,8 @@ export function useConvertRequestForm({
   onSaved: (() => void) | undefined;
 }): ConvertRequestForm {
   const { showBanner } = useBanner();
-  const [target, setTarget] = useState<ConversionTarget>('job');
   const { fields, prefill } = useConversionFields(request, requestSiteAddress);
+  const { target, changeTarget } = useConversionTarget(fields, request);
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const { run: runConvert, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
@@ -395,12 +404,6 @@ export function useConvertRequestForm({
   const { number, setNumber } = useSuggestedConversionNumber(open, target);
 
   const fieldErrors = conversionFieldErrors(target, fields.title, number, fields.clientId);
-
-  const changeTarget = (nextTarget: ConversionTarget) => {
-    if (nextTarget === target) return;
-    setTarget(nextTarget);
-    resetFieldsForTarget(nextTarget, fields, request);
-  };
 
   const submitConversion = async (approval?: AssignmentApproval) => {
     setError(null);
