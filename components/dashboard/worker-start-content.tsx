@@ -4,8 +4,9 @@ import { memo, useCallback, useState, type ReactElement } from 'react';
 
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { useOnline } from '@/lib/field-sync/device/shown-clock';
 import { workerStartClockView } from './worker-start-clock';
-import { useOnline, useWorkerStartDay } from './worker-start-day';
+import { useWorkerStartDay } from './worker-start-day';
 import {
   clockLines,
   taskCount,

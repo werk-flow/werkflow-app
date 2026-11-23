@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useClientRead } from '@/hooks/use-client-read';
 import type { StoredToday } from '@/lib/field-sync/device/today-store';
@@ -15,24 +15,6 @@ import { FIRST_REFRESH_WAIT_MS } from './worker-start-timing';
 
 /** The longest delay `setTimeout` keeps; a longer one fires at once. */
 const MAX_TIMER_MS = 2_147_483_647;
-
-function subscribeOnline(onChange: () => void): () => void {
-  window.addEventListener('online', onChange);
-  window.addEventListener('offline', onChange);
-  return () => {
-    window.removeEventListener('online', onChange);
-    window.removeEventListener('offline', onChange);
-  };
-}
-
-/** Whether the browser reports a connection; the server render assumes one. */
-export function useOnline(): boolean {
-  return useSyncExternalStore(
-    subscribeOnline,
-    () => navigator.onLine,
-    () => true,
-  );
-}
 
 /** Reads the device again after each refresh in this tab that saved the day (E7's `onTodaySaved`). */
 function useReadOnSave(reload: () => void): void {
