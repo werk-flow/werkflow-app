@@ -141,7 +141,7 @@ async function isolatedTests(): Promise<void> {
   describe('a discard after the session end’s question', () => {
     test('waits only for a send of the chain it deletes from, never for another chain’s (F30)', async () => {
       // The person's start in the other organization waits in its outbox, and a tab sends it.
-      await holdClock(OTHER_COMPANY, () => undefined);
+      await holdClock(OTHER_COMPANY, () => undefined, '');
       keepClockAction(
         start(OTHER_COMPANY, '50000000-0000-4000-8000-0000000000e0', '2026-11-11T07:00:00.000Z'),
         '',
@@ -156,7 +156,7 @@ async function isolatedTests(): Promise<void> {
       try {
         expect(await settles(() => sends === 1)).toBe(true);
         // The person switches away from the active organization, whose start waits too.
-        await holdClock(WORKER, () => undefined);
+        await holdClock(WORKER, () => undefined, '');
         keepClockAction(
           start(WORKER, '50000000-0000-4000-8000-0000000000e1', '2026-11-11T07:01:00.000Z'),
           '',
@@ -179,7 +179,7 @@ async function isolatedTests(): Promise<void> {
     });
 
     test('waits for a send of a tab still on the earlier version, which holds the one lock every chain shared (S1)', async () => {
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       keepClockAction(start(WORKER, '50000000-0000-4000-8000-0000000000e6', '2026-11-11T07:00:00.000Z'), '');
       await takeInKept();
       const shown = await timeUnsentSource.summarize('session');
@@ -207,7 +207,7 @@ async function isolatedTests(): Promise<void> {
     });
 
     test('deletes an action kept behind another chain’s open online call without waiting for that call (F30)', async () => {
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       // Another tab of the person, working in the other organization, waits for its online call.
       const other = openCall(
         start(OTHER_COMPANY, '50000000-0000-4000-8000-0000000000e2', '2026-11-11T07:00:00.000Z'),
@@ -231,7 +231,7 @@ async function isolatedTests(): Promise<void> {
     });
 
     test('goes on when a stop appeared after the question opened: the shown work goes, and the stop is asked about anew (F31)', async () => {
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       const own = openCall(start(WORKER, '50000000-0000-4000-8000-0000000000e4', '2026-11-11T07:00:00.000Z'));
       keepClockAction(start(WORKER, '50000000-0000-4000-8000-0000000000e5', '2026-11-11T07:02:00.000Z'), '');
       const shown = await timeUnsentSource.summarize('session');
@@ -266,9 +266,13 @@ async function isolatedTests(): Promise<void> {
       storage.set(stop, NEWER);
       keepClockAction(start(WORKER, '50000000-0000-4000-8000-0000000000f1', '2026-11-11T07:05:00.000Z'), '');
       let shown: { status: string } | null = null;
-      await holdClock(WORKER, (view) => {
-        shown = view;
-      });
+      await holdClock(
+        WORKER,
+        (view) => {
+          shown = view;
+        },
+        '',
+      );
       await sendOwnTimeEvents();
       // Behind the stop, the later tap waits kept and nothing leaves the phone.
       expect(sends).toBe(0);
@@ -291,7 +295,7 @@ async function isolatedTests(): Promise<void> {
     test('never brings back a stop another tab deleted while the move waited', async () => {
       const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
       storage.set(stop, NEWER);
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       // Another tab, possibly of an earlier version, deletes the stop while this tab asks whether its call runs.
       const locks = navigator.locks;
       const request = locks.request.bind(locks);
@@ -325,7 +329,7 @@ async function isolatedTests(): Promise<void> {
       const [kept] = keptKeys();
       storage.set(aside, storage.get(kept ?? '') ?? '');
       storage.delete(kept ?? '');
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
 
       expect((await takeInKept()).moved).toBe(0);
       await sendOwnTimeEvents();
@@ -338,7 +342,7 @@ async function isolatedTests(): Promise<void> {
     test('stays a stop while its online call may still run: its page may yet record it', async () => {
       const stop = keyAt('2026-11-11T11:59:58.000Z', 'from-a-newer-version');
       storage.set(stop, NEWER);
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
 
       expect(await setAsideShownStop(stop)).toBe('sending');
       expect(keptKeys()).toEqual([stop]);
@@ -347,7 +351,7 @@ async function isolatedTests(): Promise<void> {
     test('stays a stop past the grace period while its page still holds the clock call’s lock', async () => {
       const stop = keyAt('2026-11-11T07:00:00.000Z', 'call-still-open');
       storage.set(stop, NEWER);
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       // The page that tapped still waits for the server's answer, under the call's lock.
       let answer = (): void => undefined;
       let granted = (): void => undefined;
@@ -375,7 +379,7 @@ async function isolatedTests(): Promise<void> {
     test('is named by the session end’s question and deleted by its discard; the wipe leaves it', async () => {
       const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
       storage.set(stop, NEWER);
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       await setAsideShownStop(stop);
       const aside = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version', 'werkflow:unsent:clock-aside:');
 
@@ -396,7 +400,7 @@ async function isolatedTests(): Promise<void> {
     test('is deleted from the clock by the deletion the person confirmed', async () => {
       const stop = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version');
       storage.set(stop, NEWER);
-      await holdClock(WORKER, () => undefined);
+      await holdClock(WORKER, () => undefined, '');
       await setAsideShownStop(stop);
       const aside = keyAt('2026-11-11T07:00:00.000Z', 'from-a-newer-version', 'werkflow:unsent:clock-aside:');
 

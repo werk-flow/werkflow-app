@@ -1,6 +1,5 @@
-import { afterEach, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { expect, test } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   backendIdentity,
@@ -8,15 +7,10 @@ import {
   parseEnvironmentFile,
   proofEnvironmentDigest,
 } from './proof-environment';
-
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
+import { temporaryDirectory } from '../temporary-directory';
 
 function repository(address: string, extra = ''): string {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-proof-environment-'));
-  directories.push(root);
+  const root = temporaryDirectory('werkflow-proof-environment-');
   mkdirSync(join(root, 'supabase'));
   writeFileSync(join(root, 'supabase/config.toml'), 'project_id = "werkflow-app"\n');
   writeFileSync(
