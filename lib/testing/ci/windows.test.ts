@@ -277,3 +277,29 @@ describe("the Mac's window policy cases", () => {
   test('16:00 is exclusive expiry', () =>
     expect(sizeAt(mac([macRow]), '2026-11-23T16:00:00+01:00')).toBe('4/6'));
 });
+
+test('CR 162: an exception more than a year ahead holds the window file instead of resolving a timeline to it', () => {
+  const answer = resolveWindow(
+    pc([{ ...macRow, date: '2062-11-23', size: 'off' }]),
+    at('2026-11-23T02:00:00Z'),
+  );
+  expect(answer).toEqual({
+    kind: 'hold',
+    reason: "The window file's exception on 2062-11-23 lies more than a year ahead.",
+  });
+});
+
+test('CR 166: an off interval the spring clock change swallows leaves the window bounded, so the next week still turns off', () => {
+  const file: WindowFile = {
+    timezone: 'Europe/Berlin',
+    standing: [
+      { days: ['sun'], from: '00:00', to: '02:10', size: 'full' },
+      { days: ['sun'], from: '02:10', to: '02:20', size: 'off' },
+      { days: ['sun'], from: '02:20', to: '00:00', size: 'full' },
+      { days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'], from: '00:00', to: '00:00', size: 'full' },
+    ],
+  };
+  const answer = resolveWindow(file, at('2026-03-23T10:00:00Z'));
+  expect(answer.kind).toBe('open');
+  expect(answer.kind === 'open' && answer.until).not.toBeNull();
+});

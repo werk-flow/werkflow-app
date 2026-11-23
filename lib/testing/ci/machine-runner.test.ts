@@ -19,14 +19,15 @@ import {
 import {
   ceilingMs,
   EDGE_MARGIN_MS,
-  endProcessGroup,
   KILL_AFTER_MS,
   machineConfigSchema,
   nextOffEdge,
   percentile,
   recover,
+  runnerStateSchema,
   tick,
 } from './machine-runner';
+import { endProcessGroup } from '../../../scripts/ci/machine-watchdog';
 import { runnerPullsFromGitHub } from './machine-pulls';
 import type { RunPlan } from './results';
 import { MAC_STANDING, PC_STANDING, resolveWindow } from './windows';
@@ -149,7 +150,7 @@ test('F4: a window file that breaks mid-run keeps the edge the run was admitted 
   shared.windows = 'not json';
   await tickUntil(pc, shared, Date.parse('2026-11-23T04:56:00Z'));
   await tick(pc.ports);
-  expect(pc.stopped).toEqual(['2026-11-23T04:55:00.000Z']);
+  expect(pc.stopped).toEqual(['2026-11-23T04:53:00.000Z']);
 });
 
 test('F4: a slot not shown clean after a stop admits nothing and alerts, until it is clean', async () => {
@@ -415,4 +416,156 @@ test("the example machine configurations and window files parse, and the windows
     expect(resolveWindow(read(name), new Date(MONDAY_NIGHT)).kind).not.toBe('hold');
     expect(read(name)).toEqual({ timezone: BERLIN_TIME_ZONE, standing, exceptions: [] });
   }
+});
+
+test('S16, S7: a verdict whose first delivery failed is checked again at its retry, and a changed approval cancels it', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.faults.complete = 2;
+  pc.end(0);
+  await tick(pc.ports);
+  expect(pc.state().pendingCompletions.map((completion) => completion.kind)).toEqual(['verdict']);
+  // Behind main now, the head is not claimed again in this tick: only the approval decides.
+  shared.pulls = [pull(1, { listGrowthApproved: true, mergeState: 'BEHIND' })];
+  await tick(pc.ports);
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('cancelled');
+  expect(leaseOf(shared.github, head(1))).toMatchObject({ attempt: 1, state: 'released' });
+});
+
+test('S17: a verdict that cannot be built from the results ends cancelled and hands the head back', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.faults.noVerdict = true;
+  pc.end(0);
+  await tick(pc.ports);
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('cancelled');
+  expect(leaseOf(shared.github, head(1))?.state).toBe('released');
+});
+
+test('S18: a Check start whose answer was lost is found by its run URL, cancelled, and the lease handed back', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  pc.faults.lostStart = true;
+  await tick(pc.ports);
+  expect(pc.started).toEqual([]);
+  expect(shared.github.checkRuns.map((run) => run.conclusion)).toEqual(['cancelled']);
+  expect(leaseOf(shared.github, head(1))?.state).toBe('released');
+  expect(pc.state().starting).toBeNull();
+});
+
+test('S19: the window is read again at launch, and a run that no longer fits does not start', async () => {
+  // 05:20 Berlin: a 30 min run fits until the claim; the Check start then takes 15 min.
+  const shared = world({ clock: { now: Date.parse('2026-11-23T04:20:00Z') } });
+  const pc = machine('pc', shared);
+  pc.faults.startDelay = 15 * 60_000;
+  await tick(pc.ports);
+  expect(pc.started).toEqual([]);
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('cancelled');
+  expect(leaseOf(shared.github, head(1))?.state).toBe('released');
+});
+
+test('S19: the slot is emptied after every run, and a slot not shown empty admits nothing', async () => {
+  const shared = world({ pulls: [pull(1), pull(2)] });
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.faults.dirty = 'a volume stays';
+  pc.end(0);
+  await tick(pc.ports);
+  expect(pc.cleaned.length).toBeGreaterThan(0);
+  await tick(pc.ports);
+  expect(pc.started.map((run) => run.pull)).toEqual([1]);
+  expect(pc.alerts).toContain('dirty');
+});
+
+test("S23: the sweep never deletes an unexpired held lease, even of a closed PR's head", async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  const other = machine('mac', world({ ...shared, pulls: [] }));
+  await tick(other.ports);
+  expect(leaseOf(shared.github, head(1))?.state).toBe('held');
+});
+
+test('CR 213: a window file that cannot be read mid-run still renews the lease and stops a moved head, and admits nothing new', async () => {
+  const shared = world({ pulls: [pull(1), pull(2)] });
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.ports.windows = () => {
+    throw new Error('ENOENT');
+  };
+  await tickUntil(pc, shared, MONDAY_NIGHT + 15 * 60_000);
+  expect(leaseOf(shared.github, head(1))?.expiresAt).toBeGreaterThan(MONDAY_NIGHT / 1_000 + 600);
+  shared.pulls = [pull(1, { headSha: 'c'.repeat(40) }), pull(2)];
+  await tick(pc.ports);
+  await tick(pc.ports);
+  expect(pc.stopped).toHaveLength(1);
+  expect(pc.started.map((run) => run.pull)).toEqual([1]);
+});
+
+test('CR 122: a window size the configuration lacks raises one alert across ticks, and again only after the size was found', async () => {
+  const shared = world({
+    windows: MAC_WINDOWS,
+    clock: { now: Date.parse('2026-11-23T18:00:00Z') },
+    pulls: [],
+  });
+  const sizes: Record<string, { resize: string[] | null }> = {};
+  const mac = machine('mac', shared, { sizes });
+  await tick(mac.ports);
+  await tick(mac.ports);
+  expect(mac.alerts).toEqual(['hold']);
+  sizes['4/6'] = { resize: null };
+  await tick(mac.ports);
+  delete sizes['4/6'];
+  await tick(mac.ports);
+  expect(mac.alerts).toEqual(['hold', 'hold']);
+});
+
+test('CR 143: a head whose Plan selected every group, once stopped at the edge, is admitted again only by the full estimate', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.setStatus({
+    state: 'running',
+    plan: { jobs: ['plan'], skips: {}, shards: [], outputs: { full: 'true' } },
+  });
+  await tick(pc.ports);
+  shared.clock.now = Date.parse('2026-11-23T04:53:00Z');
+  await tick(pc.ports);
+  // Friday 03:00 Berlin: a 30 min run fits before 06:00, a 3 h full run does not; at 19:00 it does.
+  shared.clock.now = Date.parse('2026-11-27T02:00:00Z');
+  await tick(pc.ports);
+  expect(pc.started).toHaveLength(1);
+  shared.clock.now = Date.parse('2026-11-27T18:00:00Z');
+  await tick(pc.ports);
+  expect(pc.started).toHaveLength(2);
+});
+
+test("CR 152: a resize that crosses a size change starts no run until the slot has the window's size", async () => {
+  const shared = world({ windows: MAC_WINDOWS, clock: { now: Date.parse('2026-11-23T18:58:00Z') } });
+  const mac = machine('mac', shared, {
+    sizes: { '4/6': { resize: ['resize', '4/6'] }, '8/8': { resize: ['resize', '8/8'] } },
+  });
+  // The resize takes minutes: the night size begins while it runs.
+  mac.ports.resize = async (command) => {
+    mac.resized.push(command.join(' '));
+    shared.clock.now += 5 * 60_000;
+  };
+  await tick(mac.ports);
+  expect(mac.started).toEqual([]);
+  await tick(mac.ports);
+  expect(mac.resized).toEqual(['resize 4/6', 'resize 8/8']);
+  expect(mac.started).toHaveLength(1);
+});
+
+test("CR 132: a clock that stepped back past a run's start still owes its verdict and leaves the state loadable", async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  shared.clock.now -= 60_000;
+  pc.end(0);
+  await tick(pc.ports);
+  expect(() => runnerStateSchema.parse(pc.state())).not.toThrow();
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('success');
 });

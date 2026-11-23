@@ -6,7 +6,7 @@
 //   index, link, skills, guidance, budget, decision, citation, workspace.
 // The numbers and exemptions come from lib/docs/doc-policy.ts.
 
-import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { join, isAbsolute, resolve, relative, sep } from 'node:path';
 import { markdownHeadingAnchors } from '../lib/docs/heading-anchors';
 import { countWords, findDocumentReferences } from '../lib/docs/living-doc-rules';
@@ -29,7 +29,11 @@ import { findSkillMirrorProblems, type SkillTree } from '../lib/docs/skill-mirro
 import { findBrokenLinks } from '../lib/docs/doc-links';
 import { decisionGrowthProblem } from '../lib/docs/decision-records';
 
-const repoRoot = resolve(import.meta.dir, '..');
+// A machine runner's trusted copy of this check reads a PR's checkout as data from elsewhere
+// (scripts/ci/container-executor.ts, businessProblems) and takes its report as a file.
+const repoRoot = process.env.WERKFLOW_DOCS_ROOT
+  ? resolve(process.env.WERKFLOW_DOCS_ROOT)
+  : resolve(import.meta.dir, '..');
 const docsRoot = join(repoRoot, 'docs');
 const problems: string[] = [];
 function report(area: string, found: readonly string[]): void {
@@ -319,6 +323,8 @@ if (!missingSiblings.has('werkflow-business')) {
   }
 }
 
+if (process.env.WERKFLOW_DOCS_REPORT)
+  writeFileSync(process.env.WERKFLOW_DOCS_REPORT, `${JSON.stringify({ problems })}\n`);
 if (problems.length > 0) {
   console.error(`docs:check failed with ${problems.length} problem(s):\n`);
   for (const problem of problems) console.error(`  - ${problem}`);

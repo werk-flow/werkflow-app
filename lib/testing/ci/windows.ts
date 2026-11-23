@@ -198,8 +198,12 @@ function timeline(file: WindowFile, now: Date): { start: number; end: number | n
     else merged.push({ start, end, size: sizeHere });
   });
   const lastSegment = merged.at(-1);
+  // Unbounded only when the standing rule has one size: a size the clock change swallowed this
+  // week (an `off` inside the spring gap) still comes back.
   const forever =
-    lastSegment !== undefined && lastSegment.start <= wallInstant(addLocalDays(lastDate, -7), '00:00');
+    new Set(file.standing.map((rule) => rule.size)).size === 1 &&
+    lastSegment !== undefined &&
+    lastSegment.start <= wallInstant(addLocalDays(lastDate, -7), '00:00');
   return merged.map((segment) => ({
     ...segment,
     end: forever && segment === lastSegment ? null : segment.end,
@@ -220,6 +224,15 @@ function resolve(raw: unknown, now: Date): Resolved {
         .join('; ')}.`,
     };
   try {
+    // A date more than a year ahead is a typo; resolving a timeline to it would take minutes a tick.
+    const far = (parsed.data.exceptions ?? []).find(
+      (exception) => exception.date > addLocalDays(formatBerlinLocalDate(now), 366),
+    );
+    if (far)
+      return {
+        kind: 'hold',
+        reason: `The window file's exception on ${far.date} lies more than a year ahead.`,
+      };
     const segments = timeline(parsed.data, now);
     const time = now.getTime();
     const current = segments.find(

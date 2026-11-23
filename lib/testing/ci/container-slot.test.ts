@@ -11,7 +11,6 @@ import { slotEnvironment } from '../../../scripts/ci/container-executor';
 import {
   jobCommand,
   jobEnvironment,
-  otherGenerations,
   READ_LIMIT_BYTES,
   readCommand,
   type SlotConfig,
@@ -85,7 +84,6 @@ test("F12, F14: a job runs the image by its id, at the run's one workspace path,
   const command = (job: 'fast' | 'browser' | 'sql') =>
     jobCommand(SLOT, {
       runKey: RUN_KEY,
-      generation: 3,
       environment: jobEnvironment(
         SLOT,
         { unit: { job, shard: job === 'browser' ? 1 : null }, env: { CI_EVENT: 'integration' } },
@@ -112,7 +110,6 @@ test("F12, F14: a job runs the image by its id, at the run's one workspace path,
     command('fast'),
     stageCommand(SLOT, {
       runKey: RUN_KEY,
-      generation: 3,
       commit: 'a'.repeat(40),
       repository: 'werk-flow/werkflow-app',
       image: 'sha256:abc',
@@ -121,18 +118,29 @@ test("F12, F14: a job runs the image by its id, at the run's one workspace path,
     expect(argv.join(' ')).not.toMatch(/TOKEN|ghp_/);
 });
 
-test('F9: a read back from the slot takes only a regular file within its size limit, never a link or a device', () => {
-  const file = join(scratch, 'result.json');
+test('F9, S21: a read back from the slot opens a file once and copies it only when it is a regular file reached by no link, capped', () => {
+  const real = join(scratch, 'real');
+  spawnSync('mkdir', ['-p', real]);
+  const file = join(real, 'result.json');
   writeFileSync(file, '{"status":"passed"}');
-  const link = join(scratch, 'link.json');
+  const link = join(real, 'link.json');
   symlinkSync('/etc/hostname', link);
-  const large = join(scratch, 'large.json');
-  writeFileSync(large, Buffer.alloc(READ_LIMIT_BYTES + 1, 'x'));
+  // A linked folder on the way: the path names the file, but the open reaches it elsewhere.
+  const linkedFolder = join(scratch, 'linked');
+  symlinkSync(real, linkedFolder);
+  const large = join(real, 'large.json');
+  writeFileSync(large, Buffer.alloc(READ_LIMIT_BYTES + 10, 'x'));
   const read = (path: string) =>
-    spawnSync(readCommand(path)[0] ?? 'sh', readCommand(path).slice(1), { encoding: 'utf8' });
+    spawnSync(readCommand(path)[0] ?? 'sh', readCommand(path).slice(1), {
+      encoding: 'utf8',
+      timeout: 5_000,
+      maxBuffer: 64 * 1024 ** 2,
+    });
   expect(read(file)).toMatchObject({ status: 0, stdout: '{"status":"passed"}' });
-  for (const path of [link, large, '/dev/zero', join(scratch, 'missing.json')])
-    expect(read(path).status).not.toBe(0);
+  for (const path of [link, join(linkedFolder, 'result.json'), '/dev/zero', join(real, 'missing.json')])
+    expect([path, read(path).status]).not.toEqual([path, 0]);
+  // A file past the limit comes back one byte over it, which the trusted side refuses.
+  expect(read(large).stdout.length).toBe(READ_LIMIT_BYTES + 1);
 });
 
 test('F3: the start probe fails when a job, or a container through its socket, reads a sentinel of the runner, and passes otherwise', () => {
@@ -147,10 +155,17 @@ test('F3: the start probe fails when a job, or a container through its socket, r
   chmodSync(join(bin, 'docker'), 0o755);
   spawnSync('mkdir', ['-p', join(host, 'etc'), join(host, 'home/owner')]);
   const probe = resolve(import.meta.dir, '../../../ci/image/probe.sh');
+  const range = join(scratch, 'port-range');
+  writeFileSync(range, '55000\t65000\n');
   const run = (sentinel: string) =>
     spawnSync('bash', [probe, 'secret-token', sentinel, ''], {
       encoding: 'utf8',
-      env: { NODE_ENV: 'test', PATH: `${bin}:${process.env.PATH}`, WERKFLOW_PROBE_IMAGE: 'sha256:abc' },
+      env: {
+        NODE_ENV: 'test',
+        PATH: `${bin}:${process.env.PATH}`,
+        WERKFLOW_PROBE_IMAGE: 'sha256:abc',
+        WERKFLOW_PORT_RANGE_FILE: range,
+      },
     });
   expect(run('/home/owner/.werkflow-ci-probe').status).toBe(0);
   writeFileSync(join(host, 'home/owner/.werkflow-ci-probe'), 'secret-token\n');
@@ -158,6 +173,12 @@ test('F3: the start probe fails when a job, or a container through its socket, r
   const own = join(scratch, 'own-sentinel');
   writeFileSync(own, 'secret-token\n');
   expect(run(own).status).toBe(1);
+  // S24: a slot whose ephemeral port range covers the stack's ports fails the probe.
+  rmSync(own);
+  rmSync(join(host, 'home/owner/.werkflow-ci-probe'));
+  expect(run('/home/owner/.werkflow-ci-probe').status).toBe(0);
+  writeFileSync(range, '32768\t60999\n');
+  expect(run('/home/owner/.werkflow-ci-probe').status).toBe(1);
 });
 
 test("the slot's commands run without the runner's variables, and WSL forwards none", () => {
@@ -175,10 +196,4 @@ test("the slot's commands run without the runner's variables, and WSL forwards n
     HOME: '/home/agent',
     WSL_INTEROP: '/run/WSL/1_interop',
   });
-});
-
-test('a restart stops exactly the containers of other generations', () => {
-  expect(otherGenerations('werkflow-ci-a-fast 2\nwerkflow-ci-b-plan 3\n\n', 3)).toEqual([
-    'werkflow-ci-a-fast',
-  ]);
 });

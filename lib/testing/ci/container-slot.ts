@@ -29,12 +29,10 @@ export const slotConfigSchema = z.strictObject({
 });
 export type SlotConfig = z.infer<typeof slotConfigSchema>;
 
-/** The label every container of a run carries: its run key. */
-const RUN_LABEL = 'org.werkflow.ci-run';
-/** The label of the machine runner's generation on every container it starts. */
-const GENERATION_LABEL = 'org.werkflow.ci-generation';
 /** The image label that names the trusted commit the image was built from. */
 export const IMAGE_COMMIT_LABEL = 'org.werkflow.trusted-commit';
+/** The whole teardown of the slot after a job, a run or a stop (scripts/ci/container-executor.ts, clearSlot). */
+export const TEARDOWN_MS = 3 * 60_000;
 /** The largest result or file the trusted side reads back from the slot. */
 export const READ_LIMIT_BYTES = 8 * 1024 ** 2;
 
@@ -139,14 +137,6 @@ export function jobEnvironment(
   return environment;
 }
 
-/** The labels of a run's containers, so a stop, a restart and the watchdog find each one. */
-const labels = (runKey: string, generation: number): string[] => [
-  '--label',
-  `${RUN_LABEL}=${runKey}`,
-  '--label',
-  `${GENERATION_LABEL}=${generation}`,
-];
-
 /**
  * The command that runs one job in its container until it ends, attached so its exit is the job's.
  * The workspace is mounted at its own path, as the job's Supabase stack mounts paths of it through
@@ -156,7 +146,7 @@ const labels = (runKey: string, generation: number): string[] => [
  */
 export function jobCommand(
   config: SlotConfig,
-  job: { runKey: string; generation: number; environment: Record<string, string>; unit: Unit; image: string },
+  job: { runKey: string; environment: Record<string, string>; unit: Unit; image: string },
 ): string[] {
   const workspace = workspaceOf(config, job.runKey);
   const build = buildFolder(config, job.runKey);
@@ -167,7 +157,6 @@ export function jobCommand(
     '--init',
     '--name',
     containerName(job.runKey, job.unit),
-    ...labels(job.runKey, job.generation),
     '--network',
     'host',
     '--volume',
@@ -196,7 +185,7 @@ export function jobCommand(
  */
 export function stageCommand(
   config: SlotConfig,
-  stage: { runKey: string; generation: number; commit: string; repository: string; image: string },
+  stage: { runKey: string; commit: string; repository: string; image: string },
 ): string[] {
   return docker(
     config,
@@ -205,7 +194,6 @@ export function stageCommand(
     '--interactive',
     '--name',
     `${runPrefix(stage.runKey)}stage`,
-    ...labels(stage.runKey, stage.generation),
     '--volume',
     `${config.root}:${config.root}`,
     ...(config.containerUser === 'root' ? ['--user', '0'] : []),
@@ -219,51 +207,23 @@ export function stageCommand(
   );
 }
 
-/** Reads a regular file of the slot, never a link or a device, of at most READ_LIMIT_BYTES. */
+/**
+ * Reads a result of the slot in one open: the shell opens `path` once, then checks through that open
+ * descriptor that it is a regular file whose resolved path is `path` itself (no link anywhere on the
+ * way), and copies at most READ_LIMIT_BYTES + 1 bytes from it. The caller refuses a longer answer.
+ */
 export const readCommand = (path: string): string[] => [
   'sh',
   '-c',
-  'test -f "$1" && test ! -L "$1" && test "$(wc -c < "$1")" -le "$2" && cat "$1"',
+  'exec 3< "$1" && test -f /proc/$$/fd/3 && test "$(readlink /proc/$$/fd/3)" = "$1" && exec head -c "$2" <&3',
   'read',
   path,
-  String(READ_LIMIT_BYTES),
+  String(READ_LIMIT_BYTES + 1),
 ];
 
 /** Stops a container: SIGTERM, 60 s of grace, then SIGKILL. */
 export const stopCommand = (config: SlotConfig, name: string): string[] =>
   docker(config, 'stop', '--time', '60', name);
-
-/** The run's containers, every state, by name. */
-export const runContainersCommand = (config: SlotConfig, runKey: string): string[] =>
-  docker(config, 'ps', '--all', '--filter', `label=${RUN_LABEL}=${runKey}`, '--format', '{{.Names}}');
-
-/** The containers of runs on the slot, as `<name> <generation>` lines. */
-export const listCommand = (config: SlotConfig): string[] =>
-  docker(
-    config,
-    'ps',
-    '--all',
-    '--filter',
-    `label=${GENERATION_LABEL}`,
-    '--format',
-    `{{.Names}} {{.Label "${GENERATION_LABEL}"}}`,
-  );
-
-/** The containers of a Supabase stack on the slot, which serves CI alone: every one is a job's. */
-export const stackListCommand = (config: SlotConfig): string[] =>
-  docker(config, 'ps', '--all', '--quiet', '--filter', 'label=com.supabase.cli.project');
-
-/** The run's own volumes, removed once it ended. */
-export const runVolumes = (runKey: string): string[] => [bunCache(runKey)];
-
-/** The containers of generations other than `generation`, from `listCommand`'s output. */
-export function otherGenerations(listed: string, generation: number): string[] {
-  return listed
-    .split('\n')
-    .map((line) => line.trim().split(' '))
-    .filter(([name, label]) => name && label !== String(generation))
-    .map(([name]) => name ?? '');
-}
 
 /**
  * The start probe (ci/image/probe.sh): a job's container, given the slot's socket as every job is,

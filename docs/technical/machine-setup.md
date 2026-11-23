@@ -51,7 +51,7 @@ The machine runner is CI's `local` profile ([decision 0011](../decisions/0011-ci
 
 Install the runner, or move it to a new reviewed commit `<commit>`. Run each step on the machine, in a shell with the owner's `gh` login (on the PC, the agents' distribution):
 
-1. Copy `ci/machines/<machine>.example.json` and `<machine>.windows.example.json` to `~/ci-runner/`. Set the paths to your home and `slot.image` to `werkflow-ci:<commit>`. On the PC, set `probePorts` to the agents' distribution's address from `hostname -I`.
+1. Copy the examples to the names the runner reads: `cp ci/machines/<machine>.example.json ~/ci-runner/<machine>.json` and `cp ci/machines/<machine>.windows.example.json ~/ci-runner/windows.json`. In `<machine>.json`, set the paths to your home and `slot.image` to `werkflow-ci:<commit>`. On the PC, set `probePorts` to the agents' distribution's address from `hostname -I`.
 2. Put the CI App's private key in `~/ci-runner/key/ci-app.pem`, the one file `appKeyFile` names: `mkdir -m 700 ~/ci-runner/key` and `chmod 600` on the file. The runner refuses a key others can read. On the PC it stays in the agents' distribution, never in `werkflow-ci`.
 3. Check out the commit:
 
@@ -63,6 +63,9 @@ Install the runner, or move it to a new reviewed commit `<commit>`. Run each ste
 4. Prepare the slot and build the image there. `$SLOT` is `colima ssh --profile ci --` on the Mac and `wsl.exe -d werkflow-ci -u cirunner --` on the PC:
    - **Mac, first install only:** `colima start --profile ci --cpu 4 --memory 6 --mount "$HOME/.colima-ci-empty"` after `mkdir ~/.colima-ci-empty`, so no folder of the Mac is mounted. Then `$SLOT sh -c 'sudo install -d -o "$(id -un)" /var/lib/werkflow-ci'`.
    - **PC, first install only:** `$SLOT mkdir -p /home/cirunner/ci`.
+   - **First install only, the stack's ports:** the Supabase stack's ports 54321–54327 must lie outside the range outgoing connections take, in the network the jobs use. The runner's probe checks it and refuses to start otherwise; no job changes it.
+     - **Mac:** `$SLOT sudo sh -c 'echo "net.ipv4.ip_local_port_range = 55000 65000" > /etc/sysctl.d/90-werkflow-ci.conf && sysctl --system'`.
+     - **PC:** the rootless Docker's own network namespace. Add `~/.config/systemd/user/docker.service.d/ports.conf` for user `cirunner` in `werkflow-ci`, holding `[Service]` and `ExecStartPost=/bin/sh -c 'nsenter -U --preserve-credentials -n -t "$(cat %t/dockerd-rootless/child_pid)" sysctl -w net.ipv4.ip_local_port_range="55000 65000"'`. Then `$SLOT systemctl --user daemon-reload` and `$SLOT systemctl --user restart docker`.
    - Build:
 
      ```bash
@@ -72,11 +75,11 @@ Install the runner, or move it to a new reviewed commit `<commit>`. Run each ste
      ```
 
 5. Start the service:
-   - **Mac:** a launchd agent `~/Library/LaunchAgents/app.werkflow.ci-runner.plist`. Its `ProgramArguments` are `bun`'s absolute path, `~/ci-runner/werkflow-app/scripts/ci/machine-runner.ts`, `--config` and `~/ci-runner/mac.json`. Set `KeepAlive` and `RunAtLoad` to true and `StandardOutPath` to `~/ci-runner/runner.log`. Load it with `launchctl bootstrap gui/$(id -u) <plist>`; after a move, `launchctl kickstart -k gui/$(id -u)/app.werkflow.ci-runner`.
+   - **Mac:** a launchd agent `~/Library/LaunchAgents/app.werkflow.ci-runner.plist`. launchd expands no `~`, so every path in it is absolute. Its `ProgramArguments` are `bun`'s absolute path, `/Users/<user>/ci-runner/werkflow-app/scripts/ci/machine-runner.ts`, `--config` and `/Users/<user>/ci-runner/mac.json`. Set `KeepAlive` and `RunAtLoad` to true and `StandardOutPath` to `/Users/<user>/ci-runner/runner.log`. Load it with `launchctl bootstrap gui/$(id -u) <plist>`; after a move, `launchctl kickstart -k gui/$(id -u)/app.werkflow.ci-runner`.
    - **PC:** a systemd user unit `~/.config/systemd/user/werkflow-ci-runner.service`. Its `[Service]` holds `WorkingDirectory=%h/ci-runner/werkflow-app`, `ExecStart=<bun's absolute path> scripts/ci/machine-runner.ts --config %h/ci-runner/pc.json`, `Restart=always`, `RestartSec=30` and `KillMode=process`. `KillMode=process` leaves a run's watchdog alive across a restart. Its `[Install]` holds `WantedBy=default.target`. Run `systemctl --user daemon-reload && systemctl --user enable --now werkflow-ci-runner`. After a move, `systemctl --user restart werkflow-ci-runner`; the run ends as cancelled.
-6. Read the log (`~/ci-runner/runner.log`, or `journalctl --user -u werkflow-ci-runner` on the PC). Its first line names the machine, its generation, the commit and the image's id. A failed probe or a profile other than `local` stops the runner before its first claim.
+6. Read the log (`~/ci-runner/runner.log`, or `journalctl --user -u werkflow-ci-runner` on the PC). Its first line names the machine, its generation, the commit and the image's id. A failed probe, a slot that cannot be emptied or a profile other than `local` stops the runner before its first claim.
 
-A restart takes a new generation: the runner cancels the older generation's run and removes its containers before it claims anything.
+A restart takes a new generation: the runner cancels the older generation's run and empties the slot's daemon of every container and volume before it claims anything.
 
 ## Keep the agents moving
 

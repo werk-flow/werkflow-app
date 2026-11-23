@@ -37,20 +37,18 @@ import {
   jobCommand,
   jobEnvironment,
   keptOf,
+  READ_LIMIT_BYTES,
   readCommand,
-  runContainersCommand,
   runFolder,
-  runVolumes,
   type SlotConfig,
-  stackListCommand,
   stageCommand,
   stopCommand,
+  TEARDOWN_MS,
   containerName,
   workspaceOf,
 } from '../../lib/testing/ci/container-slot';
 import { CI_EVENTS, partSteps } from '../../lib/testing/ci/dag';
-import { type GitHubSnapshot, squashedPullRequests } from '../../lib/testing/ci/github-snapshot';
-import { pullRequestsOf } from '../../lib/testing/ci/measurement';
+import type { GitHubSnapshot } from '../../lib/testing/ci/github-snapshot';
 import { type ExpectedResult, foreignResult } from '../../lib/testing/ci/mirror';
 import { type CiResult, parseResult, type PlanIdentity, resultFileName } from '../../lib/testing/ci/results';
 import {
@@ -62,6 +60,7 @@ import {
   unitName,
 } from '../../lib/testing/ci/run-commit';
 import { openPullRequestMigrations } from '../../lib/testing/local-stack/migration-order';
+import { z } from '../../lib/zod';
 import { replaceResult } from './mirror-executor';
 
 /** Runs a command on the slot host behind its prefix. It never throws; a command past its deadline is killed and has no code. */
@@ -73,8 +72,6 @@ export type SlotShell = (
 export type ContainerOptions = {
   slot: SlotConfig;
   shell: SlotShell;
-  /** The machine runner's generation, which labels every container of the run. */
-  generation: number;
   /** The snapshot of GitHub a job reads in place of GitHub (github-snapshot.ts). */
   snapshot(task: ExecutorTask): Promise<GitHubSnapshot>;
   /** The problems the trusted docs check finds in werkflow-business for the PR's files (`businessProblems`). */
@@ -91,6 +88,7 @@ const STOP_RETRY_MS = 5_000;
 /** Each phase's deadline on the slot: a command, the staging, a read. */
 const COMMAND_MS = 120_000;
 const STAGE_MS = 20 * 60_000;
+
 const READ_MS = 60_000;
 
 /** What a job's result must name; `planIdentity` null for Plan and Check, which name none. */
@@ -205,7 +203,9 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
   /** A regular file of the slot of bounded size, or undefined when there is none. */
   const read = async (path: string): Promise<string | undefined> => {
     const result = await shell(readCommand(path), { timeoutMs: READ_MS });
-    return result.code === 0 ? result.stdout : undefined;
+    return result.code === 0 && Buffer.byteLength(result.stdout) <= READ_LIMIT_BYTES
+      ? result.stdout
+      : undefined;
   };
 
   /**
@@ -268,7 +268,6 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
       await must(
         stageCommand(slot, {
           runKey: setup.runKey,
-          generation: options.generation,
           commit: setup.commit,
           repository: task.env.GITHUB_REPOSITORY ?? '',
           image: slot.image,
@@ -298,7 +297,6 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
       const finished = shell(
         jobCommand(slot, {
           runKey: setup.runKey,
-          generation: options.generation,
           environment,
           unit: task.unit,
           image: slot.image,
@@ -309,20 +307,24 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
       });
       let launched = false;
       let unrecorded: string | undefined;
+      // Both launch reports go through here: a report that cannot be recorded stops the job and
+      // fails it, and never skips the slot's cleanup below.
+      const recordLaunch = (): void => {
+        launched = true;
+        try {
+          task.onLaunch?.();
+        } catch (error) {
+          unrecorded = message(error);
+          stop();
+        }
+      };
       const watch = new AbortController();
       const marker = `${workspace}/launched`;
       const watching = (async () => {
         while (!launched && !watch.signal.aborted) {
           await options.sleep(LAUNCH_POLL_MS, watch.signal);
           if (watch.signal.aborted) return;
-          if ((await shell(['test', '-e', marker], { timeoutMs: COMMAND_MS })).code !== 0) continue;
-          launched = true;
-          try {
-            task.onLaunch?.();
-          } catch (error) {
-            unrecorded = message(error);
-            stop();
-          }
+          if ((await shell(['test', '-e', marker], { timeoutMs: COMMAND_MS })).code === 0) recordLaunch();
         }
       })();
       const exit = await finished;
@@ -330,11 +332,10 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
       await watching;
       ended.removeEventListener('abort', stop);
       // A body that launched between the last poll and its end launched too.
-      if (!launched && (await shell(['test', '-e', marker], { timeoutMs: COMMAND_MS })).code === 0) {
-        launched = true;
-        task.onLaunch?.();
-      }
-      const left = await clearStacks(shell, slot);
+      if (!launched && (await shell(['test', '-e', marker], { timeoutMs: COMMAND_MS })).code === 0)
+        recordLaunch();
+      // Every container the job left, its Supabase stack too, goes before the next job.
+      const left = await clearSlot(shell, slot, false);
       if (left !== undefined) unverified = left;
       const text = await read(`${workspace}/results/${resultFileName(task.unit.job, task.unit.shard)}`);
       // The workspace moves aside, so the next job of the run gets the one path empty.
@@ -368,16 +369,14 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
     host: executor(false),
     jobs: executor(true),
     async release(outcome) {
-      // A failed job's workspace stays on the slot for a person; the rest go, and the run's volumes.
+      // A failed job's workspace stays on the slot for a person; the rest go. The runner empties
+      // the slot's daemon after the run (clearSlot).
       for (const { unit, state } of outcome.units) {
         const target = keptOf(slot, setup.runKey, unit);
         if (!kept.includes(target)) continue;
         if (state === 'passed') await shell(['rm', '-rf', target], { timeoutMs: COMMAND_MS });
         else setup.log(`[run] ${unitName(unit)} ${state}: its workspace stays on the slot at ${target}`);
       }
-      await shell(docker(slot, 'volume', 'rm', '--force', ...runVolumes(setup.runKey)), {
-        timeoutMs: COMMAND_MS,
-      });
       if (outcome.exitCode === 0) {
         await shell(['rm', '-rf', runFolder(slot, setup.runKey)], { timeoutMs: COMMAND_MS });
         rmSync(local, { recursive: true, force: true });
@@ -387,49 +386,43 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
 }
 
 /**
- * Removes every Supabase stack on the slot and shows it clean, or says why it is not. The slot's
- * Docker serves CI alone, so every Supabase container on it is a job's: also one a job started
- * before it could record that it did.
+ * Removes every container on the slot's daemon, and with `volumes` every volume, then shows them
+ * gone. The daemon serves CI alone, one run at a time, so whatever it holds is a run's: a job's
+ * container, its staging, its Supabase stack, also one a job started before it could record it. One
+ * deadline covers the whole teardown. Undefined once the slot is empty, otherwise why not.
  */
-export async function clearStacks(shell: SlotShell, slot: SlotConfig): Promise<string | undefined> {
-  const listed = await shell(stackListCommand(slot), { timeoutMs: COMMAND_MS });
-  if (listed.code !== 0) return `the slot's containers could not be listed: ${listed.stderr.trim()}`;
-  const left = listed.stdout.trim();
-  if (!left) return undefined;
-  await shell(['sh', '-c', 'exec "$@" $(cat)', 'remove', ...docker(slot, 'rm', '--force')], {
-    input: Buffer.from(left),
-    timeoutMs: COMMAND_MS,
-  });
-  const again = await shell(stackListCommand(slot), { timeoutMs: COMMAND_MS });
-  return again.code === 0 && again.stdout.trim() === ''
-    ? undefined
-    : `the stack's containers are still on the slot: ${again.stdout.trim() || again.stderr.trim()}`;
-}
-
-/**
- * Ends every container of run `runKey` on the slot, its staging included (SIGTERM, 60 s of grace,
- * then removal), removes any Supabase stack and the run's volumes, and shows the slot clean: none of
- * the run's containers and no stack left. Undefined when clean, otherwise why not.
- */
-export async function clearRun(
+export async function clearSlot(
   shell: SlotShell,
   slot: SlotConfig,
-  runKey: string,
+  volumes: boolean,
 ): Promise<string | undefined> {
-  const listed = await shell(runContainersCommand(slot, runKey), { timeoutMs: COMMAND_MS });
-  if (listed.code !== 0) return `the run's containers could not be listed: ${listed.stderr.trim()}`;
-  const names = listed.stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  await Promise.all(names.map((name) => shell(stopCommand(slot, name), { timeoutMs: COMMAND_MS })));
-  if (names.length) await shell(docker(slot, 'rm', '--force', ...names), { timeoutMs: COMMAND_MS });
-  const stacks = await clearStacks(shell, slot);
-  await shell(docker(slot, 'volume', 'rm', '--force', ...runVolumes(runKey)), { timeoutMs: COMMAND_MS });
-  const again = await shell(runContainersCommand(slot, runKey), { timeoutMs: COMMAND_MS });
-  if (again.code !== 0 || again.stdout.trim() !== '')
-    return `the run's containers are still on the slot: ${again.stdout.trim() || again.stderr.trim()}`;
-  return stacks;
+  const deadline = Date.now() + TEARDOWN_MS;
+  const ids = async (...args: string[]): Promise<string[]> => {
+    const listed = await shell(docker(slot, ...args), { timeoutMs: Math.max(1_000, deadline - Date.now()) });
+    if (listed.code !== 0) throw new Error(`docker ${args.join(' ')} failed: ${listed.stderr.trim()}`);
+    return listed.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+  };
+  const remove = async (...args: string[]): Promise<void> => {
+    const removed = await shell(docker(slot, ...args), { timeoutMs: Math.max(1_000, deadline - Date.now()) });
+    if (removed.code !== 0)
+      throw new Error(`docker ${args.slice(0, 3).join(' ')} failed: ${removed.stderr.trim()}`);
+  };
+  try {
+    const containers = await ids('ps', '--all', '--quiet');
+    if (containers.length) await remove('rm', '--force', ...containers);
+    const listedVolumes = volumes ? await ids('volume', 'ls', '--quiet') : [];
+    if (listedVolumes.length) await remove('volume', 'rm', '--force', ...listedVolumes);
+    const left = [
+      ...(await ids('ps', '--all', '--quiet')),
+      ...(volumes ? await ids('volume', 'ls', '--quiet') : []),
+    ];
+    return left.length ? `the slot still holds ${left.join(', ')}` : undefined;
+  } catch (error) {
+    return `the slot could not be shown empty: ${message(error)}`;
+  }
 }
 
 /**
@@ -450,13 +443,23 @@ export async function stageInputs(input: {
   mkdirSync(join(inputs, 'results'), { recursive: true });
   const passed: Record<string, string> = {};
   if (partSteps(task.unit.job, undefined).includes('siblings')) {
-    // The PR's files, as data, beside the sibling clones: the trusted docs check reads them there.
+    // The PR's files, as data, beside the sibling clones. Without symbolic links: a link checks out
+    // as a file holding its target's name, so the check never reads through one.
     const checkout = join(folder, 'werkflow-app');
     for (const args of [
-      ['clone', '--quiet', '--shared', '--no-checkout', input.source, checkout],
+      [
+        'clone',
+        '--quiet',
+        '--shared',
+        '--no-checkout',
+        '--config',
+        'core.symlinks=false',
+        input.source,
+        checkout,
+      ],
       ['-C', checkout, 'checkout', '--quiet', '--detach', input.commit],
     ])
-      if (spawnSync('git', args, { stdio: 'ignore' }).status !== 0)
+      if (spawnSync('git', args, { stdio: 'ignore', timeout: COMMAND_MS }).status !== 0)
         throw new Error(`git ${args[0]} of the docs checkout failed`);
     const exported = join(folder, 'siblings.env');
     writeFileSync(exported, '');
@@ -497,6 +500,7 @@ export function trustedSiblings(
     ['--config=/dev/null', '--no-env-file', join(source, 'scripts/ci/prepare.ts'), 'siblings'],
     {
       cwd: dirname(checkout),
+      timeout: STAGE_MS,
       env: {
         NODE_ENV: process.env.NODE_ENV,
         PATH: process.env.PATH,
@@ -518,14 +522,27 @@ class BusinessProblems extends Error {
   }
 }
 
+const reportSchema = z.object({ problems: z.array(z.string()) });
+
 /**
  * The part of docs:check that reads werkflow-business, run on the trusted side: the trusted
- * checkout's scripts/check-docs.ts, bundled into one file that imports nothing of the PR, runs
- * against the PR's checkout as data beside the sibling clones, with no credential in its environment.
- * Only its problems that name werkflow-business count; the job checks the rest.
+ * checkout's scripts/check-docs.ts, bundled into one file in this side's own folder, run with the
+ * PR's checkout as its root (WERKFLOW_DOCS_ROOT), as data, and with no credential in its environment.
+ * Nothing is written into the checkout. The check must write its report; a check that fails to
+ * start, outruns its deadline, ends otherwise or leaves no report throws, so Fast fails. Only its
+ * problems that name werkflow-business count; the job checks the rest.
  */
-export function businessProblems(source: string, bundleFolder: string, checkout: string): string[] {
-  const commit = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).stdout.trim();
+export function businessProblems(
+  source: string,
+  bundleFolder: string,
+  checkout: string,
+  timeoutMs = COMMAND_MS,
+): string[] {
+  const commit = spawnSync('git', ['rev-parse', 'HEAD'], {
+    cwd: source,
+    encoding: 'utf8',
+    timeout: COMMAND_MS,
+  }).stdout.trim();
   const bundle = join(bundleFolder, `check-docs-${commit}.js`);
   if (!existsSync(bundle)) {
     mkdirSync(bundleFolder, { recursive: true });
@@ -535,58 +552,43 @@ export function businessProblems(source: string, bundleFolder: string, checkout:
       {
         cwd: source,
         encoding: 'utf8',
+        timeout: COMMAND_MS,
       },
     );
     if (built.status !== 0)
       throw new Error(`the trusted docs check could not be bundled: ${built.stderr.trim()}`);
   }
-  // At scripts/ in the checkout, the bundle reads the checkout as its repository (import.meta.dir).
-  const placed = join(checkout, 'scripts', '.werkflow-trusted-check-docs.js');
-  mkdirSync(join(checkout, 'scripts'), { recursive: true });
-  copyFileSync(bundle, placed);
-  const ran = spawnSync(process.execPath, ['--config=/dev/null', '--no-env-file', placed], {
-    cwd: checkout,
+  const report = join(bundleFolder, `report-${process.pid}.json`);
+  rmSync(report, { force: true });
+  const ran = spawnSync(process.execPath, ['--config=/dev/null', '--no-env-file', bundle], {
+    cwd: bundleFolder,
     encoding: 'utf8',
-    env: { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH, HOME: process.env.HOME },
+    timeout: timeoutMs,
+    env: {
+      NODE_ENV: process.env.NODE_ENV,
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      WERKFLOW_DOCS_ROOT: checkout,
+      WERKFLOW_DOCS_REPORT: report,
+    },
   });
-  return `${ran.stdout}\n${ran.stderr}`
-    .split('\n')
-    .filter((line) => line.startsWith('  - ') && line.includes('werkflow-business'))
-    .map((line) => line.slice(4));
+  if (ran.error || (ran.status !== 0 && ran.status !== 1) || !existsSync(report))
+    throw new Error(
+      `the trusted docs check gave no report (${ran.error?.message ?? `exit ${ran.status ?? ran.signal}`})`,
+    );
+  const { problems } = reportSchema.parse(JSON.parse(readFileSync(report, 'utf8')));
+  rmSync(report, { force: true });
+  return problems.filter((problem) => problem.includes('werkflow-business'));
 }
 
 /**
- * GitHub as a job of `task` reads it, through this side's own `gh` login: the labels of the run's
- * PRs and of the PRs an integration commit squashes, and the open PRs' migrations. A label list
- * that cannot be read throws, so the job fails rather than read no approval.
+ * GitHub as a job of `task` reads it: the approval the machine runner captured at admission
+ * (SHRINK_ONLY_GROWTH_APPROVED), never a later label or a commit subject, and the open PRs'
+ * migrations through this side's own `gh` login.
  */
-export function githubSnapshot(source: string, commit: string, task: ExecutorTask): GitHubSnapshot {
-  const read = (command: string, args: readonly string[]): string => {
-    const answer = spawnSync(command, args, { cwd: source, encoding: 'utf8' });
-    if (answer.status !== 0)
-      throw new Error(`${command} ${args.slice(0, 3).join(' ')} failed: ${answer.stderr.trim()}`);
-    return answer.stdout.trim();
+export function githubSnapshot(source: string, task: ExecutorTask): GitHubSnapshot {
+  return {
+    approved: task.env.SHRINK_ONLY_GROWTH_APPROVED === 'true',
+    openMigrations: openPullRequestMigrations(source),
   };
-  const named = pullRequestsOf(task.env.CI_PRS);
-  if ('unreadable' in named) throw new Error(named.unreadable);
-  const base = task.env.CI_BASE_SHA;
-  const squashed =
-    task.env.CI_EVENT === 'integration' && base
-      ? squashedPullRequests(read('git', ['log', '--format=%s', `${base}..${commit}`]))
-      : [];
-  const repository = task.env.GITHUB_REPOSITORY;
-  const labels: Record<string, string[]> = {};
-  for (const pr of new Set([...named, ...squashed])) {
-    if (!repository) throw new Error('The snapshot needs GITHUB_REPOSITORY.');
-    labels[String(pr)] = read('gh', [
-      'api',
-      '--paginate',
-      `repos/${repository}/issues/${pr}/labels`,
-      '--jq',
-      '.[].name',
-    ])
-      .split('\n')
-      .filter(Boolean);
-  }
-  return { labels, openMigrations: openPullRequestMigrations(source) };
 }

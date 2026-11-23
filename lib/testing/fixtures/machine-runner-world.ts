@@ -86,7 +86,28 @@ export type World = {
   offline?: boolean;
 };
 
-type Faults = { complete: number; alert: number; dirty: string | null; image: string | undefined };
+type Faults = {
+  complete: number;
+  alert: number;
+  dirty: string | null;
+  image: string | undefined;
+  /** The next Check start is created on GitHub, but its answer is lost. */
+  lostStart: boolean;
+  /** The next verdict cannot be built from the run's results. */
+  noVerdict: boolean;
+  /** Milliseconds the next Check start takes on GitHub. */
+  startDelay: number;
+};
+
+const noFaults = (): Faults => ({
+  complete: 0,
+  alert: 0,
+  dirty: null,
+  image: undefined,
+  lostStart: false,
+  noVerdict: false,
+  startDelay: 0,
+});
 
 /** The machine's GitHub ports over the shared world; every call fails while the world is offline. */
 function githubPorts(
@@ -110,8 +131,15 @@ function githubPorts(
         online(() => {
           const id = world.github.checkRuns.length + 1;
           world.github.checkRuns.push({ id, head: sha, runUrl, conclusion: null });
+          world.clock.now += faults.startDelay;
+          if (faults.lostStart) {
+            faults.lostStart = false;
+            throw new Error('the answer was lost');
+          }
           return id;
         }),
+      find: ({ runUrl }) =>
+        online(() => world.github.checkRuns.find((run) => run.runUrl === runUrl)?.id ?? null),
       complete: (completion) =>
         online(() => {
           if (faults.complete > 0) {
@@ -119,7 +147,10 @@ function githubPorts(
             throw new Error('GitHub answered 502');
           }
           const own = world.github.checkRuns.find((run) => run.id === completion.checkRun);
-          if (own) own.conclusion = completion.kind === 'verdict' ? 'success' : 'cancelled';
+          const verdict = completion.kind === 'verdict' && !faults.noVerdict;
+          faults.noVerdict = false;
+          if (own) own.conclusion = verdict ? 'success' : 'cancelled';
+          return completion.kind === 'verdict' && !verdict ? 'cancelled' : 'completed';
         }),
     },
   };
@@ -135,14 +166,10 @@ export function machine(
   let attempts = 0;
   const started: { pull: number; runUrl: string; runDir: string; base: string; stopBy: number | null }[] = [];
   const stopped: string[] = [];
+  const cleaned: string[] = [];
   const resized: string[] = [];
   const alerts: string[] = [];
-  const faults: Faults = {
-    complete: 0,
-    alert: 0,
-    dirty: null,
-    image: undefined,
-  };
+  const faults = noFaults();
   const headInfo = new Map<string, { upToDate: boolean; snapshotReader: boolean }>();
   const ports: RunnerPorts = {
     config: config(name, options.sizes ?? { full: { resize: null } }),
@@ -170,7 +197,10 @@ export function machine(
         status = { state: 'ended', exitCode: null, full: null };
         return faults.dirty === null ? { clean: true } : { clean: false, reason: faults.dirty };
       },
-      clean: async () => (faults.dirty === null ? { clean: true } : { clean: false, reason: faults.dirty }),
+      clean: async () => {
+        cleaned.push(new Date(world.clock.now).toISOString());
+        return faults.dirty === null ? { clean: true } : { clean: false, reason: faults.dirty };
+      },
     },
     nextAttempt: () => ++attempts,
     resize: async (command) => void resized.push(command.join(' ')),
@@ -191,6 +221,7 @@ export function machine(
     state: () => state,
     started,
     stopped,
+    cleaned,
     resized,
     alerts,
     faults,

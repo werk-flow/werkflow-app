@@ -3,11 +3,21 @@
 // the container through docker's stop. No Docker, no network, no sleep.
 import { afterAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  clearRun,
+  businessProblems,
+  clearSlot,
   containerExecutors,
   type SlotShell,
   stageInputs,
@@ -103,8 +113,7 @@ function executors(shell: SlotShell) {
     {
       slot: SLOT,
       shell,
-      generation: 7,
-      snapshot: async () => ({ labels: {}, openMigrations: [] }),
+      snapshot: async () => ({ approved: false, openMigrations: [] }),
       businessCheck: () => [],
       siblings: () => undefined,
       // The launch poll and the stop's retry return at once: the job's end decides.
@@ -142,9 +151,6 @@ test("Plan's own result from its container is kept in the run's results, and the
   expect(outcome.exitCode).toBe(0);
   expect(JSON.parse(readFileSync(join(results, 'plan.json'), 'utf8')).runUrl).toBe(RUN_URL);
   expect(slot.commands.flat().join(' ')).not.toContain(TOKEN);
-  expect(slot.commands.find((command) => command.includes('werkflow-ci-job'))).toContain(
-    'org.werkflow.ci-generation=7',
-  );
 });
 
 test("a result of another run is refused and never reaches the run's results", async () => {
@@ -184,7 +190,7 @@ test("F15: werkflow-business never enters a job's inputs: this side checks it, a
   const folder = join(root, 'stage-fast');
   const task: ExecutorTask = { ...planTask(join(root, 'results-own')), unit: { job: 'fast', shard: null } };
   const options = {
-    snapshot: async () => ({ labels: {}, openMigrations: [] }),
+    snapshot: async () => ({ approved: false, openMigrations: [] }),
     siblings: (_task: ExecutorTask, checkout: string) => {
       for (const sibling of ['werkflow-website', 'werkflow-business']) {
         mkdirSync(join(checkout, '..', sibling), { recursive: true });
@@ -218,23 +224,89 @@ test("F15: werkflow-business never enters a job's inputs: this side checks it, a
   ).rejects.toThrow('werkflow-business');
 });
 
-test('F4: a stopped run counts as clean only once its job and staging containers and every Supabase stack are gone', async () => {
-  const containers = new Set([`werkflow-ci-${RUN_KEY}-fast`, `werkflow-ci-${RUN_KEY}-stage`]);
-  const stacks = new Set(['supabase_db']);
-  let stuck = false;
+test('S19: the slot counts as empty only once every container and volume on its daemon is gone, and a failed list never passes', async () => {
+  const containers = new Set(['job', 'supabase_db']);
+  const volumes = new Set(['werkflow-ci-bun-x', 'supabase_db_data']);
+  const faults = { stuck: false, listFails: false };
   const shell: SlotShell = async (argv) => {
     const line = argv.join(' ');
     const ok = (stdout = '') => ({ code: 0, stdout, stderr: '' });
-    if (line.includes(`label=org.werkflow.ci-run=${RUN_KEY}`)) return ok([...containers].join('\n'));
-    if (line.includes('label=com.supabase.cli.project')) return ok([...stacks].join('\n'));
-    if (argv.includes('rm') && !stuck) {
-      for (const name of argv) containers.delete(name);
-      stacks.clear();
-    }
+    if (faults.listFails && line.includes('ps')) return { code: 1, stdout: '', stderr: 'daemon down' };
+    if (line === 'docker ps --all --quiet') return ok([...containers].join('\n'));
+    if (line === 'docker volume ls --quiet') return ok([...volumes].join('\n'));
+    if (!faults.stuck)
+      for (const name of argv) {
+        containers.delete(name);
+        volumes.delete(name);
+      }
     return ok();
   };
-  expect(await clearRun(shell, SLOT, RUN_KEY)).toBeUndefined();
-  containers.add(`werkflow-ci-${RUN_KEY}-stage`);
-  stuck = true;
-  expect(await clearRun(shell, SLOT, RUN_KEY)).toContain(`werkflow-ci-${RUN_KEY}-stage`);
+  expect(await clearSlot(shell, SLOT, true)).toBeUndefined();
+  expect([containers.size, volumes.size]).toEqual([0, 0]);
+  containers.add('stage');
+  faults.stuck = true;
+  expect(await clearSlot(shell, SLOT, true)).toContain('stage');
+  faults.listFails = true;
+  expect(await clearSlot(shell, SLOT, false)).toContain('daemon down');
+});
+
+test("CR 187: a launch that cannot be recorded at the job's end fails the job and still empties the slot first", async () => {
+  const results = join(root, 'results-unrecorded');
+  mkdirSync(results);
+  const slot = fakeSlot(async (workspace, files) => {
+    files.set(`${workspace}/launched`, '');
+    return 0;
+  });
+  const task: ExecutorTask = {
+    ...planTask(results),
+    onLaunch: () => {
+      throw new Error('the start record cannot be written');
+    },
+  };
+  const outcome = await executors(slot.shell).host.run(task, new AbortController().signal);
+  expect(outcome.exitCode).toBeNull();
+  expect(outcome.detail).toContain('its launch could not be recorded');
+  expect(slot.commands.some((command) => command.join(' ') === 'docker ps --all --quiet')).toBe(true);
+});
+
+test("S14: a PR's symbolic link reaches the trusted docs check as a file holding its target's name, never the target", async () => {
+  const secret = join(root, 'secret.txt');
+  writeFileSync(secret, 'TRUSTED-SIDE-SECRET');
+  const pr = join(root, 'pr-with-link');
+  mkdirSync(pr);
+  const run = (...args: string[]) => execFileSync('git', args, { cwd: pr, encoding: 'utf8' }).trim();
+  run('init', '--quiet');
+  symlinkSync(secret, join(pr, 'link.md'));
+  run('add', 'link.md');
+  run('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '--quiet', '-m', 'link');
+  const seen: string[] = [];
+  await stageInputs({
+    source: pr,
+    commit: run('rev-parse', 'HEAD'),
+    task: { ...planTask(join(root, 'results-own')), unit: { job: 'fast', shard: null } },
+    folder: join(root, 'stage-link'),
+    options: {
+      snapshot: async () => ({ approved: false, openMigrations: [] }),
+      siblings: (_task, checkout) => mkdirSync(join(checkout, '..', 'werkflow-website'), { recursive: true }),
+      businessCheck: (checkout) => (seen.push(readFileSync(join(checkout, 'link.md'), 'utf8')), []),
+    },
+  });
+  expect(seen).toEqual([secret]);
+});
+
+test('S25: the trusted docs check counts only with its report, writes nothing into the checkout, and fails on no report or its deadline', () => {
+  const bundles = join(root, 'bundles');
+  mkdirSync(bundles, { recursive: true });
+  const checkout = join(root, 'docs-checkout');
+  mkdirSync(checkout, { recursive: true });
+  const bundle = (body: string) => writeFileSync(join(bundles, `check-docs-${COMMIT}.js`), body);
+  bundle(
+    "require('fs').writeFileSync(process.env.WERKFLOW_DOCS_REPORT, JSON.stringify({ problems: ['werkflow-business/AGENTS.md links nowhere', 'an app problem'] })); process.exit(1);",
+  );
+  expect(businessProblems(source, bundles, checkout)).toEqual(['werkflow-business/AGENTS.md links nowhere']);
+  expect(readdirSync(checkout)).toEqual([]);
+  bundle('process.exit(0);');
+  expect(() => businessProblems(source, bundles, checkout)).toThrow('gave no report');
+  bundle('setInterval(() => undefined, 1000);');
+  expect(() => businessProblems(source, bundles, checkout, 300)).toThrow('gave no report');
 });

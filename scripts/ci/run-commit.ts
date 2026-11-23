@@ -90,7 +90,6 @@ import { repository as ownRepository } from './run';
 //                   machines (scripts/ci/container-executor.ts); unset for the process executor.
 //   CI_CONTAINER_SLOT  container: the slot's configuration as JSON (slotConfigSchema in
 //                   lib/testing/ci/container-slot.ts); scripts/ci/machine-runner.ts passes its own.
-//   CI_CONTAINER_GENERATION  container: the machine runner's generation, which labels each job's container.
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.
 //   CI_PUBLISHER    An executable that runs `bun scripts/ci/publish-check.ts <start|finish>` from the
 //                   trusted copy as the CI App's user; an isolating executor only. It gets CI_RUN_URL,
@@ -462,15 +461,12 @@ function onContainers(
   setup: ExecutorSetup,
   environment: Readonly<Record<string, string | undefined>>,
 ): Executors {
-  const generation = Number(environment.CI_CONTAINER_GENERATION);
-  if (!environment.CI_CONTAINER_SLOT || !Number.isSafeInteger(generation) || generation < 1)
-    throw new Error('CI_EXECUTOR=container needs CI_CONTAINER_SLOT and CI_CONTAINER_GENERATION.');
+  if (!environment.CI_CONTAINER_SLOT) throw new Error('CI_EXECUTOR=container needs CI_CONTAINER_SLOT.');
   const slot = slotConfigSchema.parse(JSON.parse(environment.CI_CONTAINER_SLOT));
   return containerExecutors(setup, {
     slot,
     shell: slotShell(slot),
-    generation,
-    snapshot: async (task) => githubSnapshot(setup.source, setup.commit, task),
+    snapshot: async (task) => githubSnapshot(setup.source, task),
     businessCheck: (checkout) =>
       businessProblems(setup.source, join(setup.workRoot, 'trusted-bundles'), checkout),
     siblings: (task, checkout, exported) => trustedSiblings(setup.source, task, checkout, exported),

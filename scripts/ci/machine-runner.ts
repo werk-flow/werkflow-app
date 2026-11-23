@@ -31,20 +31,11 @@ import {
   type ScheduledRun,
 } from '../../lib/testing/ci/check-app';
 import { installationToken } from '../../lib/testing/ci/check-app-token';
-import {
-  docker,
-  IMAGE_COMMIT_LABEL,
-  listCommand,
-  otherGenerations,
-  probeCommand,
-  stackListCommand,
-} from '../../lib/testing/ci/container-slot';
+import { docker, IMAGE_COMMIT_LABEL, probeCommand } from '../../lib/testing/ci/container-slot';
 import { nextGeneration, type RefValue } from '../../lib/testing/ci/lease';
 import {
   type Completion,
-  type CurrentRun,
   EMPTY_STATE,
-  endProcessGroup,
   type MachineConfig,
   machineConfigSchema,
   recover,
@@ -57,10 +48,9 @@ import {
 import { RUNNER_PULLS_QUERY, runnerPullsFromGitHub } from '../../lib/testing/ci/machine-pulls';
 import { activeProfile, MAIN_REFSPEC } from '../../lib/testing/ci/profiles';
 import { resultFileName } from '../../lib/testing/ci/results';
-import { runKeyOf } from '../../lib/testing/ci/run-commit';
 import { z } from '../../lib/zod';
-import { clearRun, clearStacks, slotShell } from './container-executor';
-import { runCommitSignal } from './machine-watchdog';
+import { clearSlot, slotShell } from './container-executor';
+import { endProcessGroup, runCommitSignal } from './machine-watchdog';
 
 const exitSchema = z.object({ exitCode: z.number().int().nullable() });
 
@@ -77,6 +67,8 @@ function exec(command: string, args: readonly string[], env: Record<string, stri
     cwd: trusted,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 ** 2,
+    // Every read and write of GitHub or the slot has a deadline: none may hold a tick.
+    timeout: 120_000,
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...env },
   });
 }
@@ -261,6 +253,17 @@ const checks: RunnerPorts['checks'] = {
     if ('problem' in posted) throw new Error(`The start was not posted: ${posted.problem}`);
     return posted.id;
   },
+  async find({ head, runUrl }) {
+    // The attempt's start by its identity (check-app.ts, queuedCheckRunOf's external_id).
+    const listed = run('gh', [
+      'api',
+      '--paginate',
+      `repos/${config.repository}/commits/${head}/check-runs?check_name=Check&app_id=${appId}&filter=all&per_page=100`,
+      '--jq',
+      `.check_runs[] | select(.external_id == ${JSON.stringify(`${runUrl} attempt 1`)}) | .id`,
+    ]).split('\n')[0];
+    return listed ? Number(listed) : null;
+  },
   async complete(completion: Completion) {
     const scheduled = scheduledOf(completion.head, completion.runUrl);
     const cancelled = (reason: string) =>
@@ -285,6 +288,7 @@ const checks: RunnerPorts['checks'] = {
       ...(await access()),
     });
     if ('problem' in posted) throw new Error(posted.problem);
+    return 'problem' in built ? 'cancelled' : 'completed';
   },
 };
 
@@ -297,7 +301,6 @@ const alive = (group: number): boolean => {
   }
 };
 const children = new Map<number, ChildProcess>();
-const runKeyOfRun = (current: CurrentRun): string => runKeyOf(current.runUrl, 1);
 const ended = (runDir: string): void => {
   const exit = join(runDir, 'exit.json');
   if (!existsSync(exit)) writeFileSync(exit, JSON.stringify({ exitCode: null }));
@@ -383,7 +386,6 @@ const ports: RunnerPorts = {
           CI_DEDICATED_HOST: '1',
           CI_EXECUTOR: 'container',
           CI_CONTAINER_SLOT: JSON.stringify(slot),
-          CI_CONTAINER_GENERATION: String(generation),
           SHRINK_ONLY_GROWTH_APPROVED: String(pull.listGrowthApproved),
           GITHUB_REPOSITORY: config.repository,
           SIBLING_REPOSITORIES_TOKEN: siblingToken,
@@ -409,8 +411,6 @@ const ports: RunnerPorts = {
             String(stopBy),
             '--group',
             String(child.pid),
-            '--run-key',
-            runKeyOf(runUrl, 1),
             '--run-dir',
             runDir,
             '--slot',
@@ -443,7 +443,7 @@ const ports: RunnerPorts = {
       const gone =
         current.processGroup === null ||
         (await endProcessGroup(current.processGroup, runCommitSignal(current.processGroup), wait));
-      const left = await clearRun(shell, slot, runKeyOfRun(current));
+      const left = await clearSlot(shell, slot, true);
       // The run counts as ended, so its watchdog leaves the slot to the next run.
       ended(current.runDir);
       if (!gone)
@@ -454,25 +454,8 @@ const ports: RunnerPorts = {
       return left === undefined ? { clean: true } : { clean: false, reason: left };
     },
     async clean() {
-      const listed = await shell(listCommand(slot), { timeoutMs: 120_000 });
-      if (listed.code !== 0)
-        return { clean: false, reason: `the slot cannot be listed: ${listed.stderr.trim()}` };
-      const names = listed.stdout
-        .split('\n')
-        .map((line) => line.trim().split(' ')[0] ?? '')
-        .filter(Boolean);
-      if (names.length) await shell(docker(slot, 'rm', '--force', ...names), { timeoutMs: 120_000 });
-      const stacks = await clearStacks(shell, slot);
-      const again = await shell(listCommand(slot), { timeoutMs: 120_000 });
-      const stackList = await shell(stackListCommand(slot), { timeoutMs: 120_000 });
-      if (
-        again.code !== 0 ||
-        again.stdout.trim() !== '' ||
-        stackList.stdout.trim() !== '' ||
-        stacks !== undefined
-      )
-        return { clean: false, reason: stacks ?? `containers stay on the slot: ${again.stdout.trim()}` };
-      return { clean: true };
+      const left = await clearSlot(shell, slot, true);
+      return left === undefined ? { clean: true } : { clean: false, reason: left };
     },
   },
   nextAttempt: () => nextGeneration(join(config.stateDir, 'attempt')),
@@ -514,12 +497,10 @@ const ports: RunnerPorts = {
 // A restart never resumes: the older generation's run ends, and so do its containers.
 const recovered = await recover(ports);
 if (recovered) log(recovered);
-const listed = await shell(listCommand(slot), { timeoutMs: 120_000 });
-const older = otherGenerations(listed.stdout, generation);
-if (older.length) {
-  await shell(docker(slot, 'rm', '--force', ...older), { timeoutMs: 120_000 });
-  log(`removed ${older.join(', ')}, containers of an older generation`);
-}
+// The slot starts empty, or the runner does not start: a list or removal that fails is never ignored.
+const leftOver = await clearSlot(shell, slot, true);
+if (leftOver !== undefined)
+  throw new Error(`The slot cannot be emptied, so the runner claims nothing: ${leftOver}`);
 
 let stopping = false;
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
