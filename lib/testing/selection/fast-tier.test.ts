@@ -35,6 +35,7 @@ const plan = (
   changedFiles: readonly string[] | undefined,
   options: {
     fullReason?: string;
+    everyGroupOf?: Partial<Record<'ui' | 'sql' | 'static', string>>;
     rowChanges?: string[];
     graph?: Map<string, string[]>;
     tailwindScans?: ((file: string) => boolean) | undefined;
@@ -45,6 +46,7 @@ const plan = (
     graph: options.graph ?? graph,
     changedFiles,
     fullReason: options.fullReason,
+    everyGroupOf: options.everyGroupOf ?? {},
     rowChanges: options.rowChanges ?? [],
     // Tailwind scans the components here; a scanned file is covered by its own test.
     tailwindScans:
@@ -66,12 +68,25 @@ const EVERYTHING = {
   lint: ['static:lint'],
 };
 
-test('an unreadable diff, a full run and a tooling change take every group of every kind', () => {
+test('an unreadable diff, a full run and an every-group input take every group of every kind', () => {
   expect(selected(plan(undefined))).toEqual(EVERYTHING);
   expect(selected(plan(['docs/README.md'], { fullReason: 'Nightly run' }))).toEqual(EVERYTHING);
-  const tooling = plan(['bun.lock'], { fullReason: 'Tooling input changed: bun.lock' });
-  expect(selected(tooling)).toEqual(EVERYTHING);
-  expect(tooling.reasons['sql:security']).toBe('Tooling input changed: bun.lock');
+  const everyGroup = plan(['next.config.ts'], { fullReason: 'Every group runs for next.config.ts' });
+  expect(selected(everyGroup)).toEqual(EVERYTHING);
+  expect(everyGroup.reasons['sql:security']).toBe('Every group runs for next.config.ts');
+});
+
+test('a tooling input takes every group of the kinds its CI jobs run, and selects the rest by diff', () => {
+  const reason = 'Tooling input changed: .github/actions/playwright/action.yml, used by components, browser';
+  const action = plan(['.github/actions/playwright/action.yml'], { everyGroupOf: { ui: reason } });
+  expect(selected(action)).toEqual({ ...EVERYTHING, sql: [] });
+  expect(action.reasons['ui:contracts:time']).toBe(reason);
+  const everyJob = { ui: 'Tooling input changed: scripts/ci/job.ts', sql: 'x', static: 'x' };
+  expect(selected(plan(['scripts/ci/job.ts'], { everyGroupOf: everyJob }))).toEqual(EVERYTHING);
+  // A lint or type package beside documentation still runs every static gate.
+  expect(
+    plan(['docs/README.md'], { everyGroupOf: { static: 'Lint or type packages moved' } }).static,
+  ).toEqual(EVERY_GATE);
 });
 
 test('a diff of documentation alone runs the gates that read it, the dependency audit, Lint and the unit suite, and no component or SQL group', () => {

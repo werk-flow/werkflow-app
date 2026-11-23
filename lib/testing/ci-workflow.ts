@@ -1,4 +1,4 @@
-// Reads a workflow in .github/workflows for the tests that run its own step scripts as GitHub would.
+// Reads a workflow of the repository for the tests that run its own step scripts as GitHub would.
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -6,10 +6,23 @@ import { resolve } from 'node:path';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** The workflow `.github/workflows/<file>`, with readers that throw where a test expects text or a step. */
+/**
+ * The folder of the repository's workflows, relative to its root: `.github/workflows`, or
+ * CI_WORKFLOWS_DIR on the CI mirror, whose pushed tree holds only the mirror's own workflow there and
+ * keeps the repository's in .github/held-workflows (scripts/ci/mirror-push.ts). Every test and tool
+ * that reads a workflow reads it here.
+ */
+export function workflowsFolder(): string {
+  const folder = process.env.CI_WORKFLOWS_DIR || '.github/workflows';
+  if (!/^\.github\/[a-z-]+$/.test(folder))
+    throw new Error(`CI_WORKFLOWS_DIR ${folder} is no folder of .github.`);
+  return folder;
+}
+
+/** The workflow `<file>` of workflowsFolder(), with readers that throw where a test expects text or a step. */
 export function readWorkflow(file: string) {
   const workflow: unknown = Bun.YAML.parse(
-    readFileSync(resolve(import.meta.dir, '../../.github/workflows', file), 'utf8'),
+    readFileSync(resolve(import.meta.dir, '../..', workflowsFolder(), file), 'utf8'),
   );
 
   /** The value at `path`, or undefined when a step of it is missing. */
