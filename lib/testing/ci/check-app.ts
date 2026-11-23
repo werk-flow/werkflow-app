@@ -41,13 +41,19 @@ type CheckRunRequest = {
   output: { title: string; summary: string };
 } & (
   | { status: 'queued' }
-  | { status: 'completed'; started_at: string; completed_at: string; conclusion: 'success' | 'failure' }
+  | {
+      status: 'completed';
+      started_at: string;
+      completed_at: string;
+      /** `cancelled`: a machine runner stopped the run before its verdict (lib/testing/ci/machine-runner.ts). */
+      conclusion: 'success' | 'failure' | 'cancelled';
+    }
 );
 
 const SHA = /^[0-9a-f]{40}$/;
 
 /** What the runner's scheduler, not a job, says the run is: a result must match it. */
-type ScheduledRun = {
+export type ScheduledRun = {
   /** CI_RUN_URL. */
   runUrl: string;
   /** CI_RUN_ATTEMPT: a rerun shares the run's URL, so an earlier attempt's result never counts. */
@@ -157,6 +163,34 @@ export function checkRunOf(input: {
         title: verdict.passed ? 'Passed' : 'Failed',
         summary: `${verdict.summary}\n\nRun: ${runUrl}\nTree: ${check.tree}\nRunner: ${check.producer ?? 'none'}`,
       },
+    },
+  };
+}
+
+/**
+ * The check run that ends a run without a verdict: a machine runner stopped it (a window's edge, a
+ * moved head, a restart) or it never reached its Check. `cancelled`, never a pass or a failure, so
+ * the PR is eligible again; it completes the run's own start like a verdict (finishCheckRun).
+ */
+export function cancelledCheckRunOf(input: {
+  scheduled: ScheduledRun;
+  startedAt: Date;
+  now: Date;
+  reason: string;
+}): { request: CheckRunRequest } | { problem: string } {
+  const head = headOf(input.scheduled);
+  if ('problem' in head) return head;
+  return {
+    request: {
+      name: checkRunName(input.scheduled.event),
+      head_sha: head.head,
+      status: 'completed',
+      started_at: input.startedAt.toISOString(),
+      completed_at: input.now.toISOString(),
+      conclusion: 'cancelled',
+      ...detailsOf(input.scheduled.runUrl),
+      external_id: runIdentityOf(input.scheduled),
+      output: { title: 'Cancelled', summary: `${input.reason}\n\nRun: ${input.scheduled.runUrl}` },
     },
   };
 }

@@ -4,6 +4,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
+  cancelledCheckRunOf,
   CHECK_APP_CONFIG,
   checkRunOf,
   finishCheckRun,
@@ -524,4 +525,23 @@ test("the publisher posts nothing for another run's Check and prints no token", 
   expect(unconfigured.status).toBe(1);
   expect(unconfigured.stderr).toContain('names no CI App yet');
   expect(unconfigured.stdout + unconfigured.stderr).not.toContain(TOKEN);
+});
+
+test('a run a machine runner stopped ends as cancelled on its own start, never as a pass or a failure', () => {
+  const scheduled = { runUrl: RUN_URL, attempt: 1, event: 'pr' as const, commit: COMMIT, prHead: undefined };
+  const startedAt = new Date('2026-11-23T02:00:00Z');
+  const now = new Date('2026-11-23T04:58:00Z');
+  expect(cancelledCheckRunOf({ scheduled, startedAt, now, reason: 'The window turns off.' })).toEqual({
+    request: {
+      name: 'Check',
+      head_sha: COMMIT,
+      status: 'completed',
+      started_at: startedAt.toISOString(),
+      completed_at: now.toISOString(),
+      conclusion: 'cancelled',
+      details_url: RUN_URL,
+      external_id: `${RUN_URL} attempt 1`,
+      output: { title: 'Cancelled', summary: `The window turns off.\n\nRun: ${RUN_URL}` },
+    },
+  });
 });

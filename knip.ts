@@ -53,6 +53,8 @@ const config: KnipConfig = {
     'scripts/ci/run-commit.ts!',
     // Run by the CI mirror's workflow (ci/mirror/workflow.yml), which knip does not read.
     'scripts/ci/mirror-job.ts!',
+    // The owner's machines run it as a user service (docs/technical/machine-setup.md).
+    'scripts/ci/machine-runner.ts!',
     // Run on a Boat machine by scripts/boat/remote-verify.sh, or by package scripts.
     'scripts/boat/*.ts!',
     // Agent hooks run by path from the agent settings.

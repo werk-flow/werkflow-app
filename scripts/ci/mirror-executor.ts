@@ -112,7 +112,7 @@ function archivedFile(bytes: Uint8Array, name: string): string {
 }
 
 /** Writes a result in place of the one at `path`, so a reader never sees half of it. */
-function replaceResult(path: string, result: CiResult): void {
+export function replaceResult(path: string, result: CiResult): void {
   writeFileSync(`${path}.tmp`, `${JSON.stringify(result, null, 2)}\n`);
   renameSync(`${path}.tmp`, path);
 }

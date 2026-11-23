@@ -1,0 +1,22 @@
+{
+  "machine": "mac",
+  "repository": "werk-flow/werkflow-app",
+  "trustedCheckout": "/Users/ci/ci-runner/werkflow-app",
+  "stateDir": "/Users/ci/ci-runner/state",
+  "windowsFile": "/Users/ci/ci-runner/windows.json",
+  "appKeyFile": "/Users/ci/ci-runner/ci-app.pem",
+  "slot": {
+    "prefix": [],
+    "dockerHost": null,
+    "socket": "/var/run/docker.sock",
+    "root": "/Users/ci/ci-runner/slot",
+    "image": "werkflow-ci:COMMIT",
+    "containerUser": "image"
+  },
+  "sizes": {
+    "4/6": { "resize": ["sh", "-c", "colima stop && colima start --cpu 4 --memory 6"] },
+    "8/8": { "resize": ["sh", "-c", "colima stop && colima start --cpu 8 --memory 8"] }
+  },
+  "seedSeconds": { "full": 1500, "selected": 1200 },
+  "leaseTtlSeconds": 600
+}

@@ -37,6 +37,37 @@ The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-pl
 
 A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses. A lease is read with `git fetch` and swapped with `git push --force-with-lease`, so it costs no GitHub API call.
 
+## Run CI on the owner's machines
+
+The machine runner is CI's `local` profile ([decision 0011](../decisions/0011-ci-profiles.md)); [testing.md](testing.md#ci) owns what a run tests. `scripts/ci/machine-runner.ts` is a user service on the MacBook and on the PC. It runs from a trusted checkout at a reviewed commit and holds the credentials: its `gh` login and the CI App's key. Each job runs in a container of `ci/image` on the machine's slot (`scripts/ci/container-executor.ts`) and gets inputs only as files. The machine's window file says when it runs and at which size. The runner admits a run that ends before the window turns `off`, and it stops a run at that edge with its `Check` cancelled. Alerts go to the `CI alert: machine runner <machine>` issue ([Failures](testing.md#failures)).
+
+### Install or move the runner
+
+Install the runner, or move it to a new reviewed commit `<commit>`. Run each step on the machine, in a shell with the owner's `gh` login:
+
+1. Copy `ci/machines/<machine>.example.json` and `<machine>.windows.example.json` to `~/ci-runner/`. Set the paths to your home and `slot.image` to `werkflow-ci:<commit>`. Put the CI App's private key at `appKeyFile` with mode 600.
+2. Check out the commit and build the image from it:
+
+   ```bash
+   git clone https://github.com/werk-flow/werkflow-app.git ~/ci-runner/werkflow-app   # first install only
+   cd ~/ci-runner/werkflow-app && git fetch origin && git checkout --detach <commit> && bun install --frozen-lockfile
+   ```
+
+   - **Mac:** `docker build --build-arg TRUSTED_COMMIT=$(git rev-parse HEAD) -t werkflow-ci:<commit> ci/image`
+   - **PC** (the agents' distribution; the slot is user `cirunner` of `werkflow-ci`):
+
+     ```bash
+     git archive HEAD ci/image | wsl.exe -d werkflow-ci -u cirunner -- sh -c 'rm -rf ~/ci-image && mkdir -p ~/ci-image ~/ci && tar -x -C ~/ci-image'
+     wsl.exe -d werkflow-ci -u cirunner -- env DOCKER_HOST=unix:///run/user/1002/docker.sock docker build --build-arg TRUSTED_COMMIT=$(git rev-parse HEAD) -t werkflow-ci:<commit> /home/cirunner/ci-image/ci/image
+     ```
+
+3. Start the service:
+   - **Mac:** a launchd agent `~/Library/LaunchAgents/app.werkflow.ci-runner.plist` whose `ProgramArguments` are `bun`'s absolute path, `~/ci-runner/werkflow-app/scripts/ci/machine-runner.ts`, `--config` and `~/ci-runner/mac.json`, with `KeepAlive` and `RunAtLoad` true and `StandardOutPath` `~/ci-runner/runner.log`. Load it with `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/app.werkflow.ci-runner.plist`; after a move, `launchctl kickstart -k gui/$(id -u)/app.werkflow.ci-runner`.
+   - **PC:** `cd ~/ci-runner/werkflow-app && setsid nohup bun scripts/ci/machine-runner.ts --config ~/ci-runner/pc.json >> ~/ci-runner/runner.log 2>&1 < /dev/null &`. Before a move, stop it with `pkill -TERM -f scripts/ci/machine-runner.ts`; its run ends as cancelled.
+4. Read `~/ci-runner/runner.log`: the first line names the machine, its generation and the commit.
+
+A restart takes a new generation: the runner cancels the older generation's run and stops its job containers before it claims anything.
+
 ## Keep the agents moving
 
 T3 Code wakes a thread when something it watches changes: a check or comment on a pull request it watches, an answered question, a finished child. It fails in known ways. A merge ends the watch without a wake. A watch stops after 10 comment-only wakes. A child's hand-back after its own review round never reaches its lead.

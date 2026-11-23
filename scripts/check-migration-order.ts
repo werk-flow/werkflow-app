@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { snapshotOf } from '../lib/testing/ci/github-snapshot';
 import {
   migrationOrderProblems,
   openPullRequestMigrations,
@@ -12,7 +13,9 @@ import { CHANGED_CHECK_BASE } from '../lib/testing/runner/changed-check';
 const repositoryRoot = resolve(import.meta.dir, '..');
 const mainRef =
   process.env.GITHUB_ACTIONS === 'true' ? 'HEAD^1' : process.env.CI_BASE_SHA || CHANGED_CHECK_BASE;
-const openPullRequests = openPullRequestMigrations(repositoryRoot);
+// A CI job without a token reads the open PRs' migrations from the snapshot its runner staged.
+const snapshot = snapshotOf(process.env);
+const openPullRequests = snapshot ? snapshot.openMigrations : openPullRequestMigrations(repositoryRoot);
 // The open pull requests only warn early: main's history, which the merge queue checks, holds the
 // version of every pull request merged or queued before this one.
 if (openPullRequests === null)

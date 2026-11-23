@@ -95,10 +95,10 @@ After a failed release run, pass every failed group with `--group` before the ne
 - **Reuse and Check.** A push whose exact landing an integration run passed runs no job; a CI runner's pass stands for its job on an identical tree and base (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
 - **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release, and on `main` when `bun scripts/ci/full-run.ts due` says so. `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
 - **Shards.** Groups pack longest-first by recorded duration (`group-durations.json`), visual groups apart, in at most `MAX_SHARDS`; component areas in two.
-- **Stand-in.** `scripts/ci/run-commit.ts` runs a commit (mirror: `CI_EXECUTOR=mirror`), `scripts/ci/queue.ts` the queue.
+- **Stand-in.** `scripts/ci/run-commit.ts` runs a commit (`CI_EXECUTOR=mirror` or [`container`](machine-setup.md#run-ci-on-the-owners-machines)), `scripts/ci/queue.ts` the queue.
 - **Queue.** `health.yml`'s weekly `CI queue` job fails on a p90 runner wait over its ceiling (`.github/scripts/ci-queue.sh`).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
-- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Reruns of failed jobs follow the local retry rules.
+- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Failed-job reruns follow the local retry rules.
 
 ## Commands
 

@@ -33,6 +33,8 @@ import {
   type RunCommitOutcome,
   runVariables,
 } from '../../lib/testing/ci/run-commit';
+import { slotConfigSchema } from '../../lib/testing/ci/container-slot';
+import { containerExecutors, githubSnapshot, slotShell } from './container-executor';
 import { mirrorExecutors } from './mirror-executor';
 import { githubMirrorApi } from './mirror-api';
 import { mirrorIdentity, pushMirrorCommit } from './mirror-push';
@@ -46,12 +48,13 @@ import { repository as ownRepository } from './run';
 // The executor (Executors in lib/testing/ci/run-commit.ts) decides where jobs run. With
 // CI_EXECUTOR=mirror it is the CI mirror (scripts/ci/mirror-executor.ts, which names its variables):
 // every job but Plan and Check runs on GitHub's machines in a repository of its own, so the run may
-// keep a ledger, come from the queue and post its Check. Otherwise it is the process executor
-// (scripts/ci/process-executor.ts), which runs every job as this user and isolates nothing, so it
-// serves local and test runs only: run-commit refuses it whenever the run has a ledger, comes from
-// the merge queue (--runner, --main-runner), posts its Check or holds a credential
-// (isolationProblem). The Mac's runner keeps calling scripts/ci/prepare.ts and scripts/ci/job.ts per
-// job in its own container.
+// keep a ledger, come from the queue and post its Check. With CI_EXECUTOR=container every job, Plan
+// and Check included, runs in a container of its own on the owner's machine's slot
+// (scripts/ci/container-executor.ts), which isolates as the mirror does. Otherwise it is the process
+// executor (scripts/ci/process-executor.ts), which runs every job as this user and isolates nothing,
+// so it serves local and test runs only: run-commit refuses it whenever the run has a ledger, comes
+// from the merge queue (--runner, --main-runner), posts its Check or holds a credential
+// (isolationProblem).
 // Usage: bun scripts/ci/run-commit.ts   (executable: it takes no arguments)
 // It reads plain environment variables only. scripts/ci/job.ts names the run's variables it passes to
 // every job: CI_EVENT, CI_RESULTS_DIR, CI_RUN_URL, CI_BASE_SHA or CI_FULL_REASON, CI_PRODUCER, CI_PRS,
@@ -77,7 +80,11 @@ import { repository as ownRepository } from './run';
 //                   mirror's own cap holds every run of the host together. The run reads the profile
 //                   from the switch on `origin`'s main once it fetched `origin`, also when
 //                   CI_PARALLEL is set, and refuses when main names none.
-//   CI_EXECUTOR     `mirror` for the CI mirror; unset for the process executor.
+//   CI_EXECUTOR     `mirror` for the CI mirror, `container` for the container slot of the owner's
+//                   machines (scripts/ci/container-executor.ts); unset for the process executor.
+//   CI_CONTAINER_SLOT  container: the slot's configuration as JSON (slotConfigSchema in
+//                   lib/testing/ci/container-slot.ts); scripts/ci/machine-runner.ts passes its own.
+//   CI_CONTAINER_GENERATION  container: the machine runner's generation, which labels each job's container.
 //   CI_DEDICATED_HOST=1  This host's Docker serves CI alone: a job's stack replaces a running one.
 //   CI_PUBLISHER    An executable that runs `bun scripts/ci/publish-check.ts <start|finish>` from the
 //                   trusted copy as the CI App's user; an isolating executor only. It gets CI_RUN_URL,
@@ -444,6 +451,30 @@ function onMirror(
   });
 }
 
+/** The container executor of the owner's machines from this process's environment (scripts/ci/container-executor.ts). */
+function onContainers(
+  setup: ExecutorSetup,
+  environment: Readonly<Record<string, string | undefined>>,
+): Executors {
+  const generation = Number(environment.CI_CONTAINER_GENERATION);
+  if (!environment.CI_CONTAINER_SLOT || !Number.isSafeInteger(generation) || generation < 1)
+    throw new Error('CI_EXECUTOR=container needs CI_CONTAINER_SLOT and CI_CONTAINER_GENERATION.');
+  const slot = slotConfigSchema.parse(JSON.parse(environment.CI_CONTAINER_SLOT));
+  return containerExecutors(setup, {
+    slot,
+    shell: slotShell(slot),
+    generation,
+    snapshot: async (task) => githubSnapshot(setup.source, setup.commit, task),
+    sleep: (ms, signal) =>
+      new Promise((resolveSleep) => {
+        const timer = setTimeout(resolveSleep, ms);
+        signal.addEventListener('abort', () => (clearTimeout(timer), resolveSleep(undefined)), {
+          once: true,
+        });
+      }),
+  });
+}
+
 if (import.meta.main) {
   const controller = new AbortController();
   for (const name of ['SIGINT', 'SIGTERM'] as const)
@@ -459,6 +490,7 @@ if (import.meta.main) {
       environment,
       executors: (setup) => {
         if (environment.CI_EXECUTOR === 'mirror') return onMirror(setup, environment);
+        if (environment.CI_EXECUTOR === 'container') return onContainers(setup, environment);
         if (environment.CI_EXECUTOR)
           throw new Error(`CI_EXECUTOR ${environment.CI_EXECUTOR} is no executor.`);
         return processExecutors(setup);

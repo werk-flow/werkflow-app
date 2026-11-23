@@ -1,0 +1,18 @@
+{
+  "timezone": "Europe/Berlin",
+  "standing": [
+    {
+      "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      "from": "20:00",
+      "to": "05:00",
+      "size": "8/8"
+    },
+    {
+      "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      "from": "05:00",
+      "to": "20:00",
+      "size": "4/6"
+    }
+  ],
+  "exceptions": []
+}

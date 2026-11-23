@@ -34,6 +34,8 @@ import {
 //                  passes its lines to the body. Without it, nothing is passed on.
 //   GITHUB_OUTPUT  playwright: `missing` and `key` of Chromium's system packages, for the cache.
 //   CI_EVENT, CI_PRS, CI_BASE_SHA, GITHUB_REPOSITORY  approval (scripts/ci/job.ts names them).
+//   WERKFLOW_GITHUB_SNAPSHOT  approval: the labels to read in place of GitHub's, for a job without a
+//                  token (lib/testing/ci/github-snapshot.ts). A PR the snapshot lacks fails the step.
 //   SIBLING_REPOSITORIES_TOKEN  siblings: reads the private werkflow-business. Without it the clone
 //                  is left out and docs:check says so. Only the clone sees it, never the job body. A
 //                  runner off GitHub runs this step from its trusted copy before the job's own steps,
@@ -164,29 +166,26 @@ async function approval(): Promise<void> {
   if (event !== 'pr' && event !== 'integration') return;
   // After `install`: the parser needs the dependencies.
   const { pullRequestsOf } = await import('../../lib/testing/ci/measurement');
+  const { snapshotOf, squashedPullRequests } = await import('../../lib/testing/ci/github-snapshot');
+  // A job in a container of the owner's machines holds no token: it reads the snapshot the
+  // trusted side staged (lib/testing/ci/github-snapshot.ts).
+  const snapshot = snapshotOf(process.env);
   const named = pullRequestsOf(process.env.CI_PRS);
   if ('unreadable' in named) fail(named.unreadable);
   const squashed =
     event === 'integration' && process.env.CI_BASE_SHA
-      ? (
+      ? squashedPullRequests(
           read('git', ['log', '--format=%s', `${process.env.CI_BASE_SHA}..HEAD`]) ??
-          fail('The queue commits cannot be read.')
+            fail('The queue commits cannot be read.'),
         )
-          .split('\n')
-          .flatMap((subject) => /\(#([0-9]+)\)$/.exec(subject)?.[1] ?? [])
-          .map(Number)
       : [];
   const repository = process.env.GITHUB_REPOSITORY;
   let approved = false;
   for (const pr of [...new Set([...named, ...squashed])].sort((left, right) => left - right)) {
     if (!repository) fail('The approval needs GITHUB_REPOSITORY.');
-    const labels = read('gh', [
-      'api',
-      '--paginate',
-      `repos/${repository}/issues/${pr}/labels`,
-      '--jq',
-      '.[].name',
-    ]);
+    const labels = snapshot
+      ? snapshot.labels[String(pr)]?.join('\n')
+      : read('gh', ['api', '--paginate', `repos/${repository}/issues/${pr}/labels`, '--jq', '.[].name']);
     if (labels === undefined) fail(`The labels of #${pr} cannot be read.`);
     if (labels.split('\n').includes('approved: list growth')) approved = true;
   }
