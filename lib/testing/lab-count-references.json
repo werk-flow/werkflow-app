@@ -2907,7 +2907,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 14, "tolerance": 0 },
+        "requests": { "reference": 10, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -2946,8 +2946,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 5, "tolerance": 0 },
-          "encodedBytes": { "reference": 41344, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 6, "tolerance": 0 },
+          "encodedBytes": { "reference": 57595, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -3247,6 +3247,32 @@
           "to": { "reference": 14, "tolerance": 0 },
           "runKeys": ["2026-11-21T055139544Z-a5f23c"],
           "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the Aufgaben page's code and the Zeiterfassung prefetch's date picker no longer come with the layout's start-up, so opening Aufgaben fetches their chunks (4 to 10 scripts); no organization switch is involved; start-up 66 KB gzip lighter for every role"
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 14, "tolerance": 0 },
+          "to": { "reference": 10, "tolerance": 0 },
+          "runKeys": ["2026-11-23T052851921Z-d9c19d"],
+          "reason": null
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 5, "tolerance": 0 },
+            "encodedBytes": { "reference": 41344, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 6, "tolerance": 0 },
+            "encodedBytes": { "reference": 57595, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-23T052851921Z-d9c19d"],
+          "reason": "Merged with main 027ece04 (#560): Aufgaben's code no longer comes with the start-up, and the office start on the dashboard already loaded the overview's code, so opening Aufgaben fetches 6 scripts (57,595 B) where main measures 10 (115,236 B) in the same session"
         }
       ]
     },
