@@ -38,6 +38,8 @@ export type Fake = {
   /** The newest `Queue` on a head: success when the queue marked it, failure once withdrawn. */
   queueOn: (head: string) => 'success' | 'failure' | undefined;
   main: () => MainCommit;
+  /** Moves main to a new commit of `tree`, as another merge on GitHub would. */
+  pushMain: (tree: string) => void;
   state: () => QueueState;
 };
 
@@ -251,6 +253,7 @@ export function fakeWorld(pulls: QueuedPull[], options: WorldOptions = {}): Fake
     ...record.seen,
     queueOn: publisher.queueOn,
     main,
+    pushMain,
     state: () => saved,
   };
 }

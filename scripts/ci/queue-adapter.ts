@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, w
 import { join } from 'node:path';
 import { z } from 'zod';
 import { appCheckStateOf } from '../../lib/testing/ci/check-app';
+import { MAIN_REFSPEC } from '../../lib/testing/ci/profiles';
 import { mainEnvironment, type MainFollowUp, mainFollowUpSchema } from '../../lib/testing/ci/queue-main-run';
 import {
   INTEGRATION_ATTEMPT,
@@ -299,7 +300,8 @@ export function createQueueAdapter(options: {
   };
   return {
     main: async () => {
-      git('fetch', '--quiet', '--no-tags', 'origin', `+refs/heads/main:${QUEUE_REFS}/main`);
+      // origin/main too, in the same fetch: the CI profile switch is read there (lib/testing/ci/profiles.ts).
+      git('fetch', '--quiet', '--no-tags', 'origin', `+refs/heads/main:${QUEUE_REFS}/main`, MAIN_REFSPEC);
       const [commit = '', ...parents] = git('rev-list', '--parents', '-n', '1', `${QUEUE_REFS}/main`).split(
         ' ',
       );

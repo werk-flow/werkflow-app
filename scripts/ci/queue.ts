@@ -58,7 +58,9 @@
 //                   copy as the App's user, with the CI_RUN_URL and CI_COMMIT the queue passes.
 //                   `Queue` is then the App's check run, and a PR's `Check` only the App's. Before the
 //                   App exists, `Queue` is a commit status of `gh` and `Check` the commit status.
-//   --max-batch     The most PRs in a batch, default 4. 1 while the ruleset requires up-to-date branches.
+//   --max-batch     The most PRs in a batch, 1 to 4; default the active CI profile's `maxBatch`
+//                   (lib/testing/ci/profiles.ts), read from the switch on main as the tick fetched
+//                   it, also when this flag is set. 1 while the ruleset requires up-to-date branches.
 //   --dry-run       Builds, tests and decides, but never sets a status, merges, comments or
 //                   turns auto-merge off. --prs names the PRs to rehearse with, in order.
 // Exit 0: the tick decided (landed, named a failing PR, nothing queued, superseded, stale base, a
@@ -81,7 +83,8 @@ import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { CHECK_APP_CONFIG, readCheckApp } from '../../lib/testing/ci/check-app';
-import { MAX_BATCH, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
+import { activeProfile } from '../../lib/testing/ci/profiles';
+import { MAX_BATCH, mainWithSwitch, needsAttention, runQueueTick } from '../../lib/testing/ci/queue';
 import { mainFollowUp, mainRunOf, type MergeAnswer } from '../../lib/testing/ci/queue-main-run';
 import {
   createQueueAdapter,
@@ -109,7 +112,7 @@ const { values } = (() => {
         'main-runner': { type: 'string' },
         'work-dir': { type: 'string' },
         'run-url-base': { type: 'string' },
-        'max-batch': { type: 'string', default: String(MAX_BATCH) },
+        'max-batch': { type: 'string' },
         'dry-run': { type: 'boolean', default: false },
         prs: { type: 'string' },
         ledger: { type: 'string' },
@@ -120,12 +123,12 @@ const { values } = (() => {
     return refuse(message(error));
   }
 })();
-const maxBatch = Number(values['max-batch']);
 const numbers = values.prs?.split(',');
 if (!values.runner || !values['work-dir'] || !values['run-url-base'])
   refuse('The queue needs --runner, --work-dir and --run-url-base.');
 // Decimal digits only: Number() reads `0x10` as 16 and `1e1` as 10.
-if (!/^[1-9][0-9]*$/.test(values['max-batch']) || maxBatch > MAX_BATCH)
+const maxBatchFlag = values['max-batch'];
+if (maxBatchFlag !== undefined && (!/^[1-9][0-9]*$/.test(maxBatchFlag) || Number(maxBatchFlag) > MAX_BATCH))
   refuse(`--max-batch takes 1 to ${MAX_BATCH}.`);
 if (numbers && (!values['dry-run'] || numbers.some((number) => !/^[1-9][0-9]{0,8}$/.test(number))))
   refuse('--prs takes PR numbers, and only with --dry-run: a live tick lands only queued PRs.');
@@ -218,8 +221,12 @@ try {
     console.error(unpaid);
     process.exitCode = 2;
   } else {
+    // One snapshot of main for the switch and the tick's base: every clone that ticks reads one
+    // answer, and a missing or wrong switch fails the tick before it lands anything.
+    const { base, read } = await mainWithSwitch(() => adapter.main(), activeProfile);
     const outcome = await runQueueTick(adapter, {
-      maxBatch,
+      base,
+      maxBatch: maxBatchFlag === undefined ? read.profile.maxBatch : Number(maxBatchFlag),
       dryRun: values['dry-run'],
       ...(only ? { only } : {}),
     });

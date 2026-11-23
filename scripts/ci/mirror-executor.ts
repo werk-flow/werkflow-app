@@ -59,6 +59,7 @@ import {
   type Executors,
   type ExecutorSetup,
   type ExecutorTask,
+  startDeferral,
   unitName,
 } from '../../lib/testing/ci/run-commit';
 import { plannedGroups } from '../../lib/testing/ci/run-plan';
@@ -357,6 +358,13 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
     const name = unitName(task.unit);
     const held = await slot(signal);
     if (!held) return { exitCode: null, detail: 'stopped before a mirror slot was free' };
+    // The wait for a slot may have run into the midnight start window: nothing is pushed, and the
+    // slot passes on at once.
+    const deferred = startDeferral(task.unit, options.now());
+    if (deferred) {
+      held.release();
+      return deferred;
+    }
     /** The push, once tried: from then on a run may go on the mirror until it is known ended. */
     let pushed: { branch: string; commit: string; at: number } | undefined;
     let known: MirrorRun | undefined;
@@ -389,6 +397,7 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       // Renamed into place, so a holder that dies mid-write never leaves an unreadable record.
       writeFileSync(`${held.record}.tmp`, JSON.stringify({ branch, commit: built.commit, at: pushed.at }));
       renameSync(`${held.record}.tmp`, held.record);
+      // A job GitHub queues past the cutoff is not deferred: a fleet executor must check at its own start.
       const push = pushes.then(() => options.push(built.commit, branch));
       pushes = push.catch(() => undefined);
       await push;
@@ -503,7 +512,9 @@ export function mirrorExecutors(setup: ExecutorSetup, options: MirrorOptions): E
       ]);
       if (!host) {
         if (tree.result) replaceResult(target, tree.result);
-        return { exitCode: tree.exitCode, detail: tree.detail };
+        return tree.retryAt === undefined
+          ? { exitCode: tree.exitCode, detail: tree.detail }
+          : { exitCode: null, detail: tree.detail, retryAt: tree.retryAt };
       }
       const detail = `${tree.detail}; host part: ${host.detail}`;
       if (!tree.result || !host.result)

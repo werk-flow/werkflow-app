@@ -10,7 +10,7 @@ Start with `AGENTS.md`, then read only the entries whose condition applies. A ta
 - [data-model.md](technical/data-model.md): tenant boundary, roles, concept ownership, history rules.
 - [environments.md](technical/environments.md): Supabase, env files, R2, credentials, migrations, worktrees, releases.
 - [machine-setup.md](technical/machine-setup.md): new machines, background jobs.
-- [security.md](technical/security.md): a new route handler, Server Action, table, privileged function, storage path or provider setting.
+- [security.md](technical/security.md): a new route, Server Action, table, privileged function, storage path or provider setting.
 - [realtime-and-caching.md](technical/realtime-and-caching.md): cache tags, Realtime, list readers, freshness.
 - [performance.md](technical/performance.md): daily journeys, lab tables, skeletons, faster flows.
 - [document-storage-and-access.md](technical/document-storage-and-access.md): document bytes, signed URLs, storage paths, access classes, trash, versions.
@@ -20,7 +20,7 @@ Start with `AGENTS.md`, then read only the entries whose condition applies. A ta
 - [integrated-test-state.md](technical/integrated-test-state.md): seeding test state, fixture dates, stable browser steps.
 - [coderabbit.md](technical/coderabbit.md): review levels, babysitting and merging a PR, review findings.
 - [recovery-and-incidents.md](technical/recovery-and-incidents.md): something lost, leaked or down.
-- [problem-report-scrubbing.md](technical/problem-report-scrubbing.md): what may leave WerkFlow in a report.
+- [problem-report-scrubbing.md](technical/problem-report-scrubbing.md): what a report may carry.
 - [standards-audit.md](technical/standards-audit.md): rendered design acceptance, wave audits.
 - [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md): planned Tier 1 and 2 conversions.
 
@@ -56,7 +56,8 @@ Read the spec you change and those it touches. Planned scope lives in `werk-flow
 - [0007](decisions/0007-independent-test-groups.md): independent test groups.
 - [0008](decisions/0008-development-workflow.md): release by push, superseded by 0009.
 - [0009](decisions/0009-pull-requests-and-ci.md): a PR per task, `Check` as the gate.
-- [0010](decisions/0010-offline-field-sync-contract.md): offline field sync contract, iOS limits.
+- [0010](decisions/0010-offline-field-sync-contract.md): offline field sync, iOS limits.
+- [0011](decisions/0011-ci-profiles.md): CI profiles.
 
 ## How to work
 
