@@ -3,7 +3,7 @@
 import { ParkingCircle } from 'lucide-react';
 import { useState } from 'react';
 
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import type { LiveClockState } from '@/lib/time-tracking/types';

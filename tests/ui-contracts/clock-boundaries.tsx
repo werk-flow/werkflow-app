@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ClockStateProvider, useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
+import { ClockStateProvider } from '@/components/clock-state-provider';
 import { ClockFAB } from '@/components/clock-fab';
 import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';

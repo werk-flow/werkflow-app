@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFEmbeddedPage, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 
@@ -65,13 +66,15 @@ type FlowItem = {
 
 type PlacedPage = { header: number | null; items: Array<{ item: FlowItem; top: number }> };
 
-// Read once per server instance; `new URL(…, import.meta.url)` lets the bundler trace the files.
+// Read once per server instance, by a path from the app root. In a Server Action, Turbopack's
+// production build turns `new URL(…, import.meta.url)` into an object readFile refuses
+// (ERR_INVALID_ARG_TYPE); the build traces the joined path (audit:wave-3:document-pdfs).
 let fontBytes: Promise<[Uint8Array, Uint8Array]> | null = null;
 
 function loadFontBytes(): Promise<[Uint8Array, Uint8Array]> {
   fontBytes ??= Promise.all([
-    readFile(new URL('./fonts/Geist-Regular.ttf', import.meta.url)),
-    readFile(new URL('./fonts/Geist-SemiBold.ttf', import.meta.url)),
+    readFile(join(process.cwd(), 'lib/document-rendering/fonts/Geist-Regular.ttf')),
+    readFile(join(process.cwd(), 'lib/document-rendering/fonts/Geist-SemiBold.ttf')),
   ]).catch((error: unknown) => {
     fontBytes = null;
     throw error;
