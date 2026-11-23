@@ -11,6 +11,7 @@ import {
   REQUEST_URGENCY_ORDER,
   REQUEST_ATTACHED_LABEL,
   describeAttachedRequestEvent,
+  describeConversionToOffer,
   isCallbackOverdue,
   requestEquipmentOptions,
   requestUrgencyToJobPriority,
@@ -48,6 +49,7 @@ const requestRow: ClientRequestRow = {
   closed_at: '2026-10-02T08:00:00.000Z',
   converted_job_id: 'job-1',
   converted_project_id: 'project-1',
+  converted_offer_id: null,
   converted_by: 'user-4',
   converted_at: '2026-10-03T08:00:00.000Z',
   created_by: 'user-1',
@@ -118,6 +120,7 @@ describe('toClientRequest', () => {
       closedAt: '2026-10-02T08:00:00.000Z',
       convertedJobId: 'job-1',
       convertedProjectId: 'project-1',
+      convertedOfferId: null,
       convertedBy: 'user-4',
       convertedAt: '2026-10-03T08:00:00.000Z',
       createdBy: 'user-1',
@@ -215,5 +218,33 @@ describe('a request added to existing work names that work and links to it', () 
       });
     }
     expect(REQUEST_ATTACHED_LABEL).toBe('Zu bestehender Arbeit hinzugefügt');
+  });
+});
+
+describe('a request converted into an offer names that offer and links to it', () => {
+  test('the offer reads by its number and opens its page by id', () => {
+    expect(
+      describeConversionToOffer({
+        target: 'offer',
+        offerId: '41932400-0000-0000-0000-000000000090',
+        offerNumber: 'ANG-2026-001',
+        attemptKey: '41932400-0000-0000-0000-0000000000e1',
+      }),
+    ).toEqual({
+      label: 'In Angebot ANG-2026-001 umgewandelt',
+      href: '/angebote/41932400-0000-0000-0000-000000000090',
+    });
+  });
+
+  test('a conversion into work, whose number can change, or an unreadable payload names nothing', () => {
+    for (const payload of [
+      null,
+      {},
+      { target: 'offer', offerId: 'offer-1' },
+      { target: 'job', jobId: 'job-1', jobNumber: 'A-2026-0042' },
+      { target: 'project', projectId: 'project-1', projectNumber: 'P-2026-0007' },
+    ]) {
+      expect(describeConversionToOffer(payload)).toBeNull();
+    }
   });
 });

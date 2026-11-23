@@ -163,7 +163,7 @@ test('a timed schedule only the conductor fires has no cron of its own, so its w
 
 const eventSchema = z.strictObject({
   workflows: z.array(z.string()).readonly().optional(),
-  branches: z.array(z.string()).readonly(),
+  branches: z.array(z.string()).readonly().optional(),
   types: z.array(z.string()).readonly(),
 });
 
