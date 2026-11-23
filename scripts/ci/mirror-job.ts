@@ -2,21 +2,17 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CI_JOBS } from '../../lib/testing/ci/dag';
-import { mirrorDeferral, parseMirrorMessage } from '../../lib/testing/ci/mirror-message';
+import { parseMirrorMessage } from '../../lib/testing/ci/mirror-message';
 
 // The first step of a CI mirror job (ci/mirror/workflow.yml), before any install: it reads the run
 // from the commit's message (lib/testing/ci/mirror-message.ts), writes the run's Plan as plan.json
 // into the job's results directory, and passes the run's variables to the later steps through
 // GITHUB_ENV, as scripts/ci/job.ts takes them. The job's part is `tree`: the groups that read
-// outside the tree run on the orchestrator's host. It imports no package, only Node's modules and
-// lib/testing/ci/mirror-message.ts with what that imports.
-// A Browser job that starts where its timeout could reach the midnight start window, as after GitHub
-// queued it past the cutoff, writes its deferral in place of its result and fails, so no later step
-// runs; the orchestrator reads the deferral and starts the shard again once the window closes.
+// outside the tree run on the orchestrator's host. It imports nothing outside Node's modules and
+// lib/testing/ci/dag.ts and mirror-message.ts.
 // Usage: bun scripts/ci/mirror-job.ts <job>
 // It reads GITHUB_ENV, GITHUB_OUTPUT and RUNNER_TEMP, as GitHub Actions sets them, and writes the
 // step outputs `unit` (the job or shard, as the result's artifact is named) and `result` (its file).
-// MIRROR_JOB_NOW, tests only: the ISO time the midnight start rule reads in place of the clock.
 
 function fail(message: string): never {
   console.error(`::error title=Mirror job::${message}`);
@@ -37,17 +33,8 @@ if ((job === 'browser' || job === 'components') !== (run.shard !== null))
 
 const results = join(temporary, 'ci-results');
 mkdirSync(results, { recursive: true });
-const unit = run.shard === null ? job : `${job}-${run.shard}`;
-const outputs = `unit=${unit}\nresult=${join(results, `${unit}.json`)}\n`;
-const deferral = mirrorDeferral(job, new Date(process.env.MIRROR_JOB_NOW ?? Date.now()));
-if (deferral) {
-  writeFileSync(join(results, `${unit}.json`), deferral);
-  appendFileSync(outputFile, outputs);
-  fail(
-    `${unit} started where its timeout could reach the midnight start window (23:40 to 00:10 Berlin), so it runs nothing; the orchestrator starts it again once the window closes.`,
-  );
-}
 writeFileSync(join(results, 'plan.json'), `${JSON.stringify(run.plan, null, 2)}\n`);
+const unit = run.shard === null ? job : `${job}-${run.shard}`;
 const variables: Record<string, string> = {
   ...run.variables,
   CI_RESULTS_DIR: results,
@@ -60,5 +47,5 @@ appendFileSync(
     .map(([name, value]) => `${name}=${value}\n`)
     .join(''),
 );
-appendFileSync(outputFile, outputs);
+appendFileSync(outputFile, `unit=${unit}\nresult=${join(results, `${unit}.json`)}\n`);
 console.info(`[mirror] ${unit} of source commit ${run.source.commit}, tree ${run.source.tree}`);

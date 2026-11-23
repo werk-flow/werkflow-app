@@ -16,7 +16,7 @@ import { type Fake, fakeMirror as fakeMirrorOf, git, type Scenario } from '../fi
 import { planIdentityOf } from './check';
 import { partGroups } from './dag';
 import { HELD_WORKFLOWS, MIRROR_JOB_CAP, MIRROR_WORKFLOW, mirrorBranch } from './mirror';
-import { mirrorDeferral, parseMirrorMessage } from './mirror-message';
+import { parseMirrorMessage } from './mirror-message';
 import { type CiResult, type RunPlan, readResult, resultFileName } from './results';
 import type { Executors, ExecutorTask, Unit } from './run-commit';
 import { plannedGroups } from './run-plan';
@@ -635,48 +635,4 @@ test('a shard admitted at 22:54 whose mirror slot frees at 23:05 Berlin pushes n
   const ran = await executors.jobs.run(task(BROWSER), new AbortController().signal);
   expect(ran.exitCode, ran.detail).toBe(0);
   expect(readResult(join(results, 'browser-1.json'))).toMatchObject({ job: 'browser', status: 'passed' });
-});
-
-test('a mirror job that GitHub started at 23:41 Berlin defers to 00:10; a deferral the start rule does not back fails', async () => {
-  const deferredBy = (at: string): Scenario => ({
-    conclusion: 'failure',
-    files: (unit) => ({
-      [resultFileName(unit.job, unit.shard)]: mirrorDeferral('browser', new Date(at)) ?? '',
-    }),
-  });
-  // Pushed at 22:50, queued on GitHub, its job started at 23:41 and the run was read at 23:45.
-  let clock = Date.parse('2026-11-21T21:50:00Z');
-  const read = Date.parse('2026-11-21T22:45:00Z');
-  const mirror = fakeMirror({ ...deferredBy('2026-11-21T22:41:00Z'), running: () => clock < read });
-  const queued = executorsOf(mirror, MIRROR_JOB_CAP, () => undefined, RUN_KEY, {
-    now: () => clock,
-    sleep: async () => {
-      clock = read;
-    },
-  });
-  // A Browser job's own 45 min timeout: the mirror may hold it queued for 30 min beyond it.
-  const deferred = await queued.jobs.run(
-    { ...task(BROWSER), timeoutMs: 45 * 60_000 },
-    new AbortController().signal,
-  );
-  expect([deferred.exitCode, deferred.retryAt], deferred.detail).toEqual([null, CLOSES]);
-  expect(deferred.detail).toContain('the mirror job started at 2026-11-21T22:41:00.000Z');
-  expect(existsSync(join(results, 'browser-1.json'))).toBe(false);
-  // A tree that claims a deferral at noon, or at a time before its push, runs nothing and fails.
-  const noon = Date.parse('2026-11-21T11:00:00Z');
-  const forged = executorsOf(
-    fakeMirror({
-      conclusion: 'failure',
-      files: (unit) => ({
-        [resultFileName(unit.job, unit.shard)]: JSON.stringify({ deferredAt: '2026-11-21T10:00:00.000Z' }),
-      }),
-    }),
-    MIRROR_JOB_CAP,
-    () => undefined,
-    RUN_KEY,
-    { now: () => noon },
-  );
-  const refused = await forged.jobs.run(task(BROWSER), new AbortController().signal);
-  expect([refused.exitCode, refused.retryAt], refused.detail).toEqual([1, undefined]);
-  expect(refused.detail).toContain('is refused');
 });

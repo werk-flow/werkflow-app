@@ -1,10 +1,8 @@
 // The commit message of a CI mirror push (scripts/ci/mirror-executor.ts): which job or shard of
 // which run the mirror runs, on which source commit and tree, under which Plan. The orchestrator
 // writes it; scripts/ci/mirror-job.ts reads it on the mirror before any install, so this module
-// imports no package: only lib/testing/ci/dag.ts and the midnight start rule with its date modules.
-// Also the deferral a mirror Browser job leaves in place of its result when it starts too late.
+// imports nothing outside lib/testing/ci/dag.ts.
 import { CI_JOBS, type CiJob } from './dag';
-import { ciBrowserStartWaitMs } from '../runner/group-schedule';
 
 /** The message's first line; the run follows as one JSON line after a blank line. */
 const SUBJECT = 'CI mirror run';
@@ -97,26 +95,4 @@ export function parseMirrorMessage(text: string): MirrorRun | { problem: string 
     variables: taken,
     plan,
   };
-}
-
-/**
- * What a mirror Browser job writes in place of its result when it starts where its timeout could
- * reach the midnight start window (ciBrowserStartWaitMs), as after GitHub queued it past the cutoff:
- * when it checked. It then runs nothing (scripts/ci/mirror-job.ts). Undefined when the job may run.
- */
-export function mirrorDeferral(job: CiJob, now: Date): string | undefined {
-  if (job !== 'browser' || !ciBrowserStartWaitMs(now)) return undefined;
-  return `${JSON.stringify({ deferredAt: now.toISOString() })}\n`;
-}
-
-/** When a mirror job's deferral says it checked, or undefined for any other text. */
-export function parseMirrorDeferral(text: string): Date | undefined {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (!isRecord(parsed) || Object.keys(parsed).join() !== 'deferredAt') return undefined;
-    const at = typeof parsed.deferredAt === 'string' ? new Date(parsed.deferredAt) : undefined;
-    return at && !Number.isNaN(at.getTime()) ? at : undefined;
-  } catch {
-    return undefined;
-  }
 }

@@ -123,7 +123,7 @@ bun run test:audit:focused --grep "@ACCEPT <set>"                # acceptance ca
 
 A failed static gate, an input edited during the run, an interruption, or a failed changed-spec tier blocks later groups.
 
-Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree). Groups measuring freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin, as a group fixes its business date at start. The runner waits locally. In CI, `Midnight wait` holds shards from 22:25; run-commit and its executors start none from 22:54:50. A late shard is blocked (harness, `midnight start window`); rerun it after 00:10.
+Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree). Groups measuring freshness, readiness or a scenario run alone, even across worktrees. No browser group starts from 23:40 to 00:10 Berlin, as a group fixes its business date at start. The runner waits locally. In CI, `Midnight wait` holds shards a Fast and Browser timeout ahead; a later shard defers itself. Only a group still reaching the window is blocked (harness, `midnight start window`): rerun it.
 
 ## Specs
 

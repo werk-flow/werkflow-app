@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { processExecutors } from '../../../scripts/ci/process-executor';
 import { assertAppPortFree, workspacePorts } from '../runner/app-port';
+import { CI_BROWSER_JOB_TIMEOUT_MS, CI_JOB_STOP_GRACE_MS } from '../runner/group-schedule';
 import type { ExecutorTask } from './run-commit';
 
 let folder = '';
@@ -134,7 +135,6 @@ function groupListed(groupId: number): boolean {
 }
 
 afterEach(() => {
-  setSystemTime();
   for (const groupId of leftovers.splice(0)) {
     try {
       process.kill(-groupId, 'SIGKILL');
@@ -155,16 +155,23 @@ const recorded = (file: string): Record<string, string> =>
       .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
   );
 
-// The run's workspaces are <folder>/run, its trusted folder <folder>/trusted, the stack lock <folder>/stack.lock.
-const executors = () =>
-  processExecutors({
-    source,
-    commit,
-    workRoot: folder,
-    runKey: 'run',
-    replaceStack: false,
-    log: () => undefined,
-  });
+/** Noon Berlin, where the midnight start rule admits every job, whatever the wall clock reads. */
+const BERLIN_NOON = Date.parse('2026-11-21T11:00:00Z');
+
+// The run's workspaces are <folder>/run, its trusted folder <folder>/trusted, the stack lock
+// <folder>/stack.lock. The start rule reads `now`; cleanup waits read the real clock.
+const executors = (now: () => number = () => BERLIN_NOON) =>
+  processExecutors(
+    {
+      source,
+      commit,
+      workRoot: folder,
+      runKey: 'run',
+      replaceStack: false,
+      log: () => undefined,
+    },
+    now,
+  );
 
 /**
  * A job's checkout as a linked worktree of the source, made before the job runs: the executor keeps
@@ -181,8 +188,8 @@ function worktreeFor(task: ExecutorTask): string {
 }
 
 /** The run's job executor, every job in a worktree checkout. */
-const executor = () => {
-  const { jobs } = executors();
+const executor = (now?: () => number) => {
+  const { jobs } = executors(now);
   return {
     run: (given: ExecutorTask, signal: AbortSignal) => {
       worktreeFor(given);
@@ -478,11 +485,7 @@ test('a cleanup error after a command closed fails its job, and the command neve
   }
 });
 
-/** Noon Berlin, where the midnight start rule lets a browser shard start. */
-const BERLIN_NOON = new Date('2026-11-21T11:00:00Z');
-
 test("only a stack the job started is stopped, and the host's stack lock passes on", async () => {
-  setSystemTime(BERLIN_NOON);
   await executor().run(task('sql'), new AbortController().signal);
   expect(existsSync(join(folder, 'supabase.calls'))).toBe(false);
   await executor().run(task('browser', { STARTS_STACK: '1', CI_SHARD: '1' }), new AbortController().signal);
@@ -490,6 +493,9 @@ test("only a stack the job started is stopped, and the host's stack lock passes 
   expect(existsSync(join(folder, 'stack.lock'))).toBe(false);
   expect(recorded('job-browser.env').CI_STACK_STARTED).toBeUndefined();
 });
+
+/** 22:54:49.999 Berlin: the last instant the midnight start rule admits a browser shard. */
+const LAST_START = Date.parse('2026-11-21T21:54:49.999Z');
 
 test('a browser shard that gets the stack past the cutoff, stop grace included, defers to 00:10 and passes the stack on', async () => {
   const closes = Date.parse('2026-11-21T23:10:00Z');
@@ -499,16 +505,38 @@ test('a browser shard that gets the stack past the cutoff, stop grace included, 
   for (const at of ['2026-11-21T22:05:00Z', '2026-11-21T21:54:50Z']) {
     const dead = execFileSync('bash', ['-c', 'true & echo $!'], { encoding: 'utf8' }).trim();
     writeFileSync(join(folder, 'stack.lock'), dead);
-    setSystemTime(new Date(at));
-    const deferred = await executor().run(shard(), new AbortController().signal);
+    const deferred = await executor(() => Date.parse(at)).run(shard(), new AbortController().signal);
     expect([at, deferred.exitCode, deferred.retryAt], deferred.detail).toEqual([at, null, closes]);
     expect(existsSync(join(folder, 'stack.lock')), at).toBe(false);
     expect(existsSync(join(folder, 'prepare-browser.env')), at).toBe(false);
   }
   // A millisecond earlier, the timeout and the grace end before 23:40: the shard runs.
-  setSystemTime(new Date('2026-11-21T21:54:49.999Z'));
-  const ran = await executor().run(shard(), new AbortController().signal);
+  const ran = await executor(() => LAST_START).run(shard(), new AbortController().signal);
   expect(ran.exitCode, ran.detail).toBe(0);
+});
+
+test('a shard started at the last allowed instant is stopped at that start plus its timeout, however long arming took', async () => {
+  // Its timeout and stop grace end before 23:40 Berlin.
+  expect(LAST_START + CI_BROWSER_JOB_TIMEOUT_MS + CI_JOB_STOP_GRACE_MS).toBeLessThan(
+    Date.parse('2026-11-21T22:40:00Z'),
+  );
+  // The start is the first read once the shard holds the stack; every later read finds the whole
+  // timeout spent arming it.
+  let sampled = false;
+  const now = () => {
+    if (!existsSync(join(folder, 'stack.lock')) || !sampled) {
+      sampled = existsSync(join(folder, 'stack.lock'));
+      return LAST_START;
+    }
+    return LAST_START + CI_BROWSER_JOB_TIMEOUT_MS;
+  };
+  const run = await executor(now).run(
+    { ...shard(1, {}), timeoutMs: CI_BROWSER_JOB_TIMEOUT_MS },
+    new AbortController().signal,
+  );
+  expect([run.exitCode, run.retryAt], run.detail).toEqual([null, undefined]);
+  expect(run.detail).toContain(', its timeout');
+  expect(existsSync(join(folder, 'prepare-browser.env'))).toBe(false);
 });
 
 test('a stack lock whose holder died is taken over, and the job runs', async () => {
