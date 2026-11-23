@@ -535,6 +535,7 @@ test('a shard started at the last allowed instant is stopped at that start plus 
     new AbortController().signal,
   );
   expect([run.exitCode, run.retryAt], run.detail).toEqual([null, undefined]);
+  expect(run.detail).toContain('not started: its deadline passed before its first step');
   expect(run.detail).toContain(', its timeout');
   expect(existsSync(join(folder, 'prepare-browser.env'))).toBe(false);
 });

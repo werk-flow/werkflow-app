@@ -380,10 +380,13 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
           release = undefined;
           return deferred;
         }
+        // A deadline already past starts nothing: a timeout of 0 fires only after the first spawn.
+        const remaining = began + task.timeoutMs - options.now();
         ended = AbortSignal.any([
           signal,
-          AbortSignal.timeout(Math.max(0, began + task.timeoutMs - options.now())),
+          remaining > 0 ? AbortSignal.timeout(remaining) : AbortSignal.abort(),
         ]);
+        if (remaining <= 0) return fail('not started: its deadline passed before its first step');
         const run = (
           command: string,
           args: readonly string[],
