@@ -61,7 +61,7 @@ const FIELD_SERVER_MESSAGES: Record<ConversionFieldId, readonly string[]> = {
     ERROR_MESSAGES.job_number_taken,
     ERROR_MESSAGES.project_number_taken,
   ],
-  'convert-client': [ERROR_MESSAGES.client_required, OFFER_CLIENT_REQUIRED, ERROR_MESSAGES.client_archived],
+  'convert-client': [ERROR_MESSAGES.client_required, ERROR_MESSAGES.client_archived],
 };
 
 /** The dialog's field checks in visual order, keyed by control id. */
@@ -73,12 +73,12 @@ function conversionFieldErrors(
 ): Record<ConversionFieldId, string | undefined> {
   const titleMessage =
     target === 'project' ? ERROR_MESSAGES.name_required : ERROR_MESSAGES.title_or_description_required;
-  const clientMessage = target === 'offer' ? OFFER_CLIENT_REQUIRED : ERROR_MESSAGES.client_required;
   const titleTooLong = target === 'offer' && title.trim().length > OFFER_TITLE_LIMIT;
   return {
     'convert-title': !title.trim() ? titleMessage : titleTooLong ? OFFER_TITLE_TOO_LONG : undefined,
     'convert-number': target === 'job' && !number.trim() ? ERROR_MESSAGES.job_number_required : undefined,
-    'convert-client': clientId ? undefined : clientMessage,
+    // An offer's customer is the request's, no input of the dialog: its absence shows above the actions.
+    'convert-client': clientId || target === 'offer' ? undefined : ERROR_MESSAGES.client_required,
   };
 }
 
