@@ -6,8 +6,9 @@ name: PROD inspection
 # advisors. By hand, the `auth` input also compares PROD's Auth configuration with DEV's, or copies
 # its mail fields to DEV (scripts/sync-dev-auth-from-prod.ts).
 #
-# PROD is read with the read-only token PROD_INSPECT_SUPABASE_TOKEN; DEV is read, and by the auth
-# sync written, with DEV_INSPECT_SUPABASE_TOKEN, scoped to DEV. Both are secrets of the environment
+# PROD is read with the read-only token PROD_INSPECT_SUPABASE_TOKEN, DEV with the read-only
+# DEV_INSPECT_SUPABASE_TOKEN; only `auth: apply` gets DEV_AUTH_SYNC_SUPABASE_TOKEN, which may write
+# DEV's Auth configuration. All three are secrets of the environment
 # `production`, which only main may use; the job never gets the repository's SUPABASE_ACCESS_TOKEN,
 # which release uses to deploy to PROD. No workstation holds a token that reaches PROD, so on a
 # workstation both scripts fail and name this workflow. Each secret reaches only the step that runs
@@ -83,10 +84,12 @@ jobs:
         env:
           PROD_INSPECT_SUPABASE_TOKEN: ${{ secrets.PROD_INSPECT_SUPABASE_TOKEN }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.DEV_INSPECT_SUPABASE_TOKEN }}
+          # Only an apply writes DEV, so only an apply gets the token that may.
+          DEV_AUTH_SYNC_SUPABASE_TOKEN: ${{ inputs.auth == 'apply' && secrets.DEV_AUTH_SYNC_SUPABASE_TOKEN || '' }}
           AUTH: ${{ inputs.auth }}
         run: |
           if test "$AUTH" = apply; then
-            bun scripts/sync-dev-auth-from-prod.ts --apply
+            SUPABASE_ACCESS_TOKEN="$DEV_AUTH_SYNC_SUPABASE_TOKEN" bun scripts/sync-dev-auth-from-prod.ts --apply
           else
             bun scripts/sync-dev-auth-from-prod.ts
           fi

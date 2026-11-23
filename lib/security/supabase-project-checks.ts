@@ -133,7 +133,8 @@ function needsReview(lint: AdvisorLint): boolean {
 
 /**
  * Advisor findings that no reviewed entry covers, and reviewed entries the advisor no longer reports.
- * `detail: false` leaves out the advisor's free-form text, for a log that is public (prod:inspect).
+ * `detail: false` prints only the level and lint name, for a log that is public (prod:inspect): the
+ * advisor's text and its cache key can carry a value, such as a storage bucket's id.
  */
 export function advisorProblems(
   lints: readonly AdvisorLint[],
@@ -147,7 +148,7 @@ export function advisorProblems(
     problems.push(
       detail
         ? `${lint.level} ${lint.name}: ${lint.detail.replaceAll('\\`', '`')} (${lint.cache_key})`
-        : `${lint.level} ${lint.name} (${lint.cache_key})`,
+        : `${lint.level} ${lint.name}`,
     );
   }
   for (const key of Object.keys(exceptions)) {

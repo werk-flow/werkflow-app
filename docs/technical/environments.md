@@ -45,7 +45,7 @@ This table is the one home of every deployment and workflow credential. No check
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging and release: deploy the edge functions; release reads DEV's ledger | 2027-10-26 | Supabase account settings, Access Tokens; `gh secret set`; revoke the old one. |
-| `PROD_INSPECT_SUPABASE_TOKEN`, `DEV_INSPECT_SUPABASE_TOKEN` | GitHub environment `production` | The [PROD inspection](#which-tool-reaches-what) | One year | Scoped. PROD: Database, Advisors, Auth config, read only. DEV: Database read, Auth config and Project settings write. `gh secret set --env production`. |
+| `PROD_INSPECT_SUPABASE_TOKEN`, `DEV_INSPECT_SUPABASE_TOKEN`, `DEV_AUTH_SYNC_SUPABASE_TOKEN` | Environment `production` | The [PROD inspection](#which-tool-reaches-what) | One year | Scoped, read only: PROD Database, Advisors, Auth config; DEV Database, Auth config. The third: DEV Auth config and Project settings write. `gh secret set --env production`. |
 | `werkflow-workstation-dev` | Workstations | DEV only | One year | [Machine setup](machine-setup.md#set-up-a-new-machine), step 2 |
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
 | `werkflow app prod-watch` | The owner's PC: `~/.config/werkflow/prod-watch.env`, mode 600 | The [production watcher](recovery-and-incidents.md#monitoring), which checks it | 2027-11-07 | Vercel Tokens: same name, team-scoped (`werkflows-projects`, also werkflow-website), 1 year; set the file's `VERCEL_TOKEN=`. |
@@ -105,7 +105,7 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 | claude.ai Supabase connector | no | no | Organization-wide, so Claude Code denies it (`deniedMcpServers` in `~/.claude/settings.json`). |
 | MCP server `supabase` | never | read and write | `https://mcp.supabase.com/mcp?project_ref=mbkkzuqjbdvzelqvuzcn` |
 | Supabase CLI (`bunx supabase`) | never link or push | yes | The repository links to the DEV ref only. |
-| PROD inspection (`prod-inspect.yml`) | structure only | compared | The only PROD token. Paused while GitHub Actions is off. |
+| PROD inspection (`prod-inspect.yml`) | structure only | compared | Paused while GitHub Actions is off. |
 | Management API | through the PROD inspection only | yes | DEV configuration and the `*:check` scripts. |
 | R2 tokens | prod bucket only | dev bucket only | Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
 | Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP cannot reach it. |

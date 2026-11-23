@@ -17,8 +17,8 @@
  * reported as expected divergences and never synced. The job's log is public,
  * so the output names fields only, never a value or a response body.
  *
- * Exit 0: no unexpected divergence, or applied and verified. Exit 2: a compare
- * found unexpected divergences. Exit 1: the run failed.
+ * Exit 0: no unexpected divergence, after an apply too. Exit 2: an unexpected
+ * divergence remains. Exit 1: the run failed.
  */
 
 import { resolve } from 'node:path';
@@ -60,6 +60,18 @@ const configSchema = z.record(z.string(), z.unknown());
 const differs = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
 
+/** Prints the comparison by field name and returns the fields that differ unexpectedly. */
+function compare(prod: Record<string, unknown>, dev: Record<string, unknown>): string[] {
+  const keys = [...new Set([...Object.keys(prod), ...Object.keys(dev)])].sort();
+  const divergent = keys.filter((key) => differs(prod[key], dev[key]));
+  const expected = divergent.filter((key) => EXPECTED_DIVERGENT.has(key));
+  const unexpected = divergent.filter((key) => !EXPECTED_DIVERGENT.has(key));
+  console.log(`${label} Compared ${keys.length} fields of the Auth configuration.`);
+  console.log(`${label} Expected environment-specific divergences: ${expected.join(', ') || 'none'}.`);
+  console.log(`${label} Unexpected divergences: ${unexpected.join(', ') || 'none'}.`);
+  return unexpected;
+}
+
 async function main(): Promise<number> {
   const refs = supabaseProjectRefs(resolve(import.meta.dir, '..'));
   if (!refs) throw new InspectionFailure('docs/technical/environments.md names no Supabase project refs.');
@@ -74,13 +86,7 @@ async function main(): Promise<number> {
   const readDev = () => readProject({ ...devCall, schema: configSchema });
   const [prod, dev] = await Promise.all([readProject({ ...prodCall, schema: configSchema }), readDev()]);
 
-  const keys = [...new Set([...Object.keys(prod), ...Object.keys(dev)])].sort();
-  const divergent = keys.filter((key) => differs(prod[key], dev[key]));
-  const expected = divergent.filter((key) => EXPECTED_DIVERGENT.has(key));
-  const unexpected = divergent.filter((key) => !EXPECTED_DIVERGENT.has(key));
-  console.log(`${label} Compared ${keys.length} fields of the Auth configuration.`);
-  console.log(`${label} Expected environment-specific divergences: ${expected.join(', ') || 'none'}.`);
-  console.log(`${label} Unexpected divergences: ${unexpected.join(', ') || 'none'}.`);
+  const unexpected = compare(prod, dev);
 
   if (!process.argv.includes('--apply')) {
     if (unexpected.length > 0)
@@ -100,7 +106,7 @@ async function main(): Promise<number> {
   const fields = Object.keys(patch);
   if (fields.length === 0) {
     console.log(`${label} Nothing to apply: the mail fields already match PROD.`);
-    return 0;
+    return unexpected.length === 0 ? 0 : 2;
   }
   console.log(`${label} Patching ${fields.length} fields of DEV: ${fields.join(', ')}.`);
   await patchProject({ ...devCall, patch, schema: z.unknown() });
@@ -114,7 +120,8 @@ async function main(): Promise<number> {
     return 1;
   }
   console.log(`${label} Applied and verified: DEV's mail fields match PROD.`);
-  return 0;
+  // Apply copies only the allowed fields; any other difference keeps the run red, as a compare would.
+  return compare(prod, after).length === 0 ? 0 : 2;
 }
 
 if (import.meta.main) {

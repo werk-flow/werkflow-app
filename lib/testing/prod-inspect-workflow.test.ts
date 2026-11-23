@@ -51,7 +51,13 @@ test('the tokens stay in the production environment, on main, in the steps that 
   }
   expect(inspection.step('inspect', INSPECT).env).toEqual(TOKENS);
   expect(inspection.step('inspect', INSPECT).run).toBe('bun run prod:inspect');
-  expect(inspection.step('auth', AUTH).env).toEqual({ ...TOKENS, AUTH: '${{ inputs.auth }}' });
+  // Only an apply gets the token that may write DEV.
+  expect(inspection.step('auth', AUTH).env).toEqual({
+    ...TOKENS,
+    DEV_AUTH_SYNC_SUPABASE_TOKEN:
+      "${{ inputs.auth == 'apply' && secrets.DEV_AUTH_SYNC_SUPABASE_TOKEN || '' }}",
+    AUTH: '${{ inputs.auth }}',
+  });
   const workflow = readFileSync(join(repositoryRoot, workflowsFolder(), 'prod-inspect.yml'), 'utf8');
   expect(workflow.match(/secrets\.PROD_INSPECT_SUPABASE_TOKEN/g)).toHaveLength(2);
   expect(workflow).not.toContain('secrets.SUPABASE_ACCESS_TOKEN');
@@ -59,14 +65,24 @@ test('the tokens stay in the production environment, on main, in the steps that 
     expect(String(step.run ?? '')).not.toContain('${{');
 });
 
-test('the auth input picks a compare or an apply', () => {
+test('the auth input picks a compare with the read token, or an apply with the write token', () => {
   const stub = temporaryDirectory('prod-inspect-');
-  writeFileSync(join(stub, 'bun'), '#!/usr/bin/env bash\necho "bun $*"\n');
+  writeFileSync(join(stub, 'bun'), '#!/usr/bin/env bash\necho "$SUPABASE_ACCESS_TOKEN bun $*"\n');
   chmodSync(join(stub, 'bun'), 0o755);
   const run = (auth: string) =>
-    inspection.runStep('auth', AUTH, { env: { PATH: `${stub}:${process.env.PATH}`, AUTH: auth } });
-  expect(run('compare')).toEqual({ passed: true, output: 'bun scripts/sync-dev-auth-from-prod.ts\n' });
-  expect(run('apply')).toEqual({ passed: true, output: 'bun scripts/sync-dev-auth-from-prod.ts --apply\n' });
+    inspection.runStep('auth', AUTH, {
+      env: {
+        PATH: `${stub}:${process.env.PATH}`,
+        AUTH: auth,
+        SUPABASE_ACCESS_TOKEN: 'read',
+        DEV_AUTH_SYNC_SUPABASE_TOKEN: auth === 'apply' ? 'write' : '',
+      },
+    });
+  expect(run('compare')).toEqual({ passed: true, output: 'read bun scripts/sync-dev-auth-from-prod.ts\n' });
+  expect(run('apply')).toEqual({
+    passed: true,
+    output: 'write bun scripts/sync-dev-auth-from-prod.ts --apply\n',
+  });
 });
 
 test('each check opens its own alert for the owner, and only a run of that check closes it', () => {
