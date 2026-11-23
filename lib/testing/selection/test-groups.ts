@@ -266,6 +266,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['wave-2:p1-23', 'wave-2/p1-23.spec.ts', ['time', 'personnel', 'documents']],
   ['wave-2:p1-24', 'wave-2/p1-24.spec.ts', ['personnel', 'documents', 'time', 'work', 'attention']],
   ['wave-3:p1-24a', 'wave-3/p1-24a.spec.ts', ['planning', 'time', 'personnel', 'work', 'attention']],
+  ['wave-3:e2c-invoice-cancel', 'wave-3/e2c-invoice-cancel.spec.ts', ['commercial', 'documents']],
   // Every list page at 375 px; the detail pages, aliases and wide widths in layout:viewports (about four minutes each).
   ['layout', 'layout/mobile-viewport.spec.ts', ['*']],
   ['layout:viewports', 'layout/viewport-details.spec.ts', ['*']],
@@ -323,7 +324,6 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
-  // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
   ['problem-reports:report', 'problem-reports/report-a-problem.spec.ts', ['*']],
   // Support triages a report and answers, the reporter reads it live; support files a report for a caller.
   ['problem-reports:support', 'problem-reports/support-queue.spec.ts', ['*']],

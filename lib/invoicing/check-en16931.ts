@@ -10,6 +10,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 import SaxonJS from 'saxon-js';
@@ -42,11 +43,12 @@ const failedAssertsSchema = z.array(
   z.object({ id: z.string(), flag: z.string(), location: z.string(), text: z.string() }),
 );
 
-// Read once per server instance; `new URL(…, import.meta.url)` lets the bundler trace the file.
+// Read once per server instance, by a path from the app root: Turbopack's production build turns
+// `new URL(…, import.meta.url)` into an object readFile refuses (ERR_INVALID_ARG_TYPE).
 let compiledRules: Promise<unknown> | null = null;
 
 async function loadRules(): Promise<unknown> {
-  const gzipped = await readFile(new URL('./rules/en16931-cii.sef.json.gz', import.meta.url));
+  const gzipped = await readFile(join(process.cwd(), 'lib/invoicing/rules/en16931-cii.sef.json.gz'));
   const digest = createHash('sha256').update(gzipped).digest('hex');
   if (digest !== EN16931_CII_RULES.sefGzipSha256)
     throw new Error('The compiled EN 16931 rules are not the recorded ones.');

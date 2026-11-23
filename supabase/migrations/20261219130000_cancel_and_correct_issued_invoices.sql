@@ -8,8 +8,11 @@
 -- 2. guard_issued_invoice: an issued invoice takes exactly one change, its
 --    status from Ausgestellt to Storniert, only inside cancel_invoice for that
 --    invoice and once its issued Stornorechnung exists. A link must name the
---    invoice the transaction cancels (app.invoice_cancel), which only
---    cancel_invoice sets. Every other column stays refused as before.
+--    invoice the transaction cancels (app.invoice_cancel). In the app only
+--    cancel_invoice sets it; the guard trusts the flag, so a session that
+--    sets it directly, as the SQL test and a service-role session can, is
+--    the residual of werk-flow/werkflow-planning#515. Every other column
+--    stays refused as before.
 -- 3. cancel_invoice: in one transaction it copies the original into a
 --    Stornorechnung with every line negated, issues it through issue_invoice
 --    (the next number of the same series, under the series' row lock), marks
@@ -64,8 +67,10 @@ alter table public.invoice_events add constraint invoice_events_type_check
 
 -- 2. As in 20261219120000_issue_invoices_with_gapless_numbers.sql, with two
 -- additions. A link is inserted only for the invoice the transaction cancels
--- (app.invoice_cancel, which only cancel_invoice raises, to that id), on a
--- new draft without an original, and never changes. Inside that call, and once an issued Stornorechnung names
+-- (app.invoice_cancel, which the app raises only in cancel_invoice, to that
+-- id; the SQL test and a service-role session can set it directly, the
+-- residual of werk-flow/werkflow-planning#515), on a new draft without an
+-- original, and never changes. Inside that call, and once an issued Stornorechnung names
 -- the invoice, its status alone turns from Ausgestellt to Storniert; the
 -- cancel's actor and time are in its history. Every other rule of R4's guard
 -- stays: a work or person reference clears only when its target is gone,
