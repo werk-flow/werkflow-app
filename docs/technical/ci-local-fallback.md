@@ -21,7 +21,7 @@ The `local` profile's CI is removed from all three machines. The archive paths b
 ### 1. The Mac
 
 - **Removed:** the Colima profile `ci` and its disk, the stand-in's launchd jobs, its work roots and its private `R` folder.
-- **Archive:** `ops/ci-local-fallback/mac-standin/` (planning PR pending).
+- **Archive:** `ops/ci-local-fallback/mac-standin/` (werk-flow/werkflow-planning#549).
 - **Rebuild, then switch on:**
   1. Create the Colima profile `ci` without host mounts.
   2. Check out the restored runner's reviewed commit as the trusted checkout, and build the image.
