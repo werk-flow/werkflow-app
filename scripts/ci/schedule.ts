@@ -26,7 +26,8 @@ import { workflowsFolder } from '../../lib/testing/ci-workflow';
 //     --ledger  The runner's ledger (CI_LEDGER): a nightly waits while a full run in it runs, and
 //               scripts/ci/full-run.ts due reads it.
 //     --run     A run's results directory (CI_RESULTS_DIR) whose browser shards wait: due once its
-//               plan's midnight hold ended and the run has no midnight.json yet. A merge queue
+//               plan's midnight hold ended, the run has no midnight.json yet and a Browser job may
+//               start now by the midnight start rule (ciBrowserStartWaitMs). A merge queue
 //               run's directory too (scripts/ci/queue.ts): its runner waits and starts nothing.
 //               Never due while scripts/ci/run-commit.ts holds the run: it starts its own held shards.
 //     --pr-run  A pull request run in progress: the runner's id for it, the ref on origin that holds
@@ -39,6 +40,8 @@ import { workflowsFolder } from '../../lib/testing/ci-workflow';
 //     nightly   A full run of main's head: CI_EVENT=full CI_FULL_REASON='Nightly run'.
 //     full      A full run of main's head: CI_EVENT=full CI_FULL_REASON='Full run on main'.
 //     midnight  bun scripts/ci/job.ts midnight in that run, then its browser shards after Fast.
+//               `due` names the run only while the midnight start rule lets a Browser job start
+//               now; a shard started later asks that rule (ciBrowserStartWaitMs) before it starts.
 //     stop      End every job of that run: a newer push superseded it.
 //   After starting releases or nightlies, record their slots in one call, one call at a time per
 //   state file: bun scripts/ci/schedule.ts started <release|nightly> <slot> [...] --state <file>

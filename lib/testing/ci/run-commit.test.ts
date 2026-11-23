@@ -3,6 +3,7 @@
 // DAG's needs, the ledger out of the jobs' reach, the held shards started by their own run only, and
 // a Check that runs whatever happened before it.
 import { expect, test } from 'bun:test';
+import { ciBrowserHoldUntil, midnightStartWaitMs } from '../runner/group-schedule';
 import { planIdentityOf } from './check';
 import type { CiJob } from './dag';
 import type { CiResult, RunPlan } from './results';
@@ -110,6 +111,8 @@ type World = {
   log: string[];
   /** Most jobs that ran at once on the executor. */
   peak: () => number;
+  /** Every browser group the fake shards ran, with its start and whether the window blocked it. */
+  groupRuns: { shard: string; at: number; blocked: boolean }[];
 };
 
 type WorldOptions = {
@@ -133,10 +136,25 @@ type WorldOptions = {
   writeFails?: boolean;
   /** Whether Plan reaches its body (its setup passed); default true. */
   planLaunches?: boolean;
+  /** When Plan starts; START by default. */
+  start?: number;
+  /** How long a job runs on the fake clock, by its name; none when unlisted. */
+  minutes?: Partial<Record<string, number>>;
+  /**
+   * A browser shard's groups, by its name, run one after another for GROUP_MINUTES each. As
+   * scripts/verify.ts in CI, a group that starts inside the midnight window is blocked, and its
+   * shard fails.
+   */
+  groups?: Partial<Record<string, number>>;
+  /** A job's first start the executor defers, as a slot or the stack freed too late: its `retryAt`. */
+  deferOnce?: Partial<Record<string, number>>;
 };
 
+const GROUP_MINUTES = 10;
+
 function world(options: WorldOptions = {}): World {
-  let clock = START;
+  let clock = options.start ?? START;
+  const groupRuns: World['groupRuns'] = [];
   const results = new Map<string, CiResult>();
   const starts: World['starts'] = [];
   const ledger: CiResult[] = [];
@@ -182,9 +200,15 @@ function world(options: WorldOptions = {}): World {
     },
     isolatesJobs: true,
   };
+  const deferred = new Set<string>();
   const jobs: Executor = {
     run: async (task, signal) => {
       starts.push({ place: 'jobs', task, at: clock });
+      const retryAt = options.deferOnce?.[unitName(task.unit)];
+      if (retryAt !== undefined && !deferred.has(unitName(task.unit))) {
+        deferred.add(unitName(task.unit));
+        return { exitCode: null, detail: 'not started, deferred', retryAt };
+      }
       active += 1;
       peak = Math.max(peak, active);
       const name = unitName(task.unit);
@@ -196,11 +220,19 @@ function world(options: WorldOptions = {}): World {
           result(task.unit, started, { ...own, status: 'running', completedAt: null }),
       );
       options.onStart?.(task.unit);
+      let blocked = false;
+      for (let group = 0; group < (options.groups?.[name] ?? 0); group += 1) {
+        const inWindow = midnightStartWaitMs(new Date(clock)) > 0;
+        groupRuns.push({ shard: name, at: clock, blocked: inWindow });
+        blocked ||= inWindow;
+        clock += GROUP_MINUTES * MINUTE;
+      }
+      clock += (options.minutes?.[name] ?? 0) * MINUTE;
       // Let the other units start, so the run's parallelism shows.
       await new Promise((resolve) => setImmediate(resolve));
       active -= 1;
       if (signal.aborted) return { exitCode: null, detail: 'stopped' };
-      const ended = outcome(task.unit);
+      const ended = blocked ? { exitCode: 1, detail: 'a group was blocked' } : outcome(task.unit);
       if (!options.written?.[name])
         results.set(
           name,
@@ -215,6 +247,7 @@ function world(options: WorldOptions = {}): World {
     ledger,
     log,
     peak: () => peak,
+    groupRuns,
     deps: {
       host,
       jobs,
@@ -317,6 +350,95 @@ test('held shards start from their own run once the hold ends, with no job machi
   expect(at('fast')).toBe(START);
   expect(at('sql')).toBe(START);
   expect(report(w).midnight).toEqual({ result: 'success' });
+});
+
+const SERIAL_SHARDS = [1, 2, 3, 4].map((shard) => ({ shard, groups: `golden:p${shard}` }));
+/** A plan without the midnight job: Plan ran before ciBrowserHoldUntil holds. */
+const SERIAL_PLAN: RunPlan = {
+  jobs: ['plan', 'fast', 'browser', 'check'],
+  skips: { midnight: 'No browser shard waits for the midnight start window.' },
+  shards: SERIAL_SHARDS,
+  outputs: { ...OUTPUTS, shards: JSON.stringify(SERIAL_SHARDS), midnight_until: '' },
+};
+
+// Each case is a Berlin midnight in UTC: winter, summer, and the eves of both daylight-saving changes.
+test.each([
+  ['2026-11-24T23:00:00Z'],
+  ['2026-07-16T22:00:00Z'],
+  ['2026-03-28T23:00:00Z'],
+  ['2026-10-24T22:00:00Z'],
+])(
+  'a serial run planned before the hold starts no later shard that could reach the midnight window: it waits until 00:10 Berlin, then passes (midnight %s)',
+  async (midnightUtc) => {
+    const midnight = Date.parse(midnightUtc);
+    const berlin = (hours: number, minutes: number) => midnight + ((hours - 24) * 60 + minutes) * MINUTE;
+    const planned = berlin(22, 0);
+    // Plan decides at 22:00 Berlin that no shard waits.
+    expect(ciBrowserHoldUntil(new Date(planned))).toBeUndefined();
+    const w = world({
+      plan: SERIAL_PLAN,
+      start: planned,
+      minutes: { fast: 30 },
+      // Started one after another, the third shard reaches 23:40 and the fourth starts at 23:50.
+      groups: { 'browser-1': 2, 'browser-2': 4, 'browser-3': 2, 'browser-4': 1 },
+    });
+    const outcome = await runCommit(input({}, 1), w.deps, new AbortController().signal);
+    const at = (name: string) => w.starts.find((entry) => unitName(entry.task.unit) === name)?.at;
+    expect([at('browser-1'), at('browser-2')]).toEqual([berlin(22, 30), berlin(22, 50)]);
+    // 23:30 plus the shard's 45 min timeout passes 23:40, so the third shard waits for the window to close.
+    const closes = midnight + 10 * MINUTE;
+    expect([at('browser-3'), at('browser-4')]).toEqual([closes, closes + 2 * GROUP_MINUTES * MINUTE]);
+    expect(w.groupRuns.filter((run) => run.blocked)).toEqual([]);
+    expect(w.groupRuns).toHaveLength(9);
+    expect(
+      outcome.units.filter((entry) => entry.unit.job === 'browser').map((entry) => entry.state),
+      w.log.join('\n'),
+    ).toEqual(['passed', 'passed', 'passed', 'passed']);
+    expect(report(w).browser).toEqual({ result: 'success' });
+  },
+);
+
+test('a start the executor deferred is neither a pass nor a failure: the shard starts again at its retry time and passes', async () => {
+  const retryAt = START + 90 * MINUTE;
+  const w = world({ deferOnce: { 'browser-1': retryAt } });
+  const outcome = await runCommit(input({}, 1), w.deps, new AbortController().signal);
+  const browser1 = w.starts
+    .filter((entry) => unitName(entry.task.unit) === 'browser-1')
+    .map((entry) => entry.at);
+  expect(browser1).toHaveLength(2);
+  expect(browser1.at(-1)).toBe(retryAt);
+  expect(outcome.units.find((entry) => unitName(entry.unit) === 'browser-1')?.state).toBe('passed');
+  expect(report(w).browser).toEqual({ result: 'success' });
+  expect(outcome.exitCode, w.log.join('\n')).toBe(0);
+});
+
+test('a serial run planned inside the window holds its shards until 00:10 Berlin as before, and they start one after another', async () => {
+  const midnight = Date.parse('2026-11-24T23:00:00Z');
+  const planned = midnight - 15 * MINUTE;
+  const until = ciBrowserHoldUntil(new Date(planned));
+  expect(until?.getTime()).toBe(midnight + 10 * MINUTE);
+  const plan: RunPlan = {
+    ...SERIAL_PLAN,
+    jobs: [...SERIAL_PLAN.jobs, 'midnight'],
+    skips: {},
+    outputs: { ...SERIAL_PLAN.outputs, midnight_until: until?.toISOString() ?? '' },
+  };
+  const w = world({
+    plan,
+    start: planned,
+    minutes: { fast: 10 },
+    groups: { 'browser-1': 1, 'browser-2': 1, 'browser-3': 1, 'browser-4': 1 },
+  });
+  const outcome = await runCommit(input({}, 1), w.deps, new AbortController().signal);
+  const closes = midnight + 10 * MINUTE;
+  const browserStarts = w.starts
+    .filter((entry) => entry.task.unit.job === 'browser')
+    .map((entry) => entry.at);
+  expect(w.starts.find((entry) => entry.task.unit.job === 'midnight')?.at).toBe(closes);
+  expect(browserStarts).toEqual([0, 1, 2, 3].map((index) => closes + index * GROUP_MINUTES * MINUTE));
+  expect(w.groupRuns.filter((run) => run.blocked)).toEqual([]);
+  expect(outcome.exitCode, w.log.join('\n')).toBe(0);
+  expect(report(w).browser).toEqual({ result: 'success' });
 });
 
 test('a plan that holds the midnight job without a readable hold runs no browser shard', async () => {
