@@ -131,6 +131,8 @@ function refusal(result: CiResult, expected: Expected): string | undefined {
 
 /** How often a running job is asked whether its body launched. */
 const LAUNCH_POLL_MS = 5_000;
+/** How long a stop waits before it asks docker again while the job's container runs on. */
+const STOP_RETRY_MS = 5_000;
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -306,6 +308,18 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
         jobStartedAt: new Date(began).toISOString(),
         machineStart,
       });
+      // A stop or the timeout stops the container: SIGTERM, a grace, then SIGKILL (container-slot.ts).
+      // The stop repeats until the job ended, so a stop that came before docker created the
+      // container still ends it. It listens before the job starts, so no stop falls between.
+      let exited = false;
+      const stop = (): void =>
+        void (async () => {
+          while (!exited) {
+            await shell(stopCommand(slot, container));
+            if (!exited) await options.sleep(STOP_RETRY_MS, new AbortController().signal);
+          }
+        })();
+      ended.addEventListener('abort', stop, { once: true });
       const finished = shell(
         jobCommand(slot, {
           name: container,
@@ -315,10 +329,9 @@ export function containerExecutors(setup: ExecutorSetup, options: ContainerOptio
           unit: task.unit,
         }),
         { logFile: log },
-      );
-      // A stop or the timeout stops the container: SIGTERM, a grace, then SIGKILL (container-slot.ts).
-      const stop = (): void => void shell(stopCommand(slot, container));
-      ended.addEventListener('abort', stop, { once: true });
+      ).finally(() => {
+        exited = true;
+      });
       let launched = false;
       let unrecorded: string | undefined;
       const watch = new AbortController();
