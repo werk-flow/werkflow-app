@@ -156,6 +156,7 @@ export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = 
     'hooks/use-weekly-time-data.ts',
     'components/clock-action-list.tsx',
     'components/clock-fab.tsx',
+    'components/clock-state-context.ts',
     'components/clock-state-provider.tsx',
     'components/manual-entry-dialog.tsx',
     'components/manual-entry-form-content.tsx',
@@ -267,6 +268,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['wave-2:p1-23', 'wave-2/p1-23.spec.ts', ['time', 'personnel', 'documents']],
   ['wave-2:p1-24', 'wave-2/p1-24.spec.ts', ['personnel', 'documents', 'time', 'work', 'attention']],
   ['wave-3:p1-24a', 'wave-3/p1-24a.spec.ts', ['planning', 'time', 'personnel', 'work', 'attention']],
+  ['wave-3:document-pdfs', 'wave-3/document-pdfs.spec.ts', ['commercial', 'documents', 'service']],
   // Every list page at 375 px; the detail pages, aliases and wide widths in layout:viewports (about four minutes each).
   ['layout', 'layout/mobile-viewport.spec.ts', ['*']],
   ['layout:viewports', 'layout/viewport-details.spec.ts', ['*']],
@@ -465,6 +467,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
   ['werkflow-billing-mails', ['werkflow_billing_mails.sql'], ['*']],
+  ['resend-webhook-events', ['resend_webhook_events.sql'], ['*']],
   ['werkflow-invoices', ['werkflow_invoices.sql'], ['*']],
   ['werkflow-subscriptions', ['werkflow_subscriptions.sql'], ['*']],
   ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],

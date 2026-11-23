@@ -1,23 +1,14 @@
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { CLOCK_ACTION_FAILED, useClockOutbox, type ClockOutboxState } from '@/components/clock-outbox-state';
+import { ClockStateContext, type ClockStateContextValue } from '@/components/clock-state-context';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
-import type { ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
-import type { ClockMarker, ShownClock } from '@/lib/field-sync/device/shown-clock-rule';
+import type { ShownClock } from '@/lib/field-sync/device/shown-clock-rule';
 import { useOnline, useShownClock } from '@/lib/field-sync/device/shown-clock';
 import { keptActionsWait } from '@/lib/field-sync/device/unsent-mark';
 import { applyTransitionEcho } from '@/lib/time-tracking/clock-echo';
@@ -26,31 +17,6 @@ import { isClockStateEventRelevant } from '@/lib/time-tracking/clock-state-event
 import { transitionTimeActivity, type TimeTransitionInput } from '@/lib/time-tracking/segment-actions';
 import { createActivitySelection } from '@/lib/time-tracking/segments';
 import type { LiveClockState, TimeActivitySelection, TimeTransitionResult } from '@/lib/time-tracking/types';
-
-type ClockStateContextValue = {
-  /** The clock as shown (shown-clock.ts): the server's state, with the phone's unsent actions applied while they wait. */
-  state: LiveClockState | null;
-  /** The clock events the phone's outbox holds for the person and has not sent, as shown, or null. */
-  unsent: ClockDeviceView | null;
-  /** The calm marker beside the clock while what it shows is not the server's answer. */
-  marker: ClockMarker;
-  /** The clock as the server last confirmed it, without unsent events: what a settled chain goes on from. */
-  confirmed: LiveClockState | null;
-  /** The device storage failed: the phone cannot keep clock actions without signal now. */
-  deviceFailed: boolean;
-  isLoading: boolean;
-  isReady: boolean;
-  isPending: boolean;
-  statusError: string | null;
-  refresh: () => Promise<void>;
-  transitionActivity: (selection: TimeActivitySelection) => Promise<TimeTransitionResult>;
-  recoverAndContinue: (selection: TimeActivitySelection) => Promise<TimeTransitionResult>;
-  clockIn: (jobId: string | null) => Promise<TimeTransitionResult>;
-  clockOut: (acknowledgeRecovery?: boolean) => Promise<TimeTransitionResult>;
-  switchJob: (jobId: string | null) => Promise<TimeTransitionResult>;
-};
-
-const ClockStateContext = createContext<ClockStateContextValue | null>(null);
 
 /** The clock the server answered, and when the read behind it started (`performance.now()`). */
 type ServerClock = { state: LiveClockState | null; from: number };
@@ -491,10 +457,4 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
   );
 
   return <ClockStateContext.Provider value={value}>{children}</ClockStateContext.Provider>;
-}
-
-export function useClockState(): ClockStateContextValue {
-  const context = useContext(ClockStateContext);
-  if (!context) throw new Error('useClockState must be used within a ClockStateProvider');
-  return context;
 }

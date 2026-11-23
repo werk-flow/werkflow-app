@@ -9,7 +9,6 @@ import { resolve } from 'node:path';
 import { BERLIN_TIME_ZONE } from '../../date-time/berlin';
 import { z } from '../../zod';
 import { CI_EVENTS, CI_JOBS, type CiEvent, type CiJob } from './dag';
-import { FULL_RUN_SLOTS } from './full-run';
 import { type EventSchedule, type InventoryKey, SCHEDULE_NAMES, type TimedSchedule } from './inventory';
 import { MIRROR_JOB_CAP } from './mirror';
 import { MAX_BATCH } from './queue';
@@ -19,14 +18,12 @@ export const CI_PROFILE_NAMES = ['fleet', 'local'] as const;
 export type CiProfileName = (typeof CI_PROFILE_NAMES)[number];
 
 /**
- * - `conductor`: the host that plans, checks, queues and schedules (scripts/ci/run-commit.ts,
- *   queue.ts, schedule.ts).
  * - `fleet`: one of many machines: a GitHub Actions runner, directly or through the CI mirror, or
  *   a Boat machine.
  * - `local`: one of the owner's machines, the MacBook or the PC (a WSL distro); a pull request's
  *   run goes start to finish on the one that claims it.
  */
-type Executor = 'conductor' | 'fleet' | 'local';
+type Executor = 'fleet' | 'local';
 
 /**
  * Where a profile's jobs run, as finely as the queue-wait check tells them apart: GitHub Actions
@@ -72,9 +69,20 @@ type Placement = {
  * - `planned`: a clock no code fires yet; only a placeholder profile may plan one.
  * profiles.test.ts holds `timing` to that clock's own time, and the release's to the dispatcher
  * `scheduleDue` leaves active.
+ * - `dispatch`: no clock. Each workflow of the item has only `workflow_dispatch`, and `dispatchedBy`
+ *   says who starts it.
  */
 type Clock = 'workflow' | 'conductor' | 'planned';
-type TimedPlacement = Placement & { clock: Clock; timing: Timing };
+type TimedPlacement = Placement &
+  ({ clock: Clock; timing: Timing } | { clock: 'dispatch'; dispatchedBy: string });
+
+/** A GitHub Actions trigger as `<workflow>#<its on: key>`, such as `ci.yml#pull_request`. */
+type WorkflowEvent = `${string}.yml#${string}`;
+/**
+ * Who starts a kind of run. A `fleet` start names the workflow triggers that start it on GitHub
+ * Actions: ci.yml's own, or a workflow that calls ci.yml (profiles.test.ts reads both).
+ */
+type RunStart = { startedBy: 'local' } | { startedBy: 'fleet'; on: readonly WorkflowEvent[] };
 
 export type CiProfile = {
   name: CiProfileName;
@@ -95,7 +103,7 @@ export type CiProfile = {
   window: { from: string; to: string } | undefined;
   jobs: Readonly<Record<CiJob, Placement>>;
   /** Who starts each kind of run. */
-  runs: Readonly<Record<CiEvent, { startedBy: Executor }>>;
+  runs: Readonly<Record<CiEvent, RunStart>>;
   schedules: Readonly<Record<TimedSchedule, TimedPlacement> & Record<EventSchedule, Placement>>;
 };
 
@@ -112,6 +120,8 @@ const releaseDispatch: Timing = {
   zone: BERLIN_TIME_ZONE,
   weekdays: [0, 1, 2, 3, 6],
 };
+/** nightly.yml's cron, every day 17:00 Berlin: its full run and the quarantine list. */
+const nightlyCron: Timing = { kind: 'clock', at: '17:00', zone: BERLIN_TIME_ZONE, weekdays: EVERY_DAY };
 const healthWeekly: Timing = { kind: 'clock', at: '05:00', zone: 'UTC', weekdays: [0] };
 
 /**
@@ -127,50 +137,56 @@ const QUEUE_WAIT_GAPS = {
     "Not yet measured: the local machines' queue wait has no evidence until a local executor records each job's wait and the check reads it (werk-flow/werkflow-planning#503, P3).",
 } as const satisfies Readonly<Partial<Record<ExecutorKind, string>>>;
 
-/** #582's design: a conductor, the CI mirror's machines, GitHub's workflows for the rest. */
+/**
+ * #582's design, run on GitHub Actions: ci.yml's events start the runs, and each schedule names the
+ * workflow that fires it. The conductor's units on the VM are off.
+ */
 const FLEET: CiProfile = {
   name: 'fleet',
-  machines: 'Boat or GitHub Actions: many machines and a conductor',
+  machines: 'GitHub Actions runners; Boat or the CI mirror through a conductor',
   runsOn: ['actions', 'mirror', 'boat'],
   values: 'in use',
   jobsAtOnce: MIRROR_JOB_CAP,
   maxBatch: MAX_BATCH,
   window: undefined,
   jobs: {
-    plan: { executor: 'conductor', atOnce: 1 },
+    plan: { executor: 'fleet', atOnce: 1 },
     fast: { executor: 'fleet', atOnce: 'all' },
     sql: { executor: 'fleet', atOnce: 'all' },
     components: { executor: 'fleet', atOnce: 'all' },
     invoices: { executor: 'fleet', atOnce: 'all' },
     midnight: { executor: 'fleet', atOnce: 'all' },
     browser: { executor: 'fleet', atOnce: 'all' },
-    check: { executor: 'conductor', atOnce: 1 },
+    check: { executor: 'fleet', atOnce: 1 },
   },
   runs: {
-    pr: { startedBy: 'conductor' },
-    integration: { startedBy: 'conductor' },
-    main: { startedBy: 'conductor' },
-    full: { startedBy: 'conductor' },
+    pr: { startedBy: 'fleet', on: ['ci.yml#pull_request'] },
+    integration: { startedBy: 'fleet', on: ['ci.yml#merge_group'] },
+    main: { startedBy: 'fleet', on: ['ci.yml#push'] },
+    // Every trigger of a workflow that calls ci.yml with `full`: the release's own run before it
+    // decides, the nightly's, and their manual dispatches. ci.yml's own `workflow_dispatch` is the
+    // midnight proof, a branch-only path (main refuses it) that selects the full tier.
+    full: {
+      startedBy: 'fleet',
+      on: [
+        'release.yml#schedule',
+        'release.yml#workflow_dispatch',
+        'nightly.yml#schedule',
+        'nightly.yml#workflow_dispatch',
+        'main-full-run.yml#workflow_dispatch',
+        'ci.yml#workflow_dispatch',
+      ],
+    },
   },
   schedules: {
-    nightly: { executor: 'conductor', atOnce: 'all', clock: 'conductor', timing: nightly },
-    // The conductor's nightly lists no quarantines: only nightly.yml's own cron runs the list.
-    'nightly-quarantine': {
-      executor: 'fleet',
-      atOnce: 1,
-      clock: 'workflow',
-      timing: { kind: 'clock', at: '17:00', zone: BERLIN_TIME_ZONE, weekdays: EVERY_DAY },
-    },
+    nightly: { executor: 'fleet', atOnce: 'all', clock: 'workflow', timing: nightlyCron },
+    'nightly-quarantine': { executor: 'fleet', atOnce: 1, clock: 'workflow', timing: nightlyCron },
     'main-full-run': {
-      executor: 'conductor',
+      executor: 'fleet',
       atOnce: 'all',
-      clock: 'conductor',
-      timing: {
-        kind: 'slots',
-        from: FULL_RUN_SLOTS.first,
-        to: FULL_RUN_SLOTS.last,
-        everyMinutes: FULL_RUN_SLOTS.intervalMs / 60_000,
-      },
+      clock: 'dispatch',
+      dispatchedBy:
+        "By day, ci-alert.timer (werkflow-planning's ops/ci-alert.py); or a person, with `gh workflow run main-full-run.yml`.",
     },
     // date-lookahead.yml's max-parallel (profiles.test.ts reads it).
     'date-lookahead': {
@@ -189,6 +205,8 @@ const FLEET: CiProfile = {
     },
     'health-pr-asset-branches': { executor: 'fleet', atOnce: 1, clock: 'workflow', timing: healthWeekly },
     // release.yml's cron dispatches it while it has one; its hold waits for 03:30 (inventory.ts).
+    // The workflow is disabled until the owner releases again: after the PDF hold, and with a new
+    // deploy key the owner approves.
     'release-candidate': { executor: 'fleet', atOnce: 'all', clock: 'workflow', timing: releaseDispatch },
     'list-growth': { executor: 'fleet', atOnce: 1 },
     'pr-screenshots': { executor: 'fleet', atOnce: 1 },

@@ -3,7 +3,7 @@
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ManualEntryDialog, useManualEntryCopy } from '@/components/manual-entry-dialog';
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { MANUAL_ENTRY_CREATED_EVENT, queueManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge';
 
