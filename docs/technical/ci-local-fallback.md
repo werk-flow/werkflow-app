@@ -33,7 +33,7 @@ The `local` profile's CI is removed from all three machines. The archive paths b
 ### 2. The PC
 
 - **Removed:** the WSL distribution `werkflow-ci`, unregistered.
-- **Archive:** `ops/ci-local-fallback/pc-workbench/` (planning PR pending): `rootless-slot.sh`, the `wsl.conf`, the image recipe and the measurement drivers.
+- **Archive:** `ops/ci-local-fallback/pc-workbench/` (werk-flow/werkflow-planning#547): `rootless-slot.sh`, the `wsl.conf`, the image recipe and the measurement drivers.
 - **Stays:** `ci-alert.timer` (werkflow-planning `ops/ci-alert.py`), which watches the Actions alerts and dispatches main's daytime full run.
 - **Rebuild, then switch on:**
   1. Import the official Ubuntu 24.04 root file system as `werkflow-ci`, after you check its SHA256 sum and GPG signature.
@@ -46,9 +46,9 @@ The `local` profile's CI is removed from all three machines. The archive paths b
 
 ### 3. The VM
 
-- **Removed:** the conductor, the users `werkflowci` and `werkflowci-publisher`, and every `werkflow-ci-*` and `werkflowci-*` unit.
-- **Archive:** `ops/ci-local-fallback/vm/` (planning PR pending), and #546's `vm-orchestrator/`: the isolation's `apply.sh`, `verify.sh` and `rollback.sh`.
-- **Kept installed and disabled:** `werkflow-release@` and `werkflow-dev-deploy`.
+- **Removed, done:** the conductor; the users `werkflowci` and `werkflowci-publisher`; every CI unit file; and `/srv/werkflowci`, `/etc/werkflowci`, `/usr/local/lib/werkflowci` and `/etc/werkflowci-publisher`.
+- **Archive:** `ops/ci-local-fallback/vm/` (werk-flow/werkflow-planning#548), and werk-flow/werkflow-planning#546's `vm-orchestrator/`: the isolation's `apply.sh`, `verify.sh` and `rollback.sh`.
+- **Kept installed and disabled, with no keys:** `werkflow-release@` and `werkflow-dev-deploy`.
 - **Keys:** every VM key is deleted. The release and DEV paths come back only as in [Put the VM release and DEV keys back](#put-the-vm-release-and-dev-keys-back).
 - **Never** enable a VM timer while its GitHub twin, `release.yml` or `staging.yml`, is enabled.
 
