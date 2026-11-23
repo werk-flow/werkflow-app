@@ -23,7 +23,7 @@ const CURL_STUB = `#!/usr/bin/env bash
 output=
 previous=
 printf '%s\\n' "$*" >> "$STUB/arguments"
-printf '%s' "\${SUPABASE_ACCESS_TOKEN-unset}" > "$STUB/environment"
+printf '%s' "\${SUPABASE_DEV_READ_TOKEN-unset}" > "$STUB/environment"
 for argument in "$@"; do
   if test "$previous" = --output; then output="$argument"; fi
   if test "$previous" = --config; then cat "$argument" >> "$STUB/config"; fi
@@ -39,7 +39,7 @@ exit "$(cat "$STUB/exit")"
 // $STUB/children, then runs the real program (the stub folder is PATH's first entry).
 const CHILDREN = ['dirname', 'ls', 'sed', 'sort', 'mktemp', 'jq', 'comm', 'wc', 'paste', 'tr', 'rm'];
 const CHILD_STUB = `#!/usr/bin/env bash
-printf '%s %s\\n' "\${0##*/}" "\${SUPABASE_ACCESS_TOKEN-unset}" >> "$STUB/children"
+printf '%s %s\\n' "\${0##*/}" "\${SUPABASE_DEV_READ_TOKEN-unset}" >> "$STUB/children"
 PATH="\${PATH#*:}" exec "\${0##*/}" "$@"
 `;
 
@@ -72,7 +72,7 @@ function check(status: string, body: string, { exit = 0, trace = false } = {}) {
       NODE_ENV: 'test',
       PATH: `${stub}:${process.env.PATH ?? ''}`,
       STUB: stub,
-      SUPABASE_ACCESS_TOKEN: TOKEN,
+      SUPABASE_DEV_READ_TOKEN: TOKEN,
       DEV_PROJECT_REF: 'devref',
     },
   });
@@ -129,8 +129,11 @@ test('a ledger without a committed version names it and fails', () => {
 test('a refused read names its status and cause', () => {
   const body = JSON.stringify({ message: `${BODY_MARKER} ${TOKEN}` });
   for (const [status, cause] of [
-    ['401', 'expired, revoked or malformed'],
-    ['403', 'needs the permission database_read on project devref'],
+    ['401', 'Replace the repository secret SUPABASE_DEV_READ_TOKEN.'],
+    [
+      '403',
+      'needs the permission database_read on project devref. Fix the token behind the repository secret SUPABASE_DEV_READ_TOKEN.',
+    ],
     ['404', 'found no project devref'],
     ['429', 'rate-limited'],
     ['500', 'failed to run the query'],
