@@ -1,11 +1,11 @@
 // The Vercel project builds only production and staging: its Ignored Build Step is the committed
 // command (.github/vercel/ignored-build-step.sh), and the weekly check (.github/scripts/vercel-build-step.sh)
 // fails when the project's setting drifts from it.
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 
 const script = resolve(import.meta.dir, '../../.github/scripts/vercel-build-step.sh');
 const commandFile = resolve(import.meta.dir, '../../.github/vercel/ignored-build-step.sh');
@@ -27,14 +27,12 @@ const TOKEN = 'token-that-must-never-print';
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'vercel-build-step-'));
+  stub = temporaryDirectory('vercel-build-step-');
   writeFileSync(join(stub, 'curl'), CURL_STUB);
   chmodSync(join(stub, 'curl'), 0o755);
   writeFileSync(join(stub, 'output'), '');
   answer(200, { id: 'prj_test', commandForIgnoringBuildStep: committed[0] });
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 function answer(status: number, project: Record<string, unknown>) {
   writeFileSync(join(stub, 'status'), String(status));

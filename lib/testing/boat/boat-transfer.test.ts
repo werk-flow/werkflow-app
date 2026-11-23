@@ -3,17 +3,7 @@
 // never thrown away for one reset.
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { boatClient } from './boat-api';
@@ -27,10 +17,11 @@ import {
   treeFiles,
   unavailable,
 } from './verify-on-boat';
+import { temporaryDirectory } from '../temporary-directory';
 
 /** A results archive as remote-verify.sh packs it: one report under .agent-logs/. */
 function resultsArchive(): Uint8Array {
-  const work = mkdtempSync(join(tmpdir(), 'boat-results-'));
+  const work = temporaryDirectory('boat-results-');
   mkdirSync(join(work, '.agent-logs', 'verification', 'r1'), { recursive: true });
   writeFileSync(join(work, '.agent-logs', 'verification', 'r1', 'report.json'), '{"ok":true}');
   execFileSync('tar', ['-czf', join(work, 'results.tgz'), '.agent-logs'], { cwd: work });
@@ -60,8 +51,8 @@ function machineAnswering(answers: (() => Response)[]) {
 
 function checkout() {
   return {
-    folder: mkdtempSync(join(tmpdir(), 'boat-run-')),
-    repository: mkdtempSync(join(tmpdir(), 'boat-checkout-')),
+    folder: temporaryDirectory('boat-run-'),
+    repository: temporaryDirectory('boat-checkout-'),
   };
 }
 
@@ -214,7 +205,7 @@ const git = (cwd: string, ...args: string[]) =>
 
 /** A committed checkout with LF text, as this repository's .gitattributes keeps it, an executable and a link. */
 function committedCheckout(): string {
-  const workstation = mkdtempSync(join(tmpdir(), 'boat-tree-'));
+  const workstation = temporaryDirectory('boat-tree-');
   git(workstation, 'init', '-q');
   mkdirSync(join(workstation, 'lib'));
   writeFileSync(join(workstation, '.gitattributes'), '* text=auto eol=lf\n');
@@ -242,7 +233,7 @@ test('only the files that differ from HEAD travel, and the checkout they rebuild
   const files = 'files' in tree ? tree.files : [];
 
   // The machine clones HEAD, unpacks the packed files over it and removes the deleted ones, as remote-verify.sh does.
-  const folder = mkdtempSync(join(tmpdir(), 'boat-pack-'));
+  const folder = temporaryDirectory('boat-pack-');
   const machine = join(folder, 'machine');
   execFileSync('git', ['clone', '-q', workstation, machine], { env: gitEnvironment() });
   writeFileSync(join(folder, 'tree.list'), files.join('\0'));

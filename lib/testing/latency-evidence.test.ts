@@ -1,21 +1,15 @@
-import { afterEach, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { expect, test } from 'bun:test';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkLatencyEvidence } from './latency-evidence';
 import { observeDuringMutation, type LiveObservation } from './live-observation';
 import { completeRecordedObservation } from './responsiveness-tolerance';
 
-const directories: string[] = [];
 function archive(records: readonly unknown[], filename = 'live-latencies.ndjson'): string {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-latency-evidence-'));
-  directories.push(directory);
+  const directory = temporaryDirectory('werkflow-latency-evidence-');
   writeFileSync(join(directory, filename), records.map((record) => JSON.stringify(record)).join('\n'));
   return directory;
 }
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
 const passed = {
   label: 'cross-session record',
   backend: 'local',
@@ -127,6 +121,7 @@ import { SCENARIO_ARCHIVE } from './latency-evidence';
 import { MEASUREMENT_VERSION, getMeasuredScenario } from './measured-scenarios';
 import type { PerformanceBaselines } from './performance-baselines';
 import { performanceContextFixture } from './fixtures/performance';
+import { temporaryDirectory } from './temporary-directory';
 
 const scenario = getMeasuredScenario('calendar.board-to-day.covered');
 const scenarioRecord = {

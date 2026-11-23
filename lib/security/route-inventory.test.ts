@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import ts from 'typescript';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 // Tier 2 inventory for route handlers (SI-001, SI-007, SI-013). A route handler
 // gets no framework authentication or CSRF check, so every one that exists
@@ -406,19 +406,15 @@ describe('planted violations', () => {
   });
 
   test('a route.js handler joins the inventory', () => {
-    const root = mkdtempSync(join(tmpdir(), 'route-inventory-'));
-    try {
-      for (const [folder, name] of [
-        ['app/api/a', 'route.js'],
-        ['app/api/b', 'route.ts'],
-        ['app/c', 'page.tsx'],
-      ] as const) {
-        mkdirSync(join(root, folder), { recursive: true });
-        writeFileSync(join(root, folder, name), '');
-      }
-      expect(listRouteHandlers(root)).toEqual(['app/api/a/route.js', 'app/api/b/route.ts']);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
+    const root = temporaryDirectory('route-inventory-');
+    for (const [folder, name] of [
+      ['app/api/a', 'route.js'],
+      ['app/api/b', 'route.ts'],
+      ['app/c', 'page.tsx'],
+    ] as const) {
+      mkdirSync(join(root, folder), { recursive: true });
+      writeFileSync(join(root, folder, name), '');
     }
+    expect(listRouteHandlers(root)).toEqual(['app/api/a/route.js', 'app/api/b/route.ts']);
   });
 });
