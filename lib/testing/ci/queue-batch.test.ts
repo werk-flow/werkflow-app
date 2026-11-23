@@ -4,7 +4,7 @@
 // queued PR at a time. Each case drives runQueueTick through a fake GitHub, git and runner.
 import { expect, test } from 'bun:test';
 import { fakeWorld, pull, sha } from '../fixtures/merge-queue-world';
-import { needsAttention, runQueueTick } from './queue';
+import { mainWithSwitch, needsAttention, runQueueTick } from './queue';
 
 const LIVE = { maxBatch: 4, dryRun: false };
 
@@ -146,4 +146,36 @@ test('an update GitHub refuses is recorded and needs no person: the next tick as
   });
   expect(needsAttention(outcome)).toBe(false);
   expect(sha('main')).toBe(world.main().commit);
+});
+
+// One snapshot of main for the queue's CI profile switch and its base (scripts/ci/queue.ts).
+test('a tick given the main its switch was read at keeps that base when main moves before the tick reads it', async () => {
+  const world = fakeWorld([pull(1)]);
+  const base = await world.adapter.main();
+  world.pushMain('elsewhere');
+  const outcome = await runQueueTick(world.adapter, { ...LIVE, base });
+  expect(outcome.base).toBe(base.commit);
+  expect(world.tested).toEqual([[1]]);
+  // The moved main is the tick's own business: it lands nothing on a base it did not test.
+  expect(world.landed).toEqual([]);
+});
+
+test('the switch and the base come from one commit of main: a main that moves between the two reads is read again', async () => {
+  const commits = ['a', 'b', 'b'].map((seed) => sha(seed));
+  const mains = [...commits];
+  const switches = commits.slice(1);
+  const read = await mainWithSwitch(
+    async () => ({ commit: mains.shift() ?? '', parents: [], tree: 't' }),
+    () => ({ main: switches.shift() ?? '', maxBatch: 1 }),
+  );
+  expect(read.base.commit).toBe(sha('b'));
+  expect(read.read.main).toBe(sha('b'));
+  const moving = ['a', 'b', 'c', 'd', 'e', 'f'].map((seed) => sha(seed));
+  let next = 0;
+  await expect(
+    mainWithSwitch(
+      async () => ({ commit: moving[next++] ?? '', parents: [], tree: 't' }),
+      () => ({ main: moving[next++] ?? '' }),
+    ),
+  ).rejects.toThrow('three times');
 });

@@ -31,12 +31,14 @@ import { partOf, partSteps } from '../../lib/testing/ci/dag';
 import { groupGone } from '../../lib/testing/local-stack/test-session';
 import { errorCode } from '../../lib/testing/runner/error-code';
 import { awaitAppPortFree, workspacePorts } from '../../lib/testing/runner/app-port';
+import { CI_JOB_STOP_GRACE_MS } from '../../lib/testing/runner/group-schedule';
 import {
   type Executor,
   type Executors,
   type ExecutorOutcome,
   type ExecutorSetup,
   type ExecutorTask,
+  startDeferral,
   type Unit,
   unitName,
 } from '../../lib/testing/ci/run-commit';
@@ -61,6 +63,8 @@ type ProcessExecutorOptions = {
   /** Shared by this run's executors on this host: why no further job of the run may start here. */
   host: Host;
   log(line: string): void;
+  /** The clock the midnight start rule and the job's timeout read (epoch ms). */
+  now(): number;
 };
 
 /** Why no further job of the run may start on this host; `refused` wakes every job that waits for its stack. */
@@ -216,7 +220,7 @@ function runGroup(
     let escalation: ReturnType<typeof setTimeout> | undefined;
     const stop = (): void => {
       signalGroup('SIGTERM');
-      escalation = setTimeout(() => signalGroup('SIGKILL'), 10_000);
+      escalation = setTimeout(() => signalGroup('SIGKILL'), CI_JOB_STOP_GRACE_MS);
     };
     signal.addEventListener('abort', stop, { once: true });
     child.once('error', () => resolve(null));
@@ -307,11 +311,11 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
     // exists. No other job starts a server there, so no other job's port is probed.
     let port: number | undefined;
     let held: string | undefined;
-    let began = Date.now();
+    let began = options.now();
     let ended = signal;
     const fail = (detail: string) => ({
       exitCode: null,
-      detail: `${detail} after ${minutes(Date.now() - began)}${ended.aborted && !signal.aborted ? ', its timeout' : ''}; log ${log}`,
+      detail: `${detail} after ${minutes(options.now() - began)}${ended.aborted && !signal.aborted ? ', its timeout' : ''}; log ${log}`,
     });
     // What this job left that the next job on the host would meet, or undefined. Only a stack this
     // job started is stopped (prepare.ts reports it): the next job's stack starts fresh, and a stack
@@ -366,8 +370,23 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
           if ('refused' in taken) return { exitCode: null, detail: `not started: ${taken.refused}` };
           release = taken.release;
         }
-        began = Date.now();
-        ended = AbortSignal.any([signal, AbortSignal.timeout(task.timeoutMs)]);
+        // One start, after the wait for the stack: the midnight start rule admits it, and the timeout
+        // ends at that start plus the job's timeout, however long arming it takes. A start the wait
+        // ran into the window defers, and the stack passes on at once, since nothing of the job ran.
+        began = options.now();
+        const deferred = startDeferral(task.unit, began);
+        if (deferred) {
+          release?.();
+          release = undefined;
+          return deferred;
+        }
+        // A deadline already past starts nothing: a timeout of 0 fires only after the first spawn.
+        const remaining = began + task.timeoutMs - options.now();
+        ended = AbortSignal.any([
+          signal,
+          remaining > 0 ? AbortSignal.timeout(remaining) : AbortSignal.abort(),
+        ]);
+        if (remaining <= 0) return fail('not started: its deadline passed before its first step');
         const run = (
           command: string,
           args: readonly string[],
@@ -433,7 +452,7 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
           ...(options.replaceStack ? { CI_REPLACE_STACK: '1' } : {}),
         });
         if (prepared !== 0) return fail(`its environment steps ended with ${prepared ?? 'a stop'}`);
-        const setup = Date.now() - began;
+        const setup = options.now() - began;
         // Fast reads only the stack's environment file, so only a job that uses the stack keeps it.
         if (!steps.includes('stack')) {
           await freeStack();
@@ -459,7 +478,7 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
           ? fail('the job was stopped')
           : {
               exitCode: code,
-              detail: `${code === 0 ? 'passed' : `failed (exit ${code})`} in ${minutes(Date.now() - began)}, setup ${minutes(setup)}; log ${log}`,
+              detail: `${code === 0 ? 'passed' : `failed (exit ${code})`} in ${minutes(options.now() - began)}, setup ${minutes(setup)}; log ${log}`,
             };
       } catch (error) {
         return fail(`the executor failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -480,7 +499,7 @@ function processExecutor(options: ProcessExecutorOptions): Executor & { workspac
  * under the work root. Passed jobs' workspaces are removed once the run ends, and the whole run's
  * after a pass; a failed job's stays with its log.
  */
-export function processExecutors(setup: ExecutorSetup): Executors {
+export function processExecutors(setup: ExecutorSetup, now: () => number = Date.now): Executors {
   const root = join(setup.workRoot, setup.runKey);
   // Plan, Check and every job of the run share this host, so a host one of them left dirty refuses all.
   const host: Host = { refused: new AbortController() };
@@ -495,6 +514,7 @@ export function processExecutors(setup: ExecutorSetup): Executors {
       stackLock: join(setup.workRoot, 'stack.lock'),
       trusted: join(setup.workRoot, 'trusted'),
       log: setup.log,
+      now,
     });
   const jobs = executor(true);
   return {
