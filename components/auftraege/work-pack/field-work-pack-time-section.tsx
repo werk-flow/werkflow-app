@@ -4,7 +4,7 @@ import { formatBerlin } from '@/lib/utils';
 import { Clock3, LogIn, LogOut } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { useRouterRefresh } from '@/components/ui/refresh-button';

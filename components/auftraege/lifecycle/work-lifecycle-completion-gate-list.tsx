@@ -3,7 +3,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { LogOut } from 'lucide-react';
 
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { usePendingTask } from '@/hooks/use-server-action';

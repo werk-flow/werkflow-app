@@ -76,6 +76,7 @@ const COMPONENT_AREAS: readonly (readonly [string, readonly string[], readonly s
       'streamed-content',
       'task-sections',
       'today-refresh',
+      'worker-start',
     ],
     ['*'],
   ],

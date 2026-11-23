@@ -966,8 +966,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8909, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 23950, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 22010, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -1089,12 +1089,30 @@
           "reason": null
         },
         {
-          "kind": "ceiling-accept",
+          "kind": "floor-accept",
           "target": "action:/dashboard",
           "from": {
             "requests": { "reference": 1, "tolerance": 0 },
             "encodedBytes": { "reference": 9104, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "decodedBytes": { "reference": 25593, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8731, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23774, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-17T180018590Z-01ace1"],
+          "reason": "A field worker's start page renders in the browser: the employee's server render of /dashboard no longer carries the organization card and its member count (werk-flow/werkflow-planning#489)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8731, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23774, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "rows": null
           },
           "to": {
@@ -1123,6 +1141,42 @@
           },
           "runKeys": ["2026-11-21T055139543Z-159aab"],
           "reason": "#560: area skeletons load lazily, so the layout carries no office UI and this payload is smaller; nothing is missing"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8909, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23950, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8731, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23774, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-21T055532764Z-a59c9e"],
+          "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8731, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23774, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 22010, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-21T090946906Z-ec017e"],
+          "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
         }
       ]
     },
@@ -1239,8 +1293,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8907, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 23949, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8465, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 22009, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -1396,12 +1450,30 @@
           "reason": "CI read 3 requests and 14 backend requests on this step once (merge-queue run 43483232112, tree d71678a01 = main e1dc6e9be + PR #445) and 4 and 18 in the 46 other CI readings since 2026-11-13 morning, including #445 alone (run 43480952615) and main with #443 (run 43483228169); Boat run 2026-11-13T190548549Z-ac6c68 on the same merged tree read 4 and 18. The clock sheet suspends live reads while open; the clock's own Realtime echo either lands before the explicit refresh after the transition, which clears it (3), or after, which queues one catch-up clock read when the sheet closes (4). Both start their read after the commit, so the count does not repeat on this step (performance.md)."
         },
         {
-          "kind": "ceiling-accept",
+          "kind": "floor-accept",
           "target": "action:/dashboard",
           "from": {
             "requests": { "reference": 1, "tolerance": 0 },
             "encodedBytes": { "reference": 9101, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "decodedBytes": { "reference": 25592, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8730, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23773, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-17T180018590Z-01ace1"],
+          "reason": "A field worker's start page renders in the browser: the employee's server render of /dashboard no longer carries the organization card and its member count (werk-flow/werkflow-planning#489)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8730, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23773, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "rows": null
           },
           "to": {
@@ -1430,6 +1502,42 @@
           },
           "runKeys": ["2026-11-21T055139543Z-159aab"],
           "reason": "#560: area skeletons load lazily, so the layout carries no office UI and this payload is smaller; nothing is missing"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8907, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23949, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8732, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23773, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-21T055532764Z-a59c9e"],
+          "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8732, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 23773, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8465, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 22009, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-21T090946906Z-ec017e"],
+          "reason": "#553's worker start leaves the organization card out of the employee's /dashboard render, on top of #485 (werk-flow/werkflow-planning#23)"
         }
       ]
     },

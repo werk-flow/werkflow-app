@@ -156,6 +156,7 @@ export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = 
     'hooks/use-weekly-time-data.ts',
     'components/clock-action-list.tsx',
     'components/clock-fab.tsx',
+    'components/clock-state-context.ts',
     'components/clock-state-provider.tsx',
     'components/manual-entry-dialog.tsx',
     'components/manual-entry-form-content.tsx',
