@@ -1,11 +1,11 @@
 // PR-only images never live in this public repository: no branch holds them
 // (.github/scripts/pr-asset-branches.sh, weekly) and no commit adds one (the tracked-image rule
 // below). A PR embeds them as assets of the `pr-screenshots` prerelease (the file-pr skill).
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const script = join(repositoryRoot, '.github/scripts/pr-asset-branches.sh');
@@ -45,14 +45,12 @@ describe('the PR asset branch check', () => {
   let stub = '';
 
   beforeEach(() => {
-    stub = mkdtempSync(join(tmpdir(), 'pr-asset-branches-'));
+    stub = temporaryDirectory('pr-asset-branches-');
     writeFileSync(join(stub, 'gh'), GH_STUB);
     chmodSync(join(stub, 'gh'), 0o755);
     writeFileSync(join(stub, 'output'), '');
     writeRefs([]);
   });
-
-  afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
   function writeRefs(branches: string[]) {
     writeFileSync(

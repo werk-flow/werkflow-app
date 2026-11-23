@@ -10,17 +10,18 @@ Start with `AGENTS.md`, then read only the entries whose condition applies. A ta
 - [data-model.md](technical/data-model.md): tenant boundary, roles, concept ownership, history rules.
 - [environments.md](technical/environments.md): Supabase, env files, R2, credentials, migrations, worktrees, releases.
 - [machine-setup.md](technical/machine-setup.md): new machines, background jobs.
-- [security.md](technical/security.md): a new route handler, Server Action, table, privileged function, storage path or provider setting.
+- [security.md](technical/security.md): a new route, Server Action, table, privileged function, storage path or provider setting.
 - [realtime-and-caching.md](technical/realtime-and-caching.md): cache tags, Realtime, list readers, freshness.
 - [performance.md](technical/performance.md): daily journeys, lab tables, skeletons, faster flows.
 - [document-storage-and-access.md](technical/document-storage-and-access.md): document bytes, signed URLs, storage paths, access classes, trash, versions.
 - [code-quality.md](technical/code-quality.md): writing or reviewing code.
 - [testing.md](technical/testing.md): verifying a change, a failed test, a release.
-- [boat-verification.md](technical/boat-verification.md): `test:verify` on Boat, its key and snapshot.
-- [integrated-test-state.md](technical/integrated-test-state.md): seeding test state, fixture dates, stable browser steps.
-- [coderabbit.md](technical/coderabbit.md): review levels, babysitting and merging a PR, review findings.
+- [ci-local-fallback.md](technical/ci-local-fallback.md): CI on the owner's machines.
+- [boat-verification.md](technical/boat-verification.md): `test:verify` on Boat, its key, snapshot.
+- [integrated-test-state.md](technical/integrated-test-state.md): seeding test state, fixture dates, browser steps.
+- [coderabbit.md](technical/coderabbit.md): review levels, babysitting and merging, findings.
 - [recovery-and-incidents.md](technical/recovery-and-incidents.md): something lost, leaked or down.
-- [problem-report-scrubbing.md](technical/problem-report-scrubbing.md): what may leave WerkFlow in a report.
+- [problem-report-scrubbing.md](technical/problem-report-scrubbing.md): what a report may carry.
 - [standards-audit.md](technical/standards-audit.md): rendered design acceptance, wave audits.
 - [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md): planned Tier 1 and 2 conversions.
 
@@ -54,9 +55,10 @@ Read the spec you change and those it touches. Planned scope lives in `werk-flow
 - [0005](decisions/0005-enforcement-ladder.md): the three tiers.
 - [0006](decisions/0006-testing-architecture.md): local test backend, cloud canary.
 - [0007](decisions/0007-independent-test-groups.md): independent test groups.
-- [0008](decisions/0008-development-workflow.md): release by push, superseded by 0009.
+- [0008](decisions/0008-development-workflow.md): release by push, superseded.
 - [0009](decisions/0009-pull-requests-and-ci.md): a PR per task, `Check` as the gate.
-- [0010](decisions/0010-offline-field-sync-contract.md): offline field sync contract, iOS limits.
+- [0010](decisions/0010-offline-field-sync-contract.md): offline sync, iOS limits.
+- [0011](decisions/0011-ci-profiles.md): CI profiles.
 
 ## How to work
 
@@ -85,7 +87,7 @@ It holds no schema, no list of files, handlers, functions or tests, no count or 
 
 ### Verify your work
 
-Run `bun run docs:check` after every docs edit. If you changed the checker, also run `bun run test:unit lib/docs`.
+Run `bun run docs:check` after each docs edit. If you changed the checker, also run `bun run test:unit lib/docs`.
 
 ## Maintenance rules
 

@@ -1,11 +1,11 @@
-import { expect, type Locator, type Page, type Request, type Route } from '@playwright/test';
+import { expect, type Frame, type Locator, type Page, type Request, type Route } from '@playwright/test';
 import { settled } from '../../golden/support/steps/interaction';
 import { inPageTab, SHARED_COPY } from '../../golden/support/steps/shared';
 import {
   FAILED_REGION_SELECTOR,
   SKELETON_SELECTOR,
   interceptsRequest,
-  isAppPrefetch,
+  isRouteLoad,
   isTargetPrefetch,
   navigationStart,
   stateCapturePlan,
@@ -82,42 +82,89 @@ async function appRouter(page: Page, method: 'prefetch' | 'push', url: string): 
   );
 }
 
+/** The requests of a page in flight, watched from before its document opens. */
+type InFlight = {
+  /** The app's route prefetches and script chunks still in flight, those started before any helper ran included. */
+  routeLoads: (origin: string) => number;
+  /** Whether the current document sent a prefetch of the target, a link's before any helper ran included. */
+  targetPrefetched: (target: { origin: string; path: string }) => boolean;
+  stop: () => void;
+};
+
 /**
- * Navigates on the client to the target while its server render is held, so
- * the route's `loading.tsx` stays on screen. The prefetch passes first: it
- * brings the loading boundary that the navigation shows at once.
+ * Watches every request of the page until `stop`. Started before the page
+ * opens, it also sees a prefetch or chunk that a link or an earlier step
+ * started before a held navigation began to listen. A new document ends the
+ * requests of the one it replaces, which may report no end of their own.
  */
-async function navigateHeld(page: Page, path: string, interception: Interception): Promise<void> {
-  const target = { origin: new URL(page.url()).origin, path };
+function watchInFlight(page: Page): InFlight {
   const pending = new Set<Request>();
-  // router.prefetch returns before the browser starts the request: wait until the
-  // target's prefetch started and every prefetch of the app ended, the target's
-  // and any other a link on the page started meanwhile.
-  let seen = 0;
+  let sent: Request[] = [];
+  let documentRequested = false;
   const started = (request: Request): void => {
-    const seenRequest = observed(request);
-    if (!isAppPrefetch(seenRequest, target.origin)) return;
-    if (isTargetPrefetch(seenRequest, target)) seen += 1;
-    pending.add(request);
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequested = true;
+    else {
+      pending.add(request);
+      sent.push(request);
+    }
   };
   const ended = (request: Request): void => {
     pending.delete(request);
   };
+  const committed = (frame: Frame): void => {
+    if (frame !== page.mainFrame() || !documentRequested) return;
+    documentRequested = false;
+    pending.clear();
+    sent = [];
+  };
   page.on('request', started);
   page.on('requestfinished', ended);
   page.on('requestfailed', ended);
-  try {
-    await appRouter(page, 'prefetch', path);
-    await expect
-      .poll(() => seen > 0 && pending.size === 0, {
-        message: 'the prefetch of the target route and every other prefetch finished',
-      })
-      .toBe(true);
-  } finally {
-    page.off('request', started);
-    page.off('requestfinished', ended);
-    page.off('requestfailed', ended);
-  }
+  page.on('framenavigated', committed);
+  return {
+    routeLoads: (origin) => [...pending].filter((request) => isRouteLoad(observed(request), origin)).length,
+    targetPrefetched: (target) => sent.some((request) => isTargetPrefetch(observed(request), target)),
+    stop: () => {
+      page.off('request', started);
+      page.off('requestfinished', ended);
+      page.off('requestfailed', ended);
+      page.off('framenavigated', committed);
+    },
+  };
+}
+
+/**
+ * Navigates on the client to the target while its server render is held, so
+ * the route's `loading.tsx` stays on screen. The prefetch passes first: it
+ * brings the loading boundary that the navigation shows at once, and the
+ * push waits for the chunks that boundary imports.
+ */
+async function navigateHeld(
+  page: Page,
+  path: string,
+  interception: Interception,
+  inFlight: InFlight,
+): Promise<void> {
+  const target = { origin: new URL(page.url()).origin, path };
+  // A prefetch in flight, one a link started before this call included, can
+  // own a segment the target shares, so the target's prefetch starts only
+  // once no prefetch or chunk is loading.
+  await expect
+    .poll(() => inFlight.routeLoads(target.origin), {
+      message: 'no prefetch or chunk of the app is in flight before the target route is prefetched',
+    })
+    .toBe(0);
+  // router.prefetch returns before the browser starts the request, and sends
+  // none when a link already prefetched the target: wait until this document
+  // sent the target's prefetch, and no prefetch or chunk of the app is in
+  // flight again: the target's prefetch, the chunks its loading boundary
+  // imports, and any other a link started meanwhile.
+  await appRouter(page, 'prefetch', path);
+  await expect
+    .poll(() => inFlight.targetPrefetched(target) && inFlight.routeLoads(target.origin) === 0, {
+      message: 'the prefetch of the target route, its chunks and every other prefetch finished',
+    })
+    .toBe(true);
   await interception.arm();
   await appRouter(page, 'push', path);
 }
@@ -145,10 +192,17 @@ async function reachState(
   }
   await page.setViewportSize({ width, height: VIEWPORT_HEIGHT[width] ?? 800 });
   // A fresh document of the app first: the interception knows the origin, and a loading capture has its start.
-  await openSurface(page, { route: plan.reach === 'gesture' ? route : navigationStart(route) });
-  const interception = await interceptFor(page, plan, route);
-  if (plan.reach === 'client-navigation') await navigateHeld(page, route, interception);
-  else await interception.arm();
+  // Its requests are watched from before it opens, so a held navigation sees every prefetch in flight.
+  const inFlight = watchInFlight(page);
+  let interception: Interception;
+  try {
+    await openSurface(page, { route: plan.reach === 'gesture' ? route : navigationStart(route) });
+    interception = await interceptFor(page, plan, route);
+    if (plan.reach === 'client-navigation') await navigateHeld(page, route, interception, inFlight);
+    else await interception.arm();
+  } finally {
+    inFlight.stop();
+  }
   if (plan.reach === 'page-load') await page.goto(route);
   if (view.kind === 'tab') {
     const tab = inPageTab(main, view.value);
@@ -230,15 +284,27 @@ export async function withStandaloneLoading(
   route: { from: string; to: StandaloneTarget },
   capture: () => Promise<void>,
 ): Promise<void> {
-  await page.goto(route.from);
-  await settled(page);
-  const interception = await interceptFor(page, stateCapturePlan('loading', 'page'), route.to.path);
+  const inFlight = watchInFlight(page);
+  let interception: Interception;
+  try {
+    await page.goto(route.from);
+    await settled(page);
+    interception = await interceptFor(page, stateCapturePlan('loading', 'page'), route.to.path);
+  } catch (error) {
+    inFlight.stop();
+    throw error;
+  }
   try {
     // A page of the area links to its other pages, so the target's loading
     // boundary may be prefetched already and a second prefetch sends nothing:
-    // ask for it, then wait until the network is quiet instead of for a request.
+    // ask for it, then wait until the network is quiet and no prefetch or
+    // chunk of the app is in flight instead of for a request.
     await appRouter(page, 'prefetch', route.to.address);
     await page.waitForLoadState('networkidle');
+    const origin = new URL(page.url()).origin;
+    await expect
+      .poll(() => inFlight.routeLoads(origin), { message: 'no prefetch or chunk of the app is in flight' })
+      .toBe(0);
     await interception.arm();
     await appRouter(page, 'push', route.to.address);
     await expect(
@@ -248,6 +314,7 @@ export async function withStandaloneLoading(
     expect(interception.heldNavigations(), 'the skeleton belongs to the held navigation').toBeGreaterThan(0);
     await capture();
   } finally {
+    inFlight.stop();
     await interception.release();
   }
 }
