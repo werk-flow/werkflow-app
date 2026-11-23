@@ -21,7 +21,7 @@ import {
 // database function checks the actor again, refuses every id outside the
 // organization and writes the history in the same call
 // (supabase/migrations/20261210130000_keep_offers_for_the_right_customer_and_recipient.sql,
-// 20261230090000_change_the_header_of_a_draft_offer.sql).
+// 20261230110000_change_the_header_of_a_draft_offer.sql).
 
 const createRefusal = writeRefusalFor(
   new Set(['not_authorized', 'client_not_found', 'client_archived', 'site_not_found', 'contact_not_found']),

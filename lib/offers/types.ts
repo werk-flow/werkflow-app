@@ -3,7 +3,7 @@ import { z } from '@/lib/zod';
 // An Angebot without positions: number, title, customer, recipient, validity,
 // texts and the responsible member
 // (supabase/migrations/20261210130000_keep_offers_for_the_right_customer_and_recipient.sql,
-// its header changes in 20261230090000_change_the_header_of_a_draft_offer.sql).
+// its header changes in 20261230110000_change_the_header_of_a_draft_offer.sql).
 
 /** Every status the database check allows; this release writes only `entwurf`. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;

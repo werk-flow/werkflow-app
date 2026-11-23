@@ -299,7 +299,7 @@ values
 ('38040000-0000-4000-8000-000000000061', '38040000-0000-4000-8000-000000000010', 'ANG-2037-001',
  'Gesendetes Angebot', 'gesendet', '38040000-0000-4000-8000-000000000021', '38040000-0000-4000-8000-000000000021', '2037-12-31');
 
--- The header changes (migration 20261230090000_change_the_header_of_a_draft_offer.sql).
+-- The header changes (migration 20261230110000_change_the_header_of_a_draft_offer.sql).
 -- A savepoint keeps the offers as created for the reads below.
 savepoint offer_header;
 set local role service_role;
