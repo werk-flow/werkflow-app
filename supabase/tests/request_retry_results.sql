@@ -72,23 +72,39 @@ insert into public.client_requests (
 ('41932400-0000-0000-0000-000000000048', '41932400-0000-0000-0000-000000000011', 'Fremdes Angebot',
  null, null, 'Erika Musterfrau', null, 'offen', null, null);
 
--- Two photos of request 45; the second one is also a customer document.
+-- A job the field worker is assigned to.
+insert into public.jobs (id, organization_id, title, job_number, created_by) values
+('41932400-0000-0000-0000-000000000050', '41932400-0000-0000-0000-000000000010', 'Bad besichtigen',
+ 'RT-J-50', '41932400-0000-0000-0000-000000000002');
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
+('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000050',
+ '41932400-0000-0000-0000-000000000003', '41932400-0000-0000-0000-000000000002');
+
+-- Three files of request 45: the first is also a document of the field
+-- worker's job, the second a customer document, the third in the trash.
 insert into public.documents (
-  id, organization_id, storage_path, original_file_name, display_name, size_bytes, uploaded_by
+  id, organization_id, storage_path, original_file_name, display_name, size_bytes, uploaded_by, deleted_at
 ) values
 ('41932400-0000-0000-0000-000000000080', '41932400-0000-0000-0000-000000000010',
  '41932400-0000-0000-0000-000000000010/d80/bad.jpg', 'bad.jpg', 'bad.jpg', 10,
- '41932400-0000-0000-0000-000000000002'),
+ '41932400-0000-0000-0000-000000000002', null),
 ('41932400-0000-0000-0000-000000000081', '41932400-0000-0000-0000-000000000010',
  '41932400-0000-0000-0000-000000000010/d81/grundriss.pdf', 'grundriss.pdf', 'grundriss.pdf', 10,
- '41932400-0000-0000-0000-000000000002');
-insert into public.document_links (organization_id, document_id, request_id, client_id, created_by) values
+ '41932400-0000-0000-0000-000000000002', null),
+('41932400-0000-0000-0000-000000000082', '41932400-0000-0000-0000-000000000010',
+ '41932400-0000-0000-0000-000000000010/d82/alt.jpg', 'alt.jpg', 'alt.jpg', 10,
+ '41932400-0000-0000-0000-000000000002', now());
+insert into public.document_links (organization_id, document_id, request_id, client_id, job_id, created_by) values
 ('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000080',
- '41932400-0000-0000-0000-000000000045', null, '41932400-0000-0000-0000-000000000002'),
+ null, null, '41932400-0000-0000-0000-000000000050', '41932400-0000-0000-0000-000000000002'),
+('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000082',
+ '41932400-0000-0000-0000-000000000045', null, null, '41932400-0000-0000-0000-000000000002'),
+('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000080',
+ '41932400-0000-0000-0000-000000000045', null, null, '41932400-0000-0000-0000-000000000002'),
 ('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000081',
- '41932400-0000-0000-0000-000000000045', null, '41932400-0000-0000-0000-000000000002'),
+ '41932400-0000-0000-0000-000000000045', null, null, '41932400-0000-0000-0000-000000000002'),
 ('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000081',
- null, '41932400-0000-0000-0000-000000000020', '41932400-0000-0000-0000-000000000002');
+ null, '41932400-0000-0000-0000-000000000020', null, '41932400-0000-0000-0000-000000000002');
 
 -- Runs one statement and requires the named refusal.
 create function pg_temp.expect_refusal(p_label text, p_statement text, p_refusal text) returns void
@@ -368,8 +384,9 @@ $sql$, 'not_authorized');
 -- A conversion into an offer writes one draft for the request's customer at
 -- the chosen Objekt and Ansprechpartner, carries the recipient the office
 -- chose on the request, marks the request converted with the offer, links each
--- of its documents to the offer and nothing else, and records the history
--- with its key. A retry under that key returns the first offer and writes nothing.
+-- of its documents outside the trash to the offer and nothing else, and
+-- records the history with its key. A retry under that key returns the first
+-- offer and writes nothing.
 do $$
 declare
   v_buero constant uuid := '41932400-0000-0000-0000-000000000002';
@@ -411,8 +428,9 @@ begin
       where link.offer_id = v_offer.id
         and num_nonnulls(link.job_id, link.project_id, link.client_id, link.request_id) <> 0)
     or (select count(*) from public.document_links link
-      where link.document_id in ('41932400-0000-0000-0000-000000000080', '41932400-0000-0000-0000-000000000081'))
-      is distinct from 5::bigint
+      where link.document_id in ('41932400-0000-0000-0000-000000000080', '41932400-0000-0000-0000-000000000081',
+        '41932400-0000-0000-0000-000000000082'))
+      is distinct from 8::bigint
   then
     raise exception 'the request''s documents were not linked to the offer alone';
   end if;
@@ -440,6 +458,11 @@ begin
     raise exception 'a repeated conversion into an offer wrote again: % then %',
       v_after_first, pg_temp.written_rows();
   end if;
+
+  -- A free offer under key e5, which a conversion below sends again.
+  perform public.create_offer(v_buero, '41932400-0000-0000-0000-000000000010',
+    '41932400-0000-0000-0000-0000000000e5', 'Freies Angebot', '41932400-0000-0000-0000-000000000020',
+    null, null, null, null);
 end;
 $$;
 
@@ -512,6 +535,11 @@ select pg_temp.expect_refusal('an offer without a title', $sql$
   select pg_temp.convert_to_offer('41932400-0000-0000-0000-000000000002',
     '41932400-0000-0000-0000-000000000047', '  ', null, null, '41932400-0000-0000-0000-0000000000e3')
 $sql$, 'title_required');
+select pg_temp.expect_refusal('an offer conversion under the key of a free offer', $sql$
+  select pg_temp.convert_to_offer('41932400-0000-0000-0000-000000000002',
+    '41932400-0000-0000-0000-000000000047', 'Heizung tauschen', null, null,
+    '41932400-0000-0000-0000-0000000000e5')
+$sql$, 'invalid_input');
 select pg_temp.expect_refusal('an offer conversion without a key', $sql$
   select pg_temp.convert_to_offer('41932400-0000-0000-0000-000000000002',
     '41932400-0000-0000-0000-000000000047', 'Heizung tauschen', null, null, null)
@@ -538,6 +566,35 @@ begin
 end;
 $$;
 
+reset role;
+
+-- A field worker who reads a file through the assigned job reads its job
+-- link but not its offer link; a manager reads both.
+create function pg_temp.visible_links_of_photo() returns text language sql as $$
+  select concat_ws('/',
+    (select count(*) from public.document_links
+     where document_id = '41932400-0000-0000-0000-000000000080' and job_id is not null),
+    (select count(*) from public.document_links
+     where document_id = '41932400-0000-0000-0000-000000000080' and offer_id is not null));
+$$;
+grant execute on function pg_temp.visible_links_of_photo() to authenticated;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '41932400-0000-0000-0000-000000000003', true);
+do $$
+begin
+  if pg_temp.visible_links_of_photo() is distinct from '1/0' then
+    raise exception 'a field worker read the links % (job/offer) of a job document', pg_temp.visible_links_of_photo();
+  end if;
+end;
+$$;
+select set_config('request.jwt.claim.sub', '41932400-0000-0000-0000-000000000002', true);
+do $$
+begin
+  if pg_temp.visible_links_of_photo() is distinct from '1/1' then
+    raise exception 'a manager read the links % (job/offer) of a job document', pg_temp.visible_links_of_photo();
+  end if;
+end;
+$$;
 reset role;
 
 rollback;

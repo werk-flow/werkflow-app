@@ -106,12 +106,7 @@ function ConvertRequestTargetFields({ form }: { form: ConvertRequestForm }) {
             : undefined
         }
       >
-        <Input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          maxLength={target === 'offer' ? 200 : undefined}
-          disabled={isLoading}
-        />
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={isLoading} />
       </Field>
 
       {target !== 'offer' && (

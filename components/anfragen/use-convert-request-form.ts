@@ -35,6 +35,10 @@ const ERROR_MESSAGES = {
 } satisfies Record<string, string>;
 
 // An offer is for the request's customer, so its client_required asks to assign one to the request.
+// An offer title's limit (offers_title_check); a long request summary is shortened before the conversion.
+const OFFER_TITLE_LIMIT = 200;
+const OFFER_TITLE_TOO_LONG = `Der Titel eines Angebots hat höchstens ${OFFER_TITLE_LIMIT} Zeichen. Kürze ihn bitte.`;
+
 const OFFER_CLIENT_REQUIRED =
   'Ordne der Anfrage zuerst einen Kunden zu, dann kannst du ein Angebot daraus machen.';
 
@@ -69,8 +73,9 @@ function conversionFieldErrors(
   const titleMessage =
     target === 'project' ? ERROR_MESSAGES.name_required : ERROR_MESSAGES.title_or_description_required;
   const clientMessage = target === 'offer' ? OFFER_CLIENT_REQUIRED : ERROR_MESSAGES.client_required;
+  const titleTooLong = target === 'offer' && title.trim().length > OFFER_TITLE_LIMIT;
   return {
-    'convert-title': title.trim() ? undefined : titleMessage,
+    'convert-title': !title.trim() ? titleMessage : titleTooLong ? OFFER_TITLE_TOO_LONG : undefined,
     'convert-number': target === 'job' && !number.trim() ? ERROR_MESSAGES.job_number_required : undefined,
     'convert-client': clientId ? undefined : clientMessage,
   };
