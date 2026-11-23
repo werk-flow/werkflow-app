@@ -15,13 +15,14 @@ import {
 
 const requestId = '60000000-0000-4000-8000-000000000001';
 const foreignRequestId = '60000000-0000-4000-8000-000000000009';
+const clientId = '70000000-0000-4000-8000-000000000001';
 const siteId = '71000000-0000-4000-8000-000000000001';
 const offerId = '93000000-0000-4000-8000-000000000001';
 const attemptKey = '91000000-0000-4000-8000-000000000001';
 
 const world = installActionWorld({
   client_requests: [
-    { id: requestId, organization_id: ORGANIZATION_A, client_id: '70000000-0000-4000-8000-000000000001' },
+    { id: requestId, organization_id: ORGANIZATION_A, client_id: clientId },
     {
       id: foreignRequestId,
       organization_id: ORGANIZATION_B,
@@ -51,13 +52,18 @@ const convertArgs = (convertedRequestId: string, organizationId: string) => ({
     p_actor_id: CALLER_ID,
     p_request_id: convertedRequestId,
     p_attempt_key: attemptKey,
+    p_client_id: clientId,
     p_title: 'Badsanierung',
     p_site_id: siteId,
     p_contact_id: null,
   },
 });
 const convert = (convertedRequestId: string) =>
-  convertRequestToOffer(convertedRequestId, { title: 'Badsanierung', siteId, contactId: '' }, attemptKey);
+  convertRequestToOffer(
+    convertedRequestId,
+    { clientId, title: 'Badsanierung', siteId, contactId: '' },
+    attemptKey,
+  );
 
 // Signed-out callers, callers without an organization and field workers convert nothing.
 world.callerId = null;
@@ -83,20 +89,27 @@ signInAs(world, 'buero', ORGANIZATION_B);
 assert.deepEqual(await convert(requestId), { success: false, error: 'request_not_found' });
 signInAs(world, 'buero');
 
-// Without a valid request id, attempt key, Objekt or title nothing reaches the database.
+// Without a valid request id, attempt key, customer, Objekt or title nothing reaches the database.
 world.rpcCalls.length = 0;
 for (const [id, input, key] of [
-  ['not-a-uuid', { title: 'Bad' }, attemptKey],
-  [requestId, { title: 'Bad' }, 'not-a-uuid'],
-  [requestId, { title: 'Bad', siteId: 'not-a-uuid' }, attemptKey],
-  [requestId, { title: 'x'.repeat(201) }, attemptKey],
+  ['not-a-uuid', { clientId, title: 'Bad' }, attemptKey],
+  [requestId, { clientId, title: 'Bad' }, 'not-a-uuid'],
+  [requestId, { clientId: 'not-a-uuid', title: 'Bad' }, attemptKey],
+  [requestId, { clientId, title: 'Bad', siteId: 'not-a-uuid' }, attemptKey],
+  [requestId, { clientId, title: 'x'.repeat(201) }, attemptKey],
 ] as const) {
   assert.deepEqual(await convertRequestToOffer(id, input, key), { success: false, error: 'invalid_input' });
 }
 assert.deepEqual(world.rpcCalls, []);
 
 // The function's refusals keep their codes; any other failure is create_failed.
-for (const refusal of ['already_converted', 'client_required', 'title_required', 'site_not_found']) {
+for (const refusal of [
+  'already_converted',
+  'client_required',
+  'request_changed',
+  'title_required',
+  'site_not_found',
+]) {
   world.rpc = () => ({ data: null, error: { message: refusal } });
   assert.deepEqual(await convert(requestId), { success: false, error: refusal });
 }

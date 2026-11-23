@@ -3,7 +3,7 @@ import 'server-only';
 import type { ActionResult } from '@/lib/action-result';
 import type { ClientManagerContext } from '@/lib/clients/manager-access';
 import { logError } from '@/lib/logging';
-import { describeAttachedRequestEvent, describeConvertedRequestEvent } from '@/lib/requests/types';
+import { describeAttachedRequestEvent, describeConversionToOffer } from '@/lib/requests/types';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import { describeMasterDataEvent, roleEventSiteClientId } from './master-data-events';
 import { customerJobHref, firstRelation, profileName } from './relationship-labels';
@@ -18,6 +18,7 @@ const REQUEST_EVENT_LABELS: Record<string, string> = {
   closed: 'Anfrage geschlossen',
   reopened: 'Anfrage wieder geöffnet',
   linked: 'Anfrage verknüpft',
+  converted: 'Anfrage in Arbeit überführt',
 };
 
 const FOLLOW_UP_EVENT_LABELS: Record<string, string> = {
@@ -172,9 +173,7 @@ async function readTimelineRequestSources(
     .limit(sourceLimit);
   const convertedRequestsQuery = admin
     .from('client_requests')
-    .select(
-      'id,request_number,summary,converted_at,converted_by,converted_job_id,converted_project_id,converted_offer_id',
-    )
+    .select('id,request_number,summary,converted_at,converted_by,converted_job_id,converted_project_id')
     .eq('organization_id', orgId)
     .eq('client_id', clientId)
     .not('converted_at', 'is', null)
@@ -465,13 +464,12 @@ function addRequestItems(add: AddTimelineItem, sources: TimelineSources): void {
       metadata: {
         convertedJobId: request.converted_job_id,
         convertedProjectId: request.converted_project_id,
-        convertedOfferId: request.converted_offer_id,
       },
     });
   }
 }
 
-/** An addition or conversion names the work or offer it led to and links to it. */
+/** An addition names the work it joined, a conversion into an offer the offer; each links to it. */
 function requestEventOutcome(
   eventType: string,
   payload: unknown,
@@ -480,7 +478,7 @@ function requestEventOutcome(
     const { label, workHref } = describeAttachedRequestEvent(payload);
     return { label, href: workHref };
   }
-  return eventType === 'converted' ? describeConvertedRequestEvent(payload) : null;
+  return eventType === 'converted' ? describeConversionToOffer(payload) : null;
 }
 
 function addRequestEventItems(add: AddTimelineItem, sources: TimelineSources): void {

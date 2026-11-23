@@ -310,33 +310,22 @@ export function describeAttachedRequestEvent(payload: unknown): { label: string;
   };
 }
 
-/** The history label of a conversion whose work the event does not name. */
-const REQUEST_CONVERTED_LABEL = 'Anfrage in Arbeit überführt';
+// The 'converted' history row of a conversion into an offer, which never
+// changes its number. A job or project number can change, so their
+// conversions keep the request's link.
+const convertedToOfferSchema = z.object({
+  target: z.literal('offer'),
+  offerId: z.string().min(1),
+  offerNumber: z.string().min(1),
+});
 
-// The 'converted' history row as the conversion functions write it.
-const convertedPayloadSchema = z.discriminatedUnion('target', [
-  z.object({ target: z.literal('job'), jobId: z.string().min(1), jobNumber: workNumberSchema }),
-  z.object({ target: z.literal('project'), projectId: z.string().min(1), projectNumber: workNumberSchema }),
-  z.object({ target: z.literal('offer'), offerId: z.string().min(1), offerNumber: z.string().min(1) }),
-]);
-
-/** The `converted` request event as one line naming the work or offer, and its detail page. */
-export function describeConvertedRequestEvent(payload: unknown): { label: string; href: string | null } {
-  const parsed = convertedPayloadSchema.safeParse(payload);
-  if (!parsed.success) return { label: REQUEST_CONVERTED_LABEL, href: null };
-  const event = parsed.data;
-  if (event.target === 'offer') {
-    return { label: `In Angebot ${event.offerNumber} umgewandelt`, href: offerDetailHref(event.offerId) };
-  }
-  const work =
-    event.target === 'job'
-      ? { kind: event.target, id: event.jobId, number: event.jobNumber ?? null }
-      : { kind: event.target, id: event.projectId, number: event.projectNumber ?? null };
+/** A `converted` request event that made an offer, as one line naming the offer and its page; null otherwise. */
+export function describeConversionToOffer(payload: unknown): { label: string; href: string } | null {
+  const parsed = convertedToOfferSchema.safeParse(payload);
+  if (!parsed.success) return null;
   return {
-    label: work.number
-      ? `In ${WORK_TARGET_KIND_LABELS[work.kind]} ${work.number} umgewandelt`
-      : REQUEST_CONVERTED_LABEL,
-    href: requestWorkHref(work),
+    label: `In Angebot ${parsed.data.offerNumber} umgewandelt`,
+    href: offerDetailHref(parsed.data.offerId),
   };
 }
 

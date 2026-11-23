@@ -21,6 +21,7 @@ const ERROR_MESSAGES = {
   client_required: 'Bitte wähle einen Kunden aus oder lege ihn an.',
   client_archived: 'Der Kunde ist archiviert. Hole ihn zuerst aus dem Archiv zurück.',
   site_not_found: 'Der Einsatzort gehört nicht mehr zu diesem Kunden.',
+  request_changed: 'Der Kunde der Anfrage hat sich gerade geändert. Prüfe die Angaben und wandle erneut um.',
   contact_not_found: 'Der Ansprechpartner gehört nicht mehr zu diesem Kunden.',
   job_number_required: 'Bitte gib eine Auftragsnummer ein.',
   job_number_taken: 'Diese Auftragsnummer ist bereits vergeben.',
@@ -279,7 +280,7 @@ async function convertRequest(
   if (target === 'offer') {
     const result = await convertRequestToOffer(
       requestId,
-      { title: title.trim(), ...(siteId ? { siteId } : {}), ...(contactId ? { contactId } : {}) },
+      { clientId, title: title.trim(), ...(siteId ? { siteId } : {}), ...(contactId ? { contactId } : {}) },
       attemptKey,
     );
     if (!result.success) {

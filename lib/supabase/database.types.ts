@@ -16957,6 +16957,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_attempt_key: string;
+          p_client_id: string;
           p_contact_id: string;
           p_organization_id: string;
           p_request_id: string;

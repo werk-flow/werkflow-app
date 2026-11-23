@@ -14,6 +14,8 @@ const convertToOfferArgumentsSchema = z.object({
   requestId: uuidSchema,
   attemptKey: uuidSchema,
   input: z.object({
+    // The customer the dialog showed; the request must still have it.
+    clientId: uuidSchema,
     // The offer title's own limit (offers_title_check); a blank one reaches title_required.
     title: z.string().max(200),
     siteId: blankableUuidSchema.optional(),
@@ -28,6 +30,7 @@ const offerConversionResult = rowWriteResultFor(
     'request_not_found',
     'already_converted',
     'client_required',
+    'request_changed',
     'client_archived',
     'title_required',
     'site_not_found',
@@ -38,7 +41,8 @@ const offerConversionResult = rowWriteResultFor(
 
 /**
  * Converts an open request with a customer into an offer draft, once. One call
- * creates the offer for the request's customer at the chosen Objekt and
+ * creates the offer for the request's customer, which must still be the
+ * `clientId` the dialog showed, at the chosen Objekt and
  * Ansprechpartner, carries the recipient the office chose on the request,
  * marks the request converted, links its documents to the offer and records
  * the request history, or refuses and changes nothing. A retry under
@@ -47,7 +51,7 @@ const offerConversionResult = rowWriteResultFor(
  */
 export async function convertRequestToOffer(
   rawRequestId: string,
-  rawInput: { title: string; siteId?: string; contactId?: string },
+  rawInput: { clientId: string; title: string; siteId?: string; contactId?: string },
   rawAttemptKey: string,
 ): Promise<ConvertRequestToOfferResult> {
   const parsedArguments = convertToOfferArgumentsSchema.safeParse({
@@ -73,6 +77,7 @@ export async function convertRequestToOffer(
         p_actor_id: userId,
         p_request_id: requestId,
         p_attempt_key: attemptKey,
+        p_client_id: input.clientId,
         p_title: input.title,
         p_site_id: input.siteId || null,
         p_contact_id: input.contactId || null,

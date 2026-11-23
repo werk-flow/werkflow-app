@@ -77,13 +77,13 @@ do $$
 begin
   perform public.convert_client_request_to_offer('38600000-0000-4000-8000-000000000010',
     '38600000-0000-4000-8000-000000000001', '38600000-0000-4000-8000-000000000040',
-    '38600000-0000-4000-8000-000000000101', 'Bad neu', null, null);
+    '38600000-0000-4000-8000-000000000101', '38600000-0000-4000-8000-000000000020', 'Bad neu', null, null);
 end $$
 $first$);
 select dblink_send_query('request_offer_second', $second$
   select id from public.convert_client_request_to_offer('38600000-0000-4000-8000-000000000010',
     '38600000-0000-4000-8000-000000000002', '38600000-0000-4000-8000-000000000040',
-    '38600000-0000-4000-8000-000000000102', 'Bad neu, zweites Büro', null, null)
+    '38600000-0000-4000-8000-000000000102', '38600000-0000-4000-8000-000000000020', 'Bad neu, zweites Büro', null, null)
 $second$);
 select pg_temp.await_second_blocked('the other office''s conversion');
 select dblink_exec('request_offer_first', 'commit');
@@ -116,12 +116,12 @@ create temporary table request_offer_first_offer on commit drop as
 select offer_id from dblink('request_offer_first', $first$
   select id from public.convert_client_request_to_offer('38600000-0000-4000-8000-000000000010',
     '38600000-0000-4000-8000-000000000002', '38600000-0000-4000-8000-000000000041',
-    '38600000-0000-4000-8000-000000000201', 'Heizung tauschen', null, null)
+    '38600000-0000-4000-8000-000000000201', '38600000-0000-4000-8000-000000000020', 'Heizung tauschen', null, null)
 $first$) as first(offer_id uuid);
 select dblink_send_query('request_offer_second', $second$
   select id from public.convert_client_request_to_offer('38600000-0000-4000-8000-000000000010',
     '38600000-0000-4000-8000-000000000002', '38600000-0000-4000-8000-000000000041',
-    '38600000-0000-4000-8000-000000000201', 'Heizung tauschen', null, null)
+    '38600000-0000-4000-8000-000000000201', '38600000-0000-4000-8000-000000000020', 'Heizung tauschen', null, null)
 $second$);
 select pg_temp.await_second_blocked('the repeated conversion');
 select dblink_exec('request_offer_first', 'commit');

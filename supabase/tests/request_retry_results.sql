@@ -170,13 +170,14 @@ returns public.projects language sql as $$
 $$;
 grant execute on function pg_temp.convert_to_project(uuid, text, uuid) to service_role;
 
--- A conversion into an offer by the actor at the Objekt and Ansprechpartner under the attempt key.
+-- A conversion into an offer by the actor at the Objekt and Ansprechpartner
+-- under the attempt key, from a dialog that showed Hausverwaltung Lindenhof.
 create function pg_temp.convert_to_offer(
   p_actor_id uuid, p_request_id uuid, p_title text, p_site_id uuid, p_contact_id uuid, p_attempt_key uuid
 )
 returns public.offers language sql as $$
   select public.convert_client_request_to_offer('41932400-0000-0000-0000-000000000010', p_actor_id,
-    p_request_id, p_attempt_key, p_title, p_site_id, p_contact_id);
+    p_request_id, p_attempt_key, '41932400-0000-0000-0000-000000000020', p_title, p_site_id, p_contact_id);
 $$;
 grant execute on function pg_temp.convert_to_offer(uuid, uuid, text, uuid, uuid, uuid) to service_role;
 
@@ -433,7 +434,7 @@ begin
     or (select count(*) from public.document_links link
       where link.document_id in ('41932400-0000-0000-0000-000000000080', '41932400-0000-0000-0000-000000000081',
         '41932400-0000-0000-0000-000000000082'))
-      is distinct from 8::bigint
+      is distinct from 7::bigint
   then
     raise exception 'the request''s documents were not linked to the offer alone';
   end if;
@@ -505,7 +506,8 @@ $sql$, 'already_converted');
 
 -- The boundary: a field worker, a member of another organization, another
 -- organization's request, another customer's Objekt or Ansprechpartner, a
--- request without a customer and a blank title are refused; none writes.
+-- request without a customer, a customer the dialog no longer shows and a
+-- blank title are refused; none writes.
 select pg_temp.expect_refusal('a field worker''s offer conversion', $sql$
   select pg_temp.convert_to_offer('41932400-0000-0000-0000-000000000003',
     '41932400-0000-0000-0000-000000000047', 'Heizung tauschen', null, null, '41932400-0000-0000-0000-0000000000e3')
@@ -534,6 +536,12 @@ select pg_temp.expect_refusal('an offer for a request without a customer', $sql$
     '41932400-0000-0000-0000-000000000046', 'Angebot ohne Kunde', null, null,
     '41932400-0000-0000-0000-0000000000e4')
 $sql$, 'client_required');
+select pg_temp.expect_refusal('an offer for a customer the request no longer has', $sql$
+  select public.convert_client_request_to_offer('41932400-0000-0000-0000-000000000010',
+    '41932400-0000-0000-0000-000000000002', '41932400-0000-0000-0000-000000000047',
+    '41932400-0000-0000-0000-0000000000e3', '41932400-0000-0000-0000-000000000021', 'Heizung tauschen',
+    null, null)
+$sql$, 'request_changed');
 select pg_temp.expect_refusal('an offer without a title', $sql$
   select pg_temp.convert_to_offer('41932400-0000-0000-0000-000000000002',
     '41932400-0000-0000-0000-000000000047', '  ', null, null, '41932400-0000-0000-0000-0000000000e3')
@@ -560,9 +568,9 @@ $$;
 do $$
 begin
   if has_function_privilege('authenticated',
-      'public.convert_client_request_to_offer(uuid,uuid,uuid,uuid,text,uuid,uuid)', 'EXECUTE')
+      'public.convert_client_request_to_offer(uuid,uuid,uuid,uuid,uuid,text,uuid,uuid)', 'EXECUTE')
     or has_function_privilege('anon',
-      'public.convert_client_request_to_offer(uuid,uuid,uuid,uuid,text,uuid,uuid)', 'EXECUTE')
+      'public.convert_client_request_to_offer(uuid,uuid,uuid,uuid,uuid,text,uuid,uuid)', 'EXECUTE')
   then
     raise exception 'a client role may convert a request into an offer';
   end if;

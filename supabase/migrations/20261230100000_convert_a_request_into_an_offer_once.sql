@@ -194,14 +194,17 @@ grant execute on function app_private.link_request_documents_to_offer(uuid, uuid
 -- recipient the office chose on the request, marks the request converted,
 -- links its documents to the offer and records the 'converted' event with
 -- p_attempt_key. A retry under that key returns the offer and writes nothing.
--- Refusals: invalid_input (also a key an unrelated offer was created under),
--- not_authorized, request_not_found, already_converted, client_required,
--- title_required and those of app_private.check_offer_references.
+-- p_client_id is the customer the dialog showed: a request whose customer
+-- changed since is refused with request_changed. Refusals: invalid_input (also
+-- a key another offer was created under), not_authorized, request_not_found,
+-- already_converted, client_required, request_changed, title_required and
+-- those of app_private.check_offer_references.
 create function public.convert_client_request_to_offer(
   p_organization_id uuid,
   p_actor_id uuid,
   p_request_id uuid,
   p_attempt_key uuid,
+  p_client_id uuid,
   p_title text,
   p_site_id uuid,
   p_contact_id uuid
@@ -233,19 +236,23 @@ begin
   end if;
 
   if v_request.client_id is null then raise exception 'client_required'; end if;
+  if v_request.client_id is distinct from p_client_id then raise exception 'request_changed'; end if;
   if btrim(coalesce(p_title, '')) = '' then raise exception 'title_required'; end if;
 
   -- create_offer answers a key it already created an offer under with that
-  -- offer; only a new offer of this request is converted into.
+  -- offer, so a conversion takes only a key no offer was created under; one
+  -- created meanwhile under the same key for other work fails the check after.
+  if exists (
+    select 1 from public.offer_events event
+    where event.organization_id = p_organization_id and event.attempt_key = p_attempt_key
+  ) then
+    raise exception 'invalid_input';
+  end if;
   v_offer_id := public.create_offer(p_actor_id, p_organization_id, p_attempt_key, p_title,
     v_request.client_id, p_site_id, p_contact_id, 'request', p_request_id);
   select * into v_offer from public.offers offer
   where offer.organization_id = p_organization_id and offer.id = v_offer_id
-    and offer.request_id = p_request_id
-    and not exists (
-      select 1 from public.client_requests converted
-      where converted.organization_id = p_organization_id and converted.converted_offer_id = offer.id
-    );
+    and offer.request_id = p_request_id;
   if not found then raise exception 'invalid_input'; end if;
 
   -- A recipient the office chose on the request carries over, as a
@@ -276,7 +283,7 @@ begin
   return v_offer;
 end;
 $$;
-revoke all on function public.convert_client_request_to_offer(uuid, uuid, uuid, uuid, text, uuid, uuid)
+revoke all on function public.convert_client_request_to_offer(uuid, uuid, uuid, uuid, uuid, text, uuid, uuid)
   from public, anon, authenticated;
-grant execute on function public.convert_client_request_to_offer(uuid, uuid, uuid, uuid, text, uuid, uuid)
+grant execute on function public.convert_client_request_to_offer(uuid, uuid, uuid, uuid, uuid, text, uuid, uuid)
   to service_role;

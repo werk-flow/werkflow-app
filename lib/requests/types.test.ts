@@ -11,7 +11,7 @@ import {
   REQUEST_URGENCY_ORDER,
   REQUEST_ATTACHED_LABEL,
   describeAttachedRequestEvent,
-  describeConvertedRequestEvent,
+  describeConversionToOffer,
   isCallbackOverdue,
   requestEquipmentOptions,
   requestUrgencyToJobPriority,
@@ -221,23 +221,10 @@ describe('a request added to existing work names that work and links to it', () 
   });
 });
 
-describe('a converted request names the work or offer it became and links to it', () => {
-  test('a job, project or offer reads by its kind and number and opens its detail page', () => {
+describe('a request converted into an offer names that offer and links to it', () => {
+  test('the offer reads by its number and opens its page by id', () => {
     expect(
-      describeConvertedRequestEvent({ target: 'job', jobId: 'job-1', jobNumber: 'A-2026-0042' }),
-    ).toEqual({
-      label: 'In Auftrag A-2026-0042 umgewandelt',
-      href: '/auftraege/A-2026-0042',
-    });
-    expect(
-      describeConvertedRequestEvent({
-        target: 'project',
-        projectId: 'project-1',
-        projectNumber: 'P-2026-0007',
-      }),
-    ).toEqual({ label: 'In Projekt P-2026-0007 umgewandelt', href: '/auftraege/projekt/P-2026-0007' });
-    expect(
-      describeConvertedRequestEvent({
+      describeConversionToOffer({
         target: 'offer',
         offerId: '41932400-0000-0000-0000-000000000090',
         offerNumber: 'ANG-2026-001',
@@ -249,17 +236,15 @@ describe('a converted request names the work or offer it became and links to it'
     });
   });
 
-  test('a payload without a readable work or offer keeps the general label and links nowhere', () => {
+  test('a conversion into work, whose number can change, or an unreadable payload names nothing', () => {
     for (const payload of [
       null,
       {},
       { target: 'offer', offerId: 'offer-1' },
-      { target: 'job', jobNumber: 'A-1' },
+      { target: 'job', jobId: 'job-1', jobNumber: 'A-2026-0042' },
+      { target: 'project', projectId: 'project-1', projectNumber: 'P-2026-0007' },
     ]) {
-      expect(describeConvertedRequestEvent(payload)).toEqual({
-        label: 'Anfrage in Arbeit überführt',
-        href: null,
-      });
+      expect(describeConversionToOffer(payload)).toBeNull();
     }
   });
 });
