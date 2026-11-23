@@ -2,7 +2,7 @@ import type { OfferLetterhead } from '@/lib/company-profile/letterhead';
 import { addLocalDays } from '@/lib/date-time/berlin';
 import { formatGermanDate } from '@/lib/utils';
 
-import type { BusinessDocument, DocumentPosition } from './model';
+import type { BusinessDocument, DocumentPosition, DocumentTotals } from './model';
 
 const position = (
   number: string,
@@ -34,7 +34,11 @@ const DEFAULT_CLOSING_TEXT =
  * shown. Without texts of its own the office gets the sample's texts.
  * Bedarfs- and Alternativposition stay out of the subtotal.
  */
-export function sampleOffer(letterhead: OfferLetterhead, issuedOn: string): BusinessDocument {
+/** Typed with its totals, so a caller adds up against them. */
+export function sampleOffer(
+  letterhead: OfferLetterhead,
+  issuedOn: string,
+): BusinessDocument & { totals: DocumentTotals } {
   const { sender, footerColumns, stationery } = letterhead;
   return {
     issuedOn,

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { addLocalDays } from '../date-time/berlin';
+import { readWorkflow } from './ci-workflow';
 import { agentHosts, askedDay, failedBrowserDates, lookaheadDays, lookaheadLegs } from './date-lookahead';
 
 const input = {
@@ -206,4 +207,32 @@ test("the runner agent's hosts are read from its journal, each once", () => {
     'hosted-compute-request-orchestrator-prod-iad-02.githubapp.com',
   ]);
   expect(agentHosts('')).toEqual([]);
+});
+
+test('the look-ahead builds the app once, and each browser leg serves that build on its shifted clock', () => {
+  const workflow = readWorkflow('date-lookahead.yml');
+  const scripts = (job: string): string[] => {
+    const steps = workflow.at('jobs', job, 'steps');
+    return (Array.isArray(steps) ? steps : []).map((step) =>
+      typeof step === 'object' && step !== null && 'run' in step && typeof step.run === 'string'
+        ? step.run
+        : '',
+    );
+  };
+  const names = (job: string): unknown[] => {
+    const steps = workflow.at('jobs', job, 'steps');
+    return (Array.isArray(steps) ? steps : []).map((step) =>
+      typeof step === 'object' && step !== null && 'name' in step ? step.name : undefined,
+    );
+  };
+  expect(scripts('build').filter((script) => script.includes('bun run build'))).toHaveLength(1);
+  expect(workflow.text('jobs', 'build', 'if')).toBe("needs.plan.outputs.browser == 'true'");
+  expect(scripts('leg').filter((script) => script.includes('bun run build'))).toEqual([]);
+  expect(workflow.at('jobs', 'leg', 'needs')).toEqual(['plan', 'build']);
+  // Unpacked on the real clock, served on the shifted one, as the recorded build it is.
+  const order = ['Unpack the build', 'Shift the clock', 'Start the test server'].map((name) =>
+    names('leg').indexOf(name),
+  );
+  expect(order.every((index, position) => index > (order[position - 1] ?? -1))).toBe(true);
+  expect(String(workflow.step('leg', 'Start the test server').run)).toContain('test:server local --prebuilt');
 });

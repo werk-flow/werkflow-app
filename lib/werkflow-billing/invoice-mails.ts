@@ -220,6 +220,7 @@ async function issuedInvoice(stripeInvoiceId: string): Promise<z.infer<typeof is
     .from('werkflow_invoices')
     .select('number, issue_date, gross_cents, due_cents, file_key, stripe_customer_id')
     .eq('stripe_invoice_id', stripeInvoiceId)
+    .is('stripe_credit_note_id', null)
     .maybeSingle();
   const row = issuedInvoiceSchema.nullable().safeParse(data);
   if (error || !row.success) {

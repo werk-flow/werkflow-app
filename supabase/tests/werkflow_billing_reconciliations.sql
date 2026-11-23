@@ -1,5 +1,5 @@
 -- The invoice mails and the daily comparison
--- (20261221100004_mail_werkflow_invoices_and_compare_daily.sql,
+-- (20261223100004_mail_werkflow_invoices_and_compare_daily.sql,
 -- werk-flow/werkflow-planning#492): the mail ledger takes the debit notice,
 -- the invoice, the receipt and the five new alarms, and still refuses an
 -- unknown kind; only a failed debit notice can end as `expired`; no client

@@ -7,14 +7,12 @@ import {
   renameSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { BoatError, boatClient } from './boat-api';
@@ -40,6 +38,7 @@ import {
   wallClockGroup,
   withheldFile,
 } from './verify-on-boat';
+import { temporaryDirectory } from '../temporary-directory';
 
 test('change plans and ordinary groups may run on Boat', () => {
   expect(localReason([], {})).toBeUndefined();
@@ -65,7 +64,7 @@ test('runs that measure this machine, reach DEV or are asked local stay local', 
 });
 
 function keyFolder(files: Record<string, string>, folderMode = 0o700, keyMode = 0o600): string {
-  const folder = join(mkdtempSync(join(tmpdir(), 'boat-key-')), 'werkflow');
+  const folder = join(temporaryDirectory('boat-key-'), 'werkflow');
   mkdirSync(folder);
   for (const [name, text] of Object.entries(files)) writeFileSync(join(folder, name), text);
   chmodSync(folder, folderMode);
@@ -213,7 +212,7 @@ test('a plan that runs a wall-clock group stays local, whatever selected it', ()
 });
 
 test('the backend comparison covers every source the proof digest reads, but no workstation credential', () => {
-  const folder = mkdtempSync(join(tmpdir(), 'proof-env-'));
+  const folder = temporaryDirectory('proof-env-');
   writeFileSync(
     join(folder, '.env.local'),
     'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nSUPABASE_ACCESS_TOKEN=sbp_x\nEMAIL_OTP_HASH_SECRET=y\n',
@@ -239,7 +238,7 @@ test('the backend comparison covers every source the proof digest reads, but no 
 });
 
 test('only planning metadata of local runs goes to Boat, never a world and never a cloud run', () => {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-evidence-'));
+  const repository = temporaryDirectory('boat-evidence-');
   const write = (path: string, text = '{}') => {
     mkdirSync(join(repository, path, '..'), { recursive: true });
     writeFileSync(join(repository, path), text);
@@ -269,7 +268,7 @@ test('only planning metadata of local runs goes to Boat, never a world and never
 });
 
 test('a Boat proof stands for a workstation only where its code-hash secret is usable', () => {
-  const folder = mkdtempSync(join(tmpdir(), 'proof-otp-'));
+  const folder = temporaryDirectory('proof-otp-');
   const secret = (fileLine: string, environment: Record<string, string>) => {
     writeFileSync(join(folder, '.env.local'), fileLine);
     return backendValueDigests(folder, environment)['usable:EMAIL_OTP_HASH_SECRET'];
@@ -286,8 +285,8 @@ test('a Boat proof stands for a workstation only where its code-hash secret is u
 });
 
 test('results never unpack through a symbolic link that already exists in the checkout', () => {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-links-'));
-  const outside = mkdtempSync(join(tmpdir(), 'boat-outside-'));
+  const repository = temporaryDirectory('boat-links-');
+  const outside = temporaryDirectory('boat-outside-');
   mkdirSync(join(repository, '.agent-logs', 'verification'), { recursive: true });
   const report = ['.agent-logs/verification/r1/report.json'];
   expect(linkedDestination(repository, report)).toBeUndefined();
@@ -297,20 +296,20 @@ test('results never unpack through a symbolic link that already exists in the ch
 
 test('results are copied from outside the checkout and never through a symbolic link', () => {
   const unpacked = () => {
-    const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+    const staging = temporaryDirectory('boat-staging-');
     mkdirSync(join(staging, '.agent-logs', 'verification', 'r1'), { recursive: true });
     writeFileSync(join(staging, '.agent-logs', 'verification', 'r1', 'report.json'), '{"ok":true}');
     return staging;
   };
-  const repository = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  const repository = temporaryDirectory('boat-checkout-');
   copyResults(unpacked(), repository);
   expect(readFileSync(join(repository, '.agent-logs', 'verification', 'r1', 'report.json'), 'utf8')).toBe(
     '{"ok":true}',
   );
   // `.agent-logs` itself, or a folder below it, already a link: nothing is written anywhere.
   for (const link of ['.agent-logs', '.agent-logs/verification']) {
-    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
-    const outside = mkdtempSync(join(tmpdir(), 'boat-outside-'));
+    const checkout = temporaryDirectory('boat-checkout-');
+    const outside = temporaryDirectory('boat-outside-');
     mkdirSync(join(checkout, link, '..'), { recursive: true });
     symlinkSync(outside, join(checkout, link));
     expect(() => copyResults(unpacked(), checkout), link).toThrow('is a symbolic link in the checkout');
@@ -321,13 +320,13 @@ test('results are copied from outside the checkout and never through a symbolic 
 // Crafted archives, built with tar itself, go through the same unpack and copy as a Boat run.
 test('a crafted results archive is refused whole and writes nothing into the checkout', () => {
   const crafted = (name: string, build: (work: string) => string[], extra: string[] = []) => {
-    const work = mkdtempSync(join(tmpdir(), `boat-crafted-${name}-`));
+    const work = temporaryDirectory(`boat-crafted-${name}-`);
     mkdirSync(join(work, '.agent-logs', 'verification'), { recursive: true });
     const members = build(work);
     const archive = join(work, `${name}.tgz`);
     execFileSync('tar', ['-czf', archive, ...extra, ...members], { cwd: work });
-    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
-    const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+    const checkout = temporaryDirectory('boat-checkout-');
+    const staging = temporaryDirectory('boat-staging-');
     let refusal: string | undefined;
     try {
       unpackResults(archive, staging, checkout);
@@ -371,11 +370,11 @@ test('a crafted results archive is refused whole and writes nothing into the che
 
 test('an existing destination link whose name holds a backslash or a newline is never written through', () => {
   for (const name of ['a\\b', 'a\nb']) {
-    const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+    const staging = temporaryDirectory('boat-staging-');
     mkdirSync(join(staging, '.agent-logs', name), { recursive: true });
     writeFileSync(join(staging, '.agent-logs', name, 'report.json'), '{}');
-    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
-    const outside = mkdtempSync(join(tmpdir(), 'boat-outside-'));
+    const checkout = temporaryDirectory('boat-checkout-');
+    const outside = temporaryDirectory('boat-outside-');
     mkdirSync(join(checkout, '.agent-logs'));
     symlinkSync(outside, join(checkout, '.agent-logs', name));
     expect(() => copyResults(staging, checkout), JSON.stringify(name)).toThrow();
@@ -440,16 +439,16 @@ test('a crafted archive imported over an existing link with a backslash or newli
   for (const name of ['a\\b', 'a\nb']) {
     // The archive targets the linked name. It is built from the folder, so tar reads the name from
     // disk: no rename or unquote option, the same on GNU tar and bsdtar.
-    const work = mkdtempSync(join(tmpdir(), 'boat-crafted-link-'));
+    const work = temporaryDirectory('boat-crafted-link-');
     mkdirSync(join(work, '.agent-logs', name), { recursive: true });
     writeFileSync(join(work, '.agent-logs', name, 'report.json'), '{}');
     const archive = join(work, 'results.tgz');
     execFileSync('tar', ['-czf', archive, '.agent-logs'], { cwd: work });
-    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
-    const outside = mkdtempSync(join(tmpdir(), 'boat-outside-'));
+    const checkout = temporaryDirectory('boat-checkout-');
+    const outside = temporaryDirectory('boat-outside-');
     mkdirSync(join(checkout, '.agent-logs'));
     symlinkSync(outside, join(checkout, '.agent-logs', name));
-    const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+    const staging = temporaryDirectory('boat-staging-');
     expect(() => unpackResults(archive, staging, checkout), JSON.stringify(name)).toThrow(
       'The Boat results archive was refused',
     );
@@ -467,7 +466,7 @@ const interrupted = () => {
 };
 
 test('a Ctrl-C during planning stops the run instead of falling back', async () => {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-plan-'));
+  const repository = temporaryDirectory('boat-plan-');
   mkdirSync(join(repository, 'scripts'));
   writeFileSync(
     join(repository, 'scripts', 'verify.ts'),
@@ -480,7 +479,7 @@ test('a Ctrl-C during planning stops the run instead of falling back', async () 
 });
 
 test('a Ctrl-C during packing stops the run instead of falling back', async () => {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-pack-'));
+  const repository = temporaryDirectory('boat-pack-');
   execFileSync('git', ['init', '-q'], { cwd: repository, env: gitEnvironment() });
   writeFileSync(join(repository, 'README.md'), 'x');
   execFileSync('git', ['add', '.'], { cwd: repository, env: gitEnvironment() });
@@ -492,7 +491,7 @@ test('a Ctrl-C during packing stops the run instead of falling back', async () =
   const outcome = await runOnBoat({
     args: [],
     repository,
-    folder: mkdtempSync(join(tmpdir(), 'boat-pack-folder-')),
+    folder: temporaryDirectory('boat-pack-folder-'),
     key: 'boat_secret',
     signal: interrupted(),
   }).catch((error: unknown) => error);
@@ -533,12 +532,12 @@ test('a Ctrl-C during the cleanup after a failed setup never falls back', async 
 });
 
 test('an import never writes through a destination hard link and writes nothing when one file conflicts', () => {
-  const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+  const staging = temporaryDirectory('boat-staging-');
   mkdirSync(join(staging, '.agent-logs', 'runs'), { recursive: true });
   writeFileSync(join(staging, '.agent-logs', 'runs', 'a-first'), 'new');
   writeFileSync(join(staging, '.agent-logs', 'runs', 'z-last'), 'new');
   // z-last is a hard link to a file outside .agent-logs: the import refuses and the file keeps its bytes.
-  const linkedCheckout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  const linkedCheckout = temporaryDirectory('boat-checkout-');
   mkdirSync(join(linkedCheckout, '.agent-logs', 'runs'), { recursive: true });
   writeFileSync(join(linkedCheckout, 'owner-file'), 'owner');
   execFileSync('ln', [
@@ -549,12 +548,12 @@ test('an import never writes through a destination hard link and writes nothing 
   expect(readFileSync(join(linkedCheckout, 'owner-file'), 'utf8')).toBe('owner');
   expect(existsSync(join(linkedCheckout, '.agent-logs', 'runs', 'a-first'))).toBe(false);
   // z-last is a folder in the checkout: refused before a-first is written.
-  const folderCheckout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  const folderCheckout = temporaryDirectory('boat-checkout-');
   mkdirSync(join(folderCheckout, '.agent-logs', 'runs', 'z-last'), { recursive: true });
   expect(() => copyResults(staging, folderCheckout)).toThrow('is not a regular file');
   expect(readdirSync(join(folderCheckout, '.agent-logs', 'runs'))).toEqual(['z-last']);
   // A clean checkout gets both files and no temporary file is left.
-  const clean = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  const clean = temporaryDirectory('boat-checkout-');
   copyResults(staging, clean);
   expect(readdirSync(join(clean, '.agent-logs', 'runs')).sort()).toEqual(['a-first', 'z-last']);
 });
@@ -564,7 +563,7 @@ test('an import never writes through a destination hard link and writes nothing 
 // would alter unless given -P; either way nothing may land outside the staging folder.
 test('a link member followed by a file through it writes nothing outside staging', () => {
   for (const target of ['absolute', '../../outside']) {
-    const base = mkdtempSync(join(tmpdir(), 'boat-link-file-'));
+    const base = temporaryDirectory('boat-link-file-');
     const outside = join(base, 'outside');
     mkdirSync(join(base, 'one', '.agent-logs'), { recursive: true });
     mkdirSync(join(base, 'two', '.agent-logs', 'x'), { recursive: true });
@@ -578,7 +577,7 @@ test('a link member followed by a file through it writes nothing outside staging
     execFileSync('gzip', [archive]);
     const staging = join(base, 'staging');
     mkdirSync(staging);
-    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+    const checkout = temporaryDirectory('boat-checkout-');
     expect(() => unpackResults(`${archive}.gz`, staging, checkout), target).toThrow(
       'The Boat results archive was refused',
     );
@@ -601,7 +600,7 @@ async function withSigint<T>(work: (signal: AbortSignal) => Promise<T>): Promise
 }
 
 test('a real SIGINT during planning stops the run instead of falling back', async () => {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-plan-sigint-'));
+  const repository = temporaryDirectory('boat-plan-sigint-');
   mkdirSync(join(repository, 'scripts'));
   // The plan child signals this process while the synchronous planning step waits for it.
   writeFileSync(join(repository, 'scripts', 'verify.ts'), "process.kill(process.ppid, 'SIGINT');\n");
@@ -610,7 +609,7 @@ test('a real SIGINT during planning stops the run instead of falling back', asyn
 });
 
 test('a real SIGINT during packing stops the run instead of falling back', async () => {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-pack-sigint-'));
+  const repository = temporaryDirectory('boat-pack-sigint-');
   execFileSync('git', ['init', '-q'], { cwd: repository, env: gitEnvironment() });
   writeFileSync(join(repository, 'README.md'), 'x');
   execFileSync('git', ['add', '.'], { cwd: repository, env: gitEnvironment() });
@@ -625,7 +624,7 @@ test('a real SIGINT during packing stops the run instead of falling back', async
     return runOnBoat({
       args: [],
       repository,
-      folder: mkdtempSync(join(tmpdir(), 'boat-pack-sigint-folder-')),
+      folder: temporaryDirectory('boat-pack-sigint-folder-'),
       key: 'boat_secret',
       signal,
     });
@@ -634,11 +633,11 @@ test('a real SIGINT during packing stops the run instead of falling back', async
 });
 
 test('a failed rename puts the checkout back as it was', () => {
-  const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+  const staging = temporaryDirectory('boat-staging-');
   mkdirSync(join(staging, '.agent-logs', 'runs'), { recursive: true });
   for (const name of ['a-first', 'b-existing', 'c-fails'])
     writeFileSync(join(staging, '.agent-logs', 'runs', name), 'new');
-  const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  const checkout = temporaryDirectory('boat-checkout-');
   mkdirSync(join(checkout, '.agent-logs', 'runs'), { recursive: true });
   writeFileSync(join(checkout, '.agent-logs', 'runs', 'b-existing'), 'old');
   const files = ['a-first', 'b-existing', 'c-fails'].map((name) => `.agent-logs/runs/${name}`);
@@ -653,13 +652,13 @@ test('a failed rename puts the checkout back as it was', () => {
 });
 
 test('a destination longer than the system allows is refused before any write', () => {
-  const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+  const staging = temporaryDirectory('boat-staging-');
   mkdirSync(join(staging, '.agent-logs', 'runs'), { recursive: true });
   writeFileSync(join(staging, '.agent-logs', 'runs', 'a-first'), 'new');
   writeFileSync(join(staging, '.agent-logs', 'runs', 'x'.repeat(200)), 'new');
   // A checkout deep enough that the long name's destination passes PATH_MAX while a-first fits.
   const limit = process.platform === 'darwin' ? 1023 : 4095;
-  let checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  let checkout = temporaryDirectory('boat-checkout-');
   while (checkout.length < limit - 150) checkout = join(checkout, 'd'.repeat(100));
   mkdirSync(checkout, { recursive: true });
   expect(() => copyResults(staging, checkout)).toThrow('too long');
@@ -689,7 +688,7 @@ test('macOS bsdtar packs without extended attributes or AppleDouble members, GNU
 
 /** A committed repository whose working tree has a change, a deletion and an untracked file. */
 function workstationCheckout(): string {
-  const repository = mkdtempSync(join(tmpdir(), 'boat-tree-'));
+  const repository = temporaryDirectory('boat-tree-');
   const run = (...args: string[]) => execFileSync('git', args, { cwd: repository, env: gitEnvironment() });
   run('init', '-q');
   mkdirSync(join(repository, 'lib'));
@@ -705,7 +704,7 @@ function workstationCheckout(): string {
 
 /** The workstation's tree packed with this host's tar, unpacked into a fresh clone as remote-verify.sh does. */
 function rebuild(workstation: string): string {
-  const folder = mkdtempSync(join(tmpdir(), 'boat-pack-'));
+  const folder = temporaryDirectory('boat-pack-');
   const machine = join(folder, 'machine');
   execFileSync('git', ['clone', '-q', workstation, machine], { env: gitEnvironment() });
   const list = join(folder, 'tree.list');
@@ -743,7 +742,7 @@ test.skipIf(process.platform !== 'darwin')(
   () => {
     const workstation = workstationCheckout();
     execFileSync('xattr', ['-w', 'com.werkflow.test', 'provenance', join(workstation, 'lib/kept.ts')]);
-    const folder = mkdtempSync(join(tmpdir(), 'boat-pack-'));
+    const folder = temporaryDirectory('boat-pack-');
     const list = join(folder, 'tree.list');
     writeFileSync(list, 'lib/kept.ts');
     const version = execFileSync('tar', ['--version'], { encoding: 'utf8' });

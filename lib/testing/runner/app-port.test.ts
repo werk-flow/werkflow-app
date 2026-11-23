@@ -1,10 +1,11 @@
 import { expect, jest, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
-import { networkInterfaces, tmpdir } from 'node:os';
+import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { assertAppPortFree, workspaceAppOrigin, workspacePorts } from './app-port';
 import { errorCode } from './error-code';
+import { temporaryDirectory } from '../temporary-directory';
 
 function listen(host: string, port = 0): Promise<Server> {
   return new Promise((resolveListen, reject) => {
@@ -113,27 +114,23 @@ test('a free port reads as free even when a stall lets every clock run out befor
 });
 
 test('the main checkout keeps the default port and each linked worktree derives its own pair from its path', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-ports-'));
-  try {
-    const main = join(directory, 'main');
-    mkdirSync(join(main, '.git'), { recursive: true });
-    const worktrees = ['one', 'two'].map((name) => {
-      const root = join(directory, name);
-      mkdirSync(root);
-      writeFileSync(join(root, '.git'), `gitdir: ${main}/.git/worktrees/${name}\n`);
-      return root;
-    });
-    expect(workspacePorts(main)).toEqual({ app: 3000, dev: 3000 });
-    expect(workspaceAppOrigin(main)).toBe('http://localhost:3000');
-    const [one, two] = worktrees.map((root) => workspacePorts(root));
-    for (const ports of [one, two]) {
-      expect(ports?.app).toBeGreaterThanOrEqual(20_000);
-      expect(ports?.dev).toBe((ports?.app ?? 0) + 1);
-      expect(ports?.dev).toBeLessThan(30_000);
-    }
-    expect(one?.app).not.toBe(two?.app);
-    expect(workspacePorts(worktrees[0] ?? '')).toEqual(one ?? { app: 0, dev: 0 });
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
+  const directory = temporaryDirectory('werkflow-ports-');
+  const main = join(directory, 'main');
+  mkdirSync(join(main, '.git'), { recursive: true });
+  const worktrees = ['one', 'two'].map((name) => {
+    const root = join(directory, name);
+    mkdirSync(root);
+    writeFileSync(join(root, '.git'), `gitdir: ${main}/.git/worktrees/${name}\n`);
+    return root;
+  });
+  expect(workspacePorts(main)).toEqual({ app: 3000, dev: 3000 });
+  expect(workspaceAppOrigin(main)).toBe('http://localhost:3000');
+  const [one, two] = worktrees.map((root) => workspacePorts(root));
+  for (const ports of [one, two]) {
+    expect(ports?.app).toBeGreaterThanOrEqual(20_000);
+    expect(ports?.dev).toBe((ports?.app ?? 0) + 1);
+    expect(ports?.dev).toBeLessThan(30_000);
   }
+  expect(one?.app).not.toBe(two?.app);
+  expect(workspacePorts(worktrees[0] ?? '')).toEqual(one ?? { app: 0, dev: 0 });
 });

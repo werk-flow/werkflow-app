@@ -28,12 +28,15 @@ mock.module('@/lib/supabase/admin', () => ({
   createSupabaseAdminClient: () => ({
     from: () => ({
       select: () => ({
+        // The original of a Stripe invoice: its row without a credit note.
         eq: (_column: string, stripeInvoiceId: string) => ({
-          maybeSingle: async () => ({
-            data: issuedRows.some((row) => row.p_stripe_invoice_id === stripeInvoiceId)
-              ? { id: 'row' }
-              : null,
-            error: null,
+          is: () => ({
+            maybeSingle: async () => ({
+              data: issuedRows.some((row) => row.p_stripe_invoice_id === stripeInvoiceId)
+                ? { id: 'row' }
+                : null,
+              error: null,
+            }),
           }),
         }),
       }),

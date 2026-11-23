@@ -14,7 +14,8 @@ export type BillingAlarmKind =
   | 'debit_notice_late'
   | 'mail_undelivered'
   | 'signals_quiet'
-  | 'reconciliation_missed';
+  | 'reconciliation_missed'
+  | 'mail_bounced';
 
 export type BillingAlarmFacts = readonly (readonly [label: string, value: string])[];
 
@@ -68,6 +69,11 @@ const ALARM_COPY: Record<BillingAlarmKind, { title: string; what: string; next: 
     title: 'Täglicher Abgleich ausgefallen',
     what: 'Der tägliche Abgleich mit Stripe ist seit mehr als einem Tag nicht gelaufen.',
     next: 'Prüfe den Cron-Job in Vercel. Dieser Lauf hat den Abgleich nachgeholt.',
+  },
+  mail_bounced: {
+    title: 'Abrechnungsmail kam nicht an',
+    what: 'Eine Abrechnungsmail an einen Kunden kam als unzustellbar zurück, oder der Empfänger hat sie als Spam gemeldet.',
+    next: 'Prüfe die E-Mail-Adresse des Kunden in Stripe und informiere ihn auf einem anderen Weg.',
   },
 };
 

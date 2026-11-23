@@ -67,11 +67,20 @@ function query(table: string) {
       window = [0, Math.min(count, 1000) - 1];
       return Object.assign(Promise.resolve().then(rows), { maybeSingle: builder.maybeSingle });
     },
-    // Awaited as it is, or bounded by `.limit` first.
+    is: (column: string, value: null) => {
+      filters.push((row) => (row[column] ?? null) === value);
+      return builder;
+    },
+    // Awaited as it is, or narrowed by `.is` and bounded by `.limit` first.
     in: (column: string, values: readonly unknown[]) => {
       filters.push((row) => values.includes(row[column]));
+      const limit = async (count: number) => ({ data: rows().data.slice(0, count), error: null });
       return Object.assign(Promise.resolve(rows()), {
-        limit: async (count: number) => ({ data: rows().data.slice(0, count), error: null }),
+        limit,
+        is: (other: string, value: null) => {
+          filters.push((row) => (row[other] ?? null) === value);
+          return { limit };
+        },
       });
     },
     range: async (from: number, to: number) => {
@@ -290,6 +299,18 @@ for (const id of Object.keys(invoiceDebits)) {
     stripe_customer_id: 'cus_test_0001',
   });
 }
+// A refund's Storno shares its original's Stripe invoice id: the mail and the comparison read the original only.
+tables.werkflow_invoices?.unshift({
+  id: 'row_in_test_first_storno',
+  stripe_invoice_id: 'in_test_first',
+  stripe_credit_note_id: 'cn_test_first',
+  number: 'MUSTER-first-ST',
+  issue_date: dayIn(0),
+  gross_cents: -4900,
+  due_cents: 0,
+  file_key: `werkflow-billing/invoices/in_test_first/${'b'.repeat(64)}.pdf`,
+  stripe_customer_id: 'cus_test_0001',
+});
 const objects = {
   customers: {
     cus_test_0001: {

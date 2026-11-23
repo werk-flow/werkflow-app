@@ -170,6 +170,8 @@ const REVIEWED_UNPAGED_RPC_READS: Readonly<Record<string, string>> = {
   'lib/planning/actions.ts::reschedulePlanningSeries::rpc:reschedule_planning_series': ONE_SERIES,
   'lib/work-lifecycle/actions.ts::transitionWorkExecution::rpc:transition_work_execution': ONE_WORK_TARGET,
   'lib/work-lifecycle/actions.ts::saveWorkBlocker::rpc:upsert_work_blocker': ONE_WORK_TARGET,
+  'lib/werkflow-billing/mail-bounces.ts::handleBillingMailSignal::rpc:mark_werkflow_billing_mail_undelivered':
+    'the billing mails sent under one provider message id: one, since the transport answers one id per accepted send',
 };
 
 type UnpagedRead = { key: string; line: number };

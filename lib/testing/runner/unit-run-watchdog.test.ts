@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createUnitRunWatchdog, runWatchedUnitTests } from './unit-run-watchdog';
+import { temporaryDirectory } from '../temporary-directory';
 
 // The runner's wall-clock bound must hold where Bun's own timeout cannot: a
 // test that blocks its event loop. These probes drive the watchdog on a fake
@@ -46,21 +46,13 @@ describe('unit run watchdog', () => {
 // without the kill this probe outlives its own 60 s bound and fails.
 test('a test that blocks its event loop is stopped by the watchdog, which names its file', async () => {
   const repositoryRoot = resolve(import.meta.dir, '../../..');
-  const folder = mkdtempSync(join(tmpdir(), 'unit-watchdog-'));
-  try {
-    const blocking = join(folder, 'blocking.test.ts');
-    writeFileSync(
-      blocking,
-      "import { test } from 'bun:test';\ntest('blocks', () => { const end = Date.now() + 90_000; while (Date.now() < end) {} });\n",
-    );
-    const result = await runWatchedUnitTests(
-      [blocking],
-      { runMs: 30_000, progressMs: 2_000 },
-      repositoryRoot,
-    );
-    expect(result.exitCode, result.stopped ?? 'not stopped').toBe(1);
-    expect(result.stopped).toMatch(/^no test started for 2 s; the run hangs in .*blocking\.test\.ts /);
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
+  const folder = temporaryDirectory('unit-watchdog-');
+  const blocking = join(folder, 'blocking.test.ts');
+  writeFileSync(
+    blocking,
+    "import { test } from 'bun:test';\ntest('blocks', () => { const end = Date.now() + 90_000; while (Date.now() < end) {} });\n",
+  );
+  const result = await runWatchedUnitTests([blocking], { runMs: 30_000, progressMs: 2_000 }, repositoryRoot);
+  expect(result.exitCode, result.stopped ?? 'not stopped').toBe(1);
+  expect(result.stopped).toMatch(/^no test started for 2 s; the run hangs in .*blocking\.test\.ts /);
 });

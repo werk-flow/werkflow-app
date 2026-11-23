@@ -23,6 +23,12 @@ on:
         description: Decide like a scheduled run, then stop before the full run and any change to PROD
         type: boolean
         default: false
+      # A runner's scheduler dispatches the release at 03:30 instead of a held run
+      # (bun scripts/ci/schedule.ts due). It decides like a scheduled run, never as a manual one.
+      scheduled:
+        description: Decide and ship like a scheduled run, without the hold (the CI scheduler's dispatch at 03:30)
+        type: boolean
+        default: false
       alert_proof:
         description: 'Proof run only: failure, success, red-run or no-change. Decides and ships nothing; reports on "CI alert: release (proof)"'
         type: string
@@ -71,6 +77,10 @@ jobs:
     if: ${{ !inputs.alert_proof }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # the full runs of GitHub Actions
+      checks: read # the CI App's full runs (.github/scripts/check-app.sh)
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       verified: ${{ steps.candidate.outputs.verified }}
@@ -82,11 +92,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The script reads GitHub anonymously; the job token only lifts the shared runner's rate limit.
       - name: Decide the release
         id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
-          MODE: ${{ inputs.dry_run && 'dry-run' || github.event_name == 'schedule' && 'scheduled' || 'manual' }}
+          MODE: ${{ inputs.dry_run && 'dry-run' || (github.event_name == 'schedule' || inputs.scheduled) && 'scheduled' || 'manual' }}
         run: bash .github/scripts/release-candidate.sh "$MODE"
 
   full:
@@ -177,12 +188,8 @@ jobs:
           SHA: ${{ needs.candidate.outputs.sha }}
         run: git push origin "${SHA}:refs/heads/production"
 
-      # Vercel builds production from the production branch. After an Instant Rollback it
-      # stops assigning the domain to new production builds, so the release promotes explicitly.
-      # A failed build gets one redeploy, whose own id the step then waits for: a rerun of this
-      # workflow pushes the same commit, which starts no build, and lands here too. A refused API
-      # call fails the step with Vercel's reason (.github/scripts/vercel-api.sh), never leaves an
-      # empty id or state to poll.
+      # Waits for the production build, redeploys a failed one once, and promotes it unless it
+      # serves already (.github/scripts/release-promote.sh). Its last line is the deployment id.
       - name: Promote the production build
         id: promote
         env:
@@ -190,47 +197,8 @@ jobs:
           SHA: ${{ needs.candidate.outputs.sha }}
         run: |
           set -o pipefail
-          source .github/scripts/vercel-api.sh
-          vercel() { npx --yes vercel@65 "$@" --scope werkflows-projects --token "$VERCEL_TOKEN"; }
-          team="teamId=${VERCEL_TEAM_ID}"
-          query="projectId=${VERCEL_PROJECT_ID}&${team}&target=production&limit=20"
-          deadline=$((SECONDS + 1800))
-          id=""
-          redeployed=false
-          while :; do
-            if test -z "$id"; then
-              id="$(vercel_api "https://api.vercel.com/v6/deployments?${query}" \
-                | jq -r --arg sha "$SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')"
-            fi
-            # The production build may not be listed yet; keep polling with an empty state.
-            state=""
-            if test -n "$id"; then
-              state="$(vercel_api "https://api.vercel.com/v13/deployments/${id}?${team}" | jq -r .readyState)"
-            fi
-            case "$state" in
-              READY) break ;;
-              ERROR | CANCELED)
-                if $redeployed; then echo "::error::The production build of ${SHA} failed twice (${id})."; exit 1; fi
-                echo "::warning::Production build ${id} ended ${state}; redeploying it once."
-                url="$(vercel redeploy "$id" --target production --no-wait | tail -n 1)"
-                id="$(vercel_api "https://api.vercel.com/v13/deployments/${url#https://}?${team}" | jq -r '.id | strings')"
-                test -n "$id" || { echo "::error::Vercel's answer names no redeploy of ${SHA}."; exit 1; }
-                redeployed=true ;;
-            esac
-            test $SECONDS -lt $deadline || { echo "::error::No ready production build of ${SHA} after 30 minutes."; exit 1; }
-            sleep 15
-          done
-          # Vercel may already have assigned the domain to this build, and promoting the current
-          # production deployment fails with 409. A lookup that fails promotes as before.
-          # Optional lookup: no rate-limit retries, so a 429 here never spends the job's time before the promote.
-          served="$(VERCEL_API_RETRY_SECONDS=0 vercel_api "https://api.vercel.com/v4/aliases/app.werk-flow.app?${team}" | jq -r .deploymentId)" || true
-          if test "$served" = "$id"; then
-            echo "Production already serves ${SHA} (${id})."
-          else
-            vercel promote "$id" --yes
-            echo "Production serves ${SHA} (${id})."
-          fi
-          echo "deployment=$id" >> "$GITHUB_OUTPUT"
+          bash .github/scripts/release-promote.sh "$SHA" | tee "$RUNNER_TEMP/promote.log"
+          echo "deployment=$(tail -n 1 "$RUNNER_TEMP/promote.log")" >> "$GITHUB_OUTPUT"
 
   smoke:
     name: Check production

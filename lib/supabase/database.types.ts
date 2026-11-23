@@ -5885,6 +5885,75 @@ export type Database = {
           },
         ];
       };
+      maintenance_service_reports: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          document_id: string;
+          id: string;
+          maintenance_due_work_id: string;
+          organization_id: string;
+          replaces_report_id: string | null;
+          report_number: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          document_id: string;
+          id: string;
+          maintenance_due_work_id: string;
+          organization_id: string;
+          replaces_report_id?: string | null;
+          report_number: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          document_id?: string;
+          id?: string;
+          maintenance_due_work_id?: string;
+          organization_id?: string;
+          replaces_report_id?: string | null;
+          report_number?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_service_reports_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: true;
+            referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_reports_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: true;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_reports_maintenance_due_work_id_organi_fkey";
+            columns: ["maintenance_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_reports_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_reports_replaces_report_id_organizatio_fkey";
+            columns: ["replaces_report_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_service_reports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       maintenance_visit_finding_resolutions: {
         Row: {
           created_at: string;
@@ -6191,6 +6260,148 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "client_sites";
             referencedColumns: ["id", "client_id", "organization_id"];
+          },
+        ];
+      };
+      on_call_shift_events: {
+        Row: {
+          actor_id: string | null;
+          cancelled_at: string | null;
+          created_at: string;
+          ends_at: string;
+          handover_note: string;
+          id: string;
+          kind: string;
+          label: string | null;
+          member_ids: string[];
+          organization_id: string;
+          shift_id: string;
+          starts_at: string;
+          version: number;
+        };
+        Insert: {
+          actor_id?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          ends_at: string;
+          handover_note: string;
+          id?: string;
+          kind: string;
+          label?: string | null;
+          member_ids: string[];
+          organization_id: string;
+          shift_id: string;
+          starts_at: string;
+          version: number;
+        };
+        Update: {
+          actor_id?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          ends_at?: string;
+          handover_note?: string;
+          id?: string;
+          kind?: string;
+          label?: string | null;
+          member_ids?: string[];
+          organization_id?: string;
+          shift_id?: string;
+          starts_at?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "on_call_shift_events_shift_fk";
+            columns: ["shift_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "on_call_shifts";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      on_call_shift_members: {
+        Row: {
+          employee_record_id: string;
+          organization_id: string;
+          shift_id: string;
+        };
+        Insert: {
+          employee_record_id: string;
+          organization_id: string;
+          shift_id: string;
+        };
+        Update: {
+          employee_record_id?: string;
+          organization_id?: string;
+          shift_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "on_call_shift_members_employee_fk";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "on_call_shift_members_shift_fk";
+            columns: ["shift_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "on_call_shifts";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      on_call_shifts: {
+        Row: {
+          cancelled_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          ends_at: string;
+          handover_note: string;
+          id: string;
+          label: string | null;
+          organization_id: string;
+          starts_at: string;
+          updated_at: string;
+          updated_by: string | null;
+          version: number;
+        };
+        Insert: {
+          cancelled_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          ends_at: string;
+          handover_note?: string;
+          id?: string;
+          label?: string | null;
+          organization_id: string;
+          starts_at: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Update: {
+          cancelled_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          ends_at?: string;
+          handover_note?: string;
+          id?: string;
+          label?: string | null;
+          organization_id?: string;
+          starts_at?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "on_call_shifts_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -9801,6 +10012,33 @@ export type Database = {
           },
         ];
       };
+      resend_webhook_events: {
+        Row: {
+          event_type: string;
+          ledger: string | null;
+          occurred_at: string;
+          provider_message_id: string | null;
+          received_at: string;
+          svix_id: string;
+        };
+        Insert: {
+          event_type: string;
+          ledger?: string | null;
+          occurred_at: string;
+          provider_message_id?: string | null;
+          received_at?: string;
+          svix_id: string;
+        };
+        Update: {
+          event_type?: string;
+          ledger?: string | null;
+          occurred_at?: string;
+          provider_message_id?: string | null;
+          received_at?: string;
+          svix_id?: string;
+        };
+        Relationships: [];
+      };
       school_days: {
         Row: {
           cancelled_at: string | null;
@@ -12960,6 +13198,8 @@ export type Database = {
         Row: {
           attempts: number;
           created_at: string;
+          delivery_problem: string | null;
+          delivery_problem_at: string | null;
           failure_code: string | null;
           id: string;
           kind: string;
@@ -12974,6 +13214,8 @@ export type Database = {
         Insert: {
           attempts?: number;
           created_at?: string;
+          delivery_problem?: string | null;
+          delivery_problem_at?: string | null;
           failure_code?: string | null;
           id?: string;
           kind: string;
@@ -12988,6 +13230,8 @@ export type Database = {
         Update: {
           attempts?: number;
           created_at?: string;
+          delivery_problem?: string | null;
+          delivery_problem_at?: string | null;
           failure_code?: string | null;
           id?: string;
           kind?: string;
@@ -13092,6 +13336,7 @@ export type Database = {
           retain_until: string;
           rules_release: string;
           storno_of_invoice_id: string | null;
+          stripe_credit_note_id: string | null;
           stripe_customer_id: string;
           stripe_event_id: string;
           stripe_invoice_id: string;
@@ -13117,6 +13362,7 @@ export type Database = {
           retain_until?: string;
           rules_release: string;
           storno_of_invoice_id?: string | null;
+          stripe_credit_note_id?: string | null;
           stripe_customer_id: string;
           stripe_event_id: string;
           stripe_invoice_id: string;
@@ -13142,6 +13388,7 @@ export type Database = {
           retain_until?: string;
           rules_release?: string;
           storno_of_invoice_id?: string | null;
+          stripe_credit_note_id?: string | null;
           stripe_customer_id?: string;
           stripe_event_id?: string;
           stripe_invoice_id?: string;
@@ -16348,6 +16595,21 @@ export type Database = {
         };
         Returns: string;
       };
+      change_on_call_shift: {
+        Args: {
+          p_actor_id: string;
+          p_confirm_overlap: boolean;
+          p_ends_at: string;
+          p_expected_version: number;
+          p_handover_note: string;
+          p_label: string;
+          p_member_ids: string[];
+          p_organization_id: string;
+          p_shift_id: string;
+          p_starts_at: string;
+        };
+        Returns: Json;
+      };
       check_user_exists_by_email: {
         Args: { p_email: string };
         Returns: {
@@ -18030,6 +18292,15 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      end_on_call_shift: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_organization_id: string;
+          p_shift_id: string;
+        };
+        Returns: Json;
+      };
       end_responsibility_delegation: {
         Args: {
           p_actor_id: string;
@@ -18591,6 +18862,21 @@ export type Database = {
         };
         Returns: Json;
       };
+      hand_over_on_call_shift: {
+        Args: {
+          p_actor_id: string;
+          p_confirm_overlap: boolean;
+          p_expected_version: number;
+          p_handover_note: string;
+          p_member_ids: string[];
+          p_next_ends_at: string;
+          p_next_label: string;
+          p_next_shift_id: string;
+          p_organization_id: string;
+          p_shift_id: string;
+        };
+        Returns: Json;
+      };
       hand_over_personnel_work: {
         Args: {
           p_actor_id: string;
@@ -18651,6 +18937,17 @@ export type Database = {
           p_stripe_event_id: string;
           p_stripe_invoice_id: string;
           p_tax_cents: number;
+        };
+        Returns: string;
+      };
+      issue_werkflow_storno: {
+        Args: {
+          p_cancels_invoice_id: string;
+          p_organization_id: string;
+          p_replacement: Json;
+          p_storno: Json;
+          p_stripe_credit_note_id: string;
+          p_stripe_event_id: string;
         };
         Returns: string;
       };
@@ -19236,6 +19533,15 @@ export type Database = {
         };
         Returns: undefined;
       };
+      mark_werkflow_billing_mail_undelivered: {
+        Args: { p_problem: string; p_provider_message_id: string };
+        Returns: {
+          delivery_problem: string;
+          kind: string;
+          organization_id: string;
+          stripe_object_id: string;
+        }[];
+      };
       move_document: {
         Args: {
           p_actor_id: string;
@@ -19365,6 +19671,20 @@ export type Database = {
           p_source_kind?: string;
         };
         Returns: string;
+      };
+      plan_on_call_shift: {
+        Args: {
+          p_actor_id: string;
+          p_confirm_overlap: boolean;
+          p_ends_at: string;
+          p_handover_note: string;
+          p_label: string;
+          p_member_ids: string[];
+          p_organization_id: string;
+          p_shift_id: string;
+          p_starts_at: string;
+        };
+        Returns: Json;
       };
       prepare_time_period: {
         Args: {
@@ -19613,6 +19933,15 @@ export type Database = {
         Args: { p_limit: number; p_organization_id: string };
         Returns: Json;
       };
+      read_on_call_shifts: {
+        Args: {
+          p_for_office: boolean;
+          p_from: string;
+          p_organization_id: string;
+          p_until: string;
+        };
+        Returns: Json;
+      };
       read_open_absences: {
         Args: { p_organization_id: string; p_today: string };
         Returns: Json;
@@ -19797,6 +20126,16 @@ export type Database = {
             };
             Returns: string;
           };
+      record_resend_webhook_event: {
+        Args: {
+          p_event_type: string;
+          p_ledger: string;
+          p_occurred_at: string;
+          p_provider_message_id: string;
+          p_svix_id: string;
+        };
+        Returns: boolean;
+      };
       record_werkflow_subscription_state: {
         Args: {
           p_cancel_at_period_end: boolean;
@@ -19868,6 +20207,20 @@ export type Database = {
           org_id: string;
           org_name: string;
         }[];
+      };
+      register_maintenance_service_report: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_file_name: string;
+          p_maintenance_due_work_id: string;
+          p_organization_id: string;
+          p_replaces_report_id: string;
+          p_report_id: string;
+          p_size_bytes: number;
+          p_storage_path: string;
+        };
+        Returns: Json;
       };
       register_problem_report_file: {
         Args: {

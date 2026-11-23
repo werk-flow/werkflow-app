@@ -193,6 +193,7 @@ async function compareInvoices({ admin, stripe, nowSeconds, result, alarm }: Run
         .from('werkflow_invoices')
         .select('stripe_invoice_id')
         .in('stripe_invoice_id', batch)
+        .is('stripe_credit_note_id', null)
         .limit(batch.length),
     ),
     (row) => row.stripe_invoice_id,

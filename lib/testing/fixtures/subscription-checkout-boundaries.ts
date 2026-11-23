@@ -52,6 +52,7 @@ const noRead = async (): Promise<never> => {
 gateway = {
   verifySignal: async () => null,
   readInvoiceForIssue: noRead,
+  readRefundForStorno: noRead,
   readInvoice: noRead,
   readCustomer: noRead,
   readMandate: noRead,

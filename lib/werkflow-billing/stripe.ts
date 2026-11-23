@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 
 import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { failedPaymentMethodType } from '@/lib/werkflow-billing/payment-method';
+import { type StripeRefundForStorno, stripeRefundForStorno } from '@/lib/werkflow-billing/stripe-credit-note';
 import { type StripeInvoiceForIssue, stripeInvoiceForIssue } from '@/lib/werkflow-billing/stripe-invoice';
 import {
   subscriptionCalls,
@@ -48,9 +49,14 @@ export type StripeGateway = {
    * A finalized invoice read back from Stripe by id, with its customer, every
    * line, its payment method and SEPA mandate (stripe-invoice.ts); no charge
    * is needed. Throws a stable code when Stripe's answer cannot be issued yet
-   * or at all.
+   * or at all, and `stripe_read_failed` when Stripe could not be read.
    */
   readInvoiceForIssue(invoiceId: string): Promise<StripeInvoiceForIssue>;
+  /**
+   * A credit note read back from Stripe by id, with every credit note of its
+   * invoice (stripe-credit-note.ts). Throws a stable code like readInvoiceForIssue.
+   */
+  readRefundForStorno(creditNoteId: string): Promise<StripeRefundForStorno>;
   /** An organization's customer, Checkout and subscription (werk-flow/werkflow-planning#248). */
   subscriptions: StripeSubscriptionGateway;
   /** Each read below answers Stripe's current object, or throws `stripe_read_failed`. */
@@ -388,25 +394,38 @@ function debitReads(
 
 function invoiceReader(client: Stripe): StripeGateway['readInvoiceForIssue'] {
   return async (invoiceId) => {
-    const invoice = await client.invoices.retrieve(invoiceId, {
-      expand: [
-        'customer.invoice_settings.default_payment_method',
-        'payments',
-        'default_payment_method',
-        'parent.subscription_details.subscription.default_payment_method',
-      ],
+    const source = await read(async () => {
+      const invoice = await client.invoices.retrieve(invoiceId, {
+        expand: [
+          'customer.invoice_settings.default_payment_method',
+          'payments',
+          'default_payment_method',
+          'parent.subscription_details.subscription.default_payment_method',
+        ],
+      });
+      const lines = await client.invoices
+        .listLineItems(invoiceId, { limit: 100 })
+        .autoPagingToArray({ limit: 1000 });
+      const paymentMethod = await paymentMethodOf(client, invoice);
+      const mandateReference =
+        paymentMethod?.type === 'sepa_debit' ? await mandateReferenceOf(client, paymentMethod.id) : null;
+      return { invoice, lines, paymentMethod, mandateReference };
     });
-    const lines = await client.invoices
-      .listLineItems(invoiceId, { limit: 100 })
-      .autoPagingToArray({ limit: 1000 });
-    const paymentMethod = await paymentMethodOf(client, invoice);
-    return stripeInvoiceForIssue({
-      invoice,
-      lines,
-      paymentMethod,
-      mandateReference:
-        paymentMethod?.type === 'sepa_debit' ? await mandateReferenceOf(client, paymentMethod.id) : null,
+    return stripeInvoiceForIssue(source);
+  };
+}
+
+function refundReader(client: Stripe): StripeGateway['readRefundForStorno'] {
+  return async (creditNoteId) => {
+    const source = await read(async () => {
+      const creditNote = await client.creditNotes.retrieve(creditNoteId);
+      const invoiceId = idOf(creditNote.invoice);
+      const creditNotes = invoiceId
+        ? await client.creditNotes.list({ invoice: invoiceId, limit: 100 }).autoPagingToArray({ limit: 1000 })
+        : [];
+      return { creditNote, creditNotes };
     });
+    return stripeRefundForStorno(source);
   };
 }
 
@@ -435,6 +454,7 @@ export function resolveStripeGateway(
       ...billingReads(client),
       ...debitReads(client),
       readInvoiceForIssue: invoiceReader(client),
+      readRefundForStorno: refundReader(client),
       subscriptions: subscriptionCalls(client),
     },
   };
