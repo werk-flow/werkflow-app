@@ -1,14 +1,9 @@
-import { afterEach, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { expect, test } from 'bun:test';
+import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isJsonRecord } from '../../supabase/json';
 import { readReportHistory } from './report-history';
-
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
+import { temporaryDirectory } from '../temporary-directory';
 
 const digest = (character: string): string => character.repeat(64);
 const snapshot = {
@@ -47,8 +42,7 @@ const report = (id: string, status: 'passed' | 'failed', files = snapshot.files)
 });
 
 function archiveWith(reports: ReturnType<typeof report>[]): { archive: string; cache: string } {
-  const root = mkdtempSync(join(tmpdir(), 'report-history-'));
-  directories.push(root);
+  const root = temporaryDirectory('report-history-');
   const archive = join(root, 'verification');
   for (const entry of reports) {
     mkdirSync(join(archive, entry.id), { recursive: true });

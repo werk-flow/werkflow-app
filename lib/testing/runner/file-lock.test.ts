@@ -1,22 +1,13 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, expect, test } from 'bun:test';
+import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { withFileLock } from './file-lock';
-
-const temporaryDirectories: string[] = [];
-
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
+import { temporaryDirectory } from '../temporary-directory';
 
 describe('cross-process file lock', () => {
   test('serializes concurrent atomic JSON updates', async () => {
-    const directory = mkdtempSync(resolve(tmpdir(), 'werkflow-file-lock-'));
-    temporaryDirectories.push(directory);
+    const directory = temporaryDirectory('werkflow-file-lock-');
     const path = resolve(directory, 'counter.json');
     writeFileSync(path, '{"count":0}\n');
     const workerPath = resolve(import.meta.dir, 'file-lock-worker.ts');
@@ -43,8 +34,7 @@ describe('cross-process file lock', () => {
   });
 
   test('never steals an old lock from another operation', () => {
-    const directory = mkdtempSync(resolve(tmpdir(), 'werkflow-file-lock-'));
-    temporaryDirectories.push(directory);
+    const directory = temporaryDirectory('werkflow-file-lock-');
     const lockPath = resolve(directory, 'manifest.json.lock');
     writeFileSync(lockPath, 'existing-owner');
     const oldTimestamp = new Date('2026-01-02T10:00:00.000Z');
