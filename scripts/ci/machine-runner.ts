@@ -11,7 +11,7 @@
 // containers. Install and operate it as docs/technical/testing.md ("Run CI on the owner's
 // machines") says.
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
@@ -50,6 +50,7 @@ import {
   type RunnerPorts,
   type RunnerState,
   runnerStateSchema,
+  stopProcessGroup,
   TICK_MS,
   tick,
 } from '../../lib/testing/ci/machine-runner';
@@ -95,6 +96,9 @@ const app = readCheckApp(join(trusted, CHECK_APP_CONFIG));
 if ('problem' in app) throw new Error(app.problem);
 if (app.appId === null) throw new Error(`${CHECK_APP_CONFIG} names no CI App, so no Check can be posted.`);
 const appId = app.appId;
+// The CI App's key: one file on this trusted side, which only its owner reads.
+if ((statSync(config.appKeyFile).mode & 0o077) !== 0)
+  throw new Error(`${config.appKeyFile} is readable by others; run chmod 600 on it.`);
 const privateKey = readFileSync(config.appKeyFile, 'utf8');
 
 const shell = slotShell(config.slot);
@@ -338,13 +342,29 @@ const ports: RunnerPorts = {
         : { state: 'ended', exitCode: null, full };
     },
     async stop(current) {
-      if (current.processGroup === null || !alive(current.processGroup)) return;
-      // SIGTERM: run-commit stops every job's container (60 s of grace, then SIGKILL), then ends.
-      process.kill(-current.processGroup, 'SIGTERM');
+      if (current.processGroup === null) return;
+      // SIGTERM: run-commit stops every job's container (60 s of grace), then ends; SIGKILL after
+      // KILL_AFTER_MS, and then the run's job containers are stopped by their names.
       const group = current.processGroup;
-      setTimeout(() => {
-        if (alive(group)) process.kill(-group, 'SIGKILL');
-      }, 4 * 60_000).unref();
+      // A recorded group whose leader is no longer run-commit was reused by another process: never signal it.
+      const signal = (pid: number, name: 'SIGTERM' | 'SIGKILL' | 0): boolean =>
+        leadsRunCommit(group) && signalGroup(pid, name);
+      stopProcessGroup(
+        group,
+        signal,
+        (ms, act) => void setTimeout(act, ms).unref(),
+        () => {
+          void (async () => {
+            const listed = await shell(listCommand(config.slot));
+            for (const name of listed.stdout.split('\n').map((line) => line.trim().split(' ')[0] ?? ''))
+              if (
+                name.startsWith('werkflow-ci-') &&
+                !otherGenerations(listed.stdout, generation).includes(name)
+              )
+                await shell(stopCommand(config.slot, name));
+          })();
+        },
+      );
     },
   },
   resize: async (command) => {
@@ -384,13 +404,22 @@ const ports: RunnerPorts = {
   log,
 };
 
-function alive(group: number): boolean {
+/** Signals a process group by its negative id; false when it is gone. */
+function signalGroup(pid: number, name: 'SIGTERM' | 'SIGKILL' | 0): boolean {
   try {
-    process.kill(-group, 0);
+    process.kill(pid, name);
     return true;
   } catch {
     return false;
   }
+}
+
+const alive = (group: number): boolean => signalGroup(-group, 0);
+
+/** Whether process `pid` still runs scripts/ci/run-commit.ts. */
+function leadsRunCommit(pid: number): boolean {
+  const answer = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' });
+  return answer.status === 0 && answer.stdout.includes('scripts/ci/run-commit.ts');
 }
 
 // A restart never resumes: the older generation's run ends, and so do its job containers.

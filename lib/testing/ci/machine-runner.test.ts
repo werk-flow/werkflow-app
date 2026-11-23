@@ -9,6 +9,7 @@ import {
   type CurrentRun,
   EMPTY_STATE,
   eligiblePulls,
+  KILL_AFTER_MS,
   type MachineConfig,
   machineConfigSchema,
   offEdgeAhead,
@@ -18,6 +19,7 @@ import {
   type RunnerPorts,
   type RunnerState,
   type RunStatus,
+  stopProcessGroup,
   tick,
 } from './machine-runner';
 import type { QueuedPull } from './queue';
@@ -324,5 +326,121 @@ test("the example machine configurations and window files parse, and the windows
   ] as const) {
     expect(resolveWindow(read(name), new Date(MONDAY_NIGHT)).kind).not.toBe('hold');
     expect(read(name)).toEqual({ timezone: 'Europe/Berlin', standing, exceptions: [] });
+  }
+});
+
+test("the hard stop takes effect before 06:00 Berlin on Monday and on Friday, and signals only the run's process group", async () => {
+  // Monday 23 and Friday 27 November 2026: the PC's quiet hours begin at 06:00 Berlin (05:00 UTC).
+  for (const day of ['2026-11-23', '2026-11-27']) {
+    const github = fakeGitHub();
+    const edge = Date.parse(`${day}T05:00:00Z`);
+    const world = {
+      clock: { now: Date.parse(`${day}T02:00:00Z`) },
+      github,
+      pulls: [pull(1)],
+      windows: PC_WINDOWS,
+    };
+    const pc = machine('pc', world);
+    await tick(pc.ports);
+    expect(pc.started).toEqual([1]);
+    // One tick a minute, at any second of the minute: the first stop leaves the SIGKILL before the edge.
+    let stoppedAt: number | undefined;
+    for (
+      world.clock.now = Date.parse(`${day}T04:50:37Z`);
+      stoppedAt === undefined && world.clock.now < edge;
+      world.clock.now += 60_000
+    ) {
+      await tick(pc.ports);
+      if (pc.stopped.length) stoppedAt = world.clock.now;
+    }
+    expect(stoppedAt).toBeDefined();
+    expect((stoppedAt ?? edge) + KILL_AFTER_MS).toBeLessThan(edge);
+    expect(github.runs.map((run) => run.conclusion)).toEqual(['cancelled']);
+  }
+  // The stop signals the recorded group by its id, never a name: SIGTERM, then SIGKILL after the grace.
+  const signals: [number, string | 0][] = [];
+  const pending: { ms: number; act: () => void }[] = [];
+  let containersStopped = false;
+  stopProcessGroup(
+    4_242,
+    (pid, name) => (signals.push([pid, name]), true),
+    (ms, act) => void pending.push({ ms, act }),
+    () => (containersStopped = true),
+  );
+  expect(signals).toEqual([
+    [-4_242, 0],
+    [-4_242, 'SIGTERM'],
+  ]);
+  expect(pending.map((later) => later.ms)).toEqual([KILL_AFTER_MS]);
+  pending[0]?.act();
+  expect(signals.slice(2)).toEqual([
+    [-4_242, 0],
+    [-4_242, 'SIGKILL'],
+  ]);
+  expect(containersStopped).toBe(true);
+  // A group that is gone gets no signal at all.
+  const none: [number, string | 0][] = [];
+  stopProcessGroup(
+    4_243,
+    (pid, name) => (none.push([pid, name]), false),
+    () => undefined,
+    () => undefined,
+  );
+  expect(none).toEqual([[-4_243, 0]]);
+});
+
+test('a stopped run never leaves a pending Check that blocks its PR: it ends cancelled, or its lease lapses to the next claimer', async () => {
+  /** The newest App Check on a head, as GitHub's merge gate and the next claimer read it. */
+  const newest = (github: ReturnType<typeof fakeGitHub>, sha: string) =>
+    github.runs.filter((run) => run.sha === sha).toSorted((one, other) => other.id - one.id)[0];
+  const setUp = () => {
+    const github = fakeGitHub();
+    const world = { clock: { now: MONDAY_NIGHT }, github, pulls: [pull(1)], windows: PC_WINDOWS };
+    return { github, world, pc: machine('pc', world) };
+  };
+  // The window's edge, a moved head and a restart each complete the run's own Check as cancelled.
+  {
+    const { github, world, pc } = setUp();
+    await tick(pc.ports);
+    world.clock.now = Date.parse('2026-11-23T04:57:30Z');
+    await tick(pc.ports);
+    expect(newest(github, head(1))?.conclusion).toBe('cancelled');
+  }
+  {
+    const { github, world, pc } = setUp();
+    await tick(pc.ports);
+    world.pulls = [pull(1, { headSha: 'c'.repeat(40) })];
+    await tick(pc.ports);
+    expect(newest(github, head(1))?.conclusion).toBe('cancelled');
+  }
+  {
+    const { github, world, pc } = setUp();
+    await tick(pc.ports);
+    const restarted = machine('pc', world, { generation: 2 });
+    restarted.ports.save(pc.state());
+    await recover(restarted.ports);
+    expect(newest(github, head(1))?.conclusion).toBe('cancelled');
+  }
+  // A cancelled Check leaves the PR eligible: the next tick claims it again.
+  {
+    const { github, world, pc } = setUp();
+    await tick(pc.ports);
+    world.clock.now = Date.parse('2026-11-23T04:57:30Z');
+    await tick(pc.ports);
+    await tick(pc.ports);
+    world.clock.now = Date.parse('2026-11-23T16:00:00Z');
+    await tick(pc.ports);
+    expect(pc.started).toEqual([1, 1]);
+    expect(newest(github, head(1))?.conclusion).toBeNull();
+  }
+  // A runner that dies posts nothing: its lease lapses, and by P5's rules the next claimer takes the head.
+  {
+    const { github, world, pc } = setUp();
+    await tick(pc.ports);
+    const mac = machine('mac', world);
+    world.clock.now += (600 + 60) * 1_000 + 1_000;
+    await tick(mac.ports);
+    expect(mac.started).toEqual([1]);
+    expect(newest(github, head(1))?.title).toContain('m=mac');
   }
 });

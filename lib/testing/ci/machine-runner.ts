@@ -22,8 +22,13 @@ import { admitRun, resolveWindow } from './windows';
 export const TICK_MS = 60_000;
 /** Beyond a run's expected time, so it still ends inside its window (windows.ts, admitRun). */
 const RESERVE_MS = 120_000;
-/** The time a stopped run takes to end: run-commit stops each job's container, 60 s of grace, then kills it. */
-const STOP_MS = 3 * 60_000;
+/**
+ * After SIGTERM, a stopped run's process group gets SIGKILL this late: run-commit stops each job's
+ * container meanwhile (60 s of grace, then docker kills it).
+ */
+export const KILL_AFTER_MS = 2 * 60_000;
+/** The time a stopped run takes to end at most: the SIGKILL, and a minute to spare for the containers. */
+const STOP_MS = KILL_AFTER_MS + 60_000;
 /** Recorded runs below this count admit by the seed instead. */
 const MIN_SAMPLES = 5;
 /** The recorded durations kept per kind of run. */
@@ -414,6 +419,24 @@ async function admitNext(
     return `started #${pull.number} at ${pull.headSha} (${runUrl})`;
   }
   return 'no eligible pull request';
+}
+
+/**
+ * Ends a run's process group by the id the runner recorded, never by a name or pattern: SIGTERM now,
+ * then SIGKILL after KILL_AFTER_MS when the group still lives. `afterKill` runs once the SIGKILL
+ * went out, for the job containers the killed run-commit could not stop.
+ */
+export function stopProcessGroup(
+  group: number,
+  signal: (pid: number, name: 'SIGTERM' | 'SIGKILL' | 0) => boolean,
+  later: (ms: number, act: () => void) => void,
+  afterKill: () => void,
+): void {
+  if (!signal(-group, 0)) return;
+  signal(-group, 'SIGTERM');
+  later(KILL_AFTER_MS, () => {
+    if (signal(-group, 0) && signal(-group, 'SIGKILL')) afterKill();
+  });
 }
 
 /**

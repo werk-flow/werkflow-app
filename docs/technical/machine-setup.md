@@ -45,7 +45,7 @@ The machine runner is CI's `local` profile ([decision 0011](../decisions/0011-ci
 
 Install the runner, or move it to a new reviewed commit `<commit>`. Run each step on the machine, in a shell with the owner's `gh` login:
 
-1. Copy `ci/machines/<machine>.example.json` and `<machine>.windows.example.json` to `~/ci-runner/`. Set the paths to your home and `slot.image` to `werkflow-ci:<commit>`. Put the CI App's private key at `appKeyFile` with mode 600.
+1. Copy `ci/machines/<machine>.example.json` and `<machine>.windows.example.json` to `~/ci-runner/`. Set the paths to your home and `slot.image` to `werkflow-ci:<commit>`. Put the CI App's private key in the one file `appKeyFile` names and run `chmod 600` on it; the runner refuses a key others can read. It stays on the runner's side: on the PC in the agents' distribution, never in `werkflow-ci`.
 2. Check out the commit and build the image from it:
 
    ```bash
