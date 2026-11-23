@@ -108,7 +108,12 @@ export const DIALOG_INVENTORY = {
   },
   'components/anfragen/convert-request-dialog.tsx#ConvertRequestDialog|Anfrage umwandeln': {
     audits: [
-      { route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.convert', tabs: ['job', 'project'] },
+      {
+        route: '/anfragen/[requestId]',
+        role: 'admin',
+        opener: 'requests.convert',
+        tabs: ['job', 'project', 'offer'],
+      },
     ],
   },
   'components/anfragen/convert-request-to-service-dialog.tsx#ConvertRequestToServiceDialog|Anfrage als Servicefall übernehmen?':

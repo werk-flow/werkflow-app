@@ -93,7 +93,7 @@ insert into public.documents (
  '41932400-0000-0000-0000-000000000002', null),
 ('41932400-0000-0000-0000-000000000082', '41932400-0000-0000-0000-000000000010',
  '41932400-0000-0000-0000-000000000010/d82/alt.jpg', 'alt.jpg', 'alt.jpg', 10,
- '41932400-0000-0000-0000-000000000002', now());
+ '41932400-0000-0000-0000-000000000002', null);
 insert into public.document_links (organization_id, document_id, request_id, client_id, job_id, created_by) values
 ('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000080',
  null, null, '41932400-0000-0000-0000-000000000050', '41932400-0000-0000-0000-000000000002'),
@@ -105,6 +105,9 @@ insert into public.document_links (organization_id, document_id, request_id, cli
  '41932400-0000-0000-0000-000000000045', null, null, '41932400-0000-0000-0000-000000000002'),
 ('41932400-0000-0000-0000-000000000010', '41932400-0000-0000-0000-000000000081',
  null, '41932400-0000-0000-0000-000000000020', null, '41932400-0000-0000-0000-000000000002');
+-- A file is trashed after it was linked; its request link stays.
+update public.documents set deleted_at = now(), deleted_by = '41932400-0000-0000-0000-000000000002'
+where id = '41932400-0000-0000-0000-000000000082';
 
 -- Runs one statement and requires the named refusal.
 create function pg_temp.expect_refusal(p_label text, p_statement text, p_refusal text) returns void
