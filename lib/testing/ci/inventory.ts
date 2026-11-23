@@ -50,7 +50,8 @@ type TimeTrigger = { on: 'time' } & (
 
 /** The GitHub event that dispatches a workflow, as its `on:` says. */
 type GitHubEvent =
-  | { workflow: string; on: 'pull_request'; branches: readonly string[]; types: readonly string[] }
+  /** No `branches`: every base, as a stacked PR's. */
+  | { workflow: string; on: 'pull_request'; branches?: readonly string[]; types: readonly string[] }
   | {
       workflow: string;
       on: 'workflow_run';
@@ -146,7 +147,6 @@ export const SCHEDULES = {
       github: {
         workflow: 'list-growth.yml',
         on: 'pull_request',
-        branches: ['main'],
         types: ['labeled', 'unlabeled'],
       },
     },
@@ -188,6 +188,15 @@ export const SCHEDULES = {
         branches: ['gh-readonly-queue/**'],
         types: ['completed'],
       },
+    },
+  },
+  'retarget-notice': {
+    runs: 'Asks a PR whose base changed for a new head, so CI runs on the new base.',
+    sources: ['retarget-notice.yml#notice'],
+    trigger: {
+      on: 'event',
+      event: 'pull-request-retargeted',
+      github: { workflow: 'retarget-notice.yml', on: 'pull_request', types: ['edited'] },
     },
   },
 } as const satisfies Record<string, ScheduleItem>;
