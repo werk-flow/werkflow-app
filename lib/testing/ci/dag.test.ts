@@ -44,7 +44,7 @@ test('Check runs after every other job, always, and passes it the scheduler resu
 });
 
 test('the events map to the DAG events, and a draft becoming ready starts no second run (D1)', () => {
-  expect(ci.at('on', 'pull_request', 'types')).toEqual(['opened', 'synchronize', 'reopened']);
+  expect(ci.at('on', 'pull_request', 'types')).toEqual(['opened', 'synchronize']);
   expect(ci.at('on', 'merge_group', 'types')).toEqual(['checks_requested']);
   const event = ci.text('env', 'CI_EVENT');
   for (const mapping of [
@@ -91,35 +91,29 @@ test("the browser and component jobs run one job per shard of the plan, each pas
 
 // GitHub counts only the newest run of a workflow on a commit, so a run that an unchanged head
 // starts displaces the head's Check: a body edit's run left #592's green Check "Expected" and the PR
-// outside the queue (2026-11-23). A workflow that reports `Check` therefore starts only on a new
-// head, and a stacked PR runs against its own base, so its head holds a Check before GitHub
-// retargets it to main.
-test('a workflow that reports Check starts on a new head only, and a pull request runs on any base', () => {
+// outside the queue (2026-11-23). So only ci.yml reports `Check`, and only a new head on any base
+// starts it; retarget-notice.yml, which holds no Check, asks a retargeted PR for a new head.
+test('only ci.yml reports Check, and only a new head on any base starts its pull request run', () => {
   const owners = readdirSync(resolve(root, workflowsFolder()))
-    .filter((file) => file.endsWith('.yml'))
+    .filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'))
     .filter((file) => {
       const jobs = readWorkflow(file).at('jobs');
       return isRecord(jobs) && Object.values(jobs).some((job) => isRecord(job) && job.name === 'Check');
     });
   expect(owners).toEqual(['ci.yml']);
-  for (const file of owners) {
-    const workflow = readWorkflow(file);
-    const on = workflow.at('on');
-    expect(isRecord(on) ? Object.keys(on).sort() : on, file).toEqual([
-      'merge_group',
-      'pull_request',
-      'push',
-      'workflow_call',
-      'workflow_dispatch',
-    ]);
-    expect(asList(workflow.at('on', 'pull_request', 'types')), file).toSatisfy((types) =>
-      types.every((type) => ['opened', 'synchronize', 'reopened'].includes(String(type))),
-    );
-    expect(workflow.at('on', 'pull_request', 'branches'), file).toBeUndefined();
-    // A skipped Check counts as passed, and a name GitHub may leave unevaluated never reads `Check`.
-    expect(workflow.text('jobs', 'check', 'if'), file).toStartWith('always()');
-    expect(workflow.text('jobs', 'check', 'name'), file).toBe('Check');
-  }
+  const on = ci.at('on');
+  expect(isRecord(on) ? Object.keys(on).sort() : on).toEqual([
+    'merge_group',
+    'pull_request',
+    'push',
+    'workflow_call',
+    'workflow_dispatch',
+  ]);
+  // Exactly these keys: no `edited`, `reopened` or label type, and no branch or path filter.
+  expect(ci.at('on', 'pull_request')).toEqual({ types: ['opened', 'synchronize'] });
+  // A skipped Check counts as passed, and a name GitHub may leave unevaluated never reads `Check`.
+  expect(ci.text('jobs', 'check', 'if')).toStartWith('always()');
+  expect(ci.text('jobs', 'check', 'name')).toBe('Check');
 });
 
 const root = resolve(import.meta.dir, '../../..');

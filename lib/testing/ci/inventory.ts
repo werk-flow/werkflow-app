@@ -190,6 +190,15 @@ export const SCHEDULES = {
       },
     },
   },
+  'retarget-notice': {
+    runs: 'Asks a PR whose base changed for a new head, so CI runs on the new base.',
+    sources: ['retarget-notice.yml#notice'],
+    trigger: {
+      on: 'event',
+      event: 'pull-request-retargeted',
+      github: { workflow: 'retarget-notice.yml', on: 'pull_request', types: ['edited'] },
+    },
+  },
 } as const satisfies Record<string, ScheduleItem>;
 export type ScheduleName = keyof typeof SCHEDULES;
 export const SCHEDULE_NAMES = Object.keys(SCHEDULES).filter(

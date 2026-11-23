@@ -163,7 +163,7 @@ const LATE_EVENING = new Date('2026-11-23T22:50:00Z');
 
 const RUNS: readonly DryRun[] = [
   dryRun({ name: 'docs-only PR', event: 'pr', changedFiles: DOCS, raises: ['pull-request-closed'] }),
-  dryRun({ name: 'code PR', event: 'pr', changedFiles: CODE }),
+  dryRun({ name: 'code PR', event: 'pr', changedFiles: CODE, raises: ['pull-request-retargeted'] }),
   dryRun({ name: 'tooling PR', event: 'pr', changedFiles: TOOLING, raises: ['list-growth-label'] }),
   dryRun({
     name: 'queue batch of 4',

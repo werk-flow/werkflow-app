@@ -194,6 +194,7 @@ const FLEET: CiProfile = {
     'pr-screenshots': { executor: 'fleet', atOnce: 1 },
     'main-green-notice': { executor: 'fleet', atOnce: 1 },
     'merge-queue-notice': { executor: 'fleet', atOnce: 1 },
+    'retarget-notice': { executor: 'fleet', atOnce: 1 },
   },
 };
 
@@ -260,6 +261,7 @@ const LOCAL: CiProfile = {
     'pr-screenshots': { executor: 'local', atOnce: 1 },
     'main-green-notice': { executor: 'local', atOnce: 1 },
     'merge-queue-notice': { executor: 'local', atOnce: 1 },
+    'retarget-notice': { executor: 'local', atOnce: 1 },
   },
 };
 

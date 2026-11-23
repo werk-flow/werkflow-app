@@ -24,13 +24,13 @@ on:
   # left the required `Check` failed or "Expected". The Fast job reads the PR's labels at run
   # time, and list-growth.yml reruns it when the owner's `approved: list growth` label changes.
   # Marking a draft ready starts no run: the draft's run already is the PR's whole run.
-  # No event that leaves the head unchanged starts a run: GitHub counts only the newest run of this
-  # workflow on a commit, so a title or body edit's run displaced the head's green Check and left it
-  # "Expected" (2026-11-23, #592). A stacked PR therefore runs on any base, against that base: when
-  # GitHub retargets it to main after its base branch merged, its head already holds a Check, as any
-  # PR's does from an older main, and the merge queue runs it on top of main.
+  # Only a new head starts a run: GitHub counts only the newest run of this workflow on a commit, so
+  # a title or body edit's run displaced the head's green Check and left it "Expected" (2026-11-23,
+  # #592). A stacked PR runs on its own base; after GitHub retargets it, retarget-notice.yml asks its
+  # thread for a new head on the new base. A reopened PR whose Check is missing or red takes a new
+  # head too (docs/technical/coderabbit.md, "Babysit a pull request").
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize]
   merge_group:
     types: [checks_requested]
   push:

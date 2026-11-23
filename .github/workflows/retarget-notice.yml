@@ -1,0 +1,33 @@
+name: Retarget notice
+
+# Tells a PR that its base changed, so its thread pushes a new head on the new base
+# (docs/technical/coderabbit.md, "Babysit a pull request"). A stacked PR's Check ran against its old
+# base, and ci.yml starts no run on an edit: GitHub counts only a workflow's newest run on a commit,
+# so an edit's run there displaced the head's Check (2026-11-23, #592). This workflow holds no
+# Check, so its own runs displace nothing; a title or body edit starts it only to skip its job.
+#
+# It runs with the base repository's token, so it checks nothing out, and every event field reaches
+# its script as data through `env`.
+on:
+  pull_request:
+    types: [edited]
+
+permissions: {}
+
+jobs:
+  notice:
+    name: Notice
+    if: github.event.changes.base
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write # comment on the PR
+    steps:
+      - name: Comment on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          body="The base changed to \`$BASE\`. Update the branch (\`gh pr update-branch $PR\` or merge \`origin/$BASE\`) so CI runs on the new base."
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null
