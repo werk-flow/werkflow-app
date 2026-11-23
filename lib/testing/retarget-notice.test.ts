@@ -20,7 +20,8 @@ done
 `;
 
 test('only a base change comments, and the workflow reports no Check', () => {
-  expect(notice.at('on')).toEqual({ pull_request: { types: ['edited'] } });
+  // pull_request_target: GitHub starts no pull_request run on a PR that conflicts with its base.
+  expect(notice.at('on')).toEqual({ pull_request_target: { types: ['edited'] } });
   expect(notice.at('jobs', 'notice', 'if')).toBe('github.event.changes.base');
   const jobs = notice.at('jobs');
   expect(typeof jobs === 'object' && jobs !== null ? Object.keys(jobs) : jobs).toEqual(['notice']);
@@ -32,8 +33,17 @@ test('it holds the least permissions, checks nothing out and reads every event f
   expect(notice.at('jobs', 'notice', 'permissions')).toEqual({ 'pull-requests': 'write' });
   const steps = notice.at('jobs', 'notice', 'steps');
   expect(Array.isArray(steps) ? steps : []).toHaveLength(1);
+  // No action runs, so no checkout of the PR's code: only the step's own script.
   expect(notice.step('notice', 'Comment on the PR')).not.toHaveProperty('uses');
-  expect(notice.text('jobs', 'notice', 'steps', 0, 'run')).not.toContain('${{');
+  const script = notice.text('jobs', 'notice', 'steps', 0, 'run');
+  expect(script).not.toContain('${{');
+  expect(script).not.toContain('git ');
+  // The event reaches the script only as the PR's number and base name.
+  expect(notice.at('jobs', 'notice', 'steps', 0, 'env')).toEqual({
+    GH_TOKEN: '${{ github.token }}',
+    PR: '${{ github.event.pull_request.number }}',
+    BASE: '${{ github.event.pull_request.base.ref }}',
+  });
 });
 
 test('the comment names the new base and how to give the PR a new head on it', () => {

@@ -93,12 +93,17 @@ test("the browser and component jobs run one job per shard of the plan, each pas
 // starts displaces the head's Check: a body edit's run left #592's green Check "Expected" and the PR
 // outside the queue (2026-11-23). So only ci.yml reports `Check`, and only a new head on any base
 // starts it; retarget-notice.yml, which holds no Check, asks a retargeted PR for a new head.
+/** The check run name GitHub gives a job: its `name`, or its id when it has none. */
+const reportedName = (id: string, job: unknown): unknown => (isRecord(job) && 'name' in job ? job.name : id);
+
 test('only ci.yml reports Check, and only a new head on any base starts its pull request run', () => {
+  expect(reportedName('Check', { 'runs-on': 'ubuntu-24.04' })).toBe('Check');
+  expect(reportedName('check', { name: 'Notice' })).toBe('Notice');
   const owners = readdirSync(resolve(root, workflowsFolder()))
     .filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'))
     .filter((file) => {
       const jobs = readWorkflow(file).at('jobs');
-      return isRecord(jobs) && Object.values(jobs).some((job) => isRecord(job) && job.name === 'Check');
+      return isRecord(jobs) && Object.entries(jobs).some(([id, job]) => reportedName(id, job) === 'Check');
     });
   expect(owners).toEqual(['ci.yml']);
   const on = ci.at('on');
