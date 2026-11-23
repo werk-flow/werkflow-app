@@ -15,6 +15,7 @@ import { describeFailure } from '@/lib/action-messages';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import type { AiOrganizationSwitch } from '@/lib/ai/settings';
 import { setAiEnabled } from '@/lib/ai/settings-actions';
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 
 const ERROR_MESSAGES = {
   not_authorized: `Nur Admins können ${AI_PRODUCT_NAME} ein- oder ausschalten.`,
@@ -93,8 +94,9 @@ function AiSwitch({ organizationId, serverEnabled }: { organizationId: string; s
     }
   }
 
+  // The checkbox and its sentence show the asked-for value until the refreshed props confirm it.
   return (
-    <div className="space-y-2">
+    <div role="group" aria-label={AI_PRODUCT_NAME} className="space-y-2" {...unconfirmedMarker(busy)}>
       <div className="flex items-center gap-2">
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Checkbox

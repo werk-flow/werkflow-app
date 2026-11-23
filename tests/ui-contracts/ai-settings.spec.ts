@@ -23,7 +23,8 @@ test('the switch flips at once and stays locked until the refreshed props confir
   await toggle.click();
   const pending = page.getByRole('status', { name: 'WerkFlow KI wird umgeschaltet', exact: true });
   await expect(toggle).toBeChecked();
-  await expect(pending).toHaveAttribute('data-unconfirmed', '');
+  const group = page.getByRole('group', { name: 'WerkFlow KI', exact: true });
+  await expect(group).toHaveAttribute('data-unconfirmed', '');
   await expectHeldWrite(page, 'set-ai-enabled');
   expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toEqual({
     organizationId: '00000000-0000-4000-8000-0000000000a1',
@@ -35,9 +36,11 @@ test('the switch flips at once and stays locked until the refreshed props confir
   await expect(pending).toBeVisible();
   await expect(toggle).toBeDisabled();
   await expect(toggle).toBeChecked();
+  await expect(group).toHaveAttribute('data-unconfirmed', '');
 
   await releaseRefresh(page);
   await expect(pending).toHaveCount(0);
+  await expect(group).not.toHaveAttribute('data-unconfirmed');
   await expect(toggle).toBeEnabled();
   await expect(toggle).toBeChecked();
   await expect(page.getByRole('alert')).toHaveCount(0);

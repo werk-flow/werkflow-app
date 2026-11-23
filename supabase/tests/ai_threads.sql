@@ -311,6 +311,47 @@ begin
 end;
 $$;
 
+-- Boundaries of the budget: a hold lapses 15 minutes after its run began
+-- while its recorded cost still counts, and an attempt of the previous
+-- Berlin month counts no more.
+set local role service_role;
+select public.set_ai_organization_enabled('ae000000-0000-4000-8000-000000000011',
+  'ae000000-0000-4000-8000-000000000003', true);
+select public.create_ai_thread('ae000000-0000-4000-8000-000000000011', 'ae000000-0000-4000-8000-000000000003',
+  'ae000000-0000-4000-8000-000000000021', 'Grenzen');
+reset role;
+insert into public.ai_runs (id, organization_id, thread_id, user_id, idempotency_key, reserved_micro_usd, created_at)
+values ('ae000000-0000-4000-8000-000000000041', 'ae000000-0000-4000-8000-000000000011',
+  'ae000000-0000-4000-8000-000000000021', 'ae000000-0000-4000-8000-000000000003', 'lapsed-run', 50000000,
+  now() - interval '16 minutes');
+insert into public.ai_runs (id, organization_id, thread_id, user_id, idempotency_key, status, reserved_micro_usd,
+  created_at, settled_at)
+values ('ae000000-0000-4000-8000-000000000042', 'ae000000-0000-4000-8000-000000000011',
+  'ae000000-0000-4000-8000-000000000021', 'ae000000-0000-4000-8000-000000000003', 'last-month-run', 'succeeded',
+  50000000, now() - interval '40 days', now() - interval '40 days');
+insert into public.ai_run_attempts (organization_id, run_id, idempotency_key, model_id, prompt_version,
+  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, outcome, created_at) values
+('ae000000-0000-4000-8000-000000000011', 'ae000000-0000-4000-8000-000000000041', 'lapsed-run:1', 'claude-haiku',
+ 'prompt-v1', 10, 10, 0, 0, 10000000, 'succeeded', now()),
+('ae000000-0000-4000-8000-000000000011', 'ae000000-0000-4000-8000-000000000042', 'last-month:1', 'claude-haiku',
+ 'prompt-v1', 10, 10, 0, 0, 50000000, 'succeeded',
+ (date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin') - interval '1 second');
+do $$
+begin
+  -- EUR 10 spent this month, the lapsed hold free, last month's EUR 50 gone: EUR 40 fits, one cent more does not.
+  if (select verdict from public.reserve_ai_run('ae000000-0000-4000-8000-000000000011',
+      'ae000000-0000-4000-8000-000000000003', 'ae000000-0000-4000-8000-000000000021', 'over', 40000001))
+      is distinct from 'budget_exhausted' then
+    raise exception 'The recorded cost of a lapsed run did not count';
+  end if;
+  if (select verdict from public.reserve_ai_run('ae000000-0000-4000-8000-000000000011',
+      'ae000000-0000-4000-8000-000000000003', 'ae000000-0000-4000-8000-000000000021', 'fits', 40000000))
+      is distinct from 'reserved' then
+    raise exception 'A lapsed hold or last month''s spend still blocked the budget';
+  end if;
+end;
+$$;
+
 -- Retention: an old thread with only old items goes; a thread with a young
 -- item keeps it and loses the old one; the run loses its thread but the ledger
 -- keeps its cost.
