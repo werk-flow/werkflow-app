@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path';
 const PREPARE = resolve(import.meta.dir, '../../../scripts/ci/prepare.ts');
 
 // Answers like gh: `--jq` runs through real jq, so the step's own filter is under test. It records
-// each call and lists `labels-<n>.json` for PR <n>.
+// each call and lists `labels-<n>.json` for PR <n>; `labels-<n>.fail` makes that read fail.
 const GH_STUB = `#!/usr/bin/env bash
 echo "$*" >> "$STUB/gh.calls"
 filter=.
@@ -22,6 +22,7 @@ done
 case "$*" in
   *'/issues/'*'/labels'*)
     pr="$(sed -nE 's|.*/issues/([0-9]+)/labels.*|\\1|p' <<< "$*")"
+    if test -e "$STUB/labels-$pr.fail"; then echo 'HTTP 502' >&2; exit 1; fi
     jq -r "$filter" "$STUB/labels-$pr.json" 2> /dev/null || echo '[]' | jq -r "$filter" ;;
   *) echo "unexpected gh $*" >&2; exit 1 ;;
 esac
@@ -111,25 +112,74 @@ function prepare(step: string, env: Record<string, string>): { passed: boolean; 
   return { passed: ran.status === 0, output: `${ran.stdout}${ran.stderr}` };
 }
 
-test('a queue run takes the list growth approval of any PR in its group, whose own Check held it', () => {
-  const base = git('rev-parse', 'HEAD');
-  commit('Ahead in the queue (#11)');
-  commit('This entry (#12)');
-  const queue = {
+// A shrink-only list the step reads in each queue commit: a JSON ratchet of ceilings.
+const RATCHET = 'eslint-rules/type-assertion-ratchet.json';
+
+/** A commit that sets the ratchet's entries, as a PR squashed into the queue would. */
+function ratchetCommit(subject: string, entries: Record<string, number>): void {
+  mkdirSync(join(repository, 'eslint-rules'), { recursive: true });
+  writeFileSync(join(repository, RATCHET), JSON.stringify(entries));
+  git('add', RATCHET);
+  git('commit', '--quiet', '--no-verify', '--message', subject);
+}
+
+const approve = (pr: number): void =>
+  writeFileSync(join(stub, `labels-${pr}.json`), JSON.stringify([{ name: 'approved: list growth' }]));
+
+/**
+ * A GitHub merge queue entry for #12 behind #11: the event's base is #11's squash, not main, and
+ * the gate measures growth from main, so the step must find #11 from main's ref.
+ */
+function queueEntry(): Record<string, string> {
+  ratchetCommit('Main', { 'lib/a.ts': 1 });
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  ratchetCommit('Ahead in the queue (#11)', { 'lib/a.ts': 1, 'lib/b.ts': 1 });
+  const ahead = git('rev-parse', 'HEAD');
+  return {
     GH_TOKEN: 'token',
     CI_EVENT: 'integration',
-    CI_PRS: `refs/heads/gh-readonly-queue/main/pr-12-${base}`,
-    CI_BASE_SHA: base,
+    CI_PRS: `refs/heads/gh-readonly-queue/main/pr-12-${ahead}`,
+    CI_BASE_SHA: ahead,
   };
-  expect(prepare('approval', queue).passed).toBe(true);
-  expect(read('env')).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
-  expect(read('gh.calls')).toContain('/issues/11/labels');
-  expect(read('gh.calls')).toContain('/issues/12/labels');
+}
 
-  writeFileSync(join(stub, 'env'), '');
-  writeFileSync(join(stub, 'labels-11.json'), JSON.stringify([{ name: 'approved: list growth' }]));
+test("a queue entry behind an approved PR that grew a list takes that PR's approval for the growth", () => {
+  const queue = queueEntry();
+  commit('This entry (#12)');
+  approve(11);
   expect(prepare('approval', queue).passed).toBe(true);
   expect(read('env')).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
+  expect(read('gh.calls')).toContain('/issues/11/labels');
+});
+
+test("an approved PR ahead never covers a queue entry's own unapproved growth", () => {
+  // Main as the base and both PRs named, as the repository's own queue runs a batch.
+  const queue = { ...queueEntry(), CI_PRS: '11,12', CI_BASE_SHA: git('rev-parse', 'origin/main') };
+  ratchetCommit('This entry (#12)', { 'lib/a.ts': 1, 'lib/b.ts': 1, 'lib/c.ts': 1 });
+  approve(11);
+  expect(prepare('approval', queue).passed).toBe(true);
+  expect(read('env')).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+
+  // A growing commit without a PR number is no PR's growth: no label approves it.
+  writeFileSync(join(stub, 'env'), '');
+  git('reset', '--quiet', '--hard', 'HEAD^');
+  ratchetCommit('A commit outside any PR', { 'lib/a.ts': 2, 'lib/b.ts': 1 });
+  expect(prepare('approval', queue).passed).toBe(true);
+  expect(read('env')).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+});
+
+test("a queue run whose growing PR's labels cannot be read fails the step instead of passing it as approved", () => {
+  const queue = queueEntry();
+  commit('This entry (#12)');
+  writeFileSync(join(stub, 'labels-11.fail'), '');
+  expect(prepare('approval', queue).passed).toBe(false);
+  expect(read('env')).toBe('');
+});
+
+test('a queue run without the merge base with origin/main fails the step', () => {
+  commit('This entry (#12)');
+  expect(prepare('approval', { CI_EVENT: 'integration', CI_PRS: '12' }).passed).toBe(false);
+  expect(read('env')).toBe('');
 });
 
 test("a pull request run takes only its own PR's approval", () => {

@@ -33,7 +33,7 @@ import {
 //                  GitHub Actions reads it, and another runner gives each job a file of its own and
 //                  passes its lines to the body. Without it, nothing is passed on.
 //   GITHUB_OUTPUT  playwright: `missing` and `key` of Chromium's system packages, for the cache.
-//   CI_EVENT, CI_PRS, CI_BASE_SHA, GITHUB_REPOSITORY  approval (scripts/ci/job.ts names them).
+//   CI_EVENT, CI_PRS, GITHUB_REPOSITORY  approval (scripts/ci/job.ts names them).
 //   SIBLING_REPOSITORIES_TOKEN  siblings: reads the private werkflow-business. Without it the clone
 //                  is left out and docs:check says so. Only the clone sees it, never the job body. A
 //                  runner off GitHub runs this step from its trusted copy before the job's own steps,
@@ -156,29 +156,17 @@ function siblings(): void {
 /**
  * The owner's approval for a shrink-only list to grow (docs/technical/testing.md, "Grow a shrink-only
  * list"), read now, so a rerun after a label change sees it. A pull request run takes its own PR's
- * label. An integration run takes every PR it serves: CI_PRS, and each squash commit "<title> (#<n>)"
- * above its base. Each PR's own Check already held its growth to its label, so one approval covers them.
+ * label. An integration run tests main plus every PR it serves, and the gate measures the growth of
+ * all of them against main, so each PR's approval covers only its own growth: the step compares each
+ * commit above the merge base with origin/main, the gate's base, with its parent, and approves the run
+ * only when every commit that grows a list is the squash "<title> (#<n>)" of a PR with the label. A
+ * growing commit without a PR number, or of a PR without the label, keeps the gate strict.
  */
 async function approval(): Promise<void> {
   const event = process.env.CI_EVENT;
   if (event !== 'pr' && event !== 'integration') return;
-  // After `install`: the parser needs the dependencies.
-  const { pullRequestsOf } = await import('../../lib/testing/ci/measurement');
-  const named = pullRequestsOf(process.env.CI_PRS);
-  if ('unreadable' in named) fail(named.unreadable);
-  const squashed =
-    event === 'integration' && process.env.CI_BASE_SHA
-      ? (
-          read('git', ['log', '--format=%s', `${process.env.CI_BASE_SHA}..HEAD`]) ??
-          fail('The queue commits cannot be read.')
-        )
-          .split('\n')
-          .flatMap((subject) => /\(#([0-9]+)\)$/.exec(subject)?.[1] ?? [])
-          .map(Number)
-      : [];
   const repository = process.env.GITHUB_REPOSITORY;
-  let approved = false;
-  for (const pr of [...new Set([...named, ...squashed])].sort((left, right) => left - right)) {
+  const approved = (pr: number): boolean => {
     if (!repository) fail('The approval needs GITHUB_REPOSITORY.');
     const labels = read('gh', [
       'api',
@@ -188,10 +176,52 @@ async function approval(): Promise<void> {
       '.[].name',
     ]);
     if (labels === undefined) fail(`The labels of #${pr} cannot be read.`);
-    if (labels.split('\n').includes('approved: list growth')) approved = true;
+    return labels.split('\n').includes('approved: list growth');
+  };
+  let result: boolean;
+  if (event === 'pr') {
+    // After `install`: the parser needs the dependencies.
+    const { pullRequestsOf } = await import('../../lib/testing/ci/measurement');
+    const named = pullRequestsOf(process.env.CI_PRS);
+    if ('unreadable' in named) fail(named.unreadable);
+    result = named.some(approved);
+  } else {
+    const { committedFileText, SHRINK_ONLY_LISTS, shrinkOnlyProblems } = await import(
+      '../../lib/testing/publication/shrink-only-lists'
+    );
+    const base =
+      read('git', ['merge-base', 'HEAD', 'origin/main']) ??
+      fail('The merge base with origin/main cannot be read.');
+    const commits = (
+      read('git', ['log', '--first-parent', '--format=%H %s', `${base}..HEAD`]) ??
+      fail('The queue commits cannot be read.')
+    )
+      .split('\n')
+      .filter(Boolean);
+    // The commits' own changes add up to the gate's only when they form one line on its base.
+    const oldest = commits.at(-1)?.split(' ')[0];
+    if (oldest && read('git', ['rev-parse', `${oldest}^`]) !== base)
+      fail(`The queue commits do not form one line on ${base}.`);
+    const growing = commits.flatMap((line) => {
+      const [commit = '', ...subject] = line.split(' ');
+      // A list whose file the commit leaves alone cannot grow in it.
+      const changed = (
+        read('git', ['diff', '--name-only', `${commit}^`, commit]) ??
+        fail(`The files ${commit} changed cannot be read.`)
+      ).split('\n');
+      const grew = shrinkOnlyProblems(
+        (file) => committedFileText(checkout, `${commit}^`, file),
+        (file) => committedFileText(checkout, commit, file),
+        SHRINK_ONLY_LISTS.filter((list) => changed.includes(list.file)),
+      );
+      return grew.length ? [{ commit, pr: /\(#([0-9]+)\)$/.exec(subject.join(' '))?.[1], grew }] : [];
+    });
+    for (const { commit, pr, grew } of growing)
+      console.info(`${commit.slice(0, 9)} (${pr ? `#${pr}` : 'no PR number'}) grows: ${grew.join('; ')}`);
+    result = growing.length > 0 && growing.every(({ pr }) => pr !== undefined && approved(Number(pr)));
   }
-  exportVariable('SHRINK_ONLY_GROWTH_APPROVED', String(approved));
-  console.info(`approved: list growth = ${approved}`);
+  exportVariable('SHRINK_ONLY_GROWTH_APPROVED', String(result));
+  console.info(`approved: list growth = ${result}`);
 }
 
 /** The cached copy of the stack's environment: it depends only on the CLI version and config.toml. */

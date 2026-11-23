@@ -227,8 +227,8 @@ export const INTEGRATION_ATTEMPT = 1;
 
 /**
  * The environment of the batch prefix's integration run, on top of the runner's own: every job of
- * the run takes it. The run takes the list-growth approval of any PR in it (decision 0009, "a merge
- * queue").
+ * the run takes it. A PR with the list-growth approval runs alone, so the run takes its approval
+ * (decision 0009, "an approval covers only its own PR's growth").
  */
 export function integrationEnvironment(run: {
   tip: BatchEntry;

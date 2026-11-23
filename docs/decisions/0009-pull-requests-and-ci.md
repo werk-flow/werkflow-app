@@ -268,3 +268,7 @@ This narrows "a retry belongs to its work". The record holds every outstanding r
 ## Amendment 2026-11-22: two CI profiles
 
 The owner decided on 2026-11-22 (werk-flow/werkflow-planning#503) that CI keeps two profiles: `fleet` for Boat or GitHub Actions, and `local` for the owner's MacBook and PC. Both run the same checks, jobs and schedules; only the executor, concurrency, batching and timing differ. `ci/profile.json` on `main` is the one switch. [Decision 0011](0011-ci-profiles.md) owns the rules.
+
+## Amendment 2026-11-23: an approval covers only its own PR's growth
+
+A GitHub queue entry's run tests `main` and every PR ahead of it, and its Unit job measures list growth against `main`. It read only the labels of the PRs above the event's base, which is the entry ahead, so each PR queued behind an approved list growth failed until that PR landed (werk-flow/werkflow-planning#503). This replaces the approval rule of item 2 of the amendment "a merge queue": the run compares each commit above `main` with its parent, and waives the growth only when every commit that grows a list is the squash `<title> (#<n>)` of a PR with `approved: list growth`. An approval never covers another PR's growth, and a growing commit without a PR number keeps the gate strict. `scripts/ci/prepare.ts` (`approval`) owns the rule.
