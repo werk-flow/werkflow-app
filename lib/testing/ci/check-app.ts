@@ -197,15 +197,26 @@ export function cancelledCheckRunOf(input: {
 
 /**
  * A machine runner's completion of its attempt's Check: the verdict `built` from the run's results,
- * or cancelled when none could be built. The cancelled summary is fixed text: why the verdict could
+ * or cancelled when none could be built or a pass comes from a run that did not exit 0. The cancelled summary is fixed text: why the verdict could
  * not be built names the runner's own folders, which a public Check never shows.
  */
 export function verdictOrCancelled(
   built: { request: CheckRunRequest } | { problem: string },
   cancelled: (reason: string) => { request: CheckRunRequest } | { problem: string },
+  exitedZero: boolean,
 ): { request: CheckRunRequest; verdict: boolean } | { problem: string } {
-  if (!('problem' in built)) return { ...built, verdict: true };
-  const fallback = cancelled('No verdict: the run left no Check result this runner could read.');
+  // A pass needs run-commit's exit 0 too: a passing result of a run that did not end well is none.
+  const passedWithoutExit =
+    !('problem' in built) &&
+    built.request.status === 'completed' &&
+    built.request.conclusion === 'success' &&
+    !exitedZero;
+  if (!('problem' in built) && !passedWithoutExit) return { ...built, verdict: true };
+  const fallback = cancelled(
+    passedWithoutExit
+      ? 'No verdict: the Check result passed, but run-commit did not exit 0.'
+      : 'No verdict: the run left no Check result this runner could read.',
+  );
   return 'problem' in fallback ? fallback : { ...fallback, verdict: false };
 }
 

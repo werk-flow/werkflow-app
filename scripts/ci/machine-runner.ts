@@ -294,7 +294,7 @@ const checks: RunnerPorts['checks'] = {
             now: new Date(),
           });
     // A verdict that cannot be built from the run's results is no verdict: the Check ends cancelled.
-    const request = verdictOrCancelled(built, cancelled);
+    const request = verdictOrCancelled(built, cancelled, completion.exitCode === 0);
     if ('problem' in request) throw new Error(request.problem);
     if ('problem' in built) log(`[runner] check run ${completion.checkRun} has no verdict: ${built.problem}`);
     const summary = `${request.request.output.summary}\nList growth approved: ${completion.approval ? 'yes' : 'no'}`;
@@ -307,6 +307,56 @@ const checks: RunnerPorts['checks'] = {
     return request.verdict ? 'completed' : 'cancelled';
   },
 };
+
+/**
+ * The window's watchdog of a run: a process of its own, which stops the run at its stop-by instant
+ * even when this runner hangs, dies or cannot reach GitHub. One that cannot start stops the run at
+ * once, so no run goes on without its stop.
+ */
+function startWatchdog(group: number, stopBy: number, runDir: string): void {
+  const args = [
+    '--at',
+    String(stopBy),
+    '--group',
+    String(group),
+    '--run-dir',
+    runDir,
+    '--slot',
+    JSON.stringify(slot),
+  ];
+  spawnTracked(
+    () =>
+      spawn(process.execPath, [join(trusted, 'scripts/ci/machine-watchdog.ts'), ...args], {
+        cwd: trusted,
+        detached: true,
+        stdio: 'ignore',
+        env: watchdogEnvironment(process.env),
+      }),
+    (error) => {
+      log(`[runner] the watchdog did not start (${error.name}); the run is stopped`);
+      runCommitSignal(group)(-group, 'SIGTERM');
+    },
+  ).unref();
+}
+
+/**
+ * Resets the slot between runs with the machine's `reset` command (ci/slot): its Docker state and
+ * its user's writable state wiped, the trusted image loaded again. Then the image's id must be the
+ * one verified at start. The reset's duration is logged.
+ */
+async function resetSlot(): Promise<{ clean: true } | { clean: false; reason: string }> {
+  const began = Date.now();
+  const [program, ...args] = config.reset;
+  const reset = program ? exec(program, args, {}, 20 * 60_000) : undefined;
+  log(`[runner] the slot reset took ${Math.round((Date.now() - began) / 1_000)} s`);
+  if (!reset || reset.status !== 0)
+    return { clean: false, reason: `the slot reset failed: ${(reset?.stderr ?? '').trim().slice(-800)}` };
+  const image = await inspectImage();
+  if ('problem' in image) return { clean: false, reason: image.problem };
+  return image.id === imageId
+    ? { clean: true }
+    : { clean: false, reason: `the reset loaded ${image.id}, not ${imageId}` };
+}
 
 const alive = (group: number): boolean => {
   try {
@@ -436,36 +486,7 @@ const ports: RunnerPorts = {
       children.set(child.pid, child);
       // The window's watchdog: a process of its own, which stops the run at its stop-by instant
       // even when this runner hangs, dies or cannot reach GitHub.
-      // A watchdog that cannot start leaves no run without its stop: the run is stopped at once.
-      const group = child.pid;
-      if (stopBy !== null)
-        spawnTracked(
-          () =>
-            spawn(
-              process.execPath,
-              [
-                join(trusted, 'scripts/ci/machine-watchdog.ts'),
-                '--at',
-                String(stopBy),
-                '--group',
-                String(child.pid),
-                '--run-dir',
-                runDir,
-                '--slot',
-                JSON.stringify(slot),
-              ],
-              {
-                cwd: trusted,
-                detached: true,
-                stdio: 'ignore',
-                env: watchdogEnvironment(process.env),
-              },
-            ),
-          (error) => {
-            log(`[runner] the watchdog did not start (${error.name}); the run is stopped`);
-            runCommitSignal(group)(-group, 'SIGTERM');
-          },
-        ).unref();
+      if (stopBy !== null) startWatchdog(child.pid, stopBy, runDir);
       return { processGroup: child.pid };
     },
     async status(current) {
@@ -497,6 +518,10 @@ const ports: RunnerPorts = {
     },
     async clean(current) {
       return verified(current, await clearSlot(shell, slot));
+    },
+    reset: async () => resetSlot(),
+    async rearm(current, stopBy) {
+      if (current.processGroup !== null) startWatchdog(current.processGroup, stopBy, current.runDir);
     },
   },
   nextAttempt: () => nextGeneration(join(config.stateDir, 'attempt')),
@@ -540,6 +565,9 @@ if (recovered) log(recovered);
 const leftOver = await clearSlot(shell, slot);
 if (leftOver !== undefined)
   throw new Error(`The slot cannot be emptied, so the runner claims nothing: ${leftOver}`);
+const startReset = await resetSlot();
+if (!startReset.clean)
+  throw new Error(`The slot cannot be reset, so the runner claims nothing: ${startReset.reason}`);
 // The watchdog must reach the slot on its own: the same detached spawn and environment, a no-op.
 const probed = await new Promise<number | null>((done) =>
   spawnTracked(

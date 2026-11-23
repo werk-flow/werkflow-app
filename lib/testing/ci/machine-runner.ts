@@ -15,7 +15,6 @@ import { z } from 'zod';
 import { TEARDOWN_MS } from './container-slot';
 import type { MachineConfig } from './machine-config';
 import type { RunnerPull } from './machine-pulls';
-import { CI_DAG, CI_JOBS } from './dag';
 import {
   claim,
   heartbeat,
@@ -28,7 +27,7 @@ import {
 } from './lease';
 import { asked, byQueuePlace, upToDate } from './queue';
 import type { RunPlan } from './results';
-import { jobShards } from './run-plan';
+import { ceilingMs, percentile } from './run-ceiling';
 import { admitRun, nextOffEdge, resolveWindow } from './windows';
 
 /** How often the runner ticks. */
@@ -41,8 +40,6 @@ export const KILL_AFTER_MS = 2 * 60_000;
 const STOP_MS = KILL_AFTER_MS + TEARDOWN_MS;
 /** How long before the window turns off a run is stopped, by the runner or else its watchdog: two ticks and the stop. */
 export const EDGE_MARGIN_MS = 2 * TICK_MS + STOP_MS;
-/** A job's staging and handoff beyond its own timeout, for the run's ceiling. */
-const STAGE_MS = 20 * 60_000;
 /** Recorded runs below this count admit by the seed instead. */
 const MIN_SAMPLES = 5;
 /** The recorded durations kept per kind of run. */
@@ -100,6 +97,8 @@ const completionSchema = z.strictObject({
   lease: heldSchema,
   /** The run's duration, recorded for admission only once its verdict was delivered. */
   sample: z.strictObject({ kind: z.enum(['full', 'selected']), seconds: z.number().positive() }).nullable(),
+  /** run-commit's exit: a passing verdict also needs exit 0. */
+  exitCode: z.number().int().nullable(),
 });
 export type Completion = z.infer<typeof completionSchema>;
 
@@ -117,7 +116,7 @@ export const runnerStateSchema = z.strictObject({
     full: z.array(z.number().positive()),
     selected: z.array(z.number().positive()),
   }),
-  /** Why the slot is not shown clean after a stop: nothing is admitted while it is set. */
+  /** Why the slot is not clean, or that its reset after a run is due: nothing is admitted while it is set. */
   dirty: z.string().nullable(),
   pendingCompletions: z.array(completionSchema),
   pendingAlerts: z.array(alertSchema),
@@ -178,6 +177,13 @@ type RunControl = {
   stop(run: CurrentRun): Promise<Cleanup>;
   /** Empties the slot and verifies it; after `run`'s end it records the verified teardown for its watchdog. */
   clean(run?: CurrentRun): Promise<Cleanup>;
+  /**
+   * Resets the slot between runs (the machine's `slot.reset`): its Docker state and its user's
+   * writable state wiped, the trusted image loaded again and its id verified.
+   */
+  reset(): Promise<Cleanup>;
+  /** Starts a watchdog for `run` at the earlier `stopBy`; the older one leaves the run to it. */
+  rearm(run: CurrentRun, stopBy: number): Promise<void>;
 };
 
 export type RunnerPorts = {
@@ -219,29 +225,10 @@ export type RunnerPorts = {
   log(line: string): void;
 };
 
-/** The `p`th percentile of `values`, by nearest rank. */
-export function percentile(values: readonly number[], p: number): number {
-  const sorted = values.toSorted((left, right) => left - right);
-  const rank = Math.max(1, Math.ceil((p / 100) * sorted.length));
-  const value = sorted[rank - 1];
-  if (value === undefined) throw new Error('No value to take a percentile of.');
-  return value;
-}
-
 /** How long a run of `kind` is expected to take here: the 90th percentile of its recorded runs, or the seed. */
 function expectedMs(config: MachineConfig, state: RunnerState, kind: RunKind): number {
   const recorded = state.durations[kind];
   return (recorded.length >= MIN_SAMPLES ? percentile(recorded, 90) : config.seedSeconds[kind]) * 1_000;
-}
-
-/** The longest a run of `plan` may take: each unit's timeout and its staging; before Plan, Plan's. */
-export function ceilingMs(plan: RunPlan | null): number {
-  if (plan === null) return CI_DAG.plan.timeoutMinutes * 60_000 + STAGE_MS;
-  return CI_JOBS.filter((job) => job === 'plan' || plan.jobs.includes(job)).reduce(
-    (sum, job) =>
-      sum + (jobShards(job, plan)?.length ?? 1) * (CI_DAG[job].timeoutMinutes * 60_000 + STAGE_MS),
-    0,
-  );
 }
 
 /** Whether this repository's people opened the PR: no fork, no stranger. */
@@ -353,11 +340,19 @@ async function verdictStands(ports: RunnerPorts, queued: Completion): Promise<Co
     return cancel('The list-growth approval changed while the run went; the head runs again.');
   const profile = await ports.profile();
   if (profile !== 'local') return cancel(`main's CI profile turned ${profile} while the run went.`);
+  if (!(await ports.head(queued.head, await ports.main())).upToDate)
+    return cancel(`#${queued.pull} fell behind main while the run went; it runs again once updated.`);
   if (held.lease.state === 'done') return { ...queued, lease: held };
   const done = await markDone(ports.refs, queued.head, held, seconds(ports.now()));
   if (done === 'stale') return cancel('Its lease no longer held at its verdict.');
   return { ...queued, lease: done };
 }
+
+/** Why the slot admits nothing yet after a run: its reset is due (step's not-clean path does it). */
+const RESET_DUE = 'the slot awaits its reset after a run';
+
+/** A failure text as an alert shows it: trimmed, in a code block, so docker's stderr stays readable. */
+const quoted = (text: string): string => `\n\n\`\`\`\n${text.trim().slice(0, 800)}\n\`\`\``;
 
 /** Owes the run's Check its completion and tries to deliver it now. */
 const owe = (
@@ -366,6 +361,7 @@ const owe = (
   kind: Completion['kind'],
   reason: string,
   sample: Completion['sample'] = null,
+  exitCode: number | null = null,
 ): RunnerState => ({
   ...state,
   pendingCompletions: [
@@ -382,6 +378,7 @@ const owe = (
       kind,
       reason,
       sample,
+      exitCode,
     },
   ],
 });
@@ -427,12 +424,13 @@ async function step(ports: RunnerPorts): Promise<string> {
     ports.save(state);
   }
   if (state.dirty !== null) {
-    const cleanup = await ports.runs.clean();
+    const emptied = await ports.runs.clean();
+    const cleanup = emptied.clean ? await ports.runs.reset() : emptied;
     if (!cleanup.clean) {
       ports.save(
         alertOnce(state, `dirty:${cleanup.reason}`, {
           kind: 'dirty',
-          detail: `${ports.config.machine}'s slot is not clean, so it admits nothing: ${cleanup.reason}`,
+          detail: `${ports.config.machine}'s slot is not clean, so it admits nothing:${quoted(cleanup.reason)}`,
         }),
       );
       return `held: the slot is not clean: ${cleanup.reason}`;
@@ -469,11 +467,11 @@ async function stopRun(
   handBack: boolean,
 ): Promise<string> {
   const cleanup = await ports.runs.stop(run);
-  let state: RunnerState = { ...initial, current: null };
+  let state: RunnerState = { ...initial, current: null, dirty: RESET_DUE };
   if (!cleanup.clean)
     state = alertOnce({ ...state, dirty: cleanup.reason }, `dirty:${cleanup.reason}`, {
       kind: 'dirty',
-      detail: `${ports.config.machine} stopped #${run.pull}'s run but could not show its slot clean: ${cleanup.reason}`,
+      detail: `${ports.config.machine} stopped #${run.pull}'s run but could not show its slot clean:${quoted(cleanup.reason)}`,
     });
   state = owe(state, run, 'cancelled', reason);
   ports.save(state);
@@ -512,6 +510,7 @@ async function supervise(
     return line;
   }
   const held: CurrentRun = { ...run, held: renewed, stopBy };
+  if (stopBy !== null && stopBy !== run.stopBy) await ports.runs.rearm(held, stopBy);
   state = { ...state, current: held };
   ports.save(state);
   const pull = (await ports.pulls()).find((candidate) => candidate.number === run.pull);
@@ -530,13 +529,14 @@ async function finish(
   run: CurrentRun,
   status: Extract<RunStatus, { state: 'ended' }>,
 ): Promise<string> {
-  let state: RunnerState = { ...initial, current: null };
+  // The slot's reset follows on the next tick, once the verdict went out: it may take minutes.
+  let state: RunnerState = { ...initial, current: null, dirty: RESET_DUE };
   const now = ports.now();
   const cleanup = await ports.runs.clean(run);
   if (!cleanup.clean)
     state = alertOnce({ ...state, dirty: cleanup.reason }, `dirty:${cleanup.reason}`, {
       kind: 'dirty',
-      detail: `${ports.config.machine} could not show its slot empty after #${run.pull}'s run: ${cleanup.reason}`,
+      detail: `${ports.config.machine} could not show its slot empty after #${run.pull}'s run:${quoted(cleanup.reason)}`,
     });
   if (status.exitCode !== 0 && status.exitCode !== 1) {
     if (state.unstarted.includes(run.head))
@@ -554,7 +554,7 @@ async function finish(
   const kind: RunKind = status.full === true ? 'full' : 'selected';
   const took = (now - run.startedAt) / 1_000;
   // A clock that stepped back records no duration; the verdict is owed all the same.
-  ports.save(owe(state, run, 'verdict', '', took > 0 ? { kind, seconds: took } : null));
+  ports.save(owe(state, run, 'verdict', '', took > 0 ? { kind, seconds: took } : null, status.exitCode));
   return `#${run.pull} ended with ${status.exitCode}; its verdict is owed`;
 }
 
@@ -763,6 +763,7 @@ async function settleStart(
     kind: 'cancelled',
     reason: 'The run did not start.',
     sample: null,
+    exitCode: null,
     lease: starting.held,
   };
   return { ...state, starting: null, pendingCompletions: [...state.pendingCompletions, completion] };

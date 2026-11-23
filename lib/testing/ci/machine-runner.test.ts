@@ -17,18 +17,11 @@ import {
   tickUntil,
   world,
 } from '../fixtures/machine-runner-world';
-import {
-  ceilingMs,
-  EDGE_MARGIN_MS,
-  KILL_AFTER_MS,
-  percentile,
-  recover,
-  runnerStateSchema,
-  tick,
-} from './machine-runner';
+import { EDGE_MARGIN_MS, KILL_AFTER_MS, recover, runnerStateSchema, tick } from './machine-runner';
 import { endProcessGroup } from '../../../scripts/ci/machine-watchdog';
 import { runnerPullsFromGitHub } from './machine-pulls';
 import type { RunPlan } from './results';
+import { ceilingMs, percentile } from './run-ceiling';
 import { MAC_STANDING, nextOffEdge, PC_STANDING, resolveWindow } from './windows';
 
 test('F1: two runners against one queue never run the same PR, and a loser leaves no Check behind', async () => {
@@ -408,8 +401,12 @@ test('the next off edge is found across size changes, and none ahead of a window
 test("the example machine configurations and window files parse, and the windows are the owner's standing rules", () => {
   const read = (name: string): unknown =>
     JSON.parse(readFileSync(join(import.meta.dir, '../../../ci/machines', name), 'utf8'));
-  for (const name of ['mac.example.json', 'pc.example.json'])
-    expect(() => machineConfigSchema.parse(read(name))).not.toThrow();
+  for (const name of ['mac.example.json', 'pc.example.json']) {
+    const config = machineConfigSchema.parse(read(name));
+    // S4: the probe tries every port the agents' stacks and T3 listen on, not one of each.
+    const ports = config.probePorts.map((target) => Number(target.split(':')[1]));
+    for (const port of [54321, 54322, 54323, 54324, 54325, 54326, 54327, 3773]) expect(ports).toContain(port);
+  }
   for (const [name, standing] of [
     ['pc.windows.example.json', PC_STANDING],
     ['mac.windows.example.json', MAC_STANDING],
@@ -655,4 +652,70 @@ test('CR 934: a failed delivery is logged by its error code or name only, never 
   await tick(pc.ports);
   expect(pc.logs.some((line) => line.includes('stays owed (Error)'))).toBe(true);
   expect(pc.logs.join('\n')).not.toMatch(/ghp_|\/home\/owner/);
+});
+
+test("S1 (CI lead): the verdict carries run-commit's exit, so a run that did not exit 0 posts no pass", async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.end(1);
+  await tick(pc.ports);
+  expect(pc.state().pendingCompletions).toEqual([]);
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('failure');
+});
+
+test('S2 (CI lead): a verdict of a head that fell behind main while the run went is cancelled, and the head runs again', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.headInfo.set(head(1), { upToDate: false, snapshotReader: true });
+  pc.end(0);
+  await tick(pc.ports);
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('cancelled');
+  expect(leaseOf(shared.github, head(1))?.state).toBe('released');
+});
+
+test('S3 (CI lead): a window file that brings the edge closer mid-run restarts the watchdog at the new stop-by', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  shared.windows = {
+    timezone: BERLIN_TIME_ZONE,
+    standing: [
+      { days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], from: '00:00', to: '05:00', size: 'full' },
+      { days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], from: '05:00', to: '00:00', size: 'off' },
+    ],
+  };
+  await tick(pc.ports);
+  const stopBy = Date.parse('2026-11-23T04:00:00Z') - EDGE_MARGIN_MS;
+  expect(pc.rearmed).toEqual([{ pull: 1, stopBy }]);
+  await tick(pc.ports);
+  expect(pc.rearmed).toHaveLength(1);
+});
+
+test('B2 (CI lead): the slot is reset after every run, and a reset that fails admits nothing and alerts with its output quoted', async () => {
+  const shared = world({ pulls: [pull(1), pull(2)] });
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.end(0);
+  await tick(pc.ports);
+  // The reset, which may take minutes, waits until the verdict went out on the next tick.
+  expect(pc.resets).toEqual([]);
+  await tick(pc.ports);
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('success');
+  expect(pc.resets).toHaveLength(1);
+  expect(pc.started.map((run) => run.pull)).toEqual([1, 2]);
+  pc.faults.reset = 'docker load: no space left on device\n';
+  pc.end(0);
+  await tick(pc.ports);
+  await tick(pc.ports);
+  expect(pc.started.map((run) => run.pull)).toEqual([1, 2]);
+  expect(pc.alerts).toContain('dirty');
+  expect(pc.details.find((detail) => detail.includes('no space'))).toMatch(
+    /\n```\ndocker load: no space left on device\n```$/,
+  );
+  pc.faults.reset = null;
+  shared.pulls = [pull(3)];
+  await tick(pc.ports);
+  expect(pc.started.map((run) => run.pull)).toEqual([1, 2, 3]);
 });

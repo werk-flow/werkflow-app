@@ -22,6 +22,11 @@ export const machineConfigSchema = z.strictObject({
   slot: slotConfigSchema,
   /** Addresses the slot's jobs must not reach, `host:port`: the start probe tries each. */
   probePorts: z.array(z.string().regex(/^[\w.-]+:[0-9]{1,5}$/)),
+  /**
+   * Resets the slot between runs and at start, on this trusted side: the PC's runs ci/slot/reset-rootless.sh
+   * as root in werkflow-ci, the Mac's ci/slot/reset-colima.sh, which recreates the `ci` profile.
+   */
+  reset: z.array(z.string().min(1)).min(1),
   /** The machine's sizes the window file names, each with the command that resizes the slot, or null. */
   sizes: z.record(
     z.string().min(1),

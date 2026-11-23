@@ -1,8 +1,9 @@
 #!/bin/bash
 # The machine runner's start probe (lib/testing/ci/container-slot.ts, probeCommand): run as a job is,
 # with the slot's Docker socket, it must find none of the runner's sentinels, neither in its own view
-# nor through a container that mounts the slot host's root, reach none of the runner's ports, and
-# see the stack's ports outside the slot's ephemeral port range.
+# nor through a container that mounts the slot host's root, reach no Windows drive and no way to
+# start a Windows program (WSL's automount and interop), reach none of the runner's ports, and see
+# the stack's ports outside the slot's ephemeral port range.
 # Exit 0: the boundary holds. Usage: werkflow-ci-probe <token> <sentinel,...> <host:port,...>
 set -uo pipefail
 token=$1
@@ -23,6 +24,27 @@ for path in "${sentinels[@]}"; do
     *) echo "probe: the check of $path through the slot's socket did not run" >&2; exit 2 ;;
   esac
 done
+# WSL (docs/technical/machine-setup.md, step 4): the slot host mounts no Windows drive and starts no
+# Windows program, neither in the job's view nor through its socket.
+for program in wsl.exe cmd.exe powershell.exe; do
+  if command -v "$program" > /dev/null; then echo "probe: the job reaches $program" >&2; exit 1; fi
+done
+answer=$(docker run --rm --volume /:/host --entrypoint sh "$WERKFLOW_PROBE_IMAGE" -c '
+  found=""
+  for drive in /host/mnt/?; do test -d "$drive" && test -n "$(ls -A "$drive")" && found="$found $drive"; done
+  for program in /host/usr/bin/wsl.exe /host/usr/local/bin/wsl.exe /host/bin/wsl.exe /host/usr/bin/cmd.exe; do
+    test -e "$program" && found="$found $program"
+  done
+  for entry in /host/proc/sys/fs/binfmt_misc/WSLInterop*; do
+    test -f "$entry" && grep -qx enabled "$entry" && found="$found $entry"
+  done
+  for socket in /host/run/WSL/*_interop; do test -S "$socket" && found="$found $socket"; done
+  echo "checked$found"')
+case $answer in
+  checked) ;;
+  "checked "*) echo "probe: a container through the slot's socket reaches Windows:${answer#checked}" >&2; exit 1 ;;
+  *) echo "probe: the check for Windows through the slot's socket did not run" >&2; exit 2 ;;
+esac
 # The Supabase stack's ports (54321-54327) must lie outside the range outgoing connections take
 # (scripts/ci/prepare.ts); the install sets it on the slot, and no job may change it.
 read -r low high < "${WERKFLOW_PORT_RANGE_FILE:-/proc/sys/net/ipv4/ip_local_port_range}"

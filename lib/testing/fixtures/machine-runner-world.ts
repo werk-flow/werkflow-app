@@ -67,6 +67,7 @@ const config = (machine: string, sizes: MachineConfig['sizes']): MachineConfig =
     containerUser: 'image',
   },
   probePorts: [],
+  reset: ['true'],
   sizes,
   seedSeconds: { full: 3 * 3_600, selected: 30 * 60 },
   leaseTtlSeconds: 600,
@@ -97,6 +98,8 @@ type Faults = {
   findLag: number;
   /** Runs while the next Check start is on its way. */
   onStart: (() => void) | null;
+  /** The reason every slot reset fails with, or null. */
+  reset: string | null;
 };
 
 const noFaults = (): Faults => ({
@@ -109,6 +112,7 @@ const noFaults = (): Faults => ({
   startDelay: 0,
   findLag: 0,
   onStart: null,
+  reset: null,
 });
 
 /** The machine's GitHub ports over the shared world; every call fails while the world is offline. */
@@ -164,10 +168,47 @@ function githubPorts(
           );
           const verdict = completion.kind === 'verdict' && !faults.noVerdict;
           faults.noVerdict = false;
-          if (own) own.conclusion = verdict ? 'success' : 'cancelled';
+          // As check-app.ts's verdictOrCancelled: a pass needs run-commit's exit 0 as well.
+          own.conclusion = verdict ? (completion.exitCode === 0 ? 'success' : 'failure') : 'cancelled';
           return completion.kind === 'verdict' && !verdict ? 'cancelled' : 'completed';
         }),
     },
+  };
+}
+
+type SlotRecords = {
+  stopped: string[];
+  cleaned: string[];
+  resets: string[];
+  rearmed: { pull: number; stopBy: number }[];
+};
+const slotRecords = (): SlotRecords => ({ stopped: [], cleaned: [], resets: [], rearmed: [] });
+
+/** The slot side of the fake run control: each stop, emptying, reset and re-arm is recorded. */
+function slotControl(
+  world: World,
+  faults: Faults,
+  records: SlotRecords,
+  ended: () => void,
+): Pick<RunnerPorts['runs'], 'stop' | 'clean' | 'reset' | 'rearm'> {
+  const at = () => new Date(world.clock.now).toISOString();
+  const dirty = (): { clean: true } | { clean: false; reason: string } =>
+    faults.dirty === null ? { clean: true } : { clean: false, reason: faults.dirty };
+  return {
+    stop: async () => {
+      records.stopped.push(at());
+      ended();
+      return dirty();
+    },
+    clean: async () => {
+      records.cleaned.push(at());
+      return dirty();
+    },
+    reset: async () => {
+      records.resets.push(at());
+      return faults.reset === null ? { clean: true } : { clean: false, reason: faults.reset };
+    },
+    rearm: async (run, stopBy) => void records.rearmed.push({ pull: run.pull, stopBy }),
   };
 }
 
@@ -180,11 +221,12 @@ export function machine(
   let status: RunStatus = { state: 'running', plan: null };
   let attempts = 0;
   const started: { pull: number; runUrl: string; runDir: string; base: string; stopBy: number | null }[] = [];
-  const stopped: string[] = [];
-  const cleaned: string[] = [];
+  const records = slotRecords();
+  const { stopped, cleaned, resets, rearmed } = records;
   const logs: string[] = [];
   const resized: string[] = [];
   const alerts: string[] = [];
+  const details: string[] = [];
   const faults = noFaults();
   const headInfo = new Map<string, { upToDate: boolean; snapshotReader: boolean }>();
   const ports: RunnerPorts = {
@@ -208,15 +250,7 @@ export function machine(
         return { processGroup: 4_242 };
       },
       status: async () => status,
-      stop: async () => {
-        stopped.push(new Date(world.clock.now).toISOString());
-        status = { state: 'ended', exitCode: null, full: null };
-        return faults.dirty === null ? { clean: true } : { clean: false, reason: faults.dirty };
-      },
-      clean: async () => {
-        cleaned.push(new Date(world.clock.now).toISOString());
-        return faults.dirty === null ? { clean: true } : { clean: false, reason: faults.dirty };
-      },
+      ...slotControl(world, faults, records, () => (status = { state: 'ended', exitCode: null, full: null })),
     },
     nextAttempt: () => ++attempts,
     resize: async (command) => void resized.push(command.join(' ')),
@@ -228,6 +262,7 @@ export function machine(
         return false;
       }
       alerts.push(alert.kind);
+      details.push(alert.detail);
       return true;
     },
     log: (line) => void logs.push(line),
@@ -238,9 +273,12 @@ export function machine(
     started,
     stopped,
     cleaned,
+    resets,
+    rearmed,
     logs,
     resized,
     alerts,
+    details,
     faults,
     headInfo,
     setStatus: (next: RunStatus) => (status = next),

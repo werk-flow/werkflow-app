@@ -13,7 +13,27 @@
     "image": "werkflow-ci:COMMIT",
     "containerUser": "root"
   },
-  "probePorts": ["AGENTS_IP:54321", "AGENTS_IP:3000"],
+  "probePorts": [
+    "AGENTS_IP:54321",
+    "AGENTS_IP:54322",
+    "AGENTS_IP:54323",
+    "AGENTS_IP:54324",
+    "AGENTS_IP:54325",
+    "AGENTS_IP:54326",
+    "AGENTS_IP:54327",
+    "AGENTS_IP:3000",
+    "AGENTS_IP:3773"
+  ],
+  "reset": [
+    "wsl.exe",
+    "-d",
+    "werkflow-ci",
+    "-u",
+    "root",
+    "--exec",
+    "/usr/local/sbin/werkflow-ci-reset",
+    "cirunner"
+  ],
   "sizes": { "full": { "resize": null } },
   "seedSeconds": { "full": 12600, "selected": 3600 },
   "leaseTtlSeconds": 600

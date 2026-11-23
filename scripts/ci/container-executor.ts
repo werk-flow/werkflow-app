@@ -61,6 +61,7 @@ import {
 } from '../../lib/testing/ci/run-commit';
 import { openPullRequestMigrations } from '../../lib/testing/local-stack/migration-order';
 import { z } from '../../lib/zod';
+import { STAGE_MS } from '../../lib/testing/ci/run-ceiling';
 import { replaceResult } from './mirror-executor';
 
 /** Runs a command on the slot host behind its prefix. It never throws; a command past its deadline is killed and has no code. */
@@ -87,7 +88,6 @@ const LAUNCH_POLL_MS = 5_000;
 const STOP_RETRY_MS = 5_000;
 /** Each phase's deadline on the slot: a command, the staging, a read. */
 const COMMAND_MS = 120_000;
-const STAGE_MS = 20 * 60_000;
 
 const READ_MS = 60_000;
 

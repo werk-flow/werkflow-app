@@ -188,7 +188,7 @@ test('F3: the start probe fails when a job, or a container through its socket, r
   // A fake docker: `run … /:/host … -c <script>` runs the script with /host as the fake slot root.
   writeFileSync(
     join(bin, 'docker'),
-    `#!/bin/bash\nscript="\${@: -1}"\nif test -n "$FAKE_DOCKER_FAILS" && [[ $script == *grep* ]]; then exit 125; fi\nexec bash -c "\${script//\\/host/${host.replaceAll('/', '\\/')}}"\n`,
+    `#!/bin/bash\nscript="\${@: -1}"\nif test -n "$FAKE_DOCKER_FAILS" && [[ $script == *"$FAKE_DOCKER_FAILS"* ]]; then exit 125; fi\nexec bash -c "\${script//\\/host/${host.replaceAll('/', '\\/')}}"\n`,
   );
   chmodSync(join(bin, 'docker'), 0o755);
   spawnSync('mkdir', ['-p', join(host, 'etc'), join(host, 'home/owner')]);
@@ -220,7 +220,72 @@ test('F3: the start probe fails when a job, or a container through its socket, r
   expect(run('/home/owner/.werkflow-ci-probe').status).toBe(1);
   // CR 874: a sentinel check that cannot run through the socket fails the probe; silence proves nothing.
   writeFileSync(range, '55000\t65000\n');
-  expect(run('/home/owner/.werkflow-ci-probe', '1').status).toBe(2);
+  expect(run('/home/owner/.werkflow-ci-probe', 'secret-token').status).toBe(2);
+});
+
+test('B1 (CI lead): the start probe fails when the slot host mounts a Windows drive or can start a Windows program', () => {
+  const bin = join(scratch, 'bin');
+  spawnSync('mkdir', ['-p', bin]);
+  const host = join(scratch, 'host');
+  writeFileSync(
+    join(bin, 'docker'),
+    `#!/bin/bash\nscript="\${@: -1}"\nif test -n "$FAKE_DOCKER_FAILS" && [[ $script == *"$FAKE_DOCKER_FAILS"* ]]; then exit 125; fi\nexec bash -c "\${script//\\/host/${host.replaceAll('/', '\\/')}}"\n`,
+  );
+  chmodSync(join(bin, 'docker'), 0o755);
+  const own = join(scratch, 'own-bin');
+  spawnSync('mkdir', ['-p', join(host, 'etc'), join(host, 'mnt/c'), join(host, 'usr/bin'), own]);
+  spawnSync('mkdir', ['-p', join(host, 'proc/sys/fs/binfmt_misc')]);
+  const range = join(scratch, 'port-range');
+  writeFileSync(range, '55000\t65000\n');
+  const probe = resolve(import.meta.dir, '../../../ci/image/probe.sh');
+  const run = (fails = '') =>
+    spawnSync('bash', [probe, 'secret-token', '/home/owner/.werkflow-ci-probe', ''], {
+      encoding: 'utf8',
+      env: {
+        NODE_ENV: 'test',
+        FAKE_DOCKER_FAILS: fails,
+        PATH: `${own}:${bin}:${process.env.PATH}`,
+        WERKFLOW_PROBE_IMAGE: 'sha256:abc',
+        WERKFLOW_PORT_RANGE_FILE: range,
+      },
+    });
+  // An empty mount point holds no drive: the boundary holds.
+  expect(run().status).toBe(0);
+  const cases: [string, () => void, () => void][] = [
+    [
+      'a mounted C: drive',
+      () => writeFileSync(join(host, 'mnt/c/pagefile.sys'), ''),
+      () => rmSync(join(host, 'mnt/c/pagefile.sys')),
+    ],
+    [
+      'wsl.exe on the slot host',
+      () => writeFileSync(join(host, 'usr/bin/wsl.exe'), ''),
+      () => rmSync(join(host, 'usr/bin/wsl.exe')),
+    ],
+    [
+      'interop registered',
+      () => writeFileSync(join(host, 'proc/sys/fs/binfmt_misc/WSLInterop'), 'enabled\ninterpreter /init\n'),
+      () => rmSync(join(host, 'proc/sys/fs/binfmt_misc/WSLInterop')),
+    ],
+    [
+      "cmd.exe in the job's own view",
+      () => {
+        writeFileSync(join(own, 'cmd.exe'), '#!/bin/sh\n');
+        chmodSync(join(own, 'cmd.exe'), 0o755);
+      },
+      () => rmSync(join(own, 'cmd.exe')),
+    ],
+  ];
+  for (const [name, plant, remove] of cases) {
+    plant();
+    expect({ name, status: run().status }).toEqual({ name, status: 1 });
+    remove();
+  }
+  // Interop that is registered but disabled starts nothing.
+  writeFileSync(join(host, 'proc/sys/fs/binfmt_misc/WSLInterop'), 'disabled\n');
+  expect(run().status).toBe(0);
+  // A check that cannot run through the socket proves nothing.
+  expect(run('binfmt_misc').status).toBe(2);
 });
 
 test("the slot's commands run without the runner's variables, and WSL forwards none", () => {

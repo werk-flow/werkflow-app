@@ -605,8 +605,46 @@ test("CR 991: a verdict that cannot be built completes as cancelled with fixed t
   const completion = verdictOrCancelled(
     { problem: '/home/owner/ci-runner/state/runs/pc-a1/results/check.json is missing' },
     cancelled,
+    true,
   );
   if ('problem' in completion) throw new Error(completion.problem);
   expect(completion.verdict).toBe(false);
   expect(completion.request.output.summary).not.toContain('/home/owner');
+});
+
+test("S1 (CI lead): a passing Check result counts only with run-commit's exit 0; a failing one stands either way", () => {
+  const scheduled = {
+    runUrl: RUN_URL,
+    attempt: 1,
+    event: 'integration' as const,
+    commit: COMMIT,
+    prHead: undefined,
+  };
+  const cancelled = (reason: string) =>
+    cancelledCheckRunOf({
+      scheduled,
+      startedAt: new Date('2026-11-23T02:00:00Z'),
+      now: new Date('2026-11-23T02:30:00Z'),
+      reason,
+    });
+  const base = cancelled('a verdict');
+  if ('problem' in base || base.request.status !== 'completed') throw new Error('No completed request.');
+  const passed = { request: { ...base.request, conclusion: 'success' as const } };
+  const failed = { request: { ...base.request, conclusion: 'failure' as const } };
+  const conclusionOf = (completion: ReturnType<typeof verdictOrCancelled>) =>
+    'problem' in completion || completion.request.status !== 'completed'
+      ? completion
+      : { conclusion: completion.request.conclusion, verdict: completion.verdict };
+  expect(conclusionOf(verdictOrCancelled(passed, cancelled, false))).toEqual({
+    conclusion: 'cancelled',
+    verdict: false,
+  });
+  expect(conclusionOf(verdictOrCancelled(passed, cancelled, true))).toEqual({
+    conclusion: 'success',
+    verdict: true,
+  });
+  expect(conclusionOf(verdictOrCancelled(failed, cancelled, false))).toEqual({
+    conclusion: 'failure',
+    verdict: true,
+  });
 });

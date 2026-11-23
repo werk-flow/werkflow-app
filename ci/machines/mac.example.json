@@ -13,7 +13,21 @@
     "image": "werkflow-ci:COMMIT",
     "containerUser": "image"
   },
-  "probePorts": ["host.lima.internal:54321", "host.lima.internal:3000"],
+  "probePorts": [
+    "host.lima.internal:54321",
+    "host.lima.internal:54322",
+    "host.lima.internal:54323",
+    "host.lima.internal:54324",
+    "host.lima.internal:54325",
+    "host.lima.internal:54326",
+    "host.lima.internal:54327",
+    "host.lima.internal:3000",
+    "host.lima.internal:3773"
+  ],
+  "reset": [
+    "/Users/ci/ci-runner/werkflow-app/ci/slot/reset-colima.sh",
+    "/Users/ci/ci-runner/image/werkflow-ci.tar"
+  ],
   "sizes": {
     "4/6": {
       "resize": ["sh", "-c", "colima stop --profile ci && colima start --profile ci --cpu 4 --memory 6"]
