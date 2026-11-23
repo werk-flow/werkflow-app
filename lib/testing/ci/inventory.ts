@@ -51,12 +51,7 @@ type TimeTrigger = { on: 'time' } & (
 /** The GitHub event that dispatches a workflow, as its `on:` says. */
 type GitHubEvent =
   /** No `branches`: every base, as a stacked PR's. */
-  | {
-      workflow: string;
-      on: 'pull_request' | 'pull_request_target';
-      branches?: readonly string[];
-      types: readonly string[];
-    }
+  | { workflow: string; on: 'pull_request'; branches?: readonly string[]; types: readonly string[] }
   | {
       workflow: string;
       on: 'workflow_run';
@@ -201,7 +196,7 @@ export const SCHEDULES = {
     trigger: {
       on: 'event',
       event: 'pull-request-retargeted',
-      github: { workflow: 'retarget-notice.yml', on: 'pull_request_target', types: ['edited'] },
+      github: { workflow: 'retarget-notice.yml', on: 'pull_request', types: ['edited'] },
     },
   },
 } as const satisfies Record<string, ScheduleItem>;

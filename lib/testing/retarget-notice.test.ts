@@ -20,8 +20,8 @@ done
 `;
 
 test('only a base change comments, and the workflow reports no Check', () => {
-  // pull_request_target: GitHub starts no pull_request run on a PR that conflicts with its base.
-  expect(notice.at('on')).toEqual({ pull_request_target: { types: ['edited'] } });
+  // Not pull_request_target, which GitHub blocks by default in public repositories from 2026-12-02.
+  expect(notice.at('on')).toEqual({ pull_request: { types: ['edited'] } });
   expect(notice.at('jobs', 'notice', 'if')).toBe('github.event.changes.base');
   const jobs = notice.at('jobs');
   expect(typeof jobs === 'object' && jobs !== null ? Object.keys(jobs) : jobs).toEqual(['notice']);
@@ -37,7 +37,8 @@ test('it holds the least permissions, checks nothing out and reads every event f
   expect(notice.step('notice', 'Comment on the PR')).not.toHaveProperty('uses');
   const script = notice.text('jobs', 'notice', 'steps', 0, 'run');
   expect(script).not.toContain('${{');
-  expect(script).not.toContain('git ');
+  // The comment names a git command; the script runs none.
+  expect(script).not.toMatch(/^\s*git /m);
   // The event reaches the script only as the PR's number and base name.
   expect(notice.at('jobs', 'notice', 'steps', 0, 'env')).toEqual({
     GH_TOKEN: '${{ github.token }}',
@@ -65,6 +66,6 @@ test('the comment names the new base and how to give the PR a new head on it', (
     '--method POST repos/owner/repo/issues/442/comments',
   );
   expect(existsSync(join(stub, 'comment')) ? readFileSync(join(stub, 'comment'), 'utf8') : '').toBe(
-    'The base changed to `main`. Update the branch (`gh pr update-branch 442` or merge `origin/main`) so CI runs on the new base.',
+    'The base changed to `main`. Update the branch (`gh pr update-branch 442` or merge `origin/main`) so CI runs on the new base. If the branch already contains the base, push a fresh commit, such as `git commit --allow-empty`.',
   );
 });
