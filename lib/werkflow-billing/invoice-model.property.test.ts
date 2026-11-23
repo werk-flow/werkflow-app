@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
 import { berlinInstantMsArbitrary } from '@/lib/testing/berlin-arbitraries';
+import { billingFailureCode } from './failure';
 import { assertStripeAmounts, werkflowInvoiceDraft } from './invoice-model';
 import type { WerkflowSeller } from './seller';
 import type { StripeInvoiceForIssue } from './stripe-invoice';
@@ -10,6 +11,16 @@ import type { StripeInvoiceForIssue } from './stripe-invoice';
 // docs/features/commercial-and-finance.md, "WerkFlow's own invoices": the original carries
 // Stripe's amounts, every line exempt under § 19 UStG, and is issued only when its amounts equal
 // Stripe's; a tax, discount or customer balance in Stripe stops the issue.
+
+/** The billing failure code a call throws, or null when it returns. */
+function failureOf(call: () => void): string | null {
+  try {
+    call();
+    return null;
+  } catch (error) {
+    return billingFailureCode(error);
+  }
+}
 
 const SELLER: WerkflowSeller = {
   seller: {
@@ -82,7 +93,7 @@ describe('WerkFlow’s own invoice from a Stripe invoice', () => {
         );
         expect(invoice.lines.every((line) => line.tax.category === 'E')).toBe(true);
         expect(invoice.totals.taxCents).toBe(0);
-        expect(() => assertStripeAmounts(stripe, invoice)).not.toThrow();
+        expect(failureOf(() => assertStripeAmounts(stripe, invoice))).toBeNull();
       }),
     );
   });
@@ -109,7 +120,9 @@ describe('WerkFlow’s own invoice from a Stripe invoice', () => {
                     : field === 'remaining'
                       ? { ...stripe, remainingCents: stripe.remainingCents - cents }
                       : { ...stripe, lines: [{ ...first, amountCents: first.amountCents + cents }, ...rest] };
-          expect(() => assertStripeAmounts(changed, invoice)).toThrow('werkflow_invoice_amount_mismatch');
+          expect(failureOf(() => assertStripeAmounts(changed, invoice))).toBe(
+            'werkflow_invoice_amount_mismatch',
+          );
         },
       ),
     );
