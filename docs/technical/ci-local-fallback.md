@@ -20,7 +20,8 @@ The `local` profile's CI is removed from all three machines. The archive paths b
 
 ### 1. The Mac
 
-- **Removed:** the Colima profile `ci` and its disk, the stand-in's launchd jobs, its work roots and its private `R` folder.
+- **Removed:** the stand-in ran in the shared Colima profile `default`; no `ci` profile ever existed. Removed are its image `werkflow-ci-standin-mac:1`, its `ci-*` volumes and run containers inside `default`, and its `R` folder.
+- **Stays:** `default` at the day size, 4 CPU / 6 GiB. The stand-in had no launchd jobs of its own; `app.werk-flow.colima` keeps the agents' shared stack and stays.
 - **Archive:** `ops/ci-local-fallback/mac-standin/` (werk-flow/werkflow-planning#549).
 - **Rebuild, then switch on:**
   1. Create the Colima profile `ci` without host mounts.
