@@ -2,7 +2,8 @@ name: Playwright
 description: >-
   The host Chromium at the locked Playwright version, with its system packages. The runner image
   holds every library Chromium links; the few fonts it lacks come from the Actions cache, so the
-  Ubuntu package mirror is reached only when that cache misses (system-packages.sh).
+  Ubuntu package mirror is reached only when that cache misses (system-packages.sh). The steps are
+  scripts/ci/prepare.ts playwright and playwright-packages, which every other runner takes too.
 runs:
   using: composite
   steps:
@@ -18,15 +19,11 @@ runs:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ steps.version.outputs.version }}
 
-    - name: Install Chromium
-      if: steps.cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: bunx playwright install chromium
-
-    - name: Find Chromium's missing system packages
+    # Installs Chromium unless the cache held it, then names the system packages it misses.
+    - name: Install Chromium and find its missing system packages
       id: packages
       shell: bash
-      run: bash "$GITHUB_ACTION_PATH/system-packages.sh" find
+      run: bun scripts/ci/prepare.ts playwright
 
     - name: Restore Chromium's system packages
       id: debs
@@ -42,7 +39,7 @@ runs:
       env:
         DEBS: ${{ runner.temp }}/playwright-debs
         MISSING: ${{ steps.packages.outputs.missing }}
-      run: bash "$GITHUB_ACTION_PATH/system-packages.sh" install
+      run: bun scripts/ci/prepare.ts playwright-packages
 
     - name: Cache Chromium's system packages
       if: steps.packages.outputs.missing != '' && steps.debs.outputs.cache-hit != 'true'

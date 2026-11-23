@@ -15,6 +15,7 @@ Write each test at its boundary while you build the behavior.
 5. A connected outcome across roles or sessions: a step in the slice's golden or audit spec.
 6. Map the catalog clause in `lib/testing/selection/coverage-map.json` to the titles of its proving tests (for SQL, the `raise exception` message).
 7. Probe a lint rule with `createProbeLinter()` from `eslint-rules/probe-linter.mjs`, never `new ESLint()`.
+8. Script secrets: `curl_headers` or `PGPASSWORD`, never arguments (`lib/conventions/script-secrets-off-argv.test.ts`).
 
 A useful test survives an equivalent implementation. Check a regression test against the broken case. Keep catalog-clause coverage when moving an assertion. A runner test that enforces an author rule opens with `// Rule test:`.
 
@@ -29,7 +30,7 @@ A useful test survives an equivalent implementation. Check a regression test aga
 ### Run checks while you work
 
 1. After each edit: `bun run test:unit <path>`, `bun run test:ui <spec>`, or `bun run test:verify --group <id>` for one SQL or browser group.
-2. Before you push: `bun run check:changed`. It checks every file changed since the merge base, committed or not.
+2. Before you push: `bun run check:changed`, for every file changed since the merge base, committed or not.
 3. Before you finish: `bun run test:plan`, and read why each group is selected.
 4. At the end: `bun run test:verify` for the whole plan ([on Boat](boat-verification.md) with a key).
 
@@ -45,20 +46,20 @@ It survives your turn and the harness, keeps the whole log, and needs a reachabl
 
 - `--began` is log text only real work prints. The script returns on it, or with an ended command's exit code. Exit 75: not proven running; never report it as running.
 - A lead may end its turn after `began work`.
-- A delegated child stays in its turn and polls with the printed command: its turn end is its hand-back.
+- A delegated child stays in its turn and polls with the printed command: ending its turn hands back.
 - A failed wake leaves `UNHEARD RUN`, which the next notified run resends or prints.
 
 ### Grow a shrink-only list
 
-CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. When an exception is right, open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. Changing it reruns Unit (`list-growth.yml`); if that fails, push a commit.
+CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. When an exception is right, open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. Changing it reruns Fast (`list-growth.yml`); if that fails, push a commit.
 
 ## When a proof is valid
 
-A proof is a passing result whose fingerprint matches the current inputs; a later failure on the same inputs replaces it. Product code, migrations, generated types and `app/globals.css` are not browser-group inputs: selection covers them, and a selected group needs a pass on the current content of the files that selected it. Code compares by token stream without comments, so a comment edit keeps a proof.
+A proof is a passing result whose fingerprint matches the current inputs; a later failure on the same inputs replaces it. Product code, migrations, generated types and `app/globals.css` are not browser-group inputs: selection covers them, and a selected group needs a pass on the current content of its selecting files. Code compares by token stream without comments, so a comment edit keeps a proof.
 
 ## How selection works
 
-`bun run test:plan` prints each group with its reason and first file. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD`.
+`bun run test:plan` prints each group's reason and first file. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD`.
 
 Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
 
@@ -67,14 +68,14 @@ Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers
 - **Permission groups** keep selection by declared scope: each group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
-- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed. `audit:layout:<area>` also runs when its pages or dialogs render a changed file at most five areas render (`surface-closure.ts`).
-- Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
+- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed. `audit:layout:<area>` runs when its pages or dialogs render a changed file at most five areas render (`surface-closure.ts`).
+- Static gates run in every plan. Unit, SQL and component groups run when their inputs changed (`fast-tier.ts` in CI).
 - Groups whose own spec or support changed run first.
 - `test:verify` refuses to start while a group it would run has an unclassified latest failure.
 
 ### Repair mode
 
-When a browser group last failed or was blocked, a change plan selects those groups, the groups whose test code changed, and the cheap gates. Their passing report becomes the baseline. A failed group may run again after any source change. Clean its retained world first. [Failures](#failures) owns a repeat on the identical tree.
+When a browser group last failed or was blocked, a change plan selects them, the groups whose test code changed, and the cheap gates. Their passing report becomes the baseline. A failed group may run again after any source change. Clean its retained world first. [Failures](#failures) owns a repeat on the identical tree.
 
 ### Release mode
 
@@ -87,16 +88,17 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every PR to `main`, except a label change, each queue entry and every push to `main`. `Check` is its one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
+`.github/workflows/ci.yml` runs on every PR to `main` but a label change, each queue entry and each push; `Check` is its required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Jobs: `lib/testing/ci/dag.ts`; bodies: `scripts/ci/job.ts`.
 
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules: a PR's diff against its merge base, a queue entry's against its base, a push's against the previous `main` commit unless a green queue run passed that tree. Every group runs on an unreadable diff, a full run, and a change to how groups install, build or run (`TOOLING_INPUTS`, `runnerModules` but `REGISTRY_ROWS`).
-- **Drafts.** A draft PR runs no browser shard, and its `Check` fails while browser groups wait. `gh pr ready` runs them ([babysit a pull request](coderabbit.md#babysit-a-pull-request)).
-- **Full run and release gate.** A full run is `ci.yml` called with `full` from a `Full run` job, nightly, in the release and every 3 hours by day on a moved `main` (`main-full-run.yml`). `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
-- **Shards.** Visual groups get their own shards; a full selection fills at most `MAX_SHARDS`, a PR's run starts four at once.
-- **Queue.** `health.yml`'s weekly `CI queue` job fails when the p90 runner wait exceeds its ceiling (`.github/scripts/ci-queue.sh`).
-- **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
+- **Tiers.** A PR's run is the fast tier: Fast, SQL, Component contracts and E-invoices, each skipped on an empty selection. The integration run adds browser shards (owner decision D1).
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups by change-mode rules against the run's base. Every group runs on an unreadable diff, a full run or an every-group input (`toolingClass`); a tooling change runs a sample (owner decision D3).
+- **Reuse and Check.** A push whose exact landing an integration run passed runs no job; a CI runner's pass stands for its job on an identical tree and base (`lib/testing/ci/reuse.ts`). `Check` fails closed (`lib/testing/ci/check.ts`).
+- **Full run and release gate.** A full run is `ci.yml` called with `full`: nightly, in the release, and on `main` when `bun scripts/ci/full-run.ts due` says so. `release.yml` ships a commit only after its newest `Full run / Check` on `main` passed, or runs one first.
+- **Shards.** Groups pack longest-first by recorded duration (`group-durations.json`), visual groups apart, in at most `MAX_SHARDS`; component areas in two.
+- **Stand-in.** `scripts/ci/run-commit.ts` runs a commit (mirror: `CI_EXECUTOR=mirror`), `scripts/ci/queue.ts` the queue.
+- **Queue.** `health.yml`'s weekly `CI queue` job fails on a p90 runner wait over its ceiling (`.github/scripts/ci-queue.sh`).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
-- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun of failed jobs follows a local repeat's retry rules.
+- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Reruns of failed jobs follow the local retry rules.
 
 ## Commands
 
@@ -121,11 +123,11 @@ bun run test:audit:focused --grep "@ACCEPT <set>"                # acceptance ca
 
 A failed static gate, an input edited during the run, an interruption, or a failed changed-spec tier blocks later groups.
 
-Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree). Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI, `Midnight wait` holds shards from 22:55, one Browser timeout ahead. A shard still reaching it is blocked (harness, `midnight start window`); rerun it after 00:10 Berlin.
+Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree). Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI, `Midnight wait` holds shards from 22:25, a Fast and Browser timeout ahead. A shard still reaching it is blocked (harness, `midnight start window`); rerun it after 00:10 Berlin.
 
 ## Specs
 
-A browser group is one spec file with one disposable organization, a rough check that the [catalog](../product/user-flow-catalog.md) flows still work. Its tests share the world.
+A browser group is one spec file with one disposable organization, a rough check that the [catalog](../product/user-flow-catalog.md) flows work. Its tests share the world.
 
 - World and layout fixture names come from `worldName` (`lib/testing/seed-world-plan.ts`).
 - A helper goes into its area module under `tests/golden/support/steps/` or `db/`, or `shared` when two areas need it. Never re-export one module from another.
@@ -143,14 +145,14 @@ Lint (`eslint-rules/test-hygiene-rules.mjs`, unit tests too) and `spec-conventio
 - **Persisted outcome.** A step submits once, waits on the app's busy signals, and checks both the visible confirmation and the persisted row (`Persisted<Row>`, built only by a reader in `tests/golden/support/db/`).
 - **Confirmed records.** An outcome assertion reads through `confirmed`, which skips `data-unconfirmed` content. An absence after a change goes through `expectGone`.
 - **Stale premise.** A session whose premise is outdated state calls `freezeLiveUpdates` before it opens the page, or holds that state in an open dialog.
-- **No swallowed failure.** A wait that may time out branches through `settledBeforeTimeout`. A real best effort says why in a `// best-effort: <reason>` comment.
+- **No swallowed failure.** A wait that may time out branches through `settledBeforeTimeout`. A real best effort says why: `// best-effort: <reason>`.
 - **Quarantine last.** Skip only a diagnosed defect whose fix is an open planning issue. A test needing a host capability (`flock`, an address family) registers only where it exists and names what it left out: no quarantine.
 
 ## Deadlines and measured scenarios
 
 The [freshness contract](realtime-and-caching.md) owns the product targets. [Performance](performance.md) owns journeys, lab counts and payload budgets.
 
-- `expectLiveWithin` measures from submission to the new fact in the receiving session, `expectReadyWithin` from opening to usable controls. A slow but correct observation completes its test; the runner judges the timing afterwards.
+- `expectLiveWithin` measures from submission to the new fact in the receiving session, `expectReadyWithin` from opening to usable controls. A slow but correct observation completes its test; the runner judges timing afterwards.
 - Scenarios live in `lib/testing/measured-scenarios.ts`, reviewed references in `lib/testing/performance-baselines.json`. A new scenario takes its boundary's budget, a cross-session one the live target.
 - Every required scenario has a reference at its measurement and workload digests. Editing measured support files moves every digest.
 - To calibrate: pass the measured groups (a scenario without a reference passes only as `comparison: 'calibrating'`; restore `'required'` after the copy). Run `bun scripts/calibrate-performance.ts --runs <up to three run keys> --reason "<review basis>"`. Review the draft under `.agent-logs/performance-calibration/` before you copy it.
@@ -212,7 +214,7 @@ Check these before classifying.
 - Treat a review score or old report as acceptance.
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock.
 - Add a package script that builds or tests outside the workspace lock, or changes the shared stack's schema outside its exclusive lock.
-- Set a duration assertion in a unit test. Make a slow test cheaper.
+- Set a duration assertion outside a [measured scenario](#deadlines-and-measured-scenarios). Make a slow test cheaper.
 
 ## Verify your work
 

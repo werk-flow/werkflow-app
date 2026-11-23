@@ -1,6 +1,7 @@
 import { beforeEach, setDefaultTimeout } from 'bun:test';
 import { openSync, writeSync } from 'node:fs';
 import { UNIT_PROGRESS_ENVIRONMENT } from '../lib/testing/runner/unit-run-watchdog';
+import { registerTemporaryDirectoryCleanup } from '../lib/testing/temporary-directory';
 import { UNIT_TEST_TIMEOUT_MS } from './unit-test-timeout';
 
 // bunfig.toml preloads this module into every `bun test` process. A unit test
@@ -24,3 +25,7 @@ if (progressFile) {
     writeSync(progress, `${Bun.main}\n`);
   });
 }
+
+// Removes each folder a test made with temporaryDirectory: one made during a
+// test after it, one made outside a test when the run ends.
+registerTemporaryDirectoryCleanup();

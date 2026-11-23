@@ -4,6 +4,8 @@ import ts from 'typescript';
 import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 import { changeTrigger, type ChangeTrigger } from './change-triggers';
+import { componentAreaGroups } from './component-areas';
+import { MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES } from './maintenance-visit-sql-files';
 
 export interface TestGroup {
   readonly id: string;
@@ -47,8 +49,7 @@ const freshnessFiles = new Set([
   'tests/audit/performance/planning-benchmark.spec.ts',
   'tests/audit/performance/field.spec.ts',
 ]);
-// Audit P1-22 measures opening readiness inside its imported submission helper.
-// This ownership declaration must survive a helper refactor or removal of a timing call.
+// Audit P1-22 measures readiness in its imported submission helper; this survives a helper refactor.
 const readinessSources: Readonly<Record<string, string>> = {
   'tests/golden/p1-22.spec.ts': 'tests/golden/p1-22.spec.ts',
   'tests/golden/p1-11.spec.ts': 'tests/golden/p1-11.spec.ts',
@@ -71,14 +72,8 @@ function declaredTiming(files: readonly string[]): GroupTimingRequirements {
   };
 }
 
-// Prefixes describe ownership, not proof that a change cannot affect another area.
-// A changed file under a prefix selects the browser groups that declare its scope;
-// a product file no prefix owns selects the core set (group-selection.ts).
-// An entry ending in "/" owns a directory; any other entry owns exactly one file,
-// for a shared file whose feature is obvious (a hook, a skeleton, an API route).
-// Every entry must exist on disk (test-scope-prefixes.test.ts): an entry that names
-// nothing owns nothing (the customer library was listed as lib/customers/
-// while it lives in lib/clients/, 2026-09-14).
+// Ownership, not proof of isolation: a changed file selects its scope's browser groups, an unowned one the
+// core set (group-selection.ts); "/" owns a directory, else one file; test-scope-prefixes.test.ts checks.
 export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   customers: [
     'lib/clients/',
@@ -184,7 +179,15 @@ export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = 
     'app/(app)/inventar/',
     'components/loading-states/inventar-page-skeleton.tsx',
   ],
-  commercial: ['lib/price-catalog/', 'lib/offers/', 'components/angebote/', 'app/(app)/angebote/'],
+  commercial: [
+    'lib/price-catalog/',
+    'lib/offers/',
+    'lib/invoices/',
+    'components/angebote/',
+    'components/rechnungen/',
+    'app/(app)/angebote/',
+    'app/(app)/rechnungen/',
+  ],
   service: [
     'lib/installed-equipment/',
     'lib/service-cases/',
@@ -291,11 +294,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['layout:field-time', 'layout/surfaces-field-time.spec.ts', ['time', 'personnel']],
   // The screens outside the app shell with their own sessions (standalone-route-inventory.ts).
   ['layout:standalone', 'layout/standalone-screens.spec.ts', ['standalone']],
-  // Reference screenshots of every page family.
   ['visual', 'visual/references.spec.ts', ['*']],
-  // Rendered acceptance captures by what a capture drives, so a changed helper selects the groups that import it:
-  // the inventory rounds' pages, dialogs per opener module and standalone screens
-  // (tests/audit/support/acceptance-rounds.ts), then the open sets (acceptance-sets/, one file each).
+  // Acceptance captures by what they drive (tests/audit/support/acceptance-rounds.ts), then the open sets.
   ['visual:acceptance:pages', 'visual/acceptance-pages.spec.ts', ['*']],
   ['visual:acceptance:calendar', 'visual/acceptance-calendar.spec.ts', ['planning']],
   ['visual:acceptance:customers', 'visual/acceptance-customers.spec.ts', ['customers']],
@@ -416,7 +416,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
-  ['maintenance-missed-visits', ['maintenance_missed_visits.sql'], ['service', 'work']],
+  ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES],
   [
     'inventory-ledger',
     [
@@ -442,6 +442,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['leistung-prices', ['leistung_prices.sql'], ['commercial']],
   ['offers', ['offers.sql', 'offers_concurrency.sql'], ['commercial', 'customers']],
+  ['invoice-drafts', ['invoice_drafts.sql'], ['commercial', 'customers']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],
@@ -459,9 +460,13 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['job-plan-bridge', ['job_plan_bridge.sql'], ['work', 'planning']],
   ['responsibility-delegation-end', ['responsibility_delegation_end.sql'], ['personnel']],
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
+  ['on-call-shifts', ['on_call_shifts.sql'], ['service', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
+  ['werkflow-billing-mails', ['werkflow_billing_mails.sql'], ['*']],
+  ['werkflow-invoices', ['werkflow_invoices.sql'], ['*']],
+  ['werkflow-subscriptions', ['werkflow_subscriptions.sql'], ['*']],
   ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
@@ -551,15 +556,8 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
     timing: declaredTiming([`tests/audit/${file}`]),
     changeTrigger: changeTrigger(repositoryRoot, `audit:${id}`, [`tests/audit/${file}`]),
   }));
+  groups.push(...componentAreaGroups(listTestFiles(repositoryRoot, 'tests/ui-contracts', /\.spec\.ts$/)));
   groups.push(
-    {
-      id: 'ui:contracts',
-      kind: 'ui',
-      files: listTestFiles(repositoryRoot, 'tests/ui-contracts', /\.spec\.ts$/),
-      scopes: ['*'],
-      isolation: 'process',
-      timing: untimed,
-    },
     {
       id: 'unit:all',
       kind: 'unit',
@@ -670,8 +668,7 @@ export function getGroupTimingRequirements(
     const sourceTiming = readSourceTiming(source);
     requireFreshness ||= sourceTiming.requireFreshness;
     requireReadiness ||= sourceTiming.requireReadiness;
-    // A scenario call in source must be registered for this file, and a
-    // registration must still have its call: neither can drift silently.
+    // Scenario calls and registrations of this file must match: neither can drift silently.
     const registered = new Set(scenariosForFiles([file]).map((scenario) => scenario.id));
     for (const id of sourceTiming.scenarioIds) {
       if (!registered.has(id))

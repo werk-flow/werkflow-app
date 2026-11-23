@@ -1,0 +1,69 @@
+name: CI job
+description: >-
+  Runs one job body of scripts/ci/job.ts with this run's plan, and keeps its result for Check and
+  a failed job's evidence (lib/testing/ci/dag.ts). The other runners call the same script.
+inputs:
+  job:
+    description: The job of lib/testing/ci/dag.ts
+    required: true
+  shard:
+    description: A browser or component shard's number
+    default: ''
+outputs:
+  jobs:
+    description: The plan's jobs of this run, as JSON
+    value: ${{ steps.job.outputs.jobs }}
+  browser:
+    description: Whether the plan runs browser shards
+    value: ${{ steps.job.outputs.browser }}
+  shards:
+    description: The plan's browser shards, as JSON
+    value: ${{ steps.job.outputs.shards }}
+  midnight_until:
+    description: When the plan's browser shards may start, or empty
+    value: ${{ steps.job.outputs.midnight_until }}
+  static:
+    description: The static gates besides lint
+    value: ${{ steps.job.outputs.static }}
+  sql:
+    description: The SQL groups
+    value: ${{ steps.job.outputs.sql }}
+  component_shards:
+    description: The plan's component contract shards, as JSON
+    value: ${{ steps.job.outputs.component_shards }}
+runs:
+  using: composite
+  steps:
+    # The plan for every job after Plan, every result for Check. A rerun of failed jobs reads the
+    # first attempt's files, which stay 30 days.
+    - name: Read the run's results
+      if: inputs.job != 'plan'
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        pattern: ${{ inputs.job == 'check' && 'ci-result-*' || 'ci-result-plan' }}
+        merge-multiple: true
+        path: ${{ runner.temp }}/ci-results
+
+    - name: Run the job
+      id: job
+      shell: bash
+      env:
+        CI_RESULTS_DIR: ${{ runner.temp }}/ci-results
+        CI_SHARD: ${{ inputs.shard }}
+        JOB: ${{ inputs.job }}
+      run: bun scripts/ci/job.ts "$JOB"
+
+    - name: Keep the result
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ci-result-${{ inputs.job }}${{ inputs.shard && format('-{0}', inputs.shard) || '' }}
+        path: ${{ runner.temp }}/ci-results/${{ inputs.job }}${{ inputs.shard && format('-{0}', inputs.shard) || '' }}.json
+        retention-days: 30
+        if-no-files-found: ignore
+        overwrite: true
+
+    - if: failure()
+      uses: ./.github/actions/upload-evidence
+      with:
+        name: ${{ inputs.job }}${{ inputs.shard && format('-{0}', inputs.shard) || '' }}

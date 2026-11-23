@@ -1,10 +1,10 @@
 // Rule test: the release applies migrations to PROD only when DEV's ledger, read through the
 // read-only endpoint, holds every migration of the candidate, out-of-order ones included.
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 
 const script = resolve(import.meta.dir, '../../.github/scripts/dev-holds-migrations.sh');
 
@@ -20,19 +20,14 @@ let checkout = '';
 let stub = '';
 
 beforeEach(() => {
-  checkout = mkdtempSync(join(tmpdir(), 'dev-holds-checkout-'));
-  stub = mkdtempSync(join(tmpdir(), 'dev-holds-stub-'));
+  checkout = temporaryDirectory('dev-holds-checkout-');
+  stub = temporaryDirectory('dev-holds-stub-');
   mkdirSync(join(checkout, 'supabase/migrations'), { recursive: true });
   // The second sorts before the first but merged after it: an out-of-order migration.
   for (const name of ['20261210120000_newer.sql', '20261114100000_merged_later.sql', 'README.md'])
     writeFileSync(join(checkout, 'supabase/migrations', name), 'select 1;\n');
   writeFileSync(join(stub, 'curl'), CURL_STUB);
   chmodSync(join(stub, 'curl'), 0o755);
-});
-
-afterEach(() => {
-  rmSync(checkout, { recursive: true, force: true });
-  rmSync(stub, { recursive: true, force: true });
 });
 
 function run(ledger: unknown) {

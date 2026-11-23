@@ -56,6 +56,13 @@ export const DIALOG_INVENTORY = {
   'components/angebote/create-offer-dialog.tsx#CreateOfferDialog|Angebot anlegen': {
     audits: [{ route: '/angebote', role: 'admin', opener: 'commercial.offer' }],
   },
+  'components/rechnungen/create-invoice-dialog.tsx#CreateInvoiceDialog|Rechnung erstellen': {
+    audits: [{ route: '/rechnungen', role: 'admin', opener: 'commercial.invoice' }],
+  },
+  'components/rechnungen/invoice-header.tsx#DeleteInvoiceDraftButton|{`Entwurf für „${invoice.client.name}“ löschen?`}':
+    {
+      audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-delete' }],
+    },
   "components/angebote/leistungen/leistung-dialog.tsx#LeistungDialog|{entry ? 'Leistung bearbeiten' : 'Leistung anlegen'}":
     {
       audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung' }],
@@ -465,8 +472,25 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.coverage-follow-up' }],
     },
+  "components/on-call/on-call-shift-dialog.tsx#OnCallShiftDialog|{props.shift ? 'Bereitschaft ändern' : 'Bereitschaft planen'}":
+    {
+      audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-plan' }],
+    },
+  'components/on-call/on-call-handover-dialog.tsx#OnCallHandoverDialog|Bereitschaft übergeben': {
+    audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-handover' }],
+  },
+  'components/on-call/on-call-history-dialog.tsx#OnCallHistoryDialog|Verlauf der Bereitschaft': {
+    audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-history' }],
+  },
+  "components/on-call/on-call-week-content.tsx#WeekDialogs|{runsNow ? 'Bereitschaft jetzt beenden?' : 'Bereitschaft absagen?'}":
+    {
+      audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-end' }],
+    },
   'components/service/maintenance-due-action-dialog.tsx#MaintenanceDueActionDialog|Fälligkeit bearbeiten': {
-    audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.due-action' }],
+    audits: [
+      { route: '/service/wartung', role: 'admin', opener: 'service.due-action' },
+      { route: '/service/wartung', role: 'admin', opener: 'service.due-completion' },
+    ],
   },
   'components/service/maintenance-plan-action-dialog.tsx#MaintenancePlanActionDialog|{title}': {
     audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.plan-action' }],

@@ -1,9 +1,9 @@
 // The weekly CI queue check (.github/scripts/ci-queue.sh) measures what a job waited for a runner.
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { temporaryDirectory } from './temporary-directory';
 
 const script = resolve(import.meta.dir, '../../.github/scripts/ci-queue.sh');
 
@@ -31,7 +31,7 @@ esac
 let stub = '';
 
 beforeEach(() => {
-  stub = mkdtempSync(join(tmpdir(), 'ci-queue-'));
+  stub = temporaryDirectory('ci-queue-');
   writeFileSync(join(stub, 'gh'), GH_STUB);
   chmodSync(join(stub, 'gh'), 0o755);
   writeFileSync(join(stub, 'summary'), '');
@@ -39,8 +39,6 @@ beforeEach(() => {
   writeRuns('pull_request', []);
   writeRuns('push', []);
 });
-
-afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 function writeRuns(event: 'pull_request' | 'push', ids: number[]) {
   writeFileSync(join(stub, `${event}.json`), JSON.stringify({ workflow_runs: ids.map((id) => ({ id })) }));
