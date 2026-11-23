@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 
+import { AiSettingsCard } from '@/components/settings/ai-settings-card';
 import { OrganizationSettingsForm } from '@/components/settings/organization-settings-form';
 import { RegionLoadError } from '@/components/shared/region-load-error';
+import { readAiOrganizationSwitch } from '@/lib/ai/settings';
 import { readOrganizationDeletionScope } from '@/lib/org/deletion-scope';
 import { readSettingsSectionMembership } from '@/lib/settings/section-access';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -11,14 +13,16 @@ export default async function OrganizationSettingsPage() {
   const { membership: activeMembership } = await readSettingsSectionMembership('organisation');
 
   const supabase = await createSupabaseServerClient();
-  // Only an Admin may delete, so only an Admin reads what a deletion removes.
-  const [{ data: organization, error }, deletionScope] = await Promise.all([
+  const isAdmin = activeMembership.role === 'admin';
+  // Only an Admin may delete or switch WerkFlow KI, so only an Admin reads either.
+  const [{ data: organization, error }, deletionScope, aiSwitch] = await Promise.all([
     supabase
       .from('organizations')
       .select('id, name, unique_code, created_at')
       .eq('id', activeMembership.orgId)
       .single(),
-    activeMembership.role === 'admin' ? readOrganizationDeletionScope(activeMembership.orgId) : null,
+    isAdmin ? readOrganizationDeletionScope(activeMembership.orgId) : null,
+    isAdmin ? readAiOrganizationSwitch(activeMembership.orgId) : null,
   ]);
 
   if (error && error.code !== 'PGRST116') {
@@ -41,6 +45,7 @@ export default async function OrganizationSettingsPage() {
         role: activeMembership.role,
       }}
       deletionScope={deletionScope && (deletionScope.success ? deletionScope.scope : deletionScope.error)}
+      aiSettings={aiSwitch ? <AiSettingsCard state={aiSwitch} /> : null}
     />
   );
 }

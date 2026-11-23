@@ -39,6 +39,251 @@ export type Database = {
   };
   public: {
     Tables: {
+      ai_organization_settings: {
+        Row: {
+          enabled: boolean;
+          monthly_budget_micro_eur: number;
+          organization_id: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          enabled?: boolean;
+          monthly_budget_micro_eur?: number;
+          organization_id: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          enabled?: boolean;
+          monthly_budget_micro_eur?: number;
+          organization_id?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_organization_settings_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_organization_settings_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_run_attempts: {
+        Row: {
+          cache_read_tokens: number;
+          cache_write_tokens: number;
+          cost_micro_usd: number;
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          input_tokens: number;
+          model_id: string;
+          organization_id: string;
+          outcome: string;
+          output_tokens: number;
+          prompt_version: string;
+          run_id: string;
+        };
+        Insert: {
+          cache_read_tokens: number;
+          cache_write_tokens: number;
+          cost_micro_usd: number;
+          created_at?: string;
+          id?: string;
+          idempotency_key: string;
+          input_tokens: number;
+          model_id: string;
+          organization_id: string;
+          outcome: string;
+          output_tokens: number;
+          prompt_version: string;
+          run_id: string;
+        };
+        Update: {
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          cost_micro_usd?: number;
+          created_at?: string;
+          id?: string;
+          idempotency_key?: string;
+          input_tokens?: number;
+          model_id?: string;
+          organization_id?: string;
+          outcome?: string;
+          output_tokens?: number;
+          prompt_version?: string;
+          run_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_run_attempts_run_id_organization_id_fkey";
+            columns: ["run_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_runs";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      ai_runs: {
+        Row: {
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          organization_id: string;
+          reserved_micro_usd: number;
+          settled_at: string | null;
+          status: Database["public"]["Enums"]["ai_run_status"];
+          thread_id: string | null;
+          user_id: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          idempotency_key: string;
+          organization_id: string;
+          reserved_micro_usd: number;
+          settled_at?: string | null;
+          status?: Database["public"]["Enums"]["ai_run_status"];
+          thread_id?: string | null;
+          user_id?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          idempotency_key?: string;
+          organization_id?: string;
+          reserved_micro_usd?: number;
+          settled_at?: string | null;
+          status?: Database["public"]["Enums"]["ai_run_status"];
+          thread_id?: string | null;
+          user_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_runs_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_runs_thread_id_organization_id_fkey";
+            columns: ["thread_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_threads";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "ai_runs_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_thread_items: {
+        Row: {
+          body: Json;
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          kind: Database["public"]["Enums"]["ai_thread_item_kind"];
+          organization_id: string;
+          sequence: number;
+          status: Database["public"]["Enums"]["ai_thread_item_status"];
+          thread_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          body: Json;
+          created_at?: string;
+          id?: string;
+          idempotency_key: string;
+          kind: Database["public"]["Enums"]["ai_thread_item_kind"];
+          organization_id: string;
+          sequence: number;
+          status: Database["public"]["Enums"]["ai_thread_item_status"];
+          thread_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          body?: Json;
+          created_at?: string;
+          id?: string;
+          idempotency_key?: string;
+          kind?: Database["public"]["Enums"]["ai_thread_item_kind"];
+          organization_id?: string;
+          sequence?: number;
+          status?: Database["public"]["Enums"]["ai_thread_item_status"];
+          thread_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_thread_items_thread_id_organization_id_fkey";
+            columns: ["thread_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_threads";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      ai_threads: {
+        Row: {
+          created_at: string;
+          id: string;
+          last_sequence: number;
+          organization_id: string;
+          title: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id: string;
+          last_sequence?: number;
+          organization_id: string;
+          title?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          last_sequence?: number;
+          organization_id?: string;
+          title?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_threads_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ai_threads_user_id_organization_id_fkey";
+            columns: ["user_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organization_members";
+            referencedColumns: ["user_id", "organization_id"];
+          },
+        ];
+      };
       attention_events: {
         Row: {
           created_at: string;
@@ -16084,6 +16329,85 @@ export type Database = {
       };
     };
     Functions: {
+      append_ai_thread_item: {
+        Args: {
+          p_body: Json;
+          p_idempotency_key: string;
+          p_kind: Database["public"]["Enums"]["ai_thread_item_kind"];
+          p_organization_id: string;
+          p_status: Database["public"]["Enums"]["ai_thread_item_status"];
+          p_thread_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          item_id: string;
+          item_sequence: number;
+        }[];
+      };
+      create_ai_thread: {
+        Args: {
+          p_organization_id: string;
+          p_thread_id: string;
+          p_title: string;
+          p_user_id: string;
+        };
+        Returns: string;
+      };
+      record_ai_run_attempt: {
+        Args: {
+          p_cache_read_tokens: number;
+          p_cache_write_tokens: number;
+          p_cost_micro_usd: number;
+          p_idempotency_key: string;
+          p_input_tokens: number;
+          p_model_id: string;
+          p_organization_id: string;
+          p_outcome: string;
+          p_output_tokens: number;
+          p_prompt_version: string;
+          p_run_id: string;
+        };
+        Returns: string;
+      };
+      reserve_ai_run: {
+        Args: {
+          p_idempotency_key: string;
+          p_organization_id: string;
+          p_reserve_micro_usd: number;
+          p_thread_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          run_id: string;
+          verdict: string;
+        }[];
+      };
+      set_ai_organization_enabled: {
+        Args: {
+          p_actor_id: string;
+          p_enabled: boolean;
+          p_organization_id: string;
+        };
+        Returns: boolean;
+      };
+      settle_ai_run: {
+        Args: {
+          p_organization_id: string;
+          p_run_id: string;
+          p_status: Database["public"]["Enums"]["ai_run_status"];
+        };
+        Returns: number;
+      };
+      update_ai_thread_item: {
+        Args: {
+          p_body: Json;
+          p_item_id: string;
+          p_organization_id: string;
+          p_status: Database["public"]["Enums"]["ai_thread_item_status"];
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
       abandon_supplier_catalog_import: {
         Args: {
           p_actor_id: string;
@@ -23020,6 +23344,15 @@ export type Database = {
       };
     };
     Enums: {
+      ai_run_status: "reserved" | "succeeded" | "failed" | "cancelled";
+      ai_thread_item_kind:
+        | "user_message"
+        | "assistant_message"
+        | "tool_call"
+        | "question"
+        | "todo_list"
+        | "file";
+      ai_thread_item_status: "streaming" | "complete" | "failed" | "cancelled";
       change_request_status: "pending" | "approved" | "rejected";
       client_type: "privat" | "gewerblich";
       customer_commitment_source:
@@ -23678,6 +24011,16 @@ export const Constants = {
   },
   public: {
     Enums: {
+      ai_run_status: ["reserved", "succeeded", "failed", "cancelled"],
+      ai_thread_item_kind: [
+        "user_message",
+        "assistant_message",
+        "tool_call",
+        "question",
+        "todo_list",
+        "file",
+      ],
+      ai_thread_item_status: ["streaming", "complete", "failed", "cancelled"],
       change_request_status: ["pending", "approved", "rejected"],
       client_type: ["privat", "gewerblich"],
       customer_commitment_source: [

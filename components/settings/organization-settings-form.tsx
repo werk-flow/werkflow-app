@@ -3,7 +3,7 @@
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionFailure } from '@/lib/action-result';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 
@@ -54,6 +54,8 @@ type OrganizationSettingsFormProps = {
   };
   /** What a deletion removes, read for Admins only; null for other roles. */
   deletionScope: OrganizationDeletionScope | 'load_failed' | null;
+  /** The WerkFlow KI card, for Admins only; null for other roles. */
+  aiSettings: ReactNode;
 };
 
 type OrganizationSaveError = Extract<UpdateOrganizationSettingsResult, ActionFailure>['error'];
@@ -200,6 +202,7 @@ function OrganizationSaveFooter({ canEdit, isSaving }: { canEdit: boolean; isSav
 export function OrganizationSettingsForm({
   initialOrganization,
   deletionScope,
+  aiSettings,
 }: OrganizationSettingsFormProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
@@ -274,6 +277,8 @@ export function OrganizationSettingsForm({
           </form>
         </Form>
       </Card>
+
+      {aiSettings}
 
       <DangerZoneCard orgName={initialOrganization.name} canEdit={canEdit} deletionScope={deletionScope} />
     </div>

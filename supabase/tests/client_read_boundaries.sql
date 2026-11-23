@@ -675,4 +675,57 @@ select pg_temp.expect_field_columns('time_period_close_versions', 'cb000000-0000
   || 'closed_by, closed_at',
   array['opening_balance_total_minutes', 'period_delta_total_minutes', 'closing_balance_total_minutes']);
 
+-- WerkFlow KI threads are private (werk-flow/werkflow-planning#527): each
+-- author reads only their own threads and items; the admin of the same
+-- organization and a foreign member read none of another person's; a
+-- suspended author reads none, not even their own.
+reset role;
+set local role service_role;
+select public.create_ai_thread(organization_id, user_id, thread_id, title),
+  public.append_ai_thread_item(organization_id, user_id, thread_id, 'user_message', 'complete',
+    jsonb_build_object('text', title), 'turn-1')
+from (values
+  ('cb000000-0000-4000-8000-000000000010'::uuid, 'cb000000-0000-4000-8000-000000000001'::uuid,
+   'cb000000-0000-4000-8000-000000000301'::uuid, 'KI-Admin'),
+  ('cb000000-0000-4000-8000-000000000010'::uuid, 'cb000000-0000-4000-8000-000000000003'::uuid,
+   'cb000000-0000-4000-8000-000000000303'::uuid, 'KI-Mitarbeiter'),
+  ('cb000000-0000-4000-8000-000000000010'::uuid, 'cb000000-0000-4000-8000-000000000004'::uuid,
+   'cb000000-0000-4000-8000-000000000304'::uuid, 'KI-Kollegin'),
+  ('cb000000-0000-4000-8000-000000000011'::uuid, 'cb000000-0000-4000-8000-000000000005'::uuid,
+   'cb000000-0000-4000-8000-000000000305'::uuid, 'KI-Fremd')
+) as thread (organization_id, user_id, thread_id, title);
+reset role;
+
+create function pg_temp.visible_ai_threads() returns text language sql as $$
+  select concat_ws(' | ',
+    'threads=' || coalesce((select string_agg(title, ',' order by title) from public.ai_threads
+      where organization_id in ('cb000000-0000-4000-8000-000000000010', 'cb000000-0000-4000-8000-000000000011')), ''),
+    'items=' || coalesce((select string_agg(body ->> 'text', ',' order by body ->> 'text') from public.ai_thread_items
+      where organization_id in ('cb000000-0000-4000-8000-000000000010', 'cb000000-0000-4000-8000-000000000011')), '')
+  );
+$$;
+grant execute on function pg_temp.visible_ai_threads() to authenticated;
+
+create function pg_temp.expect_ai_threads(p_user uuid, p_expected text) returns void language plpgsql as $$
+declare actual text;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  actual := pg_temp.visible_ai_threads();
+  execute 'reset role';
+  if actual is distinct from p_expected then
+    raise exception 'WerkFlow KI threads visible to % are "%", expected "%"', p_user, actual, p_expected;
+  end if;
+end;
+$$;
+
+select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000003',
+  'threads=KI-Mitarbeiter | items=KI-Mitarbeiter');
+select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000001', 'threads=KI-Admin | items=KI-Admin');
+select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000005', 'threads=KI-Fremd | items=KI-Fremd');
+select pg_temp.set_access('cb000000-0000-4000-8000-000000000003', 0, 'suspend_now', clock_timestamp(),
+  'cb000000-0000-4000-8000-000000000154');
+select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000003', 'threads= | items=');
+select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000004', 'threads=KI-Kollegin | items=KI-Kollegin');
+
 rollback;
