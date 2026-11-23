@@ -81,7 +81,11 @@ const readAiSwitch = () => structuredClone(window.uiContractAiSwitch);
 
 function AiSettingsHost(): React.JSX.Element {
   const state = useRouteProps(readAiSwitch);
-  return <AiSettingsCard state={state} />;
+  return (
+    <BannerProvider>
+      <AiSettingsCard organizationId="00000000-0000-4000-8000-0000000000a1" state={state} />
+    </BannerProvider>
+  );
 }
 
 function TimeAccountOpeningHost(): React.JSX.Element {

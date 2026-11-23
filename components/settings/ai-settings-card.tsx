@@ -8,7 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox';
 import { ErrorText } from '@/components/ui/error-text';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useServerAction } from '@/hooks/use-server-action';
+import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { describeFailure } from '@/lib/action-messages';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import type { AiOrganizationSwitch } from '@/lib/ai/settings';
@@ -16,12 +18,21 @@ import { setAiEnabled } from '@/lib/ai/settings-actions';
 
 const ERROR_MESSAGES = {
   not_authorized: `Nur Admins können ${AI_PRODUCT_NAME} ein- oder ausschalten.`,
+  not_a_member: 'Du bist kein Mitglied dieser Organisation mehr. Lade die Seite neu.',
   not_released: `${AI_PRODUCT_NAME} ist für deine Organisation noch nicht freigeschaltet.`,
   update_failed: `${AI_PRODUCT_NAME} konnte nicht umgeschaltet werden. Versuche es erneut.`,
 } satisfies Record<string, string>;
 
 /** The admin's switch for WerkFlow KI in the organization settings. */
-export function AiSettingsCard({ state }: { state: AiOrganizationSwitch | 'load_failed' }) {
+export function AiSettingsCard({
+  organizationId,
+  state,
+}: {
+  organizationId: string;
+  state: AiOrganizationSwitch | 'load_failed';
+}) {
+  // Another admin's change reaches this card as a route refresh.
+  useRealtimeRouterRefresh({ tables: ['ai_organization_settings'] });
   return (
     <Card>
       <CardHeader>
@@ -37,7 +48,7 @@ export function AiSettingsCard({ state }: { state: AiOrganizationSwitch | 'load_
             Die Einstellung ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
           </RegionLoadError>
         ) : state.released ? (
-          <AiSwitch key={String(state.enabled)} initialEnabled={state.enabled} />
+          <AiSwitch organizationId={organizationId} serverEnabled={state.enabled} />
         ) : (
           <p className="text-sm text-muted-foreground">
             {AI_PRODUCT_NAME} ist für deine Organisation noch nicht freigeschaltet.
@@ -48,26 +59,36 @@ export function AiSettingsCard({ state }: { state: AiOrganizationSwitch | 'load_
   );
 }
 
-function AiSwitch({ initialEnabled }: { initialEnabled: boolean }) {
+function AiSwitch({ organizationId, serverEnabled }: { organizationId: string; serverEnabled: boolean }) {
   const router = useRouter();
-  const { run, isPending } = useServerAction(setAiEnabled);
-  const [enabled, setEnabled] = useState(initialEnabled);
+  const settleOnChange = useSettleOnChange(serverEnabled);
+  // The value the admin asked for, shown until the refreshed props carry it.
+  const [requested, setRequested] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { run, isPending, isSettling } = useServerAction(setAiEnabled, {
+    settle: async (result) => {
+      if (!result.success) return;
+      const since = settleOnChange.markChange();
+      router.refresh();
+      await settleOnChange(since);
+      setRequested(null);
+    },
+  });
+  const busy = isPending || isSettling;
+  const enabled = requested ?? serverEnabled;
 
   // A micro-toggle: it flips at once, stays quiet on success and turns back with the error.
   async function toggle(next: boolean) {
-    setEnabled(next);
+    setRequested(next);
     setError(null);
     try {
-      const result = await run({ enabled: next });
+      const result = await run({ organizationId, enabled: next });
       if (!result.success) {
-        setEnabled(!next);
+        setRequested(null);
         setError(describeFailure(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed));
-        return;
       }
-      router.refresh();
     } catch {
-      setEnabled(!next);
+      setRequested(null);
       setError(ERROR_MESSAGES.update_failed);
     }
   }
@@ -78,12 +99,12 @@ function AiSwitch({ initialEnabled }: { initialEnabled: boolean }) {
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Checkbox
             checked={enabled}
-            disabled={isPending}
+            disabled={busy}
             onCheckedChange={(checked) => void toggle(checked === true)}
           />
           {AI_PRODUCT_NAME} in dieser Organisation nutzen
         </label>
-        <InlinePending active={isPending} label={`${AI_PRODUCT_NAME} wird umgeschaltet`} />
+        <InlinePending active={busy} label={`${AI_PRODUCT_NAME} wird umgeschaltet`} />
       </div>
       <p className="text-sm text-muted-foreground">
         {enabled

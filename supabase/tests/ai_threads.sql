@@ -43,11 +43,17 @@ begin
       raise exception 'anon may read %', ai_table;
     end if;
   end loop;
-  foreach ai_table in array array['ai_organization_settings', 'ai_runs', 'ai_run_attempts'] loop
+  foreach ai_table in array array['ai_runs', 'ai_run_attempts'] loop
     if has_table_privilege('authenticated', 'public.' || ai_table, 'SELECT') then
       raise exception 'A client reads the server-only table %', ai_table;
     end if;
   end loop;
+  -- Admins read the switch for their live card, never the budget or its writer.
+  if has_column_privilege('authenticated', 'public.ai_organization_settings', 'monthly_budget_micro_eur', 'SELECT')
+    or has_column_privilege('authenticated', 'public.ai_organization_settings', 'updated_by', 'SELECT')
+    or not has_column_privilege('authenticated', 'public.ai_organization_settings', 'enabled', 'SELECT') then
+    raise exception 'A client reads the budget or the writer of the WerkFlow KI switch, or not the switch';
+  end if;
   if not exists (select 1 from cron.job where jobname = 'werkflow-ai-thread-retention') then
     raise exception 'The daily AI thread retention job is not scheduled';
   end if;
@@ -206,9 +212,18 @@ begin
     'ae000000-0000-4000-8000-000000000002', 'ae000000-0000-4000-8000-000000000020', 'run-1', 40000000);
   select * into repeated from public.reserve_ai_run('ae000000-0000-4000-8000-000000000010',
     'ae000000-0000-4000-8000-000000000002', 'ae000000-0000-4000-8000-000000000020', 'run-1', 40000000);
-  if reservation.verdict is distinct from 'reserved' or repeated.run_id is distinct from reservation.run_id then
-    raise exception 'A repeated reservation key did not return its run';
+  if reservation.verdict is distinct from 'reserved' or repeated.verdict is distinct from 'replayed'
+    or repeated.run_id is distinct from reservation.run_id then
+    raise exception 'A repeated reservation key did not replay its run: % %', reservation.verdict, repeated.verdict;
   end if;
+  -- The key names this author, thread and amount only.
+  begin
+    perform public.reserve_ai_run('ae000000-0000-4000-8000-000000000010',
+      'ae000000-0000-4000-8000-000000000002', 'ae000000-0000-4000-8000-000000000020', 'run-1', 1);
+    raise exception 'A reservation key replayed for another amount';
+  exception when others then
+    if sqlerrm is distinct from 'ai_reservation_key_conflict' then raise; end if;
+  end;
   if (select verdict from public.reserve_ai_run('ae000000-0000-4000-8000-000000000010',
       'ae000000-0000-4000-8000-000000000002', 'ae000000-0000-4000-8000-000000000020', 'run-2', 15000000))
       is distinct from 'budget_exhausted' then
@@ -224,6 +239,14 @@ begin
   if cost is distinct from 3000000::bigint then
     raise exception 'The run settled at % micro-USD, expected 3000000', cost;
   end if;
+  -- A settled run's key authorizes nothing more.
+  begin
+    perform public.reserve_ai_run('ae000000-0000-4000-8000-000000000010',
+      'ae000000-0000-4000-8000-000000000002', 'ae000000-0000-4000-8000-000000000020', 'run-1', 40000000);
+    raise exception 'A settled run was replayed';
+  exception when others then
+    if sqlerrm is distinct from 'ai_run_closed' then raise; end if;
+  end;
 
   -- EUR 3 spent: EUR 47 fits, EUR 47.01 does not.
   if (select verdict from public.reserve_ai_run('ae000000-0000-4000-8000-000000000010',

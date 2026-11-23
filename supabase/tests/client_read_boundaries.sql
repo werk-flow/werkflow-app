@@ -720,6 +720,33 @@ $$;
 select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000004', 'threads=KI-Kollegin | items=KI-Kollegin');
 select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000001', 'threads=KI-Admin | items=KI-Admin');
 select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000005', 'threads=KI-Fremd | items=KI-Fremd');
+-- The switch: the organization's admin reads it for the live card; a member
+-- and a foreign admin do not.
+set local role service_role;
+select public.set_ai_organization_enabled('cb000000-0000-4000-8000-000000000010',
+  'cb000000-0000-4000-8000-000000000001', true);
+reset role;
+create function pg_temp.reads_ai_switch(p_user uuid) returns bigint language plpgsql as $$
+declare visible bigint;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  select count(*) into visible from (select enabled from public.ai_organization_settings
+    where organization_id = 'cb000000-0000-4000-8000-000000000010') switch_read;
+  execute 'reset role';
+  return visible;
+end;
+$$;
+do $$
+begin
+  if pg_temp.reads_ai_switch('cb000000-0000-4000-8000-000000000001') is distinct from 1::bigint
+    or pg_temp.reads_ai_switch('cb000000-0000-4000-8000-000000000004') is distinct from 0::bigint
+    or pg_temp.reads_ai_switch('cb000000-0000-4000-8000-000000000005') is distinct from 0::bigint then
+    raise exception 'The WerkFlow KI switch is readable by someone other than the organization''s admin';
+  end if;
+end;
+$$;
+
 select pg_temp.set_access('cb000000-0000-4000-8000-000000000004', 0, 'suspend_now', clock_timestamp(),
   'cb000000-0000-4000-8000-000000000154');
 select pg_temp.expect_ai_threads('cb000000-0000-4000-8000-000000000004', 'threads= | items=');

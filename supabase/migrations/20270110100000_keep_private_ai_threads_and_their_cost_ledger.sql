@@ -112,6 +112,16 @@ create table public.ai_run_attempts (
 create index ai_run_attempts_month_idx on public.ai_run_attempts (organization_id, created_at);
 create index ai_run_attempts_run_idx on public.ai_run_attempts (run_id);
 
+create trigger ai_organization_settings_updated_at before update on public.ai_organization_settings
+  for each row execute function public.update_updated_at_column();
+
+-- Realtime (docs/technical/realtime-and-caching.md, "Add Realtime data"): the
+-- switch is its own owning root. Its primary key is organization_id, so the
+-- default replica identity is already minimal. Chat tables stay unpublished.
+create trigger emit_realtime_deletion after delete on public.ai_organization_settings
+  for each row execute function app_private.emit_realtime_deletion();
+alter publication supabase_realtime add table public.ai_organization_settings;
+
 -- The ledger refuses UPDATE and DELETE; only the organization's deletion
 -- cascades through it.
 create trigger guard_event_ledger_history before update or delete on public.ai_run_attempts
@@ -145,6 +155,12 @@ create policy ai_thread_items_select_author on public.ai_thread_items
 revoke all on table public.ai_organization_settings, public.ai_threads, public.ai_thread_items,
   public.ai_runs, public.ai_run_attempts from public, anon, authenticated, service_role;
 grant select on table public.ai_threads, public.ai_thread_items to authenticated;
+-- The admin's open card follows a change from another session through
+-- Realtime, so admins read the switch; the budget and its writer stay hidden.
+create policy ai_organization_settings_select_admin on public.ai_organization_settings
+  for select to authenticated
+  using (organization_id in (select app_private.get_user_admin_org_ids((select auth.uid()))));
+grant select (organization_id, enabled, updated_at) on table public.ai_organization_settings to authenticated;
 grant select on table public.ai_organization_settings, public.ai_threads, public.ai_thread_items,
   public.ai_runs, public.ai_run_attempts to service_role;
 
@@ -260,11 +276,13 @@ end;
 $$;
 
 -- Reserves the run's most expensive outcome before its first model step.
--- Verdicts: 'reserved', 'disabled' (no admin switched WerkFlow KI on) and
--- 'budget_exhausted' (this Berlin month's ledger plus the open holds plus this
--- reservation exceed the budget). A hold lapses 15 minutes after its run began,
--- so a run that died unsettled frees the budget; its recorded attempts still
--- count. A repeat with the same idempotency key returns the same run. Any
+-- Verdicts: 'reserved' (a new run), 'replayed' (the same author, thread and
+-- amount asked with the same key while that run still holds its budget),
+-- 'disabled' (no admin switched WerkFlow KI on) and 'budget_exhausted' (this
+-- Berlin month's ledger plus the open holds plus this reservation exceed the
+-- budget). A hold lapses 15 minutes after its run began, so a run that died
+-- unsettled frees the budget; its recorded attempts still count. A key that
+-- names another author, thread or amount, or a closed run, is refused. Any
 -- error, a lock wait over its timeout included, is a refusal for the caller.
 create function public.reserve_ai_run(
   p_organization_id uuid,
@@ -279,9 +297,8 @@ declare
   v_settings public.ai_organization_settings;
   v_month_start timestamptz :=
     date_trunc('month', now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin';
-  v_spent bigint;
-  v_held bigint;
-  v_run_id uuid;
+  v_committed bigint;
+  v_run public.ai_runs;
 begin
   if p_reserve_micro_usd is null or p_reserve_micro_usd <= 0 then
     raise exception 'ai_reservation_invalid';
@@ -297,34 +314,49 @@ begin
     return;
   end if;
 
-  select run.id into v_run_id from public.ai_runs run
+  select * into v_run from public.ai_runs run
   where run.organization_id = p_organization_id and run.idempotency_key = p_idempotency_key;
-  if v_run_id is not null then
-    return query select v_run_id, 'reserved'::text;
+  if found then
+    if v_run.user_id is distinct from p_user_id or v_run.thread_id is distinct from p_thread_id
+      or v_run.reserved_micro_usd <> p_reserve_micro_usd then
+      raise exception 'ai_reservation_key_conflict';
+    end if;
+    if v_run.status <> 'reserved' or v_run.created_at <= now() - interval '15 minutes' then
+      raise exception 'ai_run_closed';
+    end if;
+    return query select v_run.id, 'replayed'::text;
     return;
   end if;
 
-  select coalesce(sum(attempt.cost_micro_usd), 0) into v_spent from public.ai_run_attempts attempt
-  where attempt.organization_id = p_organization_id and attempt.created_at >= v_month_start;
-
-  select coalesce(sum(greatest(run.reserved_micro_usd - coalesce((
-    select sum(attempt.cost_micro_usd) from public.ai_run_attempts attempt
-    where attempt.run_id = run.id and attempt.organization_id = p_organization_id
-  ), 0), 0)), 0) into v_held
-  from public.ai_runs run
-  where run.organization_id = p_organization_id and run.status = 'reserved'
-    and run.created_at > now() - interval '15 minutes';
+  -- One statement, so one snapshot counts each attempt exactly once: in the
+  -- month's spend, and as recorded cost against its run's open hold.
+  select
+    coalesce((
+      select sum(attempt.cost_micro_usd) from public.ai_run_attempts attempt
+      where attempt.organization_id = p_organization_id and attempt.created_at >= v_month_start
+    ), 0)
+    + coalesce((
+      select sum(greatest(run.reserved_micro_usd - coalesce(recorded.cost, 0), 0))
+      from public.ai_runs run
+      left join lateral (
+        select sum(attempt.cost_micro_usd) as cost from public.ai_run_attempts attempt
+        where attempt.run_id = run.id and attempt.organization_id = p_organization_id
+      ) recorded on true
+      where run.organization_id = p_organization_id and run.status = 'reserved'
+        and run.created_at > now() - interval '15 minutes'
+    ), 0)
+  into v_committed;
 
   -- 1 USD counts as 1 EUR.
-  if v_spent + v_held + p_reserve_micro_usd > v_settings.monthly_budget_micro_eur then
+  if v_committed + p_reserve_micro_usd > v_settings.monthly_budget_micro_eur then
     return query select null::uuid, 'budget_exhausted'::text;
     return;
   end if;
 
   insert into public.ai_runs (organization_id, thread_id, user_id, idempotency_key, reserved_micro_usd)
   values (p_organization_id, p_thread_id, p_user_id, p_idempotency_key, p_reserve_micro_usd)
-  returning id into v_run_id;
-  return query select v_run_id, 'reserved'::text;
+  returning * into v_run;
+  return query select v_run.id, 'reserved'::text;
 end;
 $$;
 
@@ -375,7 +407,10 @@ end;
 $$;
 
 -- Ends the run's hold and returns its real cost from the ledger. A repeat
--- returns the cost again and keeps the first end state.
+-- returns the cost again and keeps the first end state. The caller records
+-- every attempt before it settles: settling declares the run's accounting
+-- complete and frees its hold, and an attempt recorded later still counts
+-- in the month but was not held.
 create function public.settle_ai_run(
   p_organization_id uuid,
   p_run_id uuid,
@@ -451,11 +486,23 @@ grant execute on function public.set_ai_organization_enabled(uuid, uuid, boolean
 -- old and holds no item. The ledger keeps its rows: runs lose their thread.
 create function app_private.delete_expired_ai_thread_items()
 returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_thread_id uuid;
 begin
   delete from public.ai_thread_items item where item.created_at < now() - interval '12 months';
-  delete from public.ai_threads thread
-  where thread.created_at < now() - interval '12 months'
-    and not exists (select 1 from public.ai_thread_items item where item.thread_id = thread.id);
+  -- Each candidate takes the thread row lock an append takes, then a fresh
+  -- statement checks it is still empty, so an append that committed while
+  -- the job waited keeps its thread.
+  for v_thread_id in
+    select thread.id from public.ai_threads thread
+    where thread.created_at < now() - interval '12 months'
+      and not exists (select 1 from public.ai_thread_items item where item.thread_id = thread.id)
+  loop
+    perform 1 from public.ai_threads thread where thread.id = v_thread_id for update;
+    delete from public.ai_threads thread
+    where thread.id = v_thread_id
+      and not exists (select 1 from public.ai_thread_items item where item.thread_id = v_thread_id);
+  end loop;
 end;
 $$;
 revoke all on function app_private.delete_expired_ai_thread_items() from public, anon, authenticated, service_role;

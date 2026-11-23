@@ -45,7 +45,9 @@ export default async function OrganizationSettingsPage() {
         role: activeMembership.role,
       }}
       deletionScope={deletionScope && (deletionScope.success ? deletionScope.scope : deletionScope.error)}
-      aiSettings={aiSwitch ? <AiSettingsCard state={aiSwitch} /> : null}
+      aiSettings={
+        aiSwitch ? <AiSettingsCard organizationId={activeMembership.orgId} state={aiSwitch} /> : null
+      }
     />
   );
 }

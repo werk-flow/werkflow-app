@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 // The action needs module mocks for identity, cookies and the database, which
 // would leak into other test files; the fixture runs it in its own process.
-test('only an Admin of the active, released organization switches WerkFlow KI, for that organization', async () => {
+test('only an Admin of the released organization the card showed switches WerkFlow KI, for that organization', async () => {
   const child = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, '../testing/fixtures/ai-settings-action-boundaries.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
