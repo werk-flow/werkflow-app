@@ -9,7 +9,7 @@
 #
 # `decide` finds the newest full run on main's last commits, and any older one still running, and
 # asks the repository's rule, scripts/ci/full-run.ts (lib/testing/ci/full-run.ts), which writes
-# run=true|false and reason to $GITHUB_OUTPUT: at once after a tooling change, otherwise in a
+# run=true|false, reason and head_has_full_run=true|false to $GITHUB_OUTPUT (nightly.yml reads the last): at once after a tooling change, otherwise in a
 # daytime slot every 3 hours, and never while a full run runs, for a commit that has one, or when
 # only documentation landed. It needs a checkout of GITHUB_SHA with its history and the installed
 # dependencies.
@@ -70,7 +70,9 @@ decide() {
     read -r started conclusion <<< "${state:-0 none}"
     case "$conclusion" in
       running) run+=(--run "${commit},${started},running") && break ;;
-      success | failure) test -n "$newest" || { newest="$commit" && run+=(--run "${commit},${started},ended"); } ;;
+      # A green Check ran its groups; a red one may have ended before any group ran.
+      success) test -n "$newest" || { newest="$commit" && run+=(--run "${commit},${started},tested"); } ;;
+      failure) test -n "$newest" || { newest="$commit" && run+=(--run "${commit},${started},ended"); } ;;
     esac
   done <<< "$list"
   decision="$(bun scripts/ci/full-run.ts due "${run[@]}")"

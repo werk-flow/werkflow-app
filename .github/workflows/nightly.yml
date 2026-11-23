@@ -8,8 +8,12 @@ name: Nightly
 # 19:45 and 00:30 Berlin. One that meets the midnight window waits it out in ci.yml's
 # `midnight` job. It shares the release's cron line, so both usually see one commit,
 # and the release at 03:30 reuses this run on it.
-# A manual run gives a main commit its full run before a release. A red run on
-# main opens or updates the issue "CI alert: nightly"; the next green run closes it.
+# A scheduled run skips a head that already has a green full run, from main-full-run.yml or an
+# earlier night (owner decision 2026-11-21, docs/decisions/0009-pull-requests-and-ci.md): the same
+# tree runs the same groups again, and the date look-ahead covers the dates. When the decision
+# fails, the full run starts. A manual run gives a main commit its full run before a release, and
+# never skips. A red run on main opens or updates the issue "CI alert: nightly"; the next green run
+# closes it, and a skipped one says nothing.
 on:
   schedule:
     - cron: '0 17 * * *'
@@ -27,11 +31,38 @@ permissions:
   actions: read
 
 jobs:
+  # Whether main's head already has a green full run (.github/scripts/main-full-run.sh decide, the
+  # rule lib/testing/ci/full-run.ts). Only a scheduled run asks.
+  decide:
+    name: Decide
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read # find the newest full run
+    outputs:
+      head_has_full_run: ${{ steps.decide.outputs.head_has_full_run }}
+    steps:
+      # The rule diffs main since its newest full run; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Decide whether the head has a full run
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/main-full-run.sh decide
+
   full:
     # The release reuses a green full run on the commit it ships by this check name,
     # `Full run / Check` (.github/workflows/release.yml).
     name: Full run
-    if: ${{ !inputs.alert_proof }}
+    needs: decide
+    # A skipped (manual) or failed decision leaves the output empty, so the full run starts.
+    if: ${{ !cancelled() && !inputs.alert_proof && needs.decide.outputs.head_has_full_run != 'true' }}
     # A called workflow gets no permission its caller lacks: ci.yml's Unit job asks for pull-requests.
     permissions:
       contents: read
@@ -67,10 +98,11 @@ jobs:
 
   alert:
     name: Alert
-    needs: [full, quarantine, proof]
-    # Only main speaks for the nightly, and a run a person cancelled says nothing about it. Nothing
-    # needs this job and the release gate reads only `Full run / Check`, so it changes no release.
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || inputs.alert_proof) }}
+    needs: [decide, full, quarantine, proof]
+    # Only main speaks for the nightly, and a run a person cancelled or one that skipped a tested
+    # head says nothing about it. Nothing needs this job and the release gate reads only
+    # `Full run / Check`, so it changes no release.
+    if: ${{ !cancelled() && needs.decide.outputs.head_has_full_run != 'true' && (github.ref == 'refs/heads/main' || inputs.alert_proof) }}
     # Two runs ending together must not both find no issue. release.yml's runs already queue.
     concurrency: nightly-alert
     runs-on: ubuntu-24.04

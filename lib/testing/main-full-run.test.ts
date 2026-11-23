@@ -136,16 +136,16 @@ const hoursBefore = (instant: string, hours: number) =>
   new Date(Date.parse(instant) - hours * HOUR * 1000).toISOString().replace('.000', '');
 const epoch = (instant: string) => Date.parse(instant) / 1000;
 
-test("the decision passes main's newest full run, ended or running, to the repository's rule", () => {
+test("the decision passes main's newest full run, tested or running, to the repository's rule", () => {
   const [, , third] = writeCommits(5);
   writeFullRun(third ?? '', hoursBefore(NOON, 3), 'success');
-  expect(decide()).toBe(`scripts/ci/full-run.ts due --run ${third},${epoch(hoursBefore(NOON, 3))},ended`);
+  expect(decide()).toBe(`scripts/ci/full-run.ts due --run ${third},${epoch(hoursBefore(NOON, 3))},tested`);
   writeFileSync(join(stub, 'bun.log'), '');
   writeFullRun(third ?? '', hoursBefore(NOON, 1), 'running');
   expect(decide()).toBe(`scripts/ci/full-run.ts due --run ${third},${epoch(hoursBefore(NOON, 1))},running`);
 });
 
-test("a red newest full run counts like a green one, and the head's own run is the newest", () => {
+test("a red newest full run counts as ended but not tested, and the head's own run is the newest", () => {
   const [head, second] = writeCommits(3);
   writeFullRun(second ?? '', hoursBefore(NOON, 4), 'failure');
   writeFullRun(head ?? '', hoursBefore(NOON, 2), 'failure');
@@ -165,7 +165,7 @@ test('a cancelled or timed-out full run tested nothing, so an older one decides'
       }),
     );
     writeFileSync(join(stub, 'bun.log'), '');
-    expect(decide()).toBe(`scripts/ci/full-run.ts due --run ${second},${epoch(hoursBefore(NOON, 4))},ended`);
+    expect(decide()).toBe(`scripts/ci/full-run.ts due --run ${second},${epoch(hoursBefore(NOON, 4))},tested`);
   }
 });
 
@@ -174,7 +174,7 @@ test('an older full run still running reaches the rule beside the newest ended o
   writeFullRun(second ?? '', hoursBefore(NOON, 4), 'success');
   writeFullRun(fourth ?? '', hoursBefore(NOON, 1), 'running');
   expect(decide()).toBe(
-    `scripts/ci/full-run.ts due --run ${second},${epoch(hoursBefore(NOON, 4))},ended --run ${fourth},${epoch(hoursBefore(NOON, 1))},running`,
+    `scripts/ci/full-run.ts due --run ${second},${epoch(hoursBefore(NOON, 4))},tested --run ${fourth},${epoch(hoursBefore(NOON, 1))},running`,
   );
 });
 

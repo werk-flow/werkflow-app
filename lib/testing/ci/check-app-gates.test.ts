@@ -317,7 +317,7 @@ test("main's full-run decision counts the configured App's full run and refuses 
   const counted = fullRunDecision(`{"appId": ${APP}}`, [fromApp(APP)]);
   expect(counted.status).toBe(0);
   // c0 has the same answer as c1: the stub lists the check runs for every commit, so c0 decides first.
-  expect(counted.rule).toBe(`scripts/ci/full-run.ts due --run ${'c0'.padEnd(40, '0')},${started},ended`);
+  expect(counted.rule).toBe(`scripts/ci/full-run.ts due --run ${'c0'.padEnd(40, '0')},${started},tested`);
   expect(fullRunDecision(`{"appId": ${APP}}`, [fromApp(OTHER_APP)]).rule).toBe('scripts/ci/full-run.ts due');
   expect(fullRunDecision('{"appId": null}', [fromApp(APP)]).rule).toBe('scripts/ci/full-run.ts due');
   // GitHub Actions stays trusted with or without the App.
