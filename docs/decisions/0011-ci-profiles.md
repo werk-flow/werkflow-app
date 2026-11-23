@@ -50,12 +50,17 @@ CI may run on many machines or on few. The design of the CI hill climb assumes m
 
 The owner decided on 2026-11-23 that CI runs on GitHub Actions again: `ci/profile.json` names `fleet`. Rule 7's last line no longer holds. The `local` profile stays maintained (rule 1) and frozen as a fallback; [ci-local-fallback.md](../technical/ci-local-fallback.md) holds its state, what stays open and the switch back.
 
+Under `fleet`, GitHub Actions starts every run and schedule: ci.yml's `pull_request`, `merge_group` and `push` events, and the full runs of the workflows that call it. nightly.yml's cron runs the nightly, release.yml's cron the release, and main's full run only by `workflow_dispatch`. No conductor's clock fires anything.
+
 Switch to `fleet`:
 
-1. Enable the CI workflow before the first fleet run: `gh workflow enable ci.yml -R werk-flow/werkflow-app`.
-2. In the `main` ruleset, have the owner set:
+1. Pause merges: turn auto-merge off on every open PR. Stop each machine runner, so it claims nothing new.
+2. Let every active run end or cancel it, and check that no lease under `refs/leases/ci/` is still held.
+3. Enable the CI workflow: `gh workflow enable ci.yml -R werk-flow/werkflow-app`.
+4. In the `main` ruleset, have the owner set:
    - the merge queue on, merging by squash, build concurrency 1, group size 1 to 4, 5 minutes' wait for a group, and "all entries must pass" (ALLGREEN);
    - a check timeout of 165 minutes;
    - `Check` required, from GitHub Actions;
    - "Require branches to be up to date before merging" off;
    - `Queue` not required.
+5. Check that the PR that sets `ci/profile.json` to `fleet` gets a `Check` from GitHub Actions. Then merge it and resume merges.

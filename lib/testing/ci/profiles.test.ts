@@ -47,12 +47,13 @@ test('each profile places every inventory item and nothing else', () => {
   }
 });
 
-test('a timed schedule gets a time in every profile, an event schedule none', () => {
+test('a timed schedule gets a time in every profile unless only a dispatch starts it, an event schedule none', () => {
   const timings: Timing[] = [];
   for (const profile of Object.values(CI_PROFILES))
     for (const name of SCHEDULE_NAMES) {
       const placement = profile.schedules[name];
-      const timed = SCHEDULES[name].trigger.on === 'time';
+      const dispatched = 'clock' in placement && placement.clock === 'dispatch';
+      const timed = SCHEDULES[name].trigger.on === 'time' && !dispatched;
       expect('timing' in placement, `${profile.name} ${name}`).toBe(timed);
       if ('timing' in placement) timings.push(placement.timing);
     }
@@ -90,6 +91,26 @@ const timingOfCron = (cron: string, timezone: string | undefined) => {
   };
 };
 
+/** The workflows an inventory item's sources name, as `<file>.yml`. */
+const workflowsOf = (name: (typeof SCHEDULE_NAMES)[number]): string[] => [
+  ...new Set(
+    SCHEDULES[name].sources.flatMap((source) => {
+      const workflow = /^([\w-]+\.yml)#/.exec(source)?.[1];
+      return workflow ? [workflow] : [];
+    }),
+  ),
+];
+
+/** A workflow's `on:` triggers, keyed by event. */
+const onOf = (workflow: string): Record<string, unknown> =>
+  z.record(z.string(), z.unknown()).parse(readWorkflow(workflow).at('on'));
+
+/** Whether a workflow has a job that calls ci.yml. */
+const callsCi = (workflow: string): boolean =>
+  Object.values(z.record(z.string(), z.unknown()).parse(readWorkflow(workflow).at('jobs'))).some(
+    (job) => z.object({ uses: z.string() }).safeParse(job).data?.uses === './.github/workflows/ci.yml',
+  );
+
 /** The timing of each of the conductor's clocks: CLOCK_WORK and the full-run slots. */
 const CONDUCTOR_TIMINGS: Readonly<Record<ClockWorkName | 'full-run', Timing>> = {
   release: {
@@ -117,7 +138,17 @@ test("each timed schedule fires at the time of the clock its profile names: the 
     for (const name of SCHEDULE_NAMES) {
       const trigger: ScheduleTrigger = SCHEDULES[name].trigger;
       const placement = profile.schedules[name];
-      if (trigger.on !== 'time' || !('timing' in placement)) continue;
+      if (trigger.on !== 'time' || !('clock' in placement)) continue;
+      if (placement.clock === 'dispatch') {
+        // No clock fires it: every workflow of the item starts only by workflow_dispatch.
+        expect(trigger.workflow, `${profile.name} ${name}`).toBeUndefined();
+        expect(placement.dispatchedBy.length, `${profile.name} ${name}`).toBeGreaterThan(0);
+        for (const workflow of workflowsOf(name))
+          expect(Object.keys(onOf(workflow)), `${profile.name} ${name}: ${workflow}`).toEqual([
+            'workflow_dispatch',
+          ]);
+        continue;
+      }
       const where = `${profile.name} ${name} on the ${placement.clock} clock`;
       if (placement.clock === 'planned') {
         // No code fires a planned clock: only a profile whose values wait for measurements has one.
@@ -134,6 +165,19 @@ test("each timed schedule fires at the time of the clock its profile names: the 
     }
 });
 
+test('each fleet run starts by a trigger its workflow has, in ci.yml or a workflow that calls ci.yml', () => {
+  for (const event of CI_EVENTS) {
+    const start = CI_PROFILES.fleet.runs[event];
+    if (start.startedBy !== 'fleet') throw new Error(`fleet's ${event} run starts off GitHub Actions.`);
+    expect(start.on.length, event).toBeGreaterThan(0);
+    for (const trigger of start.on) {
+      const [workflow = '', on = ''] = trigger.split('#');
+      expect(Object.keys(onOf(workflow)), `${event}: ${trigger}`).toContain(on);
+      expect(workflow === 'ci.yml' || callsCi(workflow), `${event}: ${trigger}`).toBe(true);
+    }
+  }
+});
+
 test("the fleet profile is #582's design: the mirror's cap, batches of 4, and every schedule on a clock that fires it", () => {
   const fleet = CI_PROFILES.fleet;
   expect(fleet.values).toBe('in use');
@@ -141,11 +185,11 @@ test("the fleet profile is #582's design: the mirror's cap, batches of 4, and ev
   expect(fleet.jobsAtOnce).toBe(MIRROR_JOB_CAP);
   expect(fleet.maxBatch).toBe(MAX_BATCH);
   expect(fleet.jobs.browser.atOnce).toBe('all');
-  // The conductor fires the work it has a clock for, release.yml's cron the release while it has
-  // one, and nightly.yml alone lists the quarantines.
-  expect(fleet.schedules.nightly.clock).toBe('conductor');
+  // On GitHub Actions no conductor's clock fires anything: nightly.yml's cron runs the nightly and
+  // its quarantine list, release.yml's cron the release, and main's full run waits for a dispatch.
+  expect(fleet.schedules.nightly.clock).toBe('workflow');
   expect(fleet.schedules['release-candidate'].clock).toBe('workflow');
-  expect(fleet.schedules['main-full-run'].clock).toBe('conductor');
+  expect(fleet.schedules['main-full-run'].clock).toBe('dispatch');
   expect(fleet.schedules['nightly-quarantine'].clock).toBe('workflow');
   expect(readWorkflow('date-lookahead.yml').at('jobs', 'leg', 'strategy', 'max-parallel')).toBe(
     fleet.schedules['date-lookahead'].atOnce,
