@@ -34,5 +34,5 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           BASE: ${{ github.event.pull_request.base.ref }}
         run: |
-          body="The base changed to \`$BASE\`. Update the branch (\`gh pr update-branch $PR\` or merge \`origin/$BASE\`) so CI runs on the new base. If the branch already contains the base, push a fresh commit, such as \`git commit --allow-empty\`."
+          body="The base changed to \`$BASE\`. Update the branch (\`gh pr update-branch $PR\` or \`git fetch origin $BASE && git merge origin/$BASE\`) so CI runs on the new base. If the branch already contains the base, push a fresh commit, such as \`git commit --allow-empty\`."
           gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null

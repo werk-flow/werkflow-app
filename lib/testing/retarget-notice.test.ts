@@ -66,6 +66,6 @@ test('the comment names the new base and how to give the PR a new head on it', (
     '--method POST repos/owner/repo/issues/442/comments',
   );
   expect(existsSync(join(stub, 'comment')) ? readFileSync(join(stub, 'comment'), 'utf8') : '').toBe(
-    'The base changed to `main`. Update the branch (`gh pr update-branch 442` or merge `origin/main`) so CI runs on the new base. If the branch already contains the base, push a fresh commit, such as `git commit --allow-empty`.',
+    'The base changed to `main`. Update the branch (`gh pr update-branch 442` or `git fetch origin main && git merge origin/main`) so CI runs on the new base. If the branch already contains the base, push a fresh commit, such as `git commit --allow-empty`.',
   );
 });
