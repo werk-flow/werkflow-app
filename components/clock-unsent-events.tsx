@@ -2,7 +2,7 @@
 
 import { useState, type ComponentProps, type ReactNode } from 'react';
 
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import ClockUnsentReplacement from '@/components/clock-unsent-replacement';
 import {
   SetAsideRecords,

@@ -266,6 +266,7 @@ mock.module('@/lib/maintenance/actions', () => ({
   getMaintenanceWorkspace: seam('maintenance-workspace'),
   getMaintenanceEvidenceOptions: seam('maintenance-evidence-options'),
 }));
+mock.module('@/lib/on-call/actions', () => ({ getOnCallOverview: seam('on-call-overview') }));
 mock.module('@/lib/service-reports/page-actions', () => ({
   getCompletedVisitPage: seam('completed-maintenance-visits'),
 }));
@@ -483,6 +484,7 @@ const inputs: Record<string, unknown> = {
     planPage: 2,
     coveragePage: 3,
   },
+  'on-call-overview': { organizationId },
   'completed-maintenance-visits': { organizationId, page: 2 },
   'published-work-templates': { targetType: 'project' },
   'work-template-preview': { versionId: jobId, targetType: 'job', jobId },
@@ -528,6 +530,7 @@ const readerArguments: Record<string, unknown> = {
   'profiles-by-ids': [jobId],
   'pending-sessions': organizationId,
   'pending-change-requests': organizationId,
+  'on-call-overview': organizationId,
   'time-correction-requests': [organizationId, 'approvals'],
   'time-correction-history': [organizationId, 2],
   'time-correction-form-options': organizationId,

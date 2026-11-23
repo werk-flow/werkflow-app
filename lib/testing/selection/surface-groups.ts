@@ -82,6 +82,7 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
   '/service/faelle': 'service',
   '/service/anlagen': 'service',
   '/service/wartung': 'service',
+  '/service/bereitschaft': 'service',
   '/service/anlagen/[equipmentNumber]': 'service',
   '/service/faelle/[caseNumber]': 'service',
   '/einstellungen/profil': 'settings',

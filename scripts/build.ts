@@ -4,6 +4,7 @@ import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'n
 import { resolve } from 'node:path';
 import { calculateBuildInputs, type BuildReceipt } from '../lib/testing/evidence/build-identity';
 import { assertAppPortFree, workspacePorts } from '../lib/testing/runner/app-port';
+import { withHeavyNodeHeap } from '../lib/testing/runner/heavy-command';
 import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 
@@ -27,11 +28,10 @@ await withWorkspaceTestLock({ operation: 'production build', repositoryRoot }, a
       {
         cwd: repositoryRoot,
         stdio: 'inherit',
-        // Next's type check of this repository needs more than Node's default heap on a machine with less than 16 GB.
         env: {
           ...process.env,
           NODE_ENV: 'production',
-          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=4096`.trim(),
+          NODE_OPTIONS: withHeavyNodeHeap(process.env.NODE_OPTIONS),
           WERKFLOW_BUILD_ID: buildId,
         },
       },

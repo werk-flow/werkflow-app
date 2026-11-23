@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { AFRelationship, JpegEmbedder, PDFHexString, PDFName, PDFString } from 'pdf-lib';
 
 import { E_INVOICE_FILE_NAME, readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
@@ -14,7 +15,7 @@ import { drawBusinessDocument } from './render';
 // `factur-x.xml` (relationship `Alternative`). A person reads the pages, a
 // machine reads the XML; both come from the same invoice. The same input
 // gives the same bytes. Mustang and veraPDF check the reference invoices in
-// CI (.github/workflows/e-invoice-checks.yml). Nothing checks PDF/A at run
+// CI (fixtures/check-reference-e-invoices.ts). Nothing checks PDF/A at run
 // time, so an invoice draws only what the renderer can vouch for (`pdfaSafe`).
 
 /** The Factur-X profile the XML follows; the XMP names it, Mustang compares it with the XML. */
@@ -25,10 +26,12 @@ let iccBytes: Promise<Uint8Array> | null = null;
 
 /** The sRGB profile of the output intent (CC0, `color/LICENSE-CC0.txt`); read once per server instance. */
 function loadSrgbProfile(): Promise<Uint8Array> {
-  iccBytes ??= readFile(new URL('./color/sRGB-v2-micro.icc', import.meta.url)).catch((error: unknown) => {
-    iccBytes = null;
-    throw error;
-  });
+  iccBytes ??= readFile(join(process.cwd(), 'lib/document-rendering/color/sRGB-v2-micro.icc')).catch(
+    (error: unknown) => {
+      iccBytes = null;
+      throw error;
+    },
+  );
   return iccBytes;
 }
 

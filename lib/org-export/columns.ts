@@ -46,6 +46,9 @@ type ExcludedTable =
   // Delivery state of Stripe's signals to WerkFlow's own billing: event ids,
   // no record of the organization.
   | 'werkflow_billing_signals'
+  // Resend's delivery signals, once per Svix id: message ids and the owning
+  // ledger, no record of the organization.
+  | 'resend_webhook_events'
   // WerkFlow's own delivery state of its billing mails and alarms; the
   // Admin sees the mails on the billing page.
   | 'werkflow_billing_mails'
@@ -151,6 +154,9 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   maintenance_visit_findings: 'Wartungen_Befunde',
   offer_events: 'Angebote_Verlauf',
   offers: 'Angebote',
+  on_call_shift_events: 'Bereitschaften_Ereignisse',
+  on_call_shift_members: 'Bereitschaften_Personen',
+  on_call_shifts: 'Bereitschaften',
   organization_capabilities: 'Organisation_Qualifikationen',
   organization_closure_days: 'Organisation_Schließtage',
   organization_export_events: 'Datenexporte_Protokoll',

@@ -9,6 +9,7 @@
 # the provider answer or the live command.
 # BREAK_CHECK=vercel-build-step expects a changed command, to prove that drift fails this step.
 set -euo pipefail
+source "$(dirname "$0")/curl-headers.sh"
 
 check=vercel-build-step
 url="$1"
@@ -33,7 +34,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 body="$work/project.json"
 status="$(curl --silent --max-time 30 --output "$body" --write-out '%{http_code}' \
-  -H "Authorization: Bearer ${VERCEL_TOKEN}" "$url" || true)"
+  --config <(curl_headers <<< "Authorization: Bearer ${VERCEL_TOKEN}") "$url" || true)"
 test "$status" = 200 || fail "VERCEL_TOKEN could not read the project (HTTP ${status})."
 actual="$(jq -r '.commandForIgnoringBuildStep // empty' "$body" 2> /dev/null)" \
   || fail "The project answer was not readable."

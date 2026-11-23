@@ -1332,9 +1332,9 @@ const eslintConfig = defineConfig([
   },
   // Test hygiene (docs/technical/testing.md, Never): every unit test,
   // component contract and browser spec waits on a fact instead of the clock,
-  // runs once under its runner's shared timeout, and is skipped only under a
-  // quarantine comment that names its planning issue. A unit test also reads
-  // no wall clock.
+  // holds no duration below a fixed number, runs once under its runner's shared
+  // timeout, and is skipped only under a quarantine comment that names its
+  // planning issue. A unit test also reads no wall clock.
   {
     files: ['lib/**/*.test.{ts,tsx,mjs}', 'tests/**/*.spec.ts', 'tests/**/support/**/*.ts'],
     plugins: { 'test-hygiene': testHygieneRules },
@@ -1344,6 +1344,7 @@ const eslintConfig = defineConfig([
       'test-hygiene/no-per-test-timeout': 'error',
       'test-hygiene/no-retries': 'error',
       'test-hygiene/no-excluded-test': 'error',
+      'test-hygiene/no-fixed-time-limit': 'error',
     },
   },
   {

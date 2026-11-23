@@ -2,14 +2,14 @@
 // that machine has waited over 10 minutes and the run took its idle mark; never a machine a run uses,
 // never one of its own workstation's, never one kept without a mark (werk-flow/werkflow-planning#415).
 import { expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, statSync, utimesSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { z } from '../../zod';
 
 import { boatClient } from './boat-api';
 import { MARK_IDLE, claimKeptMachine, takeIdleMachineElsewhere, workstationLabel } from './machine-eviction';
+import { temporaryDirectory } from '../temporary-directory';
 
 const MINE = workstationLabel('this-workstation');
 const OTHER = workstationLabel('other-workstation');
@@ -31,7 +31,7 @@ function fakeBoat(machines: Record<string, Kept>, refuseList = false) {
   const exits: number[] = [];
   const folders = Object.fromEntries(
     Object.entries(machines).map(([id, machine]) => {
-      const folder = mkdtempSync(join(tmpdir(), 'boat-pristine-'));
+      const folder = temporaryDirectory('boat-pristine-');
       if (machine.idleSeconds !== undefined) {
         const mark = join(folder, 'idle');
         writeFileSync(mark, '');
@@ -135,7 +135,7 @@ test("a kept machine is its workstation's again only while no evicting run took 
 });
 
 test('the idle mark follows only a passed wipe, and the label names no host', () => {
-  const folder = mkdtempSync(join(tmpdir(), 'boat-pristine-'));
+  const folder = temporaryDirectory('boat-pristine-');
   const mark = (wipe: string) =>
     Bun.spawnSync([
       'bash',
