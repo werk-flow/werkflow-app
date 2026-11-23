@@ -2,7 +2,7 @@
 
 import { useRef, useState, type ComponentProps } from 'react';
 
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';

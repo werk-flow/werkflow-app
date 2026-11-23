@@ -182,7 +182,7 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
 export type FakeStripeSetup = {
   /** readInvoice, readCustomer, readMandate and readDispute answer these by id. */
   objects?: FakeStripeObjects;
-  /** The real gateway's HTTP calls (readInvoiceForIssue) are answered from these. */
+  /** The real gateway's HTTP calls (readInvoiceForIssue, readRefundForStorno) are answered from these. */
   answers?: FakeStripeAnswers;
   /** Every HTTP request the fake answered is pushed here. */
   requests?: FakeStripeRequests;
@@ -215,6 +215,7 @@ export function createFakeStripeGateway(
   return {
     verifySignal: resolved.gateway.verifySignal,
     readInvoiceForIssue: resolved.gateway.readInvoiceForIssue,
+    readRefundForStorno: resolved.gateway.readRefundForStorno,
     readInvoice: (id) => lookup(objects.invoices, id),
     readCustomer: (id) => lookup(objects.customers, id),
     readMandate: (id) => lookup(objects.mandates, id),

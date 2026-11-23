@@ -2,6 +2,7 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { AFRelationship, JpegEmbedder, PDFHexString, PDFName, PDFString } from 'pdf-lib';
 
 import { E_INVOICE_FILE_NAME, readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
@@ -25,10 +26,12 @@ let iccBytes: Promise<Uint8Array> | null = null;
 
 /** The sRGB profile of the output intent (CC0, `color/LICENSE-CC0.txt`); read once per server instance. */
 function loadSrgbProfile(): Promise<Uint8Array> {
-  iccBytes ??= readFile(new URL('./color/sRGB-v2-micro.icc', import.meta.url)).catch((error: unknown) => {
-    iccBytes = null;
-    throw error;
-  });
+  iccBytes ??= readFile(join(process.cwd(), 'lib/document-rendering/color/sRGB-v2-micro.icc')).catch(
+    (error: unknown) => {
+      iccBytes = null;
+      throw error;
+    },
+  );
   return iccBytes;
 }
 
