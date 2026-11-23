@@ -195,6 +195,20 @@ export function cancelledCheckRunOf(input: {
   };
 }
 
+/**
+ * A machine runner's completion of its attempt's Check: the verdict `built` from the run's results,
+ * or cancelled when none could be built. The cancelled summary is fixed text: why the verdict could
+ * not be built names the runner's own folders, which a public Check never shows.
+ */
+export function verdictOrCancelled(
+  built: { request: CheckRunRequest } | { problem: string },
+  cancelled: (reason: string) => { request: CheckRunRequest } | { problem: string },
+): { request: CheckRunRequest; verdict: boolean } | { problem: string } {
+  if (!('problem' in built)) return { ...built, verdict: true };
+  const fallback = cancelled('No verdict: the run left no Check result this runner could read.');
+  return 'problem' in fallback ? fallback : { ...fallback, verdict: false };
+}
+
 function checkVerdict(check: CiResult, tree: string): { passed: boolean; summary: string } {
   if (check.status === 'running' || check.completedAt === null)
     return { passed: false, summary: 'Check did not finish.' };

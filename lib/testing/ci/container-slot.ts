@@ -18,7 +18,8 @@ export const slotConfigSchema = z.strictObject({
   /** The slot's Docker socket on the slot host, mounted into a job for its Supabase stack. */
   socket: z.string().startsWith('/'),
   /** The slot host's own folder for the git cache and the runs' workspaces. Mounted at its own path. */
-  root: z.string().startsWith('/'),
+  // No trailing slash: a read compares its open file's path with the one derived from the root.
+  root: z.string().regex(/^\/(?:.*[^/])?$/, 'is an absolute path without a trailing slash'),
   /**
    * The CI image: its tag in the configuration; the runner resolves it to its immutable id, checks
    * the label `org.werkflow.trusted-commit`, and hands run-commit the id.

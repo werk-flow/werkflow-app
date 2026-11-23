@@ -14,6 +14,7 @@ import {
   READ_LIMIT_BYTES,
   readCommand,
   type SlotConfig,
+  slotConfigSchema,
   stageCommand,
 } from './container-slot';
 
@@ -134,34 +135,51 @@ test('S26: an argv with spaces, quotes and sh -c positional parameters reaches t
   });
 });
 
+test('CR 923: a slot root with a trailing slash is refused, so no derived path differs from the open file', () => {
+  expect(() => slotConfigSchema.parse({ ...SLOT, root: '/home/cirunner/ci/' })).toThrow('trailing slash');
+  expect(slotConfigSchema.parse(SLOT).root).toBe('/home/cirunner/ci');
+});
+
+test('CR 983: the slot shell decodes its output once, so a character split across chunks stays whole', async () => {
+  // The child writes the two bytes of `ö` apart, so the runner reads them as two chunks.
+  const child =
+    "const [first, second] = Buffer.from('ö'); process.stdout.write(Buffer.from([first])); setTimeout(() => process.stdout.write(Buffer.from([second])), 200);";
+  const shell = slotShell({ ...SLOT, prefix: [process.execPath, '-e', child] });
+  expect((await shell([])).stdout).toBe('ö');
+});
+
 test('S11: a read back from the slot has its deadline on the slot itself', () => {
   expect(readCommand('/slot/x.json').slice(0, 3)).toEqual(['timeout', '60', 'sh']);
 });
 
-test('F9, S21: a read back from the slot opens a file once and copies it only when it is a regular file reached by no link, capped', () => {
-  const real = join(scratch, 'real');
-  spawnSync('mkdir', ['-p', real]);
-  const file = join(real, 'result.json');
-  writeFileSync(file, '{"status":"passed"}');
-  const link = join(real, 'link.json');
-  symlinkSync('/etc/hostname', link);
-  // A linked folder on the way: the path names the file, but the open reaches it elsewhere.
-  const linkedFolder = join(scratch, 'linked');
-  symlinkSync(real, linkedFolder);
-  const large = join(real, 'large.json');
-  writeFileSync(large, Buffer.alloc(READ_LIMIT_BYTES + 10, 'x'));
-  const read = (path: string) =>
-    spawnSync(readCommand(path)[0] ?? 'sh', readCommand(path).slice(1), {
-      encoding: 'utf8',
-      timeout: 5_000,
-      maxBuffer: 64 * 1024 ** 2,
-    });
-  expect(read(file)).toMatchObject({ status: 0, stdout: '{"status":"passed"}' });
-  for (const path of [link, join(linkedFolder, 'result.json'), '/dev/zero', join(real, 'missing.json')])
-    expect([path, read(path).status]).not.toEqual([path, 0]);
-  // A file past the limit comes back one byte over it, which the trusted side refuses.
-  expect(read(large).stdout.length).toBe(READ_LIMIT_BYTES + 1);
-});
+// The read checks its descriptor through /proc, which only Linux has: both slots are Linux.
+test.skipIf(process.platform !== 'linux')(
+  'F9, S21: a read back from the slot opens a file once and copies it only when it is a regular file reached by no link, capped',
+  () => {
+    const real = join(scratch, 'real');
+    spawnSync('mkdir', ['-p', real]);
+    const file = join(real, 'result.json');
+    writeFileSync(file, '{"status":"passed"}');
+    const link = join(real, 'link.json');
+    symlinkSync('/etc/hostname', link);
+    // A linked folder on the way: the path names the file, but the open reaches it elsewhere.
+    const linkedFolder = join(scratch, 'linked');
+    symlinkSync(real, linkedFolder);
+    const large = join(real, 'large.json');
+    writeFileSync(large, Buffer.alloc(READ_LIMIT_BYTES + 10, 'x'));
+    const read = (path: string) =>
+      spawnSync(readCommand(path)[0] ?? 'sh', readCommand(path).slice(1), {
+        encoding: 'utf8',
+        timeout: 5_000,
+        maxBuffer: 64 * 1024 ** 2,
+      });
+    expect(read(file)).toMatchObject({ status: 0, stdout: '{"status":"passed"}' });
+    for (const path of [link, join(linkedFolder, 'result.json'), '/dev/zero', join(real, 'missing.json')])
+      expect([path, read(path).status]).not.toEqual([path, 0]);
+    // A file past the limit comes back one byte over it, which the trusted side refuses.
+    expect(read(large).stdout.length).toBe(READ_LIMIT_BYTES + 1);
+  },
+);
 
 test('F3: the start probe fails when a job, or a container through its socket, reads a sentinel of the runner, and passes otherwise', () => {
   const bin = join(scratch, 'bin');
@@ -170,18 +188,19 @@ test('F3: the start probe fails when a job, or a container through its socket, r
   // A fake docker: `run … /:/host … -c <script>` runs the script with /host as the fake slot root.
   writeFileSync(
     join(bin, 'docker'),
-    `#!/bin/bash\nscript="\${@: -1}"\nexec bash -c "\${script//\\/host/${host.replaceAll('/', '\\/')}}"\n`,
+    `#!/bin/bash\nscript="\${@: -1}"\nif test -n "$FAKE_DOCKER_FAILS" && [[ $script == *grep* ]]; then exit 125; fi\nexec bash -c "\${script//\\/host/${host.replaceAll('/', '\\/')}}"\n`,
   );
   chmodSync(join(bin, 'docker'), 0o755);
   spawnSync('mkdir', ['-p', join(host, 'etc'), join(host, 'home/owner')]);
   const probe = resolve(import.meta.dir, '../../../ci/image/probe.sh');
   const range = join(scratch, 'port-range');
   writeFileSync(range, '55000\t65000\n');
-  const run = (sentinel: string) =>
+  const run = (sentinel: string, fails = '') =>
     spawnSync('bash', [probe, 'secret-token', sentinel, ''], {
       encoding: 'utf8',
       env: {
         NODE_ENV: 'test',
+        FAKE_DOCKER_FAILS: fails,
         PATH: `${bin}:${process.env.PATH}`,
         WERKFLOW_PROBE_IMAGE: 'sha256:abc',
         WERKFLOW_PORT_RANGE_FILE: range,
@@ -199,6 +218,9 @@ test('F3: the start probe fails when a job, or a container through its socket, r
   expect(run('/home/owner/.werkflow-ci-probe').status).toBe(0);
   writeFileSync(range, '32768\t60999\n');
   expect(run('/home/owner/.werkflow-ci-probe').status).toBe(1);
+  // CR 874: a sentinel check that cannot run through the socket fails the probe; silence proves nothing.
+  writeFileSync(range, '55000\t65000\n');
+  expect(run('/home/owner/.werkflow-ci-probe', '1').status).toBe(2);
 });
 
 test("the slot's commands run without the runner's variables, and WSL forwards none", () => {

@@ -10,8 +10,8 @@
 // Usage: bun scripts/ci/machine-watchdog.ts --at <epoch ms> --group <process group> --run-dir <dir>
 //        --slot <slot configuration as JSON>
 //        bun scripts/ci/machine-watchdog.ts --probe --slot <slot configuration as JSON>
-import { spawnSync } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { type ChildProcess, spawnSync } from 'node:child_process';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { slotConfigSchema } from '../../lib/testing/ci/container-slot';
@@ -49,10 +49,42 @@ export function runCommitSignal(
     try {
       kill(pid, name);
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      // Only ESRCH says the group is gone; any other refusal (EPERM) leaves it there.
+      return name === 0 && !(error instanceof Error && 'code' in error && error.code === 'ESRCH');
     }
   };
+}
+
+/**
+ * Writes each sentinel as a new file of its own (never over an existing one), runs `act`, and
+ * removes exactly the files it created, also when a write or `act` fails.
+ */
+export async function withSentinels<Result>(
+  paths: readonly string[],
+  token: string,
+  act: (paths: readonly string[]) => Promise<Result>,
+): Promise<Result> {
+  const created: string[] = [];
+  try {
+    for (const path of paths) {
+      writeFileSync(path, `${token}\n`, { mode: 0o600, flag: 'wx' });
+      created.push(path);
+    }
+    return await act(created);
+  } finally {
+    for (const path of created) rmSync(path, { force: true });
+  }
+}
+
+/**
+ * Spawns a child the runner depends on and handles its failure to start: an unhandled `error`
+ * event would end the runner. `failed` decides what the failure means for the run.
+ */
+export function spawnTracked(start: () => ChildProcess, failed: (error: Error) => void): ChildProcess {
+  const child = start();
+  child.once('error', failed);
+  return child;
 }
 
 /**

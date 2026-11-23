@@ -1,5 +1,6 @@
 // The machine runner's decisions (machine-runner.ts) in a world of fake GitHub, run-commit, slot
 // and clock (lib/testing/fixtures/machine-runner-world.ts). Each test names the invariant it holds.
+import { machineConfigSchema } from './machine-config';
 import { BERLIN_TIME_ZONE } from '../../date-time/berlin';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
@@ -20,7 +21,6 @@ import {
   ceilingMs,
   EDGE_MARGIN_MS,
   KILL_AFTER_MS,
-  machineConfigSchema,
   percentile,
   recover,
   runnerStateSchema,
@@ -74,6 +74,8 @@ test("F1: a verdict is posted only after the lease ref turned done, on the attem
     { id: 1, conclusion: 'success' },
   ]);
   expect(shared.github.checkRuns[0]?.runUrl).toContain('#pc-a1');
+  // CR 927: the lease was already done when the Check was completed.
+  expect(shared.github.atCompletion).toEqual(['done']);
   // A done head under the same approval is not claimed again.
   await tick(pc.ports);
   expect(pc.started).toHaveLength(1);
@@ -597,4 +599,60 @@ test('S19: the window file is read again right before launch, and a window that 
   await tick(pc.ports);
   expect(pc.started).toEqual([]);
   expect(shared.github.checkRuns[0]?.conclusion).toBe('cancelled');
+});
+
+test('CR 951: only a delivered verdict teaches admission a duration; a run without one does not', async () => {
+  const shared = world({ pulls: [pull(1), pull(2)] });
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.faults.noVerdict = true;
+  shared.clock.now += 60_000;
+  pc.end(1);
+  await tick(pc.ports);
+  expect(pc.state().durations.selected).toEqual([]);
+  // The next run ends with a failing verdict that is delivered: its duration counts.
+  await tick(pc.ports);
+  shared.clock.now += 60_000;
+  pc.end(1);
+  await tick(pc.ports);
+  expect(pc.started).toHaveLength(2);
+  expect(pc.state().durations.selected).toEqual([60]);
+});
+
+test('CR 958: a run is admitted only if it ends before its stop-by instant, not only before the window turns off', async () => {
+  // 05:25 Berlin: a 30 min run and the reserve end before 06:00, but past the stop at 05:53.
+  const shared = world({ clock: { now: Date.parse('2026-11-23T04:25:00Z') } });
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  expect(pc.started).toEqual([]);
+});
+
+test('CR 965: a claim whose lease expired while the Check start took long starts no run', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  pc.faults.startDelay = 11 * 60_000;
+  await tick(pc.ports);
+  expect(pc.started).toEqual([]);
+  expect(shared.github.checkRuns[0]?.conclusion).toBe('cancelled');
+});
+
+test('CR 970: the sweep leaves a ref that holds no lease alone, as the claim does', async () => {
+  const shared = world({ pulls: [] });
+  shared.github.refs.set(head(9), { oid: 'hand', message: 'made by hand' });
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  expect(shared.github.refs.get(head(9))?.oid).toBe('hand');
+});
+
+test('CR 934: a failed delivery is logged by its error code or name only, never its message', async () => {
+  const shared = world();
+  const pc = machine('pc', shared);
+  await tick(pc.ports);
+  pc.ports.checks.complete = async () => {
+    throw new Error('GitHub answered 502 for /home/owner/ci-runner with ghp_secrettoken');
+  };
+  shared.pulls = [pull(1, { headSha: 'c'.repeat(40) })];
+  await tick(pc.ports);
+  expect(pc.logs.some((line) => line.includes('stays owed (Error)'))).toBe(true);
+  expect(pc.logs.join('\n')).not.toMatch(/ghp_|\/home\/owner/);
 });

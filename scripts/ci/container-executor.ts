@@ -142,18 +142,20 @@ export function slotShell(slot: SlotConfig): SlotShell {
         options.timeoutMs === undefined
           ? undefined
           : setTimeout(() => child.kill('SIGKILL'), options.timeoutMs);
-      let stdout = '';
-      let stderr = '';
-      child.stdout?.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
-      child.stderr?.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')));
+      // The bytes first, decoded once: a character split across two chunks stays whole.
+      const out: Buffer[] = [];
+      const err: Buffer[] = [];
+      child.stdout?.on('data', (chunk: Buffer) => out.push(chunk));
+      child.stderr?.on('data', (chunk: Buffer) => err.push(chunk));
+      const text = (chunks: Buffer[]): string => Buffer.concat(chunks).toString('utf8');
       child.stdin?.end(options.input);
-      child.once('error', (error) => resolve({ code: null, stdout, stderr: error.message }));
+      child.once('error', (error) => resolve({ code: null, stdout: text(out), stderr: error.message }));
       child.once('close', (code, signal) => {
         clearTimeout(timer);
         resolve({
           code: signal ? null : code,
-          stdout,
-          stderr: signal ? `${stderr}\nkilled at its deadline` : stderr,
+          stdout: text(out),
+          stderr: signal ? `${text(err)}\nkilled at its deadline` : text(err),
         });
       });
     });

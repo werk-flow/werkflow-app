@@ -14,10 +14,14 @@ docker run --rm --volume /:/host --entrypoint sh "$WERKFLOW_PROBE_IMAGE" -c 'tes
   || { echo "probe: no container starts through the slot's socket" >&2; exit 2; }
 for path in "${sentinels[@]}"; do
   if seen "$path"; then echo "probe: the job reads $path" >&2; exit 1; fi
-  if docker run --rm --volume /:/host --entrypoint sh "$WERKFLOW_PROBE_IMAGE" -c "test -f '/host$path' && grep -qx '$token' '/host$path'"; then
-    echo "probe: a container through the slot's socket reads $path" >&2
-    exit 1
-  fi
+  # Only an explicit answer counts: a check that could not run proves nothing.
+  answer=$(docker run --rm --volume /:/host --entrypoint sh "$WERKFLOW_PROBE_IMAGE" -c \
+    "if test -f '/host$path' && grep -qx '$token' '/host$path'; then echo seen; else echo clear; fi")
+  case $answer in
+    clear) ;;
+    seen) echo "probe: a container through the slot's socket reads $path" >&2; exit 1 ;;
+    *) echo "probe: the check of $path through the slot's socket did not run" >&2; exit 2 ;;
+  esac
 done
 # The Supabase stack's ports (54321-54327) must lie outside the range outgoing connections take
 # (scripts/ci/prepare.ts); the install sets it on the slot, and no job may change it.

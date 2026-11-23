@@ -13,9 +13,10 @@
 // `scripts/ci/run-commit.ts` with the container executor (CI_EXECUTOR=container), beside a watchdog
 // (scripts/ci/machine-watchdog.ts) that stops it before the window turns off. Install and operate it
 // as docs/technical/machine-setup.md ("Run CI on the owner's machines") says.
+import { machineConfigSchema, type MachineConfig } from '../../lib/testing/ci/machine-config';
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -29,6 +30,7 @@ import {
   readCheckApp,
   readHandoff,
   type ScheduledRun,
+  verdictOrCancelled,
 } from '../../lib/testing/ci/check-app';
 import { installationToken } from '../../lib/testing/ci/check-app-token';
 import { docker, IMAGE_COMMIT_LABEL, probeCommand } from '../../lib/testing/ci/container-slot';
@@ -37,8 +39,6 @@ import {
   type Completion,
   EMPTY_STATE,
   type CurrentRun,
-  type MachineConfig,
-  machineConfigSchema,
   recover,
   type RunnerPorts,
   type RunnerState,
@@ -51,7 +51,14 @@ import { activeProfile, MAIN_REFSPEC } from '../../lib/testing/ci/profiles';
 import { resultFileName } from '../../lib/testing/ci/results';
 import { z } from '../../lib/zod';
 import { clearSlot, slotShell } from './container-executor';
-import { endProcessGroup, runCommitSignal, TEARDOWN_RECORD, watchdogEnvironment } from './machine-watchdog';
+import {
+  endProcessGroup,
+  runCommitSignal,
+  spawnTracked,
+  TEARDOWN_RECORD,
+  watchdogEnvironment,
+  withSentinels,
+} from './machine-watchdog';
 
 const exitSchema = z.object({ exitCode: z.number().int().nullable() });
 
@@ -141,19 +148,15 @@ const slot = { ...config.slot, image: imageId };
 // none of its ports. Each sentinel holds a random token; the probe looks for it.
 {
   const token = randomBytes(24).toString('hex');
-  const sentinels = [
-    join(dirname(config.appKeyFile), '.werkflow-ci-probe'),
-    join(trusted, '.git', 'werkflow-ci-probe'),
-    join(homedir(), '.werkflow-ci-probe'),
-  ];
-  for (const path of sentinels) writeFileSync(path, `${token}\n`, { mode: 0o600 });
-  const probed = await shell(
-    probeCommand(slot, { image: imageId, token, sentinels, ports: config.probePorts }),
-    {
-      timeoutMs: 300_000,
-    },
+  const name = `.werkflow-ci-probe-${token.slice(0, 12)}`;
+  const probed = await withSentinels(
+    [join(dirname(config.appKeyFile), name), join(trusted, '.git', name), join(homedir(), name)],
+    token,
+    (sentinels) =>
+      shell(probeCommand(slot, { image: imageId, token, sentinels, ports: config.probePorts }), {
+        timeoutMs: 300_000,
+      }),
   );
-  for (const path of sentinels) rmSync(path, { force: true });
   if (probed.code !== 0)
     throw new Error(
       `The slot's boundary does not hold, so the runner claims nothing: ${probed.stderr.trim() || probed.stdout.trim()}`,
@@ -291,8 +294,9 @@ const checks: RunnerPorts['checks'] = {
             now: new Date(),
           });
     // A verdict that cannot be built from the run's results is no verdict: the Check ends cancelled.
-    const request = 'problem' in built ? cancelled(`No verdict: ${built.problem}`) : built;
+    const request = verdictOrCancelled(built, cancelled);
     if ('problem' in request) throw new Error(request.problem);
+    if ('problem' in built) log(`[runner] check run ${completion.checkRun} has no verdict: ${built.problem}`);
     const summary = `${request.request.output.summary}\nList growth approved: ${completion.approval ? 'yes' : 'no'}`;
     const posted = await completeCheckRun({
       request: { ...request.request, output: { ...request.request.output, summary } },
@@ -300,7 +304,7 @@ const checks: RunnerPorts['checks'] = {
       ...(await access()),
     });
     if ('problem' in posted) throw new Error(posted.problem);
-    return 'problem' in built ? 'cancelled' : 'completed';
+    return request.verdict ? 'completed' : 'cancelled';
   },
 };
 
@@ -383,36 +387,44 @@ const ports: RunnerPorts = {
       mkdirSync(join(runDir, 'results'), { recursive: true });
       // The private sibling through the runner's own login; only the trusted sibling step sees it.
       const siblingToken = run('gh', ['auth', 'token']);
-      const child = spawn(process.execPath, [join(trusted, 'scripts/ci/run-commit.ts')], {
-        cwd: trusted,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          NODE_ENV: process.env.NODE_ENV,
-          PATH: process.env.PATH,
-          HOME: process.env.HOME,
-          ...(process.env.WSL_INTEROP ? { WSL_INTEROP: process.env.WSL_INTEROP } : {}),
-          // The integration run of the PR's up-to-date head: the browser groups the plan selects
-          // included, as the queue's integration run tests a landing (lib/testing/ci/dag.ts).
-          CI_EVENT: 'integration',
-          CI_COMMIT: pull.headSha,
-          CI_BASE_SHA: base,
-          CI_PRS: String(pull.number),
-          CI_RESULTS_DIR: join(runDir, 'results'),
-          CI_RUN_URL: runUrl,
-          CI_RUN_ATTEMPT: '1',
-          CI_WORK_ROOT: join(config.stateDir, 'work'),
-          CI_PRODUCER: `machine-runner:${config.machine}`,
-          // One job at a time: one Supabase stack per slot (decision 0011, the local profile).
-          CI_PARALLEL: '1',
-          CI_DEDICATED_HOST: '1',
-          CI_EXECUTOR: 'container',
-          CI_CONTAINER_SLOT: JSON.stringify(slot),
-          SHRINK_ONLY_GROWTH_APPROVED: String(pull.listGrowthApproved),
-          GITHUB_REPOSITORY: config.repository,
-          SIBLING_REPOSITORIES_TOKEN: siblingToken,
+      // A run that cannot start counts as ended without a verdict; the runner goes on.
+      const child = spawnTracked(
+        () =>
+          spawn(process.execPath, [join(trusted, 'scripts/ci/run-commit.ts')], {
+            cwd: trusted,
+            detached: true,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: {
+              NODE_ENV: process.env.NODE_ENV,
+              PATH: process.env.PATH,
+              HOME: process.env.HOME,
+              ...(process.env.WSL_INTEROP ? { WSL_INTEROP: process.env.WSL_INTEROP } : {}),
+              // The integration run of the PR's up-to-date head: the browser groups the plan selects
+              // included, as the queue's integration run tests a landing (lib/testing/ci/dag.ts).
+              CI_EVENT: 'integration',
+              CI_COMMIT: pull.headSha,
+              CI_BASE_SHA: base,
+              CI_PRS: String(pull.number),
+              CI_RESULTS_DIR: join(runDir, 'results'),
+              CI_RUN_URL: runUrl,
+              CI_RUN_ATTEMPT: '1',
+              CI_WORK_ROOT: join(config.stateDir, 'work'),
+              CI_PRODUCER: `machine-runner:${config.machine}`,
+              // One job at a time: one Supabase stack per slot (decision 0011, the local profile).
+              CI_PARALLEL: '1',
+              CI_DEDICATED_HOST: '1',
+              CI_EXECUTOR: 'container',
+              CI_CONTAINER_SLOT: JSON.stringify(slot),
+              SHRINK_ONLY_GROWTH_APPROVED: String(pull.listGrowthApproved),
+              GITHUB_REPOSITORY: config.repository,
+              SIBLING_REPOSITORIES_TOKEN: siblingToken,
+            },
+          }),
+        (error) => {
+          log(`[runner] run-commit did not start (${error.name})`);
+          writeFileSync(join(runDir, 'exit.json'), JSON.stringify({ exitCode: null }));
         },
-      });
+      );
       const output = join(runDir, 'run.log');
       for (const stream of [child.stdout, child.stderr])
         stream?.on('data', (chunk: Buffer) => writeFileSync(output, chunk, { flag: 'a' }));
@@ -424,25 +436,34 @@ const ports: RunnerPorts = {
       children.set(child.pid, child);
       // The window's watchdog: a process of its own, which stops the run at its stop-by instant
       // even when this runner hangs, dies or cannot reach GitHub.
+      // A watchdog that cannot start leaves no run without its stop: the run is stopped at once.
+      const group = child.pid;
       if (stopBy !== null)
-        spawn(
-          process.execPath,
-          [
-            join(trusted, 'scripts/ci/machine-watchdog.ts'),
-            '--at',
-            String(stopBy),
-            '--group',
-            String(child.pid),
-            '--run-dir',
-            runDir,
-            '--slot',
-            JSON.stringify(slot),
-          ],
-          {
-            cwd: trusted,
-            detached: true,
-            stdio: 'ignore',
-            env: watchdogEnvironment(process.env),
+        spawnTracked(
+          () =>
+            spawn(
+              process.execPath,
+              [
+                join(trusted, 'scripts/ci/machine-watchdog.ts'),
+                '--at',
+                String(stopBy),
+                '--group',
+                String(child.pid),
+                '--run-dir',
+                runDir,
+                '--slot',
+                JSON.stringify(slot),
+              ],
+              {
+                cwd: trusted,
+                detached: true,
+                stdio: 'ignore',
+                env: watchdogEnvironment(process.env),
+              },
+            ),
+          (error) => {
+            log(`[runner] the watchdog did not start (${error.name}); the run is stopped`);
+            runCommitSignal(group)(-group, 'SIGTERM');
           },
         ).unref();
       return { processGroup: child.pid };
@@ -520,12 +541,17 @@ const leftOver = await clearSlot(shell, slot);
 if (leftOver !== undefined)
   throw new Error(`The slot cannot be emptied, so the runner claims nothing: ${leftOver}`);
 // The watchdog must reach the slot on its own: the same detached spawn and environment, a no-op.
-const probe = spawn(
-  process.execPath,
-  [join(trusted, 'scripts/ci/machine-watchdog.ts'), '--probe', '--slot', JSON.stringify(slot)],
-  { cwd: trusted, detached: true, stdio: 'ignore', env: watchdogEnvironment(process.env) },
+const probed = await new Promise<number | null>((done) =>
+  spawnTracked(
+    () =>
+      spawn(
+        process.execPath,
+        [join(trusted, 'scripts/ci/machine-watchdog.ts'), '--probe', '--slot', JSON.stringify(slot)],
+        { cwd: trusted, detached: true, stdio: 'ignore', env: watchdogEnvironment(process.env) },
+      ),
+    () => done(null),
+  ).once('exit', done),
 );
-const probed = await new Promise<number | null>((done) => probe.once('exit', done));
 if (probed !== 0)
   throw new Error('The watchdog cannot reach the slot on its own, so the runner claims nothing.');
 

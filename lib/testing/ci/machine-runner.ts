@@ -12,7 +12,8 @@
 //      eligible PRs in order, claims the first it can, admits it by the window, and starts it.
 // A restarted runner takes a new generation and never resumes a run of an older one.
 import { z } from 'zod';
-import { slotConfigSchema, TEARDOWN_MS } from './container-slot';
+import { TEARDOWN_MS } from './container-slot';
+import type { MachineConfig } from './machine-config';
 import type { RunnerPull } from './machine-pulls';
 import { CI_DAG, CI_JOBS } from './dag';
 import {
@@ -51,35 +52,6 @@ type RunKind = 'full' | 'selected';
 const TRUSTED_AUTHORS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 
 const absolute = z.string().startsWith('/');
-
-/** One machine's configuration: a file outside the repository (ci/machines/*.example.json). */
-export const machineConfigSchema = z.strictObject({
-  /** The machine's id in its leases: lowercase letters, digits and hyphens. */
-  machine: z.string().regex(/^[a-z0-9-]{1,20}$/),
-  /** `owner/name` on GitHub. */
-  repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
-  /** The pinned, reviewed clone the runner runs from; never a PR under test. */
-  trustedCheckout: absolute,
-  /** The runner's own state: its generation, attempts, run, recorded durations. Outside every slot. */
-  stateDir: absolute,
-  /** The machine's window file (windows.ts). */
-  windowsFile: absolute,
-  /** The CI App's private key, PEM, mode 600: one file on the runner's side, never in the slot. */
-  appKeyFile: absolute,
-  slot: slotConfigSchema,
-  /** Addresses the slot's jobs must not reach, `host:port`: the start probe tries each. */
-  probePorts: z.array(z.string().regex(/^[\w.-]+:[0-9]{1,5}$/)),
-  /** The machine's sizes the window file names, each with the command that resizes the slot, or null. */
-  sizes: z.record(
-    z.string().min(1),
-    z.strictObject({ resize: z.array(z.string().min(1)).min(1).nullable() }),
-  ),
-  /** Seconds a run of each kind takes here, until enough runs are recorded. */
-  seedSeconds: z.strictObject({ full: z.number().int().positive(), selected: z.number().int().positive() }),
-  /** The lease's time to live; a heartbeat renews it every tick. */
-  leaseTtlSeconds: z.number().int().min(300).max(1_800).default(600),
-});
-export type MachineConfig = z.infer<typeof machineConfigSchema>;
 
 const heldSchema = z.strictObject({
   oid: z.string().min(1),
@@ -126,6 +98,8 @@ const completionSchema = z.strictObject({
   reason: z.string(),
   /** A verdict's lease as last written: it is posted only once this value turned `done`. */
   lease: heldSchema,
+  /** The run's duration, recorded for admission only once its verdict was delivered. */
+  sample: z.strictObject({ kind: z.enum(['full', 'selected']), seconds: z.number().positive() }).nullable(),
 });
 export type Completion = z.infer<typeof completionSchema>;
 
@@ -293,7 +267,16 @@ const stopByOf = (edge: number | null): number | null => (edge === null ? null :
 const keep = (list: readonly string[], item: string): string[] =>
   [...list.filter((entry) => entry !== item), item].slice(-200);
 const seconds = (ms: number): number => Math.floor(ms / 1_000);
-const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+/**
+ * A failure as the runner logs it or files it: its code or name only, never its message, which can
+ * hold a path, a provider body or a token (lib/logging.ts).
+ */
+const failureOf = (error: unknown): string =>
+  error instanceof Error
+    ? 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : error.name
+    : typeof error;
 
 /** Queues the alert once while it stands (`key` names it); `deliver` files it. */
 function alertOnce(state: RunnerState, key: string, alert: Alert): RunnerState {
@@ -314,10 +297,21 @@ async function deliver(ports: RunnerPorts, initial: RunnerState): Promise<Runner
           detail: `#${queued.pull}'s run on ${ports.config.machine} posted no verdict: ${completion.reason} (${queued.runUrl})`,
         });
       // A verdict that could not be built posts cancelled; its `done` lease is handed back.
-      if ((await ports.checks.complete(completion)) === 'cancelled' && completion.kind === 'verdict')
+      const delivered = await ports.checks.complete(completion);
+      if (delivered === 'cancelled' && completion.kind === 'verdict')
         await release(ports.refs, completion.head, completion.lease);
+      // Only a delivered verdict, a failing one too, teaches admission how long a run takes.
+      const { sample } = completion;
+      if (delivered === 'completed' && completion.kind === 'verdict' && sample)
+        state = {
+          ...state,
+          durations: {
+            ...state.durations,
+            [sample.kind]: [...state.durations[sample.kind], sample.seconds].slice(-KEPT_SAMPLES),
+          },
+        };
     } catch (error) {
-      ports.log(`[runner] check run ${queued.checkRun} stays owed: ${message(error)}`);
+      ports.log(`[runner] check run ${queued.checkRun} stays owed (${failureOf(error)})`);
       owed.push(queued);
     }
   const alerts: Alert[] = [];
@@ -366,7 +360,13 @@ async function verdictStands(ports: RunnerPorts, queued: Completion): Promise<Co
 }
 
 /** Owes the run's Check its completion and tries to deliver it now. */
-const owe = (state: RunnerState, run: CurrentRun, kind: Completion['kind'], reason: string): RunnerState => ({
+const owe = (
+  state: RunnerState,
+  run: CurrentRun,
+  kind: Completion['kind'],
+  reason: string,
+  sample: Completion['sample'] = null,
+): RunnerState => ({
   ...state,
   pendingCompletions: [
     ...state.pendingCompletions,
@@ -381,6 +381,7 @@ const owe = (state: RunnerState, run: CurrentRun, kind: Completion['kind'], reas
       approval: run.approval,
       kind,
       reason,
+      sample,
     },
   ],
 });
@@ -390,7 +391,7 @@ function readWindows(ports: RunnerPorts): unknown {
   try {
     return ports.windows();
   } catch (error) {
-    return `The window file cannot be read: ${message(error)}`;
+    return `The window file cannot be read (${failureOf(error)}).`;
   }
 }
 
@@ -553,12 +554,7 @@ async function finish(
   const kind: RunKind = status.full === true ? 'full' : 'selected';
   const took = (now - run.startedAt) / 1_000;
   // A clock that stepped back records no duration; the verdict is owed all the same.
-  if (took > 0)
-    state = {
-      ...state,
-      durations: { ...state.durations, [kind]: [...state.durations[kind], took].slice(-KEPT_SAMPLES) },
-    };
-  ports.save(owe(state, run, 'verdict', ''));
+  ports.save(owe(state, run, 'verdict', '', took > 0 ? { kind, seconds: took } : null));
   return `#${run.pull} ended with ${status.exitCode}; its verdict is owed`;
 }
 
@@ -590,7 +586,7 @@ async function admitNext(
   const now = ports.now();
   const admission = admitRun(windowFile, new Date(now), {
     expectedMs: expectedMs(config, state, 'selected'),
-    reserveMs: RESERVE_MS,
+    reserveMs: RESERVE_MS + EDGE_MARGIN_MS,
   });
   if (!admission.admit) return `not admitted: ${admission.reason}`;
   // A resize takes minutes: a window that changed size meanwhile is resized to on the next tick.
@@ -630,7 +626,7 @@ async function startPull(
   const fits = (kind: RunKind, file: unknown = windowFile): boolean =>
     admitRun(file, new Date(ports.now()), {
       expectedMs: expectedMs(config, state, kind),
-      reserveMs: RESERVE_MS,
+      reserveMs: RESERVE_MS + EDGE_MARGIN_MS,
     }).admit;
   // A head whose Plan selected every group is admitted only if a full run fits.
   if (state.fullHeads.includes(pull.headSha) && !fits('full')) return undefined;
@@ -648,7 +644,7 @@ async function startPull(
   try {
     checkRun = await ports.checks.start({ head: pull.headSha, runUrl });
   } catch (error) {
-    ports.log(`[runner] #${pull.number}: its Check start failed: ${message(error)}`);
+    ports.log(`[runner] #${pull.number}: its Check start failed (${failureOf(error)})`);
     ports.save(await settleStart(ports, state, starting));
     return undefined;
   }
@@ -680,6 +676,11 @@ async function startPull(
     processGroup: null,
   };
   // Saved before the start, so a runner that dies during it still knows the run to end.
+  // A claim and a Check start can outlast the lease: a run never starts on one that expired.
+  if (seconds(now) + LEASE_MARGIN_S >= claimed.held.lease.expiresAt) {
+    ports.save(await settleStart(ports, state, starting, checkRun));
+    return undefined;
+  }
   ports.save({ ...state, starting: null, current });
   const { processGroup } = await ports.runs.start({
     pull,
@@ -761,6 +762,7 @@ async function settleStart(
     approval: starting.held.lease.approval,
     kind: 'cancelled',
     reason: 'The run did not start.',
+    sample: null,
     lease: starting.held,
   };
   return { ...state, starting: null, pendingCompletions: [...state.pendingCompletions, completion] };
@@ -777,7 +779,7 @@ async function sweep(ports: RunnerPorts): Promise<void> {
     if (open.has(sha)) continue;
     const value = await ports.refs.read(sha);
     const lease = value === null ? undefined : parseLease(value.message);
-    if (value?.oid !== oid) continue;
+    if (value?.oid !== oid || lease === undefined) continue;
     if (lease?.state === 'held' && seconds(ports.now()) <= lease.expiresAt + LEASE_MARGIN_S) continue;
     await ports.refs.remove(sha, oid);
   }

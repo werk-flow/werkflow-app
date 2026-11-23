@@ -51,7 +51,7 @@ The machine runner is CI's `local` profile ([decision 0011](../decisions/0011-ci
 
 Install the runner, or move it to a new reviewed commit `<commit>`. Run each step on the machine, in a shell with the owner's `gh` login (on the PC, the agents' distribution):
 
-1. Copy the examples to the names the runner reads: `cp ci/machines/<machine>.example.json ~/ci-runner/<machine>.json` and `cp ci/machines/<machine>.windows.example.json ~/ci-runner/windows.json`. In `<machine>.json`, set the paths to your home and `slot.image` to `werkflow-ci:<commit>`. On the PC, set `probePorts` to the agents' distribution's address from `hostname -I`.
+1. Copy the examples to the names the runner reads: `cp ci/machines/<machine>.example.json ~/ci-runner/<machine>.json` and `cp ci/machines/<machine>.windows.example.json ~/ci-runner/windows.json`. In `<machine>.json`, set the paths to your home and `slot.image` to `werkflow-ci:<the commit's full id>`, the tag the build below gives. On the PC, set `probePorts` to the agents' distribution's address from `hostname -I`, and check that `wsl.exe -d werkflow-ci -u cirunner --exec id -u` prints the uid in `slot.dockerHost` and `slot.socket` (1002 in the example); otherwise put the printed uid in both.
 2. Put the CI App's private key in `~/ci-runner/key/ci-app.pem`, the one file `appKeyFile` names: `mkdir -m 700 ~/ci-runner/key` and `chmod 600` on the file. The runner refuses a key others can read. On the PC it stays in the agents' distribution, never in `werkflow-ci`.
 3. Check out the commit:
 
@@ -69,9 +69,10 @@ Install the runner, or move it to a new reviewed commit `<commit>`. Run each ste
    - Build:
 
      ```bash
-     git archive HEAD ci/image | $SLOT sh -c 'rm -rf ~/ci-image && mkdir -p ~/ci-image && tar -x -C ~/ci-image'
-     $SLOT env DOCKER_HOST=unix:///run/user/1002/docker.sock docker build --build-arg TRUSTED_COMMIT=$(git rev-parse HEAD) -t werkflow-ci:<commit> /home/cirunner/ci-image/ci/image   # PC
-     $SLOT docker build --build-arg TRUSTED_COMMIT=$(git rev-parse HEAD) -t werkflow-ci:<commit> ci-image/ci/image   # Mac
+     cd ~/ci-runner/werkflow-app   # HEAD here is <commit>
+     git archive HEAD ci/image | $SLOT sh -c 'rm -rf "$HOME/ci-image" && mkdir -p "$HOME/ci-image" && tar -x -C "$HOME/ci-image"'
+     $SLOT sh -c 'DOCKER_HOST="unix:///run/user/$(id -u)/docker.sock" exec docker build --build-arg TRUSTED_COMMIT="$1" -t "werkflow-ci:$1" "$HOME/ci-image/ci/image"' build "$(git rev-parse HEAD)"   # PC
+     $SLOT sh -c 'exec docker build --build-arg TRUSTED_COMMIT="$1" -t "werkflow-ci:$1" "$HOME/ci-image/ci/image"' build "$(git rev-parse HEAD)"   # Mac
      ```
 
 5. Start the service:

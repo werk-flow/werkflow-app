@@ -7,6 +7,7 @@ import {
   cancelledCheckRunOf,
   CHECK_APP_CONFIG,
   completeCheckRun,
+  verdictOrCancelled,
   checkRunOf,
   finishCheckRun,
   postCheckRun,
@@ -584,4 +585,28 @@ test("F1: a machine runner completes its attempt's own check run by its id, with
   expect(calls).toEqual([
     { url: 'https://api.github.com/repos/werk-flow/werkflow-app/check-runs/77', method: 'PATCH' },
   ]);
+});
+
+test("CR 991: a verdict that cannot be built completes as cancelled with fixed text, never the runner's local path", () => {
+  const scheduled = {
+    runUrl: RUN_URL,
+    attempt: 1,
+    event: 'integration' as const,
+    commit: COMMIT,
+    prHead: undefined,
+  };
+  const cancelled = (reason: string) =>
+    cancelledCheckRunOf({
+      scheduled,
+      startedAt: new Date('2026-11-23T02:00:00Z'),
+      now: new Date('2026-11-23T02:30:00Z'),
+      reason,
+    });
+  const completion = verdictOrCancelled(
+    { problem: '/home/owner/ci-runner/state/runs/pc-a1/results/check.json is missing' },
+    cancelled,
+  );
+  if ('problem' in completion) throw new Error(completion.problem);
+  expect(completion.verdict).toBe(false);
+  expect(completion.request.output.summary).not.toContain('/home/owner');
 });

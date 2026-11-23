@@ -1,17 +1,11 @@
 // A world of machine runners for lib/testing/ci/machine-runner.test.ts: a fake GitHub (lease refs
 // that swap atomically, the App's check runs, the open PRs), a fake run-commit and slot, and an
 // injected clock. No network, no sleep.
+import { type MachineConfig } from '../ci/machine-config';
 import { BERLIN_TIME_ZONE } from '../../date-time/berlin';
 import { type LeaseRefs, parseLease } from '../ci/lease';
 import type { RunnerPull } from '../ci/machine-pulls';
-import {
-  EMPTY_STATE,
-  type MachineConfig,
-  type RunnerPorts,
-  type RunnerState,
-  type RunStatus,
-  tick,
-} from '../ci/machine-runner';
+import { EMPTY_STATE, type RunnerPorts, type RunnerState, type RunStatus, tick } from '../ci/machine-runner';
 import { MAC_STANDING, PC_STANDING } from '../ci/windows';
 
 export const PC_WINDOWS = { timezone: BERLIN_TIME_ZONE, standing: PC_STANDING };
@@ -51,7 +45,9 @@ export function fakeGitHub() {
     list: async () => [...refs].map(([sha, value]) => ({ sha, oid: value.oid })),
   };
   const checkRuns: { id: number; head: string; runUrl: string; conclusion: string | null }[] = [];
-  return { refs, store, checkRuns };
+  /** The head's lease state each time a Check was completed. */
+  const atCompletion: (string | undefined)[] = [];
+  return { refs, store, checkRuns, atCompletion };
 }
 export type GitHub = ReturnType<typeof fakeGitHub>;
 
@@ -161,6 +157,11 @@ function githubPorts(
             throw new Error('GitHub answered 502');
           }
           const own = world.github.checkRuns.find((run) => run.id === completion.checkRun);
+          // GitHub refuses a completion of a check run that is not this head's.
+          if (!own || own.head !== completion.head) throw new Error('GitHub answered 404');
+          world.github.atCompletion.push(
+            parseLease(world.github.refs.get(completion.head)?.message ?? '')?.state,
+          );
           const verdict = completion.kind === 'verdict' && !faults.noVerdict;
           faults.noVerdict = false;
           if (own) own.conclusion = verdict ? 'success' : 'cancelled';
@@ -181,6 +182,7 @@ export function machine(
   const started: { pull: number; runUrl: string; runDir: string; base: string; stopBy: number | null }[] = [];
   const stopped: string[] = [];
   const cleaned: string[] = [];
+  const logs: string[] = [];
   const resized: string[] = [];
   const alerts: string[] = [];
   const faults = noFaults();
@@ -228,7 +230,7 @@ export function machine(
       alerts.push(alert.kind);
       return true;
     },
-    log: () => undefined,
+    log: (line) => void logs.push(line),
   };
   return {
     ports,
@@ -236,6 +238,7 @@ export function machine(
     started,
     stopped,
     cleaned,
+    logs,
     resized,
     alerts,
     faults,
