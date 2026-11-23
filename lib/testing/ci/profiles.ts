@@ -163,11 +163,19 @@ const FLEET: CiProfile = {
     pr: { startedBy: 'fleet', on: ['ci.yml#pull_request'] },
     integration: { startedBy: 'fleet', on: ['ci.yml#merge_group'] },
     main: { startedBy: 'fleet', on: ['ci.yml#push'] },
-    // Each calls ci.yml for a full run: the release's own before it decides, the nightly's, and a
-    // dispatched one.
+    // Every trigger of a workflow that calls ci.yml with `full`: the release's own run before it
+    // decides, the nightly's, and their manual dispatches. ci.yml's own `workflow_dispatch` is the
+    // midnight proof, a branch-only path (main refuses it) that selects the full tier.
     full: {
       startedBy: 'fleet',
-      on: ['release.yml#schedule', 'nightly.yml#schedule', 'main-full-run.yml#workflow_dispatch'],
+      on: [
+        'release.yml#schedule',
+        'release.yml#workflow_dispatch',
+        'nightly.yml#schedule',
+        'nightly.yml#workflow_dispatch',
+        'main-full-run.yml#workflow_dispatch',
+        'ci.yml#workflow_dispatch',
+      ],
     },
   },
   schedules: {

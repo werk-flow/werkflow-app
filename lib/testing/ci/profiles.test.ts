@@ -4,7 +4,7 @@
 // (lib/testing/ci/profiles.ts).
 import { afterEach, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { BERLIN_TIME_ZONE } from '../../date-time/berlin';
@@ -105,11 +105,17 @@ const workflowsOf = (name: (typeof SCHEDULE_NAMES)[number]): string[] => [
 const onOf = (workflow: string): Record<string, unknown> =>
   z.record(z.string(), z.unknown()).parse(readWorkflow(workflow).at('on'));
 
-/** Whether a workflow has a job that calls ci.yml. */
-const callsCi = (workflow: string): boolean =>
-  Object.values(z.record(z.string(), z.unknown()).parse(readWorkflow(workflow).at('jobs'))).some(
-    (job) => z.object({ uses: z.string() }).safeParse(job).data?.uses === './.github/workflows/ci.yml',
-  );
+/** The `full` input of each job of a workflow that calls ci.yml, or '' where a call passes none. */
+const ciCalls = (workflow: string): string[] =>
+  Object.values(z.record(z.string(), z.unknown()).parse(readWorkflow(workflow).at('jobs'))).flatMap((job) => {
+    const call = z
+      .object({
+        uses: z.literal('./.github/workflows/ci.yml'),
+        with: z.object({ full: z.string() }).partial().optional(),
+      })
+      .safeParse(job);
+    return call.success ? [call.data.with?.full ?? ''] : [];
+  });
 
 /** The timing of each of the conductor's clocks: CLOCK_WORK and the full-run slots. */
 const CONDUCTOR_TIMINGS: Readonly<Record<ClockWorkName | 'full-run', Timing>> = {
@@ -165,17 +171,47 @@ test("each timed schedule fires at the time of the clock its profile names: the 
     }
 });
 
-test('each fleet run starts by a trigger its workflow has, in ci.yml or a workflow that calls ci.yml', () => {
-  for (const event of CI_EVENTS) {
-    const start = CI_PROFILES.fleet.runs[event];
-    if (start.startedBy !== 'fleet') throw new Error(`fleet's ${event} run starts off GitHub Actions.`);
-    expect(start.on.length, event).toBeGreaterThan(0);
-    for (const trigger of start.on) {
-      const [workflow = '', on = ''] = trigger.split('#');
-      expect(Object.keys(onOf(workflow)), `${event}: ${trigger}`).toContain(on);
-      expect(workflow === 'ci.yml' || callsCi(workflow), `${event}: ${trigger}`).toBe(true);
+/**
+ * The run kind ci.yml's own triggers start, as its `CI_EVENT` expression picks it: a pull request,
+ * a merge group, a push to main, and the midnight proof's dispatch, which selects the full tier.
+ * `workflow_call` is no start of its own: the calling workflow's trigger is.
+ */
+const CI_TRIGGER_KINDS = {
+  pull_request: 'pr',
+  merge_group: 'integration',
+  push: 'main',
+  workflow_dispatch: 'full',
+} as const;
+
+const ciTrigger = z.enum(['pull_request', 'merge_group', 'push', 'workflow_dispatch']);
+
+test("every trigger of ci.yml and of each workflow that calls it starts the fleet's run of the kind it runs", () => {
+  const expression = readWorkflow('ci.yml').text('env', 'CI_EVENT');
+  expect(expression).toContain("inputs.midnight_proof_minutes) && 'full'");
+  expect(expression).toContain("github.event_name == 'pull_request' && 'pr'");
+  expect(expression).toContain("github.event_name == 'merge_group' && 'integration'");
+  expect(expression).toEndWith("|| 'main' }}");
+  const expected: string[] = [];
+  for (const file of readdirSync(join(repositoryRoot, workflowsFolder())).filter((name) =>
+    name.endsWith('.yml'),
+  )) {
+    const calls = ciCalls(file);
+    if (file !== 'ci.yml' && calls.length === 0) continue;
+    // A caller passes `full`, so each of its runs is a full run.
+    for (const full of calls) expect(full, file).not.toBe('');
+    for (const on of Object.keys(onOf(file))) {
+      if (file === 'ci.yml' && on === 'workflow_call') continue;
+      // A trigger ci.yml gains without a kind here fails the parse.
+      const kind = file === 'ci.yml' ? CI_TRIGGER_KINDS[ciTrigger.parse(on)] : 'full';
+      expected.push(`${kind} ${file}#${on}`);
     }
   }
+  const placed = CI_EVENTS.flatMap((event) => {
+    const start = CI_PROFILES.fleet.runs[event];
+    if (start.startedBy !== 'fleet') throw new Error(`fleet's ${event} run starts off GitHub Actions.`);
+    return start.on.map((trigger) => `${event} ${trigger}`);
+  });
+  expect(placed.toSorted()).toEqual(expected.toSorted());
 });
 
 test("the fleet profile is #582's design: the mirror's cap, batches of 4, and every schedule on a clock that fires it", () => {

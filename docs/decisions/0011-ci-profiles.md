@@ -48,9 +48,9 @@ CI may run on many machines or on few. The design of the CI hill climb assumes m
 
 ## Amendment 2026-11-23: GitHub Actions is the CI home again
 
-The owner decided on 2026-11-23 that CI runs on GitHub Actions again: `ci/profile.json` names `fleet`. Rule 7's last line no longer holds. The `local` profile stays maintained (rule 1) and frozen as a fallback; [ci-local-fallback.md](../technical/ci-local-fallback.md) holds its state, what stays open and the switch back.
+The owner decided on 2026-11-23 that CI runs on GitHub Actions again: `ci/profile.json` names `fleet`. Rule 7's last line no longer holds. The `local` profile stays maintained (rule 1) and frozen as a fallback; [ci-local-fallback.md](../technical/ci-local-fallback.md) holds its state, what stays open and the switch back. The machine runner is kept under the tag `archive/local-runner-2026-11-23`, at commit `64d200b6a39ba258d1c09e5b456bfa15aec38ac7`.
 
-Under `fleet`, GitHub Actions starts every run and schedule: ci.yml's `pull_request`, `merge_group` and `push` events, and the full runs of the workflows that call it. nightly.yml's cron runs the nightly, release.yml's cron the release, and main's full run only by `workflow_dispatch`. No conductor's clock fires anything.
+Under `fleet`, GitHub Actions starts every run and schedule. ci.yml's `pull_request`, `merge_group` and `push` events start the PR, queue and `main` runs. Each trigger of a workflow that calls ci.yml starts a full run, its `workflow_dispatch` included. ci.yml's own `workflow_dispatch` is the midnight proof, a path for branches only that selects the full tier. nightly.yml's cron runs the nightly, release.yml's cron the release, and main's full run starts only by `workflow_dispatch`. No conductor's clock fires anything. `profiles.test.ts` fails on a trigger that no placement names.
 
 Switch to `fleet`:
 
@@ -63,4 +63,5 @@ Switch to `fleet`:
    - `Check` required, from GitHub Actions;
    - "Require branches to be up to date before merging" off;
    - `Queue` not required.
-5. Check that the PR that sets `ci/profile.json` to `fleet` gets a `Check` from GitHub Actions. Then merge it and resume merges.
+5. Enabling `ci.yml` starts no run for a PR that is already open. Start one for the PR that sets `ci/profile.json` to `fleet`: `gh pr update-branch <number> -R werk-flow/werkflow-app`, or close and reopen the PR.
+6. Merge that PR only with a green `Check` from GitHub Actions on its head. Then resume merges.
