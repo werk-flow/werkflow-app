@@ -12,6 +12,8 @@
 # Needs SUPABASE_ACCESS_TOKEN and DEV_PROJECT_REF.
 set -euo pipefail
 source "$(dirname "$0")/curl-headers.sh"
+# The token stays a shell variable but leaves the environment, so curl gets it only from its config.
+export -n SUPABASE_ACCESS_TOKEN
 
 fail() {
   echo "::error title=DEV migrations::$1"
@@ -27,10 +29,11 @@ test -n "$committed" || fail "supabase/migrations holds no migration."
 body="$(mktemp)"
 trap 'rm -f "$body"' EXIT
 sent=0
-status="$(curl --silent --max-time 60 --output "$body" --write-out '%{http_code}' -X POST \
+# --disable first: no .curlrc adds an option. curl's own error text goes nowhere; its exit code is enough.
+status="$(curl --disable --silent --max-time 60 --output "$body" --write-out '%{http_code}' -X POST \
   --config <(curl_headers <<< "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}") -H 'Content-Type: application/json' \
   --data '{"query":"select version from supabase_migrations.schema_migrations order by version"}' \
-  "https://api.supabase.com/v1/projects/${DEV_PROJECT_REF}/database/query/read-only")" || sent=$?
+  "https://api.supabase.com/v1/projects/${DEV_PROJECT_REF}/database/query/read-only" 2> /dev/null)" || sent=$?
 test "$sent" = 0 || unread "${status:-000}" "Supabase's answer did not arrive (curl exit ${sent}). Rerun the release once the Supabase API answers."
 case "$status" in
   2??) ;;
@@ -41,8 +44,9 @@ case "$status" in
   5??) unread "$status" "Supabase failed to run the query. Rerun once; if it repeats, DEV's role supabase_read_only_user may lack access to supabase_migrations." ;;
   *) unread "$status" "Supabase gave an answer the release does not expect." ;;
 esac
-# Only a non-empty list of rows that each carry a 14-digit version counts as DEV's ledger.
-ledger="$(jq -er 'if type == "array" and all(.[]; .version | type == "string" and test("^[0-9]{14}$")) then .[].version else error end' "$body" 2> /dev/null | sort -u)" \
+# Only one non-empty JSON array whose rows each carry exactly 14 ASCII digits counts as DEV's
+# ledger. Slurped, so a second document fails it; no regex, since jq's `$` matches before a newline.
+ledger="$(jq -ers 'if length == 1 and (.[0] | type == "array" and length > 0 and all(.[]; .version | type == "string" and length == 14 and (explode | all(. >= 48 and . <= 57)))) then .[0][].version else error end' "$body" 2> /dev/null | sort -u)" \
   || unread "$status" "Supabase's answer holds no list of migration versions."
 missing="$(comm -23 <(echo "$committed") <(echo "$ledger"))"
 if test -n "$missing"; then
