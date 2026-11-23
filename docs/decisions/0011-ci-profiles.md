@@ -53,3 +53,7 @@ The container executor (`scripts/ci/container-executor.ts`) and the machine runn
 ## Amendment 2026-11-23: the claim is a lease ref, the verdict an integration run
 
 Rule 3's claim is the ref `refs/leases/ci/<sha>`, swapped atomically with `git push --force-with-lease`; the pending `Check` only shows it. A machine posts `Check` only from the integration run of a head up to date with `main`, so the browser groups the plan selects are in it ([machine-setup.md](../technical/machine-setup.md#run-ci-on-the-owners-machines)).
+
+## Amendment 2026-11-23: the switch to fleet enables the CI workflow first
+
+While `ci/profile.json` names `local`, the Actions workflow `ci.yml` stays disabled, so no `Check` from Actions satisfies the ruleset beside the machines' own. Switching the profile to `fleet` starts with `gh workflow enable ci.yml -R werk-flow/werkflow-app`, before the first fleet run.
