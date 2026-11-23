@@ -24,7 +24,8 @@ import { loadEnvLocal } from '../tests/golden/support/env';
  * and the advisor findings outside the reviewed exceptions. It reads through
  * the Management API's read-only query endpoint, PROD with the read-only PROD
  * token that only the PROD inspection job holds (.github/workflows/prod-inspect.yml),
- * DEV with SUPABASE_ACCESS_TOKEN. It never prints a table row, a definition, a
+ * DEV with SUPABASE_ACCESS_TOKEN (in the job, the DEV-scoped DEV_INSPECT_SUPABASE_TOKEN).
+ * It never prints a table row, a definition, an advisor's text, a
  * configuration value or a response body: the job's log is public. On a
  * workstation it fails and names the job. Exit 1 means a problem or an
  * unverified check.
@@ -69,7 +70,7 @@ async function main(): Promise<void> {
       for (const line of drift) console.log(`  ${line}`);
     }
 
-    const advisors = advisorProblems([...security.lints, ...performance.lints]);
+    const advisors = advisorProblems([...security.lints, ...performance.lints], undefined, { detail: false });
     console.log(
       `${label} Advisors: ${advisors.length === 0 ? 'no finding outside the reviewed exceptions.' : `${advisors.length} findings.`}`,
     );

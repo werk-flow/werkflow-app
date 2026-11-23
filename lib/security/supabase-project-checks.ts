@@ -131,16 +131,24 @@ function needsReview(lint: AdvisorLint): boolean {
   return lint.categories.includes('SECURITY') && !(lint.name in ACCEPTED_SECURITY_INFO_LINTS);
 }
 
-/** Advisor findings that no reviewed entry covers, and reviewed entries the advisor no longer reports. */
+/**
+ * Advisor findings that no reviewed entry covers, and reviewed entries the advisor no longer reports.
+ * `detail: false` leaves out the advisor's free-form text, for a log that is public (prod:inspect).
+ */
 export function advisorProblems(
   lints: readonly AdvisorLint[],
   exceptions: Record<string, string> = ADVISOR_EXCEPTIONS,
+  { detail = true }: { detail?: boolean } = {},
 ): string[] {
   const problems: string[] = [];
   const reported = new Set(lints.map((lint) => lint.cache_key));
   for (const lint of lints) {
     if (!needsReview(lint) || lint.cache_key in exceptions) continue;
-    problems.push(`${lint.level} ${lint.name}: ${lint.detail.replaceAll('\\`', '`')} (${lint.cache_key})`);
+    problems.push(
+      detail
+        ? `${lint.level} ${lint.name}: ${lint.detail.replaceAll('\\`', '`')} (${lint.cache_key})`
+        : `${lint.level} ${lint.name} (${lint.cache_key})`,
+    );
   }
   for (const key of Object.keys(exceptions)) {
     if (!reported.has(key))

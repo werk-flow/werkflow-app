@@ -12,7 +12,7 @@
  * PROD is only ever read, with the read-only PROD token that only the PROD
  * inspection job holds (.github/workflows/prod-inspect.yml, input `auth`); on a
  * workstation the run fails and names the job. DEV is read and written with
- * SUPABASE_ACCESS_TOKEN, and only `mailer_*` fields and SYNC_EXTRA are written.
+ * SUPABASE_ACCESS_TOKEN (in the job, the DEV-scoped DEV_INSPECT_SUPABASE_TOKEN), and only `mailer_*` fields and SYNC_EXTRA are written.
  * Environment-specific fields (site_url, uri_allow_list, SMTP credentials) are
  * reported as expected divergences and never synced. The job's log is public,
  * so the output names fields only, never a value or a response body.
