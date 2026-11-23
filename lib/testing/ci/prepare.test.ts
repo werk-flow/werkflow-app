@@ -10,7 +10,8 @@ import { join, resolve } from 'node:path';
 const PREPARE = resolve(import.meta.dir, '../../../scripts/ci/prepare.ts');
 
 // Answers like gh: `--jq` runs through real jq, so the step's own filter is under test. It records
-// each call and lists `labels-<n>.json` for PR <n>; `labels-<n>.fail` makes that read fail.
+// each call and lists `labels-<n>.json` for PR <n>. The merge queue's entries are `queue.json`
+// (`queue.fail`: the query fails), the PRs GitHub merged as commit <sha> `pulls-<sha>.json`.
 const GH_STUB = `#!/usr/bin/env bash
 echo "$*" >> "$STUB/gh.calls"
 filter=.
@@ -22,8 +23,13 @@ done
 case "$*" in
   *'/issues/'*'/labels'*)
     pr="$(sed -nE 's|.*/issues/([0-9]+)/labels.*|\\1|p' <<< "$*")"
-    if test -e "$STUB/labels-$pr.fail"; then echo 'HTTP 502' >&2; exit 1; fi
     jq -r "$filter" "$STUB/labels-$pr.json" 2> /dev/null || echo '[]' | jq -r "$filter" ;;
+  'api graphql '*)
+    if test -e "$STUB/queue.fail"; then echo 'HTTP 502' >&2; exit 1; fi
+    cat "$STUB/queue.json" 2> /dev/null || echo '{"data":{"repository":{"mergeQueue":null}}}' ;;
+  *'/commits/'*'/pulls'*)
+    sha="$(sed -nE 's|.*/commits/([0-9a-f]+)/pulls.*|\\1|p' <<< "$*")"
+    cat "$STUB/pulls-$sha.json" 2> /dev/null || echo '[]' ;;
   *) echo "unexpected gh $*" >&2; exit 1 ;;
 esac
 `;
@@ -112,67 +118,150 @@ function prepare(step: string, env: Record<string, string>): { passed: boolean; 
   return { passed: ran.status === 0, output: `${ran.stdout}${ran.stderr}` };
 }
 
-// A shrink-only list the step reads in each queue commit: a JSON ratchet of ceilings.
+// A shrink-only list in the queue's commits: a JSON ratchet, long enough that git sees a moved and
+// edited copy as a rename.
 const RATCHET = 'eslint-rules/type-assertion-ratchet.json';
+const ASIDE = 'eslint-rules/aside.json';
+const LIST = Object.fromEntries(Array.from({ length: 20 }, (_, index) => [`lib/file-${index}.ts`, 1]));
 
-/** A commit that sets the ratchet's entries, as a PR squashed into the queue would. */
-function ratchetCommit(subject: string, entries: Record<string, number>): void {
+/** A commit that sets the ratchet's entries, beyond the 20 every version holds. */
+function ratchetCommit(subject: string, extra: Record<string, number> = {}): string {
   mkdirSync(join(repository, 'eslint-rules'), { recursive: true });
-  writeFileSync(join(repository, RATCHET), JSON.stringify(entries));
+  writeFileSync(join(repository, RATCHET), JSON.stringify({ ...LIST, ...extra }, null, 1));
   git('add', RATCHET);
   git('commit', '--quiet', '--no-verify', '--message', subject);
+  return git('rev-parse', 'HEAD');
 }
 
-const approve = (pr: number): void =>
-  writeFileSync(join(stub, `labels-${pr}.json`), JSON.stringify([{ name: 'approved: list growth' }]));
+/** A commit that moves `from` to `to` with git mv, keeping its content. */
+function moveCommit(subject: string, from: string, to: string): string {
+  git('mv', from, to);
+  git('commit', '--quiet', '--no-verify', '--message', subject);
+  return git('rev-parse', 'HEAD');
+}
 
-/**
- * A GitHub merge queue entry for #12 behind #11: the event's base is #11's squash, not main, and
- * the gate measures growth from main, so the step must find #11 from main's ref.
- */
-function queueEntry(): Record<string, string> {
-  ratchetCommit('Main', { 'lib/a.ts': 1 });
+const APPROVED = [{ name: 'approved: list growth' }];
+
+/** The labels a reading by commit subject would find: the subject's PR is approved. */
+const labelSubject = (pr: number): void =>
+  writeFileSync(join(stub, `labels-${pr}.json`), JSON.stringify(APPROVED));
+
+/** GitHub's merge queue: each running entry's head commit and PR. */
+function mergeQueue(entries: readonly { commit: string; pr: number; approved: boolean }[]): void {
+  const nodes = entries.map(({ commit, pr, approved }) => ({
+    headCommit: { oid: commit },
+    pullRequest: { number: pr, labels: { totalCount: approved ? 1 : 0, nodes: approved ? APPROVED : [] } },
+  }));
+  writeFileSync(
+    join(stub, 'queue.json'),
+    JSON.stringify({
+      data: { repository: { mergeQueue: { entries: { totalCount: nodes.length, nodes } } } },
+    }),
+  );
+}
+
+/** Main holds the ratchet, and origin/main points at it, as a queue run's checkout fetched it. */
+function onMain(): Record<string, string> {
+  ratchetCommit('Main');
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
-  ratchetCommit('Ahead in the queue (#11)', { 'lib/a.ts': 1, 'lib/b.ts': 1 });
-  const ahead = git('rev-parse', 'HEAD');
-  return {
-    GH_TOKEN: 'token',
-    CI_EVENT: 'integration',
-    CI_PRS: `refs/heads/gh-readonly-queue/main/pr-12-${ahead}`,
-    CI_BASE_SHA: ahead,
-  };
+  return { GH_TOKEN: 'token', CI_EVENT: 'integration', CI_PRS: '12' };
 }
 
-test("a queue entry behind an approved PR that grew a list takes that PR's approval for the growth", () => {
-  const queue = queueEntry();
-  commit('This entry (#12)');
-  approve(11);
-  expect(prepare('approval', queue).passed).toBe(true);
-  expect(read('env')).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
-  expect(read('gh.calls')).toContain('/issues/11/labels');
-});
-
-test("an approved PR ahead never covers a queue entry's own unapproved growth", () => {
-  // Main as the base and both PRs named, as the repository's own queue runs a batch.
-  const queue = { ...queueEntry(), CI_PRS: '11,12', CI_BASE_SHA: git('rev-parse', 'origin/main') };
-  ratchetCommit('This entry (#12)', { 'lib/a.ts': 1, 'lib/b.ts': 1, 'lib/c.ts': 1 });
-  approve(11);
-  expect(prepare('approval', queue).passed).toBe(true);
-  expect(read('env')).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
-
-  // A growing commit without a PR number is no PR's growth: no label approves it.
+/** The step's exported approval, or undefined when the step failed. */
+function approval(queue: Record<string, string>): string | undefined {
   writeFileSync(join(stub, 'env'), '');
-  git('reset', '--quiet', '--hard', 'HEAD^');
-  ratchetCommit('A commit outside any PR', { 'lib/a.ts': 2, 'lib/b.ts': 1 });
-  expect(prepare('approval', queue).passed).toBe(true);
-  expect(read('env')).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+  return prepare('approval', queue).passed ? read('env') : undefined;
+}
+
+const graphqlCalls = (): number => read('gh.calls').split('api graphql').length - 1;
+
+test("a queue entry behind an approved PR that grew a list takes that PR's approval, with one queue query", () => {
+  const queue = onMain();
+  const ahead = ratchetCommit('Ahead in the queue (#11)', { 'lib/b.ts': 1 });
+  const entry = commit('This entry (#12)');
+  mergeQueue([
+    { commit: ahead, pr: 11, approved: true },
+    { commit: entry, pr: 12, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
+  expect(graphqlCalls()).toBe(1);
 });
 
-test("a queue run whose growing PR's labels cannot be read fails the step instead of passing it as approved", () => {
-  const queue = queueEntry();
+test('a queue entry that landed during the run binds through the PR GitHub merged as that commit', () => {
+  const queue = onMain();
+  const ahead = ratchetCommit('Ahead in the queue (#11)', { 'lib/b.ts': 1 });
+  mergeQueue([{ commit: commit('This entry (#12)'), pr: 12, approved: false }]);
+  const merged = (sha: string) => [
+    { number: 11, merge_commit_sha: sha, merged_at: '2026-11-23T12:00:00Z', labels: APPROVED },
+  ];
+  writeFileSync(join(stub, `pulls-${ahead}.json`), JSON.stringify(merged(ahead)));
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
+  // A PR GitHub merged as another commit is no binding.
+  writeFileSync(join(stub, `pulls-${ahead}.json`), JSON.stringify(merged('0'.repeat(40))));
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+});
+
+test("a commit subject naming an approved PR is no proof: only GitHub's records bind a commit to its PR", () => {
+  const queue = onMain();
+  const claimed = ratchetCommit('Claims the approved PR (#11)', { 'lib/b.ts': 1 });
+  labelSubject(11);
+  mergeQueue([{ commit: claimed, pr: 13, approved: false }]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+  // A commit nothing binds keeps the gate strict too.
+  mergeQueue([]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+});
+
+test('every commit that touches a list file must be approved: a list moved aside and restored, a rename included', () => {
+  const queue = onMain();
+  // Approved #11 deletes the list; unapproved #12 restores it with a new entry, growth that no
+  // comparison per commit sees, since the list is absent below it.
+  git('rm', '--quiet', RATCHET);
+  git('commit', '--quiet', '--no-verify', '--message', 'Removes the list (#11)');
+  const removed = git('rev-parse', 'HEAD');
+  const restored = ratchetCommit('Restores the list (#12)', { 'lib/b.ts': 1 });
+  labelSubject(11);
+  mergeQueue([
+    { commit: removed, pr: 11, approved: true },
+    { commit: restored, pr: 12, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+
+  // Unapproved #12 renames the list aside, so only the old path names it; approved #11 renames it back.
+  git('reset', '--quiet', '--hard', 'origin/main');
+  const aside = moveCommit('Moves the list aside (#12)', RATCHET, ASIDE);
+  const back = moveCommit('Moves it back (#11)', ASIDE, RATCHET);
+  mergeQueue([
+    { commit: aside, pr: 12, approved: false },
+    { commit: back, pr: 11, approved: true },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+});
+
+test("a merge commit in the queue's range fails the step: it brings in commits no queue entry names", () => {
+  const queue = onMain();
+  git('switch', '--quiet', '--create', 'side');
+  ratchetCommit('A side commit', { 'lib/b.ts': 1 });
+  git('switch', '--quiet', 'main');
+  git('merge', '--quiet', '--no-ff', '--message', 'Queue entry (#11)', 'side');
+  labelSubject(11);
+  mergeQueue([{ commit: git('rev-parse', 'HEAD'), pr: 11, approved: true }]);
+  expect(approval(queue)).toBeUndefined();
+  expect(read('env')).toBe('');
+});
+
+test('a queue run that touches no list asks GitHub nothing and waives nothing', () => {
+  const queue = onMain();
   commit('This entry (#12)');
-  writeFileSync(join(stub, 'labels-11.fail'), '');
-  expect(prepare('approval', queue).passed).toBe(false);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
+  expect(read('gh.calls')).toBe('');
+});
+
+test('a queue run whose merge queue cannot be read fails the step instead of passing it as approved', () => {
+  const queue = onMain();
+  ratchetCommit('Ahead in the queue (#11)', { 'lib/b.ts': 1 });
+  writeFileSync(join(stub, 'queue.fail'), '');
+  expect(approval(queue)).toBeUndefined();
   expect(read('env')).toBe('');
 });
 
