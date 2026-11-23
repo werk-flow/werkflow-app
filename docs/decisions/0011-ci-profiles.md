@@ -45,3 +45,17 @@ CI may run on many machines or on few. The design of the CI hill climb assumes m
 - The measurements of the local runs arrive: replace the placeholders.
 - A local executor or a queue-wait record off GitHub Actions exists: close its gap.
 - A third kind of machine needs CI: add a profile, which must map the whole inventory too.
+
+## Amendment 2026-11-23: GitHub Actions is the CI home again
+
+The owner decided on 2026-11-23 that CI runs on GitHub Actions again: `ci/profile.json` names `fleet`. Rule 7's last line no longer holds. The `local` profile stays maintained (rule 1) and frozen as a fallback; [ci-local-fallback.md](../technical/ci-local-fallback.md) holds its state, what stays open and the switch back.
+
+Switch to `fleet`:
+
+1. Enable the CI workflow before the first fleet run: `gh workflow enable ci.yml -R werk-flow/werkflow-app`.
+2. In the `main` ruleset, have the owner set:
+   - the merge queue on, merging by squash, build concurrency 1, group size 1 to 4, 5 minutes' wait for a group, and "all entries must pass" (ALLGREEN);
+   - a check timeout of 165 minutes;
+   - `Check` required, from GitHub Actions;
+   - "Require branches to be up to date before merging" off;
+   - `Queue` not required.
