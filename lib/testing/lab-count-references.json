@@ -3357,6 +3357,24 @@
           "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the Aufgaben page's code and the Zeiterfassung prefetch's date picker no longer come with the layout's start-up, so opening Aufgaben fetches their chunks (4 to 10 scripts); no organization switch is involved; start-up 66 KB gzip lighter for every role"
         },
         {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 5, "tolerance": 0 },
+            "encodedBytes": { "reference": 41344, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 10, "tolerance": 0 },
+            "encodedBytes": { "reference": 114766, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-22T013828858Z-cf6463"],
+          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: code moved from the layout's start-up to the page's first open. #560 raised this step's requests and left its script shape at the old request count, so its bytes printed ungated; fresh main ecc4ba31 measured 10 script requests (was 4) and 114,766 B."
+        },
+        {
           "kind": "ratchet",
           "target": "requests",
           "from": { "reference": 14, "tolerance": 0 },
@@ -3368,8 +3386,8 @@
           "kind": "ceiling-accept",
           "target": "script",
           "from": {
-            "requests": { "reference": 5, "tolerance": 0 },
-            "encodedBytes": { "reference": 41344, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "requests": { "reference": 10, "tolerance": 0 },
+            "encodedBytes": { "reference": 114766, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "decodedBytes": null,
             "rows": null
           },
@@ -3415,8 +3433,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8186, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 3, "tolerance": 0 },
+          "encodedBytes": { "reference": 20862, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -3557,6 +3575,24 @@
           "to": { "reference": 4, "tolerance": 0 },
           "runKeys": ["2026-11-21T055139544Z-a5f23c"],
           "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the settings page's UI (tabs, select) no longer comes with the layout's start-up, so opening the settings fetches its own chunks; no organization switch is involved; start-up 66 KB gzip lighter for every role"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8186, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 3, "tolerance": 0 },
+            "encodedBytes": { "reference": 20862, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-22T013828858Z-cf6463"],
+          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: code moved from the layout's start-up to the page's first open. #560 raised this step's requests and left its script shape at the old request count, so its bytes printed ungated; fresh main ecc4ba31 measured 3 script requests (was 1) and 20,862 B."
         }
       ]
     }
