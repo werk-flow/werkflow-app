@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { CHECK_APP_CONFIG, readCheckApp } from './check-app';
 import { readWorkflow } from '../ci-workflow';
+import { GITHUB_CURL_STUB } from '../github-api-stub';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const APP = 4242;
@@ -130,6 +131,7 @@ type CheckRunFixture = {
 function writeSources(checkRuns: readonly CheckRunFixture[]) {
   for (const [name, body] of [
     ['gh', GH_STUB],
+    ['curl', GITHUB_CURL_STUB],
     ['bun', BUN_STUB],
   ] as const) {
     writeFileSync(join(stub, name), body);
@@ -140,6 +142,7 @@ function writeSources(checkRuns: readonly CheckRunFixture[]) {
     JSON.stringify({
       check_runs: checkRuns.map((run, index) => ({
         status: 'completed',
+        head_sha: '@commit',
         started_at: '2026-11-21T08:00:00Z',
         completed_at: `2026-11-21T09:0${index}:00Z`,
         html_url: `https://github.test/check/${index}`,
@@ -156,6 +159,7 @@ function writeSources(checkRuns: readonly CheckRunFixture[]) {
   writeFileSync(join(stub, 'runs.json'), JSON.stringify({ workflow_runs: [] }));
   writeFileSync(join(stub, 'jobs.json'), JSON.stringify({ jobs: [] }));
   writeFileSync(join(stub, 'gh.log'), '');
+  writeFileSync(join(stub, 'curl.log'), '');
   writeFileSync(join(stub, 'bun.log'), '');
   writeFileSync(join(stub, 'output'), '');
 }
@@ -192,9 +196,20 @@ function release(
 ) {
   writeSources(checkRuns);
   if (actionsCheck) {
-    const nightly = { id: 1, head_branch: 'main', path: '.github/workflows/nightly.yml', event: 'schedule' };
+    const nightly = {
+      id: 1,
+      head_sha: '@commit',
+      head_branch: 'main',
+      path: '.github/workflows/nightly.yml',
+      event: 'schedule',
+    };
     writeFileSync(join(stub, 'runs.json'), JSON.stringify({ workflow_runs: [nightly] }));
-    const job = { name: 'Full run / Check', status: 'completed', html_url: 'https://github.test/actions/1' };
+    const job = {
+      name: 'Full run / Check',
+      head_sha: '@commit',
+      status: 'completed',
+      html_url: 'https://github.test/actions/1',
+    };
     writeFileSync(join(stub, 'jobs.json'), JSON.stringify({ jobs: [{ ...job, ...actionsCheck }] }));
   }
   const scripts = gates(config);
@@ -209,16 +224,17 @@ function release(
   git('commit', '--allow-empty', '-qm', 'shipped');
   git('update-ref', 'refs/remotes/origin/production', 'HEAD');
   git('commit', '--allow-empty', '-qm', 'new');
+  const commit = git('rev-parse', 'HEAD').stdout.trim();
   const result = spawnSync('bash', [join(scripts, 'release-candidate.sh'), 'scheduled'], {
     cwd: repository,
     encoding: 'utf8',
-    env: gateEnv(),
+    env: { ...gateEnv(), COMMIT: commit },
   });
   return {
     status: result.status,
     stdout: result.stdout,
     outputs: readFileSync(join(stub, 'output'), 'utf8').trim().split('\n').filter(Boolean),
-    calls: readFileSync(join(stub, 'gh.log'), 'utf8'),
+    calls: readFileSync(join(stub, 'curl.log'), 'utf8') + readFileSync(join(stub, 'gh.log'), 'utf8'),
   };
 }
 
