@@ -236,7 +236,7 @@ end;
 $$;
 do $$
 begin
-  if pg_temp.visible_invoices('24900000-0000-0000-0000-000000000001') is distinct from 4
+  if pg_temp.visible_invoices('24900000-0000-0000-0000-000000000001') is distinct from 5
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000002') is distinct from 0
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000003') is distinct from 0
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000004') is distinct from 0 then
@@ -269,7 +269,7 @@ begin
     raise exception 'the organization was not deleted';
   end if;
   if (select count(*) from public.werkflow_invoices
-      where organization_id = '24900000-0000-0000-0000-000000000010') is distinct from 4 then
+      where organization_id = '24900000-0000-0000-0000-000000000010') is distinct from 5 then
     raise exception 'deleting the organization removed one of its WerkFlow invoices';
   end if;
 end;
