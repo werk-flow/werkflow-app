@@ -128,10 +128,15 @@ const noRead = async (): Promise<never> => {
 gateway = {
   verifySignal: async () => null,
   readInvoiceForIssue: noRead,
+  readRefundForStorno: noRead,
   readInvoice: noRead,
   readCustomer: noRead,
   readMandate: noRead,
   readDispute: noRead,
+  readUpcomingDebit: noRead,
+  readInvoiceDebit: noRead,
+  listFinalizedInvoices: noRead,
+  listEventIds: noRead,
   subscriptions: {
     ...calls,
     readSubscription: (id) => {
