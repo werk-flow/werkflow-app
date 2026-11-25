@@ -1609,7 +1609,7 @@
         },
         "script": {
           "requests": { "reference": 36, "tolerance": 1 },
-          "encodedBytes": { "reference": 573760, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 518772, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1912,6 +1912,24 @@
           },
           "runKeys": ["2026-11-21T055139544Z-a5f23c"],
           "reason": "#560: area skeletons load lazily, so the layout carries no office UI and this payload is smaller; nothing is missing"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 36, "tolerance": 1 },
+            "encodedBytes": { "reference": 573760, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 36, "tolerance": 1 },
+            "encodedBytes": { "reference": 518772, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-25T201457413Z-60398d"],
+          "reason": "#560 (lazy area skeletons, owner decision werk-flow/werkflow-planning#29) took about 56 KB from the office start-up while its file count fell from 36 to 35, so the byte gate never judged it and 573,760 B stayed the reference. main alone measures 35 files and 517,227 to 517,296 B in every merge-queue run of 2026-11-23 and on Boat at f0cc2488 (run 2026-11-25T202112704Z-d31d88: 517,239 B). This PR adds one start-up file and so re-gates the bytes: 36 files, 518,772 B on Boat (CI queue on b7e0bb7b: 518,792). Module comparison of the /auftraege entry chunks of the CI builds of b7e0bb7b (run 45206669016) and 6aa10d1b (run 45210197405): both hold the same 431 start-up modules; only the hashed ids of the two server-action stubs updateJob and transitionTimeActivity differ. Turbopack packs five (app) layout chunks into six (1,505,550 to 1,505,675 B raw over all entry files). Nothing is missing or later."
         }
       ]
     },
