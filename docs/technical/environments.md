@@ -36,16 +36,16 @@ No migration carries auth settings, mail templates, SMTP or rate limits. Both pr
 
 ## Credentials
 
-This table is the one home of every deployment and workflow credential. No check copies a secret to test it.
+This table is the one home of every deployment and workflow credential. No check copies a secret.
 
-- `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call where the value lives. A failed run fails the step named after the credential and opens or updates the issue "Weekly health check failed". Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
-- The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only a request carrying `x-health-check-token`. The answer names each check `ok` or `failed`, never a value.
-- Agents never read a workstation secret file. `.claude/hooks/refuse-boat-key-reads.ts` refuses a call that would read the Boat key or the hand-out file `~/.config/werkflow/problem-report-handout.env`, which only `bun scripts/report-thread.ts` and the report dispatcher read.
+- `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call. A failure fails the credential's step and opens or updates the issue "Weekly health check failed". Only a failed `prod` check assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
+- The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only `x-health-check-token` and name each check `ok` or `failed`, never a value.
+- Agents never read a workstation secret file. `.claude/hooks/refuse-boat-key-reads.ts` refuses reading the Boat key or the hand-out file `~/.config/werkflow/problem-report-handout.env`, which only `bun scripts/report-thread.ts` and the report dispatcher read.
 
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging, release: deploy edge functions; never database read | 2027-10-26 | Supabase account settings, Access Tokens; `gh secret set`; revoke the old one. |
-| `SUPABASE_DEV_READ_TOKEN` | GitHub repository secret | Release: read-only SQL on DEV | As set | As above; fine-grained, Database read, DEV only. |
+| `SUPABASE_DEV_READ_TOKEN` | GitHub repository secret | Release: read-only SQL on DEV | 2027-11-16; one year at most | Supabase Account preferences, Access Tokens: `werkflow-dev-ledger-read`, organization WerkFlow, project DEV, Database read only. `gh secret set` (stdin), run `health.yml`, revoke the old one. |
 | `PROD_INSPECT_SUPABASE_TOKEN`, `DEV_INSPECT_SUPABASE_TOKEN`, `DEV_AUTH_SYNC_SUPABASE_TOKEN` | Environment `production` | The [PROD inspection](#which-tool-reaches-what) | One year | Scoped, read only: PROD Database, Advisors, Auth config; DEV Database, Auth config. The third: DEV Auth config and Project settings write. `gh secret set --env production`. |
 | `werkflow-workstation-dev` | Workstations | DEV only | One year | [Machine setup](machine-setup.md#set-up-a-new-machine), step 2 |
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
