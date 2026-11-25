@@ -17,6 +17,7 @@ import {
   type LabStepReference,
 } from './lab-counts';
 import { calibrateLabStep, gateLabMetric, rejectLabMetric, ungateLabMetric } from './lab-gate';
+import { replayProblems } from './lab-history';
 import { LAB_MEASUREMENT_VERSION, type LabObservation } from './lab-record';
 import { LAB_METRICS, type LabMetric, type LabStep } from './lab-steps';
 
@@ -246,6 +247,58 @@ describe('lab counts', () => {
         reason: 'typo',
       }),
     ).toThrow('neither a gated metric nor a request shape');
+  });
+
+  test('accepting a requests count refreshes every gated shape whose request count the same run changed, so no shape is left ungated by its count', () => {
+    // One run: its step requests, its script requests and bytes, and its prefetch requests.
+    const run = (requests: number, scripts: number, bytes: number, prefetches: number): LabObservation => {
+      const plain = observation({ counts: { requests } });
+      const payload = { encodedBytes: bytes, decodedBytes: null, rows: null };
+      return {
+        ...plain,
+        payloads: [
+          ...plain.payloads,
+          { ...payload, shape: 'script', requests: scripts },
+          { ...payload, shape: 'prefetch:/aufgaben', requests: prefetches },
+        ],
+      };
+    };
+    const { reference: base } = initialLabReference({
+      step: STEP,
+      observations: FIVE_RUNS.map(() => run(8, 4, 38_000, 2)),
+      runKeys: FIVE_RUNS,
+      buildId: 'build',
+      gated: ['requests'],
+      reason: REASON,
+    });
+    const moved = run(14, 10, 114_000, 3);
+    const accepted = acceptLabChange({
+      reference: base,
+      observation: moved,
+      target: 'requests',
+      runKey: 'run-9',
+      reason: 'code moved from start-up to the page',
+    });
+    expect(accepted.counts.requests?.reference).toBe(14);
+    expect(accepted.payloads.script).toMatchObject({
+      requests: { reference: 10 },
+      encodedBytes: { reference: 114_000 },
+    });
+    expect(accepted.history.at(-1)).toMatchObject({
+      kind: 'ceiling-accept',
+      target: 'script',
+      runKeys: ['run-9'],
+      reason: 'code moved from start-up to the page',
+    });
+    // A prefetch shape never gates, and a shape at its reference count keeps its bounds.
+    expect(accepted.payloads['prefetch:/aufgaben']).toEqual(base.payloads['prefetch:/aufgaben']);
+    expect(accepted.payloads['action:/auftraege/[jobNumber]']).toEqual(
+      base.payloads['action:/auftraege/[jobNumber]'],
+    );
+    expect(replayProblems(accepted)).toEqual([]);
+    // The refreshed shape's bytes are judged again: a later run at the same count that grows them fails.
+    const grown = compareLabStep({ step: STEP, observation: run(14, 10, 150_000, 3), reference: accepted });
+    expect(rowOf(grown, 'script#encodedBytes').status).toBe('grew');
   });
 
   test('a reference needs five runs, and an unstable metric stays ungated', () => {

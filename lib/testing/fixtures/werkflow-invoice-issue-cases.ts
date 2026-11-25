@@ -14,6 +14,12 @@ import {
 } from '@/lib/testing/fixtures/stripe-invoices';
 
 mock.module('server-only', () => ({}));
+// The invoice mail after the issue has its own cases (billing-invoice-mails.ts).
+mock.module('@/lib/werkflow-billing/invoice-mails', () => ({
+  sendDebitNotice: async () => {},
+  sendInvoiceMail: async () => {},
+  sendReceiptMail: async () => {},
+}));
 
 // The signal handlers' database and R2, in memory: the issued rows and the stored originals.
 const issuedRows: Array<{ p_stripe_invoice_id: string; p_stripe_event_id: string }> = [];

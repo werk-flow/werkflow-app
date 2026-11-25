@@ -1,0 +1,38 @@
+name: Retarget notice
+
+# Tells a PR that its base changed, so its thread pushes a new head on the new base
+# (docs/technical/coderabbit.md, "Babysit a pull request"). A stacked PR's Check ran against its old
+# base, and ci.yml starts no run on an edit: GitHub counts only a workflow's newest run on a commit,
+# so an edit's run there displaced the head's Check (2026-11-23, #592). A run of this workflow may
+# attach to the PR head too, but it reports only `Notice`, never `Check`, so it hides nothing; a
+# title or body edit starts it only to skip that job.
+#
+# `pull_request`, not `pull_request_target`, which GitHub blocks by default in public repositories
+# from 2026-12-02. Known gaps: GitHub starts no `pull_request` run while the PR conflicts with its
+# base, so a retarget that causes a conflict gets no notice; the conflict wakes the PR's watch
+# instead, and the babysit procedure merges the base. A fork's PR gets a read-only token, so its
+# comment fails. The job checks nothing out and reads only the PR's number and base name from the
+# event, as data through `env`.
+on:
+  pull_request:
+    types: [edited]
+
+permissions: {}
+
+jobs:
+  notice:
+    name: Notice
+    if: github.event.changes.base
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write # comment on the PR
+    steps:
+      - name: Comment on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          body="The base changed to \`$BASE\`. Update the branch (\`gh pr update-branch $PR\` or \`git fetch origin $BASE && git merge origin/$BASE\`) so CI runs on the new base. If the branch already contains the base, push a fresh commit, such as \`git commit --allow-empty\`."
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null
