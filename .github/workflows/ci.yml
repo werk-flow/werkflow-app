@@ -217,9 +217,14 @@ jobs:
       - uses: ./.github/actions/ci-job
         with:
           job: invoices
-      # The jar is written only after its checksum matched, so a red check still keeps a good jar.
+      # Only the pinned jar, verified again here, enters the cache, even when a check failed.
+      - name: Verify Mustang's jar before caching it
+        id: mustang-verified
+        if: always() && steps.mustang-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: bun lib/document-rendering/fixtures/mustang-jar.ts verify
       - name: Cache Mustang's jar
-        if: always() && steps.mustang-cache.outputs.cache-hit != 'true' && hashFiles(format('{0}/*.jar', steps.mustang.outputs.path)) != ''
+        if: always() && steps.mustang-verified.outcome == 'success'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.mustang.outputs.path }}

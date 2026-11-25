@@ -10,8 +10,8 @@
 // The directory keeps the checked PDFs and Mustang's reports. Exits 0 when every check holds.
 
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { mustangJar } from './mustang-jar';
 
 const JAVA_IMAGE =
@@ -55,11 +55,12 @@ if (
   ])
 )
   throw new Error('The reference invoices could not be rendered.');
+// Java reopens the jar for every invoice, so it runs a private verified copy, never the cache.
 const jar = await mustangJar(repository);
+process.on('exit', () => rmSync(dirname(jar), { recursive: true, force: true }));
 for (const image of [JAVA_IMAGE, VERAPDF_IMAGE])
   if (run('docker', ['pull', '--quiet', image])) throw new Error(`docker could not pull ${image}.`);
 readableByAll(pdfs);
-readableByAll(join(jar, '..'));
 
 /** Mustang's report of one PDF, kept beside the PDFs. */
 const reportOf = (name: string): string => join(pdfs, `${basename(name, '.pdf')}.mustang.xml`);
@@ -75,13 +76,13 @@ function mustang(name: string): boolean {
     '--volume',
     `${pdfs}:/data:ro`,
     '--volume',
-    `${join(jar, '..')}:/mustang:ro`,
+    `${jar}:/mustang.jar:ro`,
     '--workdir',
     '/tmp',
     JAVA_IMAGE,
     'java',
     '-jar',
-    `/mustang/${basename(jar)}`,
+    '/mustang.jar',
     '--no-notices',
     '--action',
     'validate',
