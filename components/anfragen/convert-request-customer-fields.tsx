@@ -14,6 +14,18 @@ interface ConvertRequestCustomerFieldsProps {
   form: ConvertRequestForm;
 }
 
+/** What the customer field says: an offer keeps the request's customer, work may take another. */
+function customerHint(request: ClientRequest, target: ConvertRequestForm['target']): string | undefined {
+  if (target === 'offer') {
+    return request.clientId
+      ? 'Das Angebot geht an den Kunden der Anfrage.'
+      : 'Ein Angebot geht an den Kunden der Anfrage. Ordne ihn der Anfrage zuerst zu.';
+  }
+  return request.clientId
+    ? undefined
+    : `Die Anfrage kam von ${request.callerName || 'einem unbekannten Anrufer'}. Wähle den passenden Kunden oder lege ihn neu an.`;
+}
+
 /** Customer, work site and contact of the conversion target. */
 export function ConvertRequestCustomerFields({
   request,
@@ -40,11 +52,7 @@ export function ConvertRequestCustomerFields({
         htmlFor="convert-client"
         required
         error={clientError}
-        description={
-          !request.clientId
-            ? `Die Anfrage kam von ${request.callerName || 'einem unbekannten Anrufer'}. Wähle den passenden Kunden oder lege ihn neu an.`
-            : undefined
-        }
+        description={customerHint(request, target)}
       >
         <ClientSelectWithCreate
           selectedClient={requestClient}
@@ -54,7 +62,8 @@ export function ConvertRequestCustomerFields({
             setSiteId('');
             setContactId('');
           }}
-          disabled={isLoading}
+          // An offer is for the request's customer; the request names it.
+          disabled={isLoading || target === 'offer'}
         />
       </Field>
 

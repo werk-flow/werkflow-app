@@ -1,14 +1,9 @@
-import { afterEach, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type OpenMigration, migrationOrderProblems } from './migration-order';
-
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
+import { temporaryDirectory } from '../temporary-directory';
 
 function git(root: string, ...args: string[]): void {
   execFileSync(
@@ -30,8 +25,7 @@ function addMigration(root: string, name: string, sql: string, commit: boolean):
  * replaces the function close_period.
  */
 function repository(): string {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-migration-order-'));
-  directories.push(root);
+  const root = temporaryDirectory('werkflow-migration-order-');
   git(root, 'init', '--quiet', '--initial-branch=main');
   mkdirSync(join(root, 'supabase/migrations'), { recursive: true });
   addMigration(root, '20261020100000_first.sql', 'create table jobs (id int);\n', true);
@@ -105,4 +99,34 @@ test('a branch migration that main already holds, as after a squash merge, passe
   addMigration(root, '20261028100000_later.sql', 'alter table jobs add column later int;\n', true);
   git(root, 'checkout', '--quiet', 'feature');
   expect(problems(root)).toEqual([]);
+});
+
+test("a batch prefix's commit is checked against its parent without a checkout: a lower version after a higher one on the same object fails", () => {
+  const root = repository();
+  git(root, 'checkout', '--quiet', 'main');
+  // Two queued PRs squashed in landing order: the first adds the higher version, the second a lower
+  // one that changes the same table. Neither is on main before the batch.
+  addMigration(root, '20261027100000_job_due.sql', 'alter table public.jobs add column due date;\n', true);
+  const first = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  addMigration(
+    root,
+    '20261026120000_job_owner.sql',
+    'alter table public.jobs add column owner text;\n',
+    true,
+  );
+  const second = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  // The working tree moves away: the check reads only the commits.
+  git(root, 'checkout', '--quiet', 'feature');
+  expect(
+    migrationOrderProblems({ repositoryRoot: root, mainRef: first, head: second, openPullRequests: [] }),
+  ).toEqual([
+    expect.stringContaining(
+      `supabase/migrations/20261026120000_job_owner.sql changes what a migration with a higher version on ${first} also changes: 20261027100000_job_due.sql (public.jobs).`,
+    ),
+  ]);
+  const base = execFileSync('git', ['rev-parse', 'main~2'], { cwd: root, encoding: 'utf8' }).trim();
+  // Against main before the batch, neither migration conflicts with anything there.
+  expect(
+    migrationOrderProblems({ repositoryRoot: root, mainRef: base, head: second, openPullRequests: [] }),
+  ).toEqual([]);
 });

@@ -1,8 +1,8 @@
-import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, expect, test } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { collectUiStringCatalog } from './extract-ui-strings';
+import { temporaryDirectory } from '../../testing/temporary-directory';
 
 const COMPONENT = `
 import { Button } from '@/components/ui/button';
@@ -24,12 +24,9 @@ export function Example({ count }: { count: number }) {
 }
 `;
 
-const roots: string[] = [];
-
 /** A fresh repository root with the given files; app/, components/ and lib/ always exist. */
 function repositoryWith(files: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), 'ui-string-catalog-'));
-  roots.push(root);
+  const root = temporaryDirectory('ui-string-catalog-');
   for (const folder of ['app', 'components', 'lib']) mkdirSync(join(root, folder));
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -37,10 +34,6 @@ function repositoryWith(files: Record<string, string>): string {
   }
   return root;
 }
-
-afterAll(() => {
-  for (const root of roots) rmSync(root, { recursive: true, force: true });
-});
 
 describe('extracting UI strings from one source', () => {
   const strings = collectUiStringCatalog(repositoryWith({ 'components/example.tsx': COMPONENT }), {});

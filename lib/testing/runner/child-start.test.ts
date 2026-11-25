@@ -1,12 +1,12 @@
 // Rule test: a lead starts a thread on its own machine only while the machine has room for it
 // (lib/testing/runner/child-start.ts); a thread placed on another machine passes.
-import { afterAll, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { childStartRefusal, localThreadStarts, thisEnvironmentId } from './child-start';
 import { admission, type Admission, type RoomReading } from './machine-room';
+import { temporaryDirectory } from '../temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const GIB = 1024 ** 3;
@@ -225,8 +225,7 @@ test('a machine without the load watch starts no local thread and names the inst
   expect(reason).not.toContain('--wait');
 });
 
-const scratch = mkdtempSync(join(tmpdir(), 'werkflow-child-start-'));
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+const scratch = temporaryDirectory('werkflow-child-start-');
 
 test("this machine's environment id is the T3 data directory's environment-id file, and a missing or empty one is unknown", () => {
   const home = join(scratch, 't3-home');

@@ -1,17 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
+import { temporaryDirectory } from '../testing/temporary-directory';
 
 const POPPER = '@radix-ui/react-popper';
 const manifestSchema = z.object({
@@ -135,27 +127,23 @@ function writePackage(
 }
 
 function withInstalledFixture(operation: (root: string) => void): void {
-  const root = mkdtempSync(join(tmpdir(), 'werkflow-popper-'));
-  try {
-    writeFileSync(
-      join(root, 'package.json'),
-      JSON.stringify({
-        name: 'fixture',
-        dependencies: { '@radix-ui/react-dropdown-menu': '1.0.0' },
-        overrides: { [POPPER]: '1.3.7' },
-      }),
-    );
-    writePackage(join(root, 'node_modules/@radix-ui/react-dropdown-menu'), '@radix-ui/react-dropdown-menu', {
-      '@radix-ui/react-menu': '1.0.0',
-    });
-    writePackage(join(root, 'node_modules/@radix-ui/react-menu'), '@radix-ui/react-menu', {
-      [POPPER]: '1.3.7',
-    });
-    writePackage(join(root, 'node_modules', POPPER), POPPER, {}, '1.3.7');
-    operation(root);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  const root = temporaryDirectory('werkflow-popper-');
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify({
+      name: 'fixture',
+      dependencies: { '@radix-ui/react-dropdown-menu': '1.0.0' },
+      overrides: { [POPPER]: '1.3.7' },
+    }),
+  );
+  writePackage(join(root, 'node_modules/@radix-ui/react-dropdown-menu'), '@radix-ui/react-dropdown-menu', {
+    '@radix-ui/react-menu': '1.0.0',
+  });
+  writePackage(join(root, 'node_modules/@radix-ui/react-menu'), '@radix-ui/react-menu', {
+    [POPPER]: '1.3.7',
+  });
+  writePackage(join(root, 'node_modules', POPPER), POPPER, {}, '1.3.7');
+  operation(root);
 }
 
 describe('installed Popper dependency resolution', () => {

@@ -108,7 +108,12 @@ export const DIALOG_INVENTORY = {
   },
   'components/anfragen/convert-request-dialog.tsx#ConvertRequestDialog|Anfrage umwandeln': {
     audits: [
-      { route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.convert', tabs: ['job', 'project'] },
+      {
+        route: '/anfragen/[requestId]',
+        role: 'admin',
+        opener: 'requests.convert',
+        tabs: ['job', 'project', 'offer'],
+      },
     ],
   },
   'components/anfragen/convert-request-to-service-dialog.tsx#ConvertRequestToServiceDialog|Anfrage als Servicefall übernehmen?':
@@ -471,6 +476,20 @@ export const DIALOG_INVENTORY = {
   'components/service/maintenance-coverage-follow-up-dialog.tsx#MaintenanceCoverageFollowUpDialog|Nachfassaktion anlegen':
     {
       audits: [{ route: '/service/wartung', role: 'admin', opener: 'service.coverage-follow-up' }],
+    },
+  "components/on-call/on-call-shift-dialog.tsx#OnCallShiftDialog|{props.shift ? 'Bereitschaft ändern' : 'Bereitschaft planen'}":
+    {
+      audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-plan' }],
+    },
+  'components/on-call/on-call-handover-dialog.tsx#OnCallHandoverDialog|Bereitschaft übergeben': {
+    audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-handover' }],
+  },
+  'components/on-call/on-call-history-dialog.tsx#OnCallHistoryDialog|Verlauf der Bereitschaft': {
+    audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-history' }],
+  },
+  "components/on-call/on-call-week-content.tsx#WeekDialogs|{runsNow ? 'Bereitschaft jetzt beenden?' : 'Bereitschaft absagen?'}":
+    {
+      audits: [{ route: '/service/bereitschaft', role: 'admin', opener: 'service.on-call-end' }],
     },
   'components/service/maintenance-due-action-dialog.tsx#MaintenanceDueActionDialog|Fälligkeit bearbeiten': {
     audits: [

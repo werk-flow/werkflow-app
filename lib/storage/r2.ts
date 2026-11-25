@@ -455,6 +455,14 @@ export async function putWerkflowBillingObject({
   }
 }
 
+/** The bytes of one WerkFlow billing original, for the invoice mail. A missing object throws `storage_object_missing`. */
+export async function readWerkflowBillingObject(path: string): Promise<Uint8Array> {
+  assertWerkflowBillingKey(path);
+  const result = await getR2Client().send(new GetObjectCommand({ Bucket: getR2BucketName(), Key: path }));
+  if (!result.Body) throw new Error('storage_object_missing');
+  return result.Body.transformToByteArray();
+}
+
 /**
  * The bytes of one object of the organization, read on the server: only the
  * organization export (lib/org-export/) packs stored originals into its

@@ -32,7 +32,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 
 ## Generated documents
 
-`lib/document-rendering/` is the one renderer of generated business documents: offers and invoices. A caller maps its records, amounts computed, into the module's plain model; the module imports no domain or database type.
+`lib/document-rendering/` is the one renderer of generated business documents: offers, invoices and Serviceberichte. A caller maps its records, amounts computed, into the module's plain model; the module imports no domain or database type.
 
 - It runs in the app's Node functions with `pdf-lib` and bundled Geist font subsets; no browser or external service sees a document.
 - The same model gives the same bytes, dates included, so a preview equals the stored copy.

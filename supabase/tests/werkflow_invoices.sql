@@ -5,7 +5,11 @@
 -- for the owner. The organization's Admin reads its rows; Büro, an employee
 -- and another organization's Admin read none, and no client writes. The row
 -- is kept until the end of the tenth year after its issue year, and deleting
--- the organization keeps it. Each row names its lines and service period.
+-- the organization keeps it. A refund's Storno (#491) cancels one document
+-- once, names it, negates its amounts and takes the organization, Stripe ids
+-- and buyer from it; a replacement for the part that stays lies between
+-- nothing and the cancelled amount and is paid in full. Each original names
+-- its lines and service period.
 begin;
 
 insert into auth.users (
@@ -126,6 +130,98 @@ begin
 end;
 $$;
 
+-- A refund's documents: the Storno and any replacement, recorded together.
+create function pg_temp.document(p_number text, p_gross bigint, p_paid bigint) returns jsonb
+language sql as $$
+  select jsonb_build_object(
+    'number', p_number, 'issue_date', '2037-11-20', 'net_cents', p_gross, 'tax_cents', 0,
+    'gross_cents', p_gross, 'paid_cents', p_paid, 'payment_means', 'card',
+    'file_key', 'werkflow-billing/invoices/in_test_0001/' || encode(sha256(convert_to(p_number, 'UTF8')), 'hex') || '.pdf',
+    'file_sha256', encode(sha256(convert_to(p_number, 'UTF8')), 'hex'), 'file_size_bytes', 1024, 'rules_release', '1.3.17'
+  );
+$$;
+create function pg_temp.storno(p_cancels uuid, p_credit_note text, p_number text, p_gross bigint, p_replacement jsonb)
+returns text language sql as $$
+  select public.issue_werkflow_storno(
+    '24900000-0000-0000-0000-000000000010', p_cancels, p_credit_note, 'evt_test_0002', pg_temp.document(p_number, p_gross, 0), p_replacement
+  );
+$$;
+create function pg_temp.document_id(p_number text) returns uuid language sql as $$
+  select id from public.werkflow_invoices where number = p_number;
+$$;
+grant execute on function pg_temp.document(text, bigint, bigint) to service_role;
+grant execute on function pg_temp.storno(uuid, text, text, bigint, jsonb) to service_role;
+grant execute on function pg_temp.document_id(text) to service_role;
+
+set local role service_role;
+do $$
+declare
+  v_original uuid := pg_temp.document_id('MUSTER-0001');
+  v_storno public.werkflow_invoices;
+begin
+  perform pg_temp.expect_refusal('a Storno that takes back less than the original',
+    format($sql$select pg_temp.storno(%L, 'cn_test_0001', 'MUSTER-0001-CN-01', -1000, null)$sql$, v_original),
+    'werkflow_storno_amount_mismatch');
+  perform pg_temp.expect_refusal('a replacement that bills the whole original again',
+    format($sql$select pg_temp.storno(%L, 'cn_test_0001', 'MUSTER-0001-CN-01', -49900,
+      pg_temp.document('MUSTER-0001-KR-01', 49900, 49900))$sql$, v_original),
+    'werkflow_storno_amount_mismatch');
+  perform pg_temp.expect_refusal('a replacement that leaves its amount unpaid',
+    format($sql$select pg_temp.storno(%L, 'cn_test_0001', 'MUSTER-0001-CN-01', -49900,
+      pg_temp.document('MUSTER-0001-KR-01', 39900, 0))$sql$, v_original),
+    'werkflow_storno_amount_mismatch');
+  perform pg_temp.expect_refusal('a replacement without its paid amount',
+    format($sql$select pg_temp.storno(%L, 'cn_test_0001', 'MUSTER-0001-CN-01', -49900,
+      pg_temp.document('MUSTER-0001-KR-01', 39900, null))$sql$, v_original),
+    'werkflow_storno_amount_mismatch');
+
+  if pg_temp.storno(v_original, 'cn_test_0001', 'MUSTER-0001-CN-01', -49900,
+      pg_temp.document('MUSTER-0001-KR-01', 39900, 39900)) is distinct from 'issued' then
+    raise exception 'a partial refund did not issue its Storno and replacement';
+  end if;
+  if pg_temp.storno(v_original, 'cn_test_0001', 'MUSTER-0001-CN-01', -49900,
+      pg_temp.document('MUSTER-0001-KR-01', 39900, 39900)) is distinct from 'already_issued' then
+    raise exception 'a replayed credit note did not answer already_issued';
+  end if;
+  if (select count(*) from public.werkflow_invoices where stripe_invoice_id = 'in_test_0001') is distinct from 3 then
+    raise exception 'a partial refund did not leave the original, its Storno and one replacement';
+  end if;
+  select * into v_storno from public.werkflow_invoices where number = 'MUSTER-0001-CN-01';
+  if v_storno.type_code is distinct from '384' or v_storno.storno_of_invoice_id is distinct from v_original
+    or v_storno.organization_id is distinct from '24900000-0000-0000-0000-000000000010'
+    or v_storno.stripe_customer_id is distinct from 'cus_test_0001'
+    or v_storno.buyer is distinct from '{"name":"Haustechnik Sonnenberg GmbH"}'::jsonb
+    or v_storno.payment_means is distinct from 'none' or v_storno.gross_cents is distinct from -49900
+    or v_storno.due_cents is distinct from -49900 then
+    raise exception 'the Storno does not name and negate the original it cancels';
+  end if;
+  if (select stripe_credit_note_id from public.werkflow_invoices where number = 'MUSTER-0001-KR-01')
+    is distinct from 'cn_test_0001' then
+    raise exception 'the replacement does not carry its credit note';
+  end if;
+  if pg_temp.issue('24900000-0000-0000-0000-000000000010', 'in_test_0001', 'MUSTER-0001') is distinct from 'already_issued' then
+    raise exception 'the original issued again beside its Storno';
+  end if;
+
+  perform pg_temp.expect_refusal('a second Storno of the cancelled original',
+    format($sql$select pg_temp.storno(%L, 'cn_test_0009', 'MUSTER-0001-CN-09', -49900, null)$sql$, v_original),
+    'werkflow_storno_conflict');
+  perform pg_temp.expect_refusal('a Storno for another organization',
+    format($sql$select public.issue_werkflow_storno('24900000-0000-0000-0000-000000000011', %L, 'cn_test_0009',
+      'evt_test_0002', pg_temp.document('MUSTER-0001-CN-09', -39900, 0), null)$sql$,
+      pg_temp.document_id('MUSTER-0001-KR-01')),
+    'werkflow_storno_target_invalid');
+  perform pg_temp.expect_refusal('a Storno of a Storno',
+    format($sql$select pg_temp.storno(%L, 'cn_test_0009', 'MUSTER-0001-CN-09', 49900, null)$sql$, v_storno.id),
+    'werkflow_storno_target_invalid');
+  if pg_temp.storno(pg_temp.document_id('MUSTER-0001-KR-01'), 'cn_test_0002', 'MUSTER-0001-CN-02', -39900, null)
+    is distinct from 'issued' then
+    raise exception 'a refund of the rest did not cancel the replacement';
+  end if;
+end;
+$$;
+reset role;
+
 -- The Admin reads the organization's rows; nobody else, and no client writes or issues.
 create function pg_temp.visible_invoices(p_user uuid) returns bigint language plpgsql as $$
 declare
@@ -140,7 +236,7 @@ end;
 $$;
 do $$
 begin
-  if pg_temp.visible_invoices('24900000-0000-0000-0000-000000000001') is distinct from 2
+  if pg_temp.visible_invoices('24900000-0000-0000-0000-000000000001') is distinct from 4
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000002') is distinct from 0
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000003') is distinct from 0
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000004') is distinct from 0 then
@@ -153,7 +249,9 @@ begin
       'execute')
     or has_function_privilege('anon',
       'public.issue_werkflow_invoice(uuid, text, text, text, text, date, jsonb, text, bigint, bigint, bigint, bigint, bigint, text, text, integer, text, text[], date, date)',
-      'execute') then
+      'execute')
+    or has_function_privilege('authenticated', 'public.issue_werkflow_storno(uuid, uuid, text, text, jsonb, jsonb)', 'execute')
+    or has_function_privilege('anon', 'public.issue_werkflow_storno(uuid, uuid, text, text, jsonb, jsonb)', 'execute') then
     raise exception 'a client role writes or issues WerkFlow invoices';
   end if;
 end;
@@ -171,8 +269,8 @@ begin
     raise exception 'the organization was not deleted';
   end if;
   if (select count(*) from public.werkflow_invoices
-      where organization_id = '24900000-0000-0000-0000-000000000010') is distinct from 2 then
-    raise exception 'deleting the organization removed its WerkFlow invoice';
+      where organization_id = '24900000-0000-0000-0000-000000000010') is distinct from 4 then
+    raise exception 'deleting the organization removed one of its WerkFlow invoices';
   end if;
 end;
 $$;

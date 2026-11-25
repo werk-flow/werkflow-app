@@ -1,6 +1,9 @@
 import { beforeEach, setDefaultTimeout } from 'bun:test';
+import fc from 'fast-check';
 import { openSync, writeSync } from 'node:fs';
+import { PROPERTY_SEED_VARIABLE, propertyRunSettings } from '../lib/testing/property-runs';
 import { UNIT_PROGRESS_ENVIRONMENT } from '../lib/testing/runner/unit-run-watchdog';
+import { registerTemporaryDirectoryCleanup } from '../lib/testing/temporary-directory';
 import { UNIT_TEST_TIMEOUT_MS } from './unit-test-timeout';
 
 // bunfig.toml preloads this module into every `bun test` process. A unit test
@@ -11,6 +14,13 @@ import { UNIT_TEST_TIMEOUT_MS } from './unit-test-timeout';
 // scripts/run-unit-tests.ts also passes the same bound as `--timeout` for
 // every file (a probe of three six-second tests failed two without it).
 setDefaultTimeout(UNIT_TEST_TIMEOUT_MS);
+
+// Every property test draws from one seed and run count (lib/testing/property-runs.ts). A random
+// seed is printed up front, so a failure that fast-check reports by seed can be replayed.
+const propertyRuns = propertyRunSettings(process.env, () => Math.floor(Math.random() * 2 ** 31));
+fc.configureGlobal(propertyRuns);
+if (process.env[PROPERTY_SEED_VARIABLE] === 'random')
+  console.info(`[properties] seed ${propertyRuns.seed}, ${propertyRuns.numRuns} runs per property`);
 
 // Under the runner, each test appends its file to the runner's progress file
 // before it starts. The write is synchronous, so it lands even when the test
@@ -24,3 +34,7 @@ if (progressFile) {
     writeSync(progress, `${Bun.main}\n`);
   });
 }
+
+// Removes each folder a test made with temporaryDirectory: one made during a
+// test after it, one made outside a test when the run ends.
+registerTemporaryDirectoryCleanup();

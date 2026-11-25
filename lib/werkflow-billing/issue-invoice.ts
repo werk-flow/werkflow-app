@@ -7,12 +7,11 @@ import { invoiceDocument } from '@/lib/document-rendering/invoice-layout';
 import type { BusinessDocument } from '@/lib/document-rendering/model';
 import { calculateInvoice } from '@/lib/invoicing/calculate';
 import { checkEn16931 } from '@/lib/invoicing/check-en16931';
-import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
-import type { CalculatedInvoice } from '@/lib/invoicing/model';
+import type { CalculatedInvoice, InvoiceDraft } from '@/lib/invoicing/model';
 import { toEn16931 } from '@/lib/invoicing/to-en16931';
 import type { StoredObject } from '@/lib/storage/r2';
 import type { Database } from '@/lib/supabase/database.types';
-import { WerkflowInvoiceFailure } from '@/lib/werkflow-billing/failure';
+import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { assertStripeAmounts, werkflowInvoiceDraft } from '@/lib/werkflow-billing/invoice-model';
 import type { WerkflowSeller } from '@/lib/werkflow-billing/seller';
 import type { StripeInvoiceForIssue } from '@/lib/werkflow-billing/stripe-invoice';
@@ -33,7 +32,7 @@ type IssuedInvoiceRecord = Omit<
   'p_buyer' | 'p_payment_means'
 > & {
   p_buyer: CalculatedInvoice['buyer'];
-  p_payment_means: 'direct-debit' | 'card' | 'none';
+  p_payment_means: ReturnType<typeof paymentMeansOf>;
 };
 
 export type IssueDependencies = {
@@ -44,6 +43,13 @@ export type IssueDependencies = {
   isIssued(stripeInvoiceId: string): Promise<boolean>;
   record(row: IssuedInvoiceRecord): Promise<'issued' | 'already_issued'>;
 };
+
+/** The payment means a record names: the debit or card Stripe collects with, else none. */
+export function paymentMeansOf(invoice: CalculatedInvoice): 'direct-debit' | 'card' | 'none' {
+  return invoice.payment?.kind === 'direct-debit' || invoice.payment?.kind === 'card'
+    ? invoice.payment.kind
+    : 'none';
+}
 
 type Letterhead = Pick<BusinessDocument, 'sender' | 'footerColumns' | 'stationery'>;
 
@@ -61,14 +67,61 @@ function werkflowLetterhead({ seller }: WerkflowSeller): Letterhead {
   };
 }
 
-function calculated(stripe: StripeInvoiceForIssue, seller: WerkflowSeller): CalculatedInvoice {
+/** The core's calculation of a draft; a draft the core refuses is not Stripe's content. */
+export function calculatedDraft(draft: InvoiceDraft): CalculatedInvoice {
   try {
-    return calculateInvoice(werkflowInvoiceDraft(stripe, seller));
+    return calculateInvoice(draft);
   } catch (error) {
     // A paid amount above the gross or a line the core refuses: Stripe's content is not the core's.
-    if (error instanceof RangeError) throw new WerkflowInvoiceFailure('werkflow_invoice_amount_mismatch');
+    if (error instanceof RangeError) throw billingFailure('werkflow_invoice_amount_mismatch');
     throw error;
   }
+}
+
+/** The stored original of a checked document, as the record names it. */
+export type CheckedOriginal = {
+  fileKey: string;
+  sha256: string;
+  sizeBytes: number;
+  rulesRelease: string;
+};
+
+/**
+ * Checks one calculated document against EN 16931, renders it as ZUGFeRD
+ * PDF/A-3 with its XML read back by the renderer, and stores the bytes under the Stripe invoice's
+ * prefix. Throws a stable code on every failure, before anything is recorded.
+ */
+export async function checkedOriginal(
+  invoice: CalculatedInvoice,
+  {
+    seller,
+    stripeInvoiceId,
+    storeOriginal,
+  }: {
+    seller: WerkflowSeller;
+    stripeInvoiceId: string;
+    storeOriginal: IssueDependencies['storeOriginal'];
+  },
+): Promise<CheckedOriginal> {
+  const xml = toEn16931(invoice);
+  // A check that cannot run throws (check-en16931.ts): no document counts as checked that no check read.
+  const check = await checkEn16931(xml).catch(() => {
+    throw billingFailure('werkflow_invoice_check_unavailable');
+  });
+  if (!check.valid) throw billingFailure('werkflow_invoice_rules_failed');
+  // The renderer reads its embedded XML back and throws unless it is `xml` (e-invoice.ts).
+  const pdf = await renderEInvoicePdf(invoiceDocument(invoice, werkflowLetterhead(seller)), xml).catch(() => {
+    throw billingFailure('werkflow_invoice_render_failed');
+  });
+
+  // The key names the bytes' hash, so a retry finds the same object or writes its own.
+  const sha256 = createHash('sha256').update(pdf).digest('hex');
+  const fileKey = `werkflow-billing/invoices/${stripeInvoiceId}/${sha256}.pdf`;
+  const stored = await storeOriginal(fileKey, pdf);
+  if (!stored.created && stored.sizeBytes !== pdf.byteLength) {
+    throw billingFailure('werkflow_invoice_storage_conflict');
+  }
+  return { fileKey, sha256, sizeBytes: pdf.byteLength, rulesRelease: check.rulesRelease };
 }
 
 /** Issues WerkFlow's original of one finalized Stripe invoice, at most once. */
@@ -79,26 +132,15 @@ export async function issueWerkflowInvoice(
   if (await dependencies.isIssued(stripeInvoiceId)) return 'already_issued';
 
   const stripe = await dependencies.readInvoice(stripeInvoiceId);
-  if (stripe.id !== stripeInvoiceId) throw new WerkflowInvoiceFailure('werkflow_invoice_unreadable');
+  if (stripe.id !== stripeInvoiceId) throw billingFailure('werkflow_invoice_unreadable');
   const seller = dependencies.seller();
-  const invoice = calculated(stripe, seller);
+  const invoice = calculatedDraft(werkflowInvoiceDraft(stripe, seller));
   assertStripeAmounts(stripe, invoice);
-
-  const xml = toEn16931(invoice);
-  const check = await checkEn16931(xml);
-  if (!check.valid) throw new WerkflowInvoiceFailure('werkflow_invoice_rules_failed');
-  const pdf = await renderEInvoicePdf(invoiceDocument(invoice, werkflowLetterhead(seller)), xml);
-  if ((await readEmbeddedInvoiceXml(pdf)) !== xml) {
-    throw new WerkflowInvoiceFailure('werkflow_invoice_readback_mismatch');
-  }
-
-  // The key names the bytes' hash, so a retry finds the same object or writes its own.
-  const sha256 = createHash('sha256').update(pdf).digest('hex');
-  const key = `werkflow-billing/invoices/${stripe.id}/${sha256}.pdf`;
-  const stored = await dependencies.storeOriginal(key, pdf);
-  if (!stored.created && stored.sizeBytes !== pdf.byteLength) {
-    throw new WerkflowInvoiceFailure('werkflow_invoice_storage_conflict');
-  }
+  const original = await checkedOriginal(invoice, {
+    seller,
+    stripeInvoiceId: stripe.id,
+    storeOriginal: dependencies.storeOriginal,
+  });
 
   return dependencies.record({
     p_organization_id: stripe.organizationId,
@@ -108,19 +150,16 @@ export async function issueWerkflowInvoice(
     p_number: invoice.number,
     p_issue_date: invoice.issueDate,
     p_buyer: invoice.buyer,
-    p_payment_means:
-      invoice.payment?.kind === 'direct-debit' || invoice.payment?.kind === 'card'
-        ? invoice.payment.kind
-        : 'none',
+    p_payment_means: paymentMeansOf(invoice),
     p_net_cents: invoice.totals.lineNetCents,
     p_tax_cents: invoice.totals.taxCents,
     p_gross_cents: invoice.totals.grossCents,
     p_paid_cents: invoice.totals.paidCents,
     p_due_cents: invoice.totals.dueCents,
-    p_file_key: key,
-    p_file_sha256: sha256,
-    p_file_size_bytes: pdf.byteLength,
-    p_rules_release: check.rulesRelease,
+    p_file_key: original.fileKey,
+    p_file_sha256: original.sha256,
+    p_file_size_bytes: original.sizeBytes,
+    p_rules_release: original.rulesRelease,
     // What the invoice was for, as the billing page lists it (werk-flow/werkflow-planning#252).
     p_line_names: invoice.lines.map((line) => line.name),
     p_service_start: invoice.delivery.kind === 'period' ? invoice.delivery.start : invoice.delivery.date,

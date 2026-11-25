@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { readUiContractReport } from '../../../tests/ui-contracts/report';
+import { temporaryDirectory } from '../temporary-directory';
 
 test('missing or malformed reports preserve failed child evidence but reject claimed success', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'werkflow-ui-report-'));
+  const directory = temporaryDirectory('werkflow-ui-report-');
   const path = join(directory, 'report.json');
   try {
     for (const source of [null, '{malformed']) {

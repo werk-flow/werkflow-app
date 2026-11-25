@@ -31,22 +31,28 @@ const attached = new WeakMap<ViewListener, () => void>();
  * send at once: a phone can be wrong about having no network. `onSettled` runs when a waiting
  * chain was sent or stopped, and when another tab's wipe ended the hold, also before the first
  * view: the page then reads the server's state again instead of keeping a kept action's echo.
+ * `pageSignal` is the wipe signal the page started under, so a wipe before this call ends the hold too.
  * Returns the call that ends the watching.
  */
 export async function attachClockOutbox(
   holder: OutboxHolder,
   listener: ViewListener,
   onSettled: () => void,
+  pageSignal: string | null,
 ): Promise<() => void> {
   let detach = attached.get(listener);
   if (!detach) {
     let wasPending = false;
     try {
-      detach = await holdClock(holder, (view, holdEnded) => {
-        listener(view, holdEnded);
-        if (holdEnded || (wasPending && view?.status !== 'pending')) onSettled();
-        wasPending = view?.status === 'pending';
-      });
+      detach = await holdClock(
+        holder,
+        (view, holdEnded) => {
+          listener(view, holdEnded);
+          if (holdEnded || (wasPending && view?.status !== 'pending')) onSettled();
+          wasPending = view?.status === 'pending';
+        },
+        pageSignal,
+      );
     } catch (failure) {
       logError('clock outbox: the device storage failed', failure);
       throw failure;

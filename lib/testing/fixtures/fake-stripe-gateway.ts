@@ -12,9 +12,9 @@ import type {
   StripeSubscriptionSnapshot,
 } from '@/lib/werkflow-billing/stripe-subscriptions';
 
-type Answer<Read extends 'readInvoice' | 'readMandate' | 'readDispute'> = Awaited<
-  ReturnType<StripeGateway[Read]>
->;
+type Answer<
+  Read extends 'readInvoice' | 'readMandate' | 'readDispute' | 'readUpcomingDebit' | 'readInvoiceDebit',
+> = Awaited<ReturnType<StripeGateway[Read]>>;
 
 /** What the fake's reads answer, by id; an id it does not hold fails as Stripe's read would. */
 export type FakeStripeObjects = {
@@ -22,6 +22,12 @@ export type FakeStripeObjects = {
   customers?: Record<string, StripeBillingCustomer | null>;
   mandates?: Record<string, Answer<'readMandate'>>;
   disputes?: Record<string, Answer<'readDispute'>>;
+  /** readUpcomingDebit by subscription id, readInvoiceDebit by invoice id; each replaces its real read. */
+  upcomingDebits?: Record<string, Answer<'readUpcomingDebit'>>;
+  invoiceDebits?: Record<string, Answer<'readInvoiceDebit'>>;
+  /** What the daily comparison's lists answer, whatever the window. */
+  finalizedInvoices?: Array<{ id: string; finalizedAt: number }>;
+  eventIds?: string[];
 };
 
 async function lookup<T>(objects: Record<string, T> | undefined, id: string): Promise<T> {
@@ -225,7 +231,7 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
 export type FakeStripeSetup = {
   /** readInvoice, readCustomer, readMandate and readDispute answer these by id. */
   objects?: FakeStripeObjects;
-  /** The real gateway's HTTP calls (readInvoiceForIssue) are answered from these. */
+  /** The real gateway's HTTP calls (readInvoiceForIssue, readRefundForStorno) are answered from these. */
   answers?: FakeStripeAnswers;
   /** Every HTTP request the fake answered is pushed here. */
   requests?: FakeStripeRequests;
@@ -258,10 +264,20 @@ export function createFakeStripeGateway(
   return {
     verifySignal: resolved.gateway.verifySignal,
     readInvoiceForIssue: resolved.gateway.readInvoiceForIssue,
+    readRefundForStorno: resolved.gateway.readRefundForStorno,
     readInvoice: (id) => lookup(objects.invoices, id),
     readCustomer: (id) => lookup(objects.customers, id),
     readMandate: (id) => lookup(objects.mandates, id),
     readDispute: (id) => lookup(objects.disputes, id),
+    // Without objects these two stay the real reads over `answers` (stripe.test.ts).
+    readUpcomingDebit: objects.upcomingDebits
+      ? (id) => lookup(objects.upcomingDebits, id)
+      : resolved.gateway.readUpcomingDebit,
+    readInvoiceDebit: objects.invoiceDebits
+      ? (id) => lookup(objects.invoiceDebits, id)
+      : resolved.gateway.readInvoiceDebit,
+    listFinalizedInvoices: async () => objects.finalizedInvoices ?? [],
+    listEventIds: async () => objects.eventIds ?? [],
     subscriptions: fakeSubscriptionCalls(billing),
   };
 }

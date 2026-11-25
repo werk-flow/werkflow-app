@@ -1,212 +1,281 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useState, type ComponentType, type ReactElement } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { useOrganization } from '@/components/organization/organization-context';
-import { DashboardPageSkeleton } from '@/components/loading-states/dashboard-page-skeleton';
-import { MitarbeiterPageSkeleton } from '@/components/loading-states/mitarbeiter-page-skeleton';
-import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 import { AreaPageSkeleton } from '@/components/loading-states/area-page-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageShell } from '@/components/shared/page-shell';
-import { ZeiterfassungOverviewSkeleton } from '@/components/loading-states/zeiterfassung-content-skeleton';
-import {
-  TimeAccountSettingsSkeleton,
-  TimeAccountSkeleton,
-  TimePeriodsSkeleton,
-} from '@/components/loading-states/zeiterfassung-time-account-skeletons';
-import { MaintenancePageSkeleton } from '@/components/loading-states/maintenance-page-skeleton';
-import { KundenPageSkeleton } from '@/components/loading-states/kunden-page-skeleton';
-import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
-import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
-import { InventarPageSkeleton } from '@/components/loading-states/inventar-page-skeleton';
-import { AufgabenPageSkeleton } from '@/components/loading-states/aufgaben-page-skeleton';
-import { AnfragenPageSkeleton } from '@/components/loading-states/anfragen-page-skeleton';
-import { QualifikationenPageSkeleton } from '@/components/loading-states/qualifikationen-page-skeleton';
-import { MeldungenPageSkeleton } from '@/components/loading-states/meldungen-page-skeleton';
-import { EinstellungenPageSkeleton } from '@/components/loading-states/einstellungen-page-skeleton';
-import { WorkTemplatesPageSkeleton } from '@/components/loading-states/work-templates-page-skeleton';
-import { EquipmentPageSkeleton } from '@/components/loading-states/equipment-page-skeleton';
-import { ServiceCasesPageSkeleton } from '@/components/loading-states/service-cases-page-skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
+
+/** Renders a skeleton; the overlay calls it, and the skeleton it returns renders as its own component. */
+type Shape = () => ReactElement;
 
 // The skeleton of the page the user lands on after an organization switch.
 // A record's detail page belongs to the organization being left, so it maps to
 // its list (the switch navigates there); an area subpage keeps its own content
 // skeleton inside the area header. The first matching prefix wins, so a
 // subpage sits above its area.
+//
+// Every role's start-up carries this map, so it holds only plain shapes: a page's title, or an
+// area's title and tabs. A page's own skeleton (the third element) often imports its content
+// module, so it loads once a switch starts: no start-up carries office code, and a new office
+// route cannot re-pack the field worker's start-up (werk-flow/werkflow-app#485). Until it
+// arrives, or when the load failed (as without signal), the switch shows the plain shape; each
+// switch start tries again.
 const ORG_SWITCH_SKELETONS: ReadonlyArray<
-  readonly [prefix: string, skeleton: (lazy: LazySkeletons) => ReactElement]
+  readonly [prefix: string, plain: Shape, load?: () => Promise<Shape>]
 > = [
-  ['/mitarbeiter', () => <MitarbeiterPageSkeleton />],
-  ['/aufgaben', () => <AufgabenPageSkeleton />],
-  ['/dashboard', () => <DashboardPageSkeleton />],
-  ['/kalender', () => <KalenderPageSkeleton />],
+  [
+    '/mitarbeiter',
+    titled('Mitarbeiter'),
+    () =>
+      import('@/components/loading-states/mitarbeiter-page-skeleton').then((m) =>
+        page(m.MitarbeiterPageSkeleton),
+      ),
+  ],
+  [
+    '/aufgaben',
+    titled('Aufgaben'),
+    () =>
+      import('@/components/loading-states/aufgaben-page-skeleton').then((m) => page(m.AufgabenPageSkeleton)),
+  ],
+  [
+    '/dashboard',
+    titled('Dashboard'),
+    () =>
+      import('@/components/loading-states/dashboard-page-skeleton').then((m) =>
+        page(m.DashboardPageSkeleton),
+      ),
+  ],
+  [
+    '/kalender',
+    titled('Kalender'),
+    () =>
+      import('@/components/loading-states/kalender-page-skeleton').then((m) => page(m.KalenderPageSkeleton)),
+  ],
   [
     '/zeiterfassung/zeitkonto',
-    () => (
-      <ZeiterfassungAreaSkeleton>
-        <TimeAccountSkeleton />
-      </ZeiterfassungAreaSkeleton>
-    ),
+    zeiterfassung(),
+    () =>
+      import('@/components/loading-states/zeiterfassung-time-account-skeletons').then((m) =>
+        zeiterfassung(m.TimeAccountSkeleton),
+      ),
   ],
   [
     '/zeiterfassung/perioden',
-    () => (
-      <ZeiterfassungAreaSkeleton>
-        <TimePeriodsSkeleton />
-      </ZeiterfassungAreaSkeleton>
-    ),
+    zeiterfassung(),
+    () =>
+      import('@/components/loading-states/zeiterfassung-time-account-skeletons').then((m) =>
+        zeiterfassung(m.TimePeriodsSkeleton),
+      ),
   ],
   [
     '/zeiterfassung/einstellungen',
-    () => (
-      <ZeiterfassungAreaSkeleton>
-        <TimeAccountSettingsSkeleton />
-      </ZeiterfassungAreaSkeleton>
-    ),
+    zeiterfassung(),
+    () =>
+      import('@/components/loading-states/zeiterfassung-time-account-skeletons').then((m) =>
+        zeiterfassung(m.TimeAccountSettingsSkeleton),
+      ),
   ],
   [
     '/zeiterfassung',
-    () => (
-      <ZeiterfassungAreaSkeleton>
-        <ZeiterfassungOverviewSkeleton />
-      </ZeiterfassungAreaSkeleton>
-    ),
+    zeiterfassung(),
+    () =>
+      import('@/components/loading-states/zeiterfassung-content-skeleton').then((m) =>
+        zeiterfassung(m.ZeiterfassungOverviewSkeleton),
+      ),
   ],
-  ['/kunden', () => <KundenPageSkeleton />],
-  ['/auftraege', () => <AuftraegePageSkeleton />],
-  ['/dokumente', () => <DokumentePageSkeleton />],
+  [
+    '/kunden',
+    titled('Kunden'),
+    () => import('@/components/loading-states/kunden-page-skeleton').then((m) => page(m.KundenPageSkeleton)),
+  ],
+  [
+    '/auftraege',
+    titled('Aufträge'),
+    () =>
+      import('@/components/loading-states/auftraege-page-skeleton').then((m) =>
+        page(m.AuftraegePageSkeleton),
+      ),
+  ],
+  [
+    '/dokumente',
+    titled('Dokumente'),
+    () =>
+      import('@/components/loading-states/dokumente-page-skeleton').then((m) =>
+        page(m.DokumentePageSkeleton),
+      ),
+  ],
+  [
+    '/service/bereitschaft',
+    service(),
+    () => import('@/components/loading-states/on-call-skeletons').then((m) => service(m.OnCallWeekSkeleton)),
+  ],
   [
     '/service/wartung',
-    () => (
-      <ServiceAreaSkeleton>
-        <MaintenancePageSkeleton />
-      </ServiceAreaSkeleton>
-    ),
+    service(),
+    () =>
+      import('@/components/loading-states/maintenance-page-skeleton').then((m) =>
+        service(m.MaintenancePageSkeleton),
+      ),
   ],
   [
     '/service/anlagen',
-    () => (
-      <ServiceAreaSkeleton>
-        <EquipmentPageSkeleton />
-      </ServiceAreaSkeleton>
-    ),
+    service(),
+    () =>
+      import('@/components/loading-states/equipment-page-skeleton').then((m) =>
+        service(m.EquipmentPageSkeleton),
+      ),
   ],
   [
     '/service',
-    () => (
-      <ServiceAreaSkeleton>
-        <ServiceCasesPageSkeleton />
-      </ServiceAreaSkeleton>
-    ),
+    service(),
+    () =>
+      import('@/components/loading-states/service-cases-page-skeleton').then((m) =>
+        service(m.ServiceCasesPageSkeleton),
+      ),
   ],
-  ['/anfragen', () => <AnfragenPageSkeleton />],
-  ['/qualifikationen', () => <QualifikationenPageSkeleton />],
-  ['/meldungen', () => <MeldungenPageSkeleton />],
-  ['/arbeitsvorlagen', () => <WorkTemplatesPageSkeleton />],
-  ['/einstellungen', () => <EinstellungenPageSkeleton />],
-  ['/inventar', () => <InventarPageSkeleton />],
+  [
+    '/anfragen',
+    titled('Anfragen'),
+    () =>
+      import('@/components/loading-states/anfragen-page-skeleton').then((m) => page(m.AnfragenPageSkeleton)),
+  ],
+  [
+    '/qualifikationen',
+    titled('Qualifikationen'),
+    () =>
+      import('@/components/loading-states/qualifikationen-page-skeleton').then((m) =>
+        page(m.QualifikationenPageSkeleton),
+      ),
+  ],
+  [
+    '/meldungen',
+    titled('Meine Meldungen'),
+    () =>
+      import('@/components/loading-states/meldungen-page-skeleton').then((m) =>
+        page(m.MeldungenPageSkeleton),
+      ),
+  ],
+  [
+    '/arbeitsvorlagen',
+    titled('Arbeitsvorlagen'),
+    () =>
+      import('@/components/loading-states/work-templates-page-skeleton').then((m) =>
+        page(m.WorkTemplatesPageSkeleton),
+      ),
+  ],
+  [
+    '/einstellungen',
+    titled('Einstellungen'),
+    () =>
+      import('@/components/loading-states/einstellungen-page-skeleton').then((m) =>
+        page(m.EinstellungenPageSkeleton),
+      ),
+  ],
+  [
+    '/inventar',
+    titled('Inventar'),
+    () =>
+      import('@/components/loading-states/inventar-page-skeleton').then((m) => page(m.InventarPageSkeleton)),
+  ],
   [
     '/angebote/leistungen',
-    ({ angebote }) => (
-      <AreaPageSkeleton title="Angebote" tabCount={2}>
-        {angebote && <angebote.LeistungenPageSkeleton />}
-      </AreaPageSkeleton>
-    ),
+    angebote(),
+    () =>
+      import('@/components/angebote/leistungen/leistungen-skeleton').then((m) =>
+        angebote(m.LeistungenPageSkeleton),
+      ),
   ],
   [
     '/angebote',
-    ({ angebote }) => (
-      <AreaPageSkeleton title="Angebote" tabCount={2}>
-        {angebote && <angebote.OffersPageSkeleton />}
-      </AreaPageSkeleton>
-    ),
+    angebote(),
+    () => import('@/components/angebote/offers-skeleton').then((m) => angebote(m.OffersPageSkeleton)),
   ],
   [
     '/rechnungen',
-    ({ rechnungen }) =>
-      rechnungen ? (
-        <rechnungen.InvoicesPageSkeleton />
-      ) : (
-        <PageShell>
-          <PageHeader title="Rechnungen" />
-        </PageShell>
-      ),
+    titled('Rechnungen'),
+    () => import('@/components/rechnungen/invoices-skeleton').then((m) => page(m.InvoicesPageSkeleton)),
   ],
 ];
 
-function ZeiterfassungAreaSkeleton({ children }: { children: ReactNode }) {
-  return (
-    <AreaPageSkeleton title="Zeiterfassung" tabCount={4}>
-      {children}
-    </AreaPageSkeleton>
-  );
+/**
+ * A page's plain shape: its title over a content placeholder. The placeholder is the busy signal
+ * while the page's own skeleton loads, and after a failed load until the next switch.
+ */
+function titled(title: string): Shape {
+  return function titledShape() {
+    return (
+      <PageShell>
+        <PageHeader title={title} />
+        <Skeleton className="h-64 w-full" />
+      </PageShell>
+    );
+  };
 }
 
-function ServiceAreaSkeleton({ children }: { children: ReactNode }) {
-  return (
-    <AreaPageSkeleton title="Service" tabCount={3}>
-      {children}
-    </AreaPageSkeleton>
-  );
+/** A page's own skeleton, rendered as its own component. */
+function page(Skeleton: ComponentType): Shape {
+  return function pageShape() {
+    return <Skeleton />;
+  };
 }
 
-function inArea(pathname: string, prefix: string): boolean {
+/** An area page's shape: the area's title and tabs, around its subpage's content skeleton once loaded, and a placeholder until then. */
+function inArea(title: string, tabCount: number, Content?: ComponentType): Shape {
+  return function areaShape() {
+    return (
+      <AreaPageSkeleton title={title} tabCount={tabCount}>
+        {Content ? <Content /> : <Skeleton className="h-64 w-full" />}
+      </AreaPageSkeleton>
+    );
+  };
+}
+
+function zeiterfassung(Content?: ComponentType): Shape {
+  return inArea('Zeiterfassung', 4, Content);
+}
+
+function service(Content?: ComponentType): Shape {
+  return inArea('Service', 3, Content);
+}
+
+function angebote(Content?: ComponentType): Shape {
+  return inArea('Angebote', 2, Content);
+}
+
+function inPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-function orgSwitchSkeleton(pathname: string, lazy: LazySkeletons): ReactElement | null {
-  const match = ORG_SWITCH_SKELETONS.find(([prefix]) => inArea(pathname, prefix));
-  return match ? match[1](lazy) : null;
-}
-
-type AngeboteSkeletons = typeof import('@/components/angebote/area-skeletons');
-type RechnungenSkeletons = typeof import('@/components/rechnungen/invoices-skeleton');
-type LazySkeletons = { angebote: AngeboteSkeletons | null; rechnungen: RechnungenSkeletons | null };
-
-const loadAngebote = () => import('@/components/angebote/area-skeletons');
-const loadRechnungen = () => import('@/components/rechnungen/invoices-skeleton');
-
-// Only the office opens Angebote and Rechnungen, so an area's content skeletons load once the
-// user is in it and no field worker's start-up carries them. Until they arrive, or when the load
-// failed (as without signal), a switch shows the area's title (and tabs); each switch start tries
-// again.
-function useAreaSkeletons<Skeletons>(
-  inThisArea: boolean,
+/** The page's own skeleton once loaded; the load starts with a switch, and a failed one again with the next. */
+function useLoadedSkeleton(
+  prefix: string | undefined,
+  load: (() => Promise<Shape>) | undefined,
   isSwitchingOrg: boolean,
-  load: () => Promise<Skeletons>,
-): Skeletons | null {
-  const [skeletons, setSkeletons] = useState<Skeletons | null>(null);
+): Shape | null {
+  const [loaded, setLoaded] = useState<ReadonlyMap<string, Shape>>(() => new Map());
   useEffect(() => {
-    if (!inThisArea || skeletons) return;
-    let current = true;
+    if (!isSwitchingOrg || prefix === undefined || !load || loaded.has(prefix)) return;
     load().then(
-      (loaded) => {
-        if (current) setSkeletons(loaded);
-      },
+      (shape) => setLoaded((previous) => new Map(previous).set(prefix, shape)),
       () => {},
     );
-    return () => {
-      current = false;
-    };
-  }, [inThisArea, isSwitchingOrg, skeletons, load]);
-  return skeletons;
+  }, [prefix, load, isSwitchingOrg, loaded]);
+  return prefix === undefined ? null : (loaded.get(prefix) ?? null);
 }
 
 // Org-switching skeleton overlay (isolated so AppShell stays data-free)
 export function OrgSwitchOverlay() {
   const { isSwitchingOrg } = useOrganization();
   const pathname = usePathname();
-  const angebote = useAreaSkeletons(inArea(pathname, '/angebote'), isSwitchingOrg, loadAngebote);
-  const rechnungen = useAreaSkeletons(inArea(pathname, '/rechnungen'), isSwitchingOrg, loadRechnungen);
+  const match = ORG_SWITCH_SKELETONS.find(([prefix]) => inPrefix(pathname, prefix));
+  const loaded = useLoadedSkeleton(match?.[0], match?.[2], isSwitchingOrg);
 
-  const currentSkeleton = useMemo(
-    () => orgSwitchSkeleton(pathname, { angebote, rechnungen }),
-    [pathname, angebote, rechnungen],
-  );
+  if (!isSwitchingOrg || !match) return null;
 
-  if (!isSwitchingOrg || !currentSkeleton) return null;
-
-  return <div className="absolute inset-0 z-50 overflow-y-auto bg-background">{currentSkeleton}</div>;
+  const shape = loaded ?? match[1];
+  return <div className="absolute inset-0 z-50 overflow-y-auto bg-background">{shape()}</div>;
 }

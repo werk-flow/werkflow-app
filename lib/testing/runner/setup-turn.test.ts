@@ -1,24 +1,19 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { hasFlock, type HeldLock } from './heavy-slot';
 import type { Admission } from './machine-room';
 import { claimSetupTurn, waitForSetupTurn } from './setup-turn';
+import { temporaryDirectory } from '../temporary-directory';
 
-const directories: string[] = [];
 const processes: ChildProcess[] = [];
 const turns: Pick<HeldLock, 'release'>[] = [];
 afterEach(() => {
   for (const turn of turns.splice(0)) turn.release();
   for (const child of processes.splice(0)) child.kill('SIGKILL');
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 function turnDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-setup-turn-'));
-  directories.push(directory);
-  return join(directory, 'nested');
+  return join(temporaryDirectory('werkflow-setup-turn-'), 'nested');
 }
 
 const ADMITTED: Admission = { admitted: true, measured: true, unwatched: false, reason: 'room' };
