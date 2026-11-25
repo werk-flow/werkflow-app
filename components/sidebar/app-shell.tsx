@@ -313,11 +313,15 @@ function MobileHeader() {
   const { isOpen, setIsOpen } = useSidebar();
 
   return (
-    <header className="grid grid-cols-[1fr_auto_1fr] md:hidden items-center border-b bg-card px-4 py-2 sticky top-0 z-30">
-      <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="-ml-1 size-11">
-        <Menu className="h-5 w-5" />
-        <span className="sr-only">Menü öffnen</span>
-      </Button>
+    // Two equal sides keep the logo centered. The layout reuses classes every
+    // page's stylesheet already carries, so the header adds no utility to it.
+    <header className="flex md:hidden items-center border-b bg-card px-4 py-2 sticky top-0 z-30">
+      <div className="flex flex-1">
+        <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="-ml-1 size-11">
+          <Menu className="h-5 w-5" />
+          <span className="sr-only">Menü öffnen</span>
+        </Button>
+      </div>
 
       <Link href="/dashboard" className="flex items-center">
         {/* Light mode logo */}
@@ -340,9 +344,11 @@ function MobileHeader() {
         />
       </Link>
 
-      <div className="-mr-1 flex items-center justify-self-end">
-        <GlobalSearchButton placement="header" />
-        <ProblemReportButton placement="header" />
+      <div className="flex flex-1 justify-end">
+        <div className="-mx-1 flex items-center">
+          <GlobalSearchButton placement="header" />
+          <ProblemReportButton placement="header" />
+        </div>
       </div>
     </header>
   );

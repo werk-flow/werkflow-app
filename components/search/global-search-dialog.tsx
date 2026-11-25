@@ -246,7 +246,9 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
       <DialogContent
         size="2xl"
         workspace
-        className="max-sm:h-dvh max-sm:max-h-dvh max-sm:rounded-none max-sm:border-t-0"
+        // Full screen on a phone. Unprefixed, the corner and border reset reuse
+        // shipped classes: the dialog's own sm: classes restore both on desktop.
+        className="max-sm:h-dvh max-sm:max-h-dvh rounded-none border-0"
       >
         <DialogHeader>
           <DialogTitle>Suchen</DialogTitle>
