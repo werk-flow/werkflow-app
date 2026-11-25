@@ -268,3 +268,7 @@ This narrows "a retry belongs to its work". The record holds every outstanding r
 ## Amendment 2026-11-22: two CI profiles
 
 The owner decided on 2026-11-22 (werk-flow/werkflow-planning#503) that CI keeps two profiles: `fleet` for Boat or GitHub Actions, and `local` for the owner's MacBook and PC. Both run the same checks, jobs and schedules; only the executor, concurrency, batching and timing differ. `ci/profile.json` on `main` is the one switch. [Decision 0011](0011-ci-profiles.md) owns the rules.
+
+## Amendment 2026-11-23: an approval covers only its own PR's growth
+
+A GitHub queue entry's run tests `main` and every PR ahead of it, and its Unit job measures list growth against `main`. It read only the labels of the PRs above the event's base, which is the entry ahead, so each PR queued behind an approved list growth failed until that PR landed (werk-flow/werkflow-planning#503). This replaces the approval rule of item 2 of the amendment "a merge queue": the run waives growth only when each commit above `main` that touches a shrink-only list file belongs to a PR with `approved: list growth`. A rename touches both its paths. GitHub's records identify each commit's PR: the merge queue's entries, or the PR GitHub merged as that commit. A commit subject identifies nothing. A touching commit those records do not bind keeps the gate strict, and a commit with other than one parent, the commit below it, fails the run. The gate still measures growth against `main`. `scripts/ci/prepare.ts` (`approval`) owns the rule.

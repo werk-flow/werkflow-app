@@ -227,8 +227,9 @@ export const INTEGRATION_ATTEMPT = 1;
 
 /**
  * The environment of the batch prefix's integration run, on top of the runner's own: every job of
- * the run takes it. The run takes the list-growth approval of any PR in it (decision 0009, "a merge
- * queue").
+ * the run takes it. A PR with the list-growth approval runs alone, so the run takes its approval;
+ * Fast's approval step replaces it with what GitHub's records bind (docs/technical/ci-local-fallback.md,
+ * "What stays open").
  */
 export function integrationEnvironment(run: {
   tip: BatchEntry;
