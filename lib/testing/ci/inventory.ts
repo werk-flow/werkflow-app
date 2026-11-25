@@ -222,6 +222,7 @@ export const HEALTH_CHECKS = {
   'supabase-access-token-dev': { job: 'repository', key: 'keyed', runs: 'github' },
   'supabase-access-token-prod': { job: 'repository', key: 'keyed', runs: 'github' },
   'dev-database-url': { job: 'repository', key: 'keyed', runs: 'github' },
+  'supabase-dev-read-token': { job: 'repository', key: 'keyed', runs: 'github' },
   'vercel-token': { job: 'repository', key: 'keyed', runs: 'github' },
   'vercel-build-step': { job: 'repository', key: 'keyed', runs: 'github' },
   'pr-asset-branches': { job: 'repository', key: 'key-free', runs: 'health-pr-asset-branches' },
