@@ -390,7 +390,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['customer-relationships', ['customer_relationships.sql'], ['customers']],
   ['customer-atomic-writes', ['customer_atomic_writes.sql'], ['customers']],
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
-  ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
+  ['request-caller-matches', ['request_caller_matches.sql', 'global_search_matches.sql'], ['customers']],
   [
     'request-retry-results',
     ['request_retry_results.sql', 'request_offer_conversion_concurrency.sql'],
@@ -496,7 +496,6 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'time_correction_history_pages.sql',
       'record_number_options.sql',
       'entity_option_search.sql',
-      'global_search_matches.sql',
     ],
     ['customers', 'work', 'documents', 'inventory', 'service', 'time'],
   ],
