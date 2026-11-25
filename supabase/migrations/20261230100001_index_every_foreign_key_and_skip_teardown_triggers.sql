@@ -23,6 +23,7 @@ create index client_requests_assigned_to_fk_idx on public.client_requests (assig
 create index client_requests_closed_by_fk_idx on public.client_requests (closed_by);
 create index client_requests_contact_id_fk_idx on public.client_requests (contact_id);
 create index client_requests_converted_by_fk_idx on public.client_requests (converted_by);
+create index client_requests_converted_offer_fk_idx on public.client_requests (converted_offer_id, organization_id);
 create index client_requests_created_by_fk_idx on public.client_requests (created_by);
 create index client_requests_site_id_fk_idx on public.client_requests (site_id);
 create index client_sites_created_by_fk_idx on public.client_sites (created_by);
