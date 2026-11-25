@@ -6,7 +6,7 @@
 -- role reads or writes the comparison's runs or ends a mail, and the service
 -- role only reads the runs and adds one. Recording a resend attempt moves only
 -- a failed row of its own organization to the back of the resend order
--- (20261221100005_retry_every_failed_billing_mail_in_turn.sql,
+-- (20261231100005_retry_every_failed_billing_mail_in_turn.sql,
 -- werk-flow/werkflow-planning#498).
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
