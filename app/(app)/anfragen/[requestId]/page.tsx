@@ -11,6 +11,7 @@ import {
   toClientRequestEvent,
   WORK_TARGET_KIND_LABELS,
   requestWorkHref,
+  offerDetailHref,
   type ClientRequest,
   type ClientRequestEvent,
   type WorkTargetKind,
@@ -84,6 +85,14 @@ function readLabelWave(admin: AdminClient, activeOrgId: string, request: ClientR
           .eq('organization_id', activeOrgId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    request.convertedOfferId
+      ? admin
+          .from('offers')
+          .select('id, offer_number')
+          .eq('id', request.convertedOfferId)
+          .eq('organization_id', activeOrgId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
     // One request has a handful of events, so the actor list is small.
     readInBatches(actorIds, (batch) =>
       admin.from('profiles').select('id, first_name, last_name, email').in('id', batch),
@@ -106,6 +115,7 @@ function anyLabelReadFailed(labelWave: LabelWave, convertedServiceCaseResult: ob
     equipmentResult,
     convertedJobResult,
     convertedProjectResult,
+    convertedOfferResult,
   ] = labelWave;
   const results: ReadonlyArray<object> = [
     clientResult,
@@ -115,6 +125,7 @@ function anyLabelReadFailed(labelWave: LabelWave, convertedServiceCaseResult: ob
     equipmentResult,
     convertedJobResult,
     convertedProjectResult,
+    convertedOfferResult,
     convertedServiceCaseResult,
   ];
   return results.some((result) => 'error' in result && Boolean(result.error));
@@ -124,8 +135,12 @@ function anyLabelReadFailed(labelWave: LabelWave, convertedServiceCaseResult: ob
 function convertedLinkOf(
   convertedJob: LabelWave[5]['data'],
   convertedProject: LabelWave[6]['data'],
+  convertedOffer: LabelWave[7]['data'],
   convertedServiceCase: { case_number: string } | null,
 ): RequestDetailData['convertedLink'] {
+  if (convertedOffer) {
+    return { label: `Angebot ${convertedOffer.offer_number}`, href: offerDetailHref(convertedOffer.id) };
+  }
   return convertedJob
     ? {
         label: `Auftrag ${convertedJob.job_number ?? convertedJob.title}`,
@@ -193,6 +208,7 @@ function requestDetailData({
     equipmentResult,
     convertedJobResult,
     convertedProjectResult,
+    convertedOfferResult,
     actorsResult,
   ],
 }: {
@@ -246,6 +262,7 @@ function requestDetailData({
     convertedLink: convertedLinkOf(
       convertedJobResult.data,
       convertedProjectResult.data,
+      convertedOfferResult.data,
       convertedServiceCase,
     ),
     attachedLink: attachedLinkOf(attachedEntry),

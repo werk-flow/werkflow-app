@@ -52,6 +52,8 @@ type ExcludedTable =
   // WerkFlow's own delivery state of its billing mails and alarms; the
   // Admin sees the mails on the billing page.
   | 'werkflow_billing_mails'
+  // WerkFlow's daily comparison runs with Stripe: counts, no organization.
+  | 'werkflow_billing_reconciliations'
   // WerkFlow's own invoices to the organization: WerkFlow's books, which the
   // Admin downloads on the billing page (werk-flow/werkflow-planning#252).
   | 'werkflow_invoices'

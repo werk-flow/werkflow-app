@@ -158,6 +158,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   converted_at: 'Umgewandelt am',
   converted_by: 'Umgewandelt von (ID)',
   converted_job_id: 'Umgewandelt in Auftrag (ID)',
+  converted_offer_id: 'Umgewandelt in Angebot (ID)',
   converted_project_id: 'Umgewandelt in Projekt (ID)',
   copied_from_document_id: 'Kopiert aus Dokument (ID)',
   copied_from_item_id: 'Kopiert aus Schritt (ID)',

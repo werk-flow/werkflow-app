@@ -59,6 +59,7 @@ export type ClientRequest = {
   closedAt: string | null;
   convertedJobId: string | null;
   convertedProjectId: string | null;
+  convertedOfferId: string | null;
   convertedBy: string | null;
   convertedAt: string | null;
   createdBy: string | null;
@@ -221,6 +222,12 @@ export type ConvertRequestResult =
   | PlanningWarningFailure
   | ActionResult<{ target: 'project'; projectId: string; projectNumber: string | null }>;
 
+/** The offer draft a request became. */
+export type ConvertRequestToOfferResult = ActionResult<{ offerId: string; offerNumber: string }>;
+
+/** The detail page of an offer. */
+export const offerDetailHref = (offerId: string): string => `/angebote/${encodeURIComponent(offerId)}`;
+
 /** The kinds of existing work a request can be attached to. */
 export const WORK_TARGET_KINDS = ['job', 'project', 'service_case'] as const;
 export type WorkTargetKind = (typeof WORK_TARGET_KINDS)[number];
@@ -303,6 +310,25 @@ export function describeAttachedRequestEvent(payload: unknown): { label: string;
   };
 }
 
+// The 'converted' history row of a conversion into an offer, which never
+// changes its number. A job or project number can change, so their
+// conversions keep the request's link.
+const convertedToOfferSchema = z.object({
+  target: z.literal('offer'),
+  offerId: z.string().min(1),
+  offerNumber: z.string().min(1),
+});
+
+/** A `converted` request event that made an offer, as one line naming the offer and its page; null otherwise. */
+export function describeConversionToOffer(payload: unknown): { label: string; href: string } | null {
+  const parsed = convertedToOfferSchema.safeParse(payload);
+  if (!parsed.success) return null;
+  return {
+    label: `In Angebot ${parsed.data.offerNumber} umgewandelt`,
+    href: offerDetailHref(parsed.data.offerId),
+  };
+}
+
 // ============================================
 // Converters
 // ============================================
@@ -335,6 +361,7 @@ export function toClientRequest(row: ClientRequestRow): ClientRequest {
     closedAt: row.closed_at,
     convertedJobId: row.converted_job_id,
     convertedProjectId: row.converted_project_id,
+    convertedOfferId: row.converted_offer_id,
     convertedBy: row.converted_by,
     convertedAt: row.converted_at,
     createdBy: row.created_by,
