@@ -23,6 +23,12 @@ export type SetCapture = CaptureSpec & {
   destination?: (world: TestWorld) => Promise<SurfaceDestination>;
   /** A dialog that pictures the page as it opens, such as the report's screenshot, opens anew in each scheme. */
   openInEachScheme?: true;
+  /**
+   * Captured as the admin of the world's outsider organization instead of the
+   * role's own account. No set seeds anything there, so a capture of an empty
+   * screen stays empty whatever the sets before it seeded.
+   */
+  session?: 'outsider';
 };
 
 export type OpenSet = AcceptanceSet<SetCapture>;

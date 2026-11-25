@@ -12,13 +12,12 @@ Deine Rolle
 Admin
 Erstellt am
 1. Januar 2026
+Mitglieder
+4
 Allgemeine Angaben
 Admins können den Organisationsnamen und den Code für den Beitritt pflegen.
 Name der Organisation
 *
 Pflichtfeld
 Pro Admin darf jeder Organisationsname nur einmal vergeben sein.
-Organisationscode
-*
-Pflichtfeld
 Nicht eingestempelt

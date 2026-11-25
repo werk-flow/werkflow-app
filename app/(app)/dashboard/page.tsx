@@ -6,10 +6,12 @@ import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberCount, getCachedMemberships } from '@/lib/data/cached';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import { DashboardCards } from '@/components/dashboard/dashboard-cards';
+import { OfficeStart } from '@/components/dashboard/office-start';
 import { WorkerStart } from '@/components/dashboard/worker-start';
 import { DashboardContentSkeleton } from '@/components/loading-states/dashboard-content-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
+import { isManagerRole } from '@/lib/roles';
 
 async function DashboardData({ activeOrgId }: { activeOrgId: string | null }) {
   if (!activeOrgId) return <DashboardCards initialMemberCount={null} />;
@@ -36,9 +38,10 @@ export default async function DashboardPage() {
     resolveActiveOrgId(cookieStore, user.id),
     getCachedMemberships(user.id),
   ]);
+  const role = memberships.find((entry) => entry.orgId === activeOrgId)?.role;
   // The start page of every role: a field worker's phone refreshes the day it keeps for signal loss here
   // (WorkerStart). Only the gate is rendered here; the refresh takes person and organization from the client contexts.
-  const keepsToday = memberships.some((entry) => entry.orgId === activeOrgId && entry.role === 'employee');
+  const keepsToday = role === 'employee';
 
   return (
     <PageShell>
@@ -71,9 +74,11 @@ export default async function DashboardPage() {
       </Suspense>
 
       <PageBody className="space-y-4">
-        {/* A field worker's start reads in the browser: every clock action renders this page again. */}
+        {/* Each start reads in the browser: every clock action renders this page again. */}
         {keepsToday ? (
           <WorkerStart />
+        ) : role && isManagerRole(role) ? (
+          <OfficeStart />
         ) : (
           <Suspense fallback={<DashboardContentSkeleton />}>
             <DashboardData activeOrgId={activeOrgId} />

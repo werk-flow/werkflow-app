@@ -2138,6 +2138,42 @@
           "reason": null
         },
         {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 6113, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 14625, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 6276, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 15171, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-19T074926196Z-e4c59c"],
+          "reason": "Owner decision 2026-11-19 (werk-flow/werkflow-planning#23, Owner queue 3): with the Aufgaben code out of the shell, the job page loads eight shared pieces itself"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8475, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9027, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-19T074926196Z-e4c59c"],
+          "reason": "Owner decision 2026-11-19 (werk-flow/werkflow-planning#23, Owner queue 3): with the Aufgaben code out of the shell, the job page loads eight shared pieces itself"
+        },
+        {
           "kind": "ratchet",
           "target": "componentRenders",
           "from": { "reference": 1583, "tolerance": 31 },
@@ -2150,8 +2186,8 @@
           "target": "route:/auftraege/[jobNumber]",
           "from": {
             "requests": { "reference": 1, "tolerance": 0 },
-            "encodedBytes": { "reference": 6113, "tolerance": { "relative": 1, "absolute": 512 } },
-            "decodedBytes": { "reference": 14625, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "encodedBytes": { "reference": 6276, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 15171, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "rows": null
           },
           "to": {
@@ -2168,7 +2204,7 @@
           "target": "script",
           "from": {
             "requests": { "reference": 1, "tolerance": 0 },
-            "encodedBytes": { "reference": 8475, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "encodedBytes": { "reference": 9027, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "decodedBytes": null,
             "rows": null
           },
@@ -2997,7 +3033,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 14, "tolerance": 0 },
+        "requests": { "reference": 10, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -3007,9 +3043,9 @@
       "payloads": {
         "background:attention-overview": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 2058, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 1028, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": { "reference": 5, "tolerance": 0 }
+          "encodedBytes": { "reference": 28181, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 27144, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 125, "tolerance": 0 }
         },
         "background:own-personnel-actions": {
           "requests": { "reference": 2, "tolerance": 0 },
@@ -3031,13 +3067,13 @@
         },
         "route:/aufgaben": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1560, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 4628, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1067, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 3963, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
-          "requests": { "reference": 10, "tolerance": 0 },
-          "encodedBytes": { "reference": 114766, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 6, "tolerance": 0 },
+          "encodedBytes": { "reference": 57595, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -3272,9 +3308,45 @@
           "kind": "raise",
           "target": "requests",
           "from": { "reference": 8, "tolerance": 0 },
-          "to": { "reference": 14, "tolerance": 0 },
-          "runKeys": ["2026-11-21T055139544Z-a5f23c"],
-          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the Aufgaben page's code and the Zeiterfassung prefetch's date picker no longer come with the layout's start-up, so opening Aufgaben fetches their chunks (4 to 10 scripts); no organization switch is involved; start-up 66 KB gzip lighter for every role"
+          "to": { "reference": 9, "tolerance": 0 },
+          "runKeys": ["2026-11-19T064235930Z-0d27c4"],
+          "reason": "Owner decision 2026-11-19 (werk-flow/werkflow-planning#23, Owner queue 1): opening Aufgaben loads its own code so every cold start loads one script less"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "background:attention-overview",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 2058, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 1028, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 5, "tolerance": 0 }
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 28181, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 27144, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 125, "tolerance": 0 }
+          },
+          "runKeys": ["2026-11-19T064235930Z-0d27c4"],
+          "reason": "Aufgaben lists overdue jobs (E8 #488); the lab world finishes no job"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/aufgaben",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1560, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 4628, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1067, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 3963, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-19T072721249Z-f21a92"],
+          "reason": "Aufgaben loads its own chunk instead of the shell's (owner decision 2026-11-19, werk-flow/werkflow-planning#23)"
         },
         {
           "kind": "ceiling-accept",
@@ -3286,6 +3358,32 @@
             "rows": null
           },
           "to": {
+            "requests": { "reference": 5, "tolerance": 0 },
+            "encodedBytes": { "reference": 41344, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-19T232617759Z-fde7b4"],
+          "reason": "Owner decision 2026-11-19 (werk-flow/werkflow-planning#23, Owner queue 1): opening Aufgaben loads its own code; these are that script's bytes (lead's reading of the decision)"
+        },
+        {
+          "kind": "raise",
+          "target": "requests",
+          "from": { "reference": 9, "tolerance": 0 },
+          "to": { "reference": 14, "tolerance": 0 },
+          "runKeys": ["2026-11-21T055139544Z-a5f23c"],
+          "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the Aufgaben page's code and the Zeiterfassung prefetch's date picker no longer come with the layout's start-up, so opening Aufgaben fetches their chunks (4 to 10 scripts); no organization switch is involved; start-up 66 KB gzip lighter for every role"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 5, "tolerance": 0 },
+            "encodedBytes": { "reference": 41344, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
             "requests": { "reference": 10, "tolerance": 0 },
             "encodedBytes": { "reference": 114766, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "decodedBytes": null,
@@ -3293,6 +3391,32 @@
           },
           "runKeys": ["2026-11-22T013828858Z-cf6463"],
           "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: code moved from the layout's start-up to the page's first open. #560 raised this step's requests and left its script shape at the old request count, so its bytes printed ungated; fresh main ecc4ba31 measured 10 script requests (was 4) and 114,766 B."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 14, "tolerance": 0 },
+          "to": { "reference": 10, "tolerance": 0 },
+          "runKeys": ["2026-11-23T052851921Z-d9c19d"],
+          "reason": null
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 10, "tolerance": 0 },
+            "encodedBytes": { "reference": 114766, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 6, "tolerance": 0 },
+            "encodedBytes": { "reference": 57595, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-23T052851921Z-d9c19d"],
+          "reason": "Merged with main 027ece04 (#560): Aufgaben's code no longer comes with the start-up, and the office start on the dashboard already loaded the overview's code, so opening Aufgaben fetches 6 scripts (57,595 B) where main measures 10 (115,236 B) in the same session"
         }
       ]
     },
