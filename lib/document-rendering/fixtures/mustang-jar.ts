@@ -4,7 +4,6 @@
 // Usage: bun lib/document-rendering/fixtures/mustang-jar.ts         prints the cache's key and path
 //        bun lib/document-rendering/fixtures/mustang-jar.ts verify  exits 0 only for the pinned jar
 
-import { createHash } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
@@ -17,6 +16,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { hexSha256 } from '@/lib/security/hex-sha256';
 
 const MUSTANG_VERSION = '2.26.0';
 const MUSTANG_SHA256 = '42d7868cb68264874a7b8cab4c3587b03b23ccc7cd72373da917f66758bb9736';
@@ -53,11 +53,9 @@ const LIMITS: Limits = { requestMs: 60_000, totalMs: 4 * 60_000 };
 /** The waits before each retry of a busy answer. */
 const RETRY_DELAYS_MS = [5_000, 20_000, 60_000];
 
-const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
-
 /** Whether the file at `path` exists and has the SHA-256 `expected`. */
 export const matches = (path: string, expected: string): boolean =>
-  existsSync(path) && sha256(readFileSync(path)) === expected;
+  existsSync(path) && hexSha256(readFileSync(path)) === expected;
 
 /** Whether a mirror answer says "later": rate limited or briefly unavailable. */
 const busy = (status: number): boolean => status === 429 || status >= 500;
@@ -96,7 +94,7 @@ export async function pinnedFile(
     answer = await download(pin.url, Math.min(limits.requestMs, left()), network);
   }
   if (!answer.bytes) throw new Error(`${pin.url} answered ${answer.status}.`);
-  const digest = sha256(answer.bytes);
+  const digest = hexSha256(answer.bytes);
   if (digest !== pin.sha256)
     throw new Error(`${pin.url} has the SHA-256 ${digest}, not the pinned ${pin.sha256}.`);
   mkdirSync(dirname(pin.path), { recursive: true });
@@ -118,7 +116,7 @@ export async function pinnedFile(
  */
 export function privateCopy(path: string, expected: string): string {
   const bytes = readFileSync(path);
-  if (sha256(bytes) !== expected) throw new Error(`${path} does not have the pinned SHA-256.`);
+  if (hexSha256(bytes) !== expected) throw new Error(`${path} does not have the pinned SHA-256.`);
   const copy = join(mkdtempSync(join(tmpdir(), 'mustang-')), basename(path));
   writeFileSync(copy, bytes, { mode: 0o444 });
   chmodSync(copy, 0o444);
