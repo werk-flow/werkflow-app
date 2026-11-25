@@ -7,12 +7,13 @@ import { ROW_PAGE_SIZE, readInBatches } from '@/lib/supabase/query-batches';
 import { billingFailure } from '@/lib/werkflow-billing/failure';
 import { resendDebitNotice, sendInvoiceMail, sendReceiptMail } from '@/lib/werkflow-billing/invoice-mails';
 import { raiseBillingAlarm } from '@/lib/werkflow-billing/mail-delivery';
-import { expireDebitNotice } from '@/lib/werkflow-billing/mail-ledger';
+import { type CustomerMailKind, expireDebitNotice } from '@/lib/werkflow-billing/mail-ledger';
 import {
   type BillingAlarmFacts,
   type BillingAlarmKind,
   isBillingAlarmKind,
 } from '@/lib/werkflow-billing/mails/alarm';
+import { sendRefundMail } from '@/lib/werkflow-billing/refund-mail';
 import { HANDLED_EVENT_TYPES } from '@/lib/werkflow-billing/signals/dispatch';
 import { handleMandateChange } from '@/lib/werkflow-billing/signals/mandate';
 import { handleFailedInvoice } from '@/lib/werkflow-billing/signals/payment-failed';
@@ -62,13 +63,21 @@ export type ReconciliationRun = {
 type Resend = (stripeObjectId: string, stripe: StripeGateway) => Promise<void>;
 type FailedMail = { id: string; kind: string; stripe_object_id: string; failure_code: string | null };
 
-const RESEND_CUSTOMER_MAIL: Readonly<Record<string, Resend>> = {
+// Every customer mail kind has its resend, so a kind without one fails the type
+// check; a debit notice resends only for its own renewal (resendDebitNotice below).
+type ResentByObject = Exclude<CustomerMailKind, 'debit_notice'>;
+const RESEND_CUSTOMER_MAIL: Readonly<Record<ResentByObject, Resend>> = {
   payment_failed: handleFailedInvoice,
   card_problem: handleFailedInvoice,
   mandate_inactive: handleMandateChange,
   invoice: (id, stripe) => sendInvoiceMail(id, stripe),
   receipt: (id, stripe) => sendReceiptMail(id, stripe),
+  refund: (id, stripe) => sendRefundMail(id, stripe),
 };
+
+function isResentByObject(kind: string): kind is ResentByObject {
+  return Object.hasOwn(RESEND_CUSTOMER_MAIL, kind);
+}
 
 /** Sends one failed row again; the ledger then holds its new state. A debit notice whose renewal has passed answers `passed`. */
 async function resend(row: FailedMail, stripe: StripeGateway, now: Date): Promise<'resent' | 'passed'> {
@@ -87,9 +96,8 @@ async function resend(row: FailedMail, stripe: StripeGateway, now: Date): Promis
     });
     return 'resent';
   }
-  const send = RESEND_CUSTOMER_MAIL[row.kind];
-  if (!send) throw billingFailure('billing_mail_kind_unknown');
-  await send(row.stripe_object_id, stripe);
+  if (!isResentByObject(row.kind)) throw billingFailure('billing_mail_kind_unknown');
+  await RESEND_CUSTOMER_MAIL[row.kind](row.stripe_object_id, stripe);
   return 'resent';
 }
 
