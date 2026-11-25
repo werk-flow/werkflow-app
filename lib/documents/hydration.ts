@@ -43,6 +43,7 @@ function collectDocumentLinkTargetIds(linkRows: DocumentLinkRow[]): {
   equipmentIds: string[];
   serviceCaseIds: string[];
   maintenanceCoverageIds: string[];
+  offerIds: string[];
 } {
   const jobIds = Array.from(
     new Set(linkRows.map((link) => link.job_id).filter((id): id is string => Boolean(id))),
@@ -68,6 +69,9 @@ function collectDocumentLinkTargetIds(linkRows: DocumentLinkRow[]): {
   const maintenanceCoverageIds = Array.from(
     new Set(linkRows.map((link) => link.maintenance_coverage_id).filter((id): id is string => Boolean(id))),
   );
+  const offerIds = Array.from(
+    new Set(linkRows.map((link) => link.offer_id).filter((id): id is string => Boolean(id))),
+  );
   return {
     jobIds,
     projectIds,
@@ -77,6 +81,7 @@ function collectDocumentLinkTargetIds(linkRows: DocumentLinkRow[]): {
     equipmentIds,
     serviceCaseIds,
     maintenanceCoverageIds,
+    offerIds,
   };
 }
 
@@ -127,11 +132,11 @@ function readCoreLinkTargets(
   ]);
 }
 
-/** The requests, equipment, service cases and maintenance coverages the links name. */
+/** The requests, equipment, service cases, maintenance coverages and offers the links name. */
 function readServiceLinkTargets(
   admin: SupabaseAdmin,
   organizationIds: string[],
-  { requestIds, equipmentIds, serviceCaseIds, maintenanceCoverageIds }: DocumentLinkTargetIds,
+  { requestIds, equipmentIds, serviceCaseIds, maintenanceCoverageIds, offerIds }: DocumentLinkTargetIds,
 ) {
   return Promise.all([
     requestIds.length > 0
@@ -170,6 +175,16 @@ function readServiceLinkTargets(
             .in('id', [...ids]),
         )
       : Promise.resolve({ data: [], error: null }),
+    // Only a manager reads an offer link (readableDocumentLinks).
+    offerIds.length > 0
+      ? readInBatches(offerIds, (ids) =>
+          admin
+            .from('offers')
+            .select('id, offer_number')
+            .in('organization_id', organizationIds)
+            .in('id', [...ids]),
+        )
+      : Promise.resolve({ data: [], error: null }),
   ]);
 }
 
@@ -180,7 +195,7 @@ async function readDocumentLinkTargets(
 ) {
   const [
     [jobsResult, projectsResult, clientsResult, employeesResult],
-    [requestsResult, equipmentResult, serviceCasesResult, maintenanceCoveragesResult],
+    [requestsResult, equipmentResult, serviceCasesResult, maintenanceCoveragesResult, offersResult],
   ] = await Promise.all([
     readCoreLinkTargets(admin, organizationIds, targetIds),
     readServiceLinkTargets(admin, organizationIds, targetIds),
@@ -196,6 +211,7 @@ async function readDocumentLinkTargets(
       equipmentResult,
       serviceCasesResult,
       maintenanceCoveragesResult,
+      offersResult,
     ].some((result) => result.error)
   )
     throw new Error('Dokumentverknüpfungen konnten nicht geladen werden.');
@@ -208,6 +224,7 @@ async function readDocumentLinkTargets(
     equipmentResult,
     serviceCasesResult,
     maintenanceCoveragesResult,
+    offersResult,
   };
 }
 
@@ -225,6 +242,7 @@ function indexDocumentLinkTargets(results: Awaited<ReturnType<typeof readDocumen
     equipmentResult,
     serviceCasesResult,
     maintenanceCoveragesResult,
+    offersResult,
   } = results;
   const jobsById = rowsById(jobsResult.data);
   const projectsById = rowsById(projectsResult.data);
@@ -234,6 +252,7 @@ function indexDocumentLinkTargets(results: Awaited<ReturnType<typeof readDocumen
   const equipmentById = rowsById(equipmentResult.data);
   const serviceCasesById = rowsById(serviceCasesResult.data);
   const maintenanceCoveragesById = rowsById(maintenanceCoveragesResult.data);
+  const offersById = rowsById(offersResult.data);
   return {
     jobsById,
     projectsById,
@@ -243,6 +262,7 @@ function indexDocumentLinkTargets(results: Awaited<ReturnType<typeof readDocumen
     equipmentById,
     serviceCasesById,
     maintenanceCoveragesById,
+    offersById,
   };
 }
 
@@ -259,6 +279,7 @@ function buildDocumentLinksByDocumentId(
     equipmentById,
     serviceCasesById,
     maintenanceCoveragesById,
+    offersById,
   } = targets;
   const linksByDocumentId = new Map<string, DocumentLink[]>();
   for (const linkRow of linkRows) {
@@ -272,6 +293,7 @@ function buildDocumentLinksByDocumentId(
     const maintenanceCoverage = linkRow.maintenance_coverage_id
       ? maintenanceCoveragesById.get(linkRow.maintenance_coverage_id)
       : null;
+    const offer = linkRow.offer_id ? offersById.get(linkRow.offer_id) : null;
     const employeeName = employee
       ? [employee.first_name, employee.last_name].filter(Boolean).join(' ') || employee.email
       : null;
@@ -292,6 +314,7 @@ function buildDocumentLinksByDocumentId(
         serviceCaseNumber: serviceCase?.case_number ?? null,
         serviceCaseSummary: serviceCase?.summary ?? null,
         maintenanceCoverageNumber: maintenanceCoverage?.coverage_number ?? null,
+        offerNumber: offer?.offer_number ?? null,
       }),
     );
     linksByDocumentId.set(linkRow.document_id, links);

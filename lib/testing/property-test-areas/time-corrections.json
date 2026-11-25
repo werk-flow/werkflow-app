@@ -1,0 +1,32 @@
+{
+  "area": "Time corrections",
+  "rule": "Zeitkorrektur of recorded time: midnight split, 24-hour limit, timeline, break warning, projection, pending sum",
+  "roots": ["lib/time-corrections"],
+  "covered": [
+    "lib/time-corrections/break-warning.ts",
+    "lib/time-corrections/calendar-proposal.ts",
+    "lib/time-corrections/merge-proposal.ts",
+    "lib/time-corrections/projection.ts",
+    "lib/time-corrections/provisional-summary.ts",
+    "lib/time-corrections/segment-snapshot.ts",
+    "lib/time-corrections/snapshot-segments.ts",
+    "lib/time-corrections/submission.ts",
+    "lib/time-corrections/timeline-validation.ts",
+    "lib/time-corrections/timeline.ts"
+  ],
+  "exempt": {
+    "lib/time-corrections/actions.ts": "Server Actions that authorize, call the database and revalidate; their time rules live in submission.ts and the covered modules it calls.",
+    "lib/time-corrections/approved-projection.ts": "Reads approved correction applications from the database; projection.ts applies them to recorded time.",
+    "lib/time-corrections/calendar-draft.ts": "Maps a calendar drag to correction boundaries one to one and passes the times through; calendar-proposal.ts moves them.",
+    "lib/time-corrections/history-visibility.ts": "Which correction requests a role sees: a permission rule, no time or money.",
+    "lib/time-corrections/messages.ts": "German failure sentences; no rule.",
+    "lib/time-corrections/pending-projection.ts": "Reads the pending requests a caller may see: a visibility rule, no time arithmetic.",
+    "lib/time-corrections/planned-visit-reads.ts": "Server Action that reads a day's planned visits to prefill a timeline; it records no time.",
+    "lib/time-corrections/read-actions.ts": "Server Action readers of corrections; the pending sum they return comes from provisional-summary.ts.",
+    "lib/time-corrections/request-list.ts": "Reads and labels correction requests for the cards; their activities come from snapshot-segments.ts.",
+    "lib/time-corrections/source-context.ts": "Reads a correction's source facts; a segment's facts come from segment-snapshot.ts.",
+    "lib/time-corrections/timeline-server.ts": "Reads recorded time for the timeline check; timeline-validation.ts decides it.",
+    "lib/time-corrections/types.ts": "Types, labels and the fact-to-entry mapping that projection.property.test.ts drives through applyApprovedTimeCorrections.",
+    "lib/time-corrections/validation.ts": "Zod input schemas and the kind-to-fact-count shape check; it computes no time, timeline-validation.ts checks the proposed times."
+  }
+}

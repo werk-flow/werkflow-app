@@ -35,6 +35,7 @@ declare
     'rate_limit_attempts',        -- keyed subject hashes; a limit can apply before an organization is known.
     'resend_webhook_events',      -- Svix and provider message ids; the owning ledger holds the organization.
     'subscriptions',              -- billing per paying account (user_id); closes with the payment slice.
+    'werkflow_billing_reconciliations', -- WerkFlow's daily comparison runs with Stripe, across every customer.
     'werkflow_billing_signals'    -- Stripe event ids before any handler maps one to an organization.
   ];
   offender text; stale text;

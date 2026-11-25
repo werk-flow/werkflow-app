@@ -5,7 +5,8 @@
   "regions": ["fra1"],
   "crons": [
     { "path": "/api/problem-report-retention", "schedule": "0 1 * * *" },
-    { "path": "/api/storage-purge", "schedule": "0 2 * * *" }
+    { "path": "/api/storage-purge", "schedule": "0 2 * * *" },
+    { "path": "/api/werkflow-billing-reconciliation", "schedule": "0 6 * * *" }
   ],
   "git": {
     "deploymentEnabled": {
