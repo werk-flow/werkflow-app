@@ -15,6 +15,7 @@ import { readSignatureViewContract, readWorkArtifactDetailContract } from './wor
 import { readDraftJobAccessContract } from './device-draft-boundaries';
 import { readRequestWorkTargetsContract } from './request-attach-boundaries';
 import { readBreakRuleWeekEntries, readBreakRuleWeekPolicy } from './break-rule-week-boundaries';
+import { readOnCallOverviewContract } from './worker-start-service-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -47,6 +48,7 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'work-artifacts') return readDraftJobAccessContract();
   if (kind === 'document-view-url') return readSignatureViewContract();
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();
+  if (kind === 'on-call-overview') return readOnCallOverviewContract();
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));
   // The job edit dialog's assignment reads stay in flight: its focus contract

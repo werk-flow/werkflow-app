@@ -5,7 +5,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { ClockActionList } from '@/components/clock-action-list';
 import { getTargetSourceHint } from '@/lib/personnel/targets';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
-import { useClockState } from '@/components/clock-state-provider';
+import { useClockState } from '@/components/clock-state-context';
 import { VacationSection } from './vacation-section';
 import { SicknessSection } from './sickness-section';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';

@@ -1,6 +1,5 @@
 // Rule test: a moved digest fails with the fix it needs, and a re-key moves only the key.
-import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 
@@ -22,6 +21,7 @@ import {
   wallClockDigestProblems,
 } from './reference-digests';
 import archivedWorkload from './workload-archive/performance-workload.json';
+import { temporaryDirectory } from './temporary-directory';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const oldDigest = 'a'.repeat(64);
@@ -193,31 +193,27 @@ test('a lab re-key changes only the workload key, and the history still replays'
 });
 
 test('an edit to a workload file moves the reviewed digest, and the re-keyed history replays', () => {
-  const tree = mkdtempSync(join(tmpdir(), 'reference-digests-'));
-  try {
-    for (const file of [
-      'tests/audit/support/performance-profile.ts',
-      'tests/audit/support/seed-publication.ts',
-      'lib/testing/fixture-publication.ts',
-      'lib/testing/workload-archive',
-    ])
-      cpSync(resolve(repositoryRoot, file), join(tree, file), { recursive: true });
-    expect(reviewedWorkloadDigest(tree, typical)).toBe(typicalDigest);
-    const profile = join(tree, 'tests/audit/support/performance-profile.ts');
-    writeFileSync(profile, 'export const typedAway = true;');
-    const movedDigest = reviewedWorkloadDigest(tree, typical);
-    expect(movedDigest).not.toBe(typicalDigest);
+  const tree = temporaryDirectory('reference-digests-');
+  for (const file of [
+    'tests/audit/support/performance-profile.ts',
+    'tests/audit/support/seed-publication.ts',
+    'lib/testing/fixture-publication.ts',
+    'lib/testing/workload-archive',
+  ])
+    cpSync(resolve(repositoryRoot, file), join(tree, file), { recursive: true });
+  expect(reviewedWorkloadDigest(tree, typical)).toBe(typicalDigest);
+  const profile = join(tree, 'tests/audit/support/performance-profile.ts');
+  writeFileSync(profile, 'export const typedAway = true;');
+  const movedDigest = reviewedWorkloadDigest(tree, typical);
+  expect(movedDigest).not.toBe(typicalDigest);
 
-    const references = readLabReferences();
-    const change = { fromDigest: typicalDigest, reason: 'a type-only edit' };
-    const rekeyed = rekeyLabWorkload(tree, references, change);
-    expect(rekeyed.steps.every((step) => step.context.workloadDigest === movedDigest)).toBe(true);
-    expect(labReferenceProblems(rekeyed, LAB_STEPS)).toEqual([]);
-    // The tree already on the digest moves nothing.
-    expect(rekeyLabWorkload(repositoryRoot, references, change)).toEqual(references);
-  } finally {
-    rmSync(tree, { recursive: true, force: true });
-  }
+  const references = readLabReferences();
+  const change = { fromDigest: typicalDigest, reason: 'a type-only edit' };
+  const rekeyed = rekeyLabWorkload(tree, references, change);
+  expect(rekeyed.steps.every((step) => step.context.workloadDigest === movedDigest)).toBe(true);
+  expect(labReferenceProblems(rekeyed, LAB_STEPS)).toEqual([]);
+  // The tree already on the digest moves nothing.
+  expect(rekeyLabWorkload(repositoryRoot, references, change)).toEqual(references);
 });
 
 test('a wall-clock re-key keeps every value and records the reason beside the reference', () => {

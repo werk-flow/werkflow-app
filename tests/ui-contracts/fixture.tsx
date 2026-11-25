@@ -49,6 +49,7 @@ import { OfflineClockContractFixture, UnsentTimeLandingContractFixture } from '.
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
 import { ReturnOnSignal } from '@/app/offline/return-on-signal';
 import { RetryButton } from '@/app/offline/retry-button';
+import { WorkerStartContractFixture } from './worker-start-boundaries';
 import { WorkHandoverContractFixture } from './work-handover-boundaries';
 import { EditJobContractFixture } from './edit-job-boundaries';
 import { SiteAccessProposalContractFixture, SiteAccessReviewContractFixture } from './site-access-boundaries';
@@ -113,7 +114,7 @@ import { TimeInput } from '@/components/ui/time-input';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { useSignOut } from '@/hooks/use-sign-out';
-import { SimulatePaymentButton } from '@/app/upgrade/simulate-payment-button';
+import { SubscribeButton } from '@/app/upgrade/subscribe-button';
 import { SignOutAndRedirectButton } from '@/app/invite-error/sign-out-redirect-button';
 import { initializeServiceBoundaries } from './service-boundaries';
 import { WorkLifecycleCard } from '@/components/auftraege/lifecycle/work-lifecycle-card';
@@ -479,7 +480,7 @@ function ContractFixture(): React.JSX.Element {
         <DropdownFixture />
         <NestedLocationFixture />
         <section aria-label="Zahlung">
-          <SimulatePaymentButton />
+          <SubscribeButton />
         </section>
         <section aria-label="Abmeldung">
           <SignOutFixture />
@@ -705,6 +706,8 @@ createRoot(root).render(
       <ReturnOnSignal />
       <RetryButton />
     </main>
+  ) : window.uiContractFixture === 'worker-start' ? (
+    <WorkerStartContractFixture />
   ) : window.uiContractFixture === 'offline-clock' ? (
     <OfflineClockContractFixture />
   ) : window.uiContractFixture === 'unsent-time-landing' ? (

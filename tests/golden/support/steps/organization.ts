@@ -1,10 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { ROLE_LABELS } from '../../../../lib/roles';
-import { getOrganizationByName, type PersistedOrganization } from '../db/shared';
+import { createAdminClient, getOrganizationByName, type PersistedOrganization } from '../db/shared';
 import { confirmTestUserEmail } from '../seed';
-import { hydratedAndSettled, pressKey, settledBeforeTimeout } from './interaction';
+import { hydratedAndSettled, settledBeforeTimeout } from './interaction';
 import { openMemberDetailFromList } from './personnel';
-import { listEntry, openDialogWithRetry, pendingRow, SHARED_COPY, visibleText } from './shared';
+import { listEntry, openDialogWithRetry, openMenuItem, pendingRow, SHARED_COPY, visibleText } from './shared';
 
 /** Copy of accounts, organizations, membership and the member list. */
 const ORGANIZATION_COPY = {
@@ -24,7 +25,6 @@ const ORGANIZATION_COPY = {
   accountMenu: 'Kontomenü öffnen',
   /** The phone header's button that opens the sidebar as a sheet, and the sheet's close button. */
   phoneMenu: { open: 'Menü öffnen', close: 'Menü schließen' },
-  simulatePayment: 'Zahlung simulieren / Fortfahren',
   organizationName: 'Name der Organisation',
   createOrganization: 'Organisation erstellen',
   /** The dashboard's banner after a created organization's first load (app/(app)/dashboard/page.tsx). */
@@ -137,9 +137,50 @@ export async function signUpViaUi(page: Page, account: SignupAccount): Promise<v
   await expect(page).toHaveURL(/\/(upgrade|onboarding)/);
 }
 
-/** The upgrade page's payment simulation that continues to the organization form. */
-export function simulatedPaymentButton(page: Page): Locator {
-  return page.getByRole('button', { name: ORGANIZATION_COPY.simulatePayment });
+/**
+ * Records a paid Checkout for a signed-up test account, as Stripe's signals
+ * would (werk-flow/werkflow-planning#248): a reservation whose subscription
+ * is active. Browser journeys never reach Stripe.
+ */
+async function recordPaidCheckout(email: string): Promise<void> {
+  if (!email.endsWith('@werkflow-golden.test')) {
+    throw new Error(`Refusing to pay for non-test address: ${email}`);
+  }
+  const admin = createAdminClient();
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('email', email)
+    .single();
+  if (profileError) throw new Error(`Signup profile not found for ${email}: ${profileError.message}`);
+  const organizationId = randomUUID();
+  const suffix = organizationId.replaceAll('-', '');
+  const { error: reserveError } = await admin.rpc('begin_werkflow_checkout', {
+    p_organization_id: organizationId,
+    p_user_id: profile.id,
+    p_linked: false,
+    p_stripe_customer_id: `cus_test_${suffix}`,
+  });
+  if (reserveError) throw new Error(`Failed to reserve for ${email}: ${reserveError.message}`);
+  const { error: recordError } = await admin.rpc('record_werkflow_subscription_state', {
+    p_organization_id: organizationId,
+    p_stripe_customer_id: `cus_test_${suffix}`,
+    p_stripe_subscription_id: `sub_test_${suffix}`,
+    p_status: 'active',
+    p_cancel_at_period_end: false,
+    p_read_at: new Date().toISOString(),
+  });
+  if (recordError) throw new Error(`Failed to record the subscription for ${email}: ${recordError.message}`);
+}
+
+/**
+ * A paid Checkout for the account, recorded as Stripe's signals would; the
+ * upgrade page then sends the payer on to the organization form.
+ */
+export async function payForNewOrganization(page: Page, email: string): Promise<void> {
+  await recordPaidCheckout(email);
+  await page.goto('/upgrade');
+  await expect(page).toHaveURL(/\/onboarding\/create-organization/);
 }
 
 /**
@@ -170,11 +211,18 @@ export async function createOrganizationInOnboarding(
   return expectOrganizationCreated(page, organizationName);
 }
 
-/** Creates a further organization through the switcher's dialog and lands on its dashboard. */
+/**
+ * Creates a further organization through the switcher's dialog and lands on
+ * its dashboard. A further organization needs its own paid Checkout
+ * (werk-flow/werkflow-planning#248), so the step records one for the signed-in
+ * Admin first, as Stripe's signals would.
+ */
 export async function createAdditionalOrganization(
   page: Page,
   organizationName: string,
+  adminEmail: string,
 ): Promise<PersistedOrganization> {
+  await recordPaidCheckout(adminEmail);
   await page.getByRole('button', { name: ORGANIZATION_COPY.createOrganization }).click();
   await page.getByLabel(ORGANIZATION_COPY.organizationName).fill(organizationName);
   await page.getByRole('button', { name: SHARED_COPY.action.create, exact: true }).click();
@@ -493,8 +541,19 @@ export function accountMenuButton(page: Page): Locator {
 }
 
 /** „Abmelden“ in the open account menu. */
-export function signOutMenuItem(page: Page): Locator {
+function signOutMenuItem(page: Page): Locator {
   return page.getByRole('menuitem', { name: ORGANIZATION_COPY.signOut }).filter({ visible: true }).first();
+}
+
+/**
+ * Opens the account menu and returns its „Abmelden“ item; on a phone the menu
+ * sits in the menu sheet. One press after the shell settled, never a second:
+ * the open menu hides its trigger from assistive technology, so a re-press on
+ * a menu that opened late finds no button.
+ */
+export async function openAccountMenu(page: Page): Promise<Locator> {
+  await showOrganizationSwitcher(page);
+  return openMenuItem(accountMenuButton(page), signOutMenuItem(page));
 }
 
 export async function signOutViaUi(page: Page): Promise<void> {
@@ -503,25 +562,7 @@ export async function signOutViaUi(page: Page): Promise<void> {
   if (await directButton.isVisible()) {
     await directButton.click();
   } else {
-    // The sign-out control sits in the sidebar profile card menu.
-    const menuButton = accountMenuButton(page);
-    await expect(menuButton).toBeVisible();
-    const menuItem = signOutMenuItem(page);
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      await menuButton.click();
-      const menuOpened = await settledBeforeTimeout(menuItem.waitFor({ state: 'visible', timeout: 2_000 }));
-      if (!menuOpened) {
-        await pressKey(page, 'Escape');
-        continue;
-      }
-      const reachedLogin = settledBeforeTimeout(page.waitForURL('**/login', { timeout: 5_000 }));
-      // best-effort: the starting navigation may detach the item mid-click; the login URL
-      // awaited next is the outcome.
-      await menuItem.click({ force: true, timeout: 2_000 }).catch(() => undefined);
-      if (await reachedLogin) return;
-      await pressKey(page, 'Escape');
-    }
-    throw new Error('Sign-out menu did not navigate to login after three attempts.');
+    await (await openAccountMenu(page)).click();
   }
   await page.waitForURL('**/login');
 }

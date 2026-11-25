@@ -119,6 +119,32 @@ export function ledgerFindings(input: {
 /** A failure the inspection may print: fixed text and a status, never provider content. */
 export class InspectionFailure extends Error {}
 
+/**
+ * The read-only PROD token. Only the PROD inspection job holds it, as a secret of the GitHub
+ * environment `production` (.github/workflows/prod-inspect.yml); a workstation's token reaches DEV
+ * only (docs/technical/environments.md#which-tool-reaches-what).
+ */
+const PROD_TOKEN = 'PROD_INSPECT_SUPABASE_TOKEN';
+
+/** What a PROD read that cannot run says, so a workstation run never passes silently. */
+const RUN_THE_JOB =
+  'PROD is read only by the PROD inspection job: gh workflow run prod-inspect.yml -R werk-flow/werkflow-app.';
+
+/** The `denied` text of every PROD call. */
+export const PROD_DENIED = `The token cannot reach PROD. ${RUN_THE_JOB}`;
+
+/** The PROD and DEV tokens of a run; a missing one fails the run and names where it lives. */
+export function projectTokens(env: Readonly<Record<string, string | undefined>>): {
+  production: string;
+  dev: string;
+} {
+  const production = env[PROD_TOKEN];
+  if (!production) throw new InspectionFailure(`${PROD_TOKEN} is not set. ${RUN_THE_JOB}`);
+  const dev = env.SUPABASE_ACCESS_TOKEN;
+  if (!dev) throw new InspectionFailure('SUPABASE_ACCESS_TOKEN, the DEV token, is not set.');
+  return { production, dev };
+}
+
 /** What the inspection prints for a failure. Any other error's message may quote a response body. */
 export function failureMessage(error: unknown): string {
   return error instanceof InspectionFailure
@@ -126,32 +152,42 @@ export function failureMessage(error: unknown): string {
     : 'the inspection failed outside a labelled step.';
 }
 
-/**
- * One Management API read of a project, parsed with the given schema. Every
- * failure becomes an InspectionFailure that names only the path and the HTTP
- * status, so no response body reaches the output.
- */
-export async function readProject<T>(input: {
+type ProjectCall<T> = {
   ref: string;
   path: string;
   token: string;
   schema: z.ZodType<T>;
-  query?: string;
+  /** Said after a 401 or 403: which token this was and where the read runs instead. */
+  denied?: string;
   fetcher?: (url: string, init: RequestInit) => Promise<Response>;
-}): Promise<T> {
+};
+
+/**
+ * One Management API call of a project, parsed with the given schema. Every
+ * failure becomes an InspectionFailure that names only the path and the HTTP
+ * status, so no response body reaches the output.
+ */
+async function callProject<T>(
+  input: ProjectCall<T> & { method: 'GET' | 'POST' | 'PATCH'; body: string | null },
+): Promise<T> {
   const fetcher = input.fetcher ?? ((url, init) => fetch(url, init));
   let response: Response;
   try {
     response = await fetcher(`https://api.supabase.com/v1/projects/${input.ref}/${input.path}`, {
-      method: input.query === undefined ? 'GET' : 'POST',
+      method: input.method,
       headers: { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/json' },
-      body: input.query === undefined ? null : JSON.stringify({ query: input.query }),
+      body: input.body,
       signal: AbortSignal.timeout(60_000),
     });
   } catch {
     throw new InspectionFailure(`${input.path}: the request failed.`);
   }
-  if (!response.ok) throw new InspectionFailure(`${input.path} returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    const denied = response.status === 401 || response.status === 403;
+    throw new InspectionFailure(
+      `${input.path} returned HTTP ${response.status}.${denied && input.denied ? ` ${input.denied}` : ''}`,
+    );
+  }
   let body: unknown;
   try {
     body = await response.json();
@@ -161,4 +197,18 @@ export async function readProject<T>(input: {
   const parsed = input.schema.safeParse(body);
   if (!parsed.success) throw new InspectionFailure(`${input.path} returned an unexpected shape.`);
   return parsed.data;
+}
+
+/** One read of a project: a GET, or with `query` a POST to a query endpoint. */
+export function readProject<T>(input: ProjectCall<T> & { query?: string }): Promise<T> {
+  return callProject({
+    ...input,
+    method: input.query === undefined ? 'GET' : 'POST',
+    body: input.query === undefined ? null : JSON.stringify({ query: input.query }),
+  });
+}
+
+/** One PATCH of a project's configuration; only the auth sync writes, and only to DEV. */
+export function patchProject<T>(input: ProjectCall<T> & { patch: Record<string, unknown> }): Promise<T> {
+  return callProject({ ...input, method: 'PATCH', body: JSON.stringify(input.patch) });
 }

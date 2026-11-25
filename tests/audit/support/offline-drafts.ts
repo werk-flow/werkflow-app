@@ -2,11 +2,7 @@ import { expect, type Locator, type Page, type Request } from '@playwright/test'
 
 import { createAdminClient } from '../../golden/support/db/shared';
 import { getJobIdByNumber } from '../../golden/support/db/work';
-import {
-  accountMenuButton,
-  showOrganizationSwitcher,
-  signOutMenuItem,
-} from '../../golden/support/steps/organization';
+import { openAccountMenu } from '../../golden/support/steps/organization';
 import { confirmed } from '../../golden/support/steps/shared';
 import {
   closeWorkArtifactDialog,
@@ -94,9 +90,7 @@ export async function expectDraftNamedInQuestion(
 
 /** Starts a sign-out from the account menu, which on a phone sits in the menu sheet. */
 export async function startSignOut(page: Page): Promise<void> {
-  await showOrganizationSwitcher(page);
-  await accountMenuButton(page).click();
-  await signOutMenuItem(page).click();
+  await (await openAccountMenu(page)).click();
 }
 
 /** Closes the phone's menu sheet a cancelled sign-out leaves open; from the tablet width there is none. */

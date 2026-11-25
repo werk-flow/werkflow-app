@@ -132,6 +132,7 @@ export async function captureRealtimeBoundaries(
         events.some((entry) => entry.receiver === receiver && entry.event === event),
       )
     ) {
+      // eslint-disable-next-line test-hygiene/no-fixed-time-limit -- backlog: the same poll's deadline goes with it (enforcement-ladder-backlog.md)
       if (Date.now() >= deadline) throw new Error(`Permitted receivers did not observe ${event}.`);
       // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- backlog: wait on the subscription callback instead (enforcement-ladder-backlog.md)
       await new Promise((resolve) => setTimeout(resolve, 50));

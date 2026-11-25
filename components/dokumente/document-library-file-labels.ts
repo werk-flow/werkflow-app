@@ -108,6 +108,10 @@ export function getLinkBadges(document: OrganizationDocument): string[] {
       return link.serviceCaseNumber ? `Servicefall ${link.serviceCaseNumber}` : 'Servicefall';
     }
 
+    if (link.offerId) {
+      return link.offerNumber ? `Angebot ${link.offerNumber}` : 'Angebot';
+    }
+
     if (link.maintenanceCoverageId) {
       return link.maintenanceCoverageNumber ? `Abdeckung ${link.maintenanceCoverageNumber}` : 'Abdeckung';
     }

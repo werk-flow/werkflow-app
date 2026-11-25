@@ -1,8 +1,7 @@
 // Rule test: the runner judges every lab record of a run against the reviewed references.
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 import { initialLabReference, type LabReferences } from './lab-counts';
 import {
@@ -13,12 +12,9 @@ import {
 } from './lab-record';
 import { checkLabEvidence } from './lab-evidence';
 import { getLabStep, LAB_METRICS, type LabMetric } from './lab-steps';
+import { temporaryDirectory } from './temporary-directory';
 
 const STEP = getLabStep('lab.field.checklist-tick');
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
 
 function observation(overrides: Partial<Record<LabMetric, number>> = {}): LabObservation {
   const counts = labObservationSchema.shape.counts.parse(
@@ -77,8 +73,7 @@ function references(calibrated: LabObservation = observation()): LabReferences {
 }
 
 function run(lines: readonly string[]): string {
-  const directory = mkdtempSync(join(tmpdir(), 'lab-evidence-'));
-  directories.push(directory);
+  const directory = temporaryDirectory('lab-evidence-');
   writeFileSync(join(directory, LAB_ARCHIVE), lines.map((line) => `${line}\n`).join(''));
   return directory;
 }
