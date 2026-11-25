@@ -129,7 +129,7 @@ export function mcpConfigPaths(projectDir: string): Parameters<typeof configured
 
 const INSTEAD = [
   'Agents never read production data: every tool result goes to the model provider.',
-  'For PROD structure (migration ledger, schema drift against DEV, advisor findings) run `bun run prod:inspect`.',
+  'For PROD structure (migration ledger, schema drift against DEV, advisor findings) read the log of the PROD inspection job (`gh workflow run prod-inspect.yml`).',
   'For data and schema work use the DEV server `supabase` or the local stack',
   '(docs/technical/environments.md, "Which tool reaches what").',
 ].join(' ');

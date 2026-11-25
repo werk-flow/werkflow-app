@@ -14,6 +14,12 @@ import {
 } from '@/lib/testing/fixtures/stripe-invoices';
 
 mock.module('server-only', () => ({}));
+// The invoice mail after an issue has its own cases (billing-invoice-mails.ts).
+mock.module('@/lib/werkflow-billing/invoice-mails', () => ({
+  sendDebitNotice: async () => {},
+  sendInvoiceMail: async () => {},
+  sendReceiptMail: async () => {},
+}));
 
 // The signal handlers' database, R2 and alarm, in memory. The alarm ledger
 // keeps one row per kind and object, as werkflow_billing_mails does.

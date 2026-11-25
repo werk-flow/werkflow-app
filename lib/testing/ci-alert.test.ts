@@ -307,13 +307,13 @@ test('an unreadable production flag fails the job instead of guessing', () => {
   expect(readFileSync(join(stub, 'gh.log'), 'utf8')).toBe('');
 });
 
-test('only the release, its missed-run alert and the health check can assign the owner', () => {
+test('only the release, its missed-run alert, the health check and the PROD inspection can assign the owner', () => {
   const workflows = join(repositoryRoot, workflowsFolder());
   const callers = readdirSync(workflows).filter((file) =>
     readFileSync(join(workflows, file), 'utf8').includes('AFFECTS_PRODUCTION'),
   );
-  expect(callers.sort()).toEqual(['health.yml', 'production-alert.yml', 'release.yml']);
-  for (const file of ['release.yml', 'production-alert.yml'])
+  expect(callers.sort()).toEqual(['health.yml', 'prod-inspect.yml', 'production-alert.yml', 'release.yml']);
+  for (const file of ['release.yml', 'production-alert.yml', 'prod-inspect.yml'])
     expect(readFileSync(join(workflows, file), 'utf8'), file).toContain('AFFECTS_PRODUCTION: true\n');
 });
 

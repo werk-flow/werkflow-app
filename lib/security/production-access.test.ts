@@ -150,7 +150,7 @@ test('without the ref or the server configuration, every Supabase server is refu
 
 test('the refusal names the structure-only path and the DEV server', () => {
   const reason = refusal('mcp__supabase-prod-readonly__execute_sql');
-  expect(reason).toContain('bun run prod:inspect');
+  expect(reason).toContain('gh workflow run prod-inspect.yml');
   expect(reason).toContain('the DEV server `supabase`');
 });
 
