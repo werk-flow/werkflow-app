@@ -45,7 +45,7 @@ This table is the one home of every deployment and workflow credential. No check
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging, release: deploy edge functions; never database read | 2027-10-26 | Supabase account settings, Access Tokens; `gh secret set`; revoke the old one. |
-| `SUPABASE_DEV_READ_TOKEN` | GitHub repository secret | Release: read-only SQL on DEV | 2027-11-16; one year at most | Supabase Account preferences, Access Tokens: `werkflow-dev-ledger-read`, organization WerkFlow, project DEV, Database read only. `gh secret set` (stdin), run `health.yml`, revoke the old one. |
+| `SUPABASE_DEV_READ_TOKEN` | GitHub repository secret | Release: read-only SQL on DEV | 2027-11-16; at most a year | Supabase Account preferences, Access Tokens: `werkflow-dev-ledger-read`, organization WerkFlow, project DEV, Database read only. `gh secret set SUPABASE_DEV_READ_TOKEN` (stdin), run `health.yml`, revoke the old token. |
 | `PROD_INSPECT_SUPABASE_TOKEN`, `DEV_INSPECT_SUPABASE_TOKEN`, `DEV_AUTH_SYNC_SUPABASE_TOKEN` | Environment `production` | The [PROD inspection](#which-tool-reaches-what) | One year | Scoped, read only: PROD Database, Advisors, Auth config; DEV Database, Auth config. The third: DEV Auth config and Project settings write. `gh secret set --env production`. |
 | `werkflow-workstation-dev` | Workstations | DEV only | One year | [Machine setup](machine-setup.md#set-up-a-new-machine), step 2 |
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
