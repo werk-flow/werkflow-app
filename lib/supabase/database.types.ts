@@ -20201,6 +20201,10 @@ export type Database = {
         };
         Returns: boolean;
       };
+      record_werkflow_billing_mail_attempt: {
+        Args: { p_mail_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
       record_werkflow_subscription_state: {
         Args: {
           p_cancel_at_period_end: boolean;

@@ -96,6 +96,26 @@ export async function expireDebitNotice(mailId: string, organizationId: string):
   if (error) throw billingFailure('billing_mail_expire_failed');
 }
 
+/**
+ * Moves a failed mail behind every failed row not yet tried, before the daily
+ * comparison resends it, so a resend that fails before its claim still gives
+ * the next row its turn. False when the row is no longer failed.
+ */
+export async function recordMailAttempt({
+  mailId,
+  organizationId,
+}: {
+  mailId: string;
+  organizationId: string | null;
+}): Promise<boolean> {
+  const { data, error } = await createSupabaseAdminClient().rpc(
+    'record_werkflow_billing_mail_attempt',
+    rpcArgs('record_werkflow_billing_mail_attempt', { p_mail_id: mailId, p_organization_id: organizationId }),
+  );
+  if (error) throw billingFailure('billing_mail_attempt_failed');
+  return data === true;
+}
+
 /** One customer mail (with its organization) or one alarm (with none). */
 export async function deliverBillingMail(
   input: MailRow & { mail: RenderedMail; replyTo?: string; attachments?: Attachments },
