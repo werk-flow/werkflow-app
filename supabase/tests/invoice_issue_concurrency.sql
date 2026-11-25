@@ -1,6 +1,6 @@
 -- Two issues checked under the same number at the same time issue one
 -- invoice under it, and an issue whose transaction rolls back uses no number
--- (migration 20261221100015_issue_invoices_with_gapless_numbers.sql). The
+-- (migration 20270111100001_issue_invoices_with_gapless_numbers.sql). The
 -- first session issues a draft and keeps its transaction open; the second
 -- session's issue, checked under the same number, waits for the series' row
 -- lock and, once the first commits, is refused invoice_number_moved without
