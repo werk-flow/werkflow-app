@@ -30,7 +30,8 @@ const MAIL_BY_METHOD = {
   sepa_debit: { kind: 'payment_failed', render: renderDebitFailedMail },
 } as const;
 
-async function handleFailedInvoice(invoiceId: string, stripe: StripeGateway): Promise<void> {
+/** Also the daily comparison's resend of a failed payment mail (reconciliation.ts). */
+export async function handleFailedInvoice(invoiceId: string, stripe: StripeGateway): Promise<void> {
   const invoice = await stripe.readInvoice(invoiceId);
   if (invoice.status !== OPEN_STATUS || invoice.amountRemainingCents <= 0) return;
   const customer = invoice.customerId ? await stripe.readCustomer(invoice.customerId) : null;

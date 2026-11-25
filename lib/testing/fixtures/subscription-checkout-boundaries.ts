@@ -57,6 +57,10 @@ gateway = {
   readCustomer: noRead,
   readMandate: noRead,
   readDispute: noRead,
+  readUpcomingDebit: noRead,
+  readInvoiceDebit: noRead,
+  listFinalizedInvoices: noRead,
+  listEventIds: noRead,
   subscriptions: fakeSubscriptionCalls(stripe),
 };
 

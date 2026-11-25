@@ -466,7 +466,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['werkflow-billing-signals', ['werkflow_billing_signals.sql'], ['*']],
-  ['werkflow-billing-mails', ['werkflow_billing_mails.sql'], ['*']],
+  ['werkflow-billing-mails', ['werkflow_billing_mails.sql', 'werkflow_billing_reconciliations.sql'], ['*']],
   ['resend-webhook-events', ['resend_webhook_events.sql'], ['*']],
   ['werkflow-invoices', ['werkflow_invoices.sql'], ['*']],
   ['werkflow-subscriptions', ['werkflow_subscriptions.sql'], ['*']],
