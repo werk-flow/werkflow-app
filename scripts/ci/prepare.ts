@@ -20,12 +20,13 @@ import {
   partSteps,
   type PrepareStep,
 } from '../../lib/testing/ci/dag';
+import type { Binding } from '../../lib/testing/ci/list-growth-approval';
 
 // The environment a CI job takes before its body, the same on every runner (lib/testing/ci/dag.ts
 // names each job's steps). On GitHub Actions the composites of .github/actions call one step at a
 // time between GitHub's caches; scripts/ci/run-commit.ts runs a job's whole list with `for <job>`.
 // It acts on the checkout in the current directory, and imports nothing outside Node's modules and
-// lib/testing/ci/dag.ts, so `install` runs before the dependencies exist.
+// lib/testing/ci/dag.ts but erased types, so `install` runs before the dependencies exist.
 // Usage: bun scripts/ci/prepare.ts <install|siblings|approval|stack-environment|stack|env|playwright|playwright-packages>
 //        bun scripts/ci/prepare.ts for <job>
 // It reads plain environment variables only:
@@ -33,7 +34,7 @@ import {
 //                  GitHub Actions reads it, and another runner gives each job a file of its own and
 //                  passes its lines to the body. Without it, nothing is passed on.
 //   GITHUB_OUTPUT  playwright: `missing` and `key` of Chromium's system packages, for the cache.
-//   CI_EVENT, CI_PRS, CI_BASE_SHA, GITHUB_REPOSITORY  approval (scripts/ci/job.ts names them).
+//   CI_EVENT, CI_PRS, GITHUB_REPOSITORY  approval (scripts/ci/job.ts names them).
 //   SIBLING_REPOSITORIES_TOKEN  siblings: reads the private werkflow-business. Without it the clone
 //                  is left out and docs:check says so. Only the clone sees it, never the job body. A
 //                  runner off GitHub runs this step from its trusted copy before the job's own steps,
@@ -156,42 +157,93 @@ function siblings(): void {
 /**
  * The owner's approval for a shrink-only list to grow (docs/technical/testing.md, "Grow a shrink-only
  * list"), read now, so a rerun after a label change sees it. A pull request run takes its own PR's
- * label. An integration run takes every PR it serves: CI_PRS, and each squash commit "<title> (#<n>)"
- * above its base. Each PR's own Check already held its growth to its label, so one approval covers them.
+ * label. An integration run tests main plus every PR it serves, and the gate measures their growth
+ * from main, so an approval may cover only its own PR: the run is approved only when every commit
+ * above the merge base with origin/main, the gate's base, that touches a list file belongs to a PR
+ * with the label. GitHub's records name each commit's PR (lib/testing/ci/list-growth-approval.ts);
+ * a touching commit they do not bind keeps the gate strict, and an unreadable answer fails the step.
  */
 async function approval(): Promise<void> {
   const event = process.env.CI_EVENT;
   if (event !== 'pr' && event !== 'integration') return;
-  // After `install`: the parser needs the dependencies.
-  const { pullRequestsOf } = await import('../../lib/testing/ci/measurement');
-  const named = pullRequestsOf(process.env.CI_PRS);
-  if ('unreadable' in named) fail(named.unreadable);
-  const squashed =
-    event === 'integration' && process.env.CI_BASE_SHA
-      ? (
-          read('git', ['log', '--format=%s', `${process.env.CI_BASE_SHA}..HEAD`]) ??
-          fail('The queue commits cannot be read.')
-        )
-          .split('\n')
-          .flatMap((subject) => /\(#([0-9]+)\)$/.exec(subject)?.[1] ?? [])
-          .map(Number)
-      : [];
   const repository = process.env.GITHUB_REPOSITORY;
-  let approved = false;
-  for (const pr of [...new Set([...named, ...squashed])].sort((left, right) => left - right)) {
-    if (!repository) fail('The approval needs GITHUB_REPOSITORY.');
-    const labels = read('gh', [
-      'api',
-      '--paginate',
-      `repos/${repository}/issues/${pr}/labels`,
-      '--jq',
-      '.[].name',
-    ]);
-    if (labels === undefined) fail(`The labels of #${pr} cannot be read.`);
-    if (labels.split('\n').includes('approved: list growth')) approved = true;
+  if (!repository || !/^[^/\s]+\/[^/\s]+$/.test(repository))
+    fail('The approval needs GITHUB_REPOSITORY as owner/name.');
+  let result: boolean;
+  if (event === 'pr') {
+    // After `install`: the parser needs the dependencies.
+    const { pullRequestsOf } = await import('../../lib/testing/ci/measurement');
+    const named = pullRequestsOf(process.env.CI_PRS);
+    if ('unreadable' in named) fail(named.unreadable);
+    result = named.some((pr) => {
+      const labels = read('gh', [
+        'api',
+        '--paginate',
+        `repos/${repository}/issues/${pr}/labels`,
+        '--jq',
+        '.[].name',
+      ]);
+      if (labels === undefined) fail(`The labels of #${pr} cannot be read.`);
+      return labels.split('\n').includes('approved: list growth');
+    });
+  } else {
+    const { SHRINK_ONLY_LISTS } = await import('../../lib/testing/publication/shrink-only-lists');
+    const { commitLine, landedBinding, QUEUE_QUERY, queueBindings } = await import(
+      '../../lib/testing/ci/list-growth-approval'
+    );
+    const base =
+      read('git', ['merge-base', 'HEAD', 'origin/main']) ??
+      fail('The merge base with origin/main cannot be read.');
+    const line = commitLine(
+      read('git', ['rev-list', '--parents', '--topo-order', `${base}..HEAD`]) ??
+        fail('The queue commits cannot be read.'),
+      base,
+    );
+    if ('unreadable' in line) fail(line.unreadable);
+    const listFiles = new Set(SHRINK_ONLY_LISTS.map((list) => list.file));
+    // Without rename detection a moved file lists its old and its new path: both touch the list.
+    const touching = line.filter((commit) =>
+      (
+        read('git', ['diff', '--name-only', '--no-renames', `${commit}^`, commit]) ??
+        fail(`The files ${commit} changed cannot be read.`)
+      )
+        .split('\n')
+        .some((file) => listFiles.has(file)),
+    );
+    const [owner = '', name = ''] = repository.split('/');
+    const queue = touching.length
+      ? queueBindings(
+          read('gh', [
+            'api',
+            'graphql',
+            '-f',
+            `query=${QUEUE_QUERY}`,
+            '-f',
+            `owner=${owner}`,
+            '-f',
+            `name=${name}`,
+          ]) ?? fail('The merge queue cannot be read.'),
+        )
+      : new Map<string, Binding>();
+    if ('unreadable' in queue) fail(queue.unreadable);
+    result = touching.length > 0;
+    for (const commit of touching) {
+      const binding =
+        queue.get(commit) ??
+        landedBinding(
+          read('gh', ['api', `repos/${repository}/commits/${commit}/pulls`]) ??
+            fail(`The pull requests of ${commit} cannot be read.`),
+          commit,
+        );
+      if (binding && 'unreadable' in binding) fail(binding.unreadable);
+      console.info(
+        `${commit.slice(0, 9)} touches a shrink-only list: ${binding ? `#${binding.pr}, ${binding.approved ? 'approved' : 'not approved'}` : 'no pull request binds it'}`,
+      );
+      if (!binding?.approved) result = false;
+    }
   }
-  exportVariable('SHRINK_ONLY_GROWTH_APPROVED', String(approved));
-  console.info(`approved: list growth = ${approved}`);
+  exportVariable('SHRINK_ONLY_GROWTH_APPROVED', String(result));
+  console.info(`approved: list growth = ${result}`);
 }
 
 /** The cached copy of the stack's environment: it depends only on the CLI version and config.toml. */

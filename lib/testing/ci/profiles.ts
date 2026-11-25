@@ -191,7 +191,7 @@ const FLEET: CiProfile = {
     // date-lookahead.yml's max-parallel (profiles.test.ts reads it).
     'date-lookahead': {
       executor: 'fleet',
-      atOnce: 7,
+      atOnce: 4,
       clock: 'workflow',
       timing: { kind: 'clock', at: '05:15', zone: 'UTC', weekdays: EVERY_DAY },
     },

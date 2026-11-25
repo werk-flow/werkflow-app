@@ -27,6 +27,7 @@ on:
           - supabase-access-token-dev
           - supabase-access-token-prod
           - dev-database-url
+          - supabase-dev-read-token
           - vercel-token
           - sibling-repositories-token
           - app-staging
@@ -83,6 +84,13 @@ jobs:
         id: dev-database-url
         if: ${{ !cancelled() }}
         run: $CHECK dev dev-database-url database DEV_DATABASE_URL
+      # The release's migration check depends on it, so a failure stops PROD's next release.
+      - name: SUPABASE_DEV_READ_TOKEN runs select 1 on DEV
+        id: supabase-dev-read-token
+        if: ${{ !cancelled() }}
+        env:
+          SUPABASE_DEV_READ_TOKEN: ${{ secrets.SUPABASE_DEV_READ_TOKEN }}
+        run: $CHECK prod supabase-dev-read-token read-only-query SUPABASE_DEV_READ_TOKEN https://api.supabase.com/v1/projects/mbkkzuqjbdvzelqvuzcn/database/query/read-only
       - name: VERCEL_TOKEN reads the project
         id: vercel-token
         if: ${{ !cancelled() }}
