@@ -6,6 +6,7 @@ import { logError } from '@/lib/logging';
 import { putWerkflowBillingObject } from '@/lib/storage/r2';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { billingFailure, billingFailureCode } from '@/lib/werkflow-billing/failure';
+import { sendInvoiceMail } from '@/lib/werkflow-billing/invoice-mails';
 import { type IssueDependencies, issueWerkflowInvoice } from '@/lib/werkflow-billing/issue-invoice';
 import { raiseBillingAlarm } from '@/lib/werkflow-billing/mail-delivery';
 import type { BillingAlarmFacts } from '@/lib/werkflow-billing/mails/alarm';
@@ -103,7 +104,10 @@ export function liveIssueDependencies(stripe: StripeGateway): IssueDependencies 
   };
 }
 
-/** Issues the original of the invoice a verified signal names, at most once. */
+/**
+ * Issues the original of the invoice a verified signal names, at most once,
+ * then mails it to the customer once (A6b, werk-flow/werkflow-planning#492).
+ */
 export async function issueOriginalOfSignal(event: Stripe.Event, stripe: StripeGateway): Promise<void> {
   const parsed = invoiceEventSchema.safeParse(event);
   if (!parsed.success) throw billingFailure('werkflow_invoice_unreadable');
@@ -111,4 +115,5 @@ export async function issueOriginalOfSignal(event: Stripe.Event, stripe: StripeG
   await alarmedIssue({ stripeObjectId: stripeInvoiceId }, () =>
     issueWerkflowInvoice({ stripeInvoiceId, stripeEventId: parsed.data.id }, liveIssueDependencies(stripe)),
   );
+  await sendInvoiceMail(stripeInvoiceId, stripe);
 }

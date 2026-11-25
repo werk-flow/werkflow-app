@@ -31,7 +31,7 @@ A journey is a step one role repeats many times a day, measured from the user's 
 Each lab group prints one table per step with reference, value, ceiling, floor and status per metric.
 
 - `regressed` or `budget-exceeded`: more work than the reference or budget allows. Find the cause; never raise the reference.
-- `ratchet-pending`: less work than the floor allows. It fails in every run, CI included, so the change that lowered the count lowers its reference with the command the table names. When CI fails but your own run measures inside the tolerance, `accept` your run's value and name CI's value as the reason.
+- `ratchet-pending`: less work than the floor allows. It fails in every run, CI included, so the change that lowered the count lowers its reference with the command the table names. When CI fails but your own run measures inside the tolerance, `accept` your run's value and name CI's value as the reason. An `accept` of `requests` also takes the shapes whose request count your run moved: read the shapes it prints, and let the reason cover them too.
 - `grew` or `shrank`: bytes above the ceiling or below the floor (a deliberate cut, or missing data). A shape's bytes sum its requests, so a shape with more requests than its reference prints them `ungated`: the step's `requests` count judges that change. With fewer requests, bytes above the ceiling still fail. Open the response, then `bun scripts/lab-counts.ts accept --run <run key> --step <id> --target <shape> --reason "<what changed>"`. A framework upgrade can shrink every payload at once: compare `backendByPath` and rows with the last passing run, open one response, and accept each target naming that comparison.
 - `measurement-missing`: a bounded value was not recorded. It fails like a regression.
 - `shape-added` or `shape-removed`: a new or stopped request. Either is a behavior change that needs its reason.
@@ -39,7 +39,7 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 ### Change a lab reference
 
 1. A lower count needs no reason: `ratchet` lowers it.
-2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check. The lead decides it, or the PR's own thread outside an epic, and lists it under "For the owner to look at" ([Decide or ask](../../AGENTS.md#decide-or-ask)). The reason names the intended behavior change. A `regressed` count is never accepted to pass.
+2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check. The lead decides it, or the PR's own thread outside an epic, and lists it under "For the owner to look at" ([Decide or ask](../../AGENTS.md#decide-or-ask)). The reason names the intended behavior change. A `regressed` count is never accepted to pass. Accepting `requests` also accepts, with the same reason, each payload shape other than a prefetch whose request count the run moved: a shape with more requests than its reference prints its bytes ungated.
 3. A changed lab test, recorder module or workload file orphans its references: [move them to the new digest](#move-a-reference-to-a-new-digest).
 4. `gate` and `reject` move a metric in or out of the gate with its evidence. A count that takes two values on one step leaves that step with `ungate`; never widen its tolerance. `calibrate` keeps that ungate; only `gate --step <id>` with new stability evidence from that step reverses it.
 

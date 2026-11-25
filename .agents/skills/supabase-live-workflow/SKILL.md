@@ -9,8 +9,8 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 
 ## Steps
 
-1. Inspect the real project before a schema claim or edit. A claim about PROD needs `bun run prod:inspect`; DEV and the migration files do not stand in for it.
-2. Inspect DEV through the MCP server `supabase` rather than guess from app code or old docs. Agents read no PROD data through any tool, because every tool result goes to the model provider. The one exception is `bun run prod:inspect`, which returns metadata only. The hook enforces this for MCP calls only.
+1. Inspect the real project before a schema claim or edit. A claim about PROD needs the log of the [PROD inspection](../../../docs/technical/environments.md#which-tool-reaches-what); DEV and the migration files do not stand in for it.
+2. Inspect DEV through the MCP server `supabase` rather than guess from app code or old docs. Agents read no PROD data through any tool, because every tool result goes to the model provider. The one exception is the PROD inspection's log, which holds metadata only. The hook enforces this for MCP calls only.
 3. Before a migration, read the migration rule in [environments](../../../docs/technical/environments.md). For a new table, also follow [security](../../../docs/technical/security.md). Create it with `bunx supabase migration new <name>` and keep that version, even when `main` holds a newer one: DEV and PROD apply it with `--include-all`. Rename it only to the version `bun run migrations:order` names.
 4. With a migration, run `bun run types:generate -- --local`: it writes the types of this tree's migrations and never changes the shared stack. CI fails while `lib/supabase/database.types.ts` is stale.
 5. Deploy an edge function from `supabase/functions/` with `bunx supabase functions deploy <slug> --project-ref <ref> --no-verify-jwt --use-api`.
@@ -37,4 +37,4 @@ A reset deletes what every worktree on the machine keeps in the stack: retained 
 
 ## Compare DEV and PROD
 
-Matching migration names and generated types miss a changed function body. Run `bun run prod:inspect` from an up-to-date `main`. It lists the versions waiting for a release, every relation, column, constraint, index, trigger, policy, function, enum and published table whose definition differs between the projects, by name only, and PROD's advisor findings. Drift is expected only for objects the pending migrations touch. To see how a named object differs, read its definition on DEV through MCP and in the migration files; never read PROD's.
+Matching migration names and generated types miss a changed function body. Run the [PROD inspection](../../../docs/technical/environments.md#which-tool-reaches-what) (`gh workflow run prod-inspect.yml`, then `gh run view <run-id> --log`) and read its log; while GitHub Actions is off it cannot run, and a claim about PROD waits. No workstation token reaches PROD, so `bun run prod:inspect` runs only in that job. The log lists the versions waiting for a release, every relation, column, constraint, index, trigger, policy, function, enum and published table whose definition differs between the projects, by name only, and PROD's advisor findings. Drift is expected only for objects the pending migrations touch. To see how a named object differs, read its definition on DEV through MCP and in the migration files; never read PROD's.
