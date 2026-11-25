@@ -165,6 +165,20 @@ test('the private copy is verified, read-only, in a fresh folder only its owner 
   expect(readdirSync(dirname(copy))).toEqual(['jar']);
 });
 
+test('a private copy whose write or check fails leaves no folder behind', () => {
+  const source = join(folder(), 'jar');
+  keep(source, JAR);
+  const parent = folder();
+  const full = (): void => {
+    throw new Error('ENOSPC: no space left on device');
+  };
+  expect(() => privateCopy(source, SHA256, { parent, write: full })).toThrow('ENOSPC');
+  expect(readdirSync(parent)).toEqual([]);
+  const tampering = (file: string): void => writeFileSync(file, TAMPERED);
+  expect(() => privateCopy(source, SHA256, { parent, write: tampering })).toThrow('does not have the pinned');
+  expect(readdirSync(parent)).toEqual([]);
+});
+
 test('Mustang runs only the private copy, mounted as one read-only file', () => {
   const script = readFileSync(join(import.meta.dir, 'check-reference-e-invoices.ts'), 'utf8');
   const mounts = [...script.matchAll(/`\$\{(\w+)\}:([^`]+)`/g)].map((match) => `${match[1]} ${match[2]}`);

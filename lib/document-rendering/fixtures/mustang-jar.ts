@@ -110,18 +110,36 @@ export async function pinnedFile(
   return pin.path;
 }
 
+/** Where a private copy's folder is made, and how its bytes are written. */
+interface CopyIo {
+  parent: string;
+  write: (file: string, bytes: Uint8Array) => void;
+}
+
+const COPY_IO: CopyIo = {
+  parent: tmpdir(),
+  write: (file, bytes) => writeFileSync(file, bytes, { mode: 0o444 }),
+};
+
 /**
  * A read-only copy of the verified file in a fresh folder only this process can write, verified
  * again, so a later change to `path` never reaches whoever runs the copy.
  */
-export function privateCopy(path: string, expected: string): string {
+export function privateCopy(path: string, expected: string, io: CopyIo = COPY_IO): string {
   const bytes = readFileSync(path);
   if (hexSha256(bytes) !== expected) throw new Error(`${path} does not have the pinned SHA-256.`);
-  const copy = join(mkdtempSync(join(tmpdir(), 'mustang-')), basename(path));
-  writeFileSync(copy, bytes, { mode: 0o444 });
-  chmodSync(copy, 0o444);
-  if (!matches(copy, expected)) throw new Error(`The copy ${copy} does not have the pinned SHA-256.`);
-  return copy;
+  const folder = mkdtempSync(join(io.parent, 'mustang-'));
+  // A failed write or check, a full disk among them, leaves no folder behind.
+  try {
+    const copy = join(folder, basename(path));
+    io.write(copy, bytes);
+    chmodSync(copy, 0o444);
+    if (!matches(copy, expected)) throw new Error(`The copy ${copy} does not have the pinned SHA-256.`);
+    return copy;
+  } catch (error) {
+    rmSync(folder, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 /** A private, verified copy of Mustang's jar, cached in the repository and downloaded on a miss. */
