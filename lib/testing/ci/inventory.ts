@@ -79,7 +79,7 @@ type ScheduleItem = {
 export const SCHEDULES = {
   nightly: {
     runs: 'A full run of main: every browser group, the wall-clock groups untimed.',
-    sources: ['lib/testing/ci/schedule.ts', 'nightly.yml#full', 'nightly.yml#alert'],
+    sources: ['lib/testing/ci/schedule.ts', 'nightly.yml#decide', 'nightly.yml#full', 'nightly.yml#alert'],
     trigger: {
       on: 'time',
       workflow: { workflow: 'nightly.yml', cron: '0 17 * * *', timezone: BERLIN_TIME_ZONE },
