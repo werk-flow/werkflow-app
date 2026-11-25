@@ -1,10 +1,9 @@
 import 'server-only';
 
-import { logError } from '@/lib/logging';
 import { readWerkflowBillingObject } from '@/lib/storage/r2';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
-import { billingFailure } from '@/lib/werkflow-billing/failure';
+import { billingFailure, werkflowInvoiceReadFailed } from '@/lib/werkflow-billing/failure';
 import {
   deliverCustomerBillingMail,
   describeCustomerMail,
@@ -53,11 +52,6 @@ const cancelledSchema = z.object({ number: z.string().min(1) }) satisfies z.ZodT
   Pick<Tables<'werkflow_invoices'>, 'number'>
 >;
 
-function readFailed(error: unknown): never {
-  logError('refundMail: werkflow_invoices read failed', error);
-  throw billingFailure('werkflow_invoice_record_failed');
-}
-
 /** The Storno of the credit note, its replacement if any, and the number of the document it cancels. */
 async function refundDocuments(stripeCreditNoteId: string) {
   const admin = createSupabaseAdminClient();
@@ -69,9 +63,9 @@ async function refundDocuments(stripeCreditNoteId: string) {
     )
     .eq('stripe_credit_note_id', stripeCreditNoteId)
     .limit(2);
-  if (error) readFailed(error);
+  if (error) werkflowInvoiceReadFailed('refundMail', error);
   const rows = z.array(documentSchema).safeParse(data);
-  if (!rows.success) readFailed(rows.error);
+  if (!rows.success) werkflowInvoiceReadFailed('refundMail', rows.error);
   const storno = rows.data.find((row) => row.type_code === '384');
   // Called after the issue step, which issued the Storno or found it issued.
   if (!storno?.storno_of_invoice_id) throw billingFailure('werkflow_storno_not_issued');
@@ -83,9 +77,9 @@ async function refundDocuments(stripeCreditNoteId: string) {
     .select('number')
     .eq('id', storno.storno_of_invoice_id)
     .maybeSingle();
-  if (cancelledError) readFailed(cancelledError);
+  if (cancelledError) werkflowInvoiceReadFailed('refundMail', cancelledError);
   const cancelled = cancelledSchema.safeParse(cancelledRow);
-  if (!cancelled.success) readFailed(cancelled.error);
+  if (!cancelled.success) werkflowInvoiceReadFailed('refundMail', cancelled.error);
   return { storno, replacement, cancelledNumber: cancelled.data.number };
 }
 

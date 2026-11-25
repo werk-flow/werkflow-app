@@ -2,7 +2,7 @@ import 'server-only';
 
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { billingFailure } from '@/lib/werkflow-billing/failure';
+import { billingFailure, werkflowInvoiceReadFailed } from '@/lib/werkflow-billing/failure';
 import { issueWerkflowStorno, type StornoDependencies } from '@/lib/werkflow-billing/issue-storno';
 import { sendRefundMail } from '@/lib/werkflow-billing/refund-mail';
 import type { SignalFamily } from '@/lib/werkflow-billing/signals/family';
@@ -37,11 +37,6 @@ const documentSchema = z.object({
   stripe_credit_note_id: z.string().nullable(),
 });
 
-function readFailed(error: unknown): never {
-  logError('creditNoteSignals: werkflow_invoices read failed', error);
-  throw billingFailure('werkflow_invoice_record_failed');
-}
-
 function liveStornoDependencies(stripe: StripeGateway): StornoDependencies {
   const admin = createSupabaseAdminClient();
   const { readInvoice, seller, storeOriginal } = liveIssueDependencies(stripe);
@@ -58,7 +53,7 @@ function liveStornoDependencies(stripe: StripeGateway): StornoDependencies {
         .eq('stripe_credit_note_id', creditNoteId)
         .eq('type_code', '384')
         .maybeSingle();
-      if (error) readFailed(error);
+      if (error) werkflowInvoiceReadFailed('creditNoteSignals', error);
       return data !== null;
     },
     documents: async (stripeInvoiceId) => {
@@ -68,7 +63,7 @@ function liveStornoDependencies(stripe: StripeGateway): StornoDependencies {
         .select('id, number, issue_date, type_code, gross_cents, stripe_credit_note_id')
         .eq('stripe_invoice_id', stripeInvoiceId)
         .limit(DOCUMENTS_CAP + 1);
-      if (error) readFailed(error);
+      if (error) werkflowInvoiceReadFailed('creditNoteSignals', error);
       const rows = z.array(documentSchema).safeParse(data);
       if (!rows.success) throw billingFailure('werkflow_invoice_record_failed');
       if (rows.data.length > DOCUMENTS_CAP) throw billingFailure('werkflow_storno_documents_overflow');
