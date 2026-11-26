@@ -41,7 +41,8 @@ function runIdOf(value: string, prefix: string, suffix: string): string | null {
   return RUN_ID.test(runId) ? runId : null;
 }
 
-export type ActorRow = { id: string; email: string; createdAt: string };
+/** `runMarker`: the run id in the user's app metadata, which only the secret key writes. */
+export type ActorRow = { id: string; email: string; createdAt: string; runMarker: string | null };
 export type OrganizationRow = { id: string; name: string; adminId: string };
 
 /** One run's rows a cleanup removes: its actor, and the organizations that actor administers. */
@@ -49,7 +50,7 @@ export type RunRows = { runId: string; actorId: string; organizationIds: string[
 
 /**
  * The runs a cleanup removes: `runId`'s own, or with `null` every run whose actor was created more than
- * a day before `now`. An organization counts only when its name carries the same run id as its admin's
+ * a day before `now`. An actor counts only when its address and its run marker name the same run. An organization counts only when its name carries the same run id as its admin's
  * address; any other organization, even one named like a run's, is never selected.
  */
 export function selectRuns(
@@ -60,7 +61,8 @@ export function selectRuns(
 ): RunRows[] {
   return actors.flatMap((actor) => {
     const actorRun = runIdOf(actor.email, 'agent+', `@${ACTOR_DOMAIN}`);
-    if (actorRun === null) return [];
+    // The address alone proves nothing: the marker only the kit's secret key writes must match it.
+    if (actorRun === null || actor.runMarker !== actorRun) return [];
     const created = Date.parse(actor.createdAt);
     const selected =
       runId === null

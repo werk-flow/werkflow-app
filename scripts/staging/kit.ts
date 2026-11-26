@@ -58,6 +58,11 @@ export type Kit = {
  * escapes a journey prints only its redacted first line: Playwright's messages can list request headers.
  */
 export function loadKit(): Kit {
+  // Playwright's debug log lists request headers, the bypass among them.
+  if (process.env.DEBUG || process.env.PWDEBUG || process.env.DEBUG_FILE)
+    throw new Error(
+      'Unset DEBUG, PWDEBUG and DEBUG_FILE: a staging journey runs without Playwright diagnostics.',
+    );
   const read = readStagingAgentKeys();
   const refs = supabaseProjectRefs(checkout);
   if (read.file === 'missing' || !refs)
@@ -104,13 +109,18 @@ async function call(url: string, init: RequestInit): Promise<Response> {
   return fetch(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS) });
 }
 
-/** A JSON answer, or a throw naming the step and the status, never the body. */
+/** A JSON answer, or a throw naming the step and the status, never the body or a parser's quote of it. */
 async function json(response: Response, step: string): Promise<unknown> {
   if (!response.ok) {
     await response.body?.cancel();
     throw new Error(`${step} answered ${response.status}.`);
   }
-  return response.json();
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${step} answered ${response.status} without JSON.`);
+  }
 }
 
 // --- DEV readers: the read-only token through the Management API ---
@@ -133,6 +143,7 @@ const runOrganizations = new WeakSet<RunOrganization>();
 
 /** The organization named for the actor's run that the actor administers, and no other. */
 export async function runOrganization(kit: Kit, actor: Actor): Promise<RunOrganization> {
+  if (!issuedActors.has(actor)) throw new Error('Use the actor createActor made.');
   const rows = z
     .array(z.object({ id: uuidSchema }))
     .parse(
@@ -160,15 +171,19 @@ export async function readDev<T extends ReadableTable>(
   return z.array(z.record(z.string(), z.unknown())).parse(await readOnlySql(kit, query, parameters));
 }
 
-const actorRows = z.array(z.object({ id: uuidSchema, email: z.string(), created_at: z.string() }));
+const actorRows = z.array(
+  z.object({ id: uuidSchema, email: z.string(), created_at: z.string(), run_marker: z.string().nullable() }),
+);
 const organizationRows = z.array(z.object({ id: uuidSchema, name: z.string(), admin_id: uuidSchema }));
 
 /** Every run's actor and organization on DEV: the database filters, so no other row reaches the kit. */
 async function readRunRows(kit: Kit): Promise<{ actors: ActorRow[]; organizations: OrganizationRow[] }> {
   const [actors, organizations] = await Promise.all([
-    readOnlySql(kit, 'select id, email, created_at from auth.users where email like $1', [
-      RUN_PATTERNS.actorEmail,
-    ]),
+    readOnlySql(
+      kit,
+      "select id, email, created_at, raw_app_meta_data->>'werkflow_agent_run' as run_marker from auth.users where email like $1",
+      [RUN_PATTERNS.actorEmail],
+    ),
     readOnlySql(kit, 'select id, name, admin_id from public.organizations where name like $1', [
       RUN_PATTERNS.organizationName,
     ]),
@@ -176,7 +191,7 @@ async function readRunRows(kit: Kit): Promise<{ actors: ActorRow[]; organization
   return {
     actors: actorRows
       .parse(actors)
-      .map((row) => ({ id: row.id, email: row.email, createdAt: row.created_at })),
+      .map((row) => ({ id: row.id, email: row.email, createdAt: row.created_at, runMarker: row.run_marker })),
     organizations: organizationRows
       .parse(organizations)
       .map((row) => ({ id: row.id, name: row.name, adminId: row.admin_id })),
@@ -193,7 +208,23 @@ export async function readStripe(kit: Kit, path: string): Promise<StripeFacts[]>
 
 // --- The actor: a confirmed DEV user through the secret key, so no mail goes out ---
 
-export type Actor = { runId: string; id: string; email: string; password: string };
+export type Actor = {
+  readonly runId: string;
+  readonly id: string;
+  readonly email: string;
+  readonly password: string;
+};
+/** Actors this kit created or re-keyed after checking their run marker; no caller makes one. */
+const issuedActors = new WeakSet<Actor>();
+/** The run marker in the user's app metadata, which only the secret key can write. */
+const RUN_MARKER = 'werkflow_agent_run';
+
+function issue(actor: Actor): Actor {
+  const issued = Object.freeze({ ...actor });
+  issuedActors.add(issued);
+  writeFileSync(join(runFolder(actor.runId), 'actor.json'), JSON.stringify(issued), { mode: 0o600 });
+  return issued;
+}
 
 function authAdmin(kit: Kit, path: string, init: RequestInit = {}): Promise<Response> {
   const secret = kit.keys.SUPABASE_DEV_SECRET_KEY;
@@ -203,7 +234,11 @@ function authAdmin(kit: Kit, path: string, init: RequestInit = {}): Promise<Resp
   });
 }
 
-const userAnswer = z.object({ id: uuidSchema, email: z.string() });
+const userAnswer = z.object({
+  id: uuidSchema,
+  email: z.string(),
+  app_metadata: z.record(z.string(), z.unknown()),
+});
 
 /** The run's folder under the gitignored `.agent-logs/`, private to this user. */
 function runFolder(runId: string): string {
@@ -212,10 +247,6 @@ function runFolder(runId: string): string {
   mkdirSync(folder, { recursive: true, mode: 0o700 });
   chmodSync(folder, 0o700);
   return folder;
-}
-
-function keepActor(actor: Actor): void {
-  writeFileSync(join(runFolder(actor.runId), 'actor.json'), JSON.stringify(actor), { mode: 0o600 });
 }
 
 function newPassword(): string {
@@ -234,37 +265,36 @@ export async function createActor(kit: Kit, runId: string): Promise<Actor> {
           email,
           password,
           email_confirm: true,
+          app_metadata: { [RUN_MARKER]: runId },
           user_metadata: { first_name: 'Agent', last_name: runId },
         }),
       }),
       'Creating the actor',
     ),
   );
-  if (created.email !== email) throw new Error('The created user has another address.');
-  const actor = { runId, id: created.id, email, password };
-  keepActor(actor);
-  return actor;
+  if (created.email !== email || created.app_metadata[RUN_MARKER] !== runId)
+    throw new Error('The created user carries another address or no run marker.');
+  return issue({ runId, id: created.id, email, password });
 }
 
 /**
  * The run's actor with a new password set through the secret key, so a cleanup works from any machine
- * and after any other machine's attempt. The user must still carry the run's address.
+ * and after any other machine's attempt. The user must still carry the run's address and run marker.
  */
 async function actorFor(kit: Kit, run: RunRows): Promise<Actor> {
   const email = runActorEmail(run.runId);
   const user = userAnswer.parse(
     await json(await authAdmin(kit, `users/${run.actorId}`), 'Reading the actor'),
   );
-  if (user.email !== email) throw new Error('The user does not carry its run address; nothing changed.');
+  if (user.email !== email || user.app_metadata[RUN_MARKER] !== run.runId)
+    throw new Error('The user does not carry its run address and marker; nothing changed.');
   const password = newPassword();
   kit.secrets.push(password);
   await json(
     await authAdmin(kit, `users/${run.actorId}`, { method: 'PUT', body: JSON.stringify({ password }) }),
     'Setting the actor password',
   );
-  const actor = { runId: run.runId, id: run.actorId, email, password };
-  keepActor(actor);
-  return actor;
+  return issue({ runId: run.runId, id: run.actorId, email, password });
 }
 
 // --- The browser: staging pages only, the bypass to staging's host only ---
@@ -280,7 +310,8 @@ export async function withStagingBrowser<T>(
   journey: (page: Page) => Promise<T>,
 ): Promise<T> {
   const browser = await chromium.launch({ channel: 'chromium' });
-  const refused: string[] = [];
+  const refused = new Set<string>();
+  const blocked = new Set<string>();
   try {
     // No service worker: its requests pass no route, so they would miss the bypass.
     const context = await browser.newContext({
@@ -297,23 +328,20 @@ export async function withStagingBrowser<T>(
         navigation: request.isNavigationRequest(),
         mainFrame: request.frame().parentFrame() === null,
       };
-      if (requestVerdict(asked) === 'refused') {
-        refused.push(refusedOrigin(asked.url));
-        await route.abort('blockedbyclient');
+      if (requestVerdict(asked, kit.devRef) === 'refused') {
+        // A refused page fails the journey; a refused asset or frame, such as a wallet button, is left out.
+        (asked.navigation && asked.mainFrame ? refused : blocked).add(refusedOrigin(asked.url));
+        await route.abort('blockedbyclient').catch(() => undefined);
         return;
       }
-      if (requestVerdict(asked) === 'elsewhere') {
-        // Another origin's request passes untouched: a rewritten header set breaks Stripe's own pages.
-        await route.fallback();
-        return;
-      }
-      // Staging's request is sent here without following redirects: Playwright would carry the bypass
-      // header to a redirect's target. The browser then requests the target itself, through this route.
-      // A failed fetch's error lists the request's headers, the bypass among them: it is dropped unread,
-      // and the browser sees a failed request.
+      // Every request is sent here without following redirects, so each redirect's target comes back
+      // through this route and its verdict before it is requested, and Playwright never carries the
+      // bypass to it. A failed fetch's error lists the request's headers: it is dropped unread.
       try {
+        const bypass = bypassHeaders(asked, secret);
         const response = await route.fetch({
-          headers: { ...request.headers(), ...bypassHeaders(asked, secret) },
+          // Another origin's request keeps its own headers: a rewritten set breaks Stripe's pages.
+          ...(Object.keys(bypass).length ? { headers: { ...request.headers(), ...bypass } } : {}),
           maxRedirects: 0,
         });
         await route.fulfill({ response });
@@ -321,25 +349,22 @@ export async function withStagingBrowser<T>(
         await route.abort('failed').catch(() => undefined);
       }
     });
-    // Another origin's redirect hop passes no route: a page it leads outside staging ends the journey
-    // at once. It never carries the bypass, which only staging's own requests get.
-    context.on('request', (request) => {
-      if (!request.redirectedFrom() || !request.isNavigationRequest()) return;
-      const asked = {
-        url: request.url(),
-        navigation: true,
-        mainFrame: request.frame().parentFrame() === null,
-      };
-      if (requestVerdict(asked) !== 'refused') return;
-      refused.push(refusedOrigin(asked.url));
-      void context.close();
+    // Realtime's socket passes no request route: DEV's project only.
+    await context.routeWebSocket(/.*/, async (socket) => {
+      const asked = { url: socket.url(), navigation: false, mainFrame: false };
+      if (requestVerdict(asked, kit.devRef) === 'elsewhere') socket.connectToServer();
+      else {
+        blocked.add(refusedOrigin(asked.url));
+        await socket.close();
+      }
     });
     const page = await context.newPage();
     try {
       const result = await journey(page);
-      if (refused.length === 0) return result;
+      if (refused.size === 0) return result;
     } catch (error) {
-      if (refused.length === 0) {
+      if (blocked.size) kit.log('blocked', { origins: [...blocked].join(',') });
+      if (refused.size === 0) {
         const path = join(runFolder(runId), `failure-${Date.now()}.png`);
         if (
           await page.screenshot({ path }).then(
@@ -351,7 +376,7 @@ export async function withStagingBrowser<T>(
         throw error;
       }
     }
-    throw new Error(`The browser refused pages outside staging: ${[...new Set(refused)].join(', ')}.`);
+    throw new Error(`The browser refused pages outside staging: ${[...refused].join(', ')}.`);
   } finally {
     await browser.close();
   }

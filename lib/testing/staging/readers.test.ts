@@ -66,6 +66,7 @@ test('Stripe objects and lists pass only with livemode false on each, as their a
     { id: 'sub_1', livemode: true },
     { id: 'sub_1' },
     { object: 'list', data: [{ livemode: false }, { livemode: true }] },
+    { object: 'list', livemode: false, data: [{ livemode: true }] },
     null,
   ])
     expect(() => sandboxAnswer(body)).toThrow(/sandbox/);

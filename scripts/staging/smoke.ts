@@ -54,12 +54,13 @@ async function journey(): Promise<string> {
     const organization = await runOrganization(kit, actor);
     const [subscription] = await readDev(kit, organization, {
       table: 'werkflow_subscriptions',
-      columns: ['status', 'runs_subscription', 'stripe_subscription_id'],
+      columns: ['status', 'stripe_subscription_id'],
     });
     const subscriptionId = String(subscription?.stripe_subscription_id ?? '');
-    if (!subscription?.runs_subscription || !subscriptionId.startsWith('sub_'))
-      throw new Error('The organization holds no running subscription on DEV.');
+    if (subscription?.status !== 'active' || !subscriptionId.startsWith('sub_'))
+      throw new Error('The organization holds no active subscription on DEV.');
     const [atStripe] = await readStripe(kit, `subscriptions/${subscriptionId}`);
+    if (atStripe?.status !== 'active') throw new Error('The sandbox subscription is not active at Stripe.');
     kit.log('dashboard shown', {
       organization: organization.id,
       subscription: subscriptionId,

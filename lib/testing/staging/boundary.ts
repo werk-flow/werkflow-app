@@ -1,6 +1,7 @@
 // The staging journey kit's browser boundary (.claude/skills/staging-journey/SKILL.md). A journey's
-// browser loads pages from staging only, and the Vercel bypass reaches staging's host only: the
-// kit's route handler asks these functions about every request (Tier 1).
+// browser reaches staging, DEV and Stripe's sandbox Checkout only, and the Vercel bypass reaches
+// staging's host only: the kit's route asks these functions about every request and every redirect
+// hop before it is sent (Tier 1).
 
 /** Staging: the branch alias of `main` (docs/technical/environments.md, "Vercel"). */
 export const STAGING_ORIGIN = 'https://werkflow-app-git-main-werkflows-projects.vercel.app';
@@ -16,21 +17,27 @@ export type BrowserRequest = {
   mainFrame: boolean;
 };
 
+/** Hosts the sandbox Checkout loads its scripts, frames and captcha from; Stripe's live pages are refused above. */
+const STRIPE_SANDBOX_ASSET_HOSTS =
+  /^(?:[a-z0-9-]+\.)*(?:stripe\.com|stripe\.network|stripecdn\.com|hcaptcha\.com)$/;
+
 /**
- * `staging`: a request to staging, which carries the bypass. `elsewhere`: a request the staging page or
- * the sandbox Checkout makes to another origin (Supabase DEV, Stripe's scripts), without the bypass.
- * `refused`: a page outside staging, except a sandbox Checkout the app sent the journey to.
+ * `staging`: a request to staging, which carries the bypass. `elsewhere`: a request to DEV's Supabase
+ * project or, from a frame or a script, to Stripe's sandbox Checkout hosts, without the bypass.
+ * `refused`: everything else, PROD included, and a page outside staging except a sandbox Checkout the
+ * app sent the journey to. A journey that needs another origin adds it here, with a test.
  */
 export type RequestVerdict = 'staging' | 'elsewhere' | 'refused';
 
-export function requestVerdict(request: BrowserRequest): RequestVerdict {
+export function requestVerdict(request: BrowserRequest, devRef: string): RequestVerdict {
   const url = URL.parse(request.url);
   if (!url || url.username || url.password) return 'refused';
   if (url.origin === STAGING_ORIGIN) return 'staging';
-  if (url.protocol !== 'https:') return 'refused';
+  if (url.protocol !== 'https:' && url.protocol !== 'wss:') return 'refused';
   if (request.navigation && request.mainFrame)
     return SANDBOX_CHECKOUT.test(url.href) ? 'elsewhere' : 'refused';
-  return 'elsewhere';
+  if (url.hostname === `${devRef}.supabase.co`) return 'elsewhere';
+  return url.protocol === 'https:' && STRIPE_SANDBOX_ASSET_HOSTS.test(url.hostname) ? 'elsewhere' : 'refused';
 }
 
 /**
@@ -39,7 +46,7 @@ export function requestVerdict(request: BrowserRequest): RequestVerdict {
  * staging then carries.
  */
 export function bypassHeaders(request: BrowserRequest, secret: string): Record<string, string> {
-  if (requestVerdict(request) !== 'staging') return {};
+  if (URL.parse(request.url)?.origin !== STAGING_ORIGIN) return {};
   return request.navigation
     ? { 'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true' }
     : { 'x-vercel-protection-bypass': secret };

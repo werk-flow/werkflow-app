@@ -1,18 +1,27 @@
-// A staging journey's browser loads staging's pages and a sandbox Checkout only, and the Vercel bypass
-// reaches staging's host only. Every value here is made up.
+// A staging journey's browser reaches staging, DEV and Stripe's sandbox Checkout only, loads no page
+// outside staging but a sandbox Checkout, and sends the Vercel bypass to staging's host only. Every
+// value here is made up.
 import { describe, expect, test } from 'bun:test';
 
-import { STAGING_ORIGIN, bypassHeaders, refusedOrigin, requestVerdict } from './boundary';
+import {
+  STAGING_ORIGIN,
+  bypassHeaders,
+  refusedOrigin,
+  requestVerdict,
+  type BrowserRequest,
+} from './boundary';
 
 const SECRET = 'MadeUpBypassSecret0123456789abcd';
+const DEV = 'devref0000000000000';
+const verdict = (request: BrowserRequest) => requestVerdict(request, DEV);
 const page = (url: string) => ({ url, navigation: true, mainFrame: true });
 const asset = (url: string) => ({ url, navigation: false, mainFrame: true });
 const embedded = (url: string) => ({ url, navigation: true, mainFrame: false });
 
 describe('origin refusal', () => {
   test('staging loads, as a page or an asset', () => {
-    expect(requestVerdict(page(`${STAGING_ORIGIN}/dashboard`))).toBe('staging');
-    expect(requestVerdict(asset(`${STAGING_ORIGIN}/_next/static/app.js`))).toBe('staging');
+    expect(verdict(page(`${STAGING_ORIGIN}/dashboard`))).toBe('staging');
+    expect(verdict(asset(`${STAGING_ORIGIN}/_next/static/app.js`))).toBe('staging');
   });
 
   test('a page anywhere else is refused: production, another preview, a look-alike host', () => {
@@ -20,30 +29,47 @@ describe('origin refusal', () => {
       'https://app.werk-flow.app/dashboard',
       'https://werkflow-app-git-feature-werkflows-projects.vercel.app/',
       `${STAGING_ORIGIN}.evil.example/`,
-      'https://werkflow-app-git-main-werkflows-projects.vercel.app.evil.example/login',
-      `http://werkflow-app-git-main-werkflows-projects.vercel.app/login`,
-      `https://user:pass@werkflow-app-git-main-werkflows-projects.vercel.app/login`,
+      'http://werkflow-app-git-main-werkflows-projects.vercel.app/login',
+      'https://user:pass@werkflow-app-git-main-werkflows-projects.vercel.app/login',
+      `https://${DEV}.supabase.co/auth/v1/verify`,
       'not a url',
     ])
-      expect(requestVerdict(page(url)), url).toBe('refused');
+      expect(verdict(page(url)), url).toBe('refused');
   });
 
   test('a sandbox Checkout page loads, a live one never does', () => {
-    expect(requestVerdict(page('https://checkout.stripe.com/c/pay/cs_test_a1B2c3#fragment'))).toBe(
-      'elsewhere',
-    );
-    expect(requestVerdict(page('https://checkout.stripe.com/g/pay/cs_test_a1B2c3'))).toBe('elsewhere');
-    expect(requestVerdict(page('https://checkout.stripe.com/c/pay/cs_live_a1B2c3'))).toBe('refused');
-    expect(requestVerdict(page('https://checkout.stripe.com/'))).toBe('refused');
-    expect(requestVerdict(page('https://dashboard.stripe.com/test/payments'))).toBe('refused');
+    expect(verdict(page('https://checkout.stripe.com/c/pay/cs_test_a1B2c3#fragment'))).toBe('elsewhere');
+    expect(verdict(page('https://checkout.stripe.com/g/pay/cs_test_a1B2c3'))).toBe('elsewhere');
+    expect(verdict(page('https://checkout.stripe.com/c/pay/cs_live_a1B2c3'))).toBe('refused');
+    expect(verdict(page('https://checkout.stripe.com/'))).toBe('refused');
+    expect(verdict(page('https://dashboard.stripe.com/test/payments'))).toBe('refused');
   });
 
-  test("the pages' own assets and embedded frames elsewhere load, over https only", () => {
-    expect(requestVerdict(asset('https://mbkkzuqjbdvzelqvuzcn.supabase.co/rest/v1/profiles'))).toBe(
-      'elsewhere',
-    );
-    expect(requestVerdict(embedded('https://js.stripe.com/v3/elements-inner.html'))).toBe('elsewhere');
-    expect(requestVerdict(asset('http://tracker.example/pixel.gif'))).toBe('refused');
+  test("DEV's project and the sandbox Checkout's hosts load as assets and frames", () => {
+    for (const request of [
+      asset(`https://${DEV}.supabase.co/rest/v1/profiles`),
+      asset(`wss://${DEV}.supabase.co/realtime/v1/websocket`),
+      embedded('https://js.stripe.com/v3/elements-inner.html'),
+      asset('https://api.stripe.com/v1/payment_pages'),
+      embedded('https://m.stripe.network/inner.html'),
+      asset('https://b.stripecdn.com/assets/x.js'),
+      embedded('https://newassets.hcaptcha.com/captcha/v1/x'),
+    ])
+      expect(verdict(request), request.url).toBe('elsewhere');
+  });
+
+  test('any other asset or frame is refused: PROD, another project, a look-alike, plain http', () => {
+    for (const request of [
+      asset('https://otherref00000000000.supabase.co/rest/v1/profiles'),
+      asset(`https://${DEV}.supabase.co.evil.example/rest/v1/profiles`),
+      asset('https://app.werk-flow.app/api/health'),
+      embedded('https://app.werk-flow.app/dashboard'),
+      asset('https://stripe.com.evil.example/x.js'),
+      embedded('https://pay.google.com/gp/p/ui/payframe'),
+      asset('http://js.stripe.com/v3/x.js'),
+      asset(`ws://${DEV}.supabase.co/realtime/v1/websocket`),
+    ])
+      expect(verdict(request), request.url).toBe('refused');
   });
 });
 
@@ -62,7 +88,7 @@ describe('header scoping', () => {
     for (const request of [
       page('https://checkout.stripe.com/c/pay/cs_test_a1B2c3'),
       asset('https://api.stripe.com/v1/payment_pages'),
-      asset('https://mbkkzuqjbdvzelqvuzcn.supabase.co/auth/v1/token'),
+      asset(`https://${DEV}.supabase.co/auth/v1/token`),
       page('https://app.werk-flow.app/login'),
       page(`${STAGING_ORIGIN}.evil.example/login`),
     ])

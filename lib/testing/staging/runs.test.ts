@@ -23,6 +23,7 @@ const actor = (id: string, runId: string, createdAt: string): ActorRow => ({
   id,
   email: runActorEmail(runId),
   createdAt,
+  runMarker: runId,
 });
 const organization = (id: string, name: string, adminId: string): OrganizationRow => ({ id, name, adminId });
 
@@ -39,8 +40,11 @@ describe('cleanup selection', () => {
     actor('actor-old', RUN, OLD),
     actor('actor-fresh', OTHER_RUN, FRESH),
     // A real person on DEV, whatever their address looks like.
-    { id: 'person', email: 'agent@werkflow-agents.test', createdAt: OLD },
-    { id: 'partner', email: `agent+${RUN}@partner.example`, createdAt: OLD },
+    { id: 'person', email: 'agent@werkflow-agents.test', createdAt: OLD, runMarker: null },
+    { id: 'partner', email: `agent+${RUN}@partner.example`, createdAt: OLD, runMarker: RUN },
+    // A run address someone typed by hand: no marker, or one for another run.
+    { id: 'look-alike', email: runActorEmail('20261120-0900-abcdef'), createdAt: OLD, runMarker: null },
+    { id: 'wrong-marker', email: runActorEmail('20261120-0900-fedcba'), createdAt: OLD, runMarker: RUN },
   ];
   const organizations = [
     organization('org-run', runOrganizationName(RUN), 'actor-old'),

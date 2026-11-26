@@ -125,12 +125,13 @@ function factsOf(body: unknown): StripeFacts {
  * `livemode: false`, a list's every item does. The message names no field of the body.
  */
 export function sandboxAnswer(body: unknown): StripeFacts[] {
-  const list = sandboxList.safeParse(body);
-  if (list.success)
+  const isList = z.object({ object: z.literal('list') }).safeParse(body).success;
+  // A list passes only when every item is a sandbox object; it never falls back to the object check.
+  if (isList && sandboxList.safeParse(body).success)
     return z
       .object({ data: z.array(z.unknown()) })
       .parse(body)
       .data.map(factsOf);
-  if (sandboxObject.safeParse(body).success) return [factsOf(body)];
+  if (!isList && sandboxObject.safeParse(body).success) return [factsOf(body)];
   throw new Error('Stripe answered something other than a sandbox object; the journey stops.');
 }
