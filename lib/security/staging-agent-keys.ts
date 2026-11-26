@@ -121,9 +121,13 @@ export function installStagingAgentKeys(
   renameSync(next, path);
 }
 
-/** Whether a file or folder mode gives no access to the group or others: 600 for a file, 700 for a folder. */
-export function privateModeVerdict(mode: number): Verdict {
-  return (mode & 0o077) === 0 ? 'ok' : 'failed';
+/** What `statSync` tells about a path: its permission bits and its type. */
+type PathStat = { mode: number; isFile(): boolean; isDirectory(): boolean };
+
+/** Whether a key file is a regular file with mode 600, or its folder a folder with mode 700. */
+export function privateModeVerdict(stat: PathStat, kind: 'file' | 'folder'): Verdict {
+  const typed = kind === 'file' ? stat.isFile() : stat.isDirectory();
+  return typed && (stat.mode & 0o777) === (kind === 'file' ? 0o600 : 0o700) ? 'ok' : 'failed';
 }
 
 const projectListSchema = z.array(z.object({ ref: z.string().optional(), id: z.string().optional() }));
@@ -136,9 +140,12 @@ export function devOnlyVerdict(body: unknown): Verdict {
   return refs.length === 1 && refs[0] === DEV_PROJECT_REF ? 'ok' : 'failed';
 }
 
-/** A write the token must be refused: only Supabase's denial (401 or 403) proves it; any other answer fails. */
+/**
+ * A write the token must be refused: only Supabase's permission denial (403) proves it. A refused
+ * sign-in (401), a write that ran, or any other answer fails.
+ */
 export function writeRefusedVerdict(status: number): Verdict {
-  return status === 401 || status === 403 ? 'ok' : 'failed';
+  return status === 403 ? 'ok' : 'failed';
 }
 
 const livemodeSchema = z.object({ livemode: z.boolean() });
@@ -150,13 +157,14 @@ export function sandboxVerdict(body: unknown): Verdict {
 }
 
 /**
- * Whether staging's protection holds. Vercel answers a request without the bypass with 401, or a
- * browser's with a redirect to its sign-in on vercel.com; with the bypass the request reaches the
- * app, which answers the sign-in page or a redirect of its own.
+ * Whether staging's protection holds for a request to the app's sign-in page. Without the bypass,
+ * Vercel answers 401, or a browser's request with a redirect to its sign-in on vercel.com. With the
+ * bypass, only the app's sign-in page itself (200) proves the request reached the app.
  */
 export function protectionVerdict(status: number, location: string | null, bypass: boolean): Verdict {
+  if (bypass) return status === 200 ? 'ok' : 'failed';
   const vercelSignIn =
-    status === 401 || (location !== null && URL.parse(location)?.hostname === 'vercel.com');
-  if (!bypass) return vercelSignIn ? 'ok' : 'failed';
-  return !vercelSignIn && status >= 200 && status < 400 ? 'ok' : 'failed';
+    status === 401 ||
+    (status >= 300 && status < 400 && location !== null && URL.parse(location)?.hostname === 'vercel.com');
+  return vercelSignIn ? 'ok' : 'failed';
 }

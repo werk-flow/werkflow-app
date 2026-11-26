@@ -374,20 +374,38 @@ test('ordinary work in a checkout that holds .env.live-backup passes', () => {
   ).toBeUndefined();
 });
 
-test('the disk reader finds .env.live-backup in a folder and its subfolders only', () => {
+test('the disk reader finds .env.live-backup at every checkout root in the tree it reads', () => {
   const root = mkdtempSync(join(tmpdir(), 'live-backup-'));
   try {
-    for (const folder of ['a', 'b/c']) mkdirSync(join(root, folder), { recursive: true });
-    for (const file of ['.env.live-backup', 'a/.env.live-backup', 'b/c/.env.live-backup'])
-      writeFileSync(join(root, file), 'MADE_UP=1\n');
-    expect(liveBackupsOnDisk(root).sort()).toEqual([
-      join(root, '.env.live-backup'),
-      join(root, 'a/.env.live-backup'),
-    ]);
-    expect(liveBackupsOnDisk(join(root, 'missing'))).toEqual([]);
+    // A workspace with a checkout three levels down, whose own subfolder holds a stray copy.
+    const checkout = join(root, 'worktrees/app/one');
+    mkdirSync(join(checkout, 'nested'), { recursive: true });
+    writeFileSync(join(checkout, '.git'), 'gitdir: /made/up\n');
+    for (const file of [join(checkout, '.env.live-backup'), join(checkout, 'nested/.env.live-backup')])
+      writeFileSync(file, 'MADE_UP=1\n');
+    expect(liveBackupsOnDisk(root, Infinity)).toEqual([join(checkout, '.env.live-backup')]);
+    // A glob reaches only as deep as its pattern.
+    expect(liveBackupsOnDisk(root, 2)).toEqual([]);
+    expect(liveBackupsOnDisk(join(root, 'worktrees/app'), 1)).toEqual([join(checkout, '.env.live-backup')]);
+    expect(liveBackupsOnDisk(join(root, 'missing'), Infinity)).toEqual([]);
+    // A tree larger than the walk's bound cannot be told.
+    for (let index = 0; index <= 4000; index++)
+      mkdirSync(join(root, 'wide', String(index)), { recursive: true });
+    expect(liveBackupsOnDisk(join(root, 'wide'), Infinity)).toBeUndefined();
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('a recursive read of a tree too large to walk is refused for .env.live-backup', () => {
+  const untold = {
+    cwd: checkout,
+    home,
+    liveBackupsUnder: (folder: string) => (folder === '/srv/huge' ? undefined : []),
+  };
+  expect(boatKeyCommandRefusal('grep -r KEY /srv/huge', untold)).toContain('cannot tell whether /srv/huge');
+  // rg skips the git-ignored file, so it needs no walk.
+  expect(boatKeyCommandRefusal('rg KEY /srv/huge', untold)).toBeUndefined();
 });
 
 // The hook itself, as the agent runs it: exit 2 with the reason refuses the call.

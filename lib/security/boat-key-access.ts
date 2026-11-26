@@ -15,8 +15,8 @@ import { errorCode } from '../testing/runner/error-code';
 // Threat model: the guard stops accidental and habitual reads, and a read that
 // a report's text prompts a report thread to make. Agents run as the owner's
 // OS user, so deliberate evasion is a rule violation it does not claim to catch.
-// A recursive read finds `.env.live-backup` in the folder it reads and in that
-// folder's subfolders; a deeper copy is out of its reach.
+// A recursive read finds `.env.live-backup` at the root of every checkout in the
+// tree it reads, up to a bound; a larger tree refuses.
 
 /** A secret no agent reads, and who reads it instead. */
 type GuardedSecret = {
@@ -200,25 +200,41 @@ export function shellFolder(input: unknown, context: Context): string {
 type Context = {
   cwd: string;
   home: string;
-  /** The `.env.live-backup` files in a folder and its subfolders: the disk for the hook, a list in tests. */
-  liveBackupsUnder: (folder: string) => readonly string[];
+  /**
+   * The `.env.live-backup` files in a folder and the folders below it, at most `depth` levels down;
+   * undefined when the tree is too large to tell. The disk for the hook, a list in tests.
+   */
+  liveBackupsUnder: (folder: string, depth: number) => readonly string[] | undefined;
 };
 
-/** The `.env.live-backup` files that exist in `folder` and its direct subfolders. */
-export function liveBackupsOnDisk(folder: string): string[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(folder, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => join(folder, entry.name));
-  } catch (error) {
-    // A missing folder, a file or a folder the user cannot list holds nothing a reader would reach.
-    if (['ENOENT', 'ENOTDIR', 'EACCES'].includes(String(errorCode(error)))) return [];
-    throw error;
+/** Folders that hold no checkout's backup, which the walk skips. */
+const UNWALKED = new Set(['node_modules', '.git', '.next']);
+/** The most folders one walk lists before the guard calls the tree too large to tell. */
+const MAX_WALKED = 4000;
+
+/**
+ * The `.env.live-backup` files in `folder` and the folders below it, at most `depth` levels down,
+ * or undefined past MAX_WALKED folders. A checkout keeps the file at its root, so the walk does not
+ * enter a folder that holds `.git`.
+ */
+export function liveBackupsOnDisk(folder: string, depth: number): string[] | undefined {
+  const found: string[] = [];
+  const queue = [{ dir: folder, level: 0 }];
+  for (const { dir, level } of queue) {
+    if (queue.length > MAX_WALKED) return undefined;
+    const backup = join(dir, LIVE_BACKUP);
+    if (lstatSync(backup, { throwIfNoEntry: false })) found.push(backup);
+    if (level >= depth || lstatSync(join(dir, '.git'), { throwIfNoEntry: false })) continue;
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true }))
+        if (entry.isDirectory() && !UNWALKED.has(entry.name))
+          queue.push({ dir: join(dir, entry.name), level: level + 1 });
+    } catch (error) {
+      // A missing folder, a file or a folder the user cannot list holds nothing a reader would reach.
+      if (!['ENOENT', 'ENOTDIR', 'EACCES'].includes(String(errorCode(error)))) throw error;
+    }
   }
-  return [folder, ...entries]
-    .map((dir) => join(dir, LIVE_BACKUP))
-    .filter((path) => lstatSync(path, { throwIfNoEntry: false }) !== undefined);
+  return found;
 }
 
 /** A word's path with a leading `~`, `$HOME` or `${HOME}` expanded, or undefined when another expansion remains. */
@@ -379,8 +395,9 @@ function lineRefusal(
 ): Refusal | undefined {
   const { home } = context;
   const secrets = secretFiles(home);
-  const liveBackups = (folder: string): SecretFile[] =>
-    context.liveBackupsUnder(folder).map((path) => ({ path, secret: LIVE_BACKUP_SECRET }));
+  // Refusals for trees too large to tell whether they hold `.env.live-backup`.
+  const untold: Refusal[] = [];
+  const liveBackups = (folder: string, depth: number) => liveBackupFiles(context, folder, depth, untold);
   const reading = readShell(command);
   if (!reading)
     return /\.config\b/.test(command)
@@ -407,7 +424,7 @@ function lineRefusal(
         const matched = word.globs
           ? [
               ...new Set(
-                [...secrets, ...liveBackups(globRoot(path))]
+                [...secrets, ...liveBackups(globRoot(path), globDepth(path))]
                   .filter((file) => globReaches(path, file.path))
                   .map((file) => file.secret),
               ),
@@ -432,17 +449,10 @@ function lineRefusal(
       pathsOf(arg.text, folders, home).map((path) => (arg.globs ? globRoot(path) : path)),
     );
     const roots = [...folders, ...operands];
-    // A checkout is where agents work, so `.env.live-backup` counts only in a folder the reader
-    // surely reads: an operand, or the working folder when it has none. rg and ag skip it, since
-    // git ignores `.env*`, unless a flag says otherwise.
-    const skipsIgnored =
-      IGNORE_RESPECTING.has(run.name) && !run.args.some((arg) => NO_IGNORE_FLAG.test(arg.text));
-    const liveRoots = skipsIgnored
-      ? []
-      : [...operands, ...(readsWorkingFolder(run.name, run.args) ? folders : [])];
+    const liveRoots = liveBackupRoots(run, operands, folders);
     for (const folder of roots) {
       const inside = secretsUnder(
-        [...secrets, ...(liveRoots.includes(folder) ? liveBackups(folder) : [])],
+        [...secrets, ...(liveRoots.includes(folder) ? liveBackups(folder, Infinity) : [])],
         folder,
       );
       if (inside.length)
@@ -452,7 +462,38 @@ function lineRefusal(
         });
     }
   }
-  return merged(refusals);
+  return merged([...refusals, ...untold]);
+}
+
+/** The live backups `folder` holds as guarded files; a tree too large to tell adds a refusal to `untold`. */
+function liveBackupFiles(context: Context, folder: string, depth: number, untold: Refusal[]): SecretFile[] {
+  const found = context.liveBackupsUnder(folder, depth);
+  if (!found)
+    untold.push({
+      why: `the guard cannot tell whether ${folder} holds .env.live-backup: the tree is too large.`,
+      secrets: [LIVE_BACKUP_SECRET],
+    });
+  return (found ?? []).map((path) => ({ path, secret: LIVE_BACKUP_SECRET }));
+}
+
+/**
+ * The folders where a recursive reader's `.env.live-backup` counts. A checkout is where agents
+ * work, so only a folder the reader surely reads: an operand, or the working folder when it has
+ * none. rg and ag skip the file, since git ignores `.env*`, unless a flag says otherwise.
+ */
+function liveBackupRoots(
+  run: { name: string; args: readonly ShellWord[] },
+  operands: readonly string[],
+  folders: readonly string[],
+): string[] {
+  const skipsIgnored =
+    IGNORE_RESPECTING.has(run.name) && !run.args.some((arg) => NO_IGNORE_FLAG.test(arg.text));
+  return skipsIgnored ? [] : [...operands, ...(readsWorkingFolder(run.name, run.args) ? folders : [])];
+}
+
+/** How many folder levels below its literal folder a glob reaches: one for `~/code/<wildcard>/.env*`. */
+function globDepth(path: string): number {
+  return relative(globRoot(path), path).split(sep).length - 1;
 }
 
 /** One refusal for several, naming every secret once; undefined for none. */

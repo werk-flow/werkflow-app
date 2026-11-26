@@ -133,12 +133,19 @@ test('an install writes a private file in a private folder, and a key out of sha
   }
 });
 
-test('a file or folder is private only without group or other access', () => {
-  expect(privateModeVerdict(0o100600)).toBe('ok');
-  expect(privateModeVerdict(0o40700)).toBe('ok');
-  expect(privateModeVerdict(0o100400)).toBe('ok');
-  for (const mode of [0o100644, 0o100664, 0o100640, 0o100604, 0o40755, 0o40750])
-    expect(privateModeVerdict(mode), mode.toString(8)).toBe('failed');
+test('a key file is a regular file with mode 600, its folder a folder with mode 700', () => {
+  const file = (mode: number) => ({ mode: 0o100000 | mode, isFile: () => true, isDirectory: () => false });
+  const folder = (mode: number) => ({ mode: 0o40000 | mode, isFile: () => false, isDirectory: () => true });
+  expect(privateModeVerdict(file(0o600), 'file')).toBe('ok');
+  expect(privateModeVerdict(folder(0o700), 'folder')).toBe('ok');
+  // A mode other than the exact one fails, though it shuts out the group and others too.
+  for (const mode of [0o644, 0o664, 0o640, 0o604, 0o700, 0o400])
+    expect(privateModeVerdict(file(mode), 'file'), mode.toString(8)).toBe('failed');
+  for (const mode of [0o755, 0o750, 0o600])
+    expect(privateModeVerdict(folder(mode), 'folder'), mode.toString(8)).toBe('failed');
+  // A folder where the file belongs, or a file where the folder belongs, fails.
+  expect(privateModeVerdict(folder(0o600), 'file')).toBe('failed');
+  expect(privateModeVerdict(file(0o700), 'folder')).toBe('failed');
 });
 
 test('a Supabase token passes only when it sees DEV and no other project', () => {
@@ -153,9 +160,8 @@ test('a Supabase token passes only when it sees DEV and no other project', () =>
 
 test('a write passes only when Supabase refuses it', () => {
   expect(writeRefusedVerdict(403)).toBe('ok');
-  expect(writeRefusedVerdict(401)).toBe('ok');
-  // A write that ran, or an answer that proves nothing, fails.
-  for (const status of [200, 201, 400, 404, 429, 500])
+  // A write that ran, a refused sign-in, or an answer that proves nothing, fails.
+  for (const status of [200, 201, 400, 401, 404, 429, 500])
     expect(writeRefusedVerdict(status), String(status)).toBe('failed');
 });
 
@@ -173,7 +179,8 @@ test("staging's protection holds without the bypass and opens with it", () => {
   expect(protectionVerdict(200, null, false)).toBe('failed');
   expect(protectionVerdict(307, '/login', false)).toBe('failed');
   expect(protectionVerdict(200, null, true)).toBe('ok');
-  expect(protectionVerdict(307, '/login', true)).toBe('ok');
+  // A redirect may lead anywhere, so only the sign-in page proves the app answered.
+  expect(protectionVerdict(307, '/login', true)).toBe('failed');
   // A bypass Vercel does not accept leaves the request at its sign-in.
   expect(protectionVerdict(401, null, true)).toBe('failed');
   expect(protectionVerdict(302, signIn, true)).toBe('failed');

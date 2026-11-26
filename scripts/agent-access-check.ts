@@ -62,14 +62,17 @@ async function devOnly(token: string): Promise<Verdict> {
   });
 }
 
-/** `select 1` through the write endpoint: harmless if it ran, and a read-only token is refused it. */
+/**
+ * A temporary table through the query endpoint: it needs write access, vanishes with its session if
+ * it ran, and Supabase denies it (403) to a token without Database write.
+ */
 async function writeRefused(token: string): Promise<Verdict> {
   return probe(async () =>
     statusVerdict(
       await request(`${MANAGEMENT_API}/projects/${DEV_PROJECT_REF}/database/query`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'select 1' }),
+        body: JSON.stringify({ query: 'create temporary table agent_access_write_probe (id int)' }),
       }),
       writeRefusedVerdict,
     ),
@@ -109,9 +112,14 @@ async function staging(bypass: string | undefined): Promise<Verdict> {
   });
 }
 
-function modeVerdict(path: string): Verdict {
+function modeVerdict(path: string, kind: 'file' | 'folder'): Verdict {
   const stat = statSync(path, { throwIfNoEntry: false });
-  return stat ? privateModeVerdict(stat.mode) : 'missing';
+  return stat ? privateModeVerdict(stat, kind) : 'missing';
+}
+
+/** Every value a file assigns to `name`: a loader may take the first or the last, so each counts. */
+function assignedValues(text: string, name: string): string[] {
+  return text.split(/\r?\n/).flatMap((line) => parseEnvironmentFile(line)[name] ?? []);
 }
 
 /** Runs every check, prints each verdict, and answers whether all passed. */
@@ -121,8 +129,8 @@ async function check(): Promise<boolean> {
   // The key file: present, private, in a private folder, with every key in its shape.
   const keyPath = join(home, STAGING_AGENT_KEY_FILE);
   const keys = readStagingAgentKeys(home);
-  const fileMode = modeVerdict(keyPath);
-  const folderMode = modeVerdict(dirname(keyPath));
+  const fileMode = modeVerdict(keyPath, 'file');
+  const folderMode = modeVerdict(dirname(keyPath), 'folder');
   lines.push([
     `~/${STAGING_AGENT_KEY_FILE} mode 600 in a 700 folder`,
     fileMode === 'missing' ? 'missing' : fileMode === 'ok' && folderMode === 'ok' ? 'ok' : 'failed',
@@ -152,9 +160,11 @@ async function check(): Promise<boolean> {
     withKey('VERCEL_STAGING_BYPASS_SECRET', (bypass) => staging(bypass)),
   ]);
 
-  // Every Supabase token this checkout's env files and the Supabase CLI's login hold sees DEV only.
+  // Every Supabase token this checkout's env files hold sees DEV only. A value without a token's
+  // shape fails unsent, so another provider's key never reaches Supabase.
   const tokenVerdicts = new Map<string, Promise<Verdict>>();
-  const tokenVerdict = (token: string): Promise<Verdict> => {
+  const tokenVerdict = (token: string): Verdict | Promise<Verdict> => {
+    if (keyShapeVerdict('SUPABASE_DEV_ACCESS_TOKEN', token) !== 'ok') return 'failed';
     const known = tokenVerdicts.get(token);
     if (known) return known;
     const verdict = devOnly(token);
@@ -167,19 +177,19 @@ async function check(): Promise<boolean> {
   for (const name of envFiles) {
     const path = join(checkout, name);
     if (!statSync(path, { throwIfNoEntry: false })?.isFile()) continue;
-    const token = parseEnvironmentFile(readFileSync(path, 'utf8')).SUPABASE_ACCESS_TOKEN;
-    if (token) lines.push([`${name} SUPABASE_ACCESS_TOKEN sees DEV only`, tokenVerdict(token)]);
+    const tokens = assignedValues(readFileSync(path, 'utf8'), 'SUPABASE_ACCESS_TOKEN');
+    tokens.forEach((token, index) => {
+      const which = tokens.length > 1 ? ` #${index + 1}` : '';
+      lines.push([`${name} SUPABASE_ACCESS_TOKEN${which} sees DEV only`, tokenVerdict(token)]);
+    });
   }
-  const cliLogin = join(home, '.supabase', 'access-token');
-  const cliToken = statSync(cliLogin, { throwIfNoEntry: false }) && readFileSync(cliLogin, 'utf8').trim();
-  if (cliToken) lines.push(["the Supabase CLI's login sees DEV only", tokenVerdict(cliToken)]);
 
   // `.env.local` and its backups: private like the key file.
-  lines.push(['.env.local mode 600', modeVerdict(join(checkout, '.env.local'))]);
+  lines.push(['.env.local mode 600', modeVerdict(join(checkout, '.env.local'), 'file')]);
   for (const name of envFiles.filter(
     (file) => file !== '.env.local' && /^\.env\.local|-backup$/.test(file),
   )) {
-    const verdict = modeVerdict(join(checkout, name));
+    const verdict = modeVerdict(join(checkout, name), 'file');
     if (verdict !== 'missing') lines.push([`${name} mode 600`, verdict]);
   }
 
@@ -209,7 +219,13 @@ function install(args: readonly string[]): boolean {
       );
       return false;
     }
-    keys.set(name, readFileSync(arg.slice(split + 1), 'utf8').trim());
+    try {
+      keys.set(name, readFileSync(arg.slice(split + 1), 'utf8').trim());
+    } catch {
+      // The error names the path, which may be a value pasted in its place: report the key only.
+      console.error(`[agent-access] ${name} file: failed. Nothing was written.`);
+      return false;
+    }
   }
   if (keys.size === 0) {
     console.error('[agent-access] Name at least one key: NAME=<file>.');
