@@ -423,6 +423,7 @@ export const STANDALONE_FAMILIES: readonly StandaloneFamily[] = [
   { id: 'onboarding-start', screen: '/onboarding/start', heading: 'Willkommen bei WerkFlow' },
   { id: 'onboarding-beitreten', screen: '/onboarding/join-organization', heading: 'Organisation beitreten' },
   { id: 'upgrade', screen: '/upgrade', heading: 'WerkFlow abonnieren' },
+  { id: 'zahlung-abgebrochen', screen: '/upgrade/abgebrochen', heading: 'Neue Organisation erstellen' },
   {
     id: 'onboarding-organisation',
     screen: '/onboarding/create-organization',

@@ -17,10 +17,18 @@ import { VERIFY_ADDRESS_COOKIE } from '@/lib/auth/address-cookies';
  * - `newcomer`: a confirmed account without an organization or a subscription.
  * - `subscriber`: a newcomer whose payment the upgrade page simulated.
  * - `prestart`: a member whose access starts later, with an open blocking onboarding task.
+ * - `further-checkout`: the Admin of an organization they created, whose
+ *   Checkout for a further organization is open and unpaid.
  * - `support`: the synthetic support user the test server's allowlist names
  *   (lib/testing/support-user.ts), a member of no organization.
  */
-export type StandaloneSession = 'anonymous' | 'newcomer' | 'subscriber' | 'prestart' | 'support';
+export type StandaloneSession =
+  | 'anonymous'
+  | 'newcomer'
+  | 'subscriber'
+  | 'prestart'
+  | 'further-checkout'
+  | 'support';
 
 export type StandaloneScreen = {
   /** The page folder under `app/`, or `not-found` for the root not-found page. */
@@ -59,6 +67,7 @@ export const STANDALONE_SCREENS = [
   { route: '/onboarding/start', session: 'newcomer', path: '/onboarding/start' },
   { route: '/onboarding/join-organization', session: 'newcomer', path: '/onboarding/join-organization' },
   { route: '/upgrade', session: 'newcomer', path: '/upgrade' },
+  { route: '/upgrade/abgebrochen', session: 'further-checkout', path: '/upgrade/abgebrochen' },
   {
     route: '/onboarding/create-organization',
     session: 'subscriber',
