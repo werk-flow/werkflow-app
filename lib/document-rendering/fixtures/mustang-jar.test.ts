@@ -206,6 +206,63 @@ test("CI caches only the pinned jar's one file, and only after the verify step p
   });
 });
 
+test("every push to main and a dispatch seed main's cache with the verified jar under CI's key, reading no secret", () => {
+  const seed = readWorkflow('mustang-cache.yml');
+  // No path filter: a cache GitHub evicted after 7 unused days returns with the next push.
+  expect(seed.at('on')).toEqual({ push: { branches: ['main'] }, workflow_dispatch: null });
+  expect(seed.at('permissions')).toEqual({ contents: 'read' });
+  expect(JSON.stringify(seed.at())).not.toContain('secrets.');
+  expect(seed.at('jobs', 'seed', 'timeout-minutes')).toBe(10);
+  // A second push's run waits for the first and then finds its key, so two saves never race.
+  expect(seed.at('concurrency')).toEqual({
+    group: 'mustang-cache-${{ github.ref }}',
+    'cancel-in-progress': false,
+  });
+  // The seed saves what E-invoices restores: the same key step, path and key.
+  const ci = readWorkflow('ci.yml');
+  expect(seed.step('seed', "Read Mustang's cache key")).toEqual(
+    ci.step('invoices', "Read Mustang's cache key"),
+  );
+  const cached = ci.step('invoices', "Restore Mustang's jar").with;
+  expect(cached).toEqual({
+    path: '${{ steps.mustang.outputs.path }}',
+    key: '${{ steps.mustang.outputs.key }}',
+  });
+  const missed = "steps.mustang-cache.outputs.cache-hit != 'true'";
+  expect(seed.step('seed', "Look up Mustang's jar")).toMatchObject({
+    id: 'mustang-cache',
+    with: {
+      path: '${{ steps.mustang.outputs.path }}',
+      key: '${{ steps.mustang.outputs.key }}',
+      'lookup-only': true,
+    },
+  });
+  const steps = seed.at('jobs', 'seed', 'steps');
+  if (!Array.isArray(steps)) throw new Error('mustang-cache.yml has no seed steps');
+  const after = steps.slice(steps.findIndex((step) => step?.id === 'mustang-cache') + 1);
+  // A hit ends the job; a miss downloads, verifies and saves exactly the pinned file, each step only
+  // after the one before it passed.
+  expect(after).toEqual([
+    {
+      name: "Download Mustang's jar",
+      if: missed,
+      run: 'bun lib/document-rendering/fixtures/mustang-jar.ts download',
+    },
+    {
+      name: "Verify Mustang's jar before caching it",
+      if: missed,
+      run: 'bun lib/document-rendering/fixtures/mustang-jar.ts verify',
+    },
+    {
+      name: "Cache Mustang's jar",
+      if: missed,
+      // The same pinned save action as CI's E-invoices job.
+      uses: ci.step('invoices', "Cache Mustang's jar").uses,
+      with: cached,
+    },
+  ]);
+});
+
 test('the pre-save check refuses a missing or tampered jar', () => {
   const path = join(folder(), 'jar');
   expect(matches(path, SHA256)).toBe(false);
