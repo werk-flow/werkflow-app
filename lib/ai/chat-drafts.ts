@@ -1,24 +1,17 @@
 'use client';
 
+import { tabStorage } from '@/lib/time-tracking/manual-entry-bridge-storage';
+
 // The WerkFlow KI chat composer's drafts (brief non-negotiable 8): one per person,
 // organization and thread, in this tab's sessionStorage, so a draft survives
 // navigation and reload and leaves the device with the tab. A memory copy
 // carries it when storage is refused. Every browser sign-out clears them
-// (lib/conventions/sign-out-clears-tab-state.test.ts), so this module imports
-// nothing: the menu sign-out loads at start-up.
+// (lib/conventions/sign-out-clears-tab-state.test.ts); the menu sign-out loads
+// at start-up, so this module imports only the storage module every sign-out
+// already loads.
 
 const DRAFT_PREFIX = 'werkflow:ki-draft:';
 
-/** The tab's session storage, or null where the browser refuses it. Every sign-out loads this module, so it imports nothing. */
-function draftStorage(): Storage | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.sessionStorage ?? null;
-  } catch {
-    // best-effort: without storage the drafts live in memory only, and a sign-out must go on.
-    return null;
-  }
-}
 const memoryDrafts = new Map<string, string>();
 const draftListeners = new Set<() => void>();
 
@@ -31,7 +24,7 @@ export function readDraft(key: string): string {
   const kept = memoryDrafts.get(key);
   if (kept !== undefined) return kept;
   try {
-    return draftStorage()?.getItem(key) ?? '';
+    return tabStorage()?.getItem(key) ?? '';
   } catch {
     // best-effort: storage that refuses a read holds no draft of this page.
     return '';
@@ -42,8 +35,8 @@ export function readDraft(key: string): string {
 export function writeDraft(key: string, text: string): void {
   memoryDrafts.set(key, text);
   try {
-    if (text) draftStorage()?.setItem(key, text);
-    else draftStorage()?.removeItem(key);
+    if (text) tabStorage()?.setItem(key, text);
+    else tabStorage()?.removeItem(key);
   } catch {
     // best-effort: the memory copy keeps the draft for this page when the browser refuses storage.
   }
@@ -59,7 +52,7 @@ export function draftKey(userId: string, organizationId: string, threadId: strin
 export function clearKiDrafts(): void {
   memoryDrafts.clear();
   try {
-    const storage = draftStorage();
+    const storage = tabStorage();
     if (!storage) return;
     const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index));
     for (const key of keys) if (key?.startsWith(DRAFT_PREFIX)) storage.removeItem(key);
