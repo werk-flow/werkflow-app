@@ -66,7 +66,6 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
   const [error, setError] = useState<string | null>(null);
   // What the last „Ausstellen“ found at fault; the draft stays a draft.
   const [findings, setFindings] = useState<IssueFinding[]>([]);
-  const [nextKey, setNextKey] = useState(0);
   const { run, isPending } = usePendingTask();
   // An issued invoice shows its fields read only.
   const pending = isPending || invoice.status !== 'entwurf';
@@ -114,21 +113,13 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
           }}
         />
       )}
-      <InvoiceLinesFields
-        lines={form.lines}
-        lineNetCents={form.lines.map((_line, index) => amounts?.lineNetCents[index] ?? null)}
-        onChange={(lines) => setForm({ ...form, lines })}
-        onAdd={() => {
-          setForm({ ...form, lines: [...form.lines, emptyLine(`new-${nextKey}`)] });
-          setNextKey(nextKey + 1);
-        }}
+      <EditorLines
+        form={form}
+        setForm={setForm}
+        amounts={amounts}
         errors={errors}
         disabled={pending}
         issued={invoice.status !== 'entwurf'}
-      />
-      <InvoiceCatalogLine
-        onAdd={(line) => setForm((current) => ({ ...current, lines: [...current.lines, line] }))}
-        disabled={pending}
       />
       <InvoiceTotals amounts={amounts} />
       <InvoiceTermsFields form={form} onChange={setForm} errors={errors} disabled={pending} />
@@ -143,6 +134,47 @@ export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
         />
       )}
     </form>
+  );
+}
+
+/** The lines with their amounts. A draft adds an empty or a catalog line; an issued invoice adds none. */
+function EditorLines({
+  form,
+  setForm,
+  amounts,
+  errors,
+  disabled,
+  issued,
+}: {
+  form: DraftForm;
+  setForm: (next: DraftForm | ((current: DraftForm) => DraftForm)) => void;
+  amounts: DraftAmounts | null;
+  errors: Record<string, string | undefined>;
+  disabled: boolean;
+  issued: boolean;
+}) {
+  const [nextKey, setNextKey] = useState(0);
+  return (
+    <>
+      <InvoiceLinesFields
+        lines={form.lines}
+        lineNetCents={form.lines.map((_line, index) => amounts?.lineNetCents[index] ?? null)}
+        onChange={(lines) => setForm({ ...form, lines })}
+        onAdd={() => {
+          setForm({ ...form, lines: [...form.lines, emptyLine(`new-${nextKey}`)] });
+          setNextKey(nextKey + 1);
+        }}
+        errors={errors}
+        disabled={disabled}
+        issued={issued}
+      />
+      {!issued && (
+        <InvoiceCatalogLine
+          onAdd={(line) => setForm((current) => ({ ...current, lines: [...current.lines, line] }))}
+          disabled={disabled}
+        />
+      )}
+    </>
   );
 }
 

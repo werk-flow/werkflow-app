@@ -72,8 +72,7 @@ function declaredTiming(files: readonly string[]): GroupTimingRequirements {
   };
 }
 
-// Ownership, not proof of isolation: a changed file selects its scope's browser groups, an unowned one the
-// core set (group-selection.ts); "/" owns a directory, else one file; test-scope-prefixes.test.ts checks.
+// Ownership, not isolation: a changed file selects its scope's groups (group-selection.ts); "/" owns a folder.
 export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   customers: [
     'lib/clients/',
