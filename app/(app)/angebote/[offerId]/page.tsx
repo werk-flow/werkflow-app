@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { OfferContentEditor } from '@/components/angebote/editor/offer-content-editor';
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { OfferHeaderFacts } from '@/components/angebote/offer-header-facts';
 import { OfferStatusBadge } from '@/components/angebote/offers-list';
@@ -80,6 +81,8 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
         </RegionLoadError>
       )}
       <OfferHeaderFacts offer={offer} />
+      {/* Only a draft's content changes; this release writes no other state. */}
+      {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
     </div>
   );
 }
