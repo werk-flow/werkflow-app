@@ -25,7 +25,7 @@ const lineArbitrary = fc
 
 const storedArbitrary = fc
   .tuple(invoiceTermsArbitrary, fc.array(lineArbitrary, { minLength: 1, maxLength: 40 }))
-  .map(([terms, lines]) => ({ ...terms, lines }));
+  .map(([terms, lines]) => ({ ...terms, lines, cancels: null, cancellationReason: null }));
 
 const ISSUE = { number: 'RE-2037-001', issueDate: '2037-11-20' };
 

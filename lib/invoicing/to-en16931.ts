@@ -7,6 +7,7 @@ import { formatGermanDate } from '@/lib/utils';
 
 import { balanceOf, taxRateBasisPoints } from './calculate';
 import type { CalculatedInvoice, InvoiceParty, InvoiceSeller, InvoiceTax } from './model';
+import { carriesAsXml } from './xml-text';
 
 /** The ZUGFeRD and Factur-X profile id of EN 16931 ("COMFORT"). */
 const EN16931_PROFILE = 'urn:cen.eu:en16931:2017';
@@ -17,12 +18,8 @@ const PAYMENT_MEANS_CODE = { 'credit-transfer': '58', 'direct-debit': '59', card
 /** An element's content: `@name` keys are attributes, `#` its text, other keys child elements in order. */
 type XmlNode = { [element: string]: string | XmlNode | XmlNode[] };
 
-/** Characters XML 1.0 cannot carry, not even as a character reference. */
-const NOT_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/;
-
 function escapeText(text: string): string {
-  if (NOT_XML.test(text) || !text.isWellFormed())
-    throw new RangeError('Invoice text holds a character XML cannot carry.');
+  if (!carriesAsXml(text)) throw new RangeError('Invoice text holds a character XML cannot carry.');
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
