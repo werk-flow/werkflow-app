@@ -212,7 +212,6 @@ Check these before classifying.
 - Wait on the clock (a sleep, `waitForTimeout`, a deadline loop). Wait on the fact.
 - Set a per-test timeout or a non-zero retry.
 - Read the wall clock in a unit test. Pin it with `setSystemTime` or an injected clock.
-- Load a `server-only` module in a unit test behind another file's mock. Call `mock.module('server-only', () => ({}))` in the test, then `await import` the module (`lib/conventions/server-only-test-mocks.test.ts`).
 - Mint a golden cleanup marker outside the seed module.
 - Locate a control in a spec by its copy, a parent hop, a CSS class, an id or an attribute.
 - Compare `count()` reads taken once. Poll them together with `expect.poll`.

@@ -5,7 +5,7 @@ import ts from 'typescript';
 import { repositorySources, resolveModuleFile, type SourceHost } from './module-imports';
 import { repositoryRoot } from './product-sources';
 
-// Rule test: docs/technical/testing.md, "Never". One process runs every unit
+// Tier 2 (decision 0005) for test isolation. One process runs every unit
 // test file, and a `mock.module` stays registered for the files after it
 // (scripts/run-unit-tests.ts). A test that loads a module importing
 // 'server-only' without mocking 'server-only' itself passes only behind an
