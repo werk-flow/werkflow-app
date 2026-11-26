@@ -72,7 +72,7 @@ function issued(lines: InvoiceLineValues[], buyerReference = '', orderReference 
     cancellationReason: null,
   };
   const draft = invoiceDraftOf(
-    { ...facts, lines: lines.map((entry) => ({ ...entry, netCents: 0 })) },
+    { ...facts, lines: lines.map((entry) => ({ ...entry, netCents: 0, source: null })) },
     SNAPSHOT,
     {
       number: 'RE-2037-001',
@@ -86,7 +86,11 @@ function issued(lines: InvoiceLineValues[], buyerReference = '', orderReference 
     id: '98300000-0000-4000-8000-000000000001',
     invoiceNumber: 'RE-2037-001',
     issueDate: '2037-11-10',
-    lines: lines.map((entry, index) => ({ ...entry, netCents: calculated.lines[index]?.netCents ?? 0 })),
+    lines: lines.map((entry, index) => ({
+      ...entry,
+      netCents: calculated.lines[index]?.netCents ?? 0,
+      source: null,
+    })),
     ...calculated.totals,
   };
 }

@@ -113,6 +113,8 @@ const original = {
   client: { id: clientId, name: 'Hausverwaltung Lindenhof GmbH' },
   recipient: { id: clientId, name: 'Hausverwaltung Lindenhof GmbH', address: 'Hofweg 1, 10117 Berlin' },
   work: null,
+  // Each line's catalog source beside it: the Storno copies the lines with theirs.
+  lineSources: [null, null],
   lines: [
     {
       name: 'Monteurstunde',
@@ -137,7 +139,7 @@ const original = {
   ],
 };
 
-/** The Stornorechnung as cancel_invoice stores it and get_invoice reads it back. */
+/** The Stornorechnung as cancel_invoice stores it and get_invoice_with_line_sources reads it back. */
 const storno = {
   ...original,
   id: stornoId,
@@ -167,6 +169,7 @@ const settings = {
   numberWithYear: true,
   numberMinDigits: 3,
   nextNumber: 2,
+  numberYear: 2037,
   nextInvoiceNumber: 'RE-2037-002',
   numbersFixed: true,
   paymentDueDays: 14,
@@ -186,7 +189,8 @@ await assertRefused(
 // Another organization's invoice reads as none, and a Stornorechnung is not cancelled: the one read, no write.
 signInAs(world, 'buero');
 world.rpc = ({ name, args }) => {
-  if (name !== 'get_invoice' || args.p_organization_id !== ORGANIZATION_A) return { data: null, error: null };
+  if (name !== 'get_invoice_with_line_sources' || args.p_organization_id !== ORGANIZATION_A)
+    return { data: null, error: null };
   return { data: args.p_invoice_id === stornoId ? storno : null, error: null };
 };
 await assertRefused(
@@ -204,7 +208,7 @@ await assertRefused(
 
 // A credit is not cancelled: its Stornorechnung would ask the customer to pay. The one read, no write.
 world.rpc = ({ name }) =>
-  name === 'get_invoice'
+  name === 'get_invoice_with_line_sources'
     ? { data: { ...original, lineNetCents: -7300, taxCents: -1807, grossCents: -9107 }, error: null }
     : { data: null, error: null };
 await assertRefused(
@@ -216,7 +220,8 @@ await assertRefused(
 
 // A Stornorechnung the rules refuse is not issued: here the seller in the snapshot lacks every tax id.
 world.rpc = ({ name }) => {
-  if (name === 'get_invoice') return { data: { ...original, issueSnapshot: snapshot('') }, error: null };
+  if (name === 'get_invoice_with_line_sources')
+    return { data: { ...original, issueSnapshot: snapshot('') }, error: null };
   return { data: name === 'get_invoice_settings' ? settings : null, error: null };
 };
 world.rpcCalls.length = 0;
@@ -231,7 +236,7 @@ assert.ok(
 );
 assert.deepEqual(
   world.rpcCalls.map((call) => call.name),
-  ['get_invoice', 'get_invoice_settings'],
+  ['get_invoice_with_line_sources', 'get_invoice_settings'],
   'a refused Stornorechnung reached the cancel',
 );
 
@@ -244,7 +249,7 @@ let registeredOriginal: unknown = null;
 // How often cancel_invoice answers that another issue took the checked number first.
 let numberMoves = 0;
 world.rpc = ({ name, args }) => {
-  if (name === 'get_invoice') {
+  if (name === 'get_invoice_with_line_sources') {
     if (args.p_invoice_id === stornoId) return { data: storno, error: null };
     return { data: cancelled ? { ...original, status: 'storniert', version: 4 } : original, error: null };
   }
@@ -279,7 +284,7 @@ assert.deepEqual(await cancelInvoice(input), {
 assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_organization_id, call.args.p_actor_id ?? null]),
   [
-    ['get_invoice', ORGANIZATION_A, null],
+    ['get_invoice_with_line_sources', ORGANIZATION_A, null],
     ['get_invoice_settings', ORGANIZATION_A, null],
     ['cancel_invoice', ORGANIZATION_A, CALLER_ID],
   ],
@@ -331,7 +336,7 @@ assert.deepEqual(await cancelInvoice(input), {
 });
 assert.deepEqual(
   world.rpcCalls.map((call) => call.name),
-  ['get_invoice', 'cancel_invoice'],
+  ['get_invoice_with_line_sources', 'cancel_invoice'],
 );
 assert.equal(world.rpcCalls[1]?.args.p_original_document_id, undefined);
 assert.equal(stored.length, 0);
@@ -361,6 +366,31 @@ assert.deepEqual(
   stored.map((object) => object.path),
 );
 assert.deepEqual(revalidatedPaths, []);
+
+// A used-up series has no number to check under: nothing is rendered or stored, the function gets an empty
+// number, and its refusal reaches the office as such, not as a moved number.
+const checkedRpc = world.rpc;
+world.rpc = (call) => {
+  if (call.name === 'get_invoice_settings')
+    return { data: { ...settings, nextInvoiceNumber: null }, error: null };
+  if (call.name === 'cancel_invoice') {
+    return { data: null, error: { code: 'P0001', message: 'invoice_numbers_exhausted' } };
+  }
+  return checkedRpc(call);
+};
+world.rpcCalls.length = 0;
+stored.length = 0;
+discarded.length = 0;
+assert.deepEqual(await cancelInvoice({ ...input, attemptKey: crypto.randomUUID() }), {
+  success: false,
+  error: 'invoice_numbers_exhausted',
+});
+assert.deepEqual(
+  world.rpcCalls.filter((call) => call.name === 'cancel_invoice').map((call) => call.args.p_expected_number),
+  [''],
+);
+assert.deepEqual([stored, discarded, revalidatedPaths], [[], [], []]);
+world.rpc = checkedRpc;
 
 // „Korrigieren“ answers the new draft.
 cancelled = false;
