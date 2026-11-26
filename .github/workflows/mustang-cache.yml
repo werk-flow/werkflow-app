@@ -1,0 +1,53 @@
+name: Mustang cache
+
+# Keeps Mustang's pinned jar in main's Actions cache, where CI's E-invoices job finds it
+# (lib/document-rendering/fixtures/mustang-jar.ts). A merge-queue run reads only its own cache and
+# main's, and nothing else saves the jar under main: a push to main reuses the queue run's tree and
+# starts no job, and full runs are rare. A queue run that missed it went to Maven Central, got 429
+# three times and failed (#621).
+#
+# It runs on every push to main, with no path filter: GitHub evicts a cache unused for 7 days, and a
+# push after an eviction seeds it again. When the key exists, the job ends after a lookup that
+# downloads nothing. A dispatch seeds it by hand.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    name: Seed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      # mustang-jar.ts needs Bun only, no installed package.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - name: Read Mustang's cache key
+        id: mustang
+        run: bun lib/document-rendering/fixtures/mustang-jar.ts >> "$GITHUB_OUTPUT"
+      - name: Look up Mustang's jar
+        id: mustang-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.mustang.outputs.path }}
+          key: ${{ steps.mustang.outputs.key }}
+          lookup-only: true
+      - name: Download Mustang's jar
+        if: steps.mustang-cache.outputs.cache-hit != 'true'
+        run: bun lib/document-rendering/fixtures/mustang-jar.ts download
+      # Only the pinned jar, verified again here, enters the cache.
+      - name: Verify Mustang's jar before caching it
+        if: steps.mustang-cache.outputs.cache-hit != 'true'
+        run: bun lib/document-rendering/fixtures/mustang-jar.ts verify
+      - name: Cache Mustang's jar
+        if: steps.mustang-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.mustang.outputs.path }}
+          key: ${{ steps.mustang.outputs.key }}
