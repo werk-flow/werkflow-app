@@ -46,7 +46,7 @@ type Form = {
   discountDays: string;
 };
 
-function formOf(settings: InvoiceSettings): Form {
+function settingsFormOf(settings: InvoiceSettings): Form {
   return {
     prefix: settings.numberPrefix,
     withYear: settings.numberWithYear,
@@ -228,7 +228,7 @@ function PaymentTermsFields({ form, update, errors, disabled }: FieldProps) {
 /** The form's text, its errors, and the save: unchanged answers „nothing to save“. */
 function useSettingsSave(settings: InvoiceSettings, organizationId: string) {
   const { showBanner } = useBanner();
-  const [form, setForm] = useState(() => formOf(settings));
+  const [form, setForm] = useState(() => settingsFormOf(settings));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const { run, isPending } = useServerAction(saveInvoiceSettings);
@@ -240,7 +240,7 @@ function useSettingsSave(settings: InvoiceSettings, organizationId: string) {
       focusFirstInvalidField(parsed.errors);
       return;
     }
-    if (JSON.stringify(form) === JSON.stringify(formOf(settings))) {
+    if (JSON.stringify(form) === JSON.stringify(settingsFormOf(settings))) {
       showBanner(NOTHING_TO_SAVE);
       return;
     }

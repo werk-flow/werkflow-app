@@ -487,6 +487,25 @@ begin
 end;
 $$;
 
+-- The invoice page reads through get_invoice_with_line_sources (lib/invoices/reads.ts): an issued
+-- invoice read there keeps its number, its dates and its original beside the line sources.
+do $$
+declare
+  v_read jsonb := public.get_invoice_with_line_sources('38060000-0000-4000-8000-000000000010',
+    pg_temp.id('first'));
+begin
+  if v_read ->> 'status' is distinct from 'ausgestellt' or v_read ->> 'invoiceNumber' is distinct from 'RG10234'
+    or v_read ->> 'issueDate' is distinct from ((now() at time zone 'Europe/Berlin')::date)::text
+    or v_read ->> 'serviceStart' is distinct from '2037-11-02' or v_read ->> 'serviceEnd' is distinct from '2037-11-02'
+    or v_read -> 'original' is distinct from
+      jsonb_build_object('documentId', '38060000-0000-4000-8000-000000000301', 'filed', true)
+    or v_read -> 'issueSnapshot' is null or v_read -> 'issueSnapshot' = 'null'::jsonb
+    or jsonb_array_length(v_read -> 'lineSources') is distinct from jsonb_array_length(v_read -> 'lines') then
+    raise exception 'the page reads the issued invoice as %', v_read;
+  end if;
+end;
+$$;
+
 -- No one links a work, customer or person to the original, through the app
 -- or directly: a work link would open it to every employee assigned to that
 -- work. Removal stays (below).

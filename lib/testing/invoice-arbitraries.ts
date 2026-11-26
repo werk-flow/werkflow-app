@@ -1,8 +1,10 @@
 import fc from 'fast-check';
 import type { PriceQuantity } from '@/lib/inventory/line-amount';
+import { EMPTY_COMPANY_PROFILE_DETAILS } from '@/lib/company-profile/profile';
 import { addLocalDays } from '@/lib/date-time/berlin';
 import type { InvoiceDraft, InvoiceTax } from '@/lib/invoicing/model';
 import { STANDARD_RATE_INVOICE } from '@/lib/invoicing/fixtures/reference-invoices';
+import type { IssueSnapshot } from '@/lib/invoices/issue-model';
 import { INVOICE_LINE_SOURCE_KINDS, type InvoiceLineSource } from '@/lib/invoices/line-sources';
 import { INVOICE_TAX_RATES, type InvoiceLineValues, type InvoiceTerms } from '@/lib/invoices/types';
 import { berlinDateArbitrary } from './berlin-arbitraries';
@@ -152,3 +154,22 @@ export const invoiceTermsArbitrary: fc.Arbitrary<InvoiceTerms> = fc
     openingText: '',
     closingText: '',
   }));
+
+/** A complete issue snapshot of the made-up seller and buyer: the EN 16931 rules pass with it. */
+export const ISSUE_SNAPSHOT: IssueSnapshot = {
+  organizationName: 'Haustechnik Sonnenberg',
+  profile: {
+    ...EMPTY_COMPANY_PROFILE_DETAILS,
+    companyName: 'Haustechnik Sonnenberg GmbH',
+    street: 'Sonnenweg 1',
+    postalCode: '01234',
+    city: 'Sonnenstadt',
+    vatId: 'DE123456789',
+    iban: 'DE00 1111 1111 1111 1111 11',
+  },
+  files: { logo: null, stationery_first: null, stationery_following: null },
+  buyer: {
+    name: 'Hausverwaltung Lindenhof GmbH',
+    address: { lines: ['Hofweg 1'], postalCode: '10117', city: 'Berlin', countryCode: 'DE' },
+  },
+};

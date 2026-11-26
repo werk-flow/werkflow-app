@@ -111,6 +111,16 @@ const draft = {
       netCents: 10800,
     },
   ],
+  // The line came from a Leistung: get_invoice_with_line_sources names it beside the line.
+  lineSources: [
+    {
+      kind: 'leistung',
+      id: '96100000-0000-4000-8000-000000000071',
+      number: 'L-7',
+      name: 'Monteurstunde',
+      archived: false,
+    },
+  ],
 };
 const issueInput = { invoiceId, expectedVersion: 2, attemptKey };
 /** The series as get_invoice_settings answers it for the caller's organization; nextInvoiceNumber moves on each issue. */
@@ -193,7 +203,7 @@ await assertRefused(
 // Another organization's invoice reads as none: the one read, no write.
 world.rpc = ({ name, args }) => {
   if (name === 'get_invoice_settings') return { data: settingsOf(args.p_organization_id), error: null };
-  return name === 'get_invoice' &&
+  return name === 'get_invoice_with_line_sources' &&
     args.p_invoice_id === invoiceId &&
     args.p_organization_id === ORGANIZATION_A
     ? { data: draft, error: null }
@@ -226,7 +236,7 @@ assert.ok(
 );
 assert.deepEqual(
   world.rpcCalls.map((call) => call.name),
-  ['get_invoice', 'get_invoice_settings'],
+  ['get_invoice_with_line_sources', 'get_invoice_settings'],
   'a refused draft reached the issue',
 );
 // The rules read the draft under the number it would take, never under a placeholder.
@@ -234,7 +244,7 @@ assert.deepEqual(checkedNumbers, ['RE-2037-001 20371120']);
 
 // A draft without a readable recipient address is refused before the rules.
 world.rpc = ({ name }) =>
-  name === 'get_invoice'
+  name === 'get_invoice_with_line_sources'
     ? { data: { ...draft, recipient: { ...draft.recipient, address: 'irgendwo' } }, error: null }
     : { data: null, error: null };
 const noAddress = await issueInvoice(issueInput);
@@ -254,7 +264,7 @@ let issued: Record<string, unknown> | null = null;
 let numberMoves = 0;
 const documentId = '96100000-0000-4000-8000-000000000001';
 world.rpc = ({ name, args }) => {
-  if (name === 'get_invoice') return { data: issued ?? draft, error: null };
+  if (name === 'get_invoice_with_line_sources') return { data: issued ?? draft, error: null };
   if (name === 'get_invoice_settings') return { data: settingsOf(args.p_organization_id), error: null };
   if (name === 'issue_invoice') {
     if (issued)
@@ -323,7 +333,7 @@ assert.deepEqual(await issueInvoice(issueInput), {
 assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_organization_id, call.args.p_actor_id ?? null]),
   [
-    ['get_invoice', ORGANIZATION_A, null],
+    ['get_invoice_with_line_sources', ORGANIZATION_A, null],
     ['get_invoice_settings', ORGANIZATION_A, null],
     ['issue_invoice', ORGANIZATION_A, CALLER_ID],
     ['get_invoice_settings', ORGANIZATION_A, null],
@@ -400,7 +410,7 @@ world.rpcCalls.length = 0;
 assert.deepEqual(await fileInvoiceOriginal({ invoiceId }), { success: true });
 assert.deepEqual(
   world.rpcCalls.map((call) => call.name),
-  ['get_invoice'],
+  ['get_invoice_with_line_sources'],
 );
 
 // The preview of a draft: a PDF marked „Entwurf“ without e-invoice data, from the caller's organization.
