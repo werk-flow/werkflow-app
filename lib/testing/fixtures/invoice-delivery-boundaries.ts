@@ -92,6 +92,17 @@ const issued = {
     },
   },
   original: { documentId: originalId, filed: true },
+  cancels: null,
+  cancellationReason: null,
+  chain: [
+    {
+      id: invoiceId,
+      invoiceNumber: 'RE-2037-001',
+      status: 'ausgestellt',
+      kind: 'rechnung',
+      issueDate: '2037-11-20',
+    },
+  ],
   client: { id: '97200000-0000-4000-8000-000000000001', name: 'Hausverwaltung Lindenhof GmbH' },
   recipient: {
     id: '97200000-0000-4000-8000-000000000001',

@@ -25,6 +25,8 @@ const TOOLING = [
   'lib/security/supabase-project-checks.ts',
   // Read by scripts/inspect-production.ts and scripts/sync-dev-auth-from-prod.ts only.
   'lib/security/production-inspection.ts',
+  // Read by scripts/prod-watch.ts only, which .github/workflows/prod-watch.yml runs.
+  'lib/production-watch/**',
   // The demo seeder's own helper. CI's SQL job runs the seeder, so the GitHub
   // Actions plugin turns it into an entry without the production mark.
   'lib/security/demo-member-password.ts',
@@ -43,6 +45,10 @@ const config: KnipConfig = {
     'lib/testing/fixtures/*.{ts,tsx}',
     'scripts/*.ts!',
     'scripts/migration/*.ts!',
+    // The staging journeys and their cleanup, run by package scripts (scripts/staging/kit.ts).
+    'scripts/staging/{smoke,invoice,cleanup}.ts!',
+    // MCP servers Claude Code and Codex start by path (docs/technical/machine-setup.md, step 4).
+    'scripts/mcp/*.ts!',
     // Run by .github/scripts/main-full-run.sh and the stand-in's scheduler.
     'scripts/ci/full-run.ts!',
     // Run by a CI runner's orchestrator, which starts what it names.

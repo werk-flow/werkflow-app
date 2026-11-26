@@ -54,6 +54,8 @@ const INVOICE: Parameters<typeof invoiceDraftOf>[0] = {
   openingText: 'Vielen Dank für deinen Auftrag.',
   closingText: '',
   lines: [line('hour', 1900, MONTEURSTUNDE), line('coil', 0)],
+  cancels: null,
+  cancellationReason: null,
 };
 
 describe('postalAddressOf', () => {

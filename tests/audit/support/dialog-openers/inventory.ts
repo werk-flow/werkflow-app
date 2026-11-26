@@ -34,6 +34,8 @@ import { worldName } from '../../../../lib/testing/seed-world-plan';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { invoiceDeliverySeed, parseDeliverySeed } from '../invoice-delivery-fixtures';
+import { invoiceChainSeed, parseInvoiceChain } from '../invoice-chain-fixtures';
+import type { TestWorld } from '../../../golden/support/world';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];
 
@@ -45,6 +47,14 @@ async function invoiceDeliveryButton(
   const seed = invoiceDeliverySeed(world, 'fresh');
   const { id } = parseDeliverySeed(await surfaceFixture(world, seed.name, seed.create));
   if (!page.url().endsWith(`/rechnungen/${id}`)) await page.goto(`/rechnungen/${id}`);
+  return page.getByRole('main').getByRole('button', { name, exact: true });
+}
+
+/** The world's issued invoice, opened unless it is the page already, and its header action. */
+async function issuedInvoiceButton(page: Page, world: TestWorld, name: 'Stornieren' | 'Korrigieren') {
+  const seed = invoiceChainSeed(world, 'issued');
+  const { originalId } = parseInvoiceChain(await surfaceFixture(world, seed.name, seed.create));
+  if (!page.url().endsWith(`/rechnungen/${originalId}`)) await page.goto(`/rechnungen/${originalId}`);
   return page.getByRole('main').getByRole('button', { name, exact: true });
 }
 
@@ -352,6 +362,14 @@ export const COMMERCIAL_OPENERS = {
   'commercial.invoice-sent-manually': {
     trigger: async (context) => invoiceDeliveryButton(context, 'Als manuell versendet markieren'),
     layer: (page) => page.getByRole('dialog', { name: 'Als manuell versendet markieren', exact: true }),
+  },
+  'commercial.invoice-cancel': {
+    trigger: async ({ page, world }) => issuedInvoiceButton(page, world, 'Stornieren'),
+    layer: (page) => page.getByRole('dialog', { name: /^Rechnung .+ stornieren\?$/ }),
+  },
+  'commercial.invoice-correct': {
+    trigger: async ({ page, world }) => issuedInvoiceButton(page, world, 'Korrigieren'),
+    layer: (page) => page.getByRole('dialog', { name: /^Rechnung .+ korrigieren\?$/ }),
   },
   'commercial.invoice-issue': {
     trigger: async ({ page }) =>

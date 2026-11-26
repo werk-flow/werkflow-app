@@ -95,6 +95,8 @@ type StripeInvoiceDebit = {
   subscriptionId: string | null;
   /** The renewal this invoice collects, as `renewsAt` of its preview named it: the end of the period before. */
   renewsAt: number;
+  /** The invoice that opened the subscription (`billing_reason` `subscription_create`): WerkFlow opens one only in Checkout. */
+  opensSubscription: boolean;
   status: Stripe.Invoice.Status | null;
   amountPaidCents: number;
   /** Seconds; null until paid. */
@@ -383,6 +385,7 @@ function debitReads(
           id: invoice.id ?? invoiceId,
           subscriptionId: idOf(invoice.parent?.subscription_details?.subscription),
           renewsAt: invoice.period_end,
+          opensSubscription: invoice.billing_reason === 'subscription_create',
           status: invoice.status,
           amountPaidCents: invoice.amount_paid,
           paidAt: invoice.status_transitions.paid_at ?? null,

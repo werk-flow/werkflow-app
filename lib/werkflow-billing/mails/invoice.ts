@@ -3,9 +3,11 @@ import { formatGermanDate } from '@/lib/utils';
 
 // The mails around one WerkFlow invoice (werk-flow/werkflow-planning#492):
 // the debit notice before a renewal, the invoice with its original, and the
-// receipt. The debit notice and the invoice mail of a SEPA debit are WerkFlow's
-// own pre-notification (register LQ-60): amount, debit date, last IBAN digits,
-// mandate reference, Gläubiger-ID and contact. Dates are `YYYY-MM-DD`.
+// receipt. Checkout announces a subscription's first SEPA debit; the debit
+// notice, or the invoice mail of a renewal whose notice did not go, is WerkFlow's
+// own pre-notification of a renewal (register LQ-60). Both mails name amount,
+// debit date, last IBAN digits, mandate reference, Gläubiger-ID and contact.
+// Dates are `YYYY-MM-DD`.
 
 type Facts = (readonly [string, string])[];
 

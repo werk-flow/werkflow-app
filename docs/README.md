@@ -1,6 +1,6 @@
 # WerkFlow docs
 
-Start with `AGENTS.md`; read only entries whose condition applies. A task adds the **Current Product Baseline** of the spec it changes, and "How to work" and "Never" in each owner doc of a virtue it touches.
+Start with `AGENTS.md`; read only entries that apply. A task adds the **Current Product Baseline** of the spec it changes, and "How to work" and "Never" in each owner doc of a virtue it touches.
 
 ## Index
 
@@ -15,7 +15,7 @@ Start with `AGENTS.md`; read only entries whose condition applies. A task adds t
 - [performance.md](technical/performance.md): daily journeys, lab tables, skeletons, faster flows.
 - [document-storage-and-access.md](technical/document-storage-and-access.md): document bytes, signed URLs, storage paths, access classes, trash, versions.
 - [code-quality.md](technical/code-quality.md): writing or reviewing code.
-- [testing.md](technical/testing.md): verifying a change, a failed test, a release.
+- [testing.md](technical/testing.md): verifying a change, a failed test, a release; a [staging journey](../.claude/skills/staging-journey/SKILL.md).
 - [ci-local-fallback.md](technical/ci-local-fallback.md): CI on the owner's machines.
 - [boat-verification.md](technical/boat-verification.md): `test:verify` on Boat, its key, snapshot.
 - [integrated-test-state.md](technical/integrated-test-state.md): seeding test state, fixture dates, browser steps.
