@@ -50,6 +50,7 @@ create table public.offer_sections (
 );
 
 create index offer_sections_offer_idx on public.offer_sections (offer_id, organization_id, position);
+create index offer_sections_organization_id_fk_idx on public.offer_sections (organization_id);
 
 alter table public.offer_sections enable row level security;
 revoke all on table public.offer_sections from public, anon, authenticated, service_role;
@@ -92,6 +93,7 @@ create table public.offer_positions (
 );
 
 create index offer_positions_section_idx on public.offer_positions (section_id, offer_id, organization_id);
+create index offer_positions_organization_id_fk_idx on public.offer_positions (organization_id);
 
 alter table public.offer_positions enable row level security;
 revoke all on table public.offer_positions from public, anon, authenticated, service_role;
