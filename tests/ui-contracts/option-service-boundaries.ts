@@ -9,6 +9,7 @@ const contractRequestSchema = jobOptionRequestSchema.extend({
   clientId: z.string().optional(),
   projectId: z.string().optional(),
   siteId: z.string().optional(),
+  subjectUserId: z.string().optional(),
 });
 function isContractRequest(input: unknown): input is JobOptionRequest {
   return contractRequestSchema.safeParse(input).success;

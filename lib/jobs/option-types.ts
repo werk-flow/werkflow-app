@@ -26,6 +26,9 @@ export const jobOptionRequestSchema = z.object({
   clientId: uuidSchema.optional(),
   projectId: uuidSchema.optional(),
   siteId: uuidSchema.optional(),
+  // A time correction's picker: the person whose time it changes, whose
+  // assigned jobs it marks. The caller when absent.
+  subjectUserId: uuidSchema.optional(),
   purpose: z
     .enum([
       'filter',

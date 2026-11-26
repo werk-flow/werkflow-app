@@ -1,7 +1,10 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
-import { readResumeActivity } from './resume-activity';
+
+// The reader is server-only; the stub lets the unit tier load it (lib/conventions/server-only-test-mocks.test.ts).
+mock.module('server-only', () => ({}));
+const { readResumeActivity } = await import('./resume-activity');
 
 type FakeResult = { data: Record<string, unknown> | null; error: { message: string } | null };
 

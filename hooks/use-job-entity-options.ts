@@ -9,7 +9,10 @@ import type { BackgroundReadInput } from '@/lib/data/background-reads';
 import type { JobEntityOption, JobOptionRequest } from '@/lib/jobs/option-types';
 import { z } from '@/lib/zod';
 
-type Request = Pick<JobOptionRequest, 'kind' | 'purpose' | 'clientId' | 'projectId' | 'siteId'>;
+type Request = Pick<
+  JobOptionRequest,
+  'kind' | 'purpose' | 'clientId' | 'projectId' | 'siteId' | 'subjectUserId'
+>;
 export type JobEntityOptionsState = {
   options: JobEntityOption[];
   onSearchChange: (query: string) => void;
@@ -44,6 +47,7 @@ function entityOptionsInput(
     ...(request.clientId ? { clientId: request.clientId } : {}),
     ...(request.projectId ? { projectId: request.projectId } : {}),
     ...(request.siteId ? { siteId: request.siteId } : {}),
+    ...(request.subjectUserId ? { subjectUserId: request.subjectUserId } : {}),
     query: query ?? '',
     offset,
     selectedIds: selectedIdsSchema.parse(JSON.parse(selectedKey)),
@@ -140,7 +144,7 @@ function entityOptionsControls({
  * save. It starts when the picker opens (the popup searches for '' on open)
  * or when selected ids need their labels; typing restarts at the first page
  * after a short debounce, `onLoadMore` appends the next page, and a scope
- * change (organization, caller, role, kind, purpose or filter) cancels the
+ * change (organization, caller, role, kind, purpose, filter or person) cancels the
  * old read. Selected records stay in the options across every search and
  * page. `known` holds labels the page already has for selected ids; they show
  * until the first answer.
@@ -152,7 +156,7 @@ export function useJobEntityOptions(
 ): JobEntityOptionsState {
   const { activeOrgId, activeOrg } = useOrganization();
   const { profile } = useUserProfile();
-  const scope = `${activeOrgId}:${profile?.id}:${activeOrg?.role}:${request.kind}:${request.purpose}:${request.clientId}:${request.projectId}:${request.siteId}`;
+  const scope = `${activeOrgId}:${profile?.id}:${activeOrg?.role}:${request.kind}:${request.purpose}:${request.clientId}:${request.projectId}:${request.siteId}:${request.subjectUserId}`;
   const selectedKey = JSON.stringify(selectedIds);
   const [cursor, setCursor] = useState<Cursor>({ scope, query: null, offset: 0, revision: 0 });
   const query = cursor.scope === scope ? cursor.query : null;

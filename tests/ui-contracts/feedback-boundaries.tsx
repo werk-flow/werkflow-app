@@ -350,7 +350,11 @@ function CorrectionTimelineHost(): React.JSX.Element {
         Prüfen
       </Button>
       <output aria-label="Prüfergebnis">{checked}</output>
-      <CorrectionTimelineFields timeline={timeline} showErrors={false} />
+      <CorrectionTimelineFields
+        timeline={timeline}
+        showErrors={false}
+        subjectUserId={employeeRecordId === 'contract-person-a' ? 'contract-user-a' : 'contract-user-b'}
+      />
     </>
   );
 }
