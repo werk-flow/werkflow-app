@@ -1,11 +1,12 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { TimeAccountDateField } from '@/components/zeiterfassung/time-account-date-field';
 import {
+  focusFirstVisibleInvalid,
   PersonRow,
   PersonTable,
   type PersonLayout,
@@ -13,6 +14,7 @@ import {
 import { TimeAccountSubmitButton } from '@/components/zeiterfassung/time-account-submit-button';
 import { useTimeAccountForm } from '@/components/zeiterfassung/use-time-account-form';
 import { createStarterTimePolicy, submitTimeAccountAdjustment } from '@/lib/time-accounts/actions';
+import { adjustmentHoursError } from '@/lib/time-accounts/balance-input';
 import { startDateHint } from '@/lib/time-accounts/opening-dates';
 import { formatMinutes } from '@/lib/time-accounts/presentation';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
@@ -104,25 +106,27 @@ function AdjustmentKindButtons({
   );
 }
 
+const HOURS_HEAD = 'Stunden (Std:Min)';
+
 /** The table row takes the bare controls; a card labels each one. */
 function adjustmentCells(
   layout: PersonLayout,
-  controls: { minutes: ReactNode; effectiveDate: ReactNode; reason: ReactNode; kinds: ReactNode },
+  controls: { hoursId: string; hours: ReactNode; effectiveDate: ReactNode; reason: ReactNode; kinds: ReactNode },
 ): Parameters<typeof PersonRow>[0]['cells'] {
-  const { minutes, effectiveDate, reason, kinds } = controls;
+  const { hoursId, hours, effectiveDate, reason, kinds } = controls;
   return layout === 'row'
     ? [
-        { key: 'minutes', content: minutes },
+        { key: 'hours', content: hours },
         { key: 'effectiveDate', content: effectiveDate },
         { key: 'reason', content: reason },
         { key: 'kind', content: kinds },
       ]
     : [
         {
-          key: 'minutes',
+          key: 'hours',
           content: (
-            <Field label="Minuten" required>
-              {minutes}
+            <Field label={HOURS_HEAD} htmlFor={hoursId} required>
+              {hours}
             </Field>
           ),
         },
@@ -170,15 +174,32 @@ function AdjustmentRequestForm({
       pendingValue={pendingValue}
     />
   );
-  // Enter in a text field must not submit through the first kind button.
-  const minutes = (
+  // The hours take „±HH:MM“ like the opening balance; a wrong value marks the
+  // field and sends nothing. Enter in a text field must not submit through
+  // the first kind button.
+  const hoursId = `adjustment-hours-${layout}-${account.id}`;
+  const [hoursError, setHoursError] = useState<string | null>(null);
+  const submitChecked = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    const message = adjustmentHoursError(String(new FormData(event.currentTarget).get('hours') ?? ''));
+    setHoursError(message);
+    if (message) {
+      event.preventDefault();
+      focusFirstVisibleInvalid([hoursId]);
+      return;
+    }
+    await handleSubmit(event);
+  };
+  const hours = (
     <Input
+      id={hoursId}
       form={formId}
-      name="minutes"
+      name="hours"
       type="text"
-      inputMode="numeric"
-      pattern="-?[0-9]+"
-      aria-label={`Korrektur in Minuten für ${account.employeeName}`}
+      autoComplete="off"
+      placeholder="+0:00"
+      aria-label={`Stunden der Korrektur für ${account.employeeName}`}
+      aria-invalid={hoursError ? true : undefined}
+      onChange={() => setHoursError(null)}
       onKeyDown={handleKeyDown}
       required
     />
@@ -212,13 +233,13 @@ function AdjustmentRequestForm({
         </>
       }
       form={
-        <form id={formId} onSubmit={handleSubmit} className="contents">
+        <form id={formId} onSubmit={submitChecked} className="contents">
           <input type="hidden" name="accountId" value={account.id} />
           <input type="hidden" name="expectedVersion" value={account.version} />
         </form>
       }
-      cells={adjustmentCells(layout, { minutes, effectiveDate, reason, kinds })}
-      error={error}
+      cells={adjustmentCells(layout, { hoursId, hours, effectiveDate, reason, kinds })}
+      error={hoursError ?? error}
     />
   );
 }
@@ -236,7 +257,7 @@ export function AdjustmentRequestForms({
     <PersonTable
       heads={[
         { label: 'Mitarbeiter' },
-        { label: 'Minuten', className: 'w-32' },
+        { label: HOURS_HEAD, className: 'w-36' },
         { label: 'Wirksam am', className: 'w-48' },
         { label: 'Grund' },
         { label: 'Art beantragen' },

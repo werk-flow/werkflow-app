@@ -2,7 +2,13 @@ import { describe, expect, test } from 'bun:test';
 
 import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { REALTIME_TABLES } from '@/lib/realtime/tables';
-import { TIME_PERIOD_DETAIL_LIVE_TABLES, TIME_PERIOD_LIST_LIVE_TABLES } from './live-tables';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  TIME_ACCOUNT_SETTINGS_LIVE_TABLES,
+  TIME_PERIOD_DETAIL_LIVE_TABLES,
+  TIME_PERIOD_LIST_LIVE_TABLES,
+} from './live-tables';
 import {
   getClosePeriodFailureMessage,
   getTimeAccountFailureMessage,
@@ -160,5 +166,28 @@ describe('period page live tables', () => {
 
   test('every table is published', () => {
     for (const table of TIME_PERIOD_DETAIL_LIVE_TABLES) expect(REALTIME_TABLES).toContain(table);
+  });
+});
+
+describe('Regeln & Export live tables', () => {
+  test('the page re-reads when another session saves what it shows', () => {
+    // Rules and their versions, assignments, openings and opening-date
+    // corrections, adjustment requests and their decisions, closed months
+    // (which lock opening dates) and the people listed (werk-flow/werkflow-planning#360).
+    for (const table of [
+      'time_account_policies',
+      'time_account_policy_assignments',
+      'time_accounts',
+      'time_account_adjustment_requests',
+      'time_periods',
+      'employee_records',
+    ] as const)
+      expect(TIME_ACCOUNT_SETTINGS_LIVE_TABLES).toContain(table);
+    for (const table of TIME_ACCOUNT_SETTINGS_LIVE_TABLES) expect(REALTIME_TABLES).toContain(table);
+  });
+
+  test('the page subscribes to them', () => {
+    const page = readFileSync(join(import.meta.dir, '../../app/(app)/zeiterfassung/einstellungen/page.tsx'), 'utf8');
+    expect(page).toContain('<LiveRouteRefresh tables={TIME_ACCOUNT_SETTINGS_LIVE_TABLES} />');
   });
 });

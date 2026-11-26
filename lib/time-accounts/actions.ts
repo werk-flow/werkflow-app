@@ -73,7 +73,8 @@ const submitTimeAccountAdjustmentFormSchema = z.object({
   accountId: id,
   expectedVersion: text(12),
   adjustmentKind: text(40),
-  minutes: text(12),
+  // „±HH:MM“ as typed (`balance-input.ts`).
+  hours: text(20),
   effectiveDate: text(10),
   reason: text(2000),
 });
@@ -350,13 +351,13 @@ export async function submitTimeAccountAdjustment(
   const expectedVersion = parseStrictInteger(formData.get('expectedVersion'));
   const adjustmentKind = String(formData.get('adjustmentKind') ?? '');
   const parsedAdjustmentKind = adjustmentKindSchema.safeParse(adjustmentKind);
-  const minutes = parseStrictInteger(formData.get('minutes'));
+  const minutes = parseSignedHoursMinutes(String(formData.get('hours') ?? ''));
   const effectiveDate = String(formData.get('effectiveDate') ?? '');
   const reason = String(formData.get('reason') ?? '');
+  if (minutes === null) return { success: false, error: 'invalid_hours' };
   if (
     !accountId ||
     expectedVersion === null ||
-    minutes === null ||
     minutes === 0 ||
     !parsedAdjustmentKind.success ||
     !isValidIsoDate(effectiveDate) ||

@@ -38,3 +38,22 @@ export const TIME_PERIOD_DETAIL_LIVE_TABLES = [
   'time_sessions',
   ...PERIOD_SCHOOL_MINUTE_LIVE_TABLES,
 ] as const satisfies readonly RealtimeTable[];
+
+/**
+ * The published roots behind Zeiterfassung → Regeln & Export. A new policy
+ * version bumps its `time_account_policies` row; an opening-date correction
+ * and an approved adjustment bump `time_accounts`; a closed period locks
+ * opening dates. Two reads stay without a refresh: the payroll mapping is not
+ * published, and a table saved from an older version is refused with
+ * `stale_version` (werk-flow/werkflow-planning#360); the suggested start date
+ * follows the earliest time record, and clock events would re-read the page
+ * on every punch for a suggestion.
+ */
+export const TIME_ACCOUNT_SETTINGS_LIVE_TABLES = [
+  'time_account_policies',
+  'time_account_policy_assignments',
+  'time_accounts',
+  'time_account_adjustment_requests',
+  'time_periods',
+  'employee_records',
+] as const satisfies readonly RealtimeTable[];
