@@ -3,7 +3,7 @@ import { z } from '@/lib/zod';
 
 // The organization's invoice settings: the number series and the default
 // Zahlungsziel and Skonto of a new draft
-// (supabase/migrations/20270203090000_issue_invoices_with_gapless_numbers.sql).
+// (supabase/migrations/20270205090000_issue_invoices_with_gapless_numbers.sql).
 // The database formats the numbers; the form only edits the parts.
 
 const invoiceSettingsValuesSchema = z
