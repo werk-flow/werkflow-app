@@ -34,7 +34,13 @@ afterEach(() => rmSync(stub, { recursive: true, force: true }));
 function gates(config: string | undefined) {
   const scripts = join(stub, 'scripts');
   mkdirSync(scripts, { recursive: true });
-  for (const name of ['check-app.sh', 'curl-headers.sh', 'release-candidate.sh', 'main-full-run.sh'])
+  for (const name of [
+    'check-app.sh',
+    'curl-headers.sh',
+    'full-run-verdict.sh',
+    'release-candidate.sh',
+    'main-full-run.sh',
+  ])
     copyFileSync(join(repositoryRoot, '.github/scripts', name), join(scripts, name));
   rmSync(join(scripts, 'check-app.json'), { force: true });
   if (config !== undefined) writeFileSync(join(scripts, 'check-app.json'), config);

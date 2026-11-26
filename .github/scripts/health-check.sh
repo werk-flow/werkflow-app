@@ -46,12 +46,13 @@ if test "${BREAK_CHECK:-}" = "$check"; then
   esac
 fi
 
-# Prints the HTTP status of a GET of $argument with the header lines on stdin; the body goes to
-# the file in $body. The headers reach curl as a config on a file descriptor (curl-headers.sh).
+# Prints the HTTP status of a request to $argument, a GET unless the arguments add curl options,
+# with the header lines on stdin; the body goes to the file in $body. The headers reach curl as a
+# config on a file descriptor (curl-headers.sh).
 body="$RUNNER_TEMP/${check}.json"
 # On a timeout or refused connection curl prints 000 itself and exits non-zero.
 get() {
-  curl --silent --max-time 30 --output "$body" --write-out '%{http_code}' \
+  curl --silent --max-time 30 "$@" --output "$body" --write-out '%{http_code}' \
     --config <(curl_headers) "$argument" || true
 }
 
@@ -65,6 +66,14 @@ case "$kind" in
   # URL carries the password percent-encoded in its user info; PGPASSWORD takes it decoded, and
   # printf -v keeps a decoded trailing newline. Only a postgres URL with one `@` and a query of
   # the options below passes: any other form could carry a credential into the arguments.
+  # A Supabase Management API read-only query, `select 1`; its answer stays in $body.
+  read-only-query)
+    status="$(get -X POST -H 'Content-Type: application/json' --data '{"query":"select 1"}' <<< "Authorization: Bearer ${value}")"
+    case "$status" in
+      200 | 201) ;;
+      *) fail "${variable} could not run select 1 (HTTP ${status})." ;;
+    esac ;;
+
   database)
     case "$value" in *$'\n'*) fail "${variable} holds a line break." ;; esac
     grep -qE '^postgres(ql)?://([^:/@]+(:[^@]*)?@)?[^@]*$' <<< "$value" \

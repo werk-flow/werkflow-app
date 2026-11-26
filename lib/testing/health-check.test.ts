@@ -97,3 +97,13 @@ test('a bearer token and an endpoint token reach curl in its config, never in it
     'header = "Authorization: Bearer bearer-token-value"\nheader = "x-health-check-token: endpoint-token-value"\n',
   );
 });
+
+test('a read-only query token posts select 1 with the token in its config only', () => {
+  const result = check('read-only-query', 'query-token-value', 'https://api.example.test/read-only');
+  expect(result.status, result.output).toBe(0);
+  expect(result.arguments).toContain('-X POST');
+  expect(result.arguments).toContain('{"query":"select 1"}');
+  expect(result.arguments).not.toContain('query-token-value');
+  expect(result.output).not.toContain('query-token-value');
+  expect(result.config).toBe('header = "Authorization: Bearer query-token-value"\n');
+});

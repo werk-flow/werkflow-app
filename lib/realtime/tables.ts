@@ -163,6 +163,7 @@ export const TRANSACTION_STAMPED_TABLES: readonly RealtimeTable[] = [
   'job_instruction_items',
   'job_material_lines',
   'jobs',
+  'offers',
   'on_call_shifts',
   'organization_capabilities',
   'organization_exports',
