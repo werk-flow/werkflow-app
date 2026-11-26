@@ -9,60 +9,97 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
-import { readOfferArticleLine } from '@/lib/invoices/line-source-actions';
-import type { OfferArticleLine } from '@/lib/invoices/line-sources';
+import type { ActionResult } from '@/lib/action-result';
+import { readOfferArticleLine, readOfferLeistungLine } from '@/lib/invoices/line-source-actions';
+import type { InvoiceLineSourceKind, OfferCatalogLine } from '@/lib/invoices/line-sources';
 
-const ADD_FAILED = 'Der Artikel konnte nicht übernommen werden. Bitte versuche es erneut.';
-const ARTICLE_FAILURE_MESSAGES: Record<string, string> = {
-  source_not_found: 'Diesen Artikel gibt es nicht mehr. Wähle einen anderen.',
-  source_archived: 'Dieser Artikel ist archiviert und lässt sich nicht mehr übernehmen.',
-  source_unpriced:
-    'Für diesen Artikel gilt heute kein Verkaufspreis. Trag ihn im Inventar nach oder schreib die Position frei.',
-  source_tax_rate_unsupported:
-    'Der Steuersatz dieses Artikels ist im Angebot nicht wählbar. Erlaubt sind 19, 7 und 0 %.',
+type CatalogKind = {
+  options: 'inventory-items' | 'leistungen';
+  read: (id: string) => Promise<ActionResult<{ line: OfferCatalogLine }>>;
+  placeholder: string;
+  empty: string;
+  failed: string;
+  messages: Readonly<Record<string, string>>;
+};
+
+// The prefill of either kind reads the same catalog line rule on the server; only the words differ.
+const CATALOG: Record<InvoiceLineSourceKind, CatalogKind> = {
+  article: {
+    options: 'inventory-items',
+    read: (articleId) => readOfferArticleLine({ articleId }),
+    placeholder: 'Artikel hinzufügen…',
+    empty: 'Kein Artikel gefunden',
+    failed: 'Der Artikel konnte nicht übernommen werden. Bitte versuche es erneut.',
+    messages: {
+      source_not_found: 'Diesen Artikel gibt es nicht mehr. Wähle einen anderen.',
+      source_archived: 'Dieser Artikel ist archiviert und lässt sich nicht mehr übernehmen.',
+      source_unpriced:
+        'Für diesen Artikel gilt heute kein Verkaufspreis. Trag ihn im Inventar nach oder schreib die Position frei.',
+      source_tax_rate_unsupported:
+        'Der Steuersatz dieses Artikels ist im Angebot nicht wählbar. Erlaubt sind 19, 7 und 0 %.',
+    },
+  },
+  leistung: {
+    options: 'leistungen',
+    read: (leistungId) => readOfferLeistungLine({ leistungId }),
+    placeholder: 'Leistung hinzufügen…',
+    empty: 'Keine Leistung gefunden',
+    failed: 'Die Leistung konnte nicht übernommen werden. Bitte versuche es erneut.',
+    messages: {
+      source_not_found: 'Diese Leistung gibt es nicht mehr. Wähle eine andere.',
+      source_archived: 'Diese Leistung ist archiviert und lässt sich nicht mehr übernehmen.',
+      source_unpriced:
+        'Für diese Leistung gilt heute kein Verkaufspreis. Trag ihn in den Preisen nach oder schreib die Position frei.',
+      source_tax_rate_unsupported:
+        'Der Steuersatz dieser Leistung ist im Angebot nicht wählbar. Erlaubt sind 19, 7 und 0 %.',
+    },
+  },
 };
 
 /**
- * „Artikel hinzufügen“ under a Titel: the picked article becomes a new
- * Position with today's net sale price, unit and VAT rate, read on the
- * server by the rule of an invoice line. The office can change every value
- * before it saves. A read that failed for no reason of the article offers
- * „Erneut versuchen“ with the same article.
+ * „Artikel hinzufügen“ or „Leistung hinzufügen“ under a Titel: the picked
+ * entry becomes a new Position with today's net sale price, unit, VAT rate
+ * and cost, read on the server by the rule of an invoice line. The office
+ * can change every value before it saves. A read that failed for no reason
+ * of the entry offers „Erneut versuchen“ with the same entry.
  */
-export function OfferArticlePicker({
+export function OfferCatalogPicker({
+  kind,
   id,
   label,
   onPick,
   onAdd,
   disabled,
 }: {
+  kind: InvoiceLineSourceKind;
   id: string;
   /** The accessible name, naming the Titel, because every Titel has one. */
   label: string;
   /** The pick is an own change at once, so another session's content cannot move its Titel meanwhile. */
   onPick: () => void;
-  onAdd: (line: OfferArticleLine) => void;
+  onAdd: (line: OfferCatalogLine) => void;
   disabled: boolean;
 }) {
+  const catalog = CATALOG[kind];
   const [picked, setPicked] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [retryId, setRetryId] = useState<string | null>(null);
   const { run, isPending } = usePendingTask();
-  const search = useJobEntityOptions({ kind: 'inventory-items' }, picked ? [picked] : []);
+  const search = useJobEntityOptions({ kind: catalog.options }, picked ? [picked] : []);
 
-  const add = (articleId: string) => {
-    if (!articleId) return;
-    setPicked(articleId);
+  const add = (entryId: string) => {
+    if (!entryId) return;
+    setPicked(entryId);
     onPick();
     void run(async () => {
       setError(null);
       setRetryId(null);
-      const result = await readOfferArticleLine({ articleId }).catch(() => null);
+      const result = await catalog.read(entryId).catch(() => null);
       setPicked('');
       if (!result?.success) {
-        setError(result ? describeFailure(result.error, ARTICLE_FAILURE_MESSAGES, ADD_FAILED) : ADD_FAILED);
-        // A reason of the article stays; any other failure may pass on a second try.
-        if (!result || !Object.hasOwn(ARTICLE_FAILURE_MESSAGES, result.error)) setRetryId(articleId);
+        setError(result ? describeFailure(result.error, catalog.messages, catalog.failed) : catalog.failed);
+        // A reason of the entry stays; any other failure may pass on a second try.
+        if (!result || !Object.hasOwn(catalog.messages, result.error)) setRetryId(entryId);
         return;
       }
       onAdd(result.line);
@@ -83,9 +120,9 @@ export function OfferArticlePicker({
           loadFailure={search.loadFailure}
           onLoadMore={search.onLoadMore}
           disabled={disabled || isPending}
-          placeholder="Artikel hinzufügen…"
+          placeholder={catalog.placeholder}
           searchPlaceholder="Nummer oder Name…"
-          emptyMessage="Kein Artikel gefunden"
+          emptyMessage={catalog.empty}
         />
         <InlinePending active={isPending} label="Preis wird übernommen" />
       </div>

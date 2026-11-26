@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
-test('a Position from an article answers only Admin and Büro, and the save keeps the cost the server read', async () => {
+test('a Position from an article or a Leistung answers only Admin and Büro, and only the offer read carries a cost', async () => {
   const child = Bun.spawn(
-    [process.execPath, resolve(import.meta.dir, '../testing/fixtures/offer-article-position-boundaries.ts')],
+    [process.execPath, resolve(import.meta.dir, '../testing/fixtures/offer-catalog-position-boundaries.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
   );
   const [code, stdout, stderr] = await Promise.all([

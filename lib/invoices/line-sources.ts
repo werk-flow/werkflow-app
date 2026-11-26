@@ -45,11 +45,17 @@ export type InvoiceCatalogLine = {
 };
 
 /**
- * A new offer Position from an article, as the server read it: an invoice
- * line's values, except that `unit` is null for a stored unit outside the
- * list („Einheit prüfen“), which the offer editor asks for before it saves.
+ * A new offer Position from an article or a Leistung, as the server read it:
+ * an invoice line's values, except that `unit` is null for a stored unit
+ * outside the list („Einheit prüfen“), which the offer editor asks for before
+ * it saves, and with the entry's net cost per price quantity on the same day
+ * (an article's purchase price, a Leistung's cost rate), null when it keeps
+ * none. An invoice line never carries a cost.
  */
-export type OfferArticleLine = Omit<InvoiceCatalogLine, 'unit'> & { unit: InventoryUnitCode | null };
+export type OfferCatalogLine = Omit<InvoiceCatalogLine, 'unit'> & {
+  unit: InventoryUnitCode | null;
+  cost: { amountCents: number; priceQuantity: PriceQuantity } | null;
+};
 
 /** „Leistung L-7 · Monteurstunde“ */
 export function lineSourceLabel(source: InvoiceLineSource): string {

@@ -6523,6 +6523,7 @@ export type Database = {
           id: string;
           item_id: string | null;
           kind: string;
+          leistung_id: string | null;
           name: string;
           offer_id: string;
           organization_id: string;
@@ -6543,6 +6544,7 @@ export type Database = {
           id?: string;
           item_id?: string | null;
           kind: string;
+          leistung_id?: string | null;
           name: string;
           offer_id: string;
           organization_id: string;
@@ -6563,6 +6565,7 @@ export type Database = {
           id?: string;
           item_id?: string | null;
           kind?: string;
+          leistung_id?: string | null;
           name?: string;
           offer_id?: string;
           organization_id?: string;
@@ -6583,6 +6586,13 @@ export type Database = {
             columns: ["item_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_positions_leistung_fk";
+            columns: ["leistung_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "leistungen";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -19447,6 +19457,10 @@ export type Database = {
         Returns: Json;
       };
       get_offer: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
+      get_offer_with_costs: {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
       };

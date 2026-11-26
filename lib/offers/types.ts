@@ -1,4 +1,5 @@
-import type { InvoiceLineSource } from '@/lib/invoices/line-sources';
+import type { PriceQuantity } from '@/lib/inventory/line-amount';
+import type { InvoiceLineSource, InvoiceLineSourceRef } from '@/lib/invoices/line-sources';
 import type { InvoiceLineValues } from '@/lib/invoices/types';
 import { z } from '@/lib/zod';
 
@@ -7,7 +8,8 @@ import { z } from '@/lib/zod';
 // (supabase/migrations/20261210130000_keep_offers_for_the_right_customer_and_recipient.sql,
 // its header changes in 20261230110000_change_the_header_of_a_draft_offer.sql,
 // its content in 20270201090000_write_titel_and_positionen_into_an_offer.sql,
-// a Position's article in 20270301090000_take_offer_positions_from_articles.sql).
+// a Position's article in 20270301090000_take_offer_positions_from_articles.sql,
+// its Leistung and its cost in 20270401090000_calculate_offers_with_leistungen_and_costs.sql).
 
 /** Every status the database check allows; this release writes only `entwurf`. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;
@@ -41,27 +43,43 @@ export type OfferListEntry = {
 
 type OfferParty = { id: string; name: string };
 
-/** The article a Position was taken from, as a save names it. */
-type OfferArticleRef = { kind: 'article'; id: string };
+/**
+ * A Position's net cost per price quantity: an article's purchase price, a
+ * Leistung's cost rate, or one the office typed. Office-only: no document of
+ * the offer carries it.
+ */
+export type OfferPositionCost = { amountCents: number; priceQuantity: PriceQuantity };
 
 /**
  * A priced Position: Bezeichnung, Beschreibung, quantity in a unit of the
  * inventory list, a net price per price quantity and a VAT rate, the fields
- * of a priced invoice line. Typed by hand, or taken from an article
- * (`source`), whose values it keeps as its own.
+ * of a priced invoice line. Typed by hand, or taken from an article or a
+ * Leistung (`source`), whose values it keeps as its own, its cost included.
  */
-export type OfferFreePosition = { kind: 'free' } & InvoiceLineValues & { source: OfferArticleRef | null };
+export type OfferFreePosition = { kind: 'free' } & InvoiceLineValues & {
+    source: InvoiceLineSourceRef | null;
+    cost: OfferPositionCost | null;
+  };
 /** A text line: a note between the positions, without an amount. */
 type OfferTextPosition = { kind: 'text'; name: string; description: string };
 export type OfferPosition = OfferFreePosition | OfferTextPosition;
 /** A Titel: a named section of the offer with its positions in order. */
 export type OfferSection = { title: string; positions: OfferPosition[] };
 
-/** As stored: a Position's article with its number, name and whether it is archived now. */
+/**
+ * As stored and as a document may show it: a Position's article or Leistung
+ * with its number, name and whether it is archived now, and no cost.
+ */
 type OfferStoredPosition =
   | OfferTextPosition
-  | (Omit<OfferFreePosition, 'source'> & { source: (InvoiceLineSource & OfferArticleRef) | null });
-export type OfferStoredSection = { title: string; positions: OfferStoredPosition[] };
+  | (Omit<OfferFreePosition, 'source' | 'cost'> & { source: InvoiceLineSource | null });
+type OfferStoredSection = { title: string; positions: OfferStoredPosition[] };
+
+/** As the office's editor reads it: each priced Position with its cost. */
+type OfferCostedPosition =
+  | OfferTextPosition
+  | (Omit<OfferFreePosition, 'source'> & { source: InvoiceLineSource | null });
+export type OfferCostedSection = { title: string; positions: OfferCostedPosition[] };
 
 export type OfferDetail = {
   id: string;
@@ -84,3 +102,6 @@ export type OfferDetail = {
   work: { kind: OfferWorkKind; id: string; label: string } | null;
   sections: OfferStoredSection[];
 };
+
+/** An offer as the office's editor reads it (readOfferWithCosts): the same, each priced Position with its cost. */
+export type OfferWithCosts = Omit<OfferDetail, 'sections'> & { sections: OfferCostedSection[] };

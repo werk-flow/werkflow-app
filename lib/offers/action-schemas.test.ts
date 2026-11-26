@@ -21,3 +21,41 @@ test('a content save above the editor byte limit is refused for every caller', (
   ).toBe(true);
   expect(saveOfferContentSchema.safeParse(save('x'.repeat(4000), 240)).success).toBe(false);
 });
+
+// A Position's cost is office input with the limits of a price: whole cents
+// from zero, per a price quantity a price can have; none is null.
+test('a content save takes a cost per a price quantity of a price, and refuses any other', () => {
+  const withCost = (cost: unknown) => ({
+    ...save('', 0),
+    sections: [
+      {
+        title: 'Montage',
+        positions: [
+          {
+            kind: 'free',
+            name: 'Monteurstunde',
+            description: '',
+            quantity: '1',
+            unit: 'hour',
+            unitPriceCents: 7250,
+            priceQuantity: 1,
+            taxRateBasisPoints: 1900,
+            source: null,
+            cost,
+          },
+        ],
+      },
+    ],
+  });
+  for (const cost of [null, { amountCents: 0, priceQuantity: 1 }, { amountCents: 812, priceQuantity: 100 }]) {
+    expect(saveOfferContentSchema.safeParse(withCost(cost)).success).toBe(true);
+  }
+  for (const cost of [
+    { amountCents: -1, priceQuantity: 1 },
+    { amountCents: 1.5, priceQuantity: 1 },
+    { amountCents: 100, priceQuantity: 3 },
+    { amountCents: 100_000_001, priceQuantity: 1 },
+  ]) {
+    expect(saveOfferContentSchema.safeParse(withCost(cost)).success).toBe(false);
+  }
+});

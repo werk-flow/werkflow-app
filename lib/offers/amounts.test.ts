@@ -18,6 +18,7 @@ function free(
     priceQuantity: options.priceQuantity ?? 1,
     taxRateBasisPoints: options.taxRateBasisPoints ?? 1900,
     source: null,
+    cost: null,
   };
 }
 

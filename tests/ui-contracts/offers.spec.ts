@@ -261,6 +261,72 @@ test('a Position from an article with an unknown unit asks for a unit before it 
   });
 });
 
+// A Leistung becomes a Position with its cost rate; a markup on the cost sets
+// the price, a typed price clears the markup, and the office's calculation
+// follows. The save sends the Position's own cost beside its price.
+test('a Leistung brings its cost, a markup sets the price, and the calculation shows the margin', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
+  await editor.getByRole('textbox', { name: 'Titel 1' }).fill('Montage');
+
+  await editor.getByRole('combobox', { name: 'Leistung zu Titel 1 hinzufügen' }).click();
+  await expect.poll(() => page.evaluate(() => window.optionContract.requests.length)).toBe(1);
+  await page.evaluate(() =>
+    window.optionContract.resolve(0, [{ value: 'contract-leistung', label: 'L-7 · Monteurstunde' }]),
+  );
+  await page.getByRole('option', { name: 'L-7 · Monteurstunde' }).click();
+  const price = editor.getByRole('textbox', { name: 'Einzelpreis netto' });
+  const markup = editor.getByRole('textbox', { name: 'Aufschlag %' });
+  await expect(price).toHaveValue('72,50');
+  await expect(editor.getByRole('textbox', { name: 'Kosten netto' })).toHaveValue('41,80');
+  await expect(editor.getByText('Aus Leistung L-7 · Monteurstunde')).toBeVisible();
+  await expect(editor.getByText('Kosten 41,80 € · Marge 30,70 € (42,3 %)')).toBeVisible();
+
+  await markup.fill('12,5');
+  await expect(price).toHaveValue('47,03');
+  const panel = editor.getByRole('region', { name: 'Kalkulation' });
+  await expect(editor.getByText('Kosten 41,80 € · Marge 5,23 € (11,1 %)')).toBeVisible();
+  await expect(panel.getByRole('group', { name: 'Titel 1 · Montage' })).toContainText('Marge %11,1 %');
+  await expect(panel.getByRole('group', { name: 'Angebot gesamt' })).toContainText('Kosten41,80 €');
+  await price.fill('50,00');
+  await expect(markup).toHaveValue('');
+
+  // A markup that does not read says so at once and leaves the price; it is never saved.
+  await markup.fill('abc');
+  await expect(editor.getByText('Gib den Aufschlag in Prozent an, zum Beispiel 25 oder 12,5.')).toBeVisible();
+  await expect(price).toHaveValue('50,00');
+  const cost = editor.getByRole('textbox', { name: 'Kosten netto' });
+  await cost.fill('41,8x');
+  await editor.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(
+    editor.getByText('Gib die Kosten netto an, zum Beispiel 48,20, oder lass das Feld leer.'),
+  ).toBeVisible();
+  await expect(cost).toBeFocused();
+  expect(await page.evaluate(() => window.uiContractWrites.calls)).toEqual([]);
+
+  await cost.fill('41,80');
+  await editor.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expectHeldWrite(page, 'save-offer-content');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    sections: [
+      {
+        title: 'Montage',
+        positions: [
+          {
+            unit: 'hour',
+            unitPriceCents: 5000,
+            source: { kind: 'leistung', id: 'contract-leistung' },
+            cost: { amountCents: 4180, priceQuantity: 1 },
+          },
+        ],
+      },
+    ],
+  });
+});
+
 // An article's price can arrive while a save of the earlier content runs,
 // before or after its answer: the save confirms, no other session's change is
 // claimed, and the added Position stays to save on the saved version.

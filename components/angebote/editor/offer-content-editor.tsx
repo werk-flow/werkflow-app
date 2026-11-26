@@ -17,14 +17,15 @@ import { saveOfferContent } from '@/lib/offers/actions';
 import {
   contentFormOf,
   contentLimitSentence,
-  liveContentAmounts,
+  liveContentFigures,
   parseContentForm,
   type SectionForm,
 } from '@/lib/offers/content-form';
-import type { OfferAmounts } from '@/lib/offers/amounts';
-import type { OfferDetail } from '@/lib/offers/types';
+import type { OfferCalculation } from '@/lib/offers/calculation';
+import type { OfferWithCosts } from '@/lib/offers/types';
 import { ownWrites } from '@/lib/realtime/own-writes';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { OfferCalculationPanel } from './offer-calculation-panel';
 import { OfferSectionFields } from './offer-section-fields';
 
 const SAVE_FAILED = 'Die Positionen konnten nicht gespeichert werden. Versuche es erneut.';
@@ -57,7 +58,7 @@ type Draft = {
   attemptKey: string;
 };
 
-function contentDraftOf(offer: OfferDetail, keyPrefix?: string): Draft {
+function contentDraftOf(offer: OfferWithCosts, keyPrefix?: string): Draft {
   return {
     sections: contentFormOf(offer.sections, keyPrefix),
     baseVersion: offer.contentVersion,
@@ -74,7 +75,7 @@ function contentDraftOf(offer: OfferDetail, keyPrefix?: string): Draft {
  * as stored, whether it arrives before or after the answer. While the own
  * save runs, its rendered answer is no other session's.
  */
-function useContentDraft(offer: OfferDetail, saving: boolean) {
+function useContentDraft(offer: OfferWithCosts, saving: boolean) {
   const [draft, setDraft] = useState(() => contentDraftOf(offer));
   const newer = offer.contentVersion > draft.baseVersion;
   if (newer && !draft.edited) setDraft(contentDraftOf(offer));
@@ -120,7 +121,7 @@ function useNewKey(): () => string {
  * and a save another session made meanwhile refuses it instead of being
  * overwritten.
  */
-export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
+export function OfferContentEditor({ offer }: { offer: OfferWithCosts }) {
   const { showBanner } = useBanner();
   // The saved content is on screen once the page renders the content version the save answered.
   const settle = useSettleOnChange(offer.contentVersion);
@@ -131,7 +132,7 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
   const { sections } = draft;
   const parsed = parseContentForm(sections);
   const errors = attempted && !parsed.ok ? parsed.errors : {};
-  const amounts = liveContentAmounts(sections);
+  const figures = liveContentFigures(sections);
   const newKey = useNewKey();
 
   const submit = (event: React.FormEvent) => {
@@ -189,7 +190,7 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
       )}
       <OfferSectionList
         sections={sections}
-        amounts={amounts}
+        calculation={figures?.calculation ?? null}
         onChange={(next) => {
           edit(next);
           // A sentence about the earlier content no longer applies to the changed one.
@@ -199,7 +200,8 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
         errors={errors}
         disabled={pending}
       />
-      <InvoiceTotals amounts={amounts} />
+      <InvoiceTotals amounts={figures?.amounts ?? null} />
+      <OfferCalculationPanel sections={sections} calculation={figures?.calculation ?? null} />
       <SaveRow error={error} pending={pending} />
     </form>
   );
@@ -233,14 +235,14 @@ function ReloadNotice({ children, onReload }: { children: React.ReactNode; onRel
 /** The Titel in order, or the first step while there is none, and adding a Titel. */
 function OfferSectionList({
   sections,
-  amounts,
+  calculation,
   onChange,
   newKey,
   errors,
   disabled,
 }: {
   sections: SectionForm[];
-  amounts: OfferAmounts | null;
+  calculation: OfferCalculation | null;
   onChange: (sections: SetStateAction<SectionForm[]>) => void;
   newKey: () => string;
   errors: Record<string, string | undefined>;
@@ -262,11 +264,11 @@ function OfferSectionList({
               index={index}
               count={sections.length}
               section={section}
-              amounts={amounts?.sections[index] ?? null}
+              figures={calculation?.sections[index] ?? null}
               onChange={(next) => onChange(sections.map((current, at) => (at === index ? next : current)))}
               onMove={(direction) => onChange(move(sections, index, direction))}
               onRemove={() => onChange(sections.filter((_section, at) => at !== index))}
-              onAddArticle={(position) =>
+              onAddCatalog={(position) =>
                 onChange((current) =>
                   current.map((entry) =>
                     entry.key === section.key

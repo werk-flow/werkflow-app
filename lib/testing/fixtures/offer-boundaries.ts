@@ -258,36 +258,44 @@ assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_organization_id]),
   [
     ['list_offer_page', ORGANIZATION_A],
-    ['get_offer', ORGANIZATION_A],
+    ['get_offer_with_costs', ORGANIZATION_A],
   ],
 );
 
 // A site may lack address parts (client_sites.street, postal_code and city allow null):
 // its offer still reads, and the header names what the site has.
-const { readOffer } = await import('@/lib/offers/reads');
+const { readOfferWithCosts } = await import('@/lib/offers/reads');
 world.rpc = ({ name }) =>
-  name === 'get_offer'
+  name === 'get_offer_with_costs'
     ? {
         data: {
-          id: ownOfferId,
-          offerNumber: 'ANG-2026-1',
-          title: 'Heizungstausch',
-          status: 'entwurf',
-          version: 1,
-          contentVersion: 1,
-          validUntil: '2026-12-14',
-          openingText: '',
-          closingText: '',
-          client: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH' },
-          site: { id: ownClientId, name: 'Lindenhof 3', street: null, postalCode: '12345', city: null },
-          contact: null,
-          recipient: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH', address: null, isDefault: true },
-          owner: null,
-          work: null,
-          sections: [],
+          costs: [],
+          offer: {
+            id: ownOfferId,
+            offerNumber: 'ANG-2026-1',
+            title: 'Heizungstausch',
+            status: 'entwurf',
+            version: 1,
+            contentVersion: 1,
+            validUntil: '2026-12-14',
+            openingText: '',
+            closingText: '',
+            client: { id: ownClientId, name: 'Haustechnik Sonnenberg GmbH' },
+            site: { id: ownClientId, name: 'Lindenhof 3', street: null, postalCode: '12345', city: null },
+            contact: null,
+            recipient: {
+              id: ownClientId,
+              name: 'Haustechnik Sonnenberg GmbH',
+              address: null,
+              isDefault: true,
+            },
+            owner: null,
+            work: null,
+            sections: [],
+          },
         },
         error: null,
       }
     : { data: null, error: null };
-const sparse = await readOffer(ORGANIZATION_A, ownOfferId);
+const sparse = await readOfferWithCosts(ORGANIZATION_A, ownOfferId);
 assert.equal(sparse?.site?.address, '12345');

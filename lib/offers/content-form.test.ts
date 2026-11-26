@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { emptyLine, parseDraftForm, type DraftForm } from '@/lib/invoices/draft-form';
 import {
-  articlePositionForm,
+  catalogPositionForm,
   contentFieldId,
   contentFormOf,
   contentLimitSentence,
   emptyPosition,
-  liveContentAmounts,
+  liveContentFigures,
+  markupSentence,
   parseContentForm,
+  withCostOrMarkup,
 } from './content-form';
 import type { OfferSection } from './types';
 
@@ -73,14 +75,14 @@ test('an offer position and an invoice line refuse an empty priced line with the
 // The totals follow the positions while a Titel still has no name, also one of only spaces.
 test('the live amounts stand while a Titel name is blank', () => {
   const position = { ...emptyPosition('p', 'free'), name: 'Wartung', price: '72,50' };
-  const amounts = liveContentAmounts([{ key: 's', title: '   ', positions: [position] }]);
-  expect(amounts?.totals.lineNetCents).toBe(7250);
+  const figures = liveContentFigures([{ key: 's', title: '   ', positions: [position] }]);
+  expect(figures?.amounts.totals.lineNetCents).toBe(7250);
 });
 
-// An article becomes a Position with the reader's sale price, unit and VAT
-// rate as editable text; the save names the article, and an article whose
-// stored unit is outside the list waits for the office's unit.
-describe('articlePositionForm', () => {
+// An article or a Leistung becomes a Position with the reader's sale price,
+// unit, VAT rate and cost as editable text; the save names the entry, and one
+// whose stored unit is outside the list waits for the office's unit.
+describe('catalogPositionForm', () => {
   const source = {
     kind: 'article' as const,
     id: '96000000-0000-4000-8000-000000000001',
@@ -96,10 +98,11 @@ describe('articlePositionForm', () => {
     priceQuantity: 10 as const,
     taxRateBasisPoints: 700 as const,
     source,
+    cost: { amountCents: 812, priceQuantity: 10 as const },
   };
 
-  test('the reader answer fills one unit of the article at its price per price quantity', () => {
-    const position = articlePositionForm('a', line);
+  test('the reader answer fills one unit of the article at its price and cost per price quantity', () => {
+    const position = catalogPositionForm('a', line);
     expect(position).toEqual({
       key: 'a',
       kind: 'free',
@@ -111,6 +114,9 @@ describe('articlePositionForm', () => {
       priceQuantity: 10,
       taxRateBasisPoints: 700,
       source,
+      cost: '8,12',
+      costPriceQuantity: 10,
+      markup: '',
     });
     const parsed = parseContentForm([{ key: 's', title: 'Material', positions: [position] }]);
     expect(parsed.ok && parsed.sections[0]?.positions[0]).toEqual({
@@ -123,20 +129,44 @@ describe('articlePositionForm', () => {
       priceQuantity: 10,
       taxRateBasisPoints: 700,
       source: { kind: 'article', id: source.id },
+      cost: { amountCents: 812, priceQuantity: 10 },
+    });
+  });
+
+  test('a Leistung is named as the source, and one without a cost rate leaves the cost to the office', () => {
+    const leistung = {
+      kind: 'leistung' as const,
+      id: '97000000-0000-4000-8000-000000000001',
+      number: 'L-7',
+      name: 'Monteurstunde',
+      archived: false,
+    };
+    const position = catalogPositionForm('l', {
+      ...line,
+      unit: 'hour',
+      priceQuantity: 1,
+      source: leistung,
+      cost: null,
+    });
+    expect([position.cost, position.costPriceQuantity]).toEqual(['', 1]);
+    const parsed = parseContentForm([{ key: 's', title: 'Montage', positions: [position] }]);
+    expect(parsed.ok && parsed.sections[0]?.positions[0]).toMatchObject({
+      source: { kind: 'leistung', id: leistung.id },
+      cost: null,
     });
   });
 
   test('a unit outside the list stays empty and the parse asks for one at the unit field', () => {
-    const position = articlePositionForm('a', { ...line, unit: null });
+    const position = catalogPositionForm('a', { ...line, unit: null });
     expect(position.unit).toBe('');
     const parsed = parseContentForm([{ key: 's', title: 'Material', positions: [position] }]);
     expect(parsed.ok ? {} : parsed.errors).toEqual({
       [contentFieldId(0, { position: 0, field: 'unit' })]: 'Wähle eine Einheit.',
     });
-    expect(liveContentAmounts([{ key: 's', title: 'Material', positions: [position] }])).toBeNull();
+    expect(liveContentFigures([{ key: 's', title: 'Material', positions: [position] }])).toBeNull();
   });
 
-  test('a stored Position keeps its article through the editor and the next save', () => {
+  test('a stored Position keeps its article and cost through the editor and the next save', () => {
     const [section] = contentFormOf([
       {
         title: 'Material',
@@ -151,6 +181,7 @@ describe('articlePositionForm', () => {
             priceQuantity: 10,
             taxRateBasisPoints: 700,
             source: { ...source, archived: true },
+            cost: { amountCents: 812, priceQuantity: 100 },
           },
         ],
       },
@@ -160,6 +191,55 @@ describe('articlePositionForm', () => {
     expect(parsed.ok && parsed.sections[0]?.positions[0]).toMatchObject({
       quantity: '2.5',
       source: { kind: 'article', id: source.id },
+      cost: { amountCents: 812, priceQuantity: 100 },
     });
+  });
+});
+
+// A markup on the cost sets the price by the shared line rule and is not kept;
+// the price the office types last is what counts.
+describe('cost and markup', () => {
+  const typed = { ...emptyPosition('p', 'free'), name: 'Pumpe', price: '100,00' };
+  const fieldOf = (field: 'cost' | 'markup') => contentFieldId(0, { position: 0, field });
+  const parse = (position: typeof typed) =>
+    parseContentForm([{ key: 's', title: 'Heizung', positions: [position] }]);
+
+  test('a markup on a cost sets the price, and a changed cost keeps the markup applied', () => {
+    const marked = withCostOrMarkup(withCostOrMarkup(typed, { cost: '1,99' }), { markup: '12,5' });
+    expect(marked.price).toBe('2,24');
+    expect(withCostOrMarkup(marked, { cost: '80' }).price).toBe('90,00');
+  });
+
+  test('a cost alone keeps the typed price, and its margin follows', () => {
+    const costed = withCostOrMarkup(typed, { cost: '60' });
+    expect(costed.price).toBe('100,00');
+    const figures = liveContentFigures([{ key: 's', title: 'Heizung', positions: [costed] }]);
+    expect(figures?.calculation.offer).toMatchObject({
+      costCents: 6000,
+      marginCents: 4000,
+      marginBasisPoints: 4000,
+    });
+  });
+
+  test('a cost that cannot be read stops the save at its field', () => {
+    expect(parse({ ...typed, cost: '12,345' })).toEqual({
+      ok: false,
+      errors: { [fieldOf('cost')]: 'Gib die Kosten netto an, zum Beispiel 48,20, oder lass das Feld leer.' },
+    });
+  });
+
+  test('a markup that sets no price says why while typing, and never stops the save', () => {
+    expect(markupSentence({ ...typed, cost: '10', markup: '1000' })).toBe(
+      'Gib den Aufschlag in Prozent an, zum Beispiel 25 oder 12,5.',
+    );
+    expect(markupSentence({ ...typed, markup: '25' })).toBe('Trag zuerst die Kosten ein.');
+    expect(markupSentence({ ...typed, cost: '10', markup: '25' })).toBeNull();
+    for (const markup of ['1000', '25']) {
+      const parsed = parse({ ...typed, markup });
+      expect(parsed.ok && parsed.sections[0]?.positions[0]).toMatchObject({
+        unitPriceCents: 10_000,
+        cost: null,
+      });
+    }
   });
 });
