@@ -130,7 +130,7 @@ function MaintenanceDueTaskRow({ task }: { task: AttentionMaintenanceDueTask }) 
   return (
     <TaskLink
       href={task.href}
-      ariaLabel={`Wartung ${task.equipmentLabel} öffnen, ${due}`}
+      ariaLabel={`Wartung ${task.equipmentLabel}${task.siteName ? ` in ${task.siteName}` : ''} öffnen, ${due}`}
       sourceId={task.sourceId}
     >
       <p className="truncate text-sm font-medium">{task.equipmentLabel}</p>

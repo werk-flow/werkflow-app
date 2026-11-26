@@ -51,9 +51,12 @@ const AUFGABEN_OVERVIEW_TABLES = [
   'jobs',
   'projects',
   'work_handover_packages',
-  // A visit job, an exception, a completion or a plan revision moves due maintenance.
+  // A visit job, an exception, a completion or a plan revision moves due maintenance;
+  // a renamed Anlage or Einsatzort renames its task.
   'maintenance_plans',
   'maintenance_due_work',
+  'installed_equipment',
+  'client_sites',
   'attention_read_states',
   'organization_responsibility_configurations',
   'organization_responsibility_assignments',

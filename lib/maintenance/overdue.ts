@@ -21,8 +21,8 @@ const MAINTENANCE_DUE_LEAD_DAYS = 14;
  * An open due item, one without a visit job, belongs in Aufgaben while it is
  * überfällig or due within the lead time: on `today` or up to
  * MAINTENANCE_DUE_LEAD_DAYS Berlin days after it. A visit job, an exception or
- * a completion takes it out. `read_manager_attention_sets` returns these
- * items with the same window.
+ * a completion takes it out. `read_manager_attention_sets` returns the
+ * candidates up to one day past the window; this rule decides.
  */
 export function isMaintenanceDueForAufgaben(
   due: { dueDate: string; status: MaintenanceDueStatus },

@@ -372,12 +372,13 @@ $$;
 -- 20270415090000_hold_due_maintenance_in_aufgaben.sql):
 -- read_manager_attention_sets returns as due_maintenance exactly the open due
 -- items of the organization, without a visit job, whose due date lies at most
--- 14 days after today in Berlin, earliest due first. Each names its plan
+-- 15 days after today in Berlin (the 14-day lead time and one day for a read
+-- across midnight), earliest due first. Each names its plan
 -- number, its plan's Einsatzort and the Anlagen of its own revision that are
 -- neither archived nor voided, by name. An item with a visit job, a completed,
--- skipped, cancelled or superseded item, one due on the 15th day and another
+-- skipped, cancelled or superseded item, one due on the 16th day and another
 -- organization's item never appear, and the set stops at its limit plus one.
--- lib/maintenance/overdue.test.ts proves the same window in TypeScript.
+-- lib/maintenance/overdue.test.ts proves the 14-day rule that decides among them.
 
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values
 ('51800000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','due-sets-admin@example.test','',now(),'{}','{"first_name":"Erika","last_name":"Musterfrau"}',now(),now()),
@@ -419,7 +420,8 @@ select '51800000-0000-4000-8000-000000000010','51800000-0000-4000-8000-000000000
 from unnest(array['51800000-0000-4000-8000-000000000050','51800000-0000-4000-8000-000000000051',
   '51800000-0000-4000-8000-000000000052','51800000-0000-4000-8000-000000000053']) as equipment_id;
 -- Due days count from today in Berlin: D1 overdue, D2 today, D3 the 14th day,
--- D4 the 15th day, D5 overdue with a visit job, D6 to D9 settled, DB foreign.
+-- D4 the 15th day, D0 the 16th day, D5 overdue with a visit job, D6 to D9
+-- settled, DB foreign.
 insert into public.maintenance_due_work(id,organization_id,maintenance_plan_id,maintenance_plan_revision_id,original_due_date,due_date,window_start_date,window_end_date,status,job_id,scope_outcome,completed_on,exception_reason,created_by,updated_by)
 select id::uuid, organization_id::uuid, plan_id::uuid, revision_id::uuid, today + offset_days, today + offset_days,
   today + offset_days - 10, today + offset_days + 10, status::public.maintenance_due_status, job_id::uuid,
@@ -433,6 +435,7 @@ from (select (now() at time zone 'Europe/Berlin')::date as today) berlin,
   ('51800000-0000-4000-8000-000000000072', 0, 'open', null, null),
   ('51800000-0000-4000-8000-000000000073', 14, 'open', null, null),
   ('51800000-0000-4000-8000-000000000074', 15, 'open', null, null),
+  ('51800000-0000-4000-8000-000000000070', 16, 'open', null, null),
   ('51800000-0000-4000-8000-000000000075', -5, 'visit_created', '51800000-0000-4000-8000-000000000040', null),
   ('51800000-0000-4000-8000-000000000076', -60, 'completed', '51800000-0000-4000-8000-000000000040', 'complete'),
   ('51800000-0000-4000-8000-000000000077', -3, 'skipped', null, null),
@@ -462,8 +465,9 @@ begin
   select array_agg(item.value ->> 'id' order by item.ordinality) into due_ids
   from jsonb_array_elements(sets -> 'due_maintenance') with ordinality as item(value, ordinality);
   if due_ids is distinct from array['51800000-0000-4000-8000-000000000071',
-    '51800000-0000-4000-8000-000000000072', '51800000-0000-4000-8000-000000000073'] then
-    raise exception 'due maintenance: expected the overdue item, the one due today and the one due on the 14th day, earliest first, got %', due_ids;
+    '51800000-0000-4000-8000-000000000072', '51800000-0000-4000-8000-000000000073',
+    '51800000-0000-4000-8000-000000000074'] then
+    raise exception 'due maintenance: expected the overdue item and those due today, on the 14th and on the 15th day, earliest first, got %', due_ids;
   end if;
   first_item := sets -> 'due_maintenance' -> 0;
   if (first_item ->> 'due_date')::date is distinct from today - 30

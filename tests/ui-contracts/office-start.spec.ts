@@ -55,7 +55,7 @@ test('the office start shows each Aufgaben section with its count, its first thr
   ]);
   await expect(
     maintenance.getByRole('link', {
-      name: 'Wartung Gasbrennwertkessel, Speicher öffnen, fällig seit 02.11.2026',
+      name: 'Wartung Gasbrennwertkessel, Speicher in Heizzentrale Lindenhof öffnen, fällig seit 02.11.2026',
     }),
   ).toHaveAttribute('href', '/service/wartung?q=WPL-2026-0000');
   await expect(

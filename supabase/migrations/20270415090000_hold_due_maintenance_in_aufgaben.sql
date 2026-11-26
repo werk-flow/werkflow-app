@@ -1,12 +1,14 @@
 -- The office's attention read also returns the open due maintenance that
 -- belongs in Aufgaben (due_maintenance), so the kind „Fällige Wartungen“ adds
 -- no backend request (lab.admin.tasks-open, lab.office.cold-start).
--- An item belongs there while it is open, so without a visit job, and its due
--- date lies at most 14 days after today in Berlin: überfällig or due within
--- the lead time. lib/maintenance/overdue.ts (isMaintenanceDueForAufgaben,
--- MAINTENANCE_DUE_LEAD_DAYS) holds the same window and decides on the Berlin
--- day the overview reports. A visit job, an exception or a completion moves
--- the item out of `open` and so out of the set.
+-- The set holds the candidates: the open items, so those without a visit
+-- job, due at most 15 days after today in Berlin. lib/maintenance/overdue.ts
+-- (isMaintenanceDueForAufgaben) alone decides which of them belong in Aufgaben,
+-- on the Berlin day the overview reports: überfällig or due within its 14-day
+-- lead time. The one day more keeps a read across Berlin midnight, where the
+-- database may still see the day before, from missing the newly due day. A
+-- visit job, an exception or a completion moves the item out of `open` and so
+-- out of the set.
 -- Each item names its plan number, its plan's Einsatzort and the Anlagen of
 -- its own plan revision that are neither archived nor voided, by name. The
 -- organization's open items are walked by maintenance_due_work_queue_idx
@@ -117,7 +119,7 @@ as $$
           on plan.id = due.maintenance_plan_id and plan.organization_id = p_organization_id
         where due.organization_id = p_organization_id
           and due.status = 'open'
-          and due.due_date <= (now() at time zone 'Europe/Berlin')::date + 14
+          and due.due_date <= (now() at time zone 'Europe/Berlin')::date + 15
         order by due.due_date, due.id
         limit p_limit + 1
       ) due_item

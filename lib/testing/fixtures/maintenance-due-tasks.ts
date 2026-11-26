@@ -8,6 +8,7 @@
 // the derivation instead of a shortened list.
 import assert from 'node:assert/strict';
 import { setSystemTime } from 'bun:test';
+import type { DueMaintenanceRow } from '@/lib/attention/maintenance-due-tasks';
 import { LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
 
@@ -20,14 +21,7 @@ const lastLeadDayId = '87000000-0000-4000-8000-000000000003';
 const beyondLeadId = '87000000-0000-4000-8000-000000000004';
 const foreignId = '87000000-0000-4000-8000-000000000005';
 
-type DueRow = {
-  id: string;
-  due_date: string;
-  plan_number: string;
-  site_name: string | null;
-  equipment_names: string[];
-};
-const due = (id: string, dueDate: string, overrides: Partial<DueRow> = {}): DueRow => ({
+const due = (id: string, dueDate: string, overrides: Partial<DueMaintenanceRow> = {}): DueMaintenanceRow => ({
   id,
   due_date: dueDate,
   plan_number: 'WPL-2026-0007',
@@ -36,7 +30,7 @@ const due = (id: string, dueDate: string, overrides: Partial<DueRow> = {}): DueR
   ...overrides,
 });
 
-const setsByOrganization = new Map<string, DueRow[]>([
+const setsByOrganization = new Map<string, DueMaintenanceRow[]>([
   [
     ORGANIZATION_A,
     [

@@ -4,7 +4,7 @@ import 'server-only';
 // call (read_manager_attention_sets, migration
 // 20270415090000_hold_due_maintenance_in_aufgaben.sql): the open requests, the
 // field workers' open access proposals, the open jobs whose visits are over,
-// and the open due maintenance of the next two weeks. `./actions` starts the
+// and the open due maintenance up to a day past its lead time. `./actions` starts the
 // read once per derivation and hands the promise to every derivation that
 // needs it, so the access proposal, overdue job and due maintenance tasks add
 // no backend request (lab.office.cold-start).

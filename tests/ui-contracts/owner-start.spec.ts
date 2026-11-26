@@ -55,7 +55,9 @@ test('the owner start shows only the exceptions, each with its count, first item
   await expect(maintenance.getByRole('heading', { name: /^Fällige Wartungen\s*\(1\)$/ })).toBeVisible();
   await expect(maintenance.getByText('Überfällig und noch ohne Wartungsbesuch')).toBeVisible();
   await expect(
-    maintenance.getByRole('link', { name: 'Wartung Gasbrennwertkessel öffnen, fällig seit 12.11.2026' }),
+    maintenance.getByRole('link', {
+      name: 'Wartung Gasbrennwertkessel in Heizzentrale Lindenhof öffnen, fällig seit 12.11.2026',
+    }),
   ).toHaveAttribute('href', '/service/wartung?q=WPL-2026-0007');
   // Due next week, it is the office's task, not an exception.
   await expect(maintenance.getByText('fällig am', { exact: false })).toHaveCount(0);
