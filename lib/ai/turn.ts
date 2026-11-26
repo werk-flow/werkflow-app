@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { APICallError, type ModelMessage, streamText } from 'ai';
 
 import { AI_MODEL_PRICE, type AiTokenUsage, costMicroUsd } from '@/lib/ai/cost';
-import { AI_TURN_LIMITS, type AiEntryPoint, estimateInputTokens, maxTurnCostMicroUsd } from '@/lib/ai/limits';
+import { AI_TURN_LIMITS, type AiEntryPoint, inputTokenCeiling, maxTurnCostMicroUsd } from '@/lib/ai/limits';
 import { type AiModel, isAllowedModel, resolveAiModel } from '@/lib/ai/model';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { isAiReleasedFor } from '@/lib/ai/release-gate';
@@ -85,6 +85,7 @@ export type AiTurnStart =
 type Admin = ReturnType<typeof createSupabaseAdminClient>;
 
 const messageBodySchema = z.object({ text: z.string() });
+const AI_TURN_FAILURE_BODY: { text: string; failure: AiTurnFailure } = { text: '', failure: 'interrupted' };
 
 /**
  * Starts one turn: the thread is the caller's, the per-person limits allow
@@ -121,17 +122,82 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
   if (limit === 'limited') return { status: 'refused', refusal: 'too_many_turns' };
   if (limit === 'unavailable') return { status: 'refused', refusal: 'unavailable' };
 
+  const reserved = await reserveRun(admin, command);
+  if (reserved.status !== 'reserved') return reserved;
+  const { runId } = reserved;
+
+  const refuse = async (refusal: AiTurnRefusal): Promise<AiTurnStart> => {
+    await settleRun(admin, organizationId, runId, 'cancelled');
+    return { status: 'refused', refusal };
+  };
+  // One active run per person: a run that sees another open run of its person
+  // yields. Both reservations are committed before either looks, so two runs
+  // never both pass; under a tie both yield, and the client sends again.
+  const other = await hasOtherOpenRun(admin, command, runId);
+  if (other !== false) return refuse(other === true ? 'run_active' : 'unavailable');
+
+  const history = await readHistory(admin, command);
+  if (history === 'load_failed') return refuse('unavailable');
+  const userItem = await appendItem(
+    admin,
+    command,
+    'user_message',
+    'complete',
+    { text: command.text },
+    `${commandId}:user`,
+  );
+  const assistantItem =
+    userItem &&
+    (await appendItem(
+      admin,
+      command,
+      'assistant_message',
+      'streaming',
+      { text: '' },
+      `${commandId}:assistant`,
+    ));
+  if (!userItem || !assistantItem) return refuse('unavailable');
+
+  const messages = fitInputCap(history, { role: 'user', content: command.text }, command.entryPoint);
+  return {
+    status: 'started',
+    userItem,
+    assistantItem,
+    run: (sink) => runTurn({ admin, command, model, runId, assistantItem, messages, sink }),
+  };
+}
+
+/**
+ * Holds the turn's most expensive outcome in the organization's budget. Its
+ * caller has counted the turn against the person's limits.
+ */
+async function reserveRun(
+  admin: Admin,
+  command: AiTurnCommand,
+): Promise<Exclude<AiTurnStart, { status: 'started' }> | { status: 'reserved'; runId: string }> {
   const reservation = await admin
     .rpc('reserve_ai_run', {
-      p_organization_id: organizationId,
-      p_user_id: userId,
-      p_thread_id: threadId,
-      p_idempotency_key: commandId,
+      p_organization_id: command.organizationId,
+      p_user_id: command.userId,
+      p_thread_id: command.threadId,
+      p_idempotency_key: command.commandId,
       p_reserve_micro_usd: maxTurnCostMicroUsd(command.entryPoint),
     })
     .single();
   if (reservation.error) {
-    if (reservation.error.message === 'ai_run_closed') return { status: 'already_done' };
+    if (reservation.error.message === 'ai_run_closed') {
+      // A command whose start broke after its reservation has no answer yet: it gets a failed one.
+      // The append is idempotent, so a finished answer stays as it is.
+      await appendItem(
+        admin,
+        command,
+        'assistant_message',
+        'failed',
+        AI_TURN_FAILURE_BODY,
+        `${command.commandId}:assistant`,
+      );
+      return { status: 'already_done' };
+    }
     logError('startAiTurn: reservation failed', reservation.error);
     return { status: 'refused', refusal: 'unavailable' };
   }
@@ -144,39 +210,21 @@ export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> 
     logError('startAiTurn: unexpected reservation verdict', 'invalid_result');
     return { status: 'refused', refusal: 'unavailable' };
   }
-  const runId = reserved.run_id;
+  return { status: 'reserved', runId: reserved.run_id };
+}
 
-  const refuse = async (refusal: AiTurnRefusal): Promise<AiTurnStart> => {
-    await settleRun(admin, organizationId, runId, 'cancelled');
-    return { status: 'refused', refusal };
-  };
-  // One active run per person: of two runs open at once, the younger yields.
-  // Both are committed before either looks, so one of them always runs.
-  const older = await hasOlderOpenRun(admin, command, runId);
-  if (older !== false) return refuse(older === true ? 'run_active' : 'unavailable');
-
-  const history = await readHistory(admin, command);
-  if (history === 'load_failed') return refuse('unavailable');
-  const userItem = await appendItem(
-    admin,
-    command,
-    'user_message',
-    'complete',
-    command.text,
-    `${commandId}:user`,
-  );
-  const assistantItem =
-    userItem &&
-    (await appendItem(admin, command, 'assistant_message', 'streaming', '', `${commandId}:assistant`));
-  if (!userItem || !assistantItem) return refuse('unavailable');
-
-  const messages: ModelMessage[] = [...history, { role: 'user', content: command.text }];
-  return {
-    status: 'started',
-    userItem,
-    assistantItem,
-    run: (sink) => runTurn({ admin, command, model, runId, assistantItem, messages, sink }),
-  };
+/** The newest history that fits the input cap beside the new message; older messages drop first. */
+function fitInputCap(
+  history: ModelMessage[],
+  message: ModelMessage,
+  entryPoint: AiEntryPoint,
+): ModelMessage[] {
+  const cap = AI_TURN_LIMITS[entryPoint].maxInputTokens;
+  let kept = history;
+  while (kept.length > 0 && inputTokenCeiling(JSON.stringify([AI_SYSTEM_PROMPT, kept, message])) > cap) {
+    kept = kept.slice(1);
+  }
+  return [...kept, message];
 }
 
 function threadTitle(text: string): string {
@@ -199,7 +247,7 @@ async function settleRun(
   if (error) logError('aiTurn: settlement failed', error);
 }
 
-async function hasOlderOpenRun(
+async function hasOtherOpenRun(
   admin: Admin,
   command: AiTurnCommand,
   runId: string,
@@ -207,20 +255,18 @@ async function hasOlderOpenRun(
   const since = new Date(Date.now() - OPEN_RUN_MINUTES * 60_000).toISOString();
   const { data, error } = await admin
     .from('ai_runs')
-    .select('id, created_at')
+    .select('id')
     .eq('organization_id', command.organizationId)
     .eq('user_id', command.userId)
     .eq('status', 'reserved')
     .gt('created_at', since)
-    .order('created_at')
-    .order('id')
+    .neq('id', runId)
     .limit(1);
   if (error) {
     logError('startAiTurn: open-run read failed', error);
     return 'load_failed';
   }
-  const oldest = data[0];
-  return oldest !== undefined && oldest.id !== runId;
+  return data.length > 0;
 }
 
 /** The thread's latest finished messages, oldest first: the model's memory of the conversation. */
@@ -251,8 +297,8 @@ async function appendItem(
   admin: Admin,
   command: AiTurnCommand,
   kind: 'user_message' | 'assistant_message',
-  status: 'complete' | 'streaming',
-  text: string,
+  status: 'complete' | 'streaming' | 'failed',
+  body: { text: string; failure?: AiTurnFailure },
   idempotencyKey: string,
 ): Promise<ItemRef | null> {
   const { data, error } = await admin
@@ -262,7 +308,7 @@ async function appendItem(
       p_thread_id: command.threadId,
       p_kind: kind,
       p_status: status,
-      p_body: { text },
+      p_body: body,
       p_idempotency_key: idempotencyKey,
     })
     .single();
@@ -284,13 +330,15 @@ type RunContext = {
   sink: AiTurnSink;
 };
 
+type Answer = { text: string; savedText: string; savedAt: number; ledgerFailed: boolean };
+
 type StepOutcome =
   | { kind: 'finished'; finishReason: string; responseMessages: ModelMessage[] }
   | { kind: 'failed'; failure: AiTurnFailure };
 
 async function runTurn(context: RunContext): Promise<AiTurnEnd> {
   const { admin, command, runId, assistantItem } = context;
-  const answer = { text: '', savedText: '', savedAt: Date.now() };
+  const answer = { text: '', savedText: '', savedAt: Date.now(), ledgerFailed: false };
   let end: AiTurnEnd;
   try {
     end = await runSteps(context, answer);
@@ -307,8 +355,19 @@ async function runTurn(context: RunContext): Promise<AiTurnEnd> {
     p_status: end.status,
     p_body: body,
   });
-  if (error) logError('aiTurn: answer save failed', error);
-  await settleRun(admin, command.organizationId, runId, end.status === 'complete' ? 'succeeded' : end.status);
+  if (error) {
+    logError('aiTurn: answer save failed', error);
+    end = failedEnd('failed', 'interrupted');
+  }
+  // An attempt the ledger could not take keeps its hold until it lapses, so the budget still covers it.
+  if (!answer.ledgerFailed) {
+    await settleRun(
+      admin,
+      command.organizationId,
+      runId,
+      end.status === 'complete' ? 'succeeded' : end.status,
+    );
+  }
   return end;
 }
 
@@ -328,10 +387,7 @@ async function readStepGate(organizationId: string): Promise<'open' | 'disabled'
   }
 }
 
-async function runSteps(
-  context: RunContext,
-  answer: { text: string; savedText: string; savedAt: number },
-): Promise<AiTurnEnd> {
+async function runSteps(context: RunContext, answer: Answer): Promise<AiTurnEnd> {
   const limits = AI_TURN_LIMITS[context.command.entryPoint];
   const turnSignal = AbortSignal.timeout(limits.totalTimeoutMs);
   let messages = context.messages;
@@ -342,14 +398,13 @@ async function runSteps(
     if (gate === 'undecidable') return failedEnd('cancelled', 'undecidable');
     if (!isAllowedModel(context.model)) return failedEnd('failed', 'provider_refused');
     const prompt = JSON.stringify([AI_SYSTEM_PROMPT, messages]);
-    if (estimateInputTokens(prompt) > limits.maxInputTokens) return failedEnd('failed', 'input_too_large');
+    if (inputTokenCeiling(prompt) > limits.maxInputTokens) return failedEnd('failed', 'input_too_large');
 
     const outcome = await runStep(context, answer, { step, messages, prompt, turnSignal });
     if (outcome.kind === 'failed') {
-      return failedEnd(outcome.failure === 'timeout' ? 'cancelled' : 'failed', outcome.failure);
+      const stopped = outcome.failure === 'timeout' || outcome.failure === 'answer_too_long';
+      return failedEnd(stopped ? 'cancelled' : 'failed', outcome.failure);
     }
-    if (Buffer.byteLength(answer.text, 'utf8') > limits.maxAnswerBytes)
-      return failedEnd('cancelled', 'answer_too_long');
     if (outcome.finishReason === 'length') return failedEnd('cancelled', 'answer_too_long');
     if (outcome.finishReason === 'content-filter') return failedEnd('failed', 'model_refused');
     // A step that ends in tool calls continues; no tool exists yet, so the SDK answers each call with an error.
@@ -360,29 +415,41 @@ async function runSteps(
 
 type AttemptResult =
   | { ok: true; finishReason: string; responseMessages: ModelMessage[]; usage: AiTokenUsage }
-  | { ok: false; error: unknown; usage: AiTokenUsage | null };
+  | { ok: false; error: unknown; usage: AiTokenUsage | null; started: boolean };
+
+/** A step the harness ends itself: the answer reached its cap, or the stream ended without finishing. */
+class TurnStop extends Error {
+  constructor(readonly reason: 'answer_too_long' | 'interrupted') {
+    super(reason);
+    this.name = 'TurnStop';
+  }
+}
 
 async function runStep(
   context: RunContext,
-  answer: { text: string; savedText: string; savedAt: number },
+  answer: Answer,
   step: { step: number; messages: ModelMessage[]; prompt: string; turnSignal: AbortSignal },
 ): Promise<StepOutcome> {
   const limits = AI_TURN_LIMITS[context.command.entryPoint];
   for (let attempt = 0; ; attempt += 1) {
     const textBefore = answer.text.length;
     const result = await runAttempt(context, answer, step);
-    const written = answer.text.slice(textBefore);
-    const classified = result.ok ? null : classifyProviderError(result.error);
+    const written = answer.text.length > textBefore;
+    const classified = result.ok ? null : classifyFailure(result.error);
     const outcome = result.ok
       ? result.finishReason === 'tool-calls'
         ? 'tool_calls'
         : 'completed'
       : (classified?.outcome ?? 'provider_error');
     // Every attempt is ledgered at its cost before anything else, so a retry never goes uncounted (B15).
-    const usage = result.usage ?? estimatedUsage(step.prompt, written);
+    const usage = result.ok
+      ? result.usage
+      : (result.usage ?? estimatedUsage(step.prompt, result.started, limits));
     const key = `${context.command.commandId}:${step.step}:${attempt}`;
-    if (!(await recordAttempt(context, key, usage, outcome)))
+    if (!(await recordAttempt(context, key, usage, outcome))) {
+      answer.ledgerFailed = true;
       return { kind: 'failed', failure: 'interrupted' };
+    }
     if (result.ok) {
       return {
         kind: 'finished',
@@ -391,9 +458,9 @@ async function runStep(
       };
     }
     const { failure, retryable } = classified ?? { failure: 'interrupted', retryable: false };
-    // What the user already saw is never written twice: a stream that broke is not retried.
+    // What the user already saw is never written twice: a stream that broke after it wrote is not retried.
     if (!retryable || written || attempt >= limits.maxRetries) {
-      if (outcome !== 'spend_limit') logError('aiTurn: provider attempt failed', result.error);
+      if (outcome === 'provider_error') logError('aiTurn: provider attempt failed', result.error);
       return { kind: 'failed', failure };
     }
     const gate = await readStepGate(context.command.organizationId);
@@ -401,9 +468,14 @@ async function runStep(
   }
 }
 
+/** The answer's stored size: its JSON with the longest failure code, under the item body cap. */
+function storedAnswerBytes(text: string): number {
+  return Buffer.byteLength(JSON.stringify({ text, failure: 'provider_unavailable' }), 'utf8');
+}
+
 async function runAttempt(
   context: RunContext,
-  answer: { text: string; savedText: string; savedAt: number },
+  answer: Answer,
   step: { messages: ModelMessage[]; turnSignal: AbortSignal },
 ): Promise<AttemptResult> {
   const limits = AI_TURN_LIMITS[context.command.entryPoint];
@@ -423,33 +495,50 @@ async function runAttempt(
   });
   let usage: AiTokenUsage | null = null;
   let finishReason = 'other';
+  // Whether the provider began generating: from then on the attempt is billed.
+  let started = false;
+  const fail = (error: unknown): AttemptResult => ({ ok: false, error, usage, started });
   try {
     for await (const part of result.fullStream) {
       if (part.type === 'text-delta') {
+        started = true;
+        // The cap holds before a delta is shown or saved; the rest of the answer is dropped.
+        if (storedAnswerBytes(answer.text + part.text) > limits.maxAnswerBytes)
+          return fail(new TurnStop('answer_too_long'));
         answer.text += part.text;
         context.sink.text(part.text);
         await savePartial(context, answer);
+      } else if (
+        part.type === 'reasoning-start' ||
+        part.type === 'text-start' ||
+        part.type === 'tool-input-start'
+      ) {
+        started = true;
       } else if (part.type === 'finish-step') {
         usage = tokenUsage(part.usage);
         finishReason = part.finishReason;
       } else if (part.type === 'error') {
-        return { ok: false, error: part.error, usage };
+        return fail(part.error);
       } else if (part.type === 'abort') {
-        return { ok: false, error: new DOMException('aborted', 'AbortError'), usage };
+        return fail(new DOMException('aborted', 'AbortError'));
       }
     }
+    // The provider's stream ended without its final event: what it wrote may be cut, its usage unknown.
+    if (finishReason === 'interrupted') return fail(new TurnStop('interrupted'));
     const response = await result.response;
-    return { ok: true, finishReason, responseMessages: response.messages, usage: usage ?? zeroUsage() };
+    return {
+      ok: true,
+      finishReason,
+      responseMessages: response.messages,
+      usage: usage ?? estimatedUsage(JSON.stringify([AI_SYSTEM_PROMPT, step.messages]), true, limits),
+    };
   } catch (error) {
-    return { ok: false, error, usage };
+    return fail(error);
   }
 }
 
 /** Saves the partial answer at most every PARTIAL_SAVE_INTERVAL_MS, so a reload or a second device shows it. */
-async function savePartial(
-  context: RunContext,
-  answer: { text: string; savedText: string; savedAt: number },
-): Promise<void> {
+async function savePartial(context: RunContext, answer: Answer): Promise<void> {
   const now = Date.now();
   if (now - answer.savedAt < PARTIAL_SAVE_INTERVAL_MS || answer.text === answer.savedText) return;
   answer.savedAt = now;
@@ -475,30 +564,27 @@ type StreamUsage = {
   outputTokens: number | undefined;
 };
 
-function tokenUsage(usage: StreamUsage): AiTokenUsage {
+function tokenUsage(usage: StreamUsage): AiTokenUsage | null {
+  if (usage.inputTokens === undefined || usage.outputTokens === undefined) return null;
   const cacheReadTokens = usage.inputTokenDetails.cacheReadTokens ?? 0;
   const cacheWriteTokens = usage.inputTokenDetails.cacheWriteTokens ?? 0;
   const inputTokens =
     usage.inputTokenDetails.noCacheTokens ??
-    Math.max(0, (usage.inputTokens ?? 0) - cacheReadTokens - cacheWriteTokens);
-  return { inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens: usage.outputTokens ?? 0 };
-}
-
-function zeroUsage(): AiTokenUsage {
-  return { inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 };
+    Math.max(0, usage.inputTokens - cacheReadTokens - cacheWriteTokens);
+  return { inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens: usage.outputTokens };
 }
 
 /**
- * A failed attempt the provider reported no usage for. One refused before it
- * streamed is not billed; one that broke while it streamed is charged at the
- * estimate of its prompt and of what it wrote, so the ledger never undercounts.
+ * An attempt the provider reported no usage for. One refused before it began
+ * is not billed; one that began is charged at its caps: the prompt's upper
+ * bound and every output token it may have used, so the ledger never undercounts.
  */
-function estimatedUsage(prompt: string, writtenText: string): AiTokenUsage {
-  if (!writtenText) return zeroUsage();
+function estimatedUsage(prompt: string, started: boolean, limits: { maxOutputTokens: number }): AiTokenUsage {
   return {
-    ...zeroUsage(),
-    inputTokens: estimateInputTokens(prompt),
-    outputTokens: estimateInputTokens(writtenText),
+    inputTokens: started ? inputTokenCeiling(prompt) : 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: started ? limits.maxOutputTokens : 0,
   };
 }
 
@@ -507,6 +593,20 @@ async function recordAttempt(
   key: string,
   usage: AiTokenUsage,
   outcome: string,
+): Promise<boolean> {
+  // The key makes a repeat charge once; a second try covers a passing database failure.
+  for (const last of [false, true]) {
+    if (await recordAttemptOnce(context, key, usage, outcome, last)) return true;
+  }
+  return false;
+}
+
+async function recordAttemptOnce(
+  context: RunContext,
+  key: string,
+  usage: AiTokenUsage,
+  outcome: string,
+  last: boolean,
 ): Promise<boolean> {
   const { error } = await context.admin.rpc('record_ai_run_attempt', {
     p_organization_id: context.command.organizationId,
@@ -521,49 +621,61 @@ async function recordAttempt(
     p_cost_micro_usd: costMicroUsd(usage, AI_MODEL_PRICE),
     p_outcome: outcome,
   });
-  if (error) logError('aiTurn: attempt record failed', error);
+  if (error && last) logError('aiTurn: attempt record failed', error);
   return !error;
 }
 
-const spendLimitBodySchema = z.object({
-  error: z.object({ details: z.object({ error_code: z.string() }) }),
-});
+const providerStreamErrorSchema = z.object({ statusCode: z.number(), data: z.unknown().optional() });
+const spendLimitSchema = z.union([
+  z
+    .object({ error: z.object({ details: z.object({ error_code: z.string() }) }) })
+    .transform((body) => body.error.details.error_code),
+  z.object({ details: z.object({ error_code: z.string() }) }).transform((body) => body.details.error_code),
+]);
+
+/** Status and body of a provider failure: a refused request, or an error event inside its stream. */
+function providerFailure(error: unknown): { status: number | undefined; body: unknown } | null {
+  if (APICallError.isInstance(error)) {
+    try {
+      return { status: error.statusCode, body: error.responseBody ? JSON.parse(error.responseBody) : null };
+    } catch {
+      return { status: error.statusCode, body: null };
+    }
+  }
+  const streamError = providerStreamErrorSchema.safeParse(error);
+  return streamError.success ? { status: streamError.data.statusCode, body: streamError.data.data } : null;
+}
 
 /**
- * Sorts a provider failure. A spend limit (402, or 429
+ * Sorts a failed attempt. A spend limit (402, or 429
  * `enforced_spend_limit_reached`) and every other refusal of the request
- * (400 and the rest of 4xx) are never retried; a timeout ends the turn;
- * overload, a server error and a lost connection are retried.
+ * (400 and the rest of 4xx) are never retried; a timeout and a full answer
+ * end the turn; overload, a server error, a lost connection and a stream that
+ * ended early are retried.
  */
-function classifyProviderError(error: unknown): {
-  failure: AiTurnFailure;
-  retryable: boolean;
-  outcome: string;
-} {
+function classifyFailure(error: unknown): { failure: AiTurnFailure; retryable: boolean; outcome: string } {
+  if (error instanceof TurnStop) {
+    return error.reason === 'answer_too_long'
+      ? { failure: 'answer_too_long', retryable: false, outcome: 'answer_too_long' }
+      : { failure: 'provider_unavailable', retryable: true, outcome: 'provider_error' };
+  }
   if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
     return { failure: 'timeout', retryable: false, outcome: 'timeout' };
   }
-  if (!APICallError.isInstance(error)) {
-    return { failure: 'provider_unavailable', retryable: false, outcome: 'provider_error' };
-  }
-  const status = error.statusCode;
+  const failure = providerFailure(error);
+  if (!failure) return { failure: 'provider_unavailable', retryable: false, outcome: 'provider_error' };
+  const { status, body } = failure;
   if (status === undefined)
     return { failure: 'provider_unavailable', retryable: true, outcome: 'provider_error' };
-  if (status === 402 || (status === 429 && isSpendLimitBody(error.responseBody))) {
+  const spendLimit = spendLimitSchema.safeParse(body);
+  if (
+    status === 402 ||
+    (status === 429 && spendLimit.success && spendLimit.data === 'enforced_spend_limit_reached')
+  ) {
     return { failure: 'provider_refused', retryable: false, outcome: 'spend_limit' };
   }
   if (status === 408 || status === 409 || status === 429 || status >= 500) {
     return { failure: 'provider_unavailable', retryable: true, outcome: 'provider_error' };
   }
   return { failure: 'provider_refused', retryable: false, outcome: 'provider_refused' };
-}
-
-function isSpendLimitBody(body: string | undefined): boolean {
-  if (!body) return false;
-  try {
-    const parsed = spendLimitBodySchema.safeParse(JSON.parse(body));
-    return parsed.success && parsed.data.error.details.error_code === 'enforced_spend_limit_reached';
-  } catch {
-    return false;
-  }
 }

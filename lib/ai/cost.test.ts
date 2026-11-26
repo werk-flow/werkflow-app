@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import { AI_MODEL_PRICE, costMicroUsd } from './cost';
-import { AI_TURN_LIMITS, estimateInputTokens, maxTurnCostMicroUsd } from './limits';
+import { AI_TURN_LIMITS, inputTokenCeiling, maxTurnCostMicroUsd } from './limits';
 
 const none = { inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 };
 
@@ -31,8 +31,8 @@ test('the reservation covers every step and attempt of a turn at its caps', () =
   expect(limits.maxInputTokens).toBeLessThan(AI_MODEL_PRICE.longPromptTokens);
 });
 
-test('the input estimate counts one token per two UTF-8 bytes, so umlauts count more', () => {
-  expect(estimateInputTokens('abcd')).toBe(2);
-  expect(estimateInputTokens('äöü')).toBe(3);
-  expect(estimateInputTokens('')).toBe(0);
+test('the input ceiling counts one token per UTF-8 byte, so umlauts count double', () => {
+  expect(inputTokenCeiling('abcd')).toBe(4);
+  expect(inputTokenCeiling('äöü')).toBe(6);
+  expect(inputTokenCeiling('')).toBe(0);
 });

@@ -54,6 +54,12 @@ function providerError(statusCode: number, responseBody: string): APICallError {
   });
 }
 
+// An error event inside the stream, shaped as the Anthropic provider emits one.
+const overloadedInStream: StreamPart = {
+  type: 'error',
+  error: { type: 'overloaded_error', message: 'Overloaded', statusCode: 529, isRetryable: true },
+};
+
 const answer: ReplayAttempt = () => [
   ...text(
     'Hallo! Ich bin WerkFlow KI. ',
@@ -95,12 +101,26 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
       ),
   ],
   // A stream that breaks after it began: what the user saw stays, nothing is retried.
-  abbruch: [
+  abbruch: [() => [...text('Ich fange an'), overloadedInStream]],
+  // Overloaded after the stream began but before any text: retried like a refused request.
+  'ueberlastet-im-strom': [() => [overloadedInStream], answer],
+  // The provider's stream ends without its final event, after it wrote and without usage.
+  unterbrochen: [
     () => [
       ...text('Ich fange an'),
-      { type: 'error', error: { type: 'overloaded_error' } },
-      finish('stop', 900, 10),
+      {
+        type: 'finish',
+        finishReason: { unified: 'interrupted', raw: undefined },
+        usage: {
+          inputTokens: { total: undefined, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: undefined, text: undefined, reasoning: undefined },
+        },
+      },
     ],
+  ],
+  // An answer that outgrows the stored answer cap.
+  'zu-lang': [
+    () => [...text(...Array.from({ length: 80 }, () => 'Rohr '.repeat(200))), finish('stop', 900, 4000)],
   ],
   // A provider failure whose body quotes the user's message: it must never reach a log (B17).
   'echo-fehler': [(userText) => providerError(500, JSON.stringify({ error: { message: userText } }))],

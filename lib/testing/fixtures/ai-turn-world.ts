@@ -32,6 +32,8 @@ export type AiTurnWorld = ActionWorld & {
 
 export function installAiTurnWorld(): AiTurnWorld {
   process.env.EMAIL_OTP_HASH_SECRET = 'fixture-only-ai-turn-secret';
+  // The fixtures replay; a key in the shell that runs them must never reach a provider.
+  delete process.env.WERKFLOW_KI_ANTHROPIC_KEY;
   process.env.AI_ORGANIZATION_IDS = `${ORGANIZATION_A},${ORGANIZATION_B}`;
   const base = installActionWorld({});
   const world: AiTurnWorld = Object.assign(base, { afterAttempt: null, pending: [] });

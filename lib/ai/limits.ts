@@ -13,7 +13,7 @@ export const AI_TURN_LIMITS = {
     maxOutputTokens: 4096,
     /** Thinking effort, sent explicitly (Claude Haiku 5.5 defaults to `medium`). */
     effort: 'low',
-    /** Estimated input tokens per step, well under the 100K prompt price boundary. */
+    /** Input tokens per step at their upper bound, well under the 100K prompt price boundary. */
     maxInputTokens: 60_000,
     /** Provider attempts after the first, per step. A spend-limit error is never retried. */
     maxRetries: 2,
@@ -25,7 +25,7 @@ export const AI_TURN_LIMITS = {
     chunkTimeoutMs: 20_000,
     /** Characters of one user message. */
     maxMessageCharacters: 8_000,
-    /** Bytes of the saved answer, under the item body cap of 64 KiB. */
+    /** Bytes of the saved answer's JSON, under the item body cap of 64 KiB. */
     maxAnswerBytes: 48_000,
   },
 } as const;
@@ -50,10 +50,11 @@ export function maxTurnCostMicroUsd(entryPoint: AiEntryPoint): number {
 }
 
 /**
- * A deliberate overestimate of a prompt's tokens: one token per two UTF-8
- * bytes. German prose takes about four bytes a token, so the cap refuses
- * early, never late.
+ * An upper bound of a prompt's input tokens: one token per UTF-8 byte. A
+ * byte-level tokenizer never makes a token of less than one byte, and the
+ * serialized prompt's JSON framing outweighs the tokens the API adds per
+ * message. The caps and the reservation hold against this bound.
  */
-export function estimateInputTokens(serializedPrompt: string): number {
-  return Math.ceil(Buffer.byteLength(serializedPrompt, 'utf8') / 2);
+export function inputTokenCeiling(serializedPrompt: string): number {
+  return Buffer.byteLength(serializedPrompt, 'utf8');
 }

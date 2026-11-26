@@ -49,11 +49,10 @@ export async function POST(
   const parsed = turnSchema.safeParse(body);
   if (!threadId.success || !parsed.success) return refuse('invalid_input', 400);
 
-  const auth = await resolveActionContextFor(parsed.data.organizationId);
-  if (!auth.success) return refuse(auth.error, auth.error === 'not_authenticated' ? 401 : 403);
-  const { userId, orgId } = auth.context;
-
   try {
+    const auth = await resolveActionContextFor(parsed.data.organizationId);
+    if (!auth.success) return refuse(auth.error, auth.error === 'not_authenticated' ? 401 : 403);
+    const { userId, orgId } = auth.context;
     const start = await startAiTurn({
       entryPoint: 'chat',
       organizationId: orgId,
