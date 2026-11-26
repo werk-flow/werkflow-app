@@ -18,11 +18,9 @@ Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Wochenzahlen
 Problem melden
 F2
-MK
-Martin Krämer
-martin.kraemer@haustechnik-kraemer.de
 Rechnungen
 Rechnungsentwurf
 Entwurf

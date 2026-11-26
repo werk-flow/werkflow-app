@@ -7,6 +7,7 @@ import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
 import type { ActionResult } from '@/lib/action-result';
 import { RESET_ADDRESS_COOKIE, RESET_ADDRESS_COOKIE_OPTIONS } from '@/lib/auth/address-cookies';
+import { endReservedSubscriptions } from '@/lib/subscription/end';
 
 /**
  * Invalidate the authenticated caller's cached profile.
@@ -65,6 +66,10 @@ export async function deleteAccount(): Promise<DeleteAccountResult> {
   if (membershipCount > 0) {
     return { success: false, error: 'has_memberships' };
   }
+
+  // A Checkout paid before the person's organization existed: Stripe never debits a deleted account.
+  const ended = await endReservedSubscriptions(user.id);
+  if (!ended.ok) return { success: false, error: ended.code };
 
   // Pending invitations for this email stay: admins keep the full invitation
   // history of their organization, and open invites expire or are revoked.

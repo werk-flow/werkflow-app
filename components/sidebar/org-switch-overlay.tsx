@@ -182,6 +182,14 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<
       import('@/components/loading-states/inventar-page-skeleton').then((m) => page(m.InventarPageSkeleton)),
   ],
   [
+    '/kennzahlen',
+    titled('Wochenzahlen'),
+    () =>
+      import('@/components/loading-states/kennzahlen-page-skeleton').then((m) =>
+        page(m.KennzahlenPageSkeleton),
+      ),
+  ],
+  [
     '/angebote/leistungen',
     angebote(),
     () =>

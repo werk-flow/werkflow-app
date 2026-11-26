@@ -229,6 +229,7 @@ assert.deepEqual(billing.billing.subscription, {
   state: { kind: 'active', renewsAt: PERIOD_END },
   canCancel: true,
   canResume: false,
+  canSubscribe: false,
 });
 assert.deepEqual(await readWerkflowBillingOutlook(ORGANIZATION_A), {
   success: true,
@@ -278,6 +279,7 @@ assert.deepEqual(ending.billing.subscription, {
   state: { kind: 'ending', endsAt: PERIOD_END },
   canCancel: false,
   canResume: true,
+  canSubscribe: false,
 });
 assert.deepEqual(await readWerkflowBillingOutlook(ORGANIZATION_A), {
   success: true,
@@ -379,6 +381,7 @@ assert.deepEqual(ended.billing.subscription, {
   state: { kind: 'ended', endedAt: PERIOD_END },
   canCancel: false,
   canResume: false,
+  canSubscribe: true,
 });
 stripeCalls.length = 0;
 assert.deepEqual(await resumeWerkflowSubscription(ORGANIZATION_A), {
