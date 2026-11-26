@@ -233,10 +233,20 @@ $$;
 
 -- A sent revision and its lines are never changed or deleted, whoever writes:
 -- the server role holds no grant for it, and the guard refuses even the
--- table's owner. Its PDF is never linked to a job, through the app or directly.
+-- table's owner. Its PDF, and a library copy of it, is never linked to a job,
+-- through the app or directly.
 select pg_temp.expect_refusal('the server role changes a revision',
   format('update public.offer_revisions set gross_cents = 1 where offer_id = %L', pg_temp.id('first')), '42501');
 reset role;
+-- A library copy of the sent PDF, as the document copy makes one.
+insert into public.documents (
+  id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by,
+  copied_from_document_id
+) values
+('38070000-0000-4000-8000-000000000320', '38070000-0000-4000-8000-000000000010',
+ '38070000-0000-4000-8000-000000000010/38070000-0000-4000-8000-000000000320/Kopie.pdf', 'Kopie.pdf',
+ 'Kopie von Angebot.pdf', 'offer', 2048, '38070000-0000-4000-8000-000000000002',
+ '38070000-0000-4000-8000-000000000301');
 select pg_temp.expect_refusal(label, statement, refusal)
 from (values
   ('change the revision''s amounts', format('update public.offer_revisions set gross_cents = 1 where offer_id = %L',
@@ -255,6 +265,10 @@ from (values
   ('insert a job link directly', $direct$insert into public.document_links
     (organization_id, document_id, job_id, created_by) values ('38070000-0000-4000-8000-000000000010',
     '38070000-0000-4000-8000-000000000301', '38070000-0000-4000-8000-000000000050',
+    '38070000-0000-4000-8000-000000000002')$direct$, 'document_is_offer_original'),
+  ('link a library copy of the PDF to a job', $direct$insert into public.document_links
+    (organization_id, document_id, job_id, created_by) values ('38070000-0000-4000-8000-000000000010',
+    '38070000-0000-4000-8000-000000000320', '38070000-0000-4000-8000-000000000050',
     '38070000-0000-4000-8000-000000000002')$direct$, 'document_is_offer_original'),
   ('turn the customer link to a job', $direct$update public.document_links
     set client_id = null, job_id = '38070000-0000-4000-8000-000000000050'

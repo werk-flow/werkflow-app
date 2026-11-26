@@ -20,8 +20,8 @@
 --    repeated press, also from another tab on the same draft, answers the
 --    first revision and registers nothing.
 -- 3. guard_offer_revision_links: no link is added to a sent revision's
---    document afterwards, so no job or project link opens it to that work's
---    employees.
+--    document or to a copy of it afterwards, so no job or project link opens
+--    it to that work's employees.
 -- 4. list_offer_revisions: the server's read of an offer's revisions.
 --
 -- WerkFlow sends nothing: the channel is what the office says it used.
@@ -102,8 +102,8 @@ create trigger guard_event_ledger_history before update or delete on public.offe
 
 -- 3. A sent revision's document keeps the offer and customer links send_offer
 -- wrote: a work link would let every employee assigned to that work read it.
--- So no link is added to it and no link of it turns to another target,
--- whoever writes; a removal and a deleted target's set null stay. send_offer
+-- So no link is added to it, or to a library copy made from it, and no link of
+-- either turns to another target, whoever writes; a removal and a deleted target's set null stay. send_offer
 -- links before it writes the revision, in one transaction, so the refusal
 -- never meets it. Security definer as the invoice original's link guard: no
 -- role executes it.
@@ -128,9 +128,18 @@ begin
   then
     return new;
   end if;
+  -- The document itself, or the original a library copy (of a copy) was made from.
   if exists (
+    with recursive copied (document_id) as (
+      select new.document_id
+      union
+      select document.copied_from_document_id from public.documents document
+      join copied on copied.document_id = document.id
+      where document.organization_id = new.organization_id and document.copied_from_document_id is not null
+    )
     select 1 from public.offer_revisions revision
-    where revision.document_id = new.document_id and revision.organization_id = new.organization_id
+    join copied on copied.document_id = revision.document_id
+    where revision.organization_id = new.organization_id
   ) then
     raise exception 'document_is_offer_original';
   end if;

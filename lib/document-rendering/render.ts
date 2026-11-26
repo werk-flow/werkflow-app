@@ -258,33 +258,42 @@ function positionFlow(
   return [...head, ...description];
 }
 
+/** The quantity and unit price columns beside the text, less room for an amount: where a label may run. */
+const SECTION_LABEL_EXTRA = 70 + 72 - 4;
+
 /** The flow of a section: its heading, its positions and its subtotal. */
 function sectionFlow(section: DocumentSection, fonts: Fonts, textWidth: number): FlowItem[] {
+  // A heading or subtotal label wraps before the amount column, which keeps room for the subtotal.
+  const labelWidth = textWidth + SECTION_LABEL_EXTRA;
+  const titleLines = wrap(section.title, fonts.bold, 10, labelWidth);
   const heading: FlowItem = {
-    height: 24,
+    height: 24 + (titleLines.length - 1) * BODY_LEADING,
     keepWithNext: true,
     bindsNext: true,
     inTable: true,
     draw: (page, top, box) => {
       const columns = columnsOf(box);
       drawLeft(page, section.number, columns.numberLeft, top + 10, fonts.bold, 10);
-      drawLeft(page, section.title, columns.textLeft, top + 10, fonts.bold, 10);
+      titleLines.forEach((line, index) =>
+        drawLeft(page, line, columns.textLeft, top + 10 + index * BODY_LEADING, fonts.bold, 10),
+      );
     },
   };
+  const labelLines = wrap(
+    ['Summe', section.number, section.title].filter(Boolean).join(' '),
+    fonts.bold,
+    BODY_SIZE,
+    labelWidth,
+  );
   const subtotal: FlowItem = {
-    height: 26,
+    height: 26 + (labelLines.length - 1) * BODY_LEADING,
     keepWithNext: false,
     inTable: true,
     draw: (page, top, box) => {
       const columns = columnsOf(box);
       drawRule(page, columns.textLeft, columns.amountRight, top + 4);
-      drawLeft(
-        page,
-        ['Summe', section.number, section.title].filter(Boolean).join(' '),
-        columns.textLeft,
-        top + 9,
-        fonts.bold,
-        BODY_SIZE,
+      labelLines.forEach((line, index) =>
+        drawLeft(page, line, columns.textLeft, top + 9 + index * BODY_LEADING, fonts.bold, BODY_SIZE),
       );
       drawRight(
         page,
@@ -477,6 +486,12 @@ function drawLetterhead(
   page.drawImage(logo, { x: box.right - width, y: PAGE_HEIGHT - 12 * MM - height, width, height });
 }
 
+/** The address field's lines, each wrapped to the field so a long name or street stays left of the info block. */
+function recipientLinesOf(document: BusinessDocument, fonts: Fonts, box: Box): string[] {
+  const width = (INFO_BLOCK_LEFT_MM - RECIPIENT_GAP_MM) * MM - box.left;
+  return document.recipientLines.flatMap((line) => wrap(line, fonts.regular, BODY_SIZE, width));
+}
+
 /**
  * The address field and the info block of the first page (DIN 5008, form B),
  * moved down by `shift` and starting at the content's left edge, so they keep
@@ -491,7 +506,7 @@ function drawAddressAndInfo(
 ) {
   const returnAddress = [document.sender.name, ...document.sender.addressLines].join(' · ');
   drawLeft(page, returnAddress, box.left, RETURN_ADDRESS_TOP_MM * MM + shift, fonts.regular, 6.5, MUTED);
-  document.recipientLines.forEach((line, index) =>
+  recipientLinesOf(document, fonts, box).forEach((line, index) =>
     drawLeft(page, line, box.left, 55 * MM + shift + index * BODY_LEADING, fonts.regular, BODY_SIZE),
   );
   const labelLeft = INFO_BLOCK_LEFT_MM * MM;
@@ -506,6 +521,8 @@ function drawAddressAndInfo(
 }
 
 const INFO_BLOCK_TOP_MM = 50;
+/** The least space between the address field and the info block. */
+const RECIPIENT_GAP_MM = 5;
 /** The least space between the address field or info block and the first page's content. */
 const HEAD_GAP_MM = 6;
 
@@ -523,7 +540,7 @@ function headBottom(document: BusinessDocument, fonts: Fonts, box: Box, shift: n
     (top, row) => top + wrap(row.value, fonts.regular, 8, valueWidth).length * 11 + 2,
     INFO_BLOCK_TOP_MM * MM + shift,
   );
-  const recipientBottom = 55 * MM + shift + document.recipientLines.length * BODY_LEADING;
+  const recipientBottom = 55 * MM + shift + recipientLinesOf(document, fonts, box).length * BODY_LEADING;
   return Math.max(infoBottom, recipientBottom) + HEAD_GAP_MM * MM;
 }
 

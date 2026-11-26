@@ -120,3 +120,13 @@ export function isOfferExpired(
 ): boolean {
   return offer.status === 'gesendet' && offer.validUntil < todayIso;
 }
+
+/** Why a draft cannot be sent as it is: it has no Position, or its validity ended before `todayIso`. */
+export function offerSendBlocker(
+  offer: { sections: ReadonlyArray<{ positions: readonly unknown[] }>; validUntil: string },
+  todayIso: string,
+): 'offer_empty' | 'offer_expired' | null {
+  if (!offer.sections.some((section) => section.positions.length > 0)) return 'offer_empty';
+  if (offer.validUntil < todayIso) return 'offer_expired';
+  return null;
+}

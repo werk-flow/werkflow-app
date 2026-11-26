@@ -492,6 +492,30 @@ describe('the business document renderer', () => {
     }
   });
 
+  test('a long recipient name and a long section title wrap instead of running off the page', async () => {
+    const recipient =
+      'Wohnungseigentümergemeinschaft Lindenstraße 5 bis 9 vertreten durch die Hausverwaltung Ende';
+    const sectionTitle = `${'Heizungsanlage im Untergeschoss '.repeat(4)}Schluss`;
+    const document = {
+      ...serviceOffer,
+      recipientLines: [recipient, 'Hofweg 1', '10117 Berlin'],
+      sections: [{ number: '1', title: sectionTitle, positions: [position('1.1')], subtotalCents: 10000 }],
+    };
+    const lines = (await readPages(await renderBusinessDocument(document)))[0] ?? [];
+    const text = lines.map((line) => line.text);
+    // The name breaks in the address field, before the info block's column.
+    expect(
+      text.some((line) => line.startsWith('Wohnungseigentümergemeinschaft') && !line.includes('Ende')),
+    ).toBe(true);
+    expect(text.some((line) => line.endsWith('Ende'))).toBe(true);
+    // The heading and the subtotal label break before the amount, which stays on the label's first line.
+    expect(text.some((line) => line.startsWith('1 Heizungsanlage') && !line.endsWith('Schluss'))).toBe(true);
+    expect(text.filter((line) => line.endsWith('Schluss')).length).toBe(2);
+    expect(text.some((line) => line.startsWith('Summe 1 Heizungsanlage') && line.endsWith('100,00 €'))).toBe(
+      true,
+    );
+  });
+
   test('a text line prints its text and description without number, quantity or amount', async () => {
     const note = {
       kind: 'text' as const,

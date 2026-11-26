@@ -22,16 +22,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { describeFailure } from '@/lib/action-messages';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { sendOffer } from '@/lib/offers/send-actions';
 import {
   OFFER_CHANNEL_LABELS,
   OFFER_CHANNELS,
+  offerSendBlocker,
   type OfferChannel,
   type OfferDetail,
 } from '@/lib/offers/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { useOfferUnsaved } from './offer-unsaved';
 
-type SendableOffer = Pick<OfferDetail, 'id' | 'offerNumber' | 'version' | 'contentVersion'>;
+type SendableOffer = Pick<
+  OfferDetail,
+  'id' | 'offerNumber' | 'version' | 'contentVersion' | 'sections' | 'validUntil'
+>;
+
+const UNSAVED_MESSAGE =
+  'Du hast Änderungen an den Positionen, die noch nicht gespeichert sind. Speichere sie zuerst, damit das Angebot sie enthält.';
 
 const SEND_FAILED = 'Das Angebot konnte nicht festgehalten werden. Versuche es erneut.';
 const SEND_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
@@ -105,6 +114,7 @@ type PdfPreview = ReturnType<typeof usePdfRead>;
  */
 function useOfferSend(offer: SendableOffer, preview: PdfPreview, onSent: () => void) {
   const { showBanner } = useBanner();
+  const unsaved = useOfferUnsaved();
   // One key per opening: a press repeated after a lost answer gets the first revision.
   const [attemptKey] = useState(() => crypto.randomUUID());
   const [channel, setChannel] = useState<OfferChannel | null>(null);
@@ -118,6 +128,11 @@ function useOfferSend(offer: SendableOffer, preview: PdfPreview, onSent: () => v
     event.preventDefault();
     setAttempted(true);
     if (focusFirstInvalidField({ [CHANNEL_FIELD_ID]: channelError }) || !channel) return;
+    // Sending freezes the draft: what the editor holds unsaved would be lost.
+    if (unsaved) {
+      setError(UNSAVED_MESSAGE);
+      return;
+    }
     const previewHash = preview.data?.contentHash;
     if (!previewHash) {
       setError('Halte das Angebot fest, sobald die Vorschau zu sehen ist.');
@@ -170,6 +185,8 @@ function OfferPreviewDialog({ offer, onClose }: { offer: SendableOffer; onClose:
     failureMessage: 'Die Vorschau konnte nicht erstellt werden.',
   });
   const send = useOfferSend(offer, preview, onClose);
+  const unsaved = useOfferUnsaved();
+  const blocker = offerSendBlocker(offer, getBusinessTodayIso());
   return (
     <Dialog
       open
@@ -198,8 +215,16 @@ function OfferPreviewDialog({ offer, onClose }: { offer: SendableOffer; onClose:
                 loadingLabel="Vorschau wird erstellt."
               />
             )}
-            <ChannelField channel={send.channel} error={send.channelError} onChange={send.setChannel} />
-            <ErrorText>{send.error}</ErrorText>
+            {blocker ? (
+              // The server would refuse this draft: the preview names why instead of offering the send.
+              <p className="text-sm text-muted-foreground">{SEND_FAILURE_MESSAGES[blocker]}</p>
+            ) : (
+              <>
+                {unsaved && <p className="text-sm text-muted-foreground">{UNSAVED_MESSAGE}</p>}
+                <ChannelField channel={send.channel} error={send.channelError} onChange={send.setChannel} />
+                <ErrorText>{send.error}</ErrorText>
+              </>
+            )}
           </DialogBody>
           <DialogFooter>
             {preview.data && (
@@ -210,9 +235,11 @@ function OfferPreviewDialog({ offer, onClose }: { offer: SendableOffer; onClose:
                 </a>
               </Button>
             )}
-            <Button pending={send.pending} type="submit" disabled={send.pending}>
-              Als gesendet festhalten
-            </Button>
+            {!blocker && (
+              <Button pending={send.pending} type="submit" disabled={send.pending}>
+                Als gesendet festhalten
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
