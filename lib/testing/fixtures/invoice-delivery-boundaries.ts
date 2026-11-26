@@ -93,6 +93,7 @@ const issued = {
   },
   work: null,
   lines: [],
+  lineSources: [],
 };
 
 // The database functions: one row per attempt key, a claim per attempt, a settle per claim.
@@ -125,7 +126,7 @@ const payloadOf = (delivery: Delivery, claimed: boolean) => ({
 world.rpc = ({ name, args }) => {
   if (name === 'consume_rate_limit')
     return { data: limiterAllows && args.p_action !== limitedAction, error: null };
-  if (name === 'get_invoice') {
+  if (name === 'get_invoice_with_line_sources') {
     const own = args.p_organization_id === ORGANIZATION_A && args.p_invoice_id === invoiceId;
     return { data: own ? issued : null, error: null };
   }

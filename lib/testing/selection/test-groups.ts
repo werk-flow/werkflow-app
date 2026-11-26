@@ -325,9 +325,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
-  // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
+  // A report from the shell with a redacted screenshot; support triages, answers live, files for a caller.
   ['problem-reports:report', 'problem-reports/report-a-problem.spec.ts', ['*']],
-  // Support triages a report and answers, the reporter reads it live; support files a report for a caller.
   ['problem-reports:support', 'problem-reports/support-queue.spec.ts', ['*']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
