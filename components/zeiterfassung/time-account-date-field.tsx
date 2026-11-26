@@ -38,7 +38,7 @@ export function TimeAccountDateField({
   return (
     <>
       <input type="hidden" form={form} name={name} value={value ? toLocalDateString(value) : ''} />
-      <DatePicker id={id} value={value} onChange={pick} ariaLabel={ariaLabel} />
+      <DatePicker {...(id ? { id } : {})} value={value} onChange={pick} ariaLabel={ariaLabel} />
     </>
   );
 }
