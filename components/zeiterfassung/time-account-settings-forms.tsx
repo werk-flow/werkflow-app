@@ -112,7 +112,7 @@ const HOURS_HEAD = 'Stunden (Std:Min)';
 function adjustmentCells(
   layout: PersonLayout,
   controls: {
-    ids: { hours: string; reason: string };
+    ids: { hours: string; date: string; reason: string };
     hours: ReactNode;
     effectiveDate: ReactNode;
     reason: ReactNode;
@@ -139,7 +139,7 @@ function adjustmentCells(
         {
           key: 'effectiveDate',
           content: (
-            <Field label="Wirksam am" required>
+            <Field label="Wirksam am" htmlFor={ids.date} required>
               {effectiveDate}
             </Field>
           ),
@@ -156,16 +156,26 @@ function adjustmentCells(
       ];
 }
 
-type AdjustmentErrors = { hours: string | null; reason: string | null };
+type AdjustmentErrors = { hours: string | null; date: string | null; reason: string | null };
 
-const NO_ADJUSTMENT_ERRORS: AdjustmentErrors = { hours: null, reason: null };
+const NO_ADJUSTMENT_ERRORS: AdjustmentErrors = { hours: null, date: null, reason: null };
+
+/** What a submitted adjustment lacks, in the order of the row. */
+function checkAdjustment(data: FormData): AdjustmentErrors {
+  return {
+    hours: adjustmentHoursError(String(data.get('hours') ?? '')),
+    date: data.get('effectiveDate') ? null : 'Wähle das Datum, ab dem die Korrektur gilt.',
+    reason: String(data.get('reason') ?? '').trim() ? null : 'Gib einen Grund für die Korrektur an.',
+  };
+}
 
 /**
  * The typed fields of one adjustment form. The hours take „±HH:MM“ like the
- * opening balance. On submit, wrong or zero hours and a missing reason mark
- * their fields, focus the first and send nothing; typing clears a mark. The
- * form takes `noValidate`, so no browser bubble runs before this check. Enter
- * in a field must not submit through the first kind button.
+ * opening balance. On submit, wrong or zero hours, a missing date and a
+ * missing reason mark their fields, focus the first and send nothing; typing
+ * clears a mark. The form takes `noValidate`, so no browser bubble runs
+ * before this check. Enter in a field must not submit through the first kind
+ * button.
  */
 function useAdjustmentFields({
   formId,
@@ -178,28 +188,27 @@ function useAdjustmentFields({
   handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
-  const ids = { hours: `${formId}-hours`, reason: `${formId}-reason` };
+  const ids = { hours: `${formId}-hours`, date: `${formId}-date`, reason: `${formId}-reason` };
   const [errors, setErrors] = useState<AdjustmentErrors>(NO_ADJUSTMENT_ERRORS);
   // The account version a draft was typed against: a live refresh that changes
   // the balance must not carry the draft over to it, so its save is refused as
-  // stale. A submission, accepted or refused, ends the draft.
+  // stale, again on every retry. Only an accepted save, which empties the
+  // fields, ends the draft.
   const [draftVersion, setDraftVersion] = useState<number | null>(null);
   const submitChecked = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    const data = new FormData(event.currentTarget);
-    const next: AdjustmentErrors = {
-      hours: adjustmentHoursError(String(data.get('hours') ?? '')),
-      reason: String(data.get('reason') ?? '').trim() ? null : 'Gib einen Grund für die Korrektur an.',
-    };
+    const form = event.currentTarget;
+    const next = checkAdjustment(new FormData(form));
     setErrors(next);
-    if (next.hours || next.reason) {
+    const invalid = (['hours', 'date', 'reason'] as const).filter((key) => next[key] !== null);
+    if (invalid.length > 0) {
       event.preventDefault();
-      focusFirstVisibleInvalid([...(next.hours ? [ids.hours] : []), ...(next.reason ? [ids.reason] : [])]);
+      focusFirstVisibleInvalid(invalid.map((key) => ids[key]));
       return;
     }
     await handleSubmit(event);
-    setDraftVersion(null);
+    if (!new FormData(form).get('hours')) setDraftVersion(null);
   };
-  const field = (key: keyof AdjustmentErrors, label: string, extra: { placeholder?: string } = {}) => (
+  const field = (key: 'hours' | 'reason', label: string, extra: { placeholder?: string } = {}) => (
     <Input
       id={ids[key]}
       form={formId}
@@ -221,7 +230,8 @@ function useAdjustmentFields({
     ids,
     hours: field('hours', 'Stunden der Korrektur', { placeholder: '+0:00' }),
     reason: field('reason', 'Korrekturgrund'),
-    message: [errors.hours, errors.reason].filter((message) => message !== null).join(' ') || null,
+    message:
+      [errors.hours, errors.date, errors.reason].filter((message) => message !== null).join(' ') || null,
     expectedVersion: draftVersion ?? account.version,
     submitChecked,
   };
@@ -261,6 +271,7 @@ function AdjustmentRequestForm({
     <TimeAccountDateField
       form={formId}
       name="effectiveDate"
+      id={ids.date}
       initialValue={today}
       ariaLabel={`Wirksamkeitsdatum für ${account.employeeName}`}
     />

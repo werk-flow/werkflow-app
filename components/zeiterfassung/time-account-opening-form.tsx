@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
+import { useSuggestedDate } from '@/components/zeiterfassung/time-account-date-field';
 import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
 import {
   focusFirstVisibleInvalid,
@@ -171,19 +172,6 @@ function checkOpening(input: {
       ...errors.balances.flatMap((id) => [balanceInputId('row', id), balanceInputId('card', id)]),
     ],
   };
-}
-
-/**
- * The shared opening date: the suggested start date until the Admin picks
- * one. A live refresh that moves the suggestion, such as a month closed in
- * another session, moves an untouched date with it; a picked date stays.
- */
-function useSuggestedDate(suggestedStartDate: string) {
-  const [picked, setPicked] = useState<{ date: Date | undefined } | null>(null);
-  // One Date per suggestion, so the picker sees a stable value between renders.
-  const suggested = useMemo(() => new Date(`${suggestedStartDate}T12:00:00`), [suggestedStartDate]);
-  const pick = (date: Date | undefined): void => setPicked({ date });
-  return [picked ? picked.date : suggested, pick] as const;
 }
 
 /**

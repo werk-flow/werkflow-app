@@ -99,7 +99,7 @@ export async function submitTimeAccountAdjustment(
   formData: FormData,
 ): Promise<TimeAccountActionResult<'submitAdjustment'>> {
   const refusal = await holdWrite('submit-adjustment', Object.fromEntries(formData));
-  if (refusal === 'invalid_hours') return { success: false, error: refusal };
+  if (refusal === 'invalid_hours' || refusal === 'stale_version') return { success: false, error: refusal };
   return refusal === null ? { success: true } : { success: false, error: 'adjustment_failed' };
 }
 

@@ -107,11 +107,27 @@ test('a draft keeps the account version it was typed against across a live refre
     expectedVersion: '1',
     hours: '-8:00',
   });
+  await answerHeldWrite(page, 'stale_version');
+  await expect(page.getByRole('alert')).toContainText('Lade die Seite neu und prüfe den Saldo.');
+
+  // A retry of the unchanged draft is refused again: it still names the version it was typed against.
+  await kind(page, 'Auszahlung').click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.calls.length)).toBe(2);
+  expect(await page.evaluate(() => window.uiContractWrites.calls[1]?.input)).toMatchObject({
+    expectedVersion: '1',
+  });
 });
 
-test('picking the selected day again keeps the date', async ({ page }) => {
+test('an emptied date marks the row, focuses the date and sends nothing', async ({ page }) => {
+  await fillReason(page);
+  await hours(page).fill('+1:00');
   const date = row(page).getByRole('group', { name: 'Wirksamkeitsdatum für Kevin Kontrakt' });
   await date.getByRole('button', { name: 'Kalender öffnen' }).click();
+  // Picking the selected day again empties the date.
   await page.getByRole('gridcell', { selected: true }).getByRole('button').click();
-  await expect(date).toContainText('02.11.2026');
+  await page.keyboard.press('Escape');
+  await kind(page, 'Korrektur').click();
+  await expect(date).toBeFocused();
+  await expect(page.getByRole('table')).toContainText('Wähle das Datum, ab dem die Korrektur gilt.');
+  expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
 });
