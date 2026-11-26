@@ -9,13 +9,11 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
-import type { ActionResult } from '@/lib/action-result';
 import { readOfferArticleLine, readOfferLeistungLine } from '@/lib/invoices/line-source-actions';
 import type { InvoiceLineSourceKind, OfferCatalogLine } from '@/lib/invoices/line-sources';
 
 type CatalogKind = {
   options: 'inventory-items' | 'leistungen';
-  read: (id: string) => Promise<ActionResult<{ line: OfferCatalogLine }>>;
   placeholder: string;
   empty: string;
   failed: string;
@@ -26,7 +24,6 @@ type CatalogKind = {
 const CATALOG: Record<InvoiceLineSourceKind, CatalogKind> = {
   article: {
     options: 'inventory-items',
-    read: (articleId) => readOfferArticleLine({ articleId }),
     placeholder: 'Artikel hinzufügen…',
     empty: 'Kein Artikel gefunden',
     failed: 'Der Artikel konnte nicht übernommen werden. Bitte versuche es erneut.',
@@ -41,7 +38,6 @@ const CATALOG: Record<InvoiceLineSourceKind, CatalogKind> = {
   },
   leistung: {
     options: 'leistungen',
-    read: (leistungId) => readOfferLeistungLine({ leistungId }),
     placeholder: 'Leistung hinzufügen…',
     empty: 'Keine Leistung gefunden',
     failed: 'Die Leistung konnte nicht übernommen werden. Bitte versuche es erneut.',
@@ -94,7 +90,11 @@ export function OfferCatalogPicker({
     void run(async () => {
       setError(null);
       setRetryId(null);
-      const result = await catalog.read(entryId).catch(() => null);
+      const result = await (
+        kind === 'leistung'
+          ? readOfferLeistungLine({ leistungId: entryId })
+          : readOfferArticleLine({ articleId: entryId })
+      ).catch(() => null);
       setPicked('');
       if (!result?.success) {
         setError(result ? describeFailure(result.error, catalog.messages, catalog.failed) : catalog.failed);

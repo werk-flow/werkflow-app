@@ -84,8 +84,8 @@ export function OfferCalculationPanel({
           {withoutCost > 0 && (
             <p className="text-sm text-muted-foreground">
               {withoutCost === 1
-                ? 'Bei 1 Position fehlen die Kosten. Ihr Verkaufspreis zählt ganz zur Marge.'
-                : `Bei ${withoutCost} Positionen fehlen die Kosten. Ihr Verkaufspreis zählt ganz zur Marge.`}
+                ? 'Bei 1 Position fehlen die Kosten. Die Marge enthält deren ganzen Betrag.'
+                : `Bei ${withoutCost} Positionen fehlen die Kosten. Die Marge enthält deren ganzen Betrag.`}
             </p>
           )}
         </>
