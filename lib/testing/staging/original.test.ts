@@ -20,6 +20,14 @@ test('an original names its number and type and passes the EN 16931 rules', asyn
   expect(storno).toMatchObject({ number: STORNO_INVOICE.number, typeCode: '384' });
 });
 
+test('a number in a comment never stands in for the document number', async () => {
+  const xml = toEn16931(calculateInvoice(STANDARD_RATE_INVOICE)).replace(
+    `<ram:ID>${STANDARD_RATE_INVOICE.number}</ram:ID>`,
+    '<!--<ram:ID>RE-FAKE</ram:ID>--><ram:ID>RE-REAL</ram:ID>',
+  );
+  expect((await readOriginal(await pdfCarrying(xml))).number).toBe('RE-REAL');
+});
+
 test('XML changed after embedding names the rule it breaks', async () => {
   const changed = await withChangedEmbeddedXml(
     await pdfCarrying(toEn16931(calculateInvoice(STANDARD_RATE_INVOICE))),
@@ -30,6 +38,6 @@ test('XML changed after embedding names the rule it breaks', async () => {
 test('a PDF without the embedded invoice, or XML without a document number, is a finding', async () => {
   await expect(readOriginal(await pdfCarrying(null))).rejects.toThrow(/no readable factur-x\.xml/);
   await expect(readOriginal(await pdfCarrying('<rsm:CrossIndustryInvoice/>'))).rejects.toThrow(
-    /no document number/,
+    /no readable CII invoice/,
   );
 });

@@ -127,7 +127,18 @@ const STRIPE_FIELDS = [
   'latest_invoice',
 ] as const;
 
-export type StripeFacts = Partial<Record<(typeof STRIPE_FIELDS)[number], string | number | boolean | null>>;
+/**
+ * Ids and kinds a journey reads from one level down, by the name it gets them under: an invoice
+ * payment's PaymentIntent, and the kind of method a charge was paid with (`card`, `sepa_debit`).
+ */
+const NESTED_STRIPE_FIELDS = {
+  payment_intent: ['payment', 'payment_intent'],
+  payment_method_type: ['payment_method_details', 'type'],
+} as const;
+
+export type StripeFacts = Partial<
+  Record<(typeof STRIPE_FIELDS)[number] | keyof typeof NESTED_STRIPE_FIELDS, string | number | boolean | null>
+>;
 
 const sandboxObject = z.object({ livemode: z.literal(false) });
 const sandboxList = z.object({ object: z.literal('list'), data: z.array(sandboxObject) });
@@ -143,6 +154,11 @@ function factsOf(body: unknown): StripeFacts {
     if (value === null || ['string', 'number', 'boolean'].includes(typeof value))
       facts[field] = z.union([z.string(), z.number(), z.boolean(), z.null()]).parse(value);
     else if (expandedId.safeParse(value).success) facts[field] = expandedId.parse(value).id;
+  }
+  for (const name of ['payment_intent', 'payment_method_type'] as const) {
+    const [parent, child] = NESTED_STRIPE_FIELDS[name];
+    const value = record.safeParse(source[parent]).data?.[child];
+    if (facts[name] === undefined && typeof value === 'string') facts[name] = value;
   }
   return facts;
 }

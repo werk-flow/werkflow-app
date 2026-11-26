@@ -3,6 +3,8 @@
 // names the invoice's number and type. It returns those and the failed rule ids only, never the buyer,
 // a line or an address.
 
+import SaxonJS from 'saxon-js';
+
 import { readEmbeddedInvoiceXml } from '../../invoicing/embedded-xml';
 import { checkEn16931 } from '../../invoicing/check-en16931';
 import { StagingFailure } from './runs';
@@ -15,8 +17,25 @@ export type OriginalFacts = {
   rulesRelease: string;
 };
 
-const DOCUMENT =
-  /<rsm:ExchangedDocument>\s*<ram:ID>([^<]+)<\/ram:ID>\s*<ram:TypeCode>(\d{3})<\/ram:TypeCode>/;
+const CII = {
+  rsm: 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100',
+  ram: 'urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100',
+};
+
+/** One element's text of the parsed CII invoice, so a comment or another element never stands in for it. */
+function documentField(xml: string, field: 'ID' | 'TypeCode'): string {
+  try {
+    return String(
+      SaxonJS.XPath.evaluate(
+        `string(parse-xml($xml)/rsm:CrossIndustryInvoice/rsm:ExchangedDocument/ram:${field})`,
+        null,
+        { namespaceContext: CII, params: { xml } },
+      ),
+    );
+  } catch {
+    throw new StagingFailure('The original holds no readable CII invoice.');
+  }
+}
 
 export async function readOriginal(pdf: Uint8Array): Promise<OriginalFacts> {
   let xml: string;
@@ -25,7 +44,8 @@ export async function readOriginal(pdf: Uint8Array): Promise<OriginalFacts> {
   } catch {
     throw new StagingFailure('The downloaded PDF holds no readable factur-x.xml.');
   }
-  const [, number, typeCode] = DOCUMENT.exec(xml) ?? [];
+  const number = documentField(xml, 'ID');
+  const typeCode = documentField(xml, 'TypeCode');
   if (!number || !typeCode) throw new StagingFailure('The original names no document number and type.');
   const check = await checkEn16931(xml);
   return {

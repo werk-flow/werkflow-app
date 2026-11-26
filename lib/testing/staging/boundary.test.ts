@@ -47,24 +47,35 @@ describe('origin refusal', () => {
     expect(verdict(page('https://dashboard.stripe.com/test/payments'))).toBe('refused');
   });
 
-  test("a signed download of a WerkFlow billing original loads as a page, from R2's signed URL only", () => {
-    const signed = `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/made-up-bucket/werkflow-billing/2026/in_1/original.pdf`;
-    const query = '?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=0abc';
-    expect(verdict(page(`${signed}${query}`))).toBe('elsewhere');
+  test("a signed download of a WerkFlow invoice original loads as a page, from R2's signed URL only", () => {
+    const host = `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com`;
+    const key = `werkflow-billing/invoices/in_1MadeUp/${'ab'.repeat(32)}.pdf`;
+    const signature = `X-Amz-Signature=${'cd'.repeat(32)}`;
+    const query = `?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=300&${signature}`;
+    expect(verdict(page(`${host}/made-up-bucket/${key}${query}`))).toBe('elsewhere');
+    expect(verdict(page(`${host}/made-up-bucket/${key}?${signature}&x-id=GetObject`))).toBe('elsewhere');
     for (const url of [
-      signed,
-      `${signed}?X-Amz-Algorithm=AWS4-HMAC-SHA256`,
-      `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/made-up-bucket/organisations/x.pdf${query}`,
-      `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/werkflow-billing/x.pdf${query}`,
-      `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/made-up-bucket/werkflow-billing/../x.pdf${query}`,
-      `https://made-up.eu.r2.cloudflarestorage.com/made-up-bucket/werkflow-billing/x.pdf${query}`,
-      `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com.evil.example/b/werkflow-billing/x.pdf${query}`,
-      `http://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/made-up-bucket/werkflow-billing/x.pdf${query}`,
+      // No signature, an empty one, or one that is no SigV4 hex digest.
+      `${host}/made-up-bucket/${key}`,
+      `${host}/made-up-bucket/${key}?X-Amz-Algorithm=AWS4-HMAC-SHA256`,
+      `${host}/made-up-bucket/${key}?X-Amz-Signature=`,
+      `${host}/made-up-bucket/${key}?X-Amz-Signature=0abc`,
+      `${host}/made-up-bucket/${key}?X-Amz-Signature=${'cd'.repeat(32)}0`,
+      // Any other key: another prefix, another object under werkflow-billing/, a path trick.
+      `${host}/made-up-bucket/organisations/x/${'ab'.repeat(32)}.pdf${query}`,
+      `${host}/made-up-bucket/werkflow-billing/storno/in_1/${'ab'.repeat(32)}.pdf${query}`,
+      `${host}/made-up-bucket/werkflow-billing/invoices/in_1/x.pdf${query}`,
+      `${host}/made-up-bucket/werkflow-billing/invoices/in_1/../${'ab'.repeat(32)}.pdf${query}`,
+      `${host}/${key}${query}`,
+      // Another host or plain http.
+      `https://made-up.eu.r2.cloudflarestorage.com/made-up-bucket/${key}${query}`,
+      `${host}.evil.example/made-up-bucket/${key}${query}`,
+      `http://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/made-up-bucket/${key}${query}`,
     ])
       expect(verdict(page(url)), url).toBe('refused');
     // Only as the page a click opens: never as an asset, a frame or a socket.
-    expect(verdict(asset(`${signed}${query}`))).toBe('refused');
-    expect(verdict(embedded(`${signed}${query}`))).toBe('refused');
+    expect(verdict(asset(`${host}/made-up-bucket/${key}${query}`))).toBe('refused');
+    expect(verdict(embedded(`${host}/made-up-bucket/${key}${query}`))).toBe('refused');
   });
 
   test("DEV's project and the sandbox Checkout's hosts load as assets and frames", () => {
@@ -109,7 +120,7 @@ describe('header scoping', () => {
     for (const request of [
       page('https://checkout.stripe.com/c/pay/cs_test_a1B2c3'),
       page(
-        `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/b/werkflow-billing/x.pdf?X-Amz-Signature=0abc`,
+        `https://${'0a'.repeat(16)}.eu.r2.cloudflarestorage.com/b/werkflow-billing/invoices/in_1/${'ab'.repeat(32)}.pdf?X-Amz-Signature=${'cd'.repeat(32)}`,
       ),
       asset('https://api.stripe.com/v1/payment_pages'),
       asset(`https://${DEV}.supabase.co/auth/v1/token`),

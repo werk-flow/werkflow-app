@@ -6,7 +6,9 @@ import { expect, type Page } from '@playwright/test';
 import { readOriginal } from '../../lib/testing/staging/original';
 import { MEMBER_ROLES, type MemberRole } from '../../lib/testing/staging/readers';
 import { StagingFailure, newRunId, runOrganizationName } from '../../lib/testing/staging/runs';
+import { SEND_INVITE_MESSAGES } from '../../components/mitarbeiter/invite-messages';
 import { ROLE_LABELS } from '../../lib/roles';
+import { DEFAULT_SETTINGS_SECTION_SLUG, getSettingsHref } from '../../lib/settings/sections';
 import { hydrated } from '../../tests/golden/support/steps/interaction';
 import {
   cleanUp,
@@ -117,7 +119,7 @@ async function issuedInvoice(method: CheckoutMethod, paid: Paid): Promise<Issued
       (
         await readDev(kit, paid.organization, {
           table: 'werkflow_invoices',
-          columns: ['id', 'number', 'type_code', 'gross_cents', 'payment_means', 'stripe_invoice_id'],
+          columns: ['id', 'number', 'type_code', 'gross_cents', 'stripe_invoice_id'],
         })
       ).find((candidate) => candidate.stripe_invoice_id === stripeInvoiceId) ?? null,
     SIGNAL_WAIT_MS,
@@ -148,36 +150,52 @@ async function debitAndMails(method: CheckoutMethod, paid: Paid, issued: Issued)
     },
     SIGNAL_WAIT_MS,
   );
-  const charges = await readStripe(kit, `charges?customer=${paid.customerId}&limit=10`);
-  const charge = charges.find(
-    (candidate) => candidate.status === 'succeeded' && candidate.amount === issued.totalCents,
-  );
-  if (!charge) throw new StagingFailure(`No succeeded charge of ${issued.totalCents} cents.`);
+  // The invoice's own payment leads to its charge, which names the method that paid it.
+  const [payment, ...others] = (
+    await readStripe(kit, `invoice_payments?invoice=${issued.stripeInvoiceId}`)
+  ).filter((candidate) => candidate.status === 'paid');
+  const paymentIntent = String(payment?.payment_intent ?? '');
+  if (others.length || !paymentIntent.startsWith('pi_'))
+    throw new StagingFailure(`Invoice ${issued.stripeInvoiceId} has no single paid PaymentIntent.`);
+  const [charge] = await readStripe(kit, `charges?payment_intent=${paymentIntent}`);
+  const expectedType = method === 'sepa' ? 'sepa_debit' : 'card';
+  if (
+    charge?.status !== 'succeeded' ||
+    charge.amount !== issued.totalCents ||
+    charge.payment_method_type !== expectedType
+  )
+    throw new StagingFailure(
+      `The charge of ${paymentIntent} is no succeeded ${expectedType} of ${issued.totalCents} cents.`,
+    );
   kit.log(`${method}: debited`, {
     stripe_invoice: issued.stripeInvoiceId,
+    payment_intent: paymentIntent,
     charge: String(charge.id),
     charge_status: String(charge.status),
+    method: expectedType,
     amount_cents: issued.totalCents,
   });
 
   begin(`${method}: invoice mail and receipt`, 'receiveSignal');
-  const readMails = () =>
-    readDev(kit, paid.organization, {
-      table: 'werkflow_billing_mails',
-      columns: ['id', 'kind', 'state', 'attempts', 'failure_code', 'stripe_object_id'],
-    }).then((rows) => rows.filter((row) => row.stripe_object_id === issued.stripeInvoiceId));
+  let seen: Record<string, unknown>[] = [];
   try {
     await waitFor(
       'sent invoice mail and receipt',
       async () => {
-        const rows = await readMails();
-        const sent = (kind: string) => rows.some((row) => row.kind === kind && row.state === 'sent');
-        return sent('invoice') && sent('receipt') ? rows : null;
+        seen = (
+          await readDev(kit, paid.organization, {
+            table: 'werkflow_billing_mails',
+            columns: ['id', 'kind', 'state', 'attempts', 'failure_code', 'stripe_object_id'],
+          })
+        ).filter((row) => row.stripe_object_id === issued.stripeInvoiceId);
+        const sent = (kind: string) => seen.some((row) => row.kind === kind && row.state === 'sent');
+        return sent('invoice') && sent('receipt') ? seen : null;
       },
       SIGNAL_WAIT_MS,
     );
   } finally {
-    for (const row of await readMails())
+    // The rows the last read saw, also when the wait ended without them: their states explain it.
+    for (const row of seen)
       kit.log(`${method}: billing mail`, {
         mail: String(row.id),
         kind: String(row.kind),
@@ -202,9 +220,11 @@ async function billingPageAndOriginal(page: Page, method: CheckoutMethod, issued
   await pdf.click();
   const download = await downloading;
   const original = await readOriginal(new Uint8Array(await readFile(await download.path())));
+  // Fixed words and rule ids only: the original's own text never reaches a printed line.
+  const rules = original.failedRules.filter((rule) => /^[A-Z]+(?:-[A-Z0-9]+)+$/.test(rule));
   if (original.number !== issued.number || original.typeCode !== '380' || original.failedRules.length)
     throw new StagingFailure(
-      `The original names ${original.number} type ${original.typeCode} and fails ${original.failedRules.join(',') || 'no rule'}.`,
+      `The original of ${issued.number} matches its number: ${original.number === issued.number}, is type 380: ${original.typeCode === '380'}, fails ${original.failedRules.length} EN 16931 rules (${rules.join(',')}).`,
     );
   kit.log(`${method}: original downloaded and checked`, {
     number: original.number,
@@ -228,9 +248,11 @@ async function inviteMembers(page: Page, members: ReadonlyMap<MemberRole, Actor>
     const banner = page.getByText(/^Einladung an .+ (?:wurde gesendet\.|konnte nicht gesendet werden: .+)$/);
     await expect(banner).toBeVisible({ timeout: 30_000 });
     const outcome = await banner.innerText();
-    // The banner names the invitee's address, which the printed line replaces.
-    if (!outcome.endsWith('wurde gesendet.'))
-      throw new StagingFailure(`The ${role} invite failed: ${outcome}`);
+    if (!outcome.endsWith('wurde gesendet.')) {
+      // The banner names the invitee's address: only the code of its known reason is printed.
+      const reason = Object.entries(SEND_INVITE_MESSAGES).find(([, message]) => outcome.endsWith(message));
+      throw new StagingFailure(`The ${role} invite failed: ${reason?.[0] ?? 'unknown reason'}.`);
+    }
   }
 }
 
@@ -243,10 +265,12 @@ async function memberRefused(member: Actor, role: MemberRole, organization: RunO
     await page.goto(`/login?invite_code=${code}`);
     await hydrated(page);
     await page.getByRole('button', { name: 'Einladung annehmen' }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
+    // Joined the run's organization, with the role its role-scoped invite code grants.
+    await expect(page).toHaveURL(`/dashboard?joined=${organization.id}`, { timeout: 30_000 });
     await page.goto(BILLING_PATH);
+    // The server sends a role the section is closed to to its profile (lib/settings/section-access.ts).
+    await expect(page).toHaveURL(getSettingsHref(DEFAULT_SETTINGS_SECTION_SLUG));
     await hydrated(page);
-    await expect(page).not.toHaveURL(new RegExp(BILLING_PATH));
     await expect(page.getByRole('button', { name: /als PDF herunterladen$/ })).toHaveCount(0);
     kit.log(`${role}: refused the billing page`, {
       member: member.id,
@@ -301,7 +325,10 @@ try {
   });
 } finally {
   begin('cleanup', 'deleteAccount');
-  for (const runId of runIds) passed = (await cleanUp(kit, runId)) && passed;
+  const failed: string[] = [];
+  for (const runId of runIds) if (!(await cleanUp(kit, runId))) failed.push(runId);
+  // A member's account goes only after its Admin's organization: one more pass, in the same order.
+  for (const runId of failed) passed = (await cleanUp(kit, runId)) && passed;
   passed = (await cleanUp(kit, null)) && passed;
 }
 for (const subscriptionId of subscriptions) {

@@ -77,6 +77,20 @@ test('Stripe objects and lists pass only with livemode false on each, as their a
       data: [{ id: 'in_1', livemode: false, customer_email: 'payer@example.test', total: 149900 }],
     }),
   ).toEqual([{ id: 'in_1', livemode: false, total: 149900 }]);
+  expect(
+    sandboxAnswer({
+      object: 'list',
+      data: [{ id: 'inpay_1', livemode: false, payment: { type: 'payment_intent', payment_intent: 'pi_1' } }],
+    }),
+  ).toEqual([{ id: 'inpay_1', livemode: false, payment_intent: 'pi_1' }]);
+  expect(
+    sandboxAnswer({
+      id: 'py_1',
+      livemode: false,
+      payment_method_details: { type: 'sepa_debit', sepa_debit: { last4: '3000', mandate: 'mandate_1' } },
+      billing_details: { name: 'Made Up' },
+    }),
+  ).toEqual([{ id: 'py_1', livemode: false, payment_method_type: 'sepa_debit' }]);
   for (const body of [
     { id: 'sub_1', livemode: true },
     { id: 'sub_1' },
