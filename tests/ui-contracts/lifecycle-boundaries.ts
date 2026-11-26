@@ -66,6 +66,7 @@ declare global {
       | 'customer-create'
       | 'request-capture'
       | 'request-attach'
+      | 'global-search'
       | 'billing-parties'
       | 'sickness-record'
       | 'absence-picker'

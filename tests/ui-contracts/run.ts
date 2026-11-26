@@ -100,6 +100,15 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('attach-request-dialog.tsx'))
                 return { path: join(import.meta.dir, 'request-attach-boundaries.tsx') };
             });
+            // The search dialog reads the active organization from the search contract.
+            builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
+              if (args.importer.endsWith('global-search-dialog.tsx'))
+                return { path: join(import.meta.dir, 'global-search-boundaries.tsx') };
+            });
+            builder.onResolve({ filter: /^next\/link$/ }, (args) => {
+              if (args.importer.endsWith('global-search-dialog.tsx'))
+                return { path: join(import.meta.dir, 'global-search-boundaries.tsx') };
+            });
             builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
               if (
                 args.importer.endsWith('use-suggested-record-number.ts') ||

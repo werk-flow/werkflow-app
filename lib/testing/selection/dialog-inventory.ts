@@ -314,6 +314,12 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.communication-settings' }],
     },
+  'components/search/global-search-dialog.tsx#GlobalSearchDialog|Suchen': {
+    audits: [
+      { route: '/kunden', role: 'admin', opener: 'customers.search-office' },
+      { route: '/dashboard', role: 'employee', opener: 'customers.search-field' },
+    ],
+  },
   'components/kunden/create-client-dialog.tsx#CreateClientDialog|Neuen Kunden anlegen': {
     audits: [{ route: '/kunden', role: 'admin', opener: 'customers.create' }],
   },

@@ -60,6 +60,7 @@ const COMPONENT_AREAS: readonly (readonly [string, readonly string[], readonly s
       'browser-observation',
       'busy-elements',
       'controls',
+      'global-search',
       'hidden-copy',
       'hydration-settle',
       'interaction',
