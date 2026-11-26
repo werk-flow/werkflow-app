@@ -8,6 +8,7 @@
 import { z } from '@/lib/zod';
 
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
+import type { RealtimeTable } from '@/lib/realtime/tables';
 import type { EmploymentCondition } from '@/lib/personnel/types';
 import { getEffectiveCondition } from '@/lib/personnel/types';
 import { getEffectiveSchedule, getWeekdayIndex, type WorkSchedule } from '@/lib/personnel/schedule';
@@ -168,6 +169,22 @@ export type ResolveDailyTargetInput = {
   /** Approved absence spans for the person (P1-06). Optional and additive. */
   absences?: ApprovedAbsenceSpan[];
 };
+
+/**
+ * The published tables behind each input of a daily target. A live view that
+ * shows targets refreshes when any of them moves; keyed by the resolver's
+ * inputs, a new input does not compile until its tables are named.
+ */
+const DAILY_TARGET_INPUT_TABLES = {
+  schedules: ['work_schedules'],
+  conditions: ['employment_conditions'],
+  calendar: ['organization_settings', 'organization_closure_days'],
+  employment: ['employee_records'],
+  absences: ['vacation_requests', 'sickness_reports', 'school_days'],
+} as const satisfies Record<Exclude<keyof ResolveDailyTargetInput, 'dateIso'>, readonly RealtimeTable[]>;
+
+export const DAILY_TARGET_LIVE_TABLES: readonly RealtimeTable[] =
+  Object.values(DAILY_TARGET_INPUT_TABLES).flat();
 
 function resolveOutsideEmployment(
   employment: EmploymentInterval,
@@ -358,4 +375,16 @@ export function getNoTargetReason(target: DailyTarget): string | null {
   if (target.absence?.type === 'school') return 'Berufsschule';
   if (target.source === 'schedule') return 'Kein Arbeitstag laut Wochenplan';
   return 'Wochenende';
+}
+
+/**
+ * The Zeiterfassung's sentence for a day without target, built from
+ * `getNoTargetReason`; null when the day has one. A Berufsschule day credits
+ * the day's target, so it counts as met rather than absent.
+ */
+export function describeNoTargetToday(target: DailyTarget): string | null {
+  const reason = getNoTargetReason(target);
+  if (reason === null) return null;
+  if (reason === 'Berufsschule') return 'Berufsschule – dein Tagesziel gilt heute als erfüllt.';
+  return `${reason} – heute keine Sollarbeitszeit.`;
 }

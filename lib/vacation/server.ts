@@ -80,14 +80,18 @@ export const readOpenAbsences = memoizeRequestRead(
   { outsideRequest: 'fresh' },
 );
 
+/** The record fields vacation counting reads, loaded with the record the caller already reads. */
+export type VacationCountingRecord = Pick<Tables<'employee_records'>, 'id' | 'entry_date' | 'exit_date'>;
+export const VACATION_COUNTING_RECORD_COLUMNS = 'id, entry_date, exit_date';
+
 /**
- * The counting context (schedules, conditions, holiday calendar) for one
- * employee record — the same inputs `resolveDailyTarget` uses, so vacation-day
- * counting can never drift from the target truth.
+ * The counting context (schedules, conditions, holiday calendar, entry and
+ * exit dates) for one employee record — the same inputs `resolveDailyTarget`
+ * uses, so vacation-day counting can never drift from the target truth.
  */
 export async function loadVacationCountingContext(
   organizationId: string,
-  employeeRecordId: string,
+  record: VacationCountingRecord,
 ): Promise<VacationCountingContext | null> {
   const admin = createSupabaseAdminClient();
   // organization_id is redundant with the record filter but keeps the
@@ -97,12 +101,12 @@ export async function loadVacationCountingContext(
       .from('work_schedules')
       .select('*')
       .eq('organization_id', organizationId)
-      .eq('employee_record_id', employeeRecordId),
+      .eq('employee_record_id', record.id),
     admin
       .from('employment_conditions')
       .select('*')
       .eq('organization_id', organizationId)
-      .eq('employee_record_id', employeeRecordId),
+      .eq('employee_record_id', record.id),
     getCachedOrganizationCalendar(organizationId),
   ]);
 
@@ -118,6 +122,7 @@ export async function loadVacationCountingContext(
     schedules: (schedulesResult.data ?? []).map(toWorkSchedule),
     conditions: (conditionsResult.data ?? []).map(toEmploymentCondition),
     calendar,
+    employment: { entryDate: record.entry_date, exitDate: record.exit_date },
   };
 }
 
@@ -179,17 +184,13 @@ export type RecordVacationCounting = {
 export function createVacationCountingCache(
   organizationId: string,
   pendingRows: ReadonlyArray<{ employee_record_id: string; start_date: string }>,
-): (employeeRecordId: string) => Promise<RecordVacationCounting | null> {
+): (record: VacationCountingRecord) => Promise<RecordVacationCounting | null> {
   const countingByRecordId = new Map<string, Promise<RecordVacationCounting | null>>();
-  return (employeeRecordId) => {
-    let counting = countingByRecordId.get(employeeRecordId);
+  return (record) => {
+    let counting = countingByRecordId.get(record.id);
     if (!counting) {
-      counting = loadRecordVacationCounting(
-        organizationId,
-        employeeRecordId,
-        balanceYears(pendingRows, employeeRecordId),
-      );
-      countingByRecordId.set(employeeRecordId, counting);
+      counting = loadRecordVacationCounting(organizationId, record, balanceYears(pendingRows, record.id));
+      countingByRecordId.set(record.id, counting);
     }
     return counting;
   };
@@ -197,12 +198,12 @@ export function createVacationCountingCache(
 
 async function loadRecordVacationCounting(
   organizationId: string,
-  employeeRecordId: string,
+  record: VacationCountingRecord,
   years: { from: number; to: number },
 ): Promise<RecordVacationCounting | null> {
-  const context = await loadVacationCountingContext(organizationId, employeeRecordId);
+  const context = await loadVacationCountingContext(organizationId, record);
   if (!context) return null;
-  const requests = await loadVacationRequestsForRecord(organizationId, employeeRecordId, years);
+  const requests = await loadVacationRequestsForRecord(organizationId, record.id, years);
   const daysByRequestId = new Map<string, Record<string, number>>();
   const daysByYearOf = (request: VacationRequest): Record<string, number> => {
     let days = daysByRequestId.get(request.id);

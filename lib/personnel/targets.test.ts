@@ -4,7 +4,9 @@ import type { EmploymentCondition } from './types';
 import type { WorkSchedule } from './schedule';
 import { getBusinessWeekDates, getWeekdayIndex } from './schedule';
 import {
+  DAILY_TARGET_LIVE_TABLES,
   DEFAULT_DAILY_TARGET_MINUTES,
+  describeNoTargetToday,
   EMPTY_HOLIDAY_CALENDAR,
   getNoTargetReason,
   getTargetSourceHint,
@@ -280,6 +282,53 @@ describe('getNoTargetReason', () => {
   test('an unconfigured person rests on the weekend, not by a Wochenplan', () => {
     const saturday = resolveDailyTarget({ dateIso: '2026-08-08', ...base, schedules: [] });
     expect(getNoTargetReason(saturday)).toBe('Wochenende');
+  });
+});
+
+describe('the live tables behind a daily target', () => {
+  test('include approved absences and the entry and exit dates, so an approval refreshes an open week', () => {
+    expect(DAILY_TARGET_LIVE_TABLES).toEqual(
+      expect.arrayContaining(['vacation_requests', 'sickness_reports', 'school_days', 'employee_records']),
+    );
+  });
+});
+
+describe("today's no-target sentence on the Zeiterfassung", () => {
+  const base = {
+    schedules: [makeSchedule('2026-01-01', FULL_TIME)],
+    conditions: [],
+    calendar: EMPTY_HOLIDAY_CALENDAR,
+    employment: OPEN_EMPLOYMENT,
+  };
+
+  test('names the reason, never a missing Arbeitszeitmodell', () => {
+    const saturdayWithoutPlan = resolveDailyTarget({ dateIso: '2026-08-08', ...base, schedules: [] });
+    expect(describeNoTargetToday(saturdayWithoutPlan)).toBe('Wochenende – heute keine Sollarbeitszeit.');
+    const afterExit = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      employment: { entryDate: null, exitDate: '2026-08-03' },
+    });
+    expect(describeNoTargetToday(afterExit)).toBe('Ausgeschieden – heute keine Sollarbeitszeit.');
+    const beforeEntry = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      employment: { entryDate: '2026-08-05', exitDate: null },
+    });
+    expect(describeNoTargetToday(beforeEntry)).toBe('Noch nicht eingetreten – heute keine Sollarbeitszeit.');
+    expect(describeNoTargetToday(resolveDailyTarget({ dateIso: '2026-08-08', ...base }))).toBe(
+      'Kein Arbeitstag laut Wochenplan – heute keine Sollarbeitszeit.',
+    );
+  });
+
+  test('a school day counts as met, and a day with a target has no sentence', () => {
+    const schoolDay = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      absences: [{ type: 'school', startDate: '2026-08-04', endDate: '2026-08-04', dayPortion: 'full' }],
+    });
+    expect(describeNoTargetToday(schoolDay)).toBe('Berufsschule – dein Tagesziel gilt heute als erfüllt.');
+    expect(describeNoTargetToday(resolveDailyTarget({ dateIso: '2026-08-04', ...base }))).toBeNull();
   });
 });
 
