@@ -1,0 +1,76 @@
+name: Production watcher
+
+# The production watcher (docs/technical/recovery-and-incidents.md#monitoring): every 10 minutes,
+# `bun scripts/prod-watch.ts` reads production's deployment states and error counts from Vercel and
+# opens, updates or closes the `Production alert: …` issues, which assign the owner. The rules live
+# in lib/production-watch/watch.ts.
+#
+# The Vercel token PROD_WATCH_VERCEL_TOKEN is a secret of the environment `production`, which only
+# main may use, and reaches only the step that runs the pass; the script hands no child process the
+# token. No agent machine holds it. The repository is public and so is this log: the pass prints
+# fixed verdicts, a failed call's path and HTTP status, never a response body, a log line or the
+# token.
+#
+# Each pass needs the last pass's state (what it reported and when). It travels in main's Actions
+# cache: the newest `prod-watch-` entry is restored, and the new state saved under this run's key.
+# A lost state costs at most one repeated comment, never a missed alert. Three failed passes in a
+# row open `Production alert: watcher`; a run by hand checks the token.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+# One pass at a time, so two passes never write the same alert or race on the state.
+concurrency:
+  group: prod-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Watch production
+    # The token lives in the environment `production`, which only main may use, so a run off main
+    # skips this job instead of failing it.
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      deployment: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write # open, update or close the production alerts
+    steps:
+      # The pass needs no dependency, only its own files and the alert script. No step needs the
+      # job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts
+            lib/production-watch
+            scripts
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - name: Restore the last pass's state
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .prod-watch
+          key: prod-watch-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: prod-watch-
+      - name: Watch production
+        id: watch
+        env:
+          PROD_WATCH_VERCEL_TOKEN: ${{ secrets.PROD_WATCH_VERCEL_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bun scripts/prod-watch.ts .prod-watch/state.json
+      # A failed pass saves its state too: it holds the count of failed passes in a row.
+      - name: Save this pass's state
+        if: ${{ !cancelled() && steps.watch.outcome != 'skipped' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .prod-watch
+          key: prod-watch-${{ github.run_id }}-${{ github.run_attempt }}
