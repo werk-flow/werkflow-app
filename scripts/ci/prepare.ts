@@ -220,7 +220,7 @@ async function approval(): Promise<void> {
         (file) => committedFileText(checkout, `${commit}^`, file),
         (file) => committedFileText(checkout, commit, file),
         touched,
-        { absentBaseGrows: true },
+        { againstParent: true },
       );
       if (!growth.length) console.info(`${commit.slice(0, 9)} touches a shrink-only list and grows none`);
       return growth.length > 0;

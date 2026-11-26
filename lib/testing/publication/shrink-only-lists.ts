@@ -353,9 +353,11 @@ export function committedFileText(repositoryRoot: string, commit: string, file: 
 /**
  * Every growth of a shrink-only list between two versions of the tree. The
  * owner's approval waives growth as `growthProblems` allows, never a list that is gone.
- * With `absentBaseGrows`, a list the base lacks counts each of its entries as added:
- * the merge queue's approval (scripts/ci/prepare.ts) compares each commit with its
- * parent, where a list restored or moved into place is growth, not a new baseline.
+ * With `againstParent`, the merge queue's approval (scripts/ci/prepare.ts) compares
+ * one commit with its parent: a list the parent lacks counts each of its entries as
+ * added, so a list restored or moved into place is growth, not a new baseline; and a
+ * list absent on both sides is unchanged, since the registry is the run's final one and
+ * may name a list a later commit adds.
  */
 export function shrinkOnlyProblems(
   readBase: (file: string) => string | null,
@@ -363,8 +365,8 @@ export function shrinkOnlyProblems(
   lists: readonly ShrinkOnlyList[] = SHRINK_ONLY_LISTS,
   {
     growthApproved = false,
-    absentBaseGrows = false,
-  }: { growthApproved?: boolean; absentBaseGrows?: boolean } = {},
+    againstParent = false,
+  }: { growthApproved?: boolean; againstParent?: boolean } = {},
 ): string[] {
   return lists.flatMap((list) => {
     const base = listEntries(list, readBase(list.file));
@@ -372,8 +374,9 @@ export function shrinkOnlyProblems(
     // A tree that never held the file (a probe repository) has nothing to ratchet.
     if (base === null && currentText === null) return [];
     const current = listEntries(list, currentText);
+    if (current === null && base === null && againstParent) return [];
     if (current === null)
       return [`${list.id}: ${list.file} no longer holds the list; update SHRINK_ONLY_LISTS`];
-    return growthProblems(list, base ?? (absentBaseGrows ? new Map() : null), current, { growthApproved });
+    return growthProblems(list, base ?? (againstParent ? new Map() : null), current, { growthApproved });
   });
 }

@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { committedFileText, SHRINK_ONLY_LISTS, shrinkOnlyProblems } from '../publication/shrink-only-lists';
 
 const PREPARE = resolve(import.meta.dir, '../../../scripts/ci/prepare.ts');
 
@@ -133,9 +134,11 @@ function ratchetCommit(subject: string, extra: Record<string, number> = {}): str
   return git('rev-parse', 'HEAD');
 }
 
-/** A commit that drops `key` from the ratchet's 20 entries: a shrink. */
+/** A commit that drops `key` from the ratchet as it stands, and nothing else: a shrink. */
 function shrinkCommit(subject: string, key: string): string {
-  const kept = Object.entries(LIST).filter(([entry]) => entry !== key);
+  const entries: unknown = JSON.parse(readFileSync(join(repository, RATCHET), 'utf8'));
+  if (entries === null || typeof entries !== 'object') throw new Error(`${RATCHET} holds no record`);
+  const kept = Object.entries(entries).filter(([entry]) => entry !== key);
   writeFileSync(join(repository, RATCHET), JSON.stringify(Object.fromEntries(kept), null, 1));
   git('add', RATCHET);
   git('commit', '--quiet', '--no-verify', '--message', subject);
@@ -175,6 +178,16 @@ function onMain(): Record<string, string> {
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   return { GH_TOKEN: 'token', CI_EVENT: 'integration', CI_PRS: '12' };
 }
+
+const RATCHET_LIST = SHRINK_ONLY_LISTS.filter((list) => list.file === RATCHET);
+
+/** The ratchet's growth from origin/main to the tip, as the gate counts it without an approval. */
+const tipGrowth = (): string[] =>
+  shrinkOnlyProblems(
+    (file) => committedFileText(repository, 'origin/main', file),
+    (file) => committedFileText(repository, 'HEAD', file),
+    RATCHET_LIST,
+  );
 
 /** The step's exported approval, or undefined when the step failed. */
 function approval(queue: Record<string, string>): string | undefined {
@@ -254,6 +267,37 @@ test("an unapproved PR that only shrinks a list leaves the approved PR's growth 
   mergeQueue([
     { commit: grown, pr: 11, approved: true },
     { commit: shrunk, pr: 12, approved: false },
+  ]);
+  expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
+  // #11's growth reaches the tip, so the gate needs the approval there.
+  expect(tipGrowth()).toEqual([`type assertion ratchet (${RATCHET}) gained "lib/b.ts"`]);
+});
+
+test('an unapproved edit to a file before an approved PR registers a new list in it keeps the approval', () => {
+  const queue = onMain();
+  // Main holds the file without the list; the registry, the run's final one, already names it.
+  const VOLUME = 'lib/attention/count-volume.test.ts';
+  mkdirSync(join(repository, 'lib/attention'), { recursive: true });
+  writeFileSync(join(repository, VOLUME), 'function workRows() {\n  return [];\n}\n');
+  git('add', VOLUME);
+  git('commit', '--quiet', '--no-verify', '--message', 'Main');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  writeFileSync(join(repository, VOLUME), 'function workRows() {\n  return [{}];\n}\n');
+  git('add', VOLUME);
+  git('commit', '--quiet', '--no-verify', '--message', 'Edits the file (#12)');
+  const edited = git('rev-parse', 'HEAD');
+  writeFileSync(
+    join(repository, VOLUME),
+    'function workRows() {\n  return [{}];\n}\nconst HISTORY_READS: Readonly<Record<string, number>> = { read: 1 };\n',
+  );
+  git('add', VOLUME);
+  git('commit', '--quiet', '--no-verify', '--message', 'Registers the list (#11)');
+  const registered = git('rev-parse', 'HEAD');
+  const grown = ratchetCommit('Grows the list (#11)', { 'lib/b.ts': 1 });
+  mergeQueue([
+    { commit: edited, pr: 12, approved: false },
+    { commit: registered, pr: 11, approved: true },
+    { commit: grown, pr: 11, approved: true },
   ]);
   expect(approval(queue)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
 });
