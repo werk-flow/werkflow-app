@@ -28,16 +28,16 @@ function ZeiterfassungTodayTargetNote({
   return (
     <>
       {noTarget ? (
-        <p className="mt-1 text-sm text-muted-foreground">{noTarget}</p>
+        <p className="mt-1 text-center text-sm text-muted-foreground">{noTarget}</p>
       ) : todayTarget?.absence?.portion === 'half_day' ? (
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-center text-sm text-muted-foreground">
           {todayTarget.absence.type === 'sickness'
             ? 'Halber Tag Krankmeldung – Tagesziel: '
             : 'Halber Urlaubstag – Tagesziel: '}
           {formatDuration(todayTarget.targetMinutes)} Arbeitszeit
         </p>
       ) : todayTarget ? (
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-center text-sm text-muted-foreground">
           Tagesziel: {formatDuration(todayTarget.targetMinutes)} Arbeitszeit
           {workPercentage !== null ? ` (${workPercentage}% erreicht)` : ''}
         </p>
