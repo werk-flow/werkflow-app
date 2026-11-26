@@ -31,6 +31,8 @@ describe('origin refusal', () => {
       `${STAGING_ORIGIN}.evil.example/`,
       'http://werkflow-app-git-main-werkflows-projects.vercel.app/login',
       'https://user:pass@werkflow-app-git-main-werkflows-projects.vercel.app/login',
+      'https://user@werkflow-app-git-main-werkflows-projects.vercel.app/login',
+      'https://:pass@werkflow-app-git-main-werkflows-projects.vercel.app/login',
       `https://${DEV}.supabase.co/auth/v1/verify`,
       'not a url',
     ])
