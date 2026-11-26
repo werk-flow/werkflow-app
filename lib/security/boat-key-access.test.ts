@@ -417,7 +417,15 @@ test('a recursive read of a tree too large to walk is refused for .env.live-back
 });
 
 test('an rg or Grep glob that brings back .env.live-backup makes the search count it', () => {
-  for (const command of ["rg -g '.env*' KEY .", 'rg --glob=.env.* KEY', "rg --iglob '**/.env.l*' KEY ."])
+  for (const command of [
+    "rg -g '.env*' KEY .",
+    'rg --glob=.env.* KEY',
+    "rg --iglob '**/.env.l*' KEY .",
+    // A separate glob value is no path operand: rg searches where it runs.
+    "rg -g '.env*' KEY",
+    // An iglob matches without case.
+    "rg --iglob '.ENV.LIVE*' KEY .",
+  ])
     expect(refusedInCheckout(command), command).toContain('PROD keys');
   for (const command of ["rg -g '*.ts' token .", "rg -g '!.env*' token ."])
     expect(refusedInCheckout(command), command).toBeUndefined();
@@ -432,6 +440,7 @@ test('a search for a secret file name in the repository passes, a read of the fi
     "rg -n '.env.live-backup' scripts",
     'grep -rn -e prod-watch.env -e boat-api-key lib/',
     'git diff | grep .env.live-backup',
+    'grep -rn -- .env.live-backup scripts',
   ])
     expect(refusedInCheckout(command), command).toBeUndefined();
   for (const command of [
@@ -443,6 +452,10 @@ test('a search for a secret file name in the repository passes, a read of the fi
     // The same spelling read elsewhere in the line, or through a variable.
     'cat .env.live-backup | grep .env.live-backup',
     'F=~/.config/werkflow/staging-agents.env; grep KEY "$F"',
+    // After `--`, `-e` is the pattern and the file an operand.
+    'grep -- -e ~/.config/werkflow/staging-agents.env',
+    // An option that may take a value leaves no word a pattern: rg reads this file as ignore rules.
+    'rg --ignore-file ~/.config/werkflow/staging-agents.env KEY',
   ])
     expect(refusedInCheckout(command), command).toMatch(/staging keys|PROD keys/);
 });

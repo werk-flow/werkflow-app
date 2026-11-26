@@ -113,9 +113,14 @@ async function staging(bypass: string | undefined): Promise<Verdict> {
   });
 }
 
+/** A path's mode verdict; a path through a file or one the user cannot reach fails, never crashes. */
 function modeVerdict(path: string, kind: 'file' | 'folder'): Verdict {
-  const stat = statSync(path, { throwIfNoEntry: false });
-  return stat ? privateModeVerdict(stat, kind) : 'missing';
+  try {
+    const stat = statSync(path, { throwIfNoEntry: false });
+    return stat ? privateModeVerdict(stat, kind) : 'missing';
+  } catch {
+    return 'failed';
+  }
 }
 
 /** The key file's contents, or undefined when it is no regular file or cannot be read. */

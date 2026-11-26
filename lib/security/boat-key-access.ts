@@ -151,22 +151,52 @@ const SEARCHERS = new Set(['grep', 'egrep', 'fgrep', 'zgrep', 'ugrep', 'rg', 'ag
 /** grep's and rg's flags that give a pattern or a pattern file in another form than `-e <pattern>`. */
 const PATTERN_SOURCE = /^(?:-[a-zA-Z]*[ef]|--regexp|--file)/;
 
+/** Long options grep and rg read without a value. */
+const VALUELESS_LONG = new Set([
+  '--recursive',
+  '--line-number',
+  '--ignore-case',
+  '--smart-case',
+  '--hidden',
+  '--files-with-matches',
+  '--count',
+  '--fixed-strings',
+  '--word-regexp',
+  '--with-filename',
+  '--no-heading',
+]);
+
+/** Whether an option surely takes no separate value: rg reads `-r`, `-E` and `-g` with one, grep does not. */
+function valueless(name: string, text: string): boolean {
+  if (text.startsWith('--')) return text.includes('=') || VALUELESS_LONG.has(text);
+  const letters = name === 'rg' ? 'nNiIHhlLcqsSuvwxoFUz' : 'nNiIHhlLcqsuvwxoFUzrREPG';
+  return /^-[a-zA-Z]+$/.test(text) && [...text.slice(1)].every((letter) => letters.includes(letter));
+}
+
 /**
- * The words a grep or rg reads as its pattern, never as a file: each `-e` value, else its first
- * operand. A pattern file or an attached pattern flag gives none, so every word stays a path.
+ * The words a grep or rg reads as its pattern, never as a file: each `-e` value before `--`, else
+ * its first operand when every option before it surely takes no value. A pattern file, an attached
+ * pattern flag or an option that may take a value gives none, so every word stays a path.
  */
 function searchPatterns(words: ShellWord[]): ShellWord[] {
   const run = innerCommand(words);
   if (!run || !['grep', 'egrep', 'fgrep', 'rg'].includes(run.name)) return [];
   const { args } = run;
-  const flagged = args.flatMap((arg, index) =>
-    arg.text === '-e' || arg.text === '--regexp' ? (args[index + 1] ?? []) : [],
-  );
-  if (args.some((arg) => PATTERN_SOURCE.test(arg.text) && arg.text !== '-e' && arg.text !== '--regexp'))
+  const end = args.findIndex((arg) => arg.text === '--');
+  const options = end === -1 ? args : args.slice(0, end);
+  if (options.some((arg) => PATTERN_SOURCE.test(arg.text) && arg.text !== '-e' && arg.text !== '--regexp'))
     return [];
+  const flagged = options.flatMap((arg, index) =>
+    arg.text === '-e' || arg.text === '--regexp' ? (options[index + 1] ?? []) : [],
+  );
   if (flagged.length) return flagged;
-  const first = args.find((arg) => !arg.text.startsWith('-'));
-  return first ? [first] : [];
+  for (const [index, arg] of args.entries()) {
+    // After `--`, the first word is the pattern whatever it looks like.
+    if (index === end) return args.slice(index + 1, index + 2);
+    if (!arg.text.startsWith('-')) return [arg];
+    if (!valueless(run.name, arg.text)) return [];
+  }
+  return [];
 }
 
 /** Search tools that recurse without a flag. */
@@ -322,8 +352,9 @@ const NO_IGNORE_FLAG = /^(?:-[a-zA-Z]*[uU][a-zA-Z]*|--no-ignore\S*|--unrestricte
 const GLOB_FLAG = /^(?:-g|--i?glob)(?:=(.*))?$|^-g(.+)$/;
 
 /** Whether an rg include glob brings back the git-ignored `.env.live-backup`, as `-g '.env*'` does. */
-function globIncludesLiveBackup(glob: string): boolean {
-  return !glob.startsWith('!') && new Bun.Glob(glob.replace(/^\*\*\//, '')).match(LIVE_BACKUP);
+function globIncludesLiveBackup(glob: string, caseless = false): boolean {
+  const pattern = (caseless ? glob.toLowerCase() : glob).replace(/^\*\*\//, '');
+  return !pattern.startsWith('!') && new Bun.Glob(pattern).match(LIVE_BACKUP);
 }
 
 /** Whether a search tool's arguments skip git-ignored files for `.env.live-backup`. */
@@ -331,7 +362,8 @@ function skipsLiveBackup(name: string, args: readonly ShellWord[]): boolean {
   if (!IGNORE_RESPECTING.has(name) || args.some((arg) => NO_IGNORE_FLAG.test(arg.text))) return false;
   return !args.some((arg, index) => {
     const match = GLOB_FLAG.exec(arg.text);
-    return match !== null && globIncludesLiveBackup(match[1] ?? match[2] ?? args[index + 1]?.text ?? '');
+    const glob = match?.[1] ?? match?.[2] ?? args[index + 1]?.text ?? '';
+    return match !== null && globIncludesLiveBackup(glob, arg.text.startsWith('--iglob'));
   });
 }
 
@@ -534,7 +566,10 @@ function liveBackupRoots(
   folders: readonly string[],
 ): string[] {
   if (skipsLiveBackup(run.name, run.args)) return [];
-  return [...operands, ...(readsWorkingFolder(run.name, run.args) ? folders : [])];
+  // rg and ag with a flag or glob that brings the file back count where they run too: an option's
+  // value would look like a folder operand to readsWorkingFolder.
+  const working = IGNORE_RESPECTING.has(run.name) || readsWorkingFolder(run.name, run.args);
+  return [...operands, ...(working ? folders : [])];
 }
 
 /** How many folder levels below its literal folder a glob reaches: one for `~/code/<wildcard>/.env*`. */
