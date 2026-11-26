@@ -29,6 +29,23 @@ export async function updateOffer(
     : { success: true, offerId: 'contract-offer', version: 2, updatedAt: '2026-11-23T08:00:00.000000+00:00' };
 }
 
+export async function saveOfferContent(
+  input: unknown,
+): Promise<
+  | { success: true; offerId: string; contentVersion: number; updatedAt: string }
+  | { success: false; error: string }
+> {
+  const refusal = await holdWrite('save-offer-content', input);
+  return refusal
+    ? { success: false, error: refusal }
+    : {
+        success: true,
+        offerId: 'contract-offer',
+        contentVersion: 2,
+        updatedAt: '2026-11-26T08:00:00.000000+00:00',
+      };
+}
+
 export function useRouter(): { push: () => void } {
   return { push: () => undefined };
 }

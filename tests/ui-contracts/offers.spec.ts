@@ -89,3 +89,44 @@ test('a retried header save the page already shows confirms at once', async ({ p
   await expect(visibleText(page, 'Angebot gespeichert.', true)).toBeVisible();
   await expect(textInDom(page, 'noch nicht aktualisiert')).toHaveCount(0);
 });
+
+// „Titel und Positionen“: the submit stays enabled; a press with an unnamed
+// Titel marks it, focuses it and sends nothing; the amounts follow the typed
+// position; a save shows pending in its first frame and names the content
+// version it was filled from; a save another session made meanwhile keeps the
+// input and says so.
+test('a content save marks a Titel without a name, then sends the whole content against its version', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'offers');
+  const editor = page.getByRole('form', { name: 'Titel und Positionen' });
+  const save = editor.getByRole('button', { name: 'Speichern', exact: true });
+  await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
+  const title = editor.getByRole('textbox', { name: 'Titel 1' });
+
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(editor.getByText('Gib dem Titel einen Namen.')).toBeVisible();
+  await expect(title).toBeFocused();
+  expect(await page.evaluate(() => window.uiContractWrites.calls)).toEqual([]);
+
+  await title.fill('Wartung');
+  await editor.getByRole('button', { name: 'Position', exact: true }).click();
+  await editor.getByRole('textbox', { name: 'Bezeichnung' }).fill('Wartung Gastherme');
+  await editor.getByRole('textbox', { name: 'Menge' }).fill('1,5');
+  await editor.getByRole('textbox', { name: 'Einzelpreis netto' }).fill('72,50');
+  await expect(editor.getByText('Summe Titel 1: 108,75 €')).toBeVisible();
+  await expect(editor.getByText('129,41 €')).toBeVisible();
+
+  await save.click();
+  await expect(save).toHaveAttribute('aria-busy', 'true');
+  await expectHeldWrite(page, 'save-offer-content');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    expectedContentVersion: 1,
+    sections: [{ title: 'Wartung', positions: [{ kind: 'free', quantity: '1.5', unitPriceCents: 7250 }] }],
+  });
+  await answerHeldWrite(page, 'offer_changed');
+  await expect(editor.getByText(/Jemand hat die Positionen gerade geändert/)).toBeVisible();
+  await expect(title).toHaveValue('Wartung');
+  await expect(save).toBeEnabled();
+});

@@ -46,7 +46,7 @@ type OfferParty = { id: string; name: string };
  */
 export type OfferFreePosition = { kind: 'free' } & InvoiceLineValues;
 /** A text line: a note between the positions, without an amount. */
-export type OfferTextPosition = { kind: 'text'; name: string; description: string };
+type OfferTextPosition = { kind: 'text'; name: string; description: string };
 export type OfferPosition = OfferFreePosition | OfferTextPosition;
 /** A Titel: a named section of the offer with its positions in order. */
 export type OfferSection = { title: string; positions: OfferPosition[] };
