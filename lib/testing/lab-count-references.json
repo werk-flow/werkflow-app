@@ -464,7 +464,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 31, "tolerance": 1 },
-        "componentRenders": { "reference": 561, "tolerance": 10 }
+        "componentRenders": { "reference": 550, "tolerance": 10 }
       },
       "payloads": {
         "prefetch:/auftraege": {
@@ -643,6 +643,14 @@
           },
           "runKeys": ["2026-11-21T055139543Z-159aab"],
           "reason": "Owner-approved one-time exception 2026-11-20 (werk-flow/werkflow-planning#29), #560: the job page's own chunks (card, checkbox, textarea, detail columns, section title, documents layout, client select) no longer come with the layout's start-up, so the job page loads them on its first open; start-up 66 KB gzip lighter for every role"
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 561, "tolerance": 10 },
+          "to": { "reference": 550, "tolerance": 10 },
+          "runKeys": ["2026-11-26T033159528Z-b2a91b"],
+          "reason": null
         }
       ]
     },
@@ -667,7 +675,7 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 1, "tolerance": 0 },
         "backendRequests": { "reference": 52, "tolerance": 1 },
-        "componentRenders": { "reference": 471, "tolerance": 9 }
+        "componentRenders": { "reference": 459, "tolerance": 9 }
       },
       "payloads": {
         "action:/auftraege/[jobNumber]": {
@@ -805,6 +813,14 @@
           },
           "runKeys": ["2026-11-21T055139543Z-159aab"],
           "reason": "#560: area skeletons load lazily, so the layout carries no office UI and this payload is smaller; nothing is missing"
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 471, "tolerance": 9 },
+          "to": { "reference": 459, "tolerance": 9 },
+          "runKeys": ["2026-11-26T033159528Z-b2a91b"],
+          "reason": null
         }
       ]
     },

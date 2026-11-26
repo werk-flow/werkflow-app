@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedUser } from '@/lib/data/cached';
 import { readOpenReservation, userHasOrganizations } from '@/lib/subscription/helpers';
 import { StandaloneTitle } from '@/components/shared/standalone-screen';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
@@ -13,25 +13,17 @@ export const metadata: Metadata = {
 };
 
 export default async function CreateOrganizationPage() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthenticatedUser();
 
   if (!user) {
     redirect('/login');
   }
 
-  // If user already has organizations, redirect to dashboard
-  const hasOrgs = await userHasOrganizations(user.id);
-  if (hasOrgs) {
-    redirect('/dashboard');
-  }
-
-  // Only a paid Checkout's reservation creates an organization.
+  // Only a paid Checkout's reservation creates an organization, the first or
+  // a further one; without it a member goes to the dashboard, anyone else pays first.
   const reservation = await readOpenReservation(user.id);
   if (!reservation?.holdsSubscription) {
-    redirect('/upgrade');
+    redirect((await userHasOrganizations(user.id)) ? '/dashboard' : '/upgrade');
   }
 
   return (
