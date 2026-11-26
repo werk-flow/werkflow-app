@@ -6544,12 +6544,15 @@ export type Database = {
           amount_cents: number | null;
           description: string;
           id: string;
+          item_id: string | null;
           kind: string;
           name: string;
           offer_id: string;
           organization_id: string;
           position: number;
           price_quantity: number | null;
+          purchase_cost_cents: number | null;
+          purchase_price_quantity: number | null;
           quantity: number | null;
           section_id: string;
           tax_rate_basis_points: number | null;
@@ -6561,12 +6564,15 @@ export type Database = {
           amount_cents?: number | null;
           description?: string;
           id?: string;
+          item_id?: string | null;
           kind: string;
           name: string;
           offer_id: string;
           organization_id: string;
           position: number;
           price_quantity?: number | null;
+          purchase_cost_cents?: number | null;
+          purchase_price_quantity?: number | null;
           quantity?: number | null;
           section_id: string;
           tax_rate_basis_points?: number | null;
@@ -6578,12 +6584,15 @@ export type Database = {
           amount_cents?: number | null;
           description?: string;
           id?: string;
+          item_id?: string | null;
           kind?: string;
           name?: string;
           offer_id?: string;
           organization_id?: string;
           position?: number;
           price_quantity?: number | null;
+          purchase_cost_cents?: number | null;
+          purchase_price_quantity?: number | null;
           quantity?: number | null;
           section_id?: string;
           tax_rate_basis_points?: number | null;
@@ -6592,6 +6601,13 @@ export type Database = {
           unit_price_cents?: number | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "offer_positions_item_fk";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
           {
             foreignKeyName: "offer_positions_organization_id_fkey";
             columns: ["organization_id"];

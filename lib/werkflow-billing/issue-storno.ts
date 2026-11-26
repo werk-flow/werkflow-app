@@ -51,6 +51,17 @@ type StornoDocument = {
   rules_release: string;
 };
 
+/**
+ * What a replacement was for, as the billing page lists it
+ * (werk-flow/werkflow-planning#554). The Storno's come from the row it cancels.
+ */
+type ReplacementContent = {
+  payment_means: ReturnType<typeof paymentMeansOf>;
+  line_names: string[];
+  service_start: string;
+  service_end: string;
+};
+
 /** The arguments `issue_werkflow_storno` records, in the function's own names. */
 type StornoRecord = {
   p_organization_id: string;
@@ -58,7 +69,7 @@ type StornoRecord = {
   p_stripe_credit_note_id: string;
   p_stripe_event_id: string;
   p_storno: StornoDocument;
-  p_replacement: (StornoDocument & { payment_means: ReturnType<typeof paymentMeansOf> }) | null;
+  p_replacement: (StornoDocument & ReplacementContent) | null;
 };
 
 export type StornoDependencies = Pick<IssueDependencies, 'readInvoice' | 'seller' | 'storeOriginal'> & {
@@ -84,6 +95,17 @@ function recordedDocument(invoice: CalculatedInvoice, original: CheckedOriginal)
     file_sha256: original.sha256,
     file_size_bytes: original.sizeBytes,
     rules_release: original.rulesRelease,
+  };
+}
+
+/** The replacement's own payment means, lines and service period, as `issue-invoice.ts` records an original's. */
+function replacementContent(replacement: CalculatedInvoice): ReplacementContent {
+  const { delivery } = replacement;
+  return {
+    payment_means: paymentMeansOf(replacement),
+    line_names: replacement.lines.map((line) => line.name),
+    service_start: delivery.kind === 'period' ? delivery.start : delivery.date,
+    service_end: delivery.kind === 'period' ? delivery.end : delivery.date,
   };
 }
 
@@ -146,10 +168,7 @@ async function issueRefund(
     p_storno: recordedDocument(storno, stornoOriginal),
     p_replacement:
       replacement && replacementOriginal
-        ? {
-            ...recordedDocument(replacement, replacementOriginal),
-            payment_means: paymentMeansOf(replacement),
-          }
+        ? { ...recordedDocument(replacement, replacementOriginal), ...replacementContent(replacement) }
         : null,
   });
 }

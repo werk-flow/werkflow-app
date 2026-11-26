@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 
 import { move } from '@/components/arbeitsvorlagen/work-template-editor-shared';
+import { InvoiceLineSourceNote } from '@/components/rechnungen/invoice-catalog-line';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -15,12 +16,14 @@ import { INVENTORY_UNITS } from '@/lib/inventory/units';
 import { INVOICE_TAX_RATES } from '@/lib/invoices/types';
 import type { OfferAmounts } from '@/lib/offers/amounts';
 import {
+  articlePositionForm,
   contentFieldId,
   emptyPosition,
   type PositionForm,
   type SectionForm,
 } from '@/lib/offers/content-form';
 import type { OfferPosition } from '@/lib/offers/types';
+import { OfferArticlePicker } from './offer-article-picker';
 
 type Errors = Record<string, string | undefined>;
 
@@ -86,7 +89,7 @@ function positionNumbers(sectionNumber: string, positions: readonly PositionForm
   });
 }
 
-/** One Titel: its name, its positions in order, its subtotal, and adding a position or a text line. */
+/** One Titel: its name, its positions in order, its subtotal, and adding a position, an article or a text line. */
 export function OfferSectionFields({
   index,
   count,
@@ -95,6 +98,7 @@ export function OfferSectionFields({
   onChange,
   onMove,
   onRemove,
+  onAddArticle,
   newKey,
   errors,
   disabled,
@@ -106,6 +110,8 @@ export function OfferSectionFields({
   onChange: (section: SectionForm) => void;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
+  /** Appends a Position to this Titel as it is when the article's price arrives. */
+  onAddArticle: (position: PositionForm) => void;
   newKey: () => string;
   errors: Errors;
   disabled: boolean;
@@ -151,9 +157,12 @@ export function OfferSectionFields({
         disabled={disabled}
       />
       <SectionFooter
+        sectionIndex={index}
         number={number}
         netCents={amounts?.netCents ?? null}
         onAdd={(kind) => setPositions([...section.positions, emptyPosition(newKey(), kind)])}
+        onPickArticle={() => onChange(section)}
+        onAddArticle={onAddArticle}
         disabled={disabled}
       />
     </li>
@@ -204,21 +213,27 @@ function PositionList({
   );
 }
 
-/** Adding a position or a text line, and the Titel's subtotal. */
+/** Adding a position, an article or a text line, and the Titel's subtotal. */
 function SectionFooter({
+  sectionIndex,
   number,
   netCents,
   onAdd,
+  onPickArticle,
+  onAddArticle,
   disabled,
 }: {
+  sectionIndex: number;
   number: string;
   netCents: number | null;
   onAdd: (kind: OfferPosition['kind']) => void;
+  onPickArticle: () => void;
+  onAddArticle: (position: PositionForm) => void;
   disabled: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex min-w-0 flex-wrap items-start gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => onAdd('free')} disabled={disabled}>
           <Plus className="size-4" />
           Position
@@ -227,6 +242,14 @@ function SectionFooter({
           <Plus className="size-4" />
           Text
         </Button>
+        <OfferArticlePicker
+          id={`offer-section-${sectionIndex}-article`}
+          label={`Artikel zu Titel ${number} hinzufügen`}
+          onPick={onPickArticle}
+          // The answer arrives after other edits may have changed the Titel: the editor appends it to the current one.
+          onAdd={(line) => onAddArticle(articlePositionForm(`article-${crypto.randomUUID()}`, line))}
+          disabled={disabled}
+        />
       </div>
       <p className="text-sm font-medium tabular-nums">
         {`Summe Titel ${number}: `}
@@ -237,7 +260,7 @@ function SectionFooter({
 }
 
 type PositionProps = {
-  fieldId: (field: 'name' | 'quantity' | 'price') => string;
+  fieldId: (field: 'name' | 'quantity' | 'unit' | 'price') => string;
   /** As printed, for example `1.2`; null for a text line. */
   number: string | null;
   position: PositionForm;
@@ -269,6 +292,7 @@ function PositionFields({
         </span>
         <OrderButtons label={label} {...order} disabled={disabled} />
       </div>
+      {position.kind === 'free' && position.source && <InvoiceLineSourceNote source={position.source} />}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Bezeichnung" htmlFor={fieldId('name')} required error={errors[fieldId('name')]}>
           <Input
@@ -312,7 +336,7 @@ function PositionAmountFields({
   errors,
   disabled,
 }: Omit<PositionProps, 'number' | 'order'>) {
-  const unitId = `${fieldId('quantity')}-unit`;
+  const unitId = fieldId('unit');
   const taxId = `${fieldId('price')}-tax`;
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-end">
@@ -325,20 +349,13 @@ function PositionAmountFields({
           disabled={disabled}
         />
       </Field>
-      <Field label="Einheit" htmlFor={unitId}>
-        <SearchableSelect
-          id={unitId}
-          value={position.unit}
-          onChange={(unit) => onChange({ ...position, unit })}
-          // Every unit in use, and a retired one the position already has.
-          options={INVENTORY_UNITS.flatMap((unit) =>
-            unit.retired && unit.code !== position.unit ? [] : [{ value: unit.code, label: unit.label }],
-          )}
-          searchPlaceholder="Einheit suchen…"
-          emptyMessage="Keine Einheit gefunden"
-          disabled={disabled}
-        />
-      </Field>
+      <PositionUnitField
+        id={unitId}
+        position={position}
+        onChange={onChange}
+        error={errors[unitId]}
+        disabled={disabled}
+      />
       <Field
         label={position.priceQuantity === 1 ? 'Einzelpreis netto' : `Netto je ${position.priceQuantity}`}
         htmlFor={fieldId('price')}
@@ -380,5 +397,45 @@ function PositionAmountFields({
         {amountCents === null ? '–' : formatEuroCents(amountCents)}
       </p>
     </div>
+  );
+}
+
+/** Einheit, empty while an article's stored unit is outside the list: the office picks one. */
+function PositionUnitField({
+  id,
+  position,
+  onChange,
+  error,
+  disabled,
+}: {
+  id: string;
+  position: PositionForm;
+  onChange: (position: PositionForm) => void;
+  error: string | undefined;
+  disabled: boolean;
+}) {
+  return (
+    <Field
+      label="Einheit"
+      htmlFor={id}
+      required
+      error={error}
+      // An article's stored unit outside the list leaves the unit to the office.
+      description={position.unit ? undefined : 'Die Einheit des Artikels ist unbekannt. Wähle eine.'}
+    >
+      <SearchableSelect
+        id={id}
+        value={position.unit}
+        onChange={(unit) => onChange({ ...position, unit })}
+        placeholder="Einheit wählen…"
+        // Every unit in use, and a retired one the position already has.
+        options={INVENTORY_UNITS.flatMap((unit) =>
+          unit.retired && unit.code !== position.unit ? [] : [{ value: unit.code, label: unit.label }],
+        )}
+        searchPlaceholder="Einheit suchen…"
+        emptyMessage="Keine Einheit gefunden"
+        disabled={disabled}
+      />
+    </Field>
   );
 }

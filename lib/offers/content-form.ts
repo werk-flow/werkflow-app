@@ -1,11 +1,14 @@
+import { isInventoryUnitCode } from '@/lib/inventory/units';
 import { emptyLine, parsePricedLine, quantityInput, type DraftLineForm } from '@/lib/invoices/draft-form';
+import type { OfferArticleLine } from '@/lib/invoices/line-sources';
 import { centsToEuroInput } from '@/lib/price-catalog/money';
 import { offerAmounts, type OfferAmounts } from './amounts';
-import type { OfferPosition, OfferSection } from './types';
+import type { OfferPosition, OfferSection, OfferStoredSection } from './types';
 
 // The content editor's text state and its parse into the Titel and
 // Positionen the save sends. A priced position is read as an invoice line is
-// (parsePricedLine); a text line needs only its Bezeichnung. Each refusal is a German sentence keyed by
+// (parsePricedLine) and needs a unit of the list; a text line needs only its
+// Bezeichnung. A Position from an article keeps the article as its source. Each refusal is a German sentence keyed by
 // the control's id, so the editor marks the field and focuses the first
 // (focusFirstInvalidField). The server parses the same limits again
 // (action-schemas.ts).
@@ -20,20 +23,20 @@ export type ParsedContent =
 /** The control id of a Titel's field, or of a field of one of its positions. */
 export function contentFieldId(
   sectionIndex: number,
-  field: 'title' | { position: number; field: 'name' | 'quantity' | 'price' },
+  field: 'title' | { position: number; field: 'name' | 'quantity' | 'unit' | 'price' },
 ): string {
   return typeof field === 'string'
     ? `offer-section-${sectionIndex}-title`
     : `offer-section-${sectionIndex}-position-${field.position}-${field.field}`;
 }
 
-/** The editor's text state of a stored content. */
-export function contentFormOf(sections: readonly OfferSection[]): SectionForm[] {
+/** The editor's text state of a stored content; `keyPrefix` names one load of it. */
+export function contentFormOf(sections: readonly OfferStoredSection[], keyPrefix = 'stored'): SectionForm[] {
   return sections.map((section, sectionIndex) => ({
-    key: `stored-${sectionIndex}`,
+    key: `${keyPrefix}-${sectionIndex}`,
     title: section.title,
     positions: section.positions.map((position, positionIndex) => {
-      const key = `stored-${sectionIndex}-${positionIndex}`;
+      const key = `${keyPrefix}-${sectionIndex}-${positionIndex}`;
       if (position.kind === 'text') {
         return { ...emptyLine(key), kind: 'text', name: position.name, description: position.description };
       }
@@ -47,8 +50,7 @@ export function contentFormOf(sections: readonly OfferSection[]): SectionForm[] 
         price: centsToEuroInput(position.unitPriceCents),
         priceQuantity: position.priceQuantity,
         taxRateBasisPoints: position.taxRateBasisPoints,
-        // Positionen from the catalog come with K4c and K6.
-        source: null,
+        source: position.source,
       };
     }),
   }));
@@ -59,14 +61,46 @@ export function emptyPosition(key: string, kind: OfferPosition['kind']): Positio
   return { ...emptyLine(key), kind };
 }
 
+/**
+ * A new Position from an article as the server read it (readOfferArticleLine):
+ * one unit at the article's sale price, all editable. A unit outside the list
+ * stays empty, so the office picks one before the save.
+ */
+export function articlePositionForm(key: string, line: OfferArticleLine): PositionForm {
+  return {
+    key,
+    kind: 'free',
+    name: line.name,
+    description: line.description,
+    quantity: '1',
+    unit: line.unit ?? '',
+    price: centsToEuroInput(line.unitPriceCents),
+    priceQuantity: line.priceQuantity,
+    taxRateBasisPoints: line.taxRateBasisPoints,
+    source: line.source,
+  };
+}
+
+const PRICED_FIELDS = ['name', 'quantity', 'unit', 'price'] as const;
+
 function parsePosition(
   position: PositionForm,
-  fieldId: (field: 'name' | 'quantity' | 'price') => string,
+  fieldId: (field: 'name' | 'quantity' | 'unit' | 'price') => string,
   errors: Record<string, string>,
 ): OfferPosition | null {
   if (position.kind === 'free') {
-    const values = parsePricedLine(position, fieldId, errors);
-    return values && { kind: 'free', ...values };
+    const lineErrors: Record<string, string> = {};
+    const values = parsePricedLine(position, fieldId, lineErrors);
+    const unitKnown = isInventoryUnitCode(position.unit);
+    if (!unitKnown) lineErrors[fieldId('unit')] = 'Wähle eine Einheit.';
+    // In the order the fields show, so the first one at fault takes the focus.
+    for (const field of PRICED_FIELDS) {
+      const sentence = lineErrors[fieldId(field)];
+      if (sentence) errors[fieldId(field)] = sentence;
+    }
+    const source =
+      position.source?.kind === 'article' ? { kind: 'article' as const, id: position.source.id } : null;
+    return values && unitKnown ? { kind: 'free', ...values, source } : null;
   }
   const name = position.name.trim();
   if (!name) errors[fieldId('name')] = 'Gib der Position eine Bezeichnung.';
