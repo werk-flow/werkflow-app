@@ -29,12 +29,15 @@ import { z } from '@/lib/zod';
 // Each goes once per Stripe object through the mail ledger, and a refused send
 // throws so the signal, or the daily comparison, sends it again.
 //
-// Pre-notification (register LQ-60): every SEPA debit is announced at least 2
-// calendar days ahead, the period of Stripe's mandate text. A renewal gets the
-// debit notice on `invoice.upcoming`; the first debit, or a renewal whose
-// notice never went out, has the invoice mail as its notice. Stripe submits the
-// debit itself, so a notice that leaves less, or a debit date Stripe does not
-// name, raises `debit_notice_late` for a person to act on.
+// Pre-notification (register LQ-60): the customer learns each SEPA debit's
+// amount and date before Stripe submits it. Checkout announces the first debit:
+// the customer confirms the paid subscription and the mandate there, and Stripe
+// submits that debit at once. Every renewal is announced at least 2 calendar
+// days ahead, the period Stripe's mandate text sets for future debits. A
+// renewal gets the debit notice on `invoice.upcoming`, or the invoice mail if
+// that notice never went out. Stripe submits the debit itself, so a renewal
+// notice that leaves less, or a renewal debit date Stripe does not name, raises
+// `debit_notice_late` for a person to act on.
 
 const NOTICE_LEAD_DAYS = 2;
 
@@ -250,9 +253,10 @@ export async function sendInvoiceMail(
   // Checked before each send attempt, so the attempt that sends was checked:
   // a sent invoice mail is never checked again. A mail first sent after the
   // debit, as by the paid backstop, is late too. A debit notice counts only
-  // for its own amount and account, and for a debit no earlier than the day it announced.
+  // for its own amount and account, and for a debit no earlier than the day it
+  // announced. Checkout announced the first debit, so only a renewal is checked.
   let lateNotice: string | null = null;
-  if (sepa) {
+  if (sepa && !debit.opensSubscription) {
     const sentNotice = debit.subscriptionId
       ? await sentAt(
           'debit_notice',

@@ -2,7 +2,7 @@
 // Stripe answers only from the sandbox, reduced to the same kind of fields.
 import { expect, test } from 'bun:test';
 
-import { sandboxAnswer, scopedReadQuery } from './readers';
+import { pendingInviteCodeQuery, sandboxAnswer, scopedReadQuery } from './readers';
 
 const ORGANIZATION = '0b9a6201-6971-4a37-a1d5-41c7fb6c179c';
 
@@ -47,6 +47,18 @@ test('a column outside the allowlist, another table, or SQL in an id refuses the
   ).toThrow();
 });
 
+test("an invite code is read for one role of the run's organization, pending only", () => {
+  expect(pendingInviteCodeQuery(ORGANIZATION, 'buero')).toEqual({
+    query:
+      "select invite_code from public.organization_invites where organization_id = $1::uuid and invited_role = $2::public.org_role and status = 'pending'",
+    parameters: [ORGANIZATION, 'buero'],
+  });
+  expect(pendingInviteCodeQuery(ORGANIZATION, 'employee').parameters).toEqual([ORGANIZATION, 'employee']);
+  expect(() => pendingInviteCodeQuery(ORGANIZATION, 'admin')).toThrow(/buero or employee/);
+  expect(() => pendingInviteCodeQuery(ORGANIZATION, "buero' or true --")).toThrow(/buero or employee/);
+  expect(() => pendingInviteCodeQuery("x' or true --", 'buero')).toThrow(/UUID/);
+});
+
 test('Stripe objects and lists pass only with livemode false on each, as their allowed fields', () => {
   expect(
     sandboxAnswer({
@@ -65,6 +77,20 @@ test('Stripe objects and lists pass only with livemode false on each, as their a
       data: [{ id: 'in_1', livemode: false, customer_email: 'payer@example.test', total: 149900 }],
     }),
   ).toEqual([{ id: 'in_1', livemode: false, total: 149900 }]);
+  expect(
+    sandboxAnswer({
+      object: 'list',
+      data: [{ id: 'inpay_1', livemode: false, payment: { type: 'payment_intent', payment_intent: 'pi_1' } }],
+    }),
+  ).toEqual([{ id: 'inpay_1', livemode: false, payment_intent: 'pi_1' }]);
+  expect(
+    sandboxAnswer({
+      id: 'py_1',
+      livemode: false,
+      payment_method_details: { type: 'sepa_debit', sepa_debit: { last4: '3000', mandate: 'mandate_1' } },
+      billing_details: { name: 'Made Up' },
+    }),
+  ).toEqual([{ id: 'py_1', livemode: false, payment_method_type: 'sepa_debit' }]);
   for (const body of [
     { id: 'sub_1', livemode: true },
     { id: 'sub_1' },

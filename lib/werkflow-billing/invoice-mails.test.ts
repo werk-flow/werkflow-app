@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 // The fixture replaces the database, R2 and the network; its own process keeps
 // those mocks out of other test files.
-test('each invoice mail and alarm goes once, every SEPA debit is announced 2 days ahead or alarmed, and the daily comparison finds what is missing', async () => {
+test('each invoice mail and alarm goes once, every SEPA renewal is announced 2 days ahead or alarmed, a first debit Checkout announced raises no alarm, and the daily comparison finds what is missing', async () => {
   const child = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, '../testing/fixtures/billing-invoice-mails.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
