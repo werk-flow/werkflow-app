@@ -153,6 +153,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   contact_phone: 'Telefon des Kontakts',
   contact_time_note: 'Erreichbarkeit',
   content: 'Inhalt',
+  content_version: 'Fassung Positionen',
   content_fingerprint: 'Prüfsumme Inhalt',
   content_hash: 'Hashwert Inhalt',
   converted_at: 'Umgewandelt am',

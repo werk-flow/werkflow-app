@@ -72,9 +72,9 @@ const config: KnipConfig = {
     // Substituted for product modules by the component-contract bundler.
     'tests/ui-contracts/*boundar*.{ts,tsx}!',
     // The E1 ↔ E2a seam (werk-flow/werkflow-planning#15): the article price
-    // reader and the line arithmetic rule exist before E2a's offers import
-    // them. Remove this entry with the first production import.
-    'lib/inventory/{article-prices,line-amount}.ts!',
+    // reader exists before E2a's article positions import it. Remove this
+    // entry with that import.
+    'lib/inventory/article-prices.ts!',
     // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
     // the offer calculation imports it. Remove this entry with that import.
     'lib/price-catalog/leistung-prices.ts!',
