@@ -29,6 +29,8 @@
     "lib/invoicing/rules/manifest.ts": "Hashes of the compiled CEN rules.",
     "lib/invoicing/sample-invoice.ts": "The fixed Musterrechnung; its amounts come from calculate.ts.",
     "lib/invoices/actions.ts": "Server Actions: parse, authorize and save; amounts come from amounts.ts.",
+    "lib/invoices/line-source-actions.ts": "Server Action that reads a catalog line; it copies the price E1's and E2a's readers return and computes no amount.",
+    "lib/invoices/line-sources.ts": "Types, schemas and the label of a line's catalog source.",
     "lib/invoices/list-page.ts": "Search and page parameters of the invoice list.",
     "lib/invoices/reads.ts": "Server reader of stored drafts; it computes no amount.",
     "lib/invoices/types.ts": "Types, status labels and the allowed VAT rates."

@@ -196,7 +196,12 @@ async function captureState(
   route: string,
 ): Promise<void> {
   const { page, world, businessDate, testInfo } = input;
-  const plan = stateCapturePlan(capture.state, capture.view.kind);
+  const plan = stateCapturePlan(
+    capture.state,
+    capture.view.kind === 'dialog' && capture.view.overFailedPage
+      ? 'dialog-over-failed-page'
+      : capture.view.kind,
+  );
   const context = { page, role: capture.role, world, businessDate, route };
   const identity = { id: capture.id, role: capture.role, view: capture.view.kind };
   try {
@@ -244,6 +249,8 @@ export async function captureAcceptance(
   sources: CaptureSources,
 ): Promise<void> {
   const { page, world, businessDate, testInfo } = input;
+  if (!capture.state && capture.view.kind === 'dialog' && capture.view.overFailedPage)
+    throw new Error(`${capture.id} opens over a failed page, so it is captured in its error state.`);
   const view = openedView(capture, sources.openers);
   await page.setViewportSize(DESKTOP);
   const destination = sources.destination

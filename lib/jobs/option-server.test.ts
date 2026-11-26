@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 
 import { jobOptionRequestSchema } from './option-types';
 
@@ -10,7 +10,8 @@ const untouchedDatabase = {
   },
 };
 mock.module('server-only', () => ({}));
-mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => untouchedDatabase }));
+let adminDatabase: object = untouchedDatabase;
+mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => adminDatabase }));
 mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => untouchedDatabase }));
 
 const { loadJobEntityOptions } = await import('./option-server');
@@ -32,4 +33,21 @@ test('an employee cannot search installed equipment or projects, and no read sta
     expect(result).toEqual({ success: false, error: 'not_authorized' });
   }
   expect(reads).toBe(0);
+});
+
+test('a Leistung page the database answers in the wrong shape fails the picker and logs malformed_result', async () => {
+  const malformedPage = { rpc: async () => ({ data: { options: 'kaputt', hasMore: false }, error: null }) };
+  adminDatabase = malformedPage;
+  const logged = spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    const result = await loadJobEntityOptions(
+      { ...employee, role: 'admin', isManagerOrAbove: true },
+      jobOptionRequestSchema.parse({ organizationId, kind: 'leistungen' }),
+    );
+    expect(result).toEqual({ success: false, error: 'options_failed' });
+    expect(logged).toHaveBeenCalledWith('loadLeistungOptions: read failed', { code: 'malformed_result' });
+  } finally {
+    logged.mockRestore();
+    adminDatabase = untouchedDatabase;
+  }
 });

@@ -77,7 +77,7 @@ begin
     end if;
   end loop;
   begin
-    perform public.claim_werkflow_billing_mail('refund', v_org, 'rechnung@sonnenberg.example', 'in_test_run_0002');
+    perform public.claim_werkflow_billing_mail('newsletter', v_org, 'rechnung@sonnenberg.example', 'in_test_run_0002');
     raise exception 'an unknown mail kind was claimed';
   exception when check_violation then null;
   end;
