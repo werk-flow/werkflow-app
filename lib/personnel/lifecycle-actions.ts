@@ -341,7 +341,8 @@ export async function setPersonnelEmploymentTransition(
     p_reason: request.reason,
     p_unresolved_work: unresolvedWork,
     p_operation_id: request.operationId,
-    p_request_hash: hashRequest({ ...request, unresolvedWork }),
+    // The caller's request alone: an identical retry gets the stored result although the open work changed since.
+    p_request_hash: hashRequest(request),
   });
   if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();

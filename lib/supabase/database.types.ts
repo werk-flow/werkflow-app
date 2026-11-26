@@ -8500,6 +8500,8 @@ export type Database = {
           employee_record_id: string;
           id: string;
           organization_id: string;
+          replaced_entry_date: string | null;
+          replaced_exit_date: string | null;
           scheduled_for: string | null;
           scheduled_state:
             | Database["public"]["Enums"]["personnel_employment_state"]
@@ -8516,6 +8518,8 @@ export type Database = {
           employee_record_id: string;
           id?: string;
           organization_id: string;
+          replaced_entry_date?: string | null;
+          replaced_exit_date?: string | null;
           scheduled_for?: string | null;
           scheduled_state?:
             | Database["public"]["Enums"]["personnel_employment_state"]
@@ -8532,6 +8536,8 @@ export type Database = {
           employee_record_id?: string;
           id?: string;
           organization_id?: string;
+          replaced_entry_date?: string | null;
+          replaced_exit_date?: string | null;
           scheduled_for?: string | null;
           scheduled_state?:
             | Database["public"]["Enums"]["personnel_employment_state"]

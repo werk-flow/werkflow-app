@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { parseBerlinDateTimeInput } from '@/lib/date-time/berlin';
+import { getBusinessTodayIso, parseBerlinDateTimeInput } from '@/lib/date-time/berlin';
 import {
   setPersonnelAccessTransition,
   setPersonnelEmploymentTransition,
@@ -11,6 +11,7 @@ import type {
   PersonnelAccessTransitionKind,
   PersonnelEmploymentTransitionKind,
 } from '@/lib/personnel/lifecycle';
+import { employmentDateRefusal } from '@/lib/personnel/lifecycle-steps';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { toLocalDateString } from '@/lib/utils';
 
@@ -155,17 +156,23 @@ async function saveEmploymentTransition(
   setError(null);
   const nextErrors: Record<string, string> = {};
   if (!employmentKind) nextErrors['employment-transition-kind'] = 'Bitte wähle einen Übergang.';
-  if (!employmentDate) nextErrors['employment-date'] = 'Bitte gib ein Datum an.';
+  const effectiveOn = employmentDate ? toLocalDateString(employmentDate) : null;
+  const dateRefusal =
+    employmentKind && effectiveOn
+      ? employmentDateRefusal(employmentKind, effectiveOn, getBusinessTodayIso())
+      : null;
+  if (!effectiveOn) nextErrors['employment-date'] = 'Bitte gib ein Datum an.';
+  else if (dateRefusal) nextErrors['employment-date'] = ERROR_MESSAGES[dateRefusal];
   if (reason.trim().length < 2) nextErrors['employment-reason'] = 'Bitte gib einen Grund an.';
   setFieldErrors(nextErrors);
-  if (focusFirstInvalidField(nextErrors) || !employmentDate || !employmentKind) return;
+  if (focusFirstInvalidField(nextErrors) || !effectiveOn || !employmentKind) return;
   try {
     await run(async () => {
       const result = await setPersonnelEmploymentTransition({
         employeeRecordId: data.employeeRecordId,
         expectedVersion: data.employment.version,
         transitionKind: employmentKind,
-        effectiveOn: toLocalDateString(employmentDate),
+        effectiveOn,
         reason,
         operationId: crypto.randomUUID(),
       });
