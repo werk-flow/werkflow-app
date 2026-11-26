@@ -59,7 +59,7 @@ It needs a reachable thread. After your turn, one wake reports every unreported 
 
 ### Grow a shrink-only list
 
-CI refuses a new entry or raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. For a right exception, open a PR naming the added entries and ask the owner for `approved: list growth` (agent context budget: `approved: context growth`). Never add one yourself: it waives growth for the whole PR. Changing one reruns Fast (`list-growth.yml`); if that fails, push a commit.
+CI refuses a new entry or raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. For a right exception, open a PR naming added entries and ask the owner for `approved: list growth` (agent context budget: `approved: context growth`). Never add one yourself: it waives the whole PR's growth. Changing one reruns Fast (`list-growth.yml`); if that fails, push a commit.
 
 ## When a proof is valid
 
