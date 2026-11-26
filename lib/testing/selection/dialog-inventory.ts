@@ -56,6 +56,9 @@ export const DIALOG_INVENTORY = {
   'components/angebote/create-offer-dialog.tsx#CreateOfferDialog|Angebot anlegen': {
     audits: [{ route: '/angebote', role: 'admin', opener: 'commercial.offer' }],
   },
+  'components/angebote/offer-header-dialog.tsx#OfferHeaderDialog|Angebotskopf bearbeiten': {
+    audits: [{ route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-header' }],
+  },
   'components/rechnungen/create-invoice-dialog.tsx#CreateInvoiceDialog|Rechnung erstellen': {
     audits: [{ route: '/rechnungen', role: 'admin', opener: 'commercial.invoice' }],
   },
@@ -108,7 +111,12 @@ export const DIALOG_INVENTORY = {
   },
   'components/anfragen/convert-request-dialog.tsx#ConvertRequestDialog|Anfrage umwandeln': {
     audits: [
-      { route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.convert', tabs: ['job', 'project'] },
+      {
+        route: '/anfragen/[requestId]',
+        role: 'admin',
+        opener: 'requests.convert',
+        tabs: ['job', 'project', 'offer'],
+      },
     ],
   },
   'components/anfragen/convert-request-to-service-dialog.tsx#ConvertRequestToServiceDialog|Anfrage als Servicefall übernehmen?':
@@ -306,6 +314,12 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.communication-settings' }],
     },
+  'components/search/global-search-dialog.tsx#GlobalSearchDialog|Suchen': {
+    audits: [
+      { route: '/kunden', role: 'admin', opener: 'customers.search-office' },
+      { route: '/dashboard', role: 'employee', opener: 'customers.search-field' },
+    ],
+  },
   'components/kunden/create-client-dialog.tsx#CreateClientDialog|Neuen Kunden anlegen': {
     audits: [{ route: '/kunden', role: 'admin', opener: 'customers.create' }],
   },
@@ -518,6 +532,11 @@ export const DIALOG_INVENTORY = {
         { route: '/einstellungen/mitarbeiter', role: 'admin', opener: 'settings.onboarding-template' },
       ],
     },
+  'components/settings/billing/billing-subscription-card.tsx#BillingSubscriptionCard|Abo kündigen?': {
+    audits: [
+      { route: '/einstellungen/abonnement-abrechnung', role: 'admin', opener: 'settings.billing-cancel' },
+    ],
+  },
   'components/settings/profile-avatar-section.tsx#ProfileAvatarSection|Profilbild anpassen': {
     audits: [{ route: '/einstellungen/profil', role: 'admin', opener: 'settings.avatar' }],
   },

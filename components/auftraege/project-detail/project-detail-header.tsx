@@ -2,6 +2,7 @@
 
 import { MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 
+import { CreateInvoiceButton } from '@/components/rechnungen/create-invoice-button';
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,13 +13,20 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { type DerivedProjectStatus, type Project, PROJECT_STATUS_LABELS } from '@/lib/jobs/types';
+import {
+  type Client,
+  type DerivedProjectStatus,
+  type Project,
+  PROJECT_STATUS_LABELS,
+} from '@/lib/jobs/types';
 import { PROJECT_STATUS_CLASSES } from '../status-classes';
 import { TrafficLight } from './project-detail-status';
 
 type ProjectDetailHeaderProps = {
   liveProject: Project;
   liveDerivedStatus: DerivedProjectStatus;
+  /** The project's customer; a project without one offers no invoice. */
+  liveClient: Pick<Client, 'id' | 'name'> | null;
   isAdminOrManager: boolean;
   /** Null while the member read has failed: a new job needs the team list. */
   setShowCreateJob: ((open: boolean) => void) | null;
@@ -29,6 +37,7 @@ type ProjectDetailHeaderProps = {
 export function ProjectDetailHeader({
   liveProject,
   liveDerivedStatus,
+  liveClient,
   isAdminOrManager,
   setShowCreateJob,
   setShowEditDialog,
@@ -52,6 +61,14 @@ export function ProjectDetailHeader({
       actions={
         isAdminOrManager ? (
           <div className="flex items-center gap-2">
+            {liveClient && (
+              <CreateInvoiceButton
+                preset={{
+                  client: { id: liveClient.id, name: liveClient.name },
+                  work: { kind: 'project', id: liveProject.id },
+                }}
+              />
+            )}
             {setShowCreateJob && (
               <Button size="sm" className="gap-1.5" onClick={() => setShowCreateJob(true)}>
                 <Plus className="size-3.5" />

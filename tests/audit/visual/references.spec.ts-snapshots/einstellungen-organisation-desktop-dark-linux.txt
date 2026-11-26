@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -58,6 +59,8 @@ Deine Rolle
 Admin
 Erstellt am
 1. Januar 2026
+Mitglieder
+4
 Allgemeine Angaben
 Admins können den Organisationsnamen und den Code für den Beitritt pflegen.
 Name der Organisation
@@ -70,8 +73,6 @@ Pflichtfeld
 Dieser Code muss organisationsweit eindeutig sein, damit neue Nutzer gezielt beitreten können.
 Änderungen wirken sich direkt auf alle Mitglieder dieser Organisation aus.
 Organisation speichern
-WerkFlow KI
-Der KI-Assistent arbeitet nur mit den Rechten der Person, die ihn nutzt. Chats sind privat: Niemand sonst kann sie lesen, auch kein Admin. Nach 12 Monaten werden sie gelöscht.
-WerkFlow KI
-ist für deine Organisation noch nicht freigeschaltet.
+Gefahrenzone
+Löscht die Organisation dauerhaft inklusive Mitgliedschaften und Einladungen.
 Nicht eingestempelt

@@ -227,8 +227,9 @@ export const INTEGRATION_ATTEMPT = 1;
 
 /**
  * The environment of the batch prefix's integration run, on top of the runner's own: every job of
- * the run takes it. The run takes the list-growth approval of any PR in it (decision 0009, "a merge
- * queue").
+ * the run takes it. A PR with the list-growth approval runs alone, so the run takes its approval;
+ * Fast's approval step replaces it with what GitHub's records bind (docs/technical/ci-local-fallback.md,
+ * "What stays open").
  */
 export function integrationEnvironment(run: {
   tip: BatchEntry;
@@ -252,6 +253,26 @@ export function integrationEnvironment(run: {
 }
 
 /**
+ * Main as `main` fetched it, with what `readSwitch` read at that same commit: the queue's base and
+ * CI profile switch from one snapshot (scripts/ci/queue.ts). Another fetch of the clone between the
+ * two reads moves origin/main on, so the pair is read again, three times at most.
+ */
+export async function mainWithSwitch<Read extends { main: string }>(
+  main: () => Promise<MainCommit>,
+  readSwitch: () => Read,
+): Promise<{ base: MainCommit; read: Read }> {
+  for (let attempt = 1; ; attempt++) {
+    const base = await main();
+    const read = readSwitch();
+    if (read.main === base.commit) return { base, read };
+    if (attempt === 3)
+      throw new Error(
+        `main moved on from ${base.commit} to ${read.main} between the read of main and of its CI profile switch, three times.`,
+      );
+  }
+}
+
+/**
  * One tick of the queue. A frozen queue does nothing. A live tick first withdraws a mark an earlier
  * tick left pending, merged or not; a withdrawal that fails freezes the queue. A live run without a
  * verdict is retried once, on the next tick, and the same work's second needs a person. A live tick ends by
@@ -260,9 +281,15 @@ export function integrationEnvironment(run: {
  */
 export async function runQueueTick(
   adapter: QueueAdapter,
-  options: { maxBatch: number; dryRun: boolean; only?: readonly number[] },
+  options: {
+    maxBatch: number;
+    dryRun: boolean;
+    only?: readonly number[];
+    /** Main as the caller read it with its CI profile switch (scripts/ci/queue.ts); read here otherwise. */
+    base?: MainCommit;
+  },
 ): Promise<QueueOutcome> {
-  const base = await adapter.main();
+  const base = options.base ?? (await adapter.main());
   const outcome: QueueOutcome = {
     base: base.commit,
     dryRun: options.dryRun,

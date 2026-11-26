@@ -66,6 +66,7 @@ const offerSchema = z.object({
   offerNumber: z.string(),
   title: z.string(),
   status: z.string(),
+  version: z.number().int().positive(),
   validUntil: z.iso.date(),
   openingText: z.string(),
   closingText: z.string(),
@@ -74,7 +75,7 @@ const offerSchema = z.object({
     .extend({ street: z.string().nullable(), postalCode: z.string().nullable(), city: z.string().nullable() })
     .nullable(),
   contact: party.nullable(),
-  recipient: party.extend({ address: z.string().nullable() }),
+  recipient: party.extend({ address: z.string().nullable(), isDefault: z.boolean() }),
   owner: z
     .object({
       userId: uuidSchema,

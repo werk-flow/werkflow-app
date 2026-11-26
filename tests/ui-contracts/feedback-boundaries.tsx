@@ -204,6 +204,7 @@ export function contractRequest(
       closedAt: null,
       convertedJobId: null,
       convertedProjectId: null,
+      convertedOfferId: null,
       convertedBy: null,
       convertedAt: null,
       createdBy: null,

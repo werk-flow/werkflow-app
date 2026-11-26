@@ -264,3 +264,15 @@ A retry record names the work its run tested: the base commit, the batch's PRs a
 ## Amendment 2026-11-21: every outstanding retry stays
 
 This narrows "a retry belongs to its work". The record holds every outstanding retry, one per work, and recording one work's retry never removes another's: otherwise a batch and its prefix that take turns ending without a verdict would retry forever. A retry stays until its work reaches a verdict or a tick settles. `lib/testing/ci/queue-retry.ts` owns the rule.
+
+## Amendment 2026-11-22: two CI profiles
+
+The owner decided on 2026-11-22 (werk-flow/werkflow-planning#503) that CI keeps two profiles: `fleet` for Boat or GitHub Actions, and `local` for the owner's MacBook and PC. Both run the same checks, jobs and schedules; only the executor, concurrency, batching and timing differ. `ci/profile.json` on `main` is the one switch. [Decision 0011](0011-ci-profiles.md) owns the rules.
+
+## Amendment 2026-11-23: an approval covers only its own PR's growth
+
+A GitHub queue entry's run tests `main` and every PR ahead of it, and its Unit job measures list growth against `main`. It read only the labels of the PRs above the event's base, which is the entry ahead, so each PR queued behind an approved list growth failed until that PR landed (werk-flow/werkflow-planning#503). This replaces the approval rule of item 2 of the amendment "a merge queue": the run waives growth only when each commit above `main` that touches a shrink-only list file belongs to a PR with `approved: list growth`. A rename touches both its paths. GitHub's records identify each commit's PR: the merge queue's entries, or the PR GitHub merged as that commit. A commit subject identifies nothing. A touching commit those records do not bind keeps the gate strict, and a commit with other than one parent, the commit below it, fails the run. The gate still measures growth against `main`. `scripts/ci/prepare.ts` (`approval`) owns the rule.
+
+## Amendment 2026-11-26: a commit that only shrinks a list needs no approval
+
+Under the amendment of 2026-11-23, an unapproved PR that only edited a list's file cancelled the approval of every PR in its group. Merge-queue run 45741947708 tested #512, approved, on top of #557, which changed `lib/attention/count-volume.test.ts` outside its list; Unit then failed on #512's approved entry (werk-flow/werkflow-planning#503). This narrows that amendment's rule: the run waives growth only when each commit above `main` that grows a shrink-only list against its parent belongs to a PR with `approved: list growth`. A commit grows a list as the gate counts growth, with two additions: a list its parent lacks counts each of its entries as added, and a list the commit removes counts as growth. A rename is a delete and an add, so a list moved aside, moved back or restored with a higher ceiling is growth. A commit that only shrinks a list, or edits its file elsewhere, needs no approval. The binding, the single-parent rule and the failure on an unreadable answer stay as the amendment of 2026-11-23 has them.

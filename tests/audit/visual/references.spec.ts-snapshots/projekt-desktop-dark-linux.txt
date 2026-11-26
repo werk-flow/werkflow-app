@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -26,6 +27,7 @@ Aufträge
 P-2026-0007
 Sanierung Wohnanlage Uferweg
 Nicht begonnen
+Rechnung erstellen
 Auftrag hinzufügen
 Arbeitsstand
 Nächster Schritt:

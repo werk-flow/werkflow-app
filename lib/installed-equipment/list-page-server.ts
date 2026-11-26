@@ -148,11 +148,12 @@ const equipmentPageSelectionSchema = z.object({
 /**
  * One page of the equipment list. The database applies the scope, the search
  * and the count before the page boundary; this reader hydrates the page rows
- * only. The page render and the live refresh (background read
- * `equipment-page`) both read through it. Office roles only.
+ * only. The page render, the live refresh (background read `equipment-page`)
+ * and the header search, with a shorter page, read through it. Office roles only.
  */
 export async function getInstalledEquipmentPage(
   rawQuery: EquipmentListQuery,
+  pageSize: number = LIST_PAGE_SIZE,
 ): Promise<ActionResult<{ page: EquipmentPage }>> {
   const parsedQuery = equipmentListQuerySchema.safeParse(rawQuery);
   if (!parsedQuery.success) return { success: false, error: 'installed_equipment_input_invalid' };
@@ -165,7 +166,7 @@ export async function getInstalledEquipmentPage(
     p_category: query.category,
     p_include_archived: query.includeArchived,
     p_page: query.page,
-    p_page_size: LIST_PAGE_SIZE,
+    p_page_size: pageSize,
   });
   const selection = equipmentPageSelectionSchema.safeParse(selected.data);
   if (selected.error || !selection.success) {

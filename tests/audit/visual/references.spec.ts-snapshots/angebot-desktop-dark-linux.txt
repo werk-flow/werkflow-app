@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -29,6 +30,7 @@ Alle Angebote
 Austausch Gas-Brennwerttherme
 ANG-2026-001 · für Familie Hoffmann
 Entwurf
+Bearbeiten
 Angebotskopf
 Kunde
 Familie Hoffmann

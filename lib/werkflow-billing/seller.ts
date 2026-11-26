@@ -1,5 +1,5 @@
 import type { InvoiceSeller } from '@/lib/invoicing/model';
-import { WerkflowInvoiceFailure } from '@/lib/werkflow-billing/failure';
+import { billingFailure } from '@/lib/werkflow-billing/failure';
 
 // WerkFlow as the seller of its own invoices. Every detail is server
 // configuration (docs/technical/environments.md, "Credentials"), never code:
@@ -18,7 +18,7 @@ const value = (environment: SellerEnvironment, name: string): string | null =>
 
 function required(environment: SellerEnvironment, name: string): string {
   const found = value(environment, name);
-  if (!found) throw new WerkflowInvoiceFailure('werkflow_seller_configuration_missing');
+  if (!found) throw billingFailure('werkflow_seller_configuration_missing');
   return found;
 }
 

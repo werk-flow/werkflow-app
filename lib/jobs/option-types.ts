@@ -10,7 +10,16 @@ import { uuidSchema } from '@/lib/validation/uuid';
  */
 export const jobOptionRequestSchema = z.object({
   organizationId: uuidSchema,
-  kind: z.enum(['clients', 'projects', 'jobs', 'equipment', 'service-cases', 'inventory-items', 'coverages']),
+  kind: z.enum([
+    'clients',
+    'projects',
+    'jobs',
+    'equipment',
+    'service-cases',
+    'inventory-items',
+    'coverages',
+    'leistungen',
+  ]),
   query: z.string().trim().max(120).default(''),
   offset: z.number().int().min(0).max(1_000_000).default(0),
   selectedIds: z.array(uuidSchema).max(10_000).default([]),

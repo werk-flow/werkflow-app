@@ -58,7 +58,8 @@ function OnCallNow({
       </StaleRegion>
     );
   }
-  if (!live.isStale) return <OnCallNowSkeleton />;
+  // A first read that failed leaves no data and no stale mark: the card shows the failure, never a lasting skeleton.
+  if (live.isLoading) return <OnCallNowSkeleton />;
   return (
     <SectionError
       title="Die Bereitschaft konnte nicht geladen werden"

@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { CreateInvoiceButton } from '@/components/rechnungen/create-invoice-button';
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { type JobWithDetails, JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 import { getJobStatusClass, getJobStatusLabel } from '../status-classes';
@@ -79,11 +80,21 @@ export function JobDetailHeader({
       }
       actions={
         isAdminOrManager ? (
-          <JobDetailActionsMenu
-            showEditDialog={showEditDialog}
-            handleEditDialogOpenChange={handleEditDialogOpenChange}
-            setShowDeleteDialog={setShowDeleteDialog}
-          />
+          <div className="flex items-center gap-2">
+            {liveJob.client && (
+              <CreateInvoiceButton
+                preset={{
+                  client: { id: liveJob.client.id, name: liveJob.client.name },
+                  work: { kind: 'job', id: liveJob.id },
+                }}
+              />
+            )}
+            <JobDetailActionsMenu
+              showEditDialog={showEditDialog}
+              handleEditDialogOpenChange={handleEditDialogOpenChange}
+              setShowDeleteDialog={setShowDeleteDialog}
+            />
+          </div>
         ) : undefined
       }
     />

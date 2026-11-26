@@ -119,8 +119,9 @@ jobs:
     needs: candidate
     # PROD receives a migration only after staging.yml applied it to DEV with the same
     # `db push --include-all`, so DEV proves an out-of-order migration first. Outside the production
-    # environment: the repository's Supabase token, which staging deploys DEV with, reads DEV's
-    # ledger through the read-only query endpoint, and no PROD secret is in this job.
+    # environment: a token that may only read DEV's database reads DEV's ledger through the
+    # read-only query endpoint, and no PROD secret is in this job. SUPABASE_ACCESS_TOKEN, which
+    # deploys to PROD too, never gets database read.
     if: needs.candidate.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -134,7 +135,7 @@ jobs:
             supabase/migrations
       - name: Check that DEV holds every migration of the candidate
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DEV_READ_TOKEN: ${{ secrets.SUPABASE_DEV_READ_TOKEN }}
           DEV_PROJECT_REF: mbkkzuqjbdvzelqvuzcn
         run: bash .github/scripts/dev-holds-migrations.sh
 

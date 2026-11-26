@@ -15,6 +15,8 @@ import { readSignatureViewContract, readWorkArtifactDetailContract } from './wor
 import { readDraftJobAccessContract } from './device-draft-boundaries';
 import { readRequestWorkTargetsContract } from './request-attach-boundaries';
 import { readBreakRuleWeekEntries, readBreakRuleWeekPolicy } from './break-rule-week-boundaries';
+import { readGlobalSearchContract } from './global-search-boundaries';
+import { readOnCallOverviewContract } from './worker-start-service-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -22,6 +24,7 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'entity-options') return readEntityOptionContract(input);
   if (kind === 'next-request-number') return { success: true, requestNumber: 'ANF-2026-0001' };
   if (kind === 'request-work-targets') return readRequestWorkTargetsContract(input);
+  if (kind === 'global-search') return readGlobalSearchContract(input);
   if (kind === 'time-correction-form-options') return readTimeCorrectionFormOptionsContract();
   if (kind === 'work-lifecycle-snapshot') return getWorkLifecycleSnapshot();
   if (kind === 'pending-vacation-for-approver' || kind === 'decidable-approved-vacation')
@@ -47,6 +50,7 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'work-artifacts') return readDraftJobAccessContract();
   if (kind === 'document-view-url') return readSignatureViewContract();
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();
+  if (kind === 'on-call-overview') return readOnCallOverviewContract();
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));
   // The job edit dialog's assignment reads stay in flight: its focus contract

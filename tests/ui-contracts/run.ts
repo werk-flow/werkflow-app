@@ -100,6 +100,15 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('attach-request-dialog.tsx'))
                 return { path: join(import.meta.dir, 'request-attach-boundaries.tsx') };
             });
+            // The search dialog reads the active organization from the search contract.
+            builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
+              if (args.importer.endsWith('global-search-dialog.tsx'))
+                return { path: join(import.meta.dir, 'global-search-boundaries.tsx') };
+            });
+            builder.onResolve({ filter: /^next\/link$/ }, (args) => {
+              if (args.importer.endsWith('global-search-dialog.tsx'))
+                return { path: join(import.meta.dir, 'global-search-boundaries.tsx') };
+            });
             builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
               if (
                 args.importer.endsWith('use-suggested-record-number.ts') ||
@@ -186,6 +195,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('client-sites-card.tsx') ||
                 args.importer.endsWith('reset-password-form.tsx') ||
                 args.importer.endsWith('aufgaben-task-row.tsx') ||
+                args.importer.endsWith('office-start-sections.tsx') ||
+                args.importer.endsWith('owner-start.tsx') ||
                 args.importer.endsWith('text-link.tsx') ||
                 args.importer.endsWith('client-duplicate-matches.tsx') ||
                 args.importer.endsWith('standalone-screen.tsx')
@@ -268,6 +279,9 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/ai\/settings-actions$/ }, () => ({
               path: join(import.meta.dir, 'ai-settings-service-boundaries.ts'),
             }));
+            builder.onResolve({ filter: /^@\/lib\/invoices\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'invoice-service-boundaries.ts'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/qualifications\/actions$/ }, () => ({
               path: join(import.meta.dir, 'qualification-service-boundaries.ts'),
             }));
@@ -299,6 +313,34 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/field-sync\/device\/today-store$/ }, (args) => {
               if (args.importer.endsWith('offline-today.tsx'))
                 return { path: join(import.meta.dir, 'offline-today-service-boundaries.ts') };
+            });
+            // The field worker's start page: its device day, saved signal, clock, counts and the on-call
+            // card's organization answer from the spec.
+            builder.onResolve(
+              {
+                filter:
+                  /^@\/(lib\/field-sync\/device\/today-(store|refresh)|components\/clock-state-context|components\/realtime\/attention-count-provider|components\/organization\/organization-context|components\/user\/user-profile-context)$/,
+              },
+              (args) => {
+                if (
+                  args.importer.endsWith('worker-start.tsx') ||
+                  args.importer.endsWith('worker-start-day.ts') ||
+                  args.importer.endsWith('on-call-now-card.tsx')
+                )
+                  return { path: join(import.meta.dir, 'worker-start-service-boundaries.ts') };
+              },
+            );
+            // E7's refresh of the day has its own contracts (today-refresh.spec.ts); here the spec saves the day.
+            builder.onResolve(
+              { filter: /^@\/components\/auftraege\/work-pack\/today-refresh-on-start$/ },
+              (args) => {
+                if (args.importer.endsWith('worker-start.tsx'))
+                  return { path: join(import.meta.dir, 'worker-start-service-boundaries.ts') };
+              },
+            );
+            builder.onResolve({ filter: /^next\/link$/ }, (args) => {
+              if (args.importer.endsWith('worker-start-sections.tsx'))
+                return { path: join(import.meta.dir, 'sidebar-service-boundaries.tsx') };
             });
             // The pathname of the `(auth)` layout's landing wipe, moved by the spec.
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {

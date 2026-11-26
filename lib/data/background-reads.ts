@@ -109,6 +109,8 @@ import {
 } from '@/lib/work-templates/actions';
 import { workTemplatePreviewInputSchema, workTemplateTargetTypeSchema } from '@/lib/work-templates/schemas';
 import { getSubstituteAbsences } from '@/lib/responsibilities/substitute-absence-read';
+import { globalSearchInputSchema } from '@/lib/search/global-search-input';
+import { searchEverywhere } from '@/lib/search/global-search-server';
 
 /**
  * The closed set of read-only readers a page may run in the background over
@@ -426,6 +428,8 @@ export const BACKGROUND_READS = {
     }),
     (input) => searchWorkPredecessors({ type: input.type, query: input.query }),
   ),
+  // The header search: one settled query through every domain list the caller's role reaches.
+  'global-search': defineRead(globalSearchInputSchema, (input) => searchEverywhere(input)),
 } as const;
 
 export type BackgroundReadKind = keyof typeof BACKGROUND_READS;

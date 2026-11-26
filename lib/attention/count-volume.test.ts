@@ -105,6 +105,8 @@ function workRows(pending: number, history: number): Record<string, Row[]> {
       execution_state_override: override,
       status_override: null,
       updated_at: RECENT,
+      // The transitions to execution_complete the handover read embeds; none recorded here.
+      work_execution_events: [],
     });
   const artifact = (index: number, status: string): Row =>
     scoped({ id: uuid(3, index), job_id: uuid(1, index), project_id: null, status, kind: 'note' });
@@ -555,7 +557,11 @@ function rpc(name: string, args: unknown) {
     const requests = openRequests(field(args, 'p_organization_id'));
     const accessProposals = openProposals(field(args, 'p_organization_id'));
     reads.push({ table: `rpc ${name}`, rows: requests.length + accessProposals.length });
-    return Promise.resolve({ data: { requests, access_proposals: accessProposals }, error: null });
+    // The overdue job set stays empty here; supabase/tests/attention_pending_sets.sql proves it.
+    return Promise.resolve({
+      data: { requests, access_proposals: accessProposals, overdue_jobs: [] },
+      error: null,
+    });
   }
   if (name === 'read_open_absences') {
     const today = String(field(args, 'p_today'));

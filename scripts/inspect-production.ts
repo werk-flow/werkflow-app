@@ -9,7 +9,9 @@ import {
   catalogRowsSchema,
   failureMessage,
   ledgerFindings,
+  PROD_DENIED,
   ledgerRowsSchema,
+  projectTokens,
   readProject,
 } from '../lib/security/production-inspection';
 import { advisorProblems, advisorResponseSchema } from '../lib/security/supabase-project-checks';
@@ -17,12 +19,16 @@ import { committedMigrationVersions } from '../lib/testing/local-stack/dev-migra
 import { loadEnvLocal } from '../tests/golden/support/env';
 
 /**
- * `bun run prod:inspect`: the one way an agent inspects PROD. It prints the
- * pending migration versions, the names of objects that differ from DEV, and
- * the advisor findings outside the reviewed exceptions. It reads through the
- * Management API's read-only query endpoint with the owner's token, and never
- * prints a table row, a definition, a configuration value or a response body.
- * Exit 1 means a problem or an unverified check.
+ * `bun run prod:inspect`: the one way PROD's structure is inspected. It prints
+ * the pending migration versions, the names of objects that differ from DEV,
+ * and the advisor findings outside the reviewed exceptions. It reads through
+ * the Management API's read-only query endpoint, PROD with the read-only PROD
+ * token that only the PROD inspection job holds (.github/workflows/prod-inspect.yml),
+ * DEV with SUPABASE_ACCESS_TOKEN (in the job, the DEV-scoped DEV_INSPECT_SUPABASE_TOKEN).
+ * It never prints a table row, a definition, an advisor's text, a
+ * configuration value or a response body: the job's log is public. On a
+ * workstation it fails and names the job. Exit 1 means a problem or an
+ * unverified check.
  */
 const label = '[prod:inspect]';
 const repositoryRoot = resolve(import.meta.dir, '..');
@@ -32,33 +38,17 @@ async function main(): Promise<void> {
     loadEnvLocal();
     const refs = supabaseProjectRefs(repositoryRoot);
     if (!refs) throw new InspectionFailure('docs/technical/environments.md names no Supabase project refs.');
-    const token = process.env.SUPABASE_ACCESS_TOKEN;
-    if (!token) throw new InspectionFailure('SUPABASE_ACCESS_TOKEN is not set (expected in .env.local).');
+    const tokens = projectTokens(process.env);
+    const prod = { ref: refs.production, token: tokens.production, denied: PROD_DENIED };
+    const dev = { ref: refs.dev, token: tokens.dev };
     const query = 'database/query/read-only';
     const [prodLedger, devLedger, prodCatalog, devCatalog, security, performance] = await Promise.all([
-      readProject({
-        ref: refs.production,
-        path: query,
-        token,
-        query: LEDGER_QUERY,
-        schema: ledgerRowsSchema,
-      }),
-      readProject({ ref: refs.dev, path: query, token, query: LEDGER_QUERY, schema: ledgerRowsSchema }),
-      readProject({
-        ref: refs.production,
-        path: query,
-        token,
-        query: CATALOG_QUERY,
-        schema: catalogRowsSchema,
-      }),
-      readProject({ ref: refs.dev, path: query, token, query: CATALOG_QUERY, schema: catalogRowsSchema }),
-      readProject({ ref: refs.production, path: 'advisors/security', token, schema: advisorResponseSchema }),
-      readProject({
-        ref: refs.production,
-        path: 'advisors/performance',
-        token,
-        schema: advisorResponseSchema,
-      }),
+      readProject({ ...prod, path: query, query: LEDGER_QUERY, schema: ledgerRowsSchema }),
+      readProject({ ...dev, path: query, query: LEDGER_QUERY, schema: ledgerRowsSchema }),
+      readProject({ ...prod, path: query, query: CATALOG_QUERY, schema: catalogRowsSchema }),
+      readProject({ ...dev, path: query, query: CATALOG_QUERY, schema: catalogRowsSchema }),
+      readProject({ ...prod, path: 'advisors/security', schema: advisorResponseSchema }),
+      readProject({ ...prod, path: 'advisors/performance', schema: advisorResponseSchema }),
     ]);
 
     const ledger = ledgerFindings({
@@ -80,7 +70,7 @@ async function main(): Promise<void> {
       for (const line of drift) console.log(`  ${line}`);
     }
 
-    const advisors = advisorProblems([...security.lints, ...performance.lints]);
+    const advisors = advisorProblems([...security.lints, ...performance.lints], undefined, { detail: false });
     console.log(
       `${label} Advisors: ${advisors.length === 0 ? 'no finding outside the reviewed exceptions.' : `${advisors.length} findings.`}`,
     );

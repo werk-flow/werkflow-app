@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 
 import { renderAlarmMail, type BillingAlarmKind } from './alarm';
+import { renderDebitNoticeMail, renderInvoiceMail, renderReceiptMail, type SepaDebit } from './invoice';
 import { formatEuro } from './layout';
 import { renderMandateInactiveMail } from './mandate';
 import { renderCardProblemMail, renderDebitFailedMail } from './payment-failed';
+import { renderRefundMail } from './refund';
 
 // Every billing mail renders with made-up data in German with „du“, as HTML
 // and plain text, and escapes what Stripe or a customer named. Tier 2.
@@ -59,17 +61,133 @@ describe('customer mails', () => {
   });
 });
 
+describe('the refund mail', () => {
+  const refund = {
+    stornoNumber: 'MUSTER-0001-CN-01',
+    cancelledNumber: 'MUSTER-0001',
+    refundedCents: 49900,
+    replacement: null,
+  };
+
+  test('a full refund names the Stornorechnung, the cancelled invoice and the amount, and asks for nothing', () => {
+    const mail = renderRefundMail(refund);
+    expect(mail.subject).toBe('Deine Stornorechnung MUSTER-0001-CN-01 von WerkFlow');
+    for (const part of ['499,00\u00a0€', 'WerkFlow-Rechnung MUSTER-0001', 'Du musst nichts tun.']) {
+      expect(mail.html).toContain(part);
+      expect(mail.text).toContain(part);
+    }
+    expect(mail.text).toContain('Bitte nimm die Stornorechnung in deine Buchhaltung auf.');
+    expect(mail.text).not.toContain('Neue Rechnung');
+    expect(mail.html).not.toContain('<a ');
+  });
+
+  test('a partial refund also names the new, paid invoice for what stays', () => {
+    const mail = renderRefundMail({
+      ...refund,
+      refundedCents: 10000,
+      replacement: { number: 'MUSTER-0001-KR-01', grossCents: 39900 },
+    });
+    expect(mail.text).toContain(
+      'wir haben dir 100,00\u00a0€ für deine WerkFlow-Rechnung MUSTER-0001 erstattet',
+    );
+    expect(mail.text).toContain('die neue Rechnung MUSTER-0001-KR-01 über 399,00\u00a0€');
+    expect(mail.text).toContain('Neue Rechnung: MUSTER-0001-KR-01');
+    expect(mail.text).toContain('Bitte nimm beide Belege in deine Buchhaltung auf.');
+  });
+});
+
 test.each<BillingAlarmKind>([
   'debit_failed',
   'debit_reversed',
   'mandate_inactive',
   'mail_failed',
   'invoice_check_failed',
+  'invoice_undelivered',
+  'debit_notice_late',
+  'mail_undelivered',
+  'signals_quiet',
+  'reconciliation_missed',
 ])('the %s alarm names its facts and says it is internal', (kind) => {
   const mail = renderAlarmMail(kind, [['Stripe-Objekt', 'in_test_0001']]);
   expect(mail.subject).toStartWith('WerkFlow-Alarm: ');
   expect(mail.text).toContain('Stripe-Objekt: in_test_0001');
   expect(mail.text).toContain('nicht an Kunden');
+});
+
+describe('the mails around an invoice (werk-flow/werkflow-planning#492)', () => {
+  const debit: SepaDebit = {
+    kind: 'sepa_debit',
+    debitDate: '2026-12-15',
+    ibanLastFour: '3000',
+    mandateReference: 'MUSTERMANDAT0001',
+    creditorId: 'DE98ZZZ09999999999',
+  };
+  const contact = 'hallo@musterfirma.example';
+  const announcement = [
+    '49,00\u00a0€',
+    '15.12.2026',
+    '3000',
+    'MUSTERMANDAT0001',
+    'DE98ZZZ09999999999',
+    contact,
+  ];
+
+  test('the debit notice is a SEPA pre-notification: amount, date, IBAN ending, mandate, creditor ID and contact', () => {
+    const mail = renderDebitNoticeMail({ amountCents: 4900, debit, contact });
+    expect(mail.subject).toBe('Ankündigung: Lastschrift für WerkFlow am 15.12.2026');
+    for (const part of announcement) {
+      expect(mail.html).toContain(part);
+      expect(mail.text).toContain(part);
+    }
+  });
+
+  test('the invoice mail of a SEPA debit announces it the same way', () => {
+    const mail = renderInvoiceMail({
+      invoiceNumber: 'MUSTER-0001',
+      issueDate: '2026-12-15',
+      grossCents: 4900,
+      dueCents: 4900,
+      payment: debit,
+      contact,
+    });
+    expect(mail.subject).toBe('Deine WerkFlow-Rechnung MUSTER-0001');
+    for (const part of [...announcement, 'MUSTER-0001', 'E-Rechnung']) expect(mail.text).toContain(part);
+  });
+
+  test('a card invoice names the card, a paid one says nothing is open, and neither names a debit', () => {
+    const card = renderInvoiceMail({
+      invoiceNumber: 'MUSTER-0002',
+      issueDate: '2026-12-15',
+      grossCents: 4900,
+      dueCents: 4900,
+      payment: { kind: 'card', lastFour: '4242' },
+      contact,
+    });
+    expect(card.text).toContain('deine Karte mit der Endung 4242 mit 49,00');
+    const paid = renderInvoiceMail({
+      invoiceNumber: 'MUSTER-0003',
+      issueDate: '2026-12-15',
+      grossCents: 4900,
+      dueCents: 0,
+      payment: debit,
+      contact,
+    });
+    expect(paid.text).toContain('bereits bezahlt');
+    for (const mail of [card, paid]) expect(mail.text).not.toContain('Gläubiger-ID');
+  });
+
+  test('the receipt names the invoice, the amount, the day and the way it was paid', () => {
+    const mail = renderReceiptMail({
+      invoiceNumber: 'MUSTER-0001',
+      amountPaidCents: 4900,
+      paidOn: '2026-12-23',
+      method: { kind: 'sepa_debit' },
+      contact,
+    });
+    expect(mail.subject).toBe('Zahlung erhalten: WerkFlow-Rechnung MUSTER-0001');
+    for (const part of ['49,00\u00a0€', '23.12.2026', 'SEPA-Lastschrift', 'Danke'])
+      expect(mail.text).toContain(part);
+  });
 });
 
 test('amounts are German euros from integer cents', () => {

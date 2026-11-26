@@ -7,13 +7,14 @@ import {
   type StripeGateway,
 } from '@/lib/werkflow-billing/stripe';
 import type {
+  StripePaymentMethodSummary,
   StripeSubscriptionGateway,
   StripeSubscriptionSnapshot,
 } from '@/lib/werkflow-billing/stripe-subscriptions';
 
-type Answer<Read extends 'readInvoice' | 'readMandate' | 'readDispute'> = Awaited<
-  ReturnType<StripeGateway[Read]>
->;
+type Answer<
+  Read extends 'readInvoice' | 'readMandate' | 'readDispute' | 'readUpcomingDebit' | 'readInvoiceDebit',
+> = Awaited<ReturnType<StripeGateway[Read]>>;
 
 /** What the fake's reads answer, by id; an id it does not hold fails as Stripe's read would. */
 export type FakeStripeObjects = {
@@ -21,6 +22,12 @@ export type FakeStripeObjects = {
   customers?: Record<string, StripeBillingCustomer | null>;
   mandates?: Record<string, Answer<'readMandate'>>;
   disputes?: Record<string, Answer<'readDispute'>>;
+  /** readUpcomingDebit by subscription id, readInvoiceDebit by invoice id; each replaces its real read. */
+  upcomingDebits?: Record<string, Answer<'readUpcomingDebit'>>;
+  invoiceDebits?: Record<string, Answer<'readInvoiceDebit'>>;
+  /** What the daily comparison's lists answer, whatever the window. */
+  finalizedInvoices?: Array<{ id: string; finalizedAt: number }>;
+  eventIds?: string[];
 };
 
 async function lookup<T>(objects: Record<string, T> | undefined, id: string): Promise<T> {
@@ -62,6 +69,10 @@ export type FakeStripeBilling = {
   failNextCheckout: boolean;
   /** The subscriptions cancelDuplicateSubscription refunded and cancelled. */
   cancelledDuplicates: string[];
+  /** What each subscription's next renewal invoice would charge; a renewal without one fails its preview. */
+  renewalAmounts: Map<string, number>;
+  /** The payment method Stripe would charge for each subscription. */
+  paymentMethods: Map<string, StripePaymentMethodSummary>;
   /** Every call fails as an unreachable Stripe would. */
   down: boolean;
   /** Runs once before the next call answers: what happens at Stripe meanwhile. */
@@ -77,6 +88,8 @@ export function createFakeStripeBilling(): FakeStripeBilling {
     checkoutRequests: [],
     failNextCheckout: false,
     cancelledDuplicates: [],
+    renewalAmounts: new Map(),
+    paymentMethods: new Map(),
     down: false,
     beforeNextCall: null,
   };
@@ -105,6 +118,41 @@ function checkoutSession(
     id,
     url: `https://checkout.stripe.test/c/pay/${id}`,
     expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+  };
+}
+
+const callFailed = () => Object.assign(new Error('stripe_call_failed'), { code: 'stripe_call_failed' });
+
+/** The billing page's calls (werk-flow/werkflow-planning#252), over the same subscriptions. */
+function fakeBillingPageCalls(
+  billing: FakeStripeBilling,
+  reach: <T>(answer: () => T) => Promise<T>,
+): Pick<StripeSubscriptionGateway, 'readBillingOutlook' | 'setCancelAtPeriodEnd'> {
+  return {
+    readBillingOutlook: (subscriptionId) =>
+      reach(() => {
+        const subscription = billing.subscriptions.get(subscriptionId);
+        if (!subscription) throw callFailed();
+        const renews =
+          !subscription.cancelAtPeriodEnd &&
+          !['canceled', 'incomplete_expired'].includes(subscription.status);
+        const amountCents = billing.renewalAmounts.get(subscriptionId);
+        if (renews && amountCents === undefined) throw callFailed();
+        return {
+          upcoming:
+            renews && amountCents !== undefined && subscription.currentPeriodEnd
+              ? { amountCents, dueAt: subscription.currentPeriodEnd }
+              : null,
+          paymentMethod: billing.paymentMethods.get(subscriptionId) ?? null,
+        };
+      }),
+    setCancelAtPeriodEnd: (subscriptionId, cancelAtPeriodEnd) =>
+      reach(() => {
+        const subscription = billing.subscriptions.get(subscriptionId);
+        // Stripe refuses to change a subscription that has ended.
+        if (!subscription || subscription.status === 'canceled') throw callFailed();
+        billing.subscriptions.set(subscriptionId, { ...subscription, cancelAtPeriodEnd });
+      }),
   };
 }
 
@@ -175,6 +223,7 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
           cancellationReason: 'cancellation_requested',
         });
       }),
+    ...fakeBillingPageCalls(billing, reach),
   };
 }
 
@@ -182,7 +231,7 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
 export type FakeStripeSetup = {
   /** readInvoice, readCustomer, readMandate and readDispute answer these by id. */
   objects?: FakeStripeObjects;
-  /** The real gateway's HTTP calls (readInvoiceForIssue) are answered from these. */
+  /** The real gateway's HTTP calls (readInvoiceForIssue, readRefundForStorno) are answered from these. */
   answers?: FakeStripeAnswers;
   /** Every HTTP request the fake answered is pushed here. */
   requests?: FakeStripeRequests;
@@ -215,10 +264,20 @@ export function createFakeStripeGateway(
   return {
     verifySignal: resolved.gateway.verifySignal,
     readInvoiceForIssue: resolved.gateway.readInvoiceForIssue,
+    readRefundForStorno: resolved.gateway.readRefundForStorno,
     readInvoice: (id) => lookup(objects.invoices, id),
     readCustomer: (id) => lookup(objects.customers, id),
     readMandate: (id) => lookup(objects.mandates, id),
     readDispute: (id) => lookup(objects.disputes, id),
+    // Without objects these two stay the real reads over `answers` (stripe.test.ts).
+    readUpcomingDebit: objects.upcomingDebits
+      ? (id) => lookup(objects.upcomingDebits, id)
+      : resolved.gateway.readUpcomingDebit,
+    readInvoiceDebit: objects.invoiceDebits
+      ? (id) => lookup(objects.invoiceDebits, id)
+      : resolved.gateway.readInvoiceDebit,
+    listFinalizedInvoices: async () => objects.finalizedInvoices ?? [],
+    listEventIds: async () => objects.eventIds ?? [],
     subscriptions: fakeSubscriptionCalls(billing),
   };
 }

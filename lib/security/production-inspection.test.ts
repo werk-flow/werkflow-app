@@ -6,10 +6,12 @@ import { resolve } from 'node:path';
 import {
   CATALOG_QUERY,
   LEDGER_QUERY,
+  PROD_DENIED,
   catalogDrift,
   failureMessage,
   ledgerFindings,
   ledgerRowsSchema,
+  projectTokens,
   readProject,
 } from './production-inspection';
 
@@ -105,4 +107,42 @@ test('a failed read reports its path and status, never the response content', as
     'database/query/read-only: the request failed.',
   ]);
   expect(failureMessage(new Error(secret))).not.toContain(secret);
+});
+
+test('a PROD call the token may not make names the inspection job; other failures do not', async () => {
+  const read = (status: number) =>
+    readProject({
+      ref: 'ref',
+      path: 'advisors/security',
+      token: 't',
+      schema: ledgerRowsSchema,
+      denied: PROD_DENIED,
+      fetcher: async () => new Response('denied', { status }),
+    }).then(() => 'passed', failureMessage);
+  expect(await Promise.all([read(401), read(403), read(500)])).toEqual([
+    `advisors/security returned HTTP 401. ${PROD_DENIED}`,
+    `advisors/security returned HTTP 403. ${PROD_DENIED}`,
+    'advisors/security returned HTTP 500.',
+  ]);
+  expect(PROD_DENIED).toContain('gh workflow run prod-inspect.yml');
+});
+
+test('a run needs the PROD token and the DEV token, and says which one is missing', () => {
+  const tokens = (env: Record<string, string | undefined>) => {
+    try {
+      return projectTokens(env);
+    } catch (error) {
+      return failureMessage(error);
+    }
+  };
+  expect(tokens({ PROD_INSPECT_SUPABASE_TOKEN: 'p', SUPABASE_ACCESS_TOKEN: 'd' })).toEqual({
+    production: 'p',
+    dev: 'd',
+  });
+  expect(tokens({ SUPABASE_ACCESS_TOKEN: 'd' })).toStartWith(
+    'PROD_INSPECT_SUPABASE_TOKEN is not set. PROD is read only by the PROD inspection job',
+  );
+  expect(tokens({ PROD_INSPECT_SUPABASE_TOKEN: 'p' })).toBe(
+    'SUPABASE_ACCESS_TOKEN, the DEV token, is not set.',
+  );
 });
