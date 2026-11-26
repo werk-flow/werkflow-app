@@ -9,19 +9,17 @@
 // `check-en16931.test.ts` compares, so a rule file never changes without its
 // compiled twin.
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { hexSha256 } from '@/lib/security/hex-sha256';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const xsltName = 'EN16931-CII-validation.xslt';
 const neutralFolder = join(tmpdir(), 'werkflow-en16931');
 const workFolder = mkdtempSync(join(tmpdir(), 'werkflow-en16931-sef-'));
-
-const hexDigest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 try {
   mkdirSync(neutralFolder, { recursive: true });
@@ -46,8 +44,8 @@ try {
       '// Written by compile.ts; check-en16931.test.ts compares both hashes with the files.',
       'export const EN16931_CII_RULES = {',
       `  release: '${release}',`,
-      `  xsltSha256: '${hexDigest(xslt)}',`,
-      `  sefGzipSha256: '${hexDigest(compiled)}',`,
+      `  xsltSha256: '${hexSha256(xslt)}',`,
+      `  sefGzipSha256: '${hexSha256(compiled)}',`,
       '};',
       '',
     ].join('\n'),

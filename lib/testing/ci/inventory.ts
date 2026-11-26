@@ -79,7 +79,7 @@ type ScheduleItem = {
 export const SCHEDULES = {
   nightly: {
     runs: 'A full run of main: every browser group, the wall-clock groups untimed.',
-    sources: ['lib/testing/ci/schedule.ts', 'nightly.yml#full', 'nightly.yml#alert'],
+    sources: ['lib/testing/ci/schedule.ts', 'nightly.yml#decide', 'nightly.yml#full', 'nightly.yml#alert'],
     trigger: {
       on: 'time',
       workflow: { workflow: 'nightly.yml', cron: '0 17 * * *', timezone: BERLIN_TIME_ZONE },
@@ -222,6 +222,7 @@ export const HEALTH_CHECKS = {
   'supabase-access-token-dev': { job: 'repository', key: 'keyed', runs: 'github' },
   'supabase-access-token-prod': { job: 'repository', key: 'keyed', runs: 'github' },
   'dev-database-url': { job: 'repository', key: 'keyed', runs: 'github' },
+  'supabase-dev-read-token': { job: 'repository', key: 'keyed', runs: 'github' },
   'vercel-token': { job: 'repository', key: 'keyed', runs: 'github' },
   'vercel-build-step': { job: 'repository', key: 'keyed', runs: 'github' },
   'pr-asset-branches': { job: 'repository', key: 'key-free', runs: 'health-pr-asset-branches' },

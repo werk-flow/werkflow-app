@@ -7,6 +7,7 @@ import {
   type StripeGateway,
 } from '@/lib/werkflow-billing/stripe';
 import type {
+  StripePaymentMethodSummary,
   StripeSubscriptionGateway,
   StripeSubscriptionSnapshot,
 } from '@/lib/werkflow-billing/stripe-subscriptions';
@@ -68,6 +69,10 @@ export type FakeStripeBilling = {
   failNextCheckout: boolean;
   /** The subscriptions cancelDuplicateSubscription refunded and cancelled. */
   cancelledDuplicates: string[];
+  /** What each subscription's next renewal invoice would charge; a renewal without one fails its preview. */
+  renewalAmounts: Map<string, number>;
+  /** The payment method Stripe would charge for each subscription. */
+  paymentMethods: Map<string, StripePaymentMethodSummary>;
   /** Every call fails as an unreachable Stripe would. */
   down: boolean;
   /** Runs once before the next call answers: what happens at Stripe meanwhile. */
@@ -83,6 +88,8 @@ export function createFakeStripeBilling(): FakeStripeBilling {
     checkoutRequests: [],
     failNextCheckout: false,
     cancelledDuplicates: [],
+    renewalAmounts: new Map(),
+    paymentMethods: new Map(),
     down: false,
     beforeNextCall: null,
   };
@@ -111,6 +118,41 @@ function checkoutSession(
     id,
     url: `https://checkout.stripe.test/c/pay/${id}`,
     expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+  };
+}
+
+const callFailed = () => Object.assign(new Error('stripe_call_failed'), { code: 'stripe_call_failed' });
+
+/** The billing page's calls (werk-flow/werkflow-planning#252), over the same subscriptions. */
+function fakeBillingPageCalls(
+  billing: FakeStripeBilling,
+  reach: <T>(answer: () => T) => Promise<T>,
+): Pick<StripeSubscriptionGateway, 'readBillingOutlook' | 'setCancelAtPeriodEnd'> {
+  return {
+    readBillingOutlook: (subscriptionId) =>
+      reach(() => {
+        const subscription = billing.subscriptions.get(subscriptionId);
+        if (!subscription) throw callFailed();
+        const renews =
+          !subscription.cancelAtPeriodEnd &&
+          !['canceled', 'incomplete_expired'].includes(subscription.status);
+        const amountCents = billing.renewalAmounts.get(subscriptionId);
+        if (renews && amountCents === undefined) throw callFailed();
+        return {
+          upcoming:
+            renews && amountCents !== undefined && subscription.currentPeriodEnd
+              ? { amountCents, dueAt: subscription.currentPeriodEnd }
+              : null,
+          paymentMethod: billing.paymentMethods.get(subscriptionId) ?? null,
+        };
+      }),
+    setCancelAtPeriodEnd: (subscriptionId, cancelAtPeriodEnd) =>
+      reach(() => {
+        const subscription = billing.subscriptions.get(subscriptionId);
+        // Stripe refuses to change a subscription that has ended.
+        if (!subscription || subscription.status === 'canceled') throw callFailed();
+        billing.subscriptions.set(subscriptionId, { ...subscription, cancelAtPeriodEnd });
+      }),
   };
 }
 
@@ -181,6 +223,7 @@ export function fakeSubscriptionCalls(billing: FakeStripeBilling): StripeSubscri
           cancellationReason: 'cancellation_requested',
         });
       }),
+    ...fakeBillingPageCalls(billing, reach),
   };
 }
 

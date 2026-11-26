@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 
+import { CreateInvoiceButton } from '@/components/rechnungen/create-invoice-button';
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
@@ -324,11 +325,17 @@ function KundenDetailHeader({
       }
       actions={
         isAdminOrManager ? (
-          <KundenDetailActionsMenu
-            isArchived={archivedAt !== null}
-            onRemove={onRemove}
-            onRestore={onRestore}
-          />
+          <div className="flex items-center gap-2">
+            {/* An archived customer takes no new invoice. */}
+            {archivedAt === null && (
+              <CreateInvoiceButton preset={{ client: { id: client.id, name: client.name }, work: null }} />
+            )}
+            <KundenDetailActionsMenu
+              isArchived={archivedAt !== null}
+              onRemove={onRemove}
+              onRestore={onRestore}
+            />
+          </div>
         ) : undefined
       }
     />

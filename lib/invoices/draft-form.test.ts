@@ -11,6 +11,8 @@ import {
 } from './draft-form';
 import type { InvoiceDetail } from './types';
 
+const ARTICLE_ID = '96000000-0000-4000-8000-000000000001';
+
 const TERMS = {
   serviceStart: '',
   serviceEnd: '',
@@ -141,6 +143,7 @@ describe('the editor parses what the office types', () => {
           unitPriceCents: 123450,
           priceQuantity: 1,
           taxRateBasisPoints: 1900,
+          source: null,
         },
       ],
     });
@@ -169,7 +172,7 @@ describe('the editor parses what the office types', () => {
     );
   });
 
-  test('a stored draft reads back into the same values', () => {
+  test('a stored draft reads back into the same values, each line with its catalog source', () => {
     const stored: InvoiceDetail = {
       id: 'i',
       invoiceNumber: null,
@@ -202,6 +205,7 @@ describe('the editor parses what the office types', () => {
           priceQuantity: 100,
           taxRateBasisPoints: 700,
           netCents: 4,
+          source: { kind: 'article', id: ARTICLE_ID, number: 'KR-15', name: 'Kupferrohr', archived: true },
         },
       ],
     };
@@ -215,6 +219,8 @@ describe('the editor parses what the office types', () => {
         unitPriceCents: 40,
         priceQuantity: 100,
         taxRateBasisPoints: 700,
+        // The save sends the kind and id only; an archived source stays on the line.
+        source: { kind: 'article', id: ARTICLE_ID },
       },
     ]);
     expect(parsed.ok && parsed.terms.discountBasisPoints).toBe(200);

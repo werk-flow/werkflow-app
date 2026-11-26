@@ -50,6 +50,8 @@ mock.module('@/lib/supabase/admin', () => ({
 mock.module('@/lib/storage/r2', () => ({
   putWerkflowBillingObject: async () => ({ created: true }),
 }));
+// The refund mail after the issue step has its own cases (werkflow-refund-mails.ts).
+mock.module('@/lib/werkflow-billing/refund-mail', () => ({ sendRefundMail: async () => {} }));
 mock.module('@/lib/werkflow-billing/mail-delivery', () => ({
   deliverCustomerBillingMail: async () => {
     throw new Error('no customer mail in the Storno cases');

@@ -3869,6 +3869,8 @@ export type Database = {
           description: string;
           id: string;
           invoice_id: string;
+          item_id: string | null;
+          leistung_id: string | null;
           name: string;
           net_cents: number;
           organization_id: string;
@@ -3884,6 +3886,8 @@ export type Database = {
           description?: string;
           id?: string;
           invoice_id: string;
+          item_id?: string | null;
+          leistung_id?: string | null;
           name: string;
           net_cents: number;
           organization_id: string;
@@ -3899,6 +3903,8 @@ export type Database = {
           description?: string;
           id?: string;
           invoice_id?: string;
+          item_id?: string | null;
+          leistung_id?: string | null;
           name?: string;
           net_cents?: number;
           organization_id?: string;
@@ -3919,65 +3925,23 @@ export type Database = {
             referencedColumns: ["id", "organization_id"];
           },
           {
+            foreignKeyName: "invoice_lines_item_fk";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoice_lines_leistung_fk";
+            columns: ["leistung_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "leistungen";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
             foreignKeyName: "invoice_lines_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      invoice_settings: {
-        Row: {
-          discount_basis_points: number | null;
-          discount_days: number | null;
-          first_issued_at: string | null;
-          next_number: number;
-          number_min_digits: number;
-          number_prefix: string;
-          number_with_year: boolean;
-          number_year: number | null;
-          organization_id: string;
-          payment_due_days: number;
-          updated_at: string;
-          updated_by: string | null;
-          version: number;
-        };
-        Insert: {
-          discount_basis_points?: number | null;
-          discount_days?: number | null;
-          first_issued_at?: string | null;
-          next_number?: number;
-          number_min_digits?: number;
-          number_prefix?: string;
-          number_with_year?: boolean;
-          number_year?: number | null;
-          organization_id: string;
-          payment_due_days?: number;
-          updated_at?: string;
-          updated_by?: string | null;
-          version?: number;
-        };
-        Update: {
-          discount_basis_points?: number | null;
-          discount_days?: number | null;
-          first_issued_at?: string | null;
-          next_number?: number;
-          number_min_digits?: number;
-          number_prefix?: string;
-          number_with_year?: boolean;
-          number_year?: number | null;
-          organization_id?: string;
-          payment_due_days?: number;
-          updated_at?: string;
-          updated_by?: string | null;
-          version?: number;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "invoice_settings_organization_id_fkey";
-            columns: ["organization_id"];
-            isOneToOne: true;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
@@ -3995,25 +3959,17 @@ export type Database = {
           gross_cents: number;
           id: string;
           invoice_number: string | null;
-          issue_date: string | null;
-          issue_snapshot: Json | null;
-          issued_at: string | null;
-          issued_by: string | null;
           job_id: string | null;
           line_net_cents: number;
-          logo_storage_path: string | null;
           opening_text: string;
           order_reference: string;
           organization_id: string;
-          original_document_id: string | null;
           payment_due_days: number;
           project_id: string | null;
           recipient_client_id: string;
           service_case_id: string | null;
           service_end: string | null;
           service_start: string | null;
-          stationery_first_storage_path: string | null;
-          stationery_following_storage_path: string | null;
           status: string;
           tax_cents: number;
           updated_at: string;
@@ -4031,25 +3987,17 @@ export type Database = {
           gross_cents?: number;
           id?: string;
           invoice_number?: string | null;
-          issue_date?: string | null;
-          issue_snapshot?: Json | null;
-          issued_at?: string | null;
-          issued_by?: string | null;
           job_id?: string | null;
           line_net_cents?: number;
-          logo_storage_path?: string | null;
           opening_text?: string;
           order_reference?: string;
           organization_id: string;
-          original_document_id?: string | null;
           payment_due_days?: number;
           project_id?: string | null;
           recipient_client_id: string;
           service_case_id?: string | null;
           service_end?: string | null;
           service_start?: string | null;
-          stationery_first_storage_path?: string | null;
-          stationery_following_storage_path?: string | null;
           status?: string;
           tax_cents?: number;
           updated_at?: string;
@@ -4067,25 +4015,17 @@ export type Database = {
           gross_cents?: number;
           id?: string;
           invoice_number?: string | null;
-          issue_date?: string | null;
-          issue_snapshot?: Json | null;
-          issued_at?: string | null;
-          issued_by?: string | null;
           job_id?: string | null;
           line_net_cents?: number;
-          logo_storage_path?: string | null;
           opening_text?: string;
           order_reference?: string;
           organization_id?: string;
-          original_document_id?: string | null;
           payment_due_days?: number;
           project_id?: string | null;
           recipient_client_id?: string;
           service_case_id?: string | null;
           service_end?: string | null;
           service_start?: string | null;
-          stationery_first_storage_path?: string | null;
-          stationery_following_storage_path?: string | null;
           status?: string;
           tax_cents?: number;
           updated_at?: string;
@@ -4113,20 +4053,6 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "invoices_original_fk";
-            columns: ["original_document_id", "organization_id"];
-            isOneToOne: false;
-            referencedRelation: "documents";
-            referencedColumns: ["id", "organization_id"];
-          },
-          {
-            foreignKeyName: "invoices_original_fk";
-            columns: ["original_document_id", "organization_id"];
-            isOneToOne: false;
-            referencedRelation: "ordinary_documents";
-            referencedColumns: ["id", "organization_id"];
           },
           {
             foreignKeyName: "invoices_project_fk";
@@ -13367,6 +13293,32 @@ export type Database = {
           },
         ];
       };
+      werkflow_billing_page_signals: {
+        Row: {
+          id: string;
+          organization_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "werkflow_billing_page_signals_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: true;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       werkflow_billing_reconciliations: {
         Row: {
           alarms_raised: number;
@@ -13442,6 +13394,7 @@ export type Database = {
           id: string;
           issue_date: string;
           issued_at: string;
+          line_names: string[];
           net_cents: number;
           number: string;
           organization_id: string;
@@ -13449,6 +13402,8 @@ export type Database = {
           payment_means: string;
           retain_until: string;
           rules_release: string;
+          service_end: string | null;
+          service_start: string | null;
           storno_of_invoice_id: string | null;
           stripe_credit_note_id: string | null;
           stripe_customer_id: string;
@@ -13468,6 +13423,7 @@ export type Database = {
           id?: string;
           issue_date: string;
           issued_at?: string;
+          line_names?: string[];
           net_cents: number;
           number: string;
           organization_id: string;
@@ -13475,6 +13431,8 @@ export type Database = {
           payment_means: string;
           retain_until?: string;
           rules_release: string;
+          service_end?: string | null;
+          service_start?: string | null;
           storno_of_invoice_id?: string | null;
           stripe_credit_note_id?: string | null;
           stripe_customer_id: string;
@@ -13494,6 +13452,7 @@ export type Database = {
           id?: string;
           issue_date?: string;
           issued_at?: string;
+          line_names?: string[];
           net_cents?: number;
           number?: string;
           organization_id?: string;
@@ -13501,6 +13460,8 @@ export type Database = {
           payment_means?: string;
           retain_until?: string;
           rules_release?: string;
+          service_end?: string | null;
+          service_start?: string | null;
           storno_of_invoice_id?: string | null;
           stripe_credit_note_id?: string | null;
           stripe_customer_id?: string;
@@ -18947,8 +18908,8 @@ export type Database = {
         Args: { p_invoice_id: string; p_organization_id: string };
         Returns: Json;
       };
-      get_invoice_settings: {
-        Args: { p_organization_id: string };
+      get_invoice_with_line_sources: {
+        Args: { p_invoice_id: string; p_organization_id: string };
         Returns: Json;
       };
       get_offer: {
@@ -19066,24 +19027,6 @@ export type Database = {
         };
         Returns: string;
       };
-      issue_invoice: {
-        Args: {
-          p_actor_id: string;
-          p_attempt_key: string;
-          p_expected_issue_date: string;
-          p_expected_number: string;
-          p_expected_version: number;
-          p_invoice_id: string;
-          p_organization_id: string;
-          p_original_content_hash?: string;
-          p_original_document_id?: string;
-          p_original_file_name?: string;
-          p_original_size_bytes?: number;
-          p_original_storage_path?: string;
-          p_snapshot: Json;
-        };
-        Returns: Json;
-      };
       issue_planning_dispatch: {
         Args: {
           p_actor_id: string;
@@ -19107,12 +19050,15 @@ export type Database = {
           p_file_size_bytes: number;
           p_gross_cents: number;
           p_issue_date: string;
+          p_line_names?: string[];
           p_net_cents: number;
           p_number: string;
           p_organization_id: string;
           p_paid_cents: number;
           p_payment_means: string;
           p_rules_release: string;
+          p_service_end?: string;
+          p_service_start?: string;
           p_stripe_customer_id: string;
           p_stripe_event_id: string;
           p_stripe_invoice_id: string;
@@ -20317,6 +20263,10 @@ export type Database = {
         };
         Returns: boolean;
       };
+      record_werkflow_billing_mail_attempt: {
+        Args: { p_mail_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
       record_werkflow_subscription_state: {
         Args: {
           p_cancel_at_period_end: boolean;
@@ -20388,19 +20338,6 @@ export type Database = {
           org_id: string;
           org_name: string;
         }[];
-      };
-      register_invoice_original: {
-        Args: {
-          p_actor_id: string;
-          p_content_hash: string;
-          p_document_id: string;
-          p_file_name: string;
-          p_invoice_id: string;
-          p_organization_id: string;
-          p_size_bytes: number;
-          p_storage_path: string;
-        };
-        Returns: Json;
       };
       register_maintenance_service_report: {
         Args: {
@@ -21226,15 +21163,6 @@ export type Database = {
         };
         Returns: number;
       };
-      save_invoice_settings: {
-        Args: {
-          p_actor_id: string;
-          p_expected_version: number;
-          p_organization_id: string;
-          p_settings: Json;
-        };
-        Returns: number;
-      };
       save_personnel_onboarding_requirement: {
         Args: {
           p_actor_id: string;
@@ -21347,6 +21275,14 @@ export type Database = {
         Returns: Json;
       };
       search_inventory_item_options: {
+        Args: {
+          p_offset?: number;
+          p_organization_id: string;
+          p_search?: string;
+        };
+        Returns: Json;
+      };
+      search_leistung_options: {
         Args: {
           p_offset?: number;
           p_organization_id: string;
@@ -22961,6 +22897,24 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      update_offer: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_closing_text: string;
+          p_contact_id: string;
+          p_expected_version: number;
+          p_offer_id: string;
+          p_opening_text: string;
+          p_organization_id: string;
+          p_owner_user_id: string;
+          p_recipient_client_id: string;
+          p_site_id: string;
+          p_title: string;
+          p_valid_until: string;
+        };
+        Returns: Json;
       };
       update_planning_occurrence: {
         Args: {

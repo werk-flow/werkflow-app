@@ -29,7 +29,7 @@ beforeEach(() => {
   stub = mkdtempSync(join(tmpdir(), 'release-gate-'));
   // The gate and its helpers beside a configuration naming APP: check-app.sh reads the file next to itself.
   mkdirSync(join(stub, 'scripts'));
-  for (const name of ['check-app.sh', 'curl-headers.sh', 'release-candidate.sh'])
+  for (const name of ['check-app.sh', 'curl-headers.sh', 'full-run-verdict.sh', 'release-candidate.sh'])
     copyFileSync(join(repositoryRoot, '.github/scripts', name), join(stub, 'scripts', name));
   writeFileSync(join(stub, 'scripts', 'check-app.json'), `{"appId": ${APP}}`);
   writeFileSync(join(stub, 'curl'), GITHUB_CURL_STUB);

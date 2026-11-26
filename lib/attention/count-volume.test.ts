@@ -555,7 +555,11 @@ function rpc(name: string, args: unknown) {
     const requests = openRequests(field(args, 'p_organization_id'));
     const accessProposals = openProposals(field(args, 'p_organization_id'));
     reads.push({ table: `rpc ${name}`, rows: requests.length + accessProposals.length });
-    return Promise.resolve({ data: { requests, access_proposals: accessProposals }, error: null });
+    // The overdue job set stays empty here; supabase/tests/attention_pending_sets.sql proves it.
+    return Promise.resolve({
+      data: { requests, access_proposals: accessProposals, overdue_jobs: [] },
+      error: null,
+    });
   }
   if (name === 'read_open_absences') {
     const today = String(field(args, 'p_today'));

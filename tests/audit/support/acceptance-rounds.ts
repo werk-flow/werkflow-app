@@ -5,7 +5,7 @@ import {
   type StandaloneRoute,
 } from '../../../lib/testing/selection/standalone-route-inventory';
 import { SURFACE_GROUPS, surfaceTargets } from '../../../lib/testing/selection/surface-groups';
-import type { CaptureState } from './acceptance-state-plan';
+import { stateCaptureId, type CaptureState } from './acceptance-state-plan';
 
 /**
  * The capture types of rendered acceptance (docs/technical/standards-audit.md,
@@ -20,7 +20,12 @@ import type { CaptureState } from './acceptance-state-plan';
 type CaptureView =
   | { kind: 'page' }
   | { kind: 'tab'; value: string }
-  | { kind: 'dialog'; opener: DialogOpenerId };
+  | {
+      kind: 'dialog';
+      opener: DialogOpenerId;
+      /** It opens only over a region the test world cannot load, so its capture is the `error` state. */
+      overFailedPage?: true;
+    };
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -64,6 +69,14 @@ export function slug(route: string): string {
 }
 
 /**
+ * The dialogs that open only over a failed region: the served test app holds
+ * no Stripe key, and the cancel confirmation needs a running subscription,
+ * whose „Nächste Zahlung“ then fails with its retry. Their capture is the
+ * `error` state, which proves that failure behind the dialog.
+ */
+const OVER_FAILED_PAGE: ReadonlySet<DialogOpenerId> = new Set<DialogOpenerId>(['settings.billing-cancel']);
+
+/**
  * Every page, tab and dialog of the inventories at the phone and the laptop
  * width in both themes: the before and after pairs of the rendered package.
  */
@@ -83,15 +96,18 @@ export function inventoryCaptures(): CaptureSpec[] {
             ...both,
           }),
         ),
-        ...target.dialogs.map(
-          (dialog): CaptureSpec => ({
-            id: `${base}-dialog-${dialog.opener.replace('.', '-')}`,
-            role: target.role,
-            route: target.route,
-            view: { kind: 'dialog', opener: dialog.opener },
-            ...both,
-          }),
-        ),
+        ...target.dialogs.map((dialog): CaptureSpec => {
+          const id = `${base}-dialog-${dialog.opener.replace('.', '-')}`;
+          const view = { kind: 'dialog', opener: dialog.opener } as const;
+          const shared = { role: target.role, route: target.route, ...both };
+          if (!OVER_FAILED_PAGE.has(dialog.opener)) return { id, view, ...shared };
+          return {
+            id: stateCaptureId(id, 'error'),
+            view: { ...view, overFailedPage: true },
+            state: 'error',
+            ...shared,
+          };
+        }),
       ];
     }),
   );

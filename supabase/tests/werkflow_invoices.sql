@@ -8,7 +8,8 @@
 -- the organization keeps it. A refund's Storno (#491) cancels one document
 -- once, names it, negates its amounts and takes the organization, Stripe ids
 -- and buyer from it; a replacement for the part that stays lies between
--- nothing and the cancelled amount and is paid in full.
+-- nothing and the cancelled amount and is paid in full. Each original names
+-- its lines and service period.
 begin;
 
 insert into auth.users (
@@ -40,7 +41,8 @@ language sql as $$
   select public.issue_werkflow_invoice(
     p_organization, p_invoice, 'cus_test_0001', 'evt_test_0001', p_number, date '2037-11-15',
     '{"name":"Haustechnik Sonnenberg GmbH"}'::jsonb, 'direct-debit', 49900, 0, 49900, 0, 49900,
-    'werkflow-billing/invoices/' || p_invoice || '/' || repeat('a', 64) || '.pdf', repeat('a', 64), 1024, '1.3.17'
+    'werkflow-billing/invoices/' || p_invoice || '/' || repeat('a', 64) || '.pdf', repeat('a', 64), 1024, '1.3.17',
+    array['WerkFlow-Abo'], date '2037-11-15', date '2037-12-14'
   );
 $$;
 
@@ -77,6 +79,33 @@ begin
   perform pg_temp.expect_refusal('a second invoice with the same number',
     $sql$select pg_temp.issue('24900000-0000-0000-0000-000000000010', 'in_test_0003', 'MUSTER-0001')$sql$,
     'werkflow_invoices_number_key');
+  -- The row says what the invoice was for (werk-flow/werkflow-planning#252).
+  if not exists (select 1 from public.werkflow_invoices
+      where stripe_invoice_id = 'in_test_0001' and line_names = array['WerkFlow-Abo']
+        and service_start = date '2037-11-15' and service_end = date '2037-12-14') then
+    raise exception 'the issued row lost its line names or service period';
+  end if;
+  -- A call of the previous build, without the three newer arguments, still issues.
+  if public.issue_werkflow_invoice(
+    '24900000-0000-0000-0000-000000000010', 'in_test_0004', 'cus_test_0001', 'evt_test_0001', 'MUSTER-0004',
+    date '2037-11-15', '{"name":"Haustechnik Sonnenberg GmbH"}'::jsonb, 'card', 49900, 0, 49900, 49900, 0,
+    'werkflow-billing/invoices/in_test_0004/' || repeat('b', 64) || '.pdf', repeat('b', 64), 1024, '1.3.17'
+  ) is distinct from 'issued' then
+    raise exception 'a call without line names or service period was not issued';
+  end if;
+  -- A statement of its own: the call's statement cannot see the row the call inserted.
+  if not exists (select 1 from public.werkflow_invoices
+      where stripe_invoice_id = 'in_test_0004' and cardinality(line_names) = 0
+        and service_start is null and service_end is null) then
+    raise exception 'a call without line names or service period was not recorded with empty ones';
+  end if;
+  perform pg_temp.expect_refusal('a service period that ends before it starts',
+    $sql$select public.issue_werkflow_invoice(
+      '24900000-0000-0000-0000-000000000010', 'in_test_0005', 'cus_test_0001', 'evt_test_0001', 'MUSTER-0005',
+      date '2037-11-15', '{}'::jsonb, 'card', 1, 0, 1, 0, 1,
+      'werkflow-billing/invoices/in_test_0005/' || repeat('c', 64) || '.pdf', repeat('c', 64), 1, '1.3.17',
+      array['WerkFlow-Abo'], date '2037-12-14', date '2037-11-15')$sql$,
+    'werkflow_invoices_service_period_check');
   perform pg_temp.expect_refusal('a service-role update',
     'update public.werkflow_invoices set gross_cents = 1', 'permission denied');
   perform pg_temp.expect_refusal('a service-role delete',
@@ -207,7 +236,7 @@ end;
 $$;
 do $$
 begin
-  if pg_temp.visible_invoices('24900000-0000-0000-0000-000000000001') is distinct from 4
+  if pg_temp.visible_invoices('24900000-0000-0000-0000-000000000001') is distinct from 5
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000002') is distinct from 0
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000003') is distinct from 0
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000004') is distinct from 0 then
@@ -216,10 +245,10 @@ begin
   if has_table_privilege('authenticated', 'public.werkflow_invoices', 'INSERT,UPDATE,DELETE')
     or has_table_privilege('anon', 'public.werkflow_invoices', 'SELECT,INSERT,UPDATE,DELETE')
     or has_function_privilege('authenticated',
-      'public.issue_werkflow_invoice(uuid, text, text, text, text, date, jsonb, text, bigint, bigint, bigint, bigint, bigint, text, text, integer, text)',
+      'public.issue_werkflow_invoice(uuid, text, text, text, text, date, jsonb, text, bigint, bigint, bigint, bigint, bigint, text, text, integer, text, text[], date, date)',
       'execute')
     or has_function_privilege('anon',
-      'public.issue_werkflow_invoice(uuid, text, text, text, text, date, jsonb, text, bigint, bigint, bigint, bigint, bigint, text, text, integer, text)',
+      'public.issue_werkflow_invoice(uuid, text, text, text, text, date, jsonb, text, bigint, bigint, bigint, bigint, bigint, text, text, integer, text, text[], date, date)',
       'execute')
     or has_function_privilege('authenticated', 'public.issue_werkflow_storno(uuid, uuid, text, text, jsonb, jsonb)', 'execute')
     or has_function_privilege('anon', 'public.issue_werkflow_storno(uuid, uuid, text, text, jsonb, jsonb)', 'execute') then
@@ -240,7 +269,7 @@ begin
     raise exception 'the organization was not deleted';
   end if;
   if (select count(*) from public.werkflow_invoices
-      where organization_id = '24900000-0000-0000-0000-000000000010') is distinct from 4 then
+      where organization_id = '24900000-0000-0000-0000-000000000010') is distinct from 5 then
     raise exception 'deleting the organization removed one of its WerkFlow invoices';
   end if;
 end;

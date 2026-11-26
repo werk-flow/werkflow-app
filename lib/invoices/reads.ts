@@ -8,6 +8,7 @@ import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { issueSnapshotSchema, type IssueSnapshot } from './issue-model';
+import { invoiceLineSourceSchema } from './line-sources';
 import type { InvoiceListQuery, InvoicePage } from './list-page';
 import {
   INVOICE_STATUSES,
@@ -98,7 +99,17 @@ const invoiceSchema = z.object({
     .object({ kind: invoiceWorkKindSchema, id: uuidSchema, number: z.string().nullable(), title: z.string() })
     .nullable(),
   lines: z.array(lineSchema).max(500),
+  // In line order: the Leistung or article each line came from, or null.
+  lineSources: z.array(invoiceLineSourceSchema.nullable()).max(500),
 });
+
+/** The invoice with each line's catalog source beside the line's values. */
+const invoiceWithLineSourcesSchema = invoiceSchema
+  .refine((invoice) => invoice.lineSources.length === invoice.lines.length)
+  .transform(({ lineSources, lines, ...invoice }) => ({
+    ...invoice,
+    lines: lines.map((line, index) => ({ ...line, source: lineSources[index] ?? null })),
+  }));
 
 type WorkRow = { kind: InvoiceWorkKind; id: string; number: string | null };
 
@@ -113,20 +124,22 @@ function workHref(work: WorkRow): string {
 type IssueFacts = { invoiceNumber: string; issueDate: string; snapshot: IssueSnapshot };
 
 /**
- * One invoice of the organization with its lines and, once issued, its issue
- * facts; `null` when there is none. Only the server reads the snapshot.
+ * One invoice of the organization with its lines, each line's catalog source
+ * and, once issued, its issue facts; `null` when there is none. Only the server
+ * reads the snapshot. get_invoice_with_line_sources returns get_invoice's
+ * answer, issue fields included, with the line sources added.
  */
 export async function readIssuedInvoice(
   organizationId: string,
   invoiceId: string,
 ): Promise<(InvoiceDetail & { issue: IssueFacts | null }) | null> {
-  const selected = await createSupabaseAdminClient().rpc('get_invoice', {
+  const selected = await createSupabaseAdminClient().rpc('get_invoice_with_line_sources', {
     p_organization_id: organizationId,
     p_invoice_id: invoiceId,
   });
   if (selected.error) throw new Error('invoice_read_failed');
   if (selected.data === null) return null;
-  const parsed = invoiceSchema.safeParse(selected.data);
+  const parsed = invoiceWithLineSourcesSchema.safeParse(selected.data);
   if (!parsed.success) throw new Error('invoice_read_failed');
   const { work, issueSnapshot, ...invoice } = parsed.data;
   let issue: IssueFacts | null = null;

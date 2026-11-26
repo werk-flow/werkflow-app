@@ -13,6 +13,7 @@ import { formatEuroCents, formatTaxRate } from '@/lib/document-rendering/format'
 import { INVENTORY_UNITS, OFFERED_INVENTORY_UNITS } from '@/lib/inventory/units';
 import { lineFieldId, type DraftLineForm } from '@/lib/invoices/draft-form';
 import { INVOICE_TAX_RATES } from '@/lib/invoices/types';
+import { InvoiceLineSourceNote } from './invoice-catalog-line';
 
 type LineProps = {
   index: number;
@@ -143,6 +144,7 @@ function InvoiceLineFields({
           </Button>
         )}
       </div>
+      {line.source && <InvoiceLineSourceNote source={line.source} />}
       <LineAmountFields
         index={index}
         line={line}

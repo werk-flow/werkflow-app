@@ -59,7 +59,9 @@ type ExcludedTable =
   | 'werkflow_invoices'
   // WerkFlow's own billing state of the organization (Stripe ids and status),
   // the contract's record, not the organization's work.
-  | 'werkflow_subscriptions';
+  | 'werkflow_subscriptions'
+  // A timestamp that tells the Admin's open billing page to read again.
+  | 'werkflow_billing_page_signals';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
