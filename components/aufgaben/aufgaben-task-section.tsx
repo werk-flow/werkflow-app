@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import {
   AlarmClock,
   CalendarClock,
+  CalendarCog,
   CalendarX,
   ClipboardCheck,
   PhoneCall,
@@ -15,7 +16,6 @@ import {
   Send,
   TriangleAlert,
   UserPlus,
-  Wrench,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -60,7 +60,8 @@ export const SECTION_PRESENTATION: Record<
     previewRows: BACKLOG_PREVIEW_ROWS,
   },
   dueMaintenance: {
-    icon: <Wrench className="size-4" />,
+    // Not the shell's Wrench: sharing it with these routes splits a shell chunk (lab.office.cold-start).
+    icon: <CalendarCog className="size-4" />,
     title: 'Fällige Wartungen',
     testId: 'attention-due-maintenance-tasks',
     previewRows: BACKLOG_PREVIEW_ROWS,
