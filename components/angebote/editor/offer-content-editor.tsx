@@ -171,14 +171,21 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
         disabled={pending}
       />
       <InvoiceTotals amounts={amounts} />
-      <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
-        <ErrorText>{error}</ErrorText>
-        <Button type="submit" pending={pending}>
-          <Save className="size-4" />
-          Speichern
-        </Button>
-      </div>
+      <SaveRow error={error} pending={pending} />
     </form>
+  );
+}
+
+/** The save's failure sentence beside „Speichern“. */
+function SaveRow({ error, pending }: { error: string | null; pending: boolean }) {
+  return (
+    <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+      <ErrorText>{error}</ErrorText>
+      <Button type="submit" pending={pending}>
+        <Save className="size-4" />
+        Speichern
+      </Button>
+    </div>
   );
 }
 
