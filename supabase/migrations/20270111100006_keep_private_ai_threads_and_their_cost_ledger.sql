@@ -448,15 +448,17 @@ end;
 $$;
 
 -- The admin's switch. Only an admin with effective access sets it. Returns
--- the row's id and write stamp, which name the save's Realtime echo, and the
--- revision the card waits for.
+-- the saved row: its id and write stamp name the save's Realtime echo, and
+-- its revision is what the card waits for.
 create function public.set_ai_organization_enabled(
   p_organization_id uuid,
   p_actor_id uuid,
   p_enabled boolean
 )
-returns table (id uuid, enabled boolean, updated_at timestamptz, revision bigint)
+returns public.ai_organization_settings
 language plpgsql security definer set search_path = '' as $$
+declare
+  v_settings public.ai_organization_settings;
 begin
   if p_enabled is null then raise exception 'ai_setting_invalid'; end if;
   if not exists (
@@ -467,13 +469,14 @@ begin
     raise exception 'ai_setting_not_admin';
   end if;
 
-  return query
-    insert into public.ai_organization_settings as settings (organization_id, enabled, updated_by, updated_at)
-    values (p_organization_id, p_enabled, p_actor_id, now())
-    on conflict (organization_id) do update
-      set enabled = excluded.enabled, updated_by = excluded.updated_by, updated_at = excluded.updated_at,
-        revision = settings.revision + 1
-    returning settings.id, settings.enabled, settings.updated_at, settings.revision;
+  -- One row, not a set (lib/conventions/unpaged-reads.test.ts).
+  insert into public.ai_organization_settings as settings (organization_id, enabled, updated_by, updated_at)
+  values (p_organization_id, p_enabled, p_actor_id, now())
+  on conflict (organization_id) do update
+    set enabled = excluded.enabled, updated_by = excluded.updated_by, updated_at = excluded.updated_at,
+      revision = settings.revision + 1
+  returning * into v_settings;
+  return v_settings;
 end;
 $$;
 

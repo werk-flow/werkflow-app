@@ -17,14 +17,12 @@ const world = installActionWorld({});
 world.rpc = ({ name, args }) => {
   assert.equal(name, 'set_ai_organization_enabled');
   return {
-    data: [
-      {
-        id: 'switch-row',
-        enabled: args.p_enabled,
-        updated_at: '2026-11-23T10:00:00.000000+00:00',
-        revision: 3,
-      },
-    ],
+    data: {
+      id: 'switch-row',
+      enabled: args.p_enabled,
+      updated_at: '2026-11-23T10:00:00.000000+00:00',
+      revision: 3,
+    },
     error: null,
   };
 };

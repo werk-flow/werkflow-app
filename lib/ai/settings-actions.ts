@@ -47,15 +47,13 @@ export async function setAiEnabled(input: {
     logError('setAiEnabled: switch write failed', error);
     return { success: false, error: 'update_failed' };
   }
-  const saved = data[0];
-  if (!saved) return { success: false, error: 'update_failed' };
   // The response renders the settings page, so the card's props carry the saved switch.
   revalidatePath('/einstellungen/organisation');
   return {
     success: true,
-    enabled: saved.enabled,
-    id: saved.id,
-    updatedAt: saved.updated_at,
-    revision: saved.revision,
+    enabled: data.enabled,
+    id: data.id,
+    updatedAt: data.updated_at,
+    revision: data.revision,
   };
 }

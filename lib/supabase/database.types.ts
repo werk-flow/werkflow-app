@@ -21663,9 +21663,18 @@ export type Database = {
         Returns: {
           enabled: boolean;
           id: string;
+          monthly_budget_micro_eur: number;
+          organization_id: string;
           revision: number;
           updated_at: string;
-        }[];
+          updated_by: string | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "ai_organization_settings";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       set_apprentice_warning_enabled: {
         Args: {
