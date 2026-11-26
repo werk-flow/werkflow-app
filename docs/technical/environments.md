@@ -104,10 +104,10 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
 | claude.ai Supabase connector | no | no | Organization-wide: the MCP hook refuses it here, `deniedMcpServers` in `~/.claude/settings.json` elsewhere. |
-| MCP server `supabase` | never | read only | `scripts/mcp/supabase-dev.ts` on the machine's [agent token](machine-setup.md#agent-keys), set up in [machine setup](machine-setup.md#set-up-a-new-machine), step 4. A write fails with SQLSTATE 25006. |
-| Supabase CLI (`bunx supabase`) | never link or push | read only | The repository links to the DEV ref only. `types:check` hands it the agent token. DEV's migrations and edge functions arrive through `staging.yml` only. |
+| MCP server `supabase` | never | read only | `scripts/mcp/supabase-dev.ts` on the [agent token](machine-setup.md#agent-keys) ([step 4](machine-setup.md#set-up-a-new-machine)). |
+| Supabase CLI (`bunx supabase`) | never link or push | read only | The repository links to the DEV ref only. Migrations and edge functions reach DEV through `staging.yml`. |
 | PROD inspection (`prod-inspect.yml`) | structure only | compared | Paused while GitHub Actions is off. |
-| Management API | through the PROD inspection only | read only | DEV configuration and the `*:check` scripts, through `lib/security/dev-management-api.ts`; SQL through the read-only endpoint. |
+| Management API | through the PROD inspection only | read only | The `*:check` scripts, through `lib/security/dev-management-api.ts`. |
 | R2 tokens | prod bucket only | dev bucket only | Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
 | Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP cannot reach it. |
 | Vercel MCP connector | metadata and counts only | yes | Deployment state, aliases and `vercel.request.count` counts by route, status, error code, deployment or Server Action. The MCP hook refuses a decrypted environment value. |
