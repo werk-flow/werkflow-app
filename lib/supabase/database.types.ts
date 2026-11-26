@@ -42,6 +42,7 @@ export type Database = {
       ai_organization_settings: {
         Row: {
           enabled: boolean;
+          id: string;
           monthly_budget_micro_eur: number;
           organization_id: string;
           updated_at: string;
@@ -49,6 +50,7 @@ export type Database = {
         };
         Insert: {
           enabled?: boolean;
+          id?: string;
           monthly_budget_micro_eur?: number;
           organization_id: string;
           updated_at?: string;
@@ -56,6 +58,7 @@ export type Database = {
         };
         Update: {
           enabled?: boolean;
+          id?: string;
           monthly_budget_micro_eur?: number;
           organization_id?: string;
           updated_at?: string;
@@ -21654,7 +21657,11 @@ export type Database = {
           p_enabled: boolean;
           p_organization_id: string;
         };
-        Returns: boolean;
+        Returns: {
+          enabled: boolean;
+          id: string;
+          updated_at: string;
+        }[];
       };
       set_apprentice_warning_enabled: {
         Args: {

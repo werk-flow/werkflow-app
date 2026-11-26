@@ -1,4 +1,4 @@
--- WerkFlow KI storage (migration 20270110100000, werk-flow/werkflow-planning#527):
+-- WerkFlow KI storage (migration 20270111100006, werk-flow/werkflow-planning#527):
 -- client roles reach no function and write no table; items take the thread's
 -- next sequence once per idempotency key; a reservation refuses when the
 -- organization is off, over its budget or undecidable; the daily job deletes
