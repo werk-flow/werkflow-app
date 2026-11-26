@@ -72,8 +72,7 @@ function declaredTiming(files: readonly string[]): GroupTimingRequirements {
   };
 }
 
-// Ownership, not proof of isolation: a changed file selects its scope's browser groups, an unowned one the
-// core set (group-selection.ts); "/" owns a directory, else one file; test-scope-prefixes.test.ts checks.
+// Ownership, not isolation: a changed file selects its scope's groups (group-selection.ts); "/" owns a folder.
 export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   customers: [
     'lib/clients/',
@@ -445,6 +444,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['leistung-prices', ['leistung_prices.sql'], ['commercial']],
   ['offers', ['offers.sql', 'offers_concurrency.sql'], ['commercial', 'customers']],
   ['invoice-drafts', ['invoice_drafts.sql', 'invoice_line_sources.sql'], ['commercial', 'customers']],
+  ['invoice-issue', ['invoice_issue.sql', 'invoice_issue_concurrency.sql'], ['commercial', 'documents']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],

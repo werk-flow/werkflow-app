@@ -25,6 +25,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no bytes; renders a fixed sample with the organization name and no stored record; private no-store responses',
     mustCall: ['resolveActionContext', 'getCachedMemberships', 'renderBusinessDocument'],
   },
+  'app/api/rechnungen/vorschau/route.ts': {
+    authorization:
+      "verified cookie identity and the active organization; Admin or Büro only, an employee and a signed-out caller get no PDF; reads only a draft of the caller's organization, renders it marked „Entwurf“ without e-invoice XML and stores nothing; private no-store responses",
+    mustCall: ['withReadRequest', 'resolveManagerContext', 'readInvoice', 'renderInvoicePdf'],
+  },
   'app/api/musterrechnung/route.ts': {
     authorization:
       'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no PDF; builds a fixed sample with the organization profile and letterhead and no stored record, sends the ZUGFeRD PDF only when the EN 16931 rules pass its XML; private no-store responses',
@@ -62,6 +67,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
     authorization:
       'delegates to getAttentionCounts, which authenticates the cookie session, resolves the active organization, and checks membership',
     mustCall: ['getAttentionCounts'],
+  },
+  'app/api/ki/threads/[threadId]/turns/route.ts': {
+    authorization:
+      'same-origin JSON guard; verified cookie identity and current membership of the organization the body names; the release gate, the per-person turn limits, the thread author check and the budget reservation in the database functions before any model step; private no-store responses',
+    mustCall: ['verifySameOriginJsonRequest', 'resolveActionContextFor', 'startAiTurn'],
   },
   'app/api/redeem-invite/route.ts': {
     authorization:

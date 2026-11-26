@@ -23,6 +23,7 @@ test('Admin and Büro see the organization settings, with the personal table vie
     'Dashboard',
     'Organisation',
     'Dokumente & Briefpapier',
+    'Rechnungen',
     'Kalender',
     'Zeiterfassung',
     'Mitarbeiter',

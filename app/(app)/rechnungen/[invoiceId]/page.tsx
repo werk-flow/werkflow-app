@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { InvoiceEditor } from '@/components/rechnungen/invoice-editor';
 import { DeleteInvoiceDraftButton, InvoiceFacts } from '@/components/rechnungen/invoice-header';
+import { IssuedInvoiceOriginal } from '@/components/rechnungen/invoice-issue';
 import { InvoiceStatusBadge } from '@/components/rechnungen/invoices-list';
 import { InvoicePageSkeleton } from '@/components/rechnungen/invoices-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
@@ -50,7 +51,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
       ) : (
         <>
           <PageHeader
-            title={invoice.invoiceNumber ?? 'Rechnungsentwurf'}
+            title={invoice.invoiceNumber ? `Rechnung ${invoice.invoiceNumber}` : 'Rechnungsentwurf'}
             badges={<InvoiceStatusBadge status={invoice.status} />}
             breadcrumbs={BREADCRUMBS}
             actions={
@@ -59,8 +60,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
           />
           <PageBody>
             <div className="space-y-8">
+              {invoice.status !== 'entwurf' && <IssuedInvoiceOriginal invoice={invoice} />}
               <InvoiceFacts invoice={invoice} />
-              <InvoiceEditor key={invoice.id} invoice={invoice} />
+              <InvoiceEditor invoice={invoice} />
             </div>
           </PageBody>
         </>

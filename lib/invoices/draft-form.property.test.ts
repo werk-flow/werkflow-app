@@ -42,6 +42,8 @@ const detailArbitrary: fc.Arbitrary<InvoiceDetail> = fc
     invoiceNumber: null,
     status: 'entwurf',
     version: 1,
+    issueDate: null,
+    original: null,
     client: { id: '00000000-0000-4000-8000-000000000002', name: 'Kunde' },
     recipient: { id: '00000000-0000-4000-8000-000000000002', name: 'Kunde', address: null },
     work: null,

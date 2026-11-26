@@ -1,4 +1,5 @@
 import { centsToEuroInput, parseEuroCents } from '@/lib/price-catalog/money';
+import { parseWholeNumberInput } from '@/lib/ui/decimal';
 import type { InvoiceDraftLine, InvoiceLineSource } from './line-sources';
 import type { InvoiceDetail, InvoiceLineValues, InvoiceTaxRate, InvoiceTerms } from './types';
 
@@ -60,22 +61,19 @@ function parseQuantity(text: string): string | null {
 }
 
 /** „2“ or „2,5“ percent → basis points; null for anything else. */
-function parsePercentBasisPoints(text: string): number | null {
+export function parsePercentBasisPoints(text: string): number | null {
   const match = /^(\d{1,2})(?:[.,](\d{1,2}))?$/.exec(text.trim());
   if (!match) return null;
   const basisPoints = Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
   return basisPoints >= 1 && basisPoints <= 9999 ? basisPoints : null;
 }
 
-function parseDays(text: string, min: number): number | null {
-  const trimmed = text.trim();
-  if (!/^\d{1,3}$/.test(trimmed)) return null;
-  const days = Number(trimmed);
-  return days >= min && days <= 365 ? days : null;
+export function parseDays(text: string, min: number): number | null {
+  return parseWholeNumberInput(text, min, 365);
 }
 
 /** „4,5“ from 450 basis points. */
-function percentInput(basisPoints: number | null): string {
+export function percentInput(basisPoints: number | null): string {
   if (basisPoints === null) return '';
   const fraction = String(basisPoints % 100)
     .padStart(2, '0')
@@ -84,7 +82,7 @@ function percentInput(basisPoints: number | null): string {
 }
 
 /** „1,5“ from the stored „1.500“. */
-function quantityInput(quantity: string): string {
+export function quantityInput(quantity: string): string {
   const trimmed = quantity.includes('.') ? quantity.replace(/0+$/, '').replace(/\.$/, '') : quantity;
   return trimmed.replace('.', ',');
 }
@@ -163,19 +161,24 @@ function parseTerms(form: DraftForm, errors: Record<string, string>): InvoiceTer
   };
 }
 
-function parseLine(
+/**
+ * A priced line typed by hand, as invoice and offer editors read it: name,
+ * quantity and net price are required. `fieldId` names each field's control,
+ * so the editor marks it; null while a field cannot be read.
+ */
+export function parsePricedLine(
   line: DraftLineForm,
-  index: number,
+  fieldId: (field: 'name' | 'quantity' | 'price') => string,
   errors: Record<string, string>,
-): InvoiceDraftLine | null {
+): InvoiceLineValues | null {
   const quantity = parseQuantity(line.quantity);
   const unitPriceCents = parseEuroCents(line.price);
-  if (!line.name.trim()) errors[lineFieldId(index, 'name')] = 'Gib der Position eine Bezeichnung.';
+  if (!line.name.trim()) errors[fieldId('name')] = 'Gib der Position eine Bezeichnung.';
   if (quantity === null) {
-    errors[lineFieldId(index, 'quantity')] = 'Gib die Menge an, höchstens drei Nachkommastellen.';
+    errors[fieldId('quantity')] = 'Gib die Menge an, höchstens drei Nachkommastellen.';
   }
   if (unitPriceCents === null || unitPriceCents === undefined) {
-    errors[lineFieldId(index, 'price')] = 'Gib den Netto-Einzelpreis an, zum Beispiel 72,50.';
+    errors[fieldId('price')] = 'Gib den Netto-Einzelpreis an, zum Beispiel 72,50.';
   }
   if (!line.name.trim() || quantity === null || unitPriceCents === null || unitPriceCents === undefined)
     return null;
@@ -187,8 +190,17 @@ function parseLine(
     unitPriceCents,
     priceQuantity: line.priceQuantity,
     taxRateBasisPoints: line.taxRateBasisPoints,
-    source: line.source ? { kind: line.source.kind, id: line.source.id } : null,
   };
+}
+
+function parseLine(
+  line: DraftLineForm,
+  index: number,
+  errors: Record<string, string>,
+): InvoiceDraftLine | null {
+  const values = parsePricedLine(line, (field) => lineFieldId(index, field), errors);
+  if (!values) return null;
+  return { ...values, source: line.source ? { kind: line.source.kind, id: line.source.id } : null };
 }
 
 /** Every line of the editor's text, or null while one cannot be read: the totals wait for all. */

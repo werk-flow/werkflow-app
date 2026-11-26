@@ -31,6 +31,8 @@ const CONTEXT_RESOLVERS = new Set([
   // resolveActionContextFor and resolveActiveOrgId.
   'verifyCurrentMembership',
   'getCurrentOrgId',
+  // lib/org/manager-context.ts: resolveActionContext's caller, refused unless Admin or Büro.
+  'resolveManagerContext',
   // lib/werkflow-billing/billing-page.ts: resolveActionContextFor, then the Admin role.
   'resolveBillingAdmin',
 ]);

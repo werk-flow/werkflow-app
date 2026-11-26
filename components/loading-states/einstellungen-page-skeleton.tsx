@@ -213,6 +213,11 @@ const SECTION_SKELETONS = {
       </SettingsCardSkeleton>
     </>
   ),
+  rechnungen: (
+    <SettingsCardSkeleton fieldCount={6} footer>
+      <TextLinesSkeleton lines={2} />
+    </SettingsCardSkeleton>
+  ),
   mitarbeiter: (
     <>
       <div className="space-y-4 border-b pb-5">
