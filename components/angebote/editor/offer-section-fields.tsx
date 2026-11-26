@@ -262,34 +262,32 @@ function PositionFields({
   const label = number ? `Position ${number}` : 'Text';
   return (
     <li className="space-y-3 p-3 sm:p-4">
-      {/* On a phone the number and the order buttons share a line above the full-width fields. */}
-      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:items-start">
-        <span className="min-w-8 text-sm text-muted-foreground tabular-nums sm:pt-8">
+      {/* The number and the order buttons share a line above the fields, at every width. */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-muted-foreground tabular-nums">
           {number ?? <Badge variant="secondary">Text</Badge>}
         </span>
-        <div className="order-last grid w-full min-w-0 gap-3 sm:order-none sm:w-auto sm:flex-1 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-          <Field label="Bezeichnung" htmlFor={fieldId('name')} required error={errors[fieldId('name')]}>
-            <Input
-              value={position.name}
-              onChange={(event) => onChange({ ...position, name: event.target.value })}
-              maxLength={200}
-              autoComplete="off"
-              disabled={disabled}
-            />
-          </Field>
-          <Field label="Beschreibung" htmlFor={`${fieldId('name')}-description`}>
-            <Textarea
-              value={position.description}
-              onChange={(event) => onChange({ ...position, description: event.target.value })}
-              maxLength={4000}
-              rows={2}
-              disabled={disabled}
-            />
-          </Field>
-        </div>
-        <div className="ml-auto sm:ml-0 sm:pt-6">
-          <OrderButtons label={label} {...order} disabled={disabled} />
-        </div>
+        <OrderButtons label={label} {...order} disabled={disabled} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Bezeichnung" htmlFor={fieldId('name')} required error={errors[fieldId('name')]}>
+          <Input
+            value={position.name}
+            onChange={(event) => onChange({ ...position, name: event.target.value })}
+            maxLength={200}
+            autoComplete="off"
+            disabled={disabled}
+          />
+        </Field>
+        <Field label="Beschreibung" htmlFor={`${fieldId('name')}-description`}>
+          <Textarea
+            value={position.description}
+            onChange={(event) => onChange({ ...position, description: event.target.value })}
+            maxLength={4000}
+            rows={2}
+            disabled={disabled}
+          />
+        </Field>
       </div>
       {position.kind === 'free' && (
         <PositionAmountFields
@@ -317,7 +315,7 @@ function PositionAmountFields({
   const unitId = `${fieldId('quantity')}-unit`;
   const taxId = `${fieldId('price')}-tax`;
   return (
-    <div className="grid grid-cols-2 gap-3 sm:ml-10 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-end">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-end">
       <Field label="Menge" htmlFor={fieldId('quantity')} required error={errors[fieldId('quantity')]}>
         <Input
           inputMode="decimal"
