@@ -581,6 +581,7 @@ declare
   v_settings public.invoice_settings;
   v_version integer := 0;
   v_year integer := extract(year from (now() at time zone 'Europe/Berlin'))::integer;
+  v_sequence integer;
 begin
   select * into v_settings from public.invoice_settings settings
   where settings.organization_id = p_organization_id;
@@ -594,14 +595,18 @@ begin
     v_settings.next_number := 1;
     v_settings.payment_due_days := 14;
   end if;
+  v_sequence := app_private.next_invoice_sequence(v_settings, v_year);
   return jsonb_build_object(
     'version', v_version,
     'numberPrefix', v_settings.number_prefix,
     'numberWithYear', v_settings.number_with_year,
     'numberMinDigits', v_settings.number_min_digits,
-    'nextNumber', app_private.next_invoice_sequence(v_settings, v_year),
-    'nextInvoiceNumber', app_private.format_invoice_number(
-      v_settings, v_year, app_private.next_invoice_sequence(v_settings, v_year)),
+    'nextNumber', v_sequence,
+    -- None once issue_invoice refuses the sequence: an exhausted series advertises no number.
+    'nextInvoiceNumber', case when v_sequence < 999999999
+      then app_private.format_invoice_number(v_settings, v_year, v_sequence) end,
+    -- The Berlin year the preview is for; a save of the series read in another year is refused.
+    'numberYear', v_year,
     'numbersFixed', v_settings.first_issued_at is not null,
     'paymentDueDays', v_settings.payment_due_days,
     'discountDays', v_settings.discount_days,
@@ -651,6 +656,13 @@ begin
   select * into v_settings from public.invoice_settings settings
   where settings.organization_id = p_organization_id
   for update;
+  -- A year-based series restarts at 1 each year. A series read in another year (a form opened before
+  -- New Year's midnight) would carry that year's next number into the new one, so it is read again.
+  if (p_settings ->> 'numberWithYear')::boolean and v_settings.first_issued_at is null
+    and (p_settings ->> 'numberYear')::integer is distinct from v_year
+  then
+    raise exception 'invoice_year_changed';
+  end if;
   if not found then
     if p_expected_version <> 0 then raise exception 'stale_version'; end if;
     insert into public.invoice_settings (

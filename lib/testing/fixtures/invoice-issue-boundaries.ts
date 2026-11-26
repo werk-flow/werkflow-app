@@ -133,6 +133,7 @@ const settingsOf = (organizationId: unknown) =>
         numberWithYear: true,
         numberMinDigits: 3,
         nextNumber: Number(nextInvoiceNumber.slice(-3)),
+        numberYear: 2037,
         nextInvoiceNumber,
         numbersFixed: false,
         paymentDueDays: 14,
@@ -159,6 +160,7 @@ await assertRefused(
             numberWithYear: true,
             numberMinDigits: 3,
             nextNumber: 1,
+            numberYear: 2037,
             paymentDueDays: 14,
             discountDays: null,
             discountBasisPoints: null,
@@ -189,6 +191,7 @@ await assertRefused(
             numberWithYear: true,
             numberMinDigits: 3,
             nextNumber: 1,
+            numberYear: 2037,
             paymentDueDays: 14,
             discountDays: null,
             discountBasisPoints: null,
@@ -259,6 +262,23 @@ world.tables.company_document_profiles = [
     vatId: 'DE123456789',
   }),
 ];
+
+// A used-up series advertises no number: the issue stops before the rules and reaches no issue_invoice.
+world.rpc = ({ name, args }) => {
+  if (name === 'get_invoice_with_line_sources') return { data: draft, error: null };
+  if (name === 'get_invoice_settings') {
+    return { data: { ...settingsOf(args.p_organization_id), nextInvoiceNumber: null }, error: null };
+  }
+  return { data: null, error: null };
+};
+world.rpcCalls.length = 0;
+assert.deepEqual(await issueInvoice(issueInput), { success: false, error: 'invoice_numbers_exhausted' });
+assert.deepEqual(
+  world.rpcCalls.map((call) => call.name),
+  ['get_invoice_with_line_sources', 'get_invoice_settings'],
+  'a used-up series reached the issue',
+);
+
 let issued: Record<string, unknown> | null = null;
 // How often issue_invoice answers that another issue took the checked number first; each move takes it.
 let numberMoves = 0;
@@ -440,6 +460,7 @@ await assertRefused(
             numberWithYear: false,
             numberMinDigits: 5,
             nextNumber: 10234,
+            numberYear: 2037,
             paymentDueDays: 30,
             discountDays: null,
             discountBasisPoints: null,
@@ -463,6 +484,7 @@ assert.deepEqual(
       numberWithYear: false,
       numberMinDigits: 5,
       nextNumber: 10234,
+      numberYear: 2037,
       paymentDueDays: 30,
       discountDays: 7,
       discountBasisPoints: 200,

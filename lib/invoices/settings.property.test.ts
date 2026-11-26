@@ -5,7 +5,7 @@ import { saveInvoiceSettingsSchema, type InvoiceSettingsValues } from './setting
 // Property tests (docs/technical/testing.md, "Property tests"). The settings are those of
 // docs/features/commercial-and-finance.md, "Invoice settings"; their limits are the save's own
 // (settings.ts, checked again by the invoice_settings table): a prefix of up to 20 letters, digits and
-// . _ / -, the year or not, 1 to 10 minimum digits and a next number from 1; a Zahlungsziel of 0 to
+// . _ / -, the year or not, 1 to 10 minimum digits and a next number from 1 to 999,999,999; a Zahlungsziel of 0 to
 // 365 days; a Skonto with both percent and days, its days within the Zahlungsziel.
 
 const settingsArbitrary: fc.Arbitrary<InvoiceSettingsValues> = fc
@@ -13,7 +13,7 @@ const settingsArbitrary: fc.Arbitrary<InvoiceSettingsValues> = fc
     numberPrefix: fc.stringMatching(/^[A-Za-z0-9._/-]{0,20}$/),
     numberWithYear: fc.boolean(),
     numberMinDigits: fc.integer({ min: 1, max: 10 }),
-    nextNumber: fc.integer({ min: 1, max: 999_999_998 }),
+    nextNumber: fc.integer({ min: 1, max: 999_999_999 }),
     paymentDueDays: fc.integer({ min: 0, max: 365 }),
     discount: fc.option(
       fc.record({
@@ -29,6 +29,7 @@ const settingsArbitrary: fc.Arbitrary<InvoiceSettingsValues> = fc
     discountDays:
       discount === null ? null : Math.max(1, Math.floor(discount.share * settings.paymentDueDays)),
     discountBasisPoints: discount === null ? null : discount.basisPoints,
+    numberYear: 2037,
   }));
 
 const save = (settings: object) => ({
@@ -44,6 +45,7 @@ const violations: Array<[string, (settings: InvoiceSettingsValues) => object | n
   ['no minimum digit', (settings) => ({ ...settings, numberMinDigits: 0 })],
   ['eleven minimum digits', (settings) => ({ ...settings, numberMinDigits: 11 })],
   ['a next number of 0', (settings) => ({ ...settings, nextNumber: 0 })],
+  ['a next number past the series', (settings) => ({ ...settings, nextNumber: 1_000_000_000 })],
   ['a fractional next number', (settings) => ({ ...settings, nextNumber: 1.5 })],
   ['a Zahlungsziel beyond a year', (settings) => ({ ...settings, paymentDueDays: 366 })],
   ['a negative Zahlungsziel', (settings) => ({ ...settings, paymentDueDays: -1 })],

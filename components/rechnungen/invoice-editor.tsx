@@ -2,7 +2,7 @@
 
 import { Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
@@ -195,6 +195,11 @@ function useDraftState(invoice: InvoiceDetail) {
   const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
   // Counts the changes, so a save marks saved only the text it sent: a catalog line that lands meanwhile stays unsaved.
   const revision = useRef(0);
+  // Once issued, the text takes no change: a catalog read that answers after the issue adds nothing.
+  const issued = useRef(invoice.status !== 'entwurf');
+  useEffect(() => {
+    issued.current = invoice.status !== 'entwurf';
+  }, [invoice.status]);
   const newer = invoice.version > baseVersion;
   // An issue elsewhere replaces own changes too: an issued invoice shows only what it says.
   const issuedElsewhere = newer && invoice.status !== 'entwurf';
@@ -211,6 +216,7 @@ function useDraftState(invoice: InvoiceDetail) {
     newerElsewhere: newer && dirty,
     /** An update from an answer that arrives later takes the current text, so edits made meanwhile stay. */
     setForm: (next: DraftForm | ((current: DraftForm) => DraftForm)) => {
+      if (issued.current) return;
       revision.current += 1;
       setFormState(next);
       setDirty(true);

@@ -162,10 +162,11 @@ export async function issueUnderCheckedNumber<Result extends ActionResult>(
   invoice: Parameters<typeof checkedIssueOriginal>[1],
   snapshot: IssueSnapshot,
   issue: (next: NextIssue, original: StoredOriginal | null) => Promise<Result>,
-): Promise<Result | InvoiceCheckFailure | ActionFailure<'invoice_incomplete'>> {
+): Promise<Result | InvoiceCheckFailure | ActionFailure<'invoice_incomplete' | 'invoice_numbers_exhausted'>> {
   for (let attempt = 1; ; attempt += 1) {
     const issueDate = getBusinessTodayIso();
     const { nextInvoiceNumber } = await readInvoiceSettings(organizationId);
+    if (nextInvoiceNumber === null) return { success: false, error: 'invoice_numbers_exhausted' };
     const next = { number: nextInvoiceNumber, issueDate };
     const original = await checkedIssueOriginal(organizationId, invoice, snapshot, next);
     if (!original) return { success: false, error: 'invoice_incomplete' };

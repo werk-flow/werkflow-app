@@ -108,11 +108,18 @@ declare
   v_settings jsonb := public.get_invoice_settings('38060000-0000-4000-8000-000000000010');
 begin
   if v_settings ->> 'version' is distinct from '0' or v_settings ->> 'nextInvoiceNumber' is distinct from 'RE-' || v_year || '-001'
-    or (v_settings ->> 'numbersFixed')::boolean then
+    or v_settings ->> 'numberYear' is distinct from v_year or (v_settings ->> 'numbersFixed')::boolean then
     raise exception 'the default settings read %', v_settings;
   end if;
 end;
 $$;
+-- A year-based series read in another year (a form opened before New Year's midnight) is read again,
+-- so that year's next number never carries into the new one, where the series restarts at 1.
+select pg_temp.expect_refusal('a year-based series read last year', format($sql$
+  select public.save_invoice_settings('38060000-0000-4000-8000-000000000001', '38060000-0000-4000-8000-000000000010', 0,
+    '{"numberPrefix":"RE-","numberWithYear":true,"numberMinDigits":3,"nextNumber":57,"numberYear":%s,
+      "paymentDueDays":14,"discountDays":null,"discountBasisPoints":null}')
+$sql$, extract(year from now() at time zone 'Europe/Berlin')::integer - 1), 'invoice_year_changed');
 select pg_temp.expect_refusal('Büro saves the series', $sql$
   select public.save_invoice_settings('38060000-0000-4000-8000-000000000002', '38060000-0000-4000-8000-000000000010', 0,
     '{"numberPrefix":"X","numberWithYear":false,"numberMinDigits":1,"nextNumber":5,"paymentDueDays":14,
@@ -168,6 +175,8 @@ $$;
 select pg_temp.fill('first'), pg_temp.fill('second');
 
 -- Issues under p_number and p_day: by default the series' next number and the Berlin day, as the server checks it.
+-- The day is the clock's when the call starts, not the transaction's: issue_invoice reads the clock after its
+-- lock, so a run that crosses Berlin midnight still issues on the day it checked.
 -- With p_original, the issue registers the original the server stored under that document id (hash p_hash).
 create function pg_temp.issue(p_actor uuid, p_org uuid, p_name text, p_version integer, p_attempt uuid,
   p_number text default null, p_day date default null, p_original uuid default null, p_hash text default null)
@@ -179,7 +188,7 @@ returns jsonb language sql as $$
       "buyer":{"name":"Hausverwaltung Lindenhof GmbH","address":{"lines":["Hofweg 1"],"postalCode":"10117",
                "city":"Berlin","countryCode":"DE"}}}',
     coalesce(p_number, public.get_invoice_settings(p_org) ->> 'nextInvoiceNumber'),
-    coalesce(p_day, (now() at time zone 'Europe/Berlin')::date),
+    coalesce(p_day, (clock_timestamp() at time zone 'Europe/Berlin')::date),
     p_original,
     case when p_original is not null then p_org || '/' || p_original || '/Rechnung.pdf' end,
     case when p_original is not null then 'Rechnung.pdf' end,
@@ -253,7 +262,9 @@ begin
     -- Issued without an original, as when the storage was unreachable: pending, no document.
     or v_issued -> 'originalDocumentId' is distinct from 'null'::jsonb or v_invoice.original_document_id is not null
     or v_invoice.status is distinct from 'ausgestellt' or v_invoice.version is distinct from 3
-    or v_invoice.issue_date is distinct from (now() at time zone 'Europe/Berlin')::date
+    or v_invoice.issue_date::text is distinct from v_issued ->> 'issueDate'
+    or v_invoice.issue_date not between (now() at time zone 'Europe/Berlin')::date
+      and (clock_timestamp() at time zone 'Europe/Berlin')::date
     or v_invoice.issued_by is distinct from '38060000-0000-4000-8000-000000000002'
     or v_invoice.issue_snapshot #>> '{buyer,name}' is distinct from 'Hausverwaltung Lindenhof GmbH'
     or v_invoice.logo_storage_path is distinct from '38060000-0000-4000-8000-000000000010/briefpapier/l/u/logo' then
@@ -466,7 +477,7 @@ begin
   select * into v_document from public.documents where id = '38060000-0000-4000-8000-000000000301';
   if (v_first ->> 'replay')::boolean is distinct from false or v_document.category is distinct from 'invoice'
     or v_document.retention_class is distinct from 'ten_years'
-    or v_document.document_date is distinct from (now() at time zone 'Europe/Berlin')::date
+    or v_document.document_date is distinct from (select issue_date from public.invoices where id = pg_temp.id('first'))
     or v_document.mime_type is distinct from 'application/pdf'
     -- Filed in the registration's transaction: no moment for a new version or another class.
     or v_document.filed_at is null or v_document.filed_by is distinct from '38060000-0000-4000-8000-000000000002' then
@@ -495,12 +506,15 @@ declare
     pg_temp.id('first'));
 begin
   if v_read ->> 'status' is distinct from 'ausgestellt' or v_read ->> 'invoiceNumber' is distinct from 'RG10234'
-    or v_read ->> 'issueDate' is distinct from ((now() at time zone 'Europe/Berlin')::date)::text
+    or v_read ->> 'issueDate' is distinct from (select issue_date from public.invoices where id = pg_temp.id('first'))::text
     or v_read ->> 'serviceStart' is distinct from '2037-11-02' or v_read ->> 'serviceEnd' is distinct from '2037-11-02'
     or v_read -> 'original' is distinct from
       jsonb_build_object('documentId', '38060000-0000-4000-8000-000000000301', 'filed', true)
     or v_read -> 'issueSnapshot' is null or v_read -> 'issueSnapshot' = 'null'::jsonb
-    or jsonb_array_length(v_read -> 'lineSources') is distinct from jsonb_array_length(v_read -> 'lines') then
+    -- The one line pg_temp.fill saved, a free line: its source is null.
+    or jsonb_array_length(v_read -> 'lines') is distinct from 1
+    or v_read #>> '{lines,0,name}' is distinct from 'Monteurstunde' or v_read #>> '{lines,0,netCents}' is distinct from '10800'
+    or v_read -> 'lineSources' is distinct from '[null]'::jsonb then
     raise exception 'the page reads the issued invoice as %', v_read;
   end if;
 end;
@@ -626,6 +640,14 @@ begin
       is distinct from 'RE-' || v_year || '-057' then
     raise exception 'the same year did not continue its numbers';
   end if;
+  -- A used-up series advertises no number: issue_invoice refuses its next sequence.
+  update public.invoice_settings set next_number = 999999999
+  where organization_id = '38060000-0000-4000-8000-000000000011';
+  if public.get_invoice_settings('38060000-0000-4000-8000-000000000011') -> 'nextInvoiceNumber'
+      is distinct from 'null'::jsonb then
+    raise exception 'a used-up series advertises %',
+      public.get_invoice_settings('38060000-0000-4000-8000-000000000011') -> 'nextInvoiceNumber';
+  end if;
 end;
 $$;
 
@@ -634,7 +656,11 @@ delete from public.organizations where id = '38060000-0000-4000-8000-00000000001
 do $$
 begin
   if exists (select 1 from public.invoices where organization_id = '38060000-0000-4000-8000-000000000010')
-    or exists (select 1 from public.invoice_settings where organization_id = '38060000-0000-4000-8000-000000000010') then
+    or exists (select 1 from public.invoice_settings where organization_id = '38060000-0000-4000-8000-000000000010')
+    -- The filed originals, the first one registered above among them.
+    or exists (select 1 from public.documents
+      where organization_id = '38060000-0000-4000-8000-000000000010' and category = 'invoice')
+    or exists (select 1 from public.documents where id = '38060000-0000-4000-8000-000000000301') then
     raise exception 'organization teardown left invoice rows';
   end if;
 end;

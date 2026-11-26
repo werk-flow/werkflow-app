@@ -44,6 +44,7 @@ const refusal = writeRefusalFor(
     'stale_version',
     'invoice_incomplete',
     'invoice_number_moved',
+    'invoice_numbers_exhausted',
   ]),
 );
 

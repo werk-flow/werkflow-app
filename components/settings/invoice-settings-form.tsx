@@ -33,6 +33,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'Du hast inzwischen die Organisation gewechselt. Lade die Seite neu, bevor du Einstellungen speicherst.',
   not_authorized: 'Nur Admins ändern die Rechnungseinstellungen.',
   stale_version: 'Jemand hat die Einstellungen inzwischen geändert. Lade die Seite neu.',
+  invoice_year_changed:
+    'Inzwischen hat ein neues Jahr begonnen, und der Nummernkreis beginnt wieder bei 1. Lade die Seite neu und prüfe die nächste Nummer.',
   save_failed: 'Die Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut.',
 };
 
@@ -61,14 +63,16 @@ function settingsFormOf(settings: InvoiceSettings): Form {
 /** The typed settings, or the message of each field at fault. */
 function parseForm(
   form: Form,
-): { ok: true; values: InvoiceSettingsValues } | { ok: false; errors: Record<string, string> } {
+):
+  | { ok: true; values: Omit<InvoiceSettingsValues, 'numberYear'> }
+  | { ok: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   if (!/^[A-Za-z0-9._/-]{0,20}$/.test(form.prefix.trim())) {
     errors[FIELD_IDS.prefix] = 'Höchstens 20 Zeichen: Buchstaben, Ziffern und . _ / -.';
   }
   const minDigits = parseWholeNumberInput(form.minDigits, 1, 10);
   if (minDigits === null) errors[FIELD_IDS.minDigits] = 'Gib eine Zahl von 1 bis 10 an.';
-  const nextNumber = parseWholeNumberInput(form.nextNumber, 1, 999_999_998);
+  const nextNumber = parseWholeNumberInput(form.nextNumber, 1, 999_999_999);
   if (nextNumber === null) errors[FIELD_IDS.nextNumber] = 'Gib eine ganze Zahl ab 1 an.';
   const paymentDueDays = parseDays(form.paymentDueDays, 0);
   if (paymentDueDays === null)
@@ -122,8 +126,14 @@ function NumberSeriesFields({
     <section className="space-y-4">
       <h3 className="text-sm font-semibold">Rechnungsnummern</h3>
       <p className="text-sm text-muted-foreground">
-        Die nächste Rechnung erhält die Nummer{' '}
-        <span className="font-medium text-foreground">{settings.nextInvoiceNumber}</span>.
+        {settings.nextInvoiceNumber === null ? (
+          'Der Nummernkreis ist ausgeschöpft: Es gibt keine weitere Rechnungsnummer.'
+        ) : (
+          <>
+            Die nächste Rechnung erhält die Nummer{' '}
+            <span className="font-medium text-foreground">{settings.nextInvoiceNumber}</span>.
+          </>
+        )}
         {settings.numbersFixed
           ? ' Seit der ersten ausgestellten Rechnung ist der Nummernkreis fest, damit keine Nummer fehlt oder doppelt vorkommt.'
           : ' Präfix, Jahr, Stellen und nächste Nummer legst du einmal vor der ersten Rechnung fest, zum Beispiel um die Nummern deiner bisherigen Software fortzuführen. Kürzere Nummern beginnen mit Nullen.'}
@@ -248,7 +258,7 @@ function useSettingsSave(settings: InvoiceSettings, organizationId: string) {
     const result = await run({
       organizationId,
       expectedVersion: settings.version,
-      settings: parsed.values,
+      settings: { ...parsed.values, numberYear: settings.numberYear },
     }).catch(() => null);
     if (!result?.success) {
       setFailure(describeFailure(result?.error ?? 'save_failed', MESSAGES, MESSAGES.save_failed ?? ''));
