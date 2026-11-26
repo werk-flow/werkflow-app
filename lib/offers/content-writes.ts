@@ -1,0 +1,98 @@
+import 'server-only';
+
+import type { ActionResult } from '@/lib/action-result';
+import { INVENTORY_UNITS } from '@/lib/inventory/units';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { writeRefusalFor } from '@/lib/supabase/write-refusal';
+import { z } from '@/lib/zod';
+import { saveOfferContentSchema, type SaveOfferContentInput } from './action-schemas';
+import { offerAmounts, type OfferAmounts } from './amounts';
+import type { OfferSection } from './types';
+
+// The one write of an offer's Titel and Positionen, for the editor's action
+// and for server callers that act for the office (werk-flow/werkflow-planning#541).
+// The caller has established the actor as Admin or Büro of the organization;
+// the database function checks the actor again under the access lock, refuses
+// an offer outside the organization and writes the history in the same call
+// (supabase/migrations/20270105090000_write_titel_and_positionen_into_an_offer.sql).
+
+const contentRefusal = writeRefusalFor(
+  new Set(['invalid_input', 'not_authorized', 'offer_not_found', 'offer_not_editable', 'offer_changed']),
+);
+
+const savedContentSchema = z.object({ contentVersion: z.number().int().positive(), updatedAt: z.string() });
+
+type OfficeActor = { orgId: string; userId: string };
+
+/** The amounts, or null for a position the line rule refuses: input the office fixes. */
+function amountsOrNull(sections: readonly OfferSection[]): OfferAmounts | null {
+  try {
+    return offerAmounts(sections);
+  } catch (error) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+}
+
+function unitLabel(code: string): string {
+  return INVENTORY_UNITS.find((unit) => unit.code === code)?.shortLabel ?? code;
+}
+
+/** The content as the database function takes it: each position with its unit label and amount. */
+function contentArgument(sections: readonly OfferSection[], amounts: OfferAmounts) {
+  return sections.map((section, sectionIndex) => {
+    const computed = amounts.sections[sectionIndex];
+    return {
+      title: section.title,
+      netCents: computed?.netCents ?? 0,
+      positions: section.positions.map((position, positionIndex) =>
+        position.kind === 'text'
+          ? position
+          : {
+              ...position,
+              unitLabel: unitLabel(position.unit),
+              amountCents: computed?.positionCents[positionIndex] ?? 0,
+            },
+      ),
+    };
+  });
+}
+
+/**
+ * Replaces the Titel and Positionen of an offer in „Entwurf“ that is still at
+ * the content version the input names, with the amounts the server computes.
+ * A repeat under the same attempt key answers the first save. The answer names
+ * the offer's transaction stamp, so the saving tab knows its Realtime echo.
+ */
+export async function writeOfferContent(
+  actor: OfficeActor,
+  rawInput: SaveOfferContentInput,
+): Promise<ActionResult<{ offerId: string; contentVersion: number; updatedAt: string }>> {
+  const parsed = saveOfferContentSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
+  const amounts = amountsOrNull(input.sections);
+  if (!amounts) return { success: false, error: 'invalid_input' };
+  const { data, error } = await createSupabaseAdminClient().rpc(
+    'save_offer_content',
+    rpcArgs('save_offer_content', {
+      p_actor_id: actor.userId,
+      p_organization_id: actor.orgId,
+      p_offer_id: input.offerId,
+      p_expected_content_version: input.expectedContentVersion,
+      p_attempt_key: input.attemptKey,
+      p_sections: contentArgument(input.sections, amounts),
+      p_totals: {
+        netCents: amounts.totals.lineNetCents,
+        taxCents: amounts.totals.taxCents,
+        grossCents: amounts.totals.grossCents,
+      },
+    }),
+  );
+  const saved = savedContentSchema.safeParse(data);
+  if (error || !saved.success) {
+    return contentRefusal(error, 'save_failed', 'writeOfferContent: save_offer_content failed');
+  }
+  return { success: true, offerId: input.offerId, ...saved.data };
+}

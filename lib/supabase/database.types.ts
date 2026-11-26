@@ -6151,15 +6151,129 @@ export type Database = {
           },
         ];
       };
+      offer_positions: {
+        Row: {
+          amount_cents: number | null;
+          description: string;
+          id: string;
+          kind: string;
+          name: string;
+          offer_id: string;
+          organization_id: string;
+          position: number;
+          price_quantity: number | null;
+          quantity: number | null;
+          section_id: string;
+          tax_rate_basis_points: number | null;
+          unit: string | null;
+          unit_label: string | null;
+          unit_price_cents: number | null;
+        };
+        Insert: {
+          amount_cents?: number | null;
+          description?: string;
+          id?: string;
+          kind: string;
+          name: string;
+          offer_id: string;
+          organization_id: string;
+          position: number;
+          price_quantity?: number | null;
+          quantity?: number | null;
+          section_id: string;
+          tax_rate_basis_points?: number | null;
+          unit?: string | null;
+          unit_label?: string | null;
+          unit_price_cents?: number | null;
+        };
+        Update: {
+          amount_cents?: number | null;
+          description?: string;
+          id?: string;
+          kind?: string;
+          name?: string;
+          offer_id?: string;
+          organization_id?: string;
+          position?: number;
+          price_quantity?: number | null;
+          quantity?: number | null;
+          section_id?: string;
+          tax_rate_basis_points?: number | null;
+          unit?: string | null;
+          unit_label?: string | null;
+          unit_price_cents?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offer_positions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offer_positions_section_fk";
+            columns: ["section_id", "offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offer_sections";
+            referencedColumns: ["id", "offer_id", "organization_id"];
+          },
+        ];
+      };
+      offer_sections: {
+        Row: {
+          id: string;
+          net_cents: number;
+          offer_id: string;
+          organization_id: string;
+          position: number;
+          title: string;
+        };
+        Insert: {
+          id?: string;
+          net_cents: number;
+          offer_id: string;
+          organization_id: string;
+          position: number;
+          title: string;
+        };
+        Update: {
+          id?: string;
+          net_cents?: number;
+          offer_id?: string;
+          organization_id?: string;
+          position?: number;
+          title?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offer_sections_offer_fk";
+            columns: ["offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offers";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_sections_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       offers: {
         Row: {
           client_id: string;
           closing_text: string;
           contact_id: string | null;
+          content_version: number;
           created_at: string;
           created_by: string | null;
+          gross_cents: number;
           id: string;
           job_id: string | null;
+          net_cents: number;
           offer_number: string;
           opening_text: string;
           organization_id: string;
@@ -6170,6 +6284,7 @@ export type Database = {
           request_id: string | null;
           site_id: string | null;
           status: string;
+          tax_cents: number;
           title: string;
           updated_at: string;
           updated_by: string | null;
@@ -6180,10 +6295,13 @@ export type Database = {
           client_id: string;
           closing_text?: string;
           contact_id?: string | null;
+          content_version?: number;
           created_at?: string;
           created_by?: string | null;
+          gross_cents?: number;
           id?: string;
           job_id?: string | null;
+          net_cents?: number;
           offer_number: string;
           opening_text?: string;
           organization_id: string;
@@ -6194,6 +6312,7 @@ export type Database = {
           request_id?: string | null;
           site_id?: string | null;
           status?: string;
+          tax_cents?: number;
           title: string;
           updated_at?: string;
           updated_by?: string | null;
@@ -6204,10 +6323,13 @@ export type Database = {
           client_id?: string;
           closing_text?: string;
           contact_id?: string | null;
+          content_version?: number;
           created_at?: string;
           created_by?: string | null;
+          gross_cents?: number;
           id?: string;
           job_id?: string | null;
+          net_cents?: number;
           offer_number?: string;
           opening_text?: string;
           organization_id?: string;
@@ -6218,6 +6340,7 @@ export type Database = {
           request_id?: string | null;
           site_id?: string | null;
           status?: string;
+          tax_cents?: number;
           title?: string;
           updated_at?: string;
           updated_by?: string | null;
@@ -17031,10 +17154,13 @@ export type Database = {
           client_id: string;
           closing_text: string;
           contact_id: string | null;
+          content_version: number;
           created_at: string;
           created_by: string | null;
+          gross_cents: number;
           id: string;
           job_id: string | null;
+          net_cents: number;
           offer_number: string;
           opening_text: string;
           organization_id: string;
@@ -17045,6 +17171,7 @@ export type Database = {
           request_id: string | null;
           site_id: string | null;
           status: string;
+          tax_cents: number;
           title: string;
           updated_at: string;
           updated_by: string | null;
@@ -21100,6 +21227,18 @@ export type Database = {
           p_totals: Json;
         };
         Returns: number;
+      };
+      save_offer_content: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_content_version: number;
+          p_offer_id: string;
+          p_organization_id: string;
+          p_sections: Json;
+          p_totals: Json;
+        };
+        Returns: Json;
       };
       save_personnel_onboarding_requirement: {
         Args: {

@@ -475,6 +475,216 @@ end;
 $$;
 rollback to savepoint offer_header;
 
+-- Titel and Positionen (migration 20270105090000_write_titel_and_positionen_into_an_offer.sql).
+savepoint offer_content;
+
+-- Grants: the content and its save are server-only; no signed-in role reads a line.
+do $$
+declare
+  v_role text;
+  v_table text;
+begin
+  foreach v_role in array array['anon', 'authenticated'] loop
+    foreach v_table in array array['public.offer_sections', 'public.offer_positions'] loop
+      if has_table_privilege(v_role, v_table, 'SELECT') or has_table_privilege(v_role, v_table, 'INSERT')
+        or has_table_privilege(v_role, v_table, 'UPDATE') or has_table_privilege(v_role, v_table, 'DELETE') then
+        raise exception '% holds a privilege on %', v_role, v_table;
+      end if;
+    end loop;
+    if has_function_privilege(v_role, 'public.save_offer_content(uuid,uuid,uuid,integer,uuid,jsonb,jsonb)', 'EXECUTE') then
+      raise exception '% can execute save_offer_content', v_role;
+    end if;
+  end loop;
+  if has_table_privilege('service_role', 'public.offer_positions', 'UPDATE')
+    or has_table_privilege('service_role', 'public.offer_sections', 'UPDATE') then
+    raise exception 'service_role can update offer content outside the save';
+  end if;
+  if not (select relrowsecurity from pg_class where oid = 'public.offer_sections'::regclass)
+    or not (select relrowsecurity from pg_class where oid = 'public.offer_positions'::regclass) then
+    raise exception 'an offer content table runs without RLS';
+  end if;
+end;
+$$;
+
+set local role service_role;
+create function pg_temp.save_content(
+  p_actor uuid, p_offer uuid, p_version integer, p_key uuid, p_sections jsonb, p_totals jsonb
+) returns integer language sql as $$
+  select (public.save_offer_content(p_actor, '38040000-0000-4000-8000-000000000010', p_offer, p_version, p_key,
+    p_sections, p_totals) ->> 'contentVersion')::integer;
+$$;
+create function pg_temp.content_events() returns bigint language sql as $$
+  select count(*) from public.offer_events
+  where organization_id = '38040000-0000-4000-8000-000000000010' and event_type = 'content_changed';
+$$;
+-- Two Titel with the amounts lib/offers/amounts.test.ts computes for them.
+create function pg_temp.installation() returns jsonb language sql as $$
+  select '[
+    {"title": " Heizung ", "netCents": 432379, "positions": [
+      {"kind": "free", "name": "Gas-Brennwerttherme", "description": "", "quantity": "1", "unit": "piece",
+       "unitLabel": "Stk", "unitPriceCents": 425000, "priceQuantity": 1, "taxRateBasisPoints": 1900, "amountCents": 425000},
+      {"kind": "free", "name": "Kupferrohr 15 mm", "description": "", "quantity": "2.125", "unit": "meter",
+       "unitLabel": "m", "unitPriceCents": 1249, "priceQuantity": 1, "taxRateBasisPoints": 1900, "amountCents": 2654},
+      {"kind": "free", "name": "Rohrschellen", "description": "", "quantity": "250", "unit": "piece",
+       "unitLabel": "Stk", "unitPriceCents": 1890, "priceQuantity": 100, "taxRateBasisPoints": 1900, "amountCents": 4725},
+      {"kind": "text", "name": "Hinweis", "description": "Die Altanlage bleibt in Betrieb."}]},
+    {"title": "Nachlass und Zubehör", "netCents": -12005, "positions": [
+      {"kind": "free", "name": "Nachlass", "description": "", "quantity": "-1", "unit": "flat_rate",
+       "unitLabel": "psch", "unitPriceCents": 15000, "priceQuantity": 1, "taxRateBasisPoints": 1900, "amountCents": -15000},
+      {"kind": "free", "name": "Wartungsheft", "description": "", "quantity": "1", "unit": "piece",
+       "unitLabel": "Stk", "unitPriceCents": 2995, "priceQuantity": 1, "taxRateBasisPoints": 700, "amountCents": 2995}]}
+  ]'::jsonb;
+$$;
+
+-- A save stores the Titel and Positionen in order with their amounts and the
+-- totals, and writes its history row, in one call; the header version stays.
+do $$
+declare
+  v_offer public.offers;
+  v_event public.offer_events;
+begin
+  if pg_temp.save_content('38040000-0000-4000-8000-000000000002', (select first_offer from ids), 1,
+      '38040000-0000-4000-8000-000000000301', pg_temp.installation(),
+      '{"netCents": 420374, "taxCents": 79512, "grossCents": 499886}') is distinct from 2 then
+    raise exception 'the first content save did not answer content version 2';
+  end if;
+  select * into v_offer from public.offers where id = (select first_offer from ids);
+  if v_offer.net_cents is distinct from 420374::bigint or v_offer.tax_cents is distinct from 79512::bigint
+    or v_offer.gross_cents is distinct from 499886::bigint or v_offer.content_version is distinct from 2
+    or v_offer.version is distinct from 1
+    or v_offer.updated_by is distinct from '38040000-0000-4000-8000-000000000002'::uuid then
+    raise exception 'the offer after the content save is %', to_jsonb(v_offer);
+  end if;
+  if (select array_agg(section.title || ':' || section.position || ':' || section.net_cents order by section.position)
+      from public.offer_sections section where section.offer_id = v_offer.id)
+    is distinct from array['Heizung:1:432379', 'Nachlass und Zubehör:2:-12005'] then
+    raise exception 'the stored Titel are wrong';
+  end if;
+  if (select array_agg(line.position || ':' || line.kind || ':' || coalesce(line.quantity::text, '-') || ':'
+        || coalesce(line.unit_label, '-') || ':' || coalesce(line.amount_cents::text, '-')
+        order by section.position, line.position)
+      from public.offer_positions line join public.offer_sections section on section.id = line.section_id
+      where line.offer_id = v_offer.id)
+    is distinct from array['1:free:1.000:Stk:425000', '2:free:2.125:m:2654', '3:free:250.000:Stk:4725',
+      '4:text:-:-:-', '1:free:-1.000:psch:-15000', '2:free:1.000:Stk:2995'] then
+    raise exception 'the stored Positionen are wrong';
+  end if;
+  select * into v_event from public.offer_events where attempt_key = '38040000-0000-4000-8000-000000000301';
+  if v_event.event_type is distinct from 'content_changed' or v_event.offer_id is distinct from v_offer.id
+    or v_event.actor_id is distinct from '38040000-0000-4000-8000-000000000002'::uuid
+    or v_event.payload is distinct from '{"contentVersion": 2, "sectionCount": 2, "positionCount": 6,
+      "grossCentsBefore": 0, "grossCents": 499886}'::jsonb then
+    raise exception 'the history row of the content save is %', to_jsonb(v_event);
+  end if;
+  if (public.get_offer('38040000-0000-4000-8000-000000000010', v_offer.id) -> 'sections' -> 0 -> 'positions' -> 1)
+      is distinct from '{"kind": "free", "name": "Kupferrohr 15 mm", "description": "", "quantity": "2.125",
+        "unit": "meter", "unitPriceCents": 1249, "priceQuantity": 1, "taxRateBasisPoints": 1900}'::jsonb
+    or (public.get_offer('38040000-0000-4000-8000-000000000010', v_offer.id) ->> 'contentVersion') is distinct from '2' then
+    raise exception 'the offer reads its content as %', public.get_offer('38040000-0000-4000-8000-000000000010', v_offer.id);
+  end if;
+end;
+$$;
+
+-- A retried save under the same key answers its content version and writes nothing.
+do $$
+begin
+  if pg_temp.save_content('38040000-0000-4000-8000-000000000002', (select first_offer from ids), 1,
+      '38040000-0000-4000-8000-000000000301', '[]', '{"netCents": 0, "taxCents": 0, "grossCents": 0}') is distinct from 2
+    or pg_temp.content_events() is distinct from 1::bigint
+    or (select count(*) from public.offer_sections where offer_id = (select first_offer from ids)) is distinct from 2::bigint then
+    raise exception 'a retried content save wrote again';
+  end if;
+end;
+$$;
+
+-- A header change keeps the content version, and the content keeps the header version.
+do $$
+begin
+  if (public.update_offer('38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+      (select first_offer from ids), 1, gen_random_uuid(), 'Heizungstausch Altbau', null, null, null, '2037-06-30',
+      '', '', '38040000-0000-4000-8000-000000000002') ->> 'version') is distinct from '2'
+    or (select content_version from public.offers where id = (select first_offer from ids)) is distinct from 2 then
+    raise exception 'a header change moved the content version';
+  end if;
+end;
+$$;
+
+-- Refusals write nothing: a stale content version, another organization's
+-- offer, a sent offer, an actor without the office role in the organization,
+-- sums that do not add up, a fourth decimal, and a text line with an amount.
+select pg_temp.expect_refusal(label, format(
+  'select public.save_offer_content(%L, %L, %L, %s, gen_random_uuid(), %L, %L)',
+  actor, org, offer, version, sections, totals), refusal)
+from (select first_offer as draft, pg_temp.installation() as content,
+    '{"netCents": 420374, "taxCents": 79512, "grossCents": 499886}'::jsonb as totals_ok from ids) mine,
+  lateral (values
+  ('stale content version', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 1, mine.content, mine.totals_ok, 'offer_changed'),
+  ('foreign offer', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   '38040000-0000-4000-8000-000000000060'::uuid, 1, mine.content, mine.totals_ok, 'offer_not_found'),
+  ('sent offer', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   '38040000-0000-4000-8000-000000000061'::uuid, 1, mine.content, mine.totals_ok, 'offer_not_editable'),
+  ('employee', '38040000-0000-4000-8000-000000000003', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 2, mine.content, mine.totals_ok, 'not_authorized'),
+  ('outsider', '38040000-0000-4000-8000-000000000004', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 2, mine.content, mine.totals_ok, 'not_authorized'),
+  ('Büro in the foreign organization', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000011',
+   '38040000-0000-4000-8000-000000000060'::uuid, 1, mine.content, mine.totals_ok, 'not_authorized'),
+  ('a net total that does not add up', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 2, mine.content, '{"netCents": 420375, "taxCents": 79512, "grossCents": 499887}'::jsonb, 'invalid_input'),
+  ('a Titel subtotal that does not add up', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 2, jsonb_set(mine.content, '{1,netCents}', '-12004'), mine.totals_ok, 'invalid_input'),
+  ('a fourth decimal', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 2, jsonb_set(mine.content, '{0,positions,1,quantity}', '"2.1254"'), mine.totals_ok, 'invalid_input'),
+  ('a text line with an amount', '38040000-0000-4000-8000-000000000002', '38040000-0000-4000-8000-000000000010',
+   mine.draft, 2, jsonb_set(mine.content, '{0,positions,3,amountCents}', '0'), mine.totals_ok, '23514')
+) as refused(label, actor, org, offer, version, sections, totals, refusal);
+do $$
+begin
+  if pg_temp.content_events() is distinct from 1::bigint
+    or (select content_version from public.offers where id = (select first_offer from ids)) is distinct from 2
+    or (select count(*) from public.offer_positions where offer_id = (select first_offer from ids)) is distinct from 6::bigint
+    or exists (select 1 from public.offer_sections where organization_id = '38040000-0000-4000-8000-000000000011') then
+    raise exception 'a refused content save wrote';
+  end if;
+end;
+$$;
+
+-- A later save renumbers by the new order and removes what it no longer names.
+do $$
+begin
+  perform pg_temp.save_content('38040000-0000-4000-8000-000000000001', (select first_offer from ids), 2,
+    gen_random_uuid(), '[{"title": "Wartung", "netCents": 2995, "positions": [
+      {"kind": "text", "name": "Vorbemerkung", "description": ""},
+      {"kind": "free", "name": "Wartungsheft", "description": "", "quantity": "1", "unit": "piece",
+       "unitLabel": "Stk", "unitPriceCents": 2995, "priceQuantity": 1, "taxRateBasisPoints": 700, "amountCents": 2995}]}]',
+    '{"netCents": 2995, "taxCents": 210, "grossCents": 3205}');
+  if (select array_agg(line.position || ':' || line.name order by line.position)
+      from public.offer_positions line where line.offer_id = (select first_offer from ids))
+      is distinct from array['1:Vorbemerkung', '2:Wartungsheft']
+    or (select count(*) from public.offer_sections where offer_id = (select first_offer from ids)) is distinct from 1::bigint
+    or (select gross_cents from public.offers where id = (select first_offer from ids)) is distinct from 3205::bigint then
+    raise exception 'the second content save did not replace the content';
+  end if;
+end;
+$$;
+reset role;
+
+-- A signed-in session reads no line of the content: neither the office,
+-- which hears of a change through offers, nor a field worker.
+create function pg_temp.content_read_by(p_user uuid) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  perform pg_temp.expect_refusal('Titel read', 'select count(*) from public.offer_sections', '42501');
+  perform pg_temp.expect_refusal('Positionen read', 'select count(*) from public.offer_positions', '42501');
+  execute 'reset role';
+end;
+$$;
+select pg_temp.content_read_by('38040000-0000-4000-8000-000000000002');
+select pg_temp.content_read_by('38040000-0000-4000-8000-000000000003');
+rollback to savepoint offer_content;
+
 -- The history is append-only, also for a privileged role.
 select pg_temp.expect_refusal('rewriting an offer event',
   $sql$update public.offer_events set payload = '{}' where organization_id = '38040000-0000-4000-8000-000000000010'$sql$,

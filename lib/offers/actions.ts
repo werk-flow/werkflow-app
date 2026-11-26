@@ -11,10 +11,13 @@ import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { z } from '@/lib/zod';
 import {
   createOfferSchema,
+  saveOfferContentSchema,
   updateOfferSchema,
   type CreateOfferInput,
+  type SaveOfferContentInput,
   type UpdateOfferInput,
 } from './action-schemas';
+import { writeOfferContent } from './content-writes';
 
 // Admin and Büro keep the offers. Every action resolves the caller's
 // organization and manager role on the server and passes only those; the
@@ -121,6 +124,29 @@ export async function updateOffer(
     return { success: true, offerId: input.offerId, ...saved.data };
   } catch (error) {
     logError('updateOffer: unexpected error', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Saves the Titel and Positionen of an offer in „Entwurf“ from the editor,
+ * with the amounts the server computes (lib/offers/content-writes.ts).
+ */
+export async function saveOfferContent(
+  rawInput: SaveOfferContentInput,
+): Promise<ActionResult<{ offerId: string; contentVersion: number; updatedAt: string }>> {
+  const parsed = saveOfferContentSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  try {
+    const caller = await resolveActionContext();
+    if (!caller.success) return caller;
+    if (!caller.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+    const result = await writeOfferContent(caller.context, parsed.data);
+    // The page renders the saved content into this answer; another session hears it through Realtime.
+    if (result.success) revalidatePath(`/angebote/${result.offerId}`);
+    return result;
+  } catch (error) {
+    logError('saveOfferContent: unexpected error', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

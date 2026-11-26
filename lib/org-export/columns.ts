@@ -154,6 +154,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   maintenance_visit_finding_resolutions: 'Wartungen_Befunde_geschlossen',
   maintenance_visit_findings: 'Wartungen_Befunde',
   offer_events: 'Angebote_Verlauf',
+  offer_positions: 'Angebote_Positionen',
+  offer_sections: 'Angebote_Titel',
   offers: 'Angebote',
   on_call_shift_events: 'Bereitschaften_Ereignisse',
   on_call_shift_members: 'Bereitschaften_Personen',

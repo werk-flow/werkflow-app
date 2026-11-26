@@ -49,7 +49,7 @@ export const TERM_FIELD_IDS = {
 } as const;
 
 /** A decimal typed with a comma or a dot, signed, at most three decimals: „-1,5“ → „-1.5“. */
-function parseQuantity(text: string): string | null {
+export function parseQuantity(text: string): string | null {
   const match = /^(-?)(\d{1,9})(?:[.,](\d{1,3}))?$/.exec(text.trim());
   if (!match) return null;
   const [, sign = '', whole = '0', fraction = ''] = match;
@@ -81,7 +81,7 @@ function percentInput(basisPoints: number | null): string {
 }
 
 /** „1,5“ from the stored „1.500“. */
-function quantityInput(quantity: string): string {
+export function quantityInput(quantity: string): string {
   const trimmed = quantity.includes('.') ? quantity.replace(/0+$/, '').replace(/\.$/, '') : quantity;
   return trimmed.replace('.', ',');
 }
