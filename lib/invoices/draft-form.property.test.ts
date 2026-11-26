@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 import {
   draftLineValuesArbitrary,
+  invoiceLineSourceArbitrary,
   invoiceTermsArbitrary,
   quantityThousandthsArbitrary,
 } from '@/lib/testing/invoice-arbitraries';
@@ -11,14 +12,16 @@ import type { InvoiceDetail } from './types';
 // Property tests (docs/technical/testing.md, "Property tests"). The rules come from
 // docs/features/commercial-and-finance.md, "Invoice drafts": lines with a quantity of up to three
 // decimals, negative for a credit, a net price, VAT 19, 7 or 0 %, a Zahlungsziel in days and an
-// optional Skonto in percent and days. The editor shows a stored draft and saves it unchanged.
+// optional Skonto in percent and days, and a line from a Leistung or an article keeps its source.
+// The editor shows a stored draft and saves it unchanged.
 
 const lineArbitrary = fc
-  .tuple(draftLineValuesArbitrary(quantityThousandthsArbitrary), fc.boolean())
-  .map(([line, padded]) => ({
+  .tuple(draftLineValuesArbitrary(quantityThousandthsArbitrary), fc.boolean(), invoiceLineSourceArbitrary)
+  .map(([line, padded, source]) => ({
     ...line,
     quantity: padded ? paddedQuantity(line.quantity) : line.quantity,
     netCents: 0,
+    source,
   }));
 
 /** A quantity as `numeric(12,3)` returns it: „1.500“. */
@@ -49,7 +52,7 @@ const detailArbitrary: fc.Arbitrary<InvoiceDetail> = fc
   }));
 
 describe('The draft editor', () => {
-  test('saves a stored draft it shows unchanged: quantities, prices, rates, service days and Skonto', () => {
+  test('saves a stored draft it shows unchanged: quantities, prices, rates, service days, Skonto and line sources', () => {
     fc.assert(
       fc.property(detailArbitrary, (detail) => {
         const parsed = parseDraftForm(draftFormOf(detail));
@@ -64,6 +67,7 @@ describe('The draft editor', () => {
             unitPriceCents: line.unitPriceCents,
             priceQuantity: line.priceQuantity,
             taxRateBasisPoints: line.taxRateBasisPoints,
+            source: line.source ? { kind: line.source.kind, id: line.source.id } : null,
           })),
         );
         expect(parsed.terms).toEqual({

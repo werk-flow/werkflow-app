@@ -299,6 +299,7 @@ export function ProjectDetailContent(content: ProjectDetailContentProps) {
       <ProjectDetailHeader
         liveProject={liveProject}
         liveDerivedStatus={liveDerivedStatus}
+        liveClient={liveClient}
         isAdminOrManager={isAdminOrManager}
         setShowCreateJob={members ? dialogState.setShowCreateJob : null}
         setShowEditDialog={dialogState.setShowEditDialog}

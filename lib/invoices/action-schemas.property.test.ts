@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 import {
   draftLineValuesArbitrary,
+  invoiceLineSourceArbitrary,
   invoiceTermsArbitrary,
   quantityThousandthsArbitrary,
 } from '@/lib/testing/invoice-arbitraries';
@@ -37,10 +38,16 @@ const IDS = {
 const saveArbitrary = fc
   .tuple(
     invoiceTermsArbitrary,
-    fc.array(draftLineValuesArbitrary(quantityThousandthsArbitrary), { maxLength: 500 }),
+    fc.array(fc.tuple(draftLineValuesArbitrary(quantityThousandthsArbitrary), invoiceLineSourceArbitrary), {
+      maxLength: 500,
+    }),
   )
   .map(([terms, lines]) => {
-    const form = draftFormOf({ ...DETAIL, ...terms, lines: lines.map((line) => ({ ...line, netCents: 0 })) });
+    const form = draftFormOf({
+      ...DETAIL,
+      ...terms,
+      lines: lines.map(([line, source]) => ({ ...line, netCents: 0, source })),
+    });
     const parsed = parseDraftForm(form);
     if (!parsed.ok) throw new Error(`the editor refuses its own draft: ${JSON.stringify(parsed.errors)}`);
     return { ...IDS, expectedVersion: 1, terms: parsed.terms, lines: parsed.lines };
@@ -70,6 +77,14 @@ const violations: Array<[string, (save: Save) => Save | null]> = [
   ],
   ['a tenth digit', (save) => withFirstLine(save, (line) => ({ ...line, quantity: '1234567890' }))],
   ['another VAT rate', (save) => withFirstLine(save, (line) => ({ ...line, taxRateBasisPoints: 1600 }))],
+  [
+    'a source of an unknown kind',
+    (save) =>
+      withFirstLine(save, (line) => ({
+        ...line,
+        source: { kind: 'material', id: '00000000-0000-4000-8000-000000000004' },
+      })),
+  ],
   ['a Zahlungsziel beyond a year', (save) => ({ ...save, terms: { ...save.terms, paymentDueDays: 366 } })],
   [
     'a Skonto period past the Zahlungsziel',
@@ -133,6 +148,7 @@ describe('The save of a draft', () => {
       priceQuantity: 1000 as const,
       taxRateBasisPoints: 1900 as const,
       netCents: 0,
+      source: null,
     };
     const parsed = parseDraftForm(
       draftFormOf({ ...DETAIL, ...terms, lines: Array.from({ length: 500 }, () => line) }),

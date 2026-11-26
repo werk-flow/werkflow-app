@@ -3869,6 +3869,8 @@ export type Database = {
           description: string;
           id: string;
           invoice_id: string;
+          item_id: string | null;
+          leistung_id: string | null;
           name: string;
           net_cents: number;
           organization_id: string;
@@ -3884,6 +3886,8 @@ export type Database = {
           description?: string;
           id?: string;
           invoice_id: string;
+          item_id?: string | null;
+          leistung_id?: string | null;
           name: string;
           net_cents: number;
           organization_id: string;
@@ -3899,6 +3903,8 @@ export type Database = {
           description?: string;
           id?: string;
           invoice_id?: string;
+          item_id?: string | null;
+          leistung_id?: string | null;
           name?: string;
           net_cents?: number;
           organization_id?: string;
@@ -3916,6 +3922,20 @@ export type Database = {
             columns: ["invoice_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "invoices";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoice_lines_item_fk";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoice_lines_leistung_fk";
+            columns: ["leistung_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "leistungen";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -18888,6 +18908,10 @@ export type Database = {
         Args: { p_invoice_id: string; p_organization_id: string };
         Returns: Json;
       };
+      get_invoice_with_line_sources: {
+        Args: { p_invoice_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       get_offer: {
         Args: { p_offer_id: string; p_organization_id: string };
         Returns: Json;
@@ -21251,6 +21275,14 @@ export type Database = {
         Returns: Json;
       };
       search_inventory_item_options: {
+        Args: {
+          p_offset?: number;
+          p_organization_id: string;
+          p_search?: string;
+        };
+        Returns: Json;
+      };
+      search_leistung_options: {
         Args: {
           p_offset?: number;
           p_organization_id: string;
