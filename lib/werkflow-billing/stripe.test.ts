@@ -153,13 +153,14 @@ describe('the debit reads of the invoice mails (werk-flow/werkflow-planning#492)
     mandateReference: 'MUSTERMANDAT0001',
   } as const;
 
-  test("an invoice's debit names its subscription, the SEPA mandate and the charge's expected debit date", async () => {
+  test("an invoice's debit names its subscription, whether Checkout opened it, the SEPA mandate and the charge's expected debit date", async () => {
     const fake = createFakeStripeGateway(WEBHOOK_SECRET, {
       answers: {
         ...SEPA_INVOICE_ANSWERS,
         'GET /v1/invoices/in_test_0001': {
           ...STRIPE_INVOICE,
           period_end: RENEWS_AT,
+          billing_reason: 'subscription_create',
           parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_test_0001' } },
         },
         'GET /v1/payment_intents/pi_test_0001': {
@@ -178,6 +179,7 @@ describe('the debit reads of the invoice mails (werk-flow/werkflow-planning#492)
       id: 'in_test_0001',
       subscriptionId: 'sub_test_0001',
       renewsAt: RENEWS_AT,
+      opensSubscription: true,
       status: 'open',
       amountPaidCents: 0,
       paidAt: null,
