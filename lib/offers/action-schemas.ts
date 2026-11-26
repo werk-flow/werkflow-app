@@ -5,6 +5,7 @@ import { INVOICE_TAX_RATES } from '@/lib/invoices/types';
 import { MAX_PRICE_CENTS } from '@/lib/price-catalog/money';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { MAX_COST_CENTS } from './calculation';
 import { contentFitsOneSave, OFFER_CONTENT_LIMITS } from './content-form';
 
 // The inputs of the offer actions. The forms check title, customer and the
@@ -47,9 +48,9 @@ const positionTextSchema = {
   description: z.string().trim().max(4000),
 };
 
-/** A Position's net cost per price quantity (OfferPositionCost); the office may type any price's cost. */
-const positionCostSchema = z.object({
-  amountCents: z.number().int().min(0).max(MAX_PRICE_CENTS),
+/** A Position's net cost per price quantity (OfferPositionCost), as the cost store keeps any article price. */
+export const positionCostSchema = z.object({
+  amountCents: z.number().int().min(0).max(MAX_COST_CENTS),
   priceQuantity: z.literal(PRICE_QUANTITIES),
 });
 

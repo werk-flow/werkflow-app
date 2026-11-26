@@ -1,6 +1,6 @@
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
 import { draftAmounts, type DraftAmounts } from '@/lib/invoices/amounts';
-import { offerCalculation } from './calculation';
+import { lineCostCents } from './calculation';
 import type { OfferFreePosition, OfferPosition, OfferSection } from './types';
 
 // The amounts of an offer come from the one invoice core, as an invoice's do,
@@ -54,8 +54,10 @@ type OfferContentArgument = {
 export function offerContentArgument(sections: readonly OfferSection[]): OfferContentArgument | null {
   try {
     const amounts = offerAmounts(sections);
-    // A cost the calculation refuses is refused by the save too, so every saved offer calculates.
-    offerCalculation(sections, amounts);
+    // A line cost the calculation refuses is refused by the save too, so every saved offer calculates.
+    for (const position of sections.flatMap((section) => section.positions)) {
+      if (position.kind === 'free' && position.cost) lineCostCents(position.quantity, position.cost);
+    }
     return {
       sections: sections.map((section, sectionIndex) => {
         const computed = amounts.sections[sectionIndex];

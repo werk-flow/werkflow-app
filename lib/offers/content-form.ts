@@ -4,7 +4,14 @@ import { emptyLine, parsePricedLine, quantityInput, type DraftLineForm } from '@
 import type { OfferCatalogLine } from '@/lib/invoices/line-sources';
 import { centsToEuroInput, parseEuroCents } from '@/lib/price-catalog/money';
 import { offerAmounts, type OfferAmounts } from './amounts';
-import { markupPriceCents, MAX_MARKUP_TENTHS, offerCalculation, type OfferCalculation } from './calculation';
+import {
+  lineCostCents,
+  markupPriceCents,
+  MAX_COST_CENTS,
+  MAX_MARKUP_TENTHS,
+  offerCalculation,
+  type OfferCalculation,
+} from './calculation';
 import type { OfferCostedSection, OfferPosition, OfferPositionCost, OfferSection } from './types';
 
 // The content editor's text state and its parse into the Titel and
@@ -126,15 +133,21 @@ export function withCostOrMarkup(
   change: { cost: string } | { markup: string },
 ): PositionForm {
   const next = { ...position, ...change };
-  const costCents = parseEuroCents(next.cost);
+  const costCents = costCentsOf(next.cost);
   const markupTenths = parseMarkupTenths(next.markup);
   if (costCents === null || costCents === undefined || markupTenths === null) return next;
-  const priceCents = markupPriceCents(
-    { amountCents: costCents, priceQuantity: next.costPriceQuantity },
-    next.priceQuantity,
-    markupTenths,
-  );
-  return { ...next, price: centsToEuroInput(priceCents) };
+  try {
+    const priceCents = markupPriceCents(
+      { amountCents: costCents, priceQuantity: next.costPriceQuantity },
+      next.priceQuantity,
+      markupTenths,
+    );
+    return { ...next, price: centsToEuroInput(priceCents) };
+  } catch (error) {
+    // A price beyond the safe range stays as typed; the save names the price field.
+    if (error instanceof RangeError) return next;
+    throw error;
+  }
 }
 
 /**
@@ -147,7 +160,7 @@ export function markupSentence(position: PositionForm): string | null {
   if (parseMarkupTenths(position.markup) === null) {
     return 'Gib den Aufschlag in Prozent von 0 bis 999,9 an, zum Beispiel 25 oder 12,5.';
   }
-  return parseEuroCents(position.cost) === null ? 'Trag zuerst die Kosten ein.' : null;
+  return costCentsOf(position.cost) === null ? 'Trag zuerst die Kosten ein.' : null;
 }
 
 /** The position in another unit: a cost and a markup stated in the old unit no longer apply. */
@@ -155,20 +168,38 @@ export function withUnit(position: PositionForm, unit: string): PositionForm {
   return unit === position.unit ? position : { ...position, unit, cost: '', markup: '' };
 }
 
+/** A typed cost per price quantity: any article price may stand in the cost store, up to a line's bound. */
+function costCentsOf(text: string): number | null | undefined {
+  return parseEuroCents(text, MAX_COST_CENTS);
+}
+
 const PRICED_FIELDS = ['name', 'quantity', 'unit', 'price', 'cost'] as const;
 
-/** The cost of a priced position as typed: null when empty, undefined with a sentence when it does not read. */
+/**
+ * The cost of a priced position as typed: null when empty, undefined with a
+ * sentence when it does not read or its line cost exceeds the line's bound.
+ * `quantity` is the parsed quantity, null while it does not read.
+ */
 function parseCost(
   position: PositionForm,
-  fieldId: (field: PositionField) => string,
-  errors: Record<string, string>,
+  quantity: string | null,
+  costError: (sentence: string) => void,
 ): OfferPositionCost | null | undefined {
-  const amountCents = parseEuroCents(position.cost);
+  const amountCents = costCentsOf(position.cost);
   if (amountCents === undefined) {
-    errors[fieldId('cost')] = 'Gib die Kosten netto an, zum Beispiel 48,20, oder lass das Feld leer.';
+    costError('Gib die Kosten netto an, zum Beispiel 48,20, oder lass das Feld leer.');
     return undefined;
   }
-  return amountCents === null ? null : { amountCents, priceQuantity: position.costPriceQuantity };
+  if (amountCents === null) return null;
+  const cost = { amountCents, priceQuantity: position.costPriceQuantity };
+  try {
+    if (quantity !== null) lineCostCents(quantity, cost);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    costError('Die Kosten dieser Position übersteigen zehn Milliarden Euro. Prüfe Menge und Kosten.');
+    return undefined;
+  }
+  return cost;
 }
 
 function parsePosition(
@@ -181,7 +212,9 @@ function parsePosition(
     const values = parsePricedLine(position, fieldId, lineErrors);
     const unitKnown = isInventoryUnitCode(position.unit);
     if (!unitKnown) lineErrors[fieldId('unit')] = 'Wähle eine Einheit.';
-    const cost = parseCost(position, fieldId, lineErrors);
+    const cost = parseCost(position, values?.quantity ?? null, (sentence) => {
+      lineErrors[fieldId('cost')] = sentence;
+    });
     // In the order the fields show, so the first one at fault takes the focus.
     for (const field of PRICED_FIELDS) {
       const sentence = lineErrors[fieldId(field)];
@@ -254,17 +287,22 @@ export function contentLimitSentence(sections: readonly OfferSection[]): string 
 export function liveContentFigures(
   sections: readonly SectionForm[],
 ): { amounts: OfferAmounts; calculation: OfferCalculation } | null {
-  const parsed = parseContentForm(
-    // A Titel without a name still adds up: only the positions decide the amounts. A cost
-    // still being typed counts as none, so the sale amounts and totals stand meanwhile.
-    sections.map((section) => ({
-      ...section,
-      title: section.title.trim() || '-',
-      positions: section.positions.map((position) =>
-        parseEuroCents(position.cost) === undefined ? { ...position, cost: '' } : position,
-      ),
-    })),
-  );
+  // A Titel without a name still adds up: only the positions decide the amounts.
+  const named = sections.map((section) => ({ ...section, title: section.title.trim() || '-' }));
+  const first = parseContentForm(named);
+  // A cost still being typed, or one too high for its line, counts as none, so the sale amounts stand.
+  const parsed = first.ok
+    ? first
+    : parseContentForm(
+        named.map((section, sectionIndex) => ({
+          ...section,
+          positions: section.positions.map((position, index) =>
+            first.errors[contentFieldId(sectionIndex, { position: index, field: 'cost' })]
+              ? { ...position, cost: '' }
+              : position,
+          ),
+        })),
+      );
   if (!parsed.ok) return null;
   try {
     const amounts = offerAmounts(parsed.sections);

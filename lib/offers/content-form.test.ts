@@ -236,6 +236,46 @@ describe('cost and markup', () => {
     expect(figures?.calculation.offer.withoutCost).toBe(1);
   });
 
+  test('a stored cost above a price limit keeps through the editor and the next save', () => {
+    const [section] = contentFormOf([
+      {
+        title: 'Material',
+        positions: [
+          {
+            kind: 'free',
+            name: 'Pressfitting 15 mm',
+            description: '',
+            quantity: '1000',
+            unit: 'piece',
+            unitPriceCents: 99_000_000,
+            priceQuantity: 1000,
+            taxRateBasisPoints: 1900,
+            source: null,
+            cost: { amountCents: 250_000_000, priceQuantity: 1000 },
+          },
+        ],
+      },
+    ]);
+    const parsed = parseContentForm(section ? [section] : []);
+    expect(parsed.ok && parsed.sections[0]?.positions[0]).toMatchObject({
+      cost: { amountCents: 250_000_000, priceQuantity: 1000 },
+    });
+  });
+
+  test('a cost too high for its line stops the save at its field, and the totals stand meanwhile', () => {
+    const position = { ...typed, quantity: '10001', price: '1,00', cost: '1000000' };
+    expect(parse(position)).toEqual({
+      ok: false,
+      errors: {
+        [fieldOf('cost')]:
+          'Die Kosten dieser Position übersteigen zehn Milliarden Euro. Prüfe Menge und Kosten.',
+      },
+    });
+    const figures = liveContentFigures([{ key: 's', title: 'Heizung', positions: [position] }]);
+    expect(figures?.amounts.totals.lineNetCents).toBe(1_000_100);
+    expect(figures?.calculation.offer.withoutCost).toBe(1);
+  });
+
   test('a cost that cannot be read stops the save at its field', () => {
     expect(parse({ ...typed, cost: '12,345' })).toEqual({
       ok: false,

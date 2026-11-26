@@ -22,8 +22,8 @@ test('a content save above the editor byte limit is refused for every caller', (
   expect(saveOfferContentSchema.safeParse(save('x'.repeat(4000), 240)).success).toBe(false);
 });
 
-// A Position's cost is office input with the limits of a price: whole cents
-// from zero, per a price quantity a price can have; none is null.
+// A Position's cost is whole cents from zero up to a line's bound, per a price
+// quantity a price can have; none is null.
 test('a content save takes a cost per a price quantity of a price, and refuses any other', () => {
   const withCost = (cost: unknown) => ({
     ...save('', 0),
@@ -47,14 +47,20 @@ test('a content save takes a cost per a price quantity of a price, and refuses a
       },
     ],
   });
-  for (const cost of [null, { amountCents: 0, priceQuantity: 1 }, { amountCents: 812, priceQuantity: 100 }]) {
+  // Any article price may stand in the cost store: a wholesaler import takes up to 2^31 cents.
+  for (const cost of [
+    null,
+    { amountCents: 0, priceQuantity: 1 },
+    { amountCents: 812, priceQuantity: 100 },
+    { amountCents: 2_147_483_647, priceQuantity: 1000 },
+  ]) {
     expect(saveOfferContentSchema.safeParse(withCost(cost)).success).toBe(true);
   }
   for (const cost of [
     { amountCents: -1, priceQuantity: 1 },
     { amountCents: 1.5, priceQuantity: 1 },
     { amountCents: 100, priceQuantity: 3 },
-    { amountCents: 100_000_001, priceQuantity: 1 },
+    { amountCents: 1_000_000_000_001, priceQuantity: 1 },
   ]) {
     expect(saveOfferContentSchema.safeParse(withCost(cost)).success).toBe(false);
   }

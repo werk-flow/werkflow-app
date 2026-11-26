@@ -7,8 +7,7 @@ import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { PRICE_QUANTITIES } from '@/lib/inventory/article-price-terms';
-import { storedSectionSchema } from './action-schemas';
+import { positionCostSchema, storedSectionSchema } from './action-schemas';
 import type { OfferListQuery, OfferPage } from './list-page';
 import {
   OFFER_STATUSES,
@@ -130,19 +129,9 @@ function offerDetailOf(data: unknown): OfferDetail {
   };
 }
 
-/**
- * A stored cost as the database keeps it: any article price may stand there
- * (inventory_item_prices), so a cost above what the editor takes still loads,
- * and the editor names it at its field.
- */
-const storedCostSchema = z.object({
-  amountCents: z.number().int().nonnegative(),
-  priceQuantity: z.literal(PRICE_QUANTITIES),
-});
-
 const offerWithCostsSchema = z.object({
   offer: z.unknown(),
-  costs: z.array(z.array(storedCostSchema.nullable())),
+  costs: z.array(z.array(positionCostSchema.nullable())),
 });
 
 /**

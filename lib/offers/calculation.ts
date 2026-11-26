@@ -70,6 +70,24 @@ function sum(groups: ReadonlyArray<CalculationFigures>): CalculationFigures {
   );
 }
 
+/**
+ * The largest cost per price quantity a Position keeps: any article price may
+ * stand in the cost store (a wholesaler import takes up to 2^31 cents), so the
+ * only bound is the line's.
+ */
+export const MAX_COST_CENTS = MAX_LINE_NET_CENTS;
+
+/**
+ * A Position's cost: its quantity at its cost per price quantity, by the
+ * shared line rule. Throws a RangeError beyond ten billion euros, the bound
+ * of a line amount, which keeps every sum of an offer an exact integer.
+ */
+export function lineCostCents(quantity: string, cost: OfferPositionCost): number {
+  const cents = lineAmountCents(quantity, cost.amountCents, cost.priceQuantity);
+  if (Math.abs(cents) > MAX_LINE_NET_CENTS) throw new RangeError('A line cost exceeds ten billion euros.');
+  return cents;
+}
+
 /** The calculation of the content whose amounts `amounts` holds (offerAmounts of the same sections). */
 export function offerCalculation(sections: readonly OfferSection[], amounts: OfferAmounts): OfferCalculation {
   const calculated = sections.map((section, sectionIndex) => {
@@ -81,13 +99,7 @@ export function offerCalculation(sections: readonly OfferSection[], amounts: Off
         throw new RangeError('A priced position has no computed amount.');
       }
       if (!position.cost) return { saleCents, costCents: null, marginCents: null, marginPermille: null };
-      const costCents = lineAmountCents(
-        position.quantity,
-        position.cost.amountCents,
-        position.cost.priceQuantity,
-      );
-      if (Math.abs(costCents) > MAX_LINE_NET_CENTS)
-        throw new RangeError('A line cost exceeds ten billion euros.');
+      const costCents = lineCostCents(position.quantity, position.cost);
       const marginCents = saleCents - costCents;
       return { saleCents, costCents, marginCents, marginPermille: permilleOf(marginCents, saleCents) };
     });
