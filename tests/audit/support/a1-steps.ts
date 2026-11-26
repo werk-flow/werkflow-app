@@ -101,6 +101,7 @@ export async function expectSignedWindowOpen(page: Page, clickDownload: () => Pr
 export async function readOrganizationCode(page: Page): Promise<PersistedJoinCode> {
   await page.goto('/einstellungen/organisation');
   const code = page.getByLabel('Organisationscode');
+  await expect(code).toBeVisible();
   await expect(code).toHaveValue(/^[A-Z0-9]{6}$/);
   return getOrganizationByJoinCode(await code.inputValue());
 }
