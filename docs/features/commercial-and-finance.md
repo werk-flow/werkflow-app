@@ -35,6 +35,6 @@ WerkFlow has offers without positions and invoice drafts, and no order or issued
 - A Leistung's price applies per one unit; a VAT rate other than 19, 7 or 0 % cannot be chosen. No offer uses a Leistung yet.
 - Not built: calculation, offer positions and amounts, order confirmation, contract, change order, billable measurement, issued invoice, credit, incoming bill, payment, open item, dunning, bank matching, accounting export, ledger.
 - A draft offer names its Rechnungsempfänger as a customer and keeps no copy of its name and address; sending will copy them (werk-flow/werkflow-planning#16).
-- In WerkFlow's own invoices, a discount, customer balance or tax in Stripe stops the issue. The billing page lists a Stornorechnung and its replacement without their lines or service period (werk-flow/werkflow-planning#554). A credit note on an open invoice, or one that carries tax, raises the alarm and issues nothing.
+- In WerkFlow's own invoices, a discount, customer balance or tax in Stripe stops the issue. A credit note on an open invoice, or one that carries tax, raises the alarm and issues nothing.
 - The Musterrechnung is a ZUGFeRD PDF; drafts get no number, PDF or sending yet; no XRechnung and no § 13b. The CII schema itself is not checked at run time.
 - WerkFlow claims no XRechnung, ZUGFeRD invoicing, Peppol, DATEV, GAEB, REB/VOB, §13b, GoBD archive, double-entry accounting, payroll or tax-filing capability.

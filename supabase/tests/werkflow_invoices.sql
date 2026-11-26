@@ -8,8 +8,9 @@
 -- the organization keeps it. A refund's Storno (#491) cancels one document
 -- once, names it, negates its amounts and takes the organization, Stripe ids
 -- and buyer from it; a replacement for the part that stays lies between
--- nothing and the cancelled amount and is paid in full. Each original names
--- its lines and service period.
+-- nothing and the cancelled amount and is paid in full. Each document names
+-- its lines and service period: an original and a replacement their own, a
+-- Storno those of the document it cancels (#554).
 begin;
 
 insert into auth.users (
@@ -137,7 +138,9 @@ language sql as $$
     'number', p_number, 'issue_date', '2037-11-20', 'net_cents', p_gross, 'tax_cents', 0,
     'gross_cents', p_gross, 'paid_cents', p_paid, 'payment_means', 'card',
     'file_key', 'werkflow-billing/invoices/in_test_0001/' || encode(sha256(convert_to(p_number, 'UTF8')), 'hex') || '.pdf',
-    'file_sha256', encode(sha256(convert_to(p_number, 'UTF8')), 'hex'), 'file_size_bytes', 1024, 'rules_release', '1.3.17'
+    'file_sha256', encode(sha256(convert_to(p_number, 'UTF8')), 'hex'), 'file_size_bytes', 1024, 'rules_release', '1.3.17',
+    'line_names', jsonb_build_array('WerkFlow-Abo', 'Erstattung ' || replace(p_number, '-KR-', '-CN-')),
+    'service_start', '2037-11-15', 'service_end', '2037-12-14'
   );
 $$;
 create function pg_temp.storno(p_cancels uuid, p_credit_note text, p_number text, p_gross bigint, p_replacement jsonb)
@@ -199,6 +202,18 @@ begin
     is distinct from 'cn_test_0001' then
     raise exception 'the replacement does not carry its credit note';
   end if;
+  -- What each document was for (werk-flow/werkflow-planning#554).
+  if v_storno.line_names is distinct from array['WerkFlow-Abo']
+    or v_storno.service_start is distinct from date '2037-11-15'
+    or v_storno.service_end is distinct from date '2037-12-14' then
+    raise exception 'the Storno does not name the lines and service period of the document it cancels';
+  end if;
+  if not exists (select 1 from public.werkflow_invoices
+      where stripe_invoice_id = 'in_test_0001' and number = 'MUSTER-0001-KR-01'
+      and line_names = array['WerkFlow-Abo', 'Erstattung MUSTER-0001-CN-01']
+      and service_start = date '2037-11-15' and service_end = date '2037-12-14') then
+    raise exception 'the replacement does not name its own lines and service period';
+  end if;
   if pg_temp.issue('24900000-0000-0000-0000-000000000010', 'in_test_0001', 'MUSTER-0001') is distinct from 'already_issued' then
     raise exception 'the original issued again beside its Storno';
   end if;
@@ -220,6 +235,38 @@ begin
   end if;
 end;
 $$;
+
+-- A Storno of a replacement names the replacement's lines; the previous build's
+-- replacement, without lines or period, still records.
+do $$
+begin
+  if not exists (select 1 from public.werkflow_invoices
+      where stripe_invoice_id = 'in_test_0001' and number = 'MUSTER-0001-CN-02'
+      and line_names = array['WerkFlow-Abo', 'Erstattung MUSTER-0001-CN-01']
+      and service_start = date '2037-11-15' and service_end = date '2037-12-14') then
+    raise exception 'the Storno of a replacement does not name the replacement''s lines and service period';
+  end if;
+  if pg_temp.storno(pg_temp.document_id('MUSTER-0004'), 'cn_test_0003', 'MUSTER-0004-CN-01', -49900,
+      pg_temp.document('MUSTER-0004-KR-01', 39900, 39900) - 'line_names' - 'service_start' - 'service_end')
+    is distinct from 'issued' then
+    raise exception 'a replacement without lines or service period was not issued';
+  end if;
+end;
+$$;
+do $$
+begin
+  if not exists (select 1 from public.werkflow_invoices
+      where stripe_invoice_id = 'in_test_0004' and number = 'MUSTER-0004-KR-01'
+      and cardinality(line_names) = 0 and service_start is null and service_end is null) then
+    raise exception 'a replacement without lines or service period was not recorded with empty ones';
+  end if;
+  perform pg_temp.expect_refusal('a replacement whose lines are no list',
+    format($sql$select pg_temp.storno(%L, 'cn_test_0004', 'MUSTER-0004-CN-02', -39900,
+      pg_temp.document('MUSTER-0004-KR-02', 29900, 29900) || '{"line_names":"WerkFlow-Abo"}'::jsonb)$sql$,
+      pg_temp.document_id('MUSTER-0004-KR-01')),
+    'werkflow_storno_lines_invalid');
+end;
+$$;
 reset role;
 
 -- The Admin reads the organization's rows; nobody else, and no client writes or issues.
@@ -236,7 +283,7 @@ end;
 $$;
 do $$
 begin
-  if pg_temp.visible_invoices('24900000-0000-0000-0000-000000000001') is distinct from 5
+  if pg_temp.visible_invoices('24900000-0000-0000-0000-000000000001') is distinct from 7
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000002') is distinct from 0
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000003') is distinct from 0
     or pg_temp.visible_invoices('24900000-0000-0000-0000-000000000004') is distinct from 0 then
@@ -269,7 +316,7 @@ begin
     raise exception 'the organization was not deleted';
   end if;
   if (select count(*) from public.werkflow_invoices
-      where organization_id = '24900000-0000-0000-0000-000000000010') is distinct from 5 then
+      where organization_id = '24900000-0000-0000-0000-000000000010') is distinct from 7 then
     raise exception 'deleting the organization removed one of its WerkFlow invoices';
   end if;
 end;
