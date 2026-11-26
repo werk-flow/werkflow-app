@@ -100,6 +100,15 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('attach-request-dialog.tsx'))
                 return { path: join(import.meta.dir, 'request-attach-boundaries.tsx') };
             });
+            // The search dialog reads the active organization from the search contract.
+            builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
+              if (args.importer.endsWith('global-search-dialog.tsx'))
+                return { path: join(import.meta.dir, 'global-search-boundaries.tsx') };
+            });
+            builder.onResolve({ filter: /^next\/link$/ }, (args) => {
+              if (args.importer.endsWith('global-search-dialog.tsx'))
+                return { path: join(import.meta.dir, 'global-search-boundaries.tsx') };
+            });
             builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
               if (
                 args.importer.endsWith('use-suggested-record-number.ts') ||
@@ -187,6 +196,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('reset-password-form.tsx') ||
                 args.importer.endsWith('aufgaben-task-row.tsx') ||
                 args.importer.endsWith('office-start-sections.tsx') ||
+                args.importer.endsWith('owner-start.tsx') ||
                 args.importer.endsWith('text-link.tsx') ||
                 args.importer.endsWith('client-duplicate-matches.tsx') ||
                 args.importer.endsWith('standalone-screen.tsx')

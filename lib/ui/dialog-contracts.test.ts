@@ -69,6 +69,11 @@ const exceptions: Record<string, DialogException> = {
     kind: 'browser',
     reason: 'Search and select existing documents before explicit linking.',
   },
+  'components/search/global-search-dialog.tsx#GlobalSearchDialog|Suchen': {
+    kind: 'browser',
+    reason:
+      'The search reads as the query settles and each hit is a link to its page; there is nothing to submit.',
+  },
   'components/dokumente/document-move-destination-dialog.tsx#MoveDestinationDialog|{title}': {
     kind: 'browser',
     reason: 'Folder tree navigation precedes an explicit move command.',

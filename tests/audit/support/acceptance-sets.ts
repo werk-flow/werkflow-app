@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import type { Locator } from '@playwright/test';
 import type { TestWorld } from '../../golden/support/world';
 import type { AcceptanceSet, CaptureSpec } from './acceptance-rounds';
 import type { SurfaceDestination } from './surface-routes';
@@ -23,6 +24,8 @@ export type SetCapture = CaptureSpec & {
   destination?: (world: TestWorld) => Promise<SurfaceDestination>;
   /** A dialog that pictures the page as it opens, such as the report's screenshot, opens anew in each scheme. */
   openInEachScheme?: true;
+  /** Acts inside the opened dialog before the image, such as typing a search query; it may seed records first. */
+  inLayer?: (layer: Locator, world: TestWorld) => Promise<void>;
   /**
    * Captured as the admin of the world's outsider organization instead of the
    * role's own account. No set seeds anything there, so a capture of an empty

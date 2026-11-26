@@ -127,6 +127,7 @@ Tier 3 defaults. Diverge after the owner tried the alternative.
 - Report a speedup as a percentage alone.
 - Re-export a library's whole namespace from a module the client imports. A namespace object keeps everything the library exports; name the members, as `lib/zod-members.ts` does.
 - Import `react-dom/client` in product code. Next's bootstrap owns it, and a second importer, even a lazy one, makes the bundler cut React's DOM renderer out of the start-up chunk: one more script on every cold start. Render into a host a layout mounts (`components/shared/unsent-work-host.tsx`).
+- Let a lazy dialog the app shell opens import a component the pages use but the shell does not, such as `ListRow`: the bundler regroups the shell's shared chunks, two more scripts on every cold start. Compare the `(app)` layout's `entryJSFiles` in a production build's client reference manifest before and after (`components/search/global-search-dialog.tsx`).
 - Render a client component inside a server primitive every page uses (`PageShell`, `PageBody`, the page headers). Its client reference and the route's chunk list ride in every route payload. Run page-wide client behavior once in the app shell.
 
 ## Verify your work
