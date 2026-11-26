@@ -87,6 +87,9 @@ export function parseContentForm(sections: readonly SectionForm[]): ParsedConten
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, sections: parsed };
 }
 
+/** How much one offer holds; the save's schema refuses the same limits (action-schemas.ts). */
+export const OFFER_CONTENT_LIMITS = { sections: 100, positionsPerSection: 500, positions: 1000 } as const;
+
 /**
  * Below Next's 1 MB body limit of a Server Action, with room for the request's
  * own fields: a larger content never reaches the server, so the editor says
@@ -94,9 +97,27 @@ export function parseContentForm(sections: readonly SectionForm[]): ParsedConten
  */
 const MAX_CONTENT_BYTES = 900_000;
 
-/** Whether the parsed content is too large to send in one save. */
-export function contentTooLarge(sections: readonly OfferSection[]): boolean {
-  return new TextEncoder().encode(JSON.stringify(sections)).length > MAX_CONTENT_BYTES;
+/**
+ * The sentence for parsed content one save cannot take: more Titel or
+ * Positionen than an offer holds, or more bytes than a Server Action carries.
+ * Null when it fits.
+ */
+export function contentLimitSentence(sections: readonly OfferSection[]): string | null {
+  if (sections.length > OFFER_CONTENT_LIMITS.sections) {
+    return `Ein Angebot hat höchstens ${OFFER_CONTENT_LIMITS.sections} Titel. Fasse Titel zusammen.`;
+  }
+  if (sections.some((section) => section.positions.length > OFFER_CONTENT_LIMITS.positionsPerSection)) {
+    return `Ein Titel hat höchstens ${OFFER_CONTENT_LIMITS.positionsPerSection} Positionen. Verteile sie auf mehrere Titel.`;
+  }
+  if (
+    sections.reduce((count, section) => count + section.positions.length, 0) > OFFER_CONTENT_LIMITS.positions
+  ) {
+    return 'Ein Angebot hat höchstens 1.000 Positionen. Verteile sie auf mehrere Angebote.';
+  }
+  if (new TextEncoder().encode(JSON.stringify(sections)).length > MAX_CONTENT_BYTES) {
+    return 'Die Positionen sind zu lang für eine Speicherung. Kürze lange Beschreibungen.';
+  }
+  return null;
 }
 
 /** The live amounts of the content as typed; null while a position cannot be read or the line rule refuses it. */

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { emptyLine, parseDraftForm, type DraftForm } from '@/lib/invoices/draft-form';
-import { contentTooLarge, emptyPosition, parseContentForm } from './content-form';
+import { contentLimitSentence, emptyPosition, parseContentForm } from './content-form';
 import type { OfferSection } from './types';
 
 function textLines(count: number, description: string): OfferSection[] {
@@ -16,14 +16,24 @@ function textLines(count: number, description: string): OfferSection[] {
   ];
 }
 
-// A save travels as one Server Action body, which Next caps at 1 MB.
-describe('contentTooLarge', () => {
+// What one save cannot take is said before it is sent: the server refuses
+// the same limits (OFFER_CONTENT_LIMITS), and Next caps a Server Action body at 1 MB.
+describe('contentLimitSentence', () => {
   test('an offer with long descriptions fits', () => {
-    expect(contentTooLarge(textLines(80, 'Ausführung nach Herstellerangabe. '.repeat(30)))).toBe(false);
+    expect(contentLimitSentence(textLines(80, 'Ausführung nach Herstellerangabe. '.repeat(30)))).toBeNull();
   });
 
   test('ninety descriptions of 4.000 euro signs do not fit, counted in UTF-8 bytes', () => {
-    expect(contentTooLarge(textLines(90, '€'.repeat(4000)))).toBe(true);
+    expect(contentLimitSentence(textLines(90, '€'.repeat(4000)))).toContain('Kürze lange Beschreibungen');
+  });
+
+  test('a Titel with 501 positions names the limit per Titel', () => {
+    expect(contentLimitSentence(textLines(501, ''))).toContain('höchstens 500 Positionen');
+  });
+
+  test('101 Titel name the limit of Titel', () => {
+    const sections = Array.from({ length: 101 }, () => ({ title: 'Titel', positions: [] }));
+    expect(contentLimitSentence(sections)).toContain('höchstens 100 Titel');
   });
 });
 

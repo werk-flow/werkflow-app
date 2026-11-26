@@ -16,7 +16,7 @@ import { describeFailure } from '@/lib/action-messages';
 import { saveOfferContent } from '@/lib/offers/actions';
 import {
   contentFormOf,
-  contentTooLarge,
+  contentLimitSentence,
   liveContentAmounts,
   parseContentForm,
   type SectionForm,
@@ -117,8 +117,9 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
       focusFirstInvalidField(parsed.errors);
       return;
     }
-    if (contentTooLarge(parsed.sections)) {
-      setError('Die Positionen sind zu lang für eine Speicherung. Kürze lange Beschreibungen.');
+    const limit = contentLimitSentence(parsed.sections);
+    if (limit) {
+      setError(limit);
       return;
     }
     void run(async () => {
