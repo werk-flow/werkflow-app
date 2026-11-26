@@ -7,7 +7,7 @@ import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { offerSectionSchema } from './action-schemas';
+import { storedSectionSchema } from './action-schemas';
 import type { OfferListQuery, OfferPage } from './list-page';
 import { OFFER_STATUSES, offerWorkKindSchema, type OfferDetail, type OfferWorkKind } from './types';
 
@@ -89,7 +89,7 @@ const offerSchema = z.object({
   work: z
     .object({ kind: offerWorkKindSchema, id: uuidSchema, number: z.string().nullable(), title: z.string() })
     .nullable(),
-  sections: z.array(offerSectionSchema),
+  sections: z.array(storedSectionSchema),
 });
 
 const WORK_LABELS: Record<OfferWorkKind, string> = { job: 'Auftrag', project: 'Projekt', request: 'Anfrage' };

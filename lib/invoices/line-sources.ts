@@ -44,6 +44,13 @@ export type InvoiceCatalogLine = {
   source: InvoiceLineSource;
 };
 
+/**
+ * A new offer Position from an article, as the server read it: an invoice
+ * line's values, except that `unit` is null for a stored unit outside the
+ * list („Einheit prüfen“), which the offer editor asks for before it saves.
+ */
+export type OfferArticleLine = Omit<InvoiceCatalogLine, 'unit'> & { unit: InventoryUnitCode | null };
+
 /** „Leistung L-7 · Monteurstunde“ */
 export function lineSourceLabel(source: InvoiceLineSource): string {
   return `${INVOICE_LINE_SOURCE_LABELS[source.kind]} ${[source.number, source.name].filter(Boolean).join(' · ')}`;
