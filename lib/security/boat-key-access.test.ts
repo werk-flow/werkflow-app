@@ -2,13 +2,15 @@
 // CLI's config; only the process that calls Boat reads the key.
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
-import { boatKeyCommandRefusal, boatKeyToolRefusal, shellFolder } from './boat-key-access';
+import { boatKeyCommandRefusal, boatKeyToolRefusal, liveBackupsOnDisk, shellFolder } from './boat-key-access';
 
 const home = '/home/agent';
-const context = { cwd: '/home/agent/code/werkflow-app', home };
-const refused = (command: string, cwd = context.cwd) => boatKeyCommandRefusal(command, { cwd, home });
+const context = { cwd: '/home/agent/code/werkflow-app', home, liveBackupsUnder: () => [] };
+const refused = (command: string, cwd = context.cwd) => boatKeyCommandRefusal(command, { ...context, cwd });
 
 test('a command that names the key file or the CLI config in any spelling is refused', () => {
   for (const command of [
@@ -122,7 +124,7 @@ test('ordinary work, the expiry file and the runner pass', () => {
 test('a payload that names its workdir resolves relative paths and globs from it', () => {
   const folder = shellFolder({ command: 'cat b*', workdir: '~/.config/werkflow' }, context);
   expect(folder).toBe('/home/agent/.config/werkflow');
-  expect(boatKeyCommandRefusal('cat b*', { cwd: folder, home })).toContain('matches a file');
+  expect(boatKeyCommandRefusal('cat b*', { ...context, cwd: folder })).toContain('matches a file');
   expect(shellFolder({ command: 'ls', workdir: '../other' }, context)).toBe('/home/agent/code/other');
   expect(shellFolder({ command: 'ls' }, context)).toBe(context.cwd);
 });
@@ -181,8 +183,11 @@ test('a spelling of the hand-out file that hides its name from the text is refus
 });
 
 test('a glob that matches the hand-out file is refused', () => {
+  // The folder's other secret files share the `.env` suffix, so the refusal may name them too.
   for (const command of ['cat ~/.config/werkflow/*.env', 'cd ~/.config/werkflow && head problem-report-*'])
-    expect(refused(command), command).toContain(`matches a file that holds ${HANDOUT}`);
+    expect(refused(command), command).toMatch(
+      new RegExp(`matches (?:a file that holds|files that hold) ${HANDOUT}`),
+    );
 });
 
 test('a recursive read of the folder that holds the hand-out file names it', () => {
@@ -192,7 +197,7 @@ test('a recursive read of the folder that holds the hand-out file names it', () 
     'tar czf /tmp/config.tgz ~/.config',
   ])
     expect(refused(command), command).toMatch(
-      new RegExp(`would read every file under .*${HANDOUT} included`),
+      new RegExp(`would read every file under .*${HANDOUT}.* included`),
     );
 });
 
@@ -234,6 +239,155 @@ test('the helper and the dispatcher, which read the hand-out secret themselves, 
     'bun run test:unit lib/problem-reports/report-thread-helper.test.ts',
   ])
     expect(refused(command), command).toBeUndefined();
+});
+
+// The agents' staging keys, the watcher's token, the Supabase CLI's login and the old sandbox
+// folder: the same shapes are refused, and each refusal names who reads the file instead.
+const HOME_SECRETS = [
+  {
+    file: '~/.config/werkflow/staging-agents.env',
+    holds: "the agents' staging keys",
+    instead: 'bun run agent-access:check',
+  },
+  {
+    file: '~/.config/werkflow/prod-watch.env',
+    holds: "the production watcher's Vercel token",
+    instead: 'ops/prod_watch.py',
+  },
+  { file: '~/.supabase/access-token', holds: "the Supabase CLI's login token", instead: 'bunx supabase' },
+  {
+    file: '~/.werkflow-stripe-sandbox/key.env',
+    holds: 'a Stripe sandbox key',
+    instead: 'STRIPE_SANDBOX_KEY',
+  },
+];
+
+test('a read, print, copy or search of an agent-machine secret is refused and names who reads it', () => {
+  for (const { file, holds, instead } of HOME_SECRETS) {
+    const quoted = file.replace(/\/([^/]+)$/, '/"$1"');
+    for (const command of [
+      `cat ${file}`,
+      `grep KEY ${file}`,
+      `cp ${file} /tmp/copy`,
+      `source ${file} && echo "$KEY"`,
+      `bash -c "head -c 8 ${file}"`,
+      // The quotes keep the name out of the raw text; the path still resolves.
+      `cat ${quoted}`,
+    ]) {
+      const reason = refused(command);
+      expect(reason, command).toContain(holds);
+      expect(reason, command).toContain(instead);
+    }
+    expect(
+      boatKeyToolRefusal({ tool_name: 'Read', tool_input: { file_path: file } }, context),
+      file,
+    ).toContain(holds);
+  }
+});
+
+test('a glob or a recursive read that reaches an agent-machine secret is refused', () => {
+  for (const { command, holds } of [
+    { command: 'cat ~/.config/werkflow/*.env', holds: "the agents' staging keys" },
+    { command: 'cat ~/.config/werkflow/s*', holds: "the agents' staging keys" },
+    { command: 'cat ~/.supabase/*', holds: "the Supabase CLI's login token" },
+    { command: 'cat ~/.werkflow-stripe-sandbox/*', holds: 'a Stripe sandbox key' },
+    { command: 'cat ~/.werkflow-*/key.env', holds: 'a Stripe sandbox key' },
+    { command: 'grep -r sk_test ~/.werkflow-stripe-sandbox', holds: 'a Stripe sandbox key' },
+    { command: 'cd ~/.werkflow-stripe-sandbox && grep -r sk_ .', holds: 'a Stripe sandbox key' },
+    { command: 'grep -r token ~/.supabase', holds: "the Supabase CLI's login token" },
+    { command: 'rg --hidden VERCEL ~/.config/werkflow', holds: "the production watcher's Vercel token" },
+  ])
+    expect(refused(command), command).toContain(holds);
+  expect(
+    boatKeyToolRefusal(
+      { tool_name: 'Grep', tool_input: { pattern: 'sk_', path: '~/.werkflow-stripe-sandbox' } },
+      context,
+    ),
+  ).toContain('a Stripe sandbox key');
+  for (const command of [
+    'ls -la ~/.config/werkflow',
+    'bun run agent-access:check',
+    'bunx supabase projects list',
+  ])
+    expect(refused(command), command).toBeUndefined();
+});
+
+// `.env.live-backup` holds PROD keys in any checkout. A checkout is where agents work, so a
+// recursive read counts it only where the reader surely reads, and rg's default skips it.
+const checkout = '/home/agent/code/werkflow-app';
+const liveBackup = `${checkout}/.env.live-backup`;
+const withLiveBackup = {
+  cwd: checkout,
+  home,
+  liveBackupsUnder: (folder: string) =>
+    folder === checkout || folder === '/home/agent/code' ? [liveBackup] : [],
+};
+const refusedInCheckout = (command: string) => boatKeyCommandRefusal(command, withLiveBackup);
+
+test('a read of .env.live-backup in any checkout is refused and names the production session', () => {
+  for (const command of [
+    'cat .env.live-backup',
+    'grep SUPABASE ../other-checkout/.env.live-backup',
+    'cp .env.live-backup .env.local',
+    'cat .env.live-"backup"',
+    'cat /srv/any/.env.live-"backup"',
+    'cat .env*',
+    'grep -h KEY .env.l*',
+    'grep -r SUPABASE .',
+    'grep -r SUPABASE',
+    'grep -R KEY ~/code',
+    'rg -uu SUPABASE .',
+    'rg --no-ignore KEY',
+    'tar czf /tmp/checkout.tgz .',
+    'find . -type f -exec cat {} +',
+  ]) {
+    const reason = refusedInCheckout(command);
+    expect(reason, command).toContain('PROD keys');
+    expect(reason, command).toContain('bun run env:prod');
+  }
+  const tool = (tool_name: string, tool_input: unknown) =>
+    boatKeyToolRefusal({ tool_name, tool_input }, withLiveBackup);
+  expect(tool('Read', { file_path: '.env.live-backup' })).toContain('PROD keys');
+  expect(tool('Read', { file_path: '/srv/other/.env.live-backup' })).toContain('PROD keys');
+  expect(tool('Grep', { pattern: 'KEY', path: '.env.live-backup' })).toContain('PROD keys');
+});
+
+test('ordinary work in a checkout that holds .env.live-backup passes', () => {
+  for (const command of [
+    'grep -rn boatKeyCommandRefusal lib/',
+    'rg --hidden token .',
+    'rg token',
+    'cp -r .agent-logs ~/scratch/evidence',
+    'cat .env.local',
+    'ls -la',
+    // The shell's wildcard skips dot files.
+    'wc -l *',
+    'bun run env:dev',
+    'find . -name "*.ts"',
+  ])
+    expect(refusedInCheckout(command), command).toBeUndefined();
+  // Without a live backup on the disk, a glob over the env files passes.
+  expect(refused('ls -la .env*')).toBeUndefined();
+  // The Grep tool runs ripgrep, which skips the git-ignored backup.
+  expect(
+    boatKeyToolRefusal({ tool_name: 'Grep', tool_input: { pattern: 'KEY' } }, withLiveBackup),
+  ).toBeUndefined();
+});
+
+test('the disk reader finds .env.live-backup in a folder and its subfolders only', () => {
+  const root = mkdtempSync(join(tmpdir(), 'live-backup-'));
+  try {
+    for (const folder of ['a', 'b/c']) mkdirSync(join(root, folder), { recursive: true });
+    for (const file of ['.env.live-backup', 'a/.env.live-backup', 'b/c/.env.live-backup'])
+      writeFileSync(join(root, file), 'MADE_UP=1\n');
+    expect(liveBackupsOnDisk(root).sort()).toEqual([
+      join(root, '.env.live-backup'),
+      join(root, 'a/.env.live-backup'),
+    ]);
+    expect(liveBackupsOnDisk(join(root, 'missing'))).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // The hook itself, as the agent runs it: exit 2 with the reason refuses the call.

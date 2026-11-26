@@ -40,7 +40,6 @@ This table is the one home of every deployment and workflow credential. No check
 
 - `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call. A failure fails the credential's step and opens or updates the issue "Weekly health check failed". Only a failed `prod` check assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only `x-health-check-token` and name each check `ok` or `failed`, never a value.
-- Agents never read a workstation secret file. `.claude/hooks/refuse-boat-key-reads.ts` refuses reading the Boat key or the hand-out file `~/.config/werkflow/problem-report-handout.env`, which only `bun scripts/report-thread.ts` and the report dispatcher read.
 
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
@@ -48,6 +47,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `SUPABASE_DEV_READ_TOKEN` | GitHub repository secret | Release: read-only SQL on DEV | 2027-11-16; at most a year | Supabase Account preferences, Access Tokens: `werkflow-dev-ledger-read`, organization WerkFlow, project DEV, Database read only. `gh secret set SUPABASE_DEV_READ_TOKEN` (stdin), run `health.yml`, revoke its predecessor. |
 | `PROD_INSPECT_SUPABASE_TOKEN`, `DEV_INSPECT_SUPABASE_TOKEN`, `DEV_AUTH_SYNC_SUPABASE_TOKEN` | Environment `production` | The [PROD inspection](#which-tool-reaches-what) | One year | Scoped, read only: PROD Database, Advisors, Auth config; DEV Database, Auth config. The third: DEV Auth config and Project settings write. `gh secret set --env production`. |
 | `werkflow-workstation-dev` | Workstations | DEV only | One year | [Machine setup](machine-setup.md#set-up-a-new-machine), step 2 |
+| [Agent keys](machine-setup.md#agent-keys) | Agent machines | Agents | One year or never | [There](machine-setup.md#agent-keys) |
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
 | `werkflow app prod-watch` | The owner's PC: `~/.config/werkflow/prod-watch.env`, mode 600 | The [production watcher](recovery-and-incidents.md#monitoring), which checks it | 2027-11-07 | Vercel Tokens: same name, team-scoped (`werkflows-projects`, also werkflow-website), 1 year; set the file's `VERCEL_TOKEN=`. |
 | Boat API key | `~/.config/werkflow/boat-api-key`, [mode 600](boat-verification.md#the-key-contract) | [Boat](boat-verification.md) | `boat-api-key.expires` | [Renew](boat-verification.md#renew-the-key) |
@@ -99,11 +99,11 @@ bun run env:prod   # PRODUCTION (loud warning; no tests)
 
 ## Which tool reaches what
 
-Agents never read PROD data through any tool: every tool result goes to the model provider. Metadata is allowed: the PROD inspection's log, and through the Vercel MCP connector Vercel's deployment state and `vercel.request.count` counts. Hooks enforce this in Claude Code and Codex; the [backlog](enforcement-ladder-backlog.md) records the other shell and `env:prod` paths. `.claude/hooks/refuse-production-mcp.ts` refuses an MCP tool that reaches the production Supabase project, or returns Vercel's logs, build events or traces. Preview runtime logs pass. No agent signs in ([security](security.md#never)): `.claude/hooks/refuse-account-sign-in.ts` refuses the sign-in commands it lists and every Vercel CLI call; the [backlog](enforcement-ladder-backlog.md) records the rest. Keep the `Supabase project` row's shape: the MCP hook reads the production ref there.
+Agents never read PROD data through any tool: every tool result goes to the model provider. Metadata is allowed: the PROD inspection's log and the Vercel MCP connector's metadata and counts. Hooks enforce this in Claude Code and Codex; the [backlog](enforcement-ladder-backlog.md) records the paths they miss. `.claude/hooks/refuse-production-mcp.ts` refuses an MCP tool that reaches the production Supabase project, or returns Vercel's logs, build events or traces. Preview runtime logs pass. No agent signs in ([security](security.md#never)): `.claude/hooks/refuse-account-sign-in.ts` refuses the sign-in commands it lists and every Vercel CLI call. Keep the `Supabase project` row's shape: the MCP hook reads the production ref there.
 
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
-| claude.ai Supabase connector | no | no | Organization-wide, so Claude Code denies it (`deniedMcpServers` in `~/.claude/settings.json`). |
+| claude.ai Supabase connector | no | no | Organization-wide; the MCP hook refuses it. `deniedMcpServers` in `~/.claude/settings.json` covers sessions outside this repository. |
 | MCP server `supabase` | never | read and write | `https://mcp.supabase.com/mcp?project_ref=mbkkzuqjbdvzelqvuzcn` |
 | Supabase CLI (`bunx supabase`) | never link or push | yes | The repository links to the DEV ref only. |
 | PROD inspection (`prod-inspect.yml`) | structure only | compared | Paused while GitHub Actions is off. |
@@ -112,6 +112,7 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 | Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP cannot reach it. |
 | Vercel MCP connector | metadata and counts only | yes | Deployment state, aliases and `vercel.request.count` counts by route, status, error code, deployment or Server Action. The MCP hook refuses a decrypted environment value. |
 | Vercel CLI | never | never | Not installed on agent machines; the hook refuses it. |
+| Staging bypass, Stripe sandbox key | protected links only; never | staging; sandbox | [Agent keys](machine-setup.md#agent-keys) |
 
 ## The migration rule
 

@@ -112,7 +112,7 @@ for (const file of ['.env.local-stack-backup', '.env.dev-backup', '.env.live-bac
 // The Supabase CLI keeps the linked DEV project there.
 link('supabase/.temp', 'directory');
 
-// The worktree's own .env.local: the local stack, with this worktree's test server as the site URL.
+// The worktree's own .env.local, mode 600: the local stack, with this worktree's test server as the site URL.
 await run(process.execPath, ['run', 'env:local']);
 
 // Every new worktree advances the shared stack to main (lib/testing/local-stack/stack-sync.ts).

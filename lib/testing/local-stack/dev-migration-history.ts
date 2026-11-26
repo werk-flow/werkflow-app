@@ -5,7 +5,7 @@ import { compareMigrationVersions, migrationVersionFromFileName } from './migrat
 import { LEDGER_QUERY, ledgerRowsSchema } from '../../security/production-inspection';
 import { requireEnv } from '../../../tests/golden/support/env';
 
-const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
+export const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
 
 export function validateSupabaseCliLink(linkedProjectRef: string | null): string[] {
   if (linkedProjectRef === null || linkedProjectRef === DEV_PROJECT_REF) {

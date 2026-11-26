@@ -141,7 +141,7 @@ test('both agent tools run the device guard before every device_open', () => {
   expect(guardedTools('.codex/hooks.json', tools, DEVICE_GUARD)).toEqual(tools);
 });
 
-test('Claude denies its file tools the Boat API key, the Boat CLI config and the hand-out secret', () => {
+test('Claude denies its file tools every workstation secret file in the home folder', () => {
   const settings = z
     .object({ permissions: z.object({ deny: z.array(z.string()) }) })
     .parse(JSON.parse(readFileSync(resolve(repositoryRoot, '.claude/settings.json'), 'utf8')));
@@ -152,6 +152,14 @@ test('Claude denies its file tools the Boat API key, the Boat CLI config and the
     'Edit(~/.config/ascii/boat/**)',
     'Read(~/.config/werkflow/problem-report-handout.env)',
     'Edit(~/.config/werkflow/problem-report-handout.env)',
+    'Read(~/.config/werkflow/staging-agents.env)',
+    'Edit(~/.config/werkflow/staging-agents.env)',
+    'Read(~/.config/werkflow/prod-watch.env)',
+    'Edit(~/.config/werkflow/prod-watch.env)',
+    'Read(~/.supabase/access-token)',
+    'Edit(~/.supabase/access-token)',
+    'Read(~/.werkflow-stripe-sandbox/**)',
+    'Edit(~/.werkflow-stripe-sandbox/**)',
   ])
     expect(settings.permissions.deny).toContain(rule);
 });

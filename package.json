@@ -56,6 +56,8 @@
     "types:check": "bun scripts/generate-supabase-types.ts --check",
     "auth:check": "bun scripts/check-supabase-project.ts auth",
     "advisors:check": "bun scripts/check-supabase-project.ts advisors",
+    "agent-access:check": "bun scripts/agent-access-check.ts",
+    "agent-keys:install": "bun scripts/agent-access-check.ts install",
     "prod:inspect": "bun scripts/inspect-production.ts",
     "docs:check": "bun scripts/check-docs.ts",
     "unused:check": "knip --no-progress && bun run unused:production",

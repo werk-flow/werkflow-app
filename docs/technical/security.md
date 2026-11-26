@@ -79,7 +79,6 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 - **Service-role queries.** A query on organization data passes an organization from the resolved context, or carries a reviewed `tenant-scope` reason.
 - **Closed periods.** A closed period freezes the recorded time of its month for every writer, service-role code included. Triggers raise SQLSTATE `WFP01`; `isPeriodClosedError` maps it to `period_closed`. Close refuses with `period_open_sessions` while a session that began before the period end is open.
 - **Account and email change.** Transitions stay atomic and server-only. One service-only RPC serializes every challenge transition per account. Send windows per mailbox survive a reset of the wizard. A completion claim permits one Auth update. Client roles read neither state table.
-- DEV's Auth configuration matches the reviewed posture (`auth:check`), and its advisors report nothing outside the reviewed exceptions (`advisors:check`).
 - A seeded demo account gets a password generated per run, never one from the repository, and PROD refuses a chosen one (`lib/security/demo-member-password.test.ts`).
 
 ### Realtime
@@ -125,6 +124,7 @@ On an unchanged tree, an exception matching no finding passes with a note: remov
 - Write to PROD outside the `release` workflow.
 - Pass a secret as a program argument in a script: other local users read it in `/proc` (`curl-headers.sh`).
 - Read PROD data in an agent session: results reach the model provider ([which tool reaches what](environments.md#which-tool-reaches-what)).
+- Keep an account-wide token or a PROD key where agents read: they hold only [agent keys](machine-setup.md#agent-keys).
 - Start a sign-in or run the Vercel CLI as an agent: the owner cannot tell who asked, and the token reaches PROD (`refuse-account-sign-in.ts`). Sign-ins are owner steps: numbered steps (machine, window, command, what the owner sees) under "Owner queue" on your epic or issue, then the question tool; keep working.
 
 ## Verify your work

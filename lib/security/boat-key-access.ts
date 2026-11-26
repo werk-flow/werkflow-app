@@ -1,21 +1,26 @@
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { lstatSync, readdirSync } from 'node:fs';
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { type ShellWord, SCRIPT_FLAG, SHELLS, program, readShell } from './shell-words';
+import { errorCode } from '../testing/runner/error-code';
 
 // Only the process that uses a workstation secret reads it
-// (docs/technical/environments.md, "Credentials"): the Boat API key, and the
-// problem-report hand-out secret that report threads reach the hand-out with.
-// The PreToolUse hook .claude/hooks/refuse-boat-key-reads.ts refuses an
-// agent's call that would read, print, copy or search one of these files, for
-// Claude Code and Codex alike.
+// (docs/technical/machine-setup.md, "Agent keys"): the Boat API key, the
+// problem-report hand-out secret, the agents' staging keys, the production
+// watcher's token, the Supabase CLI's login, the old Stripe sandbox folder, and
+// a checkout's PROD keys in `.env.live-backup`. The PreToolUse hook
+// .claude/hooks/refuse-boat-key-reads.ts refuses an agent's call that would
+// read, print, copy or search one of these files, for Claude Code and Codex alike.
 //
 // Threat model: the guard stops accidental and habitual reads, and a read that
 // a report's text prompts a report thread to make. Agents run as the owner's
 // OS user, so deliberate evasion is a rule violation it does not claim to catch.
+// A recursive read finds `.env.live-backup` in the folder it reads and in that
+// folder's subfolders; a deeper copy is out of its reach.
 
 /** A secret no agent reads, and who reads it instead. */
 type GuardedSecret = {
-  /** Its files, relative to the home folder. */
+  /** Its files and folders, relative to the home folder; a folder guards every file in it. */
   files: readonly string[];
   /** What the files hold, as a refusal names it. */
   holds: string;
@@ -26,6 +31,17 @@ type GuardedSecret = {
    */
   mention: RegExp;
   instead: string;
+};
+
+/** The file that holds a checkout's PROD keys. It has this name in any checkout, so no home path fixes it. */
+const LIVE_BACKUP = '.env.live-backup';
+const LIVE_BACKUP_SECRET: GuardedSecret = {
+  files: [],
+  holds: 'PROD keys',
+  mention: /\.env\.live-backup/,
+  instead:
+    "Only the owner's production session reads .env.live-backup, through `bun run env:prod` " +
+    '(docs/technical/environments.md, "Work on production").',
 };
 
 const GUARDED_SECRETS: readonly GuardedSecret[] = [
@@ -50,10 +66,43 @@ const GUARDED_SECRETS: readonly GuardedSecret[] = [
       'run the helper for the hand-out, the screenshot or the write-back ' +
       '(.claude/skills/report-thread/SKILL.md).',
   },
+  {
+    files: ['.config/werkflow/staging-agents.env'],
+    holds: "the agents' staging keys",
+    mention: /staging-agents\.env/,
+    instead:
+      'Only the process that uses an agent key reads it, through lib/security/staging-agent-keys.ts, ' +
+      'and never prints it: `bun run agent-access:check` checks every key and prints ok, failed or missing ' +
+      '(docs/technical/machine-setup.md, "Agent keys").',
+  },
+  {
+    files: ['.config/werkflow/prod-watch.env'],
+    holds: "the production watcher's Vercel token",
+    mention: /prod-watch\.env/,
+    instead:
+      'Only the production watcher, ops/prod_watch.py, reads its token ' +
+      '(docs/technical/recovery-and-incidents.md, "Monitoring").',
+  },
+  {
+    files: ['.supabase/access-token'],
+    holds: "the Supabase CLI's login token",
+    mention: /\.supabase\/access-token/,
+    instead:
+      'Only the Supabase CLI reads its login: run `bunx supabase` (docs/technical/environments.md, "Which tool reaches what").',
+  },
+  {
+    files: ['.werkflow-stripe-sandbox'],
+    holds: 'a Stripe sandbox key',
+    mention: /werkflow-stripe-sandbox/,
+    instead:
+      "Agents' Stripe sandbox key is STRIPE_SANDBOX_KEY in the agent key file; only the process that uses it reads it, " +
+      'through lib/security/staging-agent-keys.ts (docs/technical/machine-setup.md, "Agent keys").',
+  },
+  LIVE_BACKUP_SECRET,
 ];
 
 /** Each guarded file, resolved in the home folder, with its secret. */
-function secretFiles(home: string): { path: string; secret: GuardedSecret }[] {
+function secretFiles(home: string): SecretFile[] {
   return GUARDED_SECRETS.flatMap((secret) =>
     secret.files.map((file) => ({ path: resolve(home, file), secret })),
   );
@@ -68,12 +117,23 @@ function refusalText({ why, secrets }: Refusal): string {
   return `Refused: ${why} ${instead.join(' ')}`;
 }
 
-/** The secrets with a file in `folder`, each once. */
-function secretsUnder(
-  files: readonly { path: string; secret: GuardedSecret }[],
-  folder: string,
-): GuardedSecret[] {
-  return [...new Set(files.filter((file) => within(file.path, folder)).map((file) => file.secret))];
+type SecretFile = { path: string; secret: GuardedSecret };
+
+/** The secrets a read of `folder` reaches: a file in it, or the guarded folder it lies in; each once. */
+function secretsUnder(files: readonly SecretFile[], folder: string): GuardedSecret[] {
+  return [
+    ...new Set(
+      files
+        .filter((file) => within(file.path, folder) || within(folder, file.path))
+        .map((file) => file.secret),
+    ),
+  ];
+}
+
+/** The guarded file or folder a path names or lies in, or any file named `.env.live-backup`. */
+function secretAt(files: readonly SecretFile[], path: string): GuardedSecret | undefined {
+  if (basename(path) === LIVE_BACKUP) return LIVE_BACKUP_SECRET;
+  return files.find((file) => within(path, file.path))?.secret;
 }
 
 /** What the secrets hold, as one phrase: "a Boat API key and the problem-report hand-out secret". */
@@ -137,7 +197,29 @@ export function shellFolder(input: unknown, context: Context): string {
   return resolve(context.cwd, expandedPath(workdir, context.home) ?? workdir);
 }
 
-type Context = { cwd: string; home: string };
+type Context = {
+  cwd: string;
+  home: string;
+  /** The `.env.live-backup` files in a folder and its subfolders: the disk for the hook, a list in tests. */
+  liveBackupsUnder: (folder: string) => readonly string[];
+};
+
+/** The `.env.live-backup` files that exist in `folder` and its direct subfolders. */
+export function liveBackupsOnDisk(folder: string): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(folder, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(folder, entry.name));
+  } catch (error) {
+    // A missing folder, a file or a folder the user cannot list holds nothing a reader would reach.
+    if (['ENOENT', 'ENOTDIR', 'EACCES'].includes(String(errorCode(error)))) return [];
+    throw error;
+  }
+  return [folder, ...entries]
+    .map((dir) => join(dir, LIVE_BACKUP))
+    .filter((path) => lstatSync(path, { throwIfNoEntry: false }) !== undefined);
+}
 
 /** A word's path with a leading `~`, `$HOME` or `${HOME}` expanded, or undefined when another expansion remains. */
 function expandedPath(text: string, home: string): string | undefined {
@@ -156,6 +238,42 @@ function globRoot(path: string): string {
   const literal = path.slice(0, path.search(/[*?[]/));
   return literal.endsWith(sep) ? literal.slice(0, -1) || sep : resolve(literal, '..');
 }
+
+/**
+ * Whether a glob may name `target` or a file inside it: its literal folder lies in the target, or
+ * the glob or one of its leading folders matches the target, as `~/.werkflow-*` followed by a file
+ * name matches the guarded folder `~/.werkflow-stripe-sandbox`. Like the shell, a wildcard at the
+ * start of a name skips a dot file: `cat *` reads no `.env.live-backup`.
+ */
+function globReaches(pattern: string, target: string): boolean {
+  if (within(globRoot(pattern), target)) return true;
+  const parts = pattern.split(sep);
+  const names = target.split(sep);
+  return (
+    parts.length >= names.length &&
+    names.every((name, index) => {
+      const part = parts[index] ?? '';
+      return (
+        part === name || (!(name.startsWith('.') && !part.startsWith('.')) && new Bun.Glob(part).match(name))
+      );
+    })
+  );
+}
+
+/**
+ * Whether a recursive reader reads a folder it is given no operand for: a search tool given at
+ * most its pattern, or a `find` whose first word is an expression. Copy tools read only operands.
+ */
+function readsWorkingFolder(name: string, args: readonly ShellWord[]): boolean {
+  const operands = args.filter((arg) => !arg.text.startsWith('-'));
+  if (SEARCHERS.has(name)) return operands.length <= 1;
+  const first = args[0]?.text;
+  return name === 'find' && (first === undefined || /^[-(!]/.test(first));
+}
+
+/** Search tools that skip files git ignores, as `.env*` is, unless a flag turns that off. */
+const IGNORE_RESPECTING = new Set(['rg', 'ag']);
+const NO_IGNORE_FLAG = /^(?:-[a-zA-Z]*[uU][a-zA-Z]*|--no-ignore\S*|--unrestricted|--skip-vcs-ignores)$/;
 
 /** The program a simple command runs and its arguments, through launchers such as `env` and `timeout`. */
 function innerCommand(
@@ -256,10 +374,13 @@ function lineFolders(
 function lineRefusal(
   command: string,
   start: readonly string[],
-  home: string,
+  context: Context,
   depth: number,
 ): Refusal | undefined {
+  const { home } = context;
   const secrets = secretFiles(home);
+  const liveBackups = (folder: string): SecretFile[] =>
+    context.liveBackupsUnder(folder).map((path) => ({ path, secret: LIVE_BACKUP_SECRET }));
   const reading = readShell(command);
   if (!reading)
     return /\.config\b/.test(command)
@@ -280,16 +401,15 @@ function lineRefusal(
     // Every word, redirection targets included: `cat < config.json` reads the file too.
     for (const word of words) {
       for (const path of pathsOf(word.text, folders, home)) {
-        const named = secrets.find((file) => file.path === path);
+        const named = secretAt(secrets, path);
         if (named)
-          refusals.push({
-            why: `the command names a file that holds ${named.secret.holds}.`,
-            secrets: [named.secret],
-          });
+          refusals.push({ why: `the command names a file that holds ${named.holds}.`, secrets: [named] });
         const matched = word.globs
           ? [
               ...new Set(
-                secrets.filter((file) => new Bun.Glob(path).match(file.path)).map((file) => file.secret),
+                [...secrets, ...liveBackups(globRoot(path))]
+                  .filter((file) => globReaches(path, file.path))
+                  .map((file) => file.secret),
               ),
             ]
           : [];
@@ -303,19 +423,28 @@ function lineRefusal(
       const flag = run.args.findIndex((arg) => SCRIPT_FLAG.test(arg.text));
       const script = flag === -1 ? undefined : run.args[flag + 1]?.text;
       const inner =
-        script !== undefined && depth < 4 ? lineRefusal(script, folders, home, depth + 1) : undefined;
+        script !== undefined && depth < 4 ? lineRefusal(script, folders, context, depth + 1) : undefined;
       if (inner) refusals.push(inner);
     }
     if (!readsRecursively(run.name, run.args, run.viaXargs || viaXargs)) continue;
     // Any word may be a folder operand, and a reader given none reads where it runs.
-    const roots = [
-      ...folders,
-      ...run.args.flatMap((arg) =>
-        pathsOf(arg.text, folders, home).map((path) => (arg.globs ? globRoot(path) : path)),
-      ),
-    ];
+    const operands = run.args.flatMap((arg) =>
+      pathsOf(arg.text, folders, home).map((path) => (arg.globs ? globRoot(path) : path)),
+    );
+    const roots = [...folders, ...operands];
+    // A checkout is where agents work, so `.env.live-backup` counts only in a folder the reader
+    // surely reads: an operand, or the working folder when it has none. rg and ag skip it, since
+    // git ignores `.env*`, unless a flag says otherwise.
+    const skipsIgnored =
+      IGNORE_RESPECTING.has(run.name) && !run.args.some((arg) => NO_IGNORE_FLAG.test(arg.text));
+    const liveRoots = skipsIgnored
+      ? []
+      : [...operands, ...(readsWorkingFolder(run.name, run.args) ? folders : [])];
     for (const folder of roots) {
-      const inside = secretsUnder(secrets, folder);
+      const inside = secretsUnder(
+        [...secrets, ...(liveRoots.includes(folder) ? liveBackups(folder) : [])],
+        folder,
+      );
       if (inside.length)
         refusals.push({
           why: `${run.name} would read every file under ${folder === home ? '~' : folder.replace(home + sep, '~/')}, ${held(inside)} included.`,
@@ -347,7 +476,7 @@ function merged(refusals: readonly Refusal[]): Refusal | undefined {
  */
 export function boatKeyCommandRefusal(command: string, context: Context): string | undefined {
   const mentioned = GUARDED_SECRETS.filter((secret) => secret.mention.test(command));
-  const line = lineRefusal(command, [context.cwd], context.home, 0);
+  const line = lineRefusal(command, [context.cwd], context, 0);
   const refusal = merged([
     ...(mentioned.length ? [{ why: `the command names ${holding(mentioned)}.`, secrets: mentioned }] : []),
     ...(line ? [line] : []),
@@ -372,11 +501,14 @@ export function boatKeyToolRefusal(
   const secrets = secretFiles(home);
   if (call.tool_name === 'Read') {
     const path = field('file_path');
-    const read = secrets.find((file) => file.path === path);
-    if (read) return refusalText({ why: `the file holds ${read.secret.holds}.`, secrets: [read.secret] });
+    const read = path === undefined ? undefined : secretAt(secrets, path);
+    if (read) return refusalText({ why: `the file holds ${read.holds}.`, secrets: [read] });
   }
   if (call.tool_name === 'Grep') {
-    const searched = secretsUnder(secrets, field('path') ?? cwd);
+    // The Grep tool runs ripgrep, which skips files git ignores, `.env.live-backup` among them,
+    // unless the search names the file itself.
+    const path = field('path') ?? cwd;
+    const searched = basename(path) === LIVE_BACKUP ? [LIVE_BACKUP_SECRET] : secretsUnder(secrets, path);
     if (searched.length)
       return refusalText({
         why: `the search would read files that hold ${held(searched)}.`,
