@@ -92,8 +92,9 @@ async function readOnlyModeOff(token: string, ref: string): Promise<Outcome> {
 
 /**
  * A temporary table through the query endpoint: it needs write access, vanishes with its session if
- * it ran, and Supabase refuses it to a token without Database write (writeRefusedOutcome). Only a
- * 400's SQLSTATE is read; every other body is discarded unread.
+ * it ran, and Supabase refuses it to a token without Database write (writeRefusedOutcome). DEV's
+ * read-only mode is read before and after the write, never beside it. Only a 400's SQLSTATE is read;
+ * every other body is discarded unread.
  */
 async function writeRefused(token: string): Promise<Outcome> {
   if (!refs) return { verdict: 'failed', reason: 'the environments doc names no DEV project' };
@@ -109,8 +110,10 @@ async function writeRefused(token: string): Promise<Outcome> {
     return [response.status, undefined];
   };
   try {
-    const [[status, sqlState], readOnly] = await Promise.all([write(), readOnlyModeOff(token, dev)]);
-    return writeRefusedOutcome(status, sqlState, readOnly);
+    const before = await readOnlyModeOff(token, dev);
+    const [status, sqlState] = await write();
+    const after = await readOnlyModeOff(token, dev);
+    return writeRefusedOutcome(status, sqlState, { before, after });
   } catch {
     return { verdict: 'failed', reason: 'the write request failed, timed out or answered no JSON' };
   }

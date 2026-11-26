@@ -205,19 +205,24 @@ export function readOnlyModeOffOutcome(status: number, body: unknown): Outcome {
  * A write the token must be refused. Supabase denies a token without Database write either with 403,
  * or by running its query in a read-only transaction, which answers 400 with SQLSTATE 25006
  * (`read_only_sql_transaction`). DEV's own read-only mode answers 25006 to any token, so 25006 passes
- * only while the same token reads that mode as off (`readOnlyModeOffOutcome`). A refused sign-in (401), a
- * write that ran, another query error, or any other answer fails.
+ * only while the same token reads that mode as off (`readOnlyModeOffOutcome`) both before and after
+ * the write: one read beside the write could miss the mode ending in between. A refused sign-in
+ * (401), a write that ran, another query error, or any other answer fails.
  */
 export function writeRefusedOutcome(
   status: number,
   sqlState: string | undefined,
-  readOnlyModeOff: Outcome,
+  readOnlyModeOff: { before: Outcome; after: Outcome },
 ): Outcome {
   if (status === 403) return { verdict: 'ok' };
-  if (status === 400 && sqlState === '25006')
-    return readOnlyModeOff.verdict === 'ok'
-      ? readOnlyModeOff
-      : failedOutcome(`a read-only transaction refused the write, but ${readOnlyModeOff.reason}`);
+  if (status === 400 && sqlState === '25006') {
+    for (const when of ['before', 'after'] as const) {
+      const observed = readOnlyModeOff[when];
+      if (observed.verdict === 'failed')
+        return failedOutcome(`a read-only transaction refused the write, but ${when} it ${observed.reason}`);
+    }
+    return { verdict: 'ok' };
+  }
   const answer = sqlState === undefined ? `${status}` : `${status} with SQLSTATE ${sqlState}`;
   return failedOutcome(`the write answered ${answer}, not 403 or 400 with SQLSTATE 25006`);
 }

@@ -439,6 +439,13 @@ test('the disk reader follows a linked folder to .env.live-backup and cannot tel
     symlinkSync(join(root, 'notes.txt'), join(scan, 'file-link'));
     symlinkSync(join(root, 'missing'), join(scan, 'dangling'));
     expect(liveBackupsOnDisk(scan, Infinity)).toEqual([join(scan, 'linked', '.env.live-backup')]);
+    // Only a real node_modules, .git or .next is skipped; grep -R follows a link of that name too.
+    const named = join(root, 'named');
+    mkdirSync(named);
+    for (const name of ['node_modules', '.git', '.next']) symlinkSync(target, join(named, name));
+    expect(liveBackupsOnDisk(named, Infinity)?.sort()).toEqual(
+      ['.git', '.next', 'node_modules'].map((name) => join(named, name, '.env.live-backup')),
+    );
     // grep -R follows the link, so its read of the scanned folder is refused.
     const onDisk = { cwd: root, home, liveBackupsUnder: liveBackupsOnDisk };
     expect(boatKeyCommandRefusal(`grep -R KEY ${scan}`, onDisk)).toContain('PROD keys');

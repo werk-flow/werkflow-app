@@ -245,27 +245,47 @@ test("DEV's read-only mode is off only on 200 with both flags false", () => {
 
 test('a write passes only when Supabase refuses it, and 25006 only while DEV is not read-only', () => {
   const readOnly = readOnlyModeOffOutcome(200, { ...OFF, enabled: true });
-  expect(writeRefusedOutcome(403, undefined, readOnly)).toEqual(OK);
+  const off = { before: OK, after: OK };
+  expect(writeRefusedOutcome(403, undefined, { before: readOnly, after: readOnly })).toEqual(OK);
   // A read-only token's query runs in a read-only transaction, which refuses the write. DEV's own
   // read-only mode answers the same to a write-capable token, so the mode must read as off.
-  expect(writeRefusedOutcome(400, '25006', OK)).toEqual(OK);
-  expect(writeRefusedOutcome(400, '25006', readOnly)).toEqual({
+  expect(writeRefusedOutcome(400, '25006', off)).toEqual(OK);
+  expect(writeRefusedOutcome(400, '25006', { before: readOnly, after: readOnly })).toEqual({
     verdict: 'failed',
-    reason: "a read-only transaction refused the write, but DEV's read-only state has enabled true",
+    reason: "a read-only transaction refused the write, but before it DEV's read-only state has enabled true",
   });
-  expect(writeRefusedOutcome(400, '25006', readOnlyModeOffOutcome(404, undefined))).toEqual({
+  const unreadable = readOnlyModeOffOutcome(404, undefined);
+  expect(writeRefusedOutcome(400, '25006', { before: unreadable, after: OK })).toEqual({
     verdict: 'failed',
-    reason: "a read-only transaction refused the write, but DEV's read-only state answered 404, not 200",
+    reason:
+      "a read-only transaction refused the write, but before it DEV's read-only state answered 404, not 200",
   });
   // Another query error, a 400 without a code, a write that ran, a refused sign-in, or an answer
   // that proves nothing, fails.
-  expect(writeRefusedOutcome(400, '42601', OK)).toEqual({
+  expect(writeRefusedOutcome(400, '42601', off)).toEqual({
     verdict: 'failed',
     reason: 'the write answered 400 with SQLSTATE 42601, not 403 or 400 with SQLSTATE 25006',
   });
-  expect(writeRefusedOutcome(400, undefined, OK).verdict).toBe('failed');
+  expect(writeRefusedOutcome(400, undefined, off).verdict).toBe('failed');
   for (const status of [200, 201, 401, 404, 429, 500])
-    expect(writeRefusedOutcome(status, '25006', OK).verdict, String(status)).toBe('failed');
+    expect(writeRefusedOutcome(status, '25006', off).verdict, String(status)).toBe('failed');
+});
+
+test("a 25006 fails when DEV's read-only mode changes between the reads around the write", () => {
+  const readOnly = readOnlyModeOffOutcome(200, { ...OFF, enabled: true });
+  const overridden = readOnlyModeOffOutcome(200, { ...OFF, override_enabled: true });
+  // DEV was read-only for the write and left the mode before the second read, so the 25006 may be
+  // the mode's refusal of a write-capable token.
+  expect(writeRefusedOutcome(400, '25006', { before: readOnly, after: OK })).toEqual({
+    verdict: 'failed',
+    reason: "a read-only transaction refused the write, but before it DEV's read-only state has enabled true",
+  });
+  // DEV entered the mode after the first read, so the write may have met it.
+  expect(writeRefusedOutcome(400, '25006', { before: OK, after: overridden })).toEqual({
+    verdict: 'failed',
+    reason:
+      "a read-only transaction refused the write, but after it DEV's read-only state has override_enabled true",
+  });
 });
 
 test("a query error's SQLSTATE is the only part of its body read", () => {

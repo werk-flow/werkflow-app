@@ -257,7 +257,7 @@ type Context = {
   liveBackupsUnder: (folder: string, depth: number) => readonly string[] | undefined;
 };
 
-/** Folders that hold no checkout's backup, which the walk skips. */
+/** Real folders that hold no checkout's backup, which the walk skips; a link under these names is walked. */
 const UNWALKED = new Set(['node_modules', '.git', '.next']);
 /** The most folders one walk lists before the guard calls the tree too large to tell. */
 const MAX_WALKED = 4000;
@@ -288,7 +288,7 @@ export function liveBackupsOnDisk(folder: string, depth: number): string[] | und
     if (entries.some((entry) => entry.name === LIVE_BACKUP)) found.push(join(dir, LIVE_BACKUP));
     if (level >= depth) continue;
     for (const entry of entries)
-      if ((entry.isDirectory() || entry.isSymbolicLink()) && !UNWALKED.has(entry.name))
+      if (entry.isSymbolicLink() || (entry.isDirectory() && !UNWALKED.has(entry.name)))
         queue.push({ dir: join(dir, entry.name), level: level + 1 });
   }
   return found;
