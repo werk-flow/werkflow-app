@@ -30,6 +30,14 @@ import { DELIVERY_STATES, type DeliveryState, type DeliverySubject } from './del
 // provider delivers it once (Resend keeps a key 24 hours). Logs carry fixed
 // labels and codes only: no address, subject, text or provider answer.
 
+/**
+ * How long after its request a claimed attempt may still reach the provider:
+ * retry_document_delivery claims none after 23 hours, the provider keeps the
+ * key 24 hours, and the half hour between leaves room for a slow read and the
+ * two clocks. Later, an earlier accepted attempt could go out a second time.
+ */
+const SEND_DEADLINE_MS = (23 * 60 + 30) * 60_000;
+
 type DeliveryCaller = Pick<ActionContext, 'userId' | 'orgId' | 'isManagerOrAbove'>;
 
 export type DeliveryOutcome = ActionResult<{ state: DeliveryState; failureCode: string | null }>;
@@ -55,6 +63,7 @@ const payloadSchema = z.object({
   state: z.enum(DELIVERY_STATES),
   failureCode: z.string().nullable(),
   attempt: z.number().int().positive(),
+  requestedAt: z.iso.datetime({ offset: true }),
   recipient: z.string(),
   subject: z.string(),
   text: z.string(),
@@ -118,8 +127,10 @@ async function attachmentOf(
 /** Sends one claimed attempt and settles it with the transport's answer. */
 async function transmit(caller: DeliveryCaller, payload: DeliveryPayload): Promise<DeliveryOutcome> {
   const attachment = await attachmentOf(caller, payload);
-  const result =
-    typeof attachment === 'string'
+  const late = Date.now() >= Date.parse(payload.requestedAt) + SEND_DEADLINE_MS;
+  const result = late
+    ? ({ status: 'permanent', code: 'delivery_window_passed' } as const)
+    : typeof attachment === 'string'
       ? ({ status: 'permanent', code: attachment } as const)
       : await sendEmail({
           to: payload.recipient,
@@ -228,12 +239,14 @@ export async function sendDocument(
 ): Promise<DeliveryOutcome> {
   const limited = await passRateLimit(caller, request.recipient);
   if (limited) return (await recordedOutcome(caller, request)) ?? limited;
+  // A press repeated after its answer was lost answers from the record, also
+  // when the sender can no longer be read; only a new mail needs it.
   const sender = await readDeliverySender(caller);
-  if (!sender) return { success: false, error: 'load_failed' };
+  if (!sender) return (await recordedOutcome(caller, request)) ?? { success: false, error: 'load_failed' };
   const fromHeader = senderHeader(sender.name, process.env);
   if (!fromHeader) {
     logError('sendDocument: no sending address', 'email_not_configured');
-    return SEND_UNAVAILABLE;
+    return (await recordedOutcome(caller, request)) ?? SEND_UNAVAILABLE;
   }
   const answer = await createSupabaseAdminClient().rpc(
     'request_document_delivery',

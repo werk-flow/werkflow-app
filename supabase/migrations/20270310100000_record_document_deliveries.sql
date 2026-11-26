@@ -106,7 +106,6 @@ create table public.document_deliveries (
     references public.documents (id, organization_id)
 );
 
-create unique index document_deliveries_replident_idx on public.document_deliveries (id, organization_id);
 create index document_deliveries_invoice_idx on public.document_deliveries (invoice_id, organization_id, created_at desc)
   where invoice_id is not null;
 create index document_deliveries_document_idx on public.document_deliveries (document_id, organization_id);
@@ -140,7 +139,7 @@ grant select (id, organization_id, subject_kind, invoice_id, state, updated_at)
   on table public.document_deliveries to authenticated;
 grant select, insert, update on table public.document_deliveries to service_role;
 
-alter table public.document_deliveries replica identity using index document_deliveries_replident_idx;
+alter table public.document_deliveries replica identity using index document_deliveries_id_organization_key;
 alter publication supabase_realtime add table public.document_deliveries;
 -- An organization's deletion skips the per-row notice (20270111100001).
 create trigger emit_realtime_deletion after delete on public.document_deliveries
@@ -240,6 +239,7 @@ as $$
     'state', p_delivery.state,
     'failureCode', p_delivery.failure_code,
     'attempt', p_delivery.attempts,
+    'requestedAt', p_delivery.created_at,
     'recipient', p_delivery.recipient_email,
     'subject', p_delivery.email_subject,
     'text', p_delivery.message_text,
@@ -284,6 +284,9 @@ as $$
 declare
   v_document public.documents;
   v_delivery public.document_deliveries;
+  -- The first attempt's claim, read once the locks are held: a wait for them
+  -- shortens neither its ten minutes nor its 23 hours.
+  v_claimed_at timestamptz;
 begin
   if p_actor_id is null or p_organization_id is null or p_attempt_key is null or p_subject_id is null
     or p_document_id is null
@@ -309,13 +312,15 @@ begin
   end if;
 
   v_document := app_private.lock_delivery_document(p_organization_id, p_subject_kind, p_subject_id, p_document_id);
+  v_claimed_at := clock_timestamp();
   insert into public.document_deliveries (
     organization_id, subject_kind, invoice_id, document_id, attachment_content_hash, channel,
-    recipient_email, email_subject, message_text, sender_name, from_header, reply_to, state, attempt_key, created_by
+    recipient_email, email_subject, message_text, sender_name, from_header, reply_to, state, attempt_key, created_by,
+    created_at, updated_at
   ) values (
     p_organization_id, p_subject_kind, p_subject_id, p_document_id, v_document.metadata ->> 'contentHash', 'email',
     p_recipient_email, p_email_subject, p_message_text, p_sender_name, p_from_header, p_reply_to, 'sending',
-    p_attempt_key, p_actor_id
+    p_attempt_key, p_actor_id, v_claimed_at, v_claimed_at
   )
   returning * into v_delivery;
   insert into public.document_delivery_events (organization_id, delivery_id, event_type, state, attempt, actor_id)

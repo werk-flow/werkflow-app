@@ -216,6 +216,12 @@ begin
     or v_first ->> 'fromHeader' is distinct from '"Haustechnik Sonnenberg GmbH" <rechnung@werkflow.example>' then
     raise exception 'the request answered %', v_first;
   end if;
+  -- The first attempt starts at its claim, later than this transaction began, so a wait for the
+  -- invoice's lock shortens neither its ten minutes nor its 23 hours.
+  if (select (created_at > now(), updated_at = created_at) from public.document_deliveries
+      where id = (v_first ->> 'deliveryId')::uuid) is distinct from (true, true) then
+    raise exception 'the request is stamped with its transaction''s start';
+  end if;
   if (v_again ->> 'claimed')::boolean is distinct from false or v_again ->> 'deliveryId' is distinct from v_first ->> 'deliveryId'
     or (select count(*) from public.document_deliveries
       where organization_id = '38070000-0000-4000-8000-000000000010') is distinct from 1::bigint

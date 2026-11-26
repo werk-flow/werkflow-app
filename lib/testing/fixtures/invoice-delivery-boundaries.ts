@@ -11,7 +11,14 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mock, spyOn } from 'bun:test';
 import { EMPTY_COMPANY_PROFILE_DETAILS } from '@/lib/company-profile/profile';
-import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs, tableRows } from './action-boundary-world';
+import {
+  CALLER_ID,
+  ORGANIZATION_A,
+  ORGANIZATION_B,
+  installActionWorld,
+  signInAs,
+  tableRows,
+} from './action-boundary-world';
 import { companyProfileRow } from './company-profile-rows';
 import { assertRefused } from './operations-boundary-refusals';
 
@@ -100,6 +107,9 @@ const issued = {
 // A delivery keeps what the action forwarded, as the table does, and answers it on every attempt.
 type Delivery = {
   id: string;
+  organizationId: string;
+  /** When the request was recorded; a claimed attempt sends only within the provider's key window. */
+  requestedAt: string;
   attemptKey: string;
   state: 'sending' | 'sent' | 'failed';
   attempt: number;
@@ -117,6 +127,7 @@ const payloadOf = (delivery: Delivery, claimed: boolean) => ({
   state: delivery.state,
   failureCode: delivery.failureCode,
   attempt: delivery.attempt,
+  requestedAt: delivery.requestedAt,
   ...delivery.stored,
   storagePath: originalPath,
   fileName: 'Rechnung RE-2037-001.pdf',
@@ -139,6 +150,8 @@ world.rpc = ({ name, args }) => {
     if (earlier) return { data: payloadOf(earlier, false), error: null };
     const delivery: Delivery = {
       id: crypto.randomUUID(),
+      organizationId: ORGANIZATION_A,
+      requestedAt: new Date().toISOString(),
       attemptKey: String(args.p_attempt_key),
       state: 'sending',
       attempt: 1,
@@ -155,7 +168,9 @@ world.rpc = ({ name, args }) => {
     deliveries.push(delivery);
     return { data: payloadOf(delivery, true), error: null };
   }
-  const delivery = deliveries.find((candidate) => candidate.id === args.p_delivery_id);
+  const delivery = deliveries.find(
+    (candidate) => candidate.id === args.p_delivery_id && candidate.organizationId === args.p_organization_id,
+  );
   if (!delivery) return refused('delivery_not_found');
   if (name === 'retry_document_delivery') {
     if (delivery.state !== 'failed' || delivery.attempt !== args.p_expected_attempt) {
@@ -176,7 +191,7 @@ world.rpc = ({ name, args }) => {
 const syncTable = () => {
   world.tables.document_deliveries = deliveries.map((delivery) => ({
     id: delivery.id,
-    organization_id: ORGANIZATION_A,
+    organization_id: delivery.organizationId,
     attempt_key: delivery.attemptKey,
     created_by: CALLER_ID,
     state: delivery.state,
@@ -233,7 +248,7 @@ await assertRefused(
   { success: false, error: 'invoice_not_found' },
   'one-call',
 );
-// Another organization's delivery is refused by the function under the caller's organization.
+// A delivery id that names none is refused by the function under the caller's organization.
 world.rpcCalls.length = 0;
 assert.deepEqual(await retryInvoiceDelivery({ deliveryId: crypto.randomUUID(), expectedAttempt: 1 }), {
   success: false,
@@ -247,6 +262,41 @@ assert.deepEqual(
   ],
 );
 assert.equal(memoryOutbox.messages().length, 0, 'a refused call sent a mail');
+// Another organization's failed delivery, retried by its real id: refused, nothing claimed, read or sent.
+const foreignDelivery: Delivery = {
+  id: crypto.randomUUID(),
+  organizationId: ORGANIZATION_B,
+  attemptKey: crypto.randomUUID(),
+  requestedAt: new Date().toISOString(),
+  state: 'failed',
+  attempt: 1,
+  failureCode: 'email_provider_503',
+  stored: {
+    recipient: 'fremd@example.com',
+    subject: 'Fremde Rechnung',
+    text: 'Fremd',
+    senderName: 'Fremde Haustechnik',
+    fromHeader: '"Fremde Haustechnik" <rechnung@werkflow.example>',
+    replyTo: null,
+  },
+};
+deliveries.push(foreignDelivery);
+syncTable();
+world.rpcCalls.length = 0;
+assert.deepEqual(await retryInvoiceDelivery({ deliveryId: foreignDelivery.id, expectedAttempt: 1 }), {
+  success: false,
+  error: 'delivery_not_found',
+});
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args.p_organization_id ?? null, call.args.p_action ?? null]),
+  [
+    ['consume_rate_limit', null, 'document_send_per_organization'],
+    ['retry_document_delivery', ORGANIZATION_A, null],
+  ],
+  'the foreign delivery was read or claimed outside the caller organization',
+);
+assert.deepEqual([foreignDelivery.state, foreignDelivery.attempt], ['failed', 1]);
+assert.equal(mailsOf(foreignDelivery.id).length, 0, 'a foreign delivery was sent');
 
 // The limit comes first: a limited send records nothing and sends nothing.
 limiterAllows = false;
@@ -306,6 +356,12 @@ for (const changed of [
 }
 assert.equal(callsNamed('request_document_delivery').length, 0, 'a limited press reached the request');
 limiterAllows = true;
+// Pressed again once the sending address is gone: the recorded result, not a configuration error.
+delete process.env.FROM_EMAIL;
+process.env.VERCEL_ENV = 'preview';
+assert.deepEqual(await send(pressKey), { success: true, state: 'sent', failureCode: null });
+delete process.env.VERCEL_ENV;
+process.env.FROM_EMAIL = 'WerkFlow <rechnung@werkflow.example>';
 
 // The provider fails: the delivery is failed with its code; the retry sends it once, a second retry not at all.
 const realFetch = globalThis.fetch;
@@ -385,6 +441,34 @@ const changedDelivery = deliveries.at(-1);
 assert.ok(changedDelivery);
 assert.equal(mailsOf(changedDelivery.id).length, 0, 'a changed original was sent');
 storedPdf = pdf;
+
+// An attempt claimed in time but ready to send only past the provider's key window sends nothing:
+// the key may be gone, and an earlier accepted attempt would go out twice.
+const lateDelivery: Delivery = {
+  id: crypto.randomUUID(),
+  organizationId: ORGANIZATION_A,
+  attemptKey: crypto.randomUUID(),
+  requestedAt: new Date(Date.now() - (23 * 60 + 31) * 60_000).toISOString(),
+  state: 'failed',
+  attempt: 1,
+  failureCode: 'email_provider_503',
+  stored: {
+    recipient,
+    subject: mailSubject,
+    text: mailText,
+    senderName: 'Haustechnik Sonnenberg GmbH',
+    fromHeader: '"Haustechnik Sonnenberg GmbH" <rechnung@werkflow.example>',
+    replyTo: null,
+  },
+};
+deliveries.push(lateDelivery);
+syncTable();
+assert.deepEqual(await retryInvoiceDelivery({ deliveryId: lateDelivery.id, expectedAttempt: 1 }), {
+  success: true,
+  state: 'failed',
+  failureCode: 'delivery_window_passed',
+});
+assert.equal(mailsOf(lateDelivery.id).length, 0, 'an attempt past the key window was sent');
 
 // Manual sending names the invoice's own original too.
 world.rpcCalls.length = 0;

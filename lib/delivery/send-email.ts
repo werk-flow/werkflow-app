@@ -45,9 +45,10 @@ const RESEND_TIMEOUT_MS = 10_000;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_.:/-]{1,256}$/;
 
 // Only the id leaves Resend's answer; its error body is read for its `name`,
-// a fixed provider code, and nothing else.
-const acceptedSchema = z.object({ id: z.string().min(1).max(128) });
-const providerErrorSchema = z.object({ name: z.string().regex(/^[a-z_]{1,64}$/) });
+// a fixed provider code, and nothing else. Each fits what a caller stores: an
+// id a mail ledger keeps, a name that `email_` leaves within a 64-character code.
+const acceptedSchema = z.object({ id: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/) });
+const providerErrorSchema = z.object({ name: z.string().regex(/^[a-z_]{1,58}$/) });
 
 // Resend's own codes that a later attempt can pass; every other refusal is the message's fault.
 const RETRYABLE_PROVIDER_CODES = new Set([
