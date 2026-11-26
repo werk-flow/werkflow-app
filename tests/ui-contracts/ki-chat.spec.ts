@@ -271,3 +271,44 @@ test('a thread the person can no longer open leaves the screen with what it show
   // Its title, which can quote the first message, leaves the list too.
   await expect(threadLink(page, 'Material für die Heizung')).toHaveCount(0);
 });
+
+// A refused new chat reads its thread, which answers that it does not exist yet. A retry of the
+// same text reuses that thread, so the answer of the earlier read must not touch the live turn.
+for (const order of ['before', 'after'] as const) {
+  test(`a denied read that answers ${order} the retried turn starts leaves the live thread alone`, async ({
+    page,
+  }) => {
+    await openChat(page);
+    await page.evaluate(() => {
+      window.uiContractKiHeldReads = [];
+    });
+    await composer(page).fill('Wie viele Aufträge sind offen?');
+    await page.getByRole('button', { name: 'Senden', exact: true }).click();
+    await page.evaluate(() =>
+      window.uiContractKiTurn.resolve?.({ kind: 'refused', message: 'Gerade ist viel los.' }),
+    );
+    await expect.poll(() => page.evaluate(() => window.uiContractKiHeldReads?.length)).toBe(1);
+    await page.getByRole('button', { name: 'Senden', exact: true }).click();
+    const [first, retry] = await page.evaluate(() => window.uiContractKiTurn.calls);
+    expect(retry).toEqual(first);
+    const release = () => page.evaluate(() => window.uiContractKiHeldReads?.shift()?.release());
+    const started = () =>
+      emit(page, {
+        type: 'started',
+        userItem: { id: 'u', sequence: 1 },
+        assistantItem: { id: 'a', sequence: 2 },
+      });
+    if (order === 'before') {
+      await release();
+      await started();
+    } else {
+      await started();
+      await release();
+    }
+    await emit(page, { type: 'text', delta: 'Es sind sieben.' });
+    await expect(timeline(page).getByText('Es sind sieben.', { exact: true })).toBeVisible();
+    await expect(timeline(page).getByText('Wie viele Aufträge sind offen?', { exact: true })).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('chat')).toBe(first?.threadId);
+    await expect(threadLink(page, 'Wie viele Aufträge sind offen?')).toHaveAttribute('aria-current', 'page');
+  });
+}

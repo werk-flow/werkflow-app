@@ -38,6 +38,7 @@ const CLEAR_CALL = 'clearManualEntryBridge';
 const CACHE_CLEAR_CALL = 'clearServiceWorkerCaches';
 const CLEAR_MODULE = 'lib/time-tracking/manual-entry-bridge-storage.ts';
 const DRAFT_CLEAR_CALL = 'clearKiDrafts';
+const DRAFT_CLEAR_MODULE = 'lib/ai/chat-drafts.ts';
 const TODAY_CLEAR_CALL = 'clearTodayOnDevice';
 const TODAY_CLEAR_MODULE = 'lib/field-sync/device/today-wipe.ts';
 const UNSENT_ASK_CALL = 'endSessionAfterCheck';
@@ -151,13 +152,22 @@ describe('sign-out clears the tab state', () => {
     );
   });
 
-  // The draft clear (lib/ai/chat-drafts.ts) imports only the manual entry bridge's storage module.
   test('the clears import nothing, so a sign-out adds no startup script to a page', () => {
     for (const file of [CLEAR_MODULE, TODAY_CLEAR_MODULE]) {
       const source = parseProductSource(file);
       expect(source.statements.filter(ts.isImportDeclaration), file).toEqual([]);
       expect(source.text.includes('import('), file).toBe(false);
     }
+  });
+
+  test('the draft clear imports only the storage module every sign-out already loads', () => {
+    const source = parseProductSource(DRAFT_CLEAR_MODULE);
+    expect(
+      source.statements
+        .filter(ts.isImportDeclaration)
+        .map((statement) => statement.moduleSpecifier.getText(source)),
+    ).toEqual([`'@/${CLEAR_MODULE.replace(/\.ts$/, '')}'`]);
+    expect(source.text.includes('import('), DRAFT_CLEAR_MODULE).toBe(false);
   });
 
   test('probes: a sign-out without a clear is reported, one with both or of other sessions is not', () => {

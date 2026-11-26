@@ -12,7 +12,7 @@ import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { readDraft, subscribeDrafts, writeDraft } from '@/lib/ai/chat-drafts';
 
 // The composer stays mounted while the person switches threads (brief
-// non-negotiable 8); its drafts live in ki-drafts.ts.
+// non-negotiable 8); its drafts live in lib/ai/chat-drafts.ts.
 
 const COMPOSER_ID = 'ki-composer';
 

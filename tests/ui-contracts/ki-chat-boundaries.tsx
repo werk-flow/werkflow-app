@@ -19,19 +19,29 @@ declare global {
     uiContractKiTurn: HeldTurn;
     /** Set by the spec: every thread read fails with this code, as a lost connection or a refusal does. */
     uiContractKiReadsFail: 'background_read_failed' | 'not_found' | false;
+    /** Set by the spec to a list: each thread read waits there, with its answer, until the spec releases it. */
+    uiContractKiHeldReads: { threadId: unknown; release: () => void }[] | null;
   }
 }
 
 window.uiContractKiTurn = { calls: [], emit: null, resolve: null };
 window.uiContractKiReadsFail = false;
+window.uiContractKiHeldReads = null;
 
 /** A listed thread opens empty: the spec drives each turn. Any other thread is not the person's. */
-export function readKiThreadWindowContract(input: unknown) {
-  const threadId = input && typeof input === 'object' && 'threadId' in input ? input.threadId : null;
+function answerKiThreadWindow(threadId: unknown) {
   if (window.uiContractKiReadsFail) return { success: false, error: window.uiContractKiReadsFail };
   return KI_CONTRACT_THREADS.some((thread) => thread.id === threadId)
     ? { success: true, window: { messages: [], hasOlder: false } }
     : { success: false, error: 'not_found' };
+}
+
+export function readKiThreadWindowContract(input: unknown) {
+  const threadId = input && typeof input === 'object' && 'threadId' in input ? input.threadId : null;
+  const answer = answerKiThreadWindow(threadId);
+  const held = window.uiContractKiHeldReads;
+  if (!held) return answer;
+  return new Promise((resolve) => held.push({ threadId, release: () => resolve(answer) }));
 }
 
 export function sendTurn(input: {

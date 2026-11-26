@@ -189,9 +189,17 @@ function useThreadViews(
     reads.current = controller;
     return () => controller.abort();
   }, []);
+  // Each thread's stamp moves on with every read and every turn sent to it.
+  const stamps = useRef(new Map<string, number>());
+  const stamp = useCallback((id: string): number => {
+    const next = (stamps.current.get(id) ?? 0) + 1;
+    stamps.current.set(id, next);
+    return next;
+  }, []);
   const readWindow = useCallback(
     async (id: string, beforeSequence?: number): Promise<WindowRead> => {
       const signal = reads.current.signal;
+      const mine = stamp(id);
       const result = await readInBackground(
         'ki-thread-window',
         { organizationId, threadId: id, ...(beforeSequence ? { beforeSequence } : {}) },
@@ -199,6 +207,8 @@ function useThreadViews(
       );
       if (signal.aborted) return 'failed';
       if (!result.success && DENIED_READS.has(result.error)) {
+        // A newer read or turn of the thread has the last word: a retry may have saved it since.
+        if (stamps.current.get(id) !== mine) return 'failed';
         setViews((all) => Object.fromEntries(Object.entries(all).filter(([key]) => key !== id)));
         missing.current(id);
         return 'missing';
@@ -214,7 +224,7 @@ function useThreadViews(
       });
       return result.success ? 'found' : 'failed';
     },
-    [organizationId, missing],
+    [organizationId, missing, stamp],
   );
   /** Shows the last known messages, marked unconfirmed, and reads the thread again. */
   const reopen = useCallback(
@@ -238,7 +248,7 @@ function useThreadViews(
       return { ...all, [id]: { window: { ...window, messages }, confirmed, failed: false } };
     });
   }, []);
-  return { views, readWindow, reopen, settle };
+  return { views, readWindow, reopen, settle, supersedeReads: stamp };
 }
 
 function useShownThread(initialThreadId: string | null, reopen: (id: string) => void) {
@@ -278,6 +288,8 @@ type TurnHost = {
   touch: (threadId: string, text: string) => void;
   settle: (threadId: string, turn: readonly TimelineMessage[], confirmed: boolean) => void;
   readWindow: (threadId: string) => Promise<WindowRead>;
+  /** A turn sent to the thread: no denied read that began before it may take the thread off the page. */
+  supersedeReads: (threadId: string) => void;
 };
 
 type Refused = { threadId: string; commandId: string; text: string };
@@ -451,6 +463,7 @@ function useLiveTurn(host: TurnHost) {
       }
       const { target, commandId } = commandFor(text, host, refusedRef.current.get(draft));
       refusedRef.current.delete(draft);
+      host.supersedeReads(target);
       const controller = new AbortController();
       abortRef.current = controller;
       const turn = newTurn(target, commandId, text, draft, host.threadId === null);
@@ -485,7 +498,7 @@ export function useKiChat(input: {
   const list = useThreadList(organizationId, input.initialThreads);
   // A thread the person cannot open here (gone, or another organization's after Back) leaves the screen.
   const missing = useRef<(threadId: string) => void>(() => undefined);
-  const { views, readWindow, reopen, settle } = useThreadViews(
+  const { views, readWindow, reopen, settle, supersedeReads } = useThreadViews(
     organizationId,
     input.initialThreadId,
     input.initialWindow,
@@ -516,6 +529,7 @@ export function useKiChat(input: {
     touch: list.touch,
     settle,
     readWindow,
+    supersedeReads,
   });
   const error = turn.error?.draft === turn.draft ? turn.error.message : null;
   return { list, views, readWindow, threadId, show, openThread: open, turn, draft: turn.draft, error };
