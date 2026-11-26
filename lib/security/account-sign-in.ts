@@ -23,7 +23,7 @@ import {
 /** A CLI the guard refuses, entirely or for the subcommands that sign in or hand out a token. */
 type AccountCli = {
   /** Its program names: the last part of a path, or a package a runner such as `npx` fetches. */
-  names: readonly string[];
+  names: readonly [string, ...string[]];
   /** Each level of the subcommand that signs in, as the words it may be; none refuses every call. */
   verbs: readonly (readonly string[])[];
 };
@@ -225,8 +225,8 @@ function scan(command: string, depth = 0): Scan | undefined {
     for (const [index, word] of runnable.entries()) {
       const cli = cliOf(word.text);
       if (cli && opensWithSignIn(runnable.slice(index + 1), cli.verbs)) {
-        // The program only: an argument may be a token or a NAME=VALUE secret.
-        refused.push(word.text);
+        // The CLI's listed name only: the word or an argument may hold a token or a NAME=VALUE secret.
+        refused.push(cli.names[0]);
         break;
       }
     }
@@ -253,7 +253,7 @@ export function accountSignInRefusal(command: string): string | undefined {
   // A refusal names programs and line numbers, never an argument: it may hold a token or secret.
   const [first] = result.refused;
   if (first) {
-    return `Refused: this \`${first.slice(0, 40)}\` call starts a sign-in, hands out an account token, runs the Vercel CLI, or touches a hosted project's function secrets. ${INSTEAD}`;
+    return `Refused: this \`${first}\` call starts a sign-in, hands out an account token, runs the Vercel CLI, or touches a hosted project's function secrets. ${INSTEAD}`;
   }
   if (named <= result.accounted) return undefined;
   const lines = command

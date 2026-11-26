@@ -205,6 +205,8 @@ test('a refusal never repeats an argument, so a secret in the command stays out 
     `gh auth login --with-token <<< ${secret}`,
     `python3 -c "import os; os.system('supabase secrets set KEY=${secret}')"`,
     `ls # supabase login ${secret}`,
+    // A word that names the CLI by its last path part may carry credentials itself.
+    `git clone https://user:${secret}@example.test/x/supabase secrets`,
   ]) {
     const refusal = accountSignInRefusal(command);
     expect(refusal, command).toContain(REFUSED);
