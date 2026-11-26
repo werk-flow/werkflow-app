@@ -33,15 +33,22 @@ import type { OfferDetail } from './types';
 
 type OfficeContext = Pick<ActionContext, 'orgId' | 'userId' | 'isManagerOrAbove'>;
 
-/** The sender as rendered, stored with the revision: the profile with its letterhead files, and the Einsatzort. */
-type SenderSnapshot = {
+/**
+ * What the PDF printed beyond the revision's own columns, stored with it: the
+ * sender's profile with its letterhead files, the customer, the Einsatzort
+ * and the texts.
+ */
+type RenderedSnapshot = {
   organizationName: string;
   profile: CompanyProfileDetails;
   files: Record<CompanyFileKind, { path: string; mimeType: string } | null>;
+  clientName: string;
   site: { name: string; address: string } | null;
+  openingText: string;
+  closingText: string;
 };
 
-type RenderedOffer = { bytes: Uint8Array; revision: number; snapshot: SenderSnapshot };
+type RenderedOffer = { bytes: Uint8Array; revision: number; snapshot: RenderedSnapshot };
 
 /**
  * The draft as the PDF its customer would get on `issuedOn`, as its next
@@ -73,9 +80,16 @@ export async function renderOfferPdf(
       organizationName: organization.name,
       profile: stored.profile.details,
       files: stored.filePaths,
+      clientName: offer.client.name,
       site: offer.site && { name: offer.site.name, address: offer.site.address },
+      openingText: offer.openingText,
+      closingText: offer.closingText,
     },
   };
+}
+
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 type StoredPdf = {
@@ -94,8 +108,7 @@ async function storeOfferPdf(
   const documentId = randomUUID();
   const path = buildDocumentStoragePath({ organizationId, documentId, fileName });
   await putStorageObject({ organizationId, path, body: bytes, contentType: 'application/pdf' });
-  const contentHash = createHash('sha256').update(bytes).digest('hex');
-  return { documentId, path, fileName, sizeBytes: bytes.byteLength, contentHash };
+  return { documentId, path, fileName, sizeBytes: bytes.byteLength, contentHash: sha256Hex(bytes) };
 }
 
 const refusal = writeRefusalFor(
@@ -121,8 +134,10 @@ export type OfferSent = { offerId: string; revision: number; documentId: string 
  * Records the saved draft as sent through the channel the office names, for
  * the office's action and for a server caller that sends for the office, such
  * as E2c's email delivery. The caller has established the actor as Admin or
- * Büro of the organization. A repeat under the same attempt key, or of the
- * same draft, answers the first revision.
+ * Büro of the organization and names the SHA-256 of the PDF it showed or sent
+ * (renderOfferPdf); a rendering that differs is refused with
+ * `preview_outdated`. A repeat under the same attempt key, or of the same
+ * draft, answers the first revision.
  */
 export async function recordOfferSent(
   context: OfficeContext,
@@ -143,6 +158,8 @@ export async function recordOfferSent(
     return null;
   });
   if (!rendered) return { success: false, error: 'render_failed' };
+  // Only the PDF the office saw is filed: a changed customer, profile or day renders other bytes.
+  if (sha256Hex(rendered.bytes) !== input.previewHash) return { success: false, error: 'preview_outdated' };
   const fileName = `Angebot ${offer.offerNumber} Revision ${rendered.revision}.pdf`;
   const stored = await storeOfferPdf(context.orgId, fileName, rendered.bytes).catch((error: unknown) => {
     logError('recordOfferSent: PDF not stored', error);
@@ -157,7 +174,7 @@ async function sendRendered(
   context: OfficeContext,
   input: z.output<typeof sendOfferSchema>,
   offer: OfferDetail,
-  rendered: { stored: StoredPdf; issuedOn: string; snapshot: SenderSnapshot } | null,
+  rendered: { stored: StoredPdf; issuedOn: string; snapshot: RenderedSnapshot } | null,
 ): Promise<ActionResult<OfferSent> | ActionFailure> {
   const stored = rendered?.stored ?? null;
   const { data, error } = await createSupabaseAdminClient().rpc('send_offer', {

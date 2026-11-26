@@ -28,7 +28,7 @@ export function OfferRevisions({ revisions }: { revisions: readonly OfferRevisio
             >
               <div className="flex min-w-0 gap-3">
                 <FileCheck2 className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden />
-                <div className="min-w-0 space-y-1">
+                <div className="min-w-0 space-y-1 wrap-anywhere">
                   <p className="flex flex-wrap items-center gap-2 font-medium">
                     Revision {revision.revision}
                     {replacedBy !== undefined && (

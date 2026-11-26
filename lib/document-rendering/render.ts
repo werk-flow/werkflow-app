@@ -635,13 +635,17 @@ function documentFlow(
   // Lines wrap once, to the narrower of the two page kinds, so a line fits on whichever page it lands.
   const width = Math.min(firstBox.right - firstBox.left, followingBox.right - followingBox.left);
   const textWidth = Math.min(columnsOf(firstBox).textWidth, columnsOf(followingBox).textWidth);
+  // A title wider than the page wraps; its lines stay together, and the last keeps the space below.
+  const titleLines = wrap(document.title, fonts.bold, 15, width);
   return [
-    {
-      height: 26,
-      keepWithNext: false,
-      inTable: false,
-      draw: (page, top, box) => drawLeft(page, document.title, box.left, top, fonts.bold, 15),
-    },
+    ...titleLines.map(
+      (line, index): FlowItem => ({
+        height: index === titleLines.length - 1 ? 26 : 19,
+        keepWithNext: index < titleLines.length - 1,
+        inTable: false,
+        draw: (page, top, box) => drawLeft(page, line, box.left, top, fonts.bold, 15),
+      }),
+    ),
     ...paragraphFlow(document.openingText, fonts.regular, width, 0),
     { height: 10, keepWithNext: true, bindsNext: true, inTable: false, draw: () => undefined },
     ...document.sections.flatMap((section) => sectionFlow(section, fonts, textWidth)),

@@ -7,6 +7,7 @@
 // and a field worker assigned to a job of the offer's customer gets no signed
 // URL for the sent PDF. supabase/tests/offer_sending.sql proves the function.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mock, setSystemTime } from 'bun:test';
 import { extractText, getDocumentProxy } from 'unpdf';
 import {
@@ -22,6 +23,7 @@ import { assertRefused } from './operations-boundary-refusals';
 const offerId = '95100000-0000-4000-8000-000000000001';
 const foreignOfferId = '95100000-0000-4000-8000-000000000009';
 const clientId = '94100000-0000-4000-8000-000000000001';
+const recipientId = '94100000-0000-4000-8000-000000000002';
 const jobId = '93100000-0000-4000-8000-000000000001';
 const sentDocumentId = '92100000-0000-4000-8000-000000000001';
 const today = '2037-11-20';
@@ -135,9 +137,9 @@ const draft = {
   site: null,
   contact: null,
   recipient: {
-    id: clientId,
-    name: 'WEG Lindenstraße 5',
-    address: 'Lindenstraße 5, 10115 Berlin',
+    id: recipientId,
+    name: 'Hausverwaltung Lindenhof GmbH',
+    address: 'Hofweg 1, 10117 Berlin',
     isDefault: true,
   },
   owner: null,
@@ -184,12 +186,16 @@ const { sendOffer } = await import('@/lib/offers/send-actions');
 const preview = await import('@/app/api/angebote/vorschau/route');
 const { getDocumentSignedUrl } = await import('@/lib/documents/actions');
 const GET = (id: string) => preview.GET(new Request(`http://localhost/api/angebote/vorschau?angebot=${id}`));
+/** The SHA-256 of the preview the office saw; a well-formed stand-in until the preview below. */
+let previewHash = 'f'.repeat(64);
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const send = (overrides: Record<string, unknown> = {}) =>
   sendOffer({
     offerId,
     expectedVersion: 3,
     expectedContentVersion: 4,
     channel: 'post',
+    previewHash,
     attemptKey: '96100000-0000-4000-8000-000000000001',
     ...overrides,
   });
@@ -241,14 +247,25 @@ const shown = await GET(offerId);
 assert.equal(shown.status, 200);
 assert.equal(shown.headers.get('Content-Type'), 'application/pdf');
 assert.equal(shown.headers.get('Cache-Control'), 'private, no-store');
-const previewText = await textOf(new Uint8Array(await shown.arrayBuffer()));
+const previewBytes = new Uint8Array(await shown.arrayBuffer());
+const previewText = await textOf(previewBytes);
 assert.ok(previewText.includes('ANG-2037-001, Revision 1'), previewText);
+// Addressed to the Rechnungsempfänger, with the customer beside it.
+assert.ok(
+  previewText.includes('Hausverwaltung Lindenhof GmbH') && previewText.includes('WEG Lindenstraße 5'),
+);
 assert.ok(previewText.includes('Hinweis zur Ausführung'), previewText);
 assert.ok(
   previewText.includes('Haustechnik Sonnenberg GmbH') && !previewText.includes('Fremde'),
   previewText,
 );
 assert.equal(stored.length, 0, 'the preview stores nothing');
+
+// A send that names another preview, such as one from before a change of the company profile, is refused
+// before anything is stored.
+assert.deepEqual(await send(), { success: false, error: 'preview_outdated' });
+assert.equal(stored.length, 0);
+previewHash = sha256(previewBytes);
 
 sendAnswer = (args) => ({
   data: { revision: 1, documentId: args.p_document_id, replay: false },
@@ -260,13 +277,25 @@ assert.ok(sent.success, JSON.stringify(sent));
 assert.equal(stored.length, 1);
 const [first] = stored;
 assert.ok(first);
-assert.equal(await textOf(first.body), previewText, 'the stored revision differs from its preview');
+assert.equal(sha256(first.body), previewHash, 'the stored revision differs from its preview');
+assert.equal(await textOf(first.body), previewText);
 const sendCall = world.rpcCalls.find((call) => call.name === 'send_offer');
 assert.equal(sendCall?.args.p_organization_id, ORGANIZATION_A);
 assert.equal(sendCall?.args.p_actor_id, CALLER_ID);
 assert.equal(sendCall?.args.p_channel, 'post');
 assert.equal(sendCall?.args.p_sent_on, today);
-assert.equal(sendCall?.args.p_recipient_name, 'WEG Lindenstraße 5');
+assert.equal(sendCall?.args.p_recipient_name, 'Hausverwaltung Lindenhof GmbH');
+assert.equal(sendCall?.args.p_recipient_address, 'Hofweg 1, 10117 Berlin');
+// The snapshot keeps what the PDF printed beyond the revision's columns.
+const snapshot = JSON.stringify(sendCall?.args.p_snapshot);
+for (const printed of [
+  '"clientName":"WEG Lindenstraße 5"',
+  '"openingText":"Sehr geehrte Damen und Herren,"',
+  '"closingText":"Mit freundlichen Grüßen"',
+  '"companyName":"Haustechnik Sonnenberg GmbH"',
+]) {
+  assert.ok(snapshot.includes(printed), `${printed} missing from ${snapshot}`);
+}
 assert.equal(sendCall?.args.p_storage_path, first.path);
 assert.equal(sendCall?.args.p_document_id, sent.documentId);
 assert.ok(String(first.path).startsWith(`${ORGANIZATION_A}/${sent.documentId}/`));

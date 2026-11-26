@@ -1,7 +1,6 @@
 'use client';
 
-import { ExternalLink, FileText, Send } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { ExternalLink, FileText } from 'lucide-react';
 import { useState } from 'react';
 
 import { PdfFrame, usePdfRead } from '@/components/shared/pdf-frame';
@@ -21,6 +20,7 @@ import { Field } from '@/components/ui/field';
 import { SectionError } from '@/components/ui/section-error';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePendingTask } from '@/hooks/use-server-action';
+import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { describeFailure } from '@/lib/action-messages';
 import { sendOffer } from '@/lib/offers/send-actions';
 import {
@@ -38,6 +38,8 @@ const SEND_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   save_failed: SEND_FAILED,
   render_failed:
     'Das PDF konnte nicht erstellt werden. Prüfe die Firmenangaben und das Briefpapier unter Einstellungen.',
+  preview_outdated:
+    'Seit der Vorschau hat sich etwas geändert, das im PDF steht. Prüfe die neue Vorschau und halte das Angebot dann fest.',
   offer_changed:
     'Jemand hat das Angebot gerade geändert. Lade die Seite neu und prüfe die Vorschau noch einmal.',
   offer_not_editable: 'Das Angebot ist kein Entwurf mehr.',
@@ -49,71 +51,17 @@ const SEND_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
 
 const CHANNEL_FIELD_ID = 'offer-send-channel';
 
-/** „Vorschau“ and „Als gesendet festhalten“ of a draft, for the page header. */
+/** „Vorschau“ of a draft, for the page header; the preview is where the office records it as sent. */
 export function OfferSendActions({ offer }: { offer: SendableOffer }) {
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [sendOpen, setSendOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setPreviewOpen(true)}>
+      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
         <FileText className="size-4" />
         Vorschau
       </Button>
-      <Button type="button" variant="outline" onClick={() => setSendOpen(true)}>
-        <Send className="size-4" />
-        Als gesendet festhalten
-      </Button>
-      {previewOpen && <OfferPreviewDialog offer={offer} onClose={() => setPreviewOpen(false)} />}
-      {sendOpen && <SendOfferDialog offer={offer} onClose={() => setSendOpen(false)} />}
+      {open && <OfferPreviewDialog offer={offer} onClose={() => setOpen(false)} />}
     </>
-  );
-}
-
-/** The saved draft as the PDF „Als gesendet festhalten“ stores, rendered by the server, shown inline. */
-function OfferPreviewDialog({ offer, onClose }: { offer: SendableOffer; onClose: () => void }) {
-  const preview = usePdfRead({
-    path: `/api/angebote/vorschau?angebot=${offer.id}`,
-    deps: [offer.version, offer.contentVersion],
-    failureMessage: 'Die Vorschau konnte nicht erstellt werden.',
-  });
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent size="4xl">
-        <DialogHeader>
-          <DialogTitle>Vorschau {offer.offerNumber}</DialogTitle>
-          <DialogDescription>
-            So bekommt dein Kunde das Angebot, wenn du es heute als gesendet festhältst. Die Vorschau zeigt
-            den gespeicherten Stand.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="space-y-3">
-          {preview.failure ? (
-            <SectionError failure={preview.failure} />
-          ) : (
-            <PdfFrame
-              url={preview.data?.url}
-              title={`Vorschau ${offer.offerNumber}`}
-              loadingLabel="Vorschau wird erstellt."
-            />
-          )}
-        </DialogBody>
-        <DialogFooter>
-          {preview.data && (
-            <Button variant="outline" asChild>
-              <a href={preview.data.url} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-4" />
-                In neuem Tab öffnen
-              </a>
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -148,77 +96,121 @@ function ChannelField({
   );
 }
 
+type PdfPreview = ReturnType<typeof usePdfRead>;
+
 /**
- * „Als gesendet festhalten“: the office names how it sent the offer, and the
- * server freezes the saved draft as its next revision with the PDF the
- * preview shows. WerkFlow sends nothing itself.
+ * „Als gesendet festhalten“ of the PDF `preview` shows: the channel is
+ * required, and the send names the preview's hash, so the server files
+ * exactly that PDF or refuses with `preview_outdated`, which renders it anew.
  */
-function SendOfferDialog({ offer, onClose }: { offer: SendableOffer; onClose: () => void }) {
-  const router = useRouter();
+function useOfferSend(offer: SendableOffer, preview: PdfPreview, onSent: () => void) {
   const { showBanner } = useBanner();
   // One key per opening: a press repeated after a lost answer gets the first revision.
   const [attemptKey] = useState(() => crypto.randomUUID());
   const [channel, setChannel] = useState<OfferChannel | null>(null);
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { run, isPending: pending } = usePendingTask();
+  const { run, isPending } = usePendingTask();
+  // The action's answer carries the page with the sent offer; the dialog stays pending until it is on screen.
+  const settle = useSettleOnChange(offer.version);
   const channelError = channel ? undefined : 'Wähle, wie du das Angebot gesendet hast.';
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setAttempted(true);
     if (focusFirstInvalidField({ [CHANNEL_FIELD_ID]: channelError }) || !channel) return;
+    const previewHash = preview.data?.contentHash;
+    if (!previewHash) {
+      setError('Halte das Angebot fest, sobald die Vorschau zu sehen ist.');
+      return;
+    }
     void run(async () => {
       setError(null);
+      const since = settle.markChange();
       const result = await sendOffer({
         offerId: offer.id,
         expectedVersion: offer.version,
         expectedContentVersion: offer.contentVersion,
         channel,
+        previewHash,
         attemptKey,
       }).catch(() => null);
       if (!result?.success) {
         setError(result ? describeFailure(result.error, SEND_FAILURE_MESSAGES, SEND_FAILED) : SEND_FAILED);
+        if (result?.error === 'preview_outdated') preview.reload();
         return;
       }
+      await settle(since);
       showBanner({
         variant: 'success',
         message: `${offer.offerNumber} ist als gesendet festgehalten (Revision ${result.revision}). Das PDF liegt bei den Revisionen.`,
       });
-      router.refresh();
-      onClose();
+      onSent();
     });
   };
+  return {
+    channel,
+    setChannel,
+    channelError: attempted ? channelError : undefined,
+    error,
+    pending: isPending,
+    submit,
+  };
+}
+
+/**
+ * The saved draft as the PDF its customer gets, rendered by the server, and
+ * „Als gesendet festhalten“ below it: the office names how it sent the offer,
+ * and the server files exactly the PDF shown here, or refuses when its
+ * rendering changed since. WerkFlow sends nothing itself.
+ */
+function OfferPreviewDialog({ offer, onClose }: { offer: SendableOffer; onClose: () => void }) {
+  const preview = usePdfRead({
+    path: `/api/angebote/vorschau?angebot=${offer.id}`,
+    deps: [offer.version, offer.contentVersion],
+    failureMessage: 'Die Vorschau konnte nicht erstellt werden.',
+  });
+  const send = useOfferSend(offer, preview, onClose);
   return (
     <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      pending={pending}
+      pending={send.pending}
     >
-      <DialogContent size="md">
-        <form onSubmit={submit} className="contents" noValidate>
+      <DialogContent size="4xl">
+        <form onSubmit={send.submit} className="contents" noValidate>
           <DialogHeader>
-            <DialogTitle>Angebot als gesendet festhalten?</DialogTitle>
+            <DialogTitle>Vorschau {offer.offerNumber}</DialogTitle>
             <DialogDescription>
-              WerkFlow verschickt nichts. Du hältst fest, dass du das Angebot selbst gesendet hast. Der
-              gespeicherte Stand wird mit dem heutigen Datum als PDF abgelegt, wie ihn die Vorschau zeigt, und
-              lässt sich danach nicht mehr ändern.
+              So bekommt dein Kunde das Angebot, wenn du es heute als gesendet festhältst. Die Vorschau zeigt
+              den gespeicherten Stand. WerkFlow verschickt nichts: Du hältst fest, wie du es selbst gesendet
+              hast, und genau dieses PDF wird abgelegt und lässt sich danach nicht mehr ändern.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-2 py-1">
-            <ChannelField
-              channel={channel}
-              error={attempted ? channelError : undefined}
-              onChange={setChannel}
-            />
-            <ErrorText>{error}</ErrorText>
+          <DialogBody className="space-y-4">
+            {preview.failure ? (
+              <SectionError failure={preview.failure} />
+            ) : (
+              <PdfFrame
+                url={preview.data?.url}
+                title={`Vorschau ${offer.offerNumber}`}
+                loadingLabel="Vorschau wird erstellt."
+              />
+            )}
+            <ChannelField channel={send.channel} error={send.channelError} onChange={send.setChannel} />
+            <ErrorText>{send.error}</ErrorText>
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
-              Abbrechen
-            </Button>
-            <Button pending={pending} type="submit" disabled={pending}>
+            {preview.data && (
+              <Button variant="outline" asChild>
+                <a href={preview.data.url} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-4" />
+                  In neuem Tab öffnen
+                </a>
+              </Button>
+            )}
+            <Button pending={send.pending} type="submit" disabled={send.pending}>
               Als gesendet festhalten
             </Button>
           </DialogFooter>

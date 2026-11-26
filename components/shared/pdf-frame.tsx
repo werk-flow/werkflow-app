@@ -9,15 +9,20 @@ import type { ActionFailure } from '@/lib/action-result';
 // A PDF a route handler of this app renders (the offer preview, the
 // Musterangebot), read once as bytes and shown inline through a blob: URL,
 // the one frame source besides object storage the content security policy
-// allows (lib/security/csp-report.ts). Open and download use the same bytes.
+// allows (lib/security/csp-report.ts). Open and download use the same bytes,
+// and the bytes' hash names exactly what the screen showed.
 
-type PdfRead = { success: true; url: string } | ActionFailure<'load_failed'>;
+/** The PDF's blob: URL and the SHA-256 of its bytes, as lowercase hex. */
+type PdfRead = { success: true; url: string; contentHash: string } | ActionFailure<'load_failed'>;
 
 async function readPdf(path: string, signal: AbortSignal): Promise<PdfRead> {
   try {
     const response = await fetch(path, { signal, cache: 'no-store' });
     if (!response.ok) return { success: false, error: 'load_failed' };
-    return { success: true, url: URL.createObjectURL(await response.blob()) };
+    const blob = await response.blob();
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()));
+    const contentHash = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return { success: true, url: URL.createObjectURL(blob), contentHash };
   } catch {
     // A lost connection is the same failure as a refused render: the retry asks again.
     return { success: false, error: 'load_failed' };

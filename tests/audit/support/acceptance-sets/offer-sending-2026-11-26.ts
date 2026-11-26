@@ -173,8 +173,8 @@ type SetCapture = OpenSet['captures'][number];
 
 /**
  * werk-flow/werkflow-planning#383 of 2026-11-26: a draft's „Vorschau“ with
- * the PDF inside the page, while it renders and when it fails, the dialog
- * „Als gesendet festhalten“, an offer sent twice with revision 1 replaced,
+ * the PDF inside the page and „Als gesendet festhalten“ below it, while it
+ * renders and when it fails, an offer sent twice with revision 1 replaced,
  * and a sent offer past its validity („Abgelaufen“), for Admin and Büro. The
  * page before the change is `offer-positions-2026-11-26`'s `<role>-wartung`.
  * The Musterangebot inline is `document-sample-2026-11-12`.
@@ -189,7 +189,6 @@ function roleCaptures(role: 'admin' | 'buero'): SetCapture[] {
     { id: `${role}-vorschau`, ...draft, view: preview },
     { id: stateCaptureId(`${role}-vorschau`, 'loading'), ...draft, view: preview, state: 'loading' },
     { id: stateCaptureId(`${role}-vorschau`, 'error'), ...draft, view: preview, state: 'error' },
-    { id: `${role}-senden`, ...draft, view: { kind: 'dialog', opener: 'commercial.offer-send' } },
     {
       id: `${role}-revisionen`,
       role,

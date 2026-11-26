@@ -477,6 +477,21 @@ describe('the business document renderer', () => {
     }
   });
 
+  test('a title wider than the page wraps onto further lines instead of running off it', async () => {
+    const title = `Angebot: ${'Austausch der Gasheizung im Mehrfamilienhaus '.repeat(3)}Ende`;
+    for (const document of [
+      { ...serviceOffer, title },
+      { ...stationeryOffer, title },
+    ]) {
+      const lines = (await readPages(await renderBusinessDocument(document)))[0] ?? [];
+      const first = lines.find((line) => line.text.startsWith('Angebot: Austausch'));
+      const last = lines.find((line) => line.text.endsWith('Ende'));
+      expect(first?.text.endsWith('Ende')).toBe(false);
+      expect(last?.top ?? 0).toBeGreaterThan(first?.top ?? PAGE_HEIGHT);
+      expect(last?.left).toBe(first?.left);
+    }
+  });
+
   test('a text line prints its text and description without number, quantity or amount', async () => {
     const note = {
       kind: 'text' as const,

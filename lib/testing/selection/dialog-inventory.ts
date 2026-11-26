@@ -62,9 +62,6 @@ export const DIALOG_INVENTORY = {
   'components/angebote/offer-sending.tsx#OfferPreviewDialog|Vorschau {offer.offerNumber}': {
     audits: [{ route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-preview' }],
   },
-  'components/angebote/offer-sending.tsx#SendOfferDialog|Angebot als gesendet festhalten?': {
-    audits: [{ route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-send' }],
-  },
   'components/rechnungen/create-invoice-dialog.tsx#CreateInvoiceDialog|Rechnung erstellen': {
     audits: [{ route: '/rechnungen', role: 'admin', opener: 'commercial.invoice' }],
   },

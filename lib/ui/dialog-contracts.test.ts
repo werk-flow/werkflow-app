@@ -90,10 +90,6 @@ const exceptions: Record<string, DialogException> = {
     kind: 'browser',
     reason: 'Upload queue presents per-file status and explicit upload/retry commands.',
   },
-  'components/angebote/offer-sending.tsx#OfferPreviewDialog|Vorschau {offer.offerNumber}': {
-    kind: 'browser',
-    reason: 'Offer preview owns its PDF viewport and its open-in-new-tab control; it writes nothing.',
-  },
   "components/dokumente/document-viewer-dialog.tsx#DocumentViewerDialog|{document?.displayName ?? 'Dokument'}":
     { kind: 'browser', reason: 'Document viewer owns its media viewport and download controls.' },
   'components/kalender/dispatch-issue-dialog.tsx#DispatchIssueDialog|Einsatz senden': {

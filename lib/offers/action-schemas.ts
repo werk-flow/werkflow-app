@@ -114,6 +114,8 @@ export const sendOfferSchema = z.object({
   expectedVersion: z.number().int().positive(),
   expectedContentVersion: z.number().int().positive(),
   channel: z.enum(OFFER_CHANNELS),
+  /** SHA-256 of the preview the office saw: a send whose rendering differs is refused, never filed. */
+  previewHash: z.string().regex(/^[0-9a-f]{64}$/),
   /** One key per opening of the dialog: a press repeated after a lost answer gets the first revision. */
   attemptKey: uuidSchema,
 });

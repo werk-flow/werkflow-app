@@ -1327,4 +1327,79 @@ begin
 end;
 $$;
 
+
+-- A sent offer revision (werk-flow/werkflow-planning#383) refuses UPDATE and
+-- DELETE: service_role holds no privilege, and the owner meets the history
+-- guard. Only the organization's deletion cascades through it, its document too.
+insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
+('5e380000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated',
+ 'authenticated', 'offer-ledger-admin@example.test', '', now(), '{}',
+ '{"first_name":"Ledger","last_name":"Angebot"}', now(), now());
+insert into public.organizations (id, name, admin_id, unique_code) values
+('5e380000-0000-4000-8000-000000000010', 'Offer ledger SQL', '5e380000-0000-4000-8000-000000000001', 'OFFLEDG');
+insert into public.clients (id, organization_id, name, client_type) values
+('5e380000-0000-4000-8000-000000000020', '5e380000-0000-4000-8000-000000000010', 'WEG Ledger', 'gewerblich');
+insert into public.offers (id, organization_id, offer_number, title, status, client_id, recipient_client_id,
+  valid_until) values
+('5e380000-0000-4000-8000-000000000030', '5e380000-0000-4000-8000-000000000010', 'ANG-2026-001', 'Ledger',
+ 'gesendet', '5e380000-0000-4000-8000-000000000020', '5e380000-0000-4000-8000-000000000020', '2037-12-31');
+insert into public.documents (id, organization_id, storage_path, original_file_name, display_name, category,
+  size_bytes, uploaded_by) values
+('5e380000-0000-4000-8000-000000000040', '5e380000-0000-4000-8000-000000000010',
+ '5e380000-0000-4000-8000-000000000010/5e380000-0000-4000-8000-000000000040/Angebot.pdf', 'Angebot.pdf',
+ 'Angebot.pdf', 'offer', 10, '5e380000-0000-4000-8000-000000000001');
+insert into public.offer_revisions (organization_id, offer_id, revision, offer_number, title, valid_until, sent_on,
+  channel, client_id, recipient_client_id, recipient_name, snapshot, content, net_cents, tax_cents, gross_cents,
+  document_id) values
+('5e380000-0000-4000-8000-000000000010', '5e380000-0000-4000-8000-000000000030', 1, 'ANG-2026-001', 'Ledger',
+ '2037-12-31', '2037-11-26', 'post', '5e380000-0000-4000-8000-000000000020',
+ '5e380000-0000-4000-8000-000000000020', 'WEG Ledger', '{}', '[]', 100, 19, 119,
+ '5e380000-0000-4000-8000-000000000040');
+set local role service_role;
+do $$
+begin
+  begin
+    update public.offer_revisions set gross_cents = 0
+    where organization_id = '5e380000-0000-4000-8000-000000000010';
+    raise exception 'service-role offer revision update was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.offer_revisions where organization_id = '5e380000-0000-4000-8000-000000000010';
+    raise exception 'service-role offer revision delete was accepted';
+  exception when insufficient_privilege then null;
+  end;
+end;
+$$;
+reset role;
+do $$
+begin
+  begin
+    update public.offer_revisions set gross_cents = 0
+    where organization_id = '5e380000-0000-4000-8000-000000000010';
+    raise exception 'privileged offer revision update was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  begin
+    delete from public.offer_revisions where organization_id = '5e380000-0000-4000-8000-000000000010';
+    raise exception 'privileged offer revision delete was accepted';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  if (select gross_cents from public.offer_revisions
+      where organization_id = '5e380000-0000-4000-8000-000000000010') is distinct from 119::bigint
+  then raise exception 'the offer revision changed despite the denials'; end if;
+end;
+$$;
+delete from public.organizations where id = '5e380000-0000-4000-8000-000000000010';
+do $$
+begin
+  if exists (select 1 from public.offer_revisions where organization_id = '5e380000-0000-4000-8000-000000000010')
+    or exists (select 1 from public.documents where organization_id = '5e380000-0000-4000-8000-000000000010')
+  then raise exception 'the organization''s deletion left an offer revision or its document'; end if;
+end;
+$$;
+
 rollback;
