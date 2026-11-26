@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dependencyDigest": "0f01229fb4ba8fea49ee2cb02bd840b27abc662fd84970f4d9a26379f6e41561",
+  "dependencyDigest": "fdabfd7971658b1fd6c9edc9bf7bfe4badd17356cacd4db71ab651ab997cee14",
   "exceptions": [
     {
       "package": "minimatch",
@@ -23,7 +23,8 @@
         "Re-reviewed on 2026-11-14 for saxon-js 2.7.0 (with axios) and the dev dependency xslt3 2.7.0 (werk-flow/werkflow-planning#454): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
         "Re-reviewed on 2026-11-15 for stripe 23.1.0, which has no dependencies (werk-flow/werkflow-planning#250): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
         "Re-reviewed on 2026-11-16 for next 16.4.5, which closes GHSA-mfr8-8qww-v76h (werk-flow/werkflow-planning#29): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
-        "Re-reviewed on 2026-11-23 for the dev dependency fast-check 4.10.2 with pure-rand 8.4.2 (werk-flow/werkflow-app#592, the owner's property-test decision of 2026-11-22): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency; pure-rand comes only through fast-check."
+        "Re-reviewed on 2026-11-23 for the dev dependency fast-check 4.10.2 with pure-rand 8.4.2 (werk-flow/werkflow-app#592, the owner's property-test decision of 2026-11-22): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency; pure-rand comes only through fast-check.",
+        "Re-reviewed on 2026-11-26 for ai 7.0.171 and @ai-sdk/anthropic 4.0.103 with @ai-sdk/gateway, @ai-sdk/provider, @ai-sdk/provider-utils, @vercel/oidc, @standard-schema/spec, @workflow/serde, eventsource-parser and json-schema (werk-flow/werkflow-planning#528): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency; none of the added packages depends on minimatch."
       ]
     },
     {

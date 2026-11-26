@@ -5,10 +5,11 @@
 @source '../hooks';
 @source '../lib';
 @source '../proxy.ts';
-/* Tests and test support never render: a class string in a lint
-   test's example or a fixture would otherwise ship in every page's start-up
-   stylesheet. */
+/* Tests, test support and the KI model path never render: a class-like word
+   in a fixture, a lint test's example or a stream part name such as
+   `text-start` would otherwise ship in every page's start-up stylesheet. */
 @source not '../lib/testing';
+@source not '../lib/ai';
 @source not '../**/*.test.{ts,tsx,mjs}';
 
 :root {
