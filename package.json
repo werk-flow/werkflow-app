@@ -58,6 +58,7 @@
     "advisors:check": "bun scripts/check-supabase-project.ts advisors",
     "agent-access:check": "bun scripts/agent-access-check.ts",
     "agent-keys:install": "bun scripts/agent-access-check.ts install",
+    "staging:invoice": "bun scripts/staging/invoice.ts",
     "staging:smoke": "bun scripts/staging/smoke.ts",
     "staging:cleanup": "bun scripts/staging/cleanup.ts",
     "prod:inspect": "bun scripts/inspect-production.ts",

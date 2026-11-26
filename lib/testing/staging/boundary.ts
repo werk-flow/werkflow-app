@@ -1,5 +1,5 @@
 // The staging journey kit's browser boundary (.claude/skills/staging-journey/SKILL.md). A journey's
-// browser reaches staging, DEV and Stripe's sandbox Checkout only, and the Vercel bypass reaches
+// browser reaches staging, DEV, Stripe's sandbox Checkout and staging's signed billing downloads only, and the Vercel bypass reaches
 // staging's host only: the kit's route asks these functions about every request and every redirect
 // hop before it is sent (Tier 1).
 
@@ -8,6 +8,14 @@ export const STAGING_ORIGIN = 'https://werkflow-app-git-main-werkflows-projects.
 
 /** A sandbox Checkout session's page; a live session's id starts with `cs_live_`. */
 const SANDBOX_CHECKOUT = /^https:\/\/checkout\.stripe\.com\/(?:[a-z]+\/)*cs_test_[A-Za-z0-9]+/;
+
+/**
+ * A signed R2 download of a WerkFlow billing original, which the billing page opens as its PDF button's
+ * page (lib/storage/r2.ts, `createWerkflowBillingDownloadUrl`): an account host, a bucket, the
+ * `werkflow-billing/` prefix and a signature only staging's server can make.
+ */
+const SIGNED_BILLING_DOWNLOAD =
+  /^https:\/\/[0-9a-f]{32}\.(?:eu\.)?r2\.cloudflarestorage\.com\/[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\/werkflow-billing\/(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\?(?:[^#]*&)?X-Amz-Signature=/;
 
 export type BrowserRequest = {
   url: string;
@@ -24,8 +32,8 @@ const STRIPE_SANDBOX_ASSET_HOSTS =
 /**
  * `staging`: a request to staging, which carries the bypass. `elsewhere`: a request to DEV's Supabase
  * project or, from a frame or a script, to Stripe's sandbox Checkout hosts, without the bypass.
- * `refused`: everything else, PROD included, and a page outside staging except a sandbox Checkout the
- * app sent the journey to. A journey that needs another origin adds it here, with a test.
+ * `refused`: everything else, PROD included, and a page outside staging except a sandbox Checkout or a
+ * signed billing download the app sent the journey to. A journey that needs another origin adds it here, with a test.
  */
 export type RequestVerdict = 'staging' | 'elsewhere' | 'refused';
 
@@ -35,7 +43,9 @@ export function requestVerdict(request: BrowserRequest, devRef: string): Request
   if (url.origin === STAGING_ORIGIN) return 'staging';
   if (url.protocol !== 'https:' && url.protocol !== 'wss:') return 'refused';
   if (request.navigation && request.mainFrame)
-    return SANDBOX_CHECKOUT.test(url.href) ? 'elsewhere' : 'refused';
+    return SANDBOX_CHECKOUT.test(url.href) || SIGNED_BILLING_DOWNLOAD.test(url.href)
+      ? 'elsewhere'
+      : 'refused';
   if (url.hostname === `${devRef}.supabase.co`) return 'elsewhere';
   return url.protocol === 'https:' && STRIPE_SANDBOX_ASSET_HOSTS.test(url.hostname) ? 'elsewhere' : 'refused';
 }

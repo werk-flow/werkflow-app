@@ -78,6 +78,31 @@ export function scopedReadQuery(read: {
   };
 }
 
+/** The roles a run's member actors join its organization with (`org_role`, an Admin cannot be invited). */
+export const MEMBER_ROLES = ['buero', 'employee'] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+
+function isMemberRole(role: string): role is MemberRole {
+  return MEMBER_ROLES.some((known) => known === role);
+}
+
+/**
+ * The read of the run organization's pending invite codes for `role`. A code is a capability, not an
+ * id: no other reader returns one, and the kit adds it to the values no printed line may hold.
+ */
+export function pendingInviteCodeQuery(
+  organizationId: string,
+  role: string,
+): { query: string; parameters: string[] } {
+  if (!isUuid(organizationId)) throw new StagingFailure('The organization id is no UUID.');
+  if (!isMemberRole(role)) throw new StagingFailure('Invite a member as buero or employee only.');
+  return {
+    query:
+      "select invite_code from public.organization_invites where organization_id = $1::uuid and invited_role = $2::public.org_role and status = 'pending'",
+    parameters: [organizationId, role],
+  };
+}
+
 /** The Stripe fields a journey may read: ids, states, amounts and times, never a customer's details. */
 const STRIPE_FIELDS = [
   'id',
@@ -88,6 +113,7 @@ const STRIPE_FIELDS = [
   'canceled_at',
   'cancel_at_period_end',
   'currency',
+  'amount',
   'amount_due',
   'amount_paid',
   'amount_refunded',
