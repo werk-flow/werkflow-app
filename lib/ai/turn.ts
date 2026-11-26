@@ -360,7 +360,7 @@ async function runSteps(
 
 type AttemptResult =
   | { ok: true; finishReason: string; responseMessages: ModelMessage[]; usage: AiTokenUsage }
-  | { ok: false; error: unknown; usage: AiTokenUsage | null; streamed: boolean };
+  | { ok: false; error: unknown; usage: AiTokenUsage | null };
 
 async function runStep(
   context: RunContext,
@@ -371,31 +371,30 @@ async function runStep(
   for (let attempt = 0; ; attempt += 1) {
     const textBefore = answer.text.length;
     const result = await runAttempt(context, answer, step);
-    const streamed = answer.text.length > textBefore;
+    const written = answer.text.slice(textBefore);
     const classified = result.ok ? null : classifyProviderError(result.error);
-    const usage = result.usage ?? estimatedUsage(step.prompt, answer.text.slice(textBefore), streamed);
+    const outcome = result.ok
+      ? result.finishReason === 'tool-calls'
+        ? 'tool_calls'
+        : 'completed'
+      : (classified?.outcome ?? 'provider_error');
     // Every attempt is ledgered at its cost before anything else, so a retry never goes uncounted (B15).
-    const recorded = await recordAttempt(
-      context,
-      `${context.command.commandId}:${step.step}:${attempt}`,
-      usage,
-      result.ok
-        ? result.finishReason === 'tool-calls'
-          ? 'tool_calls'
-          : 'completed'
-        : (classified?.outcome ?? 'provider_error'),
-    );
-    if (!recorded) return { kind: 'failed', failure: 'interrupted' };
-    if (result.ok)
+    const usage = result.usage ?? estimatedUsage(step.prompt, written);
+    const key = `${context.command.commandId}:${step.step}:${attempt}`;
+    if (!(await recordAttempt(context, key, usage, outcome)))
+      return { kind: 'failed', failure: 'interrupted' };
+    if (result.ok) {
       return {
         kind: 'finished',
         finishReason: result.finishReason,
         responseMessages: result.responseMessages,
       };
-    if (!classified) return { kind: 'failed', failure: 'interrupted' };
-    if (!classified.retryable || streamed || attempt >= limits.maxRetries) {
-      if (classified.outcome !== 'spend_limit') logError('aiTurn: provider attempt failed', result.error);
-      return { kind: 'failed', failure: classified.failure };
+    }
+    const { failure, retryable } = classified ?? { failure: 'interrupted', retryable: false };
+    // What the user already saw is never written twice: a stream that broke is not retried.
+    if (!retryable || written || attempt >= limits.maxRetries) {
+      if (outcome !== 'spend_limit') logError('aiTurn: provider attempt failed', result.error);
+      return { kind: 'failed', failure };
     }
     const gate = await readStepGate(context.command.organizationId);
     if (gate !== 'open') return { kind: 'failed', failure: gate === 'disabled' ? 'disabled' : 'undecidable' };
@@ -424,24 +423,26 @@ async function runAttempt(
   });
   let usage: AiTokenUsage | null = null;
   let finishReason = 'other';
-  let failure: unknown = null;
-  for await (const part of result.fullStream) {
-    if (part.type === 'text-delta') {
-      answer.text += part.text;
-      context.sink.text(part.text);
-      await savePartial(context, answer);
-    } else if (part.type === 'finish-step') {
-      usage = tokenUsage(part.usage);
-      finishReason = part.finishReason;
-    } else if (part.type === 'error') {
-      failure = part.error;
-    } else if (part.type === 'abort') {
-      failure = new DOMException('aborted', 'AbortError');
+  try {
+    for await (const part of result.fullStream) {
+      if (part.type === 'text-delta') {
+        answer.text += part.text;
+        context.sink.text(part.text);
+        await savePartial(context, answer);
+      } else if (part.type === 'finish-step') {
+        usage = tokenUsage(part.usage);
+        finishReason = part.finishReason;
+      } else if (part.type === 'error') {
+        return { ok: false, error: part.error, usage };
+      } else if (part.type === 'abort') {
+        return { ok: false, error: new DOMException('aborted', 'AbortError'), usage };
+      }
     }
+    const response = await result.response;
+    return { ok: true, finishReason, responseMessages: response.messages, usage: usage ?? zeroUsage() };
+  } catch (error) {
+    return { ok: false, error, usage };
   }
-  if (failure !== null) return { ok: false, error: failure, usage, streamed: false };
-  const response = await result.response;
-  return { ok: true, finishReason, responseMessages: response.messages, usage: usage ?? zeroUsage() };
 }
 
 /** Saves the partial answer at most every PARTIAL_SAVE_INTERVAL_MS, so a reload or a second device shows it. */
@@ -492,8 +493,8 @@ function zeroUsage(): AiTokenUsage {
  * streamed is not billed; one that broke while it streamed is charged at the
  * estimate of its prompt and of what it wrote, so the ledger never undercounts.
  */
-function estimatedUsage(prompt: string, writtenText: string, streamed: boolean): AiTokenUsage {
-  if (!streamed) return zeroUsage();
+function estimatedUsage(prompt: string, writtenText: string): AiTokenUsage {
+  if (!writtenText) return zeroUsage();
   return {
     ...zeroUsage(),
     inputTokens: estimateInputTokens(prompt),
