@@ -1,5 +1,5 @@
 import type { OfferArticleLine } from '@/lib/invoices/line-sources';
-import { holdWrite, unexpectedWrite } from './held-write-boundary';
+import { holdWrite } from './held-write-boundary';
 
 // The offer actions and router in the contract fixture: every create the
 // dialog sends is counted, so a contract can prove a press sent none; a
@@ -102,9 +102,6 @@ export async function readOfferArticleLine(): Promise<{ success: true; line: Off
     },
   };
 }
-
-/** The invoice editor's catalog read, which the offer editor imports with the source note and never calls. */
-export const readInvoiceLineSource = unexpectedWrite;
 
 export function useRouter(): { push: () => void } {
   return { push: () => undefined };

@@ -70,9 +70,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 if (
                   args.path === '@/lib/offers/actions' ||
                   args.importer.endsWith('create-offer-dialog.tsx') ||
-                  args.importer.endsWith('offer-article-picker.tsx') ||
-                  // The offer editor shows a Position's article with the invoice editor's note.
-                  args.importer.endsWith('invoice-catalog-line.tsx')
+                  args.importer.endsWith('offer-article-picker.tsx')
                 )
                   return { path: join(import.meta.dir, 'offers-service-boundaries.ts') };
               },
