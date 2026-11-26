@@ -28,7 +28,8 @@ import { listProductSources, parseProductSource } from './product-sources';
 // loads lazily behind a gate that imports only the logging.
 //
 // The same modules call `clearKiDrafts`, so no WerkFlow KI draft of one person
-// stays in the tab for the next (werk-flow/werkflow-planning#530).
+// stays in the tab for the next (werk-flow/werkflow-planning#530). It lives
+// apart from the chat's draft module, which only the chat page loads.
 //
 // The menu sign-out sits in a chunk every page loads at startup, so each clear
 // lives in a module that imports nothing. Importing the bridge's schemas there
@@ -38,7 +39,7 @@ const CLEAR_CALL = 'clearManualEntryBridge';
 const CACHE_CLEAR_CALL = 'clearServiceWorkerCaches';
 const CLEAR_MODULE = 'lib/time-tracking/manual-entry-bridge-storage.ts';
 const DRAFT_CLEAR_CALL = 'clearKiDrafts';
-const DRAFT_CLEAR_MODULE = 'lib/ai/chat-drafts.ts';
+const DRAFT_CLEAR_MODULE = 'lib/ai/chat-draft-clear.ts';
 const TODAY_CLEAR_CALL = 'clearTodayOnDevice';
 const TODAY_CLEAR_MODULE = 'lib/field-sync/device/today-wipe.ts';
 const UNSENT_ASK_CALL = 'endSessionAfterCheck';
@@ -168,6 +169,19 @@ describe('sign-out clears the tab state', () => {
         .map((statement) => statement.moduleSpecifier.getText(source)),
     ).toEqual([`'@/${CLEAR_MODULE.replace(/\.ts$/, '')}'`]);
     expect(source.text.includes('import('), DRAFT_CLEAR_MODULE).toBe(false);
+  });
+
+  // The chat's own draft module carries its memory copies and the sending hand-off. Imported by a
+  // sign-out, it sat in the start-up chunk and split a layout script in two for every page
+  // (werk-flow/werkflow-planning#530); the sign-outs import the clear module instead.
+  test('only the chat imports its draft module', () => {
+    const importers = listProductSources().filter((file) =>
+      parseProductSource(file)
+        .statements.filter(ts.isImportDeclaration)
+        .some((statement) => statement.moduleSpecifier.getText().slice(1, -1) === '@/lib/ai/chat-drafts'),
+    );
+    expect(importers.filter((file) => !file.startsWith('components/ki/'))).toEqual([]);
+    expect(importers.length).toBeGreaterThan(0);
   });
 
   test('probes: a sign-out without a clear is reported, one with both or of other sessions is not', () => {

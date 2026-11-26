@@ -33,7 +33,7 @@ import type { AttentionCounts } from '@/lib/attention/types';
 import { MobileDrawer } from './mobile-drawer';
 import { OrgSwitchOverlay } from './org-switch-overlay';
 import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
-import { isNavItemActive, navItemsFor } from './sidebar-nav-items';
+import { isNavItemActive, navItemsFor, type NavItem } from './sidebar-nav-items';
 
 const OrganizationSwitcher = dynamic(
   () => import('@/components/organization/organization-switcher').then((mod) => mod.OrganizationSwitcher),
@@ -185,13 +185,36 @@ function SidebarLogo({ onClick }: { onClick: () => void }) {
 /** What the phone menu does on a navigation and on its report row. */
 type SidebarPresses = { onNavigate?: (() => void) | undefined; onReport?: (() => void) | undefined };
 
-/** The member's organizations WerkFlow released WerkFlow KI to; the sidebar offers its page there. */
-const AiOrganizationsContext = createContext<readonly string[]>([]);
+/**
+ * A sidebar entry the server renders, shown below „Aufgaben“ in the member's organizations in
+ * `organizationIds` only. The layout passes it only when one exists, so no other member's start-up
+ * carries its label, icon or route.
+ */
+export type ServerNavEntry = {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  organizationIds: readonly string[];
+};
 
-function useVisibleNavItems() {
+const ServerNavEntryContext = createContext<ServerNavEntry | undefined>(undefined);
+
+type SidebarRow = { item: Pick<NavItem, 'href' | 'label' | 'activePrefix'>; icon: React.ReactNode };
+
+function useSidebarRows(): SidebarRow[] {
   const { activeOrg } = useOrganization();
-  const aiOrganizationIds = useContext(AiOrganizationsContext);
-  return navItemsFor(activeOrg?.role, activeOrg !== null && aiOrganizationIds.includes(activeOrg.orgId));
+  const serverEntry = useContext(ServerNavEntryContext);
+  const rows = navItemsFor(activeOrg?.role).map(
+    (item): SidebarRow => ({ item, icon: <item.icon className="size-4" /> }),
+  );
+  if (serverEntry && activeOrg && serverEntry.organizationIds.includes(activeOrg.orgId)) {
+    const { href, label, icon } = serverEntry;
+    rows.splice(rows.findIndex((row) => row.item.href === '/aufgaben') + 1, 0, {
+      item: { href, label },
+      icon,
+    });
+  }
+  return rows;
 }
 
 // Sidebar content component (shared between desktop and mobile). The phone
@@ -203,7 +226,7 @@ function SidebarContent({
 }: SidebarPresses & { search?: boolean | undefined }) {
   const pathname = usePathname();
   const { actionableCount, approvalsCount, unreadNotificationCount } = useAttentionCounts();
-  const visibleNavItems = useVisibleNavItems();
+  const sidebarRows = useSidebarRows();
 
   const activePath = pathname;
 
@@ -228,9 +251,8 @@ function SidebarContent({
       {/* Navigation */}
       <nav aria-label="Hauptnavigation" className="flex-1 p-4">
         <ul className="space-y-1">
-          {visibleNavItems.map((item) => {
+          {sidebarRows.map(({ item, icon }) => {
             const isActive = isNavItemActive(item, activePath);
-            const Icon = item.icon;
             // Badges are viewer-scoped: the counts already exclude everything
             // the viewer cannot act on, so no extra role gate is needed.
             const badgeCount =
@@ -257,7 +279,7 @@ function SidebarContent({
                       : 'font-normal text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                   )}
                 >
-                  <Icon className="size-4" />
+                  {icon}
                   <span className="flex-1">{item.label}</span>
                   {showBadge && (
                     <>
@@ -366,12 +388,12 @@ export function AppShell({
   children,
   initialAttentionCounts,
   initialOrganizationId,
-  aiOrganizationIds = [],
+  serverNavEntry,
 }: {
   children: React.ReactNode;
   initialAttentionCounts?: AttentionCounts;
   initialOrganizationId?: string | null;
-  aiOrganizationIds?: readonly string[];
+  serverNavEntry?: ServerNavEntry;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const closeDrawer = useCallback(() => setIsOpen(false), []);
@@ -383,7 +405,7 @@ export function AppShell({
 
   return (
     <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>
-      <AiOrganizationsContext.Provider value={aiOrganizationIds}>
+      <ServerNavEntryContext.Provider value={serverNavEntry}>
         <AttentionCountProvider
           initialCounts={initialAttentionCounts}
           initialOrganizationId={initialOrganizationId}
@@ -412,7 +434,7 @@ export function AppShell({
             <UnsentWorkHost />
           </ProblemReportLauncher>
         </AttentionCountProvider>
-      </AiOrganizationsContext.Provider>
+      </ServerNavEntryContext.Provider>
     </SidebarContext.Provider>
   );
 }

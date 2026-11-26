@@ -1,21 +1,24 @@
 'use client';
 
+import { KI_DRAFT_PREFIX, onKiDraftsCleared, storedKiDraftKeys } from '@/lib/ai/chat-draft-clear';
 import { tabStorage } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
 // The WerkFlow KI chat composer's drafts (brief non-negotiable 8): one per person,
 // organization and thread, in this tab's sessionStorage, so a draft survives
 // navigation and reload and leaves the device with the tab. A memory copy
 // carries it when storage is refused. Every browser sign-out clears them
-// (lib/conventions/sign-out-clears-tab-state.test.ts); the menu sign-out loads
-// at start-up, so this module imports only the storage module every sign-out
-// already loads.
-
-const DRAFT_PREFIX = 'werkflow:ki-draft:';
+// through lib/ai/chat-draft-clear.ts, which the start-up chunk can carry; only
+// the chat page loads this module.
 /** Marks the copy of a message on its way, kept beside the draft it came from. */
 const SENDING_SUFFIX = ':sending';
 
 const memoryDrafts = new Map<string, string>();
 const draftListeners = new Set<() => void>();
+
+onKiDraftsCleared(() => {
+  memoryDrafts.clear();
+  for (const listener of draftListeners) listener();
+});
 
 export function subscribeDrafts(listener: () => void): () => void {
   draftListeners.add(listener);
@@ -46,38 +49,12 @@ export function writeDraft(key: string, text: string): void {
 }
 
 function draftScope(userId: string, organizationId: string): string {
-  return `${DRAFT_PREFIX}${userId}:${organizationId}:`;
+  return `${KI_DRAFT_PREFIX}${userId}:${organizationId}:`;
 }
 
 /** One draft per person, organization and thread; the new chat has its own. */
 export function draftKey(userId: string, organizationId: string, threadId: string | null): string {
   return `${draftScope(userId, organizationId)}${threadId ?? 'neu'}`;
-}
-
-/** The chat keys this tab keeps in sessionStorage. */
-function storedDraftKeys(): string[] {
-  try {
-    const storage = tabStorage();
-    if (!storage) return [];
-    return Array.from({ length: storage.length }, (_, index) => storage.key(index) ?? '').filter((key) =>
-      key.startsWith(DRAFT_PREFIX),
-    );
-  } catch {
-    // best-effort: storage that refuses access holds no draft; the memory copies still count.
-    return [];
-  }
-}
-
-/** Drops every chat draft of this tab. Every sign-out calls it before the session ends. */
-export function clearKiDrafts(): void {
-  const keys = storedDraftKeys();
-  memoryDrafts.clear();
-  try {
-    for (const key of keys) tabStorage()?.removeItem(key);
-  } catch {
-    // best-effort: storage that refuses access holds no draft this tab could show, and the sign-out goes on.
-  }
-  for (const listener of draftListeners) listener();
 }
 
 /** A message on its way to the turn route, from the draft under `draft`. */
@@ -114,7 +91,7 @@ export function releaseSending(draft: string): void {
 /** Takes the person's messages in the organization whose page went before their turns started. */
 export function takeSending(userId: string, organizationId: string): SendingMessage[] {
   const scope = draftScope(userId, organizationId);
-  const keys = new Set([...memoryDrafts.keys(), ...storedDraftKeys()]);
+  const keys = new Set([...memoryDrafts.keys(), ...storedKiDraftKeys()]);
   const taken: SendingMessage[] = [];
   for (const key of keys) {
     if (!key.startsWith(scope) || !key.endsWith(SENDING_SUFFIX)) continue;

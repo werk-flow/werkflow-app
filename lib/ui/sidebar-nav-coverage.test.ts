@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import { aiNavEntry } from '@/components/sidebar/ai-nav-entry';
 import { isNavItemActive, navItemsFor } from '@/components/sidebar/sidebar-nav-items';
 
 // Every authenticated page highlights exactly one sidebar entry, so the user
@@ -31,8 +32,8 @@ test('the route inventory finds the authenticated pages', () => {
 
 test('every authenticated route highlights exactly one sidebar entry', () => {
   const unmapped = routes.flatMap((route) => {
-    // A released organization's sidebar, which also shows the WerkFlow KI entry.
-    const owners = navItemsFor('admin', true)
+    // A released organization's sidebar, which the server adds the WerkFlow KI entry to.
+    const owners = [...navItemsFor('admin'), aiNavEntry([])]
       .filter((item) => isNavItemActive(item, route))
       .map((item) => item.label);
     const ownedByProfileCard = PROFILE_CARD_SECTIONS.some((href) => isNavItemActive({ href }, route));

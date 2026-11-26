@@ -105,3 +105,8 @@ assert.equal(pageScope.organizationId, organizationId, 'the page scope is keyed 
 const reserve = pageScope.children;
 assert.ok(isValidElement<{ children: ReactNode }>(reserve), 'the shell holds the clock dock reserve');
 assert.equal(reserve.props.children, 'Authorized page content');
+// An organization WerkFlow has not released WerkFlow KI to gets no KI sidebar entry, and the prop stays
+// absent: its route payloads carry nothing of the entry (werk-flow/werkflow-planning#530).
+const shellProps = propsByName.get('AppShell');
+assert.ok(shellProps, 'the layout renders the app shell');
+assert.equal('serverNavEntry' in shellProps, false, 'an unreleased organization gets no KI sidebar entry');
