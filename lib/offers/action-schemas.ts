@@ -4,7 +4,7 @@ import { INVOICE_TAX_RATES } from '@/lib/invoices/types';
 import { MAX_PRICE_CENTS } from '@/lib/price-catalog/money';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { OFFER_CONTENT_LIMITS } from './content-form';
+import { contentFitsOneSave, OFFER_CONTENT_LIMITS } from './content-form';
 
 // The inputs of the offer actions. The forms check title, customer and the
 // header's required fields before they submit; the server parses every input again.
@@ -81,7 +81,9 @@ export const saveOfferContentSchema = z.object({
       (sections) =>
         sections.reduce((count, section) => count + section.positions.length, 0) <=
         OFFER_CONTENT_LIMITS.positions,
-    ),
+    )
+    // The editor's byte limit holds for every caller, so no saved offer is one the editor cannot save again.
+    .refine(contentFitsOneSave),
 });
 
 export type SaveOfferContentInput = z.input<typeof saveOfferContentSchema>;

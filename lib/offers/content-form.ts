@@ -97,6 +97,11 @@ export const OFFER_CONTENT_LIMITS = { sections: 100, positionsPerSection: 500, p
  */
 const MAX_CONTENT_BYTES = 900_000;
 
+/** Whether the content fits one save, counted in UTF-8 bytes; the editor and the save's schema both ask. */
+export function contentFitsOneSave(sections: readonly unknown[]): boolean {
+  return new TextEncoder().encode(JSON.stringify(sections)).length <= MAX_CONTENT_BYTES;
+}
+
 /**
  * The sentence for parsed content one save cannot take: more Titel or
  * Positionen than an offer holds, or more bytes than a Server Action carries.
@@ -114,7 +119,7 @@ export function contentLimitSentence(sections: readonly OfferSection[]): string 
   ) {
     return 'Ein Angebot hat höchstens 1.000 Positionen. Verteile sie auf mehrere Angebote.';
   }
-  if (new TextEncoder().encode(JSON.stringify(sections)).length > MAX_CONTENT_BYTES) {
+  if (!contentFitsOneSave(sections)) {
     return 'Die Positionen sind zu lang für eine Speicherung. Kürze lange Beschreibungen.';
   }
   return null;
