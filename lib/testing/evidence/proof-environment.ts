@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { parseEnvironmentFile } from '../../env-file';
+
 /**
  * Environment identity for proof qualification. The build receipt must hash
  * the raw `.env.local` because the client bundle embeds `NEXT_PUBLIC_*`
@@ -36,17 +38,6 @@ function isLocalStackOrigin(value: string | URL): boolean {
 /** Replaces the private local-stack origin wherever it appears inside a value. */
 export function normalizeEnvironmentValue(value: string): string {
   return value.replace(ORIGIN_PATTERN, (origin) => (isLocalStackOrigin(origin) ? LOCAL_STACK_TOKEN : origin));
-}
-
-/** The same line shape `loadEnvLocal` accepts; other lines are comments or blank. */
-export function parseEnvironmentFile(contents: string): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const line of contents.split(/\r?\n/)) {
-    const [, key, rawValue] = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/) ?? [];
-    if (key === undefined || rawValue === undefined) continue;
-    values[key] = rawValue.trim().replace(/^["']|["']$/g, '');
-  }
-  return values;
 }
 
 export function proofEnvironmentDigest(

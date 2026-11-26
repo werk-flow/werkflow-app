@@ -5,7 +5,7 @@ import { OfferContentEditor } from '@/components/angebote/editor/offer-content-e
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
-import type { OfferDetail, OfferSection } from '@/lib/offers/types';
+import type { OfferDetail, OfferStoredSection } from '@/lib/offers/types';
 
 // „Angebot anlegen“: a press without title or customer marks both fields,
 // focuses the first and sends nothing. „Angebotskopf bearbeiten“ of a draft
@@ -16,7 +16,7 @@ import type { OfferDetail, OfferSection } from '@/lib/offers/types';
 declare global {
   interface Window {
     uiContractOfferServerRender: ((version: number) => void) | null;
-    uiContractOfferContentRender: ((contentVersion: number, sections: OfferSection[]) => void) | null;
+    uiContractOfferContentRender: ((contentVersion: number, sections: OfferStoredSection[]) => void) | null;
   }
 }
 

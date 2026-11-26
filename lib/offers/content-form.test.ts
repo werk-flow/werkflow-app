@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { emptyLine, parseDraftForm, type DraftForm } from '@/lib/invoices/draft-form';
-import { contentLimitSentence, emptyPosition, liveContentAmounts, parseContentForm } from './content-form';
+import {
+  articlePositionForm,
+  contentFieldId,
+  contentFormOf,
+  contentLimitSentence,
+  emptyPosition,
+  liveContentAmounts,
+  parseContentForm,
+} from './content-form';
 import type { OfferSection } from './types';
 
 function textLines(count: number, description: string): OfferSection[] {
@@ -67,4 +75,91 @@ test('the live amounts stand while a Titel name is blank', () => {
   const position = { ...emptyPosition('p', 'free'), name: 'Wartung', price: '72,50' };
   const amounts = liveContentAmounts([{ key: 's', title: '   ', positions: [position] }]);
   expect(amounts?.totals.lineNetCents).toBe(7250);
+});
+
+// An article becomes a Position with the reader's sale price, unit and VAT
+// rate as editable text; the save names the article, and an article whose
+// stored unit is outside the list waits for the office's unit.
+describe('articlePositionForm', () => {
+  const source = {
+    kind: 'article' as const,
+    id: '96000000-0000-4000-8000-000000000001',
+    number: 'KR-15',
+    name: 'Kupferrohr 15 mm',
+    archived: false,
+  };
+  const line = {
+    name: 'Kupferrohr 15 mm',
+    description: 'Hartkupfer, Stange 5 m',
+    unit: 'meter' as const,
+    unitPriceCents: 1234,
+    priceQuantity: 10 as const,
+    taxRateBasisPoints: 700 as const,
+    source,
+  };
+
+  test('the reader answer fills one unit of the article at its price per price quantity', () => {
+    const position = articlePositionForm('a', line);
+    expect(position).toEqual({
+      key: 'a',
+      kind: 'free',
+      name: 'Kupferrohr 15 mm',
+      description: 'Hartkupfer, Stange 5 m',
+      quantity: '1',
+      unit: 'meter',
+      price: '12,34',
+      priceQuantity: 10,
+      taxRateBasisPoints: 700,
+      source,
+    });
+    const parsed = parseContentForm([{ key: 's', title: 'Material', positions: [position] }]);
+    expect(parsed.ok && parsed.sections[0]?.positions[0]).toEqual({
+      kind: 'free',
+      name: 'Kupferrohr 15 mm',
+      description: 'Hartkupfer, Stange 5 m',
+      quantity: '1',
+      unit: 'meter',
+      unitPriceCents: 1234,
+      priceQuantity: 10,
+      taxRateBasisPoints: 700,
+      source: { kind: 'article', id: source.id },
+    });
+  });
+
+  test('a unit outside the list stays empty and the parse asks for one at the unit field', () => {
+    const position = articlePositionForm('a', { ...line, unit: null });
+    expect(position.unit).toBe('');
+    const parsed = parseContentForm([{ key: 's', title: 'Material', positions: [position] }]);
+    expect(parsed.ok ? {} : parsed.errors).toEqual({
+      [contentFieldId(0, { position: 0, field: 'unit' })]: 'Wähle eine Einheit.',
+    });
+    expect(liveContentAmounts([{ key: 's', title: 'Material', positions: [position] }])).toBeNull();
+  });
+
+  test('a stored Position keeps its article through the editor and the next save', () => {
+    const [section] = contentFormOf([
+      {
+        title: 'Material',
+        positions: [
+          {
+            kind: 'free',
+            name: 'Kupferrohr 15 mm',
+            description: '',
+            quantity: '2.500',
+            unit: 'meter',
+            unitPriceCents: 1234,
+            priceQuantity: 10,
+            taxRateBasisPoints: 700,
+            source: { ...source, archived: true },
+          },
+        ],
+      },
+    ]);
+    expect(section?.positions[0]?.source).toEqual({ ...source, archived: true });
+    const parsed = parseContentForm(section ? [section] : []);
+    expect(parsed.ok && parsed.sections[0]?.positions[0]).toMatchObject({
+      quantity: '2.5',
+      source: { kind: 'article', id: source.id },
+    });
+  });
 });

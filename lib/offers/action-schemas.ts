@@ -46,7 +46,10 @@ const positionTextSchema = {
   description: z.string().trim().max(4000),
 };
 
-/** A position typed by hand, with the limits of an invoice line; a negative quantity credits. */
+/** The article a Position was taken from, inside the caller's organization (the save checks). */
+const articleRefSchema = z.object({ kind: z.literal('article'), id: uuidSchema });
+
+/** A priced position, with the limits of an invoice line; a negative quantity credits. */
 const freePositionSchema = z.object({
   kind: z.literal('free'),
   ...positionTextSchema,
@@ -55,16 +58,32 @@ const freePositionSchema = z.object({
   unitPriceCents: z.number().int().min(0).max(MAX_PRICE_CENTS),
   priceQuantity: z.literal(PRICE_QUANTITIES),
   taxRateBasisPoints: z.literal(INVOICE_TAX_RATES),
+  /** Null for a position typed by hand. */
+  source: articleRefSchema.nullable().default(null),
 });
 
 const textPositionSchema = z.object({ kind: z.literal('text'), ...positionTextSchema });
 
-/** A Titel with its positions, as the save takes it and the reader parses it. */
-export const offerSectionSchema = z.object({
+/** A Titel with its positions, as the save takes it. */
+const offerSectionSchema = z.object({
   title: z.string().trim().min(1).max(200),
   positions: z
     .array(z.discriminatedUnion('kind', [freePositionSchema, textPositionSchema]))
     .max(OFFER_CONTENT_LIMITS.positionsPerSection),
+});
+
+/** A Titel as `get_offer` answers it: each Position's article with its number, name and archive state. */
+export const storedSectionSchema = offerSectionSchema.extend({
+  positions: z.array(
+    z.discriminatedUnion('kind', [
+      freePositionSchema.extend({
+        source: articleRefSchema
+          .extend({ number: z.string().nullable(), name: z.string(), archived: z.boolean() })
+          .nullable(),
+      }),
+      textPositionSchema,
+    ]),
+  ),
 });
 
 /** The whole content of an offer in „Entwurf“: its Titel in order, each with its Positionen in order. */

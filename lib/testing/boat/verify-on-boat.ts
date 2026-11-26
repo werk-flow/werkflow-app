@@ -19,12 +19,8 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { z } from '../../zod';
 
 import { captureInputSnapshot, changedInputs } from '../evidence/group-evidence';
-import {
-  backendIdentity,
-  backendValueDigests,
-  parseEnvironmentFile,
-  proofEnvironmentDigest,
-} from '../evidence/proof-environment';
+import { backendIdentity, backendValueDigests, proofEnvironmentDigest } from '../evidence/proof-environment';
+import { parseEnvironmentFile } from '../../env-file';
 import {
   type MigrationDrift,
   driftLine,

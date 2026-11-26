@@ -10,7 +10,15 @@
       "Edit(~/.config/werkflow/boat-api-key)",
       "Edit(~/.config/ascii/boat/**)",
       "Read(~/.config/werkflow/problem-report-handout.env)",
-      "Edit(~/.config/werkflow/problem-report-handout.env)"
+      "Edit(~/.config/werkflow/problem-report-handout.env)",
+      "Read(~/.config/werkflow/staging-agents.env)",
+      "Edit(~/.config/werkflow/staging-agents.env)",
+      "Read(~/.config/werkflow/prod-watch.env)",
+      "Edit(~/.config/werkflow/prod-watch.env)",
+      "Read(~/.supabase/access-token)",
+      "Edit(~/.supabase/access-token)",
+      "Read(~/.werkflow-stripe-sandbox/**)",
+      "Edit(~/.werkflow-stripe-sandbox/**)"
     ]
   },
   "hooks": {

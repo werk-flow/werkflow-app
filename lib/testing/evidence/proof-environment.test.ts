@@ -1,12 +1,8 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  backendIdentity,
-  normalizeEnvironmentValue,
-  parseEnvironmentFile,
-  proofEnvironmentDigest,
-} from './proof-environment';
+import { backendIdentity, normalizeEnvironmentValue, proofEnvironmentDigest } from './proof-environment';
+import { parseEnvironmentFile } from '../../env-file';
 import { temporaryDirectory } from '../temporary-directory';
 
 function repository(address: string, extra = ''): string {
