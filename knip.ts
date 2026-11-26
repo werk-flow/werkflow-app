@@ -25,6 +25,8 @@ const TOOLING = [
   'lib/security/supabase-project-checks.ts',
   // Read by scripts/inspect-production.ts and scripts/sync-dev-auth-from-prod.ts only.
   'lib/security/production-inspection.ts',
+  // Read by scripts/prod-watch.ts only, which .github/workflows/prod-watch.yml runs.
+  'lib/production-watch/**',
   // The demo seeder's own helper. CI's SQL job runs the seeder, so the GitHub
   // Actions plugin turns it into an entry without the production mark.
   'lib/security/demo-member-password.ts',
@@ -43,6 +45,10 @@ const config: KnipConfig = {
     'lib/testing/fixtures/*.{ts,tsx}',
     'scripts/*.ts!',
     'scripts/migration/*.ts!',
+    // The staging journeys and their cleanup, run by package scripts (scripts/staging/kit.ts).
+    'scripts/staging/{smoke,cleanup}.ts!',
+    // MCP servers Claude Code and Codex start by path (docs/technical/machine-setup.md, step 4).
+    'scripts/mcp/*.ts!',
     // Run by .github/scripts/main-full-run.sh and the stand-in's scheduler.
     'scripts/ci/full-run.ts!',
     // Run by a CI runner's orchestrator, which starts what it names.
@@ -71,10 +77,6 @@ const config: KnipConfig = {
     'tests/ui-contracts/playwright.config.ts!',
     // Substituted for product modules by the component-contract bundler.
     'tests/ui-contracts/*boundar*.{ts,tsx}!',
-    // The E1 ↔ E2a seam (werk-flow/werkflow-planning#15): the article price
-    // reader exists before E2a's article positions import it. Remove this
-    // entry with that import.
-    'lib/inventory/article-prices.ts!',
     // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
     // the offer calculation imports it. Remove this entry with that import.
     'lib/price-catalog/leistung-prices.ts!',

@@ -1,4 +1,5 @@
-import { loadEnvLocal, requireEnv } from '../tests/golden/support/env';
+import { loadEnvLocal } from '../tests/golden/support/env';
+import { readDevProject } from '../lib/security/dev-management-api';
 import {
   advisorProblems,
   advisorResponseSchema,
@@ -13,28 +14,16 @@ import { isJsonRecord } from '../lib/supabase/json';
  * only, and neither prints a configuration value outside the reviewed keys.
  * A request that fails leaves the check unverified, never passed.
  */
-const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
-const API = `https://api.supabase.com/v1/projects/${DEV_PROJECT_REF}`;
-
-async function readDev(path: string): Promise<unknown> {
-  const response = await fetch(`${API}/${path}`, {
-    headers: { Authorization: `Bearer ${requireEnv('SUPABASE_ACCESS_TOKEN')}` },
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error(`GET ${path} returned HTTP ${response.status}.`);
-  return response.json();
-}
-
 async function problemsFor(mode: string): Promise<string[]> {
   if (mode === 'auth') {
-    const config = await readDev('config/auth');
+    const config = await readDevProject('config/auth');
     if (!isJsonRecord(config)) throw new Error('The Auth configuration is not an object.');
     return authConfigProblems(config);
   }
   if (mode === 'advisors') {
     const [security, performance] = await Promise.all([
-      readDev('advisors/security'),
-      readDev('advisors/performance'),
+      readDevProject('advisors/security'),
+      readDevProject('advisors/performance'),
     ]);
     return advisorProblems([
       ...advisorResponseSchema.parse(security).lints,
