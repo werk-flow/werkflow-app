@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { TestWorld } from '../world';
+import type { TestUser, TestWorld } from '../world';
 import { createAdminClient } from './shared';
 
 // WerkFlow's own subscription and invoices of a world's organization, for the
@@ -62,20 +62,27 @@ async function issueInvoices(world: TestWorld, today: string): Promise<void> {
   }
 }
 
-/** Links a paid Checkout to the world's organization and returns its Stripe customer. */
-async function beginSubscription(world: TestWorld): Promise<string> {
+/** An organization a seed bills, with the Admin who paid its Checkout. */
+type BilledOrganization = { orgId: string; admin: Pick<TestUser, 'id'> };
+
+function ownOrganization(world: TestWorld): BilledOrganization {
+  return { orgId: world.orgId, admin: world.users.admin };
+}
+
+/** Links a paid Checkout to the organization and returns its Stripe customer. */
+async function beginSubscription(organization: BilledOrganization): Promise<string> {
   const admin = createAdminClient();
   const begun = await admin.rpc('begin_werkflow_checkout', {
-    p_organization_id: world.orgId,
-    p_user_id: world.users.admin.id,
+    p_organization_id: organization.orgId,
+    p_user_id: organization.admin.id,
     p_linked: true,
-    p_stripe_customer_id: stripeIdsOf(world.orgId).customer,
+    p_stripe_customer_id: stripeIdsOf(organization.orgId).customer,
   });
   if (begun.error) throw new Error(`subscription seed failed: ${begun.error.message}`);
   const { data: row, error: readError } = await admin
     .from('werkflow_subscriptions')
     .select('stripe_customer_id')
-    .eq('organization_id', world.orgId)
+    .eq('organization_id', organization.orgId)
     .single();
   if (readError) throw new Error(`subscription read failed: ${readError.message}`);
   return row.stripe_customer_id;
@@ -92,24 +99,40 @@ export async function seedWerkflowSubscription(
 ): Promise<void> {
   // The server judges the period against its own clock, so the seed does too.
   const today = new Date().toISOString().slice(0, 10);
+  await recordRunningSubscription(ownOrganization(world), cancelAtPeriodEnd, today);
+  await issueInvoices(world, today);
+}
+
+/**
+ * Gives the world's outsider organization a running subscription without an
+ * invoice: no other set seeds there, so its deletion meets no retained record.
+ */
+export async function seedOutsiderSubscription(world: TestWorld): Promise<void> {
+  await recordRunningSubscription(world.outsider, false, new Date().toISOString().slice(0, 10));
+}
+
+async function recordRunningSubscription(
+  organization: BilledOrganization,
+  cancelAtPeriodEnd: boolean,
+  today: string,
+): Promise<void> {
   const { error } = await createAdminClient().rpc('record_werkflow_subscription_state', {
-    p_organization_id: world.orgId,
-    p_stripe_customer_id: await beginSubscription(world),
-    p_stripe_subscription_id: stripeIdsOf(world.orgId).subscription,
+    p_organization_id: organization.orgId,
+    p_stripe_customer_id: await beginSubscription(organization),
+    p_stripe_subscription_id: stripeIdsOf(organization.orgId).subscription,
     p_status: 'active',
     p_cancel_at_period_end: cancelAtPeriodEnd,
     p_current_period_end: `${monthsFrom(today, 1)}T09:00:00.000Z`,
     p_read_at: new Date().toISOString(),
   });
   if (error) throw new Error(`subscription state seed failed: ${error.message}`);
-  await issueInvoices(world, today);
 }
 
 /** Gives the world's organization a subscription Stripe ended because its first debit failed, without an invoice. */
 export async function seedSubscriptionEndedAfterFailedDebit(world: TestWorld): Promise<void> {
   const { error } = await createAdminClient().rpc('record_werkflow_subscription_state', {
     p_organization_id: world.orgId,
-    p_stripe_customer_id: await beginSubscription(world),
+    p_stripe_customer_id: await beginSubscription(ownOrganization(world)),
     p_stripe_subscription_id: stripeIdsOf(world.orgId).subscription,
     p_status: 'canceled',
     p_cancel_at_period_end: false,

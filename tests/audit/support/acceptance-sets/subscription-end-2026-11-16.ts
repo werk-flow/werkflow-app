@@ -1,7 +1,7 @@
 import { expect, type Locator } from '@playwright/test';
 import {
+  seedOutsiderSubscription,
   seedSubscriptionEndedAfterFailedDebit,
-  seedWerkflowSubscription,
 } from '../../../golden/support/db/werkflow-billing';
 import type { TestWorld } from '../../../golden/support/world';
 import { stateCaptureId } from '../acceptance-state-plan';
@@ -16,14 +16,16 @@ async function endedAfterFailedDebit(world: TestWorld): Promise<SurfaceDestinati
   return { route: BILLING };
 }
 
-async function subscribedOrganization(world: TestWorld): Promise<SurfaceDestination> {
-  await seedWerkflowSubscription(world, { cancelAtPeriodEnd: false });
+async function subscribedOutsider(world: TestWorld): Promise<SurfaceDestination> {
+  await seedOutsiderSubscription(world);
   return { route: ORGANIZATION };
 }
 
 /** The served test app holds no Stripe key, so ending the seeded subscription fails and nothing is deleted. */
 async function deleteWhileStripeIsUnreachable(dialog: Locator, world: TestWorld): Promise<void> {
-  await dialog.getByLabel('Gib den Namen der Organisation ein, um zu bestätigen:').fill(world.orgName);
+  await dialog
+    .getByLabel('Gib den Namen der Organisation ein, um zu bestätigen:')
+    .fill(world.outsider.orgName);
   await dialog.getByRole('button', { name: 'Endgültig löschen', exact: true }).click();
   await expect(dialog.getByText('konnte gerade nicht beendet werden', { exact: false })).toBeVisible();
 }
@@ -36,7 +38,9 @@ async function deleteWhileStripeIsUnreachable(dialog: Locator, world: TestWorld)
  * subscription ends at once, with the refusal when Stripe cannot end it. The
  * billing page's „Nächste Zahlung“ fails without a Stripe key, so its capture
  * is an `-error` capture, as in werkflow-billing-2026-11-16. The refusal has
- * no before: the previous build deleted the organization.
+ * no before: the previous build deleted the organization. The deletion
+ * captures open the outsider organization: the world's own can hold
+ * recorded time, which refuses its deletion before Stripe is asked.
  */
 function subscriptionEndCaptures(): OpenSet {
   const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
@@ -62,6 +66,7 @@ function subscriptionEndCaptures(): OpenSet {
       {
         id: 'admin-organisation-dialog-delete-org',
         role: 'admin',
+        session: 'outsider',
         route: ORGANIZATION,
         view: { kind: 'dialog', opener: 'settings.delete-org' },
         ...both,
@@ -69,9 +74,10 @@ function subscriptionEndCaptures(): OpenSet {
       {
         id: 'admin-organisation-dialog-delete-org-abo-nicht-beendet',
         role: 'admin',
+        session: 'outsider',
         route: ORGANIZATION,
         view: { kind: 'dialog', opener: 'settings.delete-org' },
-        destination: subscribedOrganization,
+        destination: subscribedOutsider,
         act: deleteWhileStripeIsUnreachable,
         ...both,
       },

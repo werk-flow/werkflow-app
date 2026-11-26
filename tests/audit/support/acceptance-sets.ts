@@ -28,8 +28,9 @@ export type SetCapture = CaptureSpec & {
   openInEachScheme?: true;
   /**
    * Captured as the admin of the world's outsider organization instead of the
-   * role's own account. No set seeds anything there, so a capture of an empty
-   * screen stays empty whatever the sets before it seeded.
+   * role's own account. No set seeds work there, so a capture of an empty
+   * screen stays empty whatever the sets before it seeded, and the
+   * organization's deletion meets no retained record.
    */
   session?: 'outsider';
 };
