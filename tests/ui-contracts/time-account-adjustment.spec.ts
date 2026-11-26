@@ -2,8 +2,9 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fixture';
 
 // A correction, expiry or payout takes its hours as „±HH:MM“, like the
-// opening balance. Plain minutes or a zero mark and focus the hours field and
-// send nothing; typing clears the mark. A valid value is sent as typed with
+// opening balance. Plain minutes, a zero, blank hours or a blank reason mark
+// their fields, focus the first and send nothing; no browser bubble runs
+// first. Typing clears a mark. A valid value is sent as typed with
 // the clicked kind, and the server parses it again.
 test.beforeEach(async ({ page }) => {
   await openContractFixture(page, 'time-account-adjustment');
@@ -16,11 +17,28 @@ const hours = (page: Page): Locator =>
 const kind = (page: Page, label: string): Locator =>
   row(page).getByRole('button', { name: label, exact: true });
 
+const reason = (page: Page): Locator =>
+  row(page).getByRole('textbox', { name: 'Korrekturgrund für Kevin Kontrakt', exact: true });
+
 async function fillReason(page: Page): Promise<void> {
-  await row(page)
-    .getByRole('textbox', { name: 'Korrekturgrund für Kevin Kontrakt', exact: true })
-    .fill('Überstunden aus dem Altsystem');
+  await reason(page).fill('Überstunden aus dem Altsystem');
 }
+
+test('blank hours and a blank reason mark both fields and focus the hours', async ({ page }) => {
+  await kind(page, 'Korrektur').click();
+  await expect(hours(page)).toBeFocused();
+  await expect(hours(page)).toHaveAttribute('aria-invalid', 'true');
+  await expect(reason(page)).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByRole('table')).toContainText('Gib einen Grund für die Korrektur an.');
+  expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
+
+  // Valid hours with the reason still blank move the focus to the reason.
+  await hours(page).fill('+1:00');
+  await kind(page, 'Korrektur').click();
+  await expect(reason(page)).toBeFocused();
+  await expect(hours(page)).not.toHaveAttribute('aria-invalid', 'true');
+  expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
+});
 
 test('plain minutes mark and focus the hours field and send nothing', async ({ page }) => {
   await expect(page.getByRole('columnheader', { name: 'Stunden (Std:Min)' })).toBeVisible();

@@ -112,14 +112,14 @@ const HOURS_HEAD = 'Stunden (Std:Min)';
 function adjustmentCells(
   layout: PersonLayout,
   controls: {
-    hoursId: string;
+    ids: { hours: string; reason: string };
     hours: ReactNode;
     effectiveDate: ReactNode;
     reason: ReactNode;
     kinds: ReactNode;
   },
 ): Parameters<typeof PersonRow>[0]['cells'] {
-  const { hoursId, hours, effectiveDate, reason, kinds } = controls;
+  const { ids, hours, effectiveDate, reason, kinds } = controls;
   return layout === 'row'
     ? [
         { key: 'hours', content: hours },
@@ -131,7 +131,7 @@ function adjustmentCells(
         {
           key: 'hours',
           content: (
-            <Field label={HOURS_HEAD} htmlFor={hoursId} required>
+            <Field label={HOURS_HEAD} htmlFor={ids.hours} required>
               {hours}
             </Field>
           ),
@@ -147,7 +147,7 @@ function adjustmentCells(
         {
           key: 'reason',
           content: (
-            <Field label="Grund" required>
+            <Field label="Grund" htmlFor={ids.reason} required>
               {reason}
             </Field>
           ),
@@ -156,13 +156,18 @@ function adjustmentCells(
       ];
 }
 
+type AdjustmentErrors = { hours: string | null; reason: string | null };
+
+const NO_ADJUSTMENT_ERRORS: AdjustmentErrors = { hours: null, reason: null };
+
 /**
- * The hours of one adjustment form, as „±HH:MM“ like the opening balance: a
- * wrong value or zero marks and focuses the field and sends nothing, typing
- * clears the mark. Enter in the field must not submit through the first kind
- * button.
+ * The typed fields of one adjustment form. The hours take „±HH:MM“ like the
+ * opening balance. On submit, wrong or zero hours and a missing reason mark
+ * their fields, focus the first and send nothing; typing clears a mark. The
+ * form takes `noValidate`, so no browser bubble runs before this check. Enter
+ * in a field must not submit through the first kind button.
  */
-function useAdjustmentHours({
+function useAdjustmentFields({
   formId,
   employeeName,
   handleKeyDown,
@@ -173,34 +178,44 @@ function useAdjustmentHours({
   handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
-  const hoursId = `${formId}-hours`;
-  const [hoursError, setHoursError] = useState<string | null>(null);
+  const ids = { hours: `${formId}-hours`, reason: `${formId}-reason` };
+  const [errors, setErrors] = useState<AdjustmentErrors>(NO_ADJUSTMENT_ERRORS);
   const submitChecked = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    const message = adjustmentHoursError(String(new FormData(event.currentTarget).get('hours') ?? ''));
-    setHoursError(message);
-    if (message) {
+    const data = new FormData(event.currentTarget);
+    const next: AdjustmentErrors = {
+      hours: adjustmentHoursError(String(data.get('hours') ?? '')),
+      reason: String(data.get('reason') ?? '').trim() ? null : 'Gib einen Grund für die Korrektur an.',
+    };
+    setErrors(next);
+    if (next.hours || next.reason) {
       event.preventDefault();
-      focusFirstVisibleInvalid([hoursId]);
+      focusFirstVisibleInvalid([...(next.hours ? [ids.hours] : []), ...(next.reason ? [ids.reason] : [])]);
       return;
     }
     await handleSubmit(event);
   };
-  const hours = (
+  const field = (key: keyof AdjustmentErrors, label: string, extra: { placeholder?: string } = {}) => (
     <Input
-      id={hoursId}
+      id={ids[key]}
       form={formId}
-      name="hours"
+      name={key}
       type="text"
       autoComplete="off"
-      placeholder="+0:00"
-      aria-label={`Stunden der Korrektur für ${employeeName}`}
-      aria-invalid={hoursError ? true : undefined}
-      onChange={() => setHoursError(null)}
+      aria-label={`${label} für ${employeeName}`}
+      aria-invalid={errors[key] ? true : undefined}
+      onChange={() => setErrors((previous) => ({ ...previous, [key]: null }))}
       onKeyDown={handleKeyDown}
       required
+      {...extra}
     />
   );
-  return { hoursId, hours, hoursError, submitChecked };
+  return {
+    ids,
+    hours: field('hours', 'Stunden der Korrektur', { placeholder: '+0:00' }),
+    reason: field('reason', 'Korrekturgrund'),
+    message: [errors.hours, errors.reason].filter((message) => message !== null).join(' ') || null,
+    submitChecked,
+  };
 }
 
 function AdjustmentRequestForm({
@@ -227,7 +242,7 @@ function AdjustmentRequestForm({
       pendingValue={pendingValue}
     />
   );
-  const { hoursId, hours, hoursError, submitChecked } = useAdjustmentHours({
+  const { ids, hours, reason, message, submitChecked } = useAdjustmentFields({
     formId,
     employeeName: account.employeeName,
     handleKeyDown,
@@ -239,15 +254,6 @@ function AdjustmentRequestForm({
       name="effectiveDate"
       initialValue={today}
       ariaLabel={`Wirksamkeitsdatum für ${account.employeeName}`}
-    />
-  );
-  const reason = (
-    <Input
-      form={formId}
-      name="reason"
-      aria-label={`Korrekturgrund für ${account.employeeName}`}
-      onKeyDown={handleKeyDown}
-      required
     />
   );
   return (
@@ -262,13 +268,13 @@ function AdjustmentRequestForm({
         </>
       }
       form={
-        <form id={formId} onSubmit={submitChecked} className="contents">
+        <form id={formId} onSubmit={submitChecked} noValidate className="contents">
           <input type="hidden" name="accountId" value={account.id} />
           <input type="hidden" name="expectedVersion" value={account.version} />
         </form>
       }
-      cells={adjustmentCells(layout, { hoursId, hours, effectiveDate, reason, kinds })}
-      error={hoursError ?? error}
+      cells={adjustmentCells(layout, { ids, hours, effectiveDate, reason, kinds })}
+      error={message ?? error}
     />
   );
 }

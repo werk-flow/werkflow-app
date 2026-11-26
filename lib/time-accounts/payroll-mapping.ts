@@ -105,3 +105,31 @@ export function toPayrollCodeMappings(
     output_code: codes[codeRow.key]?.trim() ?? '',
   }));
 }
+
+/** The code table an Admin edits: the version it was read from, its codes then, and the typed codes. */
+export type PayrollMappingDraft = {
+  basedOnVersion: number | null;
+  readCodes: Readonly<Record<string, string>>;
+  codes: Readonly<Record<string, string>>;
+};
+
+const sameCodes = (
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Record<string, string>>,
+): boolean => PAYROLL_CODE_ROWS.every((codeRow) => (left[codeRow.key] ?? '') === (right[codeRow.key] ?? ''));
+
+/**
+ * The draft after a read of the current mapping. A newer version replaces a
+ * table without edits, the own save included. A table with unsaved edits keeps
+ * them and the version they were read from, so their save is refused with
+ * `stale_version` and its reload sentence instead of losing them to a live
+ * refresh (werk-flow/werkflow-planning#360).
+ */
+export function followMappingVersion(
+  draft: PayrollMappingDraft,
+  current: { version: number | null; codes: Readonly<Record<string, string>> },
+): PayrollMappingDraft {
+  if (current.version === draft.basedOnVersion) return draft;
+  if (!sameCodes(draft.codes, draft.readCodes) && !sameCodes(draft.codes, current.codes)) return draft;
+  return { basedOnVersion: current.version, readCodes: current.codes, codes: current.codes };
+}

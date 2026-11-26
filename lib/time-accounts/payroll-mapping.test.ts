@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { Constants } from '@/lib/supabase/database.types';
 import {
+  followMappingVersion,
   invalidPayrollCodeKeys,
   PAYROLL_CODE_MAX_LENGTH,
   PAYROLL_CODE_ROWS,
@@ -74,5 +75,33 @@ describe('toPayrollCodeMappings: a confirmed mapping is complete', () => {
       'vacation',
       'overtime',
     ]);
+  });
+});
+
+describe('followMappingVersion: a live refresh never erases unsaved codes', () => {
+  const v1 = payrollCodesByKey(null);
+  const v2 = { ...v1, overtime: 'UEB2' };
+  const draft = { basedOnVersion: 1, readCodes: v1, codes: v1 };
+
+  test('an untouched table shows the newer version', () => {
+    expect(followMappingVersion(draft, { version: 2, codes: v2 })).toEqual({
+      basedOnVersion: 2,
+      readCodes: v2,
+      codes: v2,
+    });
+  });
+
+  test('a table with edits keeps them and the version they were read from, so its save is refused as stale', () => {
+    const edited = { ...draft, codes: { ...v1, vacation: 'URL9' } };
+    expect(followMappingVersion(edited, { version: 2, codes: v2 })).toBe(edited);
+  });
+
+  test('the own save arrives as the new version with the codes typed', () => {
+    const saved = { ...draft, codes: v2 };
+    expect(followMappingVersion(saved, { version: 2, codes: v2 }).basedOnVersion).toBe(2);
+  });
+
+  test('the same version changes nothing', () => {
+    expect(followMappingVersion(draft, { version: 1, codes: v1 })).toBe(draft);
   });
 });

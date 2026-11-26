@@ -173,7 +173,7 @@ describe('Regeln & Export live tables', () => {
   test('the page re-reads when another session saves what it shows', () => {
     // Rules and their versions, assignments, openings and opening-date
     // corrections, adjustment requests and their decisions, closed months
-    // (which lock opening dates) and the people listed (werk-flow/werkflow-planning#360).
+    // (which lock opening dates), the people listed and their names (werk-flow/werkflow-planning#360).
     for (const table of [
       'time_account_policies',
       'time_account_policy_assignments',
@@ -181,6 +181,7 @@ describe('Regeln & Export live tables', () => {
       'time_account_adjustment_requests',
       'time_periods',
       'employee_records',
+      'profiles',
     ] as const)
       expect(TIME_ACCOUNT_SETTINGS_LIVE_TABLES).toContain(table);
     for (const table of TIME_ACCOUNT_SETTINGS_LIVE_TABLES) expect(REALTIME_TABLES).toContain(table);
