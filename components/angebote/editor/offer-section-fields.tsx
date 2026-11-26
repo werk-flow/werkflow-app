@@ -20,6 +20,7 @@ import {
   catalogPositionForm,
   contentFieldId,
   emptyPosition,
+  withUnit,
   type PositionForm,
   type SectionForm,
 } from '@/lib/offers/content-form';
@@ -446,7 +447,7 @@ function PositionUnitField({
       <SearchableSelect
         id={id}
         value={position.unit}
-        onChange={(unit) => onChange({ ...position, unit })}
+        onChange={(unit) => onChange(withUnit(position, unit))}
         placeholder="Einheit wählen…"
         // Every unit in use, and a retired one the position already has.
         options={INVENTORY_UNITS.flatMap((unit) =>

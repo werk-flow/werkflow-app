@@ -48,7 +48,7 @@ const positionTextSchema = {
 };
 
 /** A Position's net cost per price quantity (OfferPositionCost); the office may type any price's cost. */
-export const positionCostSchema = z.object({
+const positionCostSchema = z.object({
   amountCents: z.number().int().min(0).max(MAX_PRICE_CENTS),
   priceQuantity: z.literal(PRICE_QUANTITIES),
 });

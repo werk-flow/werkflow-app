@@ -93,7 +93,8 @@ export function emptyPosition(key: string, kind: OfferPosition['kind']): Positio
  */
 export function catalogPositionForm(key: string, line: OfferCatalogLine): PositionForm {
   return {
-    ...costFields(line.cost, line.priceQuantity),
+    // A cost is stated in the entry's unit: one outside the list leaves the cost to the office too.
+    ...costFields(line.unit ? line.cost : null, line.priceQuantity),
     key,
     kind: 'free',
     name: line.name,
@@ -144,9 +145,14 @@ export function withCostOrMarkup(
 export function markupSentence(position: PositionForm): string | null {
   if (!position.markup.trim()) return null;
   if (parseMarkupTenths(position.markup) === null) {
-    return 'Gib den Aufschlag in Prozent an, zum Beispiel 25 oder 12,5.';
+    return 'Gib den Aufschlag in Prozent von 0 bis 999,9 an, zum Beispiel 25 oder 12,5.';
   }
   return parseEuroCents(position.cost) === null ? 'Trag zuerst die Kosten ein.' : null;
+}
+
+/** The position in another unit: a cost and a markup stated in the old unit no longer apply. */
+export function withUnit(position: PositionForm, unit: string): PositionForm {
+  return unit === position.unit ? position : { ...position, unit, cost: '', markup: '' };
 }
 
 const PRICED_FIELDS = ['name', 'quantity', 'unit', 'price', 'cost'] as const;
@@ -249,8 +255,15 @@ export function liveContentFigures(
   sections: readonly SectionForm[],
 ): { amounts: OfferAmounts; calculation: OfferCalculation } | null {
   const parsed = parseContentForm(
-    // A Titel without a name still adds up: only the positions decide the amounts.
-    sections.map((section) => ({ ...section, title: section.title.trim() || '-' })),
+    // A Titel without a name still adds up: only the positions decide the amounts. A cost
+    // still being typed counts as none, so the sale amounts and totals stand meanwhile.
+    sections.map((section) => ({
+      ...section,
+      title: section.title.trim() || '-',
+      positions: section.positions.map((position) =>
+        parseEuroCents(position.cost) === undefined ? { ...position, cost: '' } : position,
+      ),
+    })),
   );
   if (!parsed.ok) return null;
   try {

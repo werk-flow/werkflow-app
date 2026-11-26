@@ -10,6 +10,7 @@ import {
   markupSentence,
   parseContentForm,
   withCostOrMarkup,
+  withUnit,
 } from './content-form';
 import type { OfferSection } from './types';
 
@@ -158,7 +159,7 @@ describe('catalogPositionForm', () => {
 
   test('a unit outside the list stays empty and the parse asks for one at the unit field', () => {
     const position = catalogPositionForm('a', { ...line, unit: null });
-    expect(position.unit).toBe('');
+    expect([position.unit, position.cost]).toEqual(['', '']);
     const parsed = parseContentForm([{ key: 's', title: 'Material', positions: [position] }]);
     expect(parsed.ok ? {} : parsed.errors).toEqual({
       [contentFieldId(0, { position: 0, field: 'unit' })]: 'Wähle eine Einheit.',
@@ -217,8 +218,22 @@ describe('cost and markup', () => {
     expect(figures?.calculation.offer).toMatchObject({
       costCents: 6000,
       marginCents: 4000,
-      marginBasisPoints: 4000,
+      marginPermille: 400,
     });
+  });
+
+  test('a new unit clears the cost stated in the old one, and an unknown catalog unit brings no cost', () => {
+    const costed = withCostOrMarkup(withCostOrMarkup(typed, { cost: '60' }), { markup: '10' });
+    expect(withUnit(costed, 'meter')).toMatchObject({ unit: 'meter', cost: '', markup: '', price: '66,00' });
+    expect(withUnit(costed, 'piece')).toBe(costed);
+  });
+
+  test('a cost still being typed leaves the sale amounts and totals standing', () => {
+    const figures = liveContentFigures([
+      { key: 's', title: 'Heizung', positions: [{ ...typed, cost: '41,' }] },
+    ]);
+    expect(figures?.amounts.totals.lineNetCents).toBe(10_000);
+    expect(figures?.calculation.offer.withoutCost).toBe(1);
   });
 
   test('a cost that cannot be read stops the save at its field', () => {
@@ -230,7 +245,7 @@ describe('cost and markup', () => {
 
   test('a markup that sets no price says why while typing, and never stops the save', () => {
     expect(markupSentence({ ...typed, cost: '10', markup: '1000' })).toBe(
-      'Gib den Aufschlag in Prozent an, zum Beispiel 25 oder 12,5.',
+      'Gib den Aufschlag in Prozent von 0 bis 999,9 an, zum Beispiel 25 oder 12,5.',
     );
     expect(markupSentence({ ...typed, markup: '25' })).toBe('Trag zuerst die Kosten ein.');
     expect(markupSentence({ ...typed, cost: '10', markup: '25' })).toBeNull();

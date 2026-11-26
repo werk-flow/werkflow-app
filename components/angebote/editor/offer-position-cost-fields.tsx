@@ -69,7 +69,6 @@ export function PositionCostFields({
 function positionMarginSentence(figures: PositionFigures | null): string {
   if (figures === null) return 'Marge: –';
   if (figures.costCents === null || figures.marginCents === null) return 'Ohne Kosten keine Marge';
-  const percent =
-    figures.marginBasisPoints === null ? '' : ` (${formatMarginPercent(figures.marginBasisPoints)})`;
+  const percent = figures.marginPermille === null ? '' : ` (${formatMarginPercent(figures.marginPermille)})`;
   return `Kosten ${formatEuroCents(figures.costCents)} · Marge ${formatEuroCents(figures.marginCents)}${percent}`;
 }

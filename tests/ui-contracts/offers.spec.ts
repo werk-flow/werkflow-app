@@ -296,7 +296,9 @@ test('a Leistung brings its cost, a markup sets the price, and the calculation s
 
   // A markup that does not read says so at once and leaves the price; it is never saved.
   await markup.fill('abc');
-  await expect(editor.getByText('Gib den Aufschlag in Prozent an, zum Beispiel 25 oder 12,5.')).toBeVisible();
+  await expect(
+    editor.getByText('Gib den Aufschlag in Prozent von 0 bis 999,9 an, zum Beispiel 25 oder 12,5.'),
+  ).toBeVisible();
   await expect(price).toHaveValue('50,00');
   const cost = editor.getByRole('textbox', { name: 'Kosten netto' });
   await cost.fill('41,8x');

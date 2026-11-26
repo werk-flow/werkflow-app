@@ -1,4 +1,5 @@
 import { lineAmountCents, type PriceQuantity } from '@/lib/inventory/line-amount';
+import { MAX_LINE_NET_CENTS } from '@/lib/invoices/amounts';
 import type { OfferAmounts } from './amounts';
 import type { OfferPositionCost, OfferSection } from './types';
 
@@ -6,7 +7,8 @@ import type { OfferPositionCost, OfferSection } from './types';
 // sells for and the margin between them, per Titel and for the offer. Office
 // facts only: the editor shows them to Admin and Büro, and no document of the
 // offer carries one. A Position's cost is its quantity at its own cost per
-// price quantity, by the shared line rule, rounded once like its amount. The
+// price quantity, by the shared line rule, rounded once like its amount, and
+// within the same ten billion euros, so every sum stays an exact integer. The
 // sale amount is the one the offer's totals count (lib/offers/amounts.ts).
 
 /** One Position: its cost and margin are null while it has no cost. */
@@ -14,8 +16,8 @@ export type PositionFigures = {
   saleCents: number;
   costCents: number | null;
   marginCents: number | null;
-  /** The margin in basis points of the sale amount; null without a cost or a sale amount. */
-  marginBasisPoints: number | null;
+  /** The margin in tenths of a percent of the sale amount, rounded once; null without a cost or a sale amount. */
+  marginPermille: number | null;
 };
 
 /** A Titel or the offer. A Position without a cost adds its sale amount and no cost; `withoutCost` counts them. */
@@ -23,7 +25,7 @@ export type CalculationFigures = {
   saleCents: number;
   costCents: number;
   marginCents: number;
-  marginBasisPoints: number | null;
+  marginPermille: number | null;
   withoutCost: number;
 };
 
@@ -33,14 +35,14 @@ export type OfferCalculation = {
   offer: CalculationFigures;
 };
 
-const BASIS = BigInt(10_000);
+const PER_MILLE = BigInt(1000);
 const ZERO = BigInt(0);
 const TWO = BigInt(2);
 
-/** `part` in basis points of `whole`, rounded half away from zero; null for a whole of zero. */
-function basisPointsOf(part: number, whole: number): number | null {
+/** `part` in tenths of a percent of `whole`, rounded half away from zero; null for a whole of zero. */
+function permilleOf(part: number, whole: number): number | null {
   if (whole === 0) return null;
-  const numerator = BigInt(part) * BASIS;
+  const numerator = BigInt(part) * PER_MILLE;
   const denominator = BigInt(whole);
   const negative = numerator < ZERO !== denominator < ZERO;
   const magnitude = numerator < ZERO ? -numerator : numerator;
@@ -55,7 +57,7 @@ function figures(saleCents: number, costCents: number, withoutCost: number): Cal
     saleCents,
     costCents,
     marginCents,
-    marginBasisPoints: basisPointsOf(marginCents, saleCents),
+    marginPermille: permilleOf(marginCents, saleCents),
     withoutCost,
   };
 }
@@ -78,14 +80,16 @@ export function offerCalculation(sections: readonly OfferSection[], amounts: Off
       if (saleCents === null || saleCents === undefined) {
         throw new RangeError('A priced position has no computed amount.');
       }
-      if (!position.cost) return { saleCents, costCents: null, marginCents: null, marginBasisPoints: null };
+      if (!position.cost) return { saleCents, costCents: null, marginCents: null, marginPermille: null };
       const costCents = lineAmountCents(
         position.quantity,
         position.cost.amountCents,
         position.cost.priceQuantity,
       );
+      if (Math.abs(costCents) > MAX_LINE_NET_CENTS)
+        throw new RangeError('A line cost exceeds ten billion euros.');
       const marginCents = saleCents - costCents;
-      return { saleCents, costCents, marginCents, marginBasisPoints: basisPointsOf(marginCents, saleCents) };
+      return { saleCents, costCents, marginCents, marginPermille: permilleOf(marginCents, saleCents) };
     });
     const priced = positions.flatMap((position) => (position ? [position] : []));
     return {

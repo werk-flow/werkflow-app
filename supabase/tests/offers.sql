@@ -867,7 +867,7 @@ begin
     or v_read -> 'sections' -> 0 -> 'positions' -> 2 -> 'source' is distinct from 'null'::jsonb then
     raise exception 'the offer reads its Leistungen as %', v_read;
   end if;
-  if v_read::text like '%4180%' or v_read::text ilike '%cost%' then
+  if jsonb_path_exists(v_read, '$.sections[*].positions[*] ? (exists(@.cost) || exists(@.purchaseCost))') then
     raise exception 'the offer read answers a cost: %', v_read;
   end if;
   if public.get_offer_with_costs(v_org, v_offer) is distinct from jsonb_build_object('offer', v_read,

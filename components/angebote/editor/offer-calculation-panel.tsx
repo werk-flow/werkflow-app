@@ -5,9 +5,9 @@ import type { SectionForm } from '@/lib/offers/content-form';
 
 const PERCENT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 
-/** „27,1 %“ from 2706 basis points; a margin below zero keeps its sign. */
-export function formatMarginPercent(basisPoints: number): string {
-  return `${PERCENT.format(basisPoints / 100)} %`;
+/** „27,1 %“ from 271 tenths of a percent; a margin below zero keeps its sign. */
+export function formatMarginPercent(permille: number): string {
+  return `${PERCENT.format(permille / 10)} %`;
 }
 
 /** Kosten, Verkauf netto, Marge and Marge % of a Titel or the offer, one per row on a phone. */
@@ -24,7 +24,7 @@ function FigureRow({
     ['Kosten', formatEuroCents(figures.costCents)],
     ['Verkauf netto', formatEuroCents(figures.saleCents)],
     ['Marge', formatEuroCents(figures.marginCents)],
-    ['Marge %', figures.marginBasisPoints === null ? '–' : formatMarginPercent(figures.marginBasisPoints)],
+    ['Marge %', figures.marginPermille === null ? '–' : formatMarginPercent(figures.marginPermille)],
   ];
   return (
     <div

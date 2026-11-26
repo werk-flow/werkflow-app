@@ -59,18 +59,18 @@ describe('offerCalculation', () => {
 
   test('a Position costs its quantity at its own cost per price quantity, rounded once', () => {
     expect(calculation.sections[0]?.positions).toEqual([
-      { saleCents: 425_000, costCents: 310_000, marginCents: 115_000, marginBasisPoints: 2706 },
-      { saleCents: 2995, costCents: 1200, marginCents: 1795, marginBasisPoints: 5993 },
-      { saleCents: 2654, costCents: 1726, marginCents: 928, marginBasisPoints: 3497 },
-      { saleCents: 4725, costCents: 2498, marginCents: 2227, marginBasisPoints: 4713 },
+      { saleCents: 425_000, costCents: 310_000, marginCents: 115_000, marginPermille: 271 },
+      { saleCents: 2995, costCents: 1200, marginCents: 1795, marginPermille: 599 },
+      { saleCents: 2654, costCents: 1726, marginCents: 928, marginPermille: 350 },
+      { saleCents: 4725, costCents: 2498, marginCents: 2227, marginPermille: 471 },
       null,
     ]);
   });
 
   test('a negative line credits its cost too, and a Position without a cost has no margin', () => {
     expect(calculation.sections[1]?.positions).toEqual([
-      { saleCents: -15_000, costCents: -9000, marginCents: -6000, marginBasisPoints: 4000 },
-      { saleCents: 5000, costCents: null, marginCents: null, marginBasisPoints: null },
+      { saleCents: -15_000, costCents: -9000, marginCents: -6000, marginPermille: 400 },
+      { saleCents: 5000, costCents: null, marginCents: null, marginPermille: null },
     ]);
   });
 
@@ -79,14 +79,14 @@ describe('offerCalculation', () => {
       saleCents: 435_374,
       costCents: 315_424,
       marginCents: 119_950,
-      marginBasisPoints: 2755,
+      marginPermille: 276,
       withoutCost: 0,
     });
     expect(calculation.sections[1]).toMatchObject({
       saleCents: -10_000,
       costCents: -9000,
       marginCents: -1000,
-      marginBasisPoints: 1000,
+      marginPermille: 100,
       withoutCost: 1,
     });
   });
@@ -96,10 +96,27 @@ describe('offerCalculation', () => {
       saleCents: 425_374,
       costCents: 306_424,
       marginCents: 118_950,
-      marginBasisPoints: 2796,
+      marginPermille: 280,
       withoutCost: 1,
     });
     expect(calculation.offer.saleCents).toBe(offerAmounts(OFFER).totals.lineNetCents);
+  });
+
+  test('a margin in percent rounds once, from the exact ratio', () => {
+    // 10,00 € on 81,00 € is 12,345… %: 12,3 %, not 12,35 % rounded again to 12,4 %.
+    const section: OfferSection = {
+      title: 'Wartung',
+      positions: [free('1', 8100, { amountCents: 7100, priceQuantity: 1 })],
+    };
+    expect(offerCalculation([section], offerAmounts([section])).offer.marginPermille).toBe(123);
+  });
+
+  test('a line cost beyond ten billion euros is refused like a line amount, so every sum stays exact', () => {
+    const section: OfferSection = {
+      title: 'Groß',
+      positions: [free('100000', 100, { amountCents: 100_000_001, priceQuantity: 1 })],
+    };
+    expect(() => offerCalculation([section], offerAmounts([section]))).toThrow(RangeError);
   });
 
   test('a sale amount of zero has no margin in percent', () => {
@@ -108,7 +125,7 @@ describe('offerCalculation', () => {
       saleCents: 0,
       costCents: 0,
       marginCents: 0,
-      marginBasisPoints: null,
+      marginPermille: null,
       withoutCost: 0,
     });
   });

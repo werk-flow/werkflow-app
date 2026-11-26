@@ -299,3 +299,55 @@ world.rpc = ({ name }) =>
     : { data: null, error: null };
 const sparse = await readOfferWithCosts(ORGANIZATION_A, ownOfferId);
 assert.equal(sparse?.site?.address, '12345');
+
+// A stored cost above what the editor takes (any article price may stand there) still loads.
+world.rpc = ({ name }) =>
+  name === 'get_offer_with_costs'
+    ? {
+        data: {
+          costs: [[{ amountCents: 250_000_000, priceQuantity: 1000 }]],
+          offer: {
+            ...sparse,
+            site: null,
+            owner: null,
+            work: null,
+            sections: [
+              {
+                title: 'Material',
+                positions: [
+                  {
+                    kind: 'free',
+                    name: 'Pressfitting 15 mm',
+                    description: '',
+                    quantity: '1000',
+                    unit: 'piece',
+                    unitPriceCents: 99_000_000,
+                    priceQuantity: 1000,
+                    taxRateBasisPoints: 1900,
+                    source: null,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        error: null,
+      }
+    : { data: null, error: null };
+const costly = await readOfferWithCosts(ORGANIZATION_A, ownOfferId);
+assert.deepEqual(
+  costly?.sections[0]?.positions[0],
+  {
+    kind: 'free',
+    name: 'Pressfitting 15 mm',
+    description: '',
+    quantity: '1000',
+    unit: 'piece',
+    unitPriceCents: 99_000_000,
+    priceQuantity: 1000,
+    taxRateBasisPoints: 1900,
+    source: null,
+    cost: { amountCents: 250_000_000, priceQuantity: 1000 },
+  },
+  'a stored cost above the editor limit did not load',
+);
