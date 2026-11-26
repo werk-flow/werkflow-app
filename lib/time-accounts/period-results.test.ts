@@ -75,7 +75,7 @@ describe('toPeriodResultRows', () => {
   });
 });
 
-describe('toPeriodOutcomesByCalculation: one person\'s months on the Zeitkonto page', () => {
+describe("toPeriodOutcomesByCalculation: one person's months on the Zeitkonto page", () => {
   const PREPARED = 'c0000000-0000-4000-8000-000000000001';
   const CLOSED = 'c0000000-0000-4000-8000-000000000002';
 

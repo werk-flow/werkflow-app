@@ -187,7 +187,10 @@ describe('Regeln & Export live tables', () => {
   });
 
   test('the page subscribes to them', () => {
-    const page = readFileSync(join(import.meta.dir, '../../app/(app)/zeiterfassung/einstellungen/page.tsx'), 'utf8');
+    const page = readFileSync(
+      join(import.meta.dir, '../../app/(app)/zeiterfassung/einstellungen/page.tsx'),
+      'utf8',
+    );
     expect(page).toContain('<LiveRouteRefresh tables={TIME_ACCOUNT_SETTINGS_LIVE_TABLES} />');
   });
 });

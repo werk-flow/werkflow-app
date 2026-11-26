@@ -13,7 +13,8 @@ test.beforeEach(async ({ page }) => {
 const row = (page: Page): Locator => page.getByRole('row').filter({ hasText: 'Kevin Kontrakt' });
 const hours = (page: Page): Locator =>
   row(page).getByRole('textbox', { name: 'Stunden der Korrektur für Kevin Kontrakt', exact: true });
-const kind = (page: Page, label: string): Locator => row(page).getByRole('button', { name: label, exact: true });
+const kind = (page: Page, label: string): Locator =>
+  row(page).getByRole('button', { name: label, exact: true });
 
 async function fillReason(page: Page): Promise<void> {
   await row(page)

@@ -39,11 +39,13 @@ describe('parseSignedHoursMinutes: an opening balance is typed as ±HH:MM', () =
 
 describe('adjustmentHoursError: a correction, expiry or payout takes the same ±HH:MM', () => {
   test('signed hours and minutes pass', () => {
-    for (const input of ['+12:30', '-3:15', '−0:01', '1:00 Std.']) expect(adjustmentHoursError(input)).toBeNull();
+    for (const input of ['+12:30', '-3:15', '−0:01', '1:00 Std.'])
+      expect(adjustmentHoursError(input)).toBeNull();
   });
 
   test('plain minutes and other text name the format', () => {
-    for (const input of ['750', '', '12,5', '1:75']) expect(adjustmentHoursError(input)).toBe(HOURS_INPUT_ERROR);
+    for (const input of ['750', '', '12,5', '1:75'])
+      expect(adjustmentHoursError(input)).toBe(HOURS_INPUT_ERROR);
   });
 
   test('zero changes no balance and is refused with its own reason', () => {

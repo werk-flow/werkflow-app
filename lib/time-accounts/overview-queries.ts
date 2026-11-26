@@ -4,7 +4,11 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import { requireAuth } from './access';
-import { type PeriodResultRow, toPeriodOutcomesByCalculation, type UncomputedResultCause } from './period-results';
+import {
+  type PeriodResultRow,
+  toPeriodOutcomesByCalculation,
+  type UncomputedResultCause,
+} from './period-results';
 import { requirePeriodRows } from './period-sources';
 import type { TimePeriodState } from './presentation';
 import { readRegion, type ReaderContext, requireRead, type TimeAccountRead } from './read-support';
@@ -95,7 +99,7 @@ async function readTimeAccountOverview(context: ReaderContext): Promise<TimeAcco
         .eq('employee_record_id', employee.id)
         .in('calculation_id', [...batch]),
     ).then(requirePeriodRows),
-    // At most one finding per gap, person and calculation: the setup gaps only.
+    // Only the caller's setup-gap findings: they mark a month as not calculated.
     readInBatches(currentCalculationIds, (batch) =>
       admin
         .from('time_period_findings')

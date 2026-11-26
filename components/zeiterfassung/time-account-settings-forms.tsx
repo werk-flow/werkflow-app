@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -111,7 +111,13 @@ const HOURS_HEAD = 'Stunden (Std:Min)';
 /** The table row takes the bare controls; a card labels each one. */
 function adjustmentCells(
   layout: PersonLayout,
-  controls: { hoursId: string; hours: ReactNode; effectiveDate: ReactNode; reason: ReactNode; kinds: ReactNode },
+  controls: {
+    hoursId: string;
+    hours: ReactNode;
+    effectiveDate: ReactNode;
+    reason: ReactNode;
+    kinds: ReactNode;
+  },
 ): Parameters<typeof PersonRow>[0]['cells'] {
   const { hoursId, hours, effectiveDate, reason, kinds } = controls;
   return layout === 'row'
@@ -150,6 +156,53 @@ function adjustmentCells(
       ];
 }
 
+/**
+ * The hours of one adjustment form, as „±HH:MM“ like the opening balance: a
+ * wrong value or zero marks and focuses the field and sends nothing, typing
+ * clears the mark. Enter in the field must not submit through the first kind
+ * button.
+ */
+function useAdjustmentHours({
+  formId,
+  employeeName,
+  handleKeyDown,
+  handleSubmit,
+}: {
+  formId: string;
+  employeeName: string;
+  handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
+  handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+}) {
+  const hoursId = `${formId}-hours`;
+  const [hoursError, setHoursError] = useState<string | null>(null);
+  const submitChecked = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    const message = adjustmentHoursError(String(new FormData(event.currentTarget).get('hours') ?? ''));
+    setHoursError(message);
+    if (message) {
+      event.preventDefault();
+      focusFirstVisibleInvalid([hoursId]);
+      return;
+    }
+    await handleSubmit(event);
+  };
+  const hours = (
+    <Input
+      id={hoursId}
+      form={formId}
+      name="hours"
+      type="text"
+      autoComplete="off"
+      placeholder="+0:00"
+      aria-label={`Stunden der Korrektur für ${employeeName}`}
+      aria-invalid={hoursError ? true : undefined}
+      onChange={() => setHoursError(null)}
+      onKeyDown={handleKeyDown}
+      required
+    />
+  );
+  return { hoursId, hours, hoursError, submitChecked };
+}
+
 function AdjustmentRequestForm({
   account,
   today,
@@ -174,36 +227,12 @@ function AdjustmentRequestForm({
       pendingValue={pendingValue}
     />
   );
-  // The hours take „±HH:MM“ like the opening balance; a wrong value marks the
-  // field and sends nothing. Enter in a text field must not submit through
-  // the first kind button.
-  const hoursId = `adjustment-hours-${layout}-${account.id}`;
-  const [hoursError, setHoursError] = useState<string | null>(null);
-  const submitChecked = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    const message = adjustmentHoursError(String(new FormData(event.currentTarget).get('hours') ?? ''));
-    setHoursError(message);
-    if (message) {
-      event.preventDefault();
-      focusFirstVisibleInvalid([hoursId]);
-      return;
-    }
-    await handleSubmit(event);
-  };
-  const hours = (
-    <Input
-      id={hoursId}
-      form={formId}
-      name="hours"
-      type="text"
-      autoComplete="off"
-      placeholder="+0:00"
-      aria-label={`Stunden der Korrektur für ${account.employeeName}`}
-      aria-invalid={hoursError ? true : undefined}
-      onChange={() => setHoursError(null)}
-      onKeyDown={handleKeyDown}
-      required
-    />
-  );
+  const { hoursId, hours, hoursError, submitChecked } = useAdjustmentHours({
+    formId,
+    employeeName: account.employeeName,
+    handleKeyDown,
+    handleSubmit,
+  });
   const effectiveDate = (
     <TimeAccountDateField
       form={formId}
