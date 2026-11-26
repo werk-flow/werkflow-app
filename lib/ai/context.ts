@@ -1,4 +1,4 @@
-import { type ModelMessage, type ToolSet, asSchema } from 'ai';
+import { type ModelMessage, type ToolResultPart, type ToolSet, asSchema } from 'ai';
 
 import { inputTokenCeiling } from '@/lib/ai/limits';
 import { AI_SYSTEM_PROMPT } from '@/lib/ai/prompt/system-prompt';
@@ -33,11 +33,12 @@ const INVISIBLE = /[\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\p{Cc}]/gu;
 const VISIBLE_CONTROLS = new Set(['\t', '\n', '\r']);
 
 /**
- * Text as a person sees it: NFC-normalized, without invisible characters.
- * NFC, not NFKC, so trade notation such as ½" and m² keeps its meaning.
+ * Text as a person sees it: without invisible characters, then NFC-normalized,
+ * so a mark a removed character separated still composes. NFC, not NFKC, so
+ * trade notation such as ½" and m² keeps its meaning.
  */
 function visibleText(text: string): string {
-  return text.normalize('NFC').replace(INVISIBLE, (char) => (VISIBLE_CONTROLS.has(char) ? char : ''));
+  return text.replace(INVISIBLE, (char) => (VISIBLE_CONTROLS.has(char) ? char : '')).normalize('NFC');
 }
 
 /** Untrusted text from `source`, cleaned before anything can read it. */
@@ -45,11 +46,12 @@ export function untrustedText(source: UntrustedSource, text: string): UntrustedT
   return { source, [TEXT]: visibleText(text) };
 }
 
-/** A tool's output that carries untrusted text: JSON with the source label beside the text. */
-export function untrustedToolOutput(text: UntrustedText): {
-  type: 'json';
-  value: { source: string; text: string };
-} {
+/**
+ * A tool's output that carries untrusted text: JSON with the source label
+ * beside the text. Typed as the SDK's tool-result output, so its text has no
+ * typed path into the system prompt or a message.
+ */
+export function untrustedToolOutput(text: UntrustedText): ToolResultPart['output'] {
   return { type: 'json', value: { source: text.source, text: text[TEXT] } };
 }
 

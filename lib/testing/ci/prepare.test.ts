@@ -412,18 +412,27 @@ function budgetCommit(subject: string, systemPrompt: number): string {
   return git('rev-parse', 'HEAD');
 }
 
-test('a pull request that grows the agent context budget is approved only by `approved: context growth`', () => {
+/** PR #9 on main's ratchet and budget: it grows the budget by a byte. */
+function contextGrowthPullRequest(): Record<string, string> {
   ratchetCommit('Main ratchet');
   budgetCommit('Main budget', 1900);
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   budgetCommit('A longer prompt', 1901);
-  const run = { CI_EVENT: 'pr', CI_PRS: '9', GH_TOKEN: 'token' };
+  return { CI_EVENT: 'pr', CI_PRS: '9', GH_TOKEN: 'token' };
+}
+
+test('a pull request that grows the agent context budget is approved only by `approved: context growth`', () => {
+  const run = contextGrowthPullRequest();
   writeFileSync(join(stub, 'labels-9.json'), JSON.stringify(APPROVED));
   expect(approval(run)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
   writeFileSync(join(stub, 'labels-9.json'), JSON.stringify(CONTEXT_APPROVED));
   expect(approval(run)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');
-  // Growth of a list beside the budget needs both labels.
+});
+
+test('a pull request that grows the agent context budget and a list needs both labels', () => {
+  const run = contextGrowthPullRequest();
   ratchetCommit('And a new assertion', { 'lib/b.ts': 1 });
+  writeFileSync(join(stub, 'labels-9.json'), JSON.stringify(CONTEXT_APPROVED));
   expect(approval(run)).toBe('SHRINK_ONLY_GROWTH_APPROVED=false\n');
   writeFileSync(join(stub, 'labels-9.json'), JSON.stringify([...APPROVED, ...CONTEXT_APPROVED]));
   expect(approval(run)).toBe('SHRINK_ONLY_GROWTH_APPROVED=true\n');

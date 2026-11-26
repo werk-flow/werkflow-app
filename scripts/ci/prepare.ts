@@ -202,6 +202,17 @@ async function approval(): Promise<void> {
   const mergeBase = (): string =>
     read('git', ['merge-base', 'HEAD', 'origin/main']) ??
     fail('The merge base with origin/main cannot be read.');
+  /** The labels the PR's change from `base` needs, measured in the lists its files touch. */
+  const pullRequestNeeds = (base: string): Set<string> => {
+    const changed = new Set(
+      (
+        read('git', ['diff', '--name-only', '--no-renames', base, 'HEAD']) ??
+        fail(`The files changed since ${base} cannot be read.`)
+      ).split('\n'),
+    );
+    const touched = SHRINK_ONLY_LISTS.filter((list) => changed.has(list.file));
+    return neededLabels(base, 'HEAD', touched, false);
+  };
   let result: boolean;
   if (event === 'pr') {
     const { pullRequestsOf } = await import('../../lib/testing/ci/measurement');
@@ -219,10 +230,8 @@ async function approval(): Promise<void> {
       const names = labels.split('\n');
       return GROWTH_APPROVAL_LABELS.some((label) => names.includes(label)) ? [names] : [];
     });
-    // Only a PR that carries a growth label needs its growth measured.
-    const needed = labelled.length
-      ? neededLabels(mergeBase(), 'HEAD', SHRINK_ONLY_LISTS, false)
-      : new Set<string>();
+    // Only a PR that carries a growth label needs its growth measured, and only in the lists it touches.
+    const needed = labelled.length ? pullRequestNeeds(mergeBase()) : new Set<string>();
     result = labelled.some((names) => [...needed].every((label) => names.includes(label)));
   } else {
     const { commitLine, landedBinding, QUEUE_QUERY, queueBindings } = await import(
