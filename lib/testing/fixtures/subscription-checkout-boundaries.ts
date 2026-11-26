@@ -238,7 +238,8 @@ assert.deepEqual(stripe.checkoutRequests[0], {
   organizationId: ORGANIZATION_A,
   priceId: 'price_test_monthly',
   successUrl: 'https://app.example.test/dashboard',
-  cancelUrl: 'https://app.example.test/upgrade',
+  // A cancelled Checkout returns to the billing page, where its Admin starts it (werk-flow/werkflow-planning#500).
+  cancelUrl: 'https://app.example.test/einstellungen/abonnement-abrechnung',
   attempt: 1,
 });
 const organizationRow = () => {
@@ -406,6 +407,8 @@ assert.equal(reservation.linked_at, null);
 assert.equal(reservation.reserved_by, CALLER_ID);
 assert.notEqual(reservation.organization_id, ORGANIZATION_A);
 assert.equal(stripe.checkoutRequests.at(-1)?.successUrl, 'https://app.example.test/upgrade/bestaetigt');
+// A cancel returns to /upgrade/abgebrochen, which sends a payer without an organization back to /upgrade.
+assert.equal(stripe.checkoutRequests.at(-1)?.cancelUrl, 'https://app.example.test/upgrade/abgebrochen');
 assert.equal(stripe.checkoutRequests.at(-1)?.organizationId, reservation.organization_id);
 assert.ok((await startOrganizationCheckout()).success);
 assert.equal(subscriptionRows().length, 1, 'a second Checkout reserved a second organization');
@@ -461,6 +464,8 @@ assert.equal(furtherReservation.linked_at, null);
 assert.equal(furtherReservation.reserved_by, CALLER_ID);
 assert.ok(![ORGANIZATION_A, ORGANIZATION_B].includes(String(furtherReservation.organization_id)));
 assert.equal(stripe.checkoutRequests.at(-1)?.successUrl, 'https://app.example.test/upgrade/bestaetigt');
+// Never /upgrade, which offers the active organization's own subscription.
+assert.equal(stripe.checkoutRequests.at(-1)?.cancelUrl, 'https://app.example.test/upgrade/abgebrochen');
 Object.assign(furtherReservation, { status: 'active', holds_subscription: true, runs_subscription: true });
 assert.deepEqual(await createOrganization('Zweite Firma GmbH'), {
   success: true,

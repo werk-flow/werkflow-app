@@ -1,0 +1,6 @@
+Neue Organisation erstellen
+Jede Organisation hat ihr eigenes monatliches Abo.
+Zahlung abgebrochen
+Es wurde nichts abgebucht und keine Organisation angelegt. Du kannst die Zahlung jederzeit erneut starten.
+Weiter zur Zahlung
+Zurück zu WerkFlow

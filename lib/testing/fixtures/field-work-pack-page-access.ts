@@ -44,6 +44,7 @@ const fieldFacts = {
   contact: 'Kim Objektleitung',
   outcome: 'Störung prüfen und Ergebnis dokumentieren.',
   equipment: 'Wärmepumpe Nord',
+  equipmentSourceNumber: 'ALT-WP 0815',
   plan: 'WP-0020',
   instructions: 'Messwerte vollständig erfassen.',
 };
@@ -229,6 +230,7 @@ const world = await installPageWorld({
       manufacturer: 'WerkFlow Testtechnik',
       model: 'WP 18',
       location_detail: 'Keller',
+      source_number: fieldFacts.equipmentSourceNumber,
       warranty_provider: officeOnly.warrantyProvider,
       warranty_basis: null,
       warranty_start_date: null,
@@ -377,9 +379,13 @@ const { default: ProjectJobPage } = await import(
   '@/app/(app)/auftraege/projekt/[projectNumber]/[jobNumber]/page'
 );
 const { JobDetailContent } = await import('@/components/auftraege/job-detail/job-detail-content');
+const { FieldWorkPackEquipmentSource } = await import(
+  '@/components/auftraege/work-pack/field-work-pack-context-sources'
+);
 const { getAssignedEquipmentForJob, getInstalledEquipmentDetailByNumber } = await import(
   '@/lib/installed-equipment/actions'
 );
+const { fieldEquipmentAnchor } = await import('@/lib/installed-equipment/types');
 const { getAssignedMaintenanceContextForJob } = await import('@/lib/maintenance/actions');
 const { getAssignedServiceContextForJob } = await import('@/lib/service-cases/actions');
 const { getJobMaterialLines } = await import('@/lib/inventory/actions');
@@ -470,6 +476,45 @@ for (const [label, page] of Object.entries(pages)) {
 const standalone = (await renderPage(pages.standalone)).values;
 for (const fact of [fieldFacts.equipment, fieldFacts.plan, fieldFacts.instructions, fieldFacts.outcome])
   assertCarries(standalone, fact, 'standalone');
+// The Anlage card shows its „Nummer im Altsystem“ when set, and the read sends no key when it is not.
+// The card is found by its anchor, so a load-failure card in its place fails, never passes.
+const equipmentCard = async (label: string) => {
+  const elements = await renderTree(pages.standalone, new Set([FieldWorkPackEquipmentSource]));
+  const card = elements.find(
+    (element) => field(element, 'props', 'id') === fieldEquipmentAnchor(equipmentId),
+  );
+  assert.ok(card, `${label}: the work pack shows no card for the Anlage`);
+  return renderedValues(card);
+};
+const assignedEquipment = async (label: string) => {
+  const result = await getAssignedEquipmentForJob(jobId);
+  assert.equal(field(result, 'success'), true, `${label}: the field Anlage read failed`);
+  assert.equal(field(result, 'equipment', 'length'), 1, `${label}: the field Anlage read lost the Anlage`);
+  const row: unknown = field(result, 'equipment', '0');
+  assert.equal(field(row, 'id'), equipmentId, `${label}: the field Anlage read returned another Anlage`);
+  return row;
+};
+const cardWithNumber = await equipmentCard('with a number');
+assertCarries(cardWithNumber, 'Nummer im Altsystem: ', 'the Anlage card');
+assertCarries(cardWithNumber, fieldFacts.equipmentSourceNumber, 'the Anlage card');
+assert.equal(
+  field(await assignedEquipment('with a number'), 'sourceNumber'),
+  fieldFacts.equipmentSourceNumber,
+);
+const equipmentRow = world.tables.installed_equipment?.find((row) => row.id === equipmentId);
+assert.ok(equipmentRow, 'the world holds the Anlage');
+equipmentRow.source_number = null;
+assert.ok(
+  !Object.hasOwn(Object(await assignedEquipment('without a number')), 'sourceNumber'),
+  'the field Anlage read sends a sourceNumber key for an Anlage without one',
+);
+const cardWithoutNumber = await equipmentCard('without a number');
+assertCarries(cardWithoutNumber, fieldFacts.equipment, 'the Anlage card without a number');
+assert.ok(
+  !cardWithoutNumber.some((value) => value.includes('Nummer im Altsystem')),
+  'the Anlage card shows a „Nummer im Altsystem“ the Anlage lacks',
+);
+equipmentRow.source_number = fieldFacts.equipmentSourceNumber;
 // The readers behind the pack withhold the same values themselves.
 const lines = await getJobMaterialLines(jobId);
 assert.equal(field(lines, 'success'), true, 'the field worker reads no material line');

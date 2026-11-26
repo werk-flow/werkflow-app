@@ -19961,6 +19961,14 @@ export type Database = {
           stripe_object_id: string;
         }[];
       };
+      match_installed_equipment: {
+        Args: {
+          p_equipment_ids: string[];
+          p_organization_id: string;
+          p_search: string;
+        };
+        Returns: Json;
+      };
       measure_handover_turnaround: {
         Args: { p_from: string; p_organization_id: string; p_to: string };
         Returns: Json;

@@ -415,7 +415,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['planning_occurrences.sql', 'planning_dispatch.sql', 'planning_operation_assessments.sql'],
     ['planning', 'work'],
   ],
-  ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
+  ['service', ['service_boundaries.sql', 'assigned_equipment_search.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
   ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES],

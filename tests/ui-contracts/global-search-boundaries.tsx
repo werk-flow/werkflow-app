@@ -50,7 +50,8 @@ function loaded(kind: SearchGroup['kind'], source: SearchSource, title: string, 
  * „Lindenhof“ answers customers and fails the documents; the documents'
  * retry answers. „Leer“ fails the documents, whose retry finds nothing. „Störung“
  * fails the whole search. „Zwei“ fails customers and documents; each retry
- * answers its own source. Anything else finds nothing.
+ * answers its own source. „Therme“ answers a field worker's Anlagen: five of
+ * seven, without a list to open. Anything else finds nothing.
  */
 export function readGlobalSearchContract(input: unknown): GlobalSearchResult {
   const query = input && typeof input === 'object' && 'query' in input ? String(input.query) : '';
@@ -113,6 +114,27 @@ export function readGlobalSearchContract(input: unknown): GlobalSearchResult {
             { kind: 'dokumente', source: 'dokumente', status: 'failed' },
           ],
         };
+  if (query === 'Therme')
+    return {
+      success: true,
+      query,
+      groups: [
+        loaded('auftraege', 'auftraege', 'Wartung Gastherme', 'A-1001 · Hausverwaltung Lindenhof GmbH'),
+        {
+          kind: 'anlagen',
+          source: 'anlagen',
+          status: 'loaded',
+          hits: [1, 2, 3, 4, 5].map((n) => ({
+            id: `anlage-${n}`,
+            title: `Gastherme ${n}`,
+            detail: `ANL-2026-000${n} · Auftrag A-1001`,
+            href: `/auftraege/A-1001#anlage-${n}`,
+          })),
+          total: 7,
+          moreHref: null,
+        },
+      ],
+    };
   if (query !== 'Lindenhof') return { success: true, query, groups: [] };
   if (sources?.includes('dokumente'))
     return {

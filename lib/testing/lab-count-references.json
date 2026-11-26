@@ -3049,7 +3049,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 10, "tolerance": 0 },
+        "requests": { "reference": 9, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -3433,6 +3433,14 @@
           },
           "runKeys": ["2026-11-23T052851921Z-d9c19d"],
           "reason": "Merged with main 027ece04 (#560): Aufgaben's code no longer comes with the start-up, and the office start on the dashboard already loaded the overview's code, so opening Aufgaben fetches 6 scripts (57,595 B) where main measures 10 (115,236 B) in the same session"
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 10, "tolerance": 0 },
+          "to": { "reference": 9, "tolerance": 0 },
+          "runKeys": ["2026-11-26T082411972Z-d22cd4"],
+          "reason": null
         }
       ]
     },

@@ -1,9 +1,6 @@
 'use client';
 import { ErrorText } from '@/components/ui/error-text';
 
-import { useState } from 'react';
-import { unstable_rethrow } from 'next/navigation';
-
 import {
   Dialog,
   DialogContent,
@@ -13,22 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { untilPageLeaves, useServerAction } from '@/hooks/use-server-action';
-import { describeFailure } from '@/lib/action-messages';
-import { startFurtherOrganizationCheckout } from '@/lib/subscription/actions';
 
-// A further organization has its own subscription (werk-flow/werkflow-planning#495):
-// the Admin pays in the same Stripe Checkout as on /upgrade, and names the
-// organization after paying, on /onboarding/create-organization.
-
-const FAILED = 'Die Zahlung konnte nicht gestartet werden. Bitte versuche es erneut.';
-const ERROR_MESSAGES: Readonly<Record<string, string>> = {
-  not_authorized: 'Nur Admins können eine weitere Organisation erstellen.',
-  not_a_member: 'Du bist kein Admin dieser Organisation mehr. Lade die Seite neu.',
-  too_many_attempts: 'Zu viele Versuche. Bitte warte etwas und versuche es dann erneut.',
-  checkout_unavailable: 'Die Zahlung ist gerade nicht verfügbar. Bitte versuche es später erneut.',
-  checkout_in_progress: 'Die Zahlung wird gerade schon geöffnet. Versuche es gleich noch einmal.',
-};
+import { useFurtherOrganizationCheckout } from './further-organization-checkout';
 
 interface CreateOrgDialogProps {
   open: boolean;
@@ -38,30 +21,15 @@ interface CreateOrgDialogProps {
 }
 
 export function CreateOrgDialog({ open, onOpenChange, adminOrganizationId }: CreateOrgDialogProps) {
-  const { run, isPending } = useServerAction(async () => {
-    const result = await startFurtherOrganizationCheckout(adminOrganizationId);
-    if (!result.success) return result;
-    // Checkout is Stripe's page; the button stays pending until the browser leaves.
-    window.location.assign(result.checkoutUrl);
-    return untilPageLeaves();
-  });
-  const [error, setError] = useState<string | null>(null);
+  const { start, isPending, error, clearError } = useFurtherOrganizationCheckout(adminOrganizationId);
 
   const handleStart = async (event: React.FormEvent) => {
     event.preventDefault();
-    setError(null);
-    try {
-      const result = await run();
-      setError(describeFailure(result.error, ERROR_MESSAGES, FAILED));
-    } catch (startError) {
-      // A paid reservation redirects to naming the organization.
-      unstable_rethrow(startError);
-      setError(FAILED);
-    }
+    await start();
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen) setError(null);
+    if (!newOpen) clearError();
     onOpenChange(newOpen);
   };
 
