@@ -198,7 +198,6 @@ export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = 
     'components/loading-states/maintenance-page-skeleton.tsx',
     'components/loading-states/service-cases-page-skeleton.tsx',
   ],
-  // The screens outside the app shell (standalone-route-inventory.ts).
   standalone: [
     'app/(auth)/',
     'app/onboarding/',
