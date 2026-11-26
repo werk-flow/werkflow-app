@@ -65,10 +65,12 @@ export function PositionCostFields({
   );
 }
 
-/** „Kosten 17,26 € · Marge 9,28 € (35 %)“, or why there is none. */
+/** „Kosten 17,26 € · Marge 9,28 € (35 %)“; without a cost, the whole amount counts as margin, as in „Kalkulation“. */
 function positionMarginSentence(figures: PositionFigures | null): string {
   if (figures === null) return 'Marge: –';
-  if (figures.costCents === null || figures.marginCents === null) return 'Ohne Kosten keine Marge';
+  if (figures.costCents === null)
+    return `Ohne Kosten · Marge ${formatEuroCents(figures.saleCents)} (ganzer Betrag)`;
+  if (figures.marginCents === null) return 'Marge: –';
   const percent = figures.marginPermille === null ? '' : ` (${formatMarginPercent(figures.marginPermille)})`;
   return `Kosten ${formatEuroCents(figures.costCents)} · Marge ${formatEuroCents(figures.marginCents)}${percent}`;
 }

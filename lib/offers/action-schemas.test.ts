@@ -65,3 +65,22 @@ test('a content save takes a cost per a price quantity of a price, and refuses a
     expect(saveOfferContentSchema.safeParse(withCost(cost)).success).toBe(false);
   }
 });
+
+// A tab opened before costs were saved sends no cost key: its save is refused, so
+// it never clears the costs the office stored meanwhile.
+test('a content save whose priced Position names no cost is refused, not taken as no cost', () => {
+  const position = {
+    kind: 'free',
+    name: 'Monteurstunde',
+    description: '',
+    quantity: '1',
+    unit: 'hour',
+    unitPriceCents: 7250,
+    priceQuantity: 1,
+    taxRateBasisPoints: 1900,
+    source: null,
+  };
+  const content = (positions: unknown[]) => ({ ...save('', 0), sections: [{ title: 'Montage', positions }] });
+  expect(saveOfferContentSchema.safeParse(content([position])).success).toBe(false);
+  expect(saveOfferContentSchema.safeParse(content([{ ...position, cost: null }])).success).toBe(true);
+});

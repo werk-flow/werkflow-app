@@ -65,8 +65,11 @@ const freePositionSchema = z.object({
   taxRateBasisPoints: z.literal(INVOICE_TAX_RATES),
   /** The article or Leistung it was taken from, inside the caller's organization (the save checks); null for one typed by hand. */
   source: invoiceLineSourceRefSchema.nullable().default(null),
-  /** Office-only; null while the office knows none. */
-  cost: positionCostSchema.nullable().default(null),
+  /**
+   * Office-only; null while the office knows none. Required: a payload without
+   * the key, from a tab older than stored costs, would otherwise clear them.
+   */
+  cost: positionCostSchema.nullable(),
 });
 
 const textPositionSchema = z.object({ kind: z.literal('text'), ...positionTextSchema });

@@ -163,6 +163,7 @@ const servicePosition = {
   unitPriceCents: 7250,
   priceQuantity: 1 as const,
   taxRateBasisPoints: 1900 as const,
+  cost: null,
 };
 const content = {
   offerId: ownOfferId,
