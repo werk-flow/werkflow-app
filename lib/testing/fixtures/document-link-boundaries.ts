@@ -8,6 +8,10 @@ import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './
 
 const ownDocumentId = '95000000-0000-4000-8000-000000000001';
 const foreignDocumentId = '95000000-0000-4000-8000-000000000002';
+// An issued invoice's original: the database refuses every added link
+// (guard_invoice_original_links, supabase/tests/invoice_issue.sql), so no work
+// link opens it to the work's employees.
+const invoiceOriginalId = '95000000-0000-4000-8000-000000000003';
 const ownJobId = '96000000-0000-4000-8000-000000000001';
 const foreignJobId = '96000000-0000-4000-8000-000000000002';
 const linkId = '97000000-0000-4000-8000-000000000001';
@@ -23,7 +27,11 @@ const documentRow = (id: string, organizationId: string) => ({
 });
 
 const world = installActionWorld({
-  documents: [documentRow(ownDocumentId, ORGANIZATION_A), documentRow(foreignDocumentId, ORGANIZATION_B)],
+  documents: [
+    documentRow(ownDocumentId, ORGANIZATION_A),
+    documentRow(foreignDocumentId, ORGANIZATION_B),
+    documentRow(invoiceOriginalId, ORGANIZATION_A),
+  ],
   personnel_documents: [],
   jobs: [
     { id: ownJobId, organization_id: ORGANIZATION_A },
@@ -34,17 +42,19 @@ const world = installActionWorld({
   ],
 });
 world.rpc = ({ name, args }) =>
-  name === 'update_document_links'
-    ? {
-        data: [
-          {
-            added_count: Array.isArray(args.p_add_job_ids) ? args.p_add_job_ids.length : 0,
-            removed_count: Array.isArray(args.p_remove_link_ids) ? args.p_remove_link_ids.length : 0,
-          },
-        ],
-        error: null,
-      }
-    : { data: null, error: { message: `${name} is outside this fixture` } };
+  name === 'update_document_links' && args.p_document_id === invoiceOriginalId
+    ? { data: null, error: { message: 'document_is_invoice_original' } }
+    : name === 'update_document_links'
+      ? {
+          data: [
+            {
+              added_count: Array.isArray(args.p_add_job_ids) ? args.p_add_job_ids.length : 0,
+              removed_count: Array.isArray(args.p_remove_link_ids) ? args.p_remove_link_ids.length : 0,
+            },
+          ],
+          error: null,
+        }
+      : { data: null, error: { message: `${name} is outside this fixture` } };
 
 const { linkDocumentsToTarget, unlinkDocument, updateDocumentLinks } = await import(
   '@/lib/documents/actions'
@@ -93,4 +103,20 @@ assert.deepEqual(
     ['update_document_links', ORGANIZATION_A, ownDocumentId],
     ['update_document_links', ORGANIZATION_A, ownDocumentId],
   ],
+);
+
+// The manager's link to an assigned job on an invoice's original comes back as the database's refusal.
+world.rpcCalls.length = 0;
+assert.deepEqual(await updateDocumentLinks({ documentId: invoiceOriginalId, addJobIds: [ownJobId] }), {
+  success: false,
+  error: 'document_is_invoice_original',
+});
+assert.deepEqual(
+  world.rpcCalls.map(({ name, args }) => [
+    name,
+    args.p_organization_id,
+    args.p_document_id,
+    args.p_add_job_ids,
+  ]),
+  [['update_document_links', ORGANIZATION_A, invoiceOriginalId, [ownJobId]]],
 );

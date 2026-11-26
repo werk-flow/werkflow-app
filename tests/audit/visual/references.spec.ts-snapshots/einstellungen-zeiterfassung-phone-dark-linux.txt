@@ -1,6 +1,7 @@
 Menü öffnen
 Einstellungen
 Dokumente & Briefpapier
+Rechnungen
 Kalender
 Zeiterfassung
 Zeiterfassung

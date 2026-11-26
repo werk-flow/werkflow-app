@@ -176,6 +176,8 @@ describe('the editor parses what the office types', () => {
     const stored: InvoiceDetail = {
       id: 'i',
       invoiceNumber: null,
+      issueDate: null,
+      original: null,
       status: 'entwurf',
       version: 2,
       serviceStart: '2026-11-02',

@@ -144,7 +144,7 @@ export async function writeDocumentLinks(
     return documentWriteFailure(
       'Failed to update document links',
       error,
-      ['document_not_found', 'link_not_found', 'not_authorized'],
+      ['document_not_found', 'document_is_invoice_original', 'link_not_found', 'not_authorized'],
       change.fallback,
     );
   }

@@ -38,7 +38,8 @@ async function lookup<T>(objects: Record<string, T> | undefined, id: string): Pr
 
 /**
  * Answers for Stripe's API in memory: the response body of each request,
- * keyed by method and path without the query (`GET /v1/invoices/in_test_1`).
+ * keyed by method and path without the query (`GET /v1/invoices/in_test_1`);
+ * a later page of a list adds its cursor (`?starting_after=<id>`).
  * A request without an answer fails the test.
  */
 export type FakeStripeAnswers = Readonly<Record<string, unknown>>;
@@ -292,7 +293,9 @@ export function createFakeStripeGateway(
     const url = new URL(input instanceof Request ? input.url : input);
     const method = init?.method ?? 'GET';
     requests.push({ method, path: url.pathname, query: decodeURIComponent(url.search) });
-    const key = `${method} ${url.pathname}`;
+    // A later page of a list answers under its cursor (`GET /v1/charges?starting_after=py_test_1`).
+    const after = url.searchParams.get('starting_after');
+    const key = `${method} ${url.pathname}${after ? `?starting_after=${after}` : ''}`;
     if (!(key in answers)) {
       return Response.json(
         { error: { type: 'invalid_request_error', message: `No fake answer for ${key}` } },

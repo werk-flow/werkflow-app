@@ -287,6 +287,19 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.includes('/components/auftraege/handover/'))
                 return { path: join(import.meta.dir, 'work-handover-service-boundaries.ts') };
             });
+            // The invoice editor and settings form: held catalog read and settings save, inert issue and router.
+            builder.onResolve(
+              {
+                filter:
+                  /^(?:@\/lib\/invoices\/(?:line-source-actions|issue-actions|settings-actions)|@\/hooks\/use-realtime-router-refresh|next\/navigation|next\/link)$/,
+              },
+              (args) => {
+                if (
+                  /(?:invoice-(?:editor|catalog-line|issue)|invoice-settings-form)\.tsx$/.test(args.importer)
+                )
+                  return { path: join(import.meta.dir, 'invoice-editor-service-boundaries.tsx') };
+              },
+            );
             // The WerkFlow KI card switches through a held stand-in whose response renders the route.
             builder.onResolve({ filter: /^@\/lib\/ai\/settings-actions$/ }, () => ({
               path: join(import.meta.dir, 'ai-settings-service-boundaries.ts'),

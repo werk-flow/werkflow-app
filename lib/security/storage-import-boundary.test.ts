@@ -180,6 +180,8 @@ test('an erased type import is not a server-only runtime boundary', () => {
 // below are the only callers of putStorageObject; a new caller fails until it
 // is reviewed here, and an entry without a caller fails as stale.
 const GENERATED_FILE_WRITERS: Record<string, string> = {
+  'lib/invoices/original.ts':
+    "An issued invoice's ZUGFeRD original, rendered from the caller organization's invoice row and its issue snapshot after the office check.",
   'lib/org-export/build.ts':
     "The organization export's ZIP parts, packed from the Admin's own organization's rows and stored originals.",
   'lib/service-reports/report-file.ts':

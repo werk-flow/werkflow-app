@@ -1,0 +1,73 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Suchen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Angebote
+Rechnungen
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+Wochenzahlen
+Problem melden
+F2
+Einstellungen
+Persönlich
+Profil
+Name und Profilbild
+Konto & Sicherheit
+E-Mail und Passwort
+Aufträge & Projekte
+Persönliche Tabellenansicht
+Abonnement & Abrechnung
+Plan und Abrechnung
+Organisation
+Dashboard
+Startansicht und Widgets
+Organisation
+Allgemeine Organisationsdaten
+Dokumente & Briefpapier
+Angebote als PDF
+Rechnungen
+Nummernkreis und Zahlungsziel
+Kalender
+Kalenderansichten und Regeln
+Zeiterfassung
+Arbeitszeiten und Freigaben
+Mitarbeiter
+Freigaben und Vertretungen
+Kunden
+Kundenverwaltung und Defaults
+Datenexport
+Rechnungen
+Rechnungsnummern und die Zahlungsbedingungen, mit denen ein neuer Rechnungsentwurf beginnt.
+Gilt für Haustechnik Krämer GmbH
+Nummernkreis und Zahlungsbedingungen
+Rechnungsnummern
+Die nächste Rechnung erhält die Nummer
+RE-2026-001
+.
+Präfix, Jahr, Stellen und nächste Nummer legst du einmal vor der ersten Rechnung fest, zum Beispiel um die Nummern deiner bisherigen Software fortzuführen. Kürzere Nummern beginnen mit Nullen.
+Präfix
+Mindestens Stellen
+Nächste Nummer
+Jahr in der Nummer
+Die Nummer enthält das Jahr des Rechnungsdatums und beginnt jedes Jahr wieder bei 1.
+Zahlungsbedingungen für neue Entwürfe
+Zahlungsziel in Tagen
+*
+Pflichtfeld
+Skonto in %
+innerhalb Tagen
+Speichern
+Nicht eingestempelt

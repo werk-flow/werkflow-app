@@ -135,6 +135,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   inventory_suppliers: 'Lager_Lieferanten',
   invoice_events: 'Rechnungen_Verlauf',
   invoice_lines: 'Rechnungen_Positionen',
+  invoice_settings: 'Rechnungen_Einstellungen',
   invoices: 'Rechnungen',
   job_assignments: 'Aufträge_Zuweisungen',
   job_capability_requirement_origins: 'Aufträge_Qualifikationsanforderungen_Herkunft',
