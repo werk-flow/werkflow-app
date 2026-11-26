@@ -11,6 +11,7 @@ import type {
   DocumentImage,
   DocumentPosition,
   DocumentSection,
+  DocumentTextLine,
   DocumentTotals,
   StationeryFile,
 } from './model';
@@ -181,15 +182,18 @@ const POSITION_MARKS: Record<DocumentPosition['kind'], string | null> = {
   alternative: 'Alternativposition',
 };
 
-/** A position's head line with its price columns and mark, then one item per description line. */
+/**
+ * A position's head line with its price columns and mark, then one item per
+ * description line. A text line draws its text and description only.
+ */
 function positionFlow(
-  position: DocumentPosition,
+  position: DocumentPosition | DocumentTextLine,
   travelsWithSubtotal: boolean,
   fonts: Fonts,
   textWidth: number,
 ): FlowItem[] {
   const [firstLine = '', ...moreLines] = wrap(position.text, fonts.regular, BODY_SIZE, textWidth);
-  const mark = POSITION_MARKS[position.kind];
+  const mark = position.kind === 'text' ? null : POSITION_MARKS[position.kind];
   const descriptionLines = position.description.trim()
     ? wrap(position.description, fonts.regular, DESCRIPTION_SIZE, textWidth)
     : [];
@@ -207,8 +211,11 @@ function positionFlow(
     tableLine(4 + BODY_LEADING, (page, top, box) => {
       const columns = columnsOf(box);
       const line = top + 4;
-      drawLeft(page, position.number, columns.numberLeft, line, fonts.regular, BODY_SIZE);
+      if (position.kind !== 'text') {
+        drawLeft(page, position.number, columns.numberLeft, line, fonts.regular, BODY_SIZE);
+      }
       drawLeft(page, firstLine, columns.textLeft, line, fonts.regular, BODY_SIZE);
+      if (position.kind === 'text') return;
       const quantity = `${formatQuantity(position.quantity)} ${position.unitLabel}`;
       drawRight(page, quantity, columns.quantityRight, line, fonts.regular, BODY_SIZE);
       const per = position.priceQuantity && position.priceQuantity !== 1 ? `/${position.priceQuantity}` : '';

@@ -84,3 +84,39 @@ export type OfferDetail = {
   work: { kind: OfferWorkKind; id: string; label: string } | null;
   sections: OfferStoredSection[];
 };
+
+/** How the office says it sent a revision; WerkFlow itself sends nothing. */
+export const OFFER_CHANNELS = ['download', 'email', 'post', 'persoenlich'] as const;
+export type OfferChannel = (typeof OFFER_CHANNELS)[number];
+
+export const OFFER_CHANNEL_LABELS: Record<OfferChannel, string> = {
+  download: 'Heruntergeladen',
+  email: 'E-Mail aus eigenem Postfach',
+  post: 'Post',
+  persoenlich: 'Persönlich übergeben',
+};
+
+/** A sent revision as its list shows it; its PDF is a filed document of the library. */
+export type OfferRevision = {
+  revision: number;
+  /** `YYYY-MM-DD`. */
+  sentOn: string;
+  channel: OfferChannel;
+  validUntil: string;
+  grossCents: number;
+  recipientName: string;
+  documentId: string;
+  /** Null once the person's account is deleted. */
+  sentBy: string | null;
+};
+
+/**
+ * „Abgelaufen“: a sent offer whose validity ended before `todayIso`. Derived
+ * from the date; nothing changes in the database.
+ */
+export function isOfferExpired(
+  offer: { status: OfferStatus; validUntil: string },
+  todayIso: string,
+): boolean {
+  return offer.status === 'gesendet' && offer.validUntil < todayIso;
+}

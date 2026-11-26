@@ -9,7 +9,14 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { storedSectionSchema } from './action-schemas';
 import type { OfferListQuery, OfferPage } from './list-page';
-import { OFFER_STATUSES, offerWorkKindSchema, type OfferDetail, type OfferWorkKind } from './types';
+import {
+  OFFER_CHANNELS,
+  OFFER_STATUSES,
+  offerWorkKindSchema,
+  type OfferDetail,
+  type OfferRevision,
+  type OfferWorkKind,
+} from './types';
 
 // Internal readers: the page authorizes the current manager and resolves the
 // organization before it calls one. A failed or malformed read throws; it
@@ -125,4 +132,40 @@ export async function readOffer(organizationId: string, offerId: string): Promis
         }
       : null,
   };
+}
+
+const revisionsSchema = z.array(
+  z.object({
+    revision: z.number().int().positive(),
+    sentOn: z.iso.date(),
+    channel: z.enum(OFFER_CHANNELS),
+    validUntil: z.iso.date(),
+    grossCents: z.number().int(),
+    recipientName: z.string(),
+    documentId: uuidSchema,
+    sentBy: z
+      .object({
+        firstName: z.string().nullable(),
+        lastName: z.string().nullable(),
+        email: z.string().nullable(),
+      })
+      .nullable(),
+  }),
+);
+
+/** The sent revisions of one offer of the organization, newest first; none for an offer never sent. */
+export async function readOfferRevisions(organizationId: string, offerId: string): Promise<OfferRevision[]> {
+  const admin = createSupabaseAdminClient();
+  const selected = await admin.rpc('list_offer_revisions', {
+    p_organization_id: organizationId,
+    p_offer_id: offerId,
+  });
+  const parsed = revisionsSchema.safeParse(selected.data);
+  if (selected.error || !parsed.success) throw new Error('offer_revisions_read_failed');
+  return parsed.data.map(({ sentBy, ...revision }) => ({
+    ...revision,
+    sentBy: sentBy
+      ? formatProfileName({ first_name: sentBy.firstName, last_name: sentBy.lastName, email: sentBy.email })
+      : null,
+  }));
 }

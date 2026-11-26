@@ -516,14 +516,18 @@ export async function getAuthorizedDocument(
     LIST_ROW_CAP,
   );
 
-  const assigned = await readAssignedLinkedJobs(context, links);
+  // Only job and project links open a document through an assignment: a customer link alone grants
+  // nothing, whatever columns the read above returns.
+  const assigned = await readAssignedLinkedJobs(
+    context,
+    links.map((link) => ({ job_id: link.job_id, project_id: link.project_id })),
+  );
   const accessError = linksError ?? assigned.error;
   if (accessError) {
     logReadFailure('getAuthorizedDocument: assignment access check failed', accessError);
     return { success: false, error: 'load_failed' };
   }
 
-  // Only job, project and Anlage links are read here: a customer link alone grants nothing.
   if (assigned.jobs.length > 0) return { success: true, document: row, protectedAccess: null };
   const throughEquipment = await opensThroughAssignedEquipment(context, row, links);
   if (throughEquipment === null) return { success: false, error: 'load_failed' };

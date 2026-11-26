@@ -226,12 +226,13 @@ function expectPageFrame(pages: TextLine[][]) {
 /** A position's first line stays with its description's first line, and a subtotal with its section's last position. */
 function expectKeepTogether(pages: TextLine[][], sections: DocumentSection[]) {
   for (const section of sections) {
-    for (const item of section.positions) {
+    const positions = section.positions.flatMap((item) => (item.kind === 'text' ? [] : [item]));
+    for (const item of positions) {
       expect(pageOf(pages, `${item.number} Bauteil`), item.number).toBe(
         pageOf(pages, `Beschreibung ${item.number}:`),
       );
     }
-    const last = section.positions.at(-1);
+    const last = positions.at(-1);
     expect(pageOf(pages, `Summe ${section.number} `), section.number).toBe(
       pageOf(pages, `${last?.number} Bauteil`),
     );
@@ -476,6 +477,29 @@ describe('the business document renderer', () => {
     }
   });
 
+  test('a text line prints its text and description without number, quantity or amount', async () => {
+    const note = {
+      kind: 'text' as const,
+      text: 'Hinweis zur Ausführung',
+      description: 'Nach Absprache mit der Hausverwaltung.',
+    };
+    const document = baseDocument([
+      {
+        number: '1',
+        title: 'Heizung',
+        positions: [position('1.1'), note, position('1.2')],
+        subtotalCents: 20000,
+      },
+    ]);
+    const lines = (await readPages(await renderBusinessDocument(document)))[0] ?? [];
+    const noteLine = lines.find((line) => line.text === 'Hinweis zur Ausführung');
+    const positionLine = lines.find((line) => line.text.startsWith('1.1 '));
+    // Alone on its line, in the Bezeichnung column where a position's text starts after its number.
+    expect(noteLine?.left).toBeGreaterThan(positionLine?.left ?? Number.POSITIVE_INFINITY);
+    expect(lines.map((line) => line.text)).toContain('Nach Absprache mit der Hausverwaltung.');
+    expect(lines.filter((line) => line.text.endsWith('100,00 € 100,00 €'))).toHaveLength(2);
+  });
+
   test('the same document renders to the same bytes', async () => {
     for (const document of [serviceOffer, installationOffer, stationeryOffer]) {
       expect(
@@ -542,7 +566,7 @@ describe('the business document renderer', () => {
   test('the Musterangebot names the organization as sender and adds up', async () => {
     const offer = plainSample('Haustechnik Sonnenberg GmbH');
     for (const section of offer.sections) {
-      const counted = section.positions.filter((item) => item.kind === 'standard');
+      const counted = section.positions.filter((item): item is DocumentPosition => item.kind === 'standard');
       expect(counted.reduce((sum, item) => sum + item.amountCents, 0)).toBe(section.subtotalCents);
     }
     expect(offer.sections.reduce((sum, section) => sum + section.subtotalCents, 0)).toBe(

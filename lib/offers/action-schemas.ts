@@ -5,6 +5,7 @@ import { MAX_PRICE_CENTS } from '@/lib/price-catalog/money';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { contentFitsOneSave, OFFER_CONTENT_LIMITS } from './content-form';
+import { OFFER_CHANNELS } from './types';
 
 // The inputs of the offer actions. The forms check title, customer and the
 // header's required fields before they submit; the server parses every input again.
@@ -106,3 +107,15 @@ export const saveOfferContentSchema = z.object({
 });
 
 export type SaveOfferContentInput = z.input<typeof saveOfferContentSchema>;
+
+/** „Als gesendet festhalten“ of a draft at the versions its page showed. */
+export const sendOfferSchema = z.object({
+  offerId: uuidSchema,
+  expectedVersion: z.number().int().positive(),
+  expectedContentVersion: z.number().int().positive(),
+  channel: z.enum(OFFER_CHANNELS),
+  /** One key per opening of the dialog: a press repeated after a lost answer gets the first revision. */
+  attemptKey: uuidSchema,
+});
+
+export type SendOfferInput = z.input<typeof sendOfferSchema>;

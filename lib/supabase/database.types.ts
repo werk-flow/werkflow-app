@@ -6601,6 +6601,121 @@ export type Database = {
           },
         ];
       };
+      offer_revisions: {
+        Row: {
+          channel: string;
+          client_id: string;
+          content: Json;
+          created_at: string;
+          document_id: string;
+          gross_cents: number;
+          id: string;
+          net_cents: number;
+          offer_id: string;
+          offer_number: string;
+          organization_id: string;
+          recipient_address: string | null;
+          recipient_client_id: string;
+          recipient_name: string;
+          revision: number;
+          sent_by: string | null;
+          sent_on: string;
+          snapshot: Json;
+          tax_cents: number;
+          title: string;
+          valid_until: string;
+        };
+        Insert: {
+          channel: string;
+          client_id: string;
+          content: Json;
+          created_at?: string;
+          document_id: string;
+          gross_cents: number;
+          id?: string;
+          net_cents: number;
+          offer_id: string;
+          offer_number: string;
+          organization_id: string;
+          recipient_address?: string | null;
+          recipient_client_id: string;
+          recipient_name: string;
+          revision: number;
+          sent_by?: string | null;
+          sent_on: string;
+          snapshot: Json;
+          tax_cents: number;
+          title: string;
+          valid_until: string;
+        };
+        Update: {
+          channel?: string;
+          client_id?: string;
+          content?: Json;
+          created_at?: string;
+          document_id?: string;
+          gross_cents?: number;
+          id?: string;
+          net_cents?: number;
+          offer_id?: string;
+          offer_number?: string;
+          organization_id?: string;
+          recipient_address?: string | null;
+          recipient_client_id?: string;
+          recipient_name?: string;
+          revision?: number;
+          sent_by?: string | null;
+          sent_on?: string;
+          snapshot?: Json;
+          tax_cents?: number;
+          title?: string;
+          valid_until?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offer_revisions_client_fk";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_revisions_document_fk";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_revisions_document_fk";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_revisions_offer_fk";
+            columns: ["offer_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "offers";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "offer_revisions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offer_revisions_recipient_fk";
+            columns: ["recipient_client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       offer_sections: {
         Row: {
           id: string;
@@ -20084,6 +20199,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      list_offer_revisions: {
+        Args: { p_offer_id: string; p_organization_id: string };
+        Returns: Json;
+      };
       list_open_maintenance_visit_findings: {
         Args: { p_equipment_ids: string[]; p_organization_id: string };
         Returns: {
@@ -21999,6 +22118,27 @@ export type Database = {
           p_limit?: number;
           p_organization_id: string;
           p_search?: string;
+        };
+        Returns: Json;
+      };
+      send_offer: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_channel: string;
+          p_content_hash?: string;
+          p_document_id?: string;
+          p_expected_content_version: number;
+          p_expected_version: number;
+          p_file_name?: string;
+          p_offer_id: string;
+          p_organization_id: string;
+          p_recipient_address: string;
+          p_recipient_name: string;
+          p_sent_on: string;
+          p_size_bytes?: number;
+          p_snapshot: Json;
+          p_storage_path?: string;
         };
         Returns: Json;
       };

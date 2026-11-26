@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { OfferContentEditor } from '@/components/angebote/editor/offer-content-editor';
 import { EditOfferHeaderButton } from '@/components/angebote/offer-header-dialog';
 import { OfferHeaderFacts } from '@/components/angebote/offer-header-facts';
+import { OfferRevisions } from '@/components/angebote/offer-revisions';
+import { OfferSendActions } from '@/components/angebote/offer-sending';
 import { OfferStatusBadge } from '@/components/angebote/offers-list';
 import { OfferDetailSkeleton } from '@/components/angebote/offers-skeleton';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -12,7 +14,7 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { SubpageHeader } from '@/components/shared/subpage-header';
 import { logError } from '@/lib/logging';
 import { getManagerAssigneeOptions } from '@/lib/members/profile-name';
-import { readOffer } from '@/lib/offers/reads';
+import { readOffer, readOfferRevisions } from '@/lib/offers/reads';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -34,6 +36,13 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
     offer && offer !== 'failed' && offer.status === 'entwurf'
       ? await getManagerAssigneeOptions(createSupabaseAdminClient(), membership.orgId)
       : null;
+  const revisions =
+    offer && offer !== 'failed'
+      ? await readOfferRevisions(membership.orgId, offer.id).catch((error: unknown) => {
+          logError('angebot.revisions_read_failed', error);
+          return 'failed' as const;
+        })
+      : [];
   if (offer === 'failed') {
     return (
       <RegionLoadError title="Das Angebot konnte nicht geladen werden">
@@ -67,9 +76,10 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
             <span className="wrap-anywhere">{`${offer.offerNumber} · für ${offer.client.name}`}</span>
           }
           actions={
-            <div className="flex items-center gap-2">
-              <OfferStatusBadge status={offer.status} />
+            <div className="flex flex-wrap items-center gap-2">
+              <OfferStatusBadge status={offer.status} validUntil={offer.validUntil} />
               {owners?.success && <EditOfferHeaderButton offer={offer} owners={owners.options} />}
+              {offer.status === 'entwurf' && <OfferSendActions offer={offer} />}
             </div>
           }
         />
@@ -81,6 +91,13 @@ export default async function OfferPage({ params }: { params: Promise<{ offerId:
         </RegionLoadError>
       )}
       <OfferHeaderFacts offer={offer} />
+      {revisions === 'failed' ? (
+        <RegionLoadError title="Die gesendeten Revisionen konnten nicht geladen werden">
+          Versuche es in einem Moment erneut.
+        </RegionLoadError>
+      ) : (
+        <OfferRevisions revisions={revisions} />
+      )}
       {/* Only a draft's content changes; this release writes no other state. */}
       {offer.status === 'entwurf' && <OfferContentEditor key={offer.id} offer={offer} />}
     </div>

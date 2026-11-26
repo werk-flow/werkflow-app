@@ -140,7 +140,7 @@ export async function readCompanyFile(organizationId: string, file: StoredFilePa
 }
 
 /** The bytes of every stored logo and stationery page; a missing object throws. */
-async function readLetterheadFiles(
+export async function readLetterheadFiles(
   organizationId: string,
   filePaths: StoredProfile['filePaths'],
 ): Promise<LetterheadFiles> {

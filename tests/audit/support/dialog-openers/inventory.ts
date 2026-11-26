@@ -323,6 +323,16 @@ export const COMMERCIAL_OPENERS = {
       page.getByRole('main').getByRole('button', { name: 'Bearbeiten', exact: true }),
     layer: (page) => page.getByRole('dialog', { name: 'Angebotskopf bearbeiten', exact: true }),
   },
+  'commercial.offer-preview': {
+    trigger: async ({ page }) =>
+      page.getByRole('main').getByRole('button', { name: 'Vorschau', exact: true }),
+    layer: (page) => page.getByRole('dialog', { name: /^Vorschau ANG-/ }),
+  },
+  'commercial.offer-send': {
+    trigger: async ({ page }) =>
+      page.getByRole('main').getByRole('button', { name: 'Als gesendet festhalten', exact: true }),
+    layer: (page) => page.getByRole('dialog', { name: 'Angebot als gesendet festhalten?', exact: true }),
+  },
   'commercial.invoice': {
     trigger: async ({ page }) =>
       page.getByRole('main').getByRole('button', { name: 'Rechnung erstellen', exact: true }),
