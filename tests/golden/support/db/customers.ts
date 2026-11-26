@@ -18,6 +18,8 @@ export interface SeedCustomerSite {
   notes?: string;
   primaryContactName?: string;
   isPrimary?: boolean;
+  /** The Objektnummer the previous program gave the site. */
+  sourceNumber?: string;
 }
 
 export interface SeededCustomer {
@@ -95,6 +97,7 @@ export async function seedCustomer(input: {
         notes: site.notes ?? null,
         primary_contact_id: primaryContactId ?? null,
         is_primary: site.isPrimary ?? false,
+        source_number: site.sourceNumber ?? null,
       })
       .throwOnError();
     siteIds.set(site.name, siteId);

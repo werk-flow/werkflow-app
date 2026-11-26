@@ -5,7 +5,7 @@ do $$
 declare ledger text;
 begin
   foreach ledger in array array[
-    'attention_events', 'client_communication_preference_events', 'client_follow_up_events',
+    'ai_run_attempts', 'attention_events', 'client_communication_preference_events', 'client_follow_up_events',
     'client_request_events', 'document_audit_events', 'employee_record_events',
     'organization_export_events', 'organization_responsibility_events', 'qualification_events',
     'sickness_report_events', 'team_events', 'time_entry_audit_events', 'vacation_request_events',
