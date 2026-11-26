@@ -77,6 +77,7 @@ export function AttentionCountProvider({
     tables: [
       'time_entries',
       'entry_change_requests',
+      'time_correction_requests',
       'vacation_requests',
       'sickness_reports',
       'employee_capabilities',

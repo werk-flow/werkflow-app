@@ -4,6 +4,7 @@ import {
   addLocalDays,
   addLocalMonths,
   addLocalMonthsClamped,
+  countWorkdaysAfter,
   formatBerlinDateTimeInput,
   formatBerlinLocalDate,
   formatBerlinLocalDateTime,
@@ -174,5 +175,21 @@ describe('local date arithmetic', () => {
     expect(getLocalWeekday('2026-08-10')).toBe(0);
     expect(getLocalWeekday('2026-08-16')).toBe(6);
     expect(() => getLocalWeekday('2026-02-30')).toThrow('invalid_local_date');
+  });
+
+  test('counts the Monday-to-Friday days after a date up to and including another', () => {
+    const cases: Array<[from: string, to: string, workdays: number]> = [
+      ['2026-11-16', '2026-11-19', 3], // Monday to Thursday
+      ['2026-11-13', '2026-11-17', 2], // over a weekend: Monday and Tuesday
+      ['2026-11-14', '2026-11-15', 0], // Saturday to Sunday
+      ['2026-10-30', '2026-11-04', 3], // over a month end
+      ['2028-02-24', '2028-03-01', 4], // through a leap day
+      ['2025-12-31', '2026-12-31', 261], // a whole year
+      ['2026-11-19', '2026-11-19', 0], // the same day
+      ['2026-11-19', '2026-11-16', 0], // a date in the past
+    ];
+    for (const [from, to, workdays] of cases) {
+      expect(countWorkdaysAfter(from, to), `${from} → ${to}`).toBe(workdays);
+    }
   });
 });

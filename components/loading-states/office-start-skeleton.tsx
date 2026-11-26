@@ -32,9 +32,13 @@ export function OfficeStartSkeleton() {
 }
 
 /** Mirrors the überfällige Wartung below the sections: a heading over one row. */
-export function OverdueMaintenanceSkeleton() {
+export function OverdueMaintenanceSkeleton({ testIdPrefix }: { testIdPrefix: string }) {
   return (
-    <div className="space-y-2" aria-hidden="true" data-testid="office-start-overdue-maintenance-placeholder">
+    <div
+      className="space-y-2"
+      aria-hidden="true"
+      data-testid={`${testIdPrefix}-overdue-maintenance-placeholder`}
+    >
       <div className="flex items-center gap-1.5 px-1">
         <Skeleton className="size-4" />
         <Skeleton className="h-4 w-24" />
