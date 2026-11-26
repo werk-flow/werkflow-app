@@ -141,8 +141,12 @@ grant select, insert, update on table public.document_deliveries to service_role
 
 alter table public.document_deliveries replica identity using index document_deliveries_replident_idx;
 alter publication supabase_realtime add table public.document_deliveries;
+-- An organization's deletion skips the per-row notice (20270111100001).
 create trigger emit_realtime_deletion after delete on public.document_deliveries
-  for each row execute function app_private.emit_realtime_deletion();
+  for each row
+  when (not coalesce(old.organization_id::text = any (pg_catalog.string_to_array(
+    pg_catalog.current_setting('app.deleting_organization_ids', true), ',')), false))
+  execute function app_private.emit_realtime_deletion();
 
 -- 2. The history.
 create table public.document_delivery_events (
