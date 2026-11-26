@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -17,16 +18,17 @@ Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Wochenzahlen
 Problem melden
 F2
-MK
-Martin Krämer
-martin.kraemer@haustechnik-kraemer.de
 Dashboard
 Bereitschaft jetzt
 Wer außerhalb der Arbeitszeit erreichbar ist.
 Gerade hat niemand Bereitschaft.
 Bereitschaft planen
+Braucht deine Entscheidung
+Keine offenen Entscheidungen.
+Nichts wartet auf dich. Neue Ausnahmen erscheinen hier sofort.
 Was jetzt ansteht
 Offene Anfragen
 (

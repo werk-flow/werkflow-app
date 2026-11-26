@@ -73,7 +73,8 @@ decide() {
       success | failure) test -n "$newest" || { newest="$commit" && run+=(--run "${commit},${started},ended"); } ;;
     esac
   done <<< "$list"
-  decision="$(bun scripts/ci/full-run.ts due "${run[@]}")"
+  # ${run[@]+…} keeps an empty list legal under set -u on bash 3.2 (macOS).
+  decision="$(bun scripts/ci/full-run.ts due ${run[@]+"${run[@]}"})"
   echo "::notice title=Full run on main::${decision}"
 }
 

@@ -58,7 +58,15 @@ async function customerListMenuItem({ page, world }: SurfaceContext, item: Locat
   return openMenuItem(customerRowActionsButton(page, layoutNames(world).client), item);
 }
 
+/** The header search: the sidebar's field-like button on the desktop, the header icon on a phone. */
+const globalSearchOpener: DialogOpener = {
+  trigger: async ({ page }) => page.getByRole('button', { name: 'Suchen', exact: true }),
+  layer: (page) => page.getByRole('dialog', { name: 'Suchen', exact: true }),
+};
+
 export const CUSTOMERS_OPENERS = {
+  'customers.search-office': globalSearchOpener,
+  'customers.search-field': globalSearchOpener,
   // The office review of an open access proposal: the „Zugang prüfen“ task in
   // Aufgaben links to the customer page, which opens it. The opener's control
   // stays behind on the Aufgaben page, so focus returns to the page.

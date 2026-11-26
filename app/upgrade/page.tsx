@@ -34,7 +34,8 @@ async function subscriptionTarget(userId: string): Promise<{ id: string; name: s
   }
   if (caller.context.role !== 'admin') redirect('/dashboard');
   const { orgId } = caller.context;
-  if ((await readOrganizationSubscription(orgId))?.holdsSubscription) redirect('/dashboard');
+  // One Stripe ended after a failed first debit no longer runs: its Admin subscribes again here.
+  if ((await readOrganizationSubscription(orgId))?.runsSubscription) redirect('/dashboard');
   const membership = (await getCachedMemberships(caller.context.userId)).find(
     (entry) => entry.orgId === orgId,
   );

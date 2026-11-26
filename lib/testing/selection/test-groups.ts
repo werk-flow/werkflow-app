@@ -389,7 +389,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['customer-relationships', ['customer_relationships.sql'], ['customers']],
   ['customer-atomic-writes', ['customer_atomic_writes.sql'], ['customers']],
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
-  ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
+  ['request-caller-matches', ['request_caller_matches.sql', 'global_search_matches.sql'], ['customers']],
   [
     'request-retry-results',
     ['request_retry_results.sql', 'request_offer_conversion_concurrency.sql'],
@@ -414,7 +414,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['planning_occurrences.sql', 'planning_dispatch.sql', 'planning_operation_assessments.sql'],
     ['planning', 'work'],
   ],
-  ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
+  ['service', ['service_boundaries.sql', 'assigned_equipment_search.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['equipment-replacement', ['equipment_replacement_carry_over.sql'], ['service']],
   ['maintenance-visit-next-actions', MAINTENANCE_VISIT_SQL_FILES, MAINTENANCE_VISIT_SQL_SCOPES],
@@ -483,7 +483,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['problem_reports.sql', 'problem_report_support.sql', 'problem_report_handout.sql'],
     ['*'],
   ],
-  ['organization-export', ['organization_export.sql'], ['*']],
+  ['organization-export', ['organization_export.sql', 'weekly_outcome_numbers.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],
   [

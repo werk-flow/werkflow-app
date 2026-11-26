@@ -9,7 +9,8 @@ export type JobListSection = (typeof JOB_LIST_SECTIONS)[number];
 export type ListSearchParams = Record<string, string | string[] | undefined>;
 export type JobListQuery = {
   page: number;
-  pageSize: typeof LIST_PAGE_SIZE;
+  /** The list pages by `LIST_PAGE_SIZE`; the header search reads a shorter page. */
+  pageSize: number;
   search: string;
   sort: SortColumn;
   direction: 'asc' | 'desc';

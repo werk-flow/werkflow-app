@@ -180,6 +180,10 @@ export async function startSubscriptionCheckout(): Promise<{ success: false; err
   return startOrganizationCheckout();
 }
 
+export async function startFurtherOrganizationCheckout(): Promise<{ success: false; error: string }> {
+  return startOrganizationCheckout();
+}
+
 export async function clearEmailChangeChallengeBeforeSignOut(): Promise<{
   success: true;
 }> {

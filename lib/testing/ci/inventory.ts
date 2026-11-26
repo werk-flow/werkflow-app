@@ -252,6 +252,7 @@ export const OUTSIDE_INVENTORY: Readonly<Record<string, string>> = {
   'release.yml#proof': "Proves the release's alert path.",
   'release.yml#alert': "Reports the release's failure.",
   'nightly.yml#proof': "Proves the nightly's alert path.",
+  'mustang-cache.yml#seed': "Keeps Mustang's pinned jar in main's Actions cache: no check.",
   'staging.yml#migrate': 'Migrates DEV after a merge.',
   'staging.yml#deploy': 'Deploys staging after a merge.',
   'production-alert.yml#alert': "Writes the production watcher's alerts.",

@@ -13586,11 +13586,14 @@ export type Database = {
           created_at: string;
           current_period_end: string | null;
           duplicate_subscription_ids: string[];
+          failed_duplicate_refunds: Json;
           holds_subscription: boolean;
           linked_at: string | null;
           organization_id: string;
           read_at_by_subscription: Json;
           reserved_by: string | null;
+          runs_subscription: boolean;
+          settled_duplicate_subscription_ids: string[];
           status: string | null;
           stripe_customer_id: string;
           stripe_subscription_id: string | null;
@@ -13607,11 +13610,14 @@ export type Database = {
           created_at?: string;
           current_period_end?: string | null;
           duplicate_subscription_ids?: string[];
+          failed_duplicate_refunds?: Json;
           holds_subscription?: boolean;
           linked_at?: string | null;
           organization_id: string;
           read_at_by_subscription?: Json;
           reserved_by?: string | null;
+          runs_subscription?: boolean;
+          settled_duplicate_subscription_ids?: string[];
           status?: string | null;
           stripe_customer_id: string;
           stripe_subscription_id?: string | null;
@@ -13628,11 +13634,14 @@ export type Database = {
           created_at?: string;
           current_period_end?: string | null;
           duplicate_subscription_ids?: string[];
+          failed_duplicate_refunds?: Json;
           holds_subscription?: boolean;
           linked_at?: string | null;
           organization_id?: string;
           read_at_by_subscription?: Json;
           reserved_by?: string | null;
+          runs_subscription?: boolean;
+          settled_duplicate_subscription_ids?: string[];
           status?: string | null;
           stripe_customer_id?: string;
           stripe_subscription_id?: string | null;
@@ -16671,6 +16680,7 @@ export type Database = {
         };
         Returns: Record<string, unknown>;
       };
+      berlin_day_end_or_now: { Args: { p_day: string }; Returns: string };
       book_inventory_import: {
         Args: {
           p_actor_id: string;
@@ -17419,6 +17429,14 @@ export type Database = {
           p_request_hash: string;
         };
         Returns: string;
+      };
+      count_berlin_workdays: {
+        Args: { p_from: string; p_to: string };
+        Returns: number;
+      };
+      count_overdue_items_at: {
+        Args: { p_day: string; p_organization_id: string };
+        Returns: Json;
       };
       create_capability_definition: {
         Args: {
@@ -19784,6 +19802,26 @@ export type Database = {
           stripe_object_id: string;
         }[];
       };
+      match_installed_equipment: {
+        Args: {
+          p_equipment_ids: string[];
+          p_organization_id: string;
+          p_search: string;
+        };
+        Returns: Json;
+      };
+      measure_handover_turnaround: {
+        Args: { p_from: string; p_organization_id: string; p_to: string };
+        Returns: Json;
+      };
+      measure_own_time_capture_share: {
+        Args: { p_from: string; p_organization_id: string; p_to: string };
+        Returns: Json;
+      };
+      measure_work_report_share: {
+        Args: { p_from: string; p_organization_id: string; p_to: string };
+        Returns: Json;
+      };
       move_document: {
         Args: {
           p_actor_id: string;
@@ -20226,6 +20264,14 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      read_weekly_outcome_numbers: {
+        Args: {
+          p_organization_id: string;
+          p_today: string;
+          p_week_count: number;
+        };
+        Returns: Json;
+      };
       read_work_lead_scope: {
         Args: { p_organization_id: string; p_user_id: string };
         Returns: Json;
@@ -20381,6 +20427,15 @@ export type Database = {
       };
       record_werkflow_billing_mail_attempt: {
         Args: { p_mail_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
+      record_werkflow_refund_failure: {
+        Args: {
+          p_organization_id: string;
+          p_stripe_payment_intent_id: string;
+          p_stripe_refund_id: string;
+          p_stripe_subscription_id: string;
+        };
         Returns: boolean;
       };
       record_werkflow_subscription_state: {
@@ -21403,6 +21458,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      search_customer_sites_and_contacts: {
+        Args: { p_limit: number; p_organization_id: string; p_search: string };
+        Returns: Json;
+      };
       search_equipment_options: {
         Args: {
           p_client_id?: string;
@@ -22031,6 +22090,10 @@ export type Database = {
           p_stripe_event_id: string;
         };
         Returns: boolean;
+      };
+      settle_werkflow_duplicate_subscription: {
+        Args: { p_organization_id: string; p_stripe_subscription_id: string };
+        Returns: undefined;
       };
       stage_supplier_catalog_import_lines: {
         Args: {
@@ -23309,6 +23372,10 @@ export type Database = {
       };
       werkflow_subscription_holds: {
         Args: { p_cancellation_reason: string; p_status: string };
+        Returns: boolean;
+      };
+      werkflow_subscription_runs: {
+        Args: { p_status: string };
         Returns: boolean;
       };
       withdraw_customer_commitment: {
