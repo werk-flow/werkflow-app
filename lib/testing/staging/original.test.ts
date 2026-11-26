@@ -2,6 +2,7 @@
 // passes the EN 16931 rules; a changed or missing XML is a finding. The invoices are the made-up
 // reference invoices.
 import { expect, test } from 'bun:test';
+import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
 
 import { calculateInvoice } from '../../invoicing/calculate';
 import { withChangedEmbeddedXml } from '../../invoicing/fixtures/broken-e-invoice-pdfs';
@@ -31,6 +32,18 @@ test('intact XML in a bare PDF lacks the PDF/A-3 and Factur-X container marks', 
   const facts = await readOriginal(await pdfCarrying(toEn16931(calculateInvoice(STANDARD_RATE_INVOICE))));
   expect(facts.failedRules).toEqual([]);
   expect(facts.missingContainerMarks).toEqual(['PDF/A-3', 'Factur-X', 'OutputIntent']);
+});
+
+test('an AF that is empty or names another attachment is a missing container mark', async () => {
+  const intact = await pdfCarrying(toEn16931(calculateInvoice(STANDARD_RATE_INVOICE)), { zugferd: true });
+  const emptied = await PDFDocument.load(intact, { updateMetadata: false });
+  emptied.catalog.set(PDFName.of('AF'), emptied.context.obj([]));
+  expect((await readOriginal(await emptied.save())).missingContainerMarks).toEqual(['AF']);
+
+  const elsewhere = await PDFDocument.load(intact, { updateMetadata: false });
+  const other = elsewhere.context.obj({ Type: 'Filespec', F: PDFString.of('other.xml') });
+  elsewhere.catalog.set(PDFName.of('AF'), elsewhere.context.obj([elsewhere.context.register(other)]));
+  expect((await readOriginal(await elsewhere.save())).missingContainerMarks).toEqual(['AF']);
 });
 
 test('a number in a comment never stands in for the document number', async () => {

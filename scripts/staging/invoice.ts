@@ -290,21 +290,24 @@ async function memberRefused(member: Actor, role: MemberRole, organization: RunO
   });
 }
 
-/** Steps 1 to 6 for one payment method; answers the Admin and the organization it paid for. */
-async function invoiceJourney(
-  method: CheckoutMethod,
-): Promise<{ admin: Actor; organization: RunOrganization }> {
+/** The SEPA Admin and organization the members join, set as soon as the organization exists. */
+const membersOrganization: { found: { admin: Actor; organization: RunOrganization } | null } = {
+  found: null,
+};
+
+/** Steps 1 to 6 for one payment method. */
+async function invoiceJourney(method: CheckoutMethod): Promise<void> {
   begin(`${method}: actor`, 'checkout');
   const admin = await newActor();
-  const organization = await withStagingBrowser(kit, async (page) => {
+  await withStagingBrowser(kit, async (page) => {
     const paid = await payAndCreateOrganization(page, admin, method);
     subscriptions.push(paid.subscriptionId);
+    // The members' organization once it exists, whatever the invoice steps after it find.
+    if (method === 'sepa') membersOrganization.found = { admin, organization: paid.organization };
     const issued = await issuedInvoice(method, paid);
     await debitAndMails(method, paid, issued);
     await billingPageAndOriginal(page, method, issued);
-    return paid.organization;
   });
-  return { admin, organization };
 }
 
 /** Step 7: a `buero` and an `employee` member join the organization and are refused its billing page. */
@@ -339,11 +342,12 @@ async function part<T>(run: () => Promise<T>): Promise<T | null> {
 kit.log('invoice journey', { started });
 let passed = false;
 try {
-  const sepa = await part(() => invoiceJourney('sepa'));
+  await part(() => invoiceJourney('sepa'));
   await part(() => invoiceJourney('card'));
-  // On the SEPA organization, whatever the card's result; last, so a member's failure leaves both
-  // invoices proven.
-  if (sepa) await part(() => membersRefused(sepa.admin, sepa.organization));
+  // On the SEPA organization, whatever the invoice steps found; last, so a member's failure leaves
+  // both invoices proven.
+  const members = membersOrganization.found;
+  if (members) await part(() => membersRefused(members.admin, members.organization));
 } finally {
   passed = failures === 0;
   begin('cleanup', 'deleteAccount');

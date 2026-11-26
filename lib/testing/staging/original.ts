@@ -3,7 +3,17 @@
 // names the invoice's number and type, in a ZUGFeRD PDF/A-3 container. It returns those, the failed
 // rule ids and the missing container marks only, never the buyer, a line or an address.
 
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  type PDFObject,
+  PDFRawStream,
+  PDFString,
+  decodePDFRawStream,
+} from 'pdf-lib';
 import SaxonJS from 'saxon-js';
 
 import { E_INVOICE_FILE_NAME, readEmbeddedInvoiceXml } from '../../invoicing/embedded-xml';
@@ -44,6 +54,31 @@ function documentField(xml: string, field: 'ID' | 'TypeCode'): string {
   }
 }
 
+/** The file specification the document's embedded files name `factur-x.xml`, the one the XML is read from. */
+function invoiceFileSpec(pdf: PDFDocument): PDFObject | undefined {
+  const entries =
+    pdf.catalog
+      .lookupMaybe(PDFName.of('Names'), PDFDict)
+      ?.lookupMaybe(PDFName.of('EmbeddedFiles'), PDFDict)
+      ?.lookupMaybe(PDFName.of('Names'), PDFArray)
+      ?.asArray() ?? [];
+  for (let index = 0; index + 1 < entries.length; index += 2) {
+    const name = entries[index];
+    if (
+      (name instanceof PDFString || name instanceof PDFHexString) &&
+      name.decodeText() === E_INVOICE_FILE_NAME
+    )
+      return entries[index + 1];
+  }
+  return undefined;
+}
+
+function afNamesInvoice(pdf: PDFDocument): boolean {
+  const spec = invoiceFileSpec(pdf);
+  const associated = pdf.catalog.lookupMaybe(PDFName.of('AF'), PDFArray)?.asArray() ?? [];
+  return spec !== undefined && associated.includes(spec);
+}
+
 function missingContainerMarks(pdf: PDFDocument): string[] {
   const metadata = pdf.catalog.lookup(PDFName.of('Metadata'));
   const xmp =
@@ -52,7 +87,8 @@ function missingContainerMarks(pdf: PDFDocument): string[] {
   const marks: [string, boolean][] = [
     ['PDF/A-3', /<pdfaid:part>3<\/pdfaid:part>/.test(xmp)],
     ['Factur-X', xmp.includes(`<fx:DocumentFileName>${E_INVOICE_FILE_NAME}</fx:DocumentFileName>`)],
-    ['AF', pdf.catalog.has(PDFName.of('AF'))],
+    // The document's associated files must name the very file specification the XML was read from.
+    ['AF', afNamesInvoice(pdf)],
     [
       'OutputIntent',
       intents.some(
