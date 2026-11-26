@@ -69,6 +69,7 @@ create table public.ai_thread_items (
 );
 
 create index ai_thread_items_created_at_idx on public.ai_thread_items (created_at);
+create index ai_thread_items_thread_fk_idx on public.ai_thread_items (thread_id, organization_id);
 
 create table public.ai_runs (
   id uuid primary key default gen_random_uuid(),
@@ -88,7 +89,7 @@ create table public.ai_runs (
 );
 
 create index ai_runs_open_idx on public.ai_runs (organization_id) where status = 'reserved';
-create index ai_runs_thread_idx on public.ai_runs (thread_id);
+create index ai_runs_thread_idx on public.ai_runs (thread_id, organization_id);
 create index ai_runs_user_idx on public.ai_runs (user_id);
 
 create table public.ai_run_attempts (
@@ -112,7 +113,9 @@ create table public.ai_run_attempts (
 );
 
 create index ai_run_attempts_month_idx on public.ai_run_attempts (organization_id, created_at);
-create index ai_run_attempts_run_idx on public.ai_run_attempts (run_id);
+create index ai_run_attempts_run_idx on public.ai_run_attempts (run_id, organization_id);
+
+create index ai_organization_settings_updated_by_idx on public.ai_organization_settings (updated_by);
 
 create trigger ai_organization_settings_updated_at before update on public.ai_organization_settings
   for each row execute function public.update_updated_at_column();
@@ -120,8 +123,12 @@ create trigger ai_organization_settings_updated_at before update on public.ai_or
 -- Realtime (docs/technical/realtime-and-caching.md, "Add Realtime data"): the
 -- switch is its own owning root. Its primary key is organization_id, so the
 -- default replica identity is already minimal. Chat tables stay unpublished.
+-- An organization's deletion skips the notice (20270111100001).
 create trigger emit_realtime_deletion after delete on public.ai_organization_settings
-  for each row execute function app_private.emit_realtime_deletion();
+  for each row
+  when (not coalesce(old.organization_id::text = any (pg_catalog.string_to_array(
+    pg_catalog.current_setting('app.deleting_organization_ids', true), ',')), false))
+  execute function app_private.emit_realtime_deletion();
 alter publication supabase_realtime add table public.ai_organization_settings;
 
 -- The ledger refuses UPDATE and DELETE; only the organization's deletion
