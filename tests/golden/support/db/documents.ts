@@ -33,7 +33,9 @@ const ONE_PIXEL_PNG = Buffer.from(
 /**
  * Stores a small PNG in object storage and registers it through the same
  * database function a finished upload calls, so the document carries its
- * version, audit event and optional job or equipment link. Returns the document id.
+ * version, audit event and optional job, equipment or customer link. An
+ * origin is set through the function the office's „Herkunft“ save calls.
+ * Returns the document id.
  */
 export async function seedStoredImageDocument(input: {
   orgId: string;
@@ -41,6 +43,9 @@ export async function seedStoredImageDocument(input: {
   displayName: string;
   jobId?: string;
   equipmentId?: string;
+  clientId?: string;
+  /** The previous program and the number it gave the original. */
+  origin?: { sourceSystem: string; sourceReference: string };
 }): Promise<string> {
   const documentId = randomUUID();
   const storagePath = buildDocumentStoragePath({
@@ -68,10 +73,24 @@ export async function seedStoredImageDocument(input: {
         p_category: 'photo',
         p_mime_type: 'image/png',
         p_size_bytes: ONE_PIXEL_PNG.byteLength,
-        p_link_kind: input.jobId ? 'job' : input.equipmentId ? 'equipment' : null,
-        p_link_target_id: input.jobId ?? input.equipmentId ?? null,
+        p_link_kind: input.jobId ? 'job' : input.equipmentId ? 'equipment' : input.clientId ? 'client' : null,
+        p_link_target_id: input.jobId ?? input.equipmentId ?? input.clientId ?? null,
       }),
     )
     .throwOnError();
+  if (input.origin) {
+    await createAdminClient()
+      .rpc(
+        'update_document_origin',
+        rpcArgs('update_document_origin', {
+          p_actor_id: input.actorId,
+          p_organization_id: input.orgId,
+          p_document_id: documentId,
+          p_source_system: input.origin.sourceSystem,
+          p_source_reference: input.origin.sourceReference,
+        }),
+      )
+      .throwOnError();
+  }
   return documentId;
 }

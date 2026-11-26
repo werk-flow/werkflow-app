@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { REQUEST_STATUS_LABELS } from '../../../../lib/requests/types';
 import { documentOpenButton, documentsRegion, uploadIntoDocumentsSection } from './documents';
 import { workTemplateSelect } from './work';
-import { pressKey, settledBeforeTimeout } from './interaction';
+import { hydratedAndSettled, pressKey, settledBeforeTimeout } from './interaction';
 import { getRequestById, type PersistedRequest } from '../db/requests';
 import {
   assignDespiteQualificationWarning,
@@ -573,6 +573,23 @@ export async function closeRequestViaDialog(page: Page, reasonLabel: string): Pr
       throw new Error('closeRequestViaDialog: request remained open after retry');
     }
   }
+}
+
+/**
+ * Closes the open request without work on its detail, which the person
+ * reached inside the app, and waits for the detail to show it closed. It
+ * never loads the page again: a journey that proves a live outcome keeps its
+ * document.
+ */
+export async function closeRequestOnDetail(page: Page, reasonLabel: string): Promise<void> {
+  await hydratedAndSettled(page);
+  await (await openRequestCloseItem(page)).click();
+  const dialog = requestCloseDialog(page);
+  await requestField(dialog, 'closeReason').click();
+  await page.getByRole('option', { name: reasonLabel, exact: true }).click();
+  await requestCloseSubmit(dialog).click();
+  await expect(dialog).toBeHidden();
+  await expect(visibleText(page, REQUEST_DETAIL_TEXT.closedWithoutWork)).toBeVisible();
 }
 
 // Assigns a responsible person on the currently open request detail page via

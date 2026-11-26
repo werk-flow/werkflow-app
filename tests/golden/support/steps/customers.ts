@@ -40,6 +40,7 @@ const CUSTOMER_COPY = {
   search: 'Kunden durchsuchen',
   pager: 'Kunden',
   detailTitle: 'Kundendetails',
+  documentsTitle: 'Dokumente',
   customerNumber: 'Kundennummer',
   deleteCustomer: 'Kunde löschen',
   openActions: 'Aktionen öffnen',
@@ -307,6 +308,16 @@ export function customerEditDialog(page: Page): Locator {
 /** The „Kundendetails“ card of the customer detail. */
 export function customerDetailsRegion(page: Page): Locator {
   return page.getByRole('region', { name: CUSTOMER_COPY.detailTitle, exact: true });
+}
+
+/** The customer's „Dokumente“ on its detail: what the office filed or linked to the customer. */
+export function customerDocumentsRegion(page: Page): Locator {
+  return page.getByRole('region', { name: CUSTOMER_COPY.documentsTitle, exact: true });
+}
+
+/** A site's Objektnummer im Altsystem on its card of the customer detail. */
+export function customerSiteSourceNumber(page: Page, sourceNumber: string): Locator {
+  return visibleText(page, `Objektnr. ${sourceNumber}`, true);
 }
 
 /** The label of a „Kundendetails“ row, for the shared MetadataSection locators. */

@@ -28,6 +28,17 @@ export async function openAufgaben(page: Page): Promise<void> {
   });
 }
 
+/** The start pages of /dashboard that show Aufgaben, by their heading (E8). */
+const START_PAGE_HEADINGS = {
+  office: 'Was jetzt ansteht',
+  owner: 'Braucht deine Entscheidung',
+} as const;
+
+/** A start page on /dashboard: Büro's and Admin's „Was jetzt ansteht“, or Admin's „Braucht deine Entscheidung“. */
+export function startPageRegion(page: Page, start: keyof typeof START_PAGE_HEADINGS): Locator {
+  return page.getByRole('region', { name: START_PAGE_HEADINGS[start], exact: true });
+}
+
 // Task links carry stable German aria-labels that name their source. Counting
 // via the accessible name doubles as the per-viewer deduplication assertion.
 function attentionTaskLink(scope: Page | Locator, ariaLabel: string): Locator {
@@ -37,6 +48,11 @@ function attentionTaskLink(scope: Page | Locator, ariaLabel: string): Locator {
 /** The task link of an open customer request (P1-02). */
 export function requestTaskLink(scope: Page | Locator, requestNumber: string): Locator {
   return attentionTaskLink(scope, `Anfrage ${requestNumber} öffnen`);
+}
+
+/** The task link of an open request whose promised callback has passed (E8). */
+export function callbackTaskLink(scope: Page | Locator, requestNumber: string): Locator {
+  return attentionTaskLink(scope, `Rückruf zur Anfrage ${requestNumber} öffnen`);
 }
 
 /** The task link of a person's pending time approval. */
@@ -194,6 +210,12 @@ export type SidebarBadgeTarget = '/aufgaben' | '/zeiterfassung';
  */
 export function sidebarBadge(page: Page, href: SidebarBadgeTarget): Locator {
   return page.locator(`aside a[href="${href}"] [data-testid="sidebar-badge"]`);
+}
+
+/** A sidebar badge shows this count; at zero the badge is gone. */
+export async function expectBadgeCount(badge: Locator, count: number): Promise<void> {
+  if (count > 0) await expect(badge).toHaveText(String(count));
+  else await expect(badge).toHaveCount(0);
 }
 
 export function aufgabenSidebarBadge(page: Page): Locator {

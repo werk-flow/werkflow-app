@@ -377,8 +377,8 @@ export function documentTableRows(page: Page, fileName: string): Locator {
 }
 
 /** The button that opens a file in the contextual frame; its name starts with the file name. */
-export function documentOpenButton(page: Page, fileName: string): Locator {
-  return page.getByRole('button', { name: new RegExp(escapeRegExp(fileName)) });
+export function documentOpenButton(scope: Page | Locator, fileName: string): Locator {
+  return scope.getByRole('button', { name: new RegExp(escapeRegExp(fileName)) });
 }
 
 /** Waits for the file name within the live envelope, then once after a reload. */
