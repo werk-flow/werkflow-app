@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -56,7 +55,17 @@ const launch = devMcpLaunch({
 });
 if ('refusal' in launch) refuse(launch.refusal);
 
-const server = spawn(process.execPath, launch.args, { stdio: 'inherit', env: launch.env });
+let server: ReturnType<typeof Bun.spawn>;
+try {
+  server = Bun.spawn({
+    cmd: [process.execPath, ...launch.args],
+    stdin: 'inherit',
+    stdout: 'inherit',
+    stderr: 'inherit',
+    env: launch.env,
+  });
+} catch {
+  refuse('the server could not start.');
+}
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, () => server.kill(signal));
-server.on('error', () => refuse('the server could not start.'));
-server.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+process.exit(await server.exited);
