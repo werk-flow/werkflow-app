@@ -147,10 +147,10 @@ begin
     raise exception 'a sent outcome without a message id was accepted';
   exception when sqlstate '22023' then null;
   end;
-  -- Every kind of 20261231100010 (the refund mail, the invoice mails and
-  -- alarms of 20261223100004, the bounce alarm of 20261221100009 and every
-  -- kind before them) is taken, a customer mail with its organization and an
-  -- alarm without one.
+  -- Every kind of 20270111100005 is taken: the subscription end's two alarms,
+  -- the refund mail of 20270111100004, the invoice mails and alarms of
+  -- 20261223100004, the bounce alarm of 20261221100009 and every kind before
+  -- them; a customer mail with its organization and an alarm without one.
   declare
     v_kind text;
   begin
@@ -159,7 +159,8 @@ begin
       'alarm.debit_failed', 'alarm.debit_reversed', 'alarm.mandate_inactive',
       'alarm.mail_failed', 'alarm.invoice_check_failed', 'alarm.invoice_undelivered',
       'alarm.debit_notice_late', 'alarm.mail_undelivered', 'alarm.signals_quiet',
-      'alarm.reconciliation_missed', 'alarm.mail_bounced'
+      'alarm.reconciliation_missed', 'alarm.mail_bounced',
+      'alarm.duplicate_subscription_cancelled', 'alarm.refund_failed'
     ] loop
       if public.claim_werkflow_billing_mail(v_kind,
           case when v_kind like 'alarm.%' then null else v_org end,
