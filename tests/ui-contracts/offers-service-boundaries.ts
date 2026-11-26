@@ -29,6 +29,24 @@ export async function updateOffer(
     : { success: true, offerId: 'contract-offer', version: 2, updatedAt: '2026-11-23T08:00:00.000000+00:00' };
 }
 
+// The content version each attempt key was saved as: a repeat answers the first save's.
+const contentVersions = new Map<string, number>();
+
+function attemptKeyOf(input: unknown): string {
+  return typeof input === 'object' &&
+    input !== null &&
+    'attemptKey' in input &&
+    typeof input.attemptKey === 'string'
+    ? input.attemptKey
+    : '';
+}
+
+/**
+ * A content save the spec answers. An accepted save takes the next version, the
+ * first 2; `answer_lost` saves and throws, as a save whose answer never
+ * arrived; a repeat under the same attempt key answers its first version, as
+ * the database replays it.
+ */
 export async function saveOfferContent(
   input: unknown,
 ): Promise<
@@ -36,16 +54,17 @@ export async function saveOfferContent(
   | { success: false; error: string }
 > {
   const refusal = await holdWrite('save-offer-content', input);
-  return refusal
-    ? { success: false, error: refusal }
-    : {
-        success: true,
-        offerId: 'contract-offer',
-        // Each content save answers the next version: the first 2, the second 3.
-        contentVersion:
-          window.uiContractWrites.calls.filter((call) => call.kind === 'save-offer-content').length + 1,
-        updatedAt: '2026-11-26T08:00:00.000000+00:00',
-      };
+  if (refusal && refusal !== 'answer_lost') return { success: false, error: refusal };
+  const key = attemptKeyOf(input);
+  const contentVersion = contentVersions.get(key) ?? contentVersions.size + 2;
+  contentVersions.set(key, contentVersion);
+  if (refusal === 'answer_lost') throw new Error('The answer of the save was lost.');
+  return {
+    success: true,
+    offerId: 'contract-offer',
+    contentVersion,
+    updatedAt: '2026-11-26T08:00:00.000000+00:00',
+  };
 }
 
 export function useRouter(): { push: () => void } {

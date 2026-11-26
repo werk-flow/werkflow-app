@@ -169,19 +169,29 @@ test('a content save confirms with the rendered content, before or after its ans
   await expect(editor.getByText(/inzwischen geändert/)).toHaveCount(0);
 });
 
-// A retry after a lost answer answers the version of the first save; when the
-// page already shows a later version of another session, the save is on
-// screen already and confirms at once instead of waiting for a further change.
+// A save is accepted but its answer is lost; another session then saves, and
+// the page shows that later version. The retry sends the same attempt, which
+// answers the first save's version: the page has passed it, so the save
+// confirms at once instead of waiting for a further change.
 test('a retried content save whose version the page has passed confirms at once', async ({ page }) => {
   await openContractFixture(page, 'offers');
   const editor = page.getByRole('form', { name: 'Titel und Positionen' });
   const save = editor.getByRole('button', { name: 'Speichern', exact: true });
   await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
   await editor.getByRole('textbox', { name: 'Titel 1' }).fill('Wartung');
-  await page.evaluate(() => window.uiContractOfferContentRender?.(3, [{ title: 'Heizung', positions: [] }]));
 
   await save.click();
   await expectHeldWrite(page, 'save-offer-content');
+  await answerHeldWrite(page, 'answer_lost');
+  await expect(
+    editor.getByText('Die Positionen konnten nicht gespeichert werden. Versuche es erneut.'),
+  ).toBeVisible();
+  await page.evaluate(() => window.uiContractOfferContentRender?.(3, [{ title: 'Heizung', positions: [] }]));
+
+  await save.click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  const [first, retry] = await page.evaluate(() => window.uiContractWrites.calls.map((call) => call.input));
+  expect(retry).toEqual(first);
   await answerHeldWrite(page, null);
   await expect(visibleText(page, 'Positionen gespeichert.', true)).toBeVisible();
   await expect(save).not.toHaveAttribute('aria-busy', 'true');
@@ -195,6 +205,10 @@ test('a refused save of untouched content names the newer content it now shows',
   await editor.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expectHeldWrite(page, 'save-offer-content');
   await answerHeldWrite(page, 'offer_changed');
-  await expect(editor.getByText('Du siehst jetzt die aktuelle Fassung.', { exact: false })).toBeVisible();
+  const sentence = editor.getByText('Du siehst jetzt die aktuelle Fassung.', { exact: false });
+  await expect(sentence).toBeVisible();
   await expect(editor.getByText(/Neu laden/)).toHaveCount(0);
+  // A change of the content ends the sentence about the earlier one.
+  await editor.getByRole('button', { name: 'Titel hinzufügen', exact: true }).click();
+  await expect(sentence).toHaveCount(0);
 });

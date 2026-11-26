@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { emptyLine, parseDraftForm, type DraftForm } from '@/lib/invoices/draft-form';
-import { contentLimitSentence, emptyPosition, parseContentForm } from './content-form';
+import { contentLimitSentence, emptyPosition, liveContentAmounts, parseContentForm } from './content-form';
 import type { OfferSection } from './types';
 
 function textLines(count: number, description: string): OfferSection[] {
@@ -60,4 +60,11 @@ test('an offer position and an invoice line refuse an empty priced line with the
     'Gib den Netto-Einzelpreis an, zum Beispiel 72,50.',
   ]);
   expect(invoice.ok ? [] : Object.values(invoice.errors)).toEqual(offerSentences);
+});
+
+// The totals follow the positions while a Titel still has no name, also one of only spaces.
+test('the live amounts stand while a Titel name is blank', () => {
+  const position = { ...emptyPosition('p', 'free'), name: 'Wartung', price: '72,50' };
+  const amounts = liveContentAmounts([{ key: 's', title: '   ', positions: [position] }]);
+  expect(amounts?.totals.lineNetCents).toBe(7250);
 });

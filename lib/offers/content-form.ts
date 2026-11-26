@@ -124,7 +124,7 @@ export function contentLimitSentence(sections: readonly OfferSection[]): string 
 export function liveContentAmounts(sections: readonly SectionForm[]): OfferAmounts | null {
   const parsed = parseContentForm(
     // A Titel without a name still adds up: only the positions decide the amounts.
-    sections.map((section) => ({ ...section, title: section.title || '-' })),
+    sections.map((section) => ({ ...section, title: section.title.trim() || '-' })),
   );
   if (!parsed.ok) return null;
   try {

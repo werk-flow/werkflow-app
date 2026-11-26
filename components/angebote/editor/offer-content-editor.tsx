@@ -166,7 +166,11 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
       <OfferSectionList
         sections={sections}
         amounts={amounts}
-        onChange={edit}
+        onChange={(next) => {
+          edit(next);
+          // A sentence about the earlier content no longer applies to the changed one.
+          setError(null);
+        }}
         newKey={newKey}
         errors={errors}
         disabled={pending}
