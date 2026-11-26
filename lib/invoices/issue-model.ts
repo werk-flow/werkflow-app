@@ -159,21 +159,26 @@ type IssuedFacts = Pick<
   | 'openingText'
   | 'closingText'
   | 'lines'
+  | 'cancels'
+  | 'cancellationReason'
 >;
 
 /**
- * The invoice as the core's draft, under the given number and date. Null while
- * it has no Leistungsdatum; the issue refuses that before the rule check.
+ * The invoice as the core's draft, under the given number and date. A
+ * Stornorechnung is a corrected invoice (384) naming the invoice it cancels
+ * (BG-3), with its reason as a note. Null while it has no Leistungsdatum; the
+ * issue refuses that before the rule check.
  */
 export function invoiceDraftOf(
   invoice: IssuedFacts,
   snapshot: IssueSnapshot,
   issue: { number: string; issueDate: string },
 ): InvoiceDraft | null {
-  const { serviceStart, serviceEnd, discountDays, discountBasisPoints } = invoice;
+  const { serviceStart, serviceEnd, discountDays, discountBasisPoints, cancels, cancellationReason } =
+    invoice;
   if (!serviceStart || !serviceEnd) return null;
   return {
-    typeCode: '380',
+    typeCode: cancels ? '384' : '380',
     number: issue.number,
     issueDate: issue.issueDate,
     currency: 'EUR',
@@ -186,7 +191,7 @@ export function invoiceDraftOf(
         : { kind: 'period', start: serviceStart, end: serviceEnd },
     buyerReference: invoice.buyerReference || null,
     orderReference: invoice.orderReference || null,
-    precedingInvoice: null,
+    precedingInvoice: cancels ? { number: cancels.invoiceNumber, issueDate: cancels.issueDate } : null,
     paymentTerms: {
       dueInDays: invoice.paymentDueDays,
       discount:
@@ -194,8 +199,13 @@ export function invoiceDraftOf(
           ? { days: discountDays, percentBasisPoints: discountBasisPoints }
           : null,
     },
-    payee: payeeOf(snapshot.profile),
-    notes: [invoice.openingText, invoice.closingText].filter(Boolean),
+    // A Stornorechnung asks for no payment, so it names no payee.
+    payee: cancels ? null : payeeOf(snapshot.profile),
+    notes: [
+      invoice.openingText,
+      invoice.closingText,
+      cancellationReason ? `Grund der Stornierung: ${cancellationReason}` : '',
+    ].filter(Boolean),
     lines: invoice.lines.map((line, index) => ({
       id: String(index + 1),
       name: line.name,

@@ -1,6 +1,6 @@
 {
   "area": "Invoices",
-  "rule": "line amounts, VAT per rate rounded once, totals, payment terms and Skonto, the save's limits, the e-invoice's amounts, typed euro amounts",
+  "rule": "line amounts, VAT per rate rounded once, totals, payment terms and Skonto, the save's limits, the e-invoice's amounts, typed euro amounts, a Stornorechnung's negated amounts",
   "roots": [
     "lib/invoicing",
     "lib/invoices",
@@ -12,6 +12,7 @@
     "lib/inventory/line-amount.ts",
     "lib/invoices/action-schemas.ts",
     "lib/invoices/amounts.ts",
+    "lib/invoices/cancel-model.ts",
     "lib/invoices/draft-form.ts",
     "lib/invoices/issue-model.ts",
     "lib/invoices/settings.ts",
@@ -22,6 +23,7 @@
   ],
   "exempt": {
     "lib/invoices/actions.ts": "Server Actions: parse, authorize and save; amounts come from amounts.ts.",
+    "lib/invoices/cancel-actions.ts": "Server Action: authorize, check and cancel; the Storno's amounts come from cancel-model.ts, its number from cancel_invoice.",
     "lib/invoices/issue-actions.ts": "Server Actions: authorize, check and issue; amounts come from issue-model.ts and the invoice core, numbers from issue_invoice.",
     "lib/invoices/issue-sources.ts": "Reads the issue snapshot and lists the details still missing; it computes no amount.",
     "lib/invoices/line-source-actions.ts": "Server Action that reads a catalog line; it copies the price E1's and E2a's readers return and computes no amount.",
@@ -36,10 +38,13 @@
     "lib/invoicing/embedded-xml.ts": "Reads the XML back out of a PDF/A-3; it computes no amount.",
     "lib/invoicing/fixtures/broken-e-invoice-pdfs.ts": "Test fixtures of refused PDFs.",
     "lib/invoicing/fixtures/broken-invoices.ts": "Test fixtures of refused invoices.",
+    "lib/invoicing/fixtures/e-invoice-pdf.ts": "Test fixture: a PDF carrying given XML and container marks; it computes no amount.",
     "lib/invoicing/fixtures/reference-invoices.ts": "Test fixtures; the property tests draw their parties from it.",
+    "lib/invoicing/fixtures/saxon-import.ts": "Test helper that loads SaxonJS under Bun; it computes no amount.",
     "lib/invoicing/model.ts": "Types of the invoice model only.",
     "lib/invoicing/rules/compile.ts": "Build script that compiles the CEN rule stylesheet.",
     "lib/invoicing/rules/manifest.ts": "Hashes of the compiled CEN rules.",
-    "lib/invoicing/sample-invoice.ts": "The fixed Musterrechnung; its amounts come from calculate.ts."
+    "lib/invoicing/sample-invoice.ts": "The fixed Musterrechnung; its amounts come from calculate.ts.",
+    "lib/invoicing/xml-text.ts": "Tells whether a text can stand in the invoice XML; it computes no amount."
   }
 }

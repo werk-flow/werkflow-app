@@ -29,6 +29,13 @@ function numberLabel(entry: InvoiceListEntry): string {
   return entry.invoiceNumber ?? 'Ohne Nummer';
 }
 
+/** „Storno zu RE-2026-001“ or „Korrektur zu RE-2026-001“; null for an invoice that refers to none. */
+function refersToLabel(entry: InvoiceListEntry): string | null {
+  if (!entry.refersTo) return null;
+  const number = entry.refersTo.invoiceNumber ?? 'Ohne Nummer';
+  return `${entry.refersTo.kind === 'storno' ? 'Storno' : 'Korrektur'} zu ${number}`;
+}
+
 /** Desktop table; a row opens the invoice and prefetches it on intent. */
 export function InvoicesTable({ entries }: { entries: readonly InvoiceListEntry[] }) {
   const router = useRouter();
@@ -54,6 +61,7 @@ export function InvoicesTable({ entries }: { entries: readonly InvoiceListEntry[
                 >
                   {numberLabel(entry)}
                 </Link>
+                {entry.refersTo && <p className="text-xs text-muted-foreground">{refersToLabel(entry)}</p>}
               </TableCell>
               <TableCell className="max-w-0">
                 <ClientRecipientLine clientName={entry.clientName} recipientName={entry.recipientName} />
@@ -79,7 +87,7 @@ export function InvoicesCards({ entries }: { entries: readonly InvoiceListEntry[
         <ListRow key={entry.id} rowId={entry.id} asChild interactive>
           <Link
             href={invoicePath(entry)}
-            aria-label={`Rechnung öffnen: ${entry.clientName}, ${numberLabel(entry)}`}
+            aria-label={`Rechnung öffnen: ${[entry.clientName, numberLabel(entry), refersToLabel(entry)].filter(Boolean).join(', ')}`}
           >
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center justify-between gap-2">
@@ -91,6 +99,7 @@ export function InvoicesCards({ entries }: { entries: readonly InvoiceListEntry[
               )}
               <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground tabular-nums">
                 <span>{numberLabel(entry)}</span>
+                {entry.refersTo && <span>{refersToLabel(entry)}</span>}
                 <span>{formatEuroCents(entry.grossCents)}</span>
                 <span>geändert {formatGermanDate(entry.updatedAt)}</span>
               </p>
