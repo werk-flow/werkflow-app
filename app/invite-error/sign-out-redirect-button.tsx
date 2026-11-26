@@ -14,6 +14,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
+import { clearKiDrafts } from '@/lib/ai/chat-drafts';
 
 interface SignOutAndRedirectButtonProps {
   /** The validated invite code, or null when it is no longer known. */
@@ -38,6 +39,7 @@ export function SignOutAndRedirectButton({ inviteCode }: SignOutAndRedirectButto
         await endSessionAfterCheck(setError, async () => {
           await clearEmailChangeChallengeQuietly();
           clearManualEntryBridge();
+          clearKiDrafts();
           await clearServiceWorkerCaches();
           await clearTodayOnDevice();
 

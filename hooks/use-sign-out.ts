@@ -13,7 +13,7 @@ import { logError } from '@/lib/logging';
 import { clockOutBeforeSignOut } from '@/lib/time-tracking/clock-state-actions';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
-import { clearKiDrafts } from '@/components/ki/ki-drafts';
+import { clearKiDrafts } from '@/lib/ai/chat-drafts';
 
 /**
  * Best-effort step before every sign-out: a pending email-change challenge

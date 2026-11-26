@@ -162,6 +162,16 @@ test('a message refused before its thread exists goes back into the composer wit
   await page.getByRole('button', { name: 'Senden', exact: true }).click();
   const calls = await page.evaluate(() => window.uiContractKiTurn.calls);
   expect(calls[1]).toEqual(calls[0]);
+
+  // Refused again and edited: other text from the new chat is a new command in a new thread.
+  await page.evaluate(() =>
+    window.uiContractKiTurn.resolve?.({ kind: 'refused', message: 'Noch einmal abgelehnt.' }),
+  );
+  await composer(page).fill('Welche Aufträge sind überfällig?');
+  await page.getByRole('button', { name: 'Senden', exact: true }).click();
+  const edited = await page.evaluate(() => window.uiContractKiTurn.calls[2]);
+  expect(edited?.threadId).not.toBe(calls[0]?.threadId);
+  expect(edited?.commandId).not.toBe(calls[0]?.commandId);
 });
 
 test('an empty message marks the composer and focuses it', async ({ page }) => {
@@ -258,4 +268,6 @@ test('a thread the person can no longer open leaves the screen with what it show
   await expect(timeline(page)).toHaveCount(0);
   await expect(page.getByRole('listitem').filter({ hasText: 'Wie viel Rohr?' })).toHaveCount(0);
   expect(new URL(page.url()).searchParams.get('chat')).toBeNull();
+  // Its title, which can quote the first message, leaves the list too.
+  await expect(threadLink(page, 'Material für die Heizung')).toHaveCount(0);
 });

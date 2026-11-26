@@ -15,6 +15,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
+import { clearKiDrafts } from '@/lib/ai/chat-drafts';
 import {
   type PasswordWithConfirmationValues,
   translateSupabasePasswordError,
@@ -164,6 +165,7 @@ async function resetPasswordAndLeave({
 
       await clearEmailChangeChallengeQuietly();
       clearManualEntryBridge();
+      clearKiDrafts();
       await clearServiceWorkerCaches();
       await clearTodayOnDevice();
 

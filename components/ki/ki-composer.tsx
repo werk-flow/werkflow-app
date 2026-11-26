@@ -9,7 +9,7 @@ import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { readDraft, subscribeDrafts, writeDraft } from './ki-drafts';
+import { readDraft, subscribeDrafts, writeDraft } from '@/lib/ai/chat-drafts';
 
 // The composer stays mounted while the person switches threads (brief
 // non-negotiable 8); its drafts live in ki-drafts.ts.

@@ -27,6 +27,9 @@ import { listProductSources, parseProductSource } from './product-sources';
 // the amendment "the time outbox"; werk-flow/werkflow-planning#319). The check
 // loads lazily behind a gate that imports only the logging.
 //
+// The same modules call `clearKiDrafts`, so no WerkFlow KI draft of one person
+// stays in the tab for the next (werk-flow/werkflow-planning#530).
+//
 // The menu sign-out sits in a chunk every page loads at startup, so each clear
 // lives in a module that imports nothing. Importing the bridge's schemas there
 // added a startup script to every page (werk-flow/werkflow-app#232).
@@ -34,6 +37,8 @@ import { listProductSources, parseProductSource } from './product-sources';
 const CLEAR_CALL = 'clearManualEntryBridge';
 const CACHE_CLEAR_CALL = 'clearServiceWorkerCaches';
 const CLEAR_MODULE = 'lib/time-tracking/manual-entry-bridge-storage.ts';
+const DRAFT_CLEAR_CALL = 'clearKiDrafts';
+const DRAFT_CLEAR_MODULE = 'lib/ai/chat-drafts.ts';
 const TODAY_CLEAR_CALL = 'clearTodayOnDevice';
 const TODAY_CLEAR_MODULE = 'lib/field-sync/device/today-wipe.ts';
 const UNSENT_ASK_CALL = 'endSessionAfterCheck';
@@ -73,6 +78,7 @@ function signOutUse(
   clearsCaches: boolean;
   clearsToday: boolean;
   asksUnsentWork: boolean;
+  clearsDrafts: boolean;
 } {
   const source = parseProductSource(fileName, text);
   const use = {
@@ -81,6 +87,7 @@ function signOutUse(
     clearsCaches: false,
     clearsToday: false,
     asksUnsentWork: false,
+    clearsDrafts: false,
   };
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
@@ -89,6 +96,7 @@ function signOutUse(
       if (calls(node, CLEAR_CALL)) use.clears = true;
       if (calls(node, CACHE_CLEAR_CALL)) use.clearsCaches = true;
       if (calls(node, TODAY_CLEAR_CALL)) use.clearsToday = true;
+      if (calls(node, DRAFT_CLEAR_CALL)) use.clearsDrafts = true;
     }
     ts.forEachChild(node, visit);
   };
@@ -112,6 +120,7 @@ function signOutsWithoutClear(): string[] {
         ...(use.clearsCaches ? [] : [`${file}: ${CACHE_CLEAR_CALL}`]),
         ...(use.clearsToday ? [] : [`${file}: ${TODAY_CLEAR_CALL}`]),
         ...(use.asksUnsentWork ? [] : [`${file}: ${UNSENT_ASK_CALL}`]),
+        ...(use.clearsDrafts ? [] : [`${file}: ${DRAFT_CLEAR_CALL}`]),
       ];
     });
 }
@@ -144,7 +153,7 @@ describe('sign-out clears the tab state', () => {
   });
 
   test('the clears import nothing, so a sign-out adds no startup script to a page', () => {
-    for (const file of [CLEAR_MODULE, TODAY_CLEAR_MODULE]) {
+    for (const file of [CLEAR_MODULE, TODAY_CLEAR_MODULE, DRAFT_CLEAR_MODULE]) {
       const source = parseProductSource(file);
       expect(source.statements.filter(ts.isImportDeclaration), file).toEqual([]);
       expect(source.text.includes('import('), file).toBe(false);
@@ -165,13 +174,14 @@ describe('sign-out clears the tab state', () => {
         clearsCaches: false,
         clearsToday: false,
         asksUnsentWork: false,
+        clearsDrafts: false,
       });
     }
     expect(
       signOutUse(
         'components/probe.ts',
         probe(
-          "await endSessionAfterCheck(report, async () => { clearManualEntryBridge(); await clearServiceWorkerCaches(); await clearTodayOnDevice(); await supabase.auth.signOut({ scope: 'global' }); });",
+          "await endSessionAfterCheck(report, async () => { clearManualEntryBridge(); clearKiDrafts(); await clearServiceWorkerCaches(); await clearTodayOnDevice(); await supabase.auth.signOut({ scope: 'global' }); });",
         ),
       ),
     ).toEqual({
@@ -180,6 +190,7 @@ describe('sign-out clears the tab state', () => {
       clearsCaches: true,
       clearsToday: true,
       asksUnsentWork: true,
+      clearsDrafts: true,
     });
     expect(
       signOutUse('components/probe.ts', probe("await supabase.auth.signOut({ scope: 'others' });")),
@@ -189,6 +200,7 @@ describe('sign-out clears the tab state', () => {
       clearsCaches: false,
       clearsToday: false,
       asksUnsentWork: false,
+      clearsDrafts: false,
     });
   });
 });

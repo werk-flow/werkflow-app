@@ -25,6 +25,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
+import { clearKiDrafts } from '@/lib/ai/chat-drafts';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   has_memberships: 'Du kannst dein Konto nicht löschen, da du Mitglied einer Organisation bist.',
@@ -54,6 +55,8 @@ export function DeleteAccountButton() {
           }
 
           clearManualEntryBridge();
+
+          clearKiDrafts();
           await clearServiceWorkerCaches();
           await clearTodayOnDevice();
           // Sign out locally and load the login page fresh — the deleted account's
