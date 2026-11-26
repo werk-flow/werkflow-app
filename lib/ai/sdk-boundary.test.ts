@@ -51,7 +51,7 @@ test('no source file outside lib/ai/ loads the AI SDK, in any form', () => {
       '--untracked',
       '-l',
       '-E',
-      String.raw`['"\x60](ai|ai/[^'"\x60]*|@ai-sdk/[^'"\x60]*)['"\x60]`,
+      '[\'"`](ai|ai/[^\'"`]*|@ai-sdk/[^\'"`]*)[\'"`]',
       '--',
       '*.ts',
       '*.tsx',

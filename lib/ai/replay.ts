@@ -100,6 +100,8 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
         '{"type":"error","error":{"type":"rate_limit_error","details":{"error_code":"contract_spend_limit_reached"}}}',
       ),
   ],
+  // The connection broke under a successful response, before any text.
+  'verbindung-weg': [() => providerError(200, ''), answer],
   // The provider accepted the request and closed the stream before its first event.
   'nur-start': [() => [{ type: 'response-metadata', id: 'msg-replay', modelId: 'claude-haiku-5-5' }], answer],
   // Overloaded in the first step, once in the second and again: the turn's two retries are spent.

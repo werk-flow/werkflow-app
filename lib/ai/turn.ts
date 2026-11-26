@@ -96,7 +96,10 @@ const AI_TURN_FAILURE_BODY: { text: string; failure: AiTurnFailure } = { text: '
  * answer are saved. `run` writes the answer; it finishes when the client
  * leaves, so the caller keeps the invocation alive until it settles.
  */
-export async function startAiTurn(command: AiTurnCommand): Promise<AiTurnStart> {
+export async function startAiTurn(sent: AiTurnCommand): Promise<AiTurnStart> {
+  // Every key names the command and its message, so a reused command id with other text is another command.
+  const textHash = createHash('sha256').update(sent.text).digest('hex').slice(0, 16);
+  const command = { ...sent, commandId: `${sent.commandId}:${textHash}` };
   const { organizationId, userId, commandId } = command;
   if (!isAiReleasedFor(organizationId)) return { status: 'refused', refusal: 'not_released' };
   const model = resolveAiModel();
@@ -187,8 +190,8 @@ async function reserveRun(
     .single();
   if (reservation.error) {
     if (reservation.error.message === 'ai_run_closed') {
-      await finishAbandonedAnswer(admin, command);
-      return { status: 'already_done' };
+      const finished = await finishAbandonedAnswer(admin, command);
+      return finished ? { status: 'already_done' } : { status: 'refused', refusal: 'unavailable' };
     }
     logError('startAiTurn: reservation failed', reservation.error);
     return { status: 'refused', refusal: 'unavailable' };
@@ -209,20 +212,23 @@ async function reserveRun(
  * A closed command whose answer was never written, or never finished, gets a
  * failed answer that keeps what was written. A finished answer stays as it is.
  */
-async function finishAbandonedAnswer(admin: Admin, command: AiTurnCommand): Promise<void> {
+async function finishAbandonedAnswer(admin: Admin, command: AiTurnCommand): Promise<boolean> {
   const key = `${command.commandId}:assistant`;
   const item = await appendItem(admin, command, 'assistant_message', 'failed', AI_TURN_FAILURE_BODY, key);
-  if (!item) return;
+  if (!item) return false;
   const { data, error } = await admin
     .from('ai_thread_items')
     .select('status, body')
     .eq('organization_id', command.organizationId)
     .eq('id', item.id)
     .maybeSingle();
-  if (error) logError('startAiTurn: answer read failed', error);
-  if (data?.status !== 'streaming') return;
+  if (error || !data) {
+    logError('startAiTurn: answer read failed', error ?? 'no_result');
+    return false;
+  }
+  if (data.status !== 'streaming') return true;
   const body = messageBodySchema.safeParse(data.body);
-  await saveAnswer(admin, command, item.id, 'failed', {
+  return saveAnswer(admin, command, item.id, 'failed', {
     ...AI_TURN_FAILURE_BODY,
     text: body.success ? body.data.text : '',
   });
@@ -355,6 +361,8 @@ type Answer = {
   text: string;
   savedText: string;
   savedAt: number;
+  /** The partial save in flight: at most one, never awaited by the stream. */
+  saving: Promise<void> | null;
   ledgerFailed: boolean;
   retriesLeft: number;
 };
@@ -369,6 +377,7 @@ async function runTurn(context: RunContext): Promise<AiTurnEnd> {
     text: '',
     savedText: '',
     savedAt: Date.now(),
+    saving: null,
     ledgerFailed: false,
     retriesLeft: AI_TURN_LIMITS[command.entryPoint].maxRetries,
   };
@@ -381,6 +390,7 @@ async function runTurn(context: RunContext): Promise<AiTurnEnd> {
   }
   const body =
     end.status === 'complete' ? { text: answer.text } : { text: answer.text, failure: end.failure };
+  await answer.saving;
   if (!(await saveAnswer(admin, command, assistantItem.id, end.status, body))) {
     end = failedEnd('failed', 'interrupted');
   }
@@ -533,6 +543,8 @@ async function runAttempt(
   step: { messages: ModelMessage[]; turnSignal: AbortSignal },
 ): Promise<AttemptResult> {
   const limits = AI_TURN_LIMITS[context.command.entryPoint];
+  // Stopping early also stops the provider's request, so it generates nothing more.
+  const attemptAbort = new AbortController();
   const result = streamText({
     model: context.model,
     instructions: AI_SYSTEM_PROMPT,
@@ -540,7 +552,7 @@ async function runAttempt(
     maxOutputTokens: limits.maxOutputTokens,
     // The harness retries, so it can ledger each attempt and never retry a spend limit.
     maxRetries: 0,
-    abortSignal: step.turnSignal,
+    abortSignal: AbortSignal.any([step.turnSignal, attemptAbort.signal]),
     timeout: { stepMs: limits.stepTimeoutMs, chunkMs: limits.chunkTimeoutMs },
     providerOptions: { anthropic: { thinking: { type: 'adaptive' }, effort: limits.effort } },
     telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
@@ -551,7 +563,10 @@ async function runAttempt(
   let finishReason = 'other';
   // Whether the provider began generating: from then on the attempt is billed.
   let started = false;
-  const fail = (error: unknown): AttemptResult => ({ ok: false, error, usage, started });
+  const fail = (error: unknown): AttemptResult => {
+    attemptAbort.abort();
+    return { ok: false, error, usage, started };
+  };
   try {
     for await (const part of result.fullStream) {
       if (part.type === 'text-delta') {
@@ -561,7 +576,7 @@ async function runAttempt(
           return fail(new TurnStop('answer_too_long'));
         answer.text += part.text;
         context.sink.text(part.text);
-        await savePartial(context, answer);
+        savePartial(context, answer);
       } else if (part.type === 'start-step') {
         // The provider accepted the request: from here on it bills the prompt.
         started = true;
@@ -589,20 +604,25 @@ async function runAttempt(
 }
 
 /** Saves the partial answer at most every PARTIAL_SAVE_INTERVAL_MS, so a reload or a second device shows it. */
-async function savePartial(context: RunContext, answer: Answer): Promise<void> {
+function savePartial(context: RunContext, answer: Answer): void {
   const now = Date.now();
-  if (now - answer.savedAt < PARTIAL_SAVE_INTERVAL_MS || answer.text === answer.savedText) return;
+  if (answer.saving || now - answer.savedAt < PARTIAL_SAVE_INTERVAL_MS || answer.text === answer.savedText)
+    return;
   answer.savedAt = now;
   answer.savedText = answer.text;
-  const { error } = await context.admin.rpc('update_ai_thread_item', {
-    p_organization_id: context.command.organizationId,
-    p_user_id: context.command.userId,
-    p_item_id: context.assistantItem.id,
-    p_status: 'streaming',
-    p_body: { text: answer.text },
-  });
-  // A missed partial save costs only freshness; the final save follows.
-  if (error) logError('aiTurn: partial save failed', error);
+  // The model's stream never waits for the database; the final save waits for this one.
+  answer.saving = (async () => {
+    const { error } = await context.admin.rpc('update_ai_thread_item', {
+      p_organization_id: context.command.organizationId,
+      p_user_id: context.command.userId,
+      p_item_id: context.assistantItem.id,
+      p_status: 'streaming',
+      p_body: { text: answer.savedText },
+    });
+    // A missed partial save costs only freshness; the final save follows.
+    if (error) logError('aiTurn: partial save failed', error);
+    answer.saving = null;
+  })();
 }
 
 type StreamUsage = {
@@ -722,8 +742,10 @@ function classifyFailure(error: unknown): { failure: AiTurnFailure; retryable: b
   const failure = providerFailure(error);
   if (!failure) return { failure: 'provider_unavailable', retryable: false, outcome: 'provider_error' };
   const { status, body } = failure;
-  if (status === undefined)
+  // No status, or a success status whose stream then broke: the connection failed, not the request.
+  if (status === undefined || status < 400) {
     return { failure: 'provider_unavailable', retryable: true, outcome: 'provider_error' };
+  }
   const spendLimit = spendLimitSchema.safeParse(body);
   if (status === 402 || (status === 429 && spendLimit.success && SPEND_LIMIT_CODES.has(spendLimit.data))) {
     return { failure: 'provider_refused', retryable: false, outcome: 'spend_limit' };

@@ -2,6 +2,7 @@
 // harness (check 4 and B13-B15, B21 of werk-flow/werkflow-planning#20). Each
 // block states one invariant; a failing assert names it.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { AI_TURN_LIMITS } from '@/lib/ai/limits';
 import { ORGANIZATION_B, signInAs, tableRows } from './action-boundary-world';
 import {
@@ -90,7 +91,8 @@ const runStatus = () => rows('ai_runs').map((row) => row.status);
     organization_id: world.memberships[0]?.orgId,
     thread_id: THREAD_ID,
     user_id: world.callerId,
-    idempotency_key: commandId,
+    // The harness keys a command by its id and its message.
+    idempotency_key: `${commandId}:${createHash('sha256').update('Wie lege ich einen Auftrag an?').digest('hex').slice(0, 16)}`,
     reserved_micro_usd: 1,
     status: 'reserved',
     created_at: new Date().toISOString(),
@@ -149,6 +151,25 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
     attempts().map((row) => row.p_outcome),
     ['provider_error', 'completed'],
   );
+}
+
+// A connection lost under a successful response before any text is retried (sol-loop S16).
+{
+  resetAiTables(world);
+  const events = await readTurn(world, await postTurn('[replay:verbindung-weg] Hallo'));
+  assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
+  assert.equal(attempts().length, 2);
+}
+
+// A command id sent again with another message is another command: the model answers the saved message (sol-loop S17).
+{
+  resetAiTables(world, { monthly_budget_micro_eur: 1 });
+  const commandId = crypto.randomUUID();
+  assert.equal((await postTurn('Erste Frage', { commandId })).status, 429);
+  resetAiTables(world);
+  const events = await readTurn(world, await postTurn('[replay:echo] Zweite Frage', { commandId }));
+  const streamed = events.flatMap((event) => (event.type === 'text' ? [event.delta] : [])).join('');
+  assert.equal(streamed, 'Du hast geschrieben: Zweite Frage');
 }
 
 // A stream the provider closed before its first event is retried, and the accepted attempt is charged (B15).
@@ -240,6 +261,12 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
       ? { data: null, error: { message: 'connection failure' } }
       : answerOf(call);
   assert.equal((await postTurn('Hallo', { commandId })).status, 503);
+  // While the failed answer cannot be written either, the retry is no success.
+  assert.equal(
+    (await postTurn('Hallo', { commandId })).status,
+    503,
+    'an unrecovered command must not be done',
+  );
   world.rpc = answerOf;
   assert.deepEqual(await (await postTurn('Hallo', { commandId })).json(), { status: 'already_done' });
   assert.deepEqual(answerItem()?.body, { text: '', failure: 'interrupted' });
