@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, Save } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type SetStateAction } from 'react';
 
 import { move } from '@/components/arbeitsvorlagen/work-template-editor-shared';
 import { InvoiceTotals } from '@/components/rechnungen/invoice-totals';
@@ -49,16 +49,19 @@ type Draft = {
   sections: SectionForm[];
   /** The content version the text was filled from; the save names it. */
   baseVersion: number;
+  /** The version this tab's last save stored: its render is no other session's change. */
+  savedVersion: number;
   /** Typed since the last load, or not yet saved. */
   edited: boolean;
   /** One per change: only a repeat of the same press answers with the first save. */
   attemptKey: string;
 };
 
-function contentDraftOf(offer: OfferDetail): Draft {
+function contentDraftOf(offer: OfferDetail, keyPrefix?: string): Draft {
   return {
-    sections: contentFormOf(offer.sections),
+    sections: contentFormOf(offer.sections, keyPrefix),
     baseVersion: offer.contentVersion,
+    savedVersion: offer.contentVersion,
     edited: false,
     attemptKey: crypto.randomUUID(),
   };
@@ -75,13 +78,29 @@ function useContentDraft(offer: OfferDetail, saving: boolean) {
   const [draft, setDraft] = useState(() => contentDraftOf(offer));
   const newer = offer.contentVersion > draft.baseVersion;
   if (newer && !draft.edited) setDraft(contentDraftOf(offer));
+  // Text changed after the own save started, such as an article whose price arrived, stays on its version.
+  else if (newer && offer.contentVersion === draft.savedVersion)
+    setDraft({ ...draft, baseVersion: draft.savedVersion });
   return {
     draft,
     newerElsewhere: newer && draft.edited && !saving,
-    edit: (sections: SectionForm[]) =>
-      setDraft({ ...draft, sections, edited: true, attemptKey: crypto.randomUUID() }),
-    saved: () => setDraft({ ...draft, edited: false, attemptKey: crypto.randomUUID() }),
-    reload: () => setDraft(contentDraftOf(offer)),
+    /** An update of the current text: an article's price arrives after other edits may have landed. */
+    edit: (next: SetStateAction<SectionForm[]>) =>
+      setDraft((current) => ({
+        ...current,
+        sections: typeof next === 'function' ? next(current.sections) : next,
+        edited: true,
+        attemptKey: crypto.randomUUID(),
+      })),
+    /** The save under `attemptKey` was stored as `contentVersion`; text changed since stays edited. */
+    saved: (attemptKey: string, contentVersion: number) =>
+      setDraft((current) => ({
+        ...current,
+        savedVersion: contentVersion,
+        ...(current.attemptKey === attemptKey ? { edited: false, attemptKey: crypto.randomUUID() } : {}),
+      })),
+    // New keys: an article pick still pending targets a Titel of the discarded text, which no longer exists.
+    reload: () => setDraft(contentDraftOf(offer, `reload-${crypto.randomUUID()}`)),
   };
 }
 
@@ -145,7 +164,7 @@ export function OfferContentEditor({ offer }: { offer: OfferDetail }) {
         setError(failureSentence(result?.error ?? null, draft.edited));
         return;
       }
-      saved();
+      saved(draft.attemptKey, result.contentVersion);
       setAttempted(false);
       // A retry after a lost answer can name a version the page already shows or has passed.
       const confirmed = result.contentVersion <= offer.contentVersion || (await settle.confirmChange(since));
@@ -222,7 +241,7 @@ function OfferSectionList({
 }: {
   sections: SectionForm[];
   amounts: OfferAmounts | null;
-  onChange: (sections: SectionForm[]) => void;
+  onChange: (sections: SetStateAction<SectionForm[]>) => void;
   newKey: () => string;
   errors: Record<string, string | undefined>;
   disabled: boolean;
@@ -247,6 +266,15 @@ function OfferSectionList({
               onChange={(next) => onChange(sections.map((current, at) => (at === index ? next : current)))}
               onMove={(direction) => onChange(move(sections, index, direction))}
               onRemove={() => onChange(sections.filter((_section, at) => at !== index))}
+              onAddArticle={(position) =>
+                onChange((current) =>
+                  current.map((entry) =>
+                    entry.key === section.key
+                      ? { ...entry, positions: [...entry.positions, position] }
+                      : entry,
+                  ),
+                )
+              }
               newKey={newKey}
               errors={errors}
               disabled={disabled}

@@ -1,3 +1,4 @@
+import type { InvoiceLineSource } from '@/lib/invoices/line-sources';
 import type { InvoiceLineValues } from '@/lib/invoices/types';
 import { z } from '@/lib/zod';
 
@@ -5,7 +6,8 @@ import { z } from '@/lib/zod';
 // responsible member, and its content of Titel with Positionen
 // (supabase/migrations/20261210130000_keep_offers_for_the_right_customer_and_recipient.sql,
 // its header changes in 20261230110000_change_the_header_of_a_draft_offer.sql,
-// its content in 20270201090000_write_titel_and_positionen_into_an_offer.sql).
+// its content in 20270201090000_write_titel_and_positionen_into_an_offer.sql,
+// a Position's article in 20270301090000_take_offer_positions_from_articles.sql).
 
 /** Every status the database check allows; this release writes only `entwurf`. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;
@@ -39,17 +41,27 @@ export type OfferListEntry = {
 
 type OfferParty = { id: string; name: string };
 
+/** The article a Position was taken from, as a save names it. */
+type OfferArticleRef = { kind: 'article'; id: string };
+
 /**
- * A Position typed by hand: Bezeichnung, Beschreibung, quantity in a unit of
- * the inventory list, a net price per price quantity and a VAT rate, the
- * fields of a priced invoice line.
+ * A priced Position: Bezeichnung, Beschreibung, quantity in a unit of the
+ * inventory list, a net price per price quantity and a VAT rate, the fields
+ * of a priced invoice line. Typed by hand, or taken from an article
+ * (`source`), whose values it keeps as its own.
  */
-export type OfferFreePosition = { kind: 'free' } & InvoiceLineValues;
+export type OfferFreePosition = { kind: 'free' } & InvoiceLineValues & { source: OfferArticleRef | null };
 /** A text line: a note between the positions, without an amount. */
 type OfferTextPosition = { kind: 'text'; name: string; description: string };
 export type OfferPosition = OfferFreePosition | OfferTextPosition;
 /** A Titel: a named section of the offer with its positions in order. */
 export type OfferSection = { title: string; positions: OfferPosition[] };
+
+/** As stored: a Position's article with its number, name and whether it is archived now. */
+type OfferStoredPosition =
+  | OfferTextPosition
+  | (Omit<OfferFreePosition, 'source'> & { source: (InvoiceLineSource & OfferArticleRef) | null });
+export type OfferStoredSection = { title: string; positions: OfferStoredPosition[] };
 
 export type OfferDetail = {
   id: string;
@@ -70,5 +82,5 @@ export type OfferDetail = {
   recipient: OfferParty & { address: string | null; isDefault: boolean };
   owner: { userId: string; name: string } | null;
   work: { kind: OfferWorkKind; id: string; label: string } | null;
-  sections: OfferSection[];
+  sections: OfferStoredSection[];
 };
