@@ -102,10 +102,10 @@ export type WatchState = {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+const stringField = (value: unknown): string => (typeof value === 'string' ? value : '');
 const optionalText = (value: unknown): { value?: string } => (typeof value === 'string' ? { value } : {});
 
-function counted(value: unknown): CountState {
+function countState(value: unknown): CountState {
   const record = isRecord(value) ? value : {};
   const state: CountState = {};
   for (const key of ['until', 'reportedAt', 'openSeen'] as const) {
@@ -116,14 +116,14 @@ function counted(value: unknown): CountState {
 }
 
 /** The state a pass saved, or a fresh one for no file or an unreadable one. */
-export function readState(saved: unknown): WatchState {
+export function readWatchState(saved: unknown): WatchState {
   const record = isRecord(saved) ? saved : {};
   const state: WatchState = {
     failures: typeof record.failures === 'number' ? record.failures : 0,
     watcherReported: record.watcherReported === true,
     reported: Array.isArray(record.reported) ? record.reported.filter((uid) => typeof uid === 'string') : [],
-    errors: counted(record.errors),
-    handled: counted(record.handled),
+    errors: countState(record.errors),
+    handled: countState(record.handled),
   };
   const since = optionalText(record.mismatchSince);
   if (since.value !== undefined) state.mismatchSince = since.value;
@@ -162,10 +162,10 @@ async function deployments(io: WatchIo, now: number, lookback = LOOKBACK): Promi
       const meta = isRecord(item.meta) ? item.meta : {};
       found.push({
         uid: item.uid,
-        state: text(item.state) || text(item.readyState),
+        state: stringField(item.state) || stringField(item.readyState),
         created: item.created,
-        sha: text(meta.githubCommitSha),
-        inspector: text(item.inspectorUrl),
+        sha: stringField(meta.githubCommitSha),
+        inspector: stringField(item.inspectorUrl),
       });
     }
     const next = isRecord(page.pagination) ? page.pagination.next : undefined;
@@ -177,12 +177,12 @@ async function deployments(io: WatchIo, now: number, lookback = LOOKBACK): Promi
 /** errorCode and errorStep of a failed deployment; its errorMessage is free text and stays unread. */
 async function failureDetail(io: WatchIo, uid: string): Promise<[string, string]> {
   const item = objectOf(await io.vercel(`/v13/deployments/${uid}?teamId=${TEAM}`), '/v13/deployments');
-  return [text(item.errorCode), text(item.errorStep)];
+  return [stringField(item.errorCode), stringField(item.errorStep)];
 }
 
 async function servedUid(io: WatchIo): Promise<string> {
   const alias = objectOf(await io.vercel(`/v4/aliases/${DOMAIN}?teamId=${TEAM}`), '/v4/aliases');
-  return text(alias.deploymentId);
+  return stringField(alias.deploymentId);
 }
 
 /** The deployment the domain serves and its SHA. */
@@ -191,7 +191,7 @@ async function served(io: WatchIo, listed: readonly Deployment[]): Promise<[stri
   const match = listed.find((deployment) => deployment.uid === uid);
   if (match) return [uid, match.sha];
   const item = objectOf(await io.vercel(`/v13/deployments/${uid}?teamId=${TEAM}`), '/v13/deployments');
-  return [uid, text(isRecord(item.meta) ? item.meta.githubCommitSha : undefined)];
+  return [uid, stringField(isRecord(item.meta) ? item.meta.githubCommitSha : undefined)];
 }
 
 type DeployFinding = { kind: 'failed' | 'stuck'; deployment: Deployment };
@@ -310,9 +310,13 @@ async function counts(
     const item = objectOf(entry, call);
     const dimensions: Record<string, string> = {};
     for (const [key, value] of Object.entries(isRecord(item.dimensions) ? item.dimensions : {}))
-      if (allowed.has(key)) dimensions[key] = typeof value === 'number' ? String(value) : text(value);
+      if (allowed.has(key)) dimensions[key] = typeof value === 'number' ? String(value) : stringField(value);
     const value = objectOf(item.values, call).value;
-    return { dimensions, count: typeof value === 'number' ? value : 0, timestamp: text(item.timestamp) };
+    return {
+      dimensions,
+      count: typeof value === 'number' ? value : 0,
+      timestamp: stringField(item.timestamp),
+    };
   };
   const series = listOf(answer.series ?? [], call).map((entry) => {
     const { timestamp, ...rest } = point(entry);

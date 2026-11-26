@@ -6,7 +6,7 @@ import {
   DEPLOY,
   ERRORS,
   HANDLED,
-  readState,
+  readWatchState,
   SERVER_ERRORS,
   type Title,
   WATCHER,
@@ -130,7 +130,7 @@ class FakeProduction implements WatchIo {
 
 function setup() {
   const fake = new FakeProduction();
-  const state: WatchState = readState(undefined);
+  const state: WatchState = readWatchState(undefined);
   const check = async (now = NOW) => (await watch(fake, state, now)).notes;
   const sent = (title?: Title, action?: 'keep' | 'close') =>
     fake.sent.filter(
@@ -493,14 +493,14 @@ test('an alert whose write failed is written by the next pass, and the failure c
 });
 
 test('a lost or unreadable state starts fresh, and a saved one carries over', async () => {
-  expect(readState('not json')).toEqual({
+  expect(readWatchState('not json')).toEqual({
     failures: 0,
     watcherReported: false,
     reported: [],
     errors: {},
     handled: {},
   });
-  expect(readState({ failures: 'two', reported: [1, 'dpl_a'], errors: { until: 3 } })).toEqual({
+  expect(readWatchState({ failures: 'two', reported: [1, 'dpl_a'], errors: { until: 3 } })).toEqual({
     failures: 0,
     watcherReported: false,
     reported: ['dpl_a'],
@@ -512,10 +512,10 @@ test('a lost or unreadable state starts fresh, and a saved one carries over', as
   await check();
   fake.open.add(ERRORS);
   // The next run reads the state from the cache as JSON.
-  const carried = readState(JSON.parse(JSON.stringify(state)));
+  const carried = readWatchState(JSON.parse(JSON.stringify(state)));
   await watch(fake, carried, NOW + 40 * MINUTE);
   expect(sent(ERRORS, 'keep')).toHaveLength(1);
   // A fresh state reports the open incident once more: a repeated comment.
-  await watch(fake, readState(undefined), NOW + 40 * MINUTE);
+  await watch(fake, readWatchState(undefined), NOW + 40 * MINUTE);
   expect(sent(ERRORS, 'keep')).toHaveLength(2);
 });

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { liveIo, runProgram } from '../lib/production-watch/live-io';
-import { readState, watch } from '../lib/production-watch/watch';
+import { readWatchState, watch } from '../lib/production-watch/watch';
 
 /**
  * `bun scripts/prod-watch.ts <state file>`: one pass of the production watcher
@@ -25,7 +25,7 @@ async function main(): Promise<number> {
       console.log('production: the saved state is unreadable; this pass starts fresh');
     }
   }
-  const state = readState(saved);
+  const state = readWatchState(saved);
   const { notes, failed } = await watch(liveIo(process.env, fetch, runProgram), state, Date.now());
   for (const note of notes) console.log(note);
   try {
