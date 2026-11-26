@@ -12,7 +12,12 @@ const launch = (args: readonly string[], given: Partial<Parameters<typeof devMcp
 test('the server starts on DEV in read-only mode, with the token only in its environment', () => {
   const started = launch([`--project-ref=${refs.dev}`]);
   if ('refusal' in started) throw new Error(started.refusal);
-  expect(started.args).toEqual(['/pinned/cli.js', `--project-ref=${refs.dev}`, '--read-only']);
+  expect(started.args).toEqual([
+    '--no-env-file',
+    '/pinned/cli.js',
+    `--project-ref=${refs.dev}`,
+    '--read-only',
+  ]);
   expect(started.args.join(' ')).not.toContain(token);
   expect(started.env).toEqual({ PATH: '/bin', SUPABASE_ACCESS_TOKEN: token });
 });

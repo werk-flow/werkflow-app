@@ -20,8 +20,8 @@ function bearer(): string {
 }
 
 /** A GET below DEV's project, such as `config/auth`; any status but 200 throws. */
-export async function readDevProject(path: string, request: typeof fetch = fetch): Promise<unknown> {
-  const response = await request(`${DEV_API}/${path}`, {
+export async function readDevProject(path: string): Promise<unknown> {
+  const response = await fetch(`${DEV_API}/${path}`, {
     headers: { Authorization: bearer() },
     signal: AbortSignal.timeout(TIMEOUT_MS),
     redirect: 'error',

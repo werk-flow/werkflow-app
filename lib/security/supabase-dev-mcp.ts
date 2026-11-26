@@ -11,13 +11,35 @@ export type DevMcpLaunch =
   | { refusal: string }
   | { args: readonly string[]; env: Readonly<Record<string, string | undefined>> };
 
+/**
+ * The only variables the server inherits: what it needs to run and reach the Management API
+ * through a proxy or a private CA. Nothing else, so neither another credential nor a Bun setting
+ * that logs request headers (`BUN_CONFIG_VERBOSE_FETCH`) reaches it.
+ */
+const INHERITED = [
+  'PATH',
+  'HOME',
+  'TMPDIR',
+  'LANG',
+  'TZ',
+  'HTTPS_PROXY',
+  'https_proxy',
+  'HTTP_PROXY',
+  'http_proxy',
+  'NO_PROXY',
+  'no_proxy',
+  'NODE_EXTRA_CA_CERTS',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+] as const;
+
 const USAGE = 'Start it as `bun scripts/mcp/supabase-dev.ts --project-ref=<DEV ref>`';
 
 /**
- * The server's arguments and environment for one start. It refuses without both refs from the
- * environments doc, an argument list other than DEV's ref, PROD's ref, or the agent token.
- * `SUPABASE_ACCESS_TOKEN` from the agent's environment never reaches the server: the key file's
- * token replaces it.
+ * Bun's arguments and the server's environment for one start. It refuses without both refs from
+ * the environments doc, an argument list other than DEV's ref, PROD's ref, or the agent token.
+ * Bun loads no `.env` file from the working directory, and the server gets only INHERITED and the
+ * key file's token, never the agent's `SUPABASE_ACCESS_TOKEN`.
  */
 export function devMcpLaunch(input: {
   args: readonly string[];
@@ -38,8 +60,9 @@ export function devMcpLaunch(input: {
       refusal:
         'SUPABASE_DEV_ACCESS_TOKEN is missing from the agent key file or out of its shape. Run `bun run agent-access:check`.',
     };
+  const inherited = INHERITED.flatMap((name) => (env[name] === undefined ? [] : [[name, env[name]]]));
   return {
-    args: [serverEntry, `--project-ref=${refs.dev}`, '--read-only'],
-    env: { ...env, SUPABASE_ACCESS_TOKEN: token },
+    args: ['--no-env-file', serverEntry, `--project-ref=${refs.dev}`, '--read-only'],
+    env: { ...Object.fromEntries(inherited), SUPABASE_ACCESS_TOKEN: token },
   };
 }
