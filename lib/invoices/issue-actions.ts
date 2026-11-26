@@ -76,10 +76,7 @@ export async function issueInvoice(rawInput: IssueInvoiceInput): Promise<IssueIn
     const invoice = await readIssuedInvoice(context.orgId, input.invoiceId);
     if (!invoice) return { success: false, error: 'invoice_not_found' };
     // Issued already: the function answers a retry of the same press with its first issue, else refuses.
-    if (invoice.issue) {
-      const { snapshot, invoiceNumber, issueDate } = invoice.issue;
-      return await issueChecked(admin, context, input, snapshot, { number: invoiceNumber, issueDate }, null);
-    }
+    if (invoice.issue) return await replayIssue(admin, context, input, invoice.issue);
     if (invoice.status !== 'entwurf') return { success: false, error: 'invoice_not_draft' };
     if (invoice.version !== input.expectedVersion) return { success: false, error: 'stale_version' };
 
@@ -87,13 +84,35 @@ export async function issueInvoice(rawInput: IssueInvoiceInput): Promise<IssueIn
     if (missing.length > 0) return { success: false, error: 'invoice_check_failed', findings: missing };
     const snapshot = await readIssueSnapshot(admin, context, invoice);
     if (!snapshot) return { success: false, error: 'load_failed' };
-    return await issueUnderCheckedNumber(context.orgId, invoice, snapshot, (next, stored) =>
+    const result = await issueUnderCheckedNumber(context.orgId, invoice, snapshot, (next, stored) =>
       issueChecked(admin, context, input, snapshot, next, stored),
     );
+    if (result.success || result.error !== 'invoice_numbers_exhausted') return result;
+    // A retry that read the draft just before its first press took the series' last number reads the
+    // series used up: that press's issue answers it.
+    const issued = await readIssuedInvoice(context.orgId, input.invoiceId);
+    return issued?.issue ? await replayIssue(admin, context, input, issued.issue) : result;
   } catch (error) {
     logError('issueInvoice: unexpected error', error);
     return { success: false, error: 'unexpected_error' };
   }
+}
+
+/** Calls issue_invoice with an issued invoice's own number and date: a retry of the same press gets its answer. */
+function replayIssue(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  context: { userId: string; orgId: string },
+  input: { invoiceId: string; expectedVersion: number; attemptKey: string },
+  issue: { snapshot: IssueSnapshot; invoiceNumber: string; issueDate: string },
+): Promise<IssueInvoiceResult> {
+  return issueChecked(
+    admin,
+    context,
+    input,
+    issue.snapshot,
+    { number: issue.invoiceNumber, issueDate: issue.issueDate },
+    null,
+  );
 }
 
 /**

@@ -62,7 +62,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ invoic
             <div className="space-y-8">
               {invoice.status !== 'entwurf' && <IssuedInvoiceOriginal invoice={invoice} />}
               <InvoiceFacts invoice={invoice} />
-              <InvoiceEditor key={invoice.id} invoice={invoice} />
+              <InvoiceEditor invoice={invoice} />
             </div>
           </PageBody>
         </>

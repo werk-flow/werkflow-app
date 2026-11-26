@@ -82,6 +82,8 @@ declare global {
       | 'inventory-movements'
       | 'leistungen'
       | 'offers'
+      | 'invoice-editor'
+      | 'invoice-settings'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName

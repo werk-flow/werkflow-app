@@ -276,20 +276,21 @@ function useSettingsSave(settings: InvoiceSettings, organizationId: string) {
   };
 }
 
+type SettingsFormProps = { organizationId: string; settings: InvoiceSettings; canEdit: boolean };
+
 /**
  * Einstellungen → Rechnungen: the number series (fixed from the first issued
  * invoice on) and the Zahlungsziel and Skonto a new draft starts with.
- * Admin changes them; Büro reads them.
+ * Admin changes them; Büro reads them. A new version, organization or Berlin
+ * year mounts a new form: its text and the year the save sends are always read
+ * together, so a series read before New Year's midnight never saves after it.
  */
-export function InvoiceSettingsForm({
-  organizationId,
-  settings,
-  canEdit,
-}: {
-  organizationId: string;
-  settings: InvoiceSettings;
-  canEdit: boolean;
-}) {
+export function InvoiceSettingsForm(props: SettingsFormProps) {
+  const { organizationId, settings } = props;
+  return <SettingsForm key={`${organizationId}:${settings.version}:${settings.numberYear}`} {...props} />;
+}
+
+function SettingsForm({ organizationId, settings, canEdit }: SettingsFormProps) {
   const { form, update, errors, failure, isPending, submit } = useSettingsSave(settings, organizationId);
   const disabled = !canEdit || isPending;
   return (

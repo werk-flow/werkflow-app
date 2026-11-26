@@ -263,7 +263,8 @@ world.tables.company_document_profiles = [
   }),
 ];
 
-// A used-up series advertises no number: the issue stops before the rules and reaches no issue_invoice.
+// A used-up series advertises no number: the issue stops before the rules and reaches no issue_invoice. It reads
+// the invoice once more, in case a first press of the same issue took the last number (below), and finds a draft.
 world.rpc = ({ name, args }) => {
   if (name === 'get_invoice_with_line_sources') return { data: draft, error: null };
   if (name === 'get_invoice_settings') {
@@ -275,7 +276,7 @@ world.rpcCalls.length = 0;
 assert.deepEqual(await issueInvoice(issueInput), { success: false, error: 'invoice_numbers_exhausted' });
 assert.deepEqual(
   world.rpcCalls.map((call) => call.name),
-  ['get_invoice_with_line_sources', 'get_invoice_settings'],
+  ['get_invoice_with_line_sources', 'get_invoice_settings', 'get_invoice_with_line_sources'],
   'a used-up series reached the issue',
 );
 
@@ -406,6 +407,34 @@ assert.deepEqual(await issueInvoice(issueInput), {
 assert.equal(world.rpcCalls[1]?.name, 'issue_invoice');
 assert.equal(world.rpcCalls[1]?.args.p_expected_number, 'RE-2037-003');
 assert.equal(stored.length, 0);
+
+// A retry that read the draft just before its first press took the series' last number reads the series used
+// up; it reads the invoice again and gets the first press's answer, not a refusal.
+const answerIssued = world.rpc;
+let invoiceReads = 0;
+world.rpc = (call) => {
+  if (call.name === 'get_invoice_with_line_sources') {
+    invoiceReads += 1;
+    return { data: invoiceReads === 1 ? draft : issued, error: null };
+  }
+  if (call.name === 'get_invoice_settings') {
+    return { data: { ...settingsOf(call.args.p_organization_id), nextInvoiceNumber: null }, error: null };
+  }
+  return answerIssued(call);
+};
+world.rpcCalls.length = 0;
+assert.deepEqual(await issueInvoice(issueInput), {
+  success: true,
+  invoiceNumber: 'RE-2037-003',
+  originalFiled: true,
+});
+assert.deepEqual(
+  world.rpcCalls.map((call) => call.name),
+  ['get_invoice_with_line_sources', 'get_invoice_settings', 'get_invoice_with_line_sources', 'issue_invoice'],
+);
+assert.equal(world.rpcCalls[3]?.args.p_expected_number, 'RE-2037-003');
+assert.equal(stored.length, 0);
+world.rpc = answerIssued;
 
 // With the storage down the draft is issued with its original pending, and the call names no original.
 const issuedOriginal = first.body;

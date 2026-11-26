@@ -2,7 +2,7 @@
 
 import { Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
@@ -55,9 +55,15 @@ function liveAmounts(form: DraftForm): DraftAmounts | null {
  * the server computes and stores the amounts again. Another session's save
  * shows here at once while nothing is typed; with own changes it asks for a
  * reload, and a save from the older version is refused. An issued invoice
- * shows the same fields, none of them editable.
+ * shows the same fields, none of them editable. A change of status mounts a
+ * new editor: an answer the draft's editor still waits for, such as a catalog
+ * line, lands on nothing.
  */
 export function InvoiceEditor({ invoice }: { invoice: InvoiceDetail }) {
+  return <InvoiceEditorForm key={`${invoice.id}:${invoice.status}`} invoice={invoice} />;
+}
+
+function InvoiceEditorForm({ invoice }: { invoice: InvoiceDetail }) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const draft = useDraftState(invoice);
@@ -195,15 +201,8 @@ function useDraftState(invoice: InvoiceDetail) {
   const [attemptKey, setAttemptKey] = useState(() => crypto.randomUUID());
   // Counts the changes, so a save marks saved only the text it sent: a catalog line that lands meanwhile stays unsaved.
   const revision = useRef(0);
-  // Once issued, the text takes no change: a catalog read that answers after the issue adds nothing.
-  const issued = useRef(invoice.status !== 'entwurf');
-  useEffect(() => {
-    issued.current = invoice.status !== 'entwurf';
-  }, [invoice.status]);
   const newer = invoice.version > baseVersion;
-  // An issue elsewhere replaces own changes too: an issued invoice shows only what it says.
-  const issuedElsewhere = newer && invoice.status !== 'entwurf';
-  if ((newer && !dirty) || issuedElsewhere) {
+  if (newer && !dirty) {
     setFormState(draftFormOf(invoice));
     setBaseVersion(invoice.version);
     setDirty(false);
@@ -216,7 +215,6 @@ function useDraftState(invoice: InvoiceDetail) {
     newerElsewhere: newer && dirty,
     /** An update from an answer that arrives later takes the current text, so edits made meanwhile stay. */
     setForm: (next: DraftForm | ((current: DraftForm) => DraftForm)) => {
-      if (issued.current) return;
       revision.current += 1;
       setFormState(next);
       setDirty(true);
