@@ -93,6 +93,27 @@ const TRANSCRIPTS: Readonly<Record<string, readonly ReplayAttempt[]>> = {
         '{"type":"error","error":{"type":"rate_limit_error","details":{"error_code":"enforced_spend_limit_reached"}}}',
       ),
   ],
+  vertragslimit: [
+    () =>
+      providerError(
+        429,
+        '{"type":"error","error":{"type":"rate_limit_error","details":{"error_code":"contract_spend_limit_reached"}}}',
+      ),
+  ],
+  // The provider accepted the request and closed the stream before its first event.
+  'nur-start': [() => [{ type: 'response-metadata', id: 'msg-replay', modelId: 'claude-haiku-5-5' }], answer],
+  // Overloaded in the first step, once in the second and again: the turn's two retries are spent.
+  'mehrfach-ueberlastet': [
+    () => [overloadedInStream],
+    () => [toolCall('auftrag_lesen', { auftrag: 'A-1001' }), finish('tool-calls', 1100, 30)],
+    () => [overloadedInStream],
+  ],
+  // A provider error event whose code quotes the user's message: it must never reach a log (B17).
+  'echo-code': [
+    (userText) => [
+      { type: 'error', error: { type: 'api_error', code: userText, statusCode: 500, isRetryable: true } },
+    ],
+  ],
   'guthaben-leer': [
     () =>
       providerError(

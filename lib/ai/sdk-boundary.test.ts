@@ -1,26 +1,55 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import ts from 'typescript';
 import { repositoryRoot } from '../conventions/product-sources';
 
 // Tier 2 beside the ESLint ban (B2): the AI SDK is reached only from lib/ai/,
 // in every source file of the repository and every import form: a static or
-// type import, a re-export, a dynamic import and a require.
-const SDK_SPECIFIER = String.raw`(ai|ai/[^'"\x60]*|@ai-sdk/[^'"\x60]*)`;
-const SDK_IMPORT = new RegExp(
-  String.raw`(\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)['"\x60]${SDK_SPECIFIER}['"\x60]`,
-  'm',
-);
+// type import, a re-export, an import type, a dynamic import and a require,
+// each also spread over several lines.
+const SDK_SPECIFIER = /^(ai|ai\/.*|@ai-sdk\/.*)$/;
 
-function sdkImportLines(text: string): number[] {
-  return text.split('\n').flatMap((line, index) => (SDK_IMPORT.test(line) ? [index + 1] : []));
+function specifierOf(node: ts.Node): ts.Expression | ts.TypeNode | undefined {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
+  if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+    return node.moduleReference.expression;
+  }
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) return node.argument.literal;
+  if (!ts.isCallExpression(node)) return undefined;
+  const callee = node.expression;
+  const isLoader =
+    callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === 'require');
+  return isLoader ? node.arguments[0] : undefined;
 }
 
-test('no source file outside lib/ai/ imports the AI SDK, in any form', () => {
+/** The lines that load the AI SDK in one source text. */
+function sdkImportLines(fileName: string, text: string): number[] {
+  const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true);
+  const lines: number[] = [];
+  const visit = (node: ts.Node): void => {
+    const specifier = specifierOf(node);
+    if (
+      specifier &&
+      (ts.isStringLiteral(specifier) || ts.isNoSubstitutionTemplateLiteral(specifier)) &&
+      SDK_SPECIFIER.test(specifier.text)
+    ) {
+      lines.push(source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return lines;
+}
+
+test('no source file outside lib/ai/ loads the AI SDK, in any form', () => {
+  // Every file that names an SDK specifier in quotes at all; the parser then decides.
   const search = Bun.spawnSync(
     [
       'git',
       'grep',
       '--untracked',
-      '-n',
+      '-l',
       '-E',
       String.raw`['"\x60](ai|ai/[^'"\x60]*|@ai-sdk/[^'"\x60]*)['"\x60]`,
       '--',
@@ -41,14 +70,14 @@ test('no source file outside lib/ai/ imports the AI SDK, in any form', () => {
   const found = search.stdout
     .toString()
     .split('\n')
-    .filter((line) => {
-      const text = line.replace(/^[^:]*:\d+:/, '');
-      return sdkImportLines(text).length > 0;
-    });
+    .filter(Boolean)
+    .flatMap((file) =>
+      sdkImportLines(file, readFileSync(join(repositoryRoot, file), 'utf8')).map((line) => `${file}:${line}`),
+    );
   expect(found).toEqual([]);
 });
 
-test('every import form of the SDK is caught, and lookalike specifiers are not', () => {
+test('every import form of the SDK is caught, over several lines too, and lookalikes are not', () => {
   const caught = [
     "import { streamText } from 'ai';",
     "import type { LanguageModel } from 'ai';",
@@ -57,12 +86,18 @@ test('every import form of the SDK is caught, and lookalike specifiers are not',
     'const sdk = await import(`@ai-sdk/react`);',
     "const sdk = require('ai/test');",
     "import 'ai';",
+    "type Model = import('ai').LanguageModel;",
+    "import sdk = require('ai');",
+    "const sdk = await import(\n  'ai'\n);",
+    "const sdk = require(\n  '@ai-sdk/anthropic',\n);",
+    "import {\n  streamText,\n} from 'ai';",
   ];
-  for (const line of caught) expect(sdkImportLines(line), line).toEqual([1]);
+  for (const text of caught) expect(sdkImportLines('probe.ts', text), text).toHaveLength(1);
   const allowed = [
     "import { startAiTurn } from '@/lib/ai/turn';",
     "const label = 'ai';",
     "import x from './ai';",
+    'const sdk = await import(name);',
   ];
-  for (const line of allowed) expect(sdkImportLines(line), line).toEqual([]);
+  for (const text of allowed) expect(sdkImportLines('probe.ts', text), text).toEqual([]);
 });

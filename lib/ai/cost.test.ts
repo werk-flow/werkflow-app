@@ -20,13 +20,13 @@ test('a prompt over 100K tokens is priced at five times every rate', () => {
   expect(costMicroUsd({ ...none, inputTokens: 100_001, outputTokens: 1_000 }, AI_MODEL_PRICE)).toBe(52_501);
 });
 
-test('the reservation covers every step and attempt of a turn at its caps', () => {
+test('the reservation covers every step and every retry of a turn at its caps', () => {
   const limits = AI_TURN_LIMITS.chat;
   const dearestAttempt = costMicroUsd(
     { ...none, cacheWriteTokens: limits.maxInputTokens, outputTokens: limits.maxOutputTokens },
     AI_MODEL_PRICE,
   );
-  expect(maxTurnCostMicroUsd('chat')).toBe(limits.maxSteps * (limits.maxRetries + 1) * dearestAttempt);
+  expect(maxTurnCostMicroUsd('chat')).toBe((limits.maxSteps + limits.maxRetries) * dearestAttempt);
   // The input cap keeps every prompt on the lower price card.
   expect(limits.maxInputTokens).toBeLessThan(AI_MODEL_PRICE.longPromptTokens);
 });

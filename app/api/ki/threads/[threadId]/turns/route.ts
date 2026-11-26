@@ -43,6 +43,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ threadId: string }> },
 ): Promise<Response> {
+  const receivedAt = Date.now();
   if (!verifySameOriginJsonRequest(request).allowed) return refuse('forbidden_origin', 403);
   const threadId = uuidSchema.safeParse((await params).threadId);
   const body: unknown = await request.json().catch(() => null);
@@ -59,6 +60,7 @@ export async function POST(
       userId,
       threadId: threadId.data,
       commandId: parsed.data.commandId,
+      receivedAt,
       text: parsed.data.text,
     });
     if (start.status === 'refused') return refuse(start.refusal, REFUSAL_STATUS[start.refusal]);

@@ -15,7 +15,7 @@ export const AI_TURN_LIMITS = {
     effort: 'low',
     /** Input tokens per step at their upper bound, well under the 100K prompt price boundary. */
     maxInputTokens: 60_000,
-    /** Provider attempts after the first, per step. A spend-limit error is never retried. */
+    /** Provider retries per turn, shared by its steps. A spend-limit error is never retried. */
     maxRetries: 2,
     /** The whole turn, all steps and retries included. */
     totalTimeoutMs: 120_000,
@@ -33,7 +33,7 @@ export const AI_TURN_LIMITS = {
 export type AiEntryPoint = keyof typeof AI_TURN_LIMITS;
 
 /**
- * The most a turn can cost: every step and every attempt at its input cap,
+ * The most a turn can cost: every step and every retry at its input cap,
  * all of it written to the prompt cache (the dearest input), plus its output
  * cap. The run reserves this before its first step, so the hold covers each
  * charge.
@@ -46,7 +46,7 @@ export function maxTurnCostMicroUsd(entryPoint: AiEntryPoint): number {
     cacheWriteTokens: limits.maxInputTokens,
     outputTokens: limits.maxOutputTokens,
   };
-  return limits.maxSteps * (limits.maxRetries + 1) * costMicroUsd(attempt, AI_MODEL_PRICE);
+  return (limits.maxSteps + limits.maxRetries) * costMicroUsd(attempt, AI_MODEL_PRICE);
 }
 
 /**

@@ -68,14 +68,17 @@ const runStatus = () => rows('ai_runs').map((row) => row.status);
   assert.equal(attempts().length, 1);
 }
 
-// An exhausted budget refuses before any model call or saved message (B14).
+// An exhausted budget refuses before any model call or answer; the person's message stays (B14).
 {
   resetAiTables(world, { monthly_budget_micro_eur: 1 });
   const response = await postTurn('Wie lege ich einen Auftrag an?');
   assert.equal(response.status, 429);
   assert.deepEqual(await response.json(), { error: 'budget_exhausted' });
   assert.equal(attempts().length, 0, 'an exhausted budget must refuse before the model call');
-  assert.equal(rows('ai_thread_items').length, 0);
+  assert.deepEqual(
+    rows('ai_thread_items').map((row) => row.kind),
+    ['user_message'],
+  );
 }
 
 // A retried command runs once and is charged once: while it runs, and after it finished (B15).
@@ -117,7 +120,7 @@ const runStatus = () => rows('ai_runs').map((row) => row.status);
 }
 
 // A spend limit is never retried and ends in a stable German message (B15).
-for (const transcript of ['ausgabenlimit', 'guthaben-leer']) {
+for (const transcript of ['ausgabenlimit', 'vertragslimit', 'guthaben-leer']) {
   resetAiTables(world);
   const events = await readTurn(world, await postTurn(`[replay:${transcript}] Hallo`));
   assert.equal(attempts().length, 1, `${transcript} must not be retried`);
@@ -146,6 +149,26 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
     attempts().map((row) => row.p_outcome),
     ['provider_error', 'completed'],
   );
+}
+
+// A stream the provider closed before its first event is retried, and the accepted attempt is charged (B15).
+{
+  resetAiTables(world);
+  const events = await readTurn(world, await postTurn('[replay:nur-start] Hallo'));
+  assert.deepEqual(events.at(-1), { type: 'end', status: 'complete' });
+  assert.deepEqual(
+    attempts().map((row) => row.p_outcome),
+    ['provider_error', 'completed'],
+  );
+  assert.ok(Number(attempts()[0]?.p_cost_micro_usd) > 0, 'an accepted request must be charged');
+}
+
+// The turn has two retries in all, not two per step (B15).
+{
+  resetAiTables(world);
+  const events = await readTurn(world, await postTurn('[replay:mehrfach-ueberlastet] Lies den Auftrag.'));
+  assert.equal(events.at(-1)?.failure, 'provider_unavailable');
+  assert.equal(attempts().length, 4, 'a turn must stop after its two retries');
 }
 
 // A stream that ends without its final event is no complete answer, and its unknown usage is charged at the caps.
@@ -181,10 +204,16 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
     call.name === 'update_ai_thread_item' && call.args.p_status !== 'streaming'
       ? { data: null, error: { message: 'connection failure' } }
       : answerOf(call);
-  const events = await readTurn(world, await postTurn('Hallo'));
+  const commandId = crypto.randomUUID();
+  const events = await readTurn(world, await postTurn('Hallo', { commandId }));
   world.rpc = answerOf;
   assert.equal(events.at(-1)?.failure, 'interrupted');
   assert.deepEqual(runStatus(), ['failed']);
+  // A retry finishes the answer the run could not, with what its last partial save held.
+  assert.equal(answerItem()?.status, 'streaming');
+  assert.deepEqual(await (await postTurn('Hallo', { commandId })).json(), { status: 'already_done' });
+  assert.equal(answerItem()?.status, 'failed', 'an answer left streaming must be finished on retry');
+  assert.deepEqual(answerItem()?.body, { text: '', failure: 'interrupted' });
 }
 
 // An attempt the ledger cannot take keeps its hold: the run is not settled (sol-loop S2).
@@ -215,6 +244,11 @@ assert.equal(attempts()[0]?.p_outcome, 'provider_refused');
   assert.deepEqual(await (await postTurn('Hallo', { commandId })).json(), { status: 'already_done' });
   assert.deepEqual(answerItem()?.body, { text: '', failure: 'interrupted' });
   assert.equal(answerItem()?.status, 'failed');
+  assert.deepEqual(
+    rows('ai_thread_items').map((row) => row.kind),
+    ['user_message', 'assistant_message'],
+    'the failed answer belongs to the saved message',
+  );
 }
 
 // An identity check that cannot complete is a private failure, never a turn (sol-loop S7).

@@ -50,7 +50,7 @@ assert.ok(
 );
 
 const logs = await captureLogs(async () => {
-  for (const transcript of ['echo', 'echo-fehler', 'abbruch', 'ausgabenlimit']) {
+  for (const transcript of ['echo', 'echo-fehler', 'echo-code', 'abbruch', 'ausgabenlimit']) {
     resetAiTables(world);
     await readTurn(world, await postTurn(`[replay:${transcript}] ${SENTINEL}`));
   }
