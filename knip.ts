@@ -25,6 +25,8 @@ const TOOLING = [
   'lib/security/supabase-project-checks.ts',
   // Read by scripts/inspect-production.ts and scripts/sync-dev-auth-from-prod.ts only.
   'lib/security/production-inspection.ts',
+  // Read by scripts/prod-watch.ts only, which .github/workflows/prod-watch.yml runs.
+  'lib/production-watch/**',
   // The demo seeder's own helper. CI's SQL job runs the seeder, so the GitHub
   // Actions plugin turns it into an entry without the production mark.
   'lib/security/demo-member-password.ts',
