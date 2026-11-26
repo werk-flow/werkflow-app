@@ -373,6 +373,17 @@ const NO_IGNORE_FLAG = /^(?:-[a-zA-Z]*[uU][a-zA-Z]*|--no-ignore\S*|--unrestricte
 /** rg's file globs, which override its ignore rules for the files they include. */
 const GLOB_FLAG = /^(?:-g|--i?glob)(?:=(.*))?$|^-g(.+)$/;
 
+/** Whether a glob has a slash inside a brace group, nested groups included (`{a,{b},src/x}`). */
+function slashInBraces(pattern: string): boolean {
+  let depth = 0;
+  for (const char of pattern) {
+    if (char === '{') depth++;
+    else if (char === '}') depth = Math.max(depth - 1, 0);
+    else if (char === '/' && depth > 0) return true;
+  }
+  return false;
+}
+
 /**
  * Whether an rg include glob brings back the git-ignored `.env.live-backup`, as `-g '.env*'` and
  * `-g 'app/.env*'` do: only its final path segment can name the file it selects. A brace group
@@ -381,7 +392,7 @@ const GLOB_FLAG = /^(?:-g|--i?glob)(?:=(.*))?$|^-g(.+)$/;
 function globIncludesLiveBackup(glob: string, caseless = false): boolean {
   const pattern = caseless ? glob.toLowerCase() : glob;
   if (pattern.startsWith('!')) return false;
-  if (/\{[^}]*\//.test(pattern)) return true;
+  if (slashInBraces(pattern)) return true;
   return new Bun.Glob(pattern.slice(pattern.lastIndexOf('/') + 1)).match(LIVE_BACKUP);
 }
 

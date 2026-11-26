@@ -493,6 +493,8 @@ test('a path-qualified glob counts when its final segment names .env.live-backup
   expect(grep('src/**/*.ts')).toBeUndefined();
   // A slash inside a brace group leaves no final segment to test, so the glob counts.
   expect(grep('{src/x,.env*}')).toContain('PROD keys');
+  // rg nests brace groups, so a slash after an inner group's close is still inside the outer one.
+  expect(grep('{a,{b,c},src/.env*}')).toContain('PROD keys');
   expect(grep('{src,lib}/*.ts')).toBeUndefined();
 });
 
