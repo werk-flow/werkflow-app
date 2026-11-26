@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadEnvConfig } from '@next/env';
+import { createRequire } from 'node:module';
 
 import { temporaryDirectory } from '@/lib/testing/temporary-directory';
 
@@ -11,6 +11,20 @@ import { temporaryDirectory } from '@/lib/testing/temporary-directory';
 // loading never replaces a variable the process already has, so a key in the
 // checkout's .env.local stays out.
 const KEY = 'WERKFLOW_KI_ANTHROPIC_KEY';
+
+/** The env loader of the installed Next, resolved from Next itself: the code `next build` and `next start` run. */
+function nextEnvLoader(): (directory: string, dev: boolean, log: object, forceReload: boolean) => unknown {
+  const fromNext = createRequire(Bun.resolveSync('next/package.json', import.meta.dir));
+  const loaded: unknown = fromNext('@next/env');
+  if (
+    loaded &&
+    typeof loaded === 'object' &&
+    'loadEnvConfig' in loaded &&
+    typeof loaded.loadEnvConfig === 'function'
+  )
+    return (...args) => Reflect.apply(loaded.loadEnvConfig, loaded, args);
+  throw new Error('Next ships no loadEnvConfig');
+}
 const original = process.env[KEY];
 
 afterEach(() => {
@@ -23,7 +37,7 @@ test('an env file cannot override the test server’s empty model key', () => {
   writeFileSync(join(directory, '.env.local'), `${KEY}=synthetic-key-from-a-file\n`);
   writeFileSync(join(directory, '.env.production'), `${KEY}=synthetic-key-from-a-file\n`);
   process.env[KEY] = '';
-  loadEnvConfig(directory, false, { info: () => undefined, error: () => undefined }, true);
+  nextEnvLoader()(directory, false, { info: () => undefined, error: () => undefined }, true);
   expect(process.env[KEY]).toBe('');
 });
 
