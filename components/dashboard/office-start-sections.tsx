@@ -69,7 +69,7 @@ export function OfficeStartView({
         />
       )}
       <AttentionRegion attention={attention} sections={sections} />
-      <OverdueMaintenanceRegion maintenance={maintenance} />
+      <OverdueMaintenanceRegion maintenance={maintenance} testIdPrefix="office-start" />
     </section>
   );
 }
@@ -95,7 +95,7 @@ function AttentionRegion({
       {(sections.length > 0 || attention.isStale) && (
         <StaleRegion stale={attention.isStale} onRetry={attention.refresh} className="space-y-6">
           {sections.map((section) => (
-            <OfficeStartSection key={section.key} section={section} />
+            <StartTaskSection key={section.key} section={section} testIdPrefix="office-start" />
           ))}
         </StaleRegion>
       )}
@@ -104,8 +104,14 @@ function AttentionRegion({
 }
 
 /** The überfällig maintenance below the sections, with its own placeholder while it loads; nothing when none is due. */
-function OverdueMaintenanceRegion({ maintenance }: { maintenance: OfficeStartRead<number> }) {
-  if (maintenance.isLoading) return <OverdueMaintenanceSkeleton />;
+export function OverdueMaintenanceRegion({
+  maintenance,
+  testIdPrefix,
+}: {
+  maintenance: OfficeStartRead<number>;
+  testIdPrefix: string;
+}) {
+  if (maintenance.isLoading) return <OverdueMaintenanceSkeleton testIdPrefix={testIdPrefix} />;
   if (maintenance.data === undefined) {
     return (
       <SectionError onRetry={() => void maintenance.refresh()} retryPending={maintenance.isRefreshing}>
@@ -116,29 +122,55 @@ function OverdueMaintenanceRegion({ maintenance }: { maintenance: OfficeStartRea
   if (maintenance.data === 0 && !maintenance.isStale) return null;
   return (
     <StaleRegion stale={maintenance.isStale} onRetry={maintenance.refresh}>
-      {maintenance.data > 0 && <OverdueMaintenanceSection count={maintenance.data} />}
+      {maintenance.data > 0 && (
+        <OverdueMaintenanceSection count={maintenance.data} testIdPrefix={testIdPrefix} />
+      )}
     </StaleRegion>
   );
 }
 
-function OfficeStartSection({ section }: { section: AttentionTaskSection }) {
+/**
+ * One Aufgaben section on a start page: its heading with the count, an
+ * optional note on why its tasks are here, its first items and the way into
+ * Aufgaben. A section that holds only part of its Aufgaben section opens it
+ * without promising all of its tasks.
+ */
+export function StartTaskSection({
+  section,
+  testIdPrefix,
+  note,
+  partOfAufgaben = false,
+}: {
+  section: AttentionTaskSection;
+  testIdPrefix: string;
+  note?: string | undefined;
+  partOfAufgaben?: boolean;
+}) {
   const { icon, title, testId } = SECTION_PRESENTATION[section.key];
   const total = section.tasks.length;
   return (
-    <div className="space-y-2" data-testid={`office-start-${testId}`}>
-      <h3 className="flex items-center gap-1.5 px-1 text-sm font-medium text-muted-foreground">
-        {icon}
-        {title}
-        <span className="tabular-nums">({total})</span>
-      </h3>
+    <div className="space-y-2" data-testid={`${testIdPrefix}-${testId}`}>
+      <div className="space-y-0.5 px-1">
+        <h3 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+          {icon}
+          {title}
+          <span className="tabular-nums">({total})</span>
+        </h3>
+        {note && <p className="text-xs text-muted-foreground">{note}</p>}
+      </div>
       <Card className="gap-0 divide-y py-0">
         {section.tasks.slice(0, PREVIEW_ROWS).map((task) => (
           <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
         ))}
         <div className="flex justify-end px-4 py-2">
           <Button asChild variant="ghost" size="sm">
-            <Link href={attentionSectionHref(section.key)} aria-label={`${title}: alle ${total} in Aufgaben`}>
-              Alle in Aufgaben
+            <Link
+              href={attentionSectionHref(section.key)}
+              aria-label={
+                partOfAufgaben ? `${title}: in Aufgaben öffnen` : `${title}: alle ${total} in Aufgaben`
+              }
+            >
+              {partOfAufgaben ? 'In Aufgaben öffnen' : 'Alle in Aufgaben'}
             </Link>
           </Button>
         </div>
@@ -147,10 +179,10 @@ function OfficeStartSection({ section }: { section: AttentionTaskSection }) {
   );
 }
 
-function OverdueMaintenanceSection({ count }: { count: number }) {
+function OverdueMaintenanceSection({ count, testIdPrefix }: { count: number; testIdPrefix: string }) {
   const label = count === 1 ? '1 Wartung überfällig' : `${count} Wartungen überfällig`;
   return (
-    <div className="space-y-2" data-testid="office-start-overdue-maintenance">
+    <div className="space-y-2" data-testid={`${testIdPrefix}-overdue-maintenance`}>
       <h3 className="flex items-center gap-1.5 px-1 text-sm font-medium text-muted-foreground">
         <Wrench className="size-4" />
         Wartung

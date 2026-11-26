@@ -71,6 +71,7 @@ const COMPONENT_AREAS: readonly (readonly [string, readonly string[], readonly s
       'offline-retry',
       'offline-today',
       'options',
+      'owner-start',
       'presentation',
       'receiver-navigation',
       'route-refresh',

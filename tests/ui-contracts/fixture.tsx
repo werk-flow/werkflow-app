@@ -128,6 +128,7 @@ import { JoinRequestsSection } from '@/components/mitarbeiter/join-requests-sect
 import { initializePersonnelBoundary } from './personnel-boundaries';
 import { TaskSectionsAnchorContractFixture, TaskSectionsContractFixture } from './task-section-boundaries';
 import { OfficeStartContractFixture } from './office-start-boundaries';
+import { OwnerStartContractFixture } from './owner-start-boundaries';
 
 initializeServiceBoundaries();
 initializeLifecycleBoundary();
@@ -774,6 +775,11 @@ createRoot(root).render(
     <main>
       <h1>Komponentenverträge</h1>
       <OfficeStartContractFixture />
+    </main>
+  ) : window.uiContractFixture === 'owner-start' ? (
+    <main>
+      <h1>Komponentenverträge</h1>
+      <OwnerStartContractFixture />
     </main>
   ) : window.uiContractFixture === 'own-personnel' ? (
     <BannerProvider>

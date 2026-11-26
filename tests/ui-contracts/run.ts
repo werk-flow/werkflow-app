@@ -196,6 +196,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('reset-password-form.tsx') ||
                 args.importer.endsWith('aufgaben-task-row.tsx') ||
                 args.importer.endsWith('office-start-sections.tsx') ||
+                args.importer.endsWith('owner-start.tsx') ||
                 args.importer.endsWith('text-link.tsx') ||
                 args.importer.endsWith('client-duplicate-matches.tsx') ||
                 args.importer.endsWith('standalone-screen.tsx')

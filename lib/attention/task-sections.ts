@@ -89,12 +89,17 @@ export function formatOpenSince(days: number): string {
   return `offen seit ${days} Tagen`;
 }
 
-// Time and vacation approvals carry personnel data, which a start page never shows.
+// Time and vacation approvals carry personnel data, whose rows a start page never shows.
 const PERSONNEL_SECTIONS: ReadonlySet<AttentionTaskSectionKey> = new Set(['time', 'vacation']);
+
+/** Whether a section's rows carry personnel data: a start page shows at most its count. */
+export function isPersonnelSection(key: AttentionTaskSectionKey): boolean {
+  return PERSONNEL_SECTIONS.has(key);
+}
 
 /** The sections of the office start: the Aufgaben sections in their order, without the personnel approvals. */
 export function groupOfficeStartTasks(tasks: readonly AttentionTask[]): AttentionTaskSection[] {
-  return groupAttentionTasks(tasks).filter((section) => !PERSONNEL_SECTIONS.has(section.key));
+  return groupAttentionTasks(tasks).filter((section) => !isPersonnelSection(section.key));
 }
 
 /** The element id of a section on the Aufgaben page. */
