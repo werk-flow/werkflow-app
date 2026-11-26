@@ -103,8 +103,8 @@ const INSTALLATION = {
   totals: { netCents: 599_874, taxCents: 113_617, grossCents: 713_491 },
 };
 
-/** A made-up customer with a service offer of one Titel and an installation offer of four. Returns their ids. */
-async function seedOffers(world: TestWorld): Promise<{ service: string; installation: string }> {
+/** A made-up customer with a service offer of one Titel and an installation offer of four. Returns both ids, space-separated. */
+async function seedOffers(world: TestWorld): Promise<string> {
   return surfaceFixture(world, 'commercial.acceptance-offer-positions', async () => {
     const admin = createAdminClient();
     const clientId = randomUUID();
@@ -144,16 +144,15 @@ async function seedOffers(world: TestWorld): Promise<{ service: string; installa
         .throwOnError();
       ids.push(offerId);
     }
-    const [service = '', installation = ''] = ids;
-    return { service, installation };
+    return ids.join(' ');
   });
 }
 
 function offerPage(kind: 'service' | 'installation') {
   return async (world: TestWorld): Promise<SurfaceDestination> => {
-    const ids = await seedOffers(world);
+    const [service, installation] = (await seedOffers(world)).split(' ');
     const title = `${(kind === 'service' ? SERVICE : INSTALLATION).title} ${world.runId}`;
-    return { route: `/angebote/${ids[kind]}`, heading: title };
+    return { route: `/angebote/${kind === 'service' ? service : installation}`, heading: title };
   };
 }
 
