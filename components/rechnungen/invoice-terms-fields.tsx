@@ -6,6 +6,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { TERM_FIELD_IDS, type DraftForm } from '@/lib/invoices/draft-form';
+import { INVOICE_REFERENCE_MAX_LENGTH } from '@/lib/invoices/types';
 import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 
 type Props = {
@@ -123,7 +124,7 @@ function ReferenceFields({ form, onChange, disabled }: Omit<Props, 'errors'>) {
         <Input
           value={form.orderReference}
           onChange={(event) => onChange({ ...form, orderReference: event.target.value })}
-          maxLength={200}
+          maxLength={INVOICE_REFERENCE_MAX_LENGTH}
           autoComplete="off"
           disabled={disabled}
         />
@@ -136,7 +137,7 @@ function ReferenceFields({ form, onChange, disabled }: Omit<Props, 'errors'>) {
         <Input
           value={form.buyerReference}
           onChange={(event) => onChange({ ...form, buyerReference: event.target.value })}
-          maxLength={200}
+          maxLength={INVOICE_REFERENCE_MAX_LENGTH}
           autoComplete="off"
           disabled={disabled}
         />

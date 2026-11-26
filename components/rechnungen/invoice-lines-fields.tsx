@@ -24,6 +24,8 @@ type LineProps = {
   onRemove: () => void;
   errors: Record<string, string | undefined>;
   disabled: boolean;
+  /** An issued invoice: its lines show without add or remove. */
+  issued: boolean;
 };
 
 /** The units a line offers: every unit in use, and a retired one the line already has. */
@@ -41,6 +43,7 @@ export function InvoiceLinesFields({
   onAdd,
   errors,
   disabled,
+  issued,
 }: {
   lines: DraftLineForm[];
   lineNetCents: Array<number | null>;
@@ -48,15 +51,18 @@ export function InvoiceLinesFields({
   onAdd: () => void;
   errors: Record<string, string | undefined>;
   disabled: boolean;
+  issued: boolean;
 }) {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SectionTitle as="h2">Positionen</SectionTitle>
-        <Button type="button" variant="outline" size="sm" onClick={onAdd} disabled={disabled}>
-          <Plus className="size-4" />
-          Position hinzufügen
-        </Button>
+        {!issued && (
+          <Button type="button" variant="outline" size="sm" onClick={onAdd} disabled={disabled}>
+            <Plus className="size-4" />
+            Position hinzufügen
+          </Button>
+        )}
       </div>
       {lines.length === 0 ? (
         <EmptyState
@@ -76,6 +82,7 @@ export function InvoiceLinesFields({
               onRemove={() => onChange(lines.filter((_line, at) => at !== index))}
               errors={errors}
               disabled={disabled}
+              issued={issued}
             />
           ))}
         </ol>
@@ -84,7 +91,16 @@ export function InvoiceLinesFields({
   );
 }
 
-function InvoiceLineFields({ index, line, netCents, onChange, onRemove, errors, disabled }: LineProps) {
+function InvoiceLineFields({
+  index,
+  line,
+  netCents,
+  onChange,
+  onRemove,
+  errors,
+  disabled,
+  issued,
+}: LineProps) {
   return (
     <li className="space-y-3 p-4">
       <div className="flex items-start gap-2">
@@ -114,17 +130,19 @@ function InvoiceLineFields({ index, line, netCents, onChange, onRemove, errors, 
             />
           </Field>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="mt-6 shrink-0"
-          aria-label={`Position ${index + 1} entfernen`}
-          onClick={onRemove}
-          disabled={disabled}
-        >
-          <Trash2 className="size-4" />
-        </Button>
+        {!issued && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="mt-6 shrink-0"
+            aria-label={`Position ${index + 1} entfernen`}
+            onClick={onRemove}
+            disabled={disabled}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        )}
       </div>
       {line.source && <InvoiceLineSourceNote source={line.source} />}
       <LineAmountFields
@@ -147,7 +165,7 @@ function LineAmountFields({
   onChange,
   errors,
   disabled,
-}: Omit<LineProps, 'onRemove'>) {
+}: Omit<LineProps, 'onRemove' | 'issued'>) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto] sm:items-end">
       <Field

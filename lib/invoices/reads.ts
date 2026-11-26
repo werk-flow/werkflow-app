@@ -7,6 +7,7 @@ import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
+import { issueSnapshotSchema, type IssueSnapshot } from './issue-model';
 import { invoiceLineSourceSchema } from './line-sources';
 import type { InvoiceListQuery, InvoicePage } from './list-page';
 import {
@@ -89,6 +90,9 @@ const invoiceSchema = z.object({
   lineNetCents: z.number().int(),
   taxCents: z.number().int(),
   grossCents: z.number().int(),
+  issueDate: z.iso.date().nullable(),
+  issueSnapshot: z.unknown(),
+  original: z.object({ documentId: uuidSchema, filed: z.boolean() }).nullable(),
   client: z.object({ id: uuidSchema, name: z.string() }),
   recipient: z.object({ id: uuidSchema, name: z.string(), address: z.string().nullable() }),
   work: z
@@ -116,8 +120,19 @@ function workHref(work: WorkRow): string {
   return `/service/faelle/${encodeURIComponent(work.number ?? work.id)}`;
 }
 
-/** One invoice of the organization with its lines; `null` when there is none. */
-export async function readInvoice(organizationId: string, invoiceId: string): Promise<InvoiceDetail | null> {
+/** The issue facts an issued invoice keeps: number, Rechnungsdatum and the snapshot it was checked with. */
+type IssueFacts = { invoiceNumber: string; issueDate: string; snapshot: IssueSnapshot };
+
+/**
+ * One invoice of the organization with its lines, each line's catalog source
+ * and, once issued, its issue facts; `null` when there is none. Only the server
+ * reads the snapshot. get_invoice_with_line_sources returns get_invoice's
+ * answer, issue fields included, with the line sources added.
+ */
+export async function readIssuedInvoice(
+  organizationId: string,
+  invoiceId: string,
+): Promise<(InvoiceDetail & { issue: IssueFacts | null }) | null> {
   const selected = await createSupabaseAdminClient().rpc('get_invoice_with_line_sources', {
     p_organization_id: organizationId,
     p_invoice_id: invoiceId,
@@ -126,9 +141,16 @@ export async function readInvoice(organizationId: string, invoiceId: string): Pr
   if (selected.data === null) return null;
   const parsed = invoiceWithLineSourcesSchema.safeParse(selected.data);
   if (!parsed.success) throw new Error('invoice_read_failed');
-  const { work, ...invoice } = parsed.data;
+  const { work, issueSnapshot, ...invoice } = parsed.data;
+  let issue: IssueFacts | null = null;
+  if (invoice.invoiceNumber !== null && invoice.issueDate !== null) {
+    const snapshot = issueSnapshotSchema.safeParse(issueSnapshot);
+    if (!snapshot.success) throw new Error('invoice_read_failed');
+    issue = { invoiceNumber: invoice.invoiceNumber, issueDate: invoice.issueDate, snapshot: snapshot.data };
+  }
   return {
     ...invoice,
+    issue,
     status: constrainedValue(INVOICE_STATUSES, invoice.status, 'invoices.status'),
     work: work
       ? {
@@ -137,5 +159,20 @@ export async function readInvoice(organizationId: string, invoiceId: string): Pr
           href: workHref(work),
         }
       : null,
+  };
+}
+
+/** One invoice of the organization with its lines, for its page; `null` when there is none. */
+export async function readInvoice(organizationId: string, invoiceId: string): Promise<InvoiceDetail | null> {
+  const invoice = await readIssuedInvoice(organizationId, invoiceId);
+  if (!invoice) return null;
+  const { issue, ...detail } = invoice;
+  if (!issue) return detail;
+  // An issued invoice names the recipient as it was issued to, not as the customer reads now.
+  const { name, address } = issue.snapshot.buyer;
+  const cityLine = `${address.postalCode} ${address.city}`;
+  return {
+    ...detail,
+    recipient: { id: detail.recipient.id, name, address: [...address.lines, cityLine].join(', ') },
   };
 }

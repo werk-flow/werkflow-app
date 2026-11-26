@@ -38,6 +38,8 @@ Organisation
 Allgemeine Organisationsdaten
 Dokumente & Briefpapier
 Angebote als PDF
+Rechnungen
+Nummernkreis und Zahlungsziel
 Kalender
 Kalenderansichten und Regeln
 Zeiterfassung
@@ -47,7 +49,6 @@ Freigaben und Vertretungen
 Kunden
 Kundenverwaltung und Defaults
 Datenexport
-Alle Daten herunterladen
 Aufträge & Projekte
 Steuert, welche Spalten du in der Aufträge-Ansicht innerhalb der aktiven Organisation sehen möchtest.
 Persönliche Einstellungen

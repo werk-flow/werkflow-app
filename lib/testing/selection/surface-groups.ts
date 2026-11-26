@@ -91,6 +91,7 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
   '/einstellungen/kunden': 'settings',
   '/einstellungen/datenexport': 'settings',
   '/einstellungen/dokumente': 'settings',
+  '/einstellungen/rechnungen': 'settings',
   '/einstellungen/dashboard': 'settings',
   '/einstellungen/kalender': 'settings',
   '/einstellungen/konto-sicherheit': 'settings',
