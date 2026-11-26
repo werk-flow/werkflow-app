@@ -54,5 +54,5 @@ Every role clocks in and out, records work, travel, break, standby, call-out and
 - Arbitrary percentages, organization-defined categories, premiums and wage values are out of scope.
 - Warnings for breaks, daily duration, rest and night, Sunday or holiday work are review aids, not proof of compliance with German law, a tariff or an employment agreement.
 - The payroll handoff is a generic ZIP. It is not a provider integration, payroll calculation, accounting export or PDF payslip. No per-employee filter or differential export exists.
-- Vacation, sickness and Berufsschule are the only absence types, and absence is full-day only. The payroll export carries no Berufsschule value.
+- Vacation, sickness and Berufsschule are the only absence types. A single vacation or sickness day can be a half day; Berufsschule is full-day. The payroll export carries no Berufsschule value.
 - No native mobile app exists. Without signal only the clock works, and only its start, switch and end. A phone that opens the app without signal shows the clock only while it holds unsent events. A connection too weak to answer keeps the clock waiting until its online call fails. The page without signal captures and never sends, and it names a running job only as „Auftrag“.
