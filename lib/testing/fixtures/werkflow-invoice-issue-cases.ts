@@ -5,6 +5,11 @@ import Stripe from 'stripe';
 import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 import {
   CARD_INVOICE_ANSWERS,
+  CHECKOUT_SEPA_BEFORE_CHARGE_ANSWERS,
+  CHECKOUT_SEPA_INVOICE_ANSWERS,
+  OWN_CHARGE_MANDATE_ANSWERS,
+  REPLACED_MANDATE_ANSWERS,
+  SECOND_PAGE_MANDATE_ANSWERS,
   MADE_UP_SELLER,
   ORGANIZATION_ID,
   SEPA_INVOICE_ANSWERS,
@@ -150,10 +155,22 @@ const refusals: Array<{
     code: 'werkflow_invoice_payment_pending',
   },
   {
-    case: 'a SEPA payment method without a mandate',
+    // A Checkout's first debit before its charge exists: Stripe delivers again, and no alarm fires.
+    case: 'a SEPA payment method whose mandate no SetupIntent or charge names yet',
+    answers: CHECKOUT_SEPA_BEFORE_CHARGE_ANSWERS,
+    code: 'werkflow_invoice_payment_pending',
+  },
+  {
+    case: 'a SEPA mandate reference that is not one',
     answers: {
-      ...SEPA_INVOICE_ANSWERS,
-      'GET /v1/setup_intents': { object: 'list', data: [], has_more: false },
+      ...CHECKOUT_SEPA_INVOICE_ANSWERS,
+      'GET /v1/mandates/mandate_test_0001': {
+        ...CHECKOUT_SEPA_INVOICE_ANSWERS['GET /v1/mandates/mandate_test_0001'],
+        payment_method_details: {
+          type: 'sepa_debit',
+          sepa_debit: { reference: '', url: 'https://example.test' },
+        },
+      },
     },
     code: 'werkflow_invoice_unreadable',
   },
@@ -167,14 +184,15 @@ describe('a finalized Stripe invoice becomes WerkFlow original', () => {
   test("a SEPA invoice finalized as its debit starts, before any charge, is issued once with Stripe's number and amounts, its mandate and creditor ID in the checked XML", async () => {
     const { issue, requests, stored, records } = world(SEPA_INVOICE_ANSWERS);
     expect(await issue()).toBe('issued');
-    // The payment method comes from the payment intent, the mandate from its SetupIntent: no charge is read.
+    // The payment method comes from the payment intent; no charge names a mandate yet, so its SetupIntent does.
     expect(requests.map((request) => `${request.method} ${request.path}`)).toEqual(
       Object.keys(SEPA_INVOICE_ANSWERS),
     );
     expect(requests[0]?.query).toContain('expand[0]=customer.invoice_settings.default_payment_method');
     expect(requests[0]?.query).toContain('expand[1]=payments');
     expect(requests[2]?.query).toContain('expand[0]=payment_method');
-    expect(requests[3]?.query).toContain(`payment_method=${SEPA_PAYMENT_METHOD.id}`);
+    expect(requests[3]?.query).toContain('customer=cus_test_0001');
+    expect(requests[4]?.query).toContain(`payment_method=${SEPA_PAYMENT_METHOD.id}`);
 
     expect(records).toHaveLength(1);
     const [row] = records;
@@ -224,6 +242,37 @@ describe('a finalized Stripe invoice becomes WerkFlow original', () => {
     const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
     expect(xml).toContain('<ram:TotalPrepaidAmount>499.00</ram:TotalPrepaidAmount>');
     expect(xml).toMatch(/<ram:ApplicableTradeSettlementFinancialCard>\s*<ram:ID>4242</);
+  });
+});
+
+describe('the first invoice of a subscription a Checkout started', () => {
+  test("a SEPA debit a Checkout collected names its mandate through the customer's charge, since it has no SetupIntent", async () => {
+    const { issue, stored, records } = world(CHECKOUT_SEPA_INVOICE_ANSWERS);
+    expect(await issue()).toBe('issued');
+    expect(records[0]).toMatchObject({ p_payment_means: 'direct-debit', p_due_cents: 49900 });
+    const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
+    expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0001</ram:DirectDebitMandateID>');
+  });
+
+  test('a newer charge names the mandate Stripe debits with, over the SetupIntent the method was set up with', async () => {
+    const { issue, stored } = world(REPLACED_MANDATE_ANSWERS);
+    expect(await issue()).toBe('issued');
+    const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
+    expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0002</ram:DirectDebitMandateID>');
+  });
+
+  test("an invoice read after a later charge names another mandate keeps its own charge's mandate", async () => {
+    const { issue, stored } = world(OWN_CHARGE_MANDATE_ANSWERS);
+    expect(await issue()).toBe('issued');
+    const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
+    expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0001</ram:DirectDebitMandateID>');
+  });
+
+  test("the mandate's charge on a later page of the customer's charges is found", async () => {
+    const { issue, stored } = world(SECOND_PAGE_MANDATE_ANSWERS);
+    expect(await issue()).toBe('issued');
+    const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
+    expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0001</ram:DirectDebitMandateID>');
   });
 });
 

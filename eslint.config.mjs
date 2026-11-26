@@ -823,6 +823,13 @@ const libToComponentsPattern = {
 // Every Radix primitive is wrapped once in components/ui: the wrapper owns the
 // refresh suspension of open layers, the pending guard, focus restoration and
 // dialog-aware portaling. A direct import elsewhere skips all of them.
+// WerkFlow KI reaches a model only through lib/ai/: its one model route, caps,
+// switches and cost ledger (werk-flow/werkflow-planning#528, B2).
+const aiSdkPattern = {
+  regex: '^(ai|ai/.*|@ai-sdk/.*)$',
+  message:
+    'The AI SDK is imported only in lib/ai/, which owns the one model route, its caps, switches and cost ledger. Call a lib/ai/ function instead.',
+};
 const radixPrimitivesPattern = {
   group: ['@radix-ui/*', 'radix-ui', 'radix-ui/*'],
   message:
@@ -837,7 +844,12 @@ const editJobDialogPattern = {
   message:
     'Load the job edit form on intent with lazyDialog (components/shared/lazy-dialog.tsx), so roles that cannot edit a job never download it (lab.field.cold-start).',
 };
-function importRestrictions({ realtimeHooks = true, libLayer = false, radixPrimitives = true } = {}) {
+function importRestrictions({
+  realtimeHooks = true,
+  libLayer = false,
+  radixPrimitives = true,
+  aiSdk = true,
+} = {}) {
   return [
     'error',
     {
@@ -868,6 +880,7 @@ function importRestrictions({ realtimeHooks = true, libLayer = false, radixPrimi
           : []),
         ...(libLayer ? [libToComponentsPattern] : []),
         ...(radixPrimitives ? [radixPrimitivesPattern] : []),
+        ...(aiSdk ? [aiSdkPattern] : []),
         editJobDialogPattern,
       ],
     },
@@ -1615,6 +1628,13 @@ const eslintConfig = defineConfig([
     ignores: ['lib/ui/*.test.*', 'lib/conventions/*.test.*', 'lib/testing/fixtures/*-page-access.ts'],
     rules: {
       'no-restricted-imports': importRestrictions({ libLayer: true }),
+    },
+  },
+  // The one home of the AI SDK, with the rest of the lib/ rules.
+  {
+    files: ['lib/ai/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': importRestrictions({ libLayer: true, aiSdk: false }),
     },
   },
   // The registry wraps the Radix primitives; it keeps every other import ban.

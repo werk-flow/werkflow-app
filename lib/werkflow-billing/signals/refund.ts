@@ -14,11 +14,15 @@ import type { SignalFamily } from '@/lib/werkflow-billing/signals/family';
 // alarm, so a person refunds by hand; one
 // the duplicate backstop issued (lib/subscription/record.ts) is also recorded
 // against its duplicate and payment. Any other refund state changes nothing.
+// `refund.updated` covers every payment method; Stripe sends the older
+// `charge.refund.updated` only for some, so a cancelled card refund went unseen.
+// The older event stays handled until every Stripe destination sends
+// `refund.updated`, so no cancellation falls between the two.
 /** A refund in these states pays the customer nothing, and WerkFlow never issues it again by itself. */
 const UNPAID = new Set(['failed', 'canceled']);
 
 export const refundSignals: SignalFamily = {
-  eventTypes: ['refund.failed', 'charge.refund.updated'],
+  eventTypes: ['refund.failed', 'refund.updated', 'charge.refund.updated'],
   handle: async (event, stripe) => {
     const refund = await stripe.subscriptions.readRefund(signalObjectId(event));
     if (!UNPAID.has(refund.status)) return;
