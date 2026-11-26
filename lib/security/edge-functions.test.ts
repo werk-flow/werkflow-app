@@ -127,7 +127,12 @@ test('a valid token gets every check, and a send-only key counts as valid', asyn
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(await response.json()).toEqual({
       ok: true,
-      checks: { resend_api_key: 'ok', from_email: 'ok', supabase_secret_keys: 'ok', local_mail_capture: 'ok' },
+      checks: {
+        resend_api_key: 'ok',
+        from_email: 'ok',
+        supabase_secret_keys: 'ok',
+        local_mail_capture: 'ok',
+      },
     });
   }
   expect(calls).toEqual([
