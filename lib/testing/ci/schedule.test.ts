@@ -281,7 +281,6 @@ function schedulerFixture(folder: string): {
   return {
     root,
     run: (...args) =>
-      // The midnight start rule lets a held run start by the time of day, so the CLI reads a fixed one.
       spawnSync(process.execPath, ['--preload', fixedClock, 'scripts/ci/schedule.ts', ...args], {
         cwd: root,
         encoding: 'utf8',
@@ -369,11 +368,15 @@ test('the CLI exits 1 on an unreadable state, and after its answer when the full
     const state = join(folder, 'state.json');
     writeFileSync(state, '{"release":"yesterday"}');
     const run = (env: Record<string, string>) =>
-      spawnSync(process.execPath, ['scripts/ci/schedule.ts', 'due', '--state', state], {
-        cwd: root,
-        encoding: 'utf8',
-        env: { NODE_ENV: 'test', PATH: process.env.PATH, HOME: process.env.HOME, ...env },
-      });
+      spawnSync(
+        process.execPath,
+        ['--preload', fixedClock, 'scripts/ci/schedule.ts', 'due', '--state', state],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          env: { NODE_ENV: 'test', PATH: process.env.PATH, HOME: process.env.HOME, ...env },
+        },
+      );
     const corrupt = run({});
     expect([corrupt.status, corrupt.stdout]).toEqual([1, '']);
     writeFileSync(state, '{"release":"2100-01-01T00:00:00.000Z","nightly":"2100-01-01T00:00:00.000Z"}');
