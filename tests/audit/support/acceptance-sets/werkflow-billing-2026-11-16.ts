@@ -19,8 +19,8 @@ const cancelled = (world: TestWorld) => subscribed(world, true);
  * running or cancelled to the end of the period; Büro's settings no longer
  * list the section. The served test app holds no Stripe key, so „Nächste
  * Zahlung“ fails with its retry and the subscribed screens are `-error`
- * captures. The pilot state without a subscription is the page's visual
- * reference, and audit:layout:settings opens the cancel confirmation.
+ * captures, the cancel confirmation over that failure included. The pilot
+ * state without a subscription is the page's visual reference.
  */
 function werkflowBillingCaptures(): OpenSet {
   const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
@@ -52,6 +52,15 @@ function werkflowBillingCaptures(): OpenSet {
         route: ROUTE,
         view: page,
         destination: cancelled,
+        state: 'error',
+        ...both,
+      },
+      {
+        id: stateCaptureId('admin-abo-kuendigen', 'error'),
+        role: 'admin',
+        route: ROUTE,
+        // The opener seeds the running subscription that offers the cancel.
+        view: { kind: 'dialog', opener: 'settings.billing-cancel', overFailedPage: true },
         state: 'error',
         ...both,
       },
