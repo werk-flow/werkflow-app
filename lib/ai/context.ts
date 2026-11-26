@@ -41,6 +41,11 @@ function visibleText(text: string): string {
   return text.replace(INVISIBLE, (char) => (VISIBLE_CONTROLS.has(char) ? char : '')).normalize('NFC');
 }
 
+/** Whether a message holds text a person can see: one without it would reach the model empty. */
+export function hasVisibleText(text: string): boolean {
+  return visibleText(text).trim().length > 0;
+}
+
 /** Untrusted text from `source`, cleaned before anything can read it. */
 export function untrustedText(source: UntrustedSource, text: string): UntrustedText {
   return { source, [TEXT]: visibleText(text) };
@@ -110,9 +115,11 @@ export async function buildAiContext(input: {
     tools,
     toolDefinitions: await serializedToolDefinitions(tools),
   };
-  const thread = input.thread.map(
-    (message): ModelMessage => ({ role: message.role, content: visibleText(message.text) }),
-  );
+  // A saved message with nothing visible left would reach the provider as an empty block.
+  const thread = input.thread.flatMap((message): ModelMessage[] => {
+    const content = visibleText(message.text);
+    return content.trim() ? [{ role: message.role, content }] : [];
+  });
   // The organization memory and then the person memory (werk-flow/werkflow-planning#539 and #538)
   // come before the thread, each as a labelled tool result.
   let kept = thread;

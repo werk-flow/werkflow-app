@@ -25,8 +25,8 @@ export type QueuedPull = {
   check: string;
   /** GitHub's merge state: `DIRTY` conflicts with main; `BEHIND` lacks main while the ruleset requires an up-to-date branch. */
   mergeState: string;
-  /** One of the owner's growth labels: `approved: list growth` or `approved: context growth`. */
-  listGrowthApproved: boolean;
+  /** The owner's growth labels it carries, sorted: `approved: context growth`, `approved: list growth`. */
+  growthApprovals: readonly string[];
 };
 
 /** One PR of the batch with the squash commit that puts it onto the batch so far. */
@@ -196,7 +196,7 @@ export function pickBatch(
     : pulls.filter(isQueued).toSorted(byQueuePlace);
   // A PR with the owner's list-growth approval runs alone, so a batch never borrows its waiver for
   // another PR whose own approval may be gone.
-  const approved = ordered.findIndex((pull) => pull.listGrowthApproved);
+  const approved = ordered.findIndex((pull) => pull.growthApprovals.length > 0);
   return approved === 0
     ? ordered.slice(0, 1)
     : ordered.slice(0, approved === -1 ? choice.maxBatch : Math.min(approved, choice.maxBatch));
@@ -210,8 +210,8 @@ export function supersession(taken: QueuedPull, now: readonly QueuedPull[]): str
   if (current.isDraft && !taken.isDraft) return `#${taken.number} went back to draft`;
   if (taken.check === 'SUCCESS' && current.check !== 'SUCCESS')
     return `#${taken.number}'s Check on ${taken.headSha} is ${current.check}`;
-  if (current.listGrowthApproved !== taken.listGrowthApproved)
-    return `#${taken.number}'s list-growth approval changed`;
+  if (current.growthApprovals.join('\n') !== taken.growthApprovals.join('\n'))
+    return `#${taken.number}'s growth approval changed`;
   if (current.queuedAt !== taken.queuedAt)
     return current.queuedAt === null
       ? `#${taken.number} left the queue`
@@ -246,7 +246,7 @@ export function integrationEnvironment(run: {
     CI_RUN_ATTEMPT: String(INTEGRATION_ATTEMPT),
     CI_RESULTS_DIR: run.resultsDir,
     CI_PRS: run.pulls.map((pull) => pull.number).join(','),
-    SHRINK_ONLY_GROWTH_APPROVED: String(run.pulls.some((pull) => pull.listGrowthApproved)),
+    SHRINK_ONLY_GROWTH_APPROVED: String(run.pulls.some((pull) => pull.growthApprovals.length > 0)),
     CI_QUEUE_COMMIT: run.tip.commit,
     CI_QUEUE_REPOSITORY: run.repository,
   };

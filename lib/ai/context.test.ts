@@ -92,6 +92,22 @@ test('untrusted text cannot reach the system or the user role', async () => {
   expect(JSON.stringify(context)).not.toContain(marker);
 });
 
+test('a saved message with nothing visible left never reaches the model', async () => {
+  const context = await buildAiContext({
+    role: 'employee',
+    thread: [
+      { role: 'user', text: 'Hallo' },
+      { role: 'assistant', text: '\u200B\u202E' },
+      { role: 'user', text: 'Noch da?' },
+    ],
+    inputTokenCap: CAP,
+  });
+  expect(context.messages).toEqual([
+    { role: 'user', content: 'Hallo' },
+    { role: 'user', content: 'Noch da?' },
+  ]);
+});
+
 test("the oldest messages drop first until the input fits, and the person's new message always stays", async () => {
   const thread = [
     { role: 'user', text: 'a'.repeat(400) },

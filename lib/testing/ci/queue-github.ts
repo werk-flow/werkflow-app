@@ -78,9 +78,9 @@ export function pullsFromGitHub(pages: unknown): QueuedPull[] {
       queuedAt: node.autoMergeRequest?.enabledAt ?? null,
       check: check ?? 'MISSING',
       mergeState: node.mergeStateStatus,
-      listGrowthApproved: node.labels.nodes.some((label) =>
-        GROWTH_APPROVAL_LABELS.some((approval) => approval === label.name),
-      ),
+      growthApprovals: GROWTH_APPROVAL_LABELS.filter((approval) =>
+        node.labels.nodes.some((label) => label.name === approval),
+      ).toSorted(),
     };
   });
 }

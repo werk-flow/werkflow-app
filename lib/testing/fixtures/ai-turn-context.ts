@@ -51,6 +51,16 @@ const streamedText = (events: Awaited<ReturnType<typeof readTurn>>) =>
   );
 }
 
+// A message of invisible characters alone is refused before anything is saved or sent.
+{
+  resetAiTables(world);
+  const response = await postTurn('\u200B\u202E\u{E0041}');
+  assert.equal(response.status, 400, 'a message with no visible text must be refused');
+  assert.deepEqual(await response.json(), { error: 'invalid_input' });
+  assert.equal(tableRows(world, 'ai_thread_items').length, 0, 'a refused message must not be saved');
+  assert.equal(world.streamRequests.length, 0, 'a refused message must not reach the model');
+}
+
 // A role-play request the model falls for changes neither its instructions nor its tools, and the
 // tool it asks for never runs (B6, B21).
 for (const role of ['employee', 'admin'] as const) {
