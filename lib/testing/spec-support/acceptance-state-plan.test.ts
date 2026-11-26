@@ -2,6 +2,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { INVENTORY_ROUNDS } from '../../../tests/audit/support/acceptance-rounds';
 import { acceptanceSets } from '../../../tests/audit/support/acceptance-sets';
 import {
   interceptsRequest,
@@ -52,6 +53,25 @@ test('a page loads behind its held navigation, fails through its failed reads, a
   for (const view of ['tab', 'dialog'] as const) {
     expect(stateCapturePlan('loading', view)).toMatchObject({ intercepts: ['reads'], reach: 'gesture' });
     expect(stateCapturePlan('error', view)).toMatchObject({ response: 'abort', shows: 'failed-region' });
+  }
+});
+
+test('a dialog over a failed page forces no failure and proves the one behind it', () => {
+  const plan = stateCapturePlan('error', 'dialog-over-failed-page');
+  expect(plan).toMatchObject({ reach: 'gesture', shows: 'failed-region-behind' });
+  expect(interceptsRequest(plan, ACTION, TARGET)).toBeNull();
+  expect(interceptsRequest(plan, BACKGROUND_READ, TARGET)).toBeNull();
+  expect(() => stateCapturePlan('loading', 'dialog-over-failed-page')).toThrow();
+});
+
+test('every inventory dialog over a failed page is captured in its error state', () => {
+  const dialogs = INVENTORY_ROUNDS.flatMap((round) => round.captures).filter(
+    (capture) => capture.view.kind === 'dialog' && capture.view.overFailedPage,
+  );
+  expect(dialogs.length).toBeGreaterThan(0);
+  for (const capture of dialogs) {
+    expect(capture.state).toBe('error');
+    expect(capture.id).toEndWith('-error');
   }
 });
 

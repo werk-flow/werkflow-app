@@ -41,7 +41,12 @@ function failure(code: string): Error {
   return Object.assign(new Error(code), { code });
 }
 
-async function recordSnapshot(
+/**
+ * One record call for a fresh read. The billing page's cancellation records
+ * the organization's own stored subscription through it: that one can never
+ * be a second subscription, so it needs none of recordSubscription's conflict steps.
+ */
+export async function recordSnapshot(
   organizationId: string,
   snapshot: StripeSubscriptionSnapshot,
   refuseAsDuplicate = false,

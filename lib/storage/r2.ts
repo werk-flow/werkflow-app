@@ -408,6 +408,29 @@ function assertWerkflowBillingKey(path: string): void {
   }
 }
 
+/**
+ * A short-lived download URL of a WerkFlow billing original. The caller
+ * checked that the original belongs to the Admin's organization
+ * (lib/werkflow-billing/billing-actions.ts).
+ */
+export async function createWerkflowBillingDownloadUrl({
+  path,
+  downloadFileName,
+}: {
+  path: string;
+  downloadFileName: string;
+}): Promise<string> {
+  assertWerkflowBillingKey(path);
+  const command = new GetObjectCommand({
+    Bucket: getR2BucketName(),
+    Key: path,
+    ResponseContentDisposition: buildContentDisposition('attachment', downloadFileName),
+  });
+  return getSignedUrl(getR2Client(), command, {
+    expiresIn: clampExpiry(SIGNED_DOWNLOAD_URL_EXPIRES_SECONDS),
+  });
+}
+
 /** Stores a WerkFlow billing original once: a taken key keeps its first object, whose size it reports. */
 export async function putWerkflowBillingObject({
   path,
