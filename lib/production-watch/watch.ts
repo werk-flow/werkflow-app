@@ -86,7 +86,10 @@ export type WatchIo = {
 
 type CountState = { until?: string; reportedAt?: string; openSeen?: string };
 
-/** What a pass remembers for the next one. Losing it costs at most a repeated comment, never an alert. */
+/**
+ * What a pass remembers for the next one. Losing it repeats a comment on an open incident, and
+ * restarts the SERVED_GRACE wait and the count of failed passes (.github/workflows/prod-watch.yml).
+ */
 export type WatchState = {
   failures: number;
   watcherReported: boolean;

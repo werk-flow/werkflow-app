@@ -47,6 +47,8 @@ test('a refused Vercel call names its path and status, never the body, the query
   const io = liveIo(ENV, answering(403, body), fakeSpawn(0).spawn);
   const message = await failure(io.vercel('/v6/deployments?projectId=prj_x&teamId=team_y'));
   expect(message).toBe('Vercel answered 403 to /v6/deployments');
+  const detail = await failure(io.vercel('/v13/deployments/dpl_not_for_the_log?teamId=team_y'));
+  expect(detail).toBe('Vercel answered 403 to /v13/deployments/{id}');
 });
 
 test('an answer that is no JSON, a missing answer and a missing token fail with fixed text', async () => {

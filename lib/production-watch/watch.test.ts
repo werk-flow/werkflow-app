@@ -515,7 +515,7 @@ test('a lost or unreadable state starts fresh, and a saved one carries over', as
   const carried = readState(JSON.parse(JSON.stringify(state)));
   await watch(fake, carried, NOW + 40 * MINUTE);
   expect(sent(ERRORS, 'keep')).toHaveLength(1);
-  // A fresh state reports the open incident once more: a repeated comment, never a missed alert.
+  // A fresh state reports the open incident once more: a repeated comment.
   await watch(fake, readState(undefined), NOW + 40 * MINUTE);
   expect(sent(ERRORS, 'keep')).toHaveLength(2);
 });

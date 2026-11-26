@@ -34,7 +34,8 @@ export function liveIo(env: NodeJS.ProcessEnv, fetcher: Fetcher, runner: Runner)
   const repository = env.GH_REPO ?? '';
 
   async function vercel(path: string, body?: unknown): Promise<unknown> {
-    const call = path.split('?')[0] ?? path;
+    // The call's name in the public log: its path without the query and without a deployment id.
+    const call = (path.split('?')[0] ?? path).replace(/\/deployments\/[^/]+/, '/deployments/{id}');
     const token = env[TOKEN_VARIABLE] ?? '';
     if (!token)
       throw new WatchError(`${TOKEN_VARIABLE} is not set; the GitHub environment production holds it`);
