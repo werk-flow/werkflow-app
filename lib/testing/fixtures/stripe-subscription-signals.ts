@@ -351,6 +351,8 @@ stripe.refunds.set('re_test_3', { ...refund, id: 're_test_3', duplicateSubscript
 // Pending when the cleanup settled, cancelled afterwards: it paid nothing either.
 stripe.refunds.set('re_test_4', { ...refund, id: 're_test_4', status: 'canceled' });
 assert.equal(signalFamilyFor('refund.failed'), refundSignals);
+assert.equal(signalFamilyFor('refund.updated'), refundSignals);
+// The older per-method event stays handled while a destination still sends it.
 assert.equal(signalFamilyFor('charge.refund.updated'), refundSignals);
 alarms.length = 0;
 const failedRefund = await signal('refund.failed', {
@@ -361,13 +363,12 @@ const failedRefund = await signal('refund.failed', {
 await refundSignals.handle(failedRefund, gateway);
 await refundSignals.handle(failedRefund, gateway);
 await refundSignals.handle(
-  await signal('charge.refund.updated', { id: 're_test_2', object: 'refund', status: 'failed' }),
+  await signal('refund.updated', { id: 're_test_2', object: 'refund', status: 'failed' }),
   gateway,
 );
-await refundSignals.handle(
-  await signal('charge.refund.updated', { id: 're_test_3', object: 'refund' }),
-  gateway,
-);
+await refundSignals.handle(await signal('refund.updated', { id: 're_test_3', object: 'refund' }), gateway);
+await refundSignals.handle(await signal('refund.updated', { id: 're_test_4', object: 'refund' }), gateway);
+// The same cancelled refund under the older event changes nothing more.
 await refundSignals.handle(
   await signal('charge.refund.updated', { id: 're_test_4', object: 'refund' }),
   gateway,
@@ -378,11 +379,13 @@ assert.deepEqual(refundFailures[0], {
   p_stripe_refund_id: 're_test_1',
   p_stripe_payment_intent_id: 'pi_test_1',
 });
+// Each delivery asks the database once; its function records a refund once.
 assert.equal(
   refundFailures.length,
-  3,
+  4,
   'the database was not asked again on a redelivery, or for another refund',
 );
+assert.equal(refundFailures[3]?.p_stripe_refund_id, 're_test_4', 'the older event was not handled');
 assert.equal(
   refundFailures[2]?.p_stripe_refund_id,
   're_test_4',
