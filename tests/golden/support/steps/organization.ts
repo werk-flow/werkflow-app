@@ -4,7 +4,7 @@ import { createAdminClient, getOrganizationByName, type PersistedOrganization } 
 import { seedPaidReservation } from '../db/werkflow-billing';
 import { confirmTestUserEmail } from '../seed';
 import type { TestUser } from '../world';
-import { hydratedAndSettled, settledBeforeTimeout } from './interaction';
+import { hydrated, hydratedAndSettled, settledBeforeTimeout } from './interaction';
 import { openMemberDetailFromList } from './personnel';
 import { listEntry, openDialogWithRetry, openMenuItem, pendingRow, SHARED_COPY, visibleText } from './shared';
 
@@ -181,6 +181,8 @@ export async function createOrganizationInOnboarding(
   page: Page,
   organizationName: string,
 ): Promise<PersistedOrganization> {
+  // A value typed into server HTML is lost when React hydrates the form.
+  await hydrated(page);
   await page.getByLabel(ORGANIZATION_COPY.organizationName).fill(organizationName);
   await page.getByRole('button', { name: ORGANIZATION_COPY.createOrganization }).click();
   return expectOrganizationCreated(page, organizationName);
