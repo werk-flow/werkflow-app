@@ -35,7 +35,7 @@ function TimelineJobField({
   // Open jobs of the whole organization, as every correction offers them;
   // the jobs of the person whose time is added stand out.
   const jobSearch = useJobEntityOptions(
-    { kind: 'jobs', purpose: 'time-correction', subjectUserId },
+    { kind: 'jobs', purpose: 'time-correction', ...(subjectUserId ? { subjectUserId } : {}) },
     row.jobId ? [row.jobId] : [],
   );
   return (
@@ -182,7 +182,7 @@ export function CorrectionTimelineFields({
   /** „Speichern“ was pressed: each row shows its errors. */
   showErrors: boolean;
   /** The person whose time is added; the job pickers mark their jobs. The caller when absent. */
-  subjectUserId?: string | undefined;
+  subjectUserId?: string;
 }) {
   return (
     <section

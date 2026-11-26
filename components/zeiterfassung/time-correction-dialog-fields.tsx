@@ -172,7 +172,7 @@ function AddedTimeFields({
       <CorrectionTimelineFields
         timeline={timeline}
         showErrors={showTimelineErrors}
-        subjectUserId={subjectUserId}
+        {...(subjectUserId ? { subjectUserId } : {})}
       />
     </>
   );
@@ -220,12 +220,16 @@ function TimeCorrectionActivityField({
 }
 
 function TimeCorrectionJobField({
-  jobSearch,
+  subjectUserId,
   jobId,
   setJobId,
-}: Pick<TimeCorrectionDialogForm, 'jobId' | 'setJobId'> & {
-  jobSearch: ReturnType<typeof useJobEntityOptions>;
-}) {
+}: Pick<TimeCorrectionDialogForm, 'jobId' | 'setJobId'> & { subjectUserId: string | undefined }) {
+  // Open jobs of the whole organization, searched on the server once the field
+  // shows; „Ohne Auftrag“ stays first. The jobs of the entry's person stand out.
+  const jobSearch = useJobEntityOptions(
+    { kind: 'jobs', purpose: 'time-correction', ...(subjectUserId ? { subjectUserId } : {}) },
+    jobId && jobId !== 'none' ? [jobId] : [],
+  );
   return (
     <Field label="Auftrag" className="gap-1.5">
       <SearchableSelect
@@ -294,11 +298,6 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
   const subjectUserId = options?.people.find(
     (person) => person.employeeRecordId === subjectEmployeeRecordId,
   )?.userId;
-  // Open jobs of the whole organization, searched on the server; „Ohne Auftrag“ stays first.
-  const jobSearch = useJobEntityOptions(
-    { kind: 'jobs', purpose: 'time-correction', subjectUserId },
-    jobId && jobId !== 'none' ? [jobId] : [],
-  );
   // Moving time to another person, or choosing whose time is added, is an
   // office decision: only Admin and Büro see it.
   const callerRole = options?.people.find(
@@ -328,7 +327,7 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
           ) : null}
 
           {kind === 'reallocate' ? (
-            <TimeCorrectionJobField jobSearch={jobSearch} jobId={jobId} setJobId={setJobId} />
+            <TimeCorrectionJobField subjectUserId={subjectUserId} jobId={jobId} setJobId={setJobId} />
           ) : null}
 
           <Field
