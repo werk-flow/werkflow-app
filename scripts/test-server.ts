@@ -7,6 +7,7 @@ import { subscribeForDatabaseReadiness } from './realtime-probe';
 import { runSessionCommand, withTestSession } from '../lib/testing/local-stack/test-session';
 import { workspacePorts } from '../lib/testing/runner/app-port';
 import { TEST_SUPPORT_USER_IDS } from '../lib/testing/support-user';
+import { testAiOrganizationId } from '../lib/testing/ai-test-organization';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 
 const target = process.argv[2];
@@ -151,6 +152,11 @@ await withTestSession(async (signal) => {
   // allowlist of its own environment, or none.
   if (target === 'local') childEnvironment.SUPPORT_USER_IDS = TEST_SUPPORT_USER_IDS;
   else delete childEnvironment.SUPPORT_USER_IDS;
+  // The local test server releases this checkout's KI organization, which the
+  // KI journey seeds; it answers from recorded streams, since no key reaches it.
+  if (target === 'local') childEnvironment.AI_ORGANIZATION_IDS = testAiOrganizationId(repositoryRoot);
+  else delete childEnvironment.AI_ORGANIZATION_IDS;
+  delete childEnvironment.WERKFLOW_KI_ANTHROPIC_KEY;
   const run = async (
     command: readonly string[],
     output: { onStdout: (chunk: Buffer) => void; onStderr: (chunk: Buffer) => void } | undefined = undefined,

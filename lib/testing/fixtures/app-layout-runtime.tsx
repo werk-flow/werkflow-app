@@ -43,6 +43,7 @@ mock.module('@/lib/org/cookies', () => ({
   CURRENT_ORG_COOKIE: 'current_org_id',
   resolveActiveOrgId: async () => organizationId,
 }));
+mock.module('@/lib/ai/release-gate', () => ({ isAiReleasedFor: () => false }));
 mock.module('@/lib/auth/redirects', () => ({ getAuthenticatedRedirectPath: async () => '/login' }));
 let optionalReads = 0;
 const heldRead = (): Promise<never> => {

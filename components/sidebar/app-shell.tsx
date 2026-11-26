@@ -185,6 +185,15 @@ function SidebarLogo({ onClick }: { onClick: () => void }) {
 /** What the phone menu does on a navigation and on its report row. */
 type SidebarPresses = { onNavigate?: (() => void) | undefined; onReport?: (() => void) | undefined };
 
+/** The member's organizations WerkFlow released WerkFlow KI to; the sidebar offers its page there. */
+const AiOrganizationsContext = createContext<readonly string[]>([]);
+
+function useVisibleNavItems() {
+  const { activeOrg } = useOrganization();
+  const aiOrganizationIds = useContext(AiOrganizationsContext);
+  return navItemsFor(activeOrg?.role, activeOrg !== null && aiOrganizationIds.includes(activeOrg.orgId));
+}
+
 // Sidebar content component (shared between desktop and mobile). The phone
 // header carries the search, so only the desktop sidebar shows it.
 function SidebarContent({
@@ -193,10 +202,8 @@ function SidebarContent({
   search = false,
 }: SidebarPresses & { search?: boolean | undefined }) {
   const pathname = usePathname();
-  const { activeOrg } = useOrganization();
   const { actionableCount, approvalsCount, unreadNotificationCount } = useAttentionCounts();
-
-  const visibleNavItems = navItemsFor(activeOrg?.role);
+  const visibleNavItems = useVisibleNavItems();
 
   const activePath = pathname;
 
@@ -359,10 +366,12 @@ export function AppShell({
   children,
   initialAttentionCounts,
   initialOrganizationId,
+  aiOrganizationIds = [],
 }: {
   children: React.ReactNode;
   initialAttentionCounts?: AttentionCounts;
   initialOrganizationId?: string | null;
+  aiOrganizationIds?: readonly string[];
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const closeDrawer = useCallback(() => setIsOpen(false), []);
@@ -374,34 +383,36 @@ export function AppShell({
 
   return (
     <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>
-      <AttentionCountProvider
-        initialCounts={initialAttentionCounts}
-        initialOrganizationId={initialOrganizationId}
-      >
-        <ProblemReportLauncher>
-          <div className="flex h-dvh w-full flex-col overflow-hidden overscroll-none bg-background md:flex-row">
-            <MobileHeader />
-            <DesktopSidebar />
-            <MobileDrawer isOpen={isOpen} onClose={closeDrawer}>
-              {(report) => <DynamicSidebarContent onNavigate={closeDrawer} onReport={report} />}
-            </MobileDrawer>
-            <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-              <main
-                ref={mainRef}
-                aria-hidden={isSwitchingOrg}
-                // The field worker's phone gets 44 px touch targets (components/ui/field-worker-targets.ts).
-                data-field-worker={activeOrg?.role === 'employee' ? '' : undefined}
-                className={cn('h-full overflow-hidden', isSwitchingOrg && 'pointer-events-none opacity-0')}
-              >
-                {children}
-              </main>
-              <OrgSwitchOverlay />
-              {activeOrg?.role === 'employee' && showIosInstallHint && <IosInstallHint />}
+      <AiOrganizationsContext.Provider value={aiOrganizationIds}>
+        <AttentionCountProvider
+          initialCounts={initialAttentionCounts}
+          initialOrganizationId={initialOrganizationId}
+        >
+          <ProblemReportLauncher>
+            <div className="flex h-dvh w-full flex-col overflow-hidden overscroll-none bg-background md:flex-row">
+              <MobileHeader />
+              <DesktopSidebar />
+              <MobileDrawer isOpen={isOpen} onClose={closeDrawer}>
+                {(report) => <DynamicSidebarContent onNavigate={closeDrawer} onReport={report} />}
+              </MobileDrawer>
+              <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+                <main
+                  ref={mainRef}
+                  aria-hidden={isSwitchingOrg}
+                  // The field worker's phone gets 44 px touch targets (components/ui/field-worker-targets.ts).
+                  data-field-worker={activeOrg?.role === 'employee' ? '' : undefined}
+                  className={cn('h-full overflow-hidden', isSwitchingOrg && 'pointer-events-none opacity-0')}
+                >
+                  {children}
+                </main>
+                <OrgSwitchOverlay />
+                {activeOrg?.role === 'employee' && showIosInstallHint && <IosInstallHint />}
+              </div>
             </div>
-          </div>
-          <UnsentWorkHost />
-        </ProblemReportLauncher>
-      </AttentionCountProvider>
+            <UnsentWorkHost />
+          </ProblemReportLauncher>
+        </AttentionCountProvider>
+      </AiOrganizationsContext.Provider>
     </SidebarContext.Provider>
   );
 }

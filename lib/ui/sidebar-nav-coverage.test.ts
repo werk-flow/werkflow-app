@@ -31,7 +31,8 @@ test('the route inventory finds the authenticated pages', () => {
 
 test('every authenticated route highlights exactly one sidebar entry', () => {
   const unmapped = routes.flatMap((route) => {
-    const owners = navItemsFor('admin')
+    // A released organization's sidebar, which also shows the WerkFlow KI entry.
+    const owners = navItemsFor('admin', true)
       .filter((item) => isNavItemActive(item, route))
       .map((item) => item.label);
     const ownedByProfileCard = PROFILE_CARD_SECTIONS.some((href) => isNavItemActive({ href }, route));

@@ -5,7 +5,7 @@ import { resetPersistedPreferences } from '../../golden/support/preferences-rese
 import { attachWorldToRun, currentRunKey, updateRunManifest } from '../../golden/support/run-state';
 import { openRolePage } from '../../golden/support/streamed-content';
 import type { SessionRole } from '../../golden/support/sessions';
-import { loadWorld, saveWorld } from '../../golden/support/world';
+import { loadWorld, saveWorld, type TestUser } from '../../golden/support/world';
 
 // One file owns one world until the parent qualifies all assertions and measurements.
 // Multiple files run as separate verifier groups, never as world replacements here.
@@ -16,7 +16,7 @@ export const test = sharedTest.extend<{
    * capture's role, instead of one page fixture per role. Its teardown closes
    * every session it opened, as the page fixtures do.
    */
-  rolePage: (role: SessionRole) => Promise<Page>;
+  rolePage: (role: SessionRole, account?: { user: TestUser; organizationId: string }) => Promise<Page>;
 }>({
   auditWorldReady: [
     async ({}, provide, testInfo) => {
@@ -37,8 +37,14 @@ export const test = sharedTest.extend<{
   ],
   rolePage: async ({ browser, baseURL }, provide) => {
     const sessions: BrowserContext[] = [];
-    await provide(async (role) => {
-      const { context, page } = await openRolePage({ browser, baseUrl: baseURL, world: loadWorld(), role });
+    await provide(async (role, account) => {
+      const { context, page } = await openRolePage({
+        browser,
+        baseUrl: baseURL,
+        world: loadWorld(),
+        role,
+        account,
+      });
       sessions.push(context);
       return page;
     });

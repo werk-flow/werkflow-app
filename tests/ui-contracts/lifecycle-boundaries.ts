@@ -52,6 +52,7 @@ declare global {
       | 'offline-today'
       | 'offline-retry'
       | 'worker-start'
+      | 'ki-chat'
       | 'offline-clock'
       | 'unsent-time-landing'
       | 'work-handover'

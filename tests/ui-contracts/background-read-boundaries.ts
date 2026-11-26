@@ -17,6 +17,7 @@ import { readRequestWorkTargetsContract } from './request-attach-boundaries';
 import { readBreakRuleWeekEntries, readBreakRuleWeekPolicy } from './break-rule-week-boundaries';
 import { readGlobalSearchContract } from './global-search-boundaries';
 import { readOnCallOverviewContract } from './worker-start-service-boundaries';
+import { readKiThreadWindowContract } from './ki-chat-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -50,6 +51,8 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'work-artifacts') return readDraftJobAccessContract();
   if (kind === 'document-view-url') return readSignatureViewContract();
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();
+  // The chat's threads open empty: the spec drives each turn (ki-chat-boundaries.tsx).
+  if (kind === 'ki-thread-window') return readKiThreadWindowContract();
   if (kind === 'on-call-overview') return readOnCallOverviewContract();
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));

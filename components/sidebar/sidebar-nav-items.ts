@@ -15,8 +15,10 @@ import {
   ReceiptText,
   Receipt,
   BarChart3,
+  Sparkles,
 } from 'lucide-react';
 
+import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { isManagerRole, type OrgRole } from '@/lib/roles';
 
 type NavItem = {
@@ -29,6 +31,8 @@ type NavItem = {
   adminOnly?: boolean;
   /** The route section this item stays active in when it is wider than `href`. */
   activePrefix?: string;
+  /** Shown only in an organization WerkFlow released WerkFlow KI to; the page says whether it is on. */
+  aiReleased?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -41,6 +45,12 @@ const navItems: NavItem[] = [
     href: '/aufgaben',
     label: 'Aufgaben',
     icon: ListTodo,
+  },
+  {
+    href: '/ki',
+    label: AI_PRODUCT_NAME,
+    icon: Sparkles,
+    aiReleased: true,
   },
   {
     href: '/kalender',
@@ -127,10 +137,13 @@ const navItems: NavItem[] = [
 ];
 
 /** The items a member with `role` sees; the office pages refuse the others on the server. */
-export function navItemsFor(role: OrgRole | undefined): NavItem[] {
+export function navItemsFor(role: OrgRole | undefined, aiReleased = false): NavItem[] {
   const isManager = role !== undefined && isManagerRole(role);
   return navItems.filter(
-    (item) => (!item.managerOrAbove || isManager) && (!item.adminOnly || role === 'admin'),
+    (item) =>
+      (!item.managerOrAbove || isManager) &&
+      (!item.adminOnly || role === 'admin') &&
+      (!item.aiReleased || aiReleased),
   );
 }
 

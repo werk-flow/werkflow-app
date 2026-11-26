@@ -199,7 +199,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('owner-start.tsx') ||
                 args.importer.endsWith('text-link.tsx') ||
                 args.importer.endsWith('client-duplicate-matches.tsx') ||
-                args.importer.endsWith('standalone-screen.tsx')
+                args.importer.endsWith('standalone-screen.tsx') ||
+                args.importer.endsWith('ki-thread-list.tsx')
               )
                 return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
             });
@@ -288,6 +289,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                   return { path: join(import.meta.dir, 'invoice-editor-service-boundaries.tsx') };
               },
             );
+            // The WerkFlow KI chat sends its turns through a held stand-in the spec answers.
+            builder.onResolve({ filter: /^\.\/turn-client$/ }, (args) => {
+              if (args.importer.endsWith('components/ki/use-ki-chat.ts'))
+                return { path: join(import.meta.dir, 'ki-chat-boundaries.tsx') };
+            });
             // The WerkFlow KI card switches through a held stand-in whose response renders the route.
             builder.onResolve({ filter: /^@\/lib\/ai\/settings-actions$/ }, () => ({
               path: join(import.meta.dir, 'ai-settings-service-boundaries.ts'),
