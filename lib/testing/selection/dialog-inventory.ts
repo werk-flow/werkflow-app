@@ -66,6 +66,12 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-delete' }],
     },
+  'components/rechnungen/invoice-cancel.tsx#CancelInvoiceDialog|{copy.title(invoice.invoiceNumber)}': {
+    audits: [
+      { route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-cancel' },
+      { route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-correct' },
+    ],
+  },
   'components/rechnungen/invoice-issue.tsx#IssueInvoiceButton|Rechnung ausstellen?': {
     audits: [{ route: '/rechnungen/[invoiceId]', role: 'admin', opener: 'commercial.invoice-issue' }],
   },

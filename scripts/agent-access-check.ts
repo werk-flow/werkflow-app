@@ -23,6 +23,7 @@ import {
   writeRefusedOutcome,
 } from '../lib/security/staging-agent-keys';
 import { supabaseProjectRefs } from '../lib/security/production-access';
+import { STAGING_ORIGIN } from '../lib/testing/staging/boundary';
 
 /**
  * `bun run agent-access:check` proves that this machine's agent keys reach DEV, staging and the
@@ -32,7 +33,6 @@ import { supabaseProjectRefs } from '../lib/security/production-access';
  * key has its shape, so a live Stripe key never leaves the machine.
  */
 const MANAGEMENT_API = 'https://api.supabase.com/v1';
-const STAGING_ORIGIN = 'https://werkflow-app-git-main-werkflows-projects.vercel.app';
 const TIMEOUT_MS = 20_000;
 const checkout = resolve(import.meta.dir, '..');
 const home = homedir();
@@ -40,7 +40,8 @@ const home = homedir();
 const refs = supabaseProjectRefs(checkout);
 
 async function request(url: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(url, { redirect: 'manual', ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  // `verbose: false`: BUN_CONFIG_VERBOSE_FETCH in the environment would print each key's header.
+  return fetch(url, { redirect: 'manual', ...init, signal: AbortSignal.timeout(TIMEOUT_MS), verbose: false });
 }
 
 /** A check's verdict from a response's status alone; the body is discarded unread. */

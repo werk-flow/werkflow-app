@@ -4257,8 +4257,11 @@ export type Database = {
       invoices: {
         Row: {
           buyer_reference: string;
+          cancellation_reason: string | null;
+          cancels_invoice_id: string | null;
           client_id: string;
           closing_text: string;
+          corrects_invoice_id: string | null;
           created_at: string;
           created_by: string | null;
           discount_basis_points: number | null;
@@ -4293,8 +4296,11 @@ export type Database = {
         };
         Insert: {
           buyer_reference?: string;
+          cancellation_reason?: string | null;
+          cancels_invoice_id?: string | null;
           client_id: string;
           closing_text?: string;
+          corrects_invoice_id?: string | null;
           created_at?: string;
           created_by?: string | null;
           discount_basis_points?: number | null;
@@ -4329,8 +4335,11 @@ export type Database = {
         };
         Update: {
           buyer_reference?: string;
+          cancellation_reason?: string | null;
+          cancels_invoice_id?: string | null;
           client_id?: string;
           closing_text?: string;
+          corrects_invoice_id?: string | null;
           created_at?: string;
           created_by?: string | null;
           discount_basis_points?: number | null;
@@ -4365,10 +4374,24 @@ export type Database = {
         };
         Relationships: [
           {
+            foreignKeyName: "invoices_cancels_fk";
+            columns: ["cancels_invoice_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
             foreignKeyName: "invoices_client_fk";
             columns: ["client_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "invoices_corrects_fk";
+            columns: ["corrects_invoice_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -17137,6 +17160,24 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      cancel_invoice: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_correct: boolean;
+          p_expected_issue_date: string;
+          p_expected_number: string;
+          p_invoice_id: string;
+          p_organization_id: string;
+          p_original_content_hash?: string;
+          p_original_document_id?: string;
+          p_original_file_name?: string;
+          p_original_size_bytes?: number;
+          p_original_storage_path?: string;
+          p_reason: string;
+        };
+        Returns: Json;
       };
       cancel_planning_dispatch: {
         Args: {
