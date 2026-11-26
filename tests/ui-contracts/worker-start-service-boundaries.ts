@@ -29,6 +29,8 @@ declare global {
     workerStartDevice?: DeviceAnswer;
     /** What the on-call overview answers; set before the bundle loads. */
     workerStartOnCall?: OnCallOverview;
+    /** The on-call overview read fails, as a lost connection does; set before the bundle loads. */
+    workerStartOnCallFails?: boolean;
     workerStartContract: {
       reads: number;
       device: DeviceAnswer;
@@ -83,7 +85,10 @@ window.workerStartContract = {
 };
 
 /** The background read `on-call-overview` (background-read-boundaries.ts). */
-export async function readOnCallOverviewContract(): Promise<{ success: true; overview: OnCallOverview }> {
+export async function readOnCallOverviewContract(): Promise<
+  { success: true; overview: OnCallOverview } | { success: false; error: 'background_read_failed' }
+> {
+  if (window.workerStartOnCallFails) return { success: false, error: 'background_read_failed' };
   return { success: true, overview: window.workerStartOnCall ?? { shifts: [], ownNext: [] } };
 }
 
