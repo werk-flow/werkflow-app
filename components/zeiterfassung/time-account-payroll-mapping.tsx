@@ -110,13 +110,15 @@ function PayrollMappingForm({ settings }: { settings: TimeAccountSettingsData })
       return;
     }
     try {
-      const result = await run({ codes, basedOnVersion: followed.basedOnVersion });
+      // The table stays editable while the save runs; only these codes become saved.
+      const submitted = codes;
+      const result = await run({ codes: submitted, basedOnVersion: followed.basedOnVersion });
       if (!result.success) {
         setError(getTimeAccountFailureMessage('createMapping', result.error));
         return;
       }
       // The saved codes are no edits: the version this save made replaces the table.
-      setDraft((previous) => ({ ...previous, readCodes: previous.codes }));
+      setDraft((previous) => ({ ...previous, readCodes: submitted }));
       showBanner({ variant: 'success', message: 'Die Lohnarten-Zuordnung ist gespeichert.' });
     } catch {
       setError(getTimeAccountFailureMessage('createMapping', 'mapping_failed'));

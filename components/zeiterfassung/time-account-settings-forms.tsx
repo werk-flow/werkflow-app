@@ -169,17 +169,21 @@ const NO_ADJUSTMENT_ERRORS: AdjustmentErrors = { hours: null, reason: null };
  */
 function useAdjustmentFields({
   formId,
-  employeeName,
+  account,
   handleKeyDown,
   handleSubmit,
 }: {
   formId: string;
-  employeeName: string;
+  account: Pick<TimeAccountSettingsData['accounts'][number], 'employeeName' | 'version'>;
   handleKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   const ids = { hours: `${formId}-hours`, reason: `${formId}-reason` };
   const [errors, setErrors] = useState<AdjustmentErrors>(NO_ADJUSTMENT_ERRORS);
+  // The account version a draft was typed against: a live refresh that changes
+  // the balance must not carry the draft over to it, so its save is refused as
+  // stale. A submission, accepted or refused, ends the draft.
+  const [draftVersion, setDraftVersion] = useState<number | null>(null);
   const submitChecked = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     const data = new FormData(event.currentTarget);
     const next: AdjustmentErrors = {
@@ -193,6 +197,7 @@ function useAdjustmentFields({
       return;
     }
     await handleSubmit(event);
+    setDraftVersion(null);
   };
   const field = (key: keyof AdjustmentErrors, label: string, extra: { placeholder?: string } = {}) => (
     <Input
@@ -201,9 +206,12 @@ function useAdjustmentFields({
       name={key}
       type="text"
       autoComplete="off"
-      aria-label={`${label} für ${employeeName}`}
+      aria-label={`${label} für ${account.employeeName}`}
       aria-invalid={errors[key] ? true : undefined}
-      onChange={() => setErrors((previous) => ({ ...previous, [key]: null }))}
+      onChange={() => {
+        setErrors((previous) => ({ ...previous, [key]: null }));
+        setDraftVersion((previous) => previous ?? account.version);
+      }}
       onKeyDown={handleKeyDown}
       required
       {...extra}
@@ -214,6 +222,7 @@ function useAdjustmentFields({
     hours: field('hours', 'Stunden der Korrektur', { placeholder: '+0:00' }),
     reason: field('reason', 'Korrekturgrund'),
     message: [errors.hours, errors.reason].filter((message) => message !== null).join(' ') || null,
+    expectedVersion: draftVersion ?? account.version,
     submitChecked,
   };
 }
@@ -242,9 +251,9 @@ function AdjustmentRequestForm({
       pendingValue={pendingValue}
     />
   );
-  const { ids, hours, reason, message, submitChecked } = useAdjustmentFields({
+  const { ids, hours, reason, message, expectedVersion, submitChecked } = useAdjustmentFields({
     formId,
-    employeeName: account.employeeName,
+    account,
     handleKeyDown,
     handleSubmit,
   });
@@ -270,7 +279,7 @@ function AdjustmentRequestForm({
       form={
         <form id={formId} onSubmit={submitChecked} noValidate className="contents">
           <input type="hidden" name="accountId" value={account.id} />
-          <input type="hidden" name="expectedVersion" value={account.version} />
+          <input type="hidden" name="expectedVersion" value={expectedVersion} />
         </form>
       }
       cells={adjustmentCells(layout, { ids, hours, effectiveDate, reason, kinds })}

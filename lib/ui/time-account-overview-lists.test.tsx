@@ -19,6 +19,7 @@ function render(outcome: Parameters<typeof TimeAccountPeriodList>[0]['periods'][
 test('an uncalculated month shows „—“ and its cause in the table and on the phone card', () => {
   const html = render({ computed: false, causes: ['missing_opening_balance'] });
   // Three values each in the phone card and the table row.
+  expect(html.match(/>—</g)).toHaveLength(6);
   expect(html.match(/nicht berechnet</g)).toHaveLength(6);
   expect(html.match(/Nicht berechnet: Zeitkonto fehlt/g)).toHaveLength(2);
   expect(html).not.toContain('0:00');
@@ -29,4 +30,5 @@ test('a calculated month of zero shows 0:00', () => {
   expect(html.match(/0:00/g)).toHaveLength(6);
   expect(html).not.toContain('Nicht berechnet');
   expect(html).not.toContain('nicht berechnet');
+  expect(html).not.toContain('—');
 });

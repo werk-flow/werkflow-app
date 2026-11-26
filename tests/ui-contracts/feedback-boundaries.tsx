@@ -100,10 +100,13 @@ function TimeAccountAdjustmentHost(): React.JSX.Element {
   return <AdjustmentRequestForms accounts={accounts} today="2026-11-02" />;
 }
 
-const readMissingAccounts = () => structuredClone(window.uiContractMissingAccounts);
+const readOpeningSettings = () => ({
+  missingAccounts: structuredClone(window.uiContractMissingAccounts),
+  suggestedStartDate: window.uiContractSuggestedStart,
+});
 
 function TimeAccountBulkOpeningHost(): React.JSX.Element {
-  const missingAccounts = useRouteProps(readMissingAccounts);
+  const { missingAccounts, suggestedStartDate } = useRouteProps(readOpeningSettings);
   return (
     <MissingTimeAccountsCard
       settings={{
@@ -111,7 +114,7 @@ function TimeAccountBulkOpeningHost(): React.JSX.Element {
         employeeCount: 2,
         missingAccounts,
         accounts: [],
-        suggestedStartDate: '2026-09-01',
+        suggestedStartDate,
       }}
     />
   );

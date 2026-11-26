@@ -86,3 +86,32 @@ test('valid hours are sent as typed with the clicked kind', async ({ page }) => 
   await expect(page.getByRole('alert')).toContainText('Der Antrag ist gespeichert.');
   await expect(hours(page)).toHaveValue('');
 });
+
+test('a draft keeps the account version it was typed against across a live refresh', async ({ page }) => {
+  await fillReason(page);
+  await hours(page).fill('-8:00');
+  // Another session changes the balance: the refreshed row shows the new version.
+  await page.evaluate(() => {
+    window.uiContractTimeAccounts = window.uiContractTimeAccounts.map((account) => ({
+      ...account,
+      currentBalanceMinutes: 120,
+      version: account.version + 1,
+    }));
+    window.dispatchEvent(new Event('ui-contract:route-refresh'));
+  });
+  await expect(row(page)).toContainText('Saldo +2:00 Std.');
+  await kind(page, 'Auszahlung').click();
+  await expectHeldWrite(page, 'submit-adjustment');
+  // The server refuses the old version as stale instead of booking the payout against the new balance.
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toMatchObject({
+    expectedVersion: '1',
+    hours: '-8:00',
+  });
+});
+
+test('picking the selected day again keeps the date', async ({ page }) => {
+  const date = row(page).getByRole('group', { name: 'Wirksamkeitsdatum für Kevin Kontrakt' });
+  await date.getByRole('button', { name: 'Kalender öffnen' }).click();
+  await page.locator('[aria-selected="true"] button').first().click();
+  await expect(date).toContainText('02.11.2026');
+});

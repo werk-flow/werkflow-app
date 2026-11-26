@@ -14,6 +14,8 @@ declare global {
   interface Window {
     uiContractTimeAccounts: TimeAccountSettingsData['accounts'];
     uiContractMissingAccounts: TimeAccountSettingsData['missingAccounts'];
+    /** The suggested start date the settings read returns; a spec moves it to model a month closed elsewhere. */
+    uiContractSuggestedStart: string;
   }
 }
 
@@ -31,6 +33,8 @@ window.uiContractMissingAccounts = [
     exitDate: '2026-12-31',
   },
 ];
+
+window.uiContractSuggestedStart = '2026-09-01';
 
 window.uiContractTimeAccounts = [
   {

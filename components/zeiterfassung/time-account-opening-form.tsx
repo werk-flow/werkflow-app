@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -174,15 +174,26 @@ function checkOpening(input: {
 }
 
 /**
+ * The shared opening date: the suggested start date until the Admin picks
+ * one. A live refresh that moves the suggestion, such as a month closed in
+ * another session, moves an untouched date with it; a picked date stays.
+ */
+function useSuggestedDate(suggestedStartDate: string) {
+  const [picked, setPicked] = useState<{ date: Date | undefined } | null>(null);
+  // One Date per suggestion, so the picker sees a stable value between renders.
+  const suggested = useMemo(() => new Date(`${suggestedStartDate}T12:00:00`), [suggestedStartDate]);
+  const pick = (date: Date | undefined): void => setPicked({ date });
+  return [picked ? picked.date : suggested, pick] as const;
+}
+
+/**
  * The state and submission of the opening form: the clicked button names one
  * person or everyone listed, a missing input marks its fields and sends
  * nothing, and a refusal stays at the form.
  */
 function useOpenTimeAccounts(missingAccounts: readonly MissingAccount[], suggestedStartDate: string) {
   const { showBanner } = useBanner();
-  const [openedOn, setOpenedOn] = useState<Date | undefined>(
-    () => new Date(`${suggestedStartDate}T12:00:00`),
-  );
+  const [openedOn, pickOpenedOn] = useSuggestedDate(suggestedStartDate);
   const [reason, setReason] = useState('Einführung des Zeitkontos');
   const [balances, setBalances] = useState<Readonly<Record<string, string>>>({});
   const [errors, setErrors] = useState<OpeningErrors>({ balances: [] });
@@ -192,7 +203,7 @@ function useOpenTimeAccounts(missingAccounts: readonly MissingAccount[], suggest
   const balanceOf = (employeeRecordId: string): string => balances[employeeRecordId] ?? ZERO_BALANCE_INPUT;
 
   const changeOpenedOn = (date: Date | undefined): void => {
-    setOpenedOn(date);
+    pickOpenedOn(date);
     setErrors((previous) => ({ ...previous, openedOn: undefined }));
   };
   const changeReason = (text: string): void => {
