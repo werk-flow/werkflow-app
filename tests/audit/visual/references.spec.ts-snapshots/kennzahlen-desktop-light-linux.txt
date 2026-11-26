@@ -1,5 +1,6 @@
 Haustechnik Krämer GmbH
 Organisation erstellen
+Suchen
 Dashboard
 Aufgaben
 3
@@ -12,6 +13,7 @@ Aufträge
 Dokumente
 Inventar
 Angebote
+Rechnungen
 Service
 Arbeitsvorlagen
 Mitarbeiter
@@ -19,9 +21,6 @@ Kunden
 Wochenzahlen
 Problem melden
 F2
-MK
-Martin Krämer
-martin.kraemer@haustechnik-kraemer.de
 Wochenzahlen
 Die Zahlen der ganzen Firma aus den letzten 12 Wochen, nie für einzelne Personen.
 Noch keine Wochenzahlen
