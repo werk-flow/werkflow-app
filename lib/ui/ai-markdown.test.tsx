@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { AiMarkdown, sameOriginTarget, splitAnswerBlocks } from '@/components/shared/ai-markdown';
+import { AiMarkdown } from '@/components/shared/ai-markdown';
+import { sameOriginTarget, splitAnswerBlocks } from '@/lib/ui/ai-markdown-text';
 
 // The renderer of model text is an exfiltration boundary (B11,
 // werk-flow/werkflow-planning#530): a model talked into it by a poisoned

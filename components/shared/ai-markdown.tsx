@@ -1,6 +1,7 @@
 import { memo, type ReactNode } from 'react';
 
 import { TextLink } from '@/components/ui/text-link';
+import { FENCE, sameOriginTarget, splitAnswerBlocks } from '@/lib/ui/ai-markdown-text';
 
 // The one renderer of model text (B11, werk-flow/werkflow-planning#530). It
 // builds React elements for a small Markdown subset and nothing else: no HTML,
@@ -8,24 +9,6 @@ import { TextLink } from '@/components/ui/text-link';
 // image, reference and tag stays visible as plain text, so a model that was
 // talked into sending data out has nothing that loads or navigates. Lint bans
 // every other Markdown renderer in product code (eslint.config.mjs).
-
-const PROBE_ORIGIN = 'https://werkflow.invalid';
-const PRINTABLE_PATH = /^\/(?![/\\])[\x21-\x5b\x5d-\x7e]*$/;
-
-/**
- * The link target of a path on this origin, as the browser resolves it, or
- * null. The written path is one leading slash and printable ASCII without a
- * backslash, so no space, control character or lookalike of a slash can turn
- * it into another host. The resolved path holds the same, because dot
- * segments (`/.//host`, `/%2e//host`) can collapse into a second slash that a
- * hard navigation would read as another host.
- */
-export function sameOriginTarget(href: string): string | null {
-  if (!PRINTABLE_PATH.test(href)) return null;
-  const url = new URL(href, PROBE_ORIGIN);
-  const target = `${url.pathname}${url.search}${url.hash}`;
-  return url.origin === PROBE_ORIGIN && PRINTABLE_PATH.test(url.pathname) ? target : null;
-}
 
 const INLINE =
   /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)|(!?)\[([^\]\n]+)\]\(([^)\s]*)\)|\*\*(.+?)\*\*|__(.+?)__|\*(\S(?:.*?\S)?)\*|\b_(\S(?:.*?\S)?)_\b/g;
@@ -60,7 +43,6 @@ function inline(text: string): ReactNode[] {
 const HEADING = /^ {0,3}#{1,6}\s+(.*)$/;
 const LIST_ITEM = /^\s*(?:([-*+])|(\d{1,9})[.)])\s+(.*)$/;
 const QUOTE = /^\s*>\s?(.*)$/;
-const FENCE = /^\s*```/;
 
 function lines(source: string[], key: number, render: (line: string) => ReactNode): ReactNode[] {
   return source.flatMap((line, index) =>
@@ -142,30 +124,6 @@ function renderBlock(source: string): ReactNode[] {
     );
   }
   return nodes;
-}
-
-/**
- * The answer's blocks: split at blank lines outside a code fence. Text only
- * grows at its end, so every block but the last is finished and never changes.
- */
-export function splitAnswerBlocks(text: string): string[] {
-  const blocks: string[] = [];
-  let current: string[] = [];
-  let fenced = false;
-  const close = (): void => {
-    if (current.length > 0) blocks.push(current.join('\n'));
-    current = [];
-  };
-  for (const row of text.split('\n')) {
-    // A code block stands alone: its fence ends the block before it, and its closing fence ends it.
-    if (FENCE.test(row) && !fenced) close();
-    if (FENCE.test(row)) fenced = !fenced;
-    if (!fenced && row.trim() === '') close();
-    else current.push(row);
-    if (FENCE.test(row) && !fenced) close();
-  }
-  close();
-  return blocks;
 }
 
 /** A finished block renders once: its source never changes, so memo keeps it (brief non-negotiable 3). */
