@@ -17,7 +17,14 @@ const world = installActionWorld({});
 world.rpc = ({ name, args }) => {
   assert.equal(name, 'set_ai_organization_enabled');
   return {
-    data: [{ id: 'switch-row', enabled: args.p_enabled, updated_at: '2026-11-23T10:00:00.000000+00:00' }],
+    data: [
+      {
+        id: 'switch-row',
+        enabled: args.p_enabled,
+        updated_at: '2026-11-23T10:00:00.000000+00:00',
+        revision: 3,
+      },
+    ],
     error: null,
   };
 };
@@ -60,6 +67,7 @@ assert.deepEqual(await setAiEnabled({ organizationId: ORGANIZATION_A, enabled: t
   enabled: true,
   id: 'switch-row',
   updatedAt: '2026-11-23T10:00:00.000000+00:00',
+  revision: 3,
 });
 assert.deepEqual(world.rpcCalls.at(-1)?.args, {
   p_organization_id: ORGANIZATION_A,

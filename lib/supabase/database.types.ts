@@ -45,6 +45,7 @@ export type Database = {
           id: string;
           monthly_budget_micro_eur: number;
           organization_id: string;
+          revision: number;
           updated_at: string;
           updated_by: string | null;
         };
@@ -53,6 +54,7 @@ export type Database = {
           id?: string;
           monthly_budget_micro_eur?: number;
           organization_id: string;
+          revision?: number;
           updated_at?: string;
           updated_by?: string | null;
         };
@@ -61,6 +63,7 @@ export type Database = {
           id?: string;
           monthly_budget_micro_eur?: number;
           organization_id?: string;
+          revision?: number;
           updated_at?: string;
           updated_by?: string | null;
         };
@@ -21660,6 +21663,7 @@ export type Database = {
         Returns: {
           enabled: boolean;
           id: string;
+          revision: number;
           updated_at: string;
         }[];
       };

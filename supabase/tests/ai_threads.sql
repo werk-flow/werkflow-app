@@ -184,8 +184,15 @@ begin
     raise exception 'An organization nobody switched on reserved a run: %', reservation.verdict;
   end if;
 
-  perform public.set_ai_organization_enabled('ae000000-0000-4000-8000-000000000010',
-    'ae000000-0000-4000-8000-000000000001', true);
+  -- Each save takes the next revision, which the admin's card waits for.
+  if (select saved.revision from public.set_ai_organization_enabled('ae000000-0000-4000-8000-000000000010',
+      'ae000000-0000-4000-8000-000000000001', true) saved) is distinct from 1::bigint then
+    raise exception 'The first save did not take revision 1';
+  end if;
+  if (select saved.revision from public.set_ai_organization_enabled('ae000000-0000-4000-8000-000000000010',
+      'ae000000-0000-4000-8000-000000000001', true) saved) is distinct from 2::bigint then
+    raise exception 'A second save did not take the next revision';
+  end if;
   if (select monthly_budget_micro_eur from public.ai_organization_settings
       where organization_id = 'ae000000-0000-4000-8000-000000000010') is distinct from 50000000::bigint then
     raise exception 'The default budget is not EUR 50 a month';

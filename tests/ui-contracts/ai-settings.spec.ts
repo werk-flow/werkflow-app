@@ -3,7 +3,7 @@ import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fi
 
 // The admin's WerkFlow KI switch is a micro-toggle: it flips in the first
 // frame while the write is open, marked unconfirmed (lib/ui/unconfirmed.ts),
-// stays pending and locked until the rendered props carry a new write stamp,
+// stays pending and locked until the rendered props carry its save's revision,
 // stays quiet once confirmed, and turns back with the reason when refused.
 test.beforeEach(async ({ page }) => {
   await openContractFixture(page, 'ai-settings');
@@ -56,13 +56,9 @@ test('a save settles at once when another admin set the switch back before the r
   await toggle.click();
   await expectHeldWrite(page, 'set-ai-enabled');
   await answerHeldWrite(page, null);
-  // Another admin's later save: off again, with a newer stamp.
+  // Another admin's later save: off again, with the next revision.
   await page.evaluate(() => {
-    window.uiContractAiSwitch = {
-      released: true,
-      enabled: false,
-      updatedAt: '2026-11-23T10:00:30.000000+00:00',
-    };
+    window.uiContractAiSwitch = { released: true, enabled: false, revision: 2 };
   });
   await releaseRefresh(page);
   await expect(page.getByRole('status', { name: 'WerkFlow KI wird umgeschaltet', exact: true })).toHaveCount(
@@ -70,6 +66,32 @@ test('a save settles at once when another admin set the switch back before the r
   );
   await expect(toggle).toBeEnabled();
   await expect(toggle).not.toBeChecked();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test("the render of another admin's earlier save does not settle a save", async ({ page }) => {
+  const toggle = page.getByRole('checkbox', {
+    name: 'WerkFlow KI in dieser Organisation nutzen',
+    exact: true,
+  });
+  const pending = page.getByRole('status', { name: 'WerkFlow KI wird umgeschaltet', exact: true });
+  await toggle.click();
+  await expectHeldWrite(page, 'set-ai-enabled');
+  // Another admin's save committed first and its render lands while this one is open.
+  await page.evaluate(() => {
+    window.uiContractAiSwitch = { released: true, enabled: false, revision: 1 };
+    window.dispatchEvent(new Event('ui-contract:route-refresh'));
+  });
+  await answerHeldWrite(page, null);
+  // This save took revision 2; its own render has not landed.
+  await expect(pending).toBeVisible();
+  await expect(toggle).toBeDisabled();
+  await expect(toggle).toBeChecked();
+
+  await releaseRefresh(page);
+  await expect(pending).toHaveCount(0);
+  await expect(toggle).toBeEnabled();
+  await expect(toggle).toBeChecked();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 

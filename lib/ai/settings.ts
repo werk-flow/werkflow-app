@@ -7,8 +7,8 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 /** What the admin's WerkFlow KI card shows. */
 export type AiOrganizationSwitch =
   | { released: false }
-  /** `updatedAt` is the last write's stamp, null before the first: a save settles when it changes. */
-  | { released: true; enabled: boolean; updatedAt: string | null };
+  /** `revision` counts the saves, 0 before the first: a save settles once it reaches the save's own. */
+  | { released: true; enabled: boolean; revision: number };
 
 /**
  * The organization's WerkFlow KI switch: off until WerkFlow released the
@@ -21,12 +21,12 @@ export async function readAiOrganizationSwitch(
   if (!isAiReleasedFor(organizationId)) return { released: false };
   const { data, error } = await createSupabaseAdminClient()
     .from('ai_organization_settings')
-    .select('enabled, updated_at')
+    .select('enabled, revision')
     .eq('organization_id', organizationId)
     .maybeSingle();
   if (error) {
     logError('readAiOrganizationSwitch: settings read failed', error);
     return 'load_failed';
   }
-  return { released: true, enabled: data?.enabled ?? false, updatedAt: data?.updated_at ?? null };
+  return { released: true, enabled: data?.enabled ?? false, revision: data?.revision ?? 0 };
 }
