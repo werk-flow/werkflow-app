@@ -177,7 +177,8 @@ alter table public.invoices add constraint invoices_issue_snapshot_check check (
 -- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that release has no invoice table yet; this release writes only drafts, which the rule lets pass
 alter table public.invoices add constraint invoices_original_fk foreign key (original_document_id, organization_id)
   references public.documents (id, organization_id);
-create index invoices_original_document_idx on public.invoices (original_document_id)
+-- The key's columns, so a deleted document finds its invoice without a scan (foreign_key_indexes.sql).
+create index invoices_original_document_idx on public.invoices (original_document_id, organization_id)
   where original_document_id is not null;
 create index invoices_issued_by_idx on public.invoices (issued_by);
 
