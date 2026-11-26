@@ -1,6 +1,6 @@
 # The CI App whose check runs the gates trust beside GitHub Actions' (werk-flow/werkflow-planning#512).
-# release-candidate.sh and main-full-run.sh source it. check-app.json beside it holds
-# {"appId": <the App's id>}, or {"appId": null} while there is none; scripts/ci/publish-check.ts
+# full-run-verdict.sh (the release gate's and the nightly's reader) and main-full-run.sh source
+# it. check-app.json beside it holds {"appId": <the App's id>}, or {"appId": null} while there is none; scripts/ci/publish-check.ts
 # posts `Check` and `Full run / Check` as that App. lib/testing/ci/check-app.ts matches the file
 # with the same pattern, so no JSON parser's leniency decides which App counts.
 

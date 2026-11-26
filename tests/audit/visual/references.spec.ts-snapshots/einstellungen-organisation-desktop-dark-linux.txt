@@ -59,6 +59,8 @@ Deine Rolle
 Admin
 Erstellt am
 1. Januar 2026
+Mitglieder
+4
 Allgemeine Angaben
 Admins können den Organisationsnamen und den Code für den Beitritt pflegen.
 Name der Organisation
@@ -73,6 +75,4 @@ Dieser Code muss organisationsweit eindeutig sein, damit neue Nutzer gezielt bei
 Organisation speichern
 Gefahrenzone
 Löscht die Organisation dauerhaft inklusive Mitgliedschaften und Einladungen.
-Diese Aktion sollte nur genutzt werden, wenn die Organisation wirklich nicht mehr benötigt wird.
-Organisation löschen
 Nicht eingestempelt

@@ -6,14 +6,15 @@
 # staging.yml applies them to DEV with the `supabase db push --include-all` the release then runs
 # on PROD, so a migration that sorts before one already applied reaches PROD only after it reached
 # DEV (docs/technical/environments.md, "The migration rule"). It reads DEV through the Management
-# API's read-only query endpoint, which needs the token permission `database_read`. A failed read
+# API's read-only query endpoint with a token that may only read DEV's database (`database_read`
+# on DEV alone), so the release reads no PROD data with it. A failed read
 # names the HTTP status and a fixed cause, never the response body: the repository is public.
 # Anything but a list of 14-digit versions applies nothing to PROD.
-# Needs SUPABASE_ACCESS_TOKEN and DEV_PROJECT_REF.
+# Needs SUPABASE_DEV_READ_TOKEN and DEV_PROJECT_REF.
 set -euo pipefail
 # The token stays a shell variable but leaves the environment before any child starts, so curl
 # gets it only from its config.
-export -n SUPABASE_ACCESS_TOKEN
+export -n SUPABASE_DEV_READ_TOKEN
 source "$(dirname "$0")/curl-headers.sh"
 
 fail() {
@@ -32,15 +33,15 @@ trap 'rm -f "$body"' EXIT
 sent=0
 # --disable first: no .curlrc adds an option. curl's own error text goes nowhere; its exit code is enough.
 status="$(curl --disable --silent --max-time 60 --output "$body" --write-out '%{http_code}' -X POST \
-  --config <(curl_headers <<< "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}") -H 'Content-Type: application/json' \
+  --config <(curl_headers <<< "Authorization: Bearer ${SUPABASE_DEV_READ_TOKEN}") -H 'Content-Type: application/json' \
   --data '{"query":"select version from supabase_migrations.schema_migrations order by version"}' \
   "https://api.supabase.com/v1/projects/${DEV_PROJECT_REF}/database/query/read-only" 2> /dev/null)" || sent=$?
 test "$sent" = 0 || unread "${status:-000}" "Supabase's answer did not arrive (curl exit ${sent}). Rerun the release once the Supabase API answers."
 case "$status" in
   2??) ;;
-  401) unread "$status" "Supabase rejected SUPABASE_ACCESS_TOKEN as expired, revoked or malformed. Replace the repository secret." ;;
-  403) unread "$status" "SUPABASE_ACCESS_TOKEN may not run read-only queries on DEV. It needs the permission database_read on project ${DEV_PROJECT_REF}." ;;
-  404) unread "$status" "Supabase found no project ${DEV_PROJECT_REF} or no read-only query endpoint for SUPABASE_ACCESS_TOKEN." ;;
+  401) unread "$status" "Supabase rejected SUPABASE_DEV_READ_TOKEN as expired, revoked or malformed. Replace the repository secret SUPABASE_DEV_READ_TOKEN." ;;
+  403) unread "$status" "SUPABASE_DEV_READ_TOKEN may not run read-only queries on DEV. It needs the permission database_read on project ${DEV_PROJECT_REF}. Fix the token behind the repository secret SUPABASE_DEV_READ_TOKEN." ;;
+  404) unread "$status" "Supabase found no project ${DEV_PROJECT_REF} or no read-only query endpoint for SUPABASE_DEV_READ_TOKEN." ;;
   429) unread "$status" "Supabase rate-limited the token. Rerun the release in a few minutes." ;;
   5??) unread "$status" "Supabase failed to run the query. Rerun once; if it repeats, DEV's role supabase_read_only_user may lack access to supabase_migrations." ;;
   *) unread "$status" "Supabase gave an answer the release does not expect." ;;

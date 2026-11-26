@@ -56,6 +56,9 @@ export const DIALOG_INVENTORY = {
   'components/angebote/create-offer-dialog.tsx#CreateOfferDialog|Angebot anlegen': {
     audits: [{ route: '/angebote', role: 'admin', opener: 'commercial.offer' }],
   },
+  'components/angebote/offer-header-dialog.tsx#OfferHeaderDialog|Angebotskopf bearbeiten': {
+    audits: [{ route: '/angebote/[offerId]', role: 'admin', opener: 'commercial.offer-header' }],
+  },
   'components/rechnungen/create-invoice-dialog.tsx#CreateInvoiceDialog|Rechnung erstellen': {
     audits: [{ route: '/rechnungen', role: 'admin', opener: 'commercial.invoice' }],
   },

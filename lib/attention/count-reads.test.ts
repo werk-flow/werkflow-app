@@ -18,6 +18,9 @@ type QueryResult = { data: unknown; error: { code: string } | null; count: numbe
 let role: Role = 'admin';
 let failingTable: string | null = null;
 let queries: string[] = [];
+// The open jobs past their visits that the office's set read returns, and the organizations it was asked for.
+let overdueJobs: Record<string, unknown>[] = [];
+let managerSetOrganizations: unknown[] = [];
 
 // The steady state of a typical member: an own employee record, no pending
 // work. Every derivation then stops after its first scarce read.
@@ -83,10 +86,14 @@ function countingQuery(table: string) {
     // The read functions that answer an object: the open absences, here none.
     if (table === 'rpc read_open_absences')
       return Promise.resolve(resolve({ data: { vacations: [], leaverWindows: [] }, error: null, count: 0 }));
-    // The other one: the open requests and access proposals of the office, here none.
+    // The other one: the open requests, access proposals and overdue jobs of the office, here none.
     if (table === 'rpc read_manager_attention_sets')
       return Promise.resolve(
-        resolve({ data: { requests: [], access_proposals: [] }, error: null, count: 0 }),
+        resolve({
+          data: { requests: [], access_proposals: [], overdue_jobs: overdueJobs },
+          error: null,
+          count: 0,
+        }),
       );
     const rows = rowsOf(table);
     return Promise.resolve(
@@ -98,7 +105,10 @@ function countingQuery(table: string) {
 
 const client = {
   from: (table: string) => countingQuery(table),
-  rpc: (name: string) => countingQuery(`rpc ${name}`),
+  rpc: (name: string, args: Record<string, unknown>) => {
+    if (name === 'read_manager_attention_sets') managerSetOrganizations.push(args.p_organization_id);
+    return countingQuery(`rpc ${name}`);
+  },
   auth: { getUser: async () => ({ data: { user: { id: USER } }, error: null }) },
 };
 
@@ -122,7 +132,7 @@ test.skipIf(ISOLATED)('the attention count read cases pass in an isolated proces
     `${stdout}
 ${stderr}`,
   ).toBe(0);
-  expect(stderr).toContain('4 pass');
+  expect(stderr).toContain('5 pass');
 });
 
 if (ISOLATED) {
@@ -234,6 +244,32 @@ if (ISOLATED) {
         'vacation_requests',
         'work_schedules',
       ]);
+    });
+
+    test("an open job past its last visit is a task of the session organization's Admin and Büro, never of an employee", async () => {
+      overdueJobs = [
+        {
+          id: '9e3f5a71-4b2c-4d8e-a1f0-6c7b8d9e0f12',
+          job_number: 'A-1001',
+          title: 'Heizung warten',
+          project_id: null,
+          project_number: null,
+          created_at: '2025-01-02T08:00:00Z',
+          last_timed_end: '2025-01-10T15:00:00Z',
+          last_all_day_end: null,
+        },
+      ];
+      managerSetOrganizations = [];
+      try {
+        const buero = await readAs('buero', getAttentionCounts);
+        expect(buero.result).toMatchObject({ success: true, counts: { actionableCount: 1 } });
+        const employee = await readAs('employee', getAttentionCounts);
+        expect(employee.result).toMatchObject({ success: true, counts: { actionableCount: 0 } });
+        // Only the office viewer's derivation read the set, and only for its own organization.
+        expect(managerSetOrganizations).toEqual([ORG]);
+      } finally {
+        overdueJobs = [];
+      }
     });
 
     test('a failed read fails the counts instead of reporting zero', async () => {

@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { AufgabenTaskSection } from '@/components/aufgaben/aufgaben-task-section';
 import { toWorkHandoverTasks } from '@/lib/attention/handover-tasks';
 
@@ -19,4 +21,22 @@ const HANDOVER_TASKS = toWorkHandoverTasks(
 
 export function TaskSectionsContractFixture() {
   return <AufgabenTaskSection tasks={HANDOVER_TASKS} />;
+}
+
+/**
+ * Aufgaben opened at its handover section: the tasks arrive after the page,
+ * as the overview read does, below a page of other content.
+ */
+export function TaskSectionsAnchorContractFixture() {
+  const [tasks, setTasks] = useState<typeof HANDOVER_TASKS>([]);
+  useEffect(() => {
+    const timer = setTimeout(() => setTasks(HANDOVER_TASKS), 300);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <>
+      <div style={{ height: 3000 }} />
+      <AufgabenTaskSection tasks={tasks} />
+    </>
+  );
 }

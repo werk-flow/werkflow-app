@@ -2,7 +2,8 @@ import { z } from '@/lib/zod';
 
 // An Angebot without positions: number, title, customer, recipient, validity,
 // texts and the responsible member
-// (supabase/migrations/20261210130000_keep_offers_for_the_right_customer_and_recipient.sql).
+// (supabase/migrations/20261210130000_keep_offers_for_the_right_customer_and_recipient.sql,
+// its header changes in 20261230110000_change_the_header_of_a_draft_offer.sql).
 
 /** Every status the database check allows; this release writes only `entwurf`. */
 export const OFFER_STATUSES = ['entwurf', 'gesendet', 'angenommen', 'abgelehnt', 'zurueckgezogen'] as const;
@@ -41,13 +42,16 @@ export type OfferDetail = {
   offerNumber: string;
   title: string;
   status: OfferStatus;
+  /** The version a header change names as the one its form was filled from. */
+  version: number;
   validUntil: string;
   openingText: string;
   closingText: string;
   client: OfferParty;
   site: (OfferParty & { address: string }) | null;
   contact: OfferParty | null;
-  recipient: OfferParty & { address: string | null };
+  /** `isDefault`: the recipient follows the Einsatzort's Rechnungsempfänger, else the customer. */
+  recipient: OfferParty & { address: string | null; isDefault: boolean };
   owner: { userId: string; name: string } | null;
   work: { kind: OfferWorkKind; id: string; label: string } | null;
 };

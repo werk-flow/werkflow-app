@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 
-import { formatOpenSince, groupAttentionTasks, nextCallbackDeadline } from './task-sections';
+import {
+  attentionSectionHref,
+  formatOpenSince,
+  groupAttentionTasks,
+  groupOfficeStartTasks,
+  nextCallbackDeadline,
+} from './task-sections';
 import type { AttentionTask } from './types';
 
 const href = '/auftraege/A-1';
@@ -17,6 +23,13 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
     stateVersion: 'job:1:0',
   },
   { sourceType: 'organization_join_request', sourceId: 'join-1', personName: 'Jo Neu', email: null },
+  {
+    sourceType: 'job_past_last_visit',
+    sourceId: 'job-overdue-1',
+    jobLabel: 'A-3 · Bad',
+    jobHref: '/auftraege/A-3',
+    lastVisitDate: '2026-11-10',
+  },
   {
     sourceType: 'site_access_proposal',
     sourceId: 'access-1',
@@ -165,12 +178,13 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
 ];
 
 describe('groupAttentionTasks', () => {
-  test('overdue callbacks lead; time approvals, vacation requests, visits to replan and open Anfragen follow, handovers last', () => {
+  test('overdue callbacks lead; time approvals, vacation requests, visits to replan, jobs past their last visit and open Anfragen follow; handovers last', () => {
     expect(groupAttentionTasks(TASK_OF_EVERY_KIND).map((section) => section.key)).toEqual([
       'callback',
       'time',
       'vacation',
       'visitReplan',
+      'overdueJob',
       'request',
       'joinRequest',
       'siteAccess',
@@ -195,6 +209,23 @@ describe('groupAttentionTasks', () => {
 
   test('a section without tasks is left out', () => {
     expect(groupAttentionTasks([])).toEqual([]);
+  });
+});
+
+describe('groupOfficeStartTasks', () => {
+  test('the office start shows every Aufgaben section in its order but the time and vacation approvals', () => {
+    const keys = groupOfficeStartTasks(TASK_OF_EVERY_KIND).map((section) => section.key);
+    expect(keys).toEqual(
+      groupAttentionTasks(TASK_OF_EVERY_KIND)
+        .map((section) => section.key)
+        .filter((key) => key !== 'time' && key !== 'vacation'),
+    );
+    expect(keys).not.toContain('time');
+    expect(keys).not.toContain('vacation');
+  });
+
+  test('each section opens Aufgaben at its own place', () => {
+    expect(attentionSectionHref('overdueJob')).toBe('/aufgaben#aufgaben-overdueJob');
   });
 });
 

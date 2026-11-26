@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 // Titel, Kunde, Einsatzort and Ansprechpartner of a new offer. The server
 // parses the same limits again (lib/offers/action-schemas.ts).
 
-const OFFER_TITLE_FIELD = 'offer-title';
+export const OFFER_TITLE_FIELD = 'offer-title';
 const OFFER_CLIENT_FIELD = 'offer-client';
 
 export type OfferCustomerForm = {
@@ -21,10 +21,14 @@ export type OfferCustomerForm = {
   contactId: string;
 };
 
+export function offerTitleError(title: string): string | undefined {
+  return title.trim() ? undefined : 'Gib dem Angebot einen Titel.';
+}
+
 /** The marks of a missing title or customer, by control id. */
 export function offerCustomerErrors(form: OfferCustomerForm): Record<string, string | undefined> {
   return {
-    [OFFER_TITLE_FIELD]: form.title.trim() ? undefined : 'Gib dem Angebot einen Titel.',
+    [OFFER_TITLE_FIELD]: offerTitleError(form.title),
     [OFFER_CLIENT_FIELD]: form.client ? undefined : 'Wähle den Kunden.',
   };
 }
@@ -51,16 +55,12 @@ export function OfferCustomerFields({
 }) {
   return (
     <>
-      <Field label="Titel" htmlFor={OFFER_TITLE_FIELD} required error={errors[OFFER_TITLE_FIELD]}>
-        <Input
-          value={form.title}
-          onChange={(event) => onChange({ ...form, title: event.target.value })}
-          maxLength={200}
-          autoComplete="off"
-          placeholder="Zum Beispiel: Austausch Gastherme"
-          disabled={disabled}
-        />
-      </Field>
+      <OfferTitleField
+        value={form.title}
+        onChange={(title) => onChange({ ...form, title })}
+        error={errors[OFFER_TITLE_FIELD]}
+        disabled={disabled}
+      />
       <Field label="Kunde" htmlFor={OFFER_CLIENT_FIELD} required error={errors[OFFER_CLIENT_FIELD]}>
         <ClientSelectWithCreate
           id={OFFER_CLIENT_FIELD}
@@ -88,5 +88,30 @@ export function OfferCustomerFields({
         />
       )}
     </>
+  );
+}
+
+export function OfferTitleField({
+  value,
+  onChange,
+  error,
+  disabled,
+}: {
+  value: string;
+  onChange: (title: string) => void;
+  error: string | undefined;
+  disabled: boolean;
+}) {
+  return (
+    <Field label="Titel" htmlFor={OFFER_TITLE_FIELD} required error={error}>
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        maxLength={200}
+        autoComplete="off"
+        placeholder="Zum Beispiel: Austausch Gastherme"
+        disabled={disabled}
+      />
+    </Field>
   );
 }

@@ -20,7 +20,7 @@ for (const set of acceptanceSets()) {
   test.describe(`@AUDIT-VISUAL-ACCEPT @ACCEPT ${set.id}`, () => {
     for (const capture of set.captures)
       test(`@ACCEPT ${set.id} ${capture.id}`, async ({ rolePage, world, businessDate }, testInfo) => {
-        const page = await rolePage(capture.role);
+        const page = await rolePage(capture.session ?? capture.role);
         const input = { page, world, businessDate, testInfo };
         const sources = {
           openers: DIALOG_OPENERS,

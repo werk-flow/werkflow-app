@@ -27,6 +27,8 @@ declare global {
       | 'member-role'
       | 'own-personnel'
       | 'task-sections'
+      | 'office-start'
+      | 'task-sections-anchor'
       | 'calendar'
       | 'options'
       | 'list-navigation'
