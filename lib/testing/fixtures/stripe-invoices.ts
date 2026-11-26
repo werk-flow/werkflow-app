@@ -76,6 +76,7 @@ export const SEPA_PAYMENT_METHOD = {
   object: 'payment_method',
   type: 'sepa_debit',
   sepa_debit: { last4: '3000', country: 'DE' },
+  customer: 'cus_test_0001',
 };
 
 /** A renewal's payment intent at finalization: its debit started, no charge yet. */
@@ -114,6 +115,54 @@ export const SEPA_INVOICE_ANSWERS = {
       },
     ],
   },
+};
+
+const NO_SETUP_INTENTS = { object: 'list', url: '/v1/setup_intents', has_more: false, data: [] };
+
+/**
+ * Stripe's answers for the first SEPA invoice of a subscription a Checkout
+ * started, shaped as the sandbox answered on 2026-11-26 (ids made up): the
+ * payment method has no SetupIntent, and its mandate is named by the
+ * customer's charge, created a second after the invoice was finalized and
+ * before Stripe sent its signal.
+ */
+export const CHECKOUT_SEPA_INVOICE_ANSWERS = {
+  ...SEPA_INVOICE_ANSWERS,
+  'GET /v1/setup_intents': NO_SETUP_INTENTS,
+  'GET /v1/charges': {
+    object: 'list',
+    url: '/v1/charges',
+    has_more: false,
+    data: [
+      {
+        id: 'py_test_0001',
+        object: 'charge',
+        customer: 'cus_test_0001',
+        payment_method: SEPA_PAYMENT_METHOD.id,
+        payment_method_details: {
+          type: 'sepa_debit',
+          sepa_debit: { last4: '3000', mandate: 'mandate_test_0001' },
+        },
+      },
+    ],
+  },
+  'GET /v1/mandates/mandate_test_0001': {
+    id: 'mandate_test_0001',
+    object: 'mandate',
+    status: 'active',
+    payment_method: SEPA_PAYMENT_METHOD.id,
+    payment_method_details: {
+      type: 'sepa_debit',
+      sepa_debit: { reference: 'MUSTERMANDAT0001', url: 'https://example.test' },
+    },
+  },
+};
+
+/** The same first invoice read before its charge exists: no mandate is known yet. */
+export const CHECKOUT_SEPA_BEFORE_CHARGE_ANSWERS = {
+  ...SEPA_INVOICE_ANSWERS,
+  'GET /v1/setup_intents': NO_SETUP_INTENTS,
+  'GET /v1/charges': { object: 'list', url: '/v1/charges', has_more: false, data: [] },
 };
 
 /** Stripe's answers for an invoice a card already paid. */

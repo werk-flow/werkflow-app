@@ -5,6 +5,8 @@ import Stripe from 'stripe';
 import { readEmbeddedInvoiceXml } from '@/lib/invoicing/embedded-xml';
 import {
   CARD_INVOICE_ANSWERS,
+  CHECKOUT_SEPA_BEFORE_CHARGE_ANSWERS,
+  CHECKOUT_SEPA_INVOICE_ANSWERS,
   MADE_UP_SELLER,
   ORGANIZATION_ID,
   SEPA_INVOICE_ANSWERS,
@@ -150,10 +152,22 @@ const refusals: Array<{
     code: 'werkflow_invoice_payment_pending',
   },
   {
-    case: 'a SEPA payment method without a mandate',
+    // A Checkout's first debit before its charge exists: Stripe delivers again, and no alarm fires.
+    case: 'a SEPA payment method whose mandate no SetupIntent or charge names yet',
+    answers: CHECKOUT_SEPA_BEFORE_CHARGE_ANSWERS,
+    code: 'werkflow_invoice_payment_pending',
+  },
+  {
+    case: 'a SEPA mandate reference that is not one',
     answers: {
-      ...SEPA_INVOICE_ANSWERS,
-      'GET /v1/setup_intents': { object: 'list', data: [], has_more: false },
+      ...CHECKOUT_SEPA_INVOICE_ANSWERS,
+      'GET /v1/mandates/mandate_test_0001': {
+        ...CHECKOUT_SEPA_INVOICE_ANSWERS['GET /v1/mandates/mandate_test_0001'],
+        payment_method_details: {
+          type: 'sepa_debit',
+          sepa_debit: { reference: '', url: 'https://example.test' },
+        },
+      },
     },
     code: 'werkflow_invoice_unreadable',
   },
@@ -224,6 +238,16 @@ describe('a finalized Stripe invoice becomes WerkFlow original', () => {
     const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
     expect(xml).toContain('<ram:TotalPrepaidAmount>499.00</ram:TotalPrepaidAmount>');
     expect(xml).toMatch(/<ram:ApplicableTradeSettlementFinancialCard>\s*<ram:ID>4242</);
+  });
+});
+
+describe('the first invoice of a subscription a Checkout started', () => {
+  test("a SEPA debit a Checkout collected names its mandate through the customer's charge, since it has no SetupIntent", async () => {
+    const { issue, stored, records } = world(CHECKOUT_SEPA_INVOICE_ANSWERS);
+    expect(await issue()).toBe('issued');
+    expect(records[0]).toMatchObject({ p_payment_means: 'direct-debit', p_due_cents: 49900 });
+    const xml = await readEmbeddedInvoiceXml([...stored.values()][0] ?? new Uint8Array());
+    expect(xml).toContain('<ram:DirectDebitMandateID>MUSTERMANDAT0001</ram:DirectDebitMandateID>');
   });
 });
 

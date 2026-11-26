@@ -278,17 +278,34 @@ async function paymentMethodOf(
   );
 }
 
-/** The reference of the SEPA mandate a payment method was set up with (its SetupIntent's mandate). */
-async function mandateReferenceOf(client: Stripe, paymentMethodId: string): Promise<string | null> {
+/**
+ * The reference of the SEPA mandate behind a payment method. A method set up
+ * through the API carries it on its SetupIntent; one a Checkout collected has
+ * no SetupIntent, and its mandate is named by the customer's first charge with
+ * it, which exists before Stripe sends that invoice's signals. Null while
+ * neither names one.
+ */
+async function mandateReferenceOf(client: Stripe, method: Stripe.PaymentMethod): Promise<string | null> {
   const setups = await client.setupIntents.list({
-    payment_method: paymentMethodId,
+    payment_method: method.id,
     limit: 10,
     expand: ['data.mandate'],
   });
   const references = setups.data.map(
     (setup) => expanded(setup.mandate)?.payment_method_details.sepa_debit?.reference,
   );
-  return references.find((reference) => reference !== undefined) ?? null;
+  const reference = references.find((found) => found !== undefined);
+  if (reference !== undefined) return reference;
+  const customerId = idOf(method.customer);
+  if (!customerId) return null;
+  const charges = await client.charges.list({ customer: customerId, limit: 100 });
+  const mandateId = charges.data
+    .filter((charge) => charge.payment_method === method.id)
+    .map((charge) => charge.payment_method_details?.sepa_debit?.mandate)
+    .find((found) => typeof found === 'string');
+  if (!mandateId) return null;
+  const mandate = await client.mandates.retrieve(mandateId);
+  return mandate.payment_method_details.sepa_debit?.reference ?? null;
 }
 
 async function debitMethodOf(
@@ -300,7 +317,7 @@ async function debitMethodOf(
   return {
     kind: 'sepa_debit',
     ibanLastFour: method.sepa_debit?.last4 ?? null,
-    mandateReference: await mandateReferenceOf(client, method.id),
+    mandateReference: await mandateReferenceOf(client, method),
   };
 }
 
@@ -404,7 +421,7 @@ function invoiceReader(client: Stripe): StripeGateway['readInvoiceForIssue'] {
         .autoPagingToArray({ limit: 1000 });
       const paymentMethod = await paymentMethodOf(client, invoice);
       const mandateReference =
-        paymentMethod?.type === 'sepa_debit' ? await mandateReferenceOf(client, paymentMethod.id) : null;
+        paymentMethod?.type === 'sepa_debit' ? await mandateReferenceOf(client, paymentMethod) : null;
       return { invoice, lines, paymentMethod, mandateReference };
     });
     return stripeInvoiceForIssue(source);

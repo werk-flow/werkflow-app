@@ -96,6 +96,8 @@ function stripePaymentOf(method: unknown, mandateReference: unknown): StripeInvo
   const parsed = paymentMethodSchema.safeParse(method);
   if (!parsed.success) throw billingFailure('werkflow_invoice_unreadable');
   if (parsed.data.type === 'card') return { kind: 'card', lastFour: parsed.data.card.last4 };
+  // No mandate yet: the first debit's charge is still being created, and Stripe delivers again.
+  if (mandateReference === null) throw billingFailure('werkflow_invoice_payment_pending');
   const reference = mandateReferenceSchema.safeParse(mandateReference);
   if (!reference.success) throw billingFailure('werkflow_invoice_unreadable');
   return { kind: 'direct-debit', mandateReference: reference.data };
