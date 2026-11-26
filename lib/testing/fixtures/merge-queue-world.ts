@@ -15,7 +15,7 @@ export function pull(number: number, overrides: Partial<QueuedPull> = {}): Queue
     queuedAt: `2026-11-21T08:0${number}:00Z`,
     check: 'SUCCESS',
     mergeState: 'BLOCKED',
-    listGrowthApproved: false,
+    growthApprovals: [],
     ...overrides,
   };
 }

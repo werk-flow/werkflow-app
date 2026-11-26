@@ -1,14 +1,12 @@
 import { z } from 'zod';
 
-// Which pull request each commit of a merge-queue run belongs to, for the list growth approval
-// (scripts/ci/prepare.ts, approval). Only GitHub's own records bind a commit to a PR: the merge
+// Which pull request each commit of a merge-queue run belongs to, with its labels, for the growth
+// approval of shrink-only lists (scripts/ci/prepare.ts, approval). Only GitHub's own records bind a commit to a PR: the merge
 // queue's entries while they run, and the PR GitHub merged as that commit once it landed. A commit
 // subject proves nothing, because its author writes it.
 
-const APPROVAL_LABEL = 'approved: list growth';
-
-/** A commit's PR, and whether that PR carries the owner's approval. */
-export type Binding = { pr: number; approved: boolean };
+/** A commit's PR, and that PR's labels, among them the owner's growth approvals. */
+export type Binding = { pr: number; labels: readonly string[] };
 
 type Unreadable = { unreadable: string };
 
@@ -86,7 +84,7 @@ export function queueBindings(answer: string): Map<string, Binding> | Unreadable
       return { unreadable: `The labels of #${pullRequest.number} do not fit one query.` };
     bindings.set(headCommit.oid, {
       pr: pullRequest.number,
-      approved: pullRequest.labels.nodes.some((label) => label.name === APPROVAL_LABEL),
+      labels: pullRequest.labels.nodes.map((label) => label.name),
     });
   }
   return bindings;
@@ -100,7 +98,7 @@ export function landedBinding(answer: string, commit: string): Binding | undefin
   return (
     landed && {
       pr: landed.number,
-      approved: landed.labels.some((label) => label.name === APPROVAL_LABEL),
+      labels: landed.labels.map((label) => label.name),
     }
   );
 }

@@ -46,7 +46,7 @@ const config: KnipConfig = {
     'scripts/*.ts!',
     'scripts/migration/*.ts!',
     // The staging journeys and their cleanup, run by package scripts (scripts/staging/kit.ts).
-    'scripts/staging/{smoke,cleanup}.ts!',
+    'scripts/staging/{smoke,invoice,cleanup}.ts!',
     // MCP servers Claude Code and Codex start by path (docs/technical/machine-setup.md, step 4).
     'scripts/mcp/*.ts!',
     // Run by .github/scripts/main-full-run.sh and the stand-in's scheduler.
@@ -77,6 +77,9 @@ const config: KnipConfig = {
     'tests/ui-contracts/playwright.config.ts!',
     // Substituted for product modules by the component-contract bundler.
     'tests/ui-contracts/*boundar*.{ts,tsx}!',
+    // The context builder's untrusted-text channel (werk-flow/werkflow-planning#529) exists before
+    // the tool results of #531 and the memory of #538 and #539 use it. Remove this entry with that import.
+    'lib/ai/context.ts!',
     // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
     // the offer calculation imports it. Remove this entry with that import.
     'lib/price-catalog/leistung-prices.ts!',

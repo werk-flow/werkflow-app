@@ -14,8 +14,10 @@ import {
 } from '../../lib/testing/staging/boundary';
 import { sendThroughBoundary } from '../../lib/testing/staging/route';
 import {
+  pendingInviteCodeQuery,
   sandboxAnswer,
   scopedReadQuery,
+  type MemberRole,
   type ReadableTable,
   type ScopedRead,
   type StripeFacts,
@@ -199,6 +201,27 @@ async function readRunRows(kit: Kit): Promise<{ actors: ActorRow[]; organization
   };
 }
 
+/**
+ * The code of the run organization's one pending invite for `role`, which only its invitee may use. It
+ * joins the values no printed line may hold (lib/testing/staging/readers.ts, `pendingInviteCodeQuery`).
+ */
+export async function pendingInviteCode(
+  kit: Kit,
+  organization: RunOrganization,
+  role: MemberRole,
+): Promise<string> {
+  if (!runOrganizations.has(organization))
+    throw new StagingFailure('Read only the run organization runOrganization found.');
+  const { query, parameters } = pendingInviteCodeQuery(organization.id, role);
+  const rows = z
+    .array(z.object({ invite_code: uuidSchema }))
+    .parse(await readOnlySql(kit, query, parameters));
+  const [row] = rows;
+  if (!row || rows.length > 1) throw new StagingFailure(`Found ${rows.length} pending ${role} invites.`);
+  kit.secrets.push(row.invite_code);
+  return row.invite_code;
+}
+
 /** A Stripe sandbox object, or a list's items, as allowed fields; a live answer throws (lib/testing/staging/readers.ts). */
 export async function readStripe(kit: Kit, path: string): Promise<StripeFacts[]> {
   const response = await call(`https://api.stripe.com/v1/${path}`, {
@@ -369,8 +392,11 @@ export async function withStagingBrowser<T>(kit: Kit, journey: (page: Page) => P
     await browser.close();
   }
   // Read after the close, so a hop refused while the browser closed still fails the journey.
-  if (refused.size)
+  if (refused.size) {
+    // The refusal wins, but the journey's own failure still names the step it stopped at.
+    if ('error' in outcome) kit.log('journey failure', { reason: failureLine(kit, outcome.error) });
     throw new StagingFailure(`The browser refused pages outside staging: ${[...refused].join(', ')}.`);
+  }
   if ('error' in outcome) throw outcome.error;
   return outcome.result;
 }
@@ -396,17 +422,27 @@ export async function signIn(page: Page, actor: Actor): Promise<void> {
   await expect(page).not.toHaveURL(/\/login/, { timeout: TIMEOUT_MS });
 }
 
+/** How a journey pays in the sandbox Checkout: Stripe's test card, or its test IBAN that debits at once. */
+export type CheckoutMethod = 'card' | 'sepa';
+
 /**
- * Pays the open sandbox Checkout with Stripe's test card, as a payer does, and waits for staging's
- * return page. Stripe asks for postcode and town only after a first submit.
+ * Pays the open sandbox Checkout as a payer does, with Stripe's test card or test SEPA account, and
+ * waits for staging's return page. Stripe asks for postcode and town only after a first submit.
  */
-export async function payWithTestCard(page: Page): Promise<void> {
+export async function payInCheckout(page: Page, method: CheckoutMethod): Promise<void> {
   await expect(page).toHaveURL(/^https:\/\/checkout\.stripe\.com\//, { timeout: TIMEOUT_MS });
   const form = page.frameLocator('iframe[src*="elements-inner"]').first();
-  await form.getByRole('button', { name: 'Karte', exact: true }).click({ timeout: TIMEOUT_MS * 2 });
-  await form.getByRole('textbox', { name: 'Kartennummer' }).fill('4242424242424242');
-  await form.getByRole('textbox', { name: 'Ablaufdatum (MM/JJ)' }).fill('12/34');
-  await form.getByRole('textbox', { name: 'Sicherheitscode' }).fill('123');
+  if (method === 'card') {
+    await form.getByRole('button', { name: 'Karte', exact: true }).click({ timeout: TIMEOUT_MS * 2 });
+    await form.getByRole('textbox', { name: 'Kartennummer' }).fill('4242424242424242');
+    await form.getByRole('textbox', { name: 'Ablaufdatum (MM/JJ)' }).fill('12/34');
+    await form.getByRole('textbox', { name: 'Sicherheitscode' }).fill('123');
+  } else {
+    await form
+      .getByRole('button', { name: 'SEPA-Lastschrift', exact: true })
+      .click({ timeout: TIMEOUT_MS * 2 });
+    await form.getByRole('textbox', { name: 'IBAN' }).fill('DE89370400440532013000');
+  }
   await form.getByRole('textbox', { name: 'Vollständiger Name' }).fill('Agenten-Test');
   await form.getByRole('combobox', { name: 'Adresse' }).fill('Teststraße 1');
   await form.getByRole('combobox', { name: 'Adresse' }).press('Escape');
@@ -416,6 +452,42 @@ export async function payWithTestCard(page: Page): Promise<void> {
   await form.getByRole('textbox', { name: 'Ort' }).fill('Berlin');
   await submit.click();
   await expect(page).toHaveURL(new RegExp(`^${STAGING_ORIGIN}/`), { timeout: TIMEOUT_MS * 2 });
+}
+
+/**
+ * The first answer of `read` that is not null, read again every few seconds for at most `timeoutMs`:
+ * a bounded wait on the changed fact, never a fixed delay. A read that throws ends the wait with its
+ * error; no answer in time throws a failure naming `waitingFor`.
+ */
+export async function waitFor<T>(
+  waitingFor: string,
+  read: () => Promise<T | null>,
+  timeoutMs: number,
+): Promise<T> {
+  // A holder, not a variable: the poll's callback sets it, which a narrowed `let` would hide.
+  const seen: { answer: { value: T } | { error: unknown } | null } = { answer: null };
+  try {
+    await expect
+      .poll(
+        async () => {
+          try {
+            const value = await read();
+            if (value !== null) seen.answer = { value };
+          } catch (error) {
+            seen.answer = { error };
+          }
+          return seen.answer !== null;
+        },
+        { timeout: timeoutMs, intervals: [2_000, 5_000] },
+      )
+      .toBe(true);
+  } catch {
+    // The poll's own message quotes the last answer; the failure names what it waited for.
+  }
+  const { answer } = seen;
+  if (answer === null) throw new StagingFailure(`No ${waitingFor} within ${timeoutMs / 1000} s.`);
+  if ('error' in answer) throw answer.error;
+  return answer.value;
 }
 
 // --- The cleanup: through the app's own deletion paths ---
@@ -469,7 +541,11 @@ async function cleanUpRun(
 export async function cleanUp(kit: Kit, runId: string | null): Promise<boolean> {
   try {
     const before = await readRunRows(kit);
-    const runs = selectRuns(before.actors, before.organizations, runId, new Date());
+    // An Admin's run first: its organization's deletion ends its members' memberships, which their
+    // account deletion waits for.
+    const runs = selectRuns(before.actors, before.organizations, runId, new Date()).sort(
+      (first, second) => second.organizationIds.length - first.organizationIds.length,
+    );
     const names = new Map(before.organizations.map((row) => [row.id, row.name]));
     let passed = true;
     for (const run of runs) {

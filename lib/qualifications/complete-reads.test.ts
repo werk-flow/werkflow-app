@@ -1,8 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import { ID_BATCH_SIZE, ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
-import { loadAssignmentEvaluation, loadCertificationExpiryNotifications } from './server';
+
+// The readers are server-only; the stub lets the unit tier load them (lib/conventions/server-only-test-mocks.test.ts).
+mock.module('server-only', () => ({}));
+const { loadAssignmentEvaluation, loadCertificationExpiryNotifications } = await import('./server');
 
 // A company with 600 employees: the certification notices refused more than
 // 500 rows, and the assignment evaluation sent up to 200 ids in one query
