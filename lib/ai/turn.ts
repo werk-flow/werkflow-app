@@ -9,6 +9,7 @@ import { type AiModel, isAllowedModel, resolveAiModel } from '@/lib/ai/model';
 import { AI_PRODUCT_NAME } from '@/lib/ai/name';
 import { isAiReleasedFor } from '@/lib/ai/release-gate';
 import { readAiOrganizationSwitch } from '@/lib/ai/settings';
+import { AI_TURN_FAILURE_MESSAGES } from '@/lib/ai/turn-messages';
 import { logError } from '@/lib/logging';
 import { consumeRateLimit } from '@/lib/security/rate-limit';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -61,19 +62,6 @@ export type AiTurnFailure =
   | 'provider_unavailable'
   | 'model_refused'
   | 'interrupted';
-
-const FAILURE_MESSAGES: Readonly<Record<AiTurnFailure, string>> = {
-  step_limit: `${AI_PRODUCT_NAME} hat nach zu vielen Schritten angehalten. Stell die Frage bitte enger.`,
-  disabled: `${AI_PRODUCT_NAME} wurde während der Antwort ausgeschaltet.`,
-  undecidable: `${AI_PRODUCT_NAME} konnte nicht prüfen, ob es weitergehen darf, und hat angehalten. Versuch es gleich noch einmal.`,
-  input_too_large: 'Dieser Chat ist zu lang für eine weitere Antwort. Fang bitte einen neuen Chat an.',
-  answer_too_long: 'Die Antwort wurde zu lang und ist hier abgeschnitten.',
-  timeout: 'Die Antwort hat zu lange gedauert und wurde abgebrochen.',
-  provider_refused: `${AI_PRODUCT_NAME} ist gerade nicht verfügbar. Wir kümmern uns darum.`,
-  provider_unavailable: `${AI_PRODUCT_NAME} ist gerade nicht erreichbar. Versuch es in ein paar Minuten noch einmal.`,
-  model_refused: `Dabei kann ${AI_PRODUCT_NAME} nicht helfen.`,
-  interrupted: 'Die Antwort wurde unterbrochen. Versuch es noch einmal.',
-};
 
 export type AiTurnEnd =
   | { status: 'complete' }
@@ -325,7 +313,7 @@ async function runTurn(context: RunContext): Promise<AiTurnEnd> {
 }
 
 function failedEnd(status: 'failed' | 'cancelled', failure: AiTurnFailure): AiTurnEnd {
-  return { status, failure, message: FAILURE_MESSAGES[failure] };
+  return { status, failure, message: AI_TURN_FAILURE_MESSAGES[failure] };
 }
 
 /** Whether the organization may take another model step. A read that cannot decide refuses (B14). */

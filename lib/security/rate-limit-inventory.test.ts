@@ -349,7 +349,12 @@ test('every mail send, invite redemption, billing activation and model run follo
   expect(findings).toEqual([]);
   expect(Object.keys(REVIEWED_UNLIMITED).filter((key) => !matched.has(key))).toEqual([]);
   // The scan still recognizes every kind: a renamed call shape must not pass silently.
-  expect([...seenKinds].sort()).toEqual(['billing activation', 'edge-function mail', 'invite redemption', 'model run']);
+  expect([...seenKinds].sort()).toEqual([
+    'billing activation',
+    'edge-function mail',
+    'invite redemption',
+    'model run',
+  ]);
 });
 
 describe('planted violations', () => {
