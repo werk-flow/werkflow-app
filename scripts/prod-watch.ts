@@ -17,12 +17,13 @@ async function main(): Promise<number> {
     console.error('Usage: bun scripts/prod-watch.ts <state file>');
     return 2;
   }
-  let saved: unknown = {};
+  // No file or an unreadable one is a lost state (readWatchState).
+  let saved: unknown;
   if (existsSync(statePath)) {
     try {
       saved = JSON.parse(readFileSync(statePath, 'utf8'));
     } catch {
-      console.log('production: the saved state is unreadable; this pass starts fresh');
+      console.log('production: the saved state is unreadable; this pass treats it as lost');
     }
   }
   const state = readWatchState(saved);

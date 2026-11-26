@@ -3,7 +3,7 @@
 // (.github/workflows/prod-watch.yml, docs/technical/recovery-and-incidents.md#monitoring).
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { readWorkflow, workflowsFolder } from './ci-workflow';
@@ -81,6 +81,7 @@ function sparseCheckout() {
         NODE_ENV: 'test',
         PATH: `${folder}:${process.env.PATH}`,
         GH_REPO: 'owner/repo',
+        ALERT_RUN: 'https://github.com/owner/repo/actions/runs/1',
         PROD_WATCH_VERCEL_TOKEN: '',
       },
     });
@@ -90,6 +91,8 @@ function sparseCheckout() {
 test('without its token a pass from the sparse checkout fails with a fixed verdict, counts the failure and writes no alert', () => {
   const { folder, root, calls, pass } = sparseCheckout();
   const state = join(folder, 'state', 'state.json');
+  mkdirSync(join(folder, 'state'));
+  writeFileSync(state, '{}\n');
   const run = pass(state);
   expect(existsSync(join(root, 'node_modules'))).toBe(false);
   expect(run.stderr).toBe('');
@@ -103,6 +106,19 @@ test('without its token a pass from the sparse checkout fails with a fixed verdi
   expect(readFileSync(calls, 'utf8')).toBe(
     'gh api --paginate repos/owner/repo/issues?state=open&labels=ci-alert&per_page=100 --jq .[].title\n',
   );
+});
+
+test('a failed pass without a saved state opens the watcher alert at once', () => {
+  const { folder, calls, pass } = sparseCheckout();
+  const state = join(folder, 'state', 'state.json');
+  const run = pass(state);
+  expect(run.status).toBe(1);
+  expect(readFileSync(calls, 'utf8')).toContain('gh issue create --title Production alert: watcher');
+  expect(JSON.parse(readFileSync(state, 'utf8'))).toMatchObject({
+    failures: 1,
+    watcherReported: true,
+    lost: true,
+  });
 });
 
 test('a state the pass cannot save fails the run with a fixed verdict, never a path or a stack', () => {

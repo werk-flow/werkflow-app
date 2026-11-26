@@ -53,7 +53,7 @@ Agents hold four keys per machine (`pc`, `mac`, `netcup`) for DEV, staging and t
 
 ## Background jobs
 
-The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS and hardware, they differ only in the jobs below. The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`). `werkflow-uptime` is a system timer (`ops/uptime-install.sh`). The [production watcher](recovery-and-incidents.md#monitoring) runs on GitHub, so no agent machine holds its token.
+The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS and hardware, they differ only in the jobs below. The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`). `werkflow-uptime` is a system timer (`ops/uptime-install.sh`). The [production watcher](recovery-and-incidents.md#monitoring) runs on GitHub; its PC copy below is the last agent job that holds a PROD-reaching token.
 
 | Job | Runs on |
 | --- | --- |
@@ -61,6 +61,7 @@ The three agent machines (`pc`, `mac`, `netcup`) share one setup. Apart from OS 
 | Load watch (`workstation-load`), [notifier](#keep-the-agents-moving) | Each machine, for itself |
 | `boat-starts`: counts Boat's machine starts per day and raises an alert before the plan's limit | Each machine; only the lease holder counts |
 | [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | The PC and the Mac; only the lease holder acts |
+| The production watcher's PC copy (`ops/prod_watch.py` in `ci-alert`), with the Vercel token `werkflow app prod-watch` | The PC, until werk-flow/werkflow-planning#573 removes the job and its token file after the first green scheduled run of `prod-watch.yml`. Then the owner revokes the token; revoked earlier, the PC copy fails and opens `Production alert: watcher` |
 | [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The PC, beside the stack |
 | `report-dispatch`: starts one report thread per waiting [problem report](../features/problem-reports.md#current-product-baseline), blockers first; does nothing while the hand-out is off | The netcup VM, the one machine with the hand-out [file](environments.md#credentials). The Mac's installer and the Linux unit skip a machine without it |
 | `werkflow-uptime`: every 5 minutes, checks that PROD's and DEV's login pages and Supabase health endpoints answer | The netcup VM |

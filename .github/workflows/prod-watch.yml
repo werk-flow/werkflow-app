@@ -13,11 +13,11 @@ name: Production watcher
 #
 # Each pass needs the last pass's state (what it reported and when). It travels in main's Actions
 # cache: the newest `prod-watch-` entry is restored, and the new state saved under this run's key.
-# A lost state (a cache miss) repeats a comment on an open incident, and restarts the one-hour wait
-# of a serving mismatch and the count of failed passes: a mismatch that ends within the hour after
-# the loss raises no alert. The newest entry is written every 10 minutes, so GitHub's 7-day eviction
-# never reaches it. Three failed passes in a row open `Production alert: watcher`; a run by hand
-# checks the token.
+# A lost state (a cache miss) repeats a comment on an open incident and never delays an alert: a
+# serving mismatch counts its hour from the head's oldest production deployment, and the first
+# failed pass opens `Production alert: watcher`. The newest entry is written every 10 minutes, so
+# GitHub's 7-day eviction never reaches it. Otherwise three failed passes in a row open the watcher
+# alert; a run by hand checks the token.
 on:
   schedule:
     - cron: '*/10 * * * *'

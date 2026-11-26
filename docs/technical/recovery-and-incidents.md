@@ -67,7 +67,7 @@ The production watcher, `.github/workflows/prod-watch.yml`, runs `bun scripts/pr
 
 - `Production alert: deploy`: a production build failed or stuck past its deadline, or production not serving the `production` head for an hour, which is a rollback or a failed promotion.
 - `Production alert: server errors`: a burst of server errors against the week before, or a route that starts to fail. It adds a comment at most every few hours and closes a day after the newest error.
-- `Production alert: handled failures`: the same two rules per label and code.
+- `Production alert: handled failures`: the same two rules: a burst of all handled failures, or a new label and code.
 - `Production alert: watcher`: three failed passes in a row, such as an expired token. `gh workflow run prod-watch.yml` checks the token: a failed run names the failed call and its HTTP status.
 
 On every machine with a Boat key, the pass opens `Owner action: Boat key` before the key expires (`ops/boat_key.py`; [renew the key](boat-verification.md#renew-the-key) owns the schedule).
@@ -81,7 +81,7 @@ A handled failure answers below 500, so the 5xx count misses it. Server-side `lo
 
 A label or code that holds an email address, a link, six digits in a row, or twenty hex characters and dashes in a row (a UUID, a token) becomes `withheld`. The metric carries no message, id, user, organization or request value; Vercel adds the deployment and region but no route or environment. Staging shares the project, so the watcher filters by production deployment. Failures in the browser are not counted, because a browser has no Vercel runtime. Recording needs Observability Plus on the Vercel team, at $1.20 per million recorded failures, and only the owner turns it on. Outside Vercel, and when recording fails, `logError` logs as before and never throws.
 
-`lib/production-watch/watch.ts` owns the rule that turns the count into `Production alert: handled failures`, per label and code. Like every watcher alert, it assigns the owner, and its thread works from the label, code and deployment, never from a log line. The production-access guard refuses `label` and `code` as dimensions, so the issue holds the counts.
+`lib/production-watch/watch.ts` owns the rules that turn the count into `Production alert: handled failures`. Like every watcher alert, it assigns the owner, and its thread works from the label, code and deployment, never from a log line. The production-access guard refuses `label` and `code` as dimensions, so the issue holds the counts.
 
 Check the path without an outage:
 

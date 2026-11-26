@@ -130,7 +130,8 @@ class FakeProduction implements WatchIo {
 
 function setup() {
   const fake = new FakeProduction();
-  const state: WatchState = readWatchState(undefined);
+  // A saved state, as every pass but one after a lost cache reads.
+  const state: WatchState = readWatchState({});
   const check = async (now = NOW) => (await watch(fake, state, now)).notes;
   const sent = (title?: Title, action?: 'keep' | 'close') =>
     fake.sent.filter(
@@ -249,6 +250,28 @@ test('D3: a promotion inside the hour raises nothing, and a later mismatch start
   fake.alias = 'dpl_live';
   await check(NOW + 70 * MINUTE);
   expect(fake.sent).toEqual([]);
+});
+
+test('D3: a state lost during an open mismatch never moves its alert later', async () => {
+  const { fake, check, sent, deploy } = setup();
+  deploy('dpl_head', 'READY', 5 * MINUTE, 'e'.repeat(40));
+  fake.head = 'e'.repeat(40);
+  await check();
+  // The cache returns no state 50 minutes in: the hour counts from the head's deployment, not anew.
+  const lost = readWatchState(undefined);
+  await watch(fake, lost, NOW + 50 * MINUTE);
+  expect(fake.sent).toEqual([]);
+  expect(lost.lost).toBeUndefined();
+  await watch(fake, lost, NOW + 60 * MINUTE);
+  expect(one(sent(DEPLOY, 'keep')).note).toContain(
+    `since ${new Date(NOW - 5 * MINUTE).toISOString().slice(0, 16)}Z`,
+  );
+
+  // With no deployment of the head in the lookback, the hour is over at once.
+  const unknown = setup();
+  unknown.fake.head = 'f'.repeat(40);
+  await watch(unknown.fake, readWatchState(undefined), NOW);
+  expect(one(unknown.sent(DEPLOY, 'keep')).note).toContain('a rollback or a failed promotion');
 });
 
 test('the deploy alert closes when production serves its head, and stays open while a build is failed', async () => {
@@ -474,6 +497,26 @@ test('three failed passes open the watcher alert once, and a good pass closes it
   expect(state.watcherReported).toBe(false);
 });
 
+test('after a lost state the first failed pass opens the watcher alert, and a good pass clears the mark', async () => {
+  const { fake, sent } = setup();
+  fake.refuse = '/metrics/v1';
+  const state = readWatchState(undefined);
+  const failed = await watch(fake, state, NOW);
+  expect(failed.notes[0]).toBe(
+    'production: production watcher failed (1 in a row): Vercel answered 403 to /metrics/v1',
+  );
+  expect(one(sent(WATCHER, 'keep')).note).toContain('after its saved state was lost');
+  // The mark is saved with the state until a pass succeeds; the alert is written once.
+  const carried = readWatchState(JSON.parse(JSON.stringify(state)));
+  expect(carried.lost).toBe(true);
+  await watch(fake, carried, NOW + 10 * MINUTE);
+  expect(sent(WATCHER, 'keep')).toHaveLength(1);
+  fake.refuse = undefined;
+  await watch(fake, carried, NOW + 20 * MINUTE);
+  expect(carried.lost).toBeUndefined();
+  expect(carried.failures).toBe(0);
+});
+
 test('an alert whose write failed is written by the next pass, and the failure counts', async () => {
   const { fake, state, check, sent, deploy } = setup();
   deploy('dpl_bad', 'ERROR', 50 * MINUTE, 'c'.repeat(40));
@@ -492,13 +535,14 @@ test('an alert whose write failed is written by the next pass, and the failure c
   expect(state.failures).toBe(0);
 });
 
-test('a lost or unreadable state starts fresh, and a saved one carries over', async () => {
+test('a lost or unreadable state starts fresh and marked lost, and a saved one carries over', async () => {
   expect(readWatchState('not json')).toEqual({
     failures: 0,
     watcherReported: false,
     reported: [],
     errors: {},
     handled: {},
+    lost: true,
   });
   expect(readWatchState({ failures: 'two', reported: [1, 'dpl_a'], errors: { until: 3 } })).toEqual({
     failures: 0,

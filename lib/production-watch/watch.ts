@@ -21,21 +21,23 @@
 //   "CI alert: release" first.
 // - D2, a stuck build: QUEUED, INITIALIZING or BUILDING for longer than BUILD_DEADLINE.
 // - D3, production not serving the `production` head for SERVED_GRACE after a pass first saw it.
-//   An Instant Rollback matches too: production then runs an older build.
+//   An Instant Rollback matches too: production then runs an older build. After a lost state the
+//   wait counts from the head's oldest production deployment, or is over when the lookback has none,
+//   so a lost state never moves the alert later.
 // - S1, a burst: in a 15-minute window, at least BURST_FLOOR server errors and BURST_RATIO times the
 //   mean 15-minute count of the 7 days before. The window ends 5 minutes before the pass, so its
 //   5-minute buckets are complete.
 // - S2, a new failing route: at least ROUTE_FLOOR server errors on one route in 24 hours, and none in
 //   the 7 days before.
-// - H1 and H2, the same two rules on handled failures, per label and code. A handled failure answers
-//   below 500, so S1 and S2 miss it.
+// - H1 and H2, the same two rules on handled failures: a burst of all of them, and a new label and
+//   code. A handled failure answers below 500, so S1 and S2 miss it.
 //
 // One issue per incident. "Production alert: deploy" reports each deployment once and closes when
 // production serves the `production` head and no D1 or D2 deployment is open. "Production alert:
 // server errors" adds at most one comment per COMMENT_GAP and closes QUIET_AFTER after the newest
 // error it reported; "Production alert: handled failures" does the same for H1 and H2. Three failed
 // passes in a row open "Production alert: watcher", so a revoked or expired token does not silence
-// the watcher. The repository is public: an issue holds ids, states, SHAs, route patterns, labels,
+// the watcher; after a lost state, the first failed pass opens it. The repository is public: an issue holds ids, states, SHAs, route patterns, labels,
 // codes and counts, never a message, and a failure names a call and its status, never a body.
 
 const TEAM = 'team_B8v4QHjpjZWyFXo6wkhiXkgN';
@@ -87,10 +89,11 @@ export type WatchIo = {
 type CountState = { until?: string; reportedAt?: string; openSeen?: string };
 
 /**
- * What a pass remembers for the next one. Losing it repeats a comment on an open incident, and
- * restarts the SERVED_GRACE wait and the count of failed passes (.github/workflows/prod-watch.yml).
+ * What a pass remembers for the next one. Losing it repeats a comment on an open incident; `lost`
+ * then holds until a pass succeeds, so no alert comes later (.github/workflows/prod-watch.yml).
  */
 export type WatchState = {
+  lost?: true;
   failures: number;
   watcherReported: boolean;
   reported: string[];
@@ -115,7 +118,7 @@ function countState(value: unknown): CountState {
   return state;
 }
 
-/** The state a pass saved, or a fresh one for no file or an unreadable one. */
+/** The state a pass saved; for no file or an unreadable one, a fresh state marked lost. */
 export function readWatchState(saved: unknown): WatchState {
   const record = isRecord(saved) ? saved : {};
   const state: WatchState = {
@@ -128,6 +131,7 @@ export function readWatchState(saved: unknown): WatchState {
   const since = optionalText(record.mismatchSince);
   if (since.value !== undefined) state.mismatchSince = since.value;
   if (record.mismatchReported === true) state.mismatchReported = true;
+  if (!isRecord(saved) || record.lost === true) state.lost = true;
   return state;
 }
 
@@ -438,6 +442,14 @@ function errorTable(signal: Signal, hits: readonly ErrorHit[]): string {
   return lines.join('\n');
 }
 
+/** The earliest start a mismatch the lost state may have held: the head's oldest production deployment. */
+function lostMismatchStart(listed: readonly Deployment[], head: string, now: number): number {
+  const ofHead = listed
+    .filter((deployment) => deployment.sha === head)
+    .map((deployment) => deployment.created);
+  return ofHead.length > 0 ? Math.min(...ofHead) : now - SERVED_GRACE;
+}
+
 async function watchDeploys(
   io: WatchIo,
   state: WatchState,
@@ -457,7 +469,7 @@ async function watchDeploys(
   const head = await io.productionHead();
   const notes: string[] = [];
   if (sha === head) delete state.mismatchSince;
-  else state.mismatchSince ??= stamp(now);
+  else state.mismatchSince ??= stamp(state.lost ? lostMismatchStart(listed, head, now) : now);
   const since = state.mismatchSince;
   const mismatch = since !== undefined && now - parseStamp(since) >= SERVED_GRACE;
   const text: string[] = [];
@@ -550,12 +562,16 @@ export async function watch(
   } catch (error) {
     state.failures += 1;
     notes = [`production watcher failed (${state.failures} in a row): ${describe(error)}`];
-    if (state.failures >= FAILURES_TO_ALERT && !state.watcherReported) {
+    // After a lost state, the passes before this one may have failed too.
+    if ((state.failures >= FAILURES_TO_ALERT || state.lost) && !state.watcherReported) {
+      const streak = state.lost
+        ? 'failed a pass after its saved state was lost, so the passes before it are unknown'
+        : `failed ${state.failures} passes in a row`;
       try {
         await io.act(
           WATCHER,
           'keep',
-          `The production watcher failed ${state.failures} passes in a row. Last failure: ${describe(error)}. ` +
+          `The production watcher ${streak}. Last failure: ${describe(error)}. ` +
             'Each failed run of `prod-watch.yml` names the failed call; docs/technical/environments.md, "Credentials", names its token.',
         );
         state.watcherReported = true;
@@ -581,5 +597,6 @@ export async function watch(
   }
   state.watcherReported = false;
   state.failures = 0;
+  delete state.lost;
   return { notes: notes.map((note) => `production: ${note}`), failed: false };
 }
